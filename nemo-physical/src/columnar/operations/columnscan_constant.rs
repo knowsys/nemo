@@ -1,4 +1,4 @@
-use crate::columnar::column_storage::columnscan::ColumnScan;
+use crate::columnar::columnscan::ColumnScan;
 use crate::datatypes::ColumnDataType;
 use std::{fmt::Debug, ops::Range};
 
@@ -10,36 +10,32 @@ enum CursorPosition {
     After,
 }
 
-/// [`ColumnScan`] which represents a column which contains fresh nulls.
+/// [`ColumnScan`] which represents a column which holds one (possibly repeated) value.
 #[derive(Debug)]
-pub struct ColumnScanNulls<T>
+pub struct ColumnScanConstant<T>
 where
     T: ColumnDataType,
 {
-    /// The current value.
+    /// The value that is always returned.
     value: T,
-
-    /// The amount by which `value` is increased every read
-    step: T,
 
     /// Where the virtual cursor is.
     cursor: CursorPosition,
 }
-impl<T> ColumnScanNulls<T>
+impl<T> ColumnScanConstant<T>
 where
     T: ColumnDataType,
 {
-    /// Constructs a new [`ColumnScanNulls`].
-    pub fn new(value: T, step: T) -> Self {
-        ColumnScanNulls {
+    /// Constructs a new [`ColumnScanConstant`].
+    pub fn new(value: T) -> Self {
+        ColumnScanConstant {
             value,
-            step,
             cursor: CursorPosition::Before,
         }
     }
 }
 
-impl<T> Iterator for ColumnScanNulls<T>
+impl<T> Iterator for ColumnScanConstant<T>
 where
     T: ColumnDataType,
 {
@@ -49,8 +45,6 @@ where
         match self.cursor {
             CursorPosition::Before => {
                 self.cursor = CursorPosition::At;
-                self.value = self.value + self.step;
-
                 Some(self.value)
             }
             CursorPosition::At => {
@@ -62,12 +56,23 @@ where
     }
 }
 
-impl<T> ColumnScan for ColumnScanNulls<T>
+impl<T> ColumnScan for ColumnScanConstant<T>
 where
     T: ColumnDataType,
 {
-    fn seek(&mut self, _value: T) -> Option<T> {
-        unimplemented!("ColumnScanNulls does not support seek");
+    fn seek(&mut self, value: T) -> Option<T> {
+        if value <= self.value {
+            if let CursorPosition::After = self.cursor {
+                None
+            } else {
+                self.cursor = CursorPosition::At;
+
+                Some(self.value)
+            }
+        } else {
+            self.cursor = CursorPosition::After;
+            None
+        }
     }
 
     fn current(&self) -> Option<T> {
@@ -92,27 +97,27 @@ where
 
 #[cfg(test)]
 mod test {
-    use crate::columnar::column_storage::columnscan::ColumnScan;
+    use crate::columnar::columnscan::ColumnScan;
 
-    use super::ColumnScanNulls;
+    use super::ColumnScanConstant;
 
     use test_log::test;
 
     #[test]
     fn test_u64() {
-        let mut scan = ColumnScanNulls::new(4u64, 2);
+        let mut scan = ColumnScanConstant::new(4u32);
         assert_eq!(scan.current(), None);
-        assert_eq!(scan.next(), Some(6));
-        assert_eq!(scan.current(), Some(6));
+        assert_eq!(scan.next(), Some(4));
+        assert_eq!(scan.current(), Some(4));
         assert_eq!(scan.next(), None);
         assert_eq!(scan.current(), None);
 
         scan.reset();
 
         assert_eq!(scan.current(), None);
-        assert_eq!(scan.next(), Some(8));
-        assert_eq!(scan.current(), Some(8));
-        assert_eq!(scan.next(), None);
-        assert_eq!(scan.current(), None);
+        assert_eq!(scan.seek(3), Some(4));
+        assert_eq!(scan.seek(4), Some(4));
+        assert_eq!(scan.seek(10), None);
+        assert_eq!(scan.seek(1), None);
     }
 }

@@ -8,9 +8,9 @@ use std::{
 
 use bytesize::ByteSize;
 
-use crate::management::ByteSized;
+use crate::{columnar::columnscan::ColumnScan, management::ByteSized};
 
-use super::{column::Column, columnscan::ColumnScan};
+use super::Column;
 
 /// Simple implementation of [`Column`] that uses Vec to store data.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -212,7 +212,7 @@ where
 
 #[cfg(test)]
 mod test {
-    use crate::columnar::column_storage::{column::Column, columnscan::ColumnScan};
+    use crate::columnar::{column::Column, columnscan::ColumnScan};
 
     use super::{ColumnScanVector, ColumnVector};
     use test_log::test;

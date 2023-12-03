@@ -3,11 +3,11 @@
 use std::num::NonZeroUsize;
 
 use crate::{
-    columnar::column_storage::column_rle::ColumnRle,
+    columnar::column::rle::ColumnRle,
     datatypes::{ColumnDataType, RunLengthEncodable},
 };
 
-use super::columnbuilder::ColumnBuilder;
+use super::ColumnBuilder;
 
 /// Compact representation of multiple values of type `T`
 /// that differ by a constant amount

@@ -1,6 +1,6 @@
 use crate::{
     arithmetic::expression::StackProgram,
-    columnar::column_storage::columnscan::{ColumnScan, ColumnScanCell},
+    columnar::columnscan::{ColumnScan, ColumnScanCell},
     datatypes::ColumnDataType,
 };
 use std::{fmt::Debug, iter::repeat_with, ops::Range};
@@ -127,8 +127,8 @@ where
 mod test {
     use crate::{
         arithmetic::expression::{BinaryOperation, StackOperation, StackProgram, StackValue},
-        columnar::column_storage::{
-            column_vector::{ColumnScanVector, ColumnVector},
+        columnar::{
+            column::vector::{ColumnScanVector, ColumnVector},
             columnscan::{ColumnScan, ColumnScanCell, ColumnScanEnum},
         },
     };

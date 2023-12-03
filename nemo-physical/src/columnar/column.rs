@@ -1,21 +1,24 @@
-//! This module defines the [Column] trait as well as [ColumnEnum],
-//! which collects all possible implementations of that trait
-//! into a single object.
+//! This module defines the [Column] trait and its implementations,
+//! as well as [ColumnEnum],
+//! which collects all implementations into a single object.
+
+pub mod interval;
+pub mod rle;
+pub mod vector;
+
+use std::{fmt::Debug, mem::size_of};
 
 use bytesize::ByteSize;
 
 use crate::{
-    datatypes::{ColumnDataType, Double, Float, RunLengthEncodable, StorageValueT},
-    generate_datatype_forwarder, generate_forwarder,
+    datatypes::{ColumnDataType, RunLengthEncodable},
+    generate_forwarder,
     management::ByteSized,
 };
-use std::{fmt::Debug, mem::size_of};
 
-use super::{
-    column_rle::ColumnRle,
-    column_vector::ColumnVector,
-    columnscan::{ColumnScan, ColumnScanEnum},
-};
+use self::{rle::ColumnRle, vector::ColumnVector};
+
+use super::columnscan::{ColumnScan, ColumnScanEnum};
 
 /// A trait representing a column of data, where each entry is of type `T`.
 pub trait Column<'a, T>: Debug + Clone + ByteSized {
@@ -83,42 +86,5 @@ impl<T: RunLengthEncodable> ByteSized for ColumnEnum<T> {
     fn size_bytes(&self) -> ByteSize {
         let size_column = forward_to_column!(self, size_bytes);
         ByteSize::b(size_of::<Self>() as u64) + size_column
-    }
-}
-
-/// Enum for column implementations
-#[derive(Debug, Clone)]
-pub enum ColumnT {
-    /// Case `ColumnEnum<u64>`
-    Id32(ColumnEnum<u32>),
-    /// Case `ColumnEnum<u64>`
-    Id64(ColumnEnum<u64>),
-    /// Case `ColumnEnum<i64>`
-    Int64(ColumnEnum<i64>),
-    /// Case `ColumnEnum<Float>`
-    Float(ColumnEnum<Float>),
-    /// Case `ColumnEnum<Double>`
-    Double(ColumnEnum<Double>),
-}
-
-generate_datatype_forwarder!(forward_to_column_enum);
-
-impl ColumnT {
-    /// Returns the number of entries in the [`Column`]
-    pub fn len(&self) -> usize {
-        forward_to_column_enum!(self, len)
-    }
-
-    /// Returns the value, wrapped in a [`StorageValueT`], at a given index.
-    ///
-    /// # Panics
-    /// Panics if `index` is out of bounds.
-    pub fn get(&self, index: usize) -> StorageValueT {
-        forward_to_column_enum!(self, get(index).as_variant_of(StorageValueT))
-    }
-
-    /// Returns [`true`] iff the column is empty
-    pub fn is_empty(&self) -> bool {
-        forward_to_column_enum!(self, is_empty)
     }
 }

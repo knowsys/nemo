@@ -1,4 +1,4 @@
-//! This module collects operations over columns
+//! This module defines and implements database operations over columns
 
 /// Module for defining [`ColumnScanJoin`]
 pub mod columnscan_join;

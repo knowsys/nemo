@@ -1,4 +1,4 @@
-use crate::columnar::column_storage::columnscan::{ColumnScan, ColumnScanCell};
+use crate::columnar::columnscan::{ColumnScan, ColumnScanCell};
 use crate::datatypes::ColumnDataType;
 use std::{fmt::Debug, ops::Range};
 
@@ -96,9 +96,8 @@ where
 
 #[cfg(test)]
 mod test {
-    use crate::columnar::column_storage::{
-        column::Column,
-        column_vector::ColumnVector,
+    use crate::columnar::{
+        column::{Column, vector::ColumnVector},
         columnscan::{ColumnScan, ColumnScanCell, ColumnScanEnum},
     };
 

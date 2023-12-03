@@ -2,21 +2,22 @@
 //! which collects all implemenations of that trait
 //! into a single object.
 
-use super::super::column_operations::{
-    ColumnScanCastEnum, ColumnScanEqualColumn, ColumnScanFollow, ColumnScanJoin, ColumnScanMinus,
-    ColumnScanPass, ColumnScanPrune, ColumnScanReorder, ColumnScanRestrictValues, ColumnScanUnion,
-};
-use super::column_rle::ColumnScanRle;
-use super::column_vector::ColumnScanVector;
+use std::{cell::UnsafeCell, fmt::Debug, ops::Range};
 
-use crate::columnar::column_operations::{
-    ColumnScanArithmetic, ColumnScanConstant, ColumnScanCopy, ColumnScanNulls, ColumnScanSubtract,
-};
 use crate::{
-    datatypes::{ColumnDataType, Double, Float, StorageValueT},
+    datatypes::{ColumnDataType, Double, Float, StorageTypeName, StorageValueT},
     generate_datatype_forwarder, generate_forwarder,
 };
-use std::{cell::UnsafeCell, fmt::Debug, ops::Range};
+
+use super::{
+    column::{rle::ColumnScanRle, vector::ColumnScanVector},
+    operations::{
+        ColumnScanArithmetic, ColumnScanCastEnum, ColumnScanConstant, ColumnScanCopy,
+        ColumnScanEqualColumn, ColumnScanFollow, ColumnScanJoin, ColumnScanMinus, ColumnScanNulls,
+        ColumnScanPass, ColumnScanPrune, ColumnScanReorder, ColumnScanRestrictValues,
+        ColumnScanSubtract, ColumnScanUnion,
+    },
+};
 
 /// Iterator for a sorted interval of values
 pub trait ColumnScan: Debug + Iterator {
@@ -572,5 +573,33 @@ impl<'a> ColumnScan for ColumnScanT<'a> {
 
     fn narrow(&mut self, interval: Range<usize>) {
         forward_to_columnscan_cell!(self, narrow(interval))
+    }
+}
+
+// Replaces [ColumnScanT]
+#[derive(Debug)]
+pub struct ColumnScanRainbow<'a> {
+    /// Case [StorageTypeName::Id32][super::super::datatypes::storage_type_name::StorageTypeName]
+    pub scan_id32: ColumnScanCell<'a, u32>,
+    /// Case [StorageTypeName::Id64][super::super::datatypes::storage_type_name::StorageTypeName]
+    pub scan_id64: ColumnScanCell<'a, u64>,
+    /// Case [StorageTypeName::Int64][super::super::datatypes::storage_type_name::StorageTypeName]
+    pub scan_i64: ColumnScanCell<'a, i64>,
+    /// Case [StorageTypeName::Float][super::super::datatypes::storage_type_name::StorageTypeName]
+    pub scan_float: ColumnScanCell<'a, Float>,
+    /// Case [StorageTypeName::Double][super::super::datatypes::storage_type_name::StorageTypeName]
+    pub scan_double: ColumnScanCell<'a, Double>,
+}
+
+impl<'a> ColumnScanRainbow<'a> {
+    /// Return to the initial state.
+    pub fn reset(&mut self, storage_type: StorageTypeName) {
+        match storage_type {
+            StorageTypeName::Id32 => self.scan_id32.reset(),
+            StorageTypeName::Id64 => self.scan_id64.reset(),
+            StorageTypeName::Int64 => self.scan_i64.reset(),
+            StorageTypeName::Float => self.scan_float.reset(),
+            StorageTypeName::Double => self.scan_double.reset(),
+        }
     }
 }

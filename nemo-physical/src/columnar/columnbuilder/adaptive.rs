@@ -2,19 +2,20 @@
 //! which dynamically chooses the most efficient representation
 //! for the constructed column.
 
+use std::fmt::Debug;
+
 use crate::{
-    columnar::column_storage::{
-        column::{Column, ColumnEnum},
-        column_vector::ColumnVector,
+    columnar::column::{
         interval::{ColumnWithIntervals, ColumnWithIntervalsT},
+        vector::ColumnVector,
+        Column, ColumnEnum,
     },
     datatypes::{
         ColumnDataType, Double, Float, RunLengthEncodable, StorageTypeName, StorageValueT,
     },
 };
-use std::fmt::Debug;
 
-use super::{columnbuilder::ColumnBuilder, columnbuilder_rle::ColumnBuilderRle};
+use super::{rle::ColumnBuilderRle, ColumnBuilder};
 
 /// Number of rle elements in rle column builder after which to decide which column type to use.
 #[derive(Copy, Clone, Debug, PartialEq)]
@@ -327,8 +328,8 @@ mod test {
     use super::ColumnBuilderAdaptive;
     use crate::{
         columnar::{
-            column_builders::columnbuilder::ColumnBuilder,
-            column_storage::column::{Column, ColumnEnum},
+            column::{Column, ColumnEnum},
+            columnbuilder::ColumnBuilder,
         },
         datatypes::{Double, Float},
     };

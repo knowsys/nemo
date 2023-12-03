@@ -1,17 +1,22 @@
 //! This module defines [ColumnRle] and [ColumnScanRle].
 
+use std::{fmt::Debug, mem::size_of, num::NonZeroUsize, ops::Range};
+
+use bytesize::ByteSize;
+
 use crate::{
-    columnar::column_builders::{
-        columnbuilder::ColumnBuilder,
-        columnbuilder_rle::{ColumnBuilderRle, RleElement},
+    columnar::{
+        columnbuilder::{
+            rle::{ColumnBuilderRle, RleElement},
+            ColumnBuilder,
+        },
+        columnscan::ColumnScan,
     },
     datatypes::{ColumnDataType, RunLengthEncodable},
     management::ByteSized,
 };
-use bytesize::ByteSize;
-use std::{fmt::Debug, mem::size_of, num::NonZeroUsize, ops::Range};
 
-use super::{column::Column, columnscan::ColumnScan};
+use super::Column;
 
 /// Implementation of [`Column`] that allows the use of incremental run length encoding.
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -440,8 +445,8 @@ where
 
 #[cfg(test)]
 mod test {
-    use crate::columnar::column_storage::column::Column;
-    use crate::columnar::column_storage::columnscan::ColumnScan;
+    use crate::columnar::column::Column;
+    use crate::columnar::columnscan::ColumnScan;
     use crate::datatypes::{Double, Float, RunLengthEncodable};
     use quickcheck_macros::quickcheck;
     use std::iter::repeat;

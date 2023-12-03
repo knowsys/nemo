@@ -1,4 +1,4 @@
-use crate::columnar::column_storage::columnscan::{ColumnScan, ColumnScanCell};
+use crate::columnar::columnscan::{ColumnScan, ColumnScanCell};
 use crate::datatypes::ColumnDataType;
 use crate::tabular::operations::triescan_prune::{SharedTrieScanPruneState, TrieScanPruneState};
 use std::fmt::Debug;
