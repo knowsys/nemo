@@ -7,7 +7,7 @@ use petgraph::{
 
 use crate::{
     model::{
-        chase_model::{ChaseAtom, ChaseRule, AGGREGATE_VARIABLE_PREFIX},
+        chase_model::{is_aggregate_variable, ChaseAtom, ChaseRule},
         types::error::TypeError,
         Identifier, PrimitiveTerm, PrimitiveType, Variable,
     },
@@ -185,7 +185,7 @@ impl PositionGraph {
                                 );
                             } else {
                                 debug_assert!(
-                                    matches!(body_variable, Variable::Universal(identifier) if identifier.0.starts_with(AGGREGATE_VARIABLE_PREFIX)),
+                                    is_aggregate_variable(body_variable),
                                     "The iteration above went through all body atoms for non aggregate variables"
                                 )
                             }

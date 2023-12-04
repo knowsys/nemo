@@ -284,8 +284,6 @@ impl ChaseRule {
                 }
 
                 *term = new_variable;
-
-                rule_next_variable_id += 1;
             }
         }
 

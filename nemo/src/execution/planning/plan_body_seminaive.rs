@@ -7,7 +7,7 @@ use nemo_physical::management::execution_plan::ExecutionNodeRef;
 use crate::{
     execution::execution_engine::RuleInfo,
     model::{
-        chase_model::{ChaseAggregate, ChaseRule, Constructor, AGGREGATE_VARIABLE_PREFIX},
+        chase_model::{is_aggregate_variable, ChaseAggregate, ChaseRule, Constructor},
         Variable,
     },
     program_analysis::{analysis::RuleAnalysis, variable_order::VariableOrder},
@@ -67,7 +67,7 @@ impl SeminaiveStrategy {
             // Compute group-by variables for all aggregates in the rule
             // This is the set of all universal variables in the head (before any arithmetic operations) except for the aggregated variables
             Some(used_variables_before_arithmetic_operations.iter().filter(|variable| match variable {
-                Variable::Universal(identifier) => !identifier.0.starts_with(AGGREGATE_VARIABLE_PREFIX),
+                Variable::Universal(_) => !is_aggregate_variable(variable),
                 Variable::Existential(_) => panic!("existential head variables are currently not supported together with aggregates"),
             }).cloned().collect())
         };
