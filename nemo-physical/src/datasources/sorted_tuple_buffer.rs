@@ -89,10 +89,10 @@ mod test {
         let v3 = AnyDataValue::new_string("b".to_string()); // 2
         let v4 = AnyDataValue::new_string("d".to_string()); // 3
 
-        tb.next_value(v1.clone());
-        tb.next_value(v2.clone());
-        tb.next_value(v3.clone());
-        tb.next_value(v4.clone());
+        tb.next_value(v1);
+        tb.next_value(v2);
+        tb.next_value(v3);
+        tb.next_value(v4);
 
         let stb = tb.finalize();
 
