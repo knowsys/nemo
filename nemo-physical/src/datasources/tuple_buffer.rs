@@ -150,21 +150,6 @@ impl<'a> TupleBuffer<'a> {
         self.get_storage_value_t(table_idx, col_index, tuple_idx)
     }
 
-    /// Returns a Vector of [`StorageValueT`] corresponding to the tuple index: `val_index`,
-    /// according to the internal order of tuples.
-    pub(crate) fn get_tuple(&self, val_index: usize) -> Vec<StorageValueT> {
-        assert!(
-            val_index < self.table_lengths.iter().sum(),
-            "col_index greater than number of columns"
-        );
-        let (table_idx, tuple_idx) = self.get_table_and_tuple_indexes(val_index);
-        let mut result: Vec<StorageValueT> = Vec::with_capacity(self.col_num);
-        for i in 0..self.col_num {
-            self.get_storage_value_t(table_idx, i, tuple_idx);
-        }
-        result
-    }
-
     /// Utility function to retrieve the [`StorageValueT`] from a [`TupleBuffer`] given its (inner)
     /// table, column and tuple indexes. Tuple index correspond to the internal order of tuples.
     /// See also [`TupleBuffer::get_table_and_tuple_indexes`]
@@ -382,8 +367,37 @@ impl<'a> TupleBuffer<'a> {
 #[cfg(test)]
 mod test {
     use super::TupleBuffer;
-    use crate::{datatypes::StorageValueT, datavalues::AnyDataValue, management::database::Dict};
+    use crate::{
+        datatypes::StorageValueT, datavalues::AnyDataValue, dictionary::DvDict,
+        management::database::Dict,
+    };
     use std::cell::RefCell;
+    use std::convert::TryFrom;
+
+    impl<'a> TupleBuffer<'a> {
+        fn get_tuple_of_any_data_values(&self, tuple_idx: usize) -> Vec<AnyDataValue> {
+            let mut result: Vec<AnyDataValue> = Vec::with_capacity(self.col_num);
+            let (table_idx, tuple_idx) = self.get_table_and_tuple_indexes(tuple_idx);
+            for i in 0..self.col_num {
+                result.push(self.svt2adv(&self.get_storage_value_t(table_idx, i, tuple_idx)));
+            }
+            result
+        }
+
+        fn svt2adv(&self, storagevaluet: &StorageValueT) -> AnyDataValue {
+            match storagevaluet {
+                StorageValueT::Id32(val) => self
+                    .dict
+                    .borrow()
+                    .id_to_datavalue(
+                        usize::try_from(*val).expect("Invalid Id32-> usize conversion"),
+                    )
+                    .expect("Invalid Dictionary Id"),
+                StorageValueT::Int64(val) => AnyDataValue::new_integer_from_i64(*val),
+                _ => panic!("Not implemented yet!"),
+            }
+        }
+    }
 
     #[test]
     fn test_internal_table_structures() {
@@ -439,5 +453,15 @@ mod test {
         assert_eq!(tb.get_value(0, 0), tb.get_value(0, 1));
         assert_ne!(tb.get_value(2, 1), tb.get_value(0, 0));
         assert_eq!(tb.get_value(2, 1), StorageValueT::Int64(42));
+
+        let vec1: Vec<AnyDataValue> = vec![v1.clone(), v1.clone(), v1.clone()];
+        let vec2: Vec<AnyDataValue> = vec![v1.clone(), v2.clone(), v1.clone()];
+        let vec3: Vec<AnyDataValue> = vec![v1.clone(), v1.clone(), v2.clone()];
+        assert_eq!(tb.get_tuple_of_any_data_values(0), vec1);
+        assert_eq!(tb.get_tuple_of_any_data_values(1), vec1);
+        assert_eq!(tb.get_tuple_of_any_data_values(2), vec2);
+        assert_eq!(tb.get_tuple_of_any_data_values(3), vec3);
+        assert_eq!(tb.get_tuple_of_any_data_values(4), vec3);
+        assert_eq!(tb.get_tuple_of_any_data_values(5), vec3);
     }
 }

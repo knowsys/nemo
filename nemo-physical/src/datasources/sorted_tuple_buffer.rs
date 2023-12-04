@@ -120,18 +120,18 @@ mod test {
         let va = AnyDataValue::new_string("a".to_string()); // 0
         let vb = AnyDataValue::new_string("b".to_string()); // 1
 
-        // 1 "a"
-        tb.next_value(v1.clone());
-        tb.next_value(va.clone());
-        // 2 10
-        tb.next_value(v2.clone());
-        tb.next_value(v10.clone());
-        // 3 "b"
-        tb.next_value(v3.clone());
-        tb.next_value(vb.clone());
         // 4 20
-        tb.next_value(v4.clone());
-        tb.next_value(v20.clone());
+        tb.next_value(v4);
+        tb.next_value(v20);
+        // 1 "a"
+        tb.next_value(v1);
+        tb.next_value(va);
+        // 2 10
+        tb.next_value(v2);
+        tb.next_value(v10);
+        // 3 "b"
+        tb.next_value(v3);
+        tb.next_value(vb);
 
         let stb = tb.finalize();
 
