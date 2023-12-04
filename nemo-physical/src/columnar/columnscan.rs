@@ -10,7 +10,7 @@ use crate::{
 };
 
 use super::{
-    column::{interval, rle::ColumnScanRle, vector::ColumnScanVector},
+    column::{rle::ColumnScanRle, vector::ColumnScanVector},
     operations::{
         ColumnScanArithmetic, ColumnScanCastEnum, ColumnScanConstant, ColumnScanCopy,
         ColumnScanEqualColumn, ColumnScanFollow, ColumnScanJoin, ColumnScanMinus, ColumnScanNulls,

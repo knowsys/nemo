@@ -1,6 +1,6 @@
-//! This module defines the [Column] trait and its implementations,
+//! This module defines the trait [Column] and its implementations,
 //! as well as [ColumnEnum],
-//! which collects all implementations into a single object.
+//! which collects all implementations of [Column] into a single object.
 
 pub mod interval;
 pub mod rle;

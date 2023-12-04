@@ -1,3 +1,6 @@
+//! This module defines the trait [PartialTrieScan],
+//! which is an iterator for [Trie][super::trie::Trie].
+
 use std::{cell::UnsafeCell, fmt::Debug};
 
 use crate::{columnar::columnscan::ColumnScanRainbow, datatypes::StorageTypeName};

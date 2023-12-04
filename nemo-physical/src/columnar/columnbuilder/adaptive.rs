@@ -302,26 +302,26 @@ impl ColumnBuilderAdaptiveT {
     }
 }
 
-impl FromIterator<StorageValueT> for ColumnBuilderAdaptiveT {
-    fn from_iter<T>(iter: T) -> Self
-    where
-        T: IntoIterator<Item = StorageValueT>,
-    {
-        let mut peekable = iter.into_iter().peekable();
-        let mut builder = Self::new(
-            peekable
-                .peek()
-                .map(|dv| dv.get_type())
-                .unwrap_or(StorageTypeName::Id64),
-            Default::default(),
-            Default::default(),
-        );
-        for item in peekable {
-            builder.add(item);
-        }
-        builder
-    }
-}
+// impl FromIterator<StorageValueT> for ColumnBuilderAdaptiveT {
+//     fn from_iter<T>(iter: T) -> Self
+//     where
+//         T: IntoIterator<Item = StorageValueT>,
+//     {
+//         let mut peekable = iter.into_iter().peekable();
+//         let mut builder = Self::new(
+//             peekable
+//                 .peek()
+//                 .map(|dv| dv.get_type())
+//                 .unwrap_or(StorageTypeName::Id64),
+//             Default::default(),
+//             Default::default(),
+//         );
+//         for item in peekable {
+//             builder.add(item);
+//         }
+//         builder
+//     }
+// }
 
 #[cfg(test)]
 mod test {

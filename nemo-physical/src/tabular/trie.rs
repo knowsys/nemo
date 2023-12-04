@@ -1,11 +1,24 @@
+//! This module implements [Trie]
+//! as well as its iterator [TrieScanGeneric].
+
 use std::cell::UnsafeCell;
 
 use crate::{
-    columnar::{columnscan::ColumnScanRainbow, intervalcolumn::column_intervals::IntervalColumnT},
+    columnar::{
+        columnscan::ColumnScanRainbow,
+        intervalcolumn::{
+            interval_lookup::lookup_column_single::IntervalLookupColumnSingle, IntervalColumnT,
+            IntervalColumnTBuilder,
+        },
+    },
+    datasources::SortedTupleBuffer,
     datatypes::StorageTypeName,
 };
 
 use super::triescan::PartialTrieScan;
+
+/// Defines the lookup method used in [IntervalColumnT]
+type IntervalLookupMethod = IntervalLookupColumnSingle;
 
 /// A tree like data structure for storing tabular data
 ///
@@ -15,12 +28,12 @@ use super::triescan::PartialTrieScan;
 pub struct Trie {
     /// Each [IntervalColumnT] represents one column in the table.
     /// We refer to each such column as a layer.
-    columns: Vec<IntervalColumnT>,
+    columns: Vec<IntervalColumnT<IntervalLookupMethod>>,
 }
 
 impl Trie {
-    /// Construct a new [Trie]
-    pub fn new(columns: Vec<IntervalColumnT>) -> Self {
+    /// Construct a new [Trie].
+    pub fn new(columns: Vec<IntervalColumnT<IntervalLookupMethod>>) -> Self {
         Self { columns }
     }
 
@@ -29,7 +42,7 @@ impl Trie {
         self.columns.len()
     }
 
-    /// Return a [TrieScan] over this trie.
+    /// Return a [PartialTrieScan] over this trie.
     pub fn iter(&self) -> TrieScanGeneric<'_> {
         let column_scans = self
             .columns
@@ -38,6 +51,47 @@ impl Trie {
             .collect::<Vec<_>>();
 
         TrieScanGeneric::new(self, column_scans)
+    }
+}
+
+impl Trie {
+    /// Create a new [Trie] from a [SortedTupleBuffer].
+    pub fn from_tuple_buffer(buffer: SortedTupleBuffer) -> Self {
+        let mut intervalcolumn_builders = (0..buffer.column_number())
+            .map(|_| IntervalColumnTBuilder::<IntervalLookupMethod>::default())
+            .collect::<Vec<_>>();
+
+        let mut last_tuple_intervals = vec![buffer.size()];
+
+        for column_index in 0..buffer.column_number() {
+            let current_builder = &mut intervalcolumn_builders[column_index];
+            let mut current_tuple_intervals = Vec::<usize>::new();
+
+            let mut predecessor_index = 0;
+            for (tuple_index, value) in buffer.get_column(column_index).enumerate() {
+                if tuple_index == last_tuple_intervals[predecessor_index] {
+                    current_builder.finish_interval();
+                    predecessor_index += 1;
+                }
+
+                let new_value = current_builder.add_value(value);
+
+                if new_value && tuple_index > 0 {
+                    current_tuple_intervals.push(tuple_index);
+                }
+            }
+
+            current_builder.finish_interval();
+
+            last_tuple_intervals = current_tuple_intervals;
+        }
+
+        Self {
+            columns: intervalcolumn_builders
+                .into_iter()
+                .map(|builder| builder.finalize())
+                .collect(),
+        }
     }
 }
 

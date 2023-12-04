@@ -1,3 +1,6 @@
+//! This module implements [IntervalLookupColumnSingle]
+//! and the associated builder [IntervalLookupColumnSingleBuilder].
+
 use std::ops::Range;
 
 use bytesize::ByteSize;
@@ -5,12 +8,13 @@ use bytesize::ByteSize;
 use crate::{
     columnar::{
         column::{Column, ColumnEnum},
+        columnbuilder::{adaptive::ColumnBuilderAdaptive, ColumnBuilder},
         columnscan::ColumnScan,
     },
     management::ByteSized,
 };
 
-use super::IntervalLookup;
+use super::{IntervalLookup, IntervalLookupBuilder};
 
 /// Implementation of [IntervalLookup],
 /// which internally uses a single [ColumnEnum]
@@ -59,6 +63,8 @@ impl IntervalLookupColumnSingle {
 }
 
 impl IntervalLookup for IntervalLookupColumnSingle {
+    type Builder = IntervalLookupColumnSingleBuilder;
+
     fn interval_bounds(&self, index: usize) -> Option<Range<usize>> {
         let interval_start = self.interval_starts.get(index);
         if interval_start == Self::EMPTY {
@@ -74,5 +80,34 @@ impl IntervalLookup for IntervalLookupColumnSingle {
 impl ByteSized for IntervalLookupColumnSingle {
     fn size_bytes(&self) -> ByteSize {
         self.interval_starts.size_bytes()
+    }
+}
+
+#[derive(Debug, Default)]
+pub struct IntervalLookupColumnSingleBuilder {
+    /// [ColumnBuilderAdaptive] for building `interval_starts`
+    builder: ColumnBuilderAdaptive<usize>,
+
+    /// Parameter passed to `self.add` in the last call
+    last_data_count: usize,
+}
+
+impl IntervalLookupBuilder for IntervalLookupColumnSingleBuilder {
+    type Lookup = IntervalLookupColumnSingle;
+
+    fn add(&mut self, data_count: usize) {
+        if data_count != self.last_data_count {
+            self.builder.add(self.last_data_count);
+        } else {
+            self.builder.add(Self::Lookup::EMPTY);
+        }
+    }
+
+    fn finalize(mut self) -> Self::Lookup {
+        self.builder.add(self.last_data_count);
+
+        Self::Lookup {
+            interval_starts: self.builder.finalize(),
+        }
     }
 }
