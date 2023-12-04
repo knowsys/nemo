@@ -42,24 +42,27 @@ impl<'a> SortedTupleBuffer<'_> {
     /// Returns the order of tuples in the TupleBuffer
     fn get_order(tuple_buffer: &TupleBuffer) -> Vec<usize> {
         let mut order: Vec<usize> = (0..tuple_buffer.size()).collect();
-        order.sort_by(|x, y| SortedTupleBuffer::compare_rows(tuple_buffer, x, y));
+        order.sort_by(|x, y| SortedTupleBuffer::compare_tuples(tuple_buffer, *x, *y));
         order
     }
 
     /// Compare two tuples by types and values corresponding to their tuple indexes, according to
     /// the internal order of tuples, i.e., tuple indexes in the first inner table are maintained,
     /// and row indexes in the second table start from table_lengths[0], and so on.
-    fn compare_rows(
+    fn compare_tuples(
         tuple_buffer: &TupleBuffer,
-        first_tuple_idx: &usize,
-        second_tuple_idx: &usize,
+        first_tuple_idx: usize,
+        second_tuple_idx: usize,
     ) -> Ordering {
-        assert!(true);
+        let (first_table_idx, first_tuple_idx) =
+            tuple_buffer.get_table_and_tuple_indexes(first_tuple_idx);
+        let (second_table_idx, second_tuple_idx) =
+            tuple_buffer.get_table_and_tuple_indexes(second_tuple_idx);
         for i in 0..tuple_buffer.column_number() {
-            let first_storage_value = tuple_buffer.get_value(*first_tuple_idx, i);
-            let second_storage_value = tuple_buffer.get_value(*second_tuple_idx, i);
-            if first_storage_value.cmp(&second_storage_value) != Ordering::Equal {
-                return first_storage_value.cmp(&second_storage_value);
+            let first = tuple_buffer.get_storage_value_t(first_table_idx, i, first_tuple_idx);
+            let second = tuple_buffer.get_storage_value_t(second_table_idx, i, second_tuple_idx);
+            if first.cmp(&second) != Ordering::Equal {
+                return first.cmp(&second);
             }
         }
         Ordering::Equal

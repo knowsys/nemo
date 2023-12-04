@@ -146,30 +146,51 @@ impl<'a> TupleBuffer<'a> {
             col_index < self.col_num,
             "col_index greater than number of columns"
         );
-        let (table_index, tuple_index) = self.get_table_and_tuple_indexes(val_index);
-        let idx_in_value_cols = self.tables[table_index].col_ids[col_index];
-        match self.tables[table_index].col_types[col_index] {
-            StorageTypeName::Id32 => {
-                StorageValueT::Id32(self.cols_u32[idx_in_value_cols][tuple_index])
-            }
-            StorageTypeName::Id64 => {
-                StorageValueT::Id64(self.cols_u64[idx_in_value_cols][tuple_index])
-            }
-            StorageTypeName::Int64 => {
-                StorageValueT::Int64(self.cols_i64[idx_in_value_cols][tuple_index])
-            }
+        let (table_idx, tuple_idx) = self.get_table_and_tuple_indexes(val_index);
+        self.get_storage_value_t(table_idx, col_index, tuple_idx)
+    }
+
+    /// Returns a Vector of [`StorageValueT`] corresponding to the tuple index: `val_index`,
+    /// according to the internal order of tuples.
+    pub(crate) fn get_tuple(&self, val_index: usize) -> Vec<StorageValueT> {
+        assert!(
+            val_index < self.table_lengths.iter().sum(),
+            "col_index greater than number of columns"
+        );
+        let (table_idx, tuple_idx) = self.get_table_and_tuple_indexes(val_index);
+        let mut result: Vec<StorageValueT> = Vec::with_capacity(self.col_num);
+        for i in 0..self.col_num {
+            self.get_storage_value_t(table_idx, i, tuple_idx);
+        }
+        result
+    }
+
+    /// Utility function to retrieve the [`StorageValueT`] from a [`TupleBuffer`] given its (inner)
+    /// table, column and tuple indexes. Tuple index correspond to the internal order of tuples.
+    /// See also [`TupleBuffer::get_table_and_tuple_indexes`]
+    pub(crate) fn get_storage_value_t(
+        &self,
+        table_idx: usize,
+        col_idx: usize,
+        tuple_idx: usize,
+    ) -> StorageValueT {
+        let deref_col_idx = self.tables[table_idx].col_ids[col_idx];
+        match self.tables[table_idx].col_types[col_idx] {
+            StorageTypeName::Id32 => StorageValueT::Id32(self.cols_u32[deref_col_idx][tuple_idx]),
+            StorageTypeName::Id64 => StorageValueT::Id64(self.cols_u64[deref_col_idx][tuple_idx]),
+            StorageTypeName::Int64 => StorageValueT::Int64(self.cols_i64[deref_col_idx][tuple_idx]),
             StorageTypeName::Float => {
-                StorageValueT::Float(self.cols_floats[idx_in_value_cols][tuple_index])
+                StorageValueT::Float(self.cols_floats[deref_col_idx][tuple_idx])
             }
             StorageTypeName::Double => {
-                StorageValueT::Double(self.cols_doubles[idx_in_value_cols][tuple_index])
+                StorageValueT::Double(self.cols_doubles[deref_col_idx][tuple_idx])
             }
         }
     }
 
     /// Utility function to get the table and tuple indexes of a tuple index given in the internal
     /// order of tuples. Panic if tuple_index is greater than the actual number of tuples.
-    fn get_table_and_tuple_indexes(&self, tuple_index: usize) -> (usize, usize) {
+    pub(crate) fn get_table_and_tuple_indexes(&self, tuple_index: usize) -> (usize, usize) {
         assert!(
             tuple_index < self.table_lengths.iter().sum(),
             "tuple index larger than number of tuples"
@@ -363,13 +384,6 @@ mod test {
     use super::TupleBuffer;
     use crate::{datatypes::StorageValueT, datavalues::AnyDataValue, management::database::Dict};
     use std::cell::RefCell;
-
-    impl<'a> TupleBuffer<'a> {
-        fn get_anydatavalue_tuple(&self, tuple_idx: usize) -> Vec<AnyDataValue> {
-            let mut result: Vec<AnyDataValue> = Vec::with_capacity(self.col_num);
-            result
-        }
-    }
 
     #[test]
     fn test_internal_table_structures() {
