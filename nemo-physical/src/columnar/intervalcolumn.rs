@@ -4,7 +4,7 @@
 //!
 //! Such columns represent a layer in a [Trie][crate::tabular::trie::Trie].
 
-pub mod interval_lookup;
+pub(crate) mod interval_lookup;
 
 use std::ops::Range;
 
@@ -24,7 +24,7 @@ use crate::{
 use self::interval_lookup::{IntervalLookup, IntervalLookupBuilder};
 
 #[derive(Debug, Clone)]
-pub struct IntervalColumn<T, LookupMethod>
+pub(crate) struct IntervalColumn<T, LookupMethod>
 where
     T: ColumnDataType,
     LookupMethod: IntervalLookup,
@@ -80,7 +80,7 @@ where
 
 /// [IntervalColumn] for each [StorageTypeName]
 #[derive(Debug, Clone)]
-pub struct IntervalColumnT<LookupMethod>
+pub(crate) struct IntervalColumnT<LookupMethod>
 where
     LookupMethod: IntervalLookup,
 {
@@ -235,7 +235,7 @@ where
 }
 
 #[derive(Debug)]
-pub struct IntervalColumnTBuilder<LookupMethod>
+pub(crate) struct IntervalColumnTBuilder<LookupMethod>
 where
     LookupMethod: IntervalLookup,
 {

@@ -22,7 +22,7 @@ use super::{IntervalLookup, IntervalLookupBuilder};
 /// and a [BitVec] to store which nodes
 /// of the previous layers have successors in the current layer
 #[derive(Debug, Clone)]
-pub struct IntervalLookupBitVector {
+pub(crate) struct IntervalLookupBitVector {
     /// [Column][crate::columnar::column::Column] that stores
     /// the start indices of intervals in the associated data column,
     /// which contain the successor nodes of the values from the previous layer
@@ -80,7 +80,7 @@ impl ByteSized for IntervalLookupBitVector {
 }
 
 #[derive(Debug, Default)]
-pub struct IntervalLookupBitVectorBuilder {
+pub(crate) struct IntervalLookupBitVectorBuilder {
     /// [ColumnBuilderAdaptive] for building `interval_starts`
     builder_intervals: ColumnBuilderAdaptive<usize>,
     /// [BitVec] for storing which predecessor value has a successor in the constructed column

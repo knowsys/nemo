@@ -5,12 +5,12 @@ use std::{fmt::Debug, ops::Range};
 
 use crate::management::ByteSized;
 
-pub mod lookup_bitvector;
-pub mod lookup_column_dual;
-pub mod lookup_column_single;
+pub(crate) mod lookup_bitvector;
+pub(crate) mod lookup_column_dual;
+pub(crate) mod lookup_column_single;
 
 /// Trait for looking up interval bounds in [IntervalColumn][super::super::intervalcolumn::IntervalColumn]
-pub trait IntervalLookup: Debug + Clone + ByteSized {
+pub(crate) trait IntervalLookup: Debug + Clone + ByteSized {
     /// [IntervalLookupBuilder] type for building objects that implement this trait
     type Builder: IntervalLookupBuilder<Lookup = Self>;
 
@@ -23,7 +23,7 @@ pub trait IntervalLookup: Debug + Clone + ByteSized {
 }
 
 /// Trait for constructing [IntervalLookup] objects
-pub trait IntervalLookupBuilder: Debug + Default {
+pub(crate) trait IntervalLookupBuilder: Debug + Default {
     /// [IntervalLookup] that will be built
     type Lookup: IntervalLookup<Builder = Self>;
 

@@ -20,7 +20,7 @@ use super::{IntervalLookup, IntervalLookupBuilder};
 /// which internally uses a single [ColumnEnum]
 /// to store the indices of the successor intervals
 #[derive(Debug, Clone)]
-pub struct IntervalLookupColumnSingle {
+pub(crate) struct IntervalLookupColumnSingle {
     /// [Column][crate::columnar::column::Column] that stores
     /// the start indices of intervals in the associated data column,
     /// which contain the successor nodes of the values from the previous layer
@@ -84,7 +84,7 @@ impl ByteSized for IntervalLookupColumnSingle {
 }
 
 #[derive(Debug, Default)]
-pub struct IntervalLookupColumnSingleBuilder {
+pub(crate) struct IntervalLookupColumnSingleBuilder {
     /// [ColumnBuilderAdaptive] for building `interval_starts`
     builder: ColumnBuilderAdaptive<usize>,
 

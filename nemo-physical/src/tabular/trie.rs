@@ -32,11 +32,6 @@ pub struct Trie {
 }
 
 impl Trie {
-    /// Construct a new [Trie].
-    pub fn new(columns: Vec<IntervalColumnT<IntervalLookupMethod>>) -> Self {
-        Self { columns }
-    }
-
     /// Return the arity, that is the number of columns, in this trie.
     pub fn arity(&self) -> usize {
         self.columns.len()
