@@ -6,8 +6,8 @@ use crate::{
     io::formats::types::ImportSpec,
     model::{
         chase_model::{
-            is_aggregate_variable, is_construct_variable, ChaseAtom, ChaseFact, ChaseRule,
-            Constructor,
+            variable::{is_aggregate_variable, is_construct_variable},
+            ChaseAtom, ChaseFact, ChaseRule, Constructor,
         },
         types::error::TypeError,
         Identifier, PrimitiveTerm, PrimitiveType, Term, TypeConstraint, Variable,

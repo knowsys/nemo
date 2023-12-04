@@ -12,9 +12,7 @@ fn is_aggregate_identifier(identifier: &Identifier) -> bool {
 }
 
 /// Check if a variable is a aggregate placeholder variable, representing the output of an aggregate.
-///
-/// See [`AGGREGATE_VARIABLE_PREFIX`]
-pub fn is_aggregate_variable(variable: &Variable) -> bool {
+pub(crate) fn is_aggregate_variable(variable: &Variable) -> bool {
     match variable {
         Variable::Universal(identifier) => is_aggregate_identifier(identifier),
         Variable::Existential(identifier) => {
@@ -32,9 +30,7 @@ fn is_construct_identifier(identifier: &Identifier) -> bool {
 }
 
 /// Check if a variable is a constructor variable
-///
-/// See [`CONSTRUCT_VARIABLE_PREFIX`]
-pub fn is_construct_variable(variable: &Variable) -> bool {
+pub(crate) fn is_construct_variable(variable: &Variable) -> bool {
     match variable {
         Variable::Universal(identifier) => is_construct_identifier(identifier),
         Variable::Existential(identifier) => {

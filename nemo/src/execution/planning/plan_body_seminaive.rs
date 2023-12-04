@@ -7,7 +7,7 @@ use nemo_physical::management::execution_plan::ExecutionNodeRef;
 use crate::{
     execution::execution_engine::RuleInfo,
     model::{
-        chase_model::{is_aggregate_variable, ChaseAggregate, ChaseRule, Constructor},
+        chase_model::{variable::is_aggregate_variable, ChaseAggregate, ChaseRule, Constructor},
         Variable,
     },
     program_analysis::{analysis::RuleAnalysis, variable_order::VariableOrder},

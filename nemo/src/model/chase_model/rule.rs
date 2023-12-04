@@ -5,12 +5,14 @@ use std::collections::{HashMap, HashSet};
 use crate::{
     error::Error,
     model::{
-        chase_model::{AGGREGATE_VARIABLE_PREFIX, CONSTRUCT_VARIABLE_PREFIX},
+        chase_model::variable::{AGGREGATE_VARIABLE_PREFIX, CONSTRUCT_VARIABLE_PREFIX},
         Constraint, Identifier, Literal, PrimitiveTerm, Rule, Term, Variable,
     },
 };
 
-use super::{ChaseAggregate, Constructor, PrimitiveAtom, VariableAtom, EQUALITY_VARIABLE_PREFIX};
+use super::{
+    variable::EQUALITY_VARIABLE_PREFIX, ChaseAggregate, Constructor, PrimitiveAtom, VariableAtom,
+};
 
 /// Representation of a rule in a [`super::ChaseProgram`].
 ///
