@@ -4,17 +4,13 @@ use std::collections::{HashMap, HashSet};
 
 use crate::{
     error::Error,
-    model::{Constraint, Identifier, Literal, PrimitiveTerm, Rule, Term, Variable},
+    model::{
+        chase_model::{AGGREGATE_VARIABLE_PREFIX, CONSTRUCT_VARIABLE_PREFIX},
+        Constraint, Identifier, Literal, PrimitiveTerm, Rule, Term, Variable,
+    },
 };
 
-use super::{ChaseAggregate, Constructor, PrimitiveAtom, VariableAtom};
-
-/// Prefix used for generated aggregate variables in a [`ChaseRule`]
-pub const AGGREGATE_VARIABLE_PREFIX: &str = "_AGGREGATE_";
-/// Prefix used for generated variables encoding equality constraints in a [`ChaseRule`]
-pub const EQUALITY_VARIABLE_PREFIX: &str = "_EQUALITY_";
-/// Prefix used for generated variables for storing the value of complex terms in a [`ChaseRule`].
-pub const CONSTRUCT_VARIABLE_PREFIX: &str = "_CONSTRUCT_";
+use super::{ChaseAggregate, Constructor, PrimitiveAtom, VariableAtom, EQUALITY_VARIABLE_PREFIX};
 
 /// Representation of a rule in a [`super::ChaseProgram`].
 ///
