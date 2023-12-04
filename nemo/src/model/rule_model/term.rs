@@ -398,30 +398,37 @@ impl Term {
         }
     }
 
-    fn aggregate_subterm_recursive(term: &Term) -> bool {
-        match term {
-            Term::Primitive(_primitive) => false,
-            Term::Binary { lhs, rhs, .. } => {
-                Self::aggregate_subterm_recursive(lhs) || Self::aggregate_subterm(rhs)
+    fn subterms_mut(&mut self) -> Vec<&mut Term> {
+        match self {
+            Term::Primitive(_primitive) => Vec::new(),
+            Term::Binary {
+                ref mut lhs,
+                ref mut rhs,
+                ..
+            } => {
+                vec![lhs, rhs]
             }
-            Term::Unary(_, inner) => Self::aggregate_subterm_recursive(inner),
-            Term::Aggregation(_aggregate) => true,
-            Term::Function(_, subterms) => subterms.iter().any(Self::aggregate_subterm_recursive),
+            Term::Unary(_, ref mut inner) => vec![inner],
+            Term::Aggregation(_aggregate) => Vec::new(),
+            Term::Function(_, subterms) => subterms.iter_mut().collect(),
         }
     }
 
-    /// Checks if this term contains an aggregate as a sub term.
-    /// This is currently not allowed.
-    pub fn aggregate_subterm(&self) -> bool {
-        match self {
-            Term::Primitive(_primitive) => false,
-            Term::Binary { lhs, rhs, .. } => {
-                Self::aggregate_subterm_recursive(lhs) || Self::aggregate_subterm(rhs)
+    /// Mutate the term in place, calling the function `f` on itself and recursively on it's subterms if the function `f` returns true
+    ///
+    /// This is used e.g. to rewrite aggregates inside of constructors with placeholder variables
+    pub fn update_subterms_recursively<F>(&mut self, f: &mut F)
+    where
+        F: FnMut(&mut Term) -> bool,
+    {
+        f(self);
+
+        for subterm in self.subterms_mut() {
+            let should_recurse = f(subterm);
+
+            if should_recurse {
+                subterm.update_subterms_recursively(f);
             }
-            Term::Unary(_, inner) => Self::aggregate_subterm_recursive(inner),
-            // this is allowed, because the aggregate is on the top-level
-            Term::Aggregation(_aggregate) => false,
-            Term::Function(_, subterms) => subterms.iter().any(Self::aggregate_subterm_recursive),
         }
     }
 

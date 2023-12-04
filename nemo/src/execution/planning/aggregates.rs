@@ -50,9 +50,8 @@ pub(super) fn generate_node_aggregate(
             let reordering =
                 ProjectReordering::from_vector(reordering_column_indices, variable_order.len());
 
-            node = current_plan.plan_mut().project(node, reordering);
-
             current_plan.add_temporary_table(node.clone(), "Subtable Aggregate Reorder");
+            node = current_plan.plan_mut().project(node, reordering);
 
             // Update variable order to reordering
             variable_order = variable_order_after_reordering;

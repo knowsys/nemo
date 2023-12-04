@@ -107,17 +107,35 @@ impl PositionGraph {
                             );
                         }
 
-                        // NOTE: we connect every aggregate input variable to it's corresponding output variable in the head
-                        for (output_variable_identifier, edge_label) in
-                            aggregate_input_to_output_variables
-                                .get(variable)
-                                .into_iter()
-                                .flatten()
+                        // NOTE: we connect every aggregate input variable to it's corresponding output variable in the head.
+                        // If there the output variable is used inside a constructor, we connect the aggregate input variable to the constructor instead
+                        // Aggregate output variables may be used multiple times in the future, possibly also inside of constructors
+                        for (output_variable, edge_label) in aggregate_input_to_output_variables
+                            .get(variable)
+                            .into_iter()
+                            .flatten()
                         {
-                            for pos in variables_to_head_positions
-                                .get(&output_variable_identifier.clone())
-                                .unwrap()
-                            {
+                            // The aggregate output is used in all head atoms that use the aggregate output variable
+                            let mut variables_using_aggregate_variable = vec![output_variable];
+
+                            // Furthermore, all constructors that use the aggregate output variable should get the same type restrictions
+                            for constructor in rule.constructors() {
+                                if constructor
+                                    .term()
+                                    .primitive_terms()
+                                    .contains(&&PrimitiveTerm::Variable(output_variable.clone()))
+                                {
+                                    variables_using_aggregate_variable.push(constructor.variable());
+                                }
+                            }
+
+                            // Head positions that use the body variable through aggregates/constructors
+                            let relevant_head_positions = variables_using_aggregate_variable
+                                .into_iter()
+                                .filter_map(|variable| variables_to_head_positions.get(variable))
+                                .flatten();
+
+                            for pos in relevant_head_positions {
                                 graph.add_edge(
                                     predicate_position.clone(),
                                     pos.clone(),
@@ -157,12 +175,10 @@ impl PositionGraph {
                 {
                     for term in constructor.term().primitive_terms() {
                         if let PrimitiveTerm::Variable(body_variable) = term {
-                            let body_position_opt =
-                                variables_to_last_node.get(body_variable).cloned();
-
-                            if let Some(body_position) = body_position_opt {
+                            // There might be no entry in `variables_to_last_node`, e.g. when the variable is an aggregate output variable, because in this case the variable is not in the body
+                            if let Some(body_position) = variables_to_last_node.get(body_variable) {
                                 graph.add_edge(
-                                    body_position,
+                                    body_position.clone(),
                                     head_position.clone(),
                                     PositionGraphEdge::BodyToHeadSameVariable,
                                 );

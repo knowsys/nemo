@@ -1276,6 +1276,7 @@ impl<'a> RuleParser<'a> {
             map_error(
                 alt((
                     self.parse_function_term(),
+                    self.parse_aggregate(),
                     map(self.parse_primitive_term(), Term::Primitive),
                     self.parse_parenthesised_term(),
                 )),

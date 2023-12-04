@@ -319,9 +319,6 @@ pub enum ParseError {
     /// An aggregate term occurs in the body of a rule.
     #[error(r#"An aggregate term ("{0}") occurs in the body of a rule"#)]
     AggregateInBody(Aggregate),
-    /// An aggregate may not be used within a complex term.
-    #[error(r#"A term ("{0}") may not contain an aggregate as a subterm."#)]
-    AggregateSubterm(String),
     /// Unknown aggregate operation
     #[error(r#"Aggregate operation "{0}" is not known"#)]
     UnknownAggregateOperation(String),
