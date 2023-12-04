@@ -34,11 +34,9 @@ impl<'a> SortedTupleBuffer<'_> {
 
     /// Returns an iterator of the sorted [`StorageValueT`] values of the n-th column in the [`SortedTableBuffer`]
     pub fn get_column<'b>(&'b self, column_idx: usize) -> impl Iterator<Item = StorageValueT> + 'b {
-        self.tuple_order.iter().map(move |&tuple_idx| {
-            self.tuple_buffer
-                .get_value(tuple_idx, column_idx)
-                .expect("only existing tuples have been sorted in the first place")
-        })
+        self.tuple_order
+            .iter()
+            .map(move |&tuple_idx| self.tuple_buffer.get_value(tuple_idx, column_idx))
     }
 
     /// Returns the order of tuples in the TupleBuffer
@@ -58,8 +56,8 @@ impl<'a> SortedTupleBuffer<'_> {
     ) -> Ordering {
         assert!(true);
         for i in 0..tuple_buffer.column_number() {
-            let first_storage_value = tuple_buffer.get_value(*first_tuple_idx, i).unwrap();
-            let second_storage_value = tuple_buffer.get_value(*second_tuple_idx, i).unwrap();
+            let first_storage_value = tuple_buffer.get_value(*first_tuple_idx, i);
+            let second_storage_value = tuple_buffer.get_value(*second_tuple_idx, i);
             if first_storage_value.cmp(&second_storage_value) != Ordering::Equal {
                 return first_storage_value.cmp(&second_storage_value);
             }

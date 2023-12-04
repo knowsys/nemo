@@ -139,40 +139,48 @@ impl<'a> TupleBuffer<'a> {
 
     /// Returns the value of the tuple number `val_index` (according to the internal
     /// order of tuples, not the insertion order) at position number `col_index`.
-    /// None is returned if there are fewer values than `val_index`.
-    pub(crate) fn get_value(&self, val_index: usize, col_index: usize) -> Option<StorageValueT> {
-        let mut table_index = 0;
-        let mut rows_before = 0;
-        while self.tables.len() > table_index
-            && rows_before + self.table_lengths[table_index] <= val_index
-        {
-            rows_before += self.table_lengths[table_index];
-            table_index += 1;
-        }
-
-        if table_index == self.tables.len() {
-            return None;
-        }
-
-        let local_val_index = val_index - rows_before;
+    /// Panic if val_index is greater than the number of tuples, or col_index is
+    /// greater than the number of columns in the [`TupleBuffer`].
+    pub(crate) fn get_value(&self, val_index: usize, col_index: usize) -> StorageValueT {
+        assert!(
+            col_index < self.col_num,
+            "col_index greater than number of columns"
+        );
+        let (table_index, tuple_index) = self.get_table_and_tuple_indexes(val_index);
         let idx_in_value_cols = self.tables[table_index].col_ids[col_index];
         match self.tables[table_index].col_types[col_index] {
-            StorageTypeName::Id32 => Some(StorageValueT::Id32(
-                self.cols_u32[idx_in_value_cols][local_val_index],
-            )),
-            StorageTypeName::Id64 => Some(StorageValueT::Id64(
-                self.cols_u64[idx_in_value_cols][local_val_index],
-            )),
-            StorageTypeName::Int64 => Some(StorageValueT::Int64(
-                self.cols_i64[idx_in_value_cols][local_val_index],
-            )),
-            StorageTypeName::Float => Some(StorageValueT::Float(
-                self.cols_floats[idx_in_value_cols][local_val_index],
-            )),
-            StorageTypeName::Double => Some(StorageValueT::Double(
-                self.cols_doubles[idx_in_value_cols][local_val_index],
-            )),
+            StorageTypeName::Id32 => {
+                StorageValueT::Id32(self.cols_u32[idx_in_value_cols][tuple_index])
+            }
+            StorageTypeName::Id64 => {
+                StorageValueT::Id64(self.cols_u64[idx_in_value_cols][tuple_index])
+            }
+            StorageTypeName::Int64 => {
+                StorageValueT::Int64(self.cols_i64[idx_in_value_cols][tuple_index])
+            }
+            StorageTypeName::Float => {
+                StorageValueT::Float(self.cols_floats[idx_in_value_cols][tuple_index])
+            }
+            StorageTypeName::Double => {
+                StorageValueT::Double(self.cols_doubles[idx_in_value_cols][tuple_index])
+            }
         }
+    }
+
+    /// Utility function to get the table and tuple indexes of a tuple index given in the internal
+    /// order of tuples. Panic if tuple_index is greater than the actual number of tuples.
+    fn get_table_and_tuple_indexes(&self, tuple_index: usize) -> (usize, usize) {
+        assert!(
+            tuple_index < self.table_lengths.iter().sum(),
+            "tuple index larger than number of tuples"
+        );
+        let mut table_idx = 0;
+        let mut tuple_idx = tuple_index;
+        while tuple_idx >= self.table_lengths[table_idx] {
+            table_idx += 1;
+            tuple_idx -= self.table_lengths[table_idx];
+        }
+        (table_idx, tuple_idx)
     }
 
     /// Writes the current tuple to the buffer.
@@ -356,6 +364,13 @@ mod test {
     use crate::{datatypes::StorageValueT, datavalues::AnyDataValue, management::database::Dict};
     use std::cell::RefCell;
 
+    impl<'a> TupleBuffer<'a> {
+        fn get_anydatavalue_tuple(&self, tuple_idx: usize) -> Vec<AnyDataValue> {
+            let mut result: Vec<AnyDataValue> = Vec::with_capacity(self.col_num);
+            result
+        }
+    }
+
     #[test]
     fn test_internal_table_structures() {
         let dict = Dict::new();
@@ -409,6 +424,6 @@ mod test {
 
         assert_eq!(tb.get_value(0, 0), tb.get_value(0, 1));
         assert_ne!(tb.get_value(2, 1), tb.get_value(0, 0));
-        assert_eq!(tb.get_value(2, 1), Some(StorageValueT::Int64(42)));
+        assert_eq!(tb.get_value(2, 1), StorageValueT::Int64(42));
     }
 }
