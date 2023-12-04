@@ -355,6 +355,7 @@ impl NemoResults {
                         Constant::StringLiteral(s) => JsValue::from(s),
                         Constant::RdfLiteral(lit) => JsValue::from(lit.to_string()),
                         Constant::MapLiteral(_map) => todo!("maps are not yet supported"),
+                        Constant::TupleLiteral(_tuple) => todo!("tuples are not yet supported"),
                     },
                     PrimitiveLogicalValueT::String(s) => JsValue::from(String::from(s)),
                     PrimitiveLogicalValueT::Integer(i) => JsValue::from(i64::from(i)),

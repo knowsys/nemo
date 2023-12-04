@@ -326,7 +326,8 @@ impl<'a> RuleParser<'a> {
             "parse_complex_constant_term",
             alt((
                 parse_constant_term(&self.prefixes),
-                map(self.parse_map_literal(), Constant::MapLiteral),
+                map(|s| self.parse_tuple_literal()(s), Constant::TupleLiteral),
+                map(|s| self.parse_map_literal()(s), Constant::MapLiteral),
             )),
         )
     }
@@ -631,7 +632,9 @@ impl<'a> RuleParser<'a> {
     }
 
     /// Parse an entry in a [Map], i.e., a [Key]--[Term] pair.
-    pub fn parse_map_entry(&'a self, s: Span<'a>) -> IntermediateResult<(Key, Constant)> {
+    pub fn parse_map_entry(
+        &'a self,
+    ) -> impl FnMut(Span<'a>) -> IntermediateResult<(Key, Constant)> {
         traced(
             "parse_map_entry",
             separated_pair(
@@ -639,7 +642,7 @@ impl<'a> RuleParser<'a> {
                 self.parse_equals(),
                 map(self.parse_complex_constant_term(), |term| term),
             ),
-        )(s)
+        )
     }
 
     /// Parse an object literal.
@@ -649,10 +652,25 @@ impl<'a> RuleParser<'a> {
             delimited(
                 self.parse_open_brace(),
                 map(
-                    separated_list0(self.parse_comma(), |s| self.parse_map_entry(s)),
+                    separated_list0(self.parse_comma(), self.parse_map_entry()),
                     Map::from_iter,
                 ),
                 self.parse_close_brace(),
+            ),
+        )
+    }
+
+    /// Parse a tuple literal.
+    pub fn parse_tuple_literal(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Tuple> {
+        traced(
+            "parse_tuple_literal",
+            delimited(
+                self.parse_open_parenthesis(),
+                map(
+                    separated_list0(self.parse_comma(), self.parse_complex_constant_term()),
+                    Tuple::from_iter,
+                ),
+                self.parse_close_parenthesis(),
             ),
         )
     }
@@ -2352,7 +2370,7 @@ mod test {
 
         let entry = format!("{ident}=23");
         assert_parse!(
-            |s| parser.parse_map_entry(s),
+            parser.parse_map_entry(),
             &entry,
             (
                 key.clone(),
@@ -2391,6 +2409,25 @@ mod test {
             parser.parse_map_literal(),
             r#"{inner = {}}"#,
             pairs.clone().into_iter().collect::<Map>()
+        );
+    }
+
+    #[test]
+    fn tuple_literal() {
+        let parser = RuleParser::new();
+
+        let expected: Tuple = [
+            Constant::Abstract(Identifier("something".to_string())),
+            Constant::NumericLiteral(NumericLiteral::Integer(42)),
+            Constant::TupleLiteral([].into_iter().collect()),
+        ]
+        .into_iter()
+        .collect();
+
+        assert_parse!(
+            parser.parse_tuple_literal(),
+            r#"(something, 42, ())"#,
+            expected
         );
     }
 

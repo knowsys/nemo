@@ -7,7 +7,7 @@ use petgraph::{
 
 use crate::{
     model::{
-        chase_model::{is_aggregate_variable, ChaseAtom, ChaseRule},
+        chase_model::{ChaseAtom, ChaseRule},
         types::error::TypeError,
         Identifier, PrimitiveTerm, PrimitiveType, Variable,
     },
@@ -169,25 +169,19 @@ impl PositionGraph {
             }
 
             for constructor in rule.constructors() {
-                // Note that the head variable for constructors is unique so we can get the first entry of this vector
                 for head_position in variables_to_head_positions
                     .get(constructor.variable())
-                    .expect("The loop at the top went through all head atoms")
+                    .unwrap_or(&vec![])
                 {
                     for term in constructor.term().primitive_terms() {
                         if let PrimitiveTerm::Variable(body_variable) = term {
-                            // There is no entry in `variables_to_last_node` when the variable is an aggregate output variable, because in this case the variable is not in the body
+                            // There might be no entry in `variables_to_last_node`, e.g. when the variable is an aggregate output variable, because in this case the variable is not in the body
                             if let Some(body_position) = variables_to_last_node.get(body_variable) {
                                 graph.add_edge(
                                     body_position.clone(),
                                     head_position.clone(),
                                     PositionGraphEdge::BodyToHeadSameVariable,
                                 );
-                            } else {
-                                debug_assert!(
-                                    is_aggregate_variable(body_variable),
-                                    "The iteration above went through all body atoms for non aggregate variables"
-                                )
                             }
                         }
                     }

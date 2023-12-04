@@ -196,22 +196,28 @@ pub(super) fn head_instruction_from_atom(
     }
 }
 
+/// Calculates at which layer the trie can be cut, because the lower layers won't be used.
+/// Returns pair of the first unused layer and the number of unused layers.
 pub(super) fn cut_last_layers(
     variable_order: &VariableOrder,
     used_variables: &HashSet<Variable>,
 ) -> (usize, usize) {
     if variable_order.is_empty() || used_variables.is_empty() {
-        return (0, variable_order.len() - 1);
+        // cut away _all_ the layers
+        return (0, variable_order.len());
     }
 
-    let mut last_index = 0;
+    let mut last_used_index = 0;
     let variable_order_list = variable_order.as_ordered_list();
 
     for (index, variable) in variable_order_list.iter().enumerate() {
         if used_variables.contains(variable) {
-            last_index = index;
+            last_used_index = index;
         }
     }
 
-    (last_index + 1, variable_order.len() - last_index - 1)
+    (
+        last_used_index + 1,
+        variable_order.len() - (last_used_index + 1),
+    )
 }
