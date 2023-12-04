@@ -375,6 +375,8 @@ mod test {
     use std::convert::TryFrom;
 
     impl<'a> TupleBuffer<'a> {
+        /// Get a vector of AnyDataValues. As `svt2adv`, this method is very limited and meant for
+        /// testing purpuses only.
         fn get_tuple_of_any_data_values(&self, tuple_idx: usize) -> Vec<AnyDataValue> {
             let mut result: Vec<AnyDataValue> = Vec::with_capacity(self.col_num);
             let (table_idx, tuple_idx) = self.get_table_and_tuple_indexes(tuple_idx);
@@ -384,6 +386,8 @@ mod test {
             result
         }
 
+        /// Convert a StorageValueT into a AnyDataValue. This method is very limited and meant for
+        /// testing purpuses only.
         fn svt2adv(&self, storagevaluet: &StorageValueT) -> AnyDataValue {
             match storagevaluet {
                 StorageValueT::Id32(val) => self
@@ -394,7 +398,7 @@ mod test {
                     )
                     .expect("Invalid Dictionary Id"),
                 StorageValueT::Int64(val) => AnyDataValue::new_integer_from_i64(*val),
-                _ => panic!("Not implemented yet!"),
+                _ => todo!(),
             }
         }
     }
