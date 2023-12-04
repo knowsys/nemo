@@ -333,7 +333,8 @@ mod test {
         columnar::{
             column::{
                 interval::{ColumnWithIntervals, ColumnWithIntervalsT},
-                vector::ColumnVector, Column,
+                vector::ColumnVector,
+                Column,
             },
             columnbuilder::{adaptive::ColumnBuilderAdaptive, ColumnBuilder},
             {column::ColumnEnum, columnscan::ColumnScanT},

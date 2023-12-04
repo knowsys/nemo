@@ -1434,6 +1434,7 @@ impl ByteSized for DatabaseInstance {
 #[cfg(test)]
 mod test {
     use crate::{
+        columnar::column::Column,
         datatypes::{DataTypeName, StorageValueT},
         management::{
             database::{ColumnOrder, TableId},
@@ -1444,7 +1445,7 @@ mod test {
             table_types::trie::Trie,
             traits::{table::Table, table_schema::TableSchema},
         },
-        util::{make_column_with_intervals_t, mapping::permutation::Permutation}, columnar::column::Column,
+        util::{make_column_with_intervals_t, mapping::permutation::Permutation},
     };
 
     use super::{DatabaseInstance, OrderedReferenceManager, TableStorage};

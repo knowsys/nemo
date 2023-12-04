@@ -97,7 +97,7 @@ where
 #[cfg(test)]
 mod test {
     use crate::columnar::{
-        column::{Column, vector::ColumnVector},
+        column::{vector::ColumnVector, Column},
         columnscan::{ColumnScan, ColumnScanCell, ColumnScanEnum},
     };
 
