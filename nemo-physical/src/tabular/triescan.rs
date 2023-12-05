@@ -3,7 +3,11 @@
 
 use std::{cell::UnsafeCell, fmt::Debug};
 
+use delegate::delegate;
+
 use crate::{columnar::columnscan::ColumnScanRainbow, datatypes::StorageTypeName};
+
+use super::{operations::join::TrieScanJoin, trie::TrieScanGeneric};
 
 /// Iterator for a [Trie][super::trie::Trie] data structure
 ///
@@ -36,10 +40,36 @@ pub trait PartialTrieScan<'a>: Debug {
     ///
     /// # Panics
     /// Panics if the requested layer is higher than the arity of this scan.
-    fn scan<'b: 'a>(&'b self, layer: usize) -> &'b UnsafeCell<ColumnScanRainbow<'a>>;
+    fn scan<'b>(&'b self, layer: usize) -> &'b UnsafeCell<ColumnScanRainbow<'a>>;
 
     /// Return the [ColumnScanT] at the current layer.
-    fn current_scan<'b>(&'a self) -> Option<&UnsafeCell<ColumnScanRainbow<'a>>> {
+    fn current_scan<'b>(&'b self) -> Option<&UnsafeCell<ColumnScanRainbow<'a>>> {
         Some(self.scan(self.current_layer()?))
+    }
+}
+
+/// Enum containing all implementations of [PartialTrieScan]
+#[derive(Debug)]
+pub enum TrieScanEnum<'a> {
+    /// Case [TrieScanGeneric]
+    TrieScanGeneric(TrieScanGeneric<'a>),
+    /// Case [TrieScanJoin]
+    TrieScanJoin(TrieScanJoin<'a>),
+}
+
+impl<'a> PartialTrieScan<'a> for TrieScanEnum<'a> {
+    delegate! {
+        to match self {
+            TrieScanEnum::TrieScanGeneric(scan) => scan,
+            TrieScanEnum::TrieScanJoin(scan) => scan,
+        } {
+            fn up(&mut self);
+            fn down(&mut self, storage_type: StorageTypeName);
+            fn path_types(&self) -> &[StorageTypeName];
+            fn arity(&self) -> usize;
+            fn current_layer(&self) -> Option<usize>;
+            fn scan<'b>(&'b self, layer: usize) -> &'b UnsafeCell<ColumnScanRainbow<'a>>;
+            fn current_scan<'b>(&'b self) -> Option<&UnsafeCell<ColumnScanRainbow<'a>>>;
+        }
     }
 }

@@ -162,7 +162,7 @@ impl<'a> PartialTrieScan<'a> for TrieScanGeneric<'a> {
         self.path_types.len().checked_sub(1)
     }
 
-    fn scan<'b: 'a>(&'b self, layer: usize) -> &'b UnsafeCell<ColumnScanRainbow<'a>> {
+    fn scan<'b>(&'b self, layer: usize) -> &'b UnsafeCell<ColumnScanRainbow<'a>> {
         &self.column_scans[layer]
     }
 

@@ -43,3 +43,56 @@ pub use triescan_nulls::TrieScanNulls;
 
 /// Module implementing functionality for projecting and reordering tries.
 pub mod project_reorder;
+
+/// END OF OLD OPERATIONS
+use std::collections::HashMap;
+use std::{fmt::Debug, hash::Hash, iter::IntoIterator};
+
+use super::triescan::TrieScanEnum;
+
+pub mod join;
+
+/// Marker for a column
+///
+/// This is used in [OperationTable].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct OperationColumnMarker(usize);
+
+/// This object is used to reference columns of input/output tables
+/// of a data base operation.
+#[derive(Debug, Clone)]
+pub struct OperationTable(Vec<OperationColumnMarker>);
+
+impl OperationTable {
+    /// Return the number of columns associated with this table.
+    pub fn arity(&self) -> usize {
+        self.0.len()
+    }
+}
+
+impl IntoIterator for OperationTable {
+    type Item = OperationColumnMarker;
+    type IntoIter = std::vec::IntoIter<OperationColumnMarker>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.into_iter()
+    }
+}
+
+/// Helper object to translate [OperationTable] like structures
+/// from the users of the physical crate into actual [OperationTable]s
+#[derive(Debug)]
+pub struct OperationTableGenerator<ExternalMarker>
+where
+    ExternalMarker: Clone + PartialEq + Eq + Hash,
+{
+    /// Associates an external marker with an [OperationColumnMarker]
+    map: HashMap<ExternalMarker, OperationColumnMarker>,
+}
+
+/// Trait for objects that are able to generate [TrieScanEnum],
+/// which implement certain data base operations.
+pub(crate) trait OperationGenerator {
+    /// Generate a
+    fn generate<'a>(&'_ self, input: Vec<TrieScanEnum<'a>>) -> TrieScanEnum<'a>;
+}

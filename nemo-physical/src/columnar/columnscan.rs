@@ -592,6 +592,23 @@ pub struct ColumnScanRainbow<'a> {
 }
 
 impl<'a> ColumnScanRainbow<'a> {
+    /// Create a new [ColumnScanRainbow].
+    pub fn new(
+        scan_id32: ColumnScanEnum<'a, u32>,
+        scan_id64: ColumnScanEnum<'a, u64>,
+        scan_i64: ColumnScanEnum<'a, i64>,
+        scan_float: ColumnScanEnum<'a, Float>,
+        scan_double: ColumnScanEnum<'a, Double>,
+    ) -> ColumnScanRainbow<'a> {
+        Self {
+            scan_id32: ColumnScanCell::new(scan_id32),
+            scan_id64: ColumnScanCell::new(scan_id64),
+            scan_i64: ColumnScanCell::new(scan_i64),
+            scan_float: ColumnScanCell::new(scan_float),
+            scan_double: ColumnScanCell::new(scan_double),
+        }
+    }
+
     /// Return the current position of a scan of the given [StorageTypeName].
     pub fn pos(&mut self, storage_type: StorageTypeName) -> Option<usize> {
         match storage_type {
