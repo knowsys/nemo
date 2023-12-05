@@ -159,17 +159,23 @@ impl<'a> Column<'a, StorageValueT> for ColumnWithIntervalsT {
     type Scan = ColumnScanT<'a>;
 
     fn len(&self) -> usize {
-        todo!()
+        forward_to_interval_column!(self, len)
     }
+
     fn is_empty(&self) -> bool {
-        todo!()
+        forward_to_interval_column!(self, is_empty)
     }
+
     fn get(&self, index: usize) -> StorageValueT {
-        todo!()
+        forward_to_interval_column!(self, get(index).as_variant_of(StorageValueT))
     }
 
     fn iter(&'a self) -> Self::Scan {
-        todo!()
+        forward_to_interval_column!(
+            self,
+            iter.wrap_with(ColumnScanCell::new)
+                .as_variant_of(ColumnScanT)
+        )
     }
 }
 
