@@ -30,9 +30,9 @@ struct ColumnIndex {
     pub column: usize,
 }
 
-/// Parameters of the join operation
+/// Used to create a [TrieScanJoin]
 #[derive(Debug)]
-pub struct JoinGenerator {
+pub struct GeneratorJoin {
     /// In the order of the output column,
     /// contains all the columns (identified by its [ColumnIndex])
     /// that should be joined
@@ -41,8 +41,8 @@ pub struct JoinGenerator {
     num_input_relations: usize,
 }
 
-impl JoinGenerator {
-    /// Create a new [JoinGenerator].
+impl GeneratorJoin {
+    /// Create a new [GeneratorJoin].
     pub fn new(output: OperationTable, input: Vec<OperationTable>) -> Self {
         let num_input_relations = input.len();
 
@@ -129,7 +129,7 @@ impl JoinGenerator {
     }
 }
 
-impl OperationGenerator for JoinGenerator {
+impl OperationGenerator for GeneratorJoin {
     fn generate<'a>(&'_ self, trie_scans: Vec<TrieScanEnum<'a>>) -> TrieScanEnum<'a> {
         // `self.bindings` contains the columns used for each output index.
         // `layers_to_scans` just contains a list of the relation indices for each output.
@@ -150,7 +150,7 @@ impl OperationGenerator for JoinGenerator {
         for output_index in 0..self.bindings.len() {
             macro_rules! join_scan {
                 ($type:ty, $scan:ident) => {{
-                    let mut input_column_scans =
+                    let mut input_scans =
                         Vec::<&'a ColumnScanCell<$type>>::with_capacity(trie_scans.len());
 
                     for &input_column in &self.bindings[output_index] {
@@ -160,10 +160,10 @@ impl OperationGenerator for JoinGenerator {
                                 .get()
                         }
                         .$scan;
-                        input_column_scans.push(input_scan)
+                        input_scans.push(input_scan)
                     }
 
-                    ColumnScanEnum::ColumnScanJoin(ColumnScanJoin::new(input_column_scans))
+                    ColumnScanEnum::ColumnScanJoin(ColumnScanJoin::new(input_scans))
                 }};
             }
 
@@ -234,20 +234,20 @@ impl<'a> PartialTrieScan<'a> for TrieScanJoin<'a> {
         self.path_types.pop();
     }
 
-    fn down(&mut self, storage_type: StorageTypeName) {
+    fn down(&mut self, next_type: StorageTypeName) {
         let next_layer = self.path_types.len();
         debug_assert!(next_layer < self.arity());
 
         let affected_scans = &self.layers_to_scans[next_layer];
         for &scan_index in affected_scans {
-            self.trie_scans[scan_index].down(storage_type);
+            self.trie_scans[scan_index].down(next_type);
         }
 
         // The above down call has changed the sub scans of the current layer.
         // Hence, we need to reset its state.
-        self.column_scans[next_layer].get_mut().reset(storage_type);
+        self.column_scans[next_layer].get_mut().reset(next_type);
 
-        self.path_types.push(storage_type);
+        self.path_types.push(next_type);
     }
 
     fn path_types(&self) -> &[StorageTypeName] {
@@ -256,10 +256,6 @@ impl<'a> PartialTrieScan<'a> for TrieScanJoin<'a> {
 
     fn arity(&self) -> usize {
         self.layers_to_scans.len()
-    }
-
-    fn current_layer(&self) -> Option<usize> {
-        self.path_types.len().checked_sub(1)
     }
 
     fn scan<'b>(&'b self, layer: usize) -> &'b UnsafeCell<ColumnScanRainbow<'a>> {

@@ -642,4 +642,28 @@ impl<'a> ColumnScanRainbow<'a> {
             StorageTypeName::Double => self.scan_double.narrow(interval),
         }
     }
+
+    /// Assumes that column scan is a [`ColumnScanUnion`]
+    /// and returns a vector containing the positions of the scans with the smallest values
+    pub fn get_smallest_scans(&mut self, storage_type: StorageTypeName) -> &Vec<bool> {
+        match storage_type {
+            StorageTypeName::Id32 => self.scan_id32.get_smallest_scans(),
+            StorageTypeName::Id64 => self.scan_id64.get_smallest_scans(),
+            StorageTypeName::Int64 => self.scan_i64.get_smallest_scans(),
+            StorageTypeName::Float => self.scan_float.get_smallest_scans(),
+            StorageTypeName::Double => self.scan_double.get_smallest_scans(),
+        }
+    }
+
+    /// Assumes that column scan is a [`ColumnScanUnion`]
+    /// Set a vector that indicates which scans are currently active and should be considered
+    pub fn set_active_scans(&mut self, storage_type: StorageTypeName, active_scans: Vec<usize>) {
+        match storage_type {
+            StorageTypeName::Id32 => self.scan_id32.set_active_scans(active_scans),
+            StorageTypeName::Id64 => self.scan_id64.set_active_scans(active_scans),
+            StorageTypeName::Int64 => self.scan_i64.set_active_scans(active_scans),
+            StorageTypeName::Float => self.scan_float.set_active_scans(active_scans),
+            StorageTypeName::Double => self.scan_double.set_active_scans(active_scans),
+        }
+    }
 }

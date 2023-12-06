@@ -124,42 +124,40 @@ impl<'a> PartialTrieScan<'a> for TrieScanGeneric<'a> {
         self.path_types.pop();
     }
 
-    fn down(&mut self, storage_type: StorageTypeName) {
-        match self.current_layer() {
+    fn down(&mut self, next_type: StorageTypeName) {
+        match self.path_types.last() {
             None => {
-                self.column_scans[0].get_mut().reset(storage_type);
+                self.column_scans[0].get_mut().reset(next_type);
             }
-            Some(current_layer) => {
+            Some(&current_type) => {
+                let current_layer = self.path_types.len();
+
                 let local_index = self.column_scans[current_layer]
                 .get_mut()
-                .pos(storage_type)
+                .pos(current_type)
                 .expect(
                     "Calling down on a trie is only allowed when currently pointing at an element.",
                 );
                 let global_index =
-                    self.trie.columns[current_layer].global_index(storage_type, local_index);
+                    self.trie.columns[current_layer].global_index(next_type, local_index);
 
                 let next_layer = current_layer + 1;
 
                 let next_interval = self.trie.columns[next_layer]
-                    .interval_bounds(storage_type, global_index)
+                    .interval_bounds(next_type, global_index)
                     .unwrap_or(0..0);
 
                 self.column_scans[next_layer]
                     .get_mut()
-                    .narrow(storage_type, next_interval);
+                    .narrow(next_type, next_interval);
             }
         }
 
-        self.path_types.push(storage_type);
+        self.path_types.push(next_type);
     }
 
     fn arity(&self) -> usize {
         self.trie.arity()
-    }
-
-    fn current_layer(&self) -> Option<usize> {
-        self.path_types.len().checked_sub(1)
     }
 
     fn scan<'b>(&'b self, layer: usize) -> &'b UnsafeCell<ColumnScanRainbow<'a>> {

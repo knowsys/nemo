@@ -7,7 +7,10 @@ use delegate::delegate;
 
 use crate::{columnar::columnscan::ColumnScanRainbow, datatypes::StorageTypeName};
 
-use super::{operations::join::TrieScanJoin, trie::TrieScanGeneric};
+use super::{
+    operations::{join::TrieScanJoin, union::TrieScanUnion},
+    trie::TrieScanGeneric,
+};
 
 /// Iterator for a [Trie][super::trie::Trie] data structure
 ///
@@ -34,7 +37,9 @@ pub trait PartialTrieScan<'a>: Debug {
     fn arity(&self) -> usize;
 
     /// Return the index of the current layer for this scan.
-    fn current_layer(&self) -> Option<usize>;
+    fn current_layer(&self) -> Option<usize> {
+        self.path_types().len().checked_sub(1)
+    }
 
     /// Return the underlying [ColumnScanT] given an index.
     ///
@@ -55,6 +60,8 @@ pub enum TrieScanEnum<'a> {
     TrieScanGeneric(TrieScanGeneric<'a>),
     /// Case [TrieScanJoin]
     TrieScanJoin(TrieScanJoin<'a>),
+    /// Case [TrieScanUnion]
+    TrieScanUnion(TrieScanUnion<'a>),
 }
 
 impl<'a> PartialTrieScan<'a> for TrieScanEnum<'a> {
@@ -62,6 +69,7 @@ impl<'a> PartialTrieScan<'a> for TrieScanEnum<'a> {
         to match self {
             TrieScanEnum::TrieScanGeneric(scan) => scan,
             TrieScanEnum::TrieScanJoin(scan) => scan,
+            TrieScanEnum::TrieScanUnion(scan) => scan,
         } {
             fn up(&mut self);
             fn down(&mut self, storage_type: StorageTypeName);
