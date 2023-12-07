@@ -328,8 +328,8 @@ impl TryFrom<Rule> for ChaseRule {
         let mut negative_constraints = Vec::<Constraint>::new();
 
         // Preprocess rule in order to make the translation simpler
-        Self::separate_equality(&mut rule, &mut constructors, &mut aggregates);
         Self::apply_equality(&mut rule);
+        Self::separate_equality(&mut rule, &mut constructors, &mut aggregates);
         Self::flatten_atoms(
             &mut rule,
             &mut constructors,
