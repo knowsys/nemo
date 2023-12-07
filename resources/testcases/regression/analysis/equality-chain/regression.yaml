@@ -1,0 +1,4 @@
+issue: 438
+title:  Debug Assert in Variable Order fails for rule with multiple constructors
+tracker: https://github.com/knowsys/nemo/issues/438
+type: bugfix
