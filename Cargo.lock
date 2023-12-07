@@ -1195,7 +1195,7 @@ dependencies = [
 
 [[package]]
 name = "nemo"
-version = "0.4.0"
+version = "0.4.1-dev"
 dependencies = [
  "ascii_tree",
  "assert_fs",
@@ -1232,7 +1232,7 @@ dependencies = [
 
 [[package]]
 name = "nemo-benches"
-version = "0.4.0"
+version = "0.4.1-dev"
 dependencies = [
  "clap 4.4.11",
  "colored",
@@ -1248,7 +1248,7 @@ dependencies = [
 
 [[package]]
 name = "nemo-cli"
-version = "0.4.0"
+version = "0.4.1-dev"
 dependencies = [
  "assert_cmd",
  "assert_fs",
@@ -1265,7 +1265,7 @@ dependencies = [
 
 [[package]]
 name = "nemo-physical"
-version = "0.4.0"
+version = "0.4.1-dev"
 dependencies = [
  "arbitrary",
  "ascii_tree",
@@ -1292,7 +1292,7 @@ dependencies = [
 
 [[package]]
 name = "nemo-python"
-version = "0.4.0"
+version = "0.4.1-dev"
 dependencies = [
  "nemo",
  "pyo3",
@@ -1300,7 +1300,7 @@ dependencies = [
 
 [[package]]
 name = "nemo-wasm"
-version = "0.4.0"
+version = "0.4.1-dev"
 dependencies = [
  "console_error_panic_hook",
  "js-sys",
