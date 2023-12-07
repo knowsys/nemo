@@ -8,7 +8,7 @@ use delegate::delegate;
 use crate::{columnar::columnscan::ColumnScanRainbow, datatypes::StorageTypeName};
 
 use super::{
-    operations::{join::TrieScanJoin, union::TrieScanUnion},
+    operations::{join::TrieScanJoin, subtract::TrieScanSubtract, union::TrieScanUnion},
     trie::TrieScanGeneric,
 };
 
@@ -62,6 +62,8 @@ pub enum TrieScanEnum<'a> {
     TrieScanJoin(TrieScanJoin<'a>),
     /// Case [TrieScanUnion]
     TrieScanUnion(TrieScanUnion<'a>),
+    /// Case [TrieScanSubtract]
+    TrieScanSubtract(TrieScanSubtract<'a>),
 }
 
 impl<'a> PartialTrieScan<'a> for TrieScanEnum<'a> {
@@ -70,6 +72,7 @@ impl<'a> PartialTrieScan<'a> for TrieScanEnum<'a> {
             TrieScanEnum::TrieScanGeneric(scan) => scan,
             TrieScanEnum::TrieScanJoin(scan) => scan,
             TrieScanEnum::TrieScanUnion(scan) => scan,
+            TrieScanEnum::TrieScanSubtract(scan) => scan,
         } {
             fn up(&mut self);
             fn down(&mut self, storage_type: StorageTypeName);

@@ -1,4 +1,8 @@
+//! This module defines [TrieScanUnion] and [GeneratorUnion].
+
 use std::cell::UnsafeCell;
+
+use bitvec::bitvec;
 
 use crate::{
     columnar::{
@@ -99,32 +103,32 @@ impl<'a> PartialTrieScan<'a> for TrieScanUnion<'a> {
 
     fn down(&mut self, next_type: StorageTypeName) {
         let previous_layer = self.current_layer();
-        let previous_type = self.path_types.first();
+        let previous_type = self.path_types.last();
 
         let next_layer = self.path_types.len();
 
         debug_assert!(next_layer < self.arity());
 
-        let mut active_scans = Vec::<usize>::with_capacity(self.arity());
+        let previous_smallest = match previous_layer {
+            Some(previous_layer) => self.column_scans[previous_layer]
+                .get_mut()
+                .union_get_smallest(
+                    *previous_type.expect("path_types is not empty previous_layer is not None"),
+                ),
+            None => bitvec![1; self.arity()],
+        };
+
         for (scan_index, trie_scan) in self.trie_scans.iter_mut().enumerate() {
-            if trie_scan.current_layer() != previous_layer {
+            if !previous_smallest[scan_index] {
                 continue;
             }
 
-            if previous_layer.is_none()
-                || self.column_scans[previous_layer.unwrap()]
-                    .get_mut()
-                    .get_smallest_scans(*previous_type.unwrap())[scan_index]
-            {
-                active_scans.push(scan_index);
-
-                trie_scan.down(next_type);
-            }
+            trie_scan.down(next_type);
         }
 
         self.column_scans[next_layer]
             .get_mut()
-            .set_active_scans(next_type, active_scans);
+            .union_set_active(next_type, previous_smallest);
         self.column_scans[next_layer].get_mut().reset(next_type);
 
         self.path_types.push(next_type);

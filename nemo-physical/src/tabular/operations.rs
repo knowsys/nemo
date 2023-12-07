@@ -51,6 +51,7 @@ use std::{fmt::Debug, hash::Hash, iter::IntoIterator};
 use super::triescan::TrieScanEnum;
 
 pub mod join;
+pub mod subtract;
 pub mod union;
 
 /// Marker for a column
@@ -68,6 +69,13 @@ impl OperationTable {
     /// Return the number of columns associated with this table.
     pub fn arity(&self) -> usize {
         self.0.len()
+    }
+
+    /// Return the position of a marker in this table.
+    pub fn position(&self, marker: &OperationColumnMarker) -> Option<usize> {
+        self.0
+            .iter()
+            .position(|current_marker| current_marker == marker)
     }
 }
 

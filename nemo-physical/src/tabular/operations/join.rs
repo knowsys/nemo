@@ -1,4 +1,4 @@
-//! This module defines
+//! This module defines [TrieScanJoin] and [GeneratorJoin].
 
 use std::{
     cell::UnsafeCell,

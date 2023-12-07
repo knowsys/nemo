@@ -111,7 +111,7 @@ impl<'a> PartialTrieScan<'a> for TrieScanUnion<'a> {
             if previous_layer.is_none()
                 || self.union_scans[previous_layer.unwrap()]
                     .get_mut()
-                    .get_smallest_scans()[scan_index]
+                    .union_get_smallest()[scan_index]
             {
                 active_scans.push(scan_index);
 
@@ -119,9 +119,9 @@ impl<'a> PartialTrieScan<'a> for TrieScanUnion<'a> {
             }
         }
 
-        self.union_scans[next_layer]
-            .get_mut()
-            .set_active_scans(active_scans);
+        // self.union_scans[next_layer]
+        //     .get_mut()
+        //     .set_active_scans(active_scans);
         self.union_scans[next_layer].get_mut().reset();
     }
 
