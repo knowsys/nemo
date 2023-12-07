@@ -46,7 +46,7 @@ where
 
     /// Returns a vector containing the indices of those scans which point to the currently smallest values
     pub fn get_smallest_scans(&self) -> BitVec {
-        self.smallest_scans
+        self.smallest_scans.clone()
     }
 
     /// Set a vector that indicates which scans are currently active and should be considered
@@ -54,21 +54,30 @@ where
         self.active_scans = active_scans;
     }
 
+    /// Return the initial state of `self.smallest_scans`,
+    /// which is a bit vector containing only zeros.
+    fn smallest_scans_default(&self) -> BitVec {
+        bitvec![0; self.smallest_scans.len()]
+    }
+
     /// For every iteration over all input `column_scan`,
-    /// computes `self.smallest_scans`, i.e. a bitfield indicating
-    /// which column scan currently points to the smallest value
-    fn update_smallest(&mut self, current_element: Option<T>, index: usize) {
-        if self.smallest_value.is_none() {
-            self.smallest_value = current_element;
-        } else if current_element.is_some()
-            && current_element.unwrap() < self.smallest_value.unwrap()
-        {
-            self.smallest_value = current_element;
-            self.smallest_scans = bitvec![0; self.column_scans.len()];
+    /// computes `self.smallest_value` and `self.smallest_scans`
+    fn update_smallest(
+        smallest_value: &mut Option<T>,
+        smallest_scans: &mut BitVec,
+        current_element: Option<T>,
+        index: usize,
+        smallest_scans_default: BitVec,
+    ) {
+        if smallest_value.is_none() {
+            *smallest_value = current_element;
+        } else if current_element.is_some() && current_element.unwrap() < smallest_value.unwrap() {
+            *smallest_value = current_element;
+            *smallest_scans = smallest_scans_default;
         }
 
-        if self.smallest_value.is_some() && self.smallest_value == current_element {
-            self.smallest_scans[index] = true;
+        if smallest_value.is_some() && *smallest_value == current_element {
+            smallest_scans.set(index, true);
         }
     }
 }
@@ -80,8 +89,10 @@ where
     type Item = T;
 
     fn next(&mut self) -> Option<Self::Item> {
+        let smallest_scnas_default = self.smallest_scans_default();
+
         self.smallest_value = None;
-        self.smallest_scans = bitvec![0; self.column_scans.len()];
+        self.smallest_scans = smallest_scnas_default.clone();
 
         for (index, scan) in self.column_scans.iter().enumerate() {
             if !self.active_scans[index] {
@@ -99,7 +110,13 @@ where
                 scan.current()
             };
 
-            self.update_smallest(current_element, index);
+            Self::update_smallest(
+                &mut self.smallest_value,
+                &mut self.smallest_scans,
+                current_element,
+                index,
+                smallest_scnas_default.clone(),
+            );
         }
 
         self.smallest_value
@@ -111,6 +128,8 @@ where
     T: 'a + ColumnDataType,
 {
     fn seek(&mut self, value: T) -> Option<T> {
+        let smallest_scnas_default = self.smallest_scans_default();
+
         self.smallest_value = None;
         self.smallest_scans = bitvec![0; self.column_scans.len()];
 
@@ -122,7 +141,13 @@ where
 
             let current_element = scan.seek(value);
 
-            self.update_smallest(current_element, index);
+            Self::update_smallest(
+                &mut self.smallest_value,
+                &mut self.smallest_scans,
+                current_element,
+                index,
+                smallest_scnas_default.clone(),
+            );
         }
 
         self.smallest_value

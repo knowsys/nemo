@@ -498,7 +498,7 @@ impl<'a> ColumnScanT<'a> {
 
     /// Assumes that column scan is a [`ColumnScanUnion`]
     /// and returns a vector containing the positions of the scans with the smallest values
-    pub fn union_get_smallest(&mut self) -> &Vec<bool> {
+    pub fn union_get_smallest(&mut self) -> BitVec {
         forward_to_columnscan_cell!(self, union_get_smallest)
     }
 

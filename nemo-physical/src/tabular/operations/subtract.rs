@@ -45,7 +45,7 @@ impl OperationGenerator for GeneratorSubtract {
         );
 
         let tries_subtract = trie_scans.split_off(1);
-        let trie_main = trie_scans[0];
+        let trie_main = trie_scans.remove(0);
 
         let mut column_scans: Vec<UnsafeCell<ColumnScanRainbow<'a>>> =
             Vec::with_capacity(trie_main.arity());
@@ -61,7 +61,7 @@ impl OperationGenerator for GeneratorSubtract {
                         Vec::<Option<&'a ColumnScanCell<$type>>>::with_capacity(trie_scans.len());
 
                     for (subtract_index, (trie_subtract, layer_map)) in
-                        (tries_subtract.iter().zip(self.layer_maps)).enumerate()
+                        (tries_subtract.iter().zip(self.layer_maps.iter())).enumerate()
                     {
                         let used_layer = layer_map.iter().position(|&layer| layer == output_layer);
 
@@ -110,7 +110,7 @@ impl OperationGenerator for GeneratorSubtract {
         TrieScanEnum::TrieScanSubtract(TrieScanSubtract {
             trie_main: Box::new(trie_main),
             tries_subtract,
-            layer_maps: self.layer_maps,
+            layer_maps: self.layer_maps.clone(),
             column_scans,
             path_types: Vec::new(),
         })
@@ -145,8 +145,7 @@ impl<'a> PartialTrieScan<'a> for TrieScanSubtract<'a> {
     fn up(&mut self) {
         let current_layer = self.current_layer().unwrap();
 
-        for (subtract_index, (trie_subtract, layer_map)) in
-            (self.tries_subtract.iter_mut().zip(self.layer_maps)).enumerate()
+        for (trie_subtract, layer_map) in self.tries_subtract.iter_mut().zip(self.layer_maps.iter())
         {
             if let Some(current_layer_subtract) = trie_subtract.current_layer() {
                 let used_layer = layer_map[current_layer_subtract];
@@ -178,7 +177,7 @@ impl<'a> PartialTrieScan<'a> for TrieScanSubtract<'a> {
         };
 
         for (subtract_index, (trie_subtract, layer_map)) in
-            (self.tries_subtract.iter_mut().zip(self.layer_maps)).enumerate()
+            (self.tries_subtract.iter_mut().zip(self.layer_maps.iter())).enumerate()
         {
             if !previous_equal[subtract_index] {
                 continue;

@@ -285,7 +285,7 @@ where
     /// Return a vector where the ith value indicates
     /// whether the ith "follow" scan points to the same value as the main scan.
     pub fn get_equal_values(&self) -> BitVec {
-        self.equal_values
+        self.equal_values.clone()
     }
 
     /// Set which sub iterators should be enabled.
@@ -302,7 +302,7 @@ where
             subtracted_values = false;
 
             for &subtract_index in &self.subtract_indices {
-                self.equal_values[subtract_index] = false;
+                self.equal_values.set(subtract_index, false);
 
                 if !self.active_scans[subtract_index] {
                     continue;
@@ -330,10 +330,10 @@ where
 
             if let Some(follow_value) = follow_scan.seek(next_value) {
                 if next_value != follow_value {
-                    self.equal_values[follow_index] = false;
+                    self.equal_values.set(follow_index, false);
                 }
             } else {
-                self.equal_values[follow_index] = false;
+                self.equal_values.set(follow_index, false);
             }
         }
 
