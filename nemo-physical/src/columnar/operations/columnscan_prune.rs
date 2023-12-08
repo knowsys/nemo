@@ -1,6 +1,6 @@
 use crate::columnar::columnscan::{ColumnScan, ColumnScanCell};
-use crate::datatypes::ColumnDataType;
-use crate::tabular::operations::triescan_prune::{SharedTrieScanPruneState, TrieScanPruneState};
+use crate::datatypes::{ColumnDataType, StorageTypeName};
+use crate::tabular::operations::prune::{SharedTrieScanPruneState, TrieScanPruneState};
 use std::fmt::Debug;
 use std::ops::Range;
 
@@ -14,6 +14,7 @@ where
     state: SharedTrieScanPruneState<'a>,
     /// Index this column scan corresponds to in the input trie
     column_scan_index: usize,
+    column_scan_type: StorageTypeName,
     reference_scan: &'a ColumnScanCell<'a, T>,
 }
 
@@ -25,11 +26,13 @@ where
     pub fn new(
         state: SharedTrieScanPruneState<'a>,
         column_scan_index: usize,
+        column_scan_type: StorageTypeName,
         reference_scan: &'a ColumnScanCell<'a, T>,
     ) -> Self {
         Self {
             state,
             column_scan_index,
+            column_scan_type,
             reference_scan,
         }
     }
@@ -52,10 +55,11 @@ where
     /// This is forwarded to `advance()` of [`crate::tabular::operations::triescan_prune::TrieScanPruneState`]`.
     fn next(&mut self) -> Option<Self::Item> {
         let current_layer = self.column_scan_index;
+        let current_type = self.column_scan_type;
 
         unsafe {
             let state = Self::exclusively_get_shared_state(&self.state);
-            state.advance_on_layer(current_layer, false);
+            state.advance_on_layer(current_layer, Some(current_type));
         };
 
         self.reference_scan.current()
@@ -84,7 +88,10 @@ where
     }
 
     fn current(&self) -> Option<T> {
-        if unsafe { (*self.state.get()).is_column_peeked(self.column_scan_index) } {
+        if unsafe {
+            (*self.state.get())
+                .is_column_peeked(self.column_scan_index, Some(self.column_scan_type))
+        } {
             None
         } else {
             self.reference_scan.current()

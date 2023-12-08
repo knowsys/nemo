@@ -5,10 +5,15 @@ use std::{cell::UnsafeCell, fmt::Debug};
 
 use delegate::delegate;
 
-use crate::{columnar::columnscan::ColumnScanRainbow, datatypes::StorageTypeName};
+use crate::{
+    columnar::columnscan::ColumnScanRainbow,
+    datatypes::{StorageTypeName, StorageValueT},
+};
 
 use super::{
-    operations::{join::TrieScanJoin, subtract::TrieScanSubtract, union::TrieScanUnion},
+    operations::{
+        join::TrieScanJoin, prune::TrieScanPrune, subtract::TrieScanSubtract, union::TrieScanUnion,
+    },
     trie::TrieScanGeneric,
 };
 
@@ -64,6 +69,8 @@ pub enum TrieScanEnum<'a> {
     TrieScanUnion(TrieScanUnion<'a>),
     /// Case [TrieScanSubtract]
     TrieScanSubtract(TrieScanSubtract<'a>),
+    /// Case [TrieScanPrune]
+    TrieScanPrune(TrieScanPrune<'a>),
 }
 
 impl<'a> PartialTrieScan<'a> for TrieScanEnum<'a> {
@@ -73,6 +80,7 @@ impl<'a> PartialTrieScan<'a> for TrieScanEnum<'a> {
             TrieScanEnum::TrieScanJoin(scan) => scan,
             TrieScanEnum::TrieScanUnion(scan) => scan,
             TrieScanEnum::TrieScanSubtract(scan) => scan,
+            TrieScanEnum::TrieScanPrune(scan) => scan,
         } {
             fn up(&mut self);
             fn down(&mut self, storage_type: StorageTypeName);
@@ -83,4 +91,22 @@ impl<'a> PartialTrieScan<'a> for TrieScanEnum<'a> {
             fn current_scan<'b>(&'b self) -> Option<&UnsafeCell<ColumnScanRainbow<'a>>>;
         }
     }
+}
+
+/// An iterator over a trie, which can call next on every layer of the trie
+pub trait TrieScan {
+    /// Advance trie at the specified layer. This might cause calls to next
+    /// at layers above the specified layer. If there is no next element at
+    /// the specified layer, returns none. Otherwise returns the index of the
+    /// uppermost changed layer.
+    fn advance_on_layer(&mut self, layer: usize) -> Option<usize>;
+
+    /// After a call to [TrieScan::advance_on_layer], this returns the current
+    /// value the specified layer. This is only allowed to call, if [TrieScan::advance_on_layer]
+    /// returned [Some].
+    ///
+    /// # Panics
+    /// If there is no current element ([TrieScan::advance_on_layer] was not
+    /// called or returned [None]).
+    fn current(&mut self, layer: usize) -> StorageValueT;
 }

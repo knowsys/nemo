@@ -413,58 +413,59 @@ impl<'a> TrieScanPruneState<'a> {
 impl<'a> TrieScanPrune<'a> {
     /// Construct new [`TrieScanPrune`] object.
     pub fn new(input_trie_scan: TrieScanEnum<'a>) -> Self {
-        let target_types = input_trie_scan.get_types().clone();
+        // let target_types = input_trie_scan.get_types().clone();
 
-        let mut output_column_scans: Vec<UnsafeCell<ColumnScanT<'a>>> = Vec::new();
+        // let mut output_column_scans: Vec<UnsafeCell<ColumnScanT<'a>>> = Vec::new();
 
-        let state = Rc::new(UnsafeCell::new(TrieScanPruneState {
-            input_trie_scan,
-            input_trie_scan_current_layer: 0,
-            highest_peeked_layer: None,
-            initialized: false,
-            external_current_layer: 0,
-        }));
+        // let state = Rc::new(UnsafeCell::new(TrieScanPruneState {
+        //     input_trie_scan,
+        //     input_trie_scan_current_layer: 0,
+        //     highest_peeked_layer: None,
+        //     initialized: false,
+        //     external_current_layer: 0,
+        // }));
 
-        // Create one `ColumnScanPrune` for every input column
-        for (i, target_type) in target_types.iter().enumerate() {
-            // Generate code for every possible data type of the input column
-            macro_rules! create_column_scan_for_storage_type {
-                ($variant:ident, $type:ty) => {{
-                    // Get input column scan
-                    // SAFETY: we're the only one accessing the shared state at this moment
-                    let column_scan_cell = unsafe { (*state.get()).input_trie_scan.get_scan(i) };
+        // // Create one `ColumnScanPrune` for every input column
+        // for (i, target_type) in target_types.iter().enumerate() {
+        //     // Generate code for every possible data type of the input column
+        //     macro_rules! create_column_scan_for_storage_type {
+        //         ($variant:ident, $type:ty) => {{
+        //             // Get input column scan
+        //             // SAFETY: we're the only one accessing the shared state at this moment
+        //             let column_scan_cell = unsafe { (*state.get()).input_trie_scan.get_scan(i) };
 
-                    let column_scan_cell = column_scan_cell.unwrap();
+        //             let column_scan_cell = column_scan_cell.unwrap();
 
-                    // Create output column scan
-                    if let ColumnScanT::$variant(referenced_scan_cell) =
-                        unsafe { &*column_scan_cell.get() }
-                    {
-                        output_column_scans.push(UnsafeCell::new(ColumnScanT::$variant(
-                            ColumnScanCell::new(ColumnScanEnum::ColumnScanPrune(
-                                ColumnScanPrune::new(Rc::clone(&state), i, referenced_scan_cell),
-                            )),
-                        )));
-                    } else {
-                        panic!("Expected a column scan of type {}", stringify!($type));
-                    }
-                }};
-            }
+        //             // Create output column scan
+        //             if let ColumnScanT::$variant(referenced_scan_cell) =
+        //                 unsafe { &*column_scan_cell.get() }
+        //             {
+        //                 output_column_scans.push(UnsafeCell::new(ColumnScanT::$variant(
+        //                     ColumnScanCell::new(ColumnScanEnum::ColumnScanPrune(
+        //                         ColumnScanPrune::new(Rc::clone(&state), i, referenced_scan_cell),
+        //                     )),
+        //                 )));
+        //             } else {
+        //                 panic!("Expected a column scan of type {}", stringify!($type));
+        //             }
+        //         }};
+        //     }
 
-            match target_type {
-                StorageTypeName::Id32 => create_column_scan_for_storage_type!(Id32, u32),
-                StorageTypeName::Id64 => create_column_scan_for_storage_type!(Id64, u64),
-                StorageTypeName::Int64 => create_column_scan_for_storage_type!(Int64, i64),
-                StorageTypeName::Float => create_column_scan_for_storage_type!(Float, Float),
-                StorageTypeName::Double => create_column_scan_for_storage_type!(Double, Double),
-            };
-        }
+        //     match target_type {
+        //         StorageTypeName::Id32 => create_column_scan_for_storage_type!(Id32, u32),
+        //         StorageTypeName::Id64 => create_column_scan_for_storage_type!(Id64, u64),
+        //         StorageTypeName::Int64 => create_column_scan_for_storage_type!(Int64, i64),
+        //         StorageTypeName::Float => create_column_scan_for_storage_type!(Float, Float),
+        //         StorageTypeName::Double => create_column_scan_for_storage_type!(Double, Double),
+        //     };
+        // }
 
-        Self {
-            state,
-            output_column_scans,
-            target_types,
-        }
+        // Self {
+        //     state,
+        //     output_column_scans,
+        //     target_types,
+        // }
+        todo!()
     }
 
     /// Moves to the next value on a given layer while ensuring that only materialized tuples are returned (see guarantees provided by [`TrieScanPrune`]).

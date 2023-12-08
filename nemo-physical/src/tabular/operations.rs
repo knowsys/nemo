@@ -51,6 +51,8 @@ use std::{fmt::Debug, hash::Hash, iter::IntoIterator};
 use super::triescan::TrieScanEnum;
 
 pub mod join;
+pub mod projectreorder;
+pub mod prune;
 pub mod subtract;
 pub mod union;
 

@@ -611,6 +611,39 @@ impl<'a> ColumnScanRainbow<'a> {
         }
     }
 
+    /// Return the current value of a scan of the given [StorageTypeName].
+    pub fn seek(&mut self, value: StorageValueT) -> Option<StorageValueT> {
+        match value {
+            StorageValueT::Id32(value) => self.scan_id32.seek(value).map(StorageValueT::Id32),
+            StorageValueT::Id64(value) => self.scan_id64.seek(value).map(StorageValueT::Id64),
+            StorageValueT::Int64(value) => self.scan_i64.seek(value).map(StorageValueT::Int64),
+            StorageValueT::Float(value) => self.scan_float.seek(value).map(StorageValueT::Float),
+            StorageValueT::Double(value) => self.scan_double.seek(value).map(StorageValueT::Double),
+        }
+    }
+
+    /// Return the current value of a scan of the given [StorageTypeName].
+    pub fn next(&mut self, storage_type: StorageTypeName) -> Option<StorageValueT> {
+        match storage_type {
+            StorageTypeName::Id32 => self.scan_id32.next().map(StorageValueT::Id32),
+            StorageTypeName::Id64 => self.scan_id64.next().map(StorageValueT::Id64),
+            StorageTypeName::Int64 => self.scan_i64.next().map(StorageValueT::Int64),
+            StorageTypeName::Float => self.scan_float.next().map(StorageValueT::Float),
+            StorageTypeName::Double => self.scan_double.next().map(StorageValueT::Double),
+        }
+    }
+
+    /// Return the current value of a scan of the given [StorageTypeName].
+    pub fn current(&self, storage_type: StorageTypeName) -> Option<StorageValueT> {
+        match storage_type {
+            StorageTypeName::Id32 => self.scan_id32.current().map(StorageValueT::Id32),
+            StorageTypeName::Id64 => self.scan_id64.current().map(StorageValueT::Id64),
+            StorageTypeName::Int64 => self.scan_i64.current().map(StorageValueT::Int64),
+            StorageTypeName::Float => self.scan_float.current().map(StorageValueT::Float),
+            StorageTypeName::Double => self.scan_double.current().map(StorageValueT::Double),
+        }
+    }
+
     /// Return the current position of a scan of the given [StorageTypeName].
     pub fn pos(&mut self, storage_type: StorageTypeName) -> Option<usize> {
         match storage_type {
@@ -646,7 +679,7 @@ impl<'a> ColumnScanRainbow<'a> {
     }
 
     /// Assumes that column scan is a [`ColumnScanUnion`]
-    /// and returns a vector containing the positions of the scans with the smallest values
+    /// and returns a vector containing the positions of the scans with the smallest values.
     pub fn union_get_smallest(&mut self, storage_type: StorageTypeName) -> BitVec {
         match storage_type {
             StorageTypeName::Id32 => self.scan_id32.union_get_smallest(),
@@ -658,7 +691,7 @@ impl<'a> ColumnScanRainbow<'a> {
     }
 
     /// Assumes that column scan is a [`ColumnScanUnion`]
-    /// Set a vector that indicates which scans are currently active and should be considered
+    /// Set a vector that indicates which scans are currently active and should be considered.
     pub fn union_set_active(&mut self, storage_type: StorageTypeName, active_scans: BitVec) {
         match storage_type {
             StorageTypeName::Id32 => self.scan_id32.union_set_active(active_scans),
