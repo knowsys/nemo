@@ -10,6 +10,7 @@ use crate::{
         operations::ColumnScanUnion,
     },
     datatypes::{Double, Float, StorageTypeName},
+    dictionary::meta_dv_dict::MetaDictionary,
     tabular::triescan::{PartialTrieScan, TrieScanEnum},
 };
 
@@ -27,7 +28,11 @@ impl GeneratorUnion {
 }
 
 impl OperationGenerator for GeneratorUnion {
-    fn generate<'a>(&'_ self, trie_scans: Vec<TrieScanEnum<'a>>) -> TrieScanEnum<'a> {
+    fn generate<'a>(
+        &'_ self,
+        trie_scans: Vec<TrieScanEnum<'a>>,
+        _dictionary: &'a MetaDictionary,
+    ) -> TrieScanEnum<'a> {
         debug_assert!(trie_scans
             .iter()
             .all(|scan| scan.arity() == trie_scans[0].arity()));

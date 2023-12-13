@@ -314,14 +314,14 @@ impl<'a> TupleBuffer<'a> {
             AnyDataValue::String(_)
             | AnyDataValue::LanguageTaggedString(_)
             | AnyDataValue::Iri(_)
+            | AnyDataValue::Boolean(_)
             | AnyDataValue::Other(_) => {
                 // TODO: can we avoid the clone()?
                 let dict_id = self.dict.borrow_mut().add_datavalue(dv.clone()).value();
                 Self::storage_value_for_usize(dict_id)
             }
-            AnyDataValue::Double(iv) => {
-                StorageValueT::Double(Double::from_number(iv.to_f64_unchecked()))
-            }
+            AnyDataValue::Float(iv) => StorageValueT::Float(iv.to_float_unchecked()),
+            AnyDataValue::Double(iv) => StorageValueT::Double(iv.to_double_unchecked()),
             AnyDataValue::UnsignedLong(iv) => Self::storage_value_for_u64(iv.to_u64_unchecked()),
             AnyDataValue::Long(iv) => StorageValueT::Int64(iv.to_i64_unchecked()),
         }

@@ -12,7 +12,8 @@ use crate::{
 
 use super::{
     operations::{
-        join::TrieScanJoin, prune::TrieScanPrune, subtract::TrieScanSubtract, union::TrieScanUnion,
+        filter::TrieScanFilter, function::TrieScanFunction, join::TrieScanJoin,
+        prune::TrieScanPrune, subtract::TrieScanSubtract, union::TrieScanUnion,
     },
     trie::TrieScanGeneric,
 };
@@ -71,6 +72,10 @@ pub enum TrieScanEnum<'a> {
     TrieScanSubtract(TrieScanSubtract<'a>),
     /// Case [TrieScanPrune]
     TrieScanPrune(TrieScanPrune<'a>),
+    /// Case [TrieScanFunction]
+    TrieScanFunction(TrieScanFunction<'a>),
+    /// Case [TrieScanFilter]
+    TrieScanFilter(TrieScanFilter<'a>),
 }
 
 impl<'a> PartialTrieScan<'a> for TrieScanEnum<'a> {
@@ -81,6 +86,8 @@ impl<'a> PartialTrieScan<'a> for TrieScanEnum<'a> {
             TrieScanEnum::TrieScanUnion(scan) => scan,
             TrieScanEnum::TrieScanSubtract(scan) => scan,
             TrieScanEnum::TrieScanPrune(scan) => scan,
+            TrieScanEnum::TrieScanFunction(scan) => scan,
+            TrieScanEnum::TrieScanFilter(scan) => scan,
         } {
             fn up(&mut self);
             fn down(&mut self, storage_type: StorageTypeName);

@@ -14,10 +14,10 @@ use crate::{
 use super::{
     column::{rle::ColumnScanRle, vector::ColumnScanVector},
     operations::{
-        ColumnScanArithmetic, ColumnScanCastEnum, ColumnScanConstant, ColumnScanCopy,
-        ColumnScanEqualColumn, ColumnScanFollow, ColumnScanJoin, ColumnScanMinus, ColumnScanNulls,
-        ColumnScanPass, ColumnScanPrune, ColumnScanReorder, ColumnScanRestrictValues,
-        ColumnScanSubtract, ColumnScanUnion,
+        constant::ColumnScanConstant, filter::ColumnScanFilter, ColumnScanArithmetic,
+        ColumnScanCastEnum, ColumnScanCopy, ColumnScanEqualColumn, ColumnScanFollow,
+        ColumnScanJoin, ColumnScanMinus, ColumnScanNulls, ColumnScanPass, ColumnScanPrune,
+        ColumnScanReorder, ColumnScanRestrictValues, ColumnScanSubtract, ColumnScanUnion,
     },
 };
 
@@ -90,6 +90,8 @@ where
     ColumnScanSubtract(ColumnScanSubtract<'a, T>),
     /// Case ColumnScanArithmetic
     ColumnScanArithmetic(ColumnScanArithmetic<'a, T>),
+    /// Case ColumnScanFilter
+    ColumnScanFilter(ColumnScanFilter<'a, T>),
 }
 
 /// The following impl statements allow converting from a specific [`ColumnScan`] into a gerneral [`ColumnScanEnum`]
@@ -278,6 +280,16 @@ where
             unimplemented!("subtract_set_active is only available for ColumnScanSubtract")
         }
     }
+
+    /// Assumes that column scan is a [ColumnScanConstant].
+    /// Set a new constant value that will be returned by this scan.
+    pub fn constant_set(&mut self, constant: Option<T>) {
+        if let Self::ColumnScanConstant(scan) = self {
+            scan.set_constant(constant)
+        } else {
+            unimplemented!("subtract_set_active is only available for ColumnScanConstant")
+        }
+    }
 }
 
 // Generate a macro forward_to_columnscan!, which takes a [`ColumnScanEnum`] and a function as arguments
@@ -301,7 +313,8 @@ generate_forwarder!(forward_to_columnscan;
     ColumnScanCopy,
     ColumnScanNulls,
     ColumnScanSubtract,
-    ColumnScanArithmetic
+    ColumnScanArithmetic,
+    ColumnScanFilter
 );
 
 impl<'a, T> Iterator for ColumnScanEnum<'a, T>
@@ -445,6 +458,11 @@ where
     /// Forward `subtract_set_active` to the underlying [`ColumnScanEnum`].
     pub fn subtract_set_active(&mut self, active_scans: BitVec) {
         unsafe { &mut *self.0.get() }.subtract_set_active(active_scans)
+    }
+
+    /// Forward `constant_set` to the underlying [ColumnScanEnum].
+    pub fn constant_set(&mut self, constant: Option<T>) {
+        unsafe { &mut *self.0.get() }.constant_set(constant)
     }
 }
 
@@ -723,6 +741,30 @@ impl<'a> ColumnScanRainbow<'a> {
             StorageTypeName::Int64 => self.scan_i64.subtract_set_active(active_scans),
             StorageTypeName::Float => self.scan_float.subtract_set_active(active_scans),
             StorageTypeName::Double => self.scan_double.subtract_set_active(active_scans),
+        }
+    }
+
+    /// Assumes that column scan is a [ColumnScanConstant].
+    /// Set a new constant value that will be returned by this scan.
+    pub fn constant_set(&mut self, constant: StorageValueT) {
+        match constant {
+            StorageValueT::Id32(value) => self.scan_id32.constant_set(Some(value)),
+            StorageValueT::Id64(value) => self.scan_id64.constant_set(Some(value)),
+            StorageValueT::Int64(value) => self.scan_i64.constant_set(Some(value)),
+            StorageValueT::Float(value) => self.scan_float.constant_set(Some(value)),
+            StorageValueT::Double(value) => self.scan_double.constant_set(Some(value)),
+        }
+    }
+
+    /// Assumes that column scan is a [ColumnScanConstant].
+    /// Set its value to `None`.
+    pub fn constant_set_none(&mut self, storage_type: StorageTypeName) {
+        match storage_type {
+            StorageTypeName::Id32 => self.scan_id32.constant_set(None),
+            StorageTypeName::Id64 => self.scan_id64.constant_set(None),
+            StorageTypeName::Int64 => self.scan_i64.constant_set(None),
+            StorageTypeName::Float => self.scan_float.constant_set(None),
+            StorageTypeName::Double => self.scan_double.constant_set(None),
         }
     }
 }

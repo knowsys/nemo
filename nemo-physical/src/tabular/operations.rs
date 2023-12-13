@@ -48,8 +48,12 @@ pub mod project_reorder;
 use std::collections::HashMap;
 use std::{fmt::Debug, hash::Hash, iter::IntoIterator};
 
+use crate::dictionary::meta_dv_dict::MetaDictionary;
+
 use super::triescan::TrieScanEnum;
 
+pub mod filter;
+pub mod function;
 pub mod join;
 pub mod projectreorder;
 pub mod prune;
@@ -105,5 +109,9 @@ where
 /// which implement certain data base operations.
 pub(crate) trait OperationGenerator {
     /// Generate a
-    fn generate<'a>(&'_ self, input: Vec<TrieScanEnum<'a>>) -> TrieScanEnum<'a>;
+    fn generate<'a>(
+        &'_ self,
+        input: Vec<TrieScanEnum<'a>>,
+        dictionary: &'a MetaDictionary,
+    ) -> TrieScanEnum<'a>;
 }

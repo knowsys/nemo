@@ -36,6 +36,8 @@ pub mod permutator;
 pub mod resource;
 pub mod util;
 
+pub mod function;
+
 /// Module defining data structures for working with numeric expressions.
 pub mod arithmetic;
 

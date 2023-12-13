@@ -442,10 +442,10 @@ impl<'a> TrieScanAppend<'a> {
     fn add_constant_column(&mut self, dict: &mut Dict, value: &DataValueT) {
         macro_rules! append_constant_for_datatype {
             ($variant:ident, $value: expr) => {{
-                self.column_scans
-                    .push(UnsafeCell::new(ColumnScanT::$variant(ColumnScanCell::new(
-                        ColumnScanEnum::ColumnScanConstant(ColumnScanConstant::new($value)),
-                    ))));
+                // self.column_scans
+                //     .push(UnsafeCell::new(ColumnScanT::$variant(ColumnScanCell::new(
+                //         ColumnScanEnum::ColumnScanConstant(ColumnScanConstant::new($value)),
+                //     ))));
             }};
         }
 

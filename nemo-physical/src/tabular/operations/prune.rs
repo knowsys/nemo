@@ -4,10 +4,11 @@ use std::{cell::UnsafeCell, rc::Rc};
 
 use crate::{
     columnar::{
-        columnscan::{ColumnScanCell, ColumnScanEnum, ColumnScanRainbow, ColumnScanT},
+        columnscan::{ColumnScanCell, ColumnScanEnum, ColumnScanRainbow},
         operations::ColumnScanPrune,
     },
-    datatypes::{ColumnDataType, Double, Float, StorageTypeName, StorageValueT},
+    datatypes::{ColumnDataType, StorageTypeName, StorageValueT},
+    dictionary::meta_dv_dict::MetaDictionary,
     tabular::triescan::{PartialTrieScan, TrieScan, TrieScanEnum},
 };
 
@@ -32,7 +33,11 @@ pub struct TrieScanPrune<'a> {
 pub struct GeneratorPrune {}
 
 impl OperationGenerator for GeneratorPrune {
-    fn generate<'a>(&'_ self, mut input: Vec<TrieScanEnum<'a>>) -> TrieScanEnum<'a> {
+    fn generate<'a>(
+        &'_ self,
+        mut input: Vec<TrieScanEnum<'a>>,
+        _dictionary: &'a MetaDictionary,
+    ) -> TrieScanEnum<'a> {
         debug_assert!(input.len() == 1);
         let input_trie_scan = input.remove(0);
         let input_trie_scan_arity = input_trie_scan.arity();
@@ -336,10 +341,10 @@ impl<'a> TrieScanPruneState<'a> {
     /// Currently, this function does not support returning the uppermost changed layer. This can be implemented in the future.
     pub fn advance_on_layer_with_seek<T: ColumnDataType>(
         &mut self,
-        target_layer: usize,
-        allow_advancements_above_target_layer: bool,
-        underlying_column_scan: &'a ColumnScanCell<'a, T>,
-        seek_minimum_value: T,
+        _target_layer: usize,
+        _allow_advancements_above_target_layer: bool,
+        _underlying_column_scan: &'a ColumnScanCell<'a, T>,
+        _seek_minimum_value: T,
     ) -> Option<T> {
         // debug_assert!(self.initialized);
 
