@@ -234,8 +234,12 @@ where
     }
 }
 
+/// Object for building an [IntervalColumnT]
+/// based on receiving the table in matrix form
+///
+/// This is used for creating an [IntervalColumnT] from a [TupleBuffer][crate::datasources::TupleBuffer].
 #[derive(Debug)]
-pub(crate) struct IntervalColumnTBuilder<LookupMethod>
+pub(crate) struct IntervalColumnTBuilderMatrix<LookupMethod>
 where
     LookupMethod: IntervalLookup,
 {
@@ -254,7 +258,7 @@ where
     current_data_item: Option<StorageValueT>,
 }
 
-impl<LookupMethod> Default for IntervalColumnTBuilder<LookupMethod>
+impl<LookupMethod> Default for IntervalColumnTBuilderMatrix<LookupMethod>
 where
     LookupMethod: IntervalLookup,
 {
@@ -270,7 +274,7 @@ where
     }
 }
 
-impl<LookupMethod> IntervalColumnTBuilder<LookupMethod>
+impl<LookupMethod> IntervalColumnTBuilderMatrix<LookupMethod>
 where
     LookupMethod: IntervalLookup,
 {
@@ -317,6 +321,80 @@ where
         self.builder_double.finish_interval();
 
         self.current_data_item = None;
+    }
+
+    pub fn finalize(self) -> IntervalColumnT<LookupMethod> {
+        IntervalColumnT::new(
+            self.builder_id32.finalize(),
+            self.builder_id64.finalize(),
+            self.builder_int64.finalize(),
+            self.builder_float.finalize(),
+            self.builder_double.finalize(),
+        )
+    }
+}
+
+/// Object for building an [IntervalColumnT]
+/// based on receiving the table in form of a [TrieScan][crate::tabular::triescan]
+#[derive(Debug)]
+pub(crate) struct IntervalColumnTBuilderTriescan<LookupMethod>
+where
+    LookupMethod: IntervalLookup,
+{
+    /// Case [StorageTypeName::Id32]
+    builder_id32: IntervalColumnBuilder<u32, LookupMethod>,
+    /// Case [StorageTypeName::Id64]
+    builder_id64: IntervalColumnBuilder<u64, LookupMethod>,
+    /// Case [StorageTypeName::Int64]
+    builder_int64: IntervalColumnBuilder<i64, LookupMethod>,
+    /// Case [StorageTypeName::Float]
+    builder_float: IntervalColumnBuilder<Float, LookupMethod>,
+    /// Case [StorageTypeName::Double]
+    builder_double: IntervalColumnBuilder<Double, LookupMethod>,
+
+    /// Remembers the last type of builder where a value was added
+    last_type: StorageTypeName,
+}
+
+impl<LookupMethod> Default for IntervalColumnTBuilderTriescan<LookupMethod>
+where
+    LookupMethod: IntervalLookup,
+{
+    fn default() -> Self {
+        Self {
+            builder_id32: Default::default(),
+            builder_id64: Default::default(),
+            builder_int64: Default::default(),
+            builder_float: Default::default(),
+            builder_double: Default::default(),
+            last_type: StorageTypeName::Id32, // Set arbitrarily
+        }
+    }
+}
+
+impl<LookupMethod> IntervalColumnTBuilderTriescan<LookupMethod>
+where
+    LookupMethod: IntervalLookup,
+{
+    /// Add a new value into the builder.
+    pub fn add_value(&mut self, value: StorageValueT) {
+        match value {
+            StorageValueT::Id32(value) => self.builder_id32.add_data(value),
+            StorageValueT::Id64(value) => self.builder_id64.add_data(value),
+            StorageValueT::Int64(value) => self.builder_int64.add_data(value),
+            StorageValueT::Float(value) => self.builder_float.add_data(value),
+            StorageValueT::Double(value) => self.builder_double.add_data(value),
+        }
+    }
+
+    pub fn finish_interval(&mut self) {
+        match self.last_type {
+            StorageTypeName::Id32 => self.builder_id32.finish_interval(),
+            StorageTypeName::Id64 => self.builder_id64.finish_interval(),
+            StorageTypeName::Int64 => self.builder_int64.finish_interval(),
+            StorageTypeName::Float => self.builder_float.finish_interval(),
+            StorageTypeName::Double => self.builder_double.finish_interval(),
+        }
     }
 
     pub fn finalize(self) -> IntervalColumnT<LookupMethod> {

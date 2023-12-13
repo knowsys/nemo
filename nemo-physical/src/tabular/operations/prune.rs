@@ -619,13 +619,17 @@ impl<'a> TrieScan for TrieScanPrune<'a> {
         uppermost_modified_column_index
     }
 
-    fn current(&mut self, layer: usize) -> StorageValueT {
+    fn current_value(&mut self, layer: usize) -> StorageValueT {
         let current_type = self.path_types()[layer];
 
         self.output_column_scans[layer]
             .get_mut()
             .current(current_type)
             .expect("advance_at_layer needs to return Some before this is called")
+    }
+
+    fn num_columns(&self) -> usize {
+        self.output_column_scans.len()
     }
 }
 

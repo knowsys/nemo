@@ -8,14 +8,14 @@ use crate::{
         columnscan::ColumnScanRainbow,
         intervalcolumn::{
             interval_lookup::lookup_column_single::IntervalLookupColumnSingle, IntervalColumnT,
-            IntervalColumnTBuilder,
+            IntervalColumnTBuilderMatrix, IntervalColumnTBuilderTriescan,
         },
     },
     datasources::SortedTupleBuffer,
     datatypes::StorageTypeName,
 };
 
-use super::triescan::PartialTrieScan;
+use super::triescan::{PartialTrieScan, TrieScan};
 
 /// Defines the lookup method used in [IntervalColumnT]
 type IntervalLookupMethod = IntervalLookupColumnSingle;
@@ -53,7 +53,7 @@ impl Trie {
     /// Create a new [Trie] from a [SortedTupleBuffer].
     pub fn from_tuple_buffer(buffer: SortedTupleBuffer) -> Self {
         let mut intervalcolumn_builders = (0..buffer.column_number())
-            .map(|_| IntervalColumnTBuilder::<IntervalLookupMethod>::default())
+            .map(|_| IntervalColumnTBuilderMatrix::<IntervalLookupMethod>::default())
             .collect::<Vec<_>>();
 
         let mut last_tuple_intervals = vec![buffer.size()];
@@ -79,6 +79,37 @@ impl Trie {
             current_builder.finish_interval();
 
             last_tuple_intervals = current_tuple_intervals;
+        }
+
+        Self {
+            columns: intervalcolumn_builders
+                .into_iter()
+                .map(|builder| builder.finalize())
+                .collect(),
+        }
+    }
+
+    /// Create a new [Trie] based on an a [TrieScan].
+    /// In the last `cut_layers` layers, this function will only check for the existence of a value
+    /// and will not materialize it fully.
+    /// To keep all the values, set `cut_layers` to 0.
+    pub fn from_trie_scan<Scan: TrieScan>(mut trie_scan: Scan, cut_layers: usize) -> Self {
+        let num_columns = trie_scan.num_columns() - cut_layers;
+
+        let mut intervalcolumn_builders = (0..num_columns)
+            .map(|_| IntervalColumnTBuilderTriescan::<IntervalLookupMethod>::default())
+            .collect::<Vec<_>>();
+
+        while let Some(changed_layer) = trie_scan.advance_on_layer(num_columns - 1) {
+            for layer in changed_layer..num_columns {
+                let current_builder = &mut intervalcolumn_builders[layer];
+                let current_value = trie_scan.current_value(layer);
+
+                current_builder.add_value(current_value);
+                if layer != changed_layer {
+                    current_builder.finish_interval();
+                }
+            }
         }
 
         Self {
@@ -133,11 +164,11 @@ impl<'a> PartialTrieScan<'a> for TrieScanGeneric<'a> {
                 let current_layer = self.path_types.len();
 
                 let local_index = self.column_scans[current_layer]
-                .get_mut()
-                .pos(current_type)
-                .expect(
-                    "Calling down on a trie is only allowed when currently pointing at an element.",
-                );
+                    .get_mut()
+                    .pos(current_type)
+                    .expect(
+                        "Calling down on a trie is only allowed when currently pointing at an element.",
+                    );
                 let global_index =
                     self.trie.columns[current_layer].global_index(next_type, local_index);
 

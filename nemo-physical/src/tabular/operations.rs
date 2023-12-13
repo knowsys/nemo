@@ -46,6 +46,7 @@ pub mod project_reorder;
 
 /// END OF OLD OPERATIONS
 use std::collections::HashMap;
+use std::ops::Deref;
 use std::{fmt::Debug, hash::Hash, iter::IntoIterator};
 
 use crate::dictionary::meta_dv_dict::MetaDictionary;
@@ -91,6 +92,14 @@ impl IntoIterator for OperationTable {
 
     fn into_iter(self) -> Self::IntoIter {
         self.0.into_iter()
+    }
+}
+
+impl Deref for OperationTable {
+    type Target = [OperationColumnMarker];
+
+    fn deref(&self) -> &[OperationColumnMarker] {
+        &self.0
     }
 }
 
