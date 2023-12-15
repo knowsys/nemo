@@ -1,7 +1,7 @@
 //! This module defines [GeneratorProjectReorder].
 
 use crate::{
-    datasources::{SortedTupleBuffer, TupleBuffer},
+    datasources::{SortedTupleBuffer, TupleWriter},
     datatypes::StorageValueT,
     tabular::{trie::Trie, triescan::TrieScan},
     util::mapping::{ordered_choice::SortedChoice, traits::NatMapping},

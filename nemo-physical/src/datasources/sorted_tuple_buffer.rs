@@ -1,12 +1,12 @@
 //! Module that allows callers to write data into columns of a database table.
 
-use crate::{datasources::TupleBuffer, datatypes::StorageValueT};
+use crate::{datasources::TupleWriter, datatypes::StorageValueT};
 use std::cmp::Ordering;
 
 /// The [`SortedTupleBuffer`] is a wrapper for [`TableBuffer`] that stores a tuple order.
 #[derive(Debug)]
 pub struct SortedTupleBuffer<'a> {
-    tuple_buffer: TupleBuffer<'a>,
+    tuple_buffer: TupleWriter<'a>,
     tuple_order: Vec<usize>,
 }
 
@@ -14,7 +14,7 @@ impl<'a> SortedTupleBuffer<'a> {
     /// Constructor for [`SortedTupleBuffer`]. It takes a [`TupleBuffer`] and a tuple_order as
     /// parameters. The tuple order indicates the indexes of the tuples ordered by increasing
     /// [`StorageValueT`]s.
-    pub fn new(tuple_buffer: TupleBuffer<'a>) -> SortedTupleBuffer {
+    pub fn new(tuple_buffer: TupleWriter<'a>) -> SortedTupleBuffer {
         let tuple_order = SortedTupleBuffer::get_order(&tuple_buffer);
         SortedTupleBuffer {
             tuple_buffer,
@@ -40,7 +40,7 @@ impl<'a> SortedTupleBuffer<'a> {
     }
 
     /// Returns the order of tuples in the TupleBuffer
-    fn get_order(tuple_buffer: &TupleBuffer) -> Vec<usize> {
+    fn get_order(tuple_buffer: &TupleWriter) -> Vec<usize> {
         let mut order: Vec<usize> = (0..tuple_buffer.size()).collect();
         order.sort_by(|x, y| SortedTupleBuffer::compare_tuples(tuple_buffer, *x, *y));
         order
@@ -50,7 +50,7 @@ impl<'a> SortedTupleBuffer<'a> {
     /// the internal order of tuples, i.e., tuple indexes in the first inner table are maintained,
     /// and row indexes in the second table start from table_lengths[0], and so on.
     fn compare_tuples(
-        tuple_buffer: &TupleBuffer,
+        tuple_buffer: &TupleWriter,
         first_tuple_idx: usize,
         second_tuple_idx: usize,
     ) -> Ordering {
@@ -74,7 +74,7 @@ mod test {
     use std::cell::RefCell;
 
     use crate::{
-        datasources::TupleBuffer, datatypes::StorageValueT, datavalues::AnyDataValue,
+        datasources::TupleWriter, datatypes::StorageValueT, datavalues::AnyDataValue,
         management::database::Dict,
     };
 
@@ -82,7 +82,7 @@ mod test {
     fn test_sorted_column_iterator_one_col() {
         let dict = Dict::new();
         let dict_ref = RefCell::new(dict);
-        let mut tb = TupleBuffer::new(&dict_ref, 1);
+        let mut tb = TupleWriter::new(&dict_ref, 1);
 
         let v1 = AnyDataValue::new_string("c".to_string()); // 0
         let v2 = AnyDataValue::new_string("a".to_string()); // 1
@@ -108,7 +108,7 @@ mod test {
     fn test_sorted_column_iterator_two_cols() {
         let dict = Dict::new();
         let dict_ref = RefCell::new(dict);
-        let mut tb = TupleBuffer::new(&dict_ref, 2);
+        let mut tb = TupleWriter::new(&dict_ref, 2);
 
         let v1 = AnyDataValue::new_integer_from_i64(1);
         let v2 = AnyDataValue::new_integer_from_i64(2);

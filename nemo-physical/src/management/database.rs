@@ -4,7 +4,7 @@ use std::fmt::{Debug, Display};
 
 use bytesize::ByteSize;
 
-use crate::datasources::{TableProvider, TupleBuffer};
+use crate::datasources::{TableProvider, TupleWriter};
 use crate::datatypes::data_value::DataValueIteratorT;
 use crate::datatypes::storage_value::{StorageValueIteratorT, VecT};
 use crate::datatypes::{DataTypeName, DataValueT, StorageValueT};
@@ -119,7 +119,7 @@ impl TableStorage {
                 TableSource::FileReader(reader) => {
                     // TODO: Code partly disabled, test will fail; this is in transition to the new loading mode ...
 
-                    let mut tuple_buffer = TupleBuffer::new(dict, schema.arity());
+                    let mut tuple_buffer = TupleWriter::new(dict, schema.arity());
                     // TODO: handle error intead of doing the let _
                     let _ = reader.provide_table_data(&mut tuple_buffer);
 

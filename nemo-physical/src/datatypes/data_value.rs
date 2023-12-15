@@ -1,4 +1,4 @@
-use crate::datasources::TupleBuffer;
+use crate::datasources::TupleWriter;
 use crate::datavalues::AnyDataValue;
 use crate::dictionary::DvDict;
 use crate::management::database::Dict;
@@ -78,7 +78,7 @@ impl DataValueT {
                 let id = dict
                     .add_datavalue(AnyDataValue::new_string(val.clone().into()))
                     .value();
-                TupleBuffer::storage_value_for_usize(id)
+                TupleWriter::storage_value_for_usize(id)
             }
             Self::U32(val) => StorageValueT::Id32(*val),
             Self::U64(val) => StorageValueT::Id64(*val),
@@ -95,7 +95,7 @@ impl DataValueT {
                 if let Some(uid) =
                     dict.datavalue_to_id(&AnyDataValue::new_string((*val).clone().into()))
                 {
-                    Some(TupleBuffer::storage_value_for_usize(uid))
+                    Some(TupleWriter::storage_value_for_usize(uid))
                 } else {
                     None
                 }

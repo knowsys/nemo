@@ -25,7 +25,7 @@ struct TypedTableRecord {
 /// can be turned into a table. The interface allows values to be added one by one, and also provides
 /// some roll-back functionality for dropping a previously started tuple in case of errors.
 #[derive(Debug)]
-pub struct TupleBuffer<'a> {
+pub struct TupleWriter<'a> {
     /// Dictionary that will be used in encoding some kinds of values for which we have no native representation.
     dict: &'a RefCell<Dict>,
     /// Number of columns in the table.
@@ -63,7 +63,7 @@ pub struct TupleBuffer<'a> {
     cols_i64: Vec<Vec<i64>>,
 }
 
-impl<'a> TupleBuffer<'a> {
+impl<'a> TupleWriter<'a> {
     /// Construct a new [`TupleBuffer`]. This is public to allow
     /// downstream implementations of [`crate::datasources::TableProvider`] to
     /// test their code. In normal operation, it will be provided by the database.
@@ -85,7 +85,7 @@ impl<'a> TupleBuffer<'a> {
 
         let initial_capacity = 10;
 
-        TupleBuffer {
+        TupleWriter {
             dict: dict,
             col_num: column_count,
             cur_row: cur_row,
@@ -366,7 +366,7 @@ impl<'a> TupleBuffer<'a> {
 
 #[cfg(test)]
 mod test {
-    use super::TupleBuffer;
+    use super::TupleWriter;
     use crate::{
         datatypes::StorageValueT, datavalues::AnyDataValue, dictionary::DvDict,
         management::database::Dict,
@@ -374,7 +374,7 @@ mod test {
     use std::cell::RefCell;
     use std::convert::TryFrom;
 
-    impl<'a> TupleBuffer<'a> {
+    impl<'a> TupleWriter<'a> {
         /// Get a vector of AnyDataValues. As `svt2adv`, this method is very limited and meant for
         /// testing purpuses only.
         fn get_tuple_of_any_data_values(&self, tuple_idx: usize) -> Vec<AnyDataValue> {
@@ -407,7 +407,7 @@ mod test {
     fn test_internal_table_structures() {
         let dict = Dict::new();
         let dict_ref = RefCell::new(dict);
-        let mut tb = TupleBuffer::new(&dict_ref, 3);
+        let mut tb = TupleWriter::new(&dict_ref, 3);
 
         let v1 = AnyDataValue::new_string("a".to_string());
         let v2 = AnyDataValue::new_integer_from_i64(42);
