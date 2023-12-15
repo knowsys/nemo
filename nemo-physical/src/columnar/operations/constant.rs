@@ -35,7 +35,7 @@ where
     T: ColumnDataType,
 {
     /// Constructs a new [`ColumnScanConstant`].
-    pub fn new(constant: Option<T>) -> Self {
+    pub(crate) fn new(constant: Option<T>) -> Self {
         Self {
             constant,
             status: ColumnScanStatus::Before,
@@ -43,7 +43,7 @@ where
     }
 
     /// Set a new constant value that will be returned by this scan
-    pub fn set_constant(&mut self, constant: Option<T>) {
+    pub(crate) fn set_constant(&mut self, constant: Option<T>) {
         self.constant = constant;
     }
 }

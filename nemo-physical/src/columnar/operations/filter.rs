@@ -38,7 +38,7 @@ where
     T: 'a + ColumnDataType,
 {
     /// Create a new [ColumnScanFilter].
-    pub fn new(
+    pub(crate) fn new(
         value_scan: &'a ColumnScanCell<'a, T>,
         program: StackProgram,
         referenced_values: Rc<RefCell<Vec<AnyDataValue>>>,

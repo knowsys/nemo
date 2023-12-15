@@ -1,4 +1,7 @@
-//! This module defines and implements database operations over columns
+//! This module collects all the operations on columns
+
+pub mod constant;
+pub mod filter;
 
 /// Module for defining [`ColumnScanJoin`]
 pub mod columnscan_join;
@@ -54,6 +57,3 @@ pub use columnscan_cast::ColumnScanCastEnum;
 /// Module for defining [`ColumnScanArithmetic`].
 pub mod columnscan_arithmetic;
 pub use columnscan_arithmetic::ColumnScanArithmetic;
-
-pub mod constant;
-pub mod filter;
