@@ -1,9 +1,8 @@
 use crate::columnar::columnscan::ColumnScan;
-use crate::columnar::operations::ColumnScanPrune;
 use crate::datatypes::{ColumnDataType, StorageValueT};
 use crate::tabular::traits::trie_scan::TrieScan;
 use crate::{
-    columnar::columnscan::{ColumnScanCell, ColumnScanEnum, ColumnScanT},
+    columnar::columnscan::{ColumnScanCell, ColumnScanT},
     datatypes::StorageTypeName,
     tabular::traits::partial_trie_scan::{PartialTrieScan, TrieScanEnum},
 };
@@ -412,7 +411,7 @@ impl<'a> TrieScanPruneState<'a> {
 
 impl<'a> TrieScanPrune<'a> {
     /// Construct new [`TrieScanPrune`] object.
-    pub fn new(input_trie_scan: TrieScanEnum<'a>) -> Self {
+    pub fn new(_input_trie_scan: TrieScanEnum<'a>) -> Self {
         // let target_types = input_trie_scan.get_types().clone();
 
         // let mut output_column_scans: Vec<UnsafeCell<ColumnScanT<'a>>> = Vec::new();

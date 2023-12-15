@@ -11,6 +11,6 @@ pub trait TableProvider: std::fmt::Debug {
     /// Provide table data by adding values to a [`TupleWriter`].
     fn provide_table_data(
         self: Box<Self>,
-        tuple_buffer: &mut TupleWriter,
+        tuple_writer: &mut TupleWriter,
     ) -> Result<(), Box<dyn Error>>;
 }

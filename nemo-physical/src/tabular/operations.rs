@@ -111,7 +111,7 @@ where
     ExternalMarker: Clone + PartialEq + Eq + Hash,
 {
     /// Associates an external marker with an [OperationColumnMarker]
-    map: HashMap<ExternalMarker, OperationColumnMarker>,
+    _map: HashMap<ExternalMarker, OperationColumnMarker>,
 }
 
 /// Trait for objects that are able to generate [TrieScanEnum],

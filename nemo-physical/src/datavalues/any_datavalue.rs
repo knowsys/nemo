@@ -396,27 +396,56 @@ impl AnyDataValue {
         })
     }
 
-    /// Transform this value into an [StorageValueT].
+    /// Return the corresponding [StorageValueT] for this value.
     ///
     /// # Panics
     /// Panics if the data value is unknown to the dictionary.
-    ///
-    /// TODO: Maybe the mutable version used in tuple buffer should also live here
-    pub fn into_storage_value_t(&self, dictionary: &MetaDictionary) -> StorageValueT {
+    pub fn to_storage_value_t(&self, dictionary: &MetaDictionary) -> StorageValueT {
         match self {
             AnyDataValue::String(_)
             | AnyDataValue::LanguageTaggedString(_)
             | AnyDataValue::Iri(_)
             | AnyDataValue::Boolean(_)
             | AnyDataValue::Other(_) => {
-                let dict_id = dictionary
+                let dictionary_id = dictionary
                     .datavalue_to_id(self)
                     .expect("Value should be knwon to the dictionary");
 
-                if let Ok(u32value) = dict_id.try_into() {
+                if let Ok(u32value) = dictionary_id.try_into() {
                     StorageValueT::Id32(u32value)
                 } else {
-                    StorageValueT::Id64(dict_id.try_into().unwrap())
+                    StorageValueT::Id64(dictionary_id.try_into().unwrap())
+                }
+            }
+            AnyDataValue::Float(iv) => StorageValueT::Float(iv.to_float_unchecked()),
+            AnyDataValue::Double(iv) => StorageValueT::Double(iv.to_double_unchecked()),
+            AnyDataValue::UnsignedLong(iv) => {
+                if let Ok(i64value) = iv.to_u64_unchecked().try_into() {
+                    StorageValueT::Int64(i64value)
+                } else {
+                    todo!("Integers that are outside of the i64 range need some fallback representation, probably using the dictionary.")
+                }
+            }
+            AnyDataValue::Long(iv) => StorageValueT::Int64(iv.to_i64_unchecked()),
+        }
+    }
+
+    /// Return the corresponding [StorageValueT] for this value.
+    ///
+    /// This function will add a new dictionary entry if needed.
+    pub fn to_storage_value_t_mut(&self, dictionary: &mut MetaDictionary) -> StorageValueT {
+        match self {
+            AnyDataValue::String(_)
+            | AnyDataValue::LanguageTaggedString(_)
+            | AnyDataValue::Iri(_)
+            | AnyDataValue::Boolean(_)
+            | AnyDataValue::Other(_) => {
+                let dictionary_id = dictionary.add_datavalue(self.clone()).value();
+
+                if let Ok(u32value) = dictionary_id.try_into() {
+                    StorageValueT::Id32(u32value)
+                } else {
+                    StorageValueT::Id64(dictionary_id.try_into().unwrap())
                 }
             }
             AnyDataValue::Float(iv) => StorageValueT::Float(iv.to_float_unchecked()),
@@ -503,6 +532,8 @@ impl PartialEq for AnyDataValue {
 
 impl Eq for AnyDataValue {}
 
+/// Trait defined by types that can be converted into an [AnyDataValue]
+/// by potentially using a [MetaDictionary]
 pub trait IntoDataValue {
     /// Convert this value into the appropriate [AnyDataValue].
     fn into_datavalue(self, dictionary: &MetaDictionary) -> Option<AnyDataValue>;

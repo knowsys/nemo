@@ -11,11 +11,11 @@ use crate::{
             IntervalColumnTBuilderMatrix, IntervalColumnTBuilderTriescan,
         },
     },
-    datasources::SortedTupleBuffer,
+    datasources::tuple_writer::TupleWriter,
     datatypes::StorageTypeName,
 };
 
-use super::triescan::{PartialTrieScan, TrieScan};
+use super::{triescan::{PartialTrieScan, TrieScan}, buffer::sorted_tuple_buffer::SortedTupleBuffer};
 
 /// Defines the lookup method used in [IntervalColumnT]
 type IntervalLookupMethod = IntervalLookupColumnSingle;
@@ -50,8 +50,7 @@ impl Trie {
 }
 
 impl Trie {
-    /// Create a new [Trie] from a [SortedTupleBuffer].
-    pub fn from_tuple_buffer(buffer: SortedTupleBuffer) -> Self {
+    pub(crate) fn from_tuple_buffer(buffer: SortedTupleBuffer) -> Self {
         let mut intervalcolumn_builders = (0..buffer.column_number())
             .map(|_| IntervalColumnTBuilderMatrix::<IntervalLookupMethod>::default())
             .collect::<Vec<_>>();
@@ -87,6 +86,11 @@ impl Trie {
                 .map(|builder| builder.finalize())
                 .collect(),
         }
+    }
+
+    /// Create a new [Trie] from a [TupleWriter].
+    pub fn from_tuple_writer(writer: TupleWriter) -> Self {
+        Self::from_tuple_buffer(writer.finalize())
     }
 
     /// Create a new [Trie] based on an a [TrieScan].

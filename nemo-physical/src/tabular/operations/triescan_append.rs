@@ -13,8 +13,8 @@ use crate::{
         },
         columnbuilder::{rle::ColumnBuilderRle, ColumnBuilder},
         operations::{
-            ColumnScanArithmetic, ColumnScanCast, ColumnScanCastEnum, ColumnScanConstant,
-            ColumnScanCopy, ColumnScanPass,
+            ColumnScanArithmetic, ColumnScanCast, ColumnScanCastEnum, ColumnScanCopy,
+            ColumnScanPass,
         },
         {
             column::{Column, ColumnEnum},
@@ -450,13 +450,13 @@ impl<'a> TrieScanAppend<'a> {
         }
 
         match value.to_storage_value_mut(dict) {
-            StorageValueT::Id32(value) => append_constant_for_datatype!(Id32, value),
-            StorageValueT::Id64(value) => append_constant_for_datatype!(Id64, value),
-            StorageValueT::Int64(value) => append_constant_for_datatype!(Int64, value),
-            StorageValueT::Float(value) => {
+            StorageValueT::Id32(_value) => append_constant_for_datatype!(Id32, value),
+            StorageValueT::Id64(_value) => append_constant_for_datatype!(Id64, value),
+            StorageValueT::Int64(_value) => append_constant_for_datatype!(Int64, value),
+            StorageValueT::Float(_value) => {
                 append_constant_for_datatype!(Float, value)
             }
-            StorageValueT::Double(value) => {
+            StorageValueT::Double(_value) => {
                 append_constant_for_datatype!(Double, value)
             }
         }

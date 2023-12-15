@@ -1,9 +1,8 @@
 //! This module defines [GeneratorProjectReorder].
 
 use crate::{
-    datasources::{SortedTupleBuffer, TupleWriter},
     datatypes::StorageValueT,
-    tabular::{trie::Trie, triescan::TrieScan},
+    tabular::{buffer::tuple_buffer::TupleBuffer, trie::Trie, triescan::TrieScan},
     util::mapping::{ordered_choice::SortedChoice, traits::NatMapping},
 };
 
@@ -22,8 +21,6 @@ pub struct GeneratorProjectReorder {
     projectreordering: ProjectReordering,
     /// Last layer of the input trie that also appears in the output
     last_used_layer: usize,
-    /// Arity of the input table
-    arity_input: usize,
     /// Arity of the output table
     arity_output: usize,
 }
@@ -32,7 +29,6 @@ impl GeneratorProjectReorder {
     /// Create a new [GeneratorSubtract].
     pub fn new(output: OperationTable, input: OperationTable) -> Self {
         let projectreordering = ProjectReordering::from_transformation(&input, &output);
-        let arity_input = input.len();
         let arity_output = output.len();
         let mut last_used_layer: usize = 0;
 
@@ -45,7 +41,6 @@ impl GeneratorProjectReorder {
         Self {
             projectreordering,
             last_used_layer,
-            arity_input,
             arity_output,
         }
     }
@@ -55,7 +50,7 @@ impl GeneratorProjectReorder {
         debug_assert!(trie_scan.num_columns() == self.arity_output);
 
         let mut current_tuple = vec![StorageValueT::Id32(0); self.arity_output];
-        // let mut tuple_buffer = TupleBuffer::new()
+        let mut tuple_buffer = TupleBuffer::new(self.arity_output);
 
         while let Some(changed_layer) = trie_scan.advance_on_layer(self.last_used_layer) {
             for input_layer in changed_layer..self.arity_output {
@@ -65,13 +60,10 @@ impl GeneratorProjectReorder {
             }
 
             for value in &current_tuple {
-                // tuple_buffer.add(value);
+                tuple_buffer.add_tuple_value(value.clone());
             }
-
-            // tuple_buffer.finish_row();
         }
 
-        // Trie::from_tuple_buffer(SortedTupleBuffer::new(tuple_buffer));
-        todo!()
+        Trie::from_tuple_buffer(tuple_buffer.finalize())
     }
 }

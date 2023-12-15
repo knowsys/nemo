@@ -226,7 +226,7 @@ impl<'a> PartialTrieScan<'a> for TrieScanFunction<'a> {
             let function_result = program.evaluate_data(&self.input_values);
             match function_result {
                 Some(result) => {
-                    let result_storage = result.into_storage_value_t(&self.dictionary);
+                    let result_storage = result.to_storage_value_t(&self.dictionary);
                     self.column_scans[next_layer]
                         .get_mut()
                         .constant_set(result_storage);
