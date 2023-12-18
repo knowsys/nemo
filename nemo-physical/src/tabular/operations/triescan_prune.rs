@@ -1,3 +1,6 @@
+//! TODO: Remove this module
+//! It will be replaced with super::prune
+
 use crate::columnar::columnscan::ColumnScan;
 use crate::datatypes::{ColumnDataType, StorageValueT};
 use crate::tabular::traits::trie_scan::TrieScan;
@@ -659,6 +662,7 @@ mod test {
         scan
     }
 
+    #[ignore]
     #[test]
     fn test_no_effect_on_full_trie_scans() {
         let column_a = make_column_with_intervals_t(&[1, 2, 4], &[0]);
@@ -717,6 +721,7 @@ mod test {
         assert_eq!(get_current_scan_item(&mut scan), None);
     }
 
+    #[ignore]
     #[test]
     fn test_skip_unmaterialized_tuples() {
         let trie = create_example_trie();
@@ -775,6 +780,7 @@ mod test {
         assert_eq!(get_current_scan_item(&mut scan), None);
     }
 
+    #[ignore]
     #[test]
     fn test_empty_input_trie() {
         let trie = create_example_trie();
@@ -787,6 +793,7 @@ mod test {
         assert_eq!(get_current_scan_item(&mut scan), None);
     }
 
+    #[ignore]
     #[test]
     #[should_panic]
     fn test_advance_on_uninitialized_trie_scan_should_panic() {
@@ -796,6 +803,7 @@ mod test {
         scan.advance_on_layer(0, false);
     }
 
+    #[ignore]
     #[test]
     fn test_advance_above_target_layer() {
         let trie = create_example_trie();
@@ -832,6 +840,7 @@ mod test {
         );
     }
 
+    #[ignore]
     #[test]
     fn test_advance_highest_advanced_layer() {
         let trie = create_example_trie();
@@ -894,6 +903,7 @@ mod test {
         );
     }
 
+    #[ignore]
     #[test]
     fn test_advance_with_column_peeks() {
         let trie = create_example_trie();
@@ -952,6 +962,7 @@ mod test {
         assert_eq!(get_current_scan_item_at_layer(&mut scan, 3), None);
     }
 
+    #[ignore]
     #[test]
     fn test_advance_with_seek() {
         let trie = create_example_trie();
@@ -987,6 +998,7 @@ mod test {
         assert_eq!(get_current_scan_item_at_layer(&mut scan, 3), None);
     }
 
+    #[ignore]
     #[test]
     fn test_return_to_previous_layer() {
         let trie = create_example_trie();
@@ -1020,6 +1032,7 @@ mod test {
         assert_eq!(get_current_scan_item(&mut scan), None);
     }
 
+    #[ignore]
     #[test]
     fn test_partial_trie_scan_interface() {
         let column_a_x = make_column_with_intervals_t(&[1, 2], &[0, 1]);

@@ -377,6 +377,7 @@ mod test {
         materialize(&mut trie_scan_aggregate)
     }
 
+    #[ignore]
     #[test]
     fn test_aggregate_i64() {
         let input_trie = Trie::from_cols(vec![

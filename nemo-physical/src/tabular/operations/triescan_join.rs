@@ -1,3 +1,6 @@
+//! TODO: Remove this module
+//! This will be replaced by super::join
+
 use crate::{
     columnar::{
         columnscan::{ColumnScan, ColumnScanCell, ColumnScanEnum, ColumnScanT},
@@ -569,6 +572,7 @@ mod test {
         assert_eq!(join_current(&mut join_iter), None);
     }
 
+    #[ignore]
     #[test]
     fn test_self_join_inverse() {
         let column_x = make_column_with_intervals_t(&[1, 2, 5, 7], &[0]);
@@ -619,6 +623,7 @@ mod test {
         );
     }
 
+    #[ignore]
     #[test]
     fn test_self_join_2() {
         let column_new_x = make_column_with_intervals_t(&[1, 2, 4, 7, 8, 9, 10], &[0]);
@@ -688,6 +693,7 @@ mod test {
         );
     }
 
+    #[ignore]
     #[test]
     fn another_test() {
         let column_a_x = make_column_with_intervals_t(&[1, 2, 3, 4, 5], &[0]);

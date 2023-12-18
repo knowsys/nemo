@@ -197,7 +197,7 @@ pub trait DataValue {
     /// the domain [`ValueDomain::Float`].
     fn to_float(&self) -> Option<Float> {
         match self.value_domain() {
-            ValueDomain::Double => Some(self.to_float_unchecked()),
+            ValueDomain::Float => Some(self.to_float_unchecked()),
             _ => None,
         }
     }

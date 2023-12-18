@@ -192,9 +192,12 @@ impl TypedTableLookup {
     fn add_new_lookup_trie_(
         &mut self,
         missing_storage_types: &[StorageTypeName],
-        last_trie_block: usize,
+        current_block: usize,
         new_id: usize,
     ) {
+        // Start index of the first new block
+        let new_block = self.lookup_trie.len();
+
         // Add empty trie node slots for all remaining levels.
         // Note that the block we ended up on before calling this function has already been allocated.
         self.lookup_trie.resize(
@@ -203,13 +206,16 @@ impl TypedTableLookup {
         );
 
         if let Some((last_type, missing_types)) = missing_storage_types.split_last() {
-            let mut current_block = last_trie_block;
+            let mut current_block = current_block;
+            let mut next_block = new_block;
 
             for storage_type in missing_types {
                 // For every layer that is not the last add a pointer to the next block
                 self.lookup_trie[current_block + Self::storage_type_number(storage_type)] =
-                    current_block;
-                current_block += NUM_STORAGETYPES;
+                    next_block;
+
+                current_block = next_block;
+                next_block += NUM_STORAGETYPES;
             }
 
             // In the last layer add a pointer to the new id
@@ -465,19 +471,19 @@ mod test {
         assert_eq!(tuple_buffer.typed_subtables[2].current_length, 3);
         assert_eq!(
             tuple_buffer.table_storage.columns_id32
-                [tuple_buffer.typed_subtables[1].storage_indices[0]]
+                [tuple_buffer.typed_subtables[2].storage_indices[0]]
                 .len(),
             3
         );
         assert_eq!(
             tuple_buffer.table_storage.columns_id32
-                [tuple_buffer.typed_subtables[1].storage_indices[1]]
+                [tuple_buffer.typed_subtables[2].storage_indices[1]]
                 .len(),
             3
         );
         assert_eq!(
             tuple_buffer.table_storage.columns_i64
-                [tuple_buffer.typed_subtables[1].storage_indices[2]]
+                [tuple_buffer.typed_subtables[2].storage_indices[2]]
                 .len(),
             3
         );

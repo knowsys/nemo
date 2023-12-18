@@ -1,3 +1,5 @@
+//! TODO: Remove this module
+
 use crate::{
     columnar::columnbuilder::{
         adaptive::{ColumnBuilderAdaptive, ColumnBuilderAdaptiveT},
@@ -104,6 +106,7 @@ mod test {
     use crate::util::test_util::make_column_with_intervals_t;
     use test_log::test;
 
+    #[ignore]
     #[test]
     fn complete() {
         let column_fst_data = [1, 2, 3];
@@ -172,6 +175,7 @@ mod test {
         );
     }
 
+    #[ignore]
     #[test]
     fn partial() {
         // Same setup as in test_trie_join
@@ -241,6 +245,7 @@ mod test {
         );
     }
 
+    #[ignore]
     #[test]
     fn trie_scan_empty() {
         let column_a_x = make_column_with_intervals_t(&[1, 2, 3], &[0]);

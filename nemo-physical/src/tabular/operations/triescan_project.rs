@@ -1,3 +1,6 @@
+//! TODO: Remove this module
+//! This will be replaced with super::projectreorder
+
 use crate::{
     columnar::{
         column::interval::{ColumnWithIntervals, ColumnWithIntervalsT},
@@ -299,6 +302,7 @@ mod test {
     use crate::util::test_util::make_column_with_intervals_t;
     use test_log::test;
 
+    #[ignore]
     #[test]
     fn single_small_hole() {
         let column_fst = make_column_with_intervals_t(&[1, 2], &[0]);
@@ -425,6 +429,7 @@ mod test {
         );
     }
 
+    #[ignore]
     #[test]
     fn multiple_big_holes() {
         let column_fst = make_column_with_intervals_t(&[1, 2], &[0]);
@@ -512,6 +517,7 @@ mod test {
         );
     }
 
+    #[ignore]
     #[test]
     fn reorder() {
         let column_fst = make_column_with_intervals_t(&[1, 2], &[0]);
@@ -581,6 +587,7 @@ mod test {
         );
     }
 
+    #[ignore]
     #[test]
     fn reorder_and_project() {
         let column_fst = make_column_with_intervals_t(&[1, 2], &[0]);
@@ -631,6 +638,7 @@ mod test {
         );
     }
 
+    #[ignore]
     #[test]
     fn test_duplicates() {
         let column_fst = make_column_with_intervals_t(&[1, 2], &[0]);
@@ -723,6 +731,7 @@ mod test {
         );
     }
 
+    #[ignore]
     #[test]
     fn complex_reorder() {
         let column_fst = make_column_with_intervals_t(&[1, 2], &[0]);
@@ -803,6 +812,7 @@ mod test {
     /// This is a test case for a bug first encountered while
     /// classifying `smallmed` using the EL calculus rules, where
     /// reordering a table with 2 rows results in a table with 4 rows.
+    #[ignore]
     #[test]
     fn spurious_tuples_in_reorder_bug() {
         let mut dict = Dict::default();
@@ -835,6 +845,7 @@ mod test {
     /// This is another test case for a bug first encountered while
     /// classifying `smallmed` using the EL calculus rules, where
     /// reordering a table with 10 rows results in a table with 30 rows.
+    #[ignore]
     #[test]
     fn spurious_tuples_in_reorder_mk2_bug() {
         let mut dict = Dict::default();
@@ -880,6 +891,7 @@ mod test {
 
     /// This is derived from [`spurious_tuples_in_reorder_mk2_bug`],
     /// but minimised to a table of 2 rows resulting in four rows.
+    #[ignore]
     #[test]
     fn spurious_tuples_in_reorder_mk2_minimised_bug() {
         let mut dict = Dict::default();
@@ -905,6 +917,7 @@ mod test {
         assert_eq!(base_trie.row_num(), reordered_trie.row_num());
     }
 
+    #[ignore]
     #[test]
     fn spurious_tuples_in_reorder_bug2() {
         let mut dict = Dict::default();

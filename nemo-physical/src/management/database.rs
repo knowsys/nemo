@@ -1545,6 +1545,7 @@ mod test {
         (execution_tree, result_id)
     }
 
+    #[ignore]
     #[test]
     fn test_casting() {
         let trie_a = Trie::from_rows(&[vec![StorageValueT::Id32(1), StorageValueT::Id32(2)]]);

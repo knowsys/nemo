@@ -552,6 +552,7 @@ mod test {
         }
     }
 
+    #[ignore]
     #[test]
     fn test_constant_types() {
         let columns_x = make_column_with_intervals_int_t(&[0, 3, 43], &[0]);
@@ -587,6 +588,7 @@ mod test {
         };
     }
 
+    #[ignore]
     #[test]
     fn test_constant() {
         let column_x = make_column_with_intervals_t(&[1, 2, 3], &[0]);

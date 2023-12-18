@@ -89,10 +89,10 @@ where
     type Item = T;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let smallest_scnas_default = self.smallest_scans_default();
+        let smallest_scans_default = self.smallest_scans_default();
 
-        self.smallest_value = None;
-        self.smallest_scans = smallest_scnas_default.clone();
+        let mut smallest_value = None;
+        let mut smallest_scans = self.smallest_scans_default();
 
         for (index, scan) in self.column_scans.iter().enumerate() {
             if !self.active_scans[index] {
@@ -102,22 +102,23 @@ where
 
             let current_element = if self.smallest_scans[index] {
                 // If the scan points to the smallest element then advance it
-                let next_value = scan.next();
-
-                next_value
+                scan.next()
             } else {
                 // Otherwise we just take the current value
                 scan.current()
             };
 
             Self::update_smallest(
-                &mut self.smallest_value,
-                &mut self.smallest_scans,
+                &mut smallest_value,
+                &mut smallest_scans,
                 current_element,
                 index,
-                smallest_scnas_default.clone(),
+                smallest_scans_default.clone(),
             );
         }
+
+        self.smallest_scans = smallest_scans;
+        self.smallest_value = smallest_value;
 
         self.smallest_value
     }
@@ -128,10 +129,10 @@ where
     T: 'a + ColumnDataType,
 {
     fn seek(&mut self, value: T) -> Option<T> {
-        let smallest_scnas_default = self.smallest_scans_default();
+        let smallest_scans_default = self.smallest_scans_default();
 
-        self.smallest_value = None;
-        self.smallest_scans = bitvec![0; self.column_scans.len()];
+        let mut smallest_value = None;
+        let mut smallest_scans = self.smallest_scans_default();
 
         for (index, scan) in self.column_scans.iter().enumerate() {
             if !self.active_scans[index] {
@@ -142,13 +143,16 @@ where
             let current_element = scan.seek(value);
 
             Self::update_smallest(
-                &mut self.smallest_value,
-                &mut self.smallest_scans,
+                &mut smallest_value,
+                &mut smallest_scans,
                 current_element,
                 index,
-                smallest_scnas_default.clone(),
+                smallest_scans_default.clone(),
             );
         }
+
+        self.smallest_scans = smallest_scans;
+        self.smallest_value = smallest_value;
 
         self.smallest_value
     }
