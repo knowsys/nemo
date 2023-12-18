@@ -140,7 +140,7 @@ impl AnyDataValue {
                 match i64::from_str(&$lexical_value) {
                     Ok(value) => {
                         $(if value < $min || value > $max {
-                            return Err(DataValueCreationError::IntegerRange{min: $min, max: $max, value: value, datatype_name: $typename.to_string()})
+                            return Err(DataValueCreationError::IntegerRange{min: $min, max: $max, value, datatype_name: $typename.to_string()})
                         })?
                         Ok(Self::new_integer_from_i64(value))
                     },
@@ -292,7 +292,7 @@ impl AnyDataValue {
         for char in lexical_value.bytes() {
             match char {
                 b'-' => {
-                    if trimmed_value.len() == 0 && before_sign {
+                    if trimmed_value.is_empty() && before_sign {
                         before_sign = false;
                         sign_plus = false;
                         trimmed_value.push('-');
@@ -301,7 +301,7 @@ impl AnyDataValue {
                     }
                 }
                 b'+' => {
-                    if trimmed_value.len() == 0 && before_sign {
+                    if trimmed_value.is_empty() && before_sign {
                         before_sign = false;
                     } else {
                         return Self::decimal_parse_error(lexical_value, decimal_type);
@@ -346,7 +346,8 @@ impl AnyDataValue {
 
         if !in_fraction {
             // Even a zero fraction is not allowed in integer types
-            assert_eq!(is_zero, false); // this case would parse as i64 earlier ...
+            assert!(!is_zero); // this case would parse as i64 earlier ...
+
             match (decimal_type, sign_plus) {
                 (DecimalType::PositiveInteger, p) | (DecimalType::NonNegativeInteger, p) if !p => {
                     return Self::decimal_parse_error(lexical_value, decimal_type);
@@ -367,17 +368,15 @@ impl AnyDataValue {
                     trimmed_value,
                     XSD_PREFIX.to_owned() + "decimal",
                 ));
+            } else if let Ok(value) = i64::from_str(&trimmed_value) {
+                return Ok(AnyDataValue::new_integer_from_i64(value));
+            } else if let Ok(value) = u64::from_str(&trimmed_value) {
+                return Ok(AnyDataValue::new_integer_from_u64(value));
             } else {
-                if let Ok(value) = i64::from_str(&trimmed_value) {
-                    return Ok(AnyDataValue::new_integer_from_i64(value));
-                } else if let Ok(value) = u64::from_str(&trimmed_value) {
-                    return Ok(AnyDataValue::new_integer_from_u64(value));
-                } else {
-                    return Ok(AnyDataValue::new_other(
-                        trimmed_value,
-                        XSD_PREFIX.to_owned() + "integer",
-                    ));
-                }
+                return Ok(AnyDataValue::new_other(
+                    trimmed_value,
+                    XSD_PREFIX.to_owned() + "integer",
+                ));
             }
         } else {
             return Self::decimal_parse_error(lexical_value, decimal_type);
@@ -391,7 +390,7 @@ impl AnyDataValue {
         decimal_type: DecimalType,
     ) -> Result<AnyDataValue, DataValueCreationError> {
         Err(DataValueCreationError::InvalidLexicalValue {
-            lexical_value: lexical_value,
+            lexical_value,
             datatype_iri: decimal_type.datatype_iri(),
         })
     }

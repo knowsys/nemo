@@ -204,7 +204,7 @@ impl<'a> PartialTrieScan<'a> for TrieScanSubtract<'a> {
     }
 
     fn path_types(&self) -> &[StorageTypeName] {
-        &self.trie_main.path_types()
+        self.trie_main.path_types()
     }
 
     fn arity(&self) -> usize {

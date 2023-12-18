@@ -17,7 +17,7 @@ use crate::{
 use super::OperationGenerator;
 
 /// Used to create a [TrieScanUnion]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Default)]
 pub struct GeneratorUnion {}
 
 impl GeneratorUnion {

@@ -52,8 +52,8 @@ impl IntervalLookupColumnSingle {
         let mut interval_scan = self.interval_starts.iter();
         interval_scan.narrow(start..self.interval_starts.len());
 
-        while let Some(value) = interval_scan.next() {
-            if value == !Self::EMPTY {
+        for value in interval_scan {
+            if value != Self::EMPTY {
                 return value;
             }
         }

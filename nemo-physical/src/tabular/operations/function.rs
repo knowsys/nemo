@@ -62,7 +62,7 @@ impl GeneratorFunction {
 
             if is_function_input {
                 let num_function_input = reference_map.len();
-                if let Entry::Vacant(entry) = reference_map.entry(output_marker.clone()) {
+                if let Entry::Vacant(entry) = reference_map.entry(output_marker) {
                     entry.insert(num_function_input);
                 }
             }
@@ -226,7 +226,7 @@ impl<'a> PartialTrieScan<'a> for TrieScanFunction<'a> {
             let function_result = program.evaluate_data(&self.input_values);
             match function_result {
                 Some(result) => {
-                    let result_storage = result.to_storage_value_t(&self.dictionary);
+                    let result_storage = result.to_storage_value_t(self.dictionary);
                     self.column_scans[next_layer]
                         .get_mut()
                         .constant_set(result_storage);

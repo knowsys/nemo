@@ -49,6 +49,7 @@ impl Double {
     /// Returns `None` otherwise.
     pub fn as_i64(&self) -> Option<i64> {
         if self.0.round() == self.0 {
+            #[allow(clippy::cast_possible_truncation)]
             Some(self.0 as i64)
         } else {
             None
@@ -67,6 +68,7 @@ impl Double {
 
     /// Converts this value into [Float].
     pub fn as_float(&self) -> Option<Float> {
+        #[allow(clippy::cast_possible_truncation)]
         Float::new(self.0 as f32).ok()
     }
 

@@ -122,7 +122,7 @@ impl StackProgram {
                 FunctionTree::Unary(function, sub) => {
                     build_operations(sub, this, reference_map, operations);
 
-                    operations.push(StackOperation::UnaryFunction(function.clone()));
+                    operations.push(StackOperation::UnaryFunction(*function));
                 }
                 FunctionTree::Binary {
                     function,
@@ -132,7 +132,7 @@ impl StackProgram {
                     build_operations(left, this, reference_map, operations);
                     build_operations(right, this, reference_map, operations);
 
-                    operations.push(StackOperation::BinaryFunction(function.clone()));
+                    operations.push(StackOperation::BinaryFunction(*function));
                 }
             }
         }

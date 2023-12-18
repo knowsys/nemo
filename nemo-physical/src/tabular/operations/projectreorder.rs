@@ -60,7 +60,7 @@ impl GeneratorProjectReorder {
             }
 
             for value in &current_tuple {
-                tuple_buffer.add_tuple_value(value.clone());
+                tuple_buffer.add_tuple_value(*value);
             }
         }
 

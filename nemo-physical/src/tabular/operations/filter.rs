@@ -61,7 +61,7 @@ impl GeneratorFilter {
 
             if is_function_input {
                 let num_function_input = reference_map.len();
-                if let Entry::Vacant(entry) = reference_map.entry(input_marker.clone()) {
+                if let Entry::Vacant(entry) = reference_map.entry(input_marker) {
                     entry.insert(num_function_input);
                 }
             }
@@ -71,7 +71,7 @@ impl GeneratorFilter {
                     output_columns.push(OutputColumn::Filtered(StackProgram::from_function_tree(
                         function,
                         &reference_map,
-                        Some(input_marker.clone()),
+                        Some(input_marker),
                     )));
                 }
                 None => {
@@ -202,7 +202,7 @@ impl<'a> PartialTrieScan<'a> for TrieScanFilter<'a> {
     }
 
     fn path_types(&self) -> &[StorageTypeName] {
-        &self.trie_scan.path_types()
+        self.trie_scan.path_types()
     }
 
     fn arity(&self) -> usize {

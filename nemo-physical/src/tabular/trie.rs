@@ -15,7 +15,10 @@ use crate::{
     datatypes::StorageTypeName,
 };
 
-use super::{triescan::{PartialTrieScan, TrieScan}, buffer::sorted_tuple_buffer::SortedTupleBuffer};
+use super::{
+    buffer::sorted_tuple_buffer::SortedTupleBuffer,
+    triescan::{PartialTrieScan, TrieScan},
+};
 
 /// Defines the lookup method used in [IntervalColumnT]
 type IntervalLookupMethod = IntervalLookupColumnSingle;
@@ -57,8 +60,7 @@ impl Trie {
 
         let mut last_tuple_intervals = vec![buffer.size()];
 
-        for column_index in 0..buffer.column_number() {
-            let current_builder = &mut intervalcolumn_builders[column_index];
+        for (column_index, current_builder) in intervalcolumn_builders.iter_mut().enumerate() {
             let mut current_tuple_intervals = Vec::<usize>::new();
 
             let mut predecessor_index = 0;
@@ -105,8 +107,11 @@ impl Trie {
             .collect::<Vec<_>>();
 
         while let Some(changed_layer) = trie_scan.advance_on_layer(num_columns - 1) {
-            for layer in changed_layer..num_columns {
-                let current_builder = &mut intervalcolumn_builders[layer];
+            for (layer, current_builder) in intervalcolumn_builders
+                .iter_mut()
+                .enumerate()
+                .skip(changed_layer)
+            {
                 let current_value = trie_scan.current_value(layer);
 
                 current_builder.add_value(current_value);

@@ -222,7 +222,7 @@ impl DsvReader {
         // TODO: Assess whether this adds anything useful on top of the local IRIs supported in RDF.
         if let Ok((remainder, _)) = parse_bare_name(span_from_str(trimmed)) {
             if remainder.is_empty() {
-                return Ok(AnyDataValue::new_iri(trimmed.to_string().into()));
+                return Ok(AnyDataValue::new_iri(trimmed.to_string()));
             }
         }
 
