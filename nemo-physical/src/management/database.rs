@@ -4,7 +4,7 @@ use std::fmt::{Debug, Display};
 
 use bytesize::ByteSize;
 
-use crate::datasources::{TableProvider, TupleWriter};
+use crate::datasources::{table_providers::TableProvider, tuple_writer::TupleWriter};
 use crate::datatypes::data_value::DataValueIteratorT;
 use crate::datatypes::storage_value::{StorageValueIteratorT, VecT};
 use crate::datatypes::{DataTypeName, DataValueT, StorageValueT};

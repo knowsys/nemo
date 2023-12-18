@@ -3,7 +3,7 @@
 
 use std::error::Error;
 
-use super::TupleWriter;
+use super::tuple_writer::TupleWriter;
 
 /// This trait is implemented by code that can provide data in the form of a list of tuples,
 /// which are unordered and possibly contain duplicates.
