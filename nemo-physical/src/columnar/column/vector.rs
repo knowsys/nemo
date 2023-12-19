@@ -202,8 +202,6 @@ where
     }
 
     fn narrow(&mut self, interval: Range<usize>) {
-        debug_assert!(interval.end > interval.start);
-
         self.interval = interval;
         self.pos = None;
         self.validate_interval();

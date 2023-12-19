@@ -303,6 +303,8 @@ where
             Some(current_value) => {
                 if current_value != value {
                     self.commit_value();
+                    self.current_data_item = Some(value);
+
                     true
                 } else {
                     false
@@ -311,6 +313,7 @@ where
         }
     }
 
+    /// Signify to the builder that all values of the current interval have been added.
     pub fn finish_interval(&mut self) {
         self.commit_value();
 
@@ -323,6 +326,7 @@ where
         self.current_data_item = None;
     }
 
+    /// Finish processing and return an [IntervalColumnT].
     pub fn finalize(self) -> IntervalColumnT<LookupMethod> {
         IntervalColumnT::new(
             self.builder_id32.finalize(),
@@ -351,9 +355,6 @@ where
     builder_float: IntervalColumnBuilder<Float, LookupMethod>,
     /// Case [StorageTypeName::Double]
     builder_double: IntervalColumnBuilder<Double, LookupMethod>,
-
-    /// Remembers the last type of builder where a value was added
-    last_type: StorageTypeName,
 }
 
 impl<LookupMethod> Default for IntervalColumnTBuilderTriescan<LookupMethod>
@@ -367,7 +368,6 @@ where
             builder_int64: Default::default(),
             builder_float: Default::default(),
             builder_double: Default::default(),
-            last_type: StorageTypeName::Id32, // Set arbitrarily
         }
     }
 }
@@ -387,16 +387,16 @@ where
         }
     }
 
+    /// Signify to the builder that all values of the current interval have been added.
     pub fn finish_interval(&mut self) {
-        match self.last_type {
-            StorageTypeName::Id32 => self.builder_id32.finish_interval(),
-            StorageTypeName::Id64 => self.builder_id64.finish_interval(),
-            StorageTypeName::Int64 => self.builder_int64.finish_interval(),
-            StorageTypeName::Float => self.builder_float.finish_interval(),
-            StorageTypeName::Double => self.builder_double.finish_interval(),
-        }
+        self.builder_id32.finish_interval();
+        self.builder_id64.finish_interval();
+        self.builder_int64.finish_interval();
+        self.builder_float.finish_interval();
+        self.builder_double.finish_interval();
     }
 
+    /// Finish processing and return an [IntervalColumnT].
     pub fn finalize(self) -> IntervalColumnT<LookupMethod> {
         IntervalColumnT::new(
             self.builder_id32.finalize(),
@@ -405,5 +405,209 @@ where
             self.builder_float.finalize(),
             self.builder_double.finalize(),
         )
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use crate::{
+        columnar::{column::Column, intervalcolumn::IntervalColumnTBuilderTriescan},
+        datatypes::{Float, StorageTypeName, StorageValueT},
+    };
+
+    use super::{
+        interval_lookup::{
+            lookup_bitvector::IntervalLookupBitVector,
+            lookup_column_dual::IntervalLookupColumnDual,
+            lookup_column_single::IntervalLookupColumnSingle, IntervalLookup,
+        },
+        IntervalColumnTBuilderMatrix,
+    };
+
+    fn test_builder_matrix<LookupMethod: IntervalLookup>() {
+        let mut builder = IntervalColumnTBuilderMatrix::<LookupMethod>::default();
+
+        assert_eq!(builder.add_value(StorageValueT::Id32(12)), true);
+        assert_eq!(builder.add_value(StorageValueT::Id32(16)), true);
+        assert_eq!(builder.add_value(StorageValueT::Id32(16)), false);
+        assert_eq!(builder.add_value(StorageValueT::Int64(-10)), true);
+        assert_eq!(builder.add_value(StorageValueT::Int64(-4)), true);
+
+        builder.finish_interval();
+
+        assert_eq!(builder.add_value(StorageValueT::Int64(-4)), true);
+        assert_eq!(builder.add_value(StorageValueT::Int64(-4)), false);
+        assert_eq!(builder.add_value(StorageValueT::Int64(0)), true);
+        assert_eq!(
+            builder.add_value(StorageValueT::Float(Float::new(3.1).unwrap())),
+            true
+        );
+        assert_eq!(
+            builder.add_value(StorageValueT::Float(Float::new(3.1).unwrap())),
+            false
+        );
+
+        builder.finish_interval();
+
+        let interval_column = builder.finalize();
+        let column_id32 = interval_column
+            .column_id32
+            .data
+            .iter()
+            .collect::<Vec<u32>>();
+        let column_int64 = interval_column
+            .column_int64
+            .data
+            .iter()
+            .collect::<Vec<i64>>();
+        let column_float = interval_column
+            .column_float
+            .data
+            .iter()
+            .collect::<Vec<Float>>();
+
+        assert_eq!(column_id32, vec![12, 16]);
+        assert_eq!(column_int64, vec![-10, -4, -4, 0]);
+        assert_eq!(column_float, vec![Float::new(3.1).unwrap()]);
+
+        assert_eq!(interval_column.column_starts, [2, 2, 6, 7, 7]);
+
+        assert_eq!(
+            interval_column.interval_bounds(StorageTypeName::Id32, 0),
+            Some(0..2)
+        );
+        assert_eq!(
+            interval_column.interval_bounds(StorageTypeName::Id64, 0),
+            None
+        );
+        assert_eq!(
+            interval_column.interval_bounds(StorageTypeName::Int64, 0),
+            Some(0..2)
+        );
+        assert_eq!(
+            interval_column.interval_bounds(StorageTypeName::Float, 0),
+            None
+        );
+        assert_eq!(
+            interval_column.interval_bounds(StorageTypeName::Double, 0),
+            None
+        );
+
+        assert_eq!(
+            interval_column.interval_bounds(StorageTypeName::Id32, 1),
+            None
+        );
+        assert_eq!(
+            interval_column.interval_bounds(StorageTypeName::Id64, 1),
+            None
+        );
+        assert_eq!(
+            interval_column.interval_bounds(StorageTypeName::Int64, 1),
+            Some(2..4)
+        );
+        assert_eq!(
+            interval_column.interval_bounds(StorageTypeName::Float, 1),
+            Some(0..1)
+        );
+        assert_eq!(
+            interval_column.interval_bounds(StorageTypeName::Double, 1),
+            None
+        );
+    }
+
+    #[test]
+    fn interval_builder_matrix() {
+        test_builder_matrix::<IntervalLookupColumnSingle>();
+        test_builder_matrix::<IntervalLookupColumnDual>();
+        test_builder_matrix::<IntervalLookupBitVector>();
+    }
+
+    fn test_builder_trie<LookupMethod: IntervalLookup>() {
+        let mut builder = IntervalColumnTBuilderTriescan::<LookupMethod>::default();
+
+        builder.add_value(StorageValueT::Id32(12));
+        builder.add_value(StorageValueT::Id32(16));
+        builder.add_value(StorageValueT::Int64(-10));
+        builder.add_value(StorageValueT::Int64(-4));
+
+        builder.finish_interval();
+
+        builder.add_value(StorageValueT::Int64(-4));
+        builder.add_value(StorageValueT::Int64(0));
+        builder.add_value(StorageValueT::Float(Float::new(3.1).unwrap()));
+
+        builder.finish_interval();
+
+        let interval_column = builder.finalize();
+        let column_id32 = interval_column
+            .column_id32
+            .data
+            .iter()
+            .collect::<Vec<u32>>();
+        let column_int64 = interval_column
+            .column_int64
+            .data
+            .iter()
+            .collect::<Vec<i64>>();
+        let column_float = interval_column
+            .column_float
+            .data
+            .iter()
+            .collect::<Vec<Float>>();
+
+        assert_eq!(column_id32, vec![12, 16]);
+        assert_eq!(column_int64, vec![-10, -4, -4, 0]);
+        assert_eq!(column_float, vec![Float::new(3.1).unwrap()]);
+
+        assert_eq!(interval_column.column_starts, [2, 2, 6, 7, 7]);
+
+        assert_eq!(
+            interval_column.interval_bounds(StorageTypeName::Id32, 0),
+            Some(0..2)
+        );
+        assert_eq!(
+            interval_column.interval_bounds(StorageTypeName::Id64, 0),
+            None
+        );
+        assert_eq!(
+            interval_column.interval_bounds(StorageTypeName::Int64, 0),
+            Some(0..2)
+        );
+        assert_eq!(
+            interval_column.interval_bounds(StorageTypeName::Float, 0),
+            None
+        );
+        assert_eq!(
+            interval_column.interval_bounds(StorageTypeName::Double, 0),
+            None
+        );
+
+        assert_eq!(
+            interval_column.interval_bounds(StorageTypeName::Id32, 1),
+            None
+        );
+        assert_eq!(
+            interval_column.interval_bounds(StorageTypeName::Id64, 1),
+            None
+        );
+        assert_eq!(
+            interval_column.interval_bounds(StorageTypeName::Int64, 1),
+            Some(2..4)
+        );
+        assert_eq!(
+            interval_column.interval_bounds(StorageTypeName::Float, 1),
+            Some(0..1)
+        );
+        assert_eq!(
+            interval_column.interval_bounds(StorageTypeName::Double, 1),
+            None
+        );
+    }
+
+    #[test]
+    fn interval_builder_trie() {
+        test_builder_trie::<IntervalLookupColumnSingle>();
+        test_builder_trie::<IntervalLookupColumnDual>();
+        test_builder_trie::<IntervalLookupBitVector>();
     }
 }

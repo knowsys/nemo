@@ -94,6 +94,8 @@ impl IntervalLookupBuilder for IntervalLookupColumnDualBuilder {
             self.builder_predecessors
                 .add(self.builder_intervals.count());
             self.builder_intervals.add(self.last_data_count);
+
+            self.last_data_count = data_count;
         } else {
             self.builder_predecessors.add(Self::Lookup::EMPTY);
         }
@@ -106,5 +108,49 @@ impl IntervalLookupBuilder for IntervalLookupColumnDualBuilder {
             interval_starts: self.builder_intervals.finalize(),
             predecessors: self.builder_predecessors.finalize(),
         }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use crate::columnar::{
+        column::Column,
+        intervalcolumn::interval_lookup::{IntervalLookup, IntervalLookupBuilder},
+    };
+
+    use super::{IntervalLookupColumnDual, IntervalLookupColumnDualBuilder};
+
+    #[test]
+    fn interval_lookup_column_dual() {
+        let empty = IntervalLookupColumnDual::EMPTY;
+
+        let mut builder = IntervalLookupColumnDualBuilder::default();
+        builder.add(0);
+        builder.add(0);
+        builder.add(5);
+        builder.add(7);
+        builder.add(7);
+        builder.add(7);
+        builder.add(10);
+        builder.add(10);
+
+        let lookup_column = builder.finalize();
+        let interval_starts = lookup_column.interval_starts.iter().collect::<Vec<usize>>();
+        let predecessors = lookup_column.predecessors.iter().collect::<Vec<usize>>();
+
+        assert_eq!(interval_starts, vec![0, 5, 7, 10]);
+        assert_eq!(
+            predecessors,
+            vec![empty, empty, 0, 1, empty, empty, 2, empty]
+        );
+
+        assert_eq!(lookup_column.interval_bounds(0), None);
+        assert_eq!(lookup_column.interval_bounds(1), None);
+        assert_eq!(lookup_column.interval_bounds(2), Some(0..5));
+        assert_eq!(lookup_column.interval_bounds(3), Some(5..7));
+        assert_eq!(lookup_column.interval_bounds(4), None);
+        assert_eq!(lookup_column.interval_bounds(5), None);
+        assert_eq!(lookup_column.interval_bounds(6), Some(7..10));
+        assert_eq!(lookup_column.interval_bounds(7), None);
     }
 }

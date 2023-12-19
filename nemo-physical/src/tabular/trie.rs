@@ -12,11 +12,11 @@ use crate::{
         },
     },
     datasources::tuple_writer::TupleWriter,
-    datatypes::StorageTypeName,
+    datatypes::{StorageTypeName, StorageValueT},
 };
 
 use super::{
-    buffer::sorted_tuple_buffer::SortedTupleBuffer,
+    buffer::{sorted_tuple_buffer::SortedTupleBuffer, tuple_buffer::TupleBuffer},
     triescan::{PartialTrieScan, TrieScan},
 };
 
@@ -58,14 +58,14 @@ impl Trie {
             .map(|_| IntervalColumnTBuilderMatrix::<IntervalLookupMethod>::default())
             .collect::<Vec<_>>();
 
-        let mut last_tuple_intervals = vec![buffer.size()];
+        let mut last_tuple_intervals = Vec::new();
 
         for (column_index, current_builder) in intervalcolumn_builders.iter_mut().enumerate() {
             let mut current_tuple_intervals = Vec::<usize>::new();
 
             let mut predecessor_index = 0;
             for (tuple_index, value) in buffer.get_column(column_index).enumerate() {
-                if tuple_index == last_tuple_intervals[predecessor_index] {
+                if last_tuple_intervals.get(predecessor_index) == Some(&tuple_index) {
                     current_builder.finish_interval();
                     predecessor_index += 1;
                 }
@@ -128,6 +128,31 @@ impl Trie {
                 .collect(),
         }
     }
+
+    /// Create a new [Trie] from a simple row based representation of the table.
+    ///
+    /// This function assumes that every row has the same number of entries.
+    pub(crate) fn from_rows(rows: Vec<Vec<StorageValueT>>) -> Self {
+        let column_number = if let Some(first_row) = rows.first() {
+            first_row.len()
+        } else {
+            return Self {
+                columns: Vec::new(),
+            };
+        };
+
+        let mut tuple_buffer = TupleBuffer::new(column_number);
+
+        for row in rows {
+            debug_assert!(row.len() == column_number);
+
+            for value in row {
+                tuple_buffer.add_tuple_value(value);
+            }
+        }
+
+        Self::from_tuple_buffer(tuple_buffer.finalize())
+    }
 }
 
 /// Implementation of [PartialTrieScan] for a [Trie]
@@ -170,7 +195,8 @@ impl<'a> PartialTrieScan<'a> for TrieScanGeneric<'a> {
                 self.column_scans[0].get_mut().reset(next_type);
             }
             Some(&current_type) => {
-                let current_layer = self.path_types.len();
+                let next_layer = self.path_types.len();
+                let current_layer = next_layer - 1;
 
                 let local_index = self.column_scans[current_layer]
                     .get_mut()
@@ -179,9 +205,7 @@ impl<'a> PartialTrieScan<'a> for TrieScanGeneric<'a> {
                         "Calling down on a trie is only allowed when currently pointing at an element.",
                     );
                 let global_index =
-                    self.trie.columns[current_layer].global_index(next_type, local_index);
-
-                let next_layer = current_layer + 1;
+                    self.trie.columns[current_layer].global_index(current_type, local_index);
 
                 let next_interval = self.trie.columns[next_layer]
                     .interval_bounds(next_type, global_index)
@@ -206,5 +230,116 @@ impl<'a> PartialTrieScan<'a> for TrieScanGeneric<'a> {
 
     fn path_types(&self) -> &[StorageTypeName] {
         &self.path_types
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use crate::{
+        datatypes::{Float, StorageTypeName, StorageValueT},
+        tabular::triescan::PartialTrieScan,
+    };
+
+    use super::{Trie, TrieScanGeneric};
+
+    fn current_layer_next(
+        scan: &mut TrieScanGeneric,
+        storage_type: StorageTypeName,
+    ) -> Option<StorageValueT> {
+        let current_layer_scan = unsafe { &mut *scan.current_scan()?.get() };
+        current_layer_scan.next(storage_type)
+    }
+
+    #[test]
+    fn generic_trie_scan() {
+        let table = vec![
+            vec![
+                StorageValueT::Id32(0),
+                StorageValueT::Int64(-2),
+                StorageValueT::Float(Float::new(1.2).unwrap()),
+            ],
+            vec![
+                StorageValueT::Id32(0),
+                StorageValueT::Int64(-1),
+                StorageValueT::Id32(20),
+            ],
+            vec![
+                StorageValueT::Id32(0),
+                StorageValueT::Int64(-1),
+                StorageValueT::Id32(32),
+            ],
+            vec![
+                StorageValueT::Int64(6),
+                StorageValueT::Id32(100),
+                StorageValueT::Id32(101),
+            ],
+            vec![
+                StorageValueT::Int64(6),
+                StorageValueT::Id32(100),
+                StorageValueT::Id32(102),
+            ],
+        ];
+
+        let trie = Trie::from_rows(table);
+        let mut scan = trie.iter();
+
+        scan.down(StorageTypeName::Id32);
+        assert_eq!(
+            current_layer_next(&mut scan, StorageTypeName::Id32),
+            Some(StorageValueT::Id32(0))
+        );
+        scan.down(StorageTypeName::Id32);
+        assert_eq!(current_layer_next(&mut scan, StorageTypeName::Id32), None);
+        scan.up();
+        scan.down(StorageTypeName::Id64);
+        assert_eq!(current_layer_next(&mut scan, StorageTypeName::Id32), None);
+        scan.up();
+        scan.down(StorageTypeName::Int64);
+        assert_eq!(
+            current_layer_next(&mut scan, StorageTypeName::Int64),
+            Some(StorageValueT::Int64(-2))
+        );
+        scan.down(StorageTypeName::Float);
+        assert_eq!(
+            current_layer_next(&mut scan, StorageTypeName::Float),
+            Some(StorageValueT::Float(Float::new(1.2).unwrap()))
+        );
+        scan.up();
+        assert_eq!(
+            current_layer_next(&mut scan, StorageTypeName::Int64),
+            Some(StorageValueT::Int64(-1))
+        );
+        scan.down(StorageTypeName::Float);
+        assert_eq!(
+            current_layer_next(&mut scan, StorageTypeName::Float),
+            Some(StorageValueT::Id32(20))
+        );
+        scan.down(StorageTypeName::Float);
+        assert_eq!(
+            current_layer_next(&mut scan, StorageTypeName::Float),
+            Some(StorageValueT::Id32(32))
+        );
+        scan.up();
+        scan.up();
+        scan.up();
+        scan.down(StorageTypeName::Int64);
+        assert_eq!(
+            current_layer_next(&mut scan, StorageTypeName::Int64),
+            Some(StorageValueT::Int64(6))
+        );
+        scan.down(StorageTypeName::Id32);
+        assert_eq!(
+            current_layer_next(&mut scan, StorageTypeName::Int64),
+            Some(StorageValueT::Id32(100))
+        );
+        scan.down(StorageTypeName::Id32);
+        assert_eq!(
+            current_layer_next(&mut scan, StorageTypeName::Int64),
+            Some(StorageValueT::Id32(101))
+        );
+        assert_eq!(
+            current_layer_next(&mut scan, StorageTypeName::Int64),
+            Some(StorageValueT::Id32(101))
+        );
     }
 }
