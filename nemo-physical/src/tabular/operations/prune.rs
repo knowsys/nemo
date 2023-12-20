@@ -155,9 +155,8 @@ impl<'a> TrieScanPruneState<'a> {
         }
 
         // Reset column peeks up to the current layer
-        self.highest_peeked_layer = self.highest_peeked_layer.map(|highest_peeked_layer| {
-            std::cmp::min(highest_peeked_layer, self.external_current_layer)
-        });
+        // The current external layer is guaranteed to be above the highest peeked layer
+        self.highest_peeked_layer = None;
     }
 
     /// Increments the `external_current_layer`
@@ -170,6 +169,9 @@ impl<'a> TrieScanPruneState<'a> {
         }
 
         assert!(self.external_current_layer < self.input_trie_scan.arity() - 1);
+        assert!(self
+            .highest_peeked_layer
+            .map_or(true, |layer| layer > self.external_current_layer));
 
         self.external_current_layer += 1;
         self.external_path_types.push(storage_type);
@@ -262,10 +264,16 @@ impl<'a> TrieScanPruneState<'a> {
         index: usize,
         storage_type_opt: Option<StorageTypeName>,
     ) -> bool {
+        // Cant you just check whether the input trie layer is lower than the external layer?
+        // TODO: Make prettier
         self.highest_peeked_layer.map_or(false, |p| {
             index >= p
                 && if let Some(storage_type) = storage_type_opt {
-                    self.input_trie_scan.path_types()[index] == storage_type
+                    if let Some(&input_type) = self.input_trie_scan.path_types().get(index) {
+                        input_type == storage_type
+                    } else {
+                        false
+                    }
                 } else {
                     true
                 }
@@ -276,7 +284,7 @@ impl<'a> TrieScanPruneState<'a> {
     ///
     /// The caller must ensure that there exists no mutable reference to the column scan at `index` and thus the [`UnsafeCell`] is safe to access.
     #[inline]
-    pub unsafe fn current_input_trie_value(&mut self, index: usize) -> Option<StorageValueT> {
+    pub unsafe fn current_input_trie_value(&self, index: usize) -> Option<StorageValueT> {
         let current_input_type = self.input_trie_scan.path_types()[index];
         let scan = self.input_trie_scan.scan(index);
 
@@ -308,13 +316,7 @@ impl<'a> TrieScanPruneState<'a> {
     unsafe fn current_value(&self) -> Option<StorageValueT> {
         debug_assert!(self.initialized);
 
-        let current_input_type =
-            self.input_trie_scan.path_types()[self.input_trie_scan_current_layer];
-        let scan = self
-            .input_trie_scan
-            .scan(self.input_trie_scan_current_layer);
-
-        unsafe { &*scan.get() }.current(current_input_type)
+        self.current_input_trie_value(self.input_trie_scan_current_layer)
     }
 
     /// Helper method for the `advance_on_layer()` and `advance_on_layer_with_seek()`
@@ -453,6 +455,9 @@ impl<'a> TrieScanPruneState<'a> {
         stay_in_type: Option<StorageTypeName>,
     ) -> Option<usize> {
         debug_assert!(self.initialized);
+        //????
+        self.external_current_layer = target_layer; // Wird vielleicht unten gamacht
+                                                    // self.external_path_types = //???
 
         let allow_advancements_above_target_layer = stay_in_type.is_none();
 
