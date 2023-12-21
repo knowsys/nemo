@@ -3,7 +3,9 @@
 use std::{collections::HashSet, io::Write, path::PathBuf, str::FromStr};
 
 use dyn_clone::DynClone;
-use nemo_physical::{datasources::table_providers::TableProvider, datavalues::AnyDataValue, resource::Resource};
+use nemo_physical::{
+    datasources::table_providers::TableProvider, datavalues::AnyDataValue, resource::Resource,
+};
 use thiserror::Error;
 
 use crate::{

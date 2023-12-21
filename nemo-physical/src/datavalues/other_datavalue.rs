@@ -30,7 +30,9 @@ impl DataValue for OtherDataValue {
     }
 
     fn canonical_string(&self) -> String {
-        super::datavalue::quote_string(self.0.to_owned()) + "^^" + &super::datavalue::quote_iri(self.1.as_str())
+        super::datavalue::quote_string(self.0.to_owned())
+            + "^^"
+            + &super::datavalue::quote_iri(self.1.as_str())
     }
 }
 
@@ -46,12 +48,12 @@ mod test {
         let dv = OtherDataValue::new(value.to_string(), datatype_iri.to_string());
 
         assert_eq!(dv.lexical_value(), "0FB7");
-        assert_eq!(
-            dv.datatype_iri(),
-            datatype_iri.to_string()
-        );
+        assert_eq!(dv.datatype_iri(), datatype_iri.to_string());
         assert_eq!(dv.value_domain(), ValueDomain::Other);
-        assert_eq!(dv.canonical_string(), "\"".to_string() + value + "\"^^<" + datatype_iri + ">");
+        assert_eq!(
+            dv.canonical_string(),
+            "\"".to_string() + value + "\"^^<" + datatype_iri + ">"
+        );
 
         assert_eq!(dv.to_string(), None);
         assert_eq!(dv.to_iri(), None);

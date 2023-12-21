@@ -63,7 +63,10 @@ mod test {
             "http://www.w3.org/1999/02/22-rdf-syntax-ns#langString".to_string()
         );
         assert_eq!(dv.value_domain(), ValueDomain::LanguageTaggedString);
-        assert_eq!(dv.canonical_string(), "\"".to_string() + value + "\"@" + lang);
+        assert_eq!(
+            dv.canonical_string(),
+            "\"".to_string() + value + "\"@" + lang
+        );
 
         assert_eq!(
             dv.to_language_tagged_string(),

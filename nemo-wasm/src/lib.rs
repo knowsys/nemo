@@ -342,22 +342,35 @@ impl NemoResults {
             let array: Array = next
                 .into_iter()
                 .map(|v| match v.value_domain() {
-                        nemo_physical::datavalues::ValueDomain::String |
-                        nemo_physical::datavalues::ValueDomain::LanguageTaggedString |
-                        nemo_physical::datavalues::ValueDomain::Iri |
-                        nemo_physical::datavalues::ValueDomain::Other => JsValue::from(v.canonical_string()),
-                        nemo_physical::datavalues::ValueDomain::Double => JsValue::from(f64::from(v.to_double_unchecked())),
-                        nemo_physical::datavalues::ValueDomain::Float => todo!("single-precision float not supported yet"),
-                        nemo_physical::datavalues::ValueDomain::UnsignedLong => JsValue::from(v.to_u64_unchecked()),
-                        nemo_physical::datavalues::ValueDomain::NonNegativeLong |
-                        nemo_physical::datavalues::ValueDomain::UnsignedInt |
-                        nemo_physical::datavalues::ValueDomain::NonNegativeInt |
-                        nemo_physical::datavalues::ValueDomain::Long |
-                        nemo_physical::datavalues::ValueDomain::Int => JsValue::from(v.to_i64_unchecked()),
-                        nemo_physical::datavalues::ValueDomain::Boolean => todo!("boolean not supported yet"),
-                        nemo_physical::datavalues::ValueDomain::Tuple => todo!("tuple values are not supported yet"),
+                    nemo_physical::datavalues::ValueDomain::String
+                    | nemo_physical::datavalues::ValueDomain::LanguageTaggedString
+                    | nemo_physical::datavalues::ValueDomain::Iri
+                    | nemo_physical::datavalues::ValueDomain::Other => {
+                        JsValue::from(v.canonical_string())
                     }
-                )
+                    nemo_physical::datavalues::ValueDomain::Double => {
+                        JsValue::from(f64::from(v.to_double_unchecked()))
+                    }
+                    nemo_physical::datavalues::ValueDomain::Float => {
+                        todo!("single-precision float not supported yet")
+                    }
+                    nemo_physical::datavalues::ValueDomain::UnsignedLong => {
+                        JsValue::from(v.to_u64_unchecked())
+                    }
+                    nemo_physical::datavalues::ValueDomain::NonNegativeLong
+                    | nemo_physical::datavalues::ValueDomain::UnsignedInt
+                    | nemo_physical::datavalues::ValueDomain::NonNegativeInt
+                    | nemo_physical::datavalues::ValueDomain::Long
+                    | nemo_physical::datavalues::ValueDomain::Int => {
+                        JsValue::from(v.to_i64_unchecked())
+                    }
+                    nemo_physical::datavalues::ValueDomain::Boolean => {
+                        todo!("boolean not supported yet")
+                    }
+                    nemo_physical::datavalues::ValueDomain::Tuple => {
+                        todo!("tuple values are not supported yet")
+                    }
+                })
                 .collect();
 
             NemoResultsIteratorNext {

@@ -8,16 +8,21 @@ use thiserror::Error;
 /// Encloses a string in double quotes, and escapes inner quotes `\"`, newlines `\n`, carriage returns `\r`,
 /// tabs `\t`, and backslashes `\\`.
 pub(crate) fn quote_string(s: String) -> String {
-    "\"".to_owned() + &s.replace("\\", "\\\\").replace("\"", "\\\"").replace("\r", "\\r").replace("\n", "\\n") + "\""
+    "\"".to_owned()
+        + &s.replace("\\", "\\\\")
+            .replace("\"", "\\\"")
+            .replace("\r", "\\r")
+            .replace("\n", "\\n")
+        + "\""
 }
 
 /// Encloses a string in pointy brackets. No other escaping is done, since we assume that the IRI has already
-/// been processed to be in a suitable form without inner `<` or `>`. 
+/// been processed to be in a suitable form without inner `<` or `>`.
 pub(crate) fn quote_iri(s: &str) -> String {
     "<".to_owned() + &s + ">"
 }
 
-// FIXME: We should not leak Double or Float in our public API. 
+// FIXME: We should not leak Double or Float in our public API.
 use crate::datatypes::{Double, Float};
 
 /// Potential errors encountered when trying to construct [`DataValue`]s.

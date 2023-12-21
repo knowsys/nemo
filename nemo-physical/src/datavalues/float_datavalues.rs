@@ -148,7 +148,10 @@ mod test {
             "http://www.w3.org/2001/XMLSchema#double".to_string()
         );
         assert_eq!(double.value_domain(), ValueDomain::Double);
-        assert_eq!(double.canonical_string(), "\"".to_string() + &value.to_string() + "\"^^<http://www.w3.org/2001/XMLSchema#double>");
+        assert_eq!(
+            double.canonical_string(),
+            "\"".to_string() + &value.to_string() + "\"^^<http://www.w3.org/2001/XMLSchema#double>"
+        );
 
         assert_eq!(double.to_double(), Some(value));
         assert_eq!(double.to_double_unchecked(), value);

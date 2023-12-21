@@ -66,6 +66,9 @@ mod test {
         // No escaping in actual value ...
         assert_eq!(dv.lexical_value(), value.to_string());
         // ... but in serialization as string
-        assert_eq!(dv.canonical_string(), "\"Hello!\\n\\\"World\\\"!\tTest\\\\backslash\"");
+        assert_eq!(
+            dv.canonical_string(),
+            "\"Hello!\\n\\\"World\\\"!\tTest\\\\backslash\""
+        );
     }
 }

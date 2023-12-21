@@ -5,10 +5,14 @@ use std::{num::IntErrorKind, str::FromStr};
 
 use delegate::delegate;
 
-use crate::{datatypes::Double, datatypes::Float, datatypes::StorageValueT, dictionary::DvDict, management::database::Dict};
+use crate::{
+    datatypes::Double, datatypes::Float, datatypes::StorageValueT, dictionary::DvDict,
+    management::database::Dict,
+};
 
 use super::{
-    boolean::BooleanDataValue, float_datavalues::FloatDataValue, datavalue::InternalDataValueCreationError, DataValue, DataValueCreationError, DoubleDataValue,
+    boolean::BooleanDataValue, datavalue::InternalDataValueCreationError,
+    float_datavalues::FloatDataValue, DataValue, DataValueCreationError, DoubleDataValue,
     IriDataValue, LangStringDataValue, LongDataValue, OtherDataValue, StringDataValue,
     UnsignedLongDataValue, ValueDomain,
 };
@@ -229,13 +233,13 @@ impl AnyDataValue {
                     DecimalType::NonPositiveInteger,
                 ),
                 "double" => Self::new_from_double_literal(lexical_value),
-                "boolean" => {
-                    match lexical_value.as_str() {
-                        "true" | "1" => Ok(Self::new_boolean(true)),
-                        "false" | "0" => Ok(Self::new_boolean(false)),
-                        _ => Err(DataValueCreationError::BooleanNotParsed { lexical_value: lexical_value })
-                    }
-                }
+                "boolean" => match lexical_value.as_str() {
+                    "true" | "1" => Ok(Self::new_boolean(true)),
+                    "false" | "0" => Ok(Self::new_boolean(false)),
+                    _ => Err(DataValueCreationError::BooleanNotParsed {
+                        lexical_value: lexical_value,
+                    }),
+                },
                 _ => Ok(Self::new_other(lexical_value, datatype_iri)),
             }
         } else {
@@ -439,7 +443,7 @@ impl AnyDataValue {
     }
 
     /// Return the corresponding [StorageValueT] for this value.
-    /// 
+    ///
     /// FIXME: Implement by matching the value domain, not the enum.
     ///
     /// # Panics
@@ -580,7 +584,6 @@ impl Eq for AnyDataValue {}
 /// A dynamically defined iterator over [`AnyDataValue`]s.
 #[allow(missing_debug_implementations)]
 pub struct AnyDataValueIterator<'a>(pub Box<dyn Iterator<Item = AnyDataValue> + 'a>);
-
 
 /// Trait defined by types that can be converted into an [AnyDataValue]
 /// by potentially using a [MetaDictionary]

@@ -4,7 +4,7 @@ use std::{
 };
 
 use nemo::{
-    datavalues::{DataValue,AnyDataValue},
+    datavalues::{AnyDataValue, DataValue},
     execution::{tracing::trace::ExecutionTraceTree, ExecutionEngine},
     io::{resource_providers::ResourceProviders, OutputManager},
     model::{
@@ -181,34 +181,38 @@ fn constant_to_python<'a>(py: Python<'a>, v: &Constant) -> PyResult<&'a PyAny> {
 fn datavalue_to_python(py: Python<'_>, v: AnyDataValue) -> PyResult<&PyAny> {
     match v.value_domain() {
         nemo::datavalues::ValueDomain::LanguageTaggedString => {
-            let (value,tag) = v.to_language_tagged_string_unchecked();
+            let (value, tag) = v.to_language_tagged_string_unchecked();
             let lit = NemoLiteral {
                 value: value,
                 language: Some(tag),
                 datatype: RDF_LANG_STRING.to_string(),
             };
             Ok(Py::new(py, lit)?.to_object(py).into_ref(py))
-        },
-        nemo::datavalues::ValueDomain::String |
-        nemo::datavalues::ValueDomain::Iri => Ok(v.canonical_string().into_py(py).into_ref(py)),
-        nemo::datavalues::ValueDomain::Double => Ok(f64::from(v.to_double_unchecked()).into_py(py).into_ref(py)),
-        nemo::datavalues::ValueDomain::Float => Ok(f32::from(v.to_float_unchecked()).into_py(py).into_ref(py)),
-        nemo::datavalues::ValueDomain::NonNegativeLong |
-        nemo::datavalues::ValueDomain::UnsignedInt |
-        nemo::datavalues::ValueDomain::NonNegativeInt |
-        nemo::datavalues::ValueDomain::Long |
-        nemo::datavalues::ValueDomain::Int => Ok(v.to_i64_unchecked().into_py(py).into_ref(py)),
+        }
+        nemo::datavalues::ValueDomain::String | nemo::datavalues::ValueDomain::Iri => {
+            Ok(v.canonical_string().into_py(py).into_ref(py))
+        }
+        nemo::datavalues::ValueDomain::Double => {
+            Ok(f64::from(v.to_double_unchecked()).into_py(py).into_ref(py))
+        }
+        nemo::datavalues::ValueDomain::Float => {
+            Ok(f32::from(v.to_float_unchecked()).into_py(py).into_ref(py))
+        }
+        nemo::datavalues::ValueDomain::NonNegativeLong
+        | nemo::datavalues::ValueDomain::UnsignedInt
+        | nemo::datavalues::ValueDomain::NonNegativeInt
+        | nemo::datavalues::ValueDomain::Long
+        | nemo::datavalues::ValueDomain::Int => Ok(v.to_i64_unchecked().into_py(py).into_ref(py)),
         nemo::datavalues::ValueDomain::Boolean => todo!("boolean not supported yet"),
         nemo::datavalues::ValueDomain::Tuple => todo!("tuples are not supported yet"),
-        nemo::datavalues::ValueDomain::UnsignedLong |
-        nemo::datavalues::ValueDomain::Other => {
+        nemo::datavalues::ValueDomain::UnsignedLong | nemo::datavalues::ValueDomain::Other => {
             let lit = NemoLiteral {
                 value: v.lexical_value(),
                 language: None,
                 datatype: v.datatype_iri(),
             };
             Ok(Py::new(py, lit)?.to_object(py).into_ref(py))
-        },
+        }
     }
 }
 
@@ -375,7 +379,10 @@ impl NemoEngine {
     }
 
     fn result(mut slf: PyRefMut<'_, Self>, predicate: String) -> PyResult<Py<NemoResults>> {
-        let iter = slf.0.predicate_rows(&Identifier::from(predicate)).py_res()?;
+        let iter = slf
+            .0
+            .predicate_rows(&Identifier::from(predicate))
+            .py_res()?;
         let results = NemoResults(Box::new(
             iter.into_iter().flatten().collect::<Vec<_>>().into_iter(),
         ));

@@ -4,6 +4,7 @@ use super::model::{Identifier, PrimitiveType};
 
 use bytesize::ByteSize;
 use nemo_physical::{
+    datavalues::AnyDataValueIterator,
     management::{
         database::{ColumnOrder, Dict, TableId, TableSource},
         execution_plan::ExecutionNodeRef,
@@ -16,7 +17,7 @@ use nemo_physical::{
             table_schema::TableSchema,
         },
     },
-    util::mapping::permutation::Permutation, datavalues::AnyDataValueIterator,
+    util::mapping::permutation::Permutation,
 };
 
 use crate::error::Error;
@@ -395,10 +396,7 @@ impl TableManager {
     }
 
     /// Get a list of column iterators for the full table (i.e. the expanded trie)
-    pub fn table_column_iters(
-        &mut self,
-        id: TableId,
-    ) -> Result<Vec<AnyDataValueIterator>, Error> {
+    pub fn table_column_iters(&mut self, id: TableId) -> Result<Vec<AnyDataValueIterator>, Error> {
         Ok(self.database.get_table_column_iterators(id)?)
     }
 

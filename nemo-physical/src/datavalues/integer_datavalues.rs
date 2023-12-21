@@ -191,7 +191,12 @@ mod test {
             "http://www.w3.org/2001/XMLSchema#unsignedLong".to_string()
         );
         assert_eq!(long1.value_domain(), ValueDomain::UnsignedLong);
-        assert_eq!(long1.canonical_string(), "\"".to_string() + &value.to_string() + "\"^^<http://www.w3.org/2001/XMLSchema#unsignedLong>");
+        assert_eq!(
+            long1.canonical_string(),
+            "\"".to_string()
+                + &value.to_string()
+                + "\"^^<http://www.w3.org/2001/XMLSchema#unsignedLong>"
+        );
 
         assert_eq!(long1.fits_into_i32(), false);
         assert_eq!(long1.fits_into_u32(), false);
@@ -318,7 +323,12 @@ mod test {
             "http://www.w3.org/2001/XMLSchema#long".to_string()
         );
         assert_eq!(long1.value_domain(), ValueDomain::UnsignedInt);
-        assert_eq!(long1.canonical_string(), "\"".to_string() + &long_value.to_string() + "\"^^<http://www.w3.org/2001/XMLSchema#long>");
+        assert_eq!(
+            long1.canonical_string(),
+            "\"".to_string()
+                + &long_value.to_string()
+                + "\"^^<http://www.w3.org/2001/XMLSchema#long>"
+        );
 
         assert_eq!(long1.fits_into_i32(), false);
         assert_eq!(long1.fits_into_u32(), true);
