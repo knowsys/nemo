@@ -39,7 +39,7 @@ impl<'a> TupleWriter<'a> {
 
     /// Returns the number of rows in the [`TableWriter`]
     pub fn size(&self) -> usize {
-        self.tuple_buffer.column_number()
+        self.tuple_buffer.size()
     }
 
     /// Provide the next value for the current tuple. Values are added in in order.
