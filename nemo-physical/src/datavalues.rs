@@ -5,8 +5,10 @@
 /// Module to define the general [DataValue] trait.
 pub mod datavalue;
 pub use datavalue::DataValue;
-pub use datavalue::DataValueCreationError;
 pub use datavalue::ValueDomain;
+/// Module to define errors that may occur when working with [DataValue]s
+pub mod errors;
+pub use errors::DataValueCreationError;
 /// Module to define [DataValue] implementations for values that can be represented as integers.
 pub mod integer_datavalues;
 pub use integer_datavalues::LongDataValue;

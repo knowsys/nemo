@@ -107,7 +107,7 @@ where
 }
 
 /// An iterator walking over a trie, while serializing every value.
-pub trait TrieSerializer {
+pub(crate) trait TrieSerializer {
     /// The type each field will be serialized to.
     ///
     /// The type must trivially be convertible to a byte array, examples

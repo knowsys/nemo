@@ -13,7 +13,7 @@ use crate::{
 };
 
 use super::{
-    boolean::BooleanDataValue, datavalue::InternalDataValueCreationError,
+    boolean::BooleanDataValue, errors::InternalDataValueCreationError,
     float_datavalues::FloatDataValue, DataValue, DataValueCreationError, DoubleDataValue,
     IriDataValue, LangStringDataValue, LongDataValue, OtherDataValue, StringDataValue,
     UnsignedLongDataValue, ValueDomain,
