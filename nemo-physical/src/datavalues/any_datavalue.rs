@@ -548,6 +548,16 @@ impl DataValue for AnyDataValue {
     }
 }
 
+/// The intended implementation of equality for [`AnyDataValue`] is based on identity in the value space,
+/// i.e., we ask whether two values syntactically represent the same elements. In most cases, this agrees with
+/// the identity of representations, especially since our values are self-normalizing in the sense that they
+/// cannot capture superficial syntactic variations in the writing one and the same element (e.g., `42` vs `+42`).
+///
+/// This notion of equality is unrelated to any potential equality theory that may be part of the model in some
+/// logical models. In particular, even though nulls might conceptually denote the same objects as other terms,
+/// the nulls as syntactic elements are still not identitical and therefore will not be considered
+/// equal here. It is not intended (and would be impossible) to capture any more complex, possibly inferred
+/// equality at this level.
 impl PartialEq for AnyDataValue {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
@@ -557,6 +567,7 @@ impl PartialEq for AnyDataValue {
                 AnyDataValue::LanguageTaggedString(dv),
                 AnyDataValue::LanguageTaggedString(dv_other),
             ) => dv == dv_other,
+            (AnyDataValue::Float(dv), AnyDataValue::Float(dv_other)) => dv == dv_other,
             (AnyDataValue::Double(dv), AnyDataValue::Double(dv_other)) => dv == dv_other,
             (AnyDataValue::Long(_), _) => {
                 other.fits_into_i64() && other.to_i64_unchecked() == self.to_i64_unchecked()
@@ -564,6 +575,7 @@ impl PartialEq for AnyDataValue {
             (AnyDataValue::UnsignedLong(_), _) => {
                 other.fits_into_u64() && other.to_u64_unchecked() == self.to_u64_unchecked()
             }
+            (AnyDataValue::Boolean(dv), AnyDataValue::Boolean(dv_other)) => dv == dv_other,
             (AnyDataValue::Other(dv), AnyDataValue::Other(dv_other)) => dv == dv_other,
             _ => false,
         }
