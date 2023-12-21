@@ -54,12 +54,12 @@ impl NumericValue {
             | crate::datavalues::ValueDomain::LanguageTaggedString
             | crate::datavalues::ValueDomain::Other
             | crate::datavalues::ValueDomain::Iri => None,
-            crate::datavalues::ValueDomain::Float => {
-                Some(NumericValue::Float(Float::from_number(value.to_f32_unchecked())))
-            }
-            crate::datavalues::ValueDomain::Double => {
-                Some(NumericValue::Double(Double::from_number(value.to_f64_unchecked())))
-            }
+            crate::datavalues::ValueDomain::Float => Some(NumericValue::Float(Float::from_number(
+                value.to_f32_unchecked(),
+            ))),
+            crate::datavalues::ValueDomain::Double => Some(NumericValue::Double(
+                Double::from_number(value.to_f64_unchecked()),
+            )),
             crate::datavalues::ValueDomain::UnsignedLong => None, // numeric, but cannot represented in NumericValue
             crate::datavalues::ValueDomain::NonNegativeLong
             | crate::datavalues::ValueDomain::UnsignedInt

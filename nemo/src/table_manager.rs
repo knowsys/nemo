@@ -12,10 +12,7 @@ use nemo_physical::{
     },
     tabular::{
         table_types::trie::Trie,
-        traits::{
-            table::TableRow,
-            table_schema::TableSchema,
-        },
+        traits::{table::TableRow, table_schema::TableSchema},
     },
     util::mapping::permutation::Permutation,
 };
@@ -396,13 +393,19 @@ impl TableManager {
     }
 
     /// Get a list of column iterators for the full table (i.e. the expanded trie)
-    pub(crate) fn table_column_iters(&mut self, id: TableId) -> Result<Vec<AnyDataValueIterator>, Error> {
+    pub(crate) fn table_column_iters(
+        &mut self,
+        id: TableId,
+    ) -> Result<Vec<AnyDataValueIterator>, Error> {
         Ok(self.database.get_table_column_iterators(id)?)
     }
 
     /// Combine all subtables of a predicate into one table
     /// and return the [`TableId`] of that new table.
-    pub(crate) fn combine_predicate(&mut self, predicate: &Identifier) -> Result<Option<TableId>, Error> {
+    pub(crate) fn combine_predicate(
+        &mut self,
+        predicate: &Identifier,
+    ) -> Result<Option<TableId>, Error> {
         match self.last_step(predicate) {
             Some(last_step) => self.combine_tables(predicate, 0..(last_step + 1)),
             None => Ok(None),
@@ -501,13 +504,7 @@ impl TableManager {
 
     /// Add a [`Trie`] as a subtable of a predicate.
     /// Predicate must be registered before calling this function.
-    fn add_table(
-        &mut self,
-        predicate: Identifier,
-        step: usize,
-        order: ColumnOrder,
-        trie: Trie,
-    ) {
+    fn add_table(&mut self, predicate: Identifier, step: usize, order: ColumnOrder, trie: Trie) {
         let schema = self
             .predicate_to_info
             .get(&predicate)

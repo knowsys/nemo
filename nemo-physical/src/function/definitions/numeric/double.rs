@@ -1,6 +1,6 @@
 //! This module defines operations on 64-bit floating point numbers.
 
-use num::{traits::CheckedNeg, CheckedDiv, CheckedMul, CheckedSub, CheckedAdd};
+use num::{traits::CheckedNeg, CheckedAdd, CheckedDiv, CheckedMul, CheckedSub};
 
 use crate::{
     arithmetic::traits::{CheckedPow, CheckedSquareRoot},
@@ -9,10 +9,12 @@ use crate::{
 };
 
 /// Helper function to build results within this module. This might become
-/// obsolete or more elegant once we converge to a more uniform representation 
+/// obsolete or more elegant once we converge to a more uniform representation
 /// of data values (in particular replacing Double by DoubleDataValue).
 fn some_datavalue_from_double(d: Double) -> Option<AnyDataValue> {
-    Some(AnyDataValue::Double(DoubleDataValue::from_f64_unchecked(f64::from(d))))
+    Some(AnyDataValue::Double(DoubleDataValue::from_f64_unchecked(
+        f64::from(d),
+    )))
 }
 
 /// Addition of 64-bit floating point numbers
@@ -22,9 +24,7 @@ pub(super) fn numeric_addition_double(
     parameter_first: Double,
     parameter_second: Double,
 ) -> Option<AnyDataValue> {
-    some_datavalue_from_double(
-        parameter_first.checked_add(&parameter_second)?,
-    )
+    some_datavalue_from_double(parameter_first.checked_add(&parameter_second)?)
 }
 
 /// Subtraction of 64-bit floating point numbers
@@ -34,9 +34,7 @@ pub(super) fn numeric_subtraction_double(
     parameter_first: Double,
     parameter_second: Double,
 ) -> Option<AnyDataValue> {
-    some_datavalue_from_double(
-        parameter_first.checked_sub(&parameter_second)?,
-    )
+    some_datavalue_from_double(parameter_first.checked_sub(&parameter_second)?)
 }
 
 /// Multiplication of 64-bit floating point numbers
@@ -46,9 +44,7 @@ pub(super) fn numeric_multiplication_double(
     parameter_first: Double,
     parameter_second: Double,
 ) -> Option<AnyDataValue> {
-    some_datavalue_from_double(
-        parameter_first.checked_mul(&parameter_second)?,
-    )
+    some_datavalue_from_double(parameter_first.checked_mul(&parameter_second)?)
 }
 
 /// Division of 64-bit floating point numbers
@@ -58,9 +54,7 @@ pub(super) fn numeric_division_double(
     parameter_first: Double,
     parameter_second: Double,
 ) -> Option<AnyDataValue> {
-    some_datavalue_from_double(
-        parameter_first.checked_div(&parameter_second)?,
-    )
+    some_datavalue_from_double(parameter_first.checked_div(&parameter_second)?)
 }
 
 /// Absolute value of a 64-bit floating point number

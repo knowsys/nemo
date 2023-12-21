@@ -9,10 +9,12 @@ use crate::{
 };
 
 /// Helper function to build results within this module. This might become
-/// obsolete or more elegant once we converge to a more uniform representation 
+/// obsolete or more elegant once we converge to a more uniform representation
 /// of data values (in particular replacing Float by FloatDataValue).
 fn some_datavalue_from_float(d: Float) -> Option<AnyDataValue> {
-    Some(AnyDataValue::Float(FloatDataValue::from_f32_unchecked(f32::from(d))))
+    Some(AnyDataValue::Float(FloatDataValue::from_f32_unchecked(
+        f32::from(d),
+    )))
 }
 
 /// Addition of 32-bit floating point numbers
@@ -22,9 +24,7 @@ pub(super) fn numeric_addition_float(
     parameter_first: Float,
     parameter_second: Float,
 ) -> Option<AnyDataValue> {
-    some_datavalue_from_float(
-        parameter_first.checked_add(&parameter_second)?,
-    )
+    some_datavalue_from_float(parameter_first.checked_add(&parameter_second)?)
 }
 
 /// Subtraction of 32-bit floating point numbers
@@ -34,9 +34,7 @@ pub(super) fn numeric_subtraction_float(
     parameter_first: Float,
     parameter_second: Float,
 ) -> Option<AnyDataValue> {
-    some_datavalue_from_float(
-        parameter_first.checked_sub(&parameter_second)?,
-    )
+    some_datavalue_from_float(parameter_first.checked_sub(&parameter_second)?)
 }
 
 /// Multiplication of 32-bit floating point numbers
@@ -46,9 +44,7 @@ pub(super) fn numeric_multiplication_float(
     parameter_first: Float,
     parameter_second: Float,
 ) -> Option<AnyDataValue> {
-    some_datavalue_from_float(
-        parameter_first.checked_mul(&parameter_second)?,
-    )
+    some_datavalue_from_float(parameter_first.checked_mul(&parameter_second)?)
 }
 
 /// Division of 32-bit floating point numbers
@@ -58,9 +54,7 @@ pub(super) fn numeric_division_float(
     parameter_first: Float,
     parameter_second: Float,
 ) -> Option<AnyDataValue> {
-    some_datavalue_from_float(
-        parameter_first.checked_div(&parameter_second)?,
-    )
+    some_datavalue_from_float(parameter_first.checked_div(&parameter_second)?)
 }
 
 /// Absolute value of a 32-bit floating point number

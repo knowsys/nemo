@@ -44,7 +44,10 @@ impl Permutator {
 
     /// TODO: Test if this works
     /// Creates [`Permutator`] based on [`data`][ColumnEnum]
-    pub(crate) fn sort_from_column_range<T>(data: &ColumnEnum<T>, ranges: &[Range<usize>]) -> Permutator
+    pub(crate) fn sort_from_column_range<T>(
+        data: &ColumnEnum<T>,
+        ranges: &[Range<usize>],
+    ) -> Permutator
     where
         T: ColumnDataType + Ord,
     {

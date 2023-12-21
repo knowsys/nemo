@@ -18,7 +18,6 @@ pub(crate) fn quote_iri(s: &str) -> String {
     "<".to_owned() + &s + ">"
 }
 
-
 /// Enum of different value domains that are distinguished in this code,
 /// such as "string" or "64bit floating point numbers". Even in an untyped context,
 /// it is often useful to distinguish some basic domains and to treat values accordingly.

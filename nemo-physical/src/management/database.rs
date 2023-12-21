@@ -9,9 +9,7 @@ use crate::datatypes::data_value::DataValueIteratorT;
 use crate::datatypes::storage_value::{StorageValueIteratorT, VecT};
 use crate::datatypes::{DataTypeName, DataValueT, StorageValueT};
 use crate::datavalues::{AnyDataValue, AnyDataValueIterator};
-use crate::dictionary::value_serializer::{
-    serialize_constant_with_dict, ValueSerializer,
-};
+use crate::dictionary::value_serializer::{serialize_constant_with_dict, ValueSerializer};
 use crate::dictionary::DvDict;
 use crate::tabular::operations::materialize::{materialize_up_to, scan_first_match};
 use crate::tabular::operations::project_reorder::project_and_reorder;
@@ -157,10 +155,7 @@ impl TableStorage {
     }
 
     /// Function that makes sure that underlying table is available in memory.
-    fn into_memory<'a>(
-        &'a mut self,
-        dict: &mut RefCell<Dict>,
-    ) -> Result<&'a Trie, ReadingError> {
+    fn into_memory<'a>(&'a mut self, dict: &mut RefCell<Dict>) -> Result<&'a Trie, ReadingError> {
         match self {
             TableStorage::InMemory(_) => {}
             TableStorage::OnDisk(schema, sources) => {
@@ -343,11 +338,7 @@ impl OrderedReferenceManager {
 
     /// Return a reference to the [`TableStorage`] associated with the given [`TableId`] and [`ColumnOrder`].
     /// Returns `None` if there is no table with that id or order.
-    fn table_storage<'a>(
-        &'a self,
-        id: TableId,
-        order: &ColumnOrder,
-    ) -> Option<&'a TableStorage> {
+    fn table_storage<'a>(&'a self, id: TableId, order: &ColumnOrder) -> Option<&'a TableStorage> {
         let resolved = self.resolve_reference(id, order)?;
         resolved.map.get(&resolved.order)
     }
@@ -1011,7 +1002,7 @@ impl DatabaseInstance {
     }
 
     /// Returns true if the table of the given id contains the given table row.
-    /// 
+    ///
     /// # Panics
     /// Panics if no table under the given id exists.
     /// Panics if trie is not available in memory.
