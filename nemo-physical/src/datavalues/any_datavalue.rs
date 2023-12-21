@@ -434,78 +434,69 @@ impl AnyDataValue {
         })
     }
 
-    /// Return the corresponding [StorageValueT] for this value.
-    ///
-    /// FIXME: Implement by matching the value domain, not the enum.
+    /// Return the corresponding [StorageValueT] for this value, under the assumption that
+    /// the value is known in the dictionary.
     ///
     /// # Panics
-    /// Panics if the data value is unknown to the dictionary.
+    /// Panics if the data value is of a type that is managed in the dictionary but cannot be found there.
     pub(crate) fn to_storage_value_t(&self, dictionary: &Dict) -> StorageValueT {
-        match self {
-            AnyDataValue::String(_)
-            | AnyDataValue::LanguageTaggedString(_)
-            | AnyDataValue::Iri(_)
-            | AnyDataValue::Boolean(_)
-            | AnyDataValue::Other(_) => {
+        match self.value_domain() {
+            ValueDomain::Tuple
+            | ValueDomain::UnsignedLong
+            | ValueDomain::Boolean
+            | ValueDomain::Other
+            | ValueDomain::String
+            | ValueDomain::LanguageTaggedString
+            | ValueDomain::Iri => {
                 let dictionary_id = dictionary
                     .datavalue_to_id(self)
-                    .expect("Value should be knwon to the dictionary");
-
-                if let Ok(u32value) = dictionary_id.try_into() {
-                    StorageValueT::Id32(u32value)
-                } else {
-                    StorageValueT::Id64(dictionary_id.try_into().unwrap())
-                }
+                    .expect("value should be known to the dictionary");
+                Self::usize_to_storage_value_t(dictionary_id)
             }
-            AnyDataValue::Float(iv) => {
-                StorageValueT::Float(Float::from_number(iv.to_f32_unchecked()))
+            ValueDomain::Float => StorageValueT::Float(Float::from_number(self.to_f32_unchecked())),
+            ValueDomain::Double => {
+                StorageValueT::Double(Double::from_number(self.to_f64_unchecked()))
             }
-            AnyDataValue::Double(iv) => {
-                StorageValueT::Double(Double::from_number(iv.to_f64_unchecked()))
-            }
-            AnyDataValue::UnsignedLong(iv) => {
-                if let Ok(i64value) = iv.to_u64_unchecked().try_into() {
-                    StorageValueT::Int64(i64value)
-                } else {
-                    todo!("Integers that are outside of the i64 range need some fallback representation, probably using the dictionary.")
-                }
-            }
-            AnyDataValue::Long(iv) => StorageValueT::Int64(iv.to_i64_unchecked()),
+            ValueDomain::NonNegativeLong
+            | ValueDomain::UnsignedInt
+            | ValueDomain::NonNegativeInt
+            | ValueDomain::Long
+            | ValueDomain::Int => StorageValueT::Int64(self.to_i64_unchecked()),
         }
     }
 
-    /// Return the corresponding [StorageValueT] for this value.
-    ///
-    /// This function will add a new dictionary entry if needed.
+    /// Return a [StorageValueT] that corresponds to this value, adding it to the dictionary if needed.
     pub(crate) fn to_storage_value_t_mut(&self, dictionary: &mut Dict) -> StorageValueT {
-        match self {
-            AnyDataValue::String(_)
-            | AnyDataValue::LanguageTaggedString(_)
-            | AnyDataValue::Iri(_)
-            | AnyDataValue::Boolean(_)
-            | AnyDataValue::Other(_) => {
+        match self.value_domain() {
+            ValueDomain::Tuple
+            | ValueDomain::UnsignedLong
+            | ValueDomain::Boolean
+            | ValueDomain::Other
+            | ValueDomain::String
+            | ValueDomain::LanguageTaggedString
+            | ValueDomain::Iri => {
+                // TODO: Do we really need to clone? Typical uses of this method do not need the value after this ...
                 let dictionary_id = dictionary.add_datavalue(self.clone()).value();
+                Self::usize_to_storage_value_t(dictionary_id)
+            }
+            ValueDomain::Float => StorageValueT::Float(Float::from_number(self.to_f32_unchecked())),
+            ValueDomain::Double => {
+                StorageValueT::Double(Double::from_number(self.to_f64_unchecked()))
+            }
+            ValueDomain::NonNegativeLong
+            | ValueDomain::UnsignedInt
+            | ValueDomain::NonNegativeInt
+            | ValueDomain::Long
+            | ValueDomain::Int => StorageValueT::Int64(self.to_i64_unchecked()),
+        }
+    }
 
-                if let Ok(u32value) = dictionary_id.try_into() {
-                    StorageValueT::Id32(u32value)
-                } else {
-                    StorageValueT::Id64(dictionary_id.try_into().unwrap())
-                }
-            }
-            AnyDataValue::Float(iv) => {
-                StorageValueT::Float(Float::from_number(iv.to_f32_unchecked()))
-            }
-            AnyDataValue::Double(iv) => {
-                StorageValueT::Double(Double::from_number(iv.to_f64_unchecked()))
-            }
-            AnyDataValue::UnsignedLong(iv) => {
-                if let Ok(i64value) = iv.to_u64_unchecked().try_into() {
-                    StorageValueT::Int64(i64value)
-                } else {
-                    todo!("Integers that are outside of the i64 range need some fallback representation, probably using the dictionary.")
-                }
-            }
-            AnyDataValue::Long(iv) => StorageValueT::Int64(iv.to_i64_unchecked()),
+    /// Convert a usize to a suitably size [StorageValueT].
+    fn usize_to_storage_value_t(n: usize) -> StorageValueT {
+        if let Ok(u32value) = n.try_into() {
+            StorageValueT::Id32(u32value)
+        } else {
+            StorageValueT::Id64(n.try_into().unwrap())
         }
     }
 }
