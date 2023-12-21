@@ -7,7 +7,7 @@
 
 use super::{DataValue, DataValueCreationError, ValueDomain};
 
-/// Physical representation of a 32bit floating point number as an [Float].
+/// Physical representation of a finite 32bit floating point number as an `f32`.
 #[repr(transparent)]
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct FloatDataValue(f32);
@@ -61,7 +61,7 @@ impl DataValue for FloatDataValue {
 
 impl Eq for FloatDataValue {} // Possible since we exclude NaNs
 
-/// Physical representation of a 64bit floating point number as an f64.
+/// Physical representation of a finite 64bit floating point number as an f64.
 #[repr(transparent)]
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct DoubleDataValue(f64);

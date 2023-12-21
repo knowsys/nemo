@@ -6,8 +6,7 @@ use std::{num::IntErrorKind, str::FromStr};
 use delegate::delegate;
 
 use crate::{
-    datatypes::Float,
-    datatypes::{Double, StorageValueT},
+    datatypes::{Float, Double, StorageValueT},
     dictionary::DvDict,
     management::database::Dict,
 };
