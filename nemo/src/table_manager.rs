@@ -13,7 +13,7 @@ use nemo_physical::{
     tabular::{
         table_types::trie::Trie,
         traits::{
-            table::{Table, TableRow},
+            table::TableRow,
             table_schema::TableSchema,
         },
     },
@@ -651,10 +651,7 @@ impl TableManager {
         let handler = self.predicate_subtables.get(predicate)?;
 
         for (step, id) in &handler.single {
-            let (trie, order) = self.database.get_trie(*id);
-            let row_reorderd = order.permute(row);
-
-            if trie.contains_row(row_reorderd) {
+            if self.database.contains_row(*id, row) {
                 return Some(*step);
             }
         }

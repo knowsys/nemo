@@ -6,7 +6,9 @@ use std::{num::IntErrorKind, str::FromStr};
 use delegate::delegate;
 
 use crate::{
-    datatypes::Double, datatypes::Float, datatypes::StorageValueT, dictionary::DvDict,
+    datatypes::Float,
+    datatypes::{Double, StorageValueT},
+    dictionary::DvDict,
     management::database::Dict,
 };
 
@@ -85,18 +87,8 @@ impl AnyDataValue {
     }
 
     /// Construct a datavalue that represents the given number.
-    pub fn new_float(value: Float) -> Self {
-        AnyDataValue::Float(FloatDataValue::new(value))
-    }
-
-    /// Construct a datavalue that represents the given number.
-    pub fn new_double_from_f32(value: f32) -> Result<AnyDataValue, DataValueCreationError> {
+    pub fn new_float_from_f32(value: f32) -> Result<AnyDataValue, DataValueCreationError> {
         Ok(AnyDataValue::Float(FloatDataValue::from_f32(value)?))
-    }
-
-    /// Construct a datavalue that represents the given number.
-    pub fn new_double(value: Double) -> Self {
-        AnyDataValue::Double(DoubleDataValue::new(value))
     }
 
     /// Construct a datavalue that represents the given number.
@@ -465,8 +457,12 @@ impl AnyDataValue {
                     StorageValueT::Id64(dictionary_id.try_into().unwrap())
                 }
             }
-            AnyDataValue::Float(iv) => StorageValueT::Float(iv.to_float_unchecked()),
-            AnyDataValue::Double(iv) => StorageValueT::Double(iv.to_double_unchecked()),
+            AnyDataValue::Float(iv) => {
+                StorageValueT::Float(Float::from_number(iv.to_f32_unchecked()))
+            }
+            AnyDataValue::Double(iv) => {
+                StorageValueT::Double(Double::from_number(iv.to_f64_unchecked()))
+            }
             AnyDataValue::UnsignedLong(iv) => {
                 if let Ok(i64value) = iv.to_u64_unchecked().try_into() {
                     StorageValueT::Int64(i64value)
@@ -481,7 +477,7 @@ impl AnyDataValue {
     /// Return the corresponding [StorageValueT] for this value.
     ///
     /// This function will add a new dictionary entry if needed.
-    pub fn to_storage_value_t_mut(&self, dictionary: &mut Dict) -> StorageValueT {
+    pub(crate) fn to_storage_value_t_mut(&self, dictionary: &mut Dict) -> StorageValueT {
         match self {
             AnyDataValue::String(_)
             | AnyDataValue::LanguageTaggedString(_)
@@ -496,8 +492,12 @@ impl AnyDataValue {
                     StorageValueT::Id64(dictionary_id.try_into().unwrap())
                 }
             }
-            AnyDataValue::Float(iv) => StorageValueT::Float(iv.to_float_unchecked()),
-            AnyDataValue::Double(iv) => StorageValueT::Double(iv.to_double_unchecked()),
+            AnyDataValue::Float(iv) => {
+                StorageValueT::Float(Float::from_number(iv.to_f32_unchecked()))
+            }
+            AnyDataValue::Double(iv) => {
+                StorageValueT::Double(Double::from_number(iv.to_f64_unchecked()))
+            }
             AnyDataValue::UnsignedLong(iv) => {
                 if let Ok(i64value) = iv.to_u64_unchecked().try_into() {
                     StorageValueT::Int64(i64value)
@@ -533,10 +533,10 @@ impl DataValue for AnyDataValue {
             fn to_language_tagged_string_unchecked(&self) -> (String, String);
             fn to_iri(&self) -> Option<String>;
             fn to_iri_unchecked(&self) -> String;
-            fn to_float(&self) -> Option<Float>;
-            fn to_float_unchecked(&self) -> Float;
-            fn to_double(&self) -> Option<Double>;
-            fn to_double_unchecked(&self) -> Double;
+            fn to_f32(&self) -> Option<f32>;
+            fn to_f32_unchecked(&self) -> f32;
+            fn to_f64(&self) -> Option<f64>;
+            fn to_f64_unchecked(&self) -> f64;
             fn fits_into_i64(&self) -> bool;
             fn fits_into_i32(&self) -> bool;
             fn fits_into_u64(&self) -> bool;
@@ -648,23 +648,24 @@ impl IntoDataValue for i64 {
 
 impl IntoDataValue for Float {
     fn into_datavalue(self, _dictionary: &Dict) -> Option<AnyDataValue> {
-        Some(AnyDataValue::new_float(self))
+        Some(AnyDataValue::Float(FloatDataValue::from_f32_unchecked(
+            self.into(),
+        )))
     }
 }
 
 impl IntoDataValue for Double {
     fn into_datavalue(self, _dictionary: &Dict) -> Option<AnyDataValue> {
-        Some(AnyDataValue::new_double(self))
+        Some(AnyDataValue::Double(DoubleDataValue::from_f64_unchecked(
+            self.into(),
+        )))
     }
 }
 
 #[cfg(test)]
 mod test {
     use super::{AnyDataValue, XSD_PREFIX};
-    use crate::{
-        datatypes::{Double, Float},
-        datavalues::{DataValue, DataValueCreationError, ValueDomain},
-    };
+    use crate::datavalues::{DataValue, DataValueCreationError, ValueDomain};
 
     #[test]
     fn anydatavalue_string() {
@@ -700,8 +701,8 @@ mod test {
 
     #[test]
     fn anydatavalue_float() {
-        let value = Float::new(2.34e3).unwrap();
-        let dv = AnyDataValue::new_float(value);
+        let value = 2.34e3;
+        let dv = AnyDataValue::new_float_from_f32(value).unwrap();
 
         assert_eq!(dv.lexical_value(), value.to_string());
         assert_eq!(
@@ -710,14 +711,14 @@ mod test {
         );
         assert_eq!(dv.value_domain(), ValueDomain::Float);
 
-        assert_eq!(dv.to_float(), Some(value));
-        assert_eq!(dv.to_float_unchecked(), value);
+        assert_eq!(dv.to_f32(), Some(value));
+        assert_eq!(dv.to_f32_unchecked(), value);
     }
 
     #[test]
     fn anydatavalue_double() {
-        let value = Double::new(2.34e3).unwrap();
-        let dv = AnyDataValue::new_double(value);
+        let value = 2.34e3;
+        let dv = AnyDataValue::new_double_from_f64(value).unwrap();
 
         assert_eq!(dv.lexical_value(), value.to_string());
         assert_eq!(
@@ -726,8 +727,8 @@ mod test {
         );
         assert_eq!(dv.value_domain(), ValueDomain::Double);
 
-        assert_eq!(dv.to_double(), Some(value));
-        assert_eq!(dv.to_double_unchecked(), value);
+        assert_eq!(dv.to_f64(), Some(value));
+        assert_eq!(dv.to_f64_unchecked(), value);
     }
 
     #[test]

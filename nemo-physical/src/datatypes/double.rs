@@ -47,7 +47,7 @@ impl Double {
     /// that can fit into an [i64].
     ///
     /// Returns `None` otherwise.
-    pub fn as_i64(&self) -> Option<i64> {
+    pub(crate) fn as_i64(&self) -> Option<i64> {
         if self.0.round() == self.0 {
             #[allow(clippy::cast_possible_truncation)]
             Some(self.0 as i64)
@@ -57,43 +57,43 @@ impl Double {
     }
 
     /// Create a [Double] from a [i64].
-    pub fn from_i64(value: i64) -> Option<Double> {
+    pub(crate) fn from_i64(value: i64) -> Option<Double> {
         Double::new(value as f64).ok()
     }
 
     /// Create a [Double] from a [u64].
-    pub fn from_u64(value: u64) -> Option<Double> {
+    pub(crate) fn from_u64(value: u64) -> Option<Double> {
         Double::new(value as f64).ok()
     }
 
     /// Converts this value into [Float].
-    pub fn as_float(&self) -> Option<Float> {
+    pub(crate) fn as_float(&self) -> Option<Float> {
         #[allow(clippy::cast_possible_truncation)]
         Float::new(self.0 as f32).ok()
     }
 
     /// Computes the absolute value.
-    pub fn abs(self) -> Self {
+    pub(crate) fn abs(self) -> Self {
         Double::new(self.0.abs()).expect("Taking the absolute value cannot result in NaN")
     }
 
     /// Returns the logarithm of the number with respect to an arbitrary base.
-    pub fn log(self, base: Self) -> Option<Self> {
+    pub(crate) fn log(self, base: Self) -> Option<Self> {
         Double::new(self.0.log(base.0)).ok()
     }
 
     /// Computes the sine of a number (in radians).
-    pub fn sin(self) -> Self {
+    pub(crate) fn sin(self) -> Self {
         Double::new(self.0.sin()).expect("Operation does not result in NaN")
     }
 
     /// Computes the cosine of a number (in radians).
-    pub fn cos(self) -> Self {
+    pub(crate) fn cos(self) -> Self {
         Double::new(self.0.cos()).expect("Operation does not result in NaN")
     }
 
     /// Computes the tangent of a number (in radians).
-    pub fn tan(self) -> Self {
+    pub(crate) fn tan(self) -> Self {
         Double::new(self.0.tan()).expect("Operation does not result in NaN")
     }
 }

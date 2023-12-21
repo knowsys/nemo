@@ -1,12 +1,19 @@
 //! This module defines operations on 64-bit floating point numbers.
 
-use num::{traits::CheckedNeg, CheckedAdd, CheckedDiv, CheckedMul, CheckedSub};
+use num::{traits::CheckedNeg, CheckedDiv, CheckedMul, CheckedSub, CheckedAdd};
 
 use crate::{
     arithmetic::traits::{CheckedPow, CheckedSquareRoot},
     datatypes::Double,
-    datavalues::AnyDataValue,
+    datavalues::{AnyDataValue, DoubleDataValue},
 };
+
+/// Helper function to build results within this module. This might become
+/// obsolete or more elegant once we converge to a more uniform representation 
+/// of data values (in particular replacing Double by DoubleDataValue).
+fn some_datavalue_from_double(d: Double) -> Option<AnyDataValue> {
+    Some(AnyDataValue::Double(DoubleDataValue::from_f64_unchecked(f64::from(d))))
+}
 
 /// Addition of 64-bit floating point numbers
 ///
@@ -15,9 +22,9 @@ pub(super) fn numeric_addition_double(
     parameter_first: Double,
     parameter_second: Double,
 ) -> Option<AnyDataValue> {
-    Some(AnyDataValue::new_double(
+    some_datavalue_from_double(
         parameter_first.checked_add(&parameter_second)?,
-    ))
+    )
 }
 
 /// Subtraction of 64-bit floating point numbers
@@ -27,9 +34,9 @@ pub(super) fn numeric_subtraction_double(
     parameter_first: Double,
     parameter_second: Double,
 ) -> Option<AnyDataValue> {
-    Some(AnyDataValue::new_double(
+    some_datavalue_from_double(
         parameter_first.checked_sub(&parameter_second)?,
-    ))
+    )
 }
 
 /// Multiplication of 64-bit floating point numbers
@@ -39,9 +46,9 @@ pub(super) fn numeric_multiplication_double(
     parameter_first: Double,
     parameter_second: Double,
 ) -> Option<AnyDataValue> {
-    Some(AnyDataValue::new_double(
+    some_datavalue_from_double(
         parameter_first.checked_mul(&parameter_second)?,
-    ))
+    )
 }
 
 /// Division of 64-bit floating point numbers
@@ -51,46 +58,46 @@ pub(super) fn numeric_division_double(
     parameter_first: Double,
     parameter_second: Double,
 ) -> Option<AnyDataValue> {
-    Some(AnyDataValue::new_double(
+    some_datavalue_from_double(
         parameter_first.checked_div(&parameter_second)?,
-    ))
+    )
 }
 
 /// Absolute value of a 64-bit floating point number
 pub(super) fn numeric_absolute_double(parameter: Double) -> Option<AnyDataValue> {
-    Some(AnyDataValue::new_double(parameter.abs()))
+    some_datavalue_from_double(parameter.abs())
 }
 
 /// Negation of a 64-bit floating point number
 pub(super) fn numeric_negation_double(parameter: Double) -> Option<AnyDataValue> {
-    Some(AnyDataValue::new_double(parameter.checked_neg()?))
+    some_datavalue_from_double(parameter.checked_neg()?)
 }
 
 /// Square root of 64-bit floating point number
 ///
 /// Returns `None` if parameter was negative
 pub(super) fn numeric_squareroot_double(parameter: Double) -> Option<AnyDataValue> {
-    Some(AnyDataValue::new_double(parameter.checked_sqrt()?))
+    some_datavalue_from_double(parameter.checked_sqrt()?)
 }
 
 /// Logarithm of a 64-bit floating point number given some base
 pub(super) fn numeric_logarithm_double(value: Double, base: Double) -> Option<AnyDataValue> {
-    Some(AnyDataValue::new_double(value.log(base)?))
+    some_datavalue_from_double(value.log(base)?)
 }
 
 /// Sine of 64-bit floating point number
 pub(super) fn numeric_sin_double(parameter: Double) -> Option<AnyDataValue> {
-    Some(AnyDataValue::new_double(parameter.sin()))
+    some_datavalue_from_double(parameter.sin())
 }
 
 /// Cosine of 64-bit floating point number
 pub(super) fn numeric_cos_double(parameter: Double) -> Option<AnyDataValue> {
-    Some(AnyDataValue::new_double(parameter.cos()))
+    some_datavalue_from_double(parameter.cos())
 }
 
 /// Tangent of 64-bit floating point number
 pub(super) fn numeric_tan_double(parameter: Double) -> Option<AnyDataValue> {
-    Some(AnyDataValue::new_double(parameter.tan()))
+    some_datavalue_from_double(parameter.tan())
 }
 
 /// Raising a 64-bit float to some power
@@ -98,7 +105,7 @@ pub(super) fn numeric_tan_double(parameter: Double) -> Option<AnyDataValue> {
 /// The first parameter is the base and the second is the exponent.
 /// Returns `None` if the result cannot be represented by an 64-bit float.
 pub(super) fn numeric_power_double(base: Double, exponent: Double) -> Option<AnyDataValue> {
-    Some(AnyDataValue::new_double(base.checked_pow(exponent)?))
+    some_datavalue_from_double(base.checked_pow(exponent)?)
 }
 
 /// Less than comparison between 64-bit floating point numbers

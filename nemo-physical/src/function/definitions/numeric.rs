@@ -47,16 +47,27 @@ enum NumericValue {
 
 impl NumericValue {
     fn from_any_datavalue(value: AnyDataValue) -> Option<NumericValue> {
-        match value {
-            AnyDataValue::Long(value) => Some(NumericValue::Integer(value.to_i64_unchecked())),
-            AnyDataValue::Float(value) => Some(NumericValue::Float(value.to_float_unchecked())),
-            AnyDataValue::Double(value) => Some(NumericValue::Double(value.to_double_unchecked())),
-            AnyDataValue::String(_)
-            | AnyDataValue::LanguageTaggedString(_)
-            | AnyDataValue::Iri(_)
-            | AnyDataValue::Boolean(_) => None,
-            AnyDataValue::UnsignedLong(_) => todo!("Unclear how to handle this in this context"),
-            AnyDataValue::Other(_) => todo!("This could be a numeric type"),
+        match value.value_domain() {
+            crate::datavalues::ValueDomain::Tuple
+            | crate::datavalues::ValueDomain::Boolean
+            | crate::datavalues::ValueDomain::String
+            | crate::datavalues::ValueDomain::LanguageTaggedString
+            | crate::datavalues::ValueDomain::Other
+            | crate::datavalues::ValueDomain::Iri => None,
+            crate::datavalues::ValueDomain::Float => {
+                Some(NumericValue::Float(Float::from_number(value.to_f32_unchecked())))
+            }
+            crate::datavalues::ValueDomain::Double => {
+                Some(NumericValue::Double(Double::from_number(value.to_f64_unchecked())))
+            }
+            crate::datavalues::ValueDomain::UnsignedLong => None, // numeric, but cannot represented in NumericValue
+            crate::datavalues::ValueDomain::NonNegativeLong
+            | crate::datavalues::ValueDomain::UnsignedInt
+            | crate::datavalues::ValueDomain::NonNegativeInt
+            | crate::datavalues::ValueDomain::Long
+            | crate::datavalues::ValueDomain::Int => {
+                Some(NumericValue::Integer(value.to_i64_unchecked()))
+            }
         }
     }
 }
@@ -76,25 +87,30 @@ impl NumericPair {
         parameter_first: AnyDataValue,
         parameter_second: AnyDataValue,
     ) -> Option<NumericPair> {
-        match parameter_first {
-            AnyDataValue::Long(value) => Some(NumericPair::Integer(
-                value.to_i64_unchecked(),
+        match parameter_first.value_domain() {
+            crate::datavalues::ValueDomain::String
+            | crate::datavalues::ValueDomain::LanguageTaggedString
+            | crate::datavalues::ValueDomain::Tuple
+            | crate::datavalues::ValueDomain::Boolean
+            | crate::datavalues::ValueDomain::Other
+            | crate::datavalues::ValueDomain::Iri => None,
+            crate::datavalues::ValueDomain::Float => Some(NumericPair::Float(
+                Float::from_number(parameter_first.to_f32_unchecked()),
+                Float::from_number(parameter_second.to_f32()?),
+            )),
+            crate::datavalues::ValueDomain::Double => Some(NumericPair::Double(
+                Double::from_number(parameter_first.to_f64_unchecked()),
+                Double::from_number(parameter_second.to_f64()?),
+            )),
+            crate::datavalues::ValueDomain::UnsignedLong => None, // numeric, but cannot be represented in StorageValues as used in NumericPair
+            crate::datavalues::ValueDomain::NonNegativeLong
+            | crate::datavalues::ValueDomain::UnsignedInt
+            | crate::datavalues::ValueDomain::NonNegativeInt
+            | crate::datavalues::ValueDomain::Long
+            | crate::datavalues::ValueDomain::Int => Some(NumericPair::Integer(
+                parameter_first.to_i64_unchecked(),
                 parameter_second.to_i64()?,
             )),
-            AnyDataValue::Float(value) => Some(NumericPair::Float(
-                value.to_float_unchecked(),
-                parameter_second.to_float()?,
-            )),
-            AnyDataValue::Double(value) => Some(NumericPair::Double(
-                value.to_double_unchecked(),
-                parameter_second.to_double()?,
-            )),
-            AnyDataValue::String(_)
-            | AnyDataValue::LanguageTaggedString(_)
-            | AnyDataValue::Iri(_)
-            | AnyDataValue::Boolean(_) => None,
-            AnyDataValue::UnsignedLong(_) => todo!("Unclear how to handle this in this context"),
-            AnyDataValue::Other(_) => todo!("This could be a numeric type"),
         }
     }
 }

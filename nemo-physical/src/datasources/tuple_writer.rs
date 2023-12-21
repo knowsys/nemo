@@ -93,13 +93,13 @@ mod test {
             writer.add_tuple_value(AnyDataValue::new_string(String::from("a")));
 
             writer.add_tuple_value(AnyDataValue::new_integer_from_i64(3));
-            writer.add_tuple_value(AnyDataValue::new_float(Float::new(1.2).unwrap()));
+            writer.add_tuple_value(AnyDataValue::new_float_from_f32(1.2).unwrap());
 
             writer.add_tuple_value(AnyDataValue::new_integer_from_i64(5));
-            writer.add_tuple_value(AnyDataValue::new_float(Float::new(0.6).unwrap()));
+            writer.add_tuple_value(AnyDataValue::new_float_from_f32(0.6).unwrap());
 
             writer.add_tuple_value(AnyDataValue::new_integer_from_i64(0));
-            writer.add_tuple_value(AnyDataValue::new_float(Float::new(1.8).unwrap()));
+            writer.add_tuple_value(AnyDataValue::new_float_from_f32(1.8).unwrap());
 
             writer.add_tuple_value(AnyDataValue::new_string(String::from("a")));
             writer.add_tuple_value(AnyDataValue::new_string(String::from("b")));

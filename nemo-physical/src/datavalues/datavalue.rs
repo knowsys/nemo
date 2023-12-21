@@ -22,9 +22,6 @@ pub(crate) fn quote_iri(s: &str) -> String {
     "<".to_owned() + &s + ">"
 }
 
-// FIXME: We should not leak Double or Float in our public API.
-use crate::datatypes::{Double, Float};
-
 /// Potential errors encountered when trying to construct [`DataValue`]s.
 #[allow(variant_size_differences)]
 #[derive(Error, Debug)]
@@ -140,10 +137,10 @@ pub enum ValueDomain {
     LanguageTaggedString,
     /// Domain of all IRIs in canonical form (no escape characters)
     Iri,
-    /// Domain of all 32bit floating point numbers, incl. ±Inf, ±0 but not NaN.
+    /// Domain of all 32bit floating point numbers, excluding ±Inf and NaN.
     /// This set of values is disjoint from all other numerical domains (including [ValueDomain::Double]).
     Float,
-    /// Domain of all 64bit floating point numbers incl. ±Inf, ±0 but not NaN.
+    /// Domain of all finite 64bit floating point numbers, excluding ±Inf and NaN.
     /// This set of values is disjoint from all other numerical domains (including [ValueDomain::Float]).
     Double,
     /// Domain of all unsigned 64bit integer numbers: 0…+18446744073709551615, or 0 … +2^64-1.
@@ -186,6 +183,7 @@ impl ValueDomain {
             ValueDomain::String => "http://www.w3.org/2001/XMLSchema#string".to_string(),
             ValueDomain::LanguageTaggedString => "http://www.w3.org/1999/02/22-rdf-syntax-ns#langString".to_string(),
             ValueDomain::Iri => "http://www.w3.org/2001/XMLSchema#anyURI".to_string(),
+            ValueDomain::Float => "http://www.w3.org/2001/XMLSchema#float".to_string(),
             ValueDomain::Double => "http://www.w3.org/2001/XMLSchema#double".to_string(),
             // We prefer long and int for integer types where possible, since they are most widely supported:
             ValueDomain::UnsignedLong => "http://www.w3.org/2001/XMLSchema#unsignedLong".to_string(),
@@ -199,7 +197,6 @@ impl ValueDomain {
             // Other literals cannot have a fixed canonical type by definition
             ValueDomain::Other => panic!("There is no canonical datatype for {:?}. Use the type of the value directly.", self),
             ValueDomain::Boolean => "http://www.w3.org/2001/XMLSchema#boolean".to_string(),
-            ValueDomain::Float => "http://www.w3.org/2001/XMLSchema#float".to_string(),
         }
     }
 }
@@ -276,33 +273,33 @@ pub trait DataValue {
         panic!("Value is not an IRI.");
     }
 
-    /// Return the [Float] that this value represents, if it is a value in
+    /// Return the f32 that this value represents, if it is a value in
     /// the domain [`ValueDomain::Float`].
-    fn to_float(&self) -> Option<Float> {
+    fn to_f32(&self) -> Option<f32> {
         match self.value_domain() {
-            ValueDomain::Float => Some(self.to_float_unchecked()),
+            ValueDomain::Float => Some(self.to_f32_unchecked()),
             _ => None,
         }
     }
 
-    /// Return the [Float] that this value represents, if it is a value in
+    /// Return the f32 that this value represents, if it is a value in
     /// the domain [`ValueDomain::Float`]. Otherwise it panics.
-    fn to_float_unchecked(&self) -> Float {
-        panic!("Value is not a double (32bit floating point number).");
+    fn to_f32_unchecked(&self) -> f32 {
+        panic!("Value is not a float (32bit floating point number).");
     }
 
-    /// Return the [Double] that this value represents, if it is a value in
+    /// Return the f64 that this value represents, if it is a value in
     /// the domain [`ValueDomain::Double`].
-    fn to_double(&self) -> Option<Double> {
+    fn to_f64(&self) -> Option<f64> {
         match self.value_domain() {
-            ValueDomain::Double => Some(self.to_double_unchecked()),
+            ValueDomain::Double => Some(self.to_f64_unchecked()),
             _ => None,
         }
     }
 
-    /// Return the [Double] that this value represents, if it is a value in
+    /// Return the f64 that this value represents, if it is a value in
     /// the domain [`ValueDomain::Double`]. Otherwise it panics.
-    fn to_double_unchecked(&self) -> Double {
+    fn to_f64_unchecked(&self) -> f64 {
         panic!("Value is not a double (64bit floating point number).");
     }
 

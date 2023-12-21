@@ -5,8 +5,15 @@ use num::{traits::CheckedNeg, CheckedAdd, CheckedDiv, CheckedMul, CheckedSub};
 use crate::{
     arithmetic::traits::{CheckedPow, CheckedSquareRoot},
     datatypes::Float,
-    datavalues::AnyDataValue,
+    datavalues::{AnyDataValue, FloatDataValue},
 };
+
+/// Helper function to build results within this module. This might become
+/// obsolete or more elegant once we converge to a more uniform representation 
+/// of data values (in particular replacing Float by FloatDataValue).
+fn some_datavalue_from_float(d: Float) -> Option<AnyDataValue> {
+    Some(AnyDataValue::Float(FloatDataValue::from_f32_unchecked(f32::from(d))))
+}
 
 /// Addition of 32-bit floating point numbers
 ///
@@ -15,9 +22,9 @@ pub(super) fn numeric_addition_float(
     parameter_first: Float,
     parameter_second: Float,
 ) -> Option<AnyDataValue> {
-    Some(AnyDataValue::new_float(
+    some_datavalue_from_float(
         parameter_first.checked_add(&parameter_second)?,
-    ))
+    )
 }
 
 /// Subtraction of 32-bit floating point numbers
@@ -27,9 +34,9 @@ pub(super) fn numeric_subtraction_float(
     parameter_first: Float,
     parameter_second: Float,
 ) -> Option<AnyDataValue> {
-    Some(AnyDataValue::new_float(
+    some_datavalue_from_float(
         parameter_first.checked_sub(&parameter_second)?,
-    ))
+    )
 }
 
 /// Multiplication of 32-bit floating point numbers
@@ -39,9 +46,9 @@ pub(super) fn numeric_multiplication_float(
     parameter_first: Float,
     parameter_second: Float,
 ) -> Option<AnyDataValue> {
-    Some(AnyDataValue::new_float(
+    some_datavalue_from_float(
         parameter_first.checked_mul(&parameter_second)?,
-    ))
+    )
 }
 
 /// Division of 32-bit floating point numbers
@@ -51,46 +58,46 @@ pub(super) fn numeric_division_float(
     parameter_first: Float,
     parameter_second: Float,
 ) -> Option<AnyDataValue> {
-    Some(AnyDataValue::new_float(
+    some_datavalue_from_float(
         parameter_first.checked_div(&parameter_second)?,
-    ))
+    )
 }
 
 /// Absolute value of a 32-bit floating point number
 pub(super) fn numeric_absolute_float(parameter: Float) -> Option<AnyDataValue> {
-    Some(AnyDataValue::new_float(parameter.abs()))
+    some_datavalue_from_float(parameter.abs())
 }
 
 /// Negation of a 32-bit floating point number
 pub(super) fn numeric_negation_float(parameter: Float) -> Option<AnyDataValue> {
-    Some(AnyDataValue::new_float(parameter.checked_neg()?))
+    some_datavalue_from_float(parameter.checked_neg()?)
 }
 
 /// Square root of 32-bit floating point number
 ///
 /// Returns `None` if parameter was negative
 pub(super) fn numeric_squareroot_float(parameter: Float) -> Option<AnyDataValue> {
-    Some(AnyDataValue::new_float(parameter.checked_sqrt()?))
+    some_datavalue_from_float(parameter.checked_sqrt()?)
 }
 
 /// Logarithm of a 32-bit floating point number given some base
 pub(super) fn numeric_logarithm_float(value: Float, base: Float) -> Option<AnyDataValue> {
-    Some(AnyDataValue::new_float(value.log(base)?))
+    some_datavalue_from_float(value.log(base)?)
 }
 
 /// Sine of 32-bit floating point number
 pub(super) fn numeric_sin_float(parameter: Float) -> Option<AnyDataValue> {
-    Some(AnyDataValue::new_float(parameter.sin()))
+    some_datavalue_from_float(parameter.sin())
 }
 
 /// Cosine of 32-bit floating point number
 pub(super) fn numeric_cos_float(parameter: Float) -> Option<AnyDataValue> {
-    Some(AnyDataValue::new_float(parameter.cos()))
+    some_datavalue_from_float(parameter.cos())
 }
 
 /// Tangent of 32-bit floating point number
 pub(super) fn numeric_tan_float(parameter: Float) -> Option<AnyDataValue> {
-    Some(AnyDataValue::new_float(parameter.tan()))
+    some_datavalue_from_float(parameter.tan())
 }
 
 /// Raising a 32-bit float to some power
@@ -98,7 +105,7 @@ pub(super) fn numeric_tan_float(parameter: Float) -> Option<AnyDataValue> {
 /// The first parameter is the base and the second is the exponent.
 /// Returns `None` if the result cannot be represented by an 32-bit float.
 pub(super) fn numeric_power_float(base: Float, exponent: Float) -> Option<AnyDataValue> {
-    Some(AnyDataValue::new_float(base.checked_pow(exponent)?))
+    some_datavalue_from_float(base.checked_pow(exponent)?)
 }
 
 /// Less than comparison between 32-bit floating point numbers

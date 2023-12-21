@@ -193,10 +193,10 @@ fn datavalue_to_python(py: Python<'_>, v: AnyDataValue) -> PyResult<&PyAny> {
             Ok(v.canonical_string().into_py(py).into_ref(py))
         }
         nemo::datavalues::ValueDomain::Double => {
-            Ok(f64::from(v.to_double_unchecked()).into_py(py).into_ref(py))
+            Ok(f64::from(v.to_f64_unchecked()).into_py(py).into_ref(py))
         }
         nemo::datavalues::ValueDomain::Float => {
-            Ok(f32::from(v.to_float_unchecked()).into_py(py).into_ref(py))
+            Ok(f32::from(v.to_f32_unchecked()).into_py(py).into_ref(py))
         }
         nemo::datavalues::ValueDomain::NonNegativeLong
         | nemo::datavalues::ValueDomain::UnsignedInt

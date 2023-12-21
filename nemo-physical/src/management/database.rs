@@ -10,7 +10,7 @@ use crate::datatypes::storage_value::{StorageValueIteratorT, VecT};
 use crate::datatypes::{DataTypeName, DataValueT, StorageValueT};
 use crate::datavalues::{AnyDataValue, AnyDataValueIterator};
 use crate::dictionary::value_serializer::{
-    serialize_constant_with_dict, TrieSerializer, ValueSerializer,
+    serialize_constant_with_dict, ValueSerializer,
 };
 use crate::dictionary::DvDict;
 use crate::tabular::operations::materialize::{materialize_up_to, scan_first_match};
@@ -987,7 +987,7 @@ impl DatabaseInstance {
     /// # Panics
     /// Panics if no table under the given id exists.
     /// Panics if trie is not available in memory.
-    pub fn get_trie(&self, id: TableId) -> (&Trie, ColumnOrder) {
+    pub(crate) fn get_trie(&self, id: TableId) -> (&Trie, ColumnOrder) {
         let order = self
             .storage_handler
             .available_orders(id)
@@ -1009,12 +1009,21 @@ impl DatabaseInstance {
         )
     }
 
+    /// Returns true if the table of the given id contains the given table row.
+    /// 
+    /// # Panics
+    /// Panics if no table under the given id exists.
+    /// Panics if trie is not available in memory.
+    pub fn contains_row(&self, id: TableId, row: &TableRow) -> bool {
+        let (trie, order) = self.get_trie(id);
+        let row_reordered = order.permute(row);
+        trie.contains_row(row_reordered)
+    }
+
     /// Return a reference to a trie identified by its id and order.
     /// If the trie is not available in memory, this function will load it.
     /// Panics if no table under the given id and order exists.
-    ///
-    /// FIXME: Should not be public, or should not panic so easily and rather use the error.
-    pub fn get_trie_or_load<'a>(
+    pub(crate) fn get_trie_or_load<'a>(
         &'a mut self,
         id: TableId,
         order: &ColumnOrder,
@@ -1023,19 +1032,6 @@ impl DatabaseInstance {
             .table_storage_mut(id, order)
             .expect("Function assumes that there is a table with the given id and order.")
             .into_memory(&mut self.dict_constants)
-    }
-
-    /// Returns an iterator that provides serialized fields for each row in the specified table.
-    /// Uses the default [`ColumnOrder`]
-    /// Panics if there is no trie associated with the given id.
-    pub fn table_serializer(&mut self, id: TableId) -> Result<impl TrieSerializer + '_, Error> {
-        let _ = self.get_trie_or_load(id, &ColumnOrder::default())?;
-        let schema = self.table_schema(id);
-        let dict = self.get_dict_constants();
-
-        Ok(self
-            .get_trie_order(id, &ColumnOrder::default())
-            .records(ValueSerializer { schema, dict }))
     }
 
     /// Returns an iterator over the specified table.
@@ -1111,7 +1107,7 @@ impl DatabaseInstance {
     }
 
     /// Convert a [`StorageValueIteratorT`] into an iterator over [`AnyDataValue`].
-    pub fn storage_to_datavalue_iterator<'a>(
+    pub(crate) fn storage_to_datavalue_iterator<'a>(
         &'a self,
         iterator: StorageValueIteratorT<'a>,
     ) -> AnyDataValueIterator<'a> {
