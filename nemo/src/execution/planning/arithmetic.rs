@@ -16,7 +16,7 @@ use crate::{
 
 /// Builds a [`StackProgram`] with [`DataValueT`]
 /// from a given [`Term`].
-pub fn compile_termtree(
+pub(crate) fn compile_termtree(
     term: &Term,
     order: &VariableOrder,
     logical_type: &PrimitiveType,

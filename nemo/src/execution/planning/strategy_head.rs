@@ -12,7 +12,7 @@ use crate::{
 use std::fmt::Debug;
 
 /// Strategies for calculating the newly derived tables.
-pub trait HeadStrategy: Debug {
+pub(crate) trait HeadStrategy: Debug {
     /// Calculate the concrete plan given a variable order.
     fn add_plan_head(
         &self,

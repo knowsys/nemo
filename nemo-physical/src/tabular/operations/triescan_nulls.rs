@@ -31,7 +31,7 @@ impl<'a> TrieScanNulls<'a> {
     /// Receives as input the [`TrieScanEnum`] to which the nulls will be appended,
     /// the amount of null-columns as well as the value of the first new null.
     /// Null-columns are always appended to the end.
-    pub fn new(trie_scan: TrieScanEnum<'a>, num_nulls: usize, nulls_start: u64) -> Self {
+    pub(crate) fn new(trie_scan: TrieScanEnum<'a>, num_nulls: usize, nulls_start: u64) -> Self {
         let mut column_scans = Vec::<UnsafeCell<ColumnScanT<'a>>>::new();
         let mut target_types = trie_scan.get_types().clone();
 

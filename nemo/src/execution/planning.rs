@@ -1,24 +1,24 @@
 //! This module implements the functionality for planing the execution of a rule.
 
-pub mod plan_body_seminaive;
+pub(crate) mod plan_body_seminaive;
 
-pub mod plan_head_datalog;
+pub(crate) mod plan_head_datalog;
 
-pub mod plan_head_restricted;
+pub(crate) mod plan_head_restricted;
 
-pub mod strategy_head;
-pub use strategy_head::HeadStrategy;
+pub(crate) mod strategy_head;
+pub(crate) use strategy_head::HeadStrategy;
 
-pub mod strategy_body;
-pub use strategy_body::BodyStrategy;
+pub(crate) mod strategy_body;
+pub(crate) use strategy_body::BodyStrategy;
 
-pub mod seminaive_join;
-pub use seminaive_join::SeminaiveJoinGenerator;
+pub(crate) mod seminaive_join;
+pub(crate) use seminaive_join::SeminaiveJoinGenerator;
 
-pub mod plan_util;
+pub(crate) mod plan_util;
 
-pub mod negation;
+pub(crate) mod negation;
 
 mod aggregates;
 
-pub mod arithmetic;
+pub(crate) mod arithmetic;

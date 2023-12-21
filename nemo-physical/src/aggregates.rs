@@ -5,4 +5,4 @@
 //! Thus, any users of this module have to ensure they use the aggregate operations in a logically meaningful way.
 
 pub mod operation;
-pub mod processors;
+pub(crate) mod processors;

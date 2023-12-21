@@ -20,7 +20,7 @@ use super::plan_util::{atom_binding, compute_constraints, subplan_union};
 
 /// Generator for creating excution plans for seminaive joins of a fixed set of [`ChaseAtom`]s and [`Constraint`]s.
 #[derive(Debug)]
-pub struct SeminaiveJoinGenerator {
+pub(crate) struct SeminaiveJoinGenerator {
     /// logical types of the variables
     pub variable_types: HashMap<Variable, PrimitiveType>,
     /// the atoms to join

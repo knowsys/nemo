@@ -17,7 +17,7 @@ use super::{
 
 /// Object responsible for executing a "normal" rule.
 #[derive(Debug)]
-pub struct RuleExecution {
+pub(crate) struct RuleExecution {
     promising_variable_orders: Vec<VariableOrder>,
 
     body_strategy: Box<dyn BodyStrategy>,
@@ -26,7 +26,7 @@ pub struct RuleExecution {
 
 impl RuleExecution {
     /// Create new [`RuleExecution`].
-    pub fn initialize(rule: &ChaseRule, analysis: &RuleAnalysis) -> Self {
+    pub(crate) fn initialize(rule: &ChaseRule, analysis: &RuleAnalysis) -> Self {
         let body_strategy = Box::new(SeminaiveStrategy::initialize(rule, analysis));
         let head_strategy: Box<dyn HeadStrategy> = if analysis.is_existential {
             Box::new(RestrictedChaseStrategy::initialize(rule, analysis))
@@ -43,7 +43,7 @@ impl RuleExecution {
 
     /// Execute the current rule.
     /// Returns the predicates which received new elements.
-    pub fn execute(
+    pub(crate) fn execute(
         &self,
         table_manager: &mut TableManager,
         rule_info: &RuleInfo,

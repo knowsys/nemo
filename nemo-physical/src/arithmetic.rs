@@ -1,2 +1,2 @@
 pub mod expression;
-pub mod traits;
+pub(crate) mod traits;

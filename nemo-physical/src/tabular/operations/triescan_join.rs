@@ -16,11 +16,11 @@ use std::{collections::hash_map::Entry, fmt::Debug};
 
 /// Identifies a column from a vector of given relations by its relation index and column index.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct JoinColumnIndex {
+pub(crate) struct JoinColumnIndex {
     /// The index of the relation this column belons to.
-    pub relation: usize,
+    pub(crate) relation: usize,
     /// The index of this column within the relation.
-    pub column: usize,
+    pub(crate) column: usize,
 }
 
 /// Contains the information needed to compute a join over a list of relations.
@@ -41,7 +41,7 @@ impl JoinBindings {
     /// where `r = argument[i][j]` means that the jth column of relation i will be joined
     /// and contribute to the column r in the resulting table.
     /// Assumes that at least one table is joined.
-    pub fn new(relations: Vec<Vec<usize>>) -> Self {
+    pub(crate) fn new(relations: Vec<Vec<usize>>) -> Self {
         debug_assert!(!relations.is_empty());
 
         let num_relations = relations.len();
@@ -75,27 +75,27 @@ impl JoinBindings {
     }
 
     /// Return the number of relation that are joined.
-    pub fn num_relations(&self) -> usize {
+    pub(crate) fn num_relations(&self) -> usize {
         self.num_relations
     }
 
     /// Return the number of output columns in the resulting table.
-    pub fn num_output_columns(&self) -> usize {
+    pub(crate) fn num_output_columns(&self) -> usize {
         self.bindings.len()
     }
 
     /// Return whether a join is required on some given output column index
-    pub fn is_join_needed(&self, index: usize) -> bool {
+    pub(crate) fn is_join_needed(&self, index: usize) -> bool {
         self.bindings[index].len() > 1
     }
 
     /// For a given output column index an iterator of the indices of the input columns that need to be joined.
-    pub fn joined_columns(&self, index: usize) -> impl Iterator<Item = &JoinColumnIndex> {
+    pub(crate) fn joined_columns(&self, index: usize) -> impl Iterator<Item = &JoinColumnIndex> {
         self.bindings[index].iter()
     }
 
     /// Change the bindings such as to take into account a reordering of the output table.
-    pub fn apply_permutation(&mut self, permutation: &Permutation) {
+    pub(crate) fn apply_permutation(&mut self, permutation: &Permutation) {
         self.bindings = permutation.permute(&self.bindings);
     }
 

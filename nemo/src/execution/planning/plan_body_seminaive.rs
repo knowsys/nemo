@@ -21,7 +21,7 @@ use super::{
 
 /// Implementation of the semi-naive existential rule evaluation strategy.
 #[derive(Debug)]
-pub struct SeminaiveStrategy {
+pub(crate) struct SeminaiveStrategy {
     /// Variables still in use after aggregations have been performed.
     ///
     /// This includes normal variables in the head and variables that are used by arithmetic operations in the head.
@@ -36,7 +36,7 @@ pub struct SeminaiveStrategy {
 
 impl SeminaiveStrategy {
     /// Create new [`SeminaiveStrategy`] object.
-    pub fn initialize(rule: &ChaseRule, analysis: &RuleAnalysis) -> Self {
+    pub(crate) fn initialize(rule: &ChaseRule, analysis: &RuleAnalysis) -> Self {
         let constructors = rule.constructors().clone();
 
         let used_variables_before_arithmetic_operations =

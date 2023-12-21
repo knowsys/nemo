@@ -30,7 +30,7 @@ use super::{
 
 /// Strategy for the restricted chase.
 #[derive(Debug)]
-pub struct RestrictedChaseStrategy {
+pub(crate) struct RestrictedChaseStrategy {
     join_generator: SeminaiveJoinGenerator,
 
     predicate_to_instructions: HashMap<Identifier, Vec<HeadInstruction>>,
@@ -46,7 +46,7 @@ pub struct RestrictedChaseStrategy {
 
 impl RestrictedChaseStrategy {
     /// Create a new [`RestrictedChaseStrategy`] object.
-    pub fn initialize(rule: &ChaseRule, analysis: &RuleAnalysis) -> Self {
+    pub(crate) fn initialize(rule: &ChaseRule, analysis: &RuleAnalysis) -> Self {
         let mut predicate_to_instructions = HashMap::<Identifier, Vec<HeadInstruction>>::new();
         let mut predicate_to_full_existential = HashMap::<Identifier, bool>::new();
 

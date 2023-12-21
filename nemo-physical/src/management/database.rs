@@ -52,7 +52,7 @@ pub type Dict = crate::dictionary::meta_dv_dict::MetaDictionary;
 /// that is needed to get from the original column order to this one.
 pub type ColumnOrder = Permutation;
 
-/// Type which represents table id.
+/// Type which represents the id of a table.
 #[derive(Debug, Default, Copy, Clone, Eq, PartialEq, Hash)]
 pub struct TableId(u64);
 
@@ -77,7 +77,7 @@ impl TableId {
     }
 }
 
-/// Indicates the file format of a table stored on disc.
+/// Indicates the file format of a table stored on disk.
 #[derive(Debug)]
 pub enum TableSource {
     /// Table read by any reader implementation
@@ -100,7 +100,7 @@ impl Display for TableSource {
 
 /// Data which stores a trie, possibly not in memory.
 #[derive(Debug)]
-pub enum TableStorage {
+enum TableStorage {
     /// Table is stored as a [`Trie`] in memory.
     InMemory(Trie),
     /// Table is stored on disk.
@@ -157,7 +157,7 @@ impl TableStorage {
     }
 
     /// Function that makes sure that underlying table is available in memory.
-    pub fn into_memory<'a>(
+    fn into_memory<'a>(
         &'a mut self,
         dict: &mut RefCell<Dict>,
     ) -> Result<&'a Trie, ReadingError> {
@@ -196,7 +196,7 @@ impl TableStorage {
 
     /// Return a reference to the stored trie.
     /// Returns `None` if trie is not in memory.
-    pub fn get_trie(&self) -> Option<&Trie> {
+    fn get_trie(&self) -> Option<&Trie> {
         if let TableStorage::InMemory(trie) = self {
             Some(trie)
         } else {
@@ -248,7 +248,7 @@ impl ByteSized for TableStatus {
 /// Manages tables under different orders.
 /// Also has the capability of representing a table as a reordered version of another.
 #[derive(Debug, Default)]
-pub struct OrderedReferenceManager {
+struct OrderedReferenceManager {
     map: HashMap<TableId, TableStatus>,
 }
 
@@ -311,7 +311,7 @@ impl OrderedReferenceManager {
     }
 
     /// Add a new table (that is not a reference).
-    pub fn add_present(&mut self, id: TableId, order: ColumnOrder, storage: TableStorage) {
+    fn add_present(&mut self, id: TableId, order: ColumnOrder, storage: TableStorage) {
         if let Some(resolved) = self.resolve_reference_mut(id, &order) {
             resolved.map.insert(resolved.order, storage);
         } else {
@@ -325,7 +325,7 @@ impl OrderedReferenceManager {
 
     /// Add a new reference to another table.
     /// Panics if the id of the referenced table does not exist.
-    pub fn add_reference(&mut self, id: TableId, reference_id: TableId, permutation: Permutation) {
+    fn add_reference(&mut self, id: TableId, reference_id: TableId, permutation: Permutation) {
         let (final_id, final_permutation) = if let TableStatus::Reference(ref_id, ref_permutation) =
             &self
                 .map
@@ -343,7 +343,7 @@ impl OrderedReferenceManager {
 
     /// Return a reference to the [`TableStorage`] associated with the given [`TableId`] and [`ColumnOrder`].
     /// Returns `None` if there is no table with that id or order.
-    pub fn table_storage<'a>(
+    fn table_storage<'a>(
         &'a self,
         id: TableId,
         order: &ColumnOrder,
@@ -354,7 +354,7 @@ impl OrderedReferenceManager {
 
     /// Return a mutable reference to the [`TableStorage`] associated with the given [`TableId`] and [`ColumnOrder`].
     /// Returns `None` if there is no table with that id or order.
-    pub fn table_storage_mut<'a>(
+    fn table_storage_mut<'a>(
         &'a mut self,
         id: TableId,
         order: &ColumnOrder,
@@ -365,7 +365,7 @@ impl OrderedReferenceManager {
 
     /// Return an iterator of all the available orders of a table.
     /// Returns `None` if there is no table with the given id.
-    pub fn available_orders(&self, id: TableId) -> Option<Vec<ColumnOrder>> {
+    fn available_orders(&self, id: TableId) -> Option<Vec<ColumnOrder>> {
         let resolved = self.resolve_reference(id, &ColumnOrder::default())?;
         Some(
             resolved
@@ -378,8 +378,9 @@ impl OrderedReferenceManager {
 
     /// Delete the given table.
     /// Return `None` if there is no table with the given id.
+    ///
     /// TODO: This does not check/fix references of tables.
-    pub fn delete_table(&mut self, id: &TableId) -> Option<()> {
+    fn delete_table(&mut self, id: &TableId) -> Option<()> {
         self.map.remove(id)?;
         Some(())
     }
@@ -387,7 +388,7 @@ impl OrderedReferenceManager {
     /// Return the number of rows contained in this table.
     ///
     /// TODO: Currently only counting of in-memory facts is supported, see <https://github.com/knowsys/nemo/issues/335>
-    pub fn count_rows(&self, id: &TableId) -> usize {
+    fn count_rows(&self, id: &TableId) -> usize {
         if let Some(resolved) = self.resolve_reference(*id, &ColumnOrder::default()) {
             // TODO: Technically we should be able to somehow count non-inmemory tables, see <https://github.com/knowsys/nemo/issues/335>
             // But this is not relevant for now
@@ -419,14 +420,14 @@ impl ByteSized for OrderedReferenceManager {
 #[derive(Debug)]
 struct TableInfo {
     /// The name of the table.
-    pub name: String,
+    name: String,
     /// The schema of the table
-    pub schema: TableSchema,
+    schema: TableSchema,
 }
 
 impl TableInfo {
     /// Create new [`TableInfo`].
-    pub fn new(name: String, schema: TableSchema) -> Self {
+    fn new(name: String, schema: TableSchema) -> Self {
         Self { name, schema }
     }
 }
@@ -441,7 +442,7 @@ pub struct DatabaseInstance {
 
     /// Dictionary that represents the general mapping between datavalues and integer ids
     /// used in all tables of this database
-    dict_constants: RefCell<Dict>,
+    dict: RefCell<Dict>,
 
     /// Lowest unused null value.
     current_null: u64,
@@ -475,7 +476,7 @@ impl DatabaseInstance {
         Self {
             storage_handler: OrderedReferenceManager::default(),
             table_infos: HashMap::new(),
-            dict_constants: RefCell::new(Dict::default()),
+            dict: RefCell::new(Dict::default()),
             current_null,
             current_id: TableId::default(),
         }
@@ -512,8 +513,8 @@ impl DatabaseInstance {
     }
 
     /// Returns a reference to the dictionary used for associating abstract constants with strings.
-    pub fn get_dict_constants(&self) -> Ref<'_, Dict> {
-        self.dict_constants.borrow()
+    pub fn dict(&self) -> Ref<'_, Dict> {
+        self.dict.borrow()
     }
 
     /// Register a new table under a given name and schema.
@@ -526,7 +527,7 @@ impl DatabaseInstance {
     }
 
     /// Add a new trie.
-    pub fn add_trie(&mut self, id: TableId, order: ColumnOrder, trie: Trie) {
+    fn add_trie(&mut self, id: TableId, order: ColumnOrder, trie: Trie) {
         self.storage_handler
             .add_present(id, order, TableStorage::InMemory(trie));
     }
@@ -661,7 +662,7 @@ impl DatabaseInstance {
             .storage_handler
             .table_storage_mut(id, &closest_order.clone())
             .expect("Call to search_closest_ordered should give us an existing order")
-            .into_memory(&mut self.dict_constants)?;
+            .into_memory(&mut self.dict)?;
 
         if !reorder.is_identity() {
             TimedCode::instance()
@@ -1031,7 +1032,7 @@ impl DatabaseInstance {
         self.storage_handler
             .table_storage_mut(id, order)
             .expect("Function assumes that there is a table with the given id and order.")
-            .into_memory(&mut self.dict_constants)
+            .into_memory(&mut self.dict)
     }
 
     /// Returns an iterator over the specified table.
@@ -1055,7 +1056,7 @@ impl DatabaseInstance {
 
         let _ = self.get_trie_or_load(id, &ColumnOrder::default())?;
         let schema = self.table_schema(id);
-        let dict = self.get_dict_constants();
+        let dict = self.dict();
 
         Ok(OwnedRecords(
             self.get_trie_order(id, &ColumnOrder::default())
@@ -1083,7 +1084,7 @@ impl DatabaseInstance {
             ($variant:ident, $iter:ident, $name:ident) => {
                 if name == DataTypeName::String {
                     // should only clone the ref and not the dict (hopefully)
-                    let dict_ref_clone = Ref::clone(&self.get_dict_constants());
+                    let dict_ref_clone = Ref::clone(&self.dict());
                     DataValueIteratorT::String(Box::new($iter.map(move |constant| {
                         serialize_constant_with_dict(constant, Ref::clone(&dict_ref_clone))
                     })))
@@ -1119,7 +1120,7 @@ impl DatabaseInstance {
             T: TryInto<usize> + Display + 'b,
         {
             // should only clone the ref and not the dict (hopefully)
-            let dict_ref_clone = Ref::clone(&db.get_dict_constants());
+            let dict_ref_clone = Ref::clone(&db.dict());
             AnyDataValueIterator(Box::new(iter.map(move |id| {
                 if let Some(dv) = id.try_into()
                 .ok()
@@ -1340,7 +1341,7 @@ impl DatabaseInstance {
 
                 if let Some(subiterator) = subiterator_opt {
                     let restrict_scan = TrieScanRestrictValues::new(
-                        &mut self.dict_constants.borrow_mut(),
+                        &mut self.dict.borrow_mut(),
                         subiterator,
                         conditions,
                     );
@@ -1373,7 +1374,7 @@ impl DatabaseInstance {
 
                 if let Some(subiterator) = subiterator_opt {
                     let append_scan = TrieScanAppend::new(
-                        &mut self.dict_constants.borrow_mut(),
+                        &mut self.dict.borrow_mut(),
                         subiterator,
                         instructions,
                         target_types.get_storage_types(),

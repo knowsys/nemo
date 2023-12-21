@@ -25,14 +25,14 @@ use super::{
 
 /// Strategy for computing the results for a datalog (non-existential) rule.
 #[derive(Debug)]
-pub struct DatalogStrategy {
+pub(crate) struct DatalogStrategy {
     predicate_to_atoms: HashMap<Identifier, Vec<HeadInstruction>>,
     num_body_variables: usize,
 }
 
 impl DatalogStrategy {
     /// Create a new [`DatalogStrategy`] object.
-    pub fn initialize(rule: &ChaseRule, analysis: &RuleAnalysis) -> Self {
+    pub(crate) fn initialize(rule: &ChaseRule, analysis: &RuleAnalysis) -> Self {
         let mut predicate_to_atoms = HashMap::<Identifier, Vec<HeadInstruction>>::new();
 
         for head_atom in rule.head() {

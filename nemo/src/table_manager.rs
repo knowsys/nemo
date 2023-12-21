@@ -340,7 +340,7 @@ impl std::fmt::Display for MemoryUsage {
 /// Manager object for handling tables that are the result
 /// of a seminaive existential rules evaluation process.
 #[derive(Debug)]
-pub struct TableManager {
+pub(crate) struct TableManager {
     /// [`DatabaseInstance`] managing all existing tables.
     database: DatabaseInstance,
 
@@ -359,7 +359,7 @@ impl Default for TableManager {
 
 impl TableManager {
     /// Create new [`TableManager`].
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             database: DatabaseInstance::new(),
             predicate_subtables: HashMap::new(),
@@ -368,7 +368,7 @@ impl TableManager {
     }
 
     /// Return a reference to the underlying [`DatabaseInstance`].
-    pub fn database(&self) -> &DatabaseInstance {
+    pub(crate) fn database(&self) -> &DatabaseInstance {
         &self.database
     }
 
@@ -382,27 +382,27 @@ impl TableManager {
 
     /// Return the step number of the last subtable that was added under a predicate.
     /// Returns `None` if the predicate has no subtables.
-    pub fn last_step(&self, predicate: &Identifier) -> Option<usize> {
+    pub(crate) fn last_step(&self, predicate: &Identifier) -> Option<usize> {
         self.predicate_subtables.get(predicate)?.last_step()
     }
 
     /// Count all the rows in the table manager that belong to a predicate.
     ///
     /// TODO: Currently only counting of in-memory facts is supported, see <https://github.com/knowsys/nemo/issues/335>
-    pub fn predicate_count_rows(&self, predicate: &Identifier) -> Option<usize> {
+    pub(crate) fn predicate_count_rows(&self, predicate: &Identifier) -> Option<usize> {
         self.predicate_subtables
             .get(predicate)
             .map(|s| s.count_rows(&self.database))
     }
 
     /// Get a list of column iterators for the full table (i.e. the expanded trie)
-    pub fn table_column_iters(&mut self, id: TableId) -> Result<Vec<AnyDataValueIterator>, Error> {
+    pub(crate) fn table_column_iters(&mut self, id: TableId) -> Result<Vec<AnyDataValueIterator>, Error> {
         Ok(self.database.get_table_column_iterators(id)?)
     }
 
     /// Combine all subtables of a predicate into one table
     /// and return the [`TableId`] of that new table.
-    pub fn combine_predicate(&mut self, predicate: &Identifier) -> Result<Option<TableId>, Error> {
+    pub(crate) fn combine_predicate(&mut self, predicate: &Identifier) -> Result<Option<TableId>, Error> {
         match self.last_step(predicate) {
             Some(last_step) => self.combine_tables(predicate, 0..(last_step + 1)),
             None => Ok(None),
@@ -410,7 +410,7 @@ impl TableManager {
     }
 
     /// Generates an appropriate table name for subtable.
-    pub fn generate_table_name(
+    pub(crate) fn generate_table_name(
         &self,
         predicate: &Identifier,
         order: &ColumnOrder,
@@ -454,7 +454,7 @@ impl TableManager {
 
     /// Intitializes helper structures that are needed for handling the table associated with the predicate.
     /// Must be done before calling functions that add tables to that predicate.
-    pub fn register_predicate(&mut self, predicate: Identifier, types: Vec<PrimitiveType>) {
+    pub(crate) fn register_predicate(&mut self, predicate: Identifier, types: Vec<PrimitiveType>) {
         let predicate_info = PredicateInfo {
             schema: TableSchema::from_vec(types.iter().copied().map(Into::into).collect()),
         };
@@ -466,7 +466,7 @@ impl TableManager {
     }
 
     /// Check whether a predicate has been registered.
-    pub fn predicate_exists(&self, predicate: &Identifier) -> bool {
+    fn predicate_exists(&self, predicate: &Identifier) -> bool {
         self.predicate_subtables.get(predicate).is_some()
     }
 
@@ -481,7 +481,7 @@ impl TableManager {
 
     /// Add a table that represents the input facts for some predicate for the chase procedure.
     /// Predicate must be registered before calling this function.
-    pub fn add_edb(&mut self, predicate: Identifier, sources: Vec<TableSource>) {
+    pub(crate) fn add_edb(&mut self, predicate: Identifier, sources: Vec<TableSource>) {
         let edb_order = ColumnOrder::default();
         const EDB_STEP: usize = 0;
 
@@ -501,7 +501,7 @@ impl TableManager {
 
     /// Add a [`Trie`] as a subtable of a predicate.
     /// Predicate must be registered before calling this function.
-    pub fn add_table(
+    fn add_table(
         &mut self,
         predicate: Identifier,
         step: usize,
@@ -522,7 +522,7 @@ impl TableManager {
 
     /// Add a reference to another table under a new name.
     /// Predicate must be registered before calling this function and referenced table must exist.
-    pub fn add_reference(
+    fn add_reference(
         &mut self,
         subtable: SubtableIdentifier,
         referenced_subtable: SubtableIdentifier,
@@ -617,7 +617,7 @@ impl TableManager {
 
     /// Returns a reference to the constants dictionary
     pub fn get_dict(&self) -> Ref<'_, Dict> {
-        self.database.get_dict_constants()
+        self.database.dict()
     }
 
     /// Return the current [`MemoryUsage`].

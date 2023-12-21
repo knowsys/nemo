@@ -12,7 +12,7 @@ use crate::{
 use std::fmt::Debug;
 
 /// Strategies for calculating all matches for a rule application.
-pub trait BodyStrategy: Debug {
+pub(crate) trait BodyStrategy: Debug {
     /// Calculate the concrete plan given a variable order.
     /// Returns the root node of the tree that represents the calculation for the body.
     /// Updates the variable order according to changes by e.g. aggregates and arithmetic operations.
