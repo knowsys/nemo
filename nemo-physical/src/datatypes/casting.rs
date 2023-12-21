@@ -1,6 +1,6 @@
 use std::cmp::Ordering;
 
-use super::{DataTypeName, Double, Float, StorageTypeName};
+use super::{DataTypeName, Double, Float};
 
 /// Implicitlly castable values are those which essentially use the same number representation format
 /// but where the range of representable values of one is a subset of the range of values of the other.
@@ -277,43 +277,43 @@ implicit_cast_incompatible!(isize, Double);
 
 implicit_cast_incompatible!(Float, Double);
 
-/// Represents which storage types can be implicitly cast into another.
-/// E.g. U32 <= U64.
-impl PartialOrd for StorageTypeName {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        match self {
-            Self::Id32 => match other {
-                Self::Id32 => Some(Ordering::Equal),
-                Self::Id64 => Some(Ordering::Less),
-                Self::Int64 => Some(Ordering::Less),
-                Self::Float => None,
-                Self::Double => None,
-            },
-            Self::Id64 => match other {
-                Self::Id32 => Some(Ordering::Greater),
-                Self::Id64 => Some(Ordering::Equal),
-                Self::Int64 => None,
-                Self::Float => None,
-                Self::Double => None,
-            },
-            Self::Int64 => match other {
-                Self::Id32 => Some(Ordering::Greater),
-                Self::Id64 => None,
-                Self::Int64 => Some(Ordering::Equal),
-                Self::Float => None,
-                Self::Double => None,
-            },
-            Self::Float => match other {
-                Self::Float => Some(Ordering::Equal),
-                _ => None,
-            },
-            Self::Double => match other {
-                Self::Double => Some(Ordering::Equal),
-                _ => None,
-            },
-        }
-    }
-}
+// /// Represents which storage types can be implicitly cast into another.
+// /// E.g. U32 <= U64.
+// impl PartialOrd for StorageTypeName {
+//     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+//         match self {
+//             Self::Id32 => match other {
+//                 Self::Id32 => Some(Ordering::Equal),
+//                 Self::Id64 => Some(Ordering::Less),
+//                 Self::Int64 => Some(Ordering::Less),
+//                 Self::Float => None,
+//                 Self::Double => None,
+//             },
+//             Self::Id64 => match other {
+//                 Self::Id32 => Some(Ordering::Greater),
+//                 Self::Id64 => Some(Ordering::Equal),
+//                 Self::Int64 => None,
+//                 Self::Float => None,
+//                 Self::Double => None,
+//             },
+//             Self::Int64 => match other {
+//                 Self::Id32 => Some(Ordering::Greater),
+//                 Self::Id64 => None,
+//                 Self::Int64 => Some(Ordering::Equal),
+//                 Self::Float => None,
+//                 Self::Double => None,
+//             },
+//             Self::Float => match other {
+//                 Self::Float => Some(Ordering::Equal),
+//                 _ => None,
+//             },
+//             Self::Double => match other {
+//                 Self::Double => Some(Ordering::Equal),
+//                 _ => None,
+//             },
+//         }
+//     }
+// }
 
 /// Represents which data types can be implicitly cast into another.
 /// E.g. U32 <= U64.

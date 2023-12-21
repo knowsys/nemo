@@ -1,5 +1,5 @@
 use super::run_length_encodable::FloatingStep;
-use super::{FloatIsNaN, FloorToUsize, RunLengthEncodable};
+use super::{Double, FloatIsNaN, FloorToUsize, RunLengthEncodable};
 use crate::arithmetic::traits::{CheckedPow, CheckedSquareRoot};
 use crate::error::Error;
 use num::traits::CheckedNeg;
@@ -22,7 +22,7 @@ impl Float {
     ///
     /// # Errors
     /// The given `value` is [`f32::NAN`].
-    pub fn new(value: f32) -> Result<Float, Error> {
+    pub fn new(value: f32) -> Result<Self, Error> {
         if value.is_nan() {
             return Err(Error::ReadingError(FloatIsNaN.into()));
         }
@@ -34,7 +34,7 @@ impl Float {
     ///
     /// # Panics
     /// The given `value` is [`f32::NAN`].
-    pub fn from_number(value: f32) -> Float {
+    pub fn from_number(value: f32) -> Self {
         if value.is_nan() {
             panic!("The provided value is not a number (NaN)!")
         }
@@ -42,13 +42,58 @@ impl Float {
         Float(value)
     }
 
-    /// Returns a [`Float`] if `value` is finite and `None` otherwise.
-    fn finite(value: f32) -> Option<Float> {
-        if !value.is_finite() {
-            return None;
+    /// Return this value as an [i64], provided that
+    /// this is a finite number without any fractional part
+    /// that can fit into an [i64].
+    ///
+    /// Returns `None` otherwise.
+    pub fn as_i64(&self) -> Option<i64> {
+        if self.0.round() == self.0 {
+            #[allow(clippy::cast_possible_truncation)]
+            Some(self.0 as i64)
+        } else {
+            None
         }
+    }
 
-        Float::new(value).ok()
+    /// Create a [Float] from a [i64].
+    pub fn from_i64(value: i64) -> Option<Float> {
+        Float::new(value as f32).ok()
+    }
+
+    /// Create a [Float] from a [u64].
+    pub fn from_u64(value: u64) -> Option<Float> {
+        Float::new(value as f32).ok()
+    }
+
+    /// Converts this value into [Double].
+    pub fn as_double(&self) -> Option<Double> {
+        Double::new(f64::try_from(self.0).ok()?).ok()
+    }
+
+    /// Computes the absolute value.
+    pub fn abs(self) -> Self {
+        Float::new(self.0.abs()).expect("Taking the absolute value cannot result in NaN")
+    }
+
+    /// Returns the logarithm of the number with respect to an arbitrary base.
+    pub fn log(self, base: Self) -> Option<Self> {
+        Float::new(self.0.log(base.0)).ok()
+    }
+
+    /// Computes the sine of a number (in radians).
+    pub fn sin(self) -> Self {
+        Float::new(self.0.sin()).expect("Operation does not result in NaN")
+    }
+
+    /// Computes the cosine of a number (in radians).
+    pub fn cos(self) -> Self {
+        Float::new(self.0.cos()).expect("Operation does not result in NaN")
+    }
+
+    /// Computes the tangent of a number (in radians).
+    pub fn tan(self) -> Self {
+        Float::new(self.0.tan()).expect("Operation does not result in NaN")
     }
 }
 
@@ -194,43 +239,43 @@ impl Product for Float {
 
 impl CheckedAdd for Float {
     fn checked_add(&self, v: &Self) -> Option<Self> {
-        Float::finite(self.0 + v.0)
+        Float::new(self.0 + v.0).ok()
     }
 }
 
 impl CheckedSub for Float {
     fn checked_sub(&self, v: &Self) -> Option<Self> {
-        Float::finite(self.0 - v.0)
+        Float::new(self.0 - v.0).ok()
     }
 }
 
 impl CheckedDiv for Float {
     fn checked_div(&self, v: &Self) -> Option<Self> {
-        Float::finite(self.0 / v.0)
+        Float::new(self.0 / v.0).ok()
     }
 }
 
 impl CheckedMul for Float {
     fn checked_mul(&self, v: &Self) -> Option<Self> {
-        Float::finite(self.0 * v.0)
+        Float::new(self.0 * v.0).ok()
     }
 }
 
 impl CheckedNeg for Float {
     fn checked_neg(&self) -> Option<Self> {
-        Float::finite(-1.0 * self.0)
+        Float::new(-1.0 * self.0).ok()
     }
 }
 
 impl CheckedSquareRoot for Float {
     fn checked_sqrt(self) -> Option<Self> {
-        Float::finite(self.0.checked_sqrt()?)
+        Float::new(self.0.checked_sqrt()?).ok()
     }
 }
 
 impl CheckedPow for Float {
     fn checked_pow(self, exponent: Self) -> Option<Self> {
-        Float::finite(self.0.checked_pow(exponent.0)?)
+        Float::new(self.0.checked_pow(exponent.0)?).ok()
     }
 }
 

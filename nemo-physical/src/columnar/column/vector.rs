@@ -1,3 +1,5 @@
+//! This module defines [ColumnVector] and [ColumnScanVector].
+
 use std::{
     fmt::Debug,
     mem::size_of,
@@ -6,10 +8,9 @@ use std::{
 
 use bytesize::ByteSize;
 
-use crate::{
-    columnar::traits::{column::Column, columnscan::ColumnScan},
-    management::ByteSized,
-};
+use crate::{columnar::columnscan::ColumnScan, management::ByteSized};
+
+use super::Column;
 
 /// Simple implementation of [`Column`] that uses Vec to store data.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -211,8 +212,9 @@ where
 
 #[cfg(test)]
 mod test {
+    use crate::columnar::{column::Column, columnscan::ColumnScan};
+
     use super::{ColumnScanVector, ColumnVector};
-    use crate::columnar::traits::{column::Column, columnscan::ColumnScan};
     use test_log::test;
 
     fn get_test_column() -> ColumnVector<u64> {

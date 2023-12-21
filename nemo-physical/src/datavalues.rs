@@ -13,6 +13,7 @@ pub use integer_datavalues::LongDataValue;
 pub use integer_datavalues::UnsignedLongDataValue;
 /// Module to define [DataValue] implementations for values that can be represented as floating point numbers.
 pub mod float_datavalues;
+pub use float_datavalues::FloatDataValue;
 pub use float_datavalues::DoubleDataValue;
 /// Module to define [DataValue] implementations for values that can be represented as Unicode strings.
 pub mod string_datavalue;
@@ -30,3 +31,6 @@ pub use other_datavalue::OtherDataValue;
 pub mod any_datavalue;
 pub use any_datavalue::AnyDataValue;
 pub use any_datavalue::AnyDataValueIterator;
+/// Module to define [DataValue] implementation for boolean values.
+pub mod boolean;
+pub use boolean::BooleanDataValue;

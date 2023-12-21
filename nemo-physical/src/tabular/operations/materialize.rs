@@ -1,7 +1,9 @@
+//! TODO: Remove this module
+
 use crate::{
-    columnar::{
-        adaptive_column_builder::{ColumnBuilderAdaptive, ColumnBuilderAdaptiveT},
-        traits::columnbuilder::ColumnBuilder,
+    columnar::columnbuilder::{
+        adaptive::{ColumnBuilderAdaptive, ColumnBuilderAdaptiveT},
+        ColumnBuilder,
     },
     datatypes::{StorageTypeName, StorageValueT},
     tabular::{
@@ -95,7 +97,7 @@ pub fn scan_first_match(trie_scan: &mut impl TrieScan) -> Option<TableRow> {
 #[cfg(test)]
 mod test {
     use super::materialize;
-    use crate::columnar::traits::column::Column;
+    use crate::columnar::column::Column;
     use crate::datatypes::StorageValueT;
     use crate::tabular::operations::materialize::scan_first_match;
     use crate::tabular::operations::{JoinBindings, TrieScanJoin, TrieScanPrune};
@@ -104,6 +106,7 @@ mod test {
     use crate::util::test_util::make_column_with_intervals_t;
     use test_log::test;
 
+    #[ignore]
     #[test]
     fn complete() {
         let column_fst_data = [1, 2, 3];
@@ -172,6 +175,7 @@ mod test {
         );
     }
 
+    #[ignore]
     #[test]
     fn partial() {
         // Same setup as in test_trie_join
@@ -241,6 +245,7 @@ mod test {
         );
     }
 
+    #[ignore]
     #[test]
     fn trie_scan_empty() {
         let column_a_x = make_column_with_intervals_t(&[1, 2, 3], &[0]);

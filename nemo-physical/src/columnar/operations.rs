@@ -1,4 +1,7 @@
-//! This module collects operations over columns
+//! This module collects all the operations on columns
+
+pub mod constant;
+pub mod filter;
 
 /// Module for defining [`ColumnScanJoin`]
 pub mod columnscan_join;

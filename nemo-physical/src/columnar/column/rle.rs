@@ -1,139 +1,22 @@
+//! This module defines [ColumnRle] and [ColumnScanRle].
+
+use std::{fmt::Debug, mem::size_of, num::NonZeroUsize, ops::Range};
+
+use bytesize::ByteSize;
+
 use crate::{
-    columnar::traits::{column::Column, columnbuilder::ColumnBuilder, columnscan::ColumnScan},
+    columnar::{
+        columnbuilder::{
+            rle::{ColumnBuilderRle, RleElement},
+            ColumnBuilder,
+        },
+        columnscan::ColumnScan,
+    },
     datatypes::{ColumnDataType, RunLengthEncodable},
     management::ByteSized,
 };
-use bytesize::ByteSize;
-use std::{fmt::Debug, mem::size_of, num::NonZeroUsize, ops::Range};
 
-#[derive(Debug, PartialEq)]
-struct RleElement<T: RunLengthEncodable> {
-    value: T,
-    length: NonZeroUsize,
-    increment: T::Step,
-}
-
-/// Implementation of [`ColumnBuilder`] that allows the use of incremental run length encoding.
-#[derive(Debug, Default, PartialEq)]
-pub struct ColumnBuilderRle<T: RunLengthEncodable> {
-    elements: Vec<RleElement<T>>,
-    previous_value_opt: Option<T>,
-    count: usize,
-}
-
-impl<T> ColumnBuilderRle<T>
-where
-    T: ColumnDataType + Default,
-{
-    /// Constructor.
-    pub fn new() -> ColumnBuilderRle<T> {
-        ColumnBuilderRle {
-            elements: Vec::new(),
-            previous_value_opt: None,
-            count: 0,
-        }
-    }
-
-    /// Adds an repeated value into the currently built column.
-    pub fn add_repeated_value(&mut self, value: T, length: usize) {
-        for _ in 0..length {
-            self.add(value);
-        }
-    }
-}
-
-impl<T> ColumnBuilderRle<T>
-where
-    T: ColumnDataType + Default,
-{
-    /// Get the average length of RleElements to get a feeling for how much memory the encoding will take.
-    pub fn avg_length_of_rle_elements(&self) -> usize {
-        if self.elements.is_empty() {
-            return 0;
-        }
-
-        self.count / self.elements.len()
-    }
-
-    /// Get number of RleElements in builder.
-    pub fn number_of_rle_elements(&self) -> usize {
-        self.elements.len()
-    }
-
-    fn finalize_raw(self) -> ColumnRle<T> {
-        ColumnRle::from_rle_elements(self.elements)
-    }
-}
-
-impl<'a, T> ColumnBuilder<'a, T> for ColumnBuilderRle<T>
-where
-    T: 'a + ColumnDataType + Default,
-{
-    type Col = ColumnRle<T>;
-
-    fn add(&mut self, value: T) {
-        self.count += 1;
-        let current_value = value;
-
-        if self.elements.is_empty() {
-            self.elements.push(RleElement {
-                value: current_value,
-                length: NonZeroUsize::new(1).expect("1 is non-zero"),
-                increment: T::zero_step(),
-            });
-
-            self.previous_value_opt = Some(current_value);
-
-            return;
-        }
-
-        let previous_value = self
-            .previous_value_opt
-            .expect("if the elements are not empty, then there is also a previous value");
-        let last_element = self
-            .elements
-            .last_mut()
-            .expect("if the elements are not empty, then there is a last one");
-        let current_increment = T::diff_step(previous_value, current_value);
-
-        match current_increment {
-            Some(cur_inc) => {
-                if last_element.length == NonZeroUsize::new(1).expect("1 is non-zero") {
-                    last_element.length = NonZeroUsize::new(2).expect("2 is non-zero");
-                    last_element.increment = cur_inc;
-                } else if last_element.increment == cur_inc {
-                    let last_length = last_element.length.get();
-
-                    last_element.length =
-                        NonZeroUsize::new(last_length + 1).expect("usize + 1 is non-zero");
-                } else {
-                    self.elements.push(RleElement {
-                        value: current_value,
-                        length: NonZeroUsize::new(1).expect("1 is non-zero"),
-                        increment: T::zero_step(),
-                    });
-                }
-            }
-            None => {
-                self.elements.push(RleElement {
-                    value: current_value,
-                    length: NonZeroUsize::new(1).expect("1 is non-zero"),
-                    increment: T::zero_step(),
-                });
-            }
-        }
-
-        self.previous_value_opt = Some(current_value);
-    }
-
-    fn finalize(self) -> Self::Col {
-        self.finalize_raw()
-    }
-
-    fn count(&self) -> usize {
-        self.count
-    }
-}
+use super::Column;
 
 /// Implementation of [`Column`] that allows the use of incremental run length encoding.
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -148,7 +31,7 @@ where
     T: ColumnDataType + Default,
 {
     /// Constructs a new ColumnRle from a vector of RleElements.
-    fn from_rle_elements(elements: Vec<RleElement<T>>) -> ColumnRle<T> {
+    pub(crate) fn from_rle_elements(elements: Vec<RleElement<T>>) -> ColumnRle<T> {
         let mut values: Vec<T> = vec![];
         let mut end_indices: Vec<NonZeroUsize> = vec![];
         let mut increments: Vec<T::Step> = vec![];
@@ -182,7 +65,7 @@ where
             builder.add(value);
         }
 
-        builder.finalize_raw()
+        builder.finalize()
     }
 
     /// Construct a new [`ColumnRle`] consisting of one value that is repeated a given number of times.
@@ -562,10 +445,9 @@ where
 
 #[cfg(test)]
 mod test {
-    use crate::{
-        columnar::traits::{column::Column, columnscan::ColumnScan},
-        datatypes::{Double, Float, RunLengthEncodable},
-    };
+    use crate::columnar::column::Column;
+    use crate::columnar::columnscan::ColumnScan;
+    use crate::datatypes::{Double, Float, RunLengthEncodable};
     use quickcheck_macros::quickcheck;
     use std::iter::repeat;
     use std::num::NonZeroUsize;

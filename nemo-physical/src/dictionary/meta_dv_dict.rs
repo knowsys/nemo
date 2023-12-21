@@ -198,8 +198,8 @@ type DictId = usize;
 const NO_DICT: DictId = usize::MAX;
 
 /// A dictionary that combines several other dictionaries.
-/// The design integrates specific optimized dictoinaries that support specific content types,
-/// but it is also designed with the possibility of external read-only disctionaries in mind,
+/// The design integrates specific optimized dictionaries that support specific content types,
+/// but it is also designed with the possibility of external read-only dictionaries in mind,
 /// as they might occur when loading pre-indexed data from external sources.
 #[derive(Debug)]
 pub struct MetaDictionary {

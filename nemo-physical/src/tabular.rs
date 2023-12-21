@@ -3,3 +3,7 @@
 pub mod operations;
 pub mod table_types;
 pub mod traits;
+pub mod trie;
+pub mod triescan;
+
+pub(crate) mod buffer;

@@ -128,12 +128,10 @@ impl DataValue for LongDataValue {
             } else {
                 return ValueDomain::NonNegativeLong;
             }
+        } else if self.0 >= I32MIN_AS_I64 {
+            return ValueDomain::Int;
         } else {
-            if self.0 >= I32MIN_AS_I64 {
-                return ValueDomain::Int;
-            } else {
-                return ValueDomain::Long;
-            }
+            return ValueDomain::Long;
         }
     }
 

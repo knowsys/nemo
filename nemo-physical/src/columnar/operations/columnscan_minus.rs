@@ -1,7 +1,9 @@
-use super::super::traits::columnscan::{ColumnScan, ColumnScanCell};
+use std::{fmt::Debug, ops::Range};
+
+use bitvec::{bitvec, vec::BitVec};
+
+use crate::columnar::columnscan::{ColumnScan, ColumnScanCell};
 use crate::datatypes::ColumnDataType;
-use std::fmt::Debug;
-use std::ops::Range;
 
 /// [`ColumnScan`] consisting of two sub scans (named main and follower)
 /// such that if main advances the follower seeks main's new value
@@ -233,16 +235,15 @@ where
     /// values from `scans_follower[i]` are subtracted from `scan_main`
     /// if i appears in this vector.
     subtract_indices: Vec<usize>,
-
     /// Vector of indices in `scans_follower` of column scans
     /// which should just "follow" the main column scan without influencing its values.
     follow_indices: Vec<usize>,
 
     /// Whether the ith follow scan points to the same value as `scan_main`.
-    equal_values: Vec<bool>,
+    equal_values: BitVec,
 
     /// `enabled[i] == false` means to skip the ith follow scan.
-    enabled: Vec<bool>,
+    active_scans: BitVec,
 
     /// Current value of this scan.
     current_value: Option<T>,
@@ -275,35 +276,35 @@ where
             scans_follower,
             subtract_indices,
             follow_indices,
-            equal_values: vec![true; follower_count],
-            enabled: vec![true; follower_count],
+            equal_values: bitvec![1; follower_count],
+            active_scans: bitvec![1; follower_count],
             current_value: None,
         }
     }
 
     /// Return a vector where the ith value indicates
     /// whether the ith "follow" scan points to the same value as the main scan.
-    pub fn equal_values(&self) -> &Vec<bool> {
-        &self.equal_values
+    pub fn get_equal_values(&self) -> BitVec {
+        self.equal_values.clone()
     }
 
     /// Set which sub iterators should be enabled.
-    pub fn enable(&mut self, enabled: &[bool]) {
-        self.enabled = enabled.to_vec();
+    pub fn set_active_scans(&mut self, active_scans: BitVec) {
+        self.active_scans = active_scans;
     }
 
     fn move_follow_scans(&mut self, mut next_value: T) -> Option<T> {
         let mut subtracted_values = true;
 
-        self.equal_values = self.enabled.clone();
+        self.equal_values = self.active_scans.clone();
 
         while subtracted_values {
             subtracted_values = false;
 
             for &subtract_index in &self.subtract_indices {
-                self.equal_values[subtract_index] = false;
+                self.equal_values.set(subtract_index, false);
 
-                if !self.enabled[subtract_index] {
+                if !self.active_scans[subtract_index] {
                     continue;
                 }
 
@@ -320,7 +321,7 @@ where
         }
 
         for &follow_index in &self.follow_indices {
-            if !self.enabled[follow_index] {
+            if !self.active_scans[follow_index] {
                 continue;
             }
 
@@ -329,10 +330,10 @@ where
 
             if let Some(follow_value) = follow_scan.seek(next_value) {
                 if next_value != follow_value {
-                    self.equal_values[follow_index] = false;
+                    self.equal_values.set(follow_index, false);
                 }
             } else {
-                self.equal_values[follow_index] = false;
+                self.equal_values.set(follow_index, false);
             }
         }
 
@@ -388,19 +389,16 @@ where
 
 #[cfg(test)]
 mod test {
+    use test_log::test;
+
+    use bitvec::{bitvec, prelude::Lsb0};
 
     use crate::columnar::{
-        column_types::vector::ColumnVector,
-        operations::ColumnScanSubtract,
-        traits::{
-            column::Column,
-            columnscan::{ColumnScan, ColumnScanCell, ColumnScanEnum},
-        },
+        column::{vector::ColumnVector, Column},
+        columnscan::{ColumnScan, ColumnScanCell, ColumnScanEnum},
     };
 
-    use super::{ColumnScanFollow, ColumnScanMinus};
-
-    use test_log::test;
+    use super::{ColumnScanFollow, ColumnScanMinus, ColumnScanSubtract};
 
     #[test]
     fn test_scan_follower() {
@@ -495,30 +493,30 @@ mod test {
         );
 
         assert!(subtract_scan.current().is_none());
-        assert_eq!(subtract_scan.equal_values(), &[true, true, true]);
+        assert_eq!(subtract_scan.get_equal_values(), bitvec![1, 1, 1]);
 
         assert_eq!(subtract_scan.next(), Some(1));
         assert_eq!(subtract_scan.current(), Some(1));
-        assert_eq!(subtract_scan.equal_values(), &[false, true, true]);
+        assert_eq!(subtract_scan.get_equal_values(), bitvec![0, 1, 1]);
 
         assert_eq!(subtract_scan.next(), Some(5));
         assert_eq!(subtract_scan.current(), Some(5));
-        assert_eq!(subtract_scan.equal_values(), &[false, true, true]);
+        assert_eq!(subtract_scan.get_equal_values(), bitvec![0, 1, 1]);
 
         assert_eq!(subtract_scan.next(), Some(7));
         assert_eq!(subtract_scan.current(), Some(7));
-        assert_eq!(subtract_scan.equal_values(), &[false, true, false]);
+        assert_eq!(subtract_scan.get_equal_values(), bitvec![0, 1, 0]);
 
         assert_eq!(subtract_scan.seek(11), Some(14));
         assert_eq!(subtract_scan.current(), Some(14));
-        assert_eq!(subtract_scan.equal_values(), &[false, true, true]);
+        assert_eq!(subtract_scan.get_equal_values(), bitvec![0, 1, 1]);
 
         assert_eq!(subtract_scan.next(), Some(15));
         assert_eq!(subtract_scan.current(), Some(15));
-        assert_eq!(subtract_scan.equal_values(), &[false, true, false]);
+        assert_eq!(subtract_scan.get_equal_values(), bitvec![0, 1, 0]);
 
         assert_eq!(subtract_scan.next(), None);
         assert_eq!(subtract_scan.current(), None);
-        assert_eq!(subtract_scan.equal_values(), &[false, true, false]);
+        assert_eq!(subtract_scan.get_equal_values(), bitvec![0, 1, 0]);
     }
 }

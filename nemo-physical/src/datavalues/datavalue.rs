@@ -17,6 +17,9 @@ pub(crate) fn quote_iri(s: &str) -> String {
     "<".to_owned() + &s + ">"
 }
 
+// FIXME: We should not leak Double or Float in our public API. 
+use crate::datatypes::{Double, Float};
+
 /// Potential errors encountered when trying to construct [`DataValue`]s.
 #[allow(variant_size_differences)]
 #[derive(Error, Debug)]
@@ -41,6 +44,12 @@ pub enum DataValueCreationError {
         value: i64,
         /// String that hints at the datatype that was used, the source of the range constraints
         datatype_name: String,
+    },
+    /// Error for problems with parsing boolean literals
+    #[error("boolean value '{lexical_value}' could not be parsed")]
+    BooleanNotParsed {
+        /// Lexical value that failed to parse
+        lexical_value: String,
     },
     /// Generic error for incorrect values given in lexical (string-based) form
     #[error("lexical value '{lexical_value}' is not valid for datatype '{datatype_iri}'")]
@@ -126,8 +135,11 @@ pub enum ValueDomain {
     LanguageTaggedString,
     /// Domain of all IRIs in canonical form (no escape characters)
     Iri,
-    /// Domain of all 64bit floating point numbers incl. ±Inf, ±0, NaN.
-    /// This set of values is disjoint from all other numerical domains.
+    /// Domain of all 32bit floating point numbers, incl. ±Inf, ±0 but not NaN.
+    /// This set of values is disjoint from all other numerical domains (including [ValueDomain::Double]).
+    Float,
+    /// Domain of all 64bit floating point numbers incl. ±Inf, ±0 but not NaN.
+    /// This set of values is disjoint from all other numerical domains (including [ValueDomain::Float]).
     Double,
     /// Domain of all unsigned 64bit integer numbers: 0…+18446744073709551615, or 0 … +2^64-1.
     /// This is a superset of [`ValueDomain::NonNegativeLong`] and its respective subtypes.
@@ -151,6 +163,8 @@ pub enum ValueDomain {
     Int,
     /// Domain of all tuples.
     Tuple,
+    /// Domain of all boolean values (true and false)
+    Boolean,
     /// Domain of all data values not covered by the remaining domains
     Other,
 }
@@ -179,6 +193,8 @@ impl ValueDomain {
             ValueDomain::Tuple => panic!("There is no canonical datatype for {:?} defined in Nemo yet. We'll need an IRI there.", self),
             // Other literals cannot have a fixed canonical type by definition
             ValueDomain::Other => panic!("There is no canonical datatype for {:?}. Use the type of the value directly.", self),
+            ValueDomain::Boolean => "http://www.w3.org/2001/XMLSchema#boolean".to_string(),
+            ValueDomain::Float => "http://www.w3.org/2001/XMLSchema#float".to_string(),
         }
     }
 }
@@ -255,18 +271,33 @@ pub trait DataValue {
         panic!("Value is not an IRI.");
     }
 
-    /// Return the f64 that this value represents, if it is a value in
-    /// the domain [`ValueDomain::Double`].
-    fn to_f64(&self) -> Option<f64> {
+    /// Return the [Float] that this value represents, if it is a value in
+    /// the domain [`ValueDomain::Float`].
+    fn to_float(&self) -> Option<Float> {
         match self.value_domain() {
-            ValueDomain::Double => Some(self.to_f64_unchecked()),
+            ValueDomain::Float => Some(self.to_float_unchecked()),
             _ => None,
         }
     }
 
-    /// Return the f64 that this value represents, if it is a value in
+    /// Return the [Float] that this value represents, if it is a value in
+    /// the domain [`ValueDomain::Float`]. Otherwise it panics.
+    fn to_float_unchecked(&self) -> Float {
+        panic!("Value is not a double (32bit floating point number).");
+    }
+
+    /// Return the [Double] that this value represents, if it is a value in
+    /// the domain [`ValueDomain::Double`].
+    fn to_double(&self) -> Option<Double> {
+        match self.value_domain() {
+            ValueDomain::Double => Some(self.to_double_unchecked()),
+            _ => None,
+        }
+    }
+
+    /// Return the [Double] that this value represents, if it is a value in
     /// the domain [`ValueDomain::Double`]. Otherwise it panics.
-    fn to_f64_unchecked(&self) -> f64 {
+    fn to_double_unchecked(&self) -> Double {
         panic!("Value is not a double (64bit floating point number).");
     }
 
@@ -360,6 +391,22 @@ pub trait DataValue {
     /// the domain [`ValueDomain::UnsignedInt`] or a subdoman thereof. Otherwise it panics.
     fn to_u32_unchecked(&self) -> u32 {
         panic!("Value is not an int (32bit signed integer number).");
+    }
+
+    /// If this value is a boolean, return its value.
+    fn to_boolean(&self) -> Option<bool> {
+        match self.value_domain() {
+            ValueDomain::Boolean => Some(self.to_boolean_unchecked()),
+            _ => None,
+        }
+    }
+
+    /// If this value is a boolean, returns its value.
+    ///
+    /// # Panics
+    /// Panics if this value is not a boolean.
+    fn to_boolean_unchecked(&self) -> bool {
+        panic!("Value is not a boolean.");
     }
 
     /// Return the value of the tuple element at the given index.

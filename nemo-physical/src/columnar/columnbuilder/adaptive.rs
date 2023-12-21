@@ -1,15 +1,21 @@
-use crate::datatypes::{
-    ColumnDataType, Double, Float, RunLengthEncodable, StorageTypeName, StorageValueT,
-};
+//! This module defines an adaptive column builder,
+//! which dynamically chooses the most efficient representation
+//! for the constructed column.
+
 use std::fmt::Debug;
 
-use super::column_types::interval::{ColumnWithIntervals, ColumnWithIntervalsT};
-use super::column_types::{rle::ColumnBuilderRle, vector::ColumnVector};
-
-use super::traits::{
-    column::{Column, ColumnEnum},
-    columnbuilder::ColumnBuilder,
+use crate::{
+    columnar::column::{
+        interval::{ColumnWithIntervals, ColumnWithIntervalsT},
+        vector::ColumnVector,
+        Column, ColumnEnum,
+    },
+    datatypes::{
+        ColumnDataType, Double, Float, RunLengthEncodable, StorageTypeName, StorageValueT,
+    },
 };
+
+use super::{rle::ColumnBuilderRle, ColumnBuilder};
 
 /// Number of rle elements in rle column builder after which to decide which column type to use.
 #[derive(Copy, Clone, Debug, PartialEq)]
@@ -296,32 +302,32 @@ impl ColumnBuilderAdaptiveT {
     }
 }
 
-impl FromIterator<StorageValueT> for ColumnBuilderAdaptiveT {
-    fn from_iter<T>(iter: T) -> Self
-    where
-        T: IntoIterator<Item = StorageValueT>,
-    {
-        let mut peekable = iter.into_iter().peekable();
-        let mut builder = Self::new(
-            peekable
-                .peek()
-                .map(|dv| dv.get_type())
-                .unwrap_or(StorageTypeName::Id64),
-            Default::default(),
-            Default::default(),
-        );
-        for item in peekable {
-            builder.add(item);
-        }
-        builder
-    }
-}
+// impl FromIterator<StorageValueT> for ColumnBuilderAdaptiveT {
+//     fn from_iter<T>(iter: T) -> Self
+//     where
+//         T: IntoIterator<Item = StorageValueT>,
+//     {
+//         let mut peekable = iter.into_iter().peekable();
+//         let mut builder = Self::new(
+//             peekable
+//                 .peek()
+//                 .map(|dv| dv.get_type())
+//                 .unwrap_or(StorageTypeName::Id64),
+//             Default::default(),
+//             Default::default(),
+//         );
+//         for item in peekable {
+//             builder.add(item);
+//         }
+//         builder
+//     }
+// }
 
 #[cfg(test)]
 mod test {
     use super::ColumnBuilderAdaptive;
     use crate::{
-        columnar::traits::{
+        columnar::{
             column::{Column, ColumnEnum},
             columnbuilder::ColumnBuilder,
         },

@@ -1,8 +1,14 @@
+//! This module defines the [ColumnBuilder] trait
+//! and its implementations.
+
+pub(crate) mod adaptive;
+pub(crate) mod rle;
+
 use std::fmt::Debug;
 
 use super::column::Column;
 
-/// Type for constructing columns.
+/// Trait for builders of columns.
 pub trait ColumnBuilder<'a, T>: Debug {
     /// Column Type that is produced by builder
     type Col: Column<'a, T>;

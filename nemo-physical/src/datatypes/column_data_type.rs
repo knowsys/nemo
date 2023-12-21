@@ -1,11 +1,13 @@
-use crate::arithmetic::traits::ArithmeticOperations;
+use std::fmt::Debug;
+
+use num::{Bounded, CheckedMul};
+
+use crate::{arithmetic::traits::ArithmeticOperations, datavalues::any_datavalue::IntoDataValue};
 
 use super::{
     casting::{ImplicitCastFrom, ImplicitCastInto},
     Field, FloorToUsize, RunLengthEncodable,
 };
-use num::{Bounded, CheckedMul};
-use std::fmt::Debug;
 
 /// A combination of traits that is required for a data type to be used in a column
 pub trait ColumnDataType:
@@ -25,6 +27,7 @@ pub trait ColumnDataType:
     + Bounded
     + RunLengthEncodable
     + ArithmeticOperations
+    + IntoDataValue
 {
 }
 
@@ -45,5 +48,6 @@ impl<T> ColumnDataType for T where
         + Bounded
         + RunLengthEncodable
         + ArithmeticOperations
+        + IntoDataValue
 {
 }

@@ -1,17 +1,17 @@
+//! TODO: Remove this implementation
+
+use std::mem::size_of;
+use std::{fmt::Debug, ops::Range};
+
 use bytesize::ByteSize;
 
+use crate::columnar::columnscan::{ColumnScanCell, ColumnScanEnum, ColumnScanT};
+use crate::datatypes::{ColumnDataType, Double, Float, StorageValueT};
 use crate::datatypes::{RunLengthEncodable, StorageTypeName};
 use crate::generate_datatype_forwarder;
 use crate::management::ByteSized;
-use crate::{
-    columnar::traits::{
-        column::{Column, ColumnEnum},
-        columnscan::{ColumnScanCell, ColumnScanEnum, ColumnScanT},
-    },
-    datatypes::{ColumnDataType, Double, Float, StorageValueT},
-};
-use std::mem::size_of;
-use std::{fmt::Debug, ops::Range};
+
+use super::{Column, ColumnEnum};
 
 /// Simple implementation of a [`Column`] that uses a second column to manage interval bounds.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -127,47 +127,6 @@ impl ColumnWithIntervalsT {
         forward_to_interval_column!(self, int_bounds(int_idx))
     }
 
-    /// Destructure into a pair of data column scan and interval column
-    pub fn as_parts(&self) -> (ColumnScanT<'_>, ColumnScanEnum<'_, usize>) {
-        match self {
-            Self::Id32(this) => {
-                let (data, intervals) = this.as_parts();
-                (
-                    ColumnScanT::Id32(ColumnScanCell::new(data.iter())),
-                    intervals.iter(),
-                )
-            }
-            Self::Id64(this) => {
-                let (data, intervals) = this.as_parts();
-                (
-                    ColumnScanT::Id64(ColumnScanCell::new(data.iter())),
-                    intervals.iter(),
-                )
-            }
-            Self::Int64(this) => {
-                let (data, intervals) = this.as_parts();
-                (
-                    ColumnScanT::Int64(ColumnScanCell::new(data.iter())),
-                    intervals.iter(),
-                )
-            }
-            Self::Float(this) => {
-                let (data, intervals) = this.as_parts();
-                (
-                    ColumnScanT::Float(ColumnScanCell::new(data.iter())),
-                    intervals.iter(),
-                )
-            }
-            Self::Double(this) => {
-                let (data, intervals) = this.as_parts();
-                (
-                    ColumnScanT::Double(ColumnScanCell::new(data.iter())),
-                    intervals.iter(),
-                )
-            }
-        }
-    }
-
     /// Return the data type name of the column.
     pub fn get_type(&self) -> StorageTypeName {
         match self {
@@ -202,9 +161,11 @@ impl<'a> Column<'a, StorageValueT> for ColumnWithIntervalsT {
     fn len(&self) -> usize {
         forward_to_interval_column!(self, len)
     }
+
     fn is_empty(&self) -> bool {
         forward_to_interval_column!(self, is_empty)
     }
+
     fn get(&self, index: usize) -> StorageValueT {
         forward_to_interval_column!(self, get(index).as_variant_of(StorageValueT))
     }
@@ -226,9 +187,9 @@ impl ByteSized for ColumnWithIntervalsT {
 
 #[cfg(test)]
 mod test {
-    use super::super::vector::ColumnVector;
+    use crate::columnar::column::{vector::ColumnVector, Column, ColumnEnum};
+
     use super::ColumnWithIntervals;
-    use crate::columnar::traits::column::{Column, ColumnEnum};
     use test_log::test;
 
     #[test]

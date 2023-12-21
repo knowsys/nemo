@@ -1,10 +1,14 @@
 use std::cmp::Ordering;
 
-use crate::generate_datatype_forwarder;
+use delegate::delegate;
 
-use super::double::Double;
-use super::float::Float;
-use super::StorageTypeName;
+use crate::{
+    datavalues::{any_datavalue::IntoDataValue, AnyDataValue},
+    dictionary::meta_dv_dict::MetaDictionary,
+    generate_datatype_forwarder,
+};
+
+use super::{double::Double, float::Float, StorageTypeName};
 
 /// Enum for values of all supported basic types.
 /// This should not be used to represent large numbers of values,
@@ -274,6 +278,20 @@ impl From<Float> for StorageValueT {
 impl From<Double> for StorageValueT {
     fn from(value: Double) -> Self {
         StorageValueT::Double(value)
+    }
+}
+
+impl IntoDataValue for StorageValueT {
+    delegate! {
+        to match self {
+            Self::Id32(value) => value,
+            Self::Id64(value) => value,
+            Self::Int64(value) => value,
+            Self::Float(value) => value,
+            Self::Double(value) => value,
+        } {
+            fn into_datavalue(self, dictionary: &MetaDictionary) -> Option<AnyDataValue>;
+        }
     }
 }
 

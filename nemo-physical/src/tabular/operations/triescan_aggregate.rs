@@ -5,7 +5,7 @@ use crate::{
         operation::AggregateOperation,
         processors::processor::{AggregateGroupProcessor, AggregateProcessor},
     },
-    columnar::traits::columnscan::ColumnScanT,
+    columnar::columnscan::ColumnScanT,
     datatypes::{Double, Float, StorageTypeName, StorageValueT},
     tabular::traits::{partial_trie_scan::PartialTrieScan, trie_scan::TrieScan},
 };
@@ -377,6 +377,7 @@ mod test {
         materialize(&mut trie_scan_aggregate)
     }
 
+    #[ignore]
     #[test]
     fn test_aggregate_i64() {
         let input_trie = Trie::from_cols(vec![

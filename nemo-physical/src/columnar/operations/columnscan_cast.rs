@@ -1,4 +1,4 @@
-use super::super::traits::columnscan::{ColumnScan, ColumnScanCell};
+use crate::columnar::columnscan::{ColumnScan, ColumnScanCell};
 use crate::datatypes::{
     casting::{ImplicitCastError, ImplicitCastFrom, ImplicitCastInto},
     ColumnDataType,
@@ -209,11 +209,8 @@ where
 #[cfg(test)]
 mod test {
     use crate::columnar::{
-        column_types::vector::ColumnVector,
-        traits::{
-            column::Column,
-            columnscan::{ColumnScan, ColumnScanCell, ColumnScanEnum},
-        },
+        column::{vector::ColumnVector, Column},
+        columnscan::{ColumnScan, ColumnScanCell, ColumnScanEnum},
     };
 
     use super::ColumnScanCast;

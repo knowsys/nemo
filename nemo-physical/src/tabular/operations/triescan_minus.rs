@@ -1,7 +1,7 @@
 use crate::{
     columnar::{
+        columnscan::{ColumnScan, ColumnScanCell, ColumnScanEnum, ColumnScanT},
         operations::{ColumnScanFollow, ColumnScanMinus, ColumnScanSubtract},
-        traits::columnscan::{ColumnScan, ColumnScanCell, ColumnScanEnum, ColumnScanT},
     },
     datatypes::{Double, Float, StorageTypeName},
     tabular::traits::partial_trie_scan::{PartialTrieScan, TrieScanEnum},
@@ -200,8 +200,9 @@ impl<'a> PartialTrieScan<'a> for TrieScanSubtract<'a> {
                 if next_layer == next_used_layer {
                     if next_layer > 0 {
                         let current_layer = next_layer - 1;
-                        let equal_values =
-                            self.column_scans[current_layer].get_mut().equal_values();
+                        let equal_values = self.column_scans[current_layer]
+                            .get_mut()
+                            .subtract_get_equal();
 
                         if !equal_values[subtract_index] {
                             continue;
@@ -217,12 +218,12 @@ impl<'a> PartialTrieScan<'a> for TrieScanSubtract<'a> {
             let current_layer = next_layer - 1;
             let equal_values = self.column_scans[current_layer]
                 .get_mut()
-                .equal_values()
+                .subtract_get_equal()
                 .clone();
 
             self.column_scans[next_layer]
                 .get_mut()
-                .subtract_enable(&equal_values);
+                .subtract_set_active(equal_values);
         }
 
         self.trie_main.down();
@@ -418,7 +419,7 @@ impl<'a> PartialTrieScan<'a> for TrieScanMinus<'a> {
 #[cfg(test)]
 mod test {
     use super::TrieScanMinus;
-    use crate::columnar::traits::columnscan::ColumnScanT;
+    use crate::columnar::columnscan::ColumnScanT;
     use crate::tabular::operations::triescan_minus::{SubtractInfo, TrieScanSubtract};
     use crate::tabular::table_types::trie::{Trie, TrieScanGeneric};
     use crate::tabular::traits::partial_trie_scan::{PartialTrieScan, TrieScanEnum};

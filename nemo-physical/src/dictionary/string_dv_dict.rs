@@ -66,7 +66,7 @@ fn two_strings_to_one(string1: &str, string2: &str) -> String {
     // as a single char at the start of the string for faster reconstruction.
     // Note: We do not use the full first byte to ensure that the result is a valid UTF-8 string. If we would use
     // byte sequences instead of strings internally, we could go higher here.
-    assert!(string2.len() > 0);
+    assert!(!string2.is_empty());
     if string2.len() <= 127 {
         result = String::with_capacity(string1.len() + string2.len() + 1);
         let tiny_len: u8 = string2.len() as u8;
@@ -88,7 +88,7 @@ fn two_strings_to_one(string1: &str, string2: &str) -> String {
 /// Extract two strings from one that uses the format of [two_strings_to_one].
 #[inline(always)]
 fn one_string_to_two(string: &str) -> Option<(String, String)> {
-    if string.len() == 0 {
+    if string.is_empty() {
         return None;
     }
     let string1: String;
@@ -104,20 +104,19 @@ fn one_string_to_two(string: &str) -> Option<(String, String)> {
             .get(marker + 1..)
             .expect("must be valid if previous call was")
             .into();
+    } else if let Some(pos) = string.find('>') {
+        string2 = string
+            .get(1..pos)
+            .expect("must be valid if previous call was")
+            .into();
+        string1 = string
+            .get(pos + 1..)
+            .expect("must be valid if previous call was")
+            .into();
     } else {
-        if let Some(pos) = string.find('>') {
-            string2 = string
-                .get(1..pos)
-                .expect("must be valid if previous call was")
-                .into();
-            string1 = string
-                .get(pos + 1..)
-                .expect("must be valid if previous call was")
-                .into();
-        } else {
-            return None;
-        }
+        return None;
     }
+
     Some((string1, string2))
 }
 

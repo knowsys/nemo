@@ -3,7 +3,7 @@
 use std::{collections::HashSet, io::BufReader, str::FromStr};
 
 use nemo_physical::{
-    datasources::{TableProvider, TupleBuffer},
+    datasources::{table_providers::TableProvider, tuple_writer::TupleWriter},
     datavalues::{AnyDataValue, DataValueCreationError},
     resource::Resource,
 };
@@ -175,13 +175,13 @@ impl RDFReader {
     /// Read the RDF triples from a parser.
     fn read_triples_with_parser<Parser>(
         &self,
-        tuple_buffer: &mut TupleBuffer,
+        tuple_writer: &mut TupleWriter,
         make_parser: impl FnOnce() -> Parser,
     ) -> Result<(), Box<dyn std::error::Error>>
     where
         Parser: TriplesParser,
     {
-        assert_eq!(tuple_buffer.column_number(), 3);
+        assert_eq!(tuple_writer.column_number(), 3);
 
         let mut triple_count = 0;
 
@@ -190,9 +190,9 @@ impl RDFReader {
             let predicate = Self::datavalue_from_named_node(triple.predicate);
             let object = Self::datavalue_from_term(triple.object)?;
 
-            tuple_buffer.next_value(subject);
-            tuple_buffer.next_value(predicate);
-            tuple_buffer.next_value(object);
+            tuple_writer.add_tuple_value(subject);
+            tuple_writer.add_tuple_value(predicate);
+            tuple_writer.add_tuple_value(object);
 
             triple_count += 1;
             if triple_count % PROGRESS_NOTIFY_INCREMENT == 0 {
@@ -218,13 +218,13 @@ impl RDFReader {
     /// Read the RDF quads from a parser.
     fn read_quads_with_parser<Parser>(
         &self,
-        tuple_buffer: &mut TupleBuffer,
+        tuple_writer: &mut TupleWriter,
         make_parser: impl FnOnce() -> Parser,
     ) -> Result<(), Box<dyn std::error::Error>>
     where
         Parser: QuadsParser,
     {
-        assert_eq!(tuple_buffer.column_number(), 4);
+        assert_eq!(tuple_writer.column_number(), 4);
 
         let mut quad_count = 0;
 
@@ -234,10 +234,10 @@ impl RDFReader {
             let object = Self::datavalue_from_term(quad.object)?;
             let graph_name = Self::datavalue_from_graph_name(quad.graph_name)?;
 
-            tuple_buffer.next_value(subject);
-            tuple_buffer.next_value(predicate);
-            tuple_buffer.next_value(object);
-            tuple_buffer.next_value(graph_name);
+            tuple_writer.add_tuple_value(subject);
+            tuple_writer.add_tuple_value(predicate);
+            tuple_writer.add_tuple_value(object);
+            tuple_writer.add_tuple_value(graph_name);
 
             quad_count += 1;
             if quad_count % PROGRESS_NOTIFY_INCREMENT == 0 {
@@ -264,7 +264,7 @@ impl RDFReader {
 impl TableProvider for RDFReader {
     fn provide_table_data(
         self: Box<Self>,
-        tuple_buffer: &mut TupleBuffer,
+        tuple_writer: &mut TupleWriter,
     ) -> Result<(), Box<dyn std::error::Error>> {
         let reader = self
             .resource_providers
@@ -274,18 +274,18 @@ impl TableProvider for RDFReader {
 
         match self.variant.refine_with_resource(&self.resource) {
             RDFVariant::NTriples => {
-                self.read_triples_with_parser(tuple_buffer, || NTriplesParser::new(reader))
+                self.read_triples_with_parser(tuple_writer, || NTriplesParser::new(reader))
             }
             RDFVariant::NQuads => {
-                self.read_quads_with_parser(tuple_buffer, || NQuadsParser::new(reader))
+                self.read_quads_with_parser(tuple_writer, || NQuadsParser::new(reader))
             }
-            RDFVariant::Turtle => self.read_triples_with_parser(tuple_buffer, || {
+            RDFVariant::Turtle => self.read_triples_with_parser(tuple_writer, || {
                 TurtleParser::new(reader, self.base.clone())
             }),
-            RDFVariant::RDFXML => self.read_triples_with_parser(tuple_buffer, || {
+            RDFVariant::RDFXML => self.read_triples_with_parser(tuple_writer, || {
                 RdfXmlParser::new(reader, self.base.clone())
             }),
-            RDFVariant::TriG => self.read_quads_with_parser(tuple_buffer, || {
+            RDFVariant::TriG => self.read_quads_with_parser(tuple_writer, || {
                 TriGParser::new(reader, self.base.clone())
             }),
             RDFVariant::Unspecified => Err(Box::new(RdfReadingError::UnknownRdfFormat(
@@ -609,7 +609,7 @@ mod test {
     use super::RDFReader;
     use std::cell::RefCell;
 
-    use nemo_physical::{datasources::TupleBuffer, management::database::Dict};
+    use nemo_physical::{datasources::tuple_writer::TupleWriter, management::database::Dict};
     use rio_turtle::{NTriplesParser, TurtleParser};
     use test_log::test;
 
@@ -626,7 +626,7 @@ mod test {
 
         let reader = RDFReader::new(ResourceProviders::empty(), String::new(), None);
         let dict = RefCell::new(Dict::default());
-        let mut tuple_buffer = TupleBuffer::new(&dict, 3);
+        let mut tuple_buffer = TupleWriter::new(&dict, 3);
         let result =
             reader.read_triples_with_parser(&mut tuple_buffer, || NTriplesParser::new(data));
         assert!(result.is_ok());
@@ -642,7 +642,7 @@ mod test {
 
         let reader = RDFReader::new(ResourceProviders::empty(), String::new(), None);
         let dict = RefCell::new(Dict::default());
-        let mut tuple_buffer = TupleBuffer::new(&dict, 3);
+        let mut tuple_buffer = TupleWriter::new(&dict, 3);
         let result =
             reader.read_triples_with_parser(&mut tuple_buffer, || TurtleParser::new(data, None));
         assert!(result.is_ok());
@@ -659,7 +659,7 @@ mod test {
 
         let reader = RDFReader::new(ResourceProviders::empty(), String::new(), None);
         let dict = RefCell::new(Dict::default());
-        let mut tuple_buffer = TupleBuffer::new(&dict, 3);
+        let mut tuple_buffer = TupleWriter::new(&dict, 3);
         let result =
             reader.read_triples_with_parser(&mut tuple_buffer, || NTriplesParser::new(data));
         assert!(result.is_ok());

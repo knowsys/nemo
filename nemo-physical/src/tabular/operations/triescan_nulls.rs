@@ -2,8 +2,8 @@ use std::cell::UnsafeCell;
 
 use crate::{
     columnar::{
+        columnscan::{ColumnScan, ColumnScanCell, ColumnScanEnum, ColumnScanT},
         operations::{ColumnScanNulls, ColumnScanPass},
-        traits::columnscan::{ColumnScan, ColumnScanCell, ColumnScanEnum, ColumnScanT},
     },
     datatypes::StorageTypeName,
     tabular::traits::partial_trie_scan::{PartialTrieScan, TrieScanEnum},
@@ -134,7 +134,7 @@ impl<'a> PartialTrieScan<'a> for TrieScanNulls<'a> {
 #[cfg(test)]
 mod test {
     use crate::{
-        columnar::traits::columnscan::ColumnScanT,
+        columnar::columnscan::ColumnScanT,
         tabular::{
             table_types::trie::{Trie, TrieScanGeneric},
             traits::partial_trie_scan::{PartialTrieScan, TrieScanEnum},

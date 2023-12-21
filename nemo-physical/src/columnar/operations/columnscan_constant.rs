@@ -1,4 +1,4 @@
-use super::super::traits::columnscan::ColumnScan;
+use crate::columnar::columnscan::ColumnScan;
 use crate::datatypes::ColumnDataType;
 use std::{fmt::Debug, ops::Range};
 
@@ -97,7 +97,7 @@ where
 
 #[cfg(test)]
 mod test {
-    use crate::columnar::traits::columnscan::ColumnScan;
+    use crate::columnar::columnscan::ColumnScan;
 
     use super::ColumnScanConstant;
 
