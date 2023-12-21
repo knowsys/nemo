@@ -61,6 +61,10 @@ impl DataValue for FloatDataValue {
     fn to_float_unchecked(&self) -> Float {
         self.0
     }
+
+    fn canonical_string(&self) -> String {
+        "\"".to_owned() + &self.0.to_string() + "\"^^<" + &self.datatype_iri() + ">"
+    }
 }
 
 impl Eq for FloatDataValue {} // Possible since we exclude NaNs

@@ -4,7 +4,7 @@ use super::{DataValue, ValueDomain};
 
 /// Physical representation of a boolean value
 #[repr(transparent)]
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct BooleanDataValue(bool);
 
 impl BooleanDataValue {
@@ -38,6 +38,12 @@ impl DataValue for BooleanDataValue {
     fn to_boolean_unchecked(&self) -> bool {
         self.0
     }
-}
 
-impl Eq for BooleanDataValue {}
+    fn canonical_string(&self) -> String {
+        if self.0 {
+            "\"true\"^^<".to_string() + &self.datatype_iri() + ">"
+        } else {
+            "\"false\"^^<".to_string() + &self.datatype_iri() + ">"
+        }
+    }
+}

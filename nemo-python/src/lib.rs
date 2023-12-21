@@ -191,12 +191,14 @@ fn datavalue_to_python(py: Python<'_>, v: AnyDataValue) -> PyResult<&PyAny> {
         },
         nemo::datavalues::ValueDomain::String |
         nemo::datavalues::ValueDomain::Iri => Ok(v.canonical_string().into_py(py).into_ref(py)),
-        nemo::datavalues::ValueDomain::Double => Ok(v.to_f64_unchecked().into_py(py).into_ref(py)),
+        nemo::datavalues::ValueDomain::Double => Ok(f64::from(v.to_double_unchecked()).into_py(py).into_ref(py)),
+        nemo::datavalues::ValueDomain::Float => Ok(f32::from(v.to_float_unchecked()).into_py(py).into_ref(py)),
         nemo::datavalues::ValueDomain::NonNegativeLong |
         nemo::datavalues::ValueDomain::UnsignedInt |
         nemo::datavalues::ValueDomain::NonNegativeInt |
         nemo::datavalues::ValueDomain::Long |
         nemo::datavalues::ValueDomain::Int => Ok(v.to_i64_unchecked().into_py(py).into_ref(py)),
+        nemo::datavalues::ValueDomain::Boolean => todo!("boolean not supported yet"),
         nemo::datavalues::ValueDomain::Tuple => todo!("tuples are not supported yet"),
         nemo::datavalues::ValueDomain::UnsignedLong |
         nemo::datavalues::ValueDomain::Other => {
