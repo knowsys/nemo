@@ -4,7 +4,7 @@ use std::{collections::HashSet, io::BufReader, str::FromStr};
 
 use nemo_physical::{
     datasources::{table_providers::TableProvider, tuple_writer::TupleWriter},
-    datavalues::{AnyDataValue, DataValueCreationError},
+    datavalues::{AnyDataValue, DataValue, DataValueCreationError},
     resource::Resource,
 };
 
@@ -626,11 +626,11 @@ mod test {
 
         let reader = RDFReader::new(ResourceProviders::empty(), String::new(), None);
         let dict = RefCell::new(Dict::default());
-        let mut tuple_buffer = TupleWriter::new(&dict, 3);
+        let mut tuple_writer = TupleWriter::new(&dict, 3);
         let result =
-            reader.read_triples_with_parser(&mut tuple_buffer, || NTriplesParser::new(data));
+            reader.read_triples_with_parser(&mut tuple_writer, || NTriplesParser::new(data));
         assert!(result.is_ok());
-        assert_eq!(tuple_buffer.size(), 4);
+        assert_eq!(tuple_writer.size(), 4);
     }
 
     #[test]
@@ -642,11 +642,11 @@ mod test {
 
         let reader = RDFReader::new(ResourceProviders::empty(), String::new(), None);
         let dict = RefCell::new(Dict::default());
-        let mut tuple_buffer = TupleWriter::new(&dict, 3);
+        let mut tuple_writer = TupleWriter::new(&dict, 3);
         let result =
-            reader.read_triples_with_parser(&mut tuple_buffer, || TurtleParser::new(data, None));
+            reader.read_triples_with_parser(&mut tuple_writer, || TurtleParser::new(data, None));
         assert!(result.is_ok());
-        assert_eq!(tuple_buffer.size(), 3);
+        assert_eq!(tuple_writer.size(), 3);
     }
 
     #[test]
@@ -659,11 +659,11 @@ mod test {
 
         let reader = RDFReader::new(ResourceProviders::empty(), String::new(), None);
         let dict = RefCell::new(Dict::default());
-        let mut tuple_buffer = TupleWriter::new(&dict, 3);
+        let mut tuple_writer = TupleWriter::new(&dict, 3);
         let result =
-            reader.read_triples_with_parser(&mut tuple_buffer, || NTriplesParser::new(data));
+            reader.read_triples_with_parser(&mut tuple_writer, || NTriplesParser::new(data));
         assert!(result.is_ok());
-        assert_eq!(tuple_buffer.size(), 1);
+        assert_eq!(tuple_writer.size(), 1);
     }
 
     // #[test]

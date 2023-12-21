@@ -262,7 +262,7 @@ pub(crate) struct TupleBuffer {
 
 impl TupleBuffer {
     /// Create a new [TupleBuffer].
-    pub fn new(column_number: usize) -> Self {
+    pub(crate) fn new(column_number: usize) -> Self {
         Self {
             typed_subtables: Vec::new(),
             table_lookup: TypedTableLookup::new(),
@@ -301,7 +301,7 @@ impl TupleBuffer {
     /// Provide the next value for the current tuple. Values are added in in order.
     /// When the value for the last column was provided, the tuple is committed to the buffer.
     /// Alternatively, a partially built tuple can be abandonded by calling `drop_current_tuple`.
-    pub fn add_tuple_value(&mut self, value: StorageValueT) {
+    pub(crate) fn add_tuple_value(&mut self, value: StorageValueT) {
         self.current_tuple_types[self.current_tuple_index] = value.get_type();
         self.current_tuple[self.current_tuple_index] = value;
         self.current_tuple_index += 1;
@@ -314,23 +314,23 @@ impl TupleBuffer {
 
     /// Forget about any previously added values that have not formed a complete tuple yet,
     /// and start a new tuple from the beginning.
-    pub fn drop_current_tuple(&mut self) {
+    pub(crate) fn drop_current_tuple(&mut self) {
         self.current_tuple_index = 0;
     }
 
     /// Finish writing to the [TupleBuffer] and return a [SortedTupleBuffer].
-    pub fn finalize(self) -> SortedTupleBuffer {
+    pub(crate) fn finalize(self) -> SortedTupleBuffer {
         SortedTupleBuffer::new(self)
     }
 
     /// Returns the number of columns on the table, i.e., the
     /// number of values that need to be written to make one tuple.
-    pub fn column_number(&self) -> usize {
+    pub(crate) fn column_number(&self) -> usize {
         self.current_tuple.len()
     }
 
-    /// Returns the number of rows in the [`TableWriter`]
-    pub fn size(&self) -> usize {
+    /// Returns the number of rows in the [TupleBuffer]
+    pub(crate) fn size(&self) -> usize {
         self.typed_subtables
             .iter()
             .map(|record| record.current_length)
