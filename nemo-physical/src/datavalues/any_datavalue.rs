@@ -5,9 +5,12 @@ use std::{num::IntErrorKind, str::FromStr};
 
 use delegate::delegate;
 
+use crate::{datatypes::StorageValueT, dictionary::DvDict, management::database::Dict};
+
 use super::{
-    DataValue, DataValueCreationError, DoubleDataValue, IriDataValue, LangStringDataValue,
-    LongDataValue, OtherDataValue, StringDataValue, UnsignedLongDataValue, ValueDomain,
+    datavalue::InternalDataValueCreationError, DataValue, DataValueCreationError, DoubleDataValue,
+    IriDataValue, LangStringDataValue, LongDataValue, OtherDataValue, StringDataValue,
+    UnsignedLongDataValue, ValueDomain,
 };
 
 // Initial part of IRI in all XML Schema types:
@@ -99,6 +102,45 @@ impl AnyDataValue {
     /// Construct a datavalue in [`ValueDomain::Other`] specified by the given lexical value and datatype IRI.
     pub fn new_other(lexical_value: String, datatype_iri: String) -> Self {
         AnyDataValue::Other(OtherDataValue::new(lexical_value, datatype_iri))
+    }
+
+    /// Construct a datavalue from its physical representation as a [`StorageValueT`], using
+    /// the given dictionary to resolve IDs.
+    pub(crate) fn new_from_storage_value(
+        sv: StorageValueT,
+        dict: &Dict,
+    ) -> Result<AnyDataValue, DataValueCreationError> {
+        match sv {
+            StorageValueT::Id32(id) => {
+                if let Some(value) = dict.id_to_datavalue(usize::try_from(id).unwrap()) {
+                    Ok(value)
+                } else {
+                    Err(DataValueCreationError::InternalError(Box::new(
+                        InternalDataValueCreationError::DictionaryIdNotFound(
+                            usize::try_from(id).unwrap(),
+                        ),
+                    )))
+                }
+            }
+            StorageValueT::Id64(id) => {
+                if let Some(value) = dict.id_to_datavalue(usize::try_from(id).unwrap()) {
+                    Ok(value)
+                } else {
+                    Err(DataValueCreationError::InternalError(Box::new(
+                        InternalDataValueCreationError::DictionaryIdNotFound(
+                            usize::try_from(id).unwrap(),
+                        ),
+                    )))
+                }
+            }
+            StorageValueT::Int64(num) => Ok(AnyDataValue::new_integer_from_i64(num)),
+            StorageValueT::Float(_) => Err(DataValueCreationError::InternalError(Box::new(
+                InternalDataValueCreationError::SinglePrecisionFloat,
+            ))),
+            StorageValueT::Double(num) => {
+                Ok(AnyDataValue::new_double_from_f64(num.into()).unwrap())
+            }
+        }
     }
 
     /// Construct a normalized datavalue in an appropriate [`ValueDomain`] from the given lexical value and datatype IRI.
@@ -384,6 +426,7 @@ impl DataValue for AnyDataValue {
             fn datatype_iri(&self) -> String;
             fn lexical_value(&self) -> String;
             fn value_domain(&self) -> ValueDomain;
+            fn canonical_string(&self) -> String;
             fn to_string(&self) -> Option<String>;
             fn to_string_unchecked(&self) -> String;
             fn to_language_tagged_string(&self) -> Option<(String, String)>;
@@ -435,6 +478,10 @@ impl PartialEq for AnyDataValue {
 }
 
 impl Eq for AnyDataValue {}
+
+/// A dynamically defined iterator over [`AnyDataValue`]s.
+#[allow(missing_debug_implementations)]
+pub struct AnyDataValueIterator<'a>(pub Box<dyn Iterator<Item = AnyDataValue> + 'a>);
 
 #[cfg(test)]
 mod test {

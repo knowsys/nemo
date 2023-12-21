@@ -4,12 +4,11 @@ use std::{
 };
 
 use nemo::{
-    datatypes::Double,
+    datavalues::{DataValue,AnyDataValue},
     execution::{tracing::trace::ExecutionTraceTree, ExecutionEngine},
     io::{resource_providers::ResourceProviders, OutputManager},
     model::{
         chase_model::{ChaseAtom, ChaseFact},
-        types::primitive_logical_value::PrimitiveLogicalValueT,
         Constant, Identifier, NumericLiteral, RdfLiteral, Variable, XSD_STRING,
     },
 };
@@ -144,8 +143,11 @@ impl NemoLiteral {
 }
 
 #[pyclass]
-struct NemoResults(Box<dyn Iterator<Item = Vec<PrimitiveLogicalValueT>> + Send>);
+struct NemoResults(Box<dyn Iterator<Item = Vec<AnyDataValue>> + Send>);
 
+/// TODO: This function may not be in synch with `datavalue_to_python` now. It should
+/// make use of the latter in some later version, once the Nemo model also used DataValues
+/// in its constants.
 fn constant_to_python<'a>(py: Python<'a>, v: &Constant) -> PyResult<&'a PyAny> {
     let decimal = py.import("decimal")?.getattr("Decimal")?;
     match v {
@@ -176,14 +178,35 @@ fn constant_to_python<'a>(py: Python<'a>, v: &Constant) -> PyResult<&'a PyAny> {
     }
 }
 
-fn logical_value_to_python(py: Python<'_>, v: PrimitiveLogicalValueT) -> PyResult<&PyAny> {
-    match v {
-        PrimitiveLogicalValueT::Any(rdf) => constant_to_python(py, &rdf),
-        PrimitiveLogicalValueT::String(s) => Ok(String::from(s).into_py(py).into_ref(py)),
-        PrimitiveLogicalValueT::Integer(i) => Ok(i64::from(i).into_py(py).into_ref(py)),
-        PrimitiveLogicalValueT::Float64(d) => {
-            Ok(f64::from(Double::from(d)).into_py(py).into_ref(py))
-        }
+fn datavalue_to_python(py: Python<'_>, v: AnyDataValue) -> PyResult<&PyAny> {
+    match v.value_domain() {
+        nemo::datavalues::ValueDomain::LanguageTaggedString => {
+            let (value,tag) = v.to_language_tagged_string_unchecked();
+            let lit = NemoLiteral {
+                value: value,
+                language: Some(tag),
+                datatype: RDF_LANG_STRING.to_string(),
+            };
+            Ok(Py::new(py, lit)?.to_object(py).into_ref(py))
+        },
+        nemo::datavalues::ValueDomain::String |
+        nemo::datavalues::ValueDomain::Iri => Ok(v.canonical_string().into_py(py).into_ref(py)),
+        nemo::datavalues::ValueDomain::Double => Ok(v.to_f64_unchecked().into_py(py).into_ref(py)),
+        nemo::datavalues::ValueDomain::NonNegativeLong |
+        nemo::datavalues::ValueDomain::UnsignedInt |
+        nemo::datavalues::ValueDomain::NonNegativeInt |
+        nemo::datavalues::ValueDomain::Long |
+        nemo::datavalues::ValueDomain::Int => Ok(v.to_i64_unchecked().into_py(py).into_ref(py)),
+        nemo::datavalues::ValueDomain::Tuple => todo!("tuples are not supported yet"),
+        nemo::datavalues::ValueDomain::UnsignedLong |
+        nemo::datavalues::ValueDomain::Other => {
+            let lit = NemoLiteral {
+                value: v.lexical_value(),
+                language: None,
+                datatype: v.datatype_iri(),
+            };
+            Ok(Py::new(py, lit)?.to_object(py).into_ref(py))
+        },
     }
 }
 
@@ -293,7 +316,7 @@ impl NemoResults {
 
         Ok(Some(
             next.into_iter()
-                .map(|v| logical_value_to_python(slf.py(), v))
+                .map(|v| datavalue_to_python(slf.py(), v))
                 .collect::<Result<_, _>>()?,
         ))
     }
@@ -342,7 +365,7 @@ impl NemoEngine {
             .0
             .export_table(
                 &OutputManager::default_export_spec(identifier.clone(), types).py_res()?,
-                self.0.output_serialization(&identifier).py_res()?,
+                self.0.predicate_rows(&identifier).py_res()?,
             )
             .py_res()?;
 
@@ -350,7 +373,7 @@ impl NemoEngine {
     }
 
     fn result(mut slf: PyRefMut<'_, Self>, predicate: String) -> PyResult<Py<NemoResults>> {
-        let iter = slf.0.table_scan(&Identifier::from(predicate)).py_res()?;
+        let iter = slf.0.predicate_rows(&Identifier::from(predicate)).py_res()?;
         let results = NemoResults(Box::new(
             iter.into_iter().flatten().collect::<Vec<_>>().into_iter(),
         ));

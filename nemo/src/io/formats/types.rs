@@ -3,7 +3,7 @@
 use std::{collections::HashSet, io::Write, path::PathBuf, str::FromStr};
 
 use dyn_clone::DynClone;
-use nemo_physical::{datasources::TableProvider, resource::Resource};
+use nemo_physical::{datasources::TableProvider, datavalues::AnyDataValue, resource::Resource};
 use thiserror::Error;
 
 use crate::{
@@ -62,7 +62,11 @@ pub trait PathWithFormatSpecificExtension {
 /// time.
 pub trait TableWriter {
     /// Write a record in the table to the given [writer][Write].
-    fn write_record(&mut self, record: &[String], writer: &mut dyn Write) -> Result<(), Error>;
+    fn write_record(
+        &mut self,
+        record: &[AnyDataValue],
+        writer: &mut dyn Write,
+    ) -> Result<(), Error>;
 }
 
 /// A supported file format for I/O.
@@ -179,7 +183,7 @@ impl ImportExportSpec {
     /// Write the given table to the given [writer][Write], using this export specification.
     pub fn write_table(
         &self,
-        table: impl Iterator<Item = Vec<String>>,
+        table: impl Iterator<Item = Vec<AnyDataValue>>,
         writer: &mut dyn Write,
     ) -> Result<(), Error> {
         let mut table_writer = self.format.writer(&self.attributes)?;
@@ -256,7 +260,7 @@ impl ExportSpec {
     /// Write the given table to the given [writer][Write].
     pub fn write_table(
         &self,
-        table: impl Iterator<Item = Vec<String>>,
+        table: impl Iterator<Item = Vec<AnyDataValue>>,
         writer: &mut dyn Write,
     ) -> Result<(), Error> {
         self.0.write_table(table, writer)

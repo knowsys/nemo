@@ -43,6 +43,10 @@ impl DataValue for UnsignedLongDataValue {
         self.0.to_string()
     }
 
+    fn canonical_string(&self) -> String {
+        "\"".to_owned() + &self.0.to_string() + "\"^^<" + &self.datatype_iri() + ">"
+    }
+
     /// The function needs to find the tightest domain for the given value.
     fn value_domain(&self) -> ValueDomain {
         if self.0 <= I32MAX_AS_U64 {
@@ -108,6 +112,10 @@ impl DataValue for LongDataValue {
 
     fn lexical_value(&self) -> String {
         self.0.to_string()
+    }
+
+    fn canonical_string(&self) -> String {
+        "\"".to_owned() + &self.0.to_string() + "\"^^<" + &self.datatype_iri() + ">"
     }
 
     /// The function needs to find the tightest domain for the given value.
@@ -185,6 +193,7 @@ mod test {
             "http://www.w3.org/2001/XMLSchema#unsignedLong".to_string()
         );
         assert_eq!(long1.value_domain(), ValueDomain::UnsignedLong);
+        assert_eq!(long1.canonical_string(), "\"".to_string() + &value.to_string() + "\"^^<http://www.w3.org/2001/XMLSchema#unsignedLong>");
 
         assert_eq!(long1.fits_into_i32(), false);
         assert_eq!(long1.fits_into_u32(), false);
@@ -311,6 +320,7 @@ mod test {
             "http://www.w3.org/2001/XMLSchema#long".to_string()
         );
         assert_eq!(long1.value_domain(), ValueDomain::UnsignedInt);
+        assert_eq!(long1.canonical_string(), "\"".to_string() + &long_value.to_string() + "\"^^<http://www.w3.org/2001/XMLSchema#long>");
 
         assert_eq!(long1.fits_into_i32(), false);
         assert_eq!(long1.fits_into_u32(), true);

@@ -54,6 +54,10 @@ impl DataValue for DoubleDataValue {
     fn to_f64_unchecked(&self) -> f64 {
         self.0
     }
+
+    fn canonical_string(&self) -> String {
+        "\"".to_owned() + &self.0.to_string() + "\"^^<" + &self.datatype_iri() + ">"
+    }
 }
 
 impl Eq for DoubleDataValue {} // Possible since we exclude NaNs
@@ -74,6 +78,7 @@ mod test {
             "http://www.w3.org/2001/XMLSchema#double".to_string()
         );
         assert_eq!(double.value_domain(), ValueDomain::Double);
+        assert_eq!(double.canonical_string(), "\"".to_string() + &value.to_string() + "\"^^<http://www.w3.org/2001/XMLSchema#double>");
 
         assert_eq!(double.to_f64(), Some(value));
         assert_eq!(double.to_f64_unchecked(), value);

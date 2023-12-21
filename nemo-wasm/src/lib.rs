@@ -14,11 +14,9 @@ use nemo::execution::ExecutionEngine;
 use nemo::io::parser::parse_fact;
 use nemo::io::parser::parse_program;
 use nemo::io::resource_providers::{ResourceProvider, ResourceProviders};
-use nemo::model::types::primitive_logical_value::PrimitiveLogicalValueT;
-use nemo::model::Constant;
 use nemo::model::Identifier;
-use nemo::model::NumericLiteral;
-use nemo_physical::datatypes::Double;
+use nemo_physical::datavalues::AnyDataValue;
+use nemo_physical::datavalues::DataValue;
 use nemo_physical::error::ExternalReadingError;
 use nemo_physical::error::ReadingError;
 use nemo_physical::resource::Resource;
@@ -260,7 +258,7 @@ impl NemoEngine {
     pub fn result(&mut self, predicate: String) -> Result<NemoResults, NemoError> {
         let iter = self
             .0
-            .table_scan(&Identifier::from(predicate))
+            .predicate_rows(&Identifier::from(predicate))
             .map_err(WasmOrInternalNemoError::NemoError)
             .map_err(NemoError)?;
 
@@ -288,7 +286,7 @@ impl NemoEngine {
 
         let Some(record_iter) = self
             .0
-            .output_serialization(&identifier)
+            .predicate_rows(&identifier)
             .map_err(WasmOrInternalNemoError::NemoError)
             .map_err(NemoError)?
         else {
@@ -324,7 +322,7 @@ impl NemoEngine {
 }
 
 #[wasm_bindgen]
-pub struct NemoResults(Box<dyn Iterator<Item = Vec<PrimitiveLogicalValueT>> + Send>);
+pub struct NemoResults(Box<dyn Iterator<Item = Vec<AnyDataValue>> + Send>);
 
 #[wasm_bindgen]
 pub struct NemoResultsIteratorNext {
@@ -343,23 +341,21 @@ impl NemoResults {
         if let Some(next) = next {
             let array: Array = next
                 .into_iter()
-                .map(|v| match v {
-                    PrimitiveLogicalValueT::Any(rdf) => match rdf {
-                        Constant::Abstract(c) => JsValue::from(c.to_string()),
-                        Constant::NumericLiteral(NumericLiteral::Integer(i)) => JsValue::from(i),
-                        Constant::NumericLiteral(NumericLiteral::Double(d)) => {
-                            JsValue::from(f64::from(d))
-                        }
-                        // currently we pack decimals into strings, maybe this should change
-                        Constant::NumericLiteral(_) => JsValue::from(rdf.to_string()),
-                        Constant::StringLiteral(s) => JsValue::from(s),
-                        Constant::RdfLiteral(lit) => JsValue::from(lit.to_string()),
-                        Constant::MapLiteral(_map) => todo!("maps are not yet supported"),
-                    },
-                    PrimitiveLogicalValueT::String(s) => JsValue::from(String::from(s)),
-                    PrimitiveLogicalValueT::Integer(i) => JsValue::from(i64::from(i)),
-                    PrimitiveLogicalValueT::Float64(d) => JsValue::from(f64::from(Double::from(d))),
-                })
+                .map(|v| match v.value_domain() {
+                        nemo_physical::datavalues::ValueDomain::String |
+                        nemo_physical::datavalues::ValueDomain::LanguageTaggedString |
+                        nemo_physical::datavalues::ValueDomain::Iri |
+                        nemo_physical::datavalues::ValueDomain::Other => JsValue::from(v.canonical_string()),
+                        nemo_physical::datavalues::ValueDomain::Double => JsValue::from(v.to_f64_unchecked()),
+                        nemo_physical::datavalues::ValueDomain::UnsignedLong => JsValue::from(v.to_u64_unchecked()),
+                        nemo_physical::datavalues::ValueDomain::NonNegativeLong |
+                        nemo_physical::datavalues::ValueDomain::UnsignedInt |
+                        nemo_physical::datavalues::ValueDomain::NonNegativeInt |
+                        nemo_physical::datavalues::ValueDomain::Long |
+                        nemo_physical::datavalues::ValueDomain::Int => JsValue::from(v.to_i64_unchecked()),
+                        nemo_physical::datavalues::ValueDomain::Tuple => todo!("tuple values are not supported yet"),
+                    }
+                )
                 .collect();
 
             NemoResultsIteratorNext {

@@ -34,6 +34,10 @@ impl DataValue for IriDataValue {
     fn to_iri_unchecked(&self) -> String {
         self.0.to_owned()
     }
+
+    fn canonical_string(&self) -> String {
+        super::datavalue::quote_iri(self.0.as_str())
+    }
 }
 
 #[cfg(test)]
@@ -52,6 +56,7 @@ mod test {
             "http://www.w3.org/2001/XMLSchema#anyURI".to_string()
         );
         assert_eq!(dv.value_domain(), ValueDomain::Iri);
+        assert_eq!(dv.canonical_string(), "<".to_string() + value + ">");
 
         assert_eq!(dv.to_iri(), Some(value.to_string()));
         assert_eq!(dv.to_iri_unchecked(), value.to_string());

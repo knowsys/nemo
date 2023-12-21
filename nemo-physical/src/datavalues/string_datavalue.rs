@@ -30,6 +30,10 @@ impl DataValue for StringDataValue {
     fn to_string_unchecked(&self) -> String {
         self.0.to_owned()
     }
+
+    fn canonical_string(&self) -> String {
+        super::datavalue::quote_string(self.0.to_owned())
+    }
 }
 
 #[cfg(test)]
@@ -48,8 +52,20 @@ mod test {
             "http://www.w3.org/2001/XMLSchema#string".to_string()
         );
         assert_eq!(dv.value_domain(), ValueDomain::String);
+        assert_eq!(dv.canonical_string(), "\"".to_string() + value + "\"");
 
         assert_eq!(dv.to_string(), Some(value.to_string()));
         assert_eq!(dv.to_string_unchecked(), value.to_string());
+    }
+
+    #[test]
+    fn test_string_escaping() {
+        let value = "Hello!\n\"World\"!\tTest\\backslash";
+        let dv = StringDataValue::new(value.to_string());
+
+        // No escaping in actual value ...
+        assert_eq!(dv.lexical_value(), value.to_string());
+        // ... but in serialization as string
+        assert_eq!(dv.canonical_string(), "\"Hello!\\n\\\"World\\\"!\tTest\\\\backslash\"");
     }
 }

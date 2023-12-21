@@ -29,3 +29,4 @@ pub use other_datavalue::OtherDataValue;
 /// Module to define [DataValue] implementations for arbitrary values.
 pub mod any_datavalue;
 pub use any_datavalue::AnyDataValue;
+pub use any_datavalue::AnyDataValueIterator;

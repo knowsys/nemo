@@ -8,9 +8,11 @@ use crate::datasources::{TableProvider, TupleBuffer};
 use crate::datatypes::data_value::DataValueIteratorT;
 use crate::datatypes::storage_value::{StorageValueIteratorT, VecT};
 use crate::datatypes::{DataTypeName, DataValueT, StorageValueT};
+use crate::datavalues::{AnyDataValue, AnyDataValueIterator};
 use crate::dictionary::value_serializer::{
     serialize_constant_with_dict, TrieSerializer, ValueSerializer,
 };
+use crate::dictionary::DvDict;
 use crate::tabular::operations::materialize::{materialize_up_to, scan_first_match};
 use crate::tabular::operations::project_reorder::project_and_reorder;
 use crate::tabular::operations::triescan_minus::TrieScanSubtract;
@@ -437,7 +439,8 @@ pub struct DatabaseInstance {
     /// Map with additional infromation about the tables
     table_infos: HashMap<TableId, TableInfo>,
 
-    /// Dictionary which stores the strings associates with abstract constants
+    /// Dictionary that represents the general mapping between datavalues and integer ids
+    /// used in all tables of this database
     dict_constants: RefCell<Dict>,
 
     /// Lowest unused null value.
@@ -1007,8 +1010,10 @@ impl DatabaseInstance {
     }
 
     /// Return a reference to a trie identified by its id and order.
-    /// If the trie is not available in memory, this function will laod it.
+    /// If the trie is not available in memory, this function will load it.
     /// Panics if no table under the given id and order exists.
+    ///
+    /// FIXME: Should not be public, or should not panic so easily and rather use the error.
     pub fn get_trie_or_load<'a>(
         &'a mut self,
         id: TableId,
@@ -1063,6 +1068,9 @@ impl DatabaseInstance {
     }
 
     /// Convert a [`StorageValueIteratorT`] into a [`DataValueIteratorT`].
+    ///
+    /// TODO: This should vanish at some point in the transition to [`DataValue`].
+    /// Currently, it is still used in tracing, where we work with "Contant" values in query results.
     pub fn storage_to_data_iterator<'a>(
         &'a self,
         name: DataTypeName,
@@ -1102,14 +1110,61 @@ impl DatabaseInstance {
         }
     }
 
-    fn get_in_memory_table_column_iterators(&self, id: TableId) -> Vec<DataValueIteratorT> {
+    /// Convert a [`StorageValueIteratorT`] into an iterator over [`AnyDataValue`].
+    pub fn storage_to_datavalue_iterator<'a>(
+        &'a self,
+        iterator: StorageValueIteratorT<'a>,
+    ) -> AnyDataValueIterator<'a> {
+        fn id_iterator_to_dv_iterator<'b, T>(
+            db: &'b DatabaseInstance,
+            iter: Box<dyn Iterator<Item = T> + 'b>,
+        ) -> AnyDataValueIterator<'b>
+        where
+            T: TryInto<usize> + Display + 'b,
+        {
+            // should only clone the ref and not the dict (hopefully)
+            let dict_ref_clone = Ref::clone(&db.get_dict_constants());
+            AnyDataValueIterator(Box::new(iter.map(move |id| {
+                if let Some(dv) = id.try_into()
+                .ok()
+                .and_then(|id_usize| dict_ref_clone.id_to_datavalue(id_usize))
+                {
+                    dv
+                } else {
+                    panic!("failed to find dictionary entry for an id that occurred in an internal table: please report this bug at https://github.com/knowsys/nemo/");
+                }
+            })))
+        }
+
+        match iterator {
+            StorageValueIteratorT::Id32(iter) => {
+                id_iterator_to_dv_iterator(self, iter)
+            },
+            StorageValueIteratorT::Id64(iter) => {
+                id_iterator_to_dv_iterator(self, iter)
+            },
+            StorageValueIteratorT::Int64(iter) => {
+                AnyDataValueIterator(Box::new(iter.map(move |integer| {
+                    AnyDataValue::new_integer_from_i64(integer)
+                })))
+            },
+            StorageValueIteratorT::Float(_iter) => {
+                panic!("32bit float not currently supported in AnyDataValue, so they should not occur in tables: please report this bug at https://github.com/knowsys/nemo/");
+            }
+            StorageValueIteratorT::Double(iter) => {
+                AnyDataValueIterator(Box::new(iter.map(move |double| {
+                    AnyDataValue::new_double_from_f64(double.into()).expect("non-finite floats in the database: please report this bug at https://github.com/knowsys/nemo/")
+                })))
+            }
+        }
+    }
+
+    fn get_in_memory_table_column_iterators(&self, id: TableId) -> Vec<AnyDataValueIterator> {
         let trie = self.get_trie_order(id, &ColumnOrder::default());
-        let schema = self.table_schema(id);
 
         trie.get_full_column_iterators()
             .into_iter()
-            .enumerate()
-            .map(|(idx, fci)| self.storage_to_data_iterator(schema[idx], fci))
+            .map(|fci| self.storage_to_datavalue_iterator(fci))
             .collect()
     }
 
@@ -1117,7 +1172,7 @@ impl DatabaseInstance {
     pub fn get_table_column_iterators(
         &mut self,
         id: TableId,
-    ) -> Result<Vec<DataValueIteratorT>, ReadingError> {
+    ) -> Result<Vec<AnyDataValueIterator>, ReadingError> {
         // make sure trie is loaded
         self.get_trie_or_load(id, &ColumnOrder::default())?;
 

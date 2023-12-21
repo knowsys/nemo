@@ -7,6 +7,7 @@ use std::{
 };
 
 use flate2::{write::GzEncoder, Compression};
+use nemo_physical::datavalues::AnyDataValue;
 
 use crate::{
     error::Error,
@@ -108,7 +109,7 @@ impl OutputManager {
     pub fn export_table(
         &self,
         export_spec: &ExportSpec,
-        table: Option<impl Iterator<Item = Vec<String>>>,
+        table: Option<impl Iterator<Item = Vec<AnyDataValue>>>,
     ) -> Result<(), Error> {
         let output_path = self.output_file_name(export_spec);
         log::info!(

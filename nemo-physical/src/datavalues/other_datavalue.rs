@@ -28,6 +28,10 @@ impl DataValue for OtherDataValue {
     fn value_domain(&self) -> ValueDomain {
         ValueDomain::Other
     }
+
+    fn canonical_string(&self) -> String {
+        super::datavalue::quote_string(self.0.to_owned()) + "^^" + &super::datavalue::quote_iri(self.1.as_str())
+    }
 }
 
 #[cfg(test)]
@@ -44,9 +48,10 @@ mod test {
         assert_eq!(dv.lexical_value(), "0FB7");
         assert_eq!(
             dv.datatype_iri(),
-            "http://www.w3.org/2001/XMLSchema#hexBinary".to_string()
+            datatype_iri.to_string()
         );
         assert_eq!(dv.value_domain(), ValueDomain::Other);
+        assert_eq!(dv.canonical_string(), "\"".to_string() + value + "\"^^<" + datatype_iri + ">");
 
         assert_eq!(dv.to_string(), None);
         assert_eq!(dv.to_iri(), None);

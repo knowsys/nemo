@@ -4,6 +4,7 @@ use std::collections::HashSet;
 use std::io::{BufReader, Read};
 
 use csv::{Reader, ReaderBuilder, WriterBuilder};
+use nemo_physical::datavalues::DataValue;
 use thiserror::Error;
 
 use oxiri::Iri;
@@ -258,13 +259,19 @@ struct DsvWriter {
 impl TableWriter for DsvWriter {
     fn write_record(
         &mut self,
-        record: &[String],
+        record: &[AnyDataValue],
         writer: &mut dyn std::io::Write,
     ) -> Result<(), Error> {
+        let mut string_record = Vec::with_capacity(record.len());
+        for dv in record {
+            // FIXME: Placeholder datavalue-to-string conversion; needs to be done properly for CSV
+            string_record.push(dv.lexical_value() + "^^" + dv.datatype_iri().as_str());
+        }
+        // FIXME: Are we building a new writer for every single record?!
         Ok(WriterBuilder::new()
             .delimiter(self.delimiter)
             .from_writer(writer)
-            .write_record(record)?)
+            .write_record(string_record)?)
     }
 }
 

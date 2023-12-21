@@ -95,7 +95,7 @@ pub fn write(path: String, engine: &mut Engine, predicates: Vec<Identifier>) -> 
             output_predicates
                 .get(predicate)
                 .expect("export spec should be present"),
-            engine.output_serialization(predicate)?,
+            engine.predicate_rows(predicate)?,
         )?;
     }
 

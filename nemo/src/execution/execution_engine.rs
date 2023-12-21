@@ -7,6 +7,7 @@ use std::{
 
 use nemo_physical::{
     datatypes::{DataValueT, StorageValueT},
+    datavalues::{AnyDataValue, AnyDataValueIterator},
     management::database::TableSource,
     meta::TimedCode,
 };
@@ -23,10 +24,7 @@ use crate::{
     },
     model::{
         chase_model::{ChaseAtom, ChaseFact, ChaseProgram},
-        types::{
-            primitive_logical_value::{PrimitiveLogicalValueIteratorT, PrimitiveLogicalValueT},
-            primitive_types::PrimitiveType,
-        },
+        types::primitive_types::PrimitiveType,
         Constant, Constraint, Fact, Identifier, PrimitiveTerm, Program, Term, TupleConstraint,
         Variable,
     },
@@ -289,95 +287,30 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         &self.program
     }
 
-    /// Get a list of column iterators for the predicate
-    pub fn get_predicate_column_iterators(
+    /// Creates an [`Iterator`] over the resulting facts of a predicate.
+    /// It switches from a column-based to a row-based view by combining column iterators.
+    pub fn predicate_rows(
         &mut self,
         predicate: &Identifier,
-    ) -> Result<Option<Vec<PrimitiveLogicalValueIteratorT>>, Error> {
+    ) -> Result<Option<impl Iterator<Item = Vec<AnyDataValue>> + '_>, Error> {
         let Some(table_id) = self.table_manager.combine_predicate(predicate)? else {
             return Ok(None);
         };
 
-        let predicate_types: &Vec<PrimitiveType> = self
-            .analysis
-            .predicate_types
-            .get(predicate)
-            .expect("All predicates should have types by now.");
-
         let iterators = self.table_manager.table_column_iters(table_id)?;
 
-        let logically_mapped_iters: Vec<PrimitiveLogicalValueIteratorT> = iterators
-            .into_iter()
-            .zip(predicate_types.iter())
-            .map(|(iter, lt)| lt.primitive_logical_value_iterator(iter))
-            .collect();
-
-        Ok(Some(logically_mapped_iters))
-    }
-
-    /// Creates an [`Iterator`] over the resulting facts of a predicate.
-    // TODO: we probably want to return a list of column iterators over logical values
-    pub fn table_scan(
-        &mut self,
-        predicate: &Identifier,
-    ) -> Result<Option<impl Iterator<Item = Vec<PrimitiveLogicalValueT>> + '_>, Error> {
-        let Some(logically_mapped_iters) = self.get_predicate_column_iterators(predicate)? else {
-            return Ok(None);
-        };
-
-        struct CombinedIters<'a>(Vec<PrimitiveLogicalValueIteratorT<'a>>);
+        struct CombinedIters<'a>(Vec<AnyDataValueIterator<'a>>);
 
         impl<'a> Iterator for CombinedIters<'a> {
-            type Item = Vec<PrimitiveLogicalValueT>;
+            type Item = Vec<AnyDataValue>;
 
             fn next(&mut self) -> Option<Self::Item> {
-                let res: Self::Item = self.0.iter_mut().filter_map(|iter| iter.next()).collect();
+                let res: Self::Item = self.0.iter_mut().filter_map(|iter| iter.0.next()).collect();
                 (!res.is_empty()).then_some(res)
             }
         }
 
-        let combined_iters = CombinedIters(logically_mapped_iters);
-
-        Ok(Some(combined_iters))
-    }
-
-    /// Creates an [`Iterator`] over the resulting facts of a predicate.
-    pub fn output_serialization(
-        &mut self,
-        predicate: &Identifier,
-    ) -> Result<Option<impl Iterator<Item = Vec<String>> + '_>, Error> {
-        let Some(table_id) = self.table_manager.combine_predicate(predicate)? else {
-            return Ok(None);
-        };
-
-        let predicate_types: &Vec<PrimitiveType> = self
-            .analysis
-            .predicate_types
-            .get(predicate)
-            .expect("All predicates should have types by now.");
-
-        let iterators = self.table_manager.table_column_iters(table_id)?;
-
-        let logically_mapped_iters: Vec<Box<dyn Iterator<Item = String>>> = iterators
-            .into_iter()
-            .zip(predicate_types.iter())
-            .map(|(iter, lt)| lt.serialize_output(iter))
-            .collect();
-
-        struct CombinedIters<'a>(Vec<Box<dyn Iterator<Item = String> + 'a>>);
-
-        impl<'a> Iterator for CombinedIters<'a> {
-            type Item = Vec<String>;
-
-            fn next(&mut self) -> Option<Self::Item> {
-                let res: Self::Item = self.0.iter_mut().filter_map(|iter| iter.next()).collect();
-                (!res.is_empty()).then_some(res)
-            }
-        }
-
-        let combined_iters = CombinedIters(logically_mapped_iters);
-
-        Ok(Some(combined_iters))
+        Ok(Some(CombinedIters(iterators)))
     }
 
     /// Counts the facts of a single predicate.
