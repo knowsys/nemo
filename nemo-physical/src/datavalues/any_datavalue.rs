@@ -627,7 +627,7 @@ mod test {
 
     #[test]
     fn anydatavalue_float() {
-        let value = 2.34e3;
+        let value = 2.3456e3;
         let dv = AnyDataValue::new_float_from_f32(value).unwrap();
 
         assert_eq!(dv.lexical_value(), value.to_string());
@@ -638,12 +638,16 @@ mod test {
         assert_eq!(dv.value_domain(), ValueDomain::Float);
 
         assert_eq!(dv.to_f32(), Some(value));
+        assert_eq!(dv.to_f64(), None);
         assert_eq!(dv.to_f32_unchecked(), value);
+        assert_eq!(dv, AnyDataValue::new_float_from_f32(value).unwrap());
+        assert_ne!(dv, AnyDataValue::new_float_from_f32(3.14).unwrap());
+        assert_ne!(dv, AnyDataValue::new_double_from_f64(2.3456e3).unwrap());
     }
 
     #[test]
     fn anydatavalue_double() {
-        let value = 2.34e3;
+        let value = 2.3456e3;
         let dv = AnyDataValue::new_double_from_f64(value).unwrap();
 
         assert_eq!(dv.lexical_value(), value.to_string());
@@ -654,7 +658,11 @@ mod test {
         assert_eq!(dv.value_domain(), ValueDomain::Double);
 
         assert_eq!(dv.to_f64(), Some(value));
+        assert_eq!(dv.to_f32(), None);
         assert_eq!(dv.to_f64_unchecked(), value);
+        assert_eq!(dv, AnyDataValue::new_double_from_f64(value).unwrap());
+        assert_ne!(dv, AnyDataValue::new_double_from_f64(3.14).unwrap());
+        assert_ne!(dv, AnyDataValue::new_float_from_f32(2.3456e3).unwrap());
     }
 
     #[test]
@@ -681,6 +689,9 @@ mod test {
         assert_eq!(dv.to_i64_unchecked(), 42);
         assert_eq!(dv.to_u64(), Some(42));
         assert_eq!(dv.to_u64_unchecked(), 42);
+
+        assert_eq!(dv, AnyDataValue::new_integer_from_i64(42));
+        assert_eq!(dv, AnyDataValue::new_integer_from_u64(42));
     }
 
     #[test]
