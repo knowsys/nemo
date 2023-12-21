@@ -4,7 +4,7 @@ use std::{collections::HashSet, io::BufReader, str::FromStr};
 
 use nemo_physical::{
     datasources::{table_providers::TableProvider, tuple_writer::TupleWriter},
-    datavalues::{AnyDataValue, DataValue, DataValueCreationError},
+    datavalues::{AnyDataValue, DataValueCreationError},
     resource::Resource,
 };
 
