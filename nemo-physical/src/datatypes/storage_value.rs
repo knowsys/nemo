@@ -3,12 +3,10 @@ use std::cmp::Ordering;
 use delegate::delegate;
 
 use crate::{
-    datavalues::AnyDataValue,
-    dictionary::meta_dv_dict::MetaDictionary,
-    generate_datatype_forwarder,
+    datavalues::AnyDataValue, dictionary::meta_dv_dict::MetaDictionary, generate_datatype_forwarder,
 };
 
-use super::{double::Double, float::Float, StorageTypeName, into_datavalue::IntoDataValue};
+use super::{double::Double, float::Float, into_datavalue::IntoDataValue, StorageTypeName};
 
 /// Enum for values of all supported basic types.
 /// This should not be used to represent large numbers of values,

@@ -1,10 +1,14 @@
-use crate::{datavalues::{AnyDataValue, FloatDataValue, DoubleDataValue}, management::database::Dict, dictionary::DvDict};
+use crate::{
+    datavalues::{AnyDataValue, DoubleDataValue, FloatDataValue},
+    dictionary::DvDict,
+    management::database::Dict,
+};
 
-use super::{Float, Double};
+use super::{Double, Float};
 
 /// Trait defined by types that can be converted into an [AnyDataValue]
 /// by potentially using a [MetaDictionary].
-/// 
+///
 /// TODO: Is this really a good design? We already have methods for creating AnyDatavalue from
 /// a variety of types, and from arbitrary StorageValueT. Why do we need additional conversions
 /// that duplicate code of the cases already implemented?  

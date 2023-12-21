@@ -11,7 +11,7 @@ use crate::{
         columnscan::{ColumnScanEnum, ColumnScanRainbow},
         operations::{filter::ColumnScanFilter, ColumnScanPass},
     },
-    datatypes::{StorageTypeName,into_datavalue::IntoDataValue},
+    datatypes::{into_datavalue::IntoDataValue, StorageTypeName},
     datavalues::AnyDataValue,
     dictionary::meta_dv_dict::MetaDictionary,
     function::{evaluation::StackProgram, tree::FunctionTree},
