@@ -42,3 +42,6 @@ pub use run_length_encodable::RunLengthEncodable;
 /// Module containing functionality relevant to casting types
 pub mod casting;
 pub use casting::ImplicitCastError;
+
+/// Module for creating AnyDataValue objects.
+pub mod into_datavalue;
