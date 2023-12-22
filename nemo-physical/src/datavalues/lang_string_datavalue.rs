@@ -14,7 +14,7 @@ impl LangStringDataValue {
     /// Constructor. We do not currently perform any checks regarding the structure
     /// of the language tag: any string is accepted there. In practice, however, it
     /// should conform to [RFC5646 Tags for Identifying Languages](https://datatracker.ietf.org/doc/html/rfc5646).
-    /// 
+    ///
     /// TODO: Should we normalize the lang_tag to lower case? This is allowed and might be needed to correct
     /// equality, but it does undo the (common?) formatting of things like `en-GB`.
     pub fn new(string: String, lang_tag: String) -> Self {

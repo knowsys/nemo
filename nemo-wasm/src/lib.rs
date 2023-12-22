@@ -349,10 +349,10 @@ impl NemoResults {
                         JsValue::from(v.canonical_string())
                     }
                     nemo_physical::datavalues::ValueDomain::Double => {
-                        JsValue::from(f64::from(v.to_f64_unchecked()))
+                        JsValue::from(v.to_f64_unchecked())
                     }
                     nemo_physical::datavalues::ValueDomain::Float => {
-                        JsValue::from(f32::from(v.to_f32_unchecked()))
+                        JsValue::from(v.to_f32_unchecked())
                     }
                     nemo_physical::datavalues::ValueDomain::UnsignedLong => {
                         JsValue::from(v.to_u64_unchecked())
