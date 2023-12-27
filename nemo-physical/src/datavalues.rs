@@ -29,10 +29,13 @@ pub use lang_string_datavalue::LangStringDataValue;
 /// Module to define [DataValue] implementations for generic values that are not covered by any of our specific [`ValueDomain`]s.
 pub mod other_datavalue;
 pub use other_datavalue::OtherDataValue;
+/// Module to define [DataValue] implementations for null values.
+pub mod null_datavalue;
+pub use null_datavalue::NullDataValue;
+/// Module to define [DataValue] implementation for boolean values.
+pub mod boolean;
+pub use boolean::BooleanDataValue;
 /// Module to define [DataValue] implementations for arbitrary values.
 pub mod any_datavalue;
 pub use any_datavalue::AnyDataValue;
 pub use any_datavalue::AnyDataValueIterator;
-/// Module to define [DataValue] implementation for boolean values.
-pub mod boolean;
-pub use boolean::BooleanDataValue;

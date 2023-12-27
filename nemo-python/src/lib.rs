@@ -200,6 +200,7 @@ fn datavalue_to_python(py: Python<'_>, v: AnyDataValue) -> PyResult<&PyAny> {
         | nemo::datavalues::ValueDomain::Long
         | nemo::datavalues::ValueDomain::Int => Ok(v.to_i64_unchecked().into_py(py).into_ref(py)),
         nemo::datavalues::ValueDomain::Boolean => todo!("boolean not supported yet"),
+        nemo::datavalues::ValueDomain::Null => todo!("nulls not supported yet"),
         nemo::datavalues::ValueDomain::Tuple => todo!("tuples are not supported yet"),
         nemo::datavalues::ValueDomain::UnsignedLong | nemo::datavalues::ValueDomain::Other => {
             let lit = NemoLiteral {

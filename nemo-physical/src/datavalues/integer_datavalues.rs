@@ -1,4 +1,4 @@
-//! This module provides implementations [`super::DataValue`]s that represent integer numbers.
+//! This module provides implementations of [`super::DataValue`]s that represent integer numbers.
 //! Integers have a more complex domain hierarchy than most other kinds of data, and the related
 //! logic is collected here as well.
 

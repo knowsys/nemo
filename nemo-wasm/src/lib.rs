@@ -343,6 +343,7 @@ impl NemoResults {
                 .into_iter()
                 .map(|v| match v.value_domain() {
                     nemo_physical::datavalues::ValueDomain::String
+                    | nemo::datavalues::ValueDomain::Null
                     | nemo_physical::datavalues::ValueDomain::LanguageTaggedString
                     | nemo_physical::datavalues::ValueDomain::Iri
                     | nemo_physical::datavalues::ValueDomain::Other => {

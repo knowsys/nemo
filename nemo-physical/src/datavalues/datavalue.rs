@@ -69,6 +69,8 @@ pub enum ValueDomain {
     Tuple,
     /// Domain of all boolean values (true and false)
     Boolean,
+    /// Domain of all named nulls.
+    Null,
     /// Domain of all data values not covered by the remaining domains
     Other,
 }
@@ -99,6 +101,7 @@ impl ValueDomain {
             // Other literals cannot have a fixed canonical type by definition
             ValueDomain::Other => panic!("There is no canonical datatype for {:?}. Use the type of the value directly.", self),
             ValueDomain::Boolean => "http://www.w3.org/2001/XMLSchema#boolean".to_string(),
+            ValueDomain::Null => panic!("There is no canonical datatype for {:?} defined in Nemo yet. Nulls can be serialized as blank nodes.", self),
         }
     }
 }

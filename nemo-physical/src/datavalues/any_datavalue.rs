@@ -14,8 +14,8 @@ use crate::{
 use super::{
     boolean::BooleanDataValue, errors::InternalDataValueCreationError,
     float_datavalues::FloatDataValue, DataValue, DataValueCreationError, DoubleDataValue,
-    IriDataValue, LangStringDataValue, LongDataValue, OtherDataValue, StringDataValue,
-    UnsignedLongDataValue, ValueDomain,
+    IriDataValue, LangStringDataValue, LongDataValue, NullDataValue, OtherDataValue,
+    StringDataValue, UnsignedLongDataValue, ValueDomain,
 };
 
 // Initial part of IRI in all XML Schema types:
@@ -70,6 +70,8 @@ pub enum AnyDataValue {
     Long(LongDataValue),
     /// Variant for representing [DataValue]s in [ValueDomain::Boolean].
     Boolean(BooleanDataValue),
+    /// Variant for representing [DataValue]s in [ValueDomain::Null].
+    Null(NullDataValue),
     /// Variant for representing [`DataValue`]s in [`ValueDomain::Other`].
     Other(OtherDataValue),
 }
@@ -446,7 +448,8 @@ impl AnyDataValue {
             | ValueDomain::Other
             | ValueDomain::String
             | ValueDomain::LanguageTaggedString
-            | ValueDomain::Iri => {
+            | ValueDomain::Iri
+            | ValueDomain::Null => {
                 let dictionary_id = dictionary
                     .datavalue_to_id(self)
                     .expect("value should be known to the dictionary");
@@ -478,6 +481,7 @@ impl AnyDataValue {
                 let dictionary_id = dictionary.add_datavalue(self.clone()).value();
                 Self::usize_to_storage_value_t(dictionary_id)
             }
+            ValueDomain::Null => todo!("use special dictionary method for making nulls, if needed"),
             ValueDomain::Float => StorageValueT::Float(Float::from_number(self.to_f32_unchecked())),
             ValueDomain::Double => {
                 StorageValueT::Double(Double::from_number(self.to_f64_unchecked()))
@@ -511,6 +515,7 @@ impl DataValue for AnyDataValue {
             AnyDataValue::Double(value) => value,
             AnyDataValue::UnsignedLong(value) => value,
             AnyDataValue::Long(value) => value,
+            AnyDataValue::Null(value) => value,
             AnyDataValue::Other(value) => value,
         } {
             fn datatype_iri(&self) -> String;
@@ -575,6 +580,7 @@ impl PartialEq for AnyDataValue {
                 other.fits_into_u64() && other.to_u64_unchecked() == self.to_u64_unchecked()
             }
             (AnyDataValue::Boolean(dv), AnyDataValue::Boolean(dv_other)) => dv == dv_other,
+            (AnyDataValue::Null(dv), AnyDataValue::Null(dv_other)) => dv == dv_other,
             (AnyDataValue::Other(dv), AnyDataValue::Other(dv_other)) => dv == dv_other,
             _ => false,
         }
