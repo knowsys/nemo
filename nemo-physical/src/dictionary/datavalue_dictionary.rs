@@ -53,6 +53,13 @@ pub trait DvDict: Debug {
     /// with [`KNOWN_ID_MARK`].
     fn add_datavalue(&mut self, dv: AnyDataValue) -> AddResult;
 
+    /// Creates a fresh null [AnyDataValue] and assigns an id to it. Both the new null and
+    /// the id are returned.
+    fn fresh_null(&mut self) -> (AnyDataValue, usize);
+
+    /// Creates a fresh null [AnyDataValue] and returns its id.
+    fn fresh_null_id(&mut self) -> usize;
+
     /// Looks up the given [`AnyDataValue`] and returns `Some(id)` if it is in the dictionary, and `None` otherwise.
     /// For marked datavalues, this returns [`KNOWN_ID_MARK`] as an id.
     fn datavalue_to_id(&self, dv: &AnyDataValue) -> Option<usize>;

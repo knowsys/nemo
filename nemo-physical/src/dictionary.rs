@@ -20,6 +20,9 @@ pub(crate) use string_dv_dict::IriDvDictionary;
 pub(crate) use string_dv_dict::LangStringDvDictionary;
 pub(crate) use string_dv_dict::OtherDvDictionary;
 pub(crate) use string_dv_dict::StringDvDictionary;
+/// Module to define a datavalue dictionary for nulls.
+pub mod null_dv_dict;
+pub(crate) use null_dv_dict::NullDvDictionary;
 /// Module to define a general-purpose datavalue dictionary.
 pub mod meta_dv_dict;
 

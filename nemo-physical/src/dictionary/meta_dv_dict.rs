@@ -1,12 +1,13 @@
 use crate::datavalues::ValueDomain;
 use crate::datavalues::{AnyDataValue, DataValue};
+use crate::dictionary::NONEXISTING_ID_MARK;
 
-use super::AddResult;
 use super::DvDict;
 use super::IriDvDictionary;
 use super::LangStringDvDictionary;
 use super::OtherDvDictionary;
 use super::StringDvDictionary;
+use super::{AddResult, NullDvDictionary};
 
 // use lru::LruCache;
 // use std::borrow::Borrow;
@@ -94,6 +95,8 @@ enum DictionaryType {
     IriDv,
     /// Dictionary for other datavalues
     OtherDv,
+    /// Dictionary for null datavalues
+    NullDv,
     // /// Dictionary for long strings (blobs)
     // Blob,
     // /// Dictionary for strings with a fixed prefix and suffix
@@ -112,6 +115,7 @@ impl DictionaryType {
             (DictionaryType::StringDv, ValueDomain::String) => true,
             (DictionaryType::LangStringDv, ValueDomain::LanguageTaggedString) => true,
             (DictionaryType::OtherDv, ValueDomain::Other) => true,
+            (DictionaryType::NullDv, ValueDomain::Null) => true,
             _ => false,
         }
     }
@@ -156,15 +160,16 @@ impl DictIterator {
         // First look for infix dictionary:
         if self.position == 0 {
             self.position = 1; // move on, whatever happens
-                               // TODO: disabled, currently no infix dictionary support
-                               // if ds.infixable() {
-                               //     if let Some(dict_idx) = md
-                               //         .infix_dicts
-                               //         .get::<dyn StringPairKey>(&(ds.prefix(), ds.suffix()))
-                               //     {
-                               //         return *dict_idx;
-                               //     }
-                               // }
+
+            // TODO: disabled, currently no infix dictionary support
+            // if ds.infixable() {
+            //     if let Some(dict_idx) = md
+            //         .infix_dicts
+            //         .get::<dyn StringPairKey>(&(ds.prefix(), ds.suffix()))
+            //     {
+            //         return *dict_idx;
+            //     }
+            // }
         }
 
         if self.position == 1 {
@@ -174,6 +179,7 @@ impl DictIterator {
                 AnyDataValue::LanguageTaggedString(_) => return md.langstring_dict,
                 AnyDataValue::Iri(_) => return md.iri_dict,
                 AnyDataValue::Other(_) => return md.other_dict,
+                AnyDataValue::Null(_) => return md.null_dict,
                 _ => {}
             }
         }
@@ -208,14 +214,16 @@ pub struct MetaDictionary {
     /// Vector of all sub-dictionaries, indexed by their sub-dictionary number
     dicts: Vec<DictRecord>,
 
-    /// If of the main string datavalue dictionary, if any (otherwise [NO_DICT])
+    /// Id of the main string datavalue dictionary, if any (otherwise [NO_DICT])
     string_dict: DictId,
-    /// If of the main language-tagged string datavalue dictionary, if any (otherwise [NO_DICT])
+    /// Id of the main language-tagged string datavalue dictionary, if any (otherwise [NO_DICT])
     langstring_dict: DictId,
-    /// If of the main IRI datavalue dictionary, if any (otherwise [NO_DICT])
+    /// Id of the main IRI datavalue dictionary, if any (otherwise [NO_DICT])
     iri_dict: DictId,
-    /// If of the main other datavalue dictionary, if any (otherwise [NO_DICT])
+    /// Id of the main other datavalue dictionary, if any (otherwise [NO_DICT])
     other_dict: DictId,
+    /// Id of the null dictionary, if any (otherwise [NO_DICT])
+    null_dict: DictId,
     /// Ids of further general-purpose dictionaries,
     /// which might be used for any kind of datavalue.
     generic_dicts: Vec<DictId>,
@@ -240,6 +248,7 @@ impl Default for MetaDictionary {
             langstring_dict: NO_DICT,
             iri_dict: NO_DICT,
             other_dict: NO_DICT,
+            null_dict: NO_DICT,
             // dict_candidates: LruCache::new(NonZeroUsize::new(150).unwrap()),
             //infix_dicts: HashMap::new(),
             generic_dicts: Vec::new(),
@@ -250,6 +259,7 @@ impl Default for MetaDictionary {
         result.add_dictionary(DictionaryType::StringDv);
         result.add_dictionary(DictionaryType::LangStringDv);
         result.add_dictionary(DictionaryType::OtherDv);
+        result.add_dictionary(DictionaryType::NullDv);
 
         result
     }
@@ -355,6 +365,13 @@ impl MetaDictionary {
                 }
                 dict = Box::new(OtherDvDictionary::new());
                 self.other_dict = self.dicts.len();
+            }
+            DictionaryType::NullDv => {
+                if self.null_dict != NO_DICT {
+                    return;
+                }
+                dict = Box::new(NullDvDictionary::new());
+                self.null_dict = self.dicts.len();
             } // DictionaryType::Infix {
               //     ref prefix,
               //     ref suffix,
@@ -457,14 +474,28 @@ impl MetaDictionary {
         // Add entry to preferred dictionary
         self.size += 1;
         let local_id = self.dicts[best_dict_idx].dict.add_datavalue(dv).value();
-        // Compute global id based on block and local id, possibly allocating new block in the process
-        AddResult::Fresh(self.local_to_global(best_dict_idx, local_id))
+        if local_id != NONEXISTING_ID_MARK {
+            // Compute global id based on block and local id, possibly allocating new block in the process
+            AddResult::Fresh(self.local_to_global(best_dict_idx, local_id))
+        } else {
+            AddResult::Rejected
+        }
     }
 }
 
 impl DvDict for MetaDictionary {
     fn add_datavalue(&mut self, dv: AnyDataValue) -> AddResult {
         self.add_datavalue_inline(dv)
+    }
+
+    fn fresh_null(&mut self) -> (AnyDataValue, usize) {
+        let (nv, local_id) = self.dicts[self.null_dict].dict.fresh_null();
+        (nv, self.local_to_global(self.null_dict, local_id))
+    }
+
+    fn fresh_null_id(&mut self) -> usize {
+        let local_id = self.dicts[self.null_dict].dict.fresh_null_id();
+        self.local_to_global(self.null_dict, local_id)
     }
 
     fn datavalue_to_id(&self, dv: &AnyDataValue) -> Option<usize> {
@@ -519,7 +550,7 @@ impl DvDict for MetaDictionary {
 #[cfg(test)]
 mod test {
     use crate::{
-        datavalues::AnyDataValue,
+        datavalues::{AnyDataValue, NullDataValue},
         dictionary::{AddResult, DvDict},
     };
 
@@ -557,5 +588,24 @@ mod test {
         }
 
         assert_eq!(dict.len(), dvs.len());
+    }
+
+    #[test]
+    fn add_and_get_nulls() {
+        let mut dict = MetaDictionary::new();
+
+        let n1_id = dict.fresh_null_id();
+        let nv1 = dict.id_to_datavalue(n1_id).unwrap();
+        let (nv2, n2_id) = dict.fresh_null();
+        let nv3 = AnyDataValue::Null(NullDataValue::new(42));
+
+        assert_eq!(dict.datavalue_to_id(&nv1), Some(n1_id));
+        assert_eq!(dict.datavalue_to_id(&nv2), Some(n2_id));
+        assert_eq!(dict.add_datavalue(nv1.clone()), AddResult::Known(n1_id));
+        assert_eq!(dict.add_datavalue(nv2.clone()), AddResult::Known(n2_id));
+
+        assert_eq!(dict.add_datavalue(nv3.clone()), AddResult::Rejected);
+
+        assert_eq!(dict.len(), 2);
     }
 }

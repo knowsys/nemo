@@ -19,12 +19,16 @@ use super::{DataValue, ValueDomain};
 /// to the same null.
 #[repr(transparent)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct NullDataValue(u64);
+pub struct NullDataValue(usize);
 
 impl NullDataValue {
     /// Constructor. This is private to the crate. External users must create nulls by using a dictionary.
-    pub(crate) fn new(value: u64) -> Self {
+    pub(crate) fn new(value: usize) -> Self {
         NullDataValue(value)
+    }
+
+    pub(crate) fn id(&self) -> usize {
+        self.0
     }
 }
 

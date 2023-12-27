@@ -199,6 +199,14 @@ impl<C: DvConverter> DvDict for StringBasedDvDictionary<C> {
         }
     }
 
+    fn fresh_null(&mut self) -> (AnyDataValue, usize) {
+        panic!("string-based dictionaries cannot make fresh nulls");
+    }
+
+    fn fresh_null_id(&mut self) -> usize {
+        panic!("string-based dictionaries cannot make fresh nulls");
+    }
+
     fn datavalue_to_id(&self, dv: &AnyDataValue) -> Option<usize> {
         if let Some(s) = C::dict_string(dv) {
             self.string_dict.str_to_id(s.as_str())
