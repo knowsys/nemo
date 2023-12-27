@@ -84,3 +84,35 @@ impl DvDict for NullDvDictionary {
         false
     }
 }
+
+#[cfg(test)]
+mod test {
+    use crate::{
+        datavalues::{AnyDataValue, NullDataValue},
+        dictionary::{AddResult, DvDict, NullDvDictionary},
+    };
+
+    #[test]
+    fn add_and_get_nulls() {
+        let mut dict = NullDvDictionary::new();
+
+        let n1_id = dict.fresh_null_id();
+        let nv1 = dict.id_to_datavalue(n1_id).unwrap();
+        let (nv2, n2_id) = dict.fresh_null();
+        let nv3 = AnyDataValue::Null(NullDataValue::new(42));
+        let dv = AnyDataValue::new_integer_from_i64(42);
+
+        assert_ne!(nv1, nv2);
+        assert_ne!(n1_id, n2_id);
+
+        assert_eq!(dict.datavalue_to_id(&nv1), Some(n1_id));
+        assert_eq!(dict.datavalue_to_id(&nv2), Some(n2_id));
+        assert_eq!(dict.add_datavalue(nv1.clone()), AddResult::Known(n1_id));
+        assert_eq!(dict.add_datavalue(nv2.clone()), AddResult::Known(n2_id));
+
+        assert_eq!(dict.add_datavalue(nv3), AddResult::Rejected);
+        assert_eq!(dict.add_datavalue(dv), AddResult::Rejected);
+
+        assert_eq!(dict.len(), 2);
+    }
+}
