@@ -33,8 +33,8 @@ pub use other_datavalue::OtherDataValue;
 pub mod null_datavalue;
 pub use null_datavalue::NullDataValue;
 /// Module to define [DataValue] implementation for boolean values.
-pub mod boolean;
-pub use boolean::BooleanDataValue;
+pub mod boolean_datavalue;
+pub use boolean_datavalue::BooleanDataValue;
 /// Module to define [DataValue] implementations for arbitrary values.
 pub mod any_datavalue;
 pub use any_datavalue::AnyDataValue;
