@@ -264,8 +264,8 @@ impl TableWriter for DsvWriter {
     ) -> Result<(), Error> {
         let mut string_record = Vec::with_capacity(record.len());
         for dv in record {
-            // FIXME: Placeholder datavalue-to-string conversion; needs to be done properly for CSV
-            string_record.push(dv.lexical_value() + "^^" + dv.datatype_iri().as_str());
+            // FIXME: this may not be the correct format in all cases; needs some output-specific type information
+            string_record.push(dv.canonical_string());
         }
         // FIXME: Are we building a new writer for every single record?!
         Ok(WriterBuilder::new()
