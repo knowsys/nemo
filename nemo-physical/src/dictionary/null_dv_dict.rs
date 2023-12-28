@@ -1,7 +1,5 @@
 //! A [`DvDict`] implementation for nulls (and nulls only).
 
-use hashbrown::hash_table::AbsentEntry;
-
 use crate::datavalues::{AnyDataValue, NullDataValue};
 
 use super::{AddResult, DvDict};
