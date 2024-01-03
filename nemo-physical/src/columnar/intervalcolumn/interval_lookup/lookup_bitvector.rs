@@ -35,7 +35,8 @@ pub(crate) struct IntervalLookupBitVector {
     /// with the start point of the next interval.
     ///
     /// The last entry in this column is always the length of the
-    /// data column associated with this lookup object.
+    /// data column associated with this lookup object
+    /// (except when this structure is empty).
     ///
     /// Note that this is a fully sorted column.
     interval_starts: ColumnEnum<usize>,
@@ -86,26 +87,27 @@ pub(crate) struct IntervalLookupBitVectorBuilder {
     /// [BitVec] for storing which predecessor value has a successor in the constructed column
     predecessors: BitVec,
 
-    /// Parameter passed to `self.add` in the last call
-    last_data_count: usize,
+    /// The end point of the last added interval
+    last_end: usize,
 }
 
 impl IntervalLookupBuilder for IntervalLookupBitVectorBuilder {
     type Lookup = IntervalLookupBitVector;
 
-    fn add(&mut self, data_count: usize) {
-        if data_count != self.last_data_count {
-            self.predecessors.push(true);
-            self.builder_intervals.add(self.last_data_count);
-
-            self.last_data_count = data_count;
-        } else {
+    fn add(&mut self, interval: Range<usize>) {
+        if interval.is_empty() {
             self.predecessors.push(false);
+        } else {
+            self.predecessors.push(true);
+            self.builder_intervals.add(interval.start);
+            self.last_end = interval.end;
         }
     }
 
     fn finalize(mut self) -> Self::Lookup {
-        self.builder_intervals.add(self.last_data_count);
+        if self.builder_intervals.count() > 0 {
+            self.builder_intervals.add(self.last_end)
+        }
 
         Self::Lookup {
             interval_starts: self.builder_intervals.finalize(),
@@ -128,14 +130,14 @@ mod test {
     #[test]
     fn interval_lookup_column_bitvector() {
         let mut builder = IntervalLookupBitVectorBuilder::default();
-        builder.add(0);
-        builder.add(0);
-        builder.add(5);
-        builder.add(7);
-        builder.add(7);
-        builder.add(7);
-        builder.add(10);
-        builder.add(10);
+        builder.add(0..0);
+        builder.add(0..0);
+        builder.add(0..5);
+        builder.add(5..7);
+        builder.add(7..7);
+        builder.add(7..7);
+        builder.add(7..10);
+        builder.add(10..10);
 
         let lookup_column = builder.finalize();
         let interval_starts = lookup_column.interval_starts.iter().collect::<Vec<usize>>();

@@ -28,16 +28,13 @@ pub(crate) struct IntervalLookupColumnSingle {
     /// This column contains one entry for every entry in the data column
     /// of the previous layer.
     ///
-    /// An entry in this column might be `Self::Empty`
+    /// An entry in this column might be `Self::EMPTY`
     /// to indicate that the corresponding node from the previous layer
     /// has no successor.
     ///
     /// The length of an interval at index `i` can be obtained
     /// by subtracting the value of this column at index `i`
     /// from the next value in this column that is not `Self::EMPTY`.
-    ///
-    /// The last entry in this column is always the length of the
-    /// data column associated with this lookup object.
     interval_starts: ColumnEnum<usize>,
 }
 
@@ -58,7 +55,9 @@ impl IntervalLookupColumnSingle {
             }
         }
 
-        unreachable!("The last value of interval_starts the length of the data column and hence not Self::EMPTY")
+        unreachable!(
+            "The builder for this column makes sure that the last entry is not Self::EMPTY"
+        )
     }
 }
 
@@ -87,26 +86,26 @@ impl ByteSized for IntervalLookupColumnSingle {
 pub(crate) struct IntervalLookupColumnSingleBuilder {
     /// [ColumnBuilderAdaptive] for building `interval_starts`
     builder: ColumnBuilderAdaptive<usize>,
-
-    /// Parameter passed to `self.add` in the last call
-    last_data_count: usize,
+    /// The end point of the last added interval
+    last_end: usize,
 }
 
 impl IntervalLookupBuilder for IntervalLookupColumnSingleBuilder {
     type Lookup = IntervalLookupColumnSingle;
 
-    fn add(&mut self, data_count: usize) {
-        if data_count != self.last_data_count {
-            self.builder.add(self.last_data_count);
-
-            self.last_data_count = data_count;
-        } else {
+    fn add(&mut self, interval: Range<usize>) {
+        if interval.is_empty() {
             self.builder.add(Self::Lookup::EMPTY);
+        } else {
+            self.builder.add(interval.start);
+            self.last_end = interval.end;
         }
     }
 
     fn finalize(mut self) -> Self::Lookup {
-        self.builder.add(self.last_data_count);
+        if self.builder.count() > 0 {
+            self.builder.add(self.last_end)
+        }
 
         Self::Lookup {
             interval_starts: self.builder.finalize(),
@@ -130,14 +129,14 @@ mod test {
         let empty = IntervalLookupColumnSingle::EMPTY;
 
         let mut builder = IntervalLookupColumnSingleBuilder::default();
-        builder.add(0);
-        builder.add(0);
-        builder.add(5);
-        builder.add(7);
-        builder.add(7);
-        builder.add(7);
-        builder.add(10);
-        builder.add(10);
+        builder.add(0..0);
+        builder.add(0..0);
+        builder.add(0..5);
+        builder.add(5..7);
+        builder.add(7..7);
+        builder.add(7..7);
+        builder.add(7..10);
+        builder.add(10..10);
 
         let lookup_column = builder.finalize();
         let interval_starts = lookup_column.interval_starts.iter().collect::<Vec<usize>>();

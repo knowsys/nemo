@@ -59,27 +59,45 @@ impl Trie {
             .collect::<Vec<_>>();
 
         let mut last_tuple_intervals = Vec::new();
+        let mut last_tuple_types = Vec::new();
 
         for (column_index, current_builder) in intervalcolumn_builders.iter_mut().enumerate() {
             let mut current_tuple_intervals = Vec::<usize>::new();
+            let mut current_tuple_types = Vec::<StorageTypeName>::new();
 
             let mut predecessor_index = 0;
+            let mut last_type = StorageTypeName::Id32; // Chosen arbitrarily
+
             for (tuple_index, value) in buffer.get_column(column_index).enumerate() {
                 if last_tuple_intervals.get(predecessor_index) == Some(&tuple_index) {
-                    current_builder.finish_interval();
+                    let last_type = last_tuple_types[predecessor_index];
+                    current_builder.finish_interval(last_type);
+
                     predecessor_index += 1;
                 }
 
+                let value_type = value.get_type();
                 let new_value = current_builder.add_value(value);
 
                 if new_value && tuple_index > 0 {
                     current_tuple_intervals.push(tuple_index);
+                    current_tuple_types.push(value_type);
+                    last_type = value_type;
                 }
             }
 
-            current_builder.finish_interval();
+            current_tuple_types.push(last_type);
+
+            if column_index > 0 {
+                current_builder.finish_interval(
+                    *last_tuple_types
+                        .last()
+                        .expect("The line above ensures that there is at least one value"),
+                );
+            }
 
             last_tuple_intervals = current_tuple_intervals;
+            last_tuple_types = current_tuple_types;
         }
 
         Self {
@@ -107,16 +125,21 @@ impl Trie {
             .collect::<Vec<_>>();
 
         while let Some(changed_layer) = trie_scan.advance_on_layer(num_columns - 1) {
+            let mut last_type = StorageTypeName::Id32;
+
             for (layer, current_builder) in intervalcolumn_builders
                 .iter_mut()
                 .enumerate()
                 .skip(changed_layer)
             {
                 let current_value = trie_scan.current_value(layer);
+                let current_type = current_value.get_type();
 
                 current_builder.add_value(current_value);
+
                 if layer != changed_layer {
-                    current_builder.finish_interval();
+                    current_builder.finish_interval(last_type);
+                    last_type = current_type;
                 }
             }
         }
@@ -198,17 +221,15 @@ impl<'a> PartialTrieScan<'a> for TrieScanGeneric<'a> {
                 let next_layer = self.path_types.len();
                 let current_layer = next_layer - 1;
 
-                let local_index = self.column_scans[current_layer]
+                let current_index = self.column_scans[current_layer]
                     .get_mut()
                     .pos(current_type)
                     .expect(
                         "Calling down on a trie is only allowed when currently pointing at an element.",
                     );
-                let global_index =
-                    self.trie.columns[current_layer].global_index(current_type, local_index);
 
                 let next_interval = self.trie.columns[next_layer]
-                    .interval_bounds(next_type, global_index)
+                    .interval_bounds(current_type, current_index, next_type)
                     .unwrap_or(0..0);
 
                 self.column_scans[next_layer]
