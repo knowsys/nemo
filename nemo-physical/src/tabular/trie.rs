@@ -66,12 +66,12 @@ impl Trie {
             let mut current_tuple_types = Vec::<StorageTypeName>::new();
 
             let mut predecessor_index = 0;
-            let mut last_type = StorageTypeName::Id32; // Chosen arbitrarily
+            let mut current_type = StorageTypeName::Id32; // Initial value chosen arbitratily
 
             for (tuple_index, value) in buffer.get_column(column_index).enumerate() {
                 if last_tuple_intervals.get(predecessor_index) == Some(&tuple_index) {
-                    let last_type = last_tuple_types[predecessor_index];
-                    current_builder.finish_interval(last_type);
+                    let previous_type = last_tuple_types[predecessor_index];
+                    current_builder.finish_interval(previous_type);
 
                     predecessor_index += 1;
                 }
@@ -81,19 +81,22 @@ impl Trie {
 
                 if new_value && tuple_index > 0 {
                     current_tuple_intervals.push(tuple_index);
-                    current_tuple_types.push(value_type);
-                    last_type = value_type;
+                    current_tuple_types.push(current_type);
                 }
+
+                current_type = value_type;
             }
 
-            current_tuple_types.push(last_type);
+            current_tuple_types.push(current_type);
 
             if column_index > 0 {
                 current_builder.finish_interval(
                     *last_tuple_types
                         .last()
-                        .expect("The line above ensures that there is at least one value"),
+                        .expect("The type of the last pushed value is always added to the vector"),
                 );
+            } else {
+                current_builder.commit_value();
             }
 
             last_tuple_intervals = current_tuple_intervals;
@@ -330,14 +333,13 @@ mod test {
             current_layer_next(&mut scan, StorageTypeName::Int64),
             Some(StorageValueT::Int64(-1))
         );
-        scan.down(StorageTypeName::Float);
+        scan.down(StorageTypeName::Id32);
         assert_eq!(
-            current_layer_next(&mut scan, StorageTypeName::Float),
+            current_layer_next(&mut scan, StorageTypeName::Id32),
             Some(StorageValueT::Id32(20))
         );
-        scan.down(StorageTypeName::Float);
         assert_eq!(
-            current_layer_next(&mut scan, StorageTypeName::Float),
+            current_layer_next(&mut scan, StorageTypeName::Id32),
             Some(StorageValueT::Id32(32))
         );
         scan.up();
@@ -350,17 +352,17 @@ mod test {
         );
         scan.down(StorageTypeName::Id32);
         assert_eq!(
-            current_layer_next(&mut scan, StorageTypeName::Int64),
+            current_layer_next(&mut scan, StorageTypeName::Id32),
             Some(StorageValueT::Id32(100))
         );
         scan.down(StorageTypeName::Id32);
         assert_eq!(
-            current_layer_next(&mut scan, StorageTypeName::Int64),
+            current_layer_next(&mut scan, StorageTypeName::Id32),
             Some(StorageValueT::Id32(101))
         );
         assert_eq!(
-            current_layer_next(&mut scan, StorageTypeName::Int64),
-            Some(StorageValueT::Id32(101))
+            current_layer_next(&mut scan, StorageTypeName::Id32),
+            Some(StorageValueT::Id32(102))
         );
     }
 }
