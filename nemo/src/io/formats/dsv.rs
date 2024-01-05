@@ -86,7 +86,7 @@ impl DsvReader {
             .from_reader(reader)
     }
 
-    /// Make a list of pareser functions to be used for ingesting the data in each column.
+    /// Make a list of parser functions to be used for ingesting the data in each column.
     fn make_parsers(&self) -> Vec<DataValueParserFunction> {
         let mut result = Vec::with_capacity(self.input_type_constraint.arity());
         for ty in self.input_type_constraint.iter() {
@@ -331,7 +331,7 @@ impl DsvFormat {
     }
 
     /// Obtain an [ImportSpec] for this format.
-    pub fn try_into_import(
+    pub(crate) fn try_into_import(
         self,
         resource: Resource,
         predicate: Identifier,
@@ -346,7 +346,7 @@ impl DsvFormat {
     }
 
     /// Obtain an [ExportSpec] for this format.
-    pub fn try_into_export(
+    pub(crate) fn try_into_export(
         self,
         resource: Resource,
         predicate: Identifier,

@@ -71,14 +71,27 @@ pub trait TableWriter {
     ) -> Result<(), Error>;
 }
 
-/// A supported file format for I/O.
-/// TODO: Consider renaming. This is not a "format" but already a concrete resource (or set of resources) in
-/// a format. In particular, implementations will report a specific file name etc.
-pub trait FileFormatMeta: std::fmt::Debug + DynClone + Send {
+/// A supported file format for I/O. For example, nemo supports the CSV format,
+/// which can be used for import and export. An implementation of [`FileFormatMeta`]
+/// provides methods to validate and refine parameters that were used with
+/// this format, and to create suitable [`TableProvider`] and [`TableWriter`] objects
+/// to read and write data in the given format.
+/// 
+/// Implementations of this trait are usually lightweight, with minimal data to distinguish
+/// similar formats (such as CSV and DSV). Most data related to the actual import or export
+/// resides in an additional map of attributes that use format-specific keys. The format can
+/// interpret and validate these attributes, and it uses them to make the [`TableProvider`]
+/// and [`TableWriter`]. The methods in this trait can panic if required attributes are
+/// missing or malformed. The method [FileFormatMeta::validated_and_refined_type_declaration]
+/// should be used to check that the attributes are safe to use.
+pub(crate) trait FileFormatMeta: std::fmt::Debug + DynClone + Send {
     /// Return the associated format.
     fn file_format(&self) -> FileFormat;
 
     /// Obtain a [`TableProvider`] for this format, if supported.
+    /// 
+    /// # Panics
+    /// If given attributes and/or types are not valid.
     fn reader(
         &self,
         attributes: &Map,
@@ -87,18 +100,33 @@ pub trait FileFormatMeta: std::fmt::Debug + DynClone + Send {
     ) -> Result<Box<dyn TableProvider>, Error>;
 
     /// Obtain a [`TableWriter`] for this format, if supported.
+    /// 
+    /// # Panics
+    /// If given attributes are not valid.
     fn writer(&self, attributes: &Map) -> Result<Box<dyn TableWriter>, Error>;
 
-    /// Obtain all resources used for this format.
+    /// Obtain all resources used for this format. In typical cases, this is a single
+    /// file to read from or write to.
+    /// 
+    /// # Panics
+    /// If required resource is not given or is malformed.
     fn resources(&self, attributes: &Map) -> Vec<Resource>;
 
-    /// Attributes that are valid for this format, but not required.
+    /// Attributes that are valid for this format, but not required. This is used to
+    /// perform some basic validity checks that are the same for all formats.
     fn optional_attributes(&self, direction: Direction) -> HashSet<Key>;
 
-    /// Attributes that are required for this format.
+    /// Attributes that are required for this format. This is used to
+    /// perform some basic validity checks that are the same for all formats.
+    /// 
+    /// If a format requires a certain attribute only under some conditions (e.g., if a
+    /// specific value is used for one attribute, then a second is required), this can
+    /// be checked in [FileFormatMeta::validate_attribute_values].
     fn required_attributes(&self, direction: Direction) -> HashSet<Key>;
 
-    /// Check whether the given attributes and the declared types are valid
+    /// Check whether the given attributes and the declared types are valid.
+    /// This is the main validation method used by callers. It triggers all other
+    /// validations.
     fn validated_and_refined_type_declaration(
         &mut self,
         direction: Direction,
@@ -117,14 +145,22 @@ pub trait FileFormatMeta: std::fmt::Debug + DynClone + Send {
     ) -> Result<TupleConstraint, FileFormatError>;
 
     /// Check whether the given pairs of attributes and values are a
-    /// valid combination for this format.
+    /// valid combination for this format. This method is called internally and
+    /// can implement arbitrary validations that cannot be caught by the coarse
+    /// checks for optional and required attributes.
+    /// 
+    /// # Panics
+    /// 
+    /// If required attributes are missing entirely. Typically,
+    /// [FileFormatMeta::validate_attribute_values] should be used instead.
     fn validate_attribute_values(
         &mut self,
         direction: Direction,
         attributes: &Map,
     ) -> Result<(), FileFormatError>;
 
-    /// Check whether the given attributes are a valid combination for this format.
+    /// Check whether the given pairs of attributes and values are a
+    /// valid combination for this format.
     fn validate_attributes(
         &mut self,
         direction: Direction,
@@ -156,7 +192,10 @@ pub trait FileFormatMeta: std::fmt::Debug + DynClone + Send {
 
 dyn_clone::clone_trait_object!(FileFormatMeta);
 
-/// An import/export specification.
+/// An import/export specification. This object captures all information that is typically
+/// present in an import or export directive in a Nemo program, including the main format,
+/// optional attributes that define additional parameters, and an indentifier to map the data
+/// to or from (i.e., a predicate name).
 #[derive(Clone, Debug)]
 pub struct ImportExportSpec {
     /// The predicate we're handling.
@@ -377,7 +416,7 @@ pub enum FileFormat {
 
 impl FileFormat {
     /// Return the associated [`FileFormatMeta`] for this format.
-    pub fn into_meta(self) -> Box<dyn FileFormatMeta> {
+    pub(crate) fn into_meta(self) -> Box<dyn FileFormatMeta> {
         match self {
             Self::DSV => Box::new(DsvFormat::new()),
             Self::CSV => Box::new(DsvFormat::csv()),
