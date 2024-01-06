@@ -106,10 +106,10 @@ impl OutputManager {
     /// Export a (possibly empty) table according to the given [export
     /// specification][ExportSpec]. If the table is empty (i.e.,
     /// [Option<_>::None]), an empty output file will be created.
-    pub fn export_table(
+    pub fn export_table<'a>(
         &self,
         export_spec: &ExportSpec,
-        table: Option<impl Iterator<Item = Vec<AnyDataValue>>>,
+        table: Option<impl Iterator<Item = Vec<AnyDataValue>> + 'a>,
     ) -> Result<(), Error> {
         let output_path = self.output_file_name(export_spec);
         log::info!(
@@ -117,12 +117,13 @@ impl OutputManager {
             export_spec.predicate().name()
         );
 
-        let mut writer = self
+        let writer = self
             .compression_format
             .writer(output_path, self.open_options())?;
 
         if let Some(table) = table {
-            export_spec.write_table(table, &mut writer)?;
+            let mut table_writer = export_spec.writer(writer)?;
+            table_writer.export_table_data(Box::new(table))?;
         }
 
         Ok(())

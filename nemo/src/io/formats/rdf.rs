@@ -1,6 +1,10 @@
 //! Reading of RDF 1.1 triples files (N-Triples, Turtle, RDF/XML) and
 //! RDF 1.1 quads files (N-Quads, TriG)
-use std::{collections::HashSet, io::BufReader, str::FromStr};
+use std::{
+    collections::HashSet,
+    io::{BufReader, Write},
+    str::FromStr,
+};
 
 use nemo_physical::{
     datasources::{table_providers::TableProvider, tuple_writer::TupleWriter},
@@ -513,7 +517,11 @@ impl FileFormatMeta for RDFFormat {
         )))
     }
 
-    fn writer(&self, _attributes: &Map) -> Result<Box<dyn TableWriter>, Error> {
+    fn writer(
+        &self,
+        _attributes: &Map,
+        _writer: Box<dyn Write>,
+    ) -> Result<Box<dyn TableWriter>, Error> {
         Err(FileFormatError::UnsupportedWrite(self.file_format()).into())
     }
 

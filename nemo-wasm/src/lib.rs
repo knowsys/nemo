@@ -293,14 +293,18 @@ impl NemoEngine {
             return Ok(());
         };
 
-        let mut writer = SyncAccessHandleWriter(sync_access_handle);
+        let writer = SyncAccessHandleWriter(sync_access_handle);
 
         let export_spec = OutputManager::default_export_spec(identifier, types)
             .map_err(WasmOrInternalNemoError::NemoError)
             .map_err(NemoError)?;
 
-        export_spec
-            .write_table(record_iter, &mut writer)
+        let mut table_writer = export_spec
+            .writer(Box::new(writer))
+            .map_err(WasmOrInternalNemoError::NemoError)
+            .map_err(NemoError)?;
+        table_writer
+            .export_table_data(Box::new(record_iter))
             .map_err(WasmOrInternalNemoError::NemoError)
             .map_err(NemoError)
     }

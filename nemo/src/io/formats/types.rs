@@ -60,14 +60,12 @@ pub trait PathWithFormatSpecificExtension {
     }
 }
 
-/// A trait for writing tables to a [writer][Write], one record at a
-/// time.
+/// A trait for exporting table data, e.g., to some file.
 pub trait TableWriter {
-    /// Write a record in the table to the given [writer][Write].
-    fn write_record(
+    /// Export a table.
+    fn export_table_data<'a>(
         &mut self,
-        record: &[AnyDataValue],
-        writer: &mut dyn Write,
+        table: Box<dyn Iterator<Item = Vec<AnyDataValue>> + 'a>,
     ) -> Result<(), Error>;
 }
 
@@ -76,7 +74,7 @@ pub trait TableWriter {
 /// provides methods to validate and refine parameters that were used with
 /// this format, and to create suitable [`TableProvider`] and [`TableWriter`] objects
 /// to read and write data in the given format.
-/// 
+///
 /// Implementations of this trait are usually lightweight, with minimal data to distinguish
 /// similar formats (such as CSV and DSV). Most data related to the actual import or export
 /// resides in an additional map of attributes that use format-specific keys. The format can
@@ -89,7 +87,7 @@ pub(crate) trait FileFormatMeta: std::fmt::Debug + DynClone + Send {
     fn file_format(&self) -> FileFormat;
 
     /// Obtain a [`TableProvider`] for this format, if supported.
-    /// 
+    ///
     /// # Panics
     /// If given attributes and/or types are not valid.
     fn reader(
@@ -99,15 +97,20 @@ pub(crate) trait FileFormatMeta: std::fmt::Debug + DynClone + Send {
         resource_providers: ResourceProviders,
     ) -> Result<Box<dyn TableProvider>, Error>;
 
-    /// Obtain a [`TableWriter`] for this format, if supported.
-    /// 
+    /// Obtain a [`TableWriter`] for this format and the given writer, if supported.
+    /// If writing is not supported, an error will be returned.
+    ///
     /// # Panics
     /// If given attributes are not valid.
-    fn writer(&self, attributes: &Map) -> Result<Box<dyn TableWriter>, Error>;
+    fn writer(
+        &self,
+        attributes: &Map,
+        writer: Box<dyn Write>,
+    ) -> Result<Box<dyn TableWriter>, Error>;
 
     /// Obtain all resources used for this format. In typical cases, this is a single
     /// file to read from or write to.
-    /// 
+    ///
     /// # Panics
     /// If required resource is not given or is malformed.
     fn resources(&self, attributes: &Map) -> Vec<Resource>;
@@ -118,7 +121,7 @@ pub(crate) trait FileFormatMeta: std::fmt::Debug + DynClone + Send {
 
     /// Attributes that are required for this format. This is used to
     /// perform some basic validity checks that are the same for all formats.
-    /// 
+    ///
     /// If a format requires a certain attribute only under some conditions (e.g., if a
     /// specific value is used for one attribute, then a second is required), this can
     /// be checked in [FileFormatMeta::validate_attribute_values].
@@ -148,9 +151,9 @@ pub(crate) trait FileFormatMeta: std::fmt::Debug + DynClone + Send {
     /// valid combination for this format. This method is called internally and
     /// can implement arbitrary validations that cannot be caught by the coarse
     /// checks for optional and required attributes.
-    /// 
+    ///
     /// # Panics
-    /// 
+    ///
     /// If required attributes are missing entirely. Typically,
     /// [FileFormatMeta::validate_attribute_values] should be used instead.
     fn validate_attribute_values(
@@ -201,13 +204,11 @@ pub struct ImportExportSpec {
     /// The predicate we're handling.
     pub(crate) predicate: Identifier,
     /// The type constraint for the predicate, as declared for the import/export.
-    /// TODO: Consider moving this into the [`FileFormatMeta`].
     /// TODO: This will most likely become an attribute anyway, specifying formats for individual columns (etc.). Maybe replace by an arity.
     pub(crate) constraint: TupleConstraint,
     /// The file format and resource we're using.
     pub(crate) format: Box<dyn FileFormatMeta>,
     /// The attributes we've been given.
-    /// TODO: Maybe it is enough to have this inside the [FileFormatMeta]?
     pub(crate) attributes: Map,
 }
 
@@ -221,19 +222,9 @@ impl ImportExportSpec {
             .reader(&self.attributes, &self.constraint, resource_providers)
     }
 
-    /// Write the given table to the given [writer][Write], using this export specification.
-    pub fn write_table(
-        &self,
-        table: impl Iterator<Item = Vec<AnyDataValue>>,
-        writer: &mut dyn Write,
-    ) -> Result<(), Error> {
-        let mut table_writer = self.format.writer(&self.attributes)?;
-
-        for record in table {
-            table_writer.write_record(&record, writer)?;
-        }
-
-        Ok(())
+    /// Obtain a [`TableWriter`] for this export specification.
+    pub fn writer(&self, writer: Box<dyn Write>) -> Result<Box<dyn TableWriter>, Error> {
+        self.format.writer(&self.attributes, writer)
     }
 }
 
@@ -298,13 +289,9 @@ impl From<ImportExportSpec> for ImportSpec {
 pub struct ExportSpec(ImportExportSpec);
 
 impl ExportSpec {
-    /// Write the given table to the given [writer][Write].
-    pub fn write_table(
-        &self,
-        table: impl Iterator<Item = Vec<AnyDataValue>>,
-        writer: &mut dyn Write,
-    ) -> Result<(), Error> {
-        self.0.write_table(table, writer)
+    /// Obtain a [`TableWriter`] for this export specification.
+    pub fn writer(&self, writer: Box<dyn Write>) -> Result<Box<dyn TableWriter>, Error> {
+        self.0.writer(writer)
     }
 
     /// Return the predicate.

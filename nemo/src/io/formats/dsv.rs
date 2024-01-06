@@ -1,9 +1,9 @@
 //! Reading of delimiter-separated value files
 
 use std::collections::HashSet;
-use std::io::{BufReader, Read};
+use std::io::{BufReader, Read, Write};
 
-use csv::{Reader, ReaderBuilder, WriterBuilder};
+use csv::{Reader, ReaderBuilder, Writer, WriterBuilder};
 use nemo_physical::datavalues::DataValue;
 use thiserror::Error;
 
@@ -253,25 +253,35 @@ impl TableProvider for DsvReader {
 }
 
 struct DsvWriter {
-    delimiter: u8,
+    writer: Writer<Box<dyn Write>>,
+}
+
+impl DsvWriter {
+    fn new(delimiter: u8, writer: Box<dyn Write>) -> Self {
+        DsvWriter {
+            writer: WriterBuilder::new()
+                .delimiter(delimiter)
+                .from_writer(writer),
+        }
+    }
 }
 
 impl TableWriter for DsvWriter {
-    fn write_record(
+    fn export_table_data<'a>(
         &mut self,
-        record: &[AnyDataValue],
-        writer: &mut dyn std::io::Write,
+        table: Box<dyn Iterator<Item = Vec<AnyDataValue>> + 'a>,
     ) -> Result<(), Error> {
-        let mut string_record = Vec::with_capacity(record.len());
-        for dv in record {
-            // FIXME: this may not be the correct format in all cases; needs some output-specific type information
-            string_record.push(dv.canonical_string());
+        for record in table {
+            let mut string_record = Vec::with_capacity(record.len());
+            for dv in record {
+                // FIXME: this may not be the correct format in all cases; needs some output-specific type information
+                string_record.push(dv.canonical_string());
+            }
+
+            self.writer.write_record(string_record)?;
         }
-        // FIXME: Are we building a new writer for every single record?!
-        Ok(WriterBuilder::new()
-            .delimiter(self.delimiter)
-            .from_writer(writer)
-            .write_record(string_record)?)
+
+        Ok(())
     }
 }
 
@@ -439,10 +449,15 @@ impl FileFormatMeta for DsvFormat {
         )))
     }
 
-    fn writer(&self, _attributes: &Map) -> Result<Box<dyn TableWriter>, Error> {
-        Ok(Box::new(DsvWriter {
-            delimiter: self.delimiter.expect("is a required attribute"),
-        }))
+    fn writer(
+        &self,
+        _attributes: &Map,
+        writer: Box<dyn Write>,
+    ) -> Result<Box<dyn TableWriter>, Error> {
+        Ok(Box::new(DsvWriter::new(
+            self.delimiter.expect("is a required attribute"),
+            writer,
+        )))
     }
 
     fn resources(&self, attributes: &Map) -> Vec<Resource> {
