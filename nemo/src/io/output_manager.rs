@@ -76,7 +76,7 @@ pub struct OutputManager {
 
 impl OutputManager {
     /// Create a [builder][OutputManagerBuilder] for an [output
-    /// file manager][OutputManager] with the given [path][PathBuf].
+    /// file manager][OutputManager] with the given [base path][PathBuf].
     pub fn builder(path: PathBuf) -> Result<OutputManagerBuilder, Error> {
         create_dir_all(&path)?;
         Ok(OutputManagerBuilder::new(path))
@@ -115,6 +115,11 @@ impl OutputManager {
     /// Export a (possibly empty) table according to the given [export
     /// specification][ExportSpec]. If the table is empty (i.e.,
     /// [Option<_>::None]), an empty output file will be created.
+    ///
+    /// TODO: File names (and io writes) should be generate through the
+    /// ExportSpec, using parameters from the output manager for making defaults.
+    /// The ExportSpec.resources() method should be used to perform the
+    /// check for existing files.
     pub fn export_table<'a>(
         &self,
         export_spec: &ExportSpec,
