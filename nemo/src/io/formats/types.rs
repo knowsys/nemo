@@ -200,7 +200,7 @@ dyn_clone::clone_trait_object!(FileFormatMeta);
 /// optional attributes that define additional parameters, and an indentifier to map the data
 /// to or from (i.e., a predicate name).
 #[derive(Clone, Debug)]
-pub struct ImportExportSpec {
+pub(crate) struct ImportExportSpec {
     /// The predicate we're handling.
     pub(crate) predicate: Identifier,
     /// The type constraint for the predicate, as declared for the import/export.
@@ -214,7 +214,7 @@ pub struct ImportExportSpec {
 
 impl ImportExportSpec {
     /// Obtain a [`TableProvider`] for this import specification.
-    pub fn reader(
+    pub(crate) fn reader(
         &self,
         resource_providers: ResourceProviders,
     ) -> Result<Box<dyn TableProvider>, Error> {
@@ -223,7 +223,7 @@ impl ImportExportSpec {
     }
 
     /// Obtain a [`TableWriter`] for this export specification.
-    pub fn writer(&self, writer: Box<dyn Write>) -> Result<Box<dyn TableWriter>, Error> {
+    pub(crate) fn writer(&self, writer: Box<dyn Write>) -> Result<Box<dyn TableWriter>, Error> {
         self.format.writer(&self.attributes, writer)
     }
 }
