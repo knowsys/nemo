@@ -1,7 +1,3 @@
-use std::path::PathBuf;
-
-use sanitise_file_name::{sanitise_with_options, Options};
-
 use crate::model::TypeConstraint;
 
 /// An identifier for, e.g., a Term or a Predicate.
@@ -17,17 +13,6 @@ impl Identifier {
     /// Returns the associated name
     pub fn name(&self) -> String {
         self.0.clone()
-    }
-
-    /// Returns a sanitised path with respect to the associated name
-    pub fn sanitised_file_name(&self, mut path: PathBuf) -> PathBuf {
-        let sanitise_options = Options::<Option<char>> {
-            url_safe: true,
-            ..Default::default()
-        };
-        let file_name = sanitise_with_options(&self.name(), &sanitise_options);
-        path.push(file_name);
-        path
     }
 }
 

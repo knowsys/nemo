@@ -17,6 +17,8 @@ use crate::{
 
 use super::formats::DsvFormat;
 
+use sanitise_file_name::{sanitise_with_options, Options};
+
 /// Compression level for gzip output, cf. gzip(1):
 ///
 /// > Regulate the speed of compression using the specified digit #,
@@ -80,11 +82,18 @@ impl OutputManager {
         Ok(OutputManagerBuilder::new(path))
     }
 
-    /// Get the output file name for the given predicate, including all extensions
-    pub fn output_file_name(&self, export_spec: &ExportSpec) -> PathBuf {
-        let mut pred_path = export_spec
-            .predicate()
-            .sanitised_file_name(self.path.to_path_buf());
+    /// Get the output file name for the given [ExportSpec]. This is a complete path (based on our base path),
+    /// which includes all extensions.
+    fn output_file_name(&self, export_spec: &ExportSpec) -> PathBuf {
+        let mut pred_path = self.path.to_path_buf();
+
+        let sanitise_options = Options::<Option<char>> {
+            url_safe: true,
+            ..Default::default()
+        };
+        let file_name = sanitise_with_options(&export_spec.predicate().name(), &sanitise_options);
+        pred_path.push(file_name);
+
         pred_path = export_spec.file_format().path_with_extension(pred_path);
         pred_path = self.compression_format.path_with_extension(pred_path);
         pred_path

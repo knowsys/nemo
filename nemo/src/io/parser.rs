@@ -619,9 +619,7 @@ impl<'a> RuleParser<'a> {
     }
 
     /// Parse an entry in a [Map], i.e., a [Key]--[Term] pair.
-    fn parse_map_entry(
-        &'a self,
-    ) -> impl FnMut(Span<'a>) -> IntermediateResult<(Key, Constant)> {
+    fn parse_map_entry(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<(Key, Constant)> {
         traced(
             "parse_map_entry",
             separated_pair(
@@ -768,9 +766,7 @@ impl<'a> RuleParser<'a> {
     }
 
     /// Parse an IRI identifier, e.g. for predicate names.
-    fn parse_iri_identifier(
-        &'a self,
-    ) -> impl FnMut(Span<'a>) -> IntermediateResult<Identifier> {
+    fn parse_iri_identifier(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Identifier> {
         map_error(
             move |input| {
                 let (remainder, name) = traced(
@@ -929,9 +925,7 @@ impl<'a> RuleParser<'a> {
     }
 
     /// Parse a [`PrimitiveTerm`].
-    fn parse_primitive_term(
-        &'a self,
-    ) -> impl FnMut(Span<'a>) -> IntermediateResult<PrimitiveTerm> {
+    fn parse_primitive_term(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<PrimitiveTerm> {
         traced(
             "parse_primitive_term",
             map_error(
@@ -996,9 +990,7 @@ impl<'a> RuleParser<'a> {
     }
 
     /// Parse a universally quantified variable.
-    fn parse_universal_variable(
-        &'a self,
-    ) -> impl FnMut(Span<'a>) -> IntermediateResult<Variable> {
+    fn parse_universal_variable(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Variable> {
         traced(
             "parse_universal_variable",
             map_error(
@@ -1178,9 +1170,7 @@ impl<'a> RuleParser<'a> {
     }
 
     /// Parse an arithmetic expression
-    fn parse_arithmetic_expression(
-        &'a self,
-    ) -> impl FnMut(Span<'a>) -> IntermediateResult<Term> {
+    fn parse_arithmetic_expression(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Term> {
         traced(
             "parse_arithmetic_expression",
             map_error(
