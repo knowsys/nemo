@@ -14,3 +14,5 @@ pub use atom::*;
 
 mod constructor;
 pub use constructor::*;
+
+pub(crate) mod variable;

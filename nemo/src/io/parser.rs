@@ -319,6 +319,19 @@ impl<'a> RuleParser<'a> {
         Default::default()
     }
 
+    fn parse_complex_constant_term(
+        &'a self,
+    ) -> impl FnMut(Span<'a>) -> IntermediateResult<'a, Constant> {
+        traced(
+            "parse_complex_constant_term",
+            alt((
+                parse_constant_term(&self.prefixes),
+                map(|s| self.parse_tuple_literal()(s), Constant::TupleLiteral),
+                map(|s| self.parse_map_literal()(s), Constant::MapLiteral),
+            )),
+        )
+    }
+
     /// Parse the dot that ends declarations, optionally surrounded by spaces.
     fn parse_dot(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Span<'a>> {
         traced("parse_dot", space_delimited_token("."))
@@ -625,7 +638,7 @@ impl<'a> RuleParser<'a> {
             separated_pair(
                 self.parse_map_key(),
                 self.parse_equals(),
-                map(parse_constant_term(&self.prefixes), |term| term),
+                map(self.parse_complex_constant_term(), |term| term),
             ),
         )
     }
@@ -641,6 +654,21 @@ impl<'a> RuleParser<'a> {
                     Map::from_iter,
                 ),
                 self.parse_close_brace(),
+            ),
+        )
+    }
+
+    /// Parse a tuple literal.
+    pub fn parse_tuple_literal(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Tuple> {
+        traced(
+            "parse_tuple_literal",
+            delimited(
+                self.parse_open_parenthesis(),
+                map(
+                    separated_list0(self.parse_comma(), self.parse_complex_constant_term()),
+                    Tuple::from_iter,
+                ),
+                self.parse_close_parenthesis(),
             ),
         )
     }
@@ -1238,6 +1266,7 @@ impl<'a> RuleParser<'a> {
             map_error(
                 alt((
                     self.parse_function_term(),
+                    self.parse_aggregate(),
                     map(self.parse_primitive_term(), Term::Primitive),
                     self.parse_parenthesised_term(),
                 )),
@@ -2354,6 +2383,41 @@ mod test {
             parser.parse_map_literal(),
             r#"{foo = 23, "23" = 42}"#,
             pairs.clone().into_iter().collect::<Map>()
+        );
+    }
+
+    #[test]
+    fn nested_map_literal() {
+        let parser = RuleParser::new();
+
+        let pairs = vec![(
+            Key::from_identifier(Identifier("inner".to_string())),
+            Constant::MapLiteral(Default::default()),
+        )];
+
+        assert_parse!(
+            parser.parse_map_literal(),
+            r#"{inner = {}}"#,
+            pairs.clone().into_iter().collect::<Map>()
+        );
+    }
+
+    #[test]
+    fn tuple_literal() {
+        let parser = RuleParser::new();
+
+        let expected: Tuple = [
+            Constant::Abstract(Identifier("something".to_string())),
+            Constant::NumericLiteral(NumericLiteral::Integer(42)),
+            Constant::TupleLiteral([].into_iter().collect()),
+        ]
+        .into_iter()
+        .collect();
+
+        assert_parse!(
+            parser.parse_tuple_literal(),
+            r#"(something, 42, ())"#,
+            expected
         );
     }
 

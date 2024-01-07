@@ -117,7 +117,7 @@ impl TestCase {
                 .lines()
                 .map(|s| s.to_string())
                 .collect::<Vec<_>>();
-            let mut expected_lines = read_to_string(expected_file)
+            let mut expected_lines = read_to_string(expected_file.clone())
                 .unwrap()
                 .trim()
                 .lines()
@@ -125,7 +125,10 @@ impl TestCase {
                 .collect::<Vec<_>>();
             output_lines.sort();
             expected_lines.sort();
-            assert_eq!(output_lines, expected_lines);
+            assert_eq!(
+                output_lines, expected_lines,
+                "actual output does not match expected output from {expected_file:?}"
+            );
         });
         Ok(())
     }

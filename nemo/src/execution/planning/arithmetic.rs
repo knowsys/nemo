@@ -84,6 +84,9 @@ pub(super) fn generate_node_arithmetic(
             constructor.variable().clone(),
             first_unused_index + constructor_index,
         );
+
+        // Replace arithmetic instructions in term tree by the aggregate placeholder variables
+
         constructor_instructions.push(AppendInstruction::Arithmetic(compile_termtree(
             constructor.term(),
             variable_order,

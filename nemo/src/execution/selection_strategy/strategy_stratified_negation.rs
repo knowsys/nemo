@@ -33,7 +33,7 @@ pub struct StrategyStratifiedNegation<SubStrategy: RuleSelectionStrategy> {
 }
 
 impl<SubStrategy: RuleSelectionStrategy> StrategyStratifiedNegation<SubStrategy> {
-    fn build_graph(rule_analyses: &Vec<&RuleAnalysis>) -> NegationGraph {
+    fn build_graph(rule_analyses: &[&RuleAnalysis]) -> NegationGraph {
         let mut predicate_to_rules_body_positive = HashMap::<Identifier, Vec<usize>>::new();
         let mut predicate_to_rules_body_negative = HashMap::<Identifier, Vec<usize>>::new();
         let mut predicate_to_rules_head = HashMap::<Identifier, Vec<usize>>::new();
