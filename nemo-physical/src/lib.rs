@@ -20,6 +20,7 @@
 )]
 #![feature(macro_metavar_expr)]
 #![feature(is_sorted)]
+#![feature(iter_intersperse)]
 
 pub mod columnar;
 pub mod tabular;

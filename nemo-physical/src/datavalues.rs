@@ -35,6 +35,9 @@ pub use null_datavalue::NullDataValue;
 /// Module to define [DataValue] implementation for boolean values.
 pub mod boolean_datavalue;
 pub use boolean_datavalue::BooleanDataValue;
+/// Module to define [DataValue] implementation for tuple values.
+pub mod tuple_datavalue;
+pub use tuple_datavalue::TupleDataValue;
 /// Module to define [DataValue] implementations for arbitrary values.
 pub mod any_datavalue;
 pub use any_datavalue::AnyDataValue;

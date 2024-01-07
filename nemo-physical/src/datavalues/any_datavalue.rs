@@ -544,10 +544,10 @@ impl DataValue for AnyDataValue {
             fn to_u64_unchecked(&self) -> u64;
             fn to_u32(&self) -> Option<u32>;
             fn to_u32_unchecked(&self) -> u32;
-            fn tuple_element(&self, index: usize) -> Option<&dyn DataValue>;
+            fn tuple_element<'a>(&self, index: usize) -> Option<&(dyn DataValue + 'a)>;
             fn tuple_len(&self) -> Option<usize>;
             fn tuple_len_unchecked(&self) -> usize;
-            fn tuple_element_unchecked(&self, _index: usize) -> &dyn DataValue;
+            fn tuple_element_unchecked<'a>(&self, _index: usize) -> &(dyn DataValue + 'a);
         }
     }
 }
