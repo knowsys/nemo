@@ -44,9 +44,6 @@ pub use infix_dictionary::InfixDictionary;
 /// Module to define [MetaDictionary]
 pub mod meta_dictionary;
 pub use meta_dictionary::MetaDictionary;
-/// Module mapping physical types into logical types into Strings
-pub mod value_serializer;
-pub use value_serializer::ValueSerializer;
 
 /// A Dictionary represents a bijective (invertible) mapping from objects to numeric ids.
 /// The "objects" are provided when the dictionary is used, whereas the ids are newly

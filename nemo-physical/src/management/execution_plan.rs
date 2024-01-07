@@ -11,39 +11,42 @@ use crate::{
     condition::statement::ConditionStatement,
     datatypes::DataValueT,
     tabular::operations::{
-        triescan_aggregate::AggregationInstructions, triescan_append::AppendInstruction,
-        triescan_join::JoinBindings, triescan_minus::SubtractInfo,
-        triescan_project::ProjectReordering, triescan_select::SelectEqualClasses,
+        filter::GeneratorFilter, function::GeneratorFunction, join::GeneratorJoin,
+        projectreorder::GeneratorProjectReorder, subtract::GeneratorSubtract,
+        union::GeneratorUnion,
     },
     util::mapping::{permutation::Permutation, traits::NatMapping},
 };
 
-use super::database::{ColumnOrder, TableId};
+/// Type that represents a reordering of the columns of a table.
+/// It is given in form of a permutation which encodes the transformation
+/// that is needed to get from the original column order to this one.
+pub type ColumnOrder = Permutation;
 
-/// Wraps [`ExecutionNode`] into a `Rc<RefCell<_>>`
+/// Wraps [ExecutionNode] into a Rc<RefCell<_>>
 #[derive(Debug)]
 struct ExecutionNodeOwned(Rc<RefCell<ExecutionNode>>);
 
 impl ExecutionNodeOwned {
-    /// Create new [`ExecutionNodeOwned`]
+    /// Create new [ExecutionNodeOwned]
     pub fn new(node: ExecutionNode) -> Self {
         Self(Rc::new(RefCell::new(node)))
     }
 
-    /// Return a [`ExecutionNodeRef`] pointing to this node
+    /// Return a [ExecutionNodeRef] pointing to this node
     pub fn get_ref(&self) -> ExecutionNodeRef {
         ExecutionNodeRef(Rc::downgrade(&self.0))
     }
 }
 
-/// Wraps [`ExecutionNode`] into a `Weak<RefCell<_>>`
+/// Wraps [ExecutionNode] into a Weak<RefCell<_>>
 #[derive(Debug, Clone)]
 pub struct ExecutionNodeRef(Weak<RefCell<ExecutionNode>>);
 
 impl ExecutionNodeRef {
-    /// Return an referenced counted cell of an [`ExecutionNode`].
+    /// Return an referenced counted cell of an [ExecutionNode].
     /// # Panics
-    /// Throws a panic if the referenced [`ExecutionNode`] does not exist.
+    /// Throws a panic if the referenced [ExecutionNode] does not exist.
     pub fn get_rc(&self) -> Rc<RefCell<ExecutionNode>> {
         self.0
             .upgrade()
@@ -52,7 +55,7 @@ impl ExecutionNodeRef {
 
     /// Return the id which identifies the referenced node
     /// # Panics
-    /// Throws a panic if borrowing the current [`ExecutionNode`] is already mutably borrowed.
+    /// Throws a panic if borrowing the current [ExecutionNode] is already mutably borrowed.
     pub fn id(&self) -> usize {
         let node_rc = self.get_rc();
         let node_borrow = node_rc.borrow();
@@ -62,22 +65,24 @@ impl ExecutionNodeRef {
 }
 
 impl ExecutionNodeRef {
-    /// Add a sub node to a join or union node
-    pub fn add_subnode(&mut self, subnode: ExecutionNodeRef) {
-        let node_rc = self.get_rc();
-        let node_operation = &mut node_rc.borrow_mut().operation;
+    // Add a sub node to a join or union node.
+    // TODO: Remove this function if it is not needed
 
-        match node_operation {
-            ExecutionOperation::Join(subnodes, _) => subnodes.push(subnode),
-            ExecutionOperation::Union(subnodes) => subnodes.push(subnode),
-            ExecutionOperation::FetchExisting(_, _) | ExecutionOperation::FetchNew(_) => {
-                panic!("Can't add subnode to a leaf node.")
-            }
-            _ => {
-                panic!("Can only add subnodes to operations which can have arbitrary many of them.")
-            }
-        }
-    }
+    // pub fn add_subnode(&mut self, subnode: ExecutionNodeRef) {
+    //     let node_rc = self.get_rc();
+    //     let node_operation = &mut node_rc.borrow_mut().operation;
+
+    //     match node_operation {
+    //         ExecutionOperation::Join(subnodes, _) => subnodes.push(subnode),
+    //         ExecutionOperation::Union(subnodes) => subnodes.push(subnode),
+    //         ExecutionOperation::FetchExisting(_, _) | ExecutionOperation::FetchNew(_) => {
+    //             panic!("Can't add subnode to a leaf node.")
+    //         }
+    //         _ => {
+    //             panic!("Can only add subnodes to operations which can have arbitrary many of them.")
+    //         }
+    //     }
+    // }
 
     /// Return the list of subnodes.
     pub fn subnodes(&self) -> Vec<ExecutionNodeRef> {
@@ -85,30 +90,24 @@ impl ExecutionNodeRef {
         let node_operation = &node_rc.borrow().operation;
 
         match node_operation {
-            ExecutionOperation::Join(subnodes, _) => subnodes.clone(),
-            ExecutionOperation::Union(subnodes) => subnodes.clone(),
             ExecutionOperation::FetchExisting(_, _) => vec![],
             ExecutionOperation::FetchNew(_) => vec![],
-            ExecutionOperation::Minus(subnode_left, subnode_right) => {
-                vec![subnode_left.clone(), subnode_right.clone()]
-            }
-            ExecutionOperation::Project(subnode, _) => vec![subnode.clone()],
-            ExecutionOperation::Filter(subnode, _) => vec![subnode.clone()],
-            ExecutionOperation::SelectEqual(subnode, _) => vec![subnode.clone()],
-            ExecutionOperation::AppendColumns(subnode, _) => vec![subnode.clone()],
-            ExecutionOperation::AppendNulls(subnode, _) => vec![subnode.clone()],
+            ExecutionOperation::Join(subnodes, _) => subnodes.clone(),
+            ExecutionOperation::Union(subnodes, _) => subnodes.clone(),
             ExecutionOperation::Subtract(subnode_main, subnodes_subtract, _) => {
-                let mut cloned = subnodes_subtract.clone();
-                cloned.push(subnode_main.clone());
+                let mut result = vec![subnode_main.clone()];
+                result.extend(subnodes_subtract);
 
-                cloned
+                result
             }
-            ExecutionOperation::Aggregate(subnode, _) => vec![subnode.clone()],
+            ExecutionOperation::ProjectReorder(subnode, _) => vec![subnode.clone()],
+            ExecutionOperation::Filter(subnode, _) => vec![subnode.clone()],
+            ExecutionOperation::Function(subnode, _) => vec![subnode.clone()],
         }
     }
 }
 
-/// Represents a node in a [`ExecutionPlan`]
+/// Represents a node in a [ExecutionPlan]
 #[derive(Debug)]
 pub struct ExecutionNode {
     /// The operation that should be performed on this node.
@@ -118,44 +117,36 @@ pub struct ExecutionNode {
 }
 
 #[derive(Debug, Clone)]
-/// Represents an operation in [`ExecutionPlan`]
+/// Represents an operation in [ExecutionPlan]
 pub enum ExecutionOperation {
-    /// Fetch a table that is already present in the database instance.
+    /// Fetch a table that is already present in the database instance
     FetchExisting(TableId, ColumnOrder),
-    /// Fetch a table that is computed as part of the [`ExecutionPlan`] this tree is part of.
+    /// Fetch a table that is computed as part of the [ExecutionPlan] this node is part of
     FetchNew(usize),
-    /// Join operation.
-    Join(Vec<ExecutionNodeRef>, JoinBindings),
-    /// Union operation.
-    Union(Vec<ExecutionNodeRef>),
-    /// Table difference operation.
-    Minus(ExecutionNodeRef, ExecutionNodeRef),
-    /// Table project operation; can only be applied to a `FetchTable` or `FetchTemp` node. TODO: FetchTable/Temp no longer existing in codebase
-    Project(ExecutionNodeRef, ProjectReordering),
-    /// Only leave entries in that have a certain value.
-    Filter(ExecutionNodeRef, Vec<ConditionStatement<DataValueT>>),
-    /// Only leave entries in that contain equal values in certain columns.
-    SelectEqual(ExecutionNodeRef, SelectEqualClasses),
-    /// Append certain columns to the trie.
-    AppendColumns(ExecutionNodeRef, Vec<Vec<AppendInstruction>>),
-    /// Append (the given number of) columns containing fresh nulls.
-    AppendNulls(ExecutionNodeRef, usize),
-    /// Operation wich subtracts multiple tables (potentially of different arities) from another table.
-    Subtract(ExecutionNodeRef, Vec<ExecutionNodeRef>, Vec<SubtractInfo>),
-    /// Aggregate operation.
-    Aggregate(ExecutionNodeRef, AggregationInstructions),
+    /// Join the tables represented by the subnodes
+    Join(Vec<ExecutionNodeRef>, GeneratorJoin),
+    /// Union of the tables represented by the subnodes
+    Union(Vec<ExecutionNodeRef>, GeneratorUnion),
+    /// Subtraction of the tables represented from another table represented by the subnodes
+    Subtract(ExecutionNodeRef, Vec<ExecutionNodeRef>, GeneratorSubtract),
+    /// Reorder or remove columns from the table represented by the subnode
+    ProjectReorder(ExecutionNodeRef, GeneratorProjectReorder),
+    /// Apply a filter to the table represented by the subnode
+    Filter(ExecutionNodeRef, GeneratorFilter),
+    /// Introduce new columns by applying a function to the columns of the table represented by the subnode
+    Function(ExecutionNodeRef, GeneratorFunction),
 }
 
-/// Declares whether the resulting table form executing a plan should be kept temporarily or permamently.
+/// Declares whether the resulting table form executing a plan should be kept temporarily or permamently
 #[derive(Debug, Clone)]
 pub(super) enum ExecutionResult {
-    /// Table will be dropped after the [`ExecutionPlan`] is finished.
+    /// Table will be dropped after the [ExecutionPlan] is finished
     Temporary,
-    /// Table will be saved permanently in the database instance.
+    /// Table will be saved permanently in the [DatabaseInstance][super::database::DatabaseInstance]
     Permanent(ColumnOrder, String),
 }
 
-/// Marker for nodes within a [`ExecutionPlan`] that are materialized into their own tables.
+/// Marker for nodes within a [ExecutionPlan] that are materialized into their own tables.
 #[derive(Debug)]
 struct ExecutionOutNode {
     /// Reference to the execution node that is marked as an "output" node.
@@ -164,8 +155,9 @@ struct ExecutionOutNode {
     result: ExecutionResult,
     /// Name which identifies this operation, e.g., for logging and timing.
     name: String,
-    /// Amount of layers that will not be considered in the final output.
-    cut_bottom_layers: usize,
+    // Amount of layers that will not be considered in the final output.
+    // TODO: Calculate this from the plan
+    // cut_bottom_layers: usize,
 }
 
 /// A DAG representing instructions for generating new tables.
@@ -190,13 +182,13 @@ impl ExecutionPlan {
             .get_ref()
     }
 
-    /// Return [`ExecutionNodeRef`] for fetching a permanent table.
+    /// Return [ExecutionNodeRef] for fetching a permanent table.
     pub fn fetch_existing(&mut self, id: TableId) -> ExecutionNodeRef {
         let new_operation = ExecutionOperation::FetchExisting(id, ColumnOrder::default());
         self.push_and_return_ref(new_operation)
     }
 
-    /// Return [`ExecutionNodeRef`] for fetching a permanent table.
+    /// Return [ExecutionNodeRef] for fetching a permanent table.
     pub fn fetch_existing_reordered(
         &mut self,
         id: TableId,
@@ -206,20 +198,20 @@ impl ExecutionPlan {
         self.push_and_return_ref(new_operation)
     }
 
-    /// Return [`ExecutionNodeRef`] for fetching a temporary table.
+    /// Return [ExecutionNodeRef] for fetching a temporary table.
     pub fn fetch_new(&mut self, index: usize) -> ExecutionNodeRef {
         let new_operation = ExecutionOperation::FetchNew(index);
         self.push_and_return_ref(new_operation)
     }
 
-    /// Return [`ExecutionNodeRef`] for joining tables.
-    /// Starts out empty; add subnodes with `add_subnode`.
+    /// Return [ExecutionNodeRef] for joining tables.
+    /// Starts out empty; add subnodes with add_subnode.
     pub fn join_empty(&mut self, bindings: JoinBindings) -> ExecutionNodeRef {
         let new_operation = ExecutionOperation::Join(Vec::new(), bindings);
         self.push_and_return_ref(new_operation)
     }
 
-    /// Return [`ExecutionNodeRef`] for joining tables.
+    /// Return [ExecutionNodeRef] for joining tables.
     pub fn join(
         &mut self,
         subtables: Vec<ExecutionNodeRef>,
@@ -229,26 +221,26 @@ impl ExecutionPlan {
         self.push_and_return_ref(new_operation)
     }
 
-    /// Return [`ExecutionNodeRef`] for the union of several tables.
-    /// Starts out empty; add subnodes with `add_subnode`.
+    /// Return [ExecutionNodeRef] for the union of several tables.
+    /// Starts out empty; add subnodes with add_subnode.
     pub fn union_empty(&mut self) -> ExecutionNodeRef {
         let new_operation = ExecutionOperation::Union(Vec::new());
         self.push_and_return_ref(new_operation)
     }
 
-    /// Return [`ExecutionNodeRef`] for joining tables.
+    /// Return [ExecutionNodeRef] for joining tables.
     pub fn union(&mut self, subtables: Vec<ExecutionNodeRef>) -> ExecutionNodeRef {
         let new_operation = ExecutionOperation::Union(subtables);
         self.push_and_return_ref(new_operation)
     }
 
-    /// Return [`ExecutionNodeRef`] for subtracting one table from another.
+    /// Return [ExecutionNodeRef] for subtracting one table from another.
     pub fn minus(&mut self, left: ExecutionNodeRef, right: ExecutionNodeRef) -> ExecutionNodeRef {
         let new_operation = ExecutionOperation::Minus(left, right);
         self.push_and_return_ref(new_operation)
     }
 
-    /// Return [`ExecutionNodeRef`] for subtracting one table from another.
+    /// Return [ExecutionNodeRef] for subtracting one table from another.
     pub fn subtract(
         &mut self,
         main: ExecutionNodeRef,
@@ -259,7 +251,7 @@ impl ExecutionPlan {
         self.push_and_return_ref(new_operation)
     }
 
-    /// Return [`ExecutionNodeRef`] for applying project to a table.
+    /// Return [ExecutionNodeRef] for applying project to a table.
     pub fn project(
         &mut self,
         subnode: ExecutionNodeRef,
@@ -269,7 +261,7 @@ impl ExecutionPlan {
         self.push_and_return_ref(new_operation)
     }
 
-    /// Return [`ExecutionNodeRef`] for restricing a column to a certain value.
+    /// Return [ExecutionNodeRef] for restricing a column to a certain value.
     pub fn filter_values(
         &mut self,
         subnode: ExecutionNodeRef,
@@ -279,7 +271,7 @@ impl ExecutionPlan {
         self.push_and_return_ref(new_operation)
     }
 
-    /// Return [`ExecutionNodeRef`] for restricting a column to values of certain other columns.
+    /// Return [ExecutionNodeRef] for restricting a column to values of certain other columns.
     pub fn select_equal(
         &mut self,
         subnode: ExecutionNodeRef,
@@ -289,7 +281,7 @@ impl ExecutionPlan {
         self.push_and_return_ref(new_operation)
     }
 
-    /// Return [`ExecutionNodeRef`] for appending columns to a trie.
+    /// Return [ExecutionNodeRef] for appending columns to a trie.
     pub fn append_columns(
         &mut self,
         subnode: ExecutionNodeRef,
@@ -299,7 +291,7 @@ impl ExecutionPlan {
         self.push_and_return_ref(new_operation)
     }
 
-    /// Return [`ExecutionNodeRef`] for aggregating a trie.
+    /// Return [ExecutionNodeRef] for aggregating a trie.
     pub fn aggregate(
         &mut self,
         subnode: ExecutionNodeRef,
@@ -309,7 +301,7 @@ impl ExecutionPlan {
         self.push_and_return_ref(new_operation)
     }
 
-    /// Return [`ExecutionNodeRef`] for appending null-columns to a trie.
+    /// Return [ExecutionNodeRef] for appending null-columns to a trie.
     pub fn append_nulls(
         &mut self,
         subnode: ExecutionNodeRef,
@@ -319,7 +311,7 @@ impl ExecutionPlan {
         self.push_and_return_ref(new_operation)
     }
 
-    /// Designate a [`ExecutionNode`] as an "output" node that will result in a materialized table.
+    /// Designate a [ExecutionNode] as an "output" node that will result in a materialized table.
     fn push_out_node(
         &mut self,
         node: ExecutionNodeRef,
@@ -339,15 +331,15 @@ impl ExecutionPlan {
         id
     }
 
-    /// Designate a [`ExecutionNode`] as an "output" node that will produce a temporary table.
+    /// Designate a [ExecutionNode] as an "output" node that will produce a temporary table.
     /// Returns an id which will later be associated with the result of the computation.
     pub fn write_temporary(&mut self, node: ExecutionNodeRef, tree_name: &str) -> usize {
         self.push_out_node(node, ExecutionResult::Temporary, tree_name, 0)
     }
 
-    /// Designate a [`ExecutionNode`] as an "output" node that will produce a temporary table.
+    /// Designate a [ExecutionNode] as an "output" node that will produce a temporary table.
     /// Returns an id which will later be associated with the result of the computation.
-    /// The parameter `cut` indicates how many of the last layers will not be needed.
+    /// The parameter cut indicates how many of the last layers will not be needed.
     pub fn write_temporary_cut(
         &mut self,
         node: ExecutionNodeRef,
@@ -357,7 +349,7 @@ impl ExecutionPlan {
         self.push_out_node(node, ExecutionResult::Temporary, tree_name, cut)
     }
 
-    /// Designate a [`ExecutionNode`] as an "output" node that will produce a permanent table (in its default order).
+    /// Designate a [ExecutionNode] as an "output" node that will produce a permanent table (in its default order).
     /// Returns an id which will later be associated with the result of the computation.
     pub fn write_permanent(
         &mut self,
@@ -368,7 +360,7 @@ impl ExecutionPlan {
         self.write_permanent_reordered(node, tree_name, table_name, ColumnOrder::default())
     }
 
-    /// Designate a [`ExecutionNode`] as an "output" node that will produce a permament table.
+    /// Designate a [ExecutionNode] as an "output" node that will produce a permament table.
     /// Returns an id which will later be associated with the result of the computation.
     pub fn write_permanent_reordered(
         &mut self,
@@ -469,7 +461,7 @@ impl ExecutionPlan {
         self.out_nodes.clear();
     }
 
-    /// Return a list of [`ExecutionTree`] that are derived taking the subgraph at each write node.
+    /// Return a list of [ExecutionTree] that are derived taking the subgraph at each write node.
     /// Each tree will be associated with an id that corresponds to the id of
     /// the write node from which the tree is derived.
     pub(super) fn split_at_write_nodes(&self) -> Vec<(usize, ExecutionTree)> {
@@ -502,8 +494,8 @@ impl ExecutionPlan {
     }
 }
 
-/// Represents a subtree of a [`ExecutionPlan`]
-/// Contains an [`ExecutionPlan`] with a designated root node.
+/// Represents a subtree of a [ExecutionPlan]
+/// Contains an [ExecutionPlan] with a designated root node.
 pub(super) struct ExecutionTree(ExecutionPlan);
 
 impl Debug for ExecutionTree {
@@ -513,14 +505,14 @@ impl Debug for ExecutionTree {
 }
 
 impl ExecutionTree {
-    /// Create a [`ExecutionTree`] from a [`ExecutionPlan`] with one write node
+    /// Create a [ExecutionTree] from a [ExecutionPlan] with one write node
     pub fn new(plan: ExecutionPlan) -> Self {
         debug_assert!(plan.out_nodes.len() == 1);
 
         ExecutionTree(plan)
     }
 
-    /// Returns the [`ExecutionResult`] of this tree.
+    /// Returns the [ExecutionResult] of this tree.
     pub(super) fn result(&self) -> &ExecutionResult {
         &self.0.out_nodes[0].result
     }
@@ -618,7 +610,7 @@ impl ExecutionTree {
         }
     }
 
-    /// Return an ascii tree representation of the [`ExecutionTree`]
+    /// Return an ascii tree representation of the [ExecutionTree]
     pub fn ascii_tree(&self) -> Tree {
         let tree = Self::ascii_tree_recursive(self.root());
         let top_level_name = match self.result() {
@@ -632,9 +624,9 @@ impl ExecutionTree {
     }
 }
 
-/// Functionality for optimizing an [`ExecutionTree`]
+/// Functionality for optimizing an [ExecutionTree]
 impl ExecutionTree {
-    /// Implements the functionalily for `simplify` by recusively traversing the tree.
+    /// Implements the functionalily for simplify by recusively traversing the tree.
     fn simplify_recursive(
         new_tree: &mut ExecutionPlan,
         node: ExecutionNodeRef,
@@ -810,10 +802,10 @@ impl ExecutionTree {
         }
     }
 
-    /// Builds a new [`ExecutionTree`] which does not include superfluous operations,
+    /// Builds a new [ExecutionTree] which does not include superfluous operations,
     /// like, e.g., performing a join over one subtable.
     /// Will also exclude the supplied set of temporary tables.
-    /// Returns `None` if the simplified tree results in a no-op.
+    /// Returns None if the simplified tree results in a no-op.
     pub fn simplify(&self, removed_temp_indices: &HashSet<usize>) -> Option<Self> {
         let mut simplified_tree = ExecutionPlan::default();
         let new_root =
@@ -846,13 +838,13 @@ impl ExecutionTree {
 
 /// Functionality for ensuring certain constraints
 impl ExecutionTree {
-    /// Alters the given [`ExecutionTree`] in such a way as to comply with the constraints of the leapfrog trie join algorithm.
+    /// Alters the given [ExecutionTree] in such a way as to comply with the constraints of the leapfrog trie join algorithm.
     /// Specifically, this will reorder tables if necessary
     pub fn satisfy_leapfrog_triejoin(&mut self) {
         Self::satisfy_leapfrog_recursive(self.root(), Permutation::default());
     }
 
-    /// Implements the functionality of `satisfy_leapfrog_triejoin` by traversing the tree recursively
+    /// Implements the functionality of satisfy_leapfrog_triejoin by traversing the tree recursively
     fn satisfy_leapfrog_recursive(node: ExecutionNodeRef, permutation: Permutation) {
         let node_rc = node.get_rc();
         let node_operation = &mut node_rc.borrow_mut().operation;

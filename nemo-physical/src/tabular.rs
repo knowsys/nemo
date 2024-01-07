@@ -1,8 +1,6 @@
-//! This module collects data structures and operations on relational tables
+//! This module collects data structures and operations for tables.
 
 pub mod operations;
-pub mod table_types;
-pub mod traits;
 pub mod trie;
 pub mod triescan;
 
