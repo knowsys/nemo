@@ -3,8 +3,12 @@
 use super::{DataValue, ValueDomain};
 
 /// Physical representation of a Unicode string using String.
+///
+/// Note: As [specified in the rust documentation](https://doc.rust-lang.org/std/primitive.str.html#impl-Ord-for-str),
+/// the derived order agrees with the [Unicode codepoint collation](https://www.w3.org/TR/xpath-functions/#dt-codepoint-collation),
+/// which is the style of string ordering used in SPARQL and as a default in XPath.
 #[repr(transparent)]
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct StringDataValue(String);
 
 impl StringDataValue {

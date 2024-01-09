@@ -5,7 +5,7 @@ use super::{AnyDataValue, DataValue, ValueDomain};
 
 /// Physical representation of a fixed-length tuple of [`DataValue`]s.
 #[repr(transparent)]
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct TupleDataValue {
     values: Box<[AnyDataValue]>,
 }

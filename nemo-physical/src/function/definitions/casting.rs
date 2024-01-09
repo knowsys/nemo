@@ -17,6 +17,7 @@ impl UnaryFunction for CastingIntoInteger64 {
     fn evaluate(&self, parameter: AnyDataValue) -> Option<AnyDataValue> {
         match parameter.value_domain() {
             crate::datavalues::ValueDomain::Tuple
+            | crate::datavalues::ValueDomain::Map
             | crate::datavalues::ValueDomain::Other
             | crate::datavalues::ValueDomain::Null
             | crate::datavalues::ValueDomain::String
@@ -71,6 +72,7 @@ impl UnaryFunction for CastingIntoFloat {
     fn evaluate(&self, parameter: AnyDataValue) -> Option<AnyDataValue> {
         match parameter.value_domain() {
             crate::datavalues::ValueDomain::Tuple
+            | crate::datavalues::ValueDomain::Map
             | crate::datavalues::ValueDomain::Null
             | crate::datavalues::ValueDomain::Other
             | crate::datavalues::ValueDomain::String
@@ -114,6 +116,7 @@ impl UnaryFunction for CastingIntoDouble {
     fn evaluate(&self, parameter: AnyDataValue) -> Option<AnyDataValue> {
         match parameter.value_domain() {
             crate::datavalues::ValueDomain::Tuple
+            | crate::datavalues::ValueDomain::Map
             | crate::datavalues::ValueDomain::Other
             | crate::datavalues::ValueDomain::Null
             | crate::datavalues::ValueDomain::String

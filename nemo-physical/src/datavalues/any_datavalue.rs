@@ -14,7 +14,7 @@ use crate::{
 use super::{
     boolean_datavalue::BooleanDataValue, errors::InternalDataValueCreationError,
     float_datavalues::FloatDataValue, DataValue, DataValueCreationError, DoubleDataValue,
-    IriDataValue, LangStringDataValue, LongDataValue, NullDataValue, OtherDataValue,
+    IriDataValue, LangStringDataValue, LongDataValue, MapDataValue, NullDataValue, OtherDataValue,
     StringDataValue, TupleDataValue, UnsignedLongDataValue, ValueDomain,
 };
 
@@ -74,6 +74,8 @@ enum AnyDataValueEnum {
     Null(NullDataValue),
     /// Variant for representing [`DataValue`]s in [`ValueDomain::Tuple`].
     Tuple(TupleDataValue),
+    /// Variant for representing [`DataValue`]s in [`ValueDomain::Map`].
+    Map(MapDataValue),
     /// Variant for representing [`DataValue`]s in [`ValueDomain::Other`].
     Other(OtherDataValue),
 }
@@ -461,6 +463,7 @@ impl AnyDataValue {
     pub(crate) fn to_storage_value_t(&self, dictionary: &Dict) -> StorageValueT {
         match self.value_domain() {
             ValueDomain::Tuple
+            | ValueDomain::Map
             | ValueDomain::UnsignedLong
             | ValueDomain::Boolean
             | ValueDomain::Other
@@ -489,6 +492,7 @@ impl AnyDataValue {
     pub(crate) fn to_storage_value_t_mut(&self, dictionary: &mut Dict) -> StorageValueT {
         match self.value_domain() {
             ValueDomain::Tuple
+            | ValueDomain::Map
             | ValueDomain::UnsignedLong
             | ValueDomain::Boolean
             | ValueDomain::Other
@@ -549,6 +553,7 @@ impl DataValue for AnyDataValue {
             AnyDataValueEnum::Long(value) => value,
             AnyDataValueEnum::Null(value) => value,
             AnyDataValueEnum::Tuple(value) => value,
+            AnyDataValueEnum::Map(value) => value,
             AnyDataValueEnum::Other(value) => value,
         } {
             fn datatype_iri(&self) -> String;
@@ -600,6 +605,7 @@ impl std::hash::Hash for AnyDataValue {
             AnyDataValueEnum::Long(value) => value,
             AnyDataValueEnum::Null(value) => value,
             AnyDataValueEnum::Tuple(value) => value,
+            AnyDataValueEnum::Map(value) => value,
             AnyDataValueEnum::Other(value) => value,
         } {
             /// The hash function for [AnyDataValue] is delegated to the contained value
@@ -642,6 +648,7 @@ impl PartialEq for AnyDataValue {
             (AnyDataValueEnum::Boolean(dv), AnyDataValueEnum::Boolean(dv_other)) => dv == dv_other,
             (AnyDataValueEnum::Null(dv), AnyDataValueEnum::Null(dv_other)) => dv == dv_other,
             (AnyDataValueEnum::Tuple(dv), AnyDataValueEnum::Tuple(dv_other)) => dv == dv_other,
+            (AnyDataValueEnum::Map(dv), AnyDataValueEnum::Map(dv_other)) => dv == dv_other,
             (AnyDataValueEnum::Other(dv), AnyDataValueEnum::Other(dv_other)) => dv == dv_other,
             _ => false,
         }
@@ -649,6 +656,58 @@ impl PartialEq for AnyDataValue {
 }
 
 impl Eq for AnyDataValue {}
+
+impl Ord for AnyDataValue {
+    /// Compare two arbitrary data values. The ordering is dominated by the [ValueDomain] of
+    /// the values. If this is equal, the actual values are compared.
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        let dom_order = self.value_domain().cmp(&other.value_domain());
+        if let std::cmp::Ordering::Equal = dom_order {
+            match (&self.0, &other.0) {
+                (AnyDataValueEnum::String(dv), AnyDataValueEnum::String(dv_other)) => {
+                    dv.cmp(&dv_other)
+                }
+                (AnyDataValueEnum::Iri(dv), AnyDataValueEnum::Iri(dv_other)) => dv.cmp(&dv_other),
+                (
+                    AnyDataValueEnum::LanguageTaggedString(dv),
+                    AnyDataValueEnum::LanguageTaggedString(dv_other),
+                ) => dv.cmp(&dv_other),
+                (AnyDataValueEnum::Float(dv), AnyDataValueEnum::Float(dv_other)) => {
+                    dv.cmp(&dv_other)
+                }
+                (AnyDataValueEnum::Double(dv), AnyDataValueEnum::Double(dv_other)) => {
+                    dv.cmp(&dv_other)
+                }
+                (AnyDataValueEnum::Long(_), _) => {
+                    self.to_i64_unchecked().cmp(&other.to_i64_unchecked())
+                }
+                (AnyDataValueEnum::UnsignedLong(_), _) => {
+                    self.to_u64_unchecked().cmp(&other.to_u64_unchecked())
+                }
+                (AnyDataValueEnum::Boolean(dv), AnyDataValueEnum::Boolean(dv_other)) => {
+                    dv.cmp(&dv_other)
+                }
+                (AnyDataValueEnum::Null(dv), AnyDataValueEnum::Null(dv_other)) => dv.cmp(&dv_other),
+                (AnyDataValueEnum::Tuple(dv), AnyDataValueEnum::Tuple(dv_other)) => {
+                    dv.cmp(&dv_other)
+                }
+                (AnyDataValueEnum::Map(dv), AnyDataValueEnum::Map(dv_other)) => dv.cmp(&dv_other),
+                (AnyDataValueEnum::Other(dv), AnyDataValueEnum::Other(dv_other)) => {
+                    dv.cmp(&dv_other)
+                }
+                _ => unreachable!("no other combination of values can have equal domains"),
+            }
+        } else {
+            dom_order
+        }
+    }
+}
+
+impl PartialOrd for AnyDataValue {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(&other))
+    }
+}
 
 /// A dynamically defined iterator over [`AnyDataValue`]s.
 #[allow(missing_debug_implementations)]
@@ -717,6 +776,12 @@ impl From<StringDataValue> for AnyDataValue {
 impl From<TupleDataValue> for AnyDataValue {
     fn from(value: TupleDataValue) -> Self {
         AnyDataValue(AnyDataValueEnum::Tuple(value))
+    }
+}
+
+impl From<MapDataValue> for AnyDataValue {
+    fn from(value: MapDataValue) -> Self {
+        AnyDataValue(AnyDataValueEnum::Map(value))
     }
 }
 

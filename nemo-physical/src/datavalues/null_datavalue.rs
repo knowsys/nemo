@@ -18,7 +18,7 @@ use super::{DataValue, ValueDomain};
 /// loading data from several unrelated sources, the same string ID should not be assumed to refer
 /// to the same null.
 #[repr(transparent)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct NullDataValue(usize);
 
 impl NullDataValue {

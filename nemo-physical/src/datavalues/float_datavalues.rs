@@ -9,7 +9,7 @@ use super::{DataValue, DataValueCreationError, ValueDomain};
 
 /// Physical representation of a finite 32bit floating point number as an `f32`.
 #[repr(transparent)]
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 pub struct FloatDataValue(f32);
 
 impl FloatDataValue {
@@ -68,9 +68,19 @@ impl std::hash::Hash for FloatDataValue {
     }
 }
 
+impl Ord for FloatDataValue {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        if let Some(comp) = self.partial_cmp(other) {
+            comp
+        } else {
+            unreachable!("all floats allowed for this type are comparable")
+        }
+    }
+}
+
 /// Physical representation of a finite 64bit floating point number as an f64.
 #[repr(transparent)]
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 pub struct DoubleDataValue(f64);
 
 impl DoubleDataValue {
@@ -126,6 +136,16 @@ impl std::hash::Hash for DoubleDataValue {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         self.value_domain().hash(state);
         self.0.to_bits().hash(state);
+    }
+}
+
+impl Ord for DoubleDataValue {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        if let Some(comp) = self.partial_cmp(other) {
+            comp
+        } else {
+            unreachable!("all floats allowed for this type are comparable")
+        }
     }
 }
 

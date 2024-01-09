@@ -5,7 +5,7 @@ use super::{DataValue, ValueDomain};
 
 /// Physical representation of arbitrary datavalues using two Strings, one
 /// for the lexical value and one for the datatype IRI.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct OtherDataValue(String, String);
 
 impl OtherDataValue {

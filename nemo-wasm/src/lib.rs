@@ -375,6 +375,9 @@ impl NemoResults {
                     nemo_physical::datavalues::ValueDomain::Tuple => {
                         todo!("tuple values are not supported yet")
                     }
+                    nemo_physical::datavalues::ValueDomain::Map => {
+                        todo!("map values are not supported yet")
+                    }
                 })
                 .collect();
 

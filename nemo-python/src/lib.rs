@@ -203,6 +203,7 @@ fn datavalue_to_python(py: Python<'_>, v: AnyDataValue) -> PyResult<&PyAny> {
         nemo::datavalues::ValueDomain::Boolean => todo!("boolean not supported yet"),
         nemo::datavalues::ValueDomain::Null => todo!("nulls not supported yet"),
         nemo::datavalues::ValueDomain::Tuple => todo!("tuples are not supported yet"),
+        nemo::datavalues::ValueDomain::Map => todo!("maps are not supported yet"),
         nemo::datavalues::ValueDomain::UnsignedLong | nemo::datavalues::ValueDomain::Other => {
             let lit = NemoLiteral {
                 value: v.lexical_value(),

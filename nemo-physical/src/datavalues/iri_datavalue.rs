@@ -6,8 +6,14 @@
 use super::{DataValue, ValueDomain};
 
 /// Physical representation of a Unicode string using String.
+///
+/// SPARQL states: "Pairs of IRIs are ordered by comparing them as simple literals.",
+/// which means that their string representations should be compared according to the
+/// [Unicode codepoint collation](https://www.w3.org/TR/xpath-functions/#dt-codepoint-collation).
+/// As [specified in the rust documentation](https://doc.rust-lang.org/std/primitive.str.html#impl-Ord-for-str),
+/// this is also the default order for strings in rust.
 #[repr(transparent)]
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct IriDataValue(String);
 
 impl IriDataValue {

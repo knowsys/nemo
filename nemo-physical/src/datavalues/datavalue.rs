@@ -71,6 +71,8 @@ pub enum ValueDomain {
     Int,
     /// Domain of all tuples.
     Tuple,
+    /// Domain of all maps.
+    Map,
     /// Domain of all boolean values (true and false)
     Boolean,
     /// Domain of all named nulls.
@@ -102,11 +104,85 @@ impl ValueDomain {
             ValueDomain::NonNegativeInt => "http://www.w3.org/2001/XMLSchema#int".to_string(),
             // Tuples have no type in RDF
             ValueDomain::Tuple => "nemo:tuple".to_string(),
+            // Maps have no type in RDF
+            ValueDomain::Map => "nemo:map".to_string(),
             // Other literals cannot have a fixed canonical type by definition
             ValueDomain::Other => panic!("There is no canonical datatype for {:?}. Use the type of the value directly.", self),
             ValueDomain::Boolean => "http://www.w3.org/2001/XMLSchema#boolean".to_string(),
             ValueDomain::Null => panic!("There is no canonical datatype for {:?} defined in Nemo yet. Nulls can be serialized as blank nodes.", self),
         }
+    }
+
+    /// We order values across distinct domains by using this
+    /// integer id. The details matter, e.g., to ensure that comparisons
+    /// of integers from different domains agree with the natural order
+    /// of these integers. This is why we do not derive this.
+    ///
+    /// See [ValueDomain::cmp] for further documentation on the requirements
+    /// for this order.
+    fn relative_domain_position(&self) -> i8 {
+        // In addition to the documentation above, we also keep the values in a block
+        // that we would store in a dictionary internaly.
+        match self {
+            // Initial elements as required by SPARQL
+            ValueDomain::Null => 10,
+            ValueDomain::Iri => 13,
+            // Continuing with elements we keep in dictionaries
+            ValueDomain::String => 20,
+            ValueDomain::LanguageTaggedString => 22,
+            ValueDomain::Other => 24,
+            ValueDomain::Tuple => 26,
+            ValueDomain::Map => 28,
+            ValueDomain::Boolean => 30,
+            // Followed by the floating points
+            ValueDomain::Float => 50,
+            ValueDomain::Double => 52,
+            // And finally the integer values
+            // The order used here is based on the assumption that the given domain is the most
+            // specific domain for a value. For example, [ValueDomain::Long] is only used for
+            // i64 numbers that are smaller than -2147483648 (hence don't fit inti i32).
+            ValueDomain::Long => 100,
+            ValueDomain::Int => 102,
+            ValueDomain::NonNegativeInt => 104,
+            ValueDomain::UnsignedInt => 106,
+            ValueDomain::NonNegativeLong => 108,
+            ValueDomain::UnsignedLong => 110,
+        }
+    }
+}
+
+impl Ord for ValueDomain {
+    /// The order of domains governs the order of values from distinct domains.
+    /// Integer domains are ordered in such a way that this order matches the
+    /// natural order of numbers provided that the domain is the most specific
+    /// (smallest) domain for that value.
+    ///
+    /// Moreover, we respect the constraints defined in SPARQL 1.1:
+    ///
+    /// > SPARQL also fixes an order between some kinds of RDF terms that would not otherwise be ordered:
+    /// > (Lowest) no value assigned to the variable or expression in this solution.
+    /// > Blank nodes
+    /// > IRIs
+    /// > RDF literals
+    ///
+    /// There are no "blank" (unassigned) values for us, but the other cases are
+    /// treated as required above, where "blank node" corresponds to our nulls.
+    ///
+    /// SPARQL (and XPath) actually requires that numeric values of different types
+    /// are compared by "promoting" values to a compatible type, as described in
+    /// detail in the [XPath specification](https://www.w3.org/TR/xpath-31/#promotion).
+    /// This is not considered here, and distinct types still have distinct positions
+    /// in the ordering. A comparison that conforms to these standards needs to be
+    /// realized on the level of individual values, if desired, not on the value domains.
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.relative_domain_position()
+            .cmp(&other.relative_domain_position())
+    }
+}
+
+impl PartialOrd for ValueDomain {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(&other))
     }
 }
 
@@ -116,7 +192,7 @@ impl ValueDomain {
 /// mean different values (i.e., the representation is canonical). The possible
 /// set of datatypes is unrestricted, but values of unknown types are treated
 /// literally and cannot be canonized.
-pub trait DataValue: Debug + Into<AnyDataValue> + PartialEq + Eq + Hash {
+pub trait DataValue: Debug + Into<AnyDataValue> + PartialEq + Eq + Hash + Ord {
     /// Return the datatype of this value, specified by an IRI.
     /// For example, the RDF literal `"abc"^^<http://www.w3.org/2001/XMLSchema#string>`
     /// has datatype IRI `http://www.w3.org/2001/XMLSchema#string`, without any surrounding

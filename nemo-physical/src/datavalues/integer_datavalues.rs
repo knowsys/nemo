@@ -24,7 +24,7 @@ const I32MIN_AS_I64: i64 = -I32MAX_AS_I64 - 1;
 
 /// Physical representation of an integer as an u64.
 #[repr(transparent)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct UnsignedLongDataValue(u64);
 
 impl UnsignedLongDataValue {
@@ -102,7 +102,7 @@ impl std::hash::Hash for UnsignedLongDataValue {
 
 /// Physical representation of an integer as an i64.
 #[repr(transparent)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct LongDataValue(i64);
 
 impl LongDataValue {

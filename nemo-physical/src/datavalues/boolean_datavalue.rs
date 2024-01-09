@@ -54,3 +54,17 @@ impl std::hash::Hash for BooleanDataValue {
         self.0.hash(state);
     }
 }
+
+impl Ord for BooleanDataValue {
+    /// This order corresponds to the
+    /// [comparison of boolean values defined for XPath (and SPARQL)](https://www.w3.org/TR/xpath-functions/#op.boolean).
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.0.cmp(&other.0)
+    }
+}
+
+impl PartialOrd for BooleanDataValue {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(&other))
+    }
+}

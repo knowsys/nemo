@@ -49,6 +49,7 @@ impl NumericValue {
     fn from_any_datavalue(value: AnyDataValue) -> Option<NumericValue> {
         match value.value_domain() {
             crate::datavalues::ValueDomain::Tuple
+            | crate::datavalues::ValueDomain::Map
             | crate::datavalues::ValueDomain::Null
             | crate::datavalues::ValueDomain::Boolean
             | crate::datavalues::ValueDomain::String
@@ -93,6 +94,7 @@ impl NumericPair {
             | crate::datavalues::ValueDomain::Null
             | crate::datavalues::ValueDomain::LanguageTaggedString
             | crate::datavalues::ValueDomain::Tuple
+            | crate::datavalues::ValueDomain::Map
             | crate::datavalues::ValueDomain::Boolean
             | crate::datavalues::ValueDomain::Other
             | crate::datavalues::ValueDomain::Iri => None,

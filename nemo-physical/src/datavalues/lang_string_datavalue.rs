@@ -7,7 +7,10 @@
 use super::{DataValue, ValueDomain};
 
 /// Physical representation of a language-tagged string using two Strings.
-#[derive(Debug, Clone, PartialEq, Eq)]
+///
+/// Note: SPARQL does not define any order for language-tagged literals. We assume
+/// that the default order should be ok.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct LangStringDataValue(String, String);
 
 impl LangStringDataValue {
