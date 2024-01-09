@@ -90,7 +90,7 @@ pub enum Constant {
 
 impl Constant {
     /// Get primitive type that fits the constant
-    pub fn primitive_type(&self) -> Option<PrimitiveType> {
+    pub(crate) fn primitive_type(&self) -> Option<PrimitiveType> {
         match self {
             Self::Abstract(_) => Some(PrimitiveType::Any),
             Self::RdfLiteral(_) => Some(PrimitiveType::Any),
@@ -305,7 +305,7 @@ pub enum Term {
 
 impl Term {
     /// Get primitive type that fits the term
-    pub fn primitive_type(&self) -> Option<PrimitiveType> {
+    pub(crate) fn primitive_type(&self) -> Option<PrimitiveType> {
         match self {
             Self::Primitive(pt) => pt.primitive_type(),
             Self::Unary(_, term) => term.primitive_type(),
@@ -321,7 +321,7 @@ impl Term {
 
     /// If the term is a simple [`PrimitiveTerm`] then return it.
     /// Otherwise return `None`.
-    pub fn as_primitive(&self) -> Option<PrimitiveTerm> {
+    pub(crate) fn as_primitive(&self) -> Option<PrimitiveTerm> {
         match self {
             Term::Primitive(primitive) => Some(primitive.clone()),
             _ => None,
@@ -330,12 +330,12 @@ impl Term {
 
     /// Returns `true` if term is primitive.
     /// Returns `false` if term is composite.
-    pub fn is_primitive(&self) -> bool {
+    pub(crate) fn is_primitive(&self) -> bool {
         self.as_primitive().is_some()
     }
 
     /// Return all [`PrimitiveTerm`]s that make up this term.
-    pub fn primitive_terms(&self) -> Vec<&PrimitiveTerm> {
+    pub(crate) fn primitive_terms(&self) -> Vec<&PrimitiveTerm> {
         match self {
             Term::Primitive(primitive) => {
                 vec![primitive]
@@ -354,8 +354,8 @@ impl Term {
         }
     }
 
-    /// Return all variables in the atom.
-    pub fn variables(&self) -> impl Iterator<Item = &Variable> {
+    /// Return all variables in the term.
+    pub(crate) fn variables(&self) -> impl Iterator<Item = &Variable> {
         self.primitive_terms()
             .into_iter()
             .filter_map(|term| match term {
@@ -364,20 +364,20 @@ impl Term {
             })
     }
 
-    /// Return all universally quantified variables in the atom.
-    pub fn universal_variables(&self) -> impl Iterator<Item = &Variable> {
+    /// Return all universally quantified variables in the term.
+    pub(crate) fn universal_variables(&self) -> impl Iterator<Item = &Variable> {
         self.variables()
             .filter(|var| matches!(var, Variable::Universal(_)))
     }
 
-    /// Return all existentially quantified variables in the atom.
-    pub fn existential_variables(&self) -> impl Iterator<Item = &Variable> {
+    /// Return all existentially quantified variables in the term.
+    pub(crate) fn existential_variables(&self) -> impl Iterator<Item = &Variable> {
         self.variables()
             .filter(|var| matches!(var, Variable::Existential(_)))
     }
 
     /// Replaces [`Variable`]s with [`Term`]s according to the provided assignment.
-    pub fn apply_assignment(&mut self, assignment: &VariableAssignment) {
+    pub(crate) fn apply_assignment(&mut self, assignment: &VariableAssignment) {
         match self {
             Term::Primitive(primitive) => {
                 if let PrimitiveTerm::Variable(variable) = primitive {
@@ -417,7 +417,7 @@ impl Term {
     /// Mutate the term in place, calling the function `f` on itself and recursively on it's subterms if the function `f` returns true
     ///
     /// This is used e.g. to rewrite aggregates inside of constructors with placeholder variables
-    pub fn update_subterms_recursively<F>(&mut self, f: &mut F)
+    pub(crate) fn update_subterms_recursively<F>(&mut self, f: &mut F)
     where
         F: FnMut(&mut Term) -> bool,
     {
@@ -433,7 +433,7 @@ impl Term {
     }
 
     /// Evaluates a constant (numeric) term.
-    pub fn evaluate_constant_numeric(
+    pub(crate) fn evaluate_constant_numeric(
         &self,
         ty: &PrimitiveType,
         dict: &Dict,
