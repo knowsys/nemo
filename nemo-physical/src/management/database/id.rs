@@ -18,6 +18,9 @@ pub(crate) trait TableId:
 }
 
 /// Id of a permanent table in the [DatabaseInstance][super::DatabaseInstance]
+///
+/// Note that an one [PermanentTableId] may represent tables,
+/// which contain the same content but in different orders.
 #[derive(Debug, Default, Copy, Clone, Eq, PartialEq, Hash)]
 pub struct PermanentTableId(usize);
 

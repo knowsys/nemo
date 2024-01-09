@@ -1,7 +1,10 @@
 //! This module defines [GeneratorProjectReorder].
 
+use std::collections::HashMap;
+
 use crate::{
     datatypes::StorageValueT,
+    management::execution_plan::ColumnOrder,
     tabular::{buffer::tuple_buffer::TupleBuffer, trie::Trie, triescan::TrieScan},
     util::mapping::{ordered_choice::SortedChoice, traits::NatMapping},
 };
@@ -26,7 +29,7 @@ pub struct GeneratorProjectReorder {
 }
 
 impl GeneratorProjectReorder {
-    /// Create a new [GeneratorSubtract].
+    /// Create a new [GeneratorProjectReorder].
     pub fn new(output: OperationTable, input: OperationTable) -> Self {
         let projectreordering = ProjectReordering::from_transformation(&input, &output);
         let arity_output = output.len();
@@ -43,6 +46,22 @@ impl GeneratorProjectReorder {
             last_used_layer,
             arity_output,
         }
+    }
+
+    /// Create a [GeneratorProjectReorder],
+    /// which transforms a [Trie] with a given input [ColumnOrder]
+    /// into a [Trie] with the same contents but in the output [ColumnOrder].
+    pub fn from_reordering(source: ColumnOrder, target: ColumnOrder, arity: usize) -> Self {
+        let mut result_map = HashMap::<usize, usize>::new();
+
+        for input in 0..arity {
+            let source_output = source.get(input);
+            let target_output = target.get(input);
+
+            result_map.insert(source_output, target_output);
+        }
+
+        ProjectReordering::from_map(result_map, arity)
     }
 
     /// Apply the operation to an input [TrieScan]
@@ -65,5 +84,10 @@ impl GeneratorProjectReorder {
         }
 
         Trie::from_tuple_buffer(tuple_buffer.finalize())
+    }
+
+    /// Return whether this operation would leave the input [Trie] unchanged.
+    pub fn is_noop(&self) -> bool {
+        self.projectreordering.is_identity()
     }
 }
