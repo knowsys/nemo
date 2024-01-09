@@ -96,6 +96,21 @@ mod test {
     }
 
     #[test]
+    fn test_tuple_eq() {
+        let dv1 = AnyDataValue::new_integer_from_i64(42);
+        let dv2 = AnyDataValue::new_string("test".to_string());
+        let dv3 = AnyDataValue::new_boolean(true);
+
+        let dv_tuple1 = TupleDataValue::new(vec![dv1.clone(), dv2.clone(), dv3.clone()]);
+        let dv_tuple2 = TupleDataValue::new(vec![dv1.clone(), dv2.clone(), dv3.clone()]);
+        let dv_tuple3 =
+            TupleDataValue::new(vec![dv1.clone(), dv2.clone(), dv3.clone(), dv3.clone()]);
+
+        assert_eq!(dv_tuple1, dv_tuple2);
+        assert_ne!(dv_tuple1, dv_tuple3);
+    }
+
+    #[test]
     fn test_empty_tuple() {
         let dv_tuple = TupleDataValue::new(vec![]);
 

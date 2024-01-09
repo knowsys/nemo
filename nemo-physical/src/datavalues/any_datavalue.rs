@@ -614,6 +614,7 @@ impl PartialEq for AnyDataValue {
             }
             (AnyDataValueEnum::Boolean(dv), AnyDataValueEnum::Boolean(dv_other)) => dv == dv_other,
             (AnyDataValueEnum::Null(dv), AnyDataValueEnum::Null(dv_other)) => dv == dv_other,
+            (AnyDataValueEnum::Tuple(dv), AnyDataValueEnum::Tuple(dv_other)) => dv == dv_other,
             (AnyDataValueEnum::Other(dv), AnyDataValueEnum::Other(dv_other)) => dv == dv_other,
             _ => false,
         }
