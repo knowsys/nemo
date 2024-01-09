@@ -1,15 +1,13 @@
 //! This module provides implementations [`super::DataValue`]s that represent tuples of
 //! data values. The tupes have a fixed length, which can also be zero.
 
-use std::sync::Arc;
-
 use super::{AnyDataValue, DataValue, ValueDomain};
 
 /// Physical representation of a fixed-length tuple of [`DataValue`]s.
 #[repr(transparent)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TupleDataValue {
-    values: Arc<[AnyDataValue]>,
+    values: Box<[AnyDataValue]>,
 }
 
 impl TupleDataValue {
