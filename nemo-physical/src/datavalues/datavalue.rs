@@ -396,13 +396,24 @@ pub trait DataValue: Debug + Into<AnyDataValue> + PartialEq + Eq + Hash + Ord {
         panic!("Value is not a boolean.");
     }
 
-    /// Return the length of the tuple element if
-    /// if it is a value in the domain [`ValueDomain::Tuple`].
-    fn tuple_len(&self) -> Option<usize> {
+    /// Return the length of this complex value if it is a
+    /// value in the domain [`ValueDomain::Tuple`] or
+    /// [`ValueDomain::Map`].
+    fn len(&self) -> Option<usize> {
         match self.value_domain() {
-            ValueDomain::Tuple => Some(self.tuple_len_unchecked()),
+            ValueDomain::Tuple | ValueDomain::Map => Some(self.len_unchecked()),
             _ => None,
         }
+    }
+
+    /// Return the length of this complex value if it is a
+    /// value in the domain [`ValueDomain::Tuple`] or
+    /// [`ValueDomain::Map`].
+    ///
+    /// # Panics
+    /// Panics if the value is not a collection.
+    fn len_unchecked(&self) -> usize {
+        panic!("Value is not a collection (tuple or map)");
     }
 
     /// Return the value of the tuple element at the given index
@@ -410,7 +421,7 @@ pub trait DataValue: Debug + Into<AnyDataValue> + PartialEq + Eq + Hash + Ord {
     fn tuple_element(&self, index: usize) -> Option<&AnyDataValue> {
         match self.value_domain() {
             ValueDomain::Tuple => {
-                if index < self.tuple_len_unchecked() {
+                if index < self.len_unchecked() {
                     Some(self.tuple_element_unchecked(index))
                 } else {
                     None
@@ -420,15 +431,6 @@ pub trait DataValue: Debug + Into<AnyDataValue> + PartialEq + Eq + Hash + Ord {
         }
     }
 
-    /// Return the length of the tuple element if
-    /// if it is a value in the domain [`ValueDomain::Tuple`].
-    ///
-    /// # Panics
-    /// Panics if the value is not a tuple.
-    fn tuple_len_unchecked(&self) -> usize {
-        panic!("Value is not a tuple");
-    }
-
     /// Return the value of the tuple element at the given index
     /// as an [AnyDataValue].
     ///
@@ -436,6 +438,34 @@ pub trait DataValue: Debug + Into<AnyDataValue> + PartialEq + Eq + Hash + Ord {
     /// Panics if index is out of bounds or if value is not a tuple.
     fn tuple_element_unchecked(&self, _index: usize) -> &AnyDataValue {
         panic!("Value is not a tuple");
+    }
+
+    /// Returns an iterator over all keys in a value that is a map.
+    /// None is returned for values that are no maps.
+    fn map_keys(&self) -> Option<Box<dyn Iterator<Item = &AnyDataValue> + '_>> {
+        None
+    }
+
+    /// Returns true if the value is a map that contains the given value
+    /// as a key. Otherwise, false is returned.
+    fn contains(&self, _key: &AnyDataValue) -> bool {
+        false
+    }
+
+    /// Return the value of the map element for the given key
+    /// as an [AnyDataValue]. None is returned if the value is not a map
+    /// or the value does not exist.
+    fn map_element(&self, _key: &AnyDataValue) -> Option<&AnyDataValue> {
+        None
+    }
+
+    /// Return the value of the map element for the given key
+    /// as an [AnyDataValue].
+    ///
+    /// # Panics
+    /// Panics if the key does not exist, or the value is not a map.
+    fn map_element_unchecked(&self, _key: &AnyDataValue) -> &AnyDataValue {
+        panic!("Value is not a map");
     }
 }
 

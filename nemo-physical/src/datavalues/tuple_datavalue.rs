@@ -1,13 +1,15 @@
 //! This module provides implementations [`super::DataValue`]s that represent tuples of
 //! data values. The tupes have a fixed length, which can also be zero.
 
+use std::sync::Arc;
+
 use super::{AnyDataValue, DataValue, ValueDomain};
 
 /// Physical representation of a fixed-length tuple of [`DataValue`]s.
 #[repr(transparent)]
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct TupleDataValue {
-    values: Box<[AnyDataValue]>,
+    values: Arc<[AnyDataValue]>,
 }
 
 impl TupleDataValue {
@@ -53,7 +55,7 @@ impl DataValue for TupleDataValue {
         self.values.get(index)
     }
 
-    fn tuple_len_unchecked(&self) -> usize {
+    fn len_unchecked(&self) -> usize {
         self.values.len()
     }
 
@@ -81,8 +83,8 @@ mod test {
 
         let dv_tuple = TupleDataValue::new(vec![dv1.clone(), dv2.clone(), dv3.clone()]);
 
-        assert_eq!(dv_tuple.tuple_len(), Some(3));
-        assert_eq!(dv_tuple.tuple_len_unchecked(), 3);
+        assert_eq!(dv_tuple.len(), Some(3));
+        assert_eq!(dv_tuple.len_unchecked(), 3);
         assert_eq!(dv_tuple.tuple_element(0), Some(&dv1));
         assert_eq!(dv_tuple.tuple_element_unchecked(0), &dv1);
         assert_eq!(dv_tuple.tuple_element(1), Some(&dv2));
@@ -121,8 +123,8 @@ mod test {
     fn test_empty_tuple() {
         let dv_tuple = TupleDataValue::new(vec![]);
 
-        assert_eq!(dv_tuple.tuple_len(), Some(0));
-        assert_eq!(dv_tuple.tuple_len_unchecked(), 0);
+        assert_eq!(dv_tuple.len(), Some(0));
+        assert_eq!(dv_tuple.len_unchecked(), 0);
         assert_eq!(dv_tuple.tuple_element(0), None);
         assert_eq!(dv_tuple.lexical_value(), "".to_string());
         assert_eq!(

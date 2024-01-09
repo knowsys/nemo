@@ -585,8 +585,8 @@ impl DataValue for AnyDataValue {
             fn to_boolean(&self) -> Option<bool>;
             fn to_boolean_unchecked(&self) -> bool;
             fn tuple_element(&self, index: usize) -> Option<&AnyDataValue>;
-            fn tuple_len(&self) -> Option<usize>;
-            fn tuple_len_unchecked(&self) -> usize;
+            fn len(&self) -> Option<usize>;
+            fn len_unchecked(&self) -> usize;
             fn tuple_element_unchecked(&self, _index: usize) -> &AnyDataValue;
         }
     }
