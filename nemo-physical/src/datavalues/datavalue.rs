@@ -3,6 +3,8 @@
 
 use std::fmt::Debug;
 
+use super::AnyDataValue;
+
 /// Encloses a string in double quotes, and escapes inner quotes `\"`, newlines `\n`, carriage returns `\r`,
 /// tabs `\t`, and backslashes `\\`.
 pub(crate) fn quote_string(s: String) -> String {
@@ -318,8 +320,18 @@ pub trait DataValue: Debug {
         panic!("Value is not a boolean.");
     }
 
-    /// Return the value of the tuple element at the given index.
-    fn tuple_element<'a>(&self, index: usize) -> Option<&(dyn DataValue + 'a)> {
+    /// Return the length of the tuple element if
+    /// if it is a value in the domain [`ValueDomain::Tuple`].
+    fn tuple_len(&self) -> Option<usize> {
+        match self.value_domain() {
+            ValueDomain::Tuple => Some(self.tuple_len_unchecked()),
+            _ => None,
+        }
+    }
+
+    /// Return the value of the tuple element at the given index
+    /// as an [AnyDataValue].
+    fn tuple_element(&self, index: usize) -> Option<&AnyDataValue> {
         match self.value_domain() {
             ValueDomain::Tuple => {
                 if index < self.tuple_len_unchecked() {
@@ -334,15 +346,6 @@ pub trait DataValue: Debug {
 
     /// Return the length of the tuple element if
     /// if it is a value in the domain [`ValueDomain::Tuple`].
-    fn tuple_len(&self) -> Option<usize> {
-        match self.value_domain() {
-            ValueDomain::Tuple => Some(self.tuple_len_unchecked()),
-            _ => None,
-        }
-    }
-
-    /// Return the length of the tuple element if
-    /// if it is a value in the domain [`ValueDomain::Tuple`].
     ///
     /// # Panics
     /// Panics if the value is not a tuple.
@@ -350,11 +353,12 @@ pub trait DataValue: Debug {
         panic!("Value is not a tuple");
     }
 
-    /// Return the value of the tuple element at the given index.
+    /// Return the value of the tuple element at the given index
+    /// as an [AnyDataValue].
     ///
     /// # Panics
     /// Panics if index is out of bounds or if value is not a tuple.
-    fn tuple_element_unchecked<'a>(&self, _index: usize) -> &(dyn DataValue + 'a) {
+    fn tuple_element_unchecked(&self, _index: usize) -> &AnyDataValue {
         panic!("Value is not a tuple");
     }
 }

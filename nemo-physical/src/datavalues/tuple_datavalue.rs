@@ -51,16 +51,15 @@ impl DataValue for TupleDataValue {
             + &super::datavalue::quote_iri(self.datatype_iri().as_str())
     }
 
-    fn tuple_element<'a>(&self, index: usize) -> Option<&(dyn DataValue + 'a)> {
-        #[allow(trivial_casts)]
-        self.values.get(index).map(|v| v as &dyn DataValue)
+    fn tuple_element(&self, index: usize) -> Option<&AnyDataValue> {
+        self.values.get(index)
     }
 
     fn tuple_len_unchecked(&self) -> usize {
         self.values.len()
     }
 
-    fn tuple_element_unchecked<'a>(&self, index: usize) -> &(dyn DataValue + 'a) {
+    fn tuple_element_unchecked(&self, index: usize) -> &AnyDataValue {
         self.values.get(index).expect("this method is unchecked")
     }
 }
@@ -79,18 +78,12 @@ mod test {
 
         assert_eq!(dv_tuple.tuple_len(), Some(3));
         assert_eq!(dv_tuple.tuple_len_unchecked(), 3);
-        #[allow(trivial_casts)]
-        let dv1_dyn = &dv1 as &dyn DataValue;
-        assert_eq!(dv_tuple.tuple_element(0), Some(dv1_dyn));
-        assert_eq!(dv_tuple.tuple_element_unchecked(0), dv1_dyn);
-        #[allow(trivial_casts)]
-        let dv2_dyn = &dv2 as &dyn DataValue;
-        assert_eq!(dv_tuple.tuple_element(1), Some(dv2_dyn));
-        assert_eq!(dv_tuple.tuple_element_unchecked(1), dv2_dyn);
-        #[allow(trivial_casts)]
-        let dv3_dyn = &dv3 as &dyn DataValue;
-        assert_eq!(dv_tuple.tuple_element(2), Some(dv3_dyn));
-        assert_eq!(dv_tuple.tuple_element_unchecked(2), dv3_dyn);
+        assert_eq!(dv_tuple.tuple_element(0), Some(&dv1));
+        assert_eq!(dv_tuple.tuple_element_unchecked(0), &dv1);
+        assert_eq!(dv_tuple.tuple_element(1), Some(&dv2));
+        assert_eq!(dv_tuple.tuple_element_unchecked(1), &dv2);
+        assert_eq!(dv_tuple.tuple_element(2), Some(&dv3));
+        assert_eq!(dv_tuple.tuple_element_unchecked(2), &dv3);
         assert_eq!(dv_tuple.tuple_element(3), None);
 
         assert_eq!(dv_tuple.datatype_iri(), "nemo:tuple".to_string());
