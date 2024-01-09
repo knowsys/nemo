@@ -1,4 +1,4 @@
-//! This module collects operations over tries
+//! This module defines operations over tries
 
 pub mod filter;
 pub mod function;
@@ -8,11 +8,16 @@ pub mod prune;
 pub mod subtract;
 pub mod union;
 
-use std::collections::HashMap;
-use std::ops::Deref;
-use std::{fmt::Debug, hash::Hash, iter::IntoIterator};
+use std::{collections::HashMap, fmt::Debug, hash::Hash, ops::Deref};
+
+use delegate::delegate;
 
 use crate::dictionary::meta_dv_dict::MetaDvDictionary;
+
+use self::{
+    filter::GeneratorFilter, function::GeneratorFunction, join::GeneratorJoin,
+    subtract::GeneratorSubtract, union::GeneratorUnion,
+};
 
 use super::triescan::TrieScanEnum;
 
@@ -78,4 +83,42 @@ pub(crate) trait OperationGenerator {
         input: Vec<TrieScanEnum<'a>>,
         dictionary: &'a MetaDvDictionary,
     ) -> TrieScanEnum<'a>;
+}
+
+pub(crate) enum OperationGeneratorEnum {
+    Join(GeneratorJoin),
+    Union(GeneratorUnion),
+    Subtract(GeneratorSubtract),
+    Filter(GeneratorFilter),
+    Function(GeneratorFunction),
+}
+
+impl OperationGenerator for OperationGeneratorEnum {
+    delegate! {
+        to match self {
+            Self::Join(generator) => generator,
+            Self::Union(generator) => generator,
+            Self::Subtract(generator) => generator,
+            Self::Filter(generator) => generator,
+            Self::Function(generator) => generator,
+        } {
+            fn generate<'a>(
+                &'_ self,
+                input: Vec<TrieScanEnum<'a>>,
+                dictionary: &'a MetaDvDictionary,
+            ) -> TrieScanEnum<'a>;
+        }
+    }
+}
+
+impl Debug for OperationGeneratorEnum {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Join(generator) => f.write_fmt(format_args!("Join ({generator:?})")),
+            Self::Union(generator) => f.write_fmt(format_args!("Union")),
+            Self::Subtract(generator) => f.write_fmt(format_args!("Subtract ({generator:?})")),
+            Self::Filter(generator) => f.write_fmt(format_args!("Filter ({generator:?})")),
+            Self::Function(generator) => f.write_fmt(format_args!("Function ({generator:?})")),
+        }
+    }
 }

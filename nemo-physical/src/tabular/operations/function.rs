@@ -20,7 +20,7 @@ use crate::{
 use super::{OperationColumnMarker, OperationGenerator, OperationTable};
 
 /// Assigns an output column to a function which determines how to compute the values of that column
-type FunctionAssignment = HashMap<OperationColumnMarker, FunctionTree<OperationColumnMarker>>;
+pub type FunctionAssignment = HashMap<OperationColumnMarker, FunctionTree<OperationColumnMarker>>;
 
 /// Marks whether an output column results from an input column or is computed via a [StackProgram]
 #[derive(Debug, Clone)]

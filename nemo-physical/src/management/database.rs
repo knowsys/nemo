@@ -1,258 +1,67 @@
+//! This module defines [DatabaseInstance],
+//! which is used to manage a collection of tables.
+
 pub mod id;
 pub mod sources;
+
+pub(crate) mod execution_tree;
 
 mod order;
 mod storage;
 
 use std::{
+    cell::RefCell,
+    collections::HashMap,
     fmt::{Debug, Display},
-    hash::Hash,
 };
 
 use crate::util::mapping::permutation::Permutation;
 
+use self::{id::PermanentTableId, order::OrderedReferenceManager};
+
 /// Dictionary Implementation used in the current configuration
 pub type Dict = crate::dictionary::meta_dv_dict::MetaDvDictionary;
-
-/// Object that owns a table in various orders.
-/// May also just be a pointer to another table.
-#[derive(Debug)]
-enum TableStatus {
-    /// Table is present under different [`ColumnOrder`]s.
-    Present(HashMap<ColumnOrder, TableStorage>),
-    /// Table has the same contents as the referenced table except for reordering.
-    /// The referenced table is given by its [`TableId`].
-    /// Given the referenced table in some column order,
-    /// the [`Permutation`] encodes the reordering that needs to be applied
-    /// to the referenced table to obtain this table in that same ordering.
-    ///
-    /// For example, assume we have a table `T`.
-    /// We also have a table `R` that is the same as `T` except for reordering `[0->1->2->0]`.
-    /// This means that to obtain the table `R` in the standard ordering one would need the table `T` in the order `[0->1->2->0]`.
-    /// To obtain the table `R` in the ordering `[0->1->2->0]` one owuld need the table `T` in the ordering `[0->2->1->0]`.
-    Reference(TableId, Permutation),
-}
-
-impl ByteSized for TableStatus {
-    fn size_bytes(&self) -> ByteSize {
-        match self {
-            TableStatus::Present(map) => map
-                .iter()
-                .map(|(_, s)| s.size_bytes())
-                .fold(ByteSize(0), |acc, x| acc + x),
-            TableStatus::Reference(_, _) => ByteSize(0),
-        }
-    }
-}
-
-/// Manages tables under different orders.
-/// Also has the capability of representing a table as a reordered version of another.
-#[derive(Debug, Default)]
-struct OrderedReferenceManager {
-    map: HashMap<TableId, TableStatus>,
-}
-
-/// Stores the result of a function that resolves table references (mutable version)
-struct TableResolvedMut<'a> {
-    /// Hashmap containing all the available orders of a table.
-    map: &'a mut HashMap<ColumnOrder, TableStorage>,
-    /// If the requested table is a reordered reference then this is the reordered requested column order
-    /// If no reordering was required then this is the original requested column order.
-    ///
-    /// Essentially, this means that searching for `order` in `map` will give return the right table.
-    order: ColumnOrder,
-}
-
-/// Stores the result of a function that resolves table references
-struct TableResolved<'a> {
-    /// Hashmap containing all the available orders of a table.
-    map: &'a HashMap<ColumnOrder, TableStorage>,
-    /// If the requested table is a reordered reference then this is the reordered requested column order
-    /// If no reordering was required then this is the original requested column order.
-    order: ColumnOrder,
-}
-
-impl OrderedReferenceManager {
-    fn resolve_reference_mut(
-        &mut self,
-        id: TableId,
-        order: &ColumnOrder,
-    ) -> Option<TableResolvedMut> {
-        match &self.map.get(&id)? {
-            TableStatus::Present(_) => {}
-            TableStatus::Reference(ref_id, permutation) => {
-                return self.resolve_reference_mut(*ref_id, &order.chain_permutation(permutation))
-            }
-        }
-
-        match self.map.get_mut(&id)? {
-            TableStatus::Present(map) => {
-                return Some(TableResolvedMut {
-                    map,
-                    order: order.clone(),
-                })
-            }
-            TableStatus::Reference(_, _) => {}
-        }
-
-        unreachable!("Each case should have been handled by one of the above matches.")
-    }
-
-    fn resolve_reference(&self, id: TableId, order: &ColumnOrder) -> Option<TableResolved> {
-        match &self.map.get(&id)? {
-            TableStatus::Present(map) => Some(TableResolved {
-                map,
-                order: order.clone(),
-            }),
-            TableStatus::Reference(ref_id, permutation) => {
-                self.resolve_reference(*ref_id, &order.chain_permutation(permutation))
-            }
-        }
-    }
-
-    /// Add a new table (that is not a reference).
-    fn add_present(&mut self, id: TableId, order: ColumnOrder, storage: TableStorage) {
-        if let Some(resolved) = self.resolve_reference_mut(id, &order) {
-            resolved.map.insert(resolved.order, storage);
-        } else {
-            let mut new_order_map = HashMap::<ColumnOrder, TableStorage>::new();
-            new_order_map.insert(order, storage);
-
-            let status = TableStatus::Present(new_order_map);
-            self.map.insert(id, status);
-        }
-    }
-
-    /// Add a new reference to another table.
-    /// Panics if the id of the referenced table does not exist.
-    fn add_reference(&mut self, id: TableId, reference_id: TableId, permutation: Permutation) {
-        let (final_id, final_permutation) = if let TableStatus::Reference(ref_id, ref_permutation) =
-            &self
-                .map
-                .get(&reference_id)
-                .expect("Referenced id should exist.")
-        {
-            (*ref_id, ref_permutation.chain_permutation(&permutation))
-        } else {
-            (reference_id, permutation)
-        };
-
-        let status = TableStatus::Reference(final_id, final_permutation);
-        self.map.insert(id, status);
-    }
-
-    /// Return a reference to the [`TableStorage`] associated with the given [`TableId`] and [`ColumnOrder`].
-    /// Returns `None` if there is no table with that id or order.
-    fn table_storage<'a>(&'a self, id: TableId, order: &ColumnOrder) -> Option<&'a TableStorage> {
-        let resolved = self.resolve_reference(id, order)?;
-        resolved.map.get(&resolved.order)
-    }
-
-    /// Return a mutable reference to the [`TableStorage`] associated with the given [`TableId`] and [`ColumnOrder`].
-    /// Returns `None` if there is no table with that id or order.
-    fn table_storage_mut<'a>(
-        &'a mut self,
-        id: TableId,
-        order: &ColumnOrder,
-    ) -> Option<&'a mut TableStorage> {
-        let resolved = self.resolve_reference_mut(id, order)?;
-        resolved.map.get_mut(&resolved.order)
-    }
-
-    /// Return an iterator of all the available orders of a table.
-    /// Returns `None` if there is no table with the given id.
-    fn available_orders(&self, id: TableId) -> Option<Vec<ColumnOrder>> {
-        let resolved = self.resolve_reference(id, &ColumnOrder::default())?;
-        Some(
-            resolved
-                .map
-                .keys()
-                .map(|o| o.chain_permutation(&resolved.order.invert()))
-                .collect(),
-        )
-    }
-
-    /// Delete the given table.
-    /// Return `None` if there is no table with the given id.
-    ///
-    /// TODO: This does not check/fix references of tables.
-    fn delete_table(&mut self, id: &TableId) -> Option<()> {
-        self.map.remove(id)?;
-        Some(())
-    }
-
-    /// Return the number of rows contained in this table.
-    ///
-    /// TODO: Currently only counting of in-memory facts is supported, see <https://github.com/knowsys/nemo/issues/335>
-    fn count_rows(&self, id: &TableId) -> usize {
-        if let Some(resolved) = self.resolve_reference(*id, &ColumnOrder::default()) {
-            // TODO: Technically we should be able to somehow count non-inmemory tables, see <https://github.com/knowsys/nemo/issues/335>
-            // But this is not relevant for now
-            if let Some((_, TableStorage::InMemory(trie))) = resolved.map.iter().next() {
-                return trie.row_num();
-            }
-        }
-
-        0
-    }
-}
-
-impl ByteSized for OrderedReferenceManager {
-    fn size_bytes(&self) -> ByteSize {
-        self.map.iter().fold(ByteSize(0), |acc, (_, status)| {
-            acc + match &status {
-                TableStatus::Present(ordered_tries) => ordered_tries
-                    .iter()
-                    .map(|(_, s)| s.size_bytes())
-                    .fold(ByteSize(0), |acc, x| acc + x),
-                TableStatus::Reference(_, _) => ByteSize(0),
-            }
-        })
-    }
-}
 
 /// Struct that contains useful information about a trie
 /// as well as the actual owner of the trie.
 #[derive(Debug)]
 struct TableInfo {
-    /// The name of the table.
+    /// The name of the table
     name: String,
-    /// The schema of the table
-    schema: TableSchema,
+    /// The number of columns stored in the table
+    arity: usize,
 }
 
 impl TableInfo {
-    /// Create new [`TableInfo`].
-    fn new(name: String, schema: TableSchema) -> Self {
-        Self { name, schema }
+    /// Create new [TableInfo].
+    fn new(name: String, arity: usize) -> Self {
+        Self { name, arity }
     }
 }
 
 /// Represents a collection of tables
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct DatabaseInstance {
-    /// Structure which owns all the tries; accessed through Id.
-    storage_handler: OrderedReferenceManager,
-    /// Map with additional infromation about the tables
-    table_infos: HashMap<TableId, TableInfo>,
+    /// Helper object to manager references and different ordering of the same table
+    reference_manager: OrderedReferenceManager,
+    /// Associates each table id with additional information
+    table_infos: HashMap<PermanentTableId, TableInfo>,
 
     /// Dictionary that represents the general mapping between datavalues and integer ids
     /// used in all tables of this database
     dict: RefCell<Dict>,
 
-    /// Lowest unused null value.
-    current_null: u64,
-
-    /// The lowest unused TableId.
-    /// Will be incremented for each new table and will never be reused.
-    current_id: TableId,
+    /// The lowest unused [PermanentTableId]
+    ///
+    /// This will be incremented for each new table.
+    current_id: PermanentTableId,
 }
 
-/// Result of executing an [`ExecutionTree`].
+/// Result of executing an [ExecutionTree].
 enum ComputationResult {
     /// Resulting trie is only stored temporarily within this object.
     Temporary(Option<Trie>),
-    /// Trie is stored permanently under a [`TableId`] and [`ColumnOrder`].
+    /// Trie is stored permanently under a [TableId] and [ColumnOrder].
     Permanent(TableId, ColumnOrder),
     /// The computation resulted in an empty trie.
     Empty,
@@ -265,19 +74,6 @@ impl Default for DatabaseInstance {
 }
 
 impl DatabaseInstance {
-    /// Create new [`DatabaseInstance`]
-    pub fn new() -> Self {
-        let current_null = 1 << 63; // TODO: Think about a robust null representation method
-
-        Self {
-            storage_handler: OrderedReferenceManager::default(),
-            table_infos: HashMap::new(),
-            dict: RefCell::new(Dict::default()),
-            current_null,
-            current_id: TableId::default(),
-        }
-    }
-
     /// Return the number of rows for a given table.
     ///
     /// TODO: Currently only counting of in-memory facts is supported, see <https://github.com/knowsys/nemo/issues/335>
@@ -296,13 +92,13 @@ impl DatabaseInstance {
         &self.table_infos.get(&id).unwrap().name
     }
 
-    /// Return the schema of a table identified by the given [`TableId`].
+    /// Return the schema of a table identified by the given [TableId].
     /// Panics if the id does not exist.
     pub fn table_schema(&self, id: TableId) -> &TableSchema {
         &self.table_infos.get(&id).unwrap().schema
     }
 
-    /// Return the arity of a table identified by the given [`TableId`].
+    /// Return the arity of a table identified by the given [TableId].
     /// Panics if the id does not exist.
     pub fn table_arity(&self, id: TableId) -> usize {
         self.table_schema(id).arity()
@@ -314,7 +110,7 @@ impl DatabaseInstance {
     }
 
     /// Register a new table under a given name and schema.
-    /// Returns the [`TableId`] with which the new table can be addressed.
+    /// Returns the [TableId] with which the new table can be addressed.
     pub fn register_table(&mut self, name: &str, schema: TableSchema) -> TableId {
         self.table_infos
             .insert(self.current_id, TableInfo::new(String::from(name), schema));
@@ -368,131 +164,9 @@ impl DatabaseInstance {
             .expect("Table to be deleted should exist.");
     }
 
-    /// Provides a measure of how "difficult" it is to transform a column with this order into another.
-    /// Say, `from = {0->2, 1->1, 2->0}` and `to = {0->1, 1->0, 2->2}`.
-    /// Starting from position 0 in "from" one needs to skip one layer to reach the 2 in "to" (+1).
-    /// Then we need to go back two layers to reach the 1 (+2)
-    /// Finally, we go one layer down to reach 0 (+-0).
-    /// This gives us an overall score of 3.
-    /// Returned value is 0 if and only if from == to.
-    #[allow(clippy::cast_possible_wrap)]
-    fn distance(from: &ColumnOrder, to: &ColumnOrder) -> usize {
-        let max_len = from.last_mapped().max(to.last_mapped()).unwrap_or(0);
-
-        let to_inverted = to.invert();
-
-        let mut current_score: usize = 0;
-        let mut current_position_from: isize = -1;
-
-        for position_to in 0..=max_len {
-            let current_value = to_inverted.get(position_to);
-
-            let position_from = from.get(current_value);
-            let difference: isize = (position_from as isize) - current_position_from;
-
-            let penalty: usize = if difference <= 0 {
-                difference.unsigned_abs()
-            } else {
-                // Taking one forward step should not be punished
-                (difference - 1) as usize
-            };
-
-            current_score += penalty;
-            current_position_from = position_from as isize;
-        }
-
-        current_score
-    }
-
-    /// Helper function that iterates through a collection of [`ColumnOrder`]
-    /// to find the one that is "closest" to given one.
-    /// Returns `None` if the given iterator is empty.
-    fn search_closest_order<'a>(
-        iter_orders: &'a [ColumnOrder],
-        order: &ColumnOrder,
-    ) -> Option<&'a ColumnOrder> {
-        iter_orders
-            .iter()
-            .min_by(|x, y| Self::distance(x, order).cmp(&Self::distance(y, order)))
-    }
-
-    /// Return a [`ProjectReordering`] that will turn a table given in some [`ColumnOrder`] into the same table in another [`ColumnOrder`].
-    pub fn reorder_to(
-        source_order: &ColumnOrder,
-        target_order: &ColumnOrder,
-        arity: usize,
-    ) -> ProjectReordering {
-        let mut result_map = HashMap::<usize, usize>::new();
-
-        for input in 0..arity {
-            let source_output = source_order.get(input);
-            let target_output = target_order.get(input);
-
-            result_map.insert(source_output, target_output);
-        }
-
-        ProjectReordering::from_map(result_map, arity)
-    }
-
-    /// Will ensure that the requested table will exist as a [`Trie`] in memory.
-    /// More precisely this will
-    ///     * Reorder an existing table if the table is not available in the requested order
-    ///     * Load a table from disk if it currently not in memory
-    /// Panics if the requested table does not exist.
-    fn make_available_in_memory(
-        &mut self,
-        id: TableId,
-        order: &ColumnOrder,
-    ) -> Result<(), ReadingError> {
-        let arity = self.table_arity(id);
-        let available_orders = self
-            .storage_handler
-            .available_orders(id)
-            .expect("Table with given id should exist.");
-
-        let closest_order = Self::search_closest_order(&available_orders, order)
-            .expect("This function assumes that there is at least one table under the given id.");
-
-        let reorder = Self::reorder_to(closest_order, order, arity);
-        let trie_unordered = self
-            .storage_handler
-            .table_storage_mut(id, &closest_order.clone())
-            .expect("Call to search_closest_ordered should give us an existing order")
-            .into_memory(&mut self.dict)?;
-
-        if !reorder.is_identity() {
-            TimedCode::instance()
-                .sub("Reasoning/Execution/Required Reorder")
-                .start();
-
-            let trie_reordered = project_and_reorder(trie_unordered, &reorder);
-
-            TimedCode::instance()
-                .sub("Reasoning/Execution/Required Reorder")
-                .stop();
-
-            self.add_trie(id, order.clone(), trie_reordered);
-        }
-
-        Ok(())
-    }
-
-    // Helper function which checks whether the top level tree node is of type `AppendNulls`.
-    // If this is the case returns the amount of null-columns that have been appended.
-    // TODO: Nothing about this feels right; revise later
-    fn appends_nulls(node: ExecutionNodeRef) -> u64 {
-        let node_rc = node.get_rc();
-        let node_operation = &node_rc.borrow().operation;
-
-        match node_operation {
-            ExecutionOperation::AppendNulls(_subnode, num_nulls) => *num_nulls as u64,
-            _ => 0,
-        }
-    }
-
     /// Prunes and materializes a trie scan by
-    /// * either unwrapping an [`TrieScanAggregateWrapper`]
-    /// * or otherwise wrapping the [`TrieScanEnum`] using a [`TrieScanPrune`].
+    /// * either unwrapping an [TrieScanAggregateWrapper]
+    /// * or otherwise wrapping the [TrieScanEnum] using a [TrieScanPrune].
     fn materialized_trie_scan(trie_scan: TrieScanEnum<'_>, cut_bottom: usize) -> Option<Trie> {
         match trie_scan {
             TrieScanEnum::TrieScanAggregateWrapper(mut aggregate_wrapper) => {
@@ -502,11 +176,11 @@ impl DatabaseInstance {
         }
     }
 
-    /// Produces a new [`Trie`] by executing a [`ExecutionTree`].
+    /// Produces a new [Trie] by executing a [ExecutionTree].
     ///
     /// # Panics
-    /// Panics if the tables that are being loaded by the [`ExecutionTree`] are not available in memory.
-    /// Also panics if the [`ExecutionTree`] wants to perform a project/reorder operation on a non-materialized trie.
+    /// Panics if the tables that are being loaded by the [ExecutionTree] are not available in memory.
+    /// Also panics if the [ExecutionTree] wants to perform a project/reorder operation on a non-materialized trie.
     fn evaluate_execution_tree(
         &self,
         execution_tree: &ExecutionTree,
@@ -568,12 +242,12 @@ impl DatabaseInstance {
         }
     }
 
-    /// Evaluates an [`ExecutionTree`] until until it finds the first row in the result and returns it.
-    /// Returns `None` if the tree evaluates to the empty table.
+    /// Evaluates an [ExecutionTree] until until it finds the first row in the result and returns it.
+    /// Returns None if the tree evaluates to the empty table.
     ///
     /// # Panics
-    /// Panics if the tables that are being loaded by the [`ExecutionTree`] are not available in memory.
-    /// Also panics if the [`ExecutionTree`] wants to perform a project/reorder operation on a non-materialized trie.
+    /// Panics if the tables that are being loaded by the [ExecutionTree] are not available in memory.
+    /// Also panics if the [ExecutionTree] wants to perform a project/reorder operation on a non-materialized trie.
     fn evaluate_execution_tree_first_match(
         &self,
         execution_tree: &ExecutionTree,
@@ -598,8 +272,8 @@ impl DatabaseInstance {
         }))
     }
 
-    /// Executes a given [`ExecutionPlan`].
-    /// Returns a map that assigns to each plan id of a permanent table the [`TableId`] in the [`DatabaseInstance`]
+    /// Executes a given [ExecutionPlan].
+    /// Returns a map that assigns to each plan id of a permanent table the [TableId] in the [DatabaseInstance]
     /// This may fail if certain operations are performed on tries with incompatible types
     /// or if the plan references tries that do not exist.
     pub fn execute_plan(&mut self, plan: ExecutionPlan) -> Result<HashMap<usize, TableId>, Error> {
@@ -650,7 +324,7 @@ impl DatabaseInstance {
             type_trees.insert(tree_id, type_tree);
 
             if let Some(new_trie) = new_trie_opt {
-                // If trie appended nulls then we need to update our `current_null` value
+                // If trie appended nulls then we need to update our current_null value
                 self.current_null += new_trie.row_num() as u64 * num_null_columns;
 
                 // Add new trie to the appropriate place
@@ -697,16 +371,16 @@ impl DatabaseInstance {
         Ok(permanent_ids)
     }
 
-    /// Execute a given [`ExecutionPlan`]
+    /// Execute a given [ExecutionPlan]
     /// but evaluate it only until the first row of the result table
-    /// or return `None` if it is empty.
+    /// or return None if it is empty.
     /// The result table is considered to be the (unique) table marked as permanent output.
     ///
     /// Assumes that the given plan has only one output node.
     /// Further assumes that each input table is already available in memory.
     /// No tables will be saved in the database.
     ///
-    /// TODO: This code is very similar to `execute_plan`,
+    /// TODO: This code is very similar to execute_plan,
     /// but hard to abstract because of the timing...
     pub fn execute_plan_first_match(&self, plan: ExecutionPlan) -> Result<Option<TableRow>, Error> {
         let execution_trees = plan.split_at_write_nodes();
@@ -832,7 +506,7 @@ impl DatabaseInstance {
     }
 
     /// Returns an iterator over the specified table.
-    /// Uses the default [`ColumnOrder`]
+    /// Uses the default [ColumnOrder]
     pub fn table_values(
         &mut self,
         id: TableId,
@@ -860,9 +534,9 @@ impl DatabaseInstance {
         ))
     }
 
-    /// Convert a [`StorageValueIteratorT`] into a [`DataValueIteratorT`].
+    /// Convert a [StorageValueIteratorT] into a [DataValueIteratorT].
     ///
-    /// TODO: This should vanish at some point in the transition to [`DataValue`].
+    /// TODO: This should vanish at some point in the transition to [DataValue].
     /// Currently, it is still used in tracing, where we work with "Contant" values in query results.
     pub fn storage_to_data_iterator<'a>(
         &'a self,
@@ -903,7 +577,7 @@ impl DatabaseInstance {
         }
     }
 
-    /// Convert a [`StorageValueIteratorT`] into an iterator over [`AnyDataValue`].
+    /// Convert a [StorageValueIteratorT] into an iterator over [AnyDataValue].
     pub(crate) fn storage_to_datavalue_iterator<'a>(
         &'a self,
         iterator: StorageValueIteratorT<'a>,
@@ -1257,7 +931,7 @@ impl DatabaseInstance {
         };
     }
 
-    /// Return the amount of memory consumed by the table under the given [`TableId`].
+    /// Return the amount of memory consumed by the table under the given [TableId].
     /// This also includes additional index structures but excludes tables that are currently stored on disk.
     ///
     /// # Panics
@@ -1507,87 +1181,6 @@ mod test {
                 .iter()
                 .collect::<Vec<usize>>(),
             vec![0, 2, 4]
-        );
-    }
-
-    #[test]
-    fn test_reference_manager() {
-        let mut current_id = TableId::default();
-        let mut manager = OrderedReferenceManager::default();
-
-        let id_present = current_id.increment();
-
-        let order_first = ColumnOrder::from_vector(vec![4, 2, 1, 0, 3]);
-        let storage_first = TableStorage::OnDisk(TableSchema::default(), vec![]);
-        manager.add_present(id_present, order_first, storage_first);
-
-        let order_second = ColumnOrder::from_vector(vec![4, 0, 1, 2, 3]);
-        let storage_second = TableStorage::OnDisk(TableSchema::default(), vec![]);
-        manager.add_present(id_present, order_second, storage_second);
-
-        let id_reference = current_id.increment();
-        let permutation_reference = Permutation::from_vector(vec![2, 3, 4, 1, 0]);
-        manager.add_reference(id_reference, id_present, permutation_reference);
-
-        let order_third = ColumnOrder::from_vector(vec![3, 4, 0, 1, 2]);
-        let storage_third = TableStorage::OnDisk(TableSchema::default(), vec![]);
-        manager.add_present(id_reference, order_third, storage_third);
-
-        let reference_available_orders = vec![
-            ColumnOrder::from_vector(vec![3, 0, 4, 2, 1]),
-            ColumnOrder::from_vector(vec![3, 2, 4, 0, 1]),
-            ColumnOrder::from_vector(vec![3, 4, 0, 1, 2]),
-        ];
-
-        for order in manager.available_orders(id_reference).unwrap() {
-            assert!(reference_available_orders.iter().any(|o| o == &order));
-        }
-
-        let requested_order = ColumnOrder::from_vector(vec![0, 3, 1, 2, 4]);
-        let expected_order = ColumnOrder::from_vector(vec![1, 2, 4, 3, 0]);
-        let resolved = manager
-            .resolve_reference(id_reference, &requested_order)
-            .unwrap();
-        assert_eq!(resolved.order, expected_order);
-
-        let id_second_reference = current_id.increment();
-        let permutation_second_reference = Permutation::from_vector(vec![4, 3, 1, 2, 0]);
-        manager.add_reference(
-            id_second_reference,
-            id_reference,
-            permutation_second_reference,
-        );
-
-        let reference_available_orders = vec![
-            ColumnOrder::from_vector(vec![4, 2, 3, 1, 0]),
-            ColumnOrder::from_vector(vec![4, 0, 3, 1, 2]),
-            ColumnOrder::from_vector(vec![0, 1, 3, 2, 4]),
-        ];
-
-        for order in manager.available_orders(id_second_reference).unwrap() {
-            assert!(reference_available_orders.iter().any(|o| o == &order));
-        }
-    }
-
-    #[test]
-    fn test_closest_order() {
-        let orders = vec![
-            ColumnOrder::from_vector(vec![3, 0, 2, 1]),
-            ColumnOrder::from_vector(vec![0, 1, 2, 3]),
-        ];
-
-        let requested_order = ColumnOrder::from_vector(vec![0, 1, 3, 2]);
-        let expected_order = ColumnOrder::from_vector(vec![0, 1, 2, 3]);
-        assert_eq!(
-            DatabaseInstance::search_closest_order(&orders, &requested_order).unwrap(),
-            &expected_order
-        );
-
-        let requested_order = ColumnOrder::from_vector(vec![3, 2, 0, 1]);
-        let expected_order = ColumnOrder::from_vector(vec![3, 0, 2, 1]);
-        assert_eq!(
-            DatabaseInstance::search_closest_order(&orders, &requested_order).unwrap(),
-            &expected_order
         );
     }
 }

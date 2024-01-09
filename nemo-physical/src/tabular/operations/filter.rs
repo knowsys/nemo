@@ -21,7 +21,7 @@ use crate::{
 use super::{OperationColumnMarker, OperationGenerator, OperationTable};
 
 /// Assigns an input column to a function which filters values from that column
-type FilterAssignment = HashMap<OperationColumnMarker, FunctionTree<OperationColumnMarker>>;
+pub type FilterAssignment = HashMap<OperationColumnMarker, FunctionTree<OperationColumnMarker>>;
 
 /// Marks whether an output column results from an input column or has a filter applied to it via a [StackProgram]
 #[derive(Debug, Clone)]

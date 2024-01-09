@@ -6,12 +6,13 @@ use std::{
 };
 
 use crate::{
-    management::execution_plan::ColumnOrder,
+    management::{execution_plan::ColumnOrder, ByteSized},
+    meta::TimedCode,
     tabular::{
         operations::projectreorder::{GeneratorProjectReorder, ProjectReordering},
         trie::Trie,
     },
-    util::mapping::{permutation::Permutation, traits::NatMapping}, meta::TimedCode,
+    util::mapping::{permutation::Permutation, traits::NatMapping},
 };
 
 use super::{id::PermanentTableId, sources::TableSource, storage::TableStorage, Dict};
@@ -255,3 +256,106 @@ impl OrderedReferenceManager {
         panic!("No table with id {id} exists.");
     }
 }
+
+impl ByteSized for OrderedReferenceManager {
+    fn size_bytes(&self) -> bytesize::ByteSize {
+        self.stored_tables
+            .iter()
+            .map(|table| table.size_bytes())
+            .sum()
+    }
+}
+
+// #[cfg(test)]
+// mod test {
+//     use crate::{
+//         management::{
+//             database::{
+//                 id::PermanentTableId, order::OrderedReferenceManager, storage::TableStorage,
+//             },
+//             execution_plan::ColumnOrder,
+//         },
+//         util::mapping::permutation::Permutation,
+//     };
+
+//     #[test]
+//     fn test_reference_manager() {
+//         let mut current_id = PermanentTableId::default();
+//         let mut manager = OrderedReferenceManager::default();
+
+//         let id_present = current_id.increment();
+
+//         let order_first = ColumnOrder::from_vector(vec![4, 2, 1, 0, 3]);
+//         let storage_first = TableStorage::OnDisk(TableSchema::default(), vec![]);
+//         manager.add_present(id_present, order_first, storage_first);
+
+//         let order_second = ColumnOrder::from_vector(vec![4, 0, 1, 2, 3]);
+//         let storage_second = TableStorage::OnDisk(TableSchema::default(), vec![]);
+//         manager.add_present(id_present, order_second, storage_second);
+
+//         let id_reference = current_id.increment();
+//         let permutation_reference = Permutation::from_vector(vec![2, 3, 4, 1, 0]);
+//         manager.add_reference(id_reference, id_present, permutation_reference);
+
+//         let order_third = ColumnOrder::from_vector(vec![3, 4, 0, 1, 2]);
+//         let storage_third = TableStorage::OnDisk(TableSchema::default(), vec![]);
+//         manager.add_present(id_reference, order_third, storage_third);
+
+//         let reference_available_orders = vec![
+//             ColumnOrder::from_vector(vec![3, 0, 4, 2, 1]),
+//             ColumnOrder::from_vector(vec![3, 2, 4, 0, 1]),
+//             ColumnOrder::from_vector(vec![3, 4, 0, 1, 2]),
+//         ];
+
+//         for order in manager.available_orders(id_reference).unwrap() {
+//             assert!(reference_available_orders.iter().any(|o| o == &order));
+//         }
+
+//         let requested_order = ColumnOrder::from_vector(vec![0, 3, 1, 2, 4]);
+//         let expected_order = ColumnOrder::from_vector(vec![1, 2, 4, 3, 0]);
+//         let resolved = manager
+//             .resolve_reference(id_reference, &requested_order)
+//             .unwrap();
+//         assert_eq!(resolved.order, expected_order);
+
+//         let id_second_reference = current_id.increment();
+//         let permutation_second_reference = Permutation::from_vector(vec![4, 3, 1, 2, 0]);
+//         manager.add_reference(
+//             id_second_reference,
+//             id_reference,
+//             permutation_second_reference,
+//         );
+
+//         let reference_available_orders = vec![
+//             ColumnOrder::from_vector(vec![4, 2, 3, 1, 0]),
+//             ColumnOrder::from_vector(vec![4, 0, 3, 1, 2]),
+//             ColumnOrder::from_vector(vec![0, 1, 3, 2, 4]),
+//         ];
+
+//         for order in manager.available_orders(id_second_reference).unwrap() {
+//             assert!(reference_available_orders.iter().any(|o| o == &order));
+//         }
+//     }
+
+//     #[test]
+//     fn test_closest_order() {
+//         let orders = vec![
+//             ColumnOrder::from_vector(vec![3, 0, 2, 1]),
+//             ColumnOrder::from_vector(vec![0, 1, 2, 3]),
+//         ];
+
+//         let requested_order = ColumnOrder::from_vector(vec![0, 1, 3, 2]);
+//         let expected_order = ColumnOrder::from_vector(vec![0, 1, 2, 3]);
+//         assert_eq!(
+//             DatabaseInstance::search_closest_order(&orders, &requested_order).unwrap(),
+//             &expected_order
+//         );
+
+//         let requested_order = ColumnOrder::from_vector(vec![3, 2, 0, 1]);
+//         let expected_order = ColumnOrder::from_vector(vec![3, 0, 2, 1]);
+//         assert_eq!(
+//             DatabaseInstance::search_closest_order(&orders, &requested_order).unwrap(),
+//             &expected_order
+//         );
+//     }
+// }
