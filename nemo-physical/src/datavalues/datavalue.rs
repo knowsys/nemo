@@ -197,24 +197,29 @@ pub trait DataValue: Debug + Into<AnyDataValue> + PartialEq + Eq + Hash + Ord {
     /// For example, the RDF literal `"abc"^^<http://www.w3.org/2001/XMLSchema#string>`
     /// has datatype IRI `http://www.w3.org/2001/XMLSchema#string`, without any surrounding
     /// brackets.
+    #[must_use]
     fn datatype_iri(&self) -> String;
 
     /// Return the canonical lexical representation of this value.
     /// For example, the RDF literal `"42"^^<http://www.w3.org/2001/XMLSchema#int>`
     /// has lexical value `42`, without any surrounding quotes.
+    #[must_use]
     fn lexical_value(&self) -> String;
 
     /// Return the most specific [`ValueDomain`] of this value.
+    #[must_use]
     fn value_domain(&self) -> ValueDomain;
 
     /// Return a canonical string representation of the datavalue. Its format generally conforms with the
     /// syntax of RDF terms as used in N3, SPARQL, and Turtle. In this format, plain strings are delimited
     /// by double quotes (followed by `@tag` for language-tagged strings), IRIs are delimited by pointy brackets
     /// `<` and `>`, and other literals are formatted as `"encoded literal value"^^<IRI that denotes the datatype>`.
+    #[must_use]
     fn canonical_string(&self) -> String;
 
     /// Return the string that this value represents, if it is a value in
     /// the domain [`ValueDomain::String`].
+    #[must_use]
     fn to_string(&self) -> Option<String> {
         match self.value_domain() {
             ValueDomain::String => Some(self.to_string_unchecked()),
@@ -224,12 +229,14 @@ pub trait DataValue: Debug + Into<AnyDataValue> + PartialEq + Eq + Hash + Ord {
 
     /// Return the string that this value represents, if it is a value in
     /// the domain [`ValueDomain::String`]. Otherwise it panics.
+    #[must_use]
     fn to_string_unchecked(&self) -> String {
         panic!("Value is not a string.");
     }
 
     /// Return the pair of string and language tag that this value represents, if it is a value in
     /// the domain [`ValueDomain::LanguageTaggedString`].
+    #[must_use]
     fn to_language_tagged_string(&self) -> Option<(String, String)> {
         match self.value_domain() {
             ValueDomain::LanguageTaggedString => Some(self.to_language_tagged_string_unchecked()),
@@ -239,12 +246,14 @@ pub trait DataValue: Debug + Into<AnyDataValue> + PartialEq + Eq + Hash + Ord {
 
     /// Return the pair of string and language tag that this value represents, if it is a value in
     /// the domain [`ValueDomain::LanguageTaggedString`]. Otherwise it panics.
+    #[must_use]
     fn to_language_tagged_string_unchecked(&self) -> (String, String) {
         panic!("Value is not a language tagged string.");
     }
 
     /// Return the string that this value represents, if it is a value in
     /// the domain [`ValueDomain::Iri`].
+    #[must_use]
     fn to_iri(&self) -> Option<String> {
         match self.value_domain() {
             ValueDomain::Iri => Some(self.to_iri_unchecked()),
@@ -254,12 +263,14 @@ pub trait DataValue: Debug + Into<AnyDataValue> + PartialEq + Eq + Hash + Ord {
 
     /// Return the string that this value represents, if it is a value in
     /// the domain [`ValueDomain::Iri`]. Otherwise it panics.
+    #[must_use]
     fn to_iri_unchecked(&self) -> String {
         panic!("Value is not an IRI.");
     }
 
     /// Return the f32 that this value represents, if it is a value in
     /// the domain [`ValueDomain::Float`].
+    #[must_use]
     fn to_f32(&self) -> Option<f32> {
         match self.value_domain() {
             ValueDomain::Float => Some(self.to_f32_unchecked()),
@@ -269,12 +280,14 @@ pub trait DataValue: Debug + Into<AnyDataValue> + PartialEq + Eq + Hash + Ord {
 
     /// Return the f32 that this value represents, if it is a value in
     /// the domain [`ValueDomain::Float`]. Otherwise it panics.
+    #[must_use]
     fn to_f32_unchecked(&self) -> f32 {
         panic!("Value is not a float (32bit floating point number).");
     }
 
     /// Return the f64 that this value represents, if it is a value in
     /// the domain [`ValueDomain::Double`].
+    #[must_use]
     fn to_f64(&self) -> Option<f64> {
         match self.value_domain() {
             ValueDomain::Double => Some(self.to_f64_unchecked()),
@@ -284,18 +297,21 @@ pub trait DataValue: Debug + Into<AnyDataValue> + PartialEq + Eq + Hash + Ord {
 
     /// Return the f64 that this value represents, if it is a value in
     /// the domain [`ValueDomain::Double`]. Otherwise it panics.
+    #[must_use]
     fn to_f64_unchecked(&self) -> f64 {
         panic!("Value is not a double (64bit floating point number).");
     }
 
     /// Return true if the value is an integer number that lies within the
     /// range of an i64 number, i.e., in the interval from -9223372036854775808 to +9223372036854775807.
+    #[must_use]
     fn fits_into_i64(&self) -> bool {
         false
     }
 
     /// Return true if the value is an integer number that lies within the
     /// range of an i32 number, i.e., in the interval from -2147483648 to +2147483647.
+    #[must_use]
     fn fits_into_i32(&self) -> bool {
         false
     }
@@ -308,12 +324,14 @@ pub trait DataValue: Debug + Into<AnyDataValue> + PartialEq + Eq + Hash + Ord {
 
     /// Return true if the value is an integer number that lies within the
     /// range of an u32 number, i.e., in the interval from 0 to +4294967295.
+    #[must_use]
     fn fits_into_u32(&self) -> bool {
         false
     }
 
     /// Return the i64 that this value represents, if it is a value in
     /// the domain [`ValueDomain::Long`] or a subdoman thereof.
+    #[must_use]
     fn to_i64(&self) -> Option<i64> {
         if self.fits_into_i64() {
             Some(self.to_i64_unchecked())
@@ -326,12 +344,14 @@ pub trait DataValue: Debug + Into<AnyDataValue> + PartialEq + Eq + Hash + Ord {
     /// the domain [`ValueDomain::Long`] or a subdoman thereof. This can also
     /// be checked by calling [`Self::fits_into_i64()`].
     /// Otherwise it panics.
+    #[must_use]
     fn to_i64_unchecked(&self) -> i64 {
         panic!("Value is not a long (64bit signed integer number).");
     }
 
     /// Return the i32 that this value represents, if it is a value in
     /// the domain [`ValueDomain::Int`] or a subdoman thereof.
+    #[must_use]
     fn to_i32(&self) -> Option<i32> {
         if self.fits_into_i32() {
             Some(self.to_i32_unchecked())
@@ -342,12 +362,14 @@ pub trait DataValue: Debug + Into<AnyDataValue> + PartialEq + Eq + Hash + Ord {
 
     /// Return the i32 that this value represents, if it is a value in
     /// the domain [`ValueDomain::Int`] or a subdoman thereof. Otherwise it panics.
+    #[must_use]
     fn to_i32_unchecked(&self) -> i32 {
         panic!("Value is not an int (32bit signed integer number).");
     }
 
     /// Return the u64 that this value represents, if it is a value in
     /// the domain [`ValueDomain::UnsignedLong`] or a subdoman thereof.
+    #[must_use]
     fn to_u64(&self) -> Option<u64> {
         if self.fits_into_u64() {
             Some(self.to_u64_unchecked())
@@ -360,12 +382,14 @@ pub trait DataValue: Debug + Into<AnyDataValue> + PartialEq + Eq + Hash + Ord {
     /// the domain [`ValueDomain::UnsignedLong`] or a subdoman thereof. This can also
     /// be checked by calling [`Self::fits_into_i64()`].
     /// Otherwise it panics.
+    #[must_use]
     fn to_u64_unchecked(&self) -> u64 {
         panic!("Value is not a long (64bit signed integer number).");
     }
 
     /// Return the u32 that this value represents, if it is a value in
     /// the domain [`ValueDomain::UnsignedInt`] or a subdoman thereof.
+    #[must_use]
     fn to_u32(&self) -> Option<u32> {
         if self.fits_into_u32() {
             Some(self.to_u32_unchecked())
@@ -376,11 +400,13 @@ pub trait DataValue: Debug + Into<AnyDataValue> + PartialEq + Eq + Hash + Ord {
 
     /// Return the u32 that this value represents, if it is a value in
     /// the domain [`ValueDomain::UnsignedInt`] or a subdoman thereof. Otherwise it panics.
+    #[must_use]
     fn to_u32_unchecked(&self) -> u32 {
         panic!("Value is not an int (32bit signed integer number).");
     }
 
     /// If this value is a boolean, return its value.
+    #[must_use]
     fn to_boolean(&self) -> Option<bool> {
         match self.value_domain() {
             ValueDomain::Boolean => Some(self.to_boolean_unchecked()),
@@ -392,6 +418,7 @@ pub trait DataValue: Debug + Into<AnyDataValue> + PartialEq + Eq + Hash + Ord {
     ///
     /// # Panics
     /// Panics if this value is not a boolean.
+    #[must_use]
     fn to_boolean_unchecked(&self) -> bool {
         panic!("Value is not a boolean.");
     }
@@ -399,6 +426,7 @@ pub trait DataValue: Debug + Into<AnyDataValue> + PartialEq + Eq + Hash + Ord {
     /// Return the length of this complex value if it is a
     /// value in the domain [`ValueDomain::Tuple`] or
     /// [`ValueDomain::Map`].
+    #[must_use]
     fn len(&self) -> Option<usize> {
         match self.value_domain() {
             ValueDomain::Tuple | ValueDomain::Map => Some(self.len_unchecked()),
@@ -412,12 +440,14 @@ pub trait DataValue: Debug + Into<AnyDataValue> + PartialEq + Eq + Hash + Ord {
     ///
     /// # Panics
     /// Panics if the value is not a collection.
+    #[must_use]
     fn len_unchecked(&self) -> usize {
         panic!("Value is not a collection (tuple or map)");
     }
 
     /// Return the value of the tuple element at the given index
     /// as an [AnyDataValue].
+    #[must_use]
     fn tuple_element(&self, index: usize) -> Option<&AnyDataValue> {
         match self.value_domain() {
             ValueDomain::Tuple => {
@@ -436,18 +466,21 @@ pub trait DataValue: Debug + Into<AnyDataValue> + PartialEq + Eq + Hash + Ord {
     ///
     /// # Panics
     /// Panics if index is out of bounds or if value is not a tuple.
+    #[must_use]
     fn tuple_element_unchecked(&self, _index: usize) -> &AnyDataValue {
         panic!("Value is not a tuple");
     }
 
     /// Returns an iterator over all keys in a value that is a map.
     /// None is returned for values that are no maps.
+    #[must_use]
     fn map_keys(&self) -> Option<Box<dyn Iterator<Item = &AnyDataValue> + '_>> {
         None
     }
 
     /// Returns true if the value is a map that contains the given value
     /// as a key. Otherwise, false is returned.
+    #[must_use]
     fn contains(&self, _key: &AnyDataValue) -> bool {
         false
     }
@@ -464,6 +497,7 @@ pub trait DataValue: Debug + Into<AnyDataValue> + PartialEq + Eq + Hash + Ord {
     ///
     /// # Panics
     /// Panics if the key does not exist, or the value is not a map.
+    #[must_use]
     fn map_element_unchecked(&self, _key: &AnyDataValue) -> &AnyDataValue {
         panic!("Value is not a map");
     }
