@@ -116,7 +116,7 @@ impl ValueDomain {
 /// mean different values (i.e., the representation is canonical). The possible
 /// set of datatypes is unrestricted, but values of unknown types are treated
 /// literally and cannot be canonized.
-pub trait DataValue: Debug {
+pub trait DataValue: Debug + Into<AnyDataValue> {
     /// Return the datatype of this value, specified by an IRI.
     /// For example, the RDF literal `"abc"^^<http://www.w3.org/2001/XMLSchema#string>`
     /// has datatype IRI `http://www.w3.org/2001/XMLSchema#string`, without any surrounding
@@ -360,12 +360,5 @@ pub trait DataValue: Debug {
     /// Panics if index is out of bounds or if value is not a tuple.
     fn tuple_element_unchecked(&self, _index: usize) -> &AnyDataValue {
         panic!("Value is not a tuple");
-    }
-}
-
-impl PartialEq for dyn DataValue {
-    fn eq(&self, other: &Self) -> bool {
-        self.datatype_iri().eq(&other.datatype_iri())
-            && self.lexical_value().eq(&other.lexical_value())
     }
 }

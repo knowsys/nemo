@@ -1,6 +1,6 @@
 //! A [`DvDict`] implementation for nulls (and nulls only).
 
-use crate::datavalues::{AnyDataValue, NullDataValue};
+use crate::datavalues::{AnyDataValue, DataValue, NullDataValue, ValueDomain};
 
 use super::{AddResult, DvDict};
 
@@ -30,9 +30,10 @@ impl Default for NullDvDictionary {
 
 impl DvDict for NullDvDictionary {
     fn add_datavalue(&mut self, dv: AnyDataValue) -> AddResult {
-        if let AnyDataValue::Null(nv) = dv {
-            if nv.id() < self.unused_ids.start {
-                AddResult::Known(nv.id())
+        if dv.value_domain() == ValueDomain::Null {
+            let id = dv.null_id_unchecked();
+            if id < self.unused_ids.start {
+                AddResult::Known(id)
             } else {
                 AddResult::Rejected
             }
@@ -43,7 +44,7 @@ impl DvDict for NullDvDictionary {
 
     fn fresh_null(&mut self) -> (AnyDataValue, usize) {
         let nv = NullDataValue::new(self.fresh_null_id());
-        (AnyDataValue::Null(nv), nv.id())
+        (nv.into(), nv.id())
     }
 
     fn fresh_null_id(&mut self) -> usize {
@@ -51,9 +52,10 @@ impl DvDict for NullDvDictionary {
     }
 
     fn datavalue_to_id(&self, dv: &AnyDataValue) -> Option<usize> {
-        if let AnyDataValue::Null(nv) = dv {
-            if nv.id() < self.unused_ids.start {
-                Some(nv.id())
+        if dv.value_domain() == ValueDomain::Null {
+            let id = dv.null_id_unchecked();
+            if id < self.unused_ids.start {
+                Some(id)
             } else {
                 None
             }
@@ -64,7 +66,7 @@ impl DvDict for NullDvDictionary {
 
     fn id_to_datavalue(&self, id: usize) -> Option<AnyDataValue> {
         if id < self.unused_ids.start {
-            Some(AnyDataValue::Null(NullDataValue::new(id)))
+            Some(NullDataValue::new(id).into())
         } else {
             None
         }
@@ -97,7 +99,7 @@ mod test {
         let n1_id = dict.fresh_null_id();
         let nv1 = dict.id_to_datavalue(n1_id).unwrap();
         let (nv2, n2_id) = dict.fresh_null();
-        let nv3 = AnyDataValue::Null(NullDataValue::new(42));
+        let nv3: AnyDataValue = NullDataValue::new(42).into();
         let dv = AnyDataValue::new_integer_from_i64(42);
 
         assert_ne!(nv1, nv2);

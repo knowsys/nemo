@@ -12,9 +12,7 @@ use crate::{
 /// obsolete or more elegant once we converge to a more uniform representation
 /// of data values (in particular replacing Double by DoubleDataValue).
 fn some_datavalue_from_double(d: Double) -> Option<AnyDataValue> {
-    Some(AnyDataValue::Double(DoubleDataValue::from_f64_unchecked(
-        f64::from(d),
-    )))
+    Some(DoubleDataValue::from_f64_unchecked(f64::from(d)).into())
 }
 
 /// Addition of 64-bit floating point numbers

@@ -15,7 +15,7 @@ use super::{
     boolean_datavalue::BooleanDataValue, errors::InternalDataValueCreationError,
     float_datavalues::FloatDataValue, DataValue, DataValueCreationError, DoubleDataValue,
     IriDataValue, LangStringDataValue, LongDataValue, NullDataValue, OtherDataValue,
-    StringDataValue, UnsignedLongDataValue, ValueDomain,
+    StringDataValue, TupleDataValue, UnsignedLongDataValue, ValueDomain,
 };
 
 // Initial part of IRI in all XML Schema types:
@@ -49,7 +49,7 @@ impl DecimalType {
 
 /// Enum that can represent arbitrary [`DataValue`]s.
 #[derive(Debug, Clone)]
-pub enum AnyDataValue {
+enum AnyDataValueEnum {
     /// Variant for representing [`DataValue`]s in [`ValueDomain::String`].
     String(StringDataValue),
     /// Variant for representing [`DataValue`]s in [`ValueDomain::LanguageTaggedString`].
@@ -72,54 +72,72 @@ pub enum AnyDataValue {
     Boolean(BooleanDataValue),
     /// Variant for representing [DataValue]s in [ValueDomain::Null].
     Null(NullDataValue),
+    /// Variant for representing [`DataValue`]s in [`ValueDomain::Tuple`].
+    Tuple(TupleDataValue),
     /// Variant for representing [`DataValue`]s in [`ValueDomain::Other`].
     Other(OtherDataValue),
 }
 
+/// Type that can represent arbitrary [`DataValue`]s.
+#[repr(transparent)]
+#[derive(Debug, Clone)]
+pub struct AnyDataValue(AnyDataValueEnum);
+
 impl AnyDataValue {
     /// Construct a datavalue that represents the given number.
     pub fn new_integer_from_i64(value: i64) -> Self {
-        AnyDataValue::Long(LongDataValue::new(value))
+        AnyDataValue(AnyDataValueEnum::Long(LongDataValue::new(value)))
     }
 
     /// Construct a datavalue that represents the given number.
     pub fn new_integer_from_u64(value: u64) -> Self {
-        AnyDataValue::UnsignedLong(UnsignedLongDataValue::new(value))
+        AnyDataValue(AnyDataValueEnum::UnsignedLong(UnsignedLongDataValue::new(
+            value,
+        )))
     }
 
     /// Construct a datavalue that represents the given number.
     pub fn new_float_from_f32(value: f32) -> Result<AnyDataValue, DataValueCreationError> {
-        Ok(AnyDataValue::Float(FloatDataValue::from_f32(value)?))
+        Ok(AnyDataValue(AnyDataValueEnum::Float(
+            FloatDataValue::from_f32(value)?,
+        )))
     }
 
     /// Construct a datavalue that represents the given number.
     pub fn new_double_from_f64(value: f64) -> Result<AnyDataValue, DataValueCreationError> {
-        Ok(AnyDataValue::Double(DoubleDataValue::from_f64(value)?))
+        Ok(AnyDataValue(AnyDataValueEnum::Double(
+            DoubleDataValue::from_f64(value)?,
+        )))
     }
 
     /// Construct a datavalue in [`ValueDomain::String`] that represents the given string.
     pub fn new_string(value: String) -> Self {
-        AnyDataValue::String(StringDataValue::new(value))
+        AnyDataValue(AnyDataValueEnum::String(StringDataValue::new(value)))
     }
 
     /// Construct a datavalue in [`ValueDomain::IRI`] that represents the given IRI.
     pub fn new_iri(value: String) -> Self {
-        AnyDataValue::Iri(IriDataValue::new(value))
+        AnyDataValue(AnyDataValueEnum::Iri(IriDataValue::new(value)))
     }
 
     /// Construct a datavalue in [`ValueDomain::LanguageTaggedString`] that represents a string with a language tag.
     pub fn new_language_tagged_string(value: String, lang_tag: String) -> Self {
-        AnyDataValue::LanguageTaggedString(LangStringDataValue::new(value, lang_tag))
+        AnyDataValue(AnyDataValueEnum::LanguageTaggedString(
+            LangStringDataValue::new(value, lang_tag),
+        ))
     }
 
     /// Construct a datavalue in [ValueDomain::Boolean].
     pub fn new_boolean(value: bool) -> Self {
-        AnyDataValue::Boolean(BooleanDataValue::new(value))
+        AnyDataValue(AnyDataValueEnum::Boolean(BooleanDataValue::new(value)))
     }
 
     /// Construct a datavalue in [`ValueDomain::Other`] specified by the given lexical value and datatype IRI.
     pub fn new_other(lexical_value: String, datatype_iri: String) -> Self {
-        AnyDataValue::Other(OtherDataValue::new(lexical_value, datatype_iri))
+        AnyDataValue(AnyDataValueEnum::Other(OtherDataValue::new(
+            lexical_value,
+            datatype_iri,
+        )))
     }
 
     /// Construct a datavalue from its physical representation as a [`StorageValueT`], using
@@ -502,21 +520,36 @@ impl AnyDataValue {
             StorageValueT::Id64(n.try_into().unwrap())
         }
     }
+
+    /// Return the internal id of a [NullDataValue] for an [AnyDataValue] with
+    /// [ValueDomain::Null].
+    ///
+    /// # Panics
+    ///
+    /// If the value domain is not [ValueDomain::Null].
+    pub(crate) fn null_id_unchecked(&self) -> usize {
+        if let AnyDataValueEnum::Null(ndv) = self.0 {
+            ndv.id()
+        } else {
+            panic!("not a null value");
+        }
+    }
 }
 
 impl DataValue for AnyDataValue {
     delegate! {
-        to match self {
-            AnyDataValue::Boolean(value) => value,
-            AnyDataValue::String(value)=> value,
-            AnyDataValue::LanguageTaggedString(value) => value,
-            AnyDataValue::Iri(value) => value,
-            AnyDataValue::Float(value) => value,
-            AnyDataValue::Double(value) => value,
-            AnyDataValue::UnsignedLong(value) => value,
-            AnyDataValue::Long(value) => value,
-            AnyDataValue::Null(value) => value,
-            AnyDataValue::Other(value) => value,
+        to match &self.0 {
+            AnyDataValueEnum::Boolean(value) => value,
+            AnyDataValueEnum::String(value)=> value,
+            AnyDataValueEnum::LanguageTaggedString(value) => value,
+            AnyDataValueEnum::Iri(value) => value,
+            AnyDataValueEnum::Float(value) => value,
+            AnyDataValueEnum::Double(value) => value,
+            AnyDataValueEnum::UnsignedLong(value) => value,
+            AnyDataValueEnum::Long(value) => value,
+            AnyDataValueEnum::Null(value) => value,
+            AnyDataValueEnum::Tuple(value) => value,
+            AnyDataValueEnum::Other(value) => value,
         } {
             fn datatype_iri(&self) -> String;
             fn lexical_value(&self) -> String;
@@ -564,24 +597,24 @@ impl DataValue for AnyDataValue {
 /// equality at this level.
 impl PartialEq for AnyDataValue {
     fn eq(&self, other: &Self) -> bool {
-        match (self, other) {
-            (AnyDataValue::String(dv), AnyDataValue::String(dv_other)) => dv == dv_other,
-            (AnyDataValue::Iri(dv), AnyDataValue::Iri(dv_other)) => dv == dv_other,
+        match (&self.0, &other.0) {
+            (AnyDataValueEnum::String(dv), AnyDataValueEnum::String(dv_other)) => dv == dv_other,
+            (AnyDataValueEnum::Iri(dv), AnyDataValueEnum::Iri(dv_other)) => dv == dv_other,
             (
-                AnyDataValue::LanguageTaggedString(dv),
-                AnyDataValue::LanguageTaggedString(dv_other),
+                AnyDataValueEnum::LanguageTaggedString(dv),
+                AnyDataValueEnum::LanguageTaggedString(dv_other),
             ) => dv == dv_other,
-            (AnyDataValue::Float(dv), AnyDataValue::Float(dv_other)) => dv == dv_other,
-            (AnyDataValue::Double(dv), AnyDataValue::Double(dv_other)) => dv == dv_other,
-            (AnyDataValue::Long(_), _) => {
+            (AnyDataValueEnum::Float(dv), AnyDataValueEnum::Float(dv_other)) => dv == dv_other,
+            (AnyDataValueEnum::Double(dv), AnyDataValueEnum::Double(dv_other)) => dv == dv_other,
+            (AnyDataValueEnum::Long(_), _) => {
                 other.fits_into_i64() && other.to_i64_unchecked() == self.to_i64_unchecked()
             }
-            (AnyDataValue::UnsignedLong(_), _) => {
+            (AnyDataValueEnum::UnsignedLong(_), _) => {
                 other.fits_into_u64() && other.to_u64_unchecked() == self.to_u64_unchecked()
             }
-            (AnyDataValue::Boolean(dv), AnyDataValue::Boolean(dv_other)) => dv == dv_other,
-            (AnyDataValue::Null(dv), AnyDataValue::Null(dv_other)) => dv == dv_other,
-            (AnyDataValue::Other(dv), AnyDataValue::Other(dv_other)) => dv == dv_other,
+            (AnyDataValueEnum::Boolean(dv), AnyDataValueEnum::Boolean(dv_other)) => dv == dv_other,
+            (AnyDataValueEnum::Null(dv), AnyDataValueEnum::Null(dv_other)) => dv == dv_other,
+            (AnyDataValueEnum::Other(dv), AnyDataValueEnum::Other(dv_other)) => dv == dv_other,
             _ => false,
         }
     }
@@ -592,6 +625,72 @@ impl Eq for AnyDataValue {}
 /// A dynamically defined iterator over [`AnyDataValue`]s.
 #[allow(missing_debug_implementations)]
 pub struct AnyDataValueIterator<'a>(pub Box<dyn Iterator<Item = AnyDataValue> + 'a>);
+
+impl From<BooleanDataValue> for AnyDataValue {
+    fn from(value: BooleanDataValue) -> Self {
+        AnyDataValue(AnyDataValueEnum::Boolean(value))
+    }
+}
+
+impl From<FloatDataValue> for AnyDataValue {
+    fn from(value: FloatDataValue) -> Self {
+        AnyDataValue(AnyDataValueEnum::Float(value))
+    }
+}
+
+impl From<DoubleDataValue> for AnyDataValue {
+    fn from(value: DoubleDataValue) -> Self {
+        AnyDataValue(AnyDataValueEnum::Double(value))
+    }
+}
+
+impl From<LongDataValue> for AnyDataValue {
+    fn from(value: LongDataValue) -> Self {
+        AnyDataValue(AnyDataValueEnum::Long(value))
+    }
+}
+
+impl From<UnsignedLongDataValue> for AnyDataValue {
+    fn from(value: UnsignedLongDataValue) -> Self {
+        AnyDataValue(AnyDataValueEnum::UnsignedLong(value))
+    }
+}
+
+impl From<IriDataValue> for AnyDataValue {
+    fn from(value: IriDataValue) -> Self {
+        AnyDataValue(AnyDataValueEnum::Iri(value))
+    }
+}
+
+impl From<LangStringDataValue> for AnyDataValue {
+    fn from(value: LangStringDataValue) -> Self {
+        AnyDataValue(AnyDataValueEnum::LanguageTaggedString(value))
+    }
+}
+
+impl From<NullDataValue> for AnyDataValue {
+    fn from(value: NullDataValue) -> Self {
+        AnyDataValue(AnyDataValueEnum::Null(value))
+    }
+}
+
+impl From<OtherDataValue> for AnyDataValue {
+    fn from(value: OtherDataValue) -> Self {
+        AnyDataValue(AnyDataValueEnum::Other(value))
+    }
+}
+
+impl From<StringDataValue> for AnyDataValue {
+    fn from(value: StringDataValue) -> Self {
+        AnyDataValue(AnyDataValueEnum::String(value))
+    }
+}
+
+impl From<TupleDataValue> for AnyDataValue {
+    fn from(value: TupleDataValue) -> Self {
+        AnyDataValue(AnyDataValueEnum::Tuple(value))
+    }
+}
 
 #[cfg(test)]
 mod test {

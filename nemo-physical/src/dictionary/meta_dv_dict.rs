@@ -174,12 +174,12 @@ impl DictIterator {
 
         if self.position == 1 {
             self.position = 2; // move on, whatever happens
-            match dv {
-                AnyDataValue::String(_) => return md.string_dict,
-                AnyDataValue::LanguageTaggedString(_) => return md.langstring_dict,
-                AnyDataValue::Iri(_) => return md.iri_dict,
-                AnyDataValue::Other(_) => return md.other_dict,
-                AnyDataValue::Null(_) => return md.null_dict,
+            match dv.value_domain() {
+                ValueDomain::String => return md.string_dict,
+                ValueDomain::LanguageTaggedString => return md.langstring_dict,
+                ValueDomain::Iri => return md.iri_dict,
+                ValueDomain::Other => return md.other_dict,
+                ValueDomain::Null => return md.null_dict,
                 _ => {}
             }
         }
@@ -597,7 +597,7 @@ mod test {
         let n1_id = dict.fresh_null_id();
         let nv1 = dict.id_to_datavalue(n1_id).unwrap();
         let (nv2, n2_id) = dict.fresh_null();
-        let nv3 = AnyDataValue::Null(NullDataValue::new(42));
+        let nv3: AnyDataValue = NullDataValue::new(42).into();
 
         assert_eq!(dict.datavalue_to_id(&nv1), Some(n1_id));
         assert_eq!(dict.datavalue_to_id(&nv2), Some(n2_id));

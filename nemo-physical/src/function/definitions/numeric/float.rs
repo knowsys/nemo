@@ -12,9 +12,7 @@ use crate::{
 /// obsolete or more elegant once we converge to a more uniform representation
 /// of data values (in particular replacing Float by FloatDataValue).
 fn some_datavalue_from_float(d: Float) -> Option<AnyDataValue> {
-    Some(AnyDataValue::Float(FloatDataValue::from_f32_unchecked(
-        f32::from(d),
-    )))
+    Some(FloatDataValue::from_f32_unchecked(f32::from(d)).into())
 }
 
 /// Addition of 32-bit floating point numbers

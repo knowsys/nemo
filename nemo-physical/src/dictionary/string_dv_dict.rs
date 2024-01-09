@@ -4,7 +4,7 @@
 //! string representations without any risk of confusion.
 
 use super::{AddResult, DvDict, StringDictionary};
-use crate::datavalues::{AnyDataValue, DataValue};
+use crate::datavalues::{AnyDataValue, DataValue, ValueDomain};
 use std::{fmt::Debug, marker::PhantomData};
 
 /// Implementation of [`DvDict`] that will only handle [`AnyDataValue::String`] values.
@@ -126,12 +126,13 @@ pub(crate) struct OtherDvConverter;
 impl DvConverter for OtherDvConverter {
     #[inline(always)]
     fn dict_string(dv: &AnyDataValue) -> Option<String> {
-        match dv {
-            AnyDataValue::Other(odv) => Some(two_strings_to_one(
-                odv.lexical_value().as_str(),
-                odv.datatype_iri().as_str(),
-            )),
-            _ => None,
+        if dv.value_domain() == ValueDomain::Other {
+            Some(two_strings_to_one(
+                dv.lexical_value().as_str(),
+                dv.datatype_iri().as_str(),
+            ))
+        } else {
+            None
         }
     }
 
@@ -149,12 +150,11 @@ pub(crate) struct LangStringDvConverter;
 impl DvConverter for LangStringDvConverter {
     #[inline(always)]
     fn dict_string(dv: &AnyDataValue) -> Option<String> {
-        match dv {
-            AnyDataValue::LanguageTaggedString(lsdv) => {
-                let (string, lang) = lsdv.to_language_tagged_string_unchecked();
-                Some(two_strings_to_one(string.as_str(), lang.as_str()))
-            }
-            _ => None,
+        if dv.value_domain() == ValueDomain::LanguageTaggedString {
+            let (string, lang) = dv.to_language_tagged_string_unchecked();
+            Some(two_strings_to_one(string.as_str(), lang.as_str()))
+        } else {
+            None
         }
     }
 

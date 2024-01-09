@@ -73,16 +73,12 @@ impl IntoDataValue for i64 {
 
 impl IntoDataValue for Float {
     fn into_datavalue(self, _dictionary: &Dict) -> Option<AnyDataValue> {
-        Some(AnyDataValue::Float(FloatDataValue::from_f32_unchecked(
-            self.into(),
-        )))
+        Some(FloatDataValue::from_f32_unchecked(self.into()).into())
     }
 }
 
 impl IntoDataValue for Double {
     fn into_datavalue(self, _dictionary: &Dict) -> Option<AnyDataValue> {
-        Some(AnyDataValue::Double(DoubleDataValue::from_f64_unchecked(
-            self.into(),
-        )))
+        Some(DoubleDataValue::from_f64_unchecked(self.into()).into())
     }
 }
