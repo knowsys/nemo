@@ -40,6 +40,13 @@ impl DataValue for IriDataValue {
     }
 }
 
+impl std::hash::Hash for IriDataValue {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.value_domain().hash(state);
+        self.0.hash(state);
+    }
+}
+
 #[cfg(test)]
 mod test {
     use super::IriDataValue;

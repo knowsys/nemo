@@ -93,6 +93,13 @@ impl DataValue for UnsignedLongDataValue {
     }
 }
 
+impl std::hash::Hash for UnsignedLongDataValue {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.value_domain().hash(state);
+        self.0.hash(state);
+    }
+}
+
 /// Physical representation of an integer as an i64.
 #[repr(transparent)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -172,6 +179,13 @@ impl DataValue for LongDataValue {
     }
 }
 
+impl std::hash::Hash for LongDataValue {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.value_domain().hash(state);
+        self.0.hash(state);
+    }
+}
+
 #[cfg(test)]
 mod test {
     use super::{
@@ -179,6 +193,10 @@ mod test {
         U32MAX_AS_I64, U32MAX_AS_U64, U64MAX_AS_U64,
     };
     use crate::datavalues::{DataValue, ValueDomain};
+    use std::{
+        collections::hash_map::DefaultHasher,
+        hash::{Hash, Hasher},
+    };
 
     #[test]
     fn test_unsigned_long_unsigned_long() {
@@ -417,5 +435,21 @@ mod test {
         assert_eq!(long1.to_i64(), Some(long_value));
         assert_eq!(long1.to_i64_unchecked(), long_value);
         assert_eq!(long1.to_u64(), None);
+    }
+
+    /// Test that distinct implementations that represent the same value
+    /// have the same hash.
+    #[test]
+    fn test_hash_eq_contract() {
+        let long = LongDataValue::new(42);
+        let ulong = UnsignedLongDataValue::new(42);
+
+        let mut hasher1 = DefaultHasher::new();
+        let mut hasher2 = DefaultHasher::new();
+
+        long.hash(&mut hasher1);
+        ulong.hash(&mut hasher2);
+
+        assert_eq!(hasher1.finish(), hasher2.finish());
     }
 }

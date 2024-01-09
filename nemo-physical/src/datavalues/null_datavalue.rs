@@ -49,3 +49,10 @@ impl DataValue for NullDataValue {
         "_:".to_string() + &self.0.to_string()
     }
 }
+
+impl std::hash::Hash for NullDataValue {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.value_domain().hash(state);
+        self.0.hash(state);
+    }
+}

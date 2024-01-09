@@ -47,3 +47,10 @@ impl DataValue for BooleanDataValue {
         }
     }
 }
+
+impl std::hash::Hash for BooleanDataValue {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.value_domain().hash(state);
+        self.0.hash(state);
+    }
+}

@@ -36,6 +36,14 @@ impl DataValue for OtherDataValue {
     }
 }
 
+impl std::hash::Hash for OtherDataValue {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.value_domain().hash(state);
+        self.0.hash(state);
+        self.1.hash(state);
+    }
+}
+
 #[cfg(test)]
 mod test {
     use super::OtherDataValue;

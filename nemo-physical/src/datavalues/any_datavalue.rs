@@ -577,10 +577,37 @@ impl DataValue for AnyDataValue {
             fn to_u64_unchecked(&self) -> u64;
             fn to_u32(&self) -> Option<u32>;
             fn to_u32_unchecked(&self) -> u32;
+            fn to_boolean(&self) -> Option<bool>;
+            fn to_boolean_unchecked(&self) -> bool;
             fn tuple_element(&self, index: usize) -> Option<&AnyDataValue>;
             fn tuple_len(&self) -> Option<usize>;
             fn tuple_len_unchecked(&self) -> usize;
             fn tuple_element_unchecked(&self, _index: usize) -> &AnyDataValue;
+        }
+    }
+}
+
+impl std::hash::Hash for AnyDataValue {
+    delegate! {
+        to match &self.0 {
+            AnyDataValueEnum::Boolean(value) => value,
+            AnyDataValueEnum::String(value)=> value,
+            AnyDataValueEnum::LanguageTaggedString(value) => value,
+            AnyDataValueEnum::Iri(value) => value,
+            AnyDataValueEnum::Float(value) => value,
+            AnyDataValueEnum::Double(value) => value,
+            AnyDataValueEnum::UnsignedLong(value) => value,
+            AnyDataValueEnum::Long(value) => value,
+            AnyDataValueEnum::Null(value) => value,
+            AnyDataValueEnum::Tuple(value) => value,
+            AnyDataValueEnum::Other(value) => value,
+        } {
+            /// The hash function for [AnyDataValue] is delegated to the contained value
+            /// implementations, without adding variant-specific information as the
+            /// derived implementation would do. This ensures that different implementations
+            /// that have the potential to represent the same value can co-exist in the
+            /// enum, while respecting the Hash-Eq-Contract.
+            fn hash<H: std::hash::Hasher>(&self, state: &mut H);
         }
     }
 }
@@ -695,8 +722,14 @@ impl From<TupleDataValue> for AnyDataValue {
 
 #[cfg(test)]
 mod test {
+    use hashbrown::HashSet;
+
     use super::{AnyDataValue, XSD_PREFIX};
     use crate::datavalues::{DataValue, DataValueCreationError, ValueDomain};
+    use std::{
+        collections::hash_map::DefaultHasher,
+        hash::{Hash, Hasher},
+    };
 
     #[test]
     fn anydatavalue_string() {
@@ -862,6 +895,12 @@ mod test {
         // ...
     }
 
+    fn hash(dv: AnyDataValue) -> u64 {
+        let mut hasher = DefaultHasher::new();
+        dv.hash(&mut hasher);
+        hasher.finish()
+    }
+
     #[test]
     fn anydatavalue_eq() {
         let dv_f64 = AnyDataValue::new_double_from_f64(42.0).unwrap();
@@ -939,6 +978,48 @@ mod test {
         assert_ne!(dv_other, dv_iri);
         assert_ne!(dv_other, dv_lang_string);
         assert_eq!(dv_other, dv_other);
+
+        // Check that equality among hashes is the same as equality
+        // among values. We expect that there are no hash collisions here.
+        let dv_f64_hash = hash(dv_f64);
+        let dv_i64_hash = hash(dv_i64);
+        let dv_u64_hash = hash(dv_u64);
+        let dv_u64_2_hash = hash(dv_u64_2);
+        let dv_string_hash = hash(dv_string);
+        let dv_iri_hash = hash(dv_iri);
+        let dv_lang_string_hash = hash(dv_lang_string);
+        let dv_other_hash = hash(dv_other);
+
+        assert_eq!(dv_i64_hash, dv_u64_hash);
+        let vec = vec![
+            dv_f64_hash,
+            dv_i64_hash,
+            dv_u64_2_hash,
+            dv_string_hash,
+            dv_iri_hash,
+            dv_lang_string_hash,
+            dv_other_hash,
+        ];
+        let set: HashSet<_> = vec.iter().collect();
+        assert_eq!(set.len(), 7);
+    }
+
+    /// Verify that hashes of similar values from different value domains are still different.
+    /// This is not needed for the contract of Hash, but makes sense to avoid collissions.
+    #[test]
+    fn anydatavalue_hash_distinct() {
+        let dv_f32 = AnyDataValue::new_float_from_f32(42.0).unwrap();
+        let dv_f64 = AnyDataValue::new_double_from_f64(42.0).unwrap();
+        let ulong_value = (42.0_f64).to_bits();
+        let dv_u64 = AnyDataValue::new_integer_from_u64(ulong_value);
+
+        let f32_hash = hash(dv_f32);
+        let f64_hash = hash(dv_f64);
+        let u64_hash = hash(dv_u64);
+
+        assert_ne!(f32_hash, f64_hash);
+        assert_ne!(f32_hash, u64_hash);
+        assert_ne!(f64_hash, u64_hash);
     }
 
     #[test]

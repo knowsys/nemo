@@ -1,7 +1,7 @@
 //! This module provides the general trait for representing a [`DataValue`], its relevant
 //! [`ValueDomain`]s, and possible errors that occur when dealing with them.
 
-use std::fmt::Debug;
+use std::{fmt::Debug, hash::Hash};
 
 use super::AnyDataValue;
 
@@ -34,7 +34,7 @@ pub(crate) fn quote_iri(s: &str) -> String {
 /// Mainly, we care about signed and unsigned 32bit and 64bit numbers, and we add auxiliary
 /// domains for the integers that are both in i32 and in u64 (i.e., "u31"), and for those that are both
 /// in i64 and in u64 (i.e., "u63").
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub enum ValueDomain {
     /// Domain of all strings of Unicode glyphs.
     String,
@@ -116,7 +116,7 @@ impl ValueDomain {
 /// mean different values (i.e., the representation is canonical). The possible
 /// set of datatypes is unrestricted, but values of unknown types are treated
 /// literally and cannot be canonized.
-pub trait DataValue: Debug + Into<AnyDataValue> + PartialEq + Eq {
+pub trait DataValue: Debug + Into<AnyDataValue> + PartialEq + Eq + Hash {
     /// Return the datatype of this value, specified by an IRI.
     /// For example, the RDF literal `"abc"^^<http://www.w3.org/2001/XMLSchema#string>`
     /// has datatype IRI `http://www.w3.org/2001/XMLSchema#string`, without any surrounding
@@ -360,5 +360,26 @@ pub trait DataValue: Debug + Into<AnyDataValue> + PartialEq + Eq {
     /// Panics if index is out of bounds or if value is not a tuple.
     fn tuple_element_unchecked(&self, _index: usize) -> &AnyDataValue {
         panic!("Value is not a tuple");
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::ValueDomain;
+    use std::{
+        collections::hash_map::DefaultHasher,
+        hash::{Hash, Hasher},
+    };
+
+    #[test]
+    fn test() {
+        let mut hasher = DefaultHasher::new();
+        let mut hasher2 = DefaultHasher::new();
+        let vdn = ValueDomain::Null;
+        let vdi = ValueDomain::Iri;
+
+        vdn.hash(&mut hasher);
+        vdi.hash(&mut hasher2);
+        assert_ne!(hasher.finish(), hasher2.finish());
     }
 }

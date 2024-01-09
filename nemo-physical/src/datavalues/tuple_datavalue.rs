@@ -62,6 +62,13 @@ impl DataValue for TupleDataValue {
     }
 }
 
+impl std::hash::Hash for TupleDataValue {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.value_domain().hash(state);
+        self.values.hash(state);
+    }
+}
+
 #[cfg(test)]
 mod test {
     use crate::datavalues::{AnyDataValue, DataValue, TupleDataValue};

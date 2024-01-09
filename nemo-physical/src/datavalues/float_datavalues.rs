@@ -61,6 +61,13 @@ impl DataValue for FloatDataValue {
 
 impl Eq for FloatDataValue {} // Possible since we exclude NaNs
 
+impl std::hash::Hash for FloatDataValue {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.value_domain().hash(state);
+        self.0.to_bits().hash(state);
+    }
+}
+
 /// Physical representation of a finite 64bit floating point number as an f64.
 #[repr(transparent)]
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -114,6 +121,13 @@ impl DataValue for DoubleDataValue {
 }
 
 impl Eq for DoubleDataValue {} // Possible since we exclude NaNs
+
+impl std::hash::Hash for DoubleDataValue {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.value_domain().hash(state);
+        self.0.to_bits().hash(state);
+    }
+}
 
 #[cfg(test)]
 mod test {
