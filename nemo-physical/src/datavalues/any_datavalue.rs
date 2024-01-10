@@ -172,9 +172,7 @@ impl AnyDataValue {
                 }
             }
             StorageValueT::Int64(num) => Ok(AnyDataValue::new_integer_from_i64(num)),
-            StorageValueT::Float(_) => Err(DataValueCreationError::InternalError(Box::new(
-                InternalDataValueCreationError::SinglePrecisionFloat,
-            ))),
+            StorageValueT::Float(num) => Ok(AnyDataValue::new_float_from_f32(num.into()).unwrap()),
             StorageValueT::Double(num) => {
                 Ok(AnyDataValue::new_double_from_f64(num.into()).unwrap())
             }

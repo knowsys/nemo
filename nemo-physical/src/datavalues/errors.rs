@@ -93,7 +93,4 @@ pub(crate) enum InternalDataValueCreationError {
     /// Error when retrieving a value from the dictionary
     #[error("could not recover DataValue from dictionary: id {0} not found")]
     DictionaryIdNotFound(usize),
-    /// Error trying to convert a 32bit float to DataValue
-    #[error("single precision floats are not supported in DataValues")]
-    SinglePrecisionFloat,
 }
