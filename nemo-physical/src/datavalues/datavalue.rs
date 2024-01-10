@@ -3,7 +3,7 @@
 
 use std::{fmt::Debug, hash::Hash};
 
-use super::AnyDataValue;
+use super::{AnyDataValue, IriDataValue};
 
 /// Encloses a string in double quotes, and escapes inner quotes `\"`, newlines `\n`, carriage returns `\r`,
 /// tabs `\t`, and backslashes `\\`.
@@ -421,6 +421,14 @@ pub trait DataValue: Debug + Into<AnyDataValue> + PartialEq + Eq + Hash + Ord {
     #[must_use]
     fn to_boolean_unchecked(&self) -> bool {
         panic!("Value is not a boolean.");
+    }
+
+    /// Return the IRI-valued label of this complex value if it has a label,
+    /// and None otherwise. Only values in the domain [`ValueDomain::Tuple`] or
+    /// [`ValueDomain::Map`] can have labels.
+    #[must_use]
+    fn label(&self) -> Option<&IriDataValue> {
+        None
     }
 
     /// Return the length of this complex value if it is a

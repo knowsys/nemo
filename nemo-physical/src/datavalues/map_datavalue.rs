@@ -3,7 +3,7 @@
 
 use std::collections::BTreeMap;
 
-use super::{AnyDataValue, DataValue, ValueDomain};
+use super::{AnyDataValue, DataValue, IriDataValue, ValueDomain};
 
 /// Physical representation of a finite map on [`DataValue`]s.
 ///
@@ -14,15 +14,29 @@ use super::{AnyDataValue, DataValue, ValueDomain};
 /// In particular, all string representations provided by the implementation
 /// are canonical, i.e., equal maps will lead to equal string serializations
 /// that list keys according to their natural order.
-#[repr(transparent)]
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct MapDataValue {
+    label: Option<IriDataValue>,
     pairs: BTreeMap<AnyDataValue, AnyDataValue>,
+}
+
+impl MapDataValue {
+    /// Constructor.
+    pub fn new<T: IntoIterator<Item = (AnyDataValue, AnyDataValue)>>(
+        label: Option<IriDataValue>,
+        pairs_iter: T,
+    ) -> Self {
+        Self {
+            label: label,
+            pairs: pairs_iter.into_iter().collect(),
+        }
+    }
 }
 
 impl FromIterator<(AnyDataValue, AnyDataValue)> for MapDataValue {
     fn from_iter<T: IntoIterator<Item = (AnyDataValue, AnyDataValue)>>(iter: T) -> Self {
         Self {
+            label: None,
             pairs: iter.into_iter().collect(),
         }
     }
@@ -34,13 +48,20 @@ impl DataValue for MapDataValue {
     }
 
     fn lexical_value(&self) -> String {
-        self.pairs
+        let pairs = self
+            .pairs
             .iter()
             .map(|v| {
                 DataValue::canonical_string(v.0) + "=" + DataValue::canonical_string(v.1).as_str()
             })
             .intersperse(",".to_string())
-            .collect::<String>()
+            .collect::<String>();
+
+        if let Some(iri) = self.label() {
+            iri.canonical_string() + "{" + pairs.as_str() + "}"
+        } else {
+            "{".to_string() + pairs.as_str() + "}"
+        }
     }
 
     fn value_domain(&self) -> ValueDomain {
@@ -51,6 +72,10 @@ impl DataValue for MapDataValue {
         super::datavalue::quote_string(self.lexical_value())
             + "^^"
             + &super::datavalue::quote_iri(self.datatype_iri().as_str())
+    }
+
+    fn label(&self) -> Option<&IriDataValue> {
+        self.label.as_ref()
     }
 
     fn len_unchecked(&self) -> usize {
@@ -86,7 +111,7 @@ mod test {
 
     use std::collections::HashSet;
 
-    use crate::datavalues::{AnyDataValue, DataValue, MapDataValue, ValueDomain};
+    use crate::datavalues::{AnyDataValue, DataValue, IriDataValue, MapDataValue, ValueDomain};
 
     #[test]
     fn test_map() {
@@ -94,15 +119,21 @@ mod test {
         let dv2 = AnyDataValue::new_string("test".to_string());
         let dv3 = AnyDataValue::new_boolean(true);
         let dv4 = AnyDataValue::new_string("test2".to_string());
+        let label = IriDataValue::new("http://example.org/label".to_string());
 
-        let map = MapDataValue::from_iter(vec![
-            (dv1.clone(), dv2.clone()),
-            (dv1.clone(), dv3.clone()),
-            (dv2.clone(), dv4.clone()),
-        ]);
+        let map = MapDataValue::new(
+            Some(label.clone()),
+            vec![
+                (dv1.clone(), dv2.clone()),
+                (dv1.clone(), dv3.clone()),
+                (dv2.clone(), dv4.clone()),
+            ],
+        );
 
         assert_eq!(map.value_domain(), ValueDomain::Map);
         assert_eq!(map.datatype_iri(), "nemo:map".to_string());
+
+        assert_eq!(map.label(), Some(&label));
 
         assert_eq!(map.len(), Some(2));
         assert_eq!(map.len_unchecked(), 2);

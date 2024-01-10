@@ -3,25 +3,32 @@
 
 use std::sync::Arc;
 
-use super::{AnyDataValue, DataValue, ValueDomain};
+use super::{AnyDataValue, DataValue, IriDataValue, ValueDomain};
 
 /// Physical representation of a fixed-length tuple of [`DataValue`]s.
-#[repr(transparent)]
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct TupleDataValue {
+    label: Option<IriDataValue>,
     values: Arc<[AnyDataValue]>,
 }
 
 impl TupleDataValue {
     /// Constructor.
-    pub fn new(values: Vec<AnyDataValue>) -> Self {
-        values.into_iter().collect()
+    pub fn new<T: IntoIterator<Item = AnyDataValue>>(
+        label: Option<IriDataValue>,
+        values: T,
+    ) -> Self {
+        Self {
+            label: label,
+            values: values.into_iter().collect(),
+        }
     }
 }
 
 impl FromIterator<AnyDataValue> for TupleDataValue {
     fn from_iter<T: IntoIterator<Item = AnyDataValue>>(iter: T) -> Self {
         Self {
+            label: None,
             values: iter.into_iter().collect(),
         }
     }
@@ -33,12 +40,19 @@ impl DataValue for TupleDataValue {
     }
 
     fn lexical_value(&self) -> String {
-        self.values
+        let values = self
+            .values
             .iter()
             .map(|v| DataValue::canonical_string(v))
             //.by_ref()
             .intersperse(",".to_string())
-            .collect::<String>()
+            .collect::<String>();
+
+        if let Some(iri) = self.label() {
+            iri.canonical_string() + "(" + values.as_str() + ")"
+        } else {
+            "(".to_string() + values.as_str() + ")"
+        }
     }
 
     fn value_domain(&self) -> ValueDomain {
@@ -53,6 +67,10 @@ impl DataValue for TupleDataValue {
 
     fn tuple_element(&self, index: usize) -> Option<&AnyDataValue> {
         self.values.get(index)
+    }
+
+    fn label(&self) -> Option<&IriDataValue> {
+        self.label.as_ref()
     }
 
     fn len_unchecked(&self) -> usize {
@@ -73,16 +91,21 @@ impl std::hash::Hash for TupleDataValue {
 
 #[cfg(test)]
 mod test {
-    use crate::datavalues::{AnyDataValue, DataValue, TupleDataValue};
+    use crate::datavalues::{AnyDataValue, DataValue, IriDataValue, TupleDataValue, ValueDomain};
 
     #[test]
     fn test_tuple() {
         let dv1 = AnyDataValue::new_integer_from_i64(42);
         let dv2 = AnyDataValue::new_string("test".to_string());
         let dv3 = AnyDataValue::new_boolean(true);
+        let label = IriDataValue::new("http://example.org/label".to_string());
 
-        let dv_tuple = TupleDataValue::new(vec![dv1.clone(), dv2.clone(), dv3.clone()]);
+        let dv_tuple = TupleDataValue::new(
+            Some(label.clone()),
+            vec![dv1.clone(), dv2.clone(), dv3.clone()],
+        );
 
+        assert_eq!(dv_tuple.label(), Some(&label));
         assert_eq!(dv_tuple.len(), Some(3));
         assert_eq!(dv_tuple.len_unchecked(), 3);
         assert_eq!(dv_tuple.tuple_element(0), Some(&dv1));
@@ -93,14 +116,18 @@ mod test {
         assert_eq!(dv_tuple.tuple_element_unchecked(2), &dv3);
         assert_eq!(dv_tuple.tuple_element(3), None);
 
+        assert_eq!(dv_tuple.value_domain(), ValueDomain::Tuple);
         assert_eq!(dv_tuple.datatype_iri(), "nemo:tuple".to_string());
         assert_eq!(
             dv_tuple.lexical_value(),
-            dv1.canonical_string()
+            label.canonical_string()
+                + "("
+                + dv1.canonical_string().as_str()
                 + ","
                 + dv2.canonical_string().as_str()
                 + ","
                 + dv3.canonical_string().as_str()
+                + ")"
         );
     }
 
@@ -109,27 +136,40 @@ mod test {
         let dv1 = AnyDataValue::new_integer_from_i64(42);
         let dv2 = AnyDataValue::new_string("test".to_string());
         let dv3 = AnyDataValue::new_boolean(true);
+        let label1 = IriDataValue::new("http://example.org/label1".to_string());
+        let label2 = IriDataValue::new("http://example.org/label2".to_string());
 
-        let dv_tuple1 = TupleDataValue::new(vec![dv1.clone(), dv2.clone(), dv3.clone()]);
-        let dv_tuple2 = TupleDataValue::new(vec![dv1.clone(), dv2.clone(), dv3.clone()]);
-        let dv_tuple3 =
-            TupleDataValue::new(vec![dv1.clone(), dv2.clone(), dv3.clone(), dv3.clone()]);
+        let dv_tuple1 = TupleDataValue::new(
+            Some(label1.clone()),
+            vec![dv1.clone(), dv2.clone(), dv3.clone()],
+        );
+        let dv_tuple2 = TupleDataValue::new(
+            Some(label1.clone()),
+            vec![dv1.clone(), dv2.clone(), dv3.clone()],
+        );
+        let dv_tuple3 = TupleDataValue::new(
+            Some(label1.clone()),
+            vec![dv1.clone(), dv2.clone(), dv3.clone(), dv3.clone()],
+        );
+        let dv_tuple4 =
+            TupleDataValue::new(Some(label2), vec![dv1.clone(), dv2.clone(), dv3.clone()]);
 
         assert_eq!(dv_tuple1, dv_tuple2);
         assert_ne!(dv_tuple1, dv_tuple3);
+        assert_ne!(dv_tuple1, dv_tuple4);
     }
 
     #[test]
     fn test_empty_tuple() {
-        let dv_tuple = TupleDataValue::new(vec![]);
+        let dv_tuple = TupleDataValue::new(None, vec![]);
 
         assert_eq!(dv_tuple.len(), Some(0));
         assert_eq!(dv_tuple.len_unchecked(), 0);
         assert_eq!(dv_tuple.tuple_element(0), None);
-        assert_eq!(dv_tuple.lexical_value(), "".to_string());
+        assert_eq!(dv_tuple.lexical_value(), "()".to_string());
         assert_eq!(
             dv_tuple.canonical_string(),
-            "\"\"^^<nemo:tuple>".to_string()
+            "\"()\"^^<nemo:tuple>".to_string()
         );
     }
 }
