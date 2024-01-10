@@ -95,7 +95,7 @@ rec {
                 export XDG_CACHE_HOME=$TMPDIR/.cache
 
                 cd $src
-                wasm-pack build --target ${target} --weak-refs --mode=no-install --out-dir=$out/lib/node_modules/${pname} nemo-wasm
+                HOME=$TMPDIR wasm-pack build --target ${target} --weak-refs --mode=no-install --out-dir=$out/lib/node_modules/${pname} nemo-wasm
 
                 runHook postBuild
               '';
@@ -179,8 +179,8 @@ rec {
             ];
 
             text = ''
-              export RUSTFLAGS"=-Dwarnings";
-              export RUSTDOCFLAGS="-Dwarnings";
+              export RUSTFLAGS"=-Dwarnings"
+              export RUSTDOCFLAGS="-Dwarnings"
 
               if [[ ! -f "flake.nix" || ! -f "Cargo.toml" || ! -f "rust-toolchain.toml" ]]; then
                 echo "This should be run from the top-level of the nemo source tree."
@@ -204,7 +204,7 @@ rec {
                 rm -rf "''${VENV}"
               popd
 
-              wasm-pack build --weak-refs --mode=no-install nemo-wasm
+              HOME=$TMPDIR wasm-pack build --weak-refs --mode=no-install nemo-wasm
 
               cargo miri test
             '';
