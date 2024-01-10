@@ -44,6 +44,7 @@ enum WasmOrInternalNemoError {
 
 #[wasm_bindgen]
 #[derive(Debug)]
+#[allow(dead_code)]
 pub struct NemoError(WasmOrInternalNemoError);
 
 #[wasm_bindgen]
@@ -118,6 +119,7 @@ impl BlobResourceProvider {
 }
 
 #[derive(Debug)]
+#[allow(dead_code)]
 struct BlobReadingError(JsValue);
 
 impl std::fmt::Display for BlobReadingError {
