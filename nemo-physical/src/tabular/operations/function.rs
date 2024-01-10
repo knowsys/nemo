@@ -151,6 +151,14 @@ impl OperationGenerator for GeneratorFunction {
             path_types: Vec::new(),
         })
     }
+
+    fn is_unary_identity(&self) -> bool {
+        // This operation behaves the same as the identity if
+        // no new columns are computed
+        self.output_columns
+            .iter()
+            .all(|c| matches!(c, OutputColumn::Input(_)))
+    }
 }
 
 /// [PartialTrieScan] which introduced additional columns which contain the result

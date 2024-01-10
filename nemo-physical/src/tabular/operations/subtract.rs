@@ -120,6 +120,10 @@ impl OperationGenerator for GeneratorSubtract {
             path_types: Vec::new(),
         })
     }
+
+    fn is_unary_identity(&self) -> bool {
+        true
+    }
 }
 
 /// [`PartialTrieScan`] that subtracts from a "main" [`PartialTrieScan`] a list of [`PartialTrieScan`]s referred to as "subtract".

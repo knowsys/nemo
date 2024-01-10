@@ -13,11 +13,14 @@ use crate::{
     },
     datasources::tuple_writer::TupleWriter,
     datatypes::{StorageTypeName, StorageValueT},
+    datavalues::AnyDataValueIterator,
+    management::{bytesized::sum_bytes, ByteSized},
 };
 
 use super::{
     buffer::{sorted_tuple_buffer::SortedTupleBuffer, tuple_buffer::TupleBuffer},
-    triescan::{PartialTrieScan, TrieScan},
+    operations::prune::TrieScanPrune,
+    triescan::{PartialTrieScan, TrieScan, TrieScanEnum},
 };
 
 /// Defines the lookup method used in [IntervalColumnT]
@@ -40,6 +43,11 @@ impl Trie {
         self.columns.len()
     }
 
+    /// Return the number of rows contained in this trie.
+    pub fn num_rows(&self) -> usize {
+        self.columns.last().map_or(0, |column| column.num_data())
+    }
+
     /// Return a [PartialTrieScan] over this trie.
     pub fn iter(&self) -> TrieScanGeneric<'_> {
         let column_scans = self
@@ -49,6 +57,16 @@ impl Trie {
             .collect::<Vec<_>>();
 
         TrieScanGeneric::new(self, column_scans)
+    }
+
+    /// Return a [TrieScan] over this trie.
+    pub fn iter_full(&self) -> TrieScanPrune {
+        TrieScanPrune::new(TrieScanEnum::TrieScanGeneric(self.iter()))
+    }
+
+    /// TODO: Implement this function
+    pub fn full_column_iterators(&self) -> Vec<AnyDataValueIterator> {
+        todo!()
     }
 }
 
@@ -178,6 +196,12 @@ impl Trie {
         }
 
         Self::from_tuple_buffer(tuple_buffer.finalize())
+    }
+}
+
+impl ByteSized for Trie {
+    fn size_bytes(&self) -> bytesize::ByteSize {
+        sum_bytes(self.columns.iter().map(|column| column.size_bytes()))
     }
 }
 

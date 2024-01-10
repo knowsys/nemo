@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet};
 
-use nemo_physical::management::database::ColumnOrder;
+use nemo_physical::management::execution_plan::ColumnOrder;
 
 use crate::{
     error::Error,

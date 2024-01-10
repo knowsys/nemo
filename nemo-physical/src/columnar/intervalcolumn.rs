@@ -8,6 +8,7 @@ pub(crate) mod interval_lookup;
 
 use std::ops::Range;
 
+use bytesize::ByteSize;
 use delegate::delegate;
 
 use crate::{
@@ -20,9 +21,7 @@ use crate::{
     management::ByteSized,
 };
 
-use self::interval_lookup::{
-    IntervalLookup, IntervalLookupBuilder, IntervalLookupBuilderT, IntervalLookupT,
-};
+use self::interval_lookup::{IntervalLookup, IntervalLookupBuilderT, IntervalLookupT};
 
 #[derive(Debug, Clone)]
 pub(crate) struct IntervalColumn<T, LookupMethod>
@@ -72,7 +71,7 @@ where
     T: ColumnDataType,
     LookupMethod: IntervalLookup,
 {
-    fn size_bytes(&self) -> bytesize::ByteSize {
+    fn size_bytes(&self) -> ByteSize {
         self.data.size_bytes() + self.interval_lookup.size_bytes()
     }
 }
@@ -150,6 +149,28 @@ where
                 .column_double
                 .interval_bounds(previous_type, previous_index),
         }
+    }
+
+    /// Return the number of data entries in this column
+    pub fn num_data(&self) -> usize {
+        self.column_id32.data.len()
+            + self.column_id64.data.len()
+            + self.column_int64.data.len()
+            + self.column_float.data.len()
+            + self.column_double.data.len()
+    }
+}
+
+impl<LookupMethod> ByteSized for IntervalColumnT<LookupMethod>
+where
+    LookupMethod: IntervalLookup,
+{
+    fn size_bytes(&self) -> ByteSize {
+        self.column_id32.size_bytes()
+            + self.column_id64.size_bytes()
+            + self.column_int64.size_bytes()
+            + self.column_float.size_bytes()
+            + self.column_double.size_bytes()
     }
 }
 

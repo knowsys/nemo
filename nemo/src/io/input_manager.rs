@@ -1,7 +1,5 @@
 //! Management of resource providers, handling of decompression and resolution of resources to readers.
 
-use nemo_physical::management::database::TableSource;
-
 use crate::{error::Error, io::resource_providers::ResourceProviders};
 
 use super::formats::types::ImportSpec;

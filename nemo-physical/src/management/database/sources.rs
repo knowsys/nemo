@@ -32,7 +32,7 @@ impl SimpleTable {
     }
 
     /// Add a new row to table
-    pub fn add_row(&mut self, row: &[AnyDataValue]) {
+    pub fn add_row(&mut self, row: Vec<AnyDataValue>) {
         debug_assert!(row.len() == self.column_number);
 
         self.data.extend(row);
@@ -56,9 +56,9 @@ impl ByteSized for SimpleTable {
     }
 }
 
-/// Source of table
+/// Source of a table
 #[derive(Debug)]
-pub(super) enum TableSource {
+pub enum TableSource {
     /// Table is stored externally and can be obtained
     /// by any implementation of [TableProvider]
     ///

@@ -1,13 +1,12 @@
 //! This module defin
 
-use std::cell::RefCell;
+use std::{cell::RefCell, error::Error};
 
 use bytesize::ByteSize;
 
 use crate::{
-    datasources::{table_providers::TableProvider, tuple_writer::TupleWriter},
-    error::ReadingError,
-    management::ByteSized,
+    datasources::tuple_writer::TupleWriter,
+    management::{bytesized::sum_bytes, ByteSized},
     tabular::trie::Trie,
 };
 
@@ -16,6 +15,10 @@ use super::{sources::TableSource, Dict};
 /// Represents the stored table
 #[derive(Debug)]
 pub(super) enum TableStorage {
+    /// Represents an empty entry
+    ///
+    /// This can be used as a default state or after deleting a table
+    Empty,
     /// Table is stored as a [Trie] in memory
     InMemory(Trie),
     /// Table is not present as [Trie]
@@ -28,14 +31,15 @@ impl TableStorage {
     ///
     /// This function assumes that at least one source is provided.
     fn load_sources(
-        sources: &[TableSource],
+        sources: Vec<TableSource>,
         dictionary: &RefCell<Dict>,
-    ) -> Result<Trie, ReadingError> {
+    ) -> Result<Trie, Box<dyn Error>> {
         debug_assert!(!sources.is_empty());
 
         let column_number = sources
             .first()
-            .expect("Function assumes that at least one source is provided");
+            .expect("Function assumes that at least one source is provided")
+            .column_number();
         let mut tuple_writer = TupleWriter::new(dictionary, column_number);
 
         for source in sources {
@@ -59,10 +63,24 @@ impl TableStorage {
     ///
     /// If the table is not already loaded into memory as a [Trie],
     /// this function will load the [TableSource] and transform it into a [Trie].
-    pub fn trie<'a>(&'a mut self, dictionary: &RefCell<Dict>) -> Result<&'a Trie, ReadingError> {
+    pub fn trie<'a>(&'a mut self, dictionary: &RefCell<Dict>) -> Result<&'a Trie, Box<dyn Error>> {
+        // Load trie if not already in memory
         match self {
-            TableStorage::InMemory(trie) => Ok(trie),
-            TableStorage::FromSources(sources) => Self::load_sources(sources, dictionary),
+            TableStorage::InMemory(_) => {}
+            TableStorage::FromSources(sources) => {
+                let sources = std::mem::take(sources);
+                let trie = Self::load_sources(sources, dictionary)?;
+
+                *self = TableStorage::InMemory(trie);
+            }
+            TableStorage::Empty => unreachable!("This trie has been deleted"),
+        }
+
+        // Return in-memory trie
+        if let TableStorage::InMemory(trie) = self {
+            Ok(trie)
+        } else {
+            unreachable!("Trie should have been loaded into memory by this point")
         }
     }
 
@@ -73,6 +91,34 @@ impl TableStorage {
         match self {
             TableStorage::InMemory(trie) => Some(trie),
             TableStorage::FromSources(_) => None,
+            TableStorage::Empty => None,
+        }
+    }
+
+    /// Returns the number of columns for the table associated with this storage object.
+    pub fn arity(&self) -> usize {
+        match self {
+            TableStorage::InMemory(trie) => trie.arity(),
+            TableStorage::FromSources(sources) => {
+                match sources
+                    .first()
+                    .expect("At least one source must be present")
+                {
+                    TableSource::External(_, arity) => *arity,
+                    TableSource::SimpleTable(table) => table.column_number(),
+                }
+            }
+            TableStorage::Empty => 0,
+        }
+    }
+
+    /// Return the number of rows that are stored in this table.
+    pub fn count_rows(&self) -> usize {
+        match self {
+            TableStorage::InMemory(trie) => trie.num_rows(),
+            // TODO: Currently only counting of in-memory facts is supported, see <https://github.com/knowsys/nemo/issues/335>
+            TableStorage::FromSources(_) => 0,
+            TableStorage::Empty => 0,
         }
     }
 }
@@ -82,8 +128,9 @@ impl ByteSized for TableStorage {
         match self {
             TableStorage::InMemory(trie) => trie.size_bytes(),
             TableStorage::FromSources(sources) => {
-                sources.iter().map(|source| source.size_bytes()).sum()
+                sum_bytes(sources.iter().map(|source| source.size_bytes()))
             }
+            TableStorage::Empty => ByteSize::b(0),
         }
     }
 }

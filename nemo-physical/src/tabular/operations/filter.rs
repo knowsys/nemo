@@ -145,6 +145,13 @@ impl OperationGenerator for GeneratorFilter {
             column_scans,
         })
     }
+
+    fn is_unary_identity(&self) -> bool {
+        // When no filter is applied then this behaves the same as identity
+        self.output_columns
+            .iter()
+            .all(|c| matches!(c, OutputColumn::Input))
+    }
 }
 
 /// [PartialTrieScan] which filters values of an input [PartialTrieScan]

@@ -195,6 +195,10 @@ impl OperationGenerator for GeneratorJoin {
             column_scans,
         })
     }
+
+    fn is_unary_identity(&self) -> bool {
+        true
+    }
 }
 
 /// [`PartialTrieScan`] which represents the result from joining a list of [`PartialTrieScan`]s

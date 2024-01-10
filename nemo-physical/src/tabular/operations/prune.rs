@@ -8,11 +8,8 @@ use crate::{
         operations::ColumnScanPrune,
     },
     datatypes::{ColumnDataType, StorageTypeName, StorageValueT},
-    dictionary::meta_dv_dict::MetaDvDictionary,
     tabular::triescan::{PartialTrieScan, TrieScan, TrieScanEnum},
 };
-
-use super::OperationGenerator;
 
 /// [`TrieScan`] which only returns values that would actually exists during materialization.
 ///
@@ -28,18 +25,9 @@ pub struct TrieScanPrune<'a> {
     output_column_scans: Vec<UnsafeCell<ColumnScanRainbow<'a>>>,
 }
 
-/// Used to create a [TrieScanPrune]
-#[derive(Debug, Clone, Copy)]
-pub struct GeneratorPrune {}
-
-impl OperationGenerator for GeneratorPrune {
-    fn generate<'a>(
-        &'_ self,
-        mut input: Vec<TrieScanEnum<'a>>,
-        _dictionary: &'a MetaDvDictionary,
-    ) -> TrieScanEnum<'a> {
-        debug_assert!(input.len() == 1);
-        let input_trie_scan = input.remove(0);
+impl<'a> TrieScanPrune<'a> {
+    /// Create a new [TrieScanPrune].
+    pub fn new(input_trie_scan: TrieScanEnum<'a>) -> Self {
         let input_trie_scan_arity = input_trie_scan.arity();
 
         let mut output_column_scans =
@@ -94,10 +82,10 @@ impl OperationGenerator for GeneratorPrune {
             output_column_scans.push(UnsafeCell::new(new_scan));
         }
 
-        TrieScanEnum::TrieScanPrune(TrieScanPrune {
+        TrieScanPrune {
             state,
             output_column_scans,
-        })
+        }
     }
 }
 

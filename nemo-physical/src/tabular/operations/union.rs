@@ -77,6 +77,10 @@ impl OperationGenerator for GeneratorUnion {
             path_types: Vec::new(),
         })
     }
+
+    fn is_unary_identity(&self) -> bool {
+        true
+    }
 }
 
 /// [`PartialTrieScan`] which represents the union of a list of [`PartialTrieScan`]s

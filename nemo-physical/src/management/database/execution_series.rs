@@ -1,5 +1,5 @@
-//! This module defines [ExecutionTree],
-//! which is a tree representation of database operations
+//! This module defines [ExecutionSeries],
+//! which defines a series of database operations
 //! that can be executed by the [DatabaseInstance][super::DatabaseInstance].
 
 use std::fmt::Debug;
@@ -9,20 +9,35 @@ use crate::{
     tabular::operations::{projectreorder::GeneratorProjectReorder, OperationGeneratorEnum},
 };
 
-use super::id::{PermanentTableId, TemporaryTableId};
+use super::id::{ExecutionId, PermanentTableId};
+
+pub(crate) type LoadedTableId = usize;
+pub(crate) type ComputedTableId = usize;
+
+#[derive(Debug)]
+pub(crate) enum ExecutionTreeLeaf {
+    /// Table was already in the data base
+    LoadTable(LoadedTableId),
+    /// Table was computed during the execution of the execution plan
+    FetchComputedTable(ComputedTableId),
+}
+
+#[derive(Debug)]
+pub(crate) enum ExecutionTreeOperation {
+    Leaf(ExecutionTreeLeaf),
+    Node {
+        generator: OperationGeneratorEnum,
+        subnodes: Vec<ExecutionTreeOperation>,
+    },
+}
 
 /// A node in the [ExecutionTree]
 #[derive(Debug)]
-pub(crate) enum ExecutionTreeNode {
-    LoadTable(PermanentTableId, ColumnOrder),
-    FetchTemporaryTable(TemporaryTableId),
-    Operation {
-        generator: OperationGeneratorEnum,
-        subnodes: Vec<ExecutionTreeNode>,
-    },
+pub(crate) enum ExecutionTreeRoot {
+    Operation(ExecutionTreeOperation),
     ProjectReorder {
         generator: GeneratorProjectReorder,
-        subnode: ExecutionTreeNode, // Note: This can only be `LoadTable` or `FetchTemporaryTable`
+        subnode: ExecutionTreeLeaf,
     },
 }
 
@@ -30,14 +45,18 @@ pub(crate) enum ExecutionTreeNode {
 /// that can be executed by the [DatabaseInstance][super::DatabaseInstance]
 pub(crate) struct ExecutionTree {
     /// Root node of the tree
-    root: ExecutionTreeNode,
+    pub root: ExecutionTreeRoot,
     /// How the result of this operation will be stored
-    result: ExecutionResult,
+    pub result: ExecutionResult,
+    /// [ExecutionId] for associating the resulting table with this tree
+    pub execution_id: ExecutionId,
+    /// Name of the of tree, e.g. for debugging purposes
+    pub operation_name: String,
 
     /// Starting from the bottom most layer,
     /// how many layers are not used in the computation
     /// and therefore not need to be computed fully
-    cut_layers: usize,
+    pub cut_layers: usize,
 }
 
 impl Debug for ExecutionTree {
@@ -47,15 +66,17 @@ impl Debug for ExecutionTree {
 }
 
 impl ExecutionTree {
-    fn ascii_tree_recursive(node: &ExecutionTreeNode) -> ascii_tree::Tree {
+    fn ascii_tree_recursive(node: &ExecutionTreeOperation) -> ascii_tree::Tree {
         match node {
-            ExecutionTreeNode::LoadTable(id, order) => {
-                ascii_tree::Tree::Leaf(vec![format!("Permanent Table: {id} ({order})")])
-            }
-            ExecutionTreeNode::FetchTemporaryTable(id) => {
-                ascii_tree::Tree::Leaf(vec![format!("Temporary Table: {id}")])
-            }
-            ExecutionTreeNode::Operation {
+            ExecutionTreeOperation::Leaf(leaf) => match leaf {
+                ExecutionTreeLeaf::LoadTable(_) => {
+                    ascii_tree::Tree::Leaf(vec![format!("Permanent Table")])
+                }
+                ExecutionTreeLeaf::FetchComputedTable(_) => {
+                    ascii_tree::Tree::Leaf(vec![format!("New Table")])
+                }
+            },
+            ExecutionTreeOperation::Node {
                 generator,
                 subnodes,
             } => {
@@ -66,19 +87,31 @@ impl ExecutionTree {
 
                 ascii_tree::Tree::Node(format!("{generator:?}"), subtrees)
             }
-            ExecutionTreeNode::ProjectReorder { generator, subnode } => {
-                let subtree = Self::ascii_tree_recursive(subnode);
-
-                ascii_tree::Tree::Node(format!("{generator:?}"), vec![subtree])
-            }
         }
     }
 
     /// Return an ascii tree representation of the [ExecutionTree].
     pub fn ascii_tree(&self) -> ascii_tree::Tree {
-        let tree = Self::ascii_tree_recursive(&self.root);
-        let top_level_name = match self.result() {
-            ExecutionResult::Temporary => format!("{} (Temporary)", self.name()),
+        let tree = match &self.root {
+            ExecutionTreeRoot::Operation(operation_tree) => {
+                Self::ascii_tree_recursive(operation_tree)
+            }
+            ExecutionTreeRoot::ProjectReorder { generator, subnode } => {
+                let subnode_tree = match subnode {
+                    ExecutionTreeLeaf::LoadTable(_) => {
+                        ascii_tree::Tree::Leaf(vec![format!("Permanent Table")])
+                    }
+                    ExecutionTreeLeaf::FetchComputedTable(_) => {
+                        ascii_tree::Tree::Leaf(vec![format!("New Table")])
+                    }
+                };
+
+                ascii_tree::Tree::Node(format!("{generator:?}"), vec![subnode_tree])
+            }
+        };
+
+        let top_level_name = match &self.result {
+            ExecutionResult::Temporary => format!("{} (Temporary)", self.operation_name),
             ExecutionResult::Permanent(order, name) => {
                 format!("{name} (Permanent {order}")
             }
@@ -86,6 +119,15 @@ impl ExecutionTree {
 
         ascii_tree::Tree::Node(top_level_name, vec![tree])
     }
+}
+
+/// Represents a
+#[derive(Debug)]
+pub(crate) struct ExecutionSeries {
+    /// Tables that need to be present in memory before executing this series
+    pub loaded_tries: Vec<(PermanentTableId, ColumnOrder)>,
+    /// List of execution trees that makes up this series
+    pub trees: Vec<ExecutionTree>,
 }
 
 // impl ExecutionTree {

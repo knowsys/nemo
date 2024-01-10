@@ -1,4 +1,4 @@
-//! This module defines [PermanentTableId] and [TemporaryTableId],
+//! This module defines [PermanentTableId] and [ComputedTableId],
 //! which are used to identify tables in [DatabaseInstance][super::DatabaseInstance].
 
 use std::{
@@ -6,9 +6,8 @@ use std::{
     hash::Hash,
 };
 
-pub(crate) trait TableId:
-    Debug + Default + Display + Copy + Clone + Eq + PartialEq + Hash
-{
+/// Trait for types that represent ids of tables
+pub trait TableId: Debug + Default + Display + Copy + Clone + Eq + PartialEq + Hash {
     /// Increment the id by one.
     /// Return the old (non-incremented) id.
     fn increment(&mut self) -> Self;
@@ -37,29 +36,29 @@ impl TableId for PermanentTableId {
         old
     }
 
-    fn get(&self) -> u64 {
+    fn get(&self) -> usize {
         self.0
     }
 }
 
-/// Id of a temporary table in the [DatabaseInstance][super::DatabaseInstance]
+/// Id of a table computed during the execution of an [ExecutionPlan][super::super::ExecutionPlan]
 #[derive(Debug, Default, Copy, Clone, Eq, PartialEq, Hash)]
-pub struct TemporaryTableId(usize);
+pub struct ExecutionId(usize);
 
-impl Display for TemporaryTableId {
+impl Display for ExecutionId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         Display::fmt(&self.0, f)
     }
 }
 
-impl TableId for TemporaryTableId {
+impl TableId for ExecutionId {
     fn increment(&mut self) -> Self {
         let old = *self;
         self.0 += 1;
         old
     }
 
-    fn get(&self) -> u64 {
+    fn get(&self) -> usize {
         self.0
     }
 }

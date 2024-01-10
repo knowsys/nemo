@@ -8,7 +8,6 @@ use std::{
 use nemo_physical::{
     datatypes::{DataValueT, StorageValueT},
     datavalues::{AnyDataValue, AnyDataValueIterator},
-    management::database::TableSource,
     meta::TimedCode,
 };
 
@@ -340,347 +339,351 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         self.table_manager.memory_usage()
     }
 
-    /// Recursive part of the function `trace`.
-    ///
-    /// Takes as input the fact of which the trace should be computed.
-    /// In addition receives the values of the terms as [`StorageValueT`].
-    ///
-    /// Returns a handle to the derived fact in the given [`ExecutionTrace`] if a valid derivation could be found.
-    /// Returns `None` otherwise.
-    fn trace_recursive(
-        &self,
-        trace: &mut ExecutionTrace,
-        fact: ChaseFact,
-        fact_values: Vec<StorageValueT>,
-    ) -> Result<TraceFactHandle, Error> {
-        let trace_handle = trace.register_fact(fact.clone());
+    // TODO: Reimplement tracing feature
 
-        if fact.arity() != fact_values.len() {
-            // It was not possible to associate each value in the fact with an entry in the table.
-            trace.update_status(trace_handle, TraceStatus::Fail);
-            return Ok(trace_handle);
-        }
+    // /// Recursive part of the function `trace`.
+    // ///
+    // /// Takes as input the fact of which the trace should be computed.
+    // /// In addition receives the values of the terms as [`StorageValueT`].
+    // ///
+    // /// Returns a handle to the derived fact in the given [`ExecutionTrace`] if a valid derivation could be found.
+    // /// Returns `None` otherwise.
+    // fn trace_recursive(
+    //     &self,
+    //     trace: &mut ExecutionTrace,
+    //     fact: ChaseFact,
+    //     fact_values: Vec<StorageValueT>,
+    // ) -> Result<TraceFactHandle, Error> {
+    //     let trace_handle = trace.register_fact(fact.clone());
 
-        if trace.status(trace_handle).is_known() {
-            return Ok(trace_handle);
-        }
+    //     if fact.arity() != fact_values.len() {
+    //         // It was not possible to associate each value in the fact with an entry in the table.
+    //         trace.update_status(trace_handle, TraceStatus::Fail);
+    //         return Ok(trace_handle);
+    //     }
 
-        // Find the origin of the given fact
-        let step = match self
-            .table_manager
-            .find_table_row(&fact.predicate(), &fact_values)
-        {
-            Some(s) => s,
-            None => {
-                // If the table manager does not know the predicate of the fact
-                // then it could not have been derived
-                trace.update_status(trace_handle, TraceStatus::Fail);
-                return Ok(trace_handle);
-            }
-        };
+    //     if trace.status(trace_handle).is_known() {
+    //         return Ok(trace_handle);
+    //     }
 
-        if step == 0 {
-            // If a fact was derived in step 0 it must have been given as an EDB fact
-            trace.update_status(trace_handle, TraceStatus::Success(TraceDerivation::Input));
-            return Ok(trace_handle);
-        }
+    //     // Find the origin of the given fact
+    //     let step = match self
+    //         .table_manager
+    //         .find_table_row(&fact.predicate(), &fact_values)
+    //     {
+    //         Some(s) => s,
+    //         None => {
+    //             // If the table manager does not know the predicate of the fact
+    //             // then it could not have been derived
+    //             trace.update_status(trace_handle, TraceStatus::Fail);
+    //             return Ok(trace_handle);
+    //         }
+    //     };
 
-        // Rule index of the rule that was applied to derive the given fact
-        let rule_index = self.rule_history[step];
-        let rule = &self.program.rules()[rule_index];
+    //     if step == 0 {
+    //         // If a fact was derived in step 0 it must have been given as an EDB fact
+    //         trace.update_status(trace_handle, TraceStatus::Success(TraceDerivation::Input));
+    //         return Ok(trace_handle);
+    //     }
 
-        let predicate_types: &Vec<PrimitiveType> = self
-            .analysis
-            .predicate_types
-            .get(&fact.predicate())
-            .expect("Every predicate should be associated with a type.");
+    //     // Rule index of the rule that was applied to derive the given fact
+    //     let rule_index = self.rule_history[step];
+    //     let rule = &self.program.rules()[rule_index];
 
-        // Iterate over all head atoms which could have derived the given fact
-        for (head_index, head_atom) in rule.head().iter().enumerate() {
-            if head_atom.predicate() != fact.predicate() {
-                continue;
-            }
+    //     let predicate_types: &Vec<PrimitiveType> = self
+    //         .analysis
+    //         .predicate_types
+    //         .get(&fact.predicate())
+    //         .expect("Every predicate should be associated with a type.");
 
-            // Unify the head atom with the given fact
+    //     // Iterate over all head atoms which could have derived the given fact
+    //     for (head_index, head_atom) in rule.head().iter().enumerate() {
+    //         if head_atom.predicate() != fact.predicate() {
+    //             continue;
+    //         }
 
-            // If unification is possible `compatible` remains true
-            let mut compatible = true;
-            // Contains the head variable and the constant it aligns with.
-            let mut assignment_constant = HashMap::<Variable, Constant>::new();
-            // For each constructor variable, contains the term which describes its calculation
-            // and the constant it should equal to based on the input fact
-            let mut assignment_constructor = HashMap::<Variable, (Constant, Term)>::new();
+    //         // Unify the head atom with the given fact
 
-            for (ty, (head_term, fact_term)) in predicate_types
-                .iter()
-                .zip(head_atom.terms().iter().zip(fact.terms().iter()))
-            {
-                match head_term {
-                    PrimitiveTerm::Constant(constant) => {
-                        if ty.ground_term_to_data_value_t(constant.clone())
-                            != ty.ground_term_to_data_value_t(fact_term.clone())
-                        {
-                            compatible = false;
-                            break;
-                        }
-                    }
-                    PrimitiveTerm::Variable(variable) => {
-                        // Matching with existential variables should not produce any restrictions,
-                        // so we just consider universal variables here
-                        if variable.is_existential() {
-                            continue;
-                        }
+    //         // If unification is possible `compatible` remains true
+    //         let mut compatible = true;
+    //         // Contains the head variable and the constant it aligns with.
+    //         let mut assignment_constant = HashMap::<Variable, Constant>::new();
+    //         // For each constructor variable, contains the term which describes its calculation
+    //         // and the constant it should equal to based on the input fact
+    //         let mut assignment_constructor = HashMap::<Variable, (Constant, Term)>::new();
 
-                        if let Some(constructor) = rule.get_constructor(variable) {
-                            match assignment_constructor.entry(variable.clone()) {
-                                Entry::Occupied(entry) => {
-                                    let (stored_constant, _) = entry.get();
+    //         for (ty, (head_term, fact_term)) in predicate_types
+    //             .iter()
+    //             .zip(head_atom.terms().iter().zip(fact.terms().iter()))
+    //         {
+    //             match head_term {
+    //                 PrimitiveTerm::Constant(constant) => {
+    //                     if ty.ground_term_to_data_value_t(constant.clone())
+    //                         != ty.ground_term_to_data_value_t(fact_term.clone())
+    //                     {
+    //                         compatible = false;
+    //                         break;
+    //                     }
+    //                 }
+    //                 PrimitiveTerm::Variable(variable) => {
+    //                     // Matching with existential variables should not produce any restrictions,
+    //                     // so we just consider universal variables here
+    //                     if variable.is_existential() {
+    //                         continue;
+    //                     }
 
-                                    if stored_constant != fact_term {
-                                        compatible = false;
-                                        break;
-                                    }
-                                }
-                                Entry::Vacant(entry) => {
-                                    if constructor.term().variables().next().is_none() {
-                                        if let Term::Primitive(PrimitiveTerm::Constant(constant)) =
-                                            constructor.term()
-                                        {
-                                            if ty.ground_term_to_data_value_t(constant.clone())
-                                                != ty.ground_term_to_data_value_t(fact_term.clone())
-                                            {
-                                                compatible = false;
-                                                break;
-                                            }
-                                        } else {
-                                            if let Ok(fact_term_data) =
-                                                ty.ground_term_to_data_value_t(fact_term.clone())
-                                            {
-                                                if let Some(fact_term_storage) = fact_term_data
-                                                    .to_storage_value(
-                                                        &self.table_manager.get_dict(),
-                                                    )
-                                                {
-                                                    if let Some(constructor_value_storage) =
-                                                        constructor
-                                                            .term()
-                                                            .evaluate_constant_numeric(
-                                                                ty,
-                                                                &self.table_manager.get_dict(),
-                                                            )
-                                                    {
-                                                        if fact_term_storage
-                                                            == constructor_value_storage
-                                                        {
-                                                            continue;
-                                                        }
-                                                    }
-                                                }
-                                            }
+    //                     if let Some(constructor) = rule.get_constructor(variable) {
+    //                         match assignment_constructor.entry(variable.clone()) {
+    //                             Entry::Occupied(entry) => {
+    //                                 let (stored_constant, _) = entry.get();
 
-                                            compatible = false;
-                                            break;
-                                        }
-                                    } else {
-                                        entry.insert((
-                                            fact_term.clone(),
-                                            constructor.term().clone(),
-                                        ));
-                                    }
-                                }
-                            }
-                        } else {
-                            match assignment_constant.entry(variable.clone()) {
-                                Entry::Occupied(entry) => {
-                                    if ty.ground_term_to_data_value_t(entry.get().clone())
-                                        != ty.ground_term_to_data_value_t(fact_term.clone())
-                                    {
-                                        compatible = false;
-                                        break;
-                                    }
-                                }
-                                Entry::Vacant(entry) => {
-                                    entry.insert(fact_term.clone());
-                                }
-                            }
-                        }
-                    }
-                }
-            }
+    //                                 if stored_constant != fact_term {
+    //                                     compatible = false;
+    //                                     break;
+    //                                 }
+    //                             }
+    //                             Entry::Vacant(entry) => {
+    //                                 if constructor.term().variables().next().is_none() {
+    //                                     if let Term::Primitive(PrimitiveTerm::Constant(constant)) =
+    //                                         constructor.term()
+    //                                     {
+    //                                         if ty.ground_term_to_data_value_t(constant.clone())
+    //                                             != ty.ground_term_to_data_value_t(fact_term.clone())
+    //                                         {
+    //                                             compatible = false;
+    //                                             break;
+    //                                         }
+    //                                     } else {
+    //                                         if let Ok(fact_term_data) =
+    //                                             ty.ground_term_to_data_value_t(fact_term.clone())
+    //                                         {
+    //                                             if let Some(fact_term_storage) = fact_term_data
+    //                                                 .to_storage_value(
+    //                                                     &self.table_manager.dictionary(),
+    //                                                 )
+    //                                             {
+    //                                                 if let Some(constructor_value_storage) =
+    //                                                     constructor
+    //                                                         .term()
+    //                                                         .evaluate_constant_numeric(
+    //                                                             ty,
+    //                                                             &self.table_manager.dictionary(),
+    //                                                         )
+    //                                                 {
+    //                                                     if fact_term_storage
+    //                                                         == constructor_value_storage
+    //                                                     {
+    //                                                         continue;
+    //                                                     }
+    //                                                 }
+    //                                             }
+    //                                         }
 
-            if !compatible {
-                // Fact could not have been unified
-                continue;
-            }
+    //                                         compatible = false;
+    //                                         break;
+    //                                     }
+    //                                 } else {
+    //                                     entry.insert((
+    //                                         fact_term.clone(),
+    //                                         constructor.term().clone(),
+    //                                     ));
+    //                                 }
+    //                             }
+    //                         }
+    //                     } else {
+    //                         match assignment_constant.entry(variable.clone()) {
+    //                             Entry::Occupied(entry) => {
+    //                                 if ty.ground_term_to_data_value_t(entry.get().clone())
+    //                                     != ty.ground_term_to_data_value_t(fact_term.clone())
+    //                                 {
+    //                                     compatible = false;
+    //                                     break;
+    //                                 }
+    //                             }
+    //                             Entry::Vacant(entry) => {
+    //                                 entry.insert(fact_term.clone());
+    //                             }
+    //                         }
+    //                     }
+    //                 }
+    //             }
+    //         }
 
-            // The goal of this part of the code is to apply the rule which led to the given fact
-            // but with the variable binding derived from the unification above
+    //         if !compatible {
+    //             // Fact could not have been unified
+    //             continue;
+    //         }
 
-            let unification_constraints: Vec<Constraint> =
-                assignment_constant
-                    .into_iter()
-                    .map(|(variable, term)| {
-                        Constraint::Equals(
-                            Term::Primitive(PrimitiveTerm::Variable(variable)),
-                            Term::Primitive(PrimitiveTerm::Constant(term)),
-                        )
-                    })
-                    .chain(assignment_constructor.into_iter().map(
-                        |(_variable, (constant, term))| {
-                            Constraint::Equals(
-                                Term::Primitive(PrimitiveTerm::Constant(constant)),
-                                term,
-                            )
-                        },
-                    ))
-                    .collect();
+    //         // The goal of this part of the code is to apply the rule which led to the given fact
+    //         // but with the variable binding derived from the unification above
 
-            let mut rule = self.program.rules()[rule_index].clone();
-            rule.positive_constraints_mut()
-                .extend(unification_constraints);
-            let analysis = &self.analysis.rule_analysis[rule_index];
+    //         let unification_constraints: Vec<Constraint> =
+    //             assignment_constant
+    //                 .into_iter()
+    //                 .map(|(variable, term)| {
+    //                     Constraint::Equals(
+    //                         Term::Primitive(PrimitiveTerm::Variable(variable)),
+    //                         Term::Primitive(PrimitiveTerm::Constant(term)),
+    //                     )
+    //                 })
+    //                 .chain(assignment_constructor.into_iter().map(
+    //                     |(_variable, (constant, term))| {
+    //                         Constraint::Equals(
+    //                             Term::Primitive(PrimitiveTerm::Constant(constant)),
+    //                             term,
+    //                         )
+    //                     },
+    //                 ))
+    //                 .collect();
 
-            let body_execution = SeminaiveStrategy::initialize(&rule, analysis);
-            let mut current_plan = SubtableExecutionPlan::default();
-            let mut variable_order = analysis.promising_variable_orders[0].clone(); // TODO: This selection is arbitrary
+    //         let mut rule = self.program.rules()[rule_index].clone();
+    //         rule.positive_constraints_mut()
+    //             .extend(unification_constraints);
+    //         let analysis = &self.analysis.rule_analysis[rule_index];
 
-            // When going backwards we disable semi-naive evaluation
-            let rule_info = RuleInfo {
-                step_last_applied: 0,
-            };
+    //         let body_execution = SeminaiveStrategy::initialize(&rule, analysis);
+    //         let mut current_plan = SubtableExecutionPlan::default();
+    //         let mut variable_order = analysis.promising_variable_orders[0].clone(); // TODO: This selection is arbitrary
 
-            let node = body_execution.add_plan_body(
-                &self.table_manager,
-                &mut current_plan,
-                &rule_info,
-                &mut variable_order,
-                step,
-            );
+    //         // When going backwards we disable semi-naive evaluation
+    //         let rule_info = RuleInfo {
+    //             step_last_applied: 0,
+    //         };
 
-            // `execute_plan_first_match` requires one output node marked as permanent
-            current_plan.plan_mut().clear_write_nodes();
-            current_plan.add_permanent_table(
-                node,
-                "Tracing Query",
-                "Tracing Query",
-                SubtableIdentifier::new(fact.predicate(), step),
-            );
+    //         let node = body_execution.add_plan_body(
+    //             &self.table_manager,
+    //             &mut current_plan,
+    //             &rule_info,
+    //             &mut variable_order,
+    //             step,
+    //         );
 
-            if let Ok(Some(query_result)) =
-                self.table_manager.execute_plan_first_match(current_plan)
-            {
-                // Convert query answer from the phyical representation into logical Term-representation
-                let query_types: Vec<&PrimitiveType> = variable_order
-                    .as_ordered_list()
-                    .iter()
-                    .map(|v| {
-                        analysis
-                            .variable_types
-                            .get(v)
-                            .expect("Every variable must have been assigned a type")
-                    })
-                    .collect();
+    //         // `execute_plan_first_match` requires one output node marked as permanent
+    //         current_plan.plan_mut().clear_write_nodes();
+    //         current_plan.add_permanent_table(
+    //             node,
+    //             "Tracing Query",
+    //             "Tracing Query",
+    //             SubtableIdentifier::new(fact.predicate(), step),
+    //         );
 
-                let query_terms: Vec<Constant> = query_result
-                    .iter()
-                    .zip(query_types.iter())
-                    .map(|(entry, ty)| {
-                        let mut iterator = ty.primitive_logical_value_iterator(
-                            self.table_manager
-                                .database()
-                                .storage_to_data_iterator(ty.datatype_name(), entry.iter_once()),
-                        );
+    //         if let Ok(Some(query_result)) =
+    //             self.table_manager.execute_plan_first_match(current_plan)
+    //         {
+    //             // Convert query answer from the phyical representation into logical Term-representation
+    //             let query_types: Vec<&PrimitiveType> = variable_order
+    //                 .as_ordered_list()
+    //                 .iter()
+    //                 .map(|v| {
+    //                     analysis
+    //                         .variable_types
+    //                         .get(v)
+    //                         .expect("Every variable must have been assigned a type")
+    //                 })
+    //                 .collect();
 
-                        iterator
-                            .next()
-                            .expect("Iterator must contain at least one value")
-                            .into()
-                    })
-                    .collect();
+    //             let query_terms: Vec<Constant> = query_result
+    //                 .iter()
+    //                 .zip(query_types.iter())
+    //                 .map(|(entry, ty)| {
+    //                     let mut iterator = ty.primitive_logical_value_iterator(
+    //                         self.table_manager
+    //                             .database()
+    //                             .storage_to_data_iterator(ty.datatype_name(), entry.iter_once()),
+    //                     );
 
-                let rule_assignment: HashMap<Variable, Constant> = variable_order
-                    .as_ordered_list()
-                    .into_iter()
-                    .zip(query_terms.iter().cloned())
-                    .collect();
+    //                     iterator
+    //                         .next()
+    //                         .expect("Iterator must contain at least one value")
+    //                         .into()
+    //                 })
+    //                 .collect();
 
-                let mut fully_derived = true;
-                let mut subtraces = Vec::<TraceFactHandle>::new();
-                for body_atom in rule.positive_body() {
-                    let next_fact_predicate = body_atom.predicate();
-                    let mut next_fact_values = Vec::<StorageValueT>::new();
-                    let mut next_fact_terms = Vec::<Constant>::new();
+    //             let rule_assignment: HashMap<Variable, Constant> = variable_order
+    //                 .as_ordered_list()
+    //                 .into_iter()
+    //                 .zip(query_terms.iter().cloned())
+    //                 .collect();
 
-                    for variable in body_atom.terms() {
-                        let query_index = *variable_order
-                            .get(variable)
-                            .expect("Variable order must contain every variable");
+    //             let mut fully_derived = true;
+    //             let mut subtraces = Vec::<TraceFactHandle>::new();
+    //             for body_atom in rule.positive_body() {
+    //                 let next_fact_predicate = body_atom.predicate();
+    //                 let mut next_fact_values = Vec::<StorageValueT>::new();
+    //                 let mut next_fact_terms = Vec::<Constant>::new();
 
-                        next_fact_values.push(query_result[query_index]);
-                        next_fact_terms.push(query_terms[query_index].clone());
-                    }
+    //                 for variable in body_atom.terms() {
+    //                     let query_index = *variable_order
+    //                         .get(variable)
+    //                         .expect("Variable order must contain every variable");
 
-                    let next_fact = ChaseFact::new(next_fact_predicate, next_fact_terms);
-                    let next_handle = self.trace_recursive(trace, next_fact, next_fact_values)?;
+    //                     next_fact_values.push(query_result[query_index]);
+    //                     next_fact_terms.push(query_terms[query_index].clone());
+    //                 }
 
-                    if trace.status(next_handle).is_success() {
-                        subtraces.push(next_handle);
-                    } else {
-                        fully_derived = false;
-                        break;
-                    }
-                }
+    //                 let next_fact = ChaseFact::new(next_fact_predicate, next_fact_terms);
+    //                 let next_handle = self.trace_recursive(trace, next_fact, next_fact_values)?;
 
-                if !fully_derived {
-                    continue;
-                }
+    //                 if trace.status(next_handle).is_success() {
+    //                     subtraces.push(next_handle);
+    //                 } else {
+    //                     fully_derived = false;
+    //                     break;
+    //                 }
+    //             }
 
-                let rule_application =
-                    TraceRuleApplication::new(rule_index, rule_assignment, head_index);
+    //             if !fully_derived {
+    //                 continue;
+    //             }
 
-                let derivation = TraceDerivation::Derived(rule_application, subtraces);
-                trace.update_status(trace_handle, TraceStatus::Success(derivation));
+    //             let rule_application =
+    //                 TraceRuleApplication::new(rule_index, rule_assignment, head_index);
 
-                return Ok(trace_handle);
-            } else {
-                continue;
-            }
-        }
+    //             let derivation = TraceDerivation::Derived(rule_application, subtraces);
+    //             trace.update_status(trace_handle, TraceStatus::Success(derivation));
 
-        trace.update_status(trace_handle, TraceStatus::Fail);
-        Ok(trace_handle)
-    }
+    //             return Ok(trace_handle);
+    //         } else {
+    //             continue;
+    //         }
+    //     }
+
+    //     trace.update_status(trace_handle, TraceStatus::Fail);
+    //     Ok(trace_handle)
+    // }
 
     /// Build an [`ExecutionTrace`] for a list of facts.
     /// Also returns a list containing a [`TraceFactHandle`] for each fact.
     pub fn trace(&self, facts: Vec<Fact>) -> Result<(ExecutionTrace, Vec<TraceFactHandle>), Error> {
-        let mut trace = ExecutionTrace::new(
-            self.input_program.clone(),
-            self.analysis.predicate_types.clone(),
-        );
+        todo!()
 
-        let mut handles = Vec::new();
+        // let mut trace = ExecutionTrace::new(
+        //     self.input_program.clone(),
+        //     self.analysis.predicate_types.clone(),
+        // );
 
-        for fact in facts {
-            let chase_fact = ChaseFact::from_flat_atom(&fact.0);
+        // let mut handles = Vec::new();
 
-            // Convert fact into physical representation
-            let mut fact_values = Vec::<StorageValueT>::new();
-            for entry in Self::fact_to_vec(&chase_fact, &self.analysis) {
-                if let Some(value) =
-                    entry.to_storage_value(self.table_manager.get_dict().borrow_mut())
-                {
-                    fact_values.push(value);
-                } else {
-                    // Dictionary does not contain term
-                    break;
-                }
-            }
+        // for fact in facts {
+        //     let chase_fact = ChaseFact::from_flat_atom(&fact.0);
 
-            handles.push(self.trace_recursive(&mut trace, chase_fact, fact_values)?);
-        }
+        //     // Convert fact into physical representation
+        //     let mut fact_values = Vec::<StorageValueT>::new();
+        //     for entry in Self::fact_to_vec(&chase_fact, &self.analysis) {
+        //         if let Some(value) =
+        //             entry.to_storage_value(self.table_manager.dictionary().borrow_mut())
+        //         {
+        //             fact_values.push(value);
+        //         } else {
+        //             // Dictionary does not contain term
+        //             break;
+        //         }
+        //     }
 
-        Ok((trace, handles))
+        //     handles.push(self.trace_recursive(&mut trace, chase_fact, fact_values)?);
+        // }
+
+        // Ok((trace, handles))
     }
 
     /// Return the [logical type][TupleConstraint] for the given [predicate][Identifier].

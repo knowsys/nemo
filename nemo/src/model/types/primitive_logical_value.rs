@@ -2,12 +2,10 @@ use std::num::ParseIntError;
 
 use num::FromPrimitive;
 
+use nemo_physical::datatypes::data_value::DataValueIteratorT;
 use nemo_physical::datatypes::data_value::PhysicalString;
 use nemo_physical::datatypes::Double;
 use nemo_physical::error::ReadingError;
-use nemo_physical::{
-    datatypes::data_value::DataValueIteratorT, dictionary::value_serializer::NULL_PREFIX,
-};
 
 use crate::model::{
     Constant, Identifier, Map, NumericLiteral, RdfLiteral, Tuple, XSD_DECIMAL, XSD_DOUBLE,
@@ -25,6 +23,7 @@ const CONSTANT_PREFIX: &str = "CO:";
 const DATATYPE_VALUE_PREFIX: &str = "DV:";
 const MAP_VALUE_PREFIX: &str = "MP:";
 const TUPLE_VALUE_PREFIX: &str = "TP:";
+const NULL_PREFIX: &str = "NULL:"; // TODO: Temporary fix
 
 /// The prefix used to indicate constants that are Nulls
 pub const LOGICAL_NULL_PREFIX: &str = "__Null#";

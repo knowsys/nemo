@@ -8,7 +8,7 @@ use crate::model::{
     chase_model::{ChaseAtom, ChaseProgram, ChaseRule, VariableAtom},
     Identifier, Variable,
 };
-use nemo_physical::{management::database::ColumnOrder, permutator::Permutator};
+use nemo_physical::{management::execution_plan::ColumnOrder, permutator::Permutator};
 
 /// Represents an ordering of variables as [`HashMap`].
 #[repr(transparent)]
@@ -549,7 +549,7 @@ mod test {
         io::formats::dsv::DsvFormat,
         model::chase_model::{ChaseProgram, ChaseRule, PrimitiveAtom, VariableAtom},
     };
-    use nemo_physical::management::database::ColumnOrder;
+    use nemo_physical::management::execution_plan::ColumnOrder;
 
     use std::collections::{HashMap, HashSet};
 

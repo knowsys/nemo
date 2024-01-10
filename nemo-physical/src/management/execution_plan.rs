@@ -17,8 +17,8 @@ use crate::{
 };
 
 use super::database::{
-    execution_tree::{ExecutionTree, ExecutionTreeNode},
-    id::PermanentTableId,
+    execution_series::ExecutionSeries,
+    id::{ExecutionId, PermanentTableId, TableId},
 };
 
 /// Type that represents a reordering of the columns of a table.
@@ -43,7 +43,7 @@ impl ExecutionNodeOwned {
 }
 
 /// Wraps [ExecutionNode] into a `Weak<RefCell<_>>`
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct ExecutionNodeRef(Weak<RefCell<ExecutionNode>>);
 
 impl ExecutionNodeRef {
@@ -106,7 +106,7 @@ impl ExecutionNodeRef {
             ExecutionOperation::Union(subnodes) => subnodes.clone(),
             ExecutionOperation::Subtract(subnode_main, subnodes_subtract) => {
                 let mut result = vec![subnode_main.clone()];
-                result.extend(subnodes_subtract);
+                result.extend(subnodes_subtract.iter().cloned());
 
                 result
             }
@@ -133,7 +133,7 @@ pub struct ExecutionNode {
     pub marked_columns: OperationTable,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 /// Represents an operation in [ExecutionPlan]
 pub enum ExecutionOperation {
     /// Fetch a table that is already present in the database instance
@@ -157,7 +157,7 @@ pub enum ExecutionOperation {
 
 /// Declares whether the resulting table form executing a plan should be kept temporarily or permamently
 #[derive(Debug, Clone)]
-pub(super) enum ExecutionResult {
+pub(crate) enum ExecutionResult {
     /// Table will be dropped after the [ExecutionPlan] is finished.
     Temporary,
     /// Table will be stored permanently in the [DatabaseInstance][super::database::DatabaseInstance]
@@ -174,6 +174,8 @@ struct ExecutionOutNode {
     result: ExecutionResult,
     /// Name which identifies this operation, e.g., for logging and timing.
     operation_name: String,
+    /// Handle for later identifying the result table of this node
+    execution_id: ExecutionId,
 }
 
 /// A DAG representing instructions for generating new tables.
@@ -183,6 +185,9 @@ pub struct ExecutionPlan {
     nodes: Vec<ExecutionNodeOwned>,
     /// A list that marks all nodes that will be materialized into their own tables.
     out_nodes: Vec<ExecutionOutNode>,
+
+    /// The current [ExecutionId]
+    current_execution_id: ExecutionId,
 }
 
 impl ExecutionPlan {
@@ -279,14 +284,14 @@ impl ExecutionPlan {
         marked_columns: OperationTable,
         subnode: ExecutionNodeRef,
     ) -> ExecutionNodeRef {
-        let new_operation = ExecutionOperation::Project(subnode);
+        let new_operation = ExecutionOperation::ProjectReorder(subnode.clone());
 
         // The project/reorder operation requires that its input is a materialized trie.
         // Also, the result of this operation is a materialized trie.
         // Hence, we mark the input of this node as well as this node as "output" nodes.
         let project_node = self.push_and_return_reference(new_operation, marked_columns);
         self.write_temporary(subnode, "Input for Project/Reorder");
-        self.write_temporary(project_node, "Project/Reorder");
+        self.write_temporary(project_node.clone(), "Project/Reorder");
 
         project_node
     }
@@ -309,7 +314,7 @@ impl ExecutionPlan {
         subnode: ExecutionNodeRef,
         functions: FunctionAssignment,
     ) -> ExecutionNodeRef {
-        let new_operation = ExecutionOperation::SelectEqual(subnode, functions);
+        let new_operation = ExecutionOperation::Function(subnode, functions);
         self.push_and_return_reference(new_operation, marked_columns)
     }
 }
@@ -319,16 +324,21 @@ impl ExecutionPlan {
     ///
     /// If table has been marked as an "ouput" node already,
     /// this function will overwrite the name and [ExecutionResult].
+    ///
+    /// Returns an [ExecutionId] which can be linked to the output table
+    /// that was computed by evaluateing this node.
     fn push_out_node(
         &mut self,
         node: ExecutionNodeRef,
         result: ExecutionResult,
         operation_name: &str,
-    ) {
+    ) -> ExecutionId {
+        let next_id = self.current_execution_id.increment();
+
         if let Some(index) = self
             .out_nodes
             .iter()
-            .position(|out_node| out_node.node.id() == node.id)
+            .position(|out_node| out_node.node.id() == node.id())
         {
             self.out_nodes[index].operation_name = String::from(operation_name);
             self.out_nodes[index].result = result;
@@ -337,28 +347,45 @@ impl ExecutionPlan {
                 node,
                 result,
                 operation_name: String::from(operation_name),
+                execution_id: next_id,
             });
         }
+
+        next_id
     }
 
     /// Designate a [ExecutionNode] as an "output" node that will produce a temporary table.
-    pub fn write_temporary(&mut self, node: ExecutionNodeRef, operation_name: &str) {
+    ///
+    /// Returns an [ExecutionId] which can be linked to the output table
+    /// that was computed by evaluateing this node.
+    pub fn write_temporary(&mut self, node: ExecutionNodeRef, operation_name: &str) -> ExecutionId {
         self.push_out_node(node, ExecutionResult::Temporary, operation_name)
     }
 
     /// Designate a [ExecutionNode] as an "output" node that will produce a permanent table (in its default order).
-    pub fn write_permanent(&mut self, node: ExecutionNodeRef, tree_name: &str, table_name: &str) {
+    ///
+    /// Returns an [ExecutionId] which can be linked to the output table
+    /// that was computed by evaluateing this node.
+    pub fn write_permanent(
+        &mut self,
+        node: ExecutionNodeRef,
+        tree_name: &str,
+        table_name: &str,
+    ) -> ExecutionId {
         self.write_permanent_reordered(node, tree_name, table_name, ColumnOrder::default())
     }
 
     /// Designate a [ExecutionNode] as an "output" node that will produce a permament table.
+    ///  
+    /// Returns an [ExecutionId] which can be linked to the output table
+    /// that was computed by evaluateing this node.
     pub fn write_permanent_reordered(
         &mut self,
         node: ExecutionNodeRef,
         tree_name: &str,
         table_name: &str,
         order: ColumnOrder,
-    ) {
+    ) -> ExecutionId {
         self.push_out_node(
             node,
             ExecutionResult::Permanent(order, String::from(table_name)),
@@ -368,13 +395,6 @@ impl ExecutionPlan {
 }
 
 impl ExecutionPlan {
-    /// Split the [ExecutionPlan] into a list of [ExecutionTree]s
-    /// that will be executed one after another
-    /// by the [DatabaseInstance][super::DatabaseInstance].
-    pub(crate) fn finalize(self) -> Vec<ExecutionTree> {
-        todo!()
-    }
-
     // fn copy_subgraph(
     //     new_plan: &mut ExecutionPlan,
     //     node: ExecutionNodeRef,
@@ -459,73 +479,87 @@ impl ExecutionPlan {
     //     self.out_nodes.clear();
     // }
 
-    fn execution_subtree(
-        node: ExecutionNodeRef,
-        out_node_ids: &HashSet<ExecutionNodeId>,
-    ) -> ExecutionTreeNode {
-        if out_node_ids.contains(&node.id()) {
-            // Do something
-        }
-
-        let node_rc = node.get_rc();
-        let node_operation = &node_rc.borrow().operation;
-        let node_markers = node_rc.borrow().marked_columns.clone();
-
-        match node_operation {
-            ExecutionOperation::FetchTable(_, _) => todo!(),
-            ExecutionOperation::Join(subnodes) => {
-                let subnode_markers = subnodes.iter().map(|node| node.markers()).collect();
-                let subtrees = subnodes
-                    .iter()
-                    .map(|node| Self::execution_subtree(node, out_node_ids))
-                    .collect();
-
-                ExecutionTreeNode::Operation {
-                    generator: OperationGeneratorEnum::Join(GeneratorJoin::new(
-                        node_markers,
-                        subnode_markers,
-                    )),
-                    subnodes: subtrees,
-                }
-            }
-            ExecutionOperation::Union(_) => todo!(),
-            ExecutionOperation::Subtract(_, _) => todo!(),
-            ExecutionOperation::ProjectReorder(_) => todo!(),
-            ExecutionOperation::Filter(_, _) => todo!(),
-            ExecutionOperation::Function(_, _) => todo!(),
-            ExecutionOperation::Aggregate() => todo!(),
-        }
+    fn execution_subtree(node: ExecutionNodeRef, out_node_ids: &HashSet<ExecutionNodeId>) {
+        todo!()
     }
 
-    /// Return a list of [ExecutionTree] that are derived taking the subgraph at each write node.
-    /// Each tree will be associated with an id that corresponds to the id of
-    /// the write node from which the tree is derived.
-    pub(super) fn split_at_write_nodes(&self) -> Vec<(usize, ExecutionTree)> {
-        let write_node_ids: HashSet<usize> = self.out_nodes.iter().map(|o| o.node.id()).collect();
+    fn execution_subtree_x(node: ExecutionNodeRef, out_node_ids: &HashSet<ExecutionNodeId>) {
+        // if out_node_ids.contains(&node.id()) {
+        //     // Do something
 
-        let mut result = Vec::new();
-        for out_node in &self.out_nodes {
-            let id = out_node.node.id();
-            let mut subtree = ExecutionPlan::default();
+        //     // ExecutionTreeNode::FetchComputedTable(())
+        // }
 
-            let mut write_node_ids_without_this = write_node_ids.clone();
-            write_node_ids_without_this.remove(&id);
+        // let node_rc = node.get_rc();
+        // let node_operation = &node_rc.borrow().operation;
+        // let node_markers = node_rc.borrow().marked_columns.clone();
 
-            let root_node = Self::copy_subgraph(
-                &mut subtree,
-                out_node.node.clone(),
-                &write_node_ids_without_this,
-            );
-            subtree.out_nodes.push(ExecutionOutNode {
-                node: root_node,
-                result: out_node.result.clone(),
-                name: out_node.name.clone(),
-                cut_bottom_layers: out_node.cut_bottom_layers,
-            });
+        // match node_operation {
+        //     ExecutionOperation::FetchTable(_, _) => todo!(),
+        //     ExecutionOperation::Join(subnodes) => {
+        //         // let subnode_markers = subnodes.iter().map(|node| node.markers()).collect();
+        //         // let subtrees = subnodes
+        //         //     .iter()
+        //         //     .map(|node| Self::execution_subtree(node.clone(), out_node_ids))
+        //         //     .collect();
 
-            result.push((id, ExecutionTree::new(subtree)));
-        }
+        //         // ExecutionTreeNode::Operation {
+        //         //     generator: OperationGeneratorEnum::Join(GeneratorJoin::new(
+        //         //         node_markers,
+        //         //         subnode_markers,
+        //         //     )),
+        //         //     subnodes: subtrees,
+        //         // }
+        //         todo!()
+        //     }
+        //     ExecutionOperation::Union(_) => todo!(),
+        //     ExecutionOperation::Subtract(_, _) => todo!(),
+        //     ExecutionOperation::ProjectReorder(_) => todo!(),
+        //     ExecutionOperation::Filter(_, _) => todo!(),
+        //     ExecutionOperation::Function(_, _) => todo!(),
+        //     ExecutionOperation::Aggregate() => todo!(),
+        // }
 
-        result
+        todo!()
     }
+
+    /// Split the [ExecutionPlan] into a [ExecutionSeries]
+    /// by splitting it into several [ExecutionTree]
+    /// that will be executed one after another by the
+    /// by the [DatabaseInstance][super::DatabaseInstance].
+    pub(crate) fn finalize(self) -> ExecutionSeries {
+        todo!()
+    }
+
+    // /// Return a list of [ExecutionTree] that are derived taking the subgraph at each write node.
+    // /// Each tree will be associated with an id that corresponds to the id of
+    // /// the write node from which the tree is derived.
+    // pub(super) fn split_at_write_nodes(&self) -> Vec<(usize, ExecutionTree)> {
+    //     let write_node_ids: HashSet<usize> = self.out_nodes.iter().map(|o| o.node.id()).collect();
+
+    //     let mut result = Vec::new();
+    //     for out_node in &self.out_nodes {
+    //         let id = out_node.node.id();
+    //         let mut subtree = ExecutionPlan::default();
+
+    //         let mut write_node_ids_without_this = write_node_ids.clone();
+    //         write_node_ids_without_this.remove(&id);
+
+    //         let root_node = Self::copy_subgraph(
+    //             &mut subtree,
+    //             out_node.node.clone(),
+    //             &write_node_ids_without_this,
+    //         );
+    //         subtree.out_nodes.push(ExecutionOutNode {
+    //             node: root_node,
+    //             result: out_node.result.clone(),
+    //             name: out_node.name.clone(),
+    //             cut_bottom_layers: out_node.cut_bottom_layers,
+    //         });
+
+    //         result.push((id, ExecutionTree::new(subtree)));
+    //     }
+
+    //     result
+    // }
 }

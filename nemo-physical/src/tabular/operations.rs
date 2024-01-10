@@ -77,12 +77,15 @@ where
 /// Trait for objects that are able to generate [TrieScanEnum],
 /// which implement certain data base operations.
 pub(crate) trait OperationGenerator {
-    /// Generate a
+    /// Generate a [TrieScanEnum].
     fn generate<'a>(
         &'_ self,
         input: Vec<TrieScanEnum<'a>>,
         dictionary: &'a MetaDvDictionary,
     ) -> TrieScanEnum<'a>;
+
+    /// Returns whether the operation is the identity its input is only a single [TrieScanEnum].
+    fn is_unary_identity(&self) -> bool;
 }
 
 pub(crate) enum OperationGeneratorEnum {
@@ -107,6 +110,8 @@ impl OperationGenerator for OperationGeneratorEnum {
                 input: Vec<TrieScanEnum<'a>>,
                 dictionary: &'a MetaDvDictionary,
             ) -> TrieScanEnum<'a>;
+
+            fn is_unary_identity(&self) -> bool;
         }
     }
 }

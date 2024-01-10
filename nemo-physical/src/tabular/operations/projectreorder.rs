@@ -61,7 +61,11 @@ impl GeneratorProjectReorder {
             result_map.insert(source_output, target_output);
         }
 
-        ProjectReordering::from_map(result_map, arity)
+        Self {
+            projectreordering: ProjectReordering::from_map(result_map, arity),
+            last_used_layer: arity - 1,
+            arity_output: arity,
+        }
     }
 
     /// Apply the operation to an input [TrieScan]
