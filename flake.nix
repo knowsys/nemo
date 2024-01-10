@@ -44,7 +44,12 @@ rec {
           cargo = toolchain;
           rustc = toolchain;
         };
-        defaultBuildInputs = [pkgs.openssl pkgs.openssl.dev] ++ pkgs.lib.optionals pkgs.stdenv.isDarwin [pkgs.darwin.apple_sdk.frameworks.Security];
+        defaultBuildInputs =
+          [pkgs.openssl pkgs.openssl.dev]
+          ++ pkgs.lib.optionals pkgs.stdenv.isDarwin [
+            pkgs.darwin.apple_sdk.frameworks.Security
+            pkgs.darwin.apple_sdk.frameworks.SystemConfiguration
+          ];
         defaultNativeBuildInputs = [toolchain pkgs.pkg-config];
       in rec {
         packages = let
