@@ -2,7 +2,7 @@ use super::{AddResult, Dictionary, DictionaryString, StringDictionary};
 
 /// A read-only, hashmap-based [Dictionary] to implement a bijection between strings and integers.  
 /// Strings are stored in a compact buffer to reduce memory overhead and fragmentation.
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct HashMapDictionary {
     string_dict: StringDictionary,
 }

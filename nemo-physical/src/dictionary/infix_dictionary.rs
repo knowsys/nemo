@@ -6,7 +6,7 @@ use super::DictionaryString;
 /// A read-only [Dictionary] to implement a bijection between integer ids and strings that start and end
 /// with a certain fixed prefix and postfix, respectively. Strings that do not have this shape will be
 /// rejected.
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct InfixDictionary {
     dict: HashMapDictionary,
     prefix: String,

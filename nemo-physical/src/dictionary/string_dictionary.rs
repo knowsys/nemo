@@ -242,7 +242,7 @@ impl Eq for StringRef {}
 /// A struct that implements a bijection between strings and integers, where the integers
 /// are automatically assigned upon insertion.
 /// Strings are stored in a compact buffer to reduce memory overhead and fragmentation.
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub(crate) struct StringDictionary {
     store: Vec<StringRef>,
     mapping: HashMap<StringRef, usize>,

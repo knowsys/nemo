@@ -168,7 +168,7 @@ impl DvConverter for LangStringDvConverter {
 /// A generic [`DvDict`] dictionary based on converting datavalues to strings. The
 /// type parameter defines how the conversion is to be done, making sure that we have
 /// compile-time knowledge about this.
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub(crate) struct StringBasedDvDictionary<C: DvConverter> {
     string_dict: StringDictionary,
     _phantom: PhantomData<C>,
