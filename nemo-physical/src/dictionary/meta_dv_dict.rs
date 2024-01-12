@@ -416,7 +416,11 @@ impl MetaDvDictionary {
             }
         }
         // Performance note: The remaining code is only executed once per unique string (i.e., typically much fewer times than the above).
-        assert!(best_dict_idx < self.dicts.len());
+
+        // No dictionary was found for this type of value. Maybe a number, which we never make dictionary entries for.
+        if best_dict_idx >= self.dicts.len() {
+            return AddResult::Rejected;
+        }
 
         // Consider creating a new dictionary for the new entry:
         // if dv.infixable() {
@@ -607,5 +611,13 @@ mod test {
         assert_eq!(dict.add_datavalue(nv3.clone()), AddResult::Rejected);
 
         assert_eq!(dict.len(), 2);
+    }
+
+    #[test]
+    fn add_unsupported_dv() {
+        let mut dict = MetaDvDictionary::new();
+        let dv = AnyDataValue::new_integer_from_i64(42);
+
+        assert_eq!(dict.add_datavalue(dv), AddResult::Rejected);
     }
 }
