@@ -1,4 +1,8 @@
-use super::{AddResult, KNOWN_ID_MARK};
+use super::{
+    bytes_buffer::{BytesBuffer, GlobalBytesBuffer},
+    bytes_dictionary::BytesDictionary,
+    AddResult,
+};
 
 use std::{
     fmt::Display,
@@ -6,8 +10,6 @@ use std::{
     marker::PhantomData,
     sync::atomic::{AtomicBool, Ordering},
 };
-
-use hashbrown::HashMap;
 
 /// Global string buffer for dictionary data.
 /// This is global here to allow keys in the hashmap to access it for computing equality and hashes,
@@ -241,16 +243,12 @@ impl Eq for StringRef {}
 
 /// A struct that implements a bijection between strings and integers, where the integers
 /// are automatically assigned upon insertion.
-/// Strings are stored in a compact buffer to reduce memory overhead and fragmentation.
+/// Data is stored in a the given [GlobalBytesBuffer].
 #[derive(Debug)]
-pub(crate) struct StringDictionary {
-    store: Vec<StringRef>,
-    mapping: HashMap<StringRef, usize>,
-    buffer: usize,
-    has_known_mark: bool,
+pub(crate) struct GenericStringDictionary<B: GlobalBytesBuffer> {
+    bytes_dict: BytesDictionary<B>,
 }
-
-impl StringDictionary {
+impl<B: GlobalBytesBuffer> GenericStringDictionary<B> {
     /// Construct a new and empty string dictionary.
     pub(crate) fn new() -> Self {
         Self::default()
@@ -263,28 +261,28 @@ impl StringDictionary {
     /// or previoulsy present (it will never be rejected). The result then also yields
     /// the strings id.
     pub(crate) fn add_str(&mut self, string: &str) -> AddResult {
-        self.add_str_with_id(string, self.store.len())
+        self.bytes_dict.add_bytes(string.as_bytes())
     }
 
     /// Looks for a given [&str] slice and returns `Some(id)` if it is in the dictionary,
     /// and `None` otherwise. The special value [`super::KNOWN_ID_MARK`] will be returned
     /// if the string was marked but not actually inserted.
     pub(crate) fn str_to_id(&self, string: &str) -> Option<usize> {
-        self.mapping.get(string).copied()
+        self.bytes_dict.bytes_to_id(string.as_bytes())
     }
 
     /// Returns the [String] associated with the `id`, or `None`` if no string has been
     /// associated to this id.
     pub(crate) fn id_to_string(&self, id: usize) -> Option<String> {
-        self.store
-            .get(id)
-            .map(|entry| -> String { entry.to_string() })
+        self.bytes_dict
+            .id_to_bytes(id)
+            .map(|bytes| unsafe { String::from_utf8_unchecked(bytes) })
     }
 
     /// Returns the number of elements in the dictionary. Strings that are merely
     /// marked are not counted here.
     pub(crate) fn len(&self) -> usize {
-        self.store.len()
+        self.bytes_dict.len()
     }
 
     /// Marks the given string as being known without storing it under an own id.
@@ -294,59 +292,28 @@ impl StringDictionary {
     /// be known already. A use case that would require other behavior is not
     /// known so far, so we do not make any effort there.
     pub(crate) fn mark_str(&mut self, string: &str) -> AddResult {
-        self.has_known_mark = true;
-        self.add_str_with_id(string, KNOWN_ID_MARK)
+        self.bytes_dict.mark_bytes(string.as_bytes())
     }
 
     /// Returns true if the dictionary contains any marked elements.
     pub(crate) fn has_marked(&self) -> bool {
-        self.has_known_mark
-    }
-
-    /// Check if a string is already in the dictionary, and if not,
-    /// set its id to the given value. This is an internal helper method
-    /// that is only ever called with `self.store.len()` or with
-    /// [KNOWN_ID_MARK] as id. Other non-consecutive ID assignments
-    /// will generally lead to errors, since the same ID might be assigned
-    /// later on again.
-    ///
-    /// If the given string is known but not assigned an ID (indicated by
-    /// [KNOWN_ID_MARK]), then the operation will still not assign an
-    /// ID either.
-    #[inline(always)]
-    fn add_str_with_id(&mut self, string: &str, id: usize) -> AddResult {
-        match self.mapping.get(string) {
-            Some(idx) => AddResult::Known(*idx),
-            None => {
-                let sref = unsafe { BUFFER.push_str(self.buffer, string) };
-                if id != KNOWN_ID_MARK {
-                    self.store.push(sref);
-                }
-                self.mapping.insert(sref, id);
-                AddResult::Fresh(id)
-            }
-        }
+        self.bytes_dict.has_marked()
     }
 }
 
-impl Default for StringDictionary {
+impl<B: GlobalBytesBuffer> Default for GenericStringDictionary<B> {
     fn default() -> Self {
-        StringDictionary {
-            store: Vec::new(),
-            mapping: HashMap::new(),
-            buffer: unsafe { BUFFER.init_buffer() },
-            has_known_mark: false,
+        GenericStringDictionary {
+            bytes_dict: Default::default(),
         }
     }
 }
 
-impl Drop for StringDictionary {
-    fn drop(&mut self) {
-        unsafe {
-            BUFFER.drop_buffer(self.buffer);
-        }
-    }
-}
+crate::dictionary::bytes_buffer::declare_bytes_buffer!(
+    StringDictBytesBuffer,
+    STRING_DICT_TEST_BUFFER
+);
+pub(crate) type StringDictionary = GenericStringDictionary<StringDictBytesBuffer>;
 
 #[cfg(test)]
 mod test {
