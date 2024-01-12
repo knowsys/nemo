@@ -89,8 +89,10 @@ fn main() {
 
     let mut dict = DictEnum::from_dict_type(dicttype);
     let mut count_lines = 0;
-    let mut count_unique = 0;
-    let mut bytes = 0;
+    let mut count_added = 0;
+    let mut count_rejected = 0;
+    let mut bytes_added = 0;
+    let mut bytes_rejected = 0;
 
     TimedCode::instance().sub("Dictionary filling").start();
 
@@ -106,13 +108,15 @@ fn main() {
             Some('"') => {
                 if let Some(type_pos) = s.find("\"^^<") {
                     // println!("Lit {} | {}", &s[1..type_pos], &s[type_pos+4..s.len()-1]);
-                    if let Ok(val) = AnyDataValue::new_from_typed_literal(
-                        s[1..s.len() - 1].to_string(),
+                    match AnyDataValue::new_from_typed_literal(
+                        s[1..type_pos].to_string(),
                         s[type_pos + 4..s.len() - 1].to_string(),
                     ) {
-                        dv = val;
-                    } else {
-                        dv = AnyDataValue::new_string(s.clone());
+                        Ok(val) => dv = val,
+                        Err(err) => {
+                            println!("Error parsing value `{}`: {:?}", s, err);
+                            dv = AnyDataValue::new_string(s.clone());
+                        }
                     }
                 } else if let Some(at_pos) = s.rfind("\"@") {
                     if at_pos > 0 {
@@ -126,7 +130,7 @@ fn main() {
                         dv = AnyDataValue::new_string(s[1..s.len() - 1].to_string());
                     }
                 } else {
-                    //println!("String {}", &s[1..s.len()-1]);
+                    // println!("String {}", &s[1..s.len()-1]);
                     dv = AnyDataValue::new_string(s[1..s.len() - 1].to_string());
                 }
             }
@@ -142,11 +146,14 @@ fn main() {
 
         match add_result {
             AddResult::Fresh(_value) => {
-                bytes += b;
-                count_unique += 1;
+                bytes_added += b;
+                count_added += 1;
             }
             AddResult::Known(_value) => {}
-            AddResult::Rejected => {}
+            AddResult::Rejected => {
+                bytes_rejected += b;
+                count_rejected += 1;
+            }
         }
 
         count_lines += 1;
@@ -154,9 +161,14 @@ fn main() {
 
     TimedCode::instance().sub("Dictionary filling").stop();
 
+    println!("Processed {} strings.", count_lines);
     println!(
-        "Processed {} strings (dictionary contains {} unique strings with {} bytes overall).",
-        count_lines, count_unique, bytes
+        "  Dictionary accepted data for {} unique strings with {} bytes overall.",
+        count_added, bytes_added
+    );
+    println!(
+        "  Dictionary rejected {} (non-unique) strings with {} bytes overall.",
+        count_rejected, bytes_rejected
     );
 
     TimedCode::instance().stop();
