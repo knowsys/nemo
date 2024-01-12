@@ -3,6 +3,31 @@ use hashbrown::HashMap;
 use super::bytes_buffer::{BytesRef, GlobalBytesBuffer};
 use super::{AddResult, KNOWN_ID_MARK};
 
+/// This macro declares a new BytesDictionary of the given name,
+/// which uses the given buffer name to store its global data.
+/// The buffer name must be unique to each declared dictionary type,
+/// but upper case (which we do not attempt to achieve in the macro ...).
+/// All declarations are at the place where the macro is invoked and
+/// are private. There is no need for wider visibility, since one can better
+/// always create a new type for a new use of such a dictionary.
+macro_rules! declare_bytes_dictionary {
+    ($dict_name:ident, $buf_name:ident) => {
+        static mut $buf_name: BytesBuffer = BytesBuffer::new();
+        paste::paste! {
+            #[derive(Debug)]
+            struct [<$dict_name GlobalBuffer>];
+            unsafe impl GlobalBytesBuffer for [<$dict_name GlobalBuffer>] {
+                unsafe fn get() -> &'static mut BytesBuffer {
+                    &mut $buf_name
+                }
+            }
+            type $dict_name = BytesDictionary<[<$dict_name GlobalBuffer>]>;
+        }
+    };
+}
+
+pub(crate) use declare_bytes_dictionary;
+
 /// A struct that implements a bijection between byte arrays and integers, where the integers
 /// are automatically assigned upon insertion.
 /// Byte arrays are stored in a compact buffer to reduce memory overhead and fragmentation.
@@ -116,19 +141,13 @@ mod test {
         AddResult, KNOWN_ID_MARK,
     };
 
-    static mut TEST_BUFFER: BytesBuffer = BytesBuffer::new();
-    #[derive(Debug)]
-    struct TestGlobalBuffer;
-    unsafe impl GlobalBytesBuffer for TestGlobalBuffer {
-        unsafe fn get() -> &'static mut BytesBuffer {
-            &mut TEST_BUFFER
-        }
-    }
+    use crate::dictionary::bytes_dictionary;
+    bytes_dictionary::declare_bytes_dictionary!(TestBytesDictionary, TEST_BUFFER);
 
     #[test]
     fn add_and_get() {
-        let mut dict: BytesDictionary<TestGlobalBuffer> = BytesDictionary::new();
-        let mut dict2: BytesDictionary<TestGlobalBuffer> = BytesDictionary::new();
+        let mut dict: TestBytesDictionary = BytesDictionary::new();
+        let mut dict2: TestBytesDictionary = BytesDictionary::new();
 
         let res1 = dict.add_bytes(&[1, 2, 3]);
         dict.add_bytes(&[42]);
@@ -157,7 +176,7 @@ mod test {
 
     #[test]
     fn fetch_id() {
-        let mut dict: BytesDictionary<TestGlobalBuffer> = BytesDictionary::new();
+        let mut dict: TestBytesDictionary = BytesDictionary::new();
 
         dict.add_bytes(&[1, 2, 3]);
         dict.add_bytes(&[42]);
@@ -170,7 +189,7 @@ mod test {
 
     #[test]
     fn empty_bytes() {
-        let mut dict: BytesDictionary<TestGlobalBuffer> = BytesDictionary::new();
+        let mut dict: TestBytesDictionary = BytesDictionary::new();
 
         assert_eq!(dict.add_bytes(&[]), AddResult::Fresh(0));
         assert_eq!(dict.id_to_bytes(0), Some(vec![]));
@@ -181,7 +200,7 @@ mod test {
 
     #[test]
     fn mark_str() {
-        let mut dict: BytesDictionary<TestGlobalBuffer> = BytesDictionary::new();
+        let mut dict: TestBytesDictionary = BytesDictionary::new();
 
         assert_eq!(dict.add_bytes(&[1]), AddResult::Fresh(0));
         assert_eq!(dict.add_bytes(&[2]), AddResult::Fresh(1));
