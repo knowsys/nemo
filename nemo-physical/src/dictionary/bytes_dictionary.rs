@@ -10,6 +10,7 @@ use super::{AddResult, KNOWN_ID_MARK};
 /// All declarations are at the place where the macro is invoked and
 /// are private. There is no need for wider visibility, since one can better
 /// always create a new type for a new use of such a dictionary.
+#[macro_export]
 macro_rules! declare_bytes_dictionary {
     ($dict_name:ident, $buf_name:ident) => {
         static mut $buf_name: BytesBuffer = BytesBuffer::new();
@@ -25,8 +26,6 @@ macro_rules! declare_bytes_dictionary {
         }
     };
 }
-
-pub(crate) use declare_bytes_dictionary;
 
 /// A struct that implements a bijection between byte arrays and integers, where the integers
 /// are automatically assigned upon insertion.
@@ -135,14 +134,14 @@ impl<B: GlobalBytesBuffer> Drop for BytesDictionary<B> {
 
 #[cfg(test)]
 mod test {
+    use crate::declare_bytes_dictionary;
     use crate::dictionary::{
         bytes_buffer::{BytesBuffer, GlobalBytesBuffer},
         bytes_dictionary::BytesDictionary,
         AddResult, KNOWN_ID_MARK,
     };
 
-    use crate::dictionary::bytes_dictionary;
-    bytes_dictionary::declare_bytes_dictionary!(TestBytesDictionary, TEST_BUFFER);
+    declare_bytes_dictionary!(TestBytesDictionary, TEST_BUFFER);
 
     #[test]
     fn add_and_get() {
