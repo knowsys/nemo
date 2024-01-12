@@ -273,15 +273,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a3e368af43e418a04d52505cf3dbc23dda4e3407ae2fa99fd0e4f308ce546acc"
 
 [[package]]
-name = "casey"
-version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "614586263949597dcc18675da12ef9b429135e13628d92eb8b8c6fa50ca5656b"
-dependencies = [
- "syn 1.0.109",
-]
-
-[[package]]
 name = "cast"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1309,7 +1300,6 @@ dependencies = [
  "ascii_tree",
  "bitvec",
  "bytesize",
- "casey",
  "delegate",
  "enum_dispatch",
  "env_logger 0.10.1",
