@@ -20,6 +20,8 @@ pub mod bytes_buffer;
 pub mod bytes_dictionary;
 /// Module to define string-based datavalue dictionaries.
 pub mod string_dv_dict;
+/// Module to define the [StringMap]
+pub mod string_map;
 pub(crate) use string_dv_dict::IriDvDictionary;
 pub(crate) use string_dv_dict::LangStringDvDictionary;
 pub(crate) use string_dv_dict::OtherDvDictionary;

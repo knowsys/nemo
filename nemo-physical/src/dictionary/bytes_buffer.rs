@@ -86,8 +86,8 @@ impl BytesBuffer {
     /// This data can be turned into a [BytesRef] by a [GlobalBytesBuffer].
     ///
     /// TODO: Allocation of new pages could re-use freed pages instead of always appending.
-    fn push_bytes(&mut self, buffer: usize, s: &[u8]) -> (usize, usize) {
-        let len = s.len();
+    fn push_bytes(&mut self, buffer: usize, bytes: &[u8]) -> (usize, usize) {
+        let len = bytes.len();
         assert!(len < PAGE_SIZE);
 
         self.acquire_page_lock();
@@ -100,8 +100,10 @@ impl BytesBuffer {
         let page_inner_addr = self.pages[page_num].1.len();
         // TODO: Presumably the following is faster than extend_from_slice(), but this needs benchmarking
         let old_len = self.pages[page_num].1.len();
-        self.pages[page_num].1.resize_with(old_len + s.len(), || 0);
-        self.pages[page_num].1[old_len..].copy_from_slice(s);
+        self.pages[page_num]
+            .1
+            .resize_with(old_len + bytes.len(), || 0);
+        self.pages[page_num].1[old_len..].copy_from_slice(bytes);
         self.release_page_lock();
 
         (page_num * PAGE_SIZE + page_inner_addr, len)
@@ -158,9 +160,9 @@ pub(crate) unsafe trait GlobalBytesBuffer: Debug + Sized {
     }
 
     /// Inserts a byte array into the buffer and returns its address and length.
-    fn push_bytes(buffer: usize, s: &[u8]) -> BytesRef<Self> {
+    fn push_bytes(buffer: usize, bytes: &[u8]) -> BytesRef<Self> {
         unsafe {
-            let (address, len) = Self::get().push_bytes(buffer, s);
+            let (address, len) = Self::get().push_bytes(buffer, bytes);
             BytesRef::new(address, len)
         }
     }
@@ -293,6 +295,26 @@ impl<B: GlobalBytesBuffer> Clone for BytesRef<B> {
         *self
     }
 }
+
+/// This macro declares a new GlobalBytesBuffer of the given name.
+/// The buffer name must be unique, but upper case (which we do not
+/// attempt to achieve in the macro ...).
+/// All declarations are at the place where the macro is invoked and
+/// are private to the crate, which is the widest visibility intended
+/// for the unsafe code involved.
+macro_rules! declare_bytes_buffer {
+    ($buf_name:ident, $buf_name_upper:ident) => {
+        pub(crate) static mut $buf_name_upper: BytesBuffer = BytesBuffer::new();
+        #[derive(Debug)]
+        pub(crate) struct $buf_name;
+        unsafe impl GlobalBytesBuffer for $buf_name {
+            unsafe fn get() -> &'static mut BytesBuffer {
+                &mut $buf_name_upper
+            }
+        }
+    };
+}
+pub(crate) use declare_bytes_buffer;
 
 #[cfg(test)]
 mod test {

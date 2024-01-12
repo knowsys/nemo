@@ -3,30 +3,6 @@ use hashbrown::HashMap;
 use super::bytes_buffer::{BytesRef, GlobalBytesBuffer};
 use super::{AddResult, KNOWN_ID_MARK};
 
-/// This macro declares a new BytesDictionary of the given name,
-/// which uses the given buffer name to store its global data.
-/// The buffer name must be unique to each declared dictionary type,
-/// but upper case (which we do not attempt to achieve in the macro ...).
-/// All declarations are at the place where the macro is invoked and
-/// are private. There is no need for wider visibility, since one can better
-/// always create a new type for a new use of such a dictionary.
-#[macro_export]
-macro_rules! declare_bytes_dictionary {
-    ($dict_name:ident, $buf_name:ident) => {
-        static mut $buf_name: BytesBuffer = BytesBuffer::new();
-        paste::paste! {
-            #[derive(Debug)]
-            struct [<$dict_name GlobalBuffer>];
-            unsafe impl GlobalBytesBuffer for [<$dict_name GlobalBuffer>] {
-                unsafe fn get() -> &'static mut BytesBuffer {
-                    &mut $buf_name
-                }
-            }
-            type $dict_name = BytesDictionary<[<$dict_name GlobalBuffer>]>;
-        }
-    };
-}
-
 /// A struct that implements a bijection between byte arrays and integers, where the integers
 /// are automatically assigned upon insertion.
 /// Byte arrays are stored in a compact buffer to reduce memory overhead and fragmentation.
@@ -134,14 +110,14 @@ impl<B: GlobalBytesBuffer> Drop for BytesDictionary<B> {
 
 #[cfg(test)]
 mod test {
-    use crate::declare_bytes_dictionary;
     use crate::dictionary::{
         bytes_buffer::{BytesBuffer, GlobalBytesBuffer},
         bytes_dictionary::BytesDictionary,
         AddResult, KNOWN_ID_MARK,
     };
 
-    declare_bytes_dictionary!(TestBytesDictionary, TEST_BUFFER);
+    crate::dictionary::bytes_buffer::declare_bytes_buffer!(TestBytesBuffer, TEST_BUFFER);
+    type TestBytesDictionary = BytesDictionary<TestBytesBuffer>;
 
     #[test]
     fn add_and_get() {
