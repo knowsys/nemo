@@ -1,6 +1,7 @@
 use flate2::read::MultiGzDecoder;
 use nemo_physical::datavalues::AnyDataValue;
 use nemo_physical::dictionary::meta_dv_dict::MetaDvDictionary;
+use nemo_physical::dictionary::string_dictionary::BenchmarkStringDictionary;
 use nemo_physical::dictionary::DvDict;
 use std::env;
 use std::fs::File;
@@ -16,18 +17,23 @@ use nemo_physical::dictionary::{
 enum DictEnum {
     StringHash(HashMapDictionary),
     StringMeta(MetaDictionary),
+    StringBuffer(BenchmarkStringDictionary),
     DvMeta(MetaDvDictionary),
 }
 impl DictEnum {
     fn from_dict_type(dict_type: &str) -> Self {
         match dict_type {
-            "stringhash" => {
+            "oldhash" => {
                 println!("Using string-based HashMapDictionary.");
                 DictEnum::StringHash(HashMapDictionary::new())
             }
-            "stringmeta" => {
+            "oldmeta" => {
                 println!("Using string-based MetaDictionary.");
                 DictEnum::StringMeta(MetaDictionary::new())
+            }
+            "string" => {
+                println!("Using StringDictionary (plain strings, not DataValues).");
+                DictEnum::StringBuffer(Default::default())
             }
             "meta" => {
                 println!("Using MetaDvDictionary.");
@@ -41,6 +47,7 @@ impl DictEnum {
         match self {
             DictEnum::StringHash(dict) => dict.add_string(string),
             DictEnum::StringMeta(dict) => dict.add_string(string),
+            DictEnum::StringBuffer(dict) => dict.add_str(string.as_str()),
             DictEnum::DvMeta(dict) => dict.add_datavalue(dv),
         }
     }
@@ -49,6 +56,7 @@ impl DictEnum {
         match &self {
             DictEnum::StringHash(dict) => dict.len(),
             DictEnum::StringMeta(dict) => dict.len(),
+            DictEnum::StringBuffer(dict) => dict.len(),
             DictEnum::DvMeta(dict) => dict.len(),
         }
     }
@@ -65,7 +73,7 @@ fn main() {
             "  <filename> File with dictionary entries, one per line, possibly with duplicates."
         );
         println!(
-            "  <dicttype> Identifier for the dictionary to test, e.g., \"hash\" or \"prefix\"."
+            "  <dicttype> Identifier for the dictionary to test, e.g., \"meta\" or \"string\"."
         );
         println!(
             "  <nonstop> If anything is given here, the program will terminate without asking for a prompt."
