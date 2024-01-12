@@ -49,7 +49,7 @@ use std::collections::HashMap;
 use std::ops::Deref;
 use std::{fmt::Debug, hash::Hash, iter::IntoIterator};
 
-use crate::dictionary::meta_dv_dict::MetaDictionary;
+use crate::dictionary::meta_dv_dict::MetaDvDictionary;
 
 use super::triescan::TrieScanEnum;
 
@@ -121,6 +121,6 @@ pub(crate) trait OperationGenerator {
     fn generate<'a>(
         &'_ self,
         input: Vec<TrieScanEnum<'a>>,
-        dictionary: &'a MetaDictionary,
+        dictionary: &'a MetaDvDictionary,
     ) -> TrieScanEnum<'a>;
 }

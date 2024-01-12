@@ -11,7 +11,7 @@ use crate::{
         operations::ColumnScanJoin,
     },
     datatypes::{Double, Float, StorageTypeName},
-    dictionary::meta_dv_dict::MetaDictionary,
+    dictionary::meta_dv_dict::MetaDvDictionary,
     tabular::{
         operations::OperationColumnMarker,
         triescan::{PartialTrieScan, TrieScanEnum},
@@ -134,7 +134,7 @@ impl OperationGenerator for GeneratorJoin {
     fn generate<'a>(
         &'_ self,
         trie_scans: Vec<TrieScanEnum<'a>>,
-        _dictionary: &'a MetaDictionary,
+        _dictionary: &'a MetaDvDictionary,
     ) -> TrieScanEnum<'a> {
         // `self.bindings` contains the columns used for each output index.
         // `layers_to_scans` just contains a list of the relation indices for each output.

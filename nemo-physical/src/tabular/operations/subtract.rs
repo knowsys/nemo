@@ -10,7 +10,7 @@ use crate::{
         operations::ColumnScanSubtract,
     },
     datatypes::{Double, Float, StorageTypeName},
-    dictionary::meta_dv_dict::MetaDictionary,
+    dictionary::meta_dv_dict::MetaDvDictionary,
     tabular::triescan::{PartialTrieScan, TrieScanEnum},
 };
 
@@ -42,7 +42,7 @@ impl OperationGenerator for GeneratorSubtract {
     fn generate<'a>(
         &'_ self,
         mut trie_scans: Vec<TrieScanEnum<'a>>,
-        _dictionary: &'a MetaDictionary,
+        _dictionary: &'a MetaDvDictionary,
     ) -> TrieScanEnum<'a> {
         debug_assert!(
             trie_scans.len() > 1,

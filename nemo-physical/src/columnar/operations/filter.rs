@@ -6,7 +6,7 @@ use crate::{
     columnar::columnscan::{ColumnScan, ColumnScanCell},
     datatypes::ColumnDataType,
     datavalues::AnyDataValue,
-    dictionary::meta_dv_dict::MetaDictionary,
+    dictionary::meta_dv_dict::MetaDvDictionary,
     function::evaluation::StackProgram,
 };
 
@@ -27,7 +27,7 @@ where
 
     /// Dictionary used for translating values of `value_scan` into [AnyDataValue]
     /// TODO: Lifetime probably not correct
-    dictionary: &'a MetaDictionary,
+    dictionary: &'a MetaDvDictionary,
 
     /// Current value
     current_value: Option<T>,
@@ -42,7 +42,7 @@ where
         value_scan: &'a ColumnScanCell<'a, T>,
         program: StackProgram,
         referenced_values: Rc<RefCell<Vec<AnyDataValue>>>,
-        dictionary: &'a MetaDictionary,
+        dictionary: &'a MetaDvDictionary,
     ) -> Self {
         Self {
             value_scan,

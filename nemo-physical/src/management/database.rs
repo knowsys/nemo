@@ -43,7 +43,7 @@ use super::{
 };
 
 /// Dictionary Implementation used in the current configuration
-pub type Dict = crate::dictionary::meta_dv_dict::MetaDictionary;
+pub type Dict = crate::dictionary::meta_dv_dict::MetaDvDictionary;
 
 /// Type that represents a reordering of the columns of a table.
 /// It is given in form of a permutation which encodes the transformation

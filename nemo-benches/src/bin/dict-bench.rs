@@ -1,4 +1,7 @@
 use flate2::read::MultiGzDecoder;
+use nemo_physical::datavalues::AnyDataValue;
+use nemo_physical::dictionary::meta_dv_dict::MetaDvDictionary;
+use nemo_physical::dictionary::DvDict;
 use std::env;
 use std::fs::File;
 use std::io::prelude::*;
@@ -10,17 +13,44 @@ use nemo_physical::dictionary::{
     hash_map_dictionary::HashMapDictionary, meta_dictionary::MetaDictionary, AddResult, Dictionary,
 };
 
-fn create_dictionary(dict_type: &str) -> Box<dyn Dictionary> {
-    match dict_type {
-        "hashmap" => {
-            println!("Using HashMapDictionary.");
-            Box::new(HashMapDictionary::new())
+enum DictEnum {
+    StringHash(HashMapDictionary),
+    StringMeta(MetaDictionary),
+    DvMeta(MetaDvDictionary),
+}
+impl DictEnum {
+    fn from_dict_type(dict_type: &str) -> Self {
+        match dict_type {
+            "stringhash" => {
+                println!("Using string-based HashMapDictionary.");
+                DictEnum::StringHash(HashMapDictionary::new())
+            }
+            "stringmeta" => {
+                println!("Using string-based MetaDictionary.");
+                DictEnum::StringMeta(MetaDictionary::new())
+            }
+            "meta" => {
+                println!("Using MetaDvDictionary.");
+                DictEnum::DvMeta(MetaDvDictionary::new())
+            }
+            _ => panic!("Unexpected dictionary type '{}'.", dict_type),
         }
-        "meta" => {
-            println!("Using MetaDictionary.");
-            Box::new(MetaDictionary::new())
+    }
+
+    fn add(&mut self, string: String, dv: AnyDataValue) -> AddResult {
+        match self {
+            DictEnum::StringHash(dict) => dict.add_string(string),
+            DictEnum::StringMeta(dict) => dict.add_string(string),
+            DictEnum::DvMeta(dict) => dict.add_datavalue(dv),
         }
-        _ => panic!("Unexpected dictionary type '{}'.", dict_type),
+    }
+
+    fn len(&mut self) -> usize {
+        match &self {
+            DictEnum::StringHash(dict) => dict.len(),
+            DictEnum::StringMeta(dict) => dict.len(),
+            DictEnum::DvMeta(dict) => dict.len(),
+        }
     }
 }
 
@@ -49,7 +79,7 @@ fn main() {
         File::open(filename).expect("Cannot open file."),
     ));
 
-    let mut dict = create_dictionary(dicttype);
+    let mut dict = DictEnum::from_dict_type(dicttype);
     let mut count_lines = 0;
     let mut count_unique = 0;
     let mut bytes = 0;
@@ -62,8 +92,47 @@ fn main() {
         let s = l.unwrap();
         let b = s.len();
 
-        let entry_status = dict.add_string(s);
-        match entry_status {
+        let dv: AnyDataValue;
+        // Simple ad hoc parsing to get realisitc data; some errors would be ok
+        match s.chars().nth(0) {
+            Some('"') => {
+                if let Some(type_pos) = s.find("\"^^<") {
+                    // println!("Lit {} | {}", &s[1..type_pos], &s[type_pos+4..s.len()-1]);
+                    if let Ok(val) = AnyDataValue::new_from_typed_literal(
+                        s[1..s.len() - 1].to_string(),
+                        s[type_pos + 4..s.len() - 1].to_string(),
+                    ) {
+                        dv = val;
+                    } else {
+                        dv = AnyDataValue::new_string(s.clone());
+                    }
+                } else if let Some(at_pos) = s.rfind("\"@") {
+                    if at_pos > 0 {
+                        // println!("Lang {} | {}", &s[1..at_pos], &s[at_pos+2..s.len()]);
+                        dv = AnyDataValue::new_language_tagged_string(
+                            s[1..at_pos].to_string(),
+                            s[at_pos + 2..s.len()].to_string(),
+                        );
+                    } else {
+                        // avoid panics when for strings like "@sometag"
+                        dv = AnyDataValue::new_string(s[1..s.len() - 1].to_string());
+                    }
+                } else {
+                    //println!("String {}", &s[1..s.len()-1]);
+                    dv = AnyDataValue::new_string(s[1..s.len() - 1].to_string());
+                }
+            }
+            Some('<') => {
+                dv = AnyDataValue::new_iri(s[1..s.len() - 1].to_string());
+            }
+            _ => {
+                dv = AnyDataValue::new_string(s.clone());
+            }
+        }
+
+        let add_result = dict.add(s, dv);
+
+        match add_result {
             AddResult::Fresh(_value) => {
                 bytes += b;
                 count_unique += 1;

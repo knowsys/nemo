@@ -3,7 +3,8 @@ use std::cmp::Ordering;
 use delegate::delegate;
 
 use crate::{
-    datavalues::AnyDataValue, dictionary::meta_dv_dict::MetaDictionary, generate_datatype_forwarder,
+    datavalues::AnyDataValue, dictionary::meta_dv_dict::MetaDvDictionary,
+    generate_datatype_forwarder,
 };
 
 use super::{double::Double, float::Float, into_datavalue::IntoDataValue, StorageTypeName};
@@ -288,7 +289,7 @@ impl IntoDataValue for StorageValueT {
             Self::Float(value) => value,
             Self::Double(value) => value,
         } {
-            fn into_datavalue(self, dictionary: &MetaDictionary) -> Option<AnyDataValue>;
+            fn into_datavalue(self, dictionary: &MetaDvDictionary) -> Option<AnyDataValue>;
         }
     }
 }

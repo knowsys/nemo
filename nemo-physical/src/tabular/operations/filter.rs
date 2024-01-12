@@ -13,7 +13,7 @@ use crate::{
     },
     datatypes::{into_datavalue::IntoDataValue, StorageTypeName},
     datavalues::AnyDataValue,
-    dictionary::meta_dv_dict::MetaDictionary,
+    dictionary::meta_dv_dict::MetaDvDictionary,
     function::{evaluation::StackProgram, tree::FunctionTree},
     tabular::triescan::{PartialTrieScan, TrieScanEnum},
 };
@@ -91,7 +91,7 @@ impl OperationGenerator for GeneratorFilter {
     fn generate<'a>(
         &'_ self,
         mut trie_scans: Vec<TrieScanEnum<'a>>,
-        dictionary: &'a MetaDictionary,
+        dictionary: &'a MetaDvDictionary,
     ) -> TrieScanEnum<'a> {
         let trie_scan = trie_scans.remove(0);
 
@@ -154,7 +154,7 @@ pub struct TrieScanFilter<'a> {
     trie_scan: Box<TrieScanEnum<'a>>,
     /// Dictionary used to translate column values in [AnyDataValue] for evaluation
     /// TODO: Check lifetimes
-    dictionary: &'a MetaDictionary,
+    dictionary: &'a MetaDvDictionary,
 
     /// Marks for each output index,
     /// whether the value of the corresponding layer is used as input to some function.

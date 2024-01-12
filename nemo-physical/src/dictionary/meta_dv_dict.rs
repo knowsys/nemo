@@ -156,7 +156,7 @@ impl DictIterator {
 
     /// Advance iterator, and return the id of the next dictionary, or
     /// [`NO_DICT`] if no further matching dictionaries exist.
-    fn next(&mut self, dv: &AnyDataValue, md: &MetaDictionary) -> usize {
+    fn next(&mut self, dv: &AnyDataValue, md: &MetaDvDictionary) -> usize {
         // First look for infix dictionary:
         if self.position == 0 {
             self.position = 1; // move on, whatever happens
@@ -208,7 +208,7 @@ const NO_DICT: DictId = usize::MAX;
 /// but it is also designed with the possibility of external read-only dictionaries in mind,
 /// as they might occur when loading pre-indexed data from external sources.
 #[derive(Debug)]
-pub struct MetaDictionary {
+pub struct MetaDvDictionary {
     /// Vector to map global block numbers to pairs (sub-dictionary, local block number)
     dictblocks: Vec<(DictId, usize)>,
     /// Vector of all sub-dictionaries, indexed by their sub-dictionary number
@@ -237,8 +237,8 @@ pub struct MetaDictionary {
     size: usize,
 }
 
-impl Default for MetaDictionary {
-    /// Initialise a [MetaDictionary].
+impl Default for MetaDvDictionary {
+    /// Initialise a [MetaDvDictionary].
     /// Sets up relevant default dictionaries for basic blocks.
     fn default() -> Self {
         let mut result = Self {
@@ -265,7 +265,7 @@ impl Default for MetaDictionary {
     }
 }
 
-impl MetaDictionary {
+impl MetaDvDictionary {
     /// Construct a new and empty dictionary.
     pub fn new() -> Self {
         Self::default()
@@ -483,7 +483,7 @@ impl MetaDictionary {
     }
 }
 
-impl DvDict for MetaDictionary {
+impl DvDict for MetaDvDictionary {
     fn add_datavalue(&mut self, dv: AnyDataValue) -> AddResult {
         self.add_datavalue_inline(dv)
     }
@@ -554,11 +554,11 @@ mod test {
         dictionary::{AddResult, DvDict},
     };
 
-    use super::MetaDictionary;
+    use super::MetaDvDictionary;
 
     #[test]
     fn add_and_get() {
-        let mut dict = MetaDictionary::new();
+        let mut dict = MetaDvDictionary::new();
 
         let mut dvs = Vec::new();
         dvs.push(AnyDataValue::new_string("http://example.org".to_string()));
@@ -592,7 +592,7 @@ mod test {
 
     #[test]
     fn add_and_get_nulls() {
-        let mut dict = MetaDictionary::new();
+        let mut dict = MetaDvDictionary::new();
 
         let n1_id = dict.fresh_null_id();
         let nv1 = dict.id_to_datavalue(n1_id).unwrap();

@@ -8,7 +8,7 @@ use crate::{
         operations::ColumnScanPrune,
     },
     datatypes::{ColumnDataType, StorageTypeName, StorageValueT},
-    dictionary::meta_dv_dict::MetaDictionary,
+    dictionary::meta_dv_dict::MetaDvDictionary,
     tabular::triescan::{PartialTrieScan, TrieScan, TrieScanEnum},
 };
 
@@ -36,7 +36,7 @@ impl OperationGenerator for GeneratorPrune {
     fn generate<'a>(
         &'_ self,
         mut input: Vec<TrieScanEnum<'a>>,
-        _dictionary: &'a MetaDictionary,
+        _dictionary: &'a MetaDvDictionary,
     ) -> TrieScanEnum<'a> {
         debug_assert!(input.len() == 1);
         let input_trie_scan = input.remove(0);
