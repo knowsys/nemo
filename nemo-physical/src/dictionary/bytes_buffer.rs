@@ -23,7 +23,7 @@ const LENGTH_BITS_MASK: u64 = (1 << (PAGE_ADDR_BITS - 1)) - 1;
 /// are needed to specify a position within a page. References to buffered strings are represented
 /// by [`BytesRef`], which stores a starting address and length of the slice. The `usize` starting
 /// address is global (uniform for all buffers), with the lower [`PAGE_ADDR_BITS`] bits encoding a position within a page,
-/// and the remaining higher bits encoding the number of the page (whatever buffer it belongs to).
+/// and the remaining higher bits encoding the numeric id of the page (whatever buffer it belongs to).
 /// Since this address must fit into usize, 32bit platforms can only support 2 to the power of
 /// (32-[`PAGE_ADDR_BITS`]) pages. Moreover, since [`BytesRef`] combines the address and the slice length
 /// into a single `u64` (on all platforms), even 64bit platforms cannot use all 64bits for byte array addresses.
@@ -320,22 +320,8 @@ pub(crate) use declare_bytes_buffer;
 mod test {
     use super::{BytesBuffer, GlobalBytesBuffer};
 
-    static mut TEST_BUFFER: BytesBuffer = BytesBuffer::new();
-    #[derive(Debug)]
-    struct TestGlobalBuffer;
-    unsafe impl GlobalBytesBuffer for TestGlobalBuffer {
-        unsafe fn get() -> &'static mut BytesBuffer {
-            &mut TEST_BUFFER
-        }
-    }
-    static mut TEST_BUFFER2: BytesBuffer = BytesBuffer::new();
-    #[derive(Debug)]
-    struct TestGlobalBuffer2;
-    unsafe impl GlobalBytesBuffer for TestGlobalBuffer2 {
-        unsafe fn get() -> &'static mut BytesBuffer {
-            &mut TEST_BUFFER2
-        }
-    }
+    crate::dictionary::bytes_buffer::declare_bytes_buffer!(TestGlobalBuffer, TEST_BUFFER);
+    crate::dictionary::bytes_buffer::declare_bytes_buffer!(TestGlobalBuffer2, TEST_BUFFER2);
 
     #[test]
     fn test_buffer() {

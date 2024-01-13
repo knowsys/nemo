@@ -311,7 +311,7 @@ impl<B: GlobalBytesBuffer> Default for GenericStringDictionary<B> {
 
 crate::dictionary::bytes_buffer::declare_bytes_buffer!(
     StringDictBytesBuffer,
-    STRING_DICT_TEST_BUFFER
+    STRING_DICT_BYTES_BUFFER
 );
 pub(crate) type StringDictionary = GenericStringDictionary<StringDictBytesBuffer>;
 
