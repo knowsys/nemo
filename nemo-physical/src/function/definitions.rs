@@ -2,6 +2,7 @@
 
 pub mod boolean;
 pub mod casting;
+pub mod generic;
 pub mod numeric;
 pub mod string;
 
@@ -12,6 +13,7 @@ use crate::datavalues::AnyDataValue;
 use self::{
     boolean::{BooleanConjunction, BooleanDisjunction, BooleanNegation},
     casting::{CastingIntoDouble, CastingIntoFloat, CastingIntoInteger64},
+    generic::{Equals, Unequals},
     numeric::{
         NumericAbsolute, NumericAddition, NumericCosine, NumericDivision, NumericGreaterthan,
         NumericGreaterthaneq, NumericLessthan, NumericLessthaneq, NumericLogarithm,
@@ -87,6 +89,8 @@ pub(crate) trait BinaryFunction {
 /// Enum containing all implementations of [BinaryFunction]
 #[derive(Debug, Clone, Copy)]
 pub enum BinaryFunctionEnum {
+    Equals(Equals),
+    Unequals(Unequals),
     NumericAddition(NumericAddition),
     NumericSubtraction(NumericSubtraction),
     NumericMultiplication(NumericMultiplication),
@@ -108,6 +112,8 @@ pub enum BinaryFunctionEnum {
 impl BinaryFunction for BinaryFunctionEnum {
     delegate! {
         to match self {
+            Self::Equals(function) => function,
+            Self::Unequals(function) => function,
             Self::NumericAddition(function) => function,
             Self::NumericSubtraction(function) => function,
             Self::NumericMultiplication(function) => function,

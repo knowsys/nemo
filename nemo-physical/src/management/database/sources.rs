@@ -7,7 +7,7 @@ use bytesize::ByteSize;
 use crate::{
     datasources::{table_providers::TableProvider, tuple_writer::TupleWriter},
     datavalues::AnyDataValue,
-    management::ByteSized,
+    management::bytesized::ByteSized,
 };
 
 /// Simple row-based table containing [AnyDataValue]s

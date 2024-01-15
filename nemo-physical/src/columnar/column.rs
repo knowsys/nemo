@@ -13,7 +13,7 @@ use bytesize::ByteSize;
 use crate::{
     datatypes::{ColumnDataType, RunLengthEncodable},
     generate_forwarder,
-    management::ByteSized,
+    management::bytesized::ByteSized,
 };
 
 use self::{rle::ColumnRle, vector::ColumnVector};

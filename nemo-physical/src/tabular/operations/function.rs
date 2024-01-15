@@ -45,7 +45,7 @@ pub struct GeneratorFunction {
 
 impl GeneratorFunction {
     /// Create a new [GeneratorFunction]
-    pub fn new(output: OperationTable, functions: FunctionAssignment) -> Self {
+    pub fn new(output: OperationTable, functions: &FunctionAssignment) -> Self {
         let mut output_columns = Vec::<OutputColumn>::new();
         let mut input_indices = Vec::<bool>::new();
 

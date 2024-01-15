@@ -9,7 +9,7 @@ use crate::columnar::columnscan::{ColumnScanCell, ColumnScanEnum, ColumnScanT};
 use crate::datatypes::{ColumnDataType, Double, Float, StorageValueT};
 use crate::datatypes::{RunLengthEncodable, StorageTypeName};
 use crate::generate_datatype_forwarder;
-use crate::management::ByteSized;
+use crate::management::bytesized::ByteSized;
 
 use super::{Column, ColumnEnum};
 

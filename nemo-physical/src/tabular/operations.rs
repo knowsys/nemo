@@ -8,7 +8,13 @@ pub mod prune;
 pub mod subtract;
 pub mod union;
 
-use std::{collections::HashMap, fmt::Debug, hash::Hash, ops::Deref};
+use std::{
+    collections::{hash_map::Entry, HashMap},
+    fmt::Debug,
+    hash::Hash,
+    iter::IntoIterator,
+    ops::Deref,
+};
 
 use delegate::delegate;
 
@@ -29,10 +35,15 @@ pub struct OperationColumnMarker(usize);
 
 /// This object is used to reference columns of input/output tables
 /// of a data base operation.
-#[derive(Debug, Clone)]
+#[derive(Debug, Default, Clone)]
 pub struct OperationTable(Vec<OperationColumnMarker>);
 
 impl OperationTable {
+    /// Create a [OperationTable] which marks each column with a distinct [OperationColumnMarker].
+    pub fn new_unique(arity: usize) -> Self {
+        Self((0..arity).map(|i| OperationColumnMarker(i)).collect())
+    }
+
     /// Return the number of columns associated with this table.
     pub fn arity(&self) -> usize {
         self.0.len()
@@ -43,6 +54,35 @@ impl OperationTable {
         self.0
             .iter()
             .position(|current_marker| current_marker == marker)
+    }
+
+    /// Push a new marker to end of this table.
+    pub fn push(&mut self, marker: OperationColumnMarker) {
+        self.0.push(marker);
+    }
+
+    /// Pushes a new unique [OperationColumnMarker] at the end of the table.
+    ///
+    /// Returns a reference to the newly added [OperationColumnMarker].
+    pub fn push_new(&mut self) -> &OperationColumnMarker {
+        self.push(OperationColumnMarker(self.0.len()));
+        self.0.last().expect("Value has been pushed above")
+    }
+
+    /// Pushes a new unique [OperationColumnMarker] at given index in the table.
+    ///
+    /// Returns a reference to the newly added [OperationColumnMarker].
+    pub fn push_new_at(&mut self, index: usize) -> &OperationColumnMarker {
+        self.0.insert(index, OperationColumnMarker(self.0.len()));
+        &self.0[index]
+    }
+
+    /// Return the [OperationColumnMarker] of the column with the given index.
+    ///
+    /// # Panics
+    /// Panics if there is no column with this index.
+    pub fn get(&self, index: usize) -> &OperationColumnMarker {
+        &self.0[index]
     }
 }
 
@@ -63,15 +103,69 @@ impl Deref for OperationTable {
     }
 }
 
-/// Helper object to translate [OperationTable] like structures
-/// from the users of the physical crate into actual [OperationTable]s
-#[derive(Debug)]
+/// Helper object to obtain [OperationTable]s
+/// mainly by providing a translation between
+/// user defined "markers" (supplied as a generic parameter to this object)
+/// and [OperationColumnMarker]s.
+#[derive(Debug, Default)]
 pub struct OperationTableGenerator<ExternalMarker>
 where
     ExternalMarker: Clone + PartialEq + Eq + Hash,
 {
     /// Associates an external marker with an [OperationColumnMarker]
-    _map: HashMap<ExternalMarker, OperationColumnMarker>,
+    map: HashMap<ExternalMarker, OperationColumnMarker>,
+}
+
+impl<ExternalMarker> OperationTableGenerator<ExternalMarker>
+where
+    ExternalMarker: Clone + PartialEq + Eq + Hash,
+{
+    /// Create a new
+    pub fn new() -> Self {
+        Self {
+            map: HashMap::new(),
+        }
+    }
+
+    /// Add a new marker.
+    pub fn add_marker(&mut self, marker: ExternalMarker) {
+        let next_marker = OperationColumnMarker(self.map.len());
+        match self.map.entry(marker) {
+            Entry::Vacant(entry) => {
+                entry.insert(next_marker);
+            }
+            Entry::Occupied(_) => {}
+        }
+    }
+
+    /// Generate an [OperationTable] from an iterator.
+    ///
+    /// # Panics
+    /// Panics if there is no known translation from the external markers
+    /// into [OperationColumnMarker]s.
+    pub fn operation_table<'a, ExternalIterator: Iterator<Item = &'a ExternalMarker>>(
+        &self,
+        iterator: ExternalIterator,
+    ) -> OperationTable
+    where
+        ExternalMarker: 'a,
+    {
+        OperationTable(
+            iterator
+                .map(|marker| {
+                    self.map
+                        .get(marker)
+                        .expect("Function assumes that every relevant external marker is known")
+                        .clone()
+                })
+                .collect(),
+        )
+    }
+
+    /// Returns the [OperationColumnMarker] associated with the argument.
+    pub fn get<'a>(&'a self, marker: &ExternalMarker) -> Option<&'a OperationColumnMarker> {
+        self.map.get(marker)
+    }
 }
 
 /// Trait for objects that are able to generate [TrieScanEnum],
@@ -89,10 +183,15 @@ pub(crate) trait OperationGenerator {
 }
 
 pub(crate) enum OperationGeneratorEnum {
+    /// Join
     Join(GeneratorJoin),
+    /// Union
     Union(GeneratorUnion),
+    /// Subtract
     Subtract(GeneratorSubtract),
+    /// Filter
     Filter(GeneratorFilter),
+    /// Function
     Function(GeneratorFunction),
 }
 
@@ -120,7 +219,7 @@ impl Debug for OperationGeneratorEnum {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Join(generator) => f.write_fmt(format_args!("Join ({generator:?})")),
-            Self::Union(generator) => f.write_fmt(format_args!("Union")),
+            Self::Union(_generator) => f.write_fmt(format_args!("Union")),
             Self::Subtract(generator) => f.write_fmt(format_args!("Subtract ({generator:?})")),
             Self::Filter(generator) => f.write_fmt(format_args!("Filter ({generator:?})")),
             Self::Function(generator) => f.write_fmt(format_args!("Function ({generator:?})")),

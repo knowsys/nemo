@@ -6,7 +6,7 @@ use std::{
 use bytesize::ByteSize;
 use num::Zero;
 
-use crate::management::ByteSized;
+use crate::management::bytesized::ByteSized;
 
 /// Data, which can be run length compressed with increments of [`RunLengthEncodable::Step`]
 pub trait RunLengthEncodable: Zero {

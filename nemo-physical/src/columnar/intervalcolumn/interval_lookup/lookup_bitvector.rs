@@ -11,7 +11,7 @@ use crate::{
         column::{Column, ColumnEnum},
         columnbuilder::{adaptive::ColumnBuilderAdaptive, ColumnBuilder},
     },
-    management::ByteSized,
+    management::bytesized::ByteSized,
 };
 
 use super::{IntervalLookup, IntervalLookupBuilder};

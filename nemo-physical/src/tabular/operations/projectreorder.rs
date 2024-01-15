@@ -30,6 +30,11 @@ pub struct GeneratorProjectReorder {
 
 impl GeneratorProjectReorder {
     /// Create a new [GeneratorProjectReorder].
+    ///
+    /// Every marker in the output table must appear in the input table.
+    ///
+    /// # Panics
+    /// Panics if the above condition is not met.
     pub fn new(output: OperationTable, input: OperationTable) -> Self {
         let projectreordering = ProjectReordering::from_transformation(&input, &output);
         let arity_output = output.len();

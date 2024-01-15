@@ -3,21 +3,29 @@
 
 use std::{
     cell::RefCell,
-    collections::HashSet,
+    collections::{hash_map::Entry, HashMap, HashSet},
     fmt::Debug,
     rc::{Rc, Weak},
 };
 
 use crate::{
+    management::database::execution_series::{
+        ExecutionTreeLeaf, ExecutionTreeOperation, ExecutionTreeRoot,
+    },
     tabular::operations::{
-        filter::FilterAssignment, function::FunctionAssignment, join::GeneratorJoin,
+        filter::{Filters, GeneratorFilter},
+        function::{FunctionAssignment, GeneratorFunction},
+        join::GeneratorJoin,
+        projectreorder::GeneratorProjectReorder,
+        subtract::GeneratorSubtract,
+        union::GeneratorUnion,
         OperationGeneratorEnum, OperationTable,
     },
     util::mapping::permutation::Permutation,
 };
 
 use super::database::{
-    execution_series::ExecutionSeries,
+    execution_series::{ComputedTableId, ExecutionSeries, ExecutionTree, LoadedTableId},
     id::{ExecutionId, PermanentTableId, TableId},
 };
 
@@ -56,10 +64,11 @@ impl ExecutionNodeRef {
             .expect("Referenced execution node has been deleted")
     }
 
-    /// Return the id which identifies the referenced node
+    /// Return the [ExecutionId] which identifies the referenced node
+    ///
     /// # Panics
     /// Throws a panic if borrowing the current [ExecutionNode] is already mutably borrowed.
-    pub fn id(&self) -> usize {
+    pub fn id(&self) -> ExecutionId {
         let node_rc = self.get_rc();
         let node_borrow = node_rc.borrow();
 
@@ -118,14 +127,11 @@ impl ExecutionNodeRef {
     }
 }
 
-/// Identifies a node within an [ExecutionPlan]
-pub type ExecutionNodeId = usize;
-
 /// Represents a node in an [ExecutionPlan]
 #[derive(Debug)]
 pub struct ExecutionNode {
     /// Identifier of the node.
-    pub id: ExecutionNodeId,
+    pub id: ExecutionId,
 
     /// Operation that should be performed on this node
     pub operation: ExecutionOperation,
@@ -147,7 +153,7 @@ pub enum ExecutionOperation {
     /// Reorder or remove columns from the table represented by the subnode
     ProjectReorder(ExecutionNodeRef),
     /// Apply a filter to the table represented by the subnode
-    Filter(ExecutionNodeRef, FilterAssignment),
+    Filter(ExecutionNodeRef, Filters),
     /// Introduce new columns by applying a function to the columns of the table represented by the subnode
     Function(ExecutionNodeRef, FunctionAssignment),
     /// Aggreagte
@@ -174,8 +180,6 @@ struct ExecutionOutNode {
     result: ExecutionResult,
     /// Name which identifies this operation, e.g., for logging and timing.
     operation_name: String,
-    /// Handle for later identifying the result table of this node
-    execution_id: ExecutionId,
 }
 
 /// A DAG representing instructions for generating new tables.
@@ -197,7 +201,7 @@ impl ExecutionPlan {
         operation: ExecutionOperation,
         marked_columns: OperationTable,
     ) -> ExecutionNodeRef {
-        let id = self.nodes.len();
+        let id = self.current_execution_id.increment();
         let node = ExecutionNode {
             id,
             operation,
@@ -211,7 +215,7 @@ impl ExecutionPlan {
             .get_ref()
     }
 
-    /// Return [ExecutionNodeRef] for fetching a table from the [DatabaseInstance][super::DatabaseInstance].
+    /// Return [ExecutionNodeRef] for fetching a table from the [DatabaseInstance][super::database::DatabaseInstance].
     pub fn fetch_table(
         &mut self,
         marked_columns: OperationTable,
@@ -221,7 +225,7 @@ impl ExecutionPlan {
         self.push_and_return_reference(new_operation, marked_columns)
     }
 
-    /// Return [ExecutionNodeRef] for fetching a table from the [DatabaseInstance][super::DatabaseInstance]
+    /// Return [ExecutionNodeRef] for fetching a table from the [DatabaseInstance][super::database::DatabaseInstance]
     /// in a given [ColumnOrder].
     pub fn fetch_table_reordered(
         &mut self,
@@ -270,10 +274,10 @@ impl ExecutionPlan {
     /// Return [ExecutionNodeRef] for subtracting one table from another.
     pub fn subtract(
         &mut self,
-        marked_columns: OperationTable,
         main: ExecutionNodeRef,
         subtracted: Vec<ExecutionNodeRef>,
     ) -> ExecutionNodeRef {
+        let marked_columns = main.markers();
         let new_operation = ExecutionOperation::Subtract(main, subtracted);
         self.push_and_return_reference(new_operation, marked_columns)
     }
@@ -297,12 +301,8 @@ impl ExecutionPlan {
     }
 
     /// Return [ExecutionNodeRef] for restricing a column to a certain value.
-    pub fn filter(
-        &mut self,
-        marked_columns: OperationTable,
-        subnode: ExecutionNodeRef,
-        filters: FilterAssignment,
-    ) -> ExecutionNodeRef {
+    pub fn filter(&mut self, subnode: ExecutionNodeRef, filters: Filters) -> ExecutionNodeRef {
+        let marked_columns = subnode.markers();
         let new_operation = ExecutionOperation::Filter(subnode, filters);
         self.push_and_return_reference(new_operation, marked_columns)
     }
@@ -333,7 +333,7 @@ impl ExecutionPlan {
         result: ExecutionResult,
         operation_name: &str,
     ) -> ExecutionId {
-        let next_id = self.current_execution_id.increment();
+        let id = node.id();
 
         if let Some(index) = self
             .out_nodes
@@ -347,11 +347,10 @@ impl ExecutionPlan {
                 node,
                 result,
                 operation_name: String::from(operation_name),
-                execution_id: next_id,
             });
         }
 
-        next_id
+        id
     }
 
     /// Designate a [ExecutionNode] as an "output" node that will produce a temporary table.
@@ -395,171 +394,261 @@ impl ExecutionPlan {
 }
 
 impl ExecutionPlan {
-    // fn copy_subgraph(
-    //     new_plan: &mut ExecutionPlan,
-    //     node: ExecutionNodeRef,
-    //     write_node_ids: &HashSet<usize>,
-    // ) -> ExecutionNodeRef {
-    //     let node_rc = node.get_rc();
-    //     let node_operation = &node_rc.borrow().operation;
-    //     let node_id = node_rc.borrow().id;
+    fn execution_tree(
+        output_node: &ExecutionOutNode,
+        output_nodes: &[ExecutionOutNode],
+        computed_trees: &mut Vec<ExecutionTree>,
+        computed_trees_map: &mut HashMap<ExecutionId, ComputedTableId>,
+        loaded_tables: &mut HashMap<(PermanentTableId, ColumnOrder), LoadedTableId>,
+    ) -> ComputedTableId {
+        if let Some(id) = computed_trees_map.get(&output_node.node.id()) {
+            *id
+        } else {
+            let id = computed_trees.len();
 
-    //     if write_node_ids.contains(&node_id) {
-    //         return new_plan.fetch_new(node_id);
-    //     }
+            let root = Self::execution_node(
+                output_node.node.clone(),
+                output_nodes,
+                computed_trees,
+                computed_trees_map,
+                loaded_tables,
+            );
 
-    //     match node_operation {
-    //         ExecutionOperation::FetchExisting(id, order) => {
-    //             new_plan.fetch_existing_reordered(*id, order.clone())
-    //         }
-    //         ExecutionOperation::FetchNew(index) => new_plan.fetch_new(*index),
-    //         ExecutionOperation::Join(subnodes, bindings) => {
-    //             let new_subnodes = subnodes
-    //                 .iter()
-    //                 .cloned()
-    //                 .map(|n| Self::copy_subgraph(new_plan, n, write_node_ids))
-    //                 .collect();
+            let tree = ExecutionTree {
+                root,
+                id: output_node.node.id(),
+                result: output_node.result.clone(),
+                operation_name: output_node.operation_name.clone(),
+                cut_layers: 0, // TODO: Compute cut_layers
+            };
 
-    //             new_plan.join(new_subnodes, bindings.clone())
-    //         }
-    //         ExecutionOperation::Union(subnodes) => {
-    //             let new_subnodes = subnodes
-    //                 .iter()
-    //                 .cloned()
-    //                 .map(|n| Self::copy_subgraph(new_plan, n, write_node_ids))
-    //                 .collect();
+            let computed_table_id = computed_trees.len();
+            computed_trees.push(tree);
+            computed_trees_map.insert(output_node.node.id(), computed_table_id);
 
-    //             new_plan.union(new_subnodes)
-    //         }
-    //         ExecutionOperation::Minus(left, right) => {
-    //             let new_left = Self::copy_subgraph(new_plan, left.clone(), write_node_ids);
-    //             let new_right = Self::copy_subgraph(new_plan, right.clone(), write_node_ids);
-
-    //             new_plan.minus(new_left, new_right)
-    //         }
-    //         ExecutionOperation::Project(subnode, reorder) => {
-    //             let new_subnode = Self::copy_subgraph(new_plan, subnode.clone(), write_node_ids);
-    //             new_plan.project(new_subnode, reorder.clone())
-    //         }
-    //         ExecutionOperation::Filter(subnode, assignments) => {
-    //             let new_subnode = Self::copy_subgraph(new_plan, subnode.clone(), write_node_ids);
-    //             new_plan.filter_values(new_subnode, assignments.clone())
-    //         }
-    //         ExecutionOperation::SelectEqual(subnode, classes) => {
-    //             let new_subnode = Self::copy_subgraph(new_plan, subnode.clone(), write_node_ids);
-    //             new_plan.select_equal(new_subnode, classes.clone())
-    //         }
-    //         ExecutionOperation::AppendColumns(subnode, instructions) => {
-    //             let new_subnode = Self::copy_subgraph(new_plan, subnode.clone(), write_node_ids);
-    //             new_plan.append_columns(new_subnode, instructions.clone())
-    //         }
-    //         ExecutionOperation::AppendNulls(subnode, num_null_cols) => {
-    //             let new_subnode = Self::copy_subgraph(new_plan, subnode.clone(), write_node_ids);
-    //             new_plan.append_nulls(new_subnode, *num_null_cols)
-    //         }
-    //         ExecutionOperation::Subtract(subnode_main, subnodes_subtract, subtract_infos) => {
-    //             let new_main = Self::copy_subgraph(new_plan, subnode_main.clone(), write_node_ids);
-    //             let new_subtract = subnodes_subtract
-    //                 .iter()
-    //                 .cloned()
-    //                 .map(|n| Self::copy_subgraph(new_plan, n, write_node_ids))
-    //                 .collect();
-
-    //             new_plan.subtract(new_main, new_subtract, subtract_infos.clone())
-    //         }
-    //         ExecutionOperation::Aggregate(subnode, instructions) => {
-    //             let new_subnode = Self::copy_subgraph(new_plan, subnode.clone(), write_node_ids);
-    //             new_plan.aggregate(new_subnode, *instructions)
-    //         }
-    //     }
-    // }
-
-    // /// Deletes all information which marks execution nodes as output.
-    // pub fn clear_write_nodes(&mut self) {
-    //     self.out_nodes.clear();
-    // }
-
-    fn execution_subtree(node: ExecutionNodeRef, out_node_ids: &HashSet<ExecutionNodeId>) {
-        todo!()
+            id
+        }
     }
 
-    fn execution_subtree_x(node: ExecutionNodeRef, out_node_ids: &HashSet<ExecutionNodeId>) {
-        // if out_node_ids.contains(&node.id()) {
-        //     // Do something
+    fn execution_node(
+        node: ExecutionNodeRef,
+        output_nodes: &[ExecutionOutNode],
+        computed_trees: &mut Vec<ExecutionTree>,
+        computed_trees_map: &mut HashMap<ExecutionId, ComputedTableId>,
+        loaded_tables: &mut HashMap<(PermanentTableId, ColumnOrder), LoadedTableId>,
+    ) -> ExecutionTreeRoot {
+        if let Some(output_node) = output_nodes
+            .iter()
+            .find(|output_node| node.id() == output_node.node.id())
+        {
+            let computed_id = Self::execution_tree(
+                output_node,
+                output_nodes,
+                computed_trees,
+                computed_trees_map,
+                loaded_tables,
+            );
 
-        //     // ExecutionTreeNode::FetchComputedTable(())
-        // }
+            return ExecutionTreeRoot::Operation(ExecutionTreeOperation::Leaf(
+                ExecutionTreeLeaf::FetchComputedTable(computed_id),
+            ));
+        }
 
-        // let node_rc = node.get_rc();
-        // let node_operation = &node_rc.borrow().operation;
-        // let node_markers = node_rc.borrow().marked_columns.clone();
+        let node_rc = node.get_rc();
+        let node_operation = &node_rc.borrow().operation;
+        let node_markers = node_rc.borrow().marked_columns.clone();
 
-        // match node_operation {
-        //     ExecutionOperation::FetchTable(_, _) => todo!(),
-        //     ExecutionOperation::Join(subnodes) => {
-        //         // let subnode_markers = subnodes.iter().map(|node| node.markers()).collect();
-        //         // let subtrees = subnodes
-        //         //     .iter()
-        //         //     .map(|node| Self::execution_subtree(node.clone(), out_node_ids))
-        //         //     .collect();
+        match node_operation {
+            ExecutionOperation::FetchTable(id, order) => {
+                let new_loaded_id = loaded_tables.len();
+                let id = match loaded_tables.entry((*id, order.clone())) {
+                    Entry::Occupied(entry) => *entry.get(),
+                    Entry::Vacant(entry) => {
+                        entry.insert(new_loaded_id);
+                        new_loaded_id
+                    }
+                };
 
-        //         // ExecutionTreeNode::Operation {
-        //         //     generator: OperationGeneratorEnum::Join(GeneratorJoin::new(
-        //         //         node_markers,
-        //         //         subnode_markers,
-        //         //     )),
-        //         //     subnodes: subtrees,
-        //         // }
-        //         todo!()
-        //     }
-        //     ExecutionOperation::Union(_) => todo!(),
-        //     ExecutionOperation::Subtract(_, _) => todo!(),
-        //     ExecutionOperation::ProjectReorder(_) => todo!(),
-        //     ExecutionOperation::Filter(_, _) => todo!(),
-        //     ExecutionOperation::Function(_, _) => todo!(),
-        //     ExecutionOperation::Aggregate() => todo!(),
-        // }
+                ExecutionTreeRoot::Operation(ExecutionTreeOperation::Leaf(
+                    ExecutionTreeLeaf::LoadTable(id),
+                ))
+            }
+            ExecutionOperation::Join(subnodes) => {
+                let subnode_markers = subnodes.iter().map(|node| node.markers()).collect();
+                let subtrees = subnodes
+                    .iter()
+                    .map(|node| {
+                        Self::execution_node(
+                            node.clone(),
+                            output_nodes,
+                            computed_trees,
+                            computed_trees_map,
+                            loaded_tables,
+                        )
+                        .operation()
+                        .expect("No sub node should be a project")
+                    })
+                    .collect::<Vec<_>>();
 
-        todo!()
+                ExecutionTreeRoot::Operation(ExecutionTreeOperation::Node {
+                    generator: OperationGeneratorEnum::Join(GeneratorJoin::new(
+                        node_markers,
+                        subnode_markers,
+                    )),
+                    subnodes: subtrees,
+                })
+            }
+            ExecutionOperation::Union(subnodes) => {
+                let subtrees = subnodes
+                    .iter()
+                    .map(|node| {
+                        Self::execution_node(
+                            node.clone(),
+                            output_nodes,
+                            computed_trees,
+                            computed_trees_map,
+                            loaded_tables,
+                        )
+                        .operation()
+                        .expect("No sub node should be a project")
+                    })
+                    .collect::<Vec<_>>();
+
+                ExecutionTreeRoot::Operation(ExecutionTreeOperation::Node {
+                    generator: OperationGeneratorEnum::Union(GeneratorUnion::new()),
+                    subnodes: subtrees,
+                })
+            }
+            ExecutionOperation::Subtract(subnode_main, subnodes_subtract) => {
+                let markers_main = subnode_main.markers();
+                let markers_subtract = subnodes_subtract
+                    .iter()
+                    .map(|subnode| subnode.markers())
+                    .collect();
+
+                let subtrees = vec![subnode_main]
+                    .iter()
+                    .cloned()
+                    .chain(subnodes_subtract.iter())
+                    .map(|node| {
+                        Self::execution_node(
+                            node.clone(),
+                            output_nodes,
+                            computed_trees,
+                            computed_trees_map,
+                            loaded_tables,
+                        )
+                        .operation()
+                        .expect("No sub node should be a project")
+                    })
+                    .collect::<Vec<_>>();
+
+                ExecutionTreeRoot::Operation(ExecutionTreeOperation::Node {
+                    generator: OperationGeneratorEnum::Subtract(GeneratorSubtract::new(
+                        markers_main,
+                        markers_subtract,
+                    )),
+                    subnodes: subtrees,
+                })
+            }
+            ExecutionOperation::Filter(subnode, filters) => {
+                let subtree = Self::execution_node(
+                    subnode.clone(),
+                    output_nodes,
+                    computed_trees,
+                    computed_trees_map,
+                    loaded_tables,
+                )
+                .operation()
+                .expect("No sub node should be a project");
+
+                ExecutionTreeRoot::Operation(ExecutionTreeOperation::Node {
+                    generator: OperationGeneratorEnum::Filter(GeneratorFilter::new(
+                        node_markers,
+                        filters,
+                    )),
+                    subnodes: vec![subtree],
+                })
+            }
+            ExecutionOperation::Function(subnode, function_assignment) => {
+                let subtree = Self::execution_node(
+                    subnode.clone(),
+                    output_nodes,
+                    computed_trees,
+                    computed_trees_map,
+                    loaded_tables,
+                )
+                .operation()
+                .expect("No sub node should be a project");
+
+                ExecutionTreeRoot::Operation(ExecutionTreeOperation::Node {
+                    generator: OperationGeneratorEnum::Function(GeneratorFunction::new(
+                        node_markers,
+                        function_assignment,
+                    )),
+                    subnodes: vec![subtree],
+                })
+            }
+            ExecutionOperation::Aggregate() => todo!(),
+            ExecutionOperation::ProjectReorder(subnode) => {
+                let marker_subnode = subnode.markers();
+                let subtree = if let ExecutionTreeOperation::Leaf(leaf) = Self::execution_node(
+                    subnode.clone(),
+                    output_nodes,
+                    computed_trees,
+                    computed_trees_map,
+                    loaded_tables,
+                )
+                .operation()
+                .expect("No sub node should be a project")
+                {
+                    leaf
+                } else {
+                    unreachable!("Subnode of a project must be a load instruction");
+                };
+
+                ExecutionTreeRoot::ProjectReorder {
+                    generator: GeneratorProjectReorder::new(node_markers, marker_subnode),
+                    subnode: subtree,
+                }
+            }
+        }
     }
 
-    /// Split the [ExecutionPlan] into a [ExecutionSeries]
-    /// by splitting it into several [ExecutionTree]
+    /// Split the [ExecutionPlan] into an [ExecutionSeries]
+    /// by splitting it into several [ExecutionTree][super::database::execution_series::ExecutionTree]s
     /// that will be executed one after another by the
-    /// by the [DatabaseInstance][super::DatabaseInstance].
+    /// by the [DatabaseInstance][super::database::DatabaseInstance].
     pub(crate) fn finalize(self) -> ExecutionSeries {
-        todo!()
+        let mut loaded_tables = HashMap::<(PermanentTableId, ColumnOrder), LoadedTableId>::new();
+        let mut trees = Vec::<ExecutionTree>::with_capacity(self.out_nodes.len());
+        let mut trees_map = HashMap::<ExecutionId, ComputedTableId>::new();
+
+        for output_node in &self.out_nodes {
+            Self::execution_tree(
+                output_node,
+                &self.out_nodes,
+                &mut trees,
+                &mut trees_map,
+                &mut loaded_tables,
+            );
+        }
+
+        let mut loaded_tries = loaded_tables.keys().cloned().collect::<Vec<_>>();
+        loaded_tries.sort_by(|left, right| {
+            loaded_tables
+                .get(left)
+                .expect("Keys were generated from the map")
+                .cmp(
+                    loaded_tables
+                        .get(right)
+                        .expect("Keys were generated from the map"),
+                )
+        });
+
+        ExecutionSeries {
+            loaded_tries,
+            trees,
+        }
     }
-
-    // /// Return a list of [ExecutionTree] that are derived taking the subgraph at each write node.
-    // /// Each tree will be associated with an id that corresponds to the id of
-    // /// the write node from which the tree is derived.
-    // pub(super) fn split_at_write_nodes(&self) -> Vec<(usize, ExecutionTree)> {
-    //     let write_node_ids: HashSet<usize> = self.out_nodes.iter().map(|o| o.node.id()).collect();
-
-    //     let mut result = Vec::new();
-    //     for out_node in &self.out_nodes {
-    //         let id = out_node.node.id();
-    //         let mut subtree = ExecutionPlan::default();
-
-    //         let mut write_node_ids_without_this = write_node_ids.clone();
-    //         write_node_ids_without_this.remove(&id);
-
-    //         let root_node = Self::copy_subgraph(
-    //             &mut subtree,
-    //             out_node.node.clone(),
-    //             &write_node_ids_without_this,
-    //         );
-    //         subtree.out_nodes.push(ExecutionOutNode {
-    //             node: root_node,
-    //             result: out_node.result.clone(),
-    //             name: out_node.name.clone(),
-    //             cut_bottom_layers: out_node.cut_bottom_layers,
-    //         });
-
-    //         result.push((id, ExecutionTree::new(subtree)));
-    //     }
-
-    //     result
-    // }
 }

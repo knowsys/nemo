@@ -20,8 +20,10 @@ use crate::{
 
 use super::{OperationColumnMarker, OperationGenerator, OperationTable};
 
+/// Collection of filters to be applied to a table
+pub type Filters = Vec<FunctionTree<OperationColumnMarker>>;
 /// Assigns an input column to a function which filters values from that column
-pub type FilterAssignment = HashMap<OperationColumnMarker, FunctionTree<OperationColumnMarker>>;
+type FilterAssignment = HashMap<OperationColumnMarker, FunctionTree<OperationColumnMarker>>;
 
 /// Marks whether an output column results from an input column or has a filter applied to it via a [StackProgram]
 #[derive(Debug, Clone)]
@@ -45,11 +47,13 @@ pub struct GeneratorFilter {
 
 impl GeneratorFilter {
     /// Create a new [GeneratorFilter].
-    pub fn new(input: OperationTable, filters: FilterAssignment) -> Self {
+    pub fn new(input: OperationTable, filters: &Filters) -> Self {
+        let filter_assignment = Self::compute_assignments(&input, filters);
+
         let mut output_columns = Vec::<OutputColumn>::new();
         let mut input_indices = Vec::<bool>::new();
 
-        let referenced_columns: HashSet<OperationColumnMarker> = filters
+        let referenced_columns: HashSet<OperationColumnMarker> = filter_assignment
             .iter()
             .flat_map(|(_, function)| function.references())
             .collect();
@@ -66,7 +70,7 @@ impl GeneratorFilter {
                 }
             }
 
-            match filters.get(&input_marker) {
+            match filter_assignment.get(&input_marker) {
                 Some(function) => {
                     output_columns.push(OutputColumn::Filtered(StackProgram::from_function_tree(
                         function,
@@ -84,6 +88,11 @@ impl GeneratorFilter {
             output_columns,
             input_indices,
         }
+    }
+
+    /// Compute the [FilterAssignment] from a list of [Filters].
+    fn compute_assignments(input: &OperationTable, filters: &Filters) -> FilterAssignment {
+        todo!()
     }
 }
 

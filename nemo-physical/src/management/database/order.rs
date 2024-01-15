@@ -9,7 +9,7 @@ use std::{
 use bytesize::ByteSize;
 
 use crate::{
-    management::{bytesized::sum_bytes, execution_plan::ColumnOrder, ByteSized},
+    management::{bytesized::sum_bytes, bytesized::ByteSized, execution_plan::ColumnOrder},
     meta::TimedCode,
     tabular::{operations::projectreorder::GeneratorProjectReorder, trie::Trie},
     util::mapping::{permutation::Permutation, traits::NatMapping},

@@ -41,6 +41,19 @@ pub(crate) enum ExecutionTreeRoot {
     },
 }
 
+impl ExecutionTreeRoot {
+    /// Returns [ExecutionTreeOperation] if this is not a project node.
+    ///
+    /// Returns `None` otherwise.
+    pub fn operation(self) -> Option<ExecutionTreeOperation> {
+        if let Self::Operation(result) = self {
+            Some(result)
+        } else {
+            None
+        }
+    }
+}
+
 /// A tree representation of of database operations
 /// that can be executed by the [DatabaseInstance][super::DatabaseInstance]
 pub(crate) struct ExecutionTree {
@@ -48,8 +61,8 @@ pub(crate) struct ExecutionTree {
     pub root: ExecutionTreeRoot,
     /// How the result of this operation will be stored
     pub result: ExecutionResult,
-    /// [ExecutionId] for associating the resulting table with this tree
-    pub execution_id: ExecutionId,
+    /// [ExecutionId] to associate this tree to its original node in the plan
+    pub id: ExecutionId,
     /// Name of the of tree, e.g. for debugging purposes
     pub operation_name: String,
 

@@ -45,6 +45,9 @@ impl SortedChoice {
     /// Derive a [`SortedChoice`] that would transform a vector of elements into another.
     /// I.e. `this.permute(source) = target`
     /// For example `from_transformation([x, y, z, w], [z, w, x]) = {0->2, 2->0, 3->1}`.
+    ///
+    /// # Panics
+    /// Panics if there is a source element that does not appear in the target.
     pub fn from_transformation<T: PartialEq>(source: &[T], target: &[T]) -> Self {
         debug_assert!(source.len() >= target.len());
 

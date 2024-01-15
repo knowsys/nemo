@@ -18,7 +18,7 @@ use crate::{
         columnscan::{ColumnScanCell, ColumnScanEnum, ColumnScanRainbow},
     },
     datatypes::{ColumnDataType, Double, Float, StorageTypeName, StorageValueT},
-    management::ByteSized,
+    management::bytesized::ByteSized,
 };
 
 use self::interval_lookup::{IntervalLookup, IntervalLookupBuilderT, IntervalLookupT};

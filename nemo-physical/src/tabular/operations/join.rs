@@ -44,6 +44,14 @@ pub struct GeneratorJoin {
 
 impl GeneratorJoin {
     /// Create a new [GeneratorJoin].
+    ///
+    /// Markers in every input table
+    /// must appear in the same order as they appear in the output table.
+    /// No marker must be repeated in an input table.
+    /// Every marker in the output table must appear in some input table.
+    ///
+    /// # Panics
+    /// Panics if any of the above conditions is not met.
     pub fn new(output: OperationTable, input: Vec<OperationTable>) -> Self {
         let num_input_relations = input.len();
 
@@ -51,9 +59,9 @@ impl GeneratorJoin {
         // with a list of columns that need to be joined
         let mut output_map = HashMap::<OperationColumnMarker, Vec<ColumnIndex>>::new();
 
-        for (relation_index, relation_table) in input.into_iter().enumerate() {
-            for (column_index, marker) in relation_table.into_iter().enumerate() {
-                let output_vec = match output_map.entry(marker) {
+        for (relation_index, relation_table) in input.iter().enumerate() {
+            for (column_index, marker) in relation_table.iter().enumerate() {
+                let output_vec = match output_map.entry(marker.clone()) {
                     Entry::Occupied(entry) => entry.into_mut(),
                     Entry::Vacant(entry) => entry.insert(Vec::new()),
                 };
@@ -62,6 +70,20 @@ impl GeneratorJoin {
                     relation: relation_index,
                     column: column_index,
                 });
+
+                if column_index > 0 {
+                    let previous_column_index = column_index - 1;
+                    let previous_marker = &relation_table[previous_column_index];
+
+                    let current_output_position = output
+                        .position(&marker)
+                        .expect("Every input marker must appear in the output");
+                    let previous_output_position = output
+                        .position(previous_marker)
+                        .expect("Every input marker must appear in the output");
+
+                    debug_assert!(current_output_position > previous_output_position)
+                }
             }
         }
 

@@ -6,7 +6,7 @@ use bytesize::ByteSize;
 
 use crate::{
     datasources::tuple_writer::TupleWriter,
-    management::{bytesized::sum_bytes, ByteSized},
+    management::{bytesized::sum_bytes, bytesized::ByteSized},
     tabular::trie::Trie,
 };
 

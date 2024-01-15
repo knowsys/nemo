@@ -14,7 +14,7 @@ use crate::{
     datasources::tuple_writer::TupleWriter,
     datatypes::{StorageTypeName, StorageValueT},
     datavalues::AnyDataValueIterator,
-    management::{bytesized::sum_bytes, ByteSized},
+    management::{bytesized::sum_bytes, bytesized::ByteSized},
 };
 
 use super::{

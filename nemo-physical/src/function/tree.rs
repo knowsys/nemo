@@ -7,6 +7,7 @@ use crate::datavalues::AnyDataValue;
 use super::definitions::{
     boolean::{BooleanConjunction, BooleanDisjunction, BooleanNegation},
     casting::{CastingIntoDouble, CastingIntoFloat, CastingIntoInteger64},
+    generic::{Equals, Unequals},
     numeric::{
         NumericAbsolute, NumericAddition, NumericCosine, NumericDivision, NumericGreaterthan,
         NumericGreaterthaneq, NumericLessthan, NumericLessthaneq, NumericLogarithm,
@@ -65,6 +66,24 @@ where
     /// Create a leaf node with a referene.
     pub fn reference(reference: ReferenceType) -> Self {
         Self::Leaf(FunctionLeaf::Reference(reference))
+    }
+
+    /// Create a tree node representing checking for whether two values are equal to each other
+    pub fn equals(left: Self, right: Self) -> Self {
+        Self::Binary {
+            function: BinaryFunctionEnum::Equals(Equals),
+            left: Box::new(left),
+            right: Box::new(right),
+        }
+    }
+
+    /// Create a tree node representing checking for whether two values are not equal to each other
+    pub fn unequals(left: Self, right: Self) -> Self {
+        Self::Binary {
+            function: BinaryFunctionEnum::Unequals(Unequals),
+            left: Box::new(left),
+            right: Box::new(right),
+        }
     }
 
     /// Create a tree node representing the conjunction of two boolean values.

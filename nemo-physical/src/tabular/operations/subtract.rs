@@ -26,11 +26,19 @@ pub struct GeneratorSubtract {
 
 impl GeneratorSubtract {
     /// Create a new [GeneratorSubtract].
+    ///
+    /// For every input table, every marker must appear in the output table
+    /// and also in the same order
+    ///
+    /// # Panics
+    /// Panics if the above condition is not met.
     pub fn new(output: OperationTable, inputs: Vec<OperationTable>) -> Self {
         let mut layer_maps = Vec::<SubtractedLayerMap>::new();
 
         for input in inputs {
-            let layer_map = input.into_iter().map(|input_marker| output.position(&input_marker).expect("Every column of the subtracted tables should be assigned to a column in the main trie.")).collect();
+            let layer_map: SubtractedLayerMap = input.into_iter().map(|input_marker| output.position(&input_marker).expect("Every column of the subtracted tables should be assigned to a column in the main trie.")).collect();
+            debug_assert!(layer_map.is_sorted());
+
             layer_maps.push(layer_map);
         }
 

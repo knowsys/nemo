@@ -8,7 +8,7 @@ use std::{
 
 use bytesize::ByteSize;
 
-use crate::{columnar::columnscan::ColumnScan, management::ByteSized};
+use crate::{columnar::columnscan::ColumnScan, management::bytesized::ByteSized};
 
 use super::Column;
 

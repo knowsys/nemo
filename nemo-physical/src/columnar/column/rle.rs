@@ -13,7 +13,7 @@ use crate::{
         columnscan::ColumnScan,
     },
     datatypes::{ColumnDataType, RunLengthEncodable},
-    management::ByteSized,
+    management::bytesized::ByteSized,
 };
 
 use super::Column;
