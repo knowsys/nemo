@@ -6,15 +6,15 @@ use bytesize::ByteSize;
 use nemo_physical::{
     datavalues::AnyDataValueIterator,
     management::{
+        database::DatabaseInstance,
         database::{
             id::{ExecutionId, PermanentTableId},
             sources::TableSource,
             Dict,
         },
-        execution_plan::{ColumnOrder, ExecutionNodeRef},
-        DatabaseInstance, ExecutionPlan,
+        execution_plan::{ColumnOrder, ExecutionNodeRef, ExecutionPlan},
     },
-    tabular::trie::Trie,
+    tabular::{operations::OperationTable, trie::Trie},
     util::mapping::permutation::Permutation,
 };
 
@@ -203,13 +203,13 @@ struct PredicateInfo {
 
 /// Identifier of a subtable in a chase sequence.
 #[derive(Debug, Clone)]
-pub struct SubPermanentTableIdentifier {
+pub struct SubtableIdentifier {
     predicate: Identifier,
     step: usize,
 }
 
-impl SubPermanentTableIdentifier {
-    /// Create a new [SubPermanentTableIdentifier].
+impl SubtableIdentifier {
+    /// Create a new [SubtableIdentifier].
     pub fn new(predicate: Identifier, step: usize) -> Self {
         Self { predicate, step }
     }
@@ -221,8 +221,8 @@ pub struct SubtableExecutionPlan {
     /// The execution plan.
     execution_plan: ExecutionPlan,
     /// Each tree in the plan that will result in a new permanent table
-    /// will have an associated [SubPermanentTableIdentifier].
-    map_subtrees: HashMap<ExecutionId, SubPermanentTableIdentifier>,
+    /// will have an associated [SubtableIdentifier].
+    map_subtrees: HashMap<ExecutionId, SubtableIdentifier>,
 }
 
 impl SubtableExecutionPlan {
@@ -237,7 +237,7 @@ impl SubtableExecutionPlan {
         node: ExecutionNodeRef,
         tree_name: &str,
         table_name: &str,
-        subtable_id: SubPermanentTableIdentifier,
+        subtable_id: SubtableIdentifier,
     ) -> ExecutionId {
         let node_id = self
             .execution_plan
@@ -358,7 +358,7 @@ impl TableManager {
 
     /// Return the [PermanentTableId] that is associated with a given subtable.
     /// Returns None if the predicate does not exist.
-    fn table_id(&self, subtable: &SubPermanentTableIdentifier) -> Option<PermanentTableId> {
+    fn table_id(&self, subtable: &SubtableIdentifier) -> Option<PermanentTableId> {
         self.predicate_subtables
             .get(&subtable.predicate)?
             .subtable(subtable.step)
@@ -458,7 +458,7 @@ impl TableManager {
         self.predicate_subtables.get(predicate).is_some()
     }
 
-    fn add_subtable(&mut self, subtable: SubPermanentTableIdentifier, table_id: PermanentTableId) {
+    fn add_subtable(&mut self, subtable: SubtableIdentifier, table_id: PermanentTableId) {
         let subtable_handler = self
             .predicate_subtables
             .get_mut(&subtable.predicate)
@@ -469,12 +469,13 @@ impl TableManager {
 
     /// Add a table that represents the input facts for some predicate for the chase procedure.
     /// Predicate must be registered before calling this function.
-    pub(crate) fn add_edb(
-        &mut self,
-        predicate: Identifier,
-        arity: usize,
-        sources: Vec<TableSource>,
-    ) {
+    pub(crate) fn add_edb(&mut self, predicate: Identifier, sources: Vec<TableSource>) {
+        let arity = if let Some(source) = sources.first() {
+            source.column_number()
+        } else {
+            return;
+        };
+
         let edb_order = ColumnOrder::default();
         const EDB_STEP: usize = 0;
 
@@ -483,10 +484,7 @@ impl TableManager {
         let table_id = self.database.register_table(&name, arity);
         self.database.add_sources(table_id, edb_order, sources);
 
-        self.add_subtable(
-            SubPermanentTableIdentifier::new(predicate, EDB_STEP),
-            table_id,
-        )
+        self.add_subtable(SubtableIdentifier::new(predicate, EDB_STEP), table_id)
     }
 
     /// Add a [Trie] as a subtable of a predicate.
@@ -495,26 +493,22 @@ impl TableManager {
         let name = self.generate_table_name(&predicate, &order, step);
 
         let table_id = self.database.register_add_trie(&name, order, trie);
-        self.add_subtable(SubPermanentTableIdentifier::new(predicate, step), table_id);
+        self.add_subtable(SubtableIdentifier::new(predicate, step), table_id);
     }
 
     /// Add a reference to another table under a new name.
     /// Predicate must be registered before calling this function and referenced table must exist.
     fn add_reference(
         &mut self,
-        subtable: SubPermanentTableIdentifier,
-        referenced_subtable: SubPermanentTableIdentifier,
+        subtable: SubtableIdentifier,
+        referenced_subtable: SubtableIdentifier,
         permutation: Permutation,
     ) {
         let referenced_id = self
             .table_id(&referenced_subtable)
             .expect("Referenced table does not exist.");
 
-        let arity = self
-            .predicate_to_info
-            .get(&subtable.predicate)
-            .expect("Predicate should be registered before calling this function")
-            .arity;
+        let arity = self.arity(&subtable.predicate);
 
         let name = self.generate_table_name_reference(
             &subtable.predicate,
@@ -528,6 +522,17 @@ impl TableManager {
             .add_reference(table_id, referenced_id, permutation);
 
         self.add_subtable(subtable, table_id);
+    }
+
+    /// Return the arity of a given predicate.
+    ///
+    /// # Panics
+    /// Panics if the predicate has not been registered yet.
+    pub fn arity(&self, predicate: &Identifier) -> usize {
+        self.predicate_to_info
+            .get(predicate)
+            .expect("Predicate should be registered before calling this function")
+            .arity
     }
 
     /// Return the ids of all subtables of a predicate within a certain range of steps.
@@ -564,9 +569,9 @@ impl TableManager {
         let mut union_plan = ExecutionPlan::default();
         let fetch_nodes = tables
             .iter()
-            .map(|id| union_plan.fetch_existing(*id))
+            .map(|id| union_plan.fetch_table(OperationTable::default(), *id))
             .collect();
-        let union_node = union_plan.union(fetch_nodes);
+        let union_node = union_plan.union(OperationTable::default(), fetch_nodes);
         let plan_id = union_plan.write_permanent(union_node, "Combining Tables", &name);
 
         let execution_result = self.database.execute_plan(union_plan)?;

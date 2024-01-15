@@ -1,5 +1,7 @@
 //! Management of resource providers, handling of decompression and resolution of resources to readers.
 
+use nemo_physical::management::database::sources::TableSource;
+
 use crate::{error::Error, io::resource_providers::ResourceProviders};
 
 use super::formats::types::ImportSpec;
@@ -19,9 +21,14 @@ impl InputManager {
     }
 
     /// Constructs a [`TableSource`] from the given [import specificiation][ImportSpec].
-    pub fn import_table(&self, import_spec: &ImportSpec) -> Result<TableSource, Error> {
-        Ok(TableSource::FileReader(
+    pub fn import_table(
+        &self,
+        import_spec: &ImportSpec,
+        arity: usize,
+    ) -> Result<TableSource, Error> {
+        Ok(TableSource::External(
             import_spec.reader(self.resource_providers.clone())?,
+            arity,
         ))
     }
 }

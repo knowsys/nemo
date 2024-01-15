@@ -1,40 +1,30 @@
 //! Functionality which handles the execution of a program
 
-use std::{
-    borrow::BorrowMut,
-    collections::{hash_map::Entry, HashMap},
-};
+use std::{collections::HashMap, error::Error};
 
 use nemo_physical::{
-    datatypes::{DataValueT, StorageValueT},
     datavalues::{AnyDataValue, AnyDataValueIterator},
+    management::database::sources::{SimpleTable, TableSource},
     meta::TimedCode,
 };
 
 use crate::{
-    error::Error,
-    execution::{
-        planning::{plan_body_seminaive::SeminaiveStrategy, BodyStrategy},
-        tracing::trace::TraceRuleApplication,
-    },
     io::{
         formats::types::ExportSpec, input_manager::InputManager,
         resource_providers::ResourceProviders, OutputManager,
     },
     model::{
-        chase_model::{ChaseAtom, ChaseFact, ChaseProgram},
-        types::primitive_types::PrimitiveType,
-        Constant, Constraint, Fact, Identifier, PrimitiveTerm, Program, Term, TupleConstraint,
-        Variable,
+        chase_model::{ChaseAtom, ChaseProgram},
+        Fact, Identifier, Program, TupleConstraint,
     },
     program_analysis::analysis::ProgramAnalysis,
-    table_manager::{MemoryUsage, SubtableExecutionPlan, SubtableIdentifier, TableManager},
+    table_manager::{MemoryUsage, TableManager},
 };
 
 use super::{
     rule_execution::RuleExecution,
     selection_strategy::strategy::RuleSelectionStrategy,
-    tracing::trace::{ExecutionTrace, TraceDerivation, TraceFactHandle, TraceStatus},
+    tracing::trace::{ExecutionTrace, TraceFactHandle},
 };
 
 // Number of tables that are periodically combined into one.
@@ -59,8 +49,6 @@ impl RuleInfo {
 /// Object which handles the evaluation of the program.
 #[derive(Debug)]
 pub struct ExecutionEngine<RuleSelectionStrategy> {
-    input_program: Program,
-
     program: ChaseProgram,
     analysis: ProgramAnalysis,
 
@@ -83,7 +71,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
     pub fn initialize(
         program: Program,
         resource_providers: ResourceProviders,
-    ) -> Result<Self, Error> {
+    ) -> Result<Self, Box<dyn Error>> {
         let chase_program: ChaseProgram = program.clone().try_into()?;
 
         chase_program.check_for_unsupported_features()?;
@@ -93,12 +81,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
 
         let mut table_manager = TableManager::new();
         Self::register_all_predicates(&mut table_manager, &analysis);
-        Self::add_imports(
-            &mut table_manager,
-            &input_manager,
-            &chase_program,
-            &analysis,
-        )?;
+        Self::add_imports(&mut table_manager, &input_manager, &chase_program)?;
 
         let mut rule_infos = Vec::<RuleInfo>::new();
         chase_program
@@ -112,7 +95,6 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         )?;
 
         Ok(Self {
-            input_program: program,
             program: chase_program,
             analysis,
             rule_strategy,
@@ -135,30 +117,10 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                     .predicate_types
                     .get(predicate)
                     .cloned()
-                    .expect("All predicates should have types by now."),
+                    .expect("All predicates should have types by now.")
+                    .len(),
             );
         }
-    }
-
-    /// Converts a [`ChaseFact`] into a list of [`DataValueT`].
-    /// If the predicate is unknown, then the returned list will be empty.
-    fn fact_to_vec(fact: &ChaseFact, analysis: &ProgramAnalysis) -> Vec<DataValueT> {
-        if !analysis
-            .all_predicates
-            .contains(&(fact.predicate(), fact.arity()))
-        {
-            return Vec::default();
-        }
-
-        fact
-        .terms()
-        .iter()
-        .enumerate()
-        .map(|(i, t)| {
-            analysis.predicate_types.get(&fact.predicate()).unwrap()[i]
-                .ground_term_to_data_value_t(t.clone()).expect("Trying to convert a ground type into an invalid logical type. Should have been prevented by the type checker.")
-        })
-        .collect()
     }
 
     /// Add edb tables to the [`TableManager`]
@@ -167,33 +129,42 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         table_manager: &mut TableManager,
         input_manager: &InputManager,
         program: &ChaseProgram,
-        analysis: &ProgramAnalysis,
-    ) -> Result<(), Error> {
+    ) -> Result<(), Box<dyn Error>> {
         let mut predicate_to_sources = HashMap::<Identifier, Vec<TableSource>>::new();
 
         // Add all the import specifications
         for import_spec in program.imports() {
-            let table_source = input_manager.import_table(import_spec)?;
+            let import_predicate = import_spec.predicate().clone();
+            let import_arity = table_manager.arity(&import_predicate);
+
+            let table_source = input_manager.import_table(import_spec, import_arity)?;
 
             predicate_to_sources
-                .entry(import_spec.predicate().clone())
+                .entry(import_predicate)
                 .or_default()
                 .push(table_source);
         }
 
         // Add all the facts contained in the rule file as a source
-        let mut predicate_to_rows = HashMap::<Identifier, Vec<Vec<DataValueT>>>::new();
+        let mut predicate_to_rows = HashMap::<Identifier, SimpleTable>::new();
 
         for fact in program.facts() {
-            let rows = predicate_to_rows.entry(fact.predicate()).or_default();
-            rows.push(Self::fact_to_vec(fact, analysis));
+            let table = predicate_to_rows
+                .entry(fact.predicate())
+                .or_insert(SimpleTable::new(fact.arity()));
+            table.add_row(
+                fact.terms()
+                    .iter()
+                    .map(|term| term.as_datavalue())
+                    .collect(),
+            );
         }
 
-        for (predicate, rows) in predicate_to_rows.into_iter() {
+        for (predicate, table) in predicate_to_rows.into_iter() {
             predicate_to_sources
                 .entry(predicate)
                 .or_default()
-                .push(TableSource::RLS(rows));
+                .push(TableSource::SimpleTable(table));
         }
 
         // Add all the sources to the table mananager
@@ -205,7 +176,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
     }
 
     /// Executes the program.
-    pub fn execute(&mut self) -> Result<(), Error> {
+    pub fn execute(&mut self) -> Result<(), Box<dyn Error>> {
         TimedCode::instance().sub("Reasoning/Rules").start();
         TimedCode::instance().sub("Reasoning/Execution").start();
 
@@ -291,7 +262,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
     pub fn predicate_rows(
         &mut self,
         predicate: &Identifier,
-    ) -> Result<Option<impl Iterator<Item = Vec<AnyDataValue>> + '_>, Error> {
+    ) -> Result<Option<impl Iterator<Item = Vec<AnyDataValue>> + '_>, Box<dyn Error>> {
         let Some(table_id) = self.table_manager.combine_predicate(predicate)? else {
             return Ok(None);
         };
@@ -654,7 +625,10 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
 
     /// Build an [`ExecutionTrace`] for a list of facts.
     /// Also returns a list containing a [`TraceFactHandle`] for each fact.
-    pub fn trace(&self, facts: Vec<Fact>) -> Result<(ExecutionTrace, Vec<TraceFactHandle>), Error> {
+    pub fn trace(
+        &self,
+        _facts: Vec<Fact>,
+    ) -> Result<(ExecutionTrace, Vec<TraceFactHandle>), Box<dyn Error>> {
         todo!()
 
         // let mut trace = ExecutionTrace::new(

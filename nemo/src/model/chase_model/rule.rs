@@ -11,7 +11,8 @@ use crate::{
 };
 
 use super::{
-    variable::EQUALITY_VARIABLE_PREFIX, ChaseAggregate, Constructor, PrimitiveAtom, VariableAtom,
+    variable::EQUALITY_VARIABLE_PREFIX, ChaseAggregate, ChaseAtom, Constructor, PrimitiveAtom,
+    VariableAtom,
 };
 
 /// Representation of a rule in a [`super::ChaseProgram`].
@@ -150,6 +151,26 @@ impl ChaseRule {
         self.constructors
             .iter()
             .find(|&constructor| constructor.variable() == variable)
+    }
+
+    /// Return all [Variable]s used in this rule.
+    pub fn all_variables(&self) -> Vec<Variable> {
+        let variables_body = self.all_body().flat_map(|atom| atom.get_variables());
+        let variables_head = self.head.iter().flat_map(|atom| atom.get_variables());
+        let variables_constructors = self
+            .constructors
+            .iter()
+            .map(|constructor| constructor.variable().clone());
+        let variables_aggregates = self
+            .aggregates
+            .iter()
+            .map(|aggregate| aggregate.output_variable.clone());
+
+        variables_body
+            .chain(variables_head)
+            .chain(variables_constructors)
+            .chain(variables_aggregates)
+            .collect()
     }
 }
 

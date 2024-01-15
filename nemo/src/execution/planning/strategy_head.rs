@@ -4,8 +4,7 @@
 use nemo_physical::management::execution_plan::ExecutionNodeRef;
 
 use crate::{
-    execution::execution_engine::RuleInfo,
-    program_analysis::variable_order::VariableOrder,
+    execution::{execution_engine::RuleInfo, rule_execution::VariableTranslation},
     table_manager::{SubtableExecutionPlan, TableManager},
 };
 
@@ -18,9 +17,9 @@ pub(crate) trait HeadStrategy: Debug {
         &self,
         table_manager: &TableManager,
         current_plan: &mut SubtableExecutionPlan,
+        variable_translation: &VariableTranslation,
         body: ExecutionNodeRef,
         rule_info: &RuleInfo,
-        variable_order: &VariableOrder,
         step_number: usize,
     );
 }
