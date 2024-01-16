@@ -9,8 +9,6 @@ use std::{
 const PAGE_ADDR_BITS: usize = 25; // 32MB
 /// Size of pages in the buffer
 const PAGE_SIZE: usize = 1 << PAGE_ADDR_BITS;
-/// Bit mask that keeps only the (lower) PAGE_ADDR_BITS-1 bits, for extracting a string's length
-const LENGTH_BITS_MASK: u64 = (1 << (PAGE_ADDR_BITS - 1)) - 1;
 
 /// A manager for buffers for byte array data, using compact memory regions managed in pages.
 /// New buffers need to be initialized, upon which they will receive an identifying buffer id
@@ -185,6 +183,8 @@ pub(crate) unsafe trait GlobalBytesBuffer: Debug + Sized {
 /// This should be at most [`PAGE_ADDR_BITS`], the maximal length in any page
 /// in the [`BytesBuffer`], but it could conceivably also be less.
 const BYTESREF_BYTES_LENGTH_BITS: u64 = 24;
+/// Bit mask that keeps only the (lower) BYTESREF_BYTES_LENGTH_BITS-1 bits, for extracting a string's length
+const LENGTH_BITS_MASK: u64 = (1 << BYTESREF_BYTES_LENGTH_BITS) - 1;
 /// Number of bits reserved for the starting address of a byte array.
 const BYTESREF_STARTING_ADDRESS_BITS: u64 = 64 - BYTESREF_BYTES_LENGTH_BITS;
 /// Largest number that can specify the length of a byte array in a [`BytesRef`].
