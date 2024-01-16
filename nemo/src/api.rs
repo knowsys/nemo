@@ -24,11 +24,10 @@
 //! # }
 //! ```
 
-use std::{collections::HashMap, error::Error, fs::read_to_string, path::PathBuf};
-
-use nemo_physical::error::ReadingError;
+use std::{collections::HashMap, fs::read_to_string, path::PathBuf};
 
 use crate::{
+    error::{Error, ReadingError},
     execution::{DefaultExecutionEngine, ExecutionEngine},
     io::{
         parser::{all_input_consumed, RuleParser},
@@ -44,7 +43,7 @@ pub type Engine = DefaultExecutionEngine;
 /// Load the given `file` and load the program from the file.
 ///
 /// For details see [`load_string`]
-pub fn load(file: PathBuf) -> Result<Engine, Box<dyn Error>> {
+pub fn load(file: PathBuf) -> Result<Engine, Error> {
     let input = read_to_string(file.clone()).map_err(|err| ReadingError::IOReading {
         error: err,
         filename: file.to_string_lossy().to_string(),
@@ -58,7 +57,7 @@ pub fn load(file: PathBuf) -> Result<Engine, Box<dyn Error>> {
 ///
 /// # Error
 /// Returns an appropriate [`Error`] variant on parsing and feature check issues.
-pub fn load_string(input: String) -> Result<Engine, Box<dyn Error>> {
+pub fn load_string(input: String) -> Result<Engine, Error> {
     let program = all_input_consumed(RuleParser::new().parse_program())(&input)?;
     ExecutionEngine::initialize(program, ResourceProviders::default())
 }
@@ -69,7 +68,7 @@ pub fn load_string(input: String) -> Result<Engine, Box<dyn Error>> {
 /// If there are `@source` or `@import` directives in the
 /// parsed rules, all relative paths are resolved with the current
 /// working directory
-pub fn reason(engine: &mut Engine) -> Result<(), Box<dyn Error>> {
+pub fn reason(engine: &mut Engine) -> Result<(), Error> {
     engine.execute()
 }
 
@@ -79,11 +78,7 @@ pub fn output_predicates(engine: &Engine) -> Vec<Identifier> {
 }
 
 /// Writes all result [`predicates`][Identifier] in the vector `predicates` into the directory specified in `path`.
-pub fn write(
-    path: String,
-    engine: &mut Engine,
-    predicates: Vec<Identifier>,
-) -> Result<(), Box<dyn Error>> {
+pub fn write(path: String, engine: &mut Engine, predicates: Vec<Identifier>) -> Result<(), Error> {
     let output_dir = PathBuf::from(path);
     let output_manager = OutputManager::builder(output_dir.clone())?
         .overwrite()

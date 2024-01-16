@@ -1,5 +1,7 @@
 //! Managing of tables
 
+use crate::error::Error;
+
 use super::model::Identifier;
 
 use bytesize::ByteSize;
@@ -18,7 +20,7 @@ use nemo_physical::{
     util::mapping::permutation::Permutation,
 };
 
-use std::{cell::Ref, cmp::Ordering, collections::HashMap, error::Error, hash::Hash, ops::Range};
+use std::{cell::Ref, cmp::Ordering, collections::HashMap, hash::Hash, ops::Range};
 
 /// Indicates that the table contains the union of successive tables.
 /// For example assume that for predicate p there were tables derived in steps 2, 4, 7, 10, 11.
@@ -383,7 +385,7 @@ impl TableManager {
     pub(crate) fn table_column_iters(
         &mut self,
         id: PermanentTableId,
-    ) -> Result<Vec<AnyDataValueIterator>, Box<dyn Error>> {
+    ) -> Result<Vec<AnyDataValueIterator>, Error> {
         Ok(self.database.get_table_column_iterators(id)?)
     }
 
@@ -392,7 +394,7 @@ impl TableManager {
     pub(crate) fn combine_predicate(
         &mut self,
         predicate: &Identifier,
-    ) -> Result<Option<PermanentTableId>, Box<dyn Error>> {
+    ) -> Result<Option<PermanentTableId>, Error> {
         match self.last_step(predicate) {
             Some(last_step) => self.combine_tables(predicate, 0..(last_step + 1)),
             None => Ok(None),
@@ -552,7 +554,7 @@ impl TableManager {
         &mut self,
         predicate: &Identifier,
         range: Range<usize>,
-    ) -> Result<Option<PermanentTableId>, Box<dyn Error>> {
+    ) -> Result<Option<PermanentTableId>, Error> {
         let combined_order: ColumnOrder = ColumnOrder::default();
 
         let name = self.generate_table_name_combined(predicate, &combined_order, &range);
@@ -588,7 +590,7 @@ impl TableManager {
     pub fn execute_plan(
         &mut self,
         subtable_plan: SubtableExecutionPlan,
-    ) -> Result<Vec<Identifier>, Box<dyn Error>> {
+    ) -> Result<Vec<Identifier>, Error> {
         let result = self.database.execute_plan(subtable_plan.execution_plan)?;
 
         let mut updated_predicates = Vec::new();
@@ -658,7 +660,7 @@ impl TableManager {
     // pub fn execute_plan_first_match(
     //     &self,
     //     subtable_plan: SubtableExecutionPlan,
-    // ) -> Result<Option<TableRow>, Box<dyn Error>> {
+    // ) -> Result<Option<TableRow>, Error> {
     //     debug_assert!(subtable_plan.map_subtrees.len() == 1);
 
     //     Ok(self

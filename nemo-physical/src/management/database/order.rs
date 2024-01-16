@@ -3,12 +3,12 @@
 use std::{
     cell::RefCell,
     collections::{hash_map::Entry, HashMap},
-    error::Error,
 };
 
 use bytesize::ByteSize;
 
 use crate::{
+    error::Error,
     management::{bytesized::sum_bytes, bytesized::ByteSized, execution_plan::ColumnOrder},
     meta::TimedCode,
     tabular::{operations::projectreorder::GeneratorProjectReorder, trie::Trie},
@@ -287,7 +287,7 @@ impl OrderedReferenceManager {
         dictionary: &RefCell<Dict>,
         id: PermanentTableId,
         column_order: ColumnOrder,
-    ) -> Result<StorageId, Box<dyn Error>> {
+    ) -> Result<StorageId, Error> {
         let (id, column_order) = self.resolve_reference(id, column_order);
 
         if let Some(order_map) = self.storage_map.get(&id) {

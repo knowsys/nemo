@@ -1,11 +1,12 @@
 //! This module defin
 
-use std::{cell::RefCell, error::Error};
+use std::cell::RefCell;
 
 use bytesize::ByteSize;
 
 use crate::{
     datasources::tuple_writer::TupleWriter,
+    error::{Error, ReadingError},
     management::{bytesized::sum_bytes, bytesized::ByteSized},
     tabular::trie::Trie,
 };
@@ -30,10 +31,7 @@ impl TableStorage {
     /// Load the table from a list of [TableSource]s and convert it into a [Trie].
     ///
     /// This function assumes that at least one source is provided.
-    fn load_sources(
-        sources: Vec<TableSource>,
-        dictionary: &RefCell<Dict>,
-    ) -> Result<Trie, Box<dyn Error>> {
+    fn load_sources(sources: Vec<TableSource>, dictionary: &RefCell<Dict>) -> Result<Trie, Error> {
         debug_assert!(!sources.is_empty());
 
         let column_number = sources
@@ -48,7 +46,9 @@ impl TableStorage {
 
             match source {
                 TableSource::External(provider, _) => {
-                    provider.provide_table_data(&mut tuple_writer)?;
+                    provider
+                        .provide_table_data(&mut tuple_writer)
+                        .map_err(ReadingError::ExternalError)?;
                 }
                 TableSource::SimpleTable(table) => {
                     table.write_tuples(&mut tuple_writer);
@@ -63,7 +63,7 @@ impl TableStorage {
     ///
     /// If the table is not already loaded into memory as a [Trie],
     /// this function will load the [TableSource] and transform it into a [Trie].
-    pub fn trie<'a>(&'a mut self, dictionary: &RefCell<Dict>) -> Result<&'a Trie, Box<dyn Error>> {
+    pub fn trie<'a>(&'a mut self, dictionary: &RefCell<Dict>) -> Result<&'a Trie, Error> {
         // Load trie if not already in memory
         match self {
             TableStorage::InMemory(_) => {}

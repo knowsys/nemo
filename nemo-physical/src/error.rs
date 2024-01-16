@@ -13,6 +13,9 @@ pub trait ExternalReadingError: Display + std::fmt::Debug {}
 #[allow(variant_size_differences)]
 #[derive(Error, Debug)]
 pub enum ReadingError {
+    /// An external error during reading.
+    #[error(transparent)]
+    ExternalError(#[from] Box<dyn std::error::Error>),
     /// Error from trying to use a floating point number that is NaN
     #[error(transparent)]
     FloatIsNaN(#[from] FloatIsNaN),

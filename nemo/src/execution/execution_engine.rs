@@ -1,6 +1,6 @@
 //! Functionality which handles the execution of a program
 
-use std::{collections::HashMap, error::Error};
+use std::collections::HashMap;
 
 use nemo_physical::{
     datavalues::{AnyDataValue, AnyDataValueIterator},
@@ -9,6 +9,7 @@ use nemo_physical::{
 };
 
 use crate::{
+    error::Error,
     io::{
         formats::types::ExportSpec, input_manager::InputManager,
         resource_providers::ResourceProviders, OutputManager,
@@ -71,7 +72,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
     pub fn initialize(
         program: Program,
         resource_providers: ResourceProviders,
-    ) -> Result<Self, Box<dyn Error>> {
+    ) -> Result<Self, Error> {
         let chase_program: ChaseProgram = program.clone().try_into()?;
 
         chase_program.check_for_unsupported_features()?;
@@ -129,7 +130,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         table_manager: &mut TableManager,
         input_manager: &InputManager,
         program: &ChaseProgram,
-    ) -> Result<(), Box<dyn Error>> {
+    ) -> Result<(), Error> {
         let mut predicate_to_sources = HashMap::<Identifier, Vec<TableSource>>::new();
 
         // Add all the import specifications
@@ -176,7 +177,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
     }
 
     /// Executes the program.
-    pub fn execute(&mut self) -> Result<(), Box<dyn Error>> {
+    pub fn execute(&mut self) -> Result<(), Error> {
         TimedCode::instance().sub("Reasoning/Rules").start();
         TimedCode::instance().sub("Reasoning/Execution").start();
 
@@ -262,7 +263,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
     pub fn predicate_rows(
         &mut self,
         predicate: &Identifier,
-    ) -> Result<Option<impl Iterator<Item = Vec<AnyDataValue>> + '_>, Box<dyn Error>> {
+    ) -> Result<Option<impl Iterator<Item = Vec<AnyDataValue>> + '_>, Error> {
         let Some(table_id) = self.table_manager.combine_predicate(predicate)? else {
             return Ok(None);
         };
@@ -628,7 +629,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
     pub fn trace(
         &self,
         _facts: Vec<Fact>,
-    ) -> Result<(ExecutionTrace, Vec<TraceFactHandle>), Box<dyn Error>> {
+    ) -> Result<(ExecutionTrace, Vec<TraceFactHandle>), Error> {
         todo!()
 
         // let mut trace = ExecutionTrace::new(

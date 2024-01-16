@@ -1,10 +1,9 @@
 //! This module contains functionality for applying a rule.
 
-use std::error::Error;
-
 use nemo_physical::tabular::operations::OperationTableGenerator;
 
 use crate::{
+    error::Error,
     model::{chase_model::ChaseRule, Identifier, Variable},
     program_analysis::{analysis::RuleAnalysis, variable_order::VariableOrder},
     table_manager::{SubtableExecutionPlan, TableManager},
@@ -68,7 +67,7 @@ impl RuleExecution {
         table_manager: &mut TableManager,
         rule_info: &RuleInfo,
         step_number: usize,
-    ) -> Result<Vec<Identifier>, Box<dyn Error>> {
+    ) -> Result<Vec<Identifier>, Error> {
         log::info!(
             "Available orders: {}",
             self.promising_variable_orders.iter().enumerate().fold(

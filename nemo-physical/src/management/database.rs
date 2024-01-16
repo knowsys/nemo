@@ -12,7 +12,6 @@ mod storage;
 use std::{
     cell::{Ref, RefCell},
     collections::HashMap,
-    error::Error,
     fmt::Debug,
 };
 
@@ -21,6 +20,7 @@ use bytesize::ByteSize;
 use crate::{
     datasources::table_providers::TableProvider,
     datavalues::AnyDataValueIterator,
+    error::Error,
     management::{bytesized::ByteSized, database::execution_series::ExecutionTreeRoot},
     meta::TimedCode,
     tabular::{
@@ -140,7 +140,7 @@ impl DatabaseInstance {
     pub fn get_table_column_iterators(
         &mut self,
         id: PermanentTableId,
-    ) -> Result<Vec<AnyDataValueIterator>, Box<dyn Error>> {
+    ) -> Result<Vec<AnyDataValueIterator>, Error> {
         // Make sure trie is loaded
         let storage_id =
             self.reference_manager
@@ -257,7 +257,7 @@ impl DatabaseInstance {
     fn collect_requiured_tries(
         &mut self,
         tables: &[(PermanentTableId, ColumnOrder)],
-    ) -> Result<Vec<StorageId>, Box<dyn Error>> {
+    ) -> Result<Vec<StorageId>, Error> {
         let mut result = Vec::new();
 
         for (id, order) in tables.iter().cloned() {
@@ -330,7 +330,7 @@ impl DatabaseInstance {
         &'a self,
         storage: &'a TemporaryStorage,
         tree: &ExecutionTree,
-    ) -> Result<ComputationResult, Box<dyn Error>> {
+    ) -> Result<ComputationResult, Error> {
         let dictionary = &self.dictionary.borrow();
 
         let trie = match &tree.root {
@@ -355,7 +355,7 @@ impl DatabaseInstance {
     pub fn execute_plan(
         &mut self,
         plan: ExecutionPlan,
-    ) -> Result<HashMap<ExecutionId, PermanentTableId>, Box<dyn Error>> {
+    ) -> Result<HashMap<ExecutionId, PermanentTableId>, Error> {
         let exeuction_series = plan.finalize();
 
         TimedCode::instance()
