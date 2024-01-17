@@ -3,13 +3,24 @@ use hashbrown::HashMap;
 use super::bytes_buffer::{BytesRef, GlobalBytesBuffer};
 use super::{AddResult, KNOWN_ID_MARK};
 
+/// A marker id reserved for playing the role of [KNOWN_ID_MARK] while we are workin
+/// with 32bit ids. This is internal and always replaced by [KNOWN_ID_MARK] to the outside.
+#[cfg(not(test))]
+const SMALL_KNOWN_ID_MARK: u32 = u32::MAX;
+#[cfg(test)]
+// Note: A smaller value is used to exercise the relevant code in the unit tests as well.
+const SMALL_KNOWN_ID_MARK: u32 = 3;
+
+const SMALL_KNOWN_ID_MARK_AS_USIZE: usize = SMALL_KNOWN_ID_MARK as usize;
+
 /// A struct that implements a bijection between byte arrays and integers, where the integers
 /// are automatically assigned upon insertion.
 /// Byte arrays are stored in a compact buffer to reduce memory overhead and fragmentation.
 #[derive(Debug)]
 pub(crate) struct BytesDictionary<B: GlobalBytesBuffer> {
     store: Vec<BytesRef<B>>,
-    mapping: HashMap<BytesRef<B>, usize>,
+    map_short: HashMap<BytesRef<B>, u32>,
+    map_long: HashMap<BytesRef<B>, u64>,
     buffer_id: usize,
     has_known_mark: bool,
 }
@@ -27,14 +38,25 @@ impl<B: GlobalBytesBuffer> BytesDictionary<B> {
     /// or previoulsy present (it will never be rejected). The result then also yields
     /// the array's id.
     pub(crate) fn add_bytes(&mut self, bytes: &[u8]) -> AddResult {
-        self.add_bytes_with_id(bytes, self.store.len())
+        self.add_bytes_inner(bytes, true)
     }
 
     /// Looks for a given `&[u8]` slice and returns `Some(id)` if it is in the dictionary,
     /// and `None` otherwise. The special value [`super::KNOWN_ID_MARK`] will be returned
     /// if the array was marked but not actually inserted.
     pub(crate) fn bytes_to_id(&self, bytes: &[u8]) -> Option<usize> {
-        self.mapping.get(bytes).copied()
+        if let Some(id) = self.map_short.get(bytes).copied() {
+            if id == SMALL_KNOWN_ID_MARK {
+                return Some(KNOWN_ID_MARK);
+            } else {
+                return Some(Self::id32_to_id(id));
+            }
+        } else if !self.map_long.is_empty() {
+            if let Some(id) = self.map_long.get(bytes).copied() {
+                return Some(Self::id64_to_id(id));
+            }
+        }
+        None
     }
 
     /// Returns the vector of bytes associated with the `id`, or `None`` if no byte array has been
@@ -57,7 +79,7 @@ impl<B: GlobalBytesBuffer> BytesDictionary<B> {
     /// known so far, so we do not make any effort there.
     pub(crate) fn mark_bytes(&mut self, bytes: &[u8]) -> AddResult {
         self.has_known_mark = true;
-        self.add_bytes_with_id(bytes, KNOWN_ID_MARK)
+        self.add_bytes_inner(bytes, false)
     }
 
     /// Returns true if the dictionary contains any marked elements.
@@ -66,28 +88,80 @@ impl<B: GlobalBytesBuffer> BytesDictionary<B> {
     }
 
     /// Check if a bytes array is already in the dictionary, and if not,
-    /// set its id to the given value. This is an internal helper method
-    /// that is only ever called with `self.store.len()` or with
-    /// [KNOWN_ID_MARK] as id. Other non-consecutive ID assignments
-    /// will generally lead to errors, since the same ID might be assigned
-    /// later on again.
+    /// add it. If `insert` is true, the bytes will be given a new id and
+    /// sotred under this id. Otherwise, the bytes will merely be marked as
+    /// known.
     ///
     /// If the given array is known but not assigned an ID (indicated by
-    /// [KNOWN_ID_MARK]), then the operation will still not assign an
-    /// ID either.
+    /// [SMALL_KNOWN_ID_MARK]), then the operation will still not assign an
+    /// ID either, independently of `insert`.
     #[inline(always)]
-    fn add_bytes_with_id(&mut self, bytes: &[u8], id: usize) -> AddResult {
-        match self.mapping.get(bytes) {
-            Some(idx) => AddResult::Known(*idx),
-            None => {
-                let sref = B::push_bytes(self.buffer_id, bytes);
-                if id != KNOWN_ID_MARK {
-                    self.store.push(sref);
+    fn add_bytes_inner(&mut self, bytes: &[u8], insert: bool) -> AddResult {
+        match self.map_short.get(bytes) {
+            Some(idx) => {
+                if *idx == SMALL_KNOWN_ID_MARK {
+                    return AddResult::Known(KNOWN_ID_MARK);
+                } else {
+                    return AddResult::Known(Self::id32_to_id(*idx));
                 }
-                self.mapping.insert(sref, id);
-                AddResult::Fresh(id)
             }
+            None => match self.map_long.get(bytes) {
+                Some(idx) => {
+                    return AddResult::Known(Self::id64_to_id(*idx));
+                }
+                None => {
+                    let sref = B::push_bytes(self.buffer_id, bytes);
+                    if insert {
+                        let id = self.store.len();
+                        let inner_id = Self::id_to_innerid(id);
+                        self.store.push(sref);
+                        if let Ok(id_u32) = u32::try_from(inner_id) {
+                            self.map_short.insert(sref, id_u32);
+                        } else {
+                            self.map_long.insert(
+                                sref,
+                                u64::try_from(inner_id)
+                                    .expect("no support for platforms with more than 64bits"),
+                            );
+                        }
+                        return AddResult::Fresh(id);
+                    } else {
+                        self.map_short.insert(sref, SMALL_KNOWN_ID_MARK);
+                        return AddResult::Fresh(KNOWN_ID_MARK);
+                    }
+                }
+            },
         }
+    }
+
+    /// Convert an id as reported to the outside to the value that
+    /// would be stored to represent it in our maps (leaving space for
+    /// [SMALL_KNOWN_ID_MARK]).
+    fn id_to_innerid(id: usize) -> usize {
+        if id < SMALL_KNOWN_ID_MARK_AS_USIZE {
+            id
+        } else {
+            id + 1
+        }
+    }
+
+    /// Convert a 32bit id that is stored in our maps to the id that should
+    /// be reported to the outside (removing the space for
+    /// [SMALL_KNOWN_ID_MARK]).
+    fn id32_to_id(id32: u32) -> usize {
+        if id32 < SMALL_KNOWN_ID_MARK {
+            id32 as usize
+        } else {
+            (id32 - 1) as usize
+        }
+    }
+
+    /// Convert a 64bit id that is stored in our maps to the id that should
+    /// be reported to the outside (removing the space for
+    /// [SMALL_KNOWN_ID_MARK]).
+    fn id64_to_id(id64: u64) -> usize {
+        assert!(id64 > u32::MAX as u64);
+        usize::try_from(id64 - 1).expect("64bit ids should only occur on 64bit platforms")
     }
 }
 
@@ -95,7 +169,8 @@ impl<B: GlobalBytesBuffer> Default for BytesDictionary<B> {
     fn default() -> Self {
         BytesDictionary {
             store: Vec::new(),
-            mapping: HashMap::new(),
+            map_short: HashMap::new(),
+            map_long: HashMap::new(),
             buffer_id: B::init_buffer(),
             has_known_mark: false,
         }

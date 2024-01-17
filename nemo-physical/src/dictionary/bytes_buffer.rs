@@ -206,7 +206,7 @@ pub(crate) struct BytesRef<B: GlobalBytesBuffer> {
     /// the buffer, and 24bits that encode the string length.
     /// This limits the maximal buffer size to 1TB of string data, and the maximal length
     /// of a single string to 16M bytes.
-    reference: u64,
+    reference: [u8; 8],
     _phantom: PhantomData<B>,
 }
 
@@ -219,7 +219,7 @@ impl<B: GlobalBytesBuffer> BytesRef<B> {
         let u64add: u64 = address.try_into().unwrap();
         let u64len: u64 = len.try_into().unwrap();
         BytesRef {
-            reference: (u64add << BYTESREF_BYTES_LENGTH_BITS) + u64len,
+            reference: ((u64add << BYTESREF_BYTES_LENGTH_BITS) + u64len).to_ne_bytes(),
             _phantom: PhantomData,
         }
     }
@@ -227,7 +227,7 @@ impl<B: GlobalBytesBuffer> BytesRef<B> {
     /// Returns the stored start address for the bytes that this refers to.
     /// For temporary references that do not point to the buffer, the result is meaningless.
     fn address(&self) -> usize {
-        (self.reference >> BYTESREF_BYTES_LENGTH_BITS)
+        (self.reference() >> BYTESREF_BYTES_LENGTH_BITS)
             .try_into()
             .unwrap()
     }
@@ -235,13 +235,13 @@ impl<B: GlobalBytesBuffer> BytesRef<B> {
     /// Returns the stored length of the bytes that this refers to.
     /// For temporary references that do not point to the buffer, the result is meaningless.
     pub(crate) fn len(&self) -> usize {
-        (self.reference & LENGTH_BITS_MASK).try_into().unwrap()
+        (self.reference() & LENGTH_BITS_MASK).try_into().unwrap()
     }
 
     /// Returns a reference to a slice of a byte array for this data.
     /// This is a pointer to global mutable data, and cannot be used safely.
     unsafe fn as_bytes(&self) -> &[u8] {
-        debug_assert!(((!self.reference) >> BYTESREF_BYTES_LENGTH_BITS) != 0);
+        debug_assert!(((!self.reference()) >> BYTESREF_BYTES_LENGTH_BITS) != 0);
         unsafe { B::get_bytes(self.address(), self.len()) }
     }
 
@@ -254,6 +254,10 @@ impl<B: GlobalBytesBuffer> BytesRef<B> {
             result.copy_from_slice(bytes);
             result
         }
+    }
+
+    fn reference(&self) -> u64 {
+        u64::from_ne_bytes(self.reference)
     }
 }
 
