@@ -1,5 +1,7 @@
 use flate2::read::MultiGzDecoder;
 use nemo_physical::datavalues::AnyDataValue;
+use nemo_physical::datavalues::DataValue;
+use nemo_physical::datavalues::ValueDomain;
 use nemo_physical::dictionary::meta_dv_dict::MetaDvDictionary;
 use nemo_physical::dictionary::string_dictionary::BenchmarkStringDictionary;
 use nemo_physical::dictionary::DvDict;
@@ -9,10 +11,17 @@ use std::io::prelude::*;
 use std::io::stdin;
 use std::io::BufReader;
 
+use core::cmp;
+
 use nemo::meta::{timing::TimedDisplay, TimedCode};
 use nemo_physical::dictionary::{
     hash_map_dictionary::HashMapDictionary, meta_dictionary::MetaDictionary, AddResult, Dictionary,
 };
+
+/// If true, additional statistics about the length of some entry values
+/// will be gathered. This needs extra memory and prints longer reports.
+/// Only for internal testing.
+const GATHER_STATISTICS: bool = false;
 
 enum DictEnum {
     StringHash(HashMapDictionary),
@@ -94,6 +103,18 @@ fn main() {
     let mut bytes_added = 0;
     let mut bytes_rejected = 0;
 
+    // Used only for additional statistics:
+    let mut iri_lengths: Vec<u64>;
+    let mut string_lengths: Vec<u64>;
+    let max_length = 513; // maximal data length we still care about for the histograms
+    if GATHER_STATISTICS {
+        iri_lengths = vec![0; max_length + 1]; // histogram of IRI lengths
+        string_lengths = vec![0; max_length + 1]; // histogram of string literal value lengths
+    } else {
+        iri_lengths = vec![];
+        string_lengths = vec![];
+    }
+
     TimedCode::instance().sub("Dictionary filling").start();
 
     println!("Starting to fill dictionary ...");
@@ -142,12 +163,25 @@ fn main() {
             }
         }
 
+        let value_domain = dv.value_domain();
         let add_result = dict.add(s, dv);
 
         match add_result {
             AddResult::Fresh(_value) => {
                 bytes_added += b;
                 count_added += 1;
+
+                if GATHER_STATISTICS {
+                    match value_domain {
+                        ValueDomain::Iri => {
+                            iri_lengths[cmp::min(b, max_length)] += 1;
+                        }
+                        ValueDomain::LanguageTaggedString => {
+                            string_lengths[cmp::min(b, max_length)] += 1;
+                        }
+                        _ => {}
+                    }
+                }
             }
             AddResult::Known(_value) => {}
             AddResult::Rejected => {
@@ -194,5 +228,41 @@ fn main() {
     if dict.len() == 123456789 {
         // FWIW, prevent dict from going out of scope before really finishing
         println!("Today is your lucky day.");
+    }
+
+    if GATHER_STATISTICS {
+        let mut count_less: u64 = 0;
+        let mut count_more: u64 = 0;
+        println!("Lengths of unique IRIs:");
+        for (pos, count) in iri_lengths.iter().enumerate() {
+            println!("  {:>5}: {:>20}", pos, count);
+            if pos < 256 {
+                count_less += count;
+            } else {
+                count_more += count;
+            }
+        }
+        println!("The last line summarises all longer cases.");
+        println!(
+            "{} IRIs up to length <256, {} IRIs beyond that length.",
+            count_less, count_more
+        );
+
+        count_less = 0;
+        count_more = 0;
+        println!("Lengths of unique strings:");
+        for (pos, count) in string_lengths.iter().enumerate() {
+            println!("  {:>5}: {:>20}", pos, count);
+            if pos < 256 {
+                count_less += count;
+            } else {
+                count_more += count;
+            }
+        }
+        println!("The last line summarises all longer cases.");
+        println!(
+            "{} strings up to length <256, {} strings beyond that length.",
+            count_less, count_more
+        );
     }
 }
