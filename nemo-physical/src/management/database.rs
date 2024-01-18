@@ -21,7 +21,7 @@ use crate::{
     datasources::table_providers::TableProvider,
     datavalues::AnyDataValueIterator,
     error::Error,
-    management::{bytesized::ByteSized, database::execution_series::ExecutionTreeRoot},
+    management::{bytesized::ByteSized, database::execution_series::ExecutionTreeNode},
     meta::TimedCode,
     tabular::{
         operations::{prune::TrieScanPrune, OperationGenerator},
@@ -334,12 +334,12 @@ impl DatabaseInstance {
         let dictionary = &self.dictionary.borrow();
 
         let trie = match &tree.root {
-            ExecutionTreeRoot::Operation(operation) => {
+            ExecutionTreeNode::Operation(operation) => {
                 let trie_scan = self.evaluate_operation(dictionary, storage, operation);
                 trie_scan
                     .map(|scan| Trie::from_trie_scan(TrieScanPrune::new(scan), tree.cut_layers))
             }
-            ExecutionTreeRoot::ProjectReorder { generator, subnode } => self
+            ExecutionTreeNode::ProjectReorder { generator, subnode } => self
                 .evaluate_tree_leaf(storage, subnode)
                 .map(|scan| generator.apply_operation(TrieScanPrune::new(scan))),
         };

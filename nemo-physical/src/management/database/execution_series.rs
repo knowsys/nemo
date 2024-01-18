@@ -33,7 +33,7 @@ pub(crate) enum ExecutionTreeOperation {
 
 /// A node in the [ExecutionTree]
 #[derive(Debug)]
-pub(crate) enum ExecutionTreeRoot {
+pub(crate) enum ExecutionTreeNode {
     Operation(ExecutionTreeOperation),
     ProjectReorder {
         generator: GeneratorProjectReorder,
@@ -41,7 +41,7 @@ pub(crate) enum ExecutionTreeRoot {
     },
 }
 
-impl ExecutionTreeRoot {
+impl ExecutionTreeNode {
     /// Returns [ExecutionTreeOperation] if this is not a project node.
     ///
     /// Returns `None` otherwise.
@@ -58,7 +58,7 @@ impl ExecutionTreeRoot {
 /// that can be executed by the [DatabaseInstance][super::DatabaseInstance]
 pub(crate) struct ExecutionTree {
     /// Root node of the tree
-    pub root: ExecutionTreeRoot,
+    pub root: ExecutionTreeNode,
     /// How the result of this operation will be stored
     pub result: ExecutionResult,
     /// [ExecutionId] to associate this tree to its original node in the plan
@@ -106,10 +106,10 @@ impl ExecutionTree {
     /// Return an ascii tree representation of the [ExecutionTree].
     pub fn ascii_tree(&self) -> ascii_tree::Tree {
         let tree = match &self.root {
-            ExecutionTreeRoot::Operation(operation_tree) => {
+            ExecutionTreeNode::Operation(operation_tree) => {
                 Self::ascii_tree_recursive(operation_tree)
             }
-            ExecutionTreeRoot::ProjectReorder { generator, subnode } => {
+            ExecutionTreeNode::ProjectReorder { generator, subnode } => {
                 let subnode_tree = match subnode {
                     ExecutionTreeLeaf::LoadTable(_) => {
                         ascii_tree::Tree::Leaf(vec![format!("Permanent Table")])

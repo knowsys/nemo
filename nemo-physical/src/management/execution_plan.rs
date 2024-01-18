@@ -10,7 +10,7 @@ use std::{
 
 use crate::{
     management::database::execution_series::{
-        ExecutionTreeLeaf, ExecutionTreeOperation, ExecutionTreeRoot,
+        ExecutionTreeLeaf, ExecutionTreeNode, ExecutionTreeOperation,
     },
     tabular::operations::{
         filter::{Filters, GeneratorFilter},
@@ -394,6 +394,12 @@ impl ExecutionPlan {
 }
 
 impl ExecutionPlan {
+    /// From a given [ExecutionOutNode], computes its [ExecutionTree]
+    /// by depth-first traversing the [ExecutionPlan].
+    ///
+    /// The newly created [ExecutionTree] is pushed into `computed_trees`.
+    /// Returns a [ComputedTableId], which is the index of the newly generated
+    /// [ExecutionTree] in the `computed_trees` vector.
     fn execution_tree(
         output_node: &ExecutionOutNode,
         output_nodes: &[ExecutionOutNode],
@@ -407,6 +413,7 @@ impl ExecutionPlan {
             let id = computed_trees.len();
 
             let root = Self::execution_node(
+                output_node.node.id(),
                 output_node.node.clone(),
                 output_nodes,
                 computed_trees,
@@ -430,28 +437,33 @@ impl ExecutionPlan {
         }
     }
 
+    /// Generate a [ExecutionTreeNode] in an [ExecutionTree]
+    /// by a depth-first traversal of the given [ExecutionPlan].
     fn execution_node(
+        root_node_id: ExecutionId,
         node: ExecutionNodeRef,
         output_nodes: &[ExecutionOutNode],
         computed_trees: &mut Vec<ExecutionTree>,
         computed_trees_map: &mut HashMap<ExecutionId, ComputedTableId>,
         loaded_tables: &mut HashMap<(PermanentTableId, ColumnOrder), LoadedTableId>,
-    ) -> ExecutionTreeRoot {
-        if let Some(output_node) = output_nodes
-            .iter()
-            .find(|output_node| node.id() == output_node.node.id())
-        {
-            let computed_id = Self::execution_tree(
-                output_node,
-                output_nodes,
-                computed_trees,
-                computed_trees_map,
-                loaded_tables,
-            );
+    ) -> ExecutionTreeNode {
+        if node.id() != root_node_id {
+            if let Some(output_node) = output_nodes
+                .iter()
+                .find(|output_node| node.id() == output_node.node.id())
+            {
+                let computed_id = Self::execution_tree(
+                    output_node,
+                    output_nodes,
+                    computed_trees,
+                    computed_trees_map,
+                    loaded_tables,
+                );
 
-            return ExecutionTreeRoot::Operation(ExecutionTreeOperation::Leaf(
-                ExecutionTreeLeaf::FetchComputedTable(computed_id),
-            ));
+                return ExecutionTreeNode::Operation(ExecutionTreeOperation::Leaf(
+                    ExecutionTreeLeaf::FetchComputedTable(computed_id),
+                ));
+            }
         }
 
         let node_rc = node.get_rc();
@@ -469,7 +481,7 @@ impl ExecutionPlan {
                     }
                 };
 
-                ExecutionTreeRoot::Operation(ExecutionTreeOperation::Leaf(
+                ExecutionTreeNode::Operation(ExecutionTreeOperation::Leaf(
                     ExecutionTreeLeaf::LoadTable(id),
                 ))
             }
@@ -479,6 +491,7 @@ impl ExecutionPlan {
                     .iter()
                     .map(|node| {
                         Self::execution_node(
+                            root_node_id,
                             node.clone(),
                             output_nodes,
                             computed_trees,
@@ -490,7 +503,7 @@ impl ExecutionPlan {
                     })
                     .collect::<Vec<_>>();
 
-                ExecutionTreeRoot::Operation(ExecutionTreeOperation::Node {
+                ExecutionTreeNode::Operation(ExecutionTreeOperation::Node {
                     generator: OperationGeneratorEnum::Join(GeneratorJoin::new(
                         node_markers,
                         subnode_markers,
@@ -503,6 +516,7 @@ impl ExecutionPlan {
                     .iter()
                     .map(|node| {
                         Self::execution_node(
+                            root_node_id,
                             node.clone(),
                             output_nodes,
                             computed_trees,
@@ -514,7 +528,7 @@ impl ExecutionPlan {
                     })
                     .collect::<Vec<_>>();
 
-                ExecutionTreeRoot::Operation(ExecutionTreeOperation::Node {
+                ExecutionTreeNode::Operation(ExecutionTreeOperation::Node {
                     generator: OperationGeneratorEnum::Union(GeneratorUnion::new()),
                     subnodes: subtrees,
                 })
@@ -532,6 +546,7 @@ impl ExecutionPlan {
                     .chain(subnodes_subtract.iter())
                     .map(|node| {
                         Self::execution_node(
+                            root_node_id,
                             node.clone(),
                             output_nodes,
                             computed_trees,
@@ -543,7 +558,7 @@ impl ExecutionPlan {
                     })
                     .collect::<Vec<_>>();
 
-                ExecutionTreeRoot::Operation(ExecutionTreeOperation::Node {
+                ExecutionTreeNode::Operation(ExecutionTreeOperation::Node {
                     generator: OperationGeneratorEnum::Subtract(GeneratorSubtract::new(
                         markers_main,
                         markers_subtract,
@@ -553,6 +568,7 @@ impl ExecutionPlan {
             }
             ExecutionOperation::Filter(subnode, filters) => {
                 let subtree = Self::execution_node(
+                    root_node_id,
                     subnode.clone(),
                     output_nodes,
                     computed_trees,
@@ -562,7 +578,7 @@ impl ExecutionPlan {
                 .operation()
                 .expect("No sub node should be a project");
 
-                ExecutionTreeRoot::Operation(ExecutionTreeOperation::Node {
+                ExecutionTreeNode::Operation(ExecutionTreeOperation::Node {
                     generator: OperationGeneratorEnum::Filter(GeneratorFilter::new(
                         node_markers,
                         filters,
@@ -572,6 +588,7 @@ impl ExecutionPlan {
             }
             ExecutionOperation::Function(subnode, function_assignment) => {
                 let subtree = Self::execution_node(
+                    root_node_id,
                     subnode.clone(),
                     output_nodes,
                     computed_trees,
@@ -581,7 +598,7 @@ impl ExecutionPlan {
                 .operation()
                 .expect("No sub node should be a project");
 
-                ExecutionTreeRoot::Operation(ExecutionTreeOperation::Node {
+                ExecutionTreeNode::Operation(ExecutionTreeOperation::Node {
                     generator: OperationGeneratorEnum::Function(GeneratorFunction::new(
                         node_markers,
                         function_assignment,
@@ -593,6 +610,7 @@ impl ExecutionPlan {
             ExecutionOperation::ProjectReorder(subnode) => {
                 let marker_subnode = subnode.markers();
                 let subtree = if let ExecutionTreeOperation::Leaf(leaf) = Self::execution_node(
+                    root_node_id,
                     subnode.clone(),
                     output_nodes,
                     computed_trees,
@@ -607,7 +625,7 @@ impl ExecutionPlan {
                     unreachable!("Subnode of a project must be a load instruction");
                 };
 
-                ExecutionTreeRoot::ProjectReorder {
+                ExecutionTreeNode::ProjectReorder {
                     generator: GeneratorProjectReorder::new(node_markers, marker_subnode),
                     subnode: subtree,
                 }
@@ -617,7 +635,7 @@ impl ExecutionPlan {
 
     /// Split the [ExecutionPlan] into an [ExecutionSeries]
     /// by splitting it into several [ExecutionTree][super::database::execution_series::ExecutionTree]s
-    /// that will be executed one after another by the
+    /// that will be executed one after another
     /// by the [DatabaseInstance][super::database::DatabaseInstance].
     pub(crate) fn finalize(self) -> ExecutionSeries {
         let mut loaded_tables = HashMap::<(PermanentTableId, ColumnOrder), LoadedTableId>::new();
