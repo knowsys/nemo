@@ -75,7 +75,7 @@ impl GeneratorProjectReorder {
 
     /// Apply the operation to an input [TrieScan]
     pub fn apply_operation<Scan: TrieScan>(&self, mut trie_scan: Scan) -> Trie {
-        debug_assert!(trie_scan.num_columns() == self.arity_output);
+        debug_assert!(trie_scan.num_columns() == self.projectreordering.domain_size());
 
         let mut current_tuple = vec![StorageValueT::Id32(0); self.arity_output];
         let mut tuple_buffer = TupleBuffer::new(self.arity_output);

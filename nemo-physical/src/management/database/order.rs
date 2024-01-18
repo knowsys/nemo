@@ -72,7 +72,7 @@ impl OrderedReferenceManager {
     }
 
     /// Return a list of all the available [ColumnOrder] for a given table.
-    pub fn available_orders(&self, id: PermanentTableId) -> Vec<ColumnOrder> {
+    pub fn _available_orders(&self, id: PermanentTableId) -> Vec<ColumnOrder> {
         if let Some(order_map) = self.storage_map.get(&id) {
             order_map.keys().cloned().collect()
         } else {
@@ -292,6 +292,7 @@ impl OrderedReferenceManager {
 
         if let Some(order_map) = self.storage_map.get(&id) {
             if let Some(&storage_id) = order_map.get(&column_order) {
+                self.stored_tables[storage_id].trie(dictionary)?;
                 return Ok(storage_id);
             } else {
                 let closest_order = Self::closest_order(order_map.keys(), &column_order)

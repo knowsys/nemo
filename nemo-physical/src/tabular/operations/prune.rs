@@ -150,6 +150,8 @@ impl<'a> TrieScanPruneState<'a> {
 
     /// Increments the `external_current_layer`
     pub fn external_down(&mut self, storage_type: StorageTypeName) {
+        self.external_path_types.push(storage_type);
+
         if !self.initialized {
             // First down initializes the trie scan
             self.initialized = true;
@@ -158,9 +160,7 @@ impl<'a> TrieScanPruneState<'a> {
         }
 
         assert!(self.external_current_layer < self.input_trie_scan.arity() - 1);
-
         self.external_current_layer += 1;
-        self.external_path_types.push(storage_type);
     }
 
     /// Return the number of columns in the input trie.
