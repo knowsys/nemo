@@ -14,10 +14,9 @@ use crate::{
 use super::{
     column::{rle::ColumnScanRle, vector::ColumnScanVector},
     operations::{
-        constant::ColumnScanConstant, filter::ColumnScanFilter, ColumnScanArithmetic,
-        ColumnScanCastEnum, ColumnScanCopy, ColumnScanEqualColumn, ColumnScanFollow,
-        ColumnScanJoin, ColumnScanMinus, ColumnScanNulls, ColumnScanPass, ColumnScanPrune,
-        ColumnScanReorder, ColumnScanRestrictValues, ColumnScanSubtract, ColumnScanUnion,
+        constant::ColumnScanConstant, filter::ColumnScanFilter, join::ColumnScanJoin,
+        pass::ColumnScanPass, prune::ColumnScanPrune, subtract::ColumnScanSubtract,
+        union::ColumnScanUnion,
     },
 };
 
@@ -33,7 +32,7 @@ pub trait ColumnScan: Debug + Iterator {
     fn current(&self) -> Option<Self::Item>;
 
     /// Return to the initial state
-    /// Typically, the state of a [`ColumnScan`] is determined by the state of its sub scans
+    /// Typically, the state of a [ColumnScan] is determined by the state of its sub scans
     /// as well as some additional information.
     /// This function is only supposed to reset the latter to its initial state (i.e. after calling new).
     /// The intention of this function is to use it after the internal iterators have been reset from the outside
@@ -50,7 +49,7 @@ pub trait ColumnScan: Debug + Iterator {
     fn narrow(&mut self, interval: Range<usize>);
 }
 
-/// Enum for [`ColumnScan`] of all supported types
+/// Enum for [ColumnScan] of all supported types
 #[derive(Debug)]
 pub enum ColumnScanEnum<'a, T>
 where
@@ -60,41 +59,23 @@ where
     ColumnScanVector(ColumnScanVector<'a, T>),
     /// Case ColumnRleScan
     ColumnScanRle(ColumnScanRle<'a, T>),
+    /// Case ColumnScanConstant
+    ColumnScanConstant(ColumnScanConstant<T>),
+    /// Case ColumnScanFilter
+    ColumnScanFilter(ColumnScanFilter<'a, T>),
     /// Case ColumnScanJoin
     ColumnScanJoin(ColumnScanJoin<'a, T>),
-    /// Case ColumnScanCast
-    ColumnScanCast(ColumnScanCastEnum<'a, T>),
-    /// Case ColumnScanReorder
-    ColumnScanReorder(ColumnScanReorder<'a, T>),
-    /// Case ColumnScanEqualColumn
-    ColumnScanEqualColumn(ColumnScanEqualColumn<'a, T>),
-    /// Case ColumnScanRestrictValues
-    ColumnScanRestrictValues(ColumnScanRestrictValues<'a, T>),
-    /// Case ColumnScanJoin
+    /// Case ColumnScanPass
     ColumnScanPass(ColumnScanPass<'a, T>),
     /// Case ColumnScanPrune
     ColumnScanPrune(ColumnScanPrune<'a, T>),
-    /// Case ColumnScanFollow
-    ColumnScanFollow(ColumnScanFollow<'a, T>),
-    /// Case ColumnScanMinus
-    ColumnScanMinus(ColumnScanMinus<'a, T>),
-    /// Case ColumnScanUnion
-    ColumnScanUnion(ColumnScanUnion<'a, T>),
-    /// Case ColumnScanConstant
-    ColumnScanConstant(ColumnScanConstant<T>),
-    /// Case ColumnScanCopy
-    ColumnScanCopy(ColumnScanCopy<'a, T>),
-    /// Case ColumnScanNulls
-    ColumnScanNulls(ColumnScanNulls<T>),
     /// Case ColumnScanSubtract
     ColumnScanSubtract(ColumnScanSubtract<'a, T>),
-    /// Case ColumnScanArithmetic
-    ColumnScanArithmetic(ColumnScanArithmetic<'a, T>),
-    /// Case ColumnScanFilter
-    ColumnScanFilter(ColumnScanFilter<'a, T>),
+    /// Case ColumnScanUnion
+    ColumnScanUnion(ColumnScanUnion<'a, T>),
 }
 
-/// The following impl statements allow converting from a specific [`ColumnScan`] into a gerneral [`ColumnScanEnum`]
+/// The following impl statements allow converting from a specific [ColumnScan] into a gerneral [ColumnScanEnum]
 
 impl<'a, T> From<ColumnScanVector<'a, T>> for ColumnScanEnum<'a, T>
 where
@@ -114,12 +95,21 @@ where
     }
 }
 
-impl<'a, T> From<ColumnScanCastEnum<'a, T>> for ColumnScanEnum<'a, T>
+impl<'a, T> From<ColumnScanConstant<T>> for ColumnScanEnum<'a, T>
+where
+    T: ColumnDataType,
+{
+    fn from(cs: ColumnScanConstant<T>) -> Self {
+        Self::ColumnScanConstant(cs)
+    }
+}
+
+impl<'a, T> From<ColumnScanFilter<'a, T>> for ColumnScanEnum<'a, T>
 where
     T: 'a + ColumnDataType,
 {
-    fn from(cs: ColumnScanCastEnum<'a, T>) -> Self {
-        Self::ColumnScanCast(cs)
+    fn from(cs: ColumnScanFilter<'a, T>) -> Self {
+        Self::ColumnScanFilter(cs)
     }
 }
 
@@ -132,33 +122,6 @@ where
     }
 }
 
-impl<'a, T> From<ColumnScanReorder<'a, T>> for ColumnScanEnum<'a, T>
-where
-    T: 'a + ColumnDataType,
-{
-    fn from(cs: ColumnScanReorder<'a, T>) -> Self {
-        Self::ColumnScanReorder(cs)
-    }
-}
-
-impl<'a, T> From<ColumnScanEqualColumn<'a, T>> for ColumnScanEnum<'a, T>
-where
-    T: 'a + ColumnDataType,
-{
-    fn from(cs: ColumnScanEqualColumn<'a, T>) -> Self {
-        Self::ColumnScanEqualColumn(cs)
-    }
-}
-
-impl<'a, T> From<ColumnScanRestrictValues<'a, T>> for ColumnScanEnum<'a, T>
-where
-    T: 'a + ColumnDataType,
-{
-    fn from(cs: ColumnScanRestrictValues<'a, T>) -> Self {
-        Self::ColumnScanRestrictValues(cs)
-    }
-}
-
 impl<'a, T> From<ColumnScanPass<'a, T>> for ColumnScanEnum<'a, T>
 where
     T: 'a + ColumnDataType,
@@ -168,21 +131,21 @@ where
     }
 }
 
-impl<'a, T> From<ColumnScanMinus<'a, T>> for ColumnScanEnum<'a, T>
+impl<'a, T> From<ColumnScanPrune<'a, T>> for ColumnScanEnum<'a, T>
 where
     T: 'a + ColumnDataType,
 {
-    fn from(cs: ColumnScanMinus<'a, T>) -> Self {
-        Self::ColumnScanMinus(cs)
+    fn from(cs: ColumnScanPrune<'a, T>) -> Self {
+        Self::ColumnScanPrune(cs)
     }
 }
 
-impl<'a, T> From<ColumnScanFollow<'a, T>> for ColumnScanEnum<'a, T>
+impl<'a, T> From<ColumnScanSubtract<'a, T>> for ColumnScanEnum<'a, T>
 where
     T: 'a + ColumnDataType,
 {
-    fn from(cs: ColumnScanFollow<'a, T>) -> Self {
-        Self::ColumnScanFollow(cs)
+    fn from(cs: ColumnScanSubtract<'a, T>) -> Self {
+        Self::ColumnScanSubtract(cs)
     }
 }
 
@@ -195,43 +158,13 @@ where
     }
 }
 
-/// The following block makes functions which are specific to one variant of a [`ColumnScanEnum`]
-/// available on the whole [`ColumnScanEnum`]
+/// The following block makes functions which are specific to one variant of a [ColumnScanEnum]
+/// available on the whole [ColumnScanEnum]
 impl<'a, T> ColumnScanEnum<'a, T>
 where
     T: 'a + ColumnDataType,
 {
-    /// Assumes that column scan is a [`ColumnScanReorder`]
-    /// Return all positions in the underlying column the cursor is currently at
-    pub fn pos_multiple(&self) -> Option<Vec<usize>> {
-        if let Self::ColumnScanReorder(cs) = self {
-            cs.pos_multiple()
-        } else {
-            unimplemented!("pos_multiple is only available for ColumnScanReorder")
-        }
-    }
-
-    /// Assumes that column scan is a [`ColumnScanReorder`]
-    /// Set iterator to a set of possibly disjoint ranged
-    pub fn narrow_ranges(&mut self, intervals: Vec<Range<usize>>) {
-        if let Self::ColumnScanReorder(cs) = self {
-            cs.narrow_ranges(intervals)
-        } else {
-            unimplemented!("narrow_ranges is only available for ColumnScanReorder")
-        }
-    }
-
-    /// Assumes that column scan is a [`ColumnScanFollow`]
-    /// Returns whether its scans point to the same value
-    pub fn is_equal(&self) -> bool {
-        if let Self::ColumnScanFollow(cs) = self {
-            cs.is_equal()
-        } else {
-            unimplemented!("narrow_ranges is only available for ColumnScanReorder")
-        }
-    }
-
-    /// Assumes that column scan is a [`ColumnScanUnion`]
+    /// Assumes that column scan is a [ColumnScanUnion]
     /// and returns a vector containing the positions of the scans with the smallest values
     pub fn union_get_smallest(&self) -> BitVec {
         if let Self::ColumnScanUnion(cs) = self {
@@ -241,7 +174,7 @@ where
         }
     }
 
-    /// Assumes that column scan is a [`ColumnScanUnion`]
+    /// Assumes that column scan is a [ColumnScanUnion]
     /// Set a vector that indicates which scans are currently active and should be considered
     pub fn union_set_active(&mut self, active_scans: BitVec) {
         if let Self::ColumnScanUnion(cs) = self {
@@ -251,17 +184,7 @@ where
         }
     }
 
-    /// Assumes that column scan is a [`ColumnScanMinus`]
-    /// Set a vector that indicates which scans are currently active and should be considered
-    pub fn minus_enable(&mut self, enabled: bool) {
-        if let Self::ColumnScanMinus(cs) = self {
-            cs.minus_enable(enabled)
-        } else {
-            unimplemented!("minus_enable is only available for ColumnScanMinus")
-        }
-    }
-
-    /// Assumes that column scan is a [`ColumnScanSubtract`]
+    /// Assumes that column scan is a [ColumnScanSubtract]
     /// Return a vector indicating which subiterators point to the same value as the main one.
     pub fn subtract_get_equal(&self) -> BitVec {
         if let Self::ColumnScanSubtract(cs) = self {
@@ -271,7 +194,7 @@ where
         }
     }
 
-    /// Assumes that column scan is a [`ColumnScanSubtract`]
+    /// Assumes that column scan is a [ColumnScanSubtract]
     /// Set which sub iterators should be active.
     pub fn subtract_set_active(&mut self, active_scans: BitVec) {
         if let Self::ColumnScanSubtract(cs) = self {
@@ -292,29 +215,20 @@ where
     }
 }
 
-// Generate a macro forward_to_columnscan!, which takes a [`ColumnScanEnum`] and a function as arguments
+// Generate a macro forward_to_columnscan!, which takes a [ColumnScanEnum] and a function as arguments
 // and unfolds into a `match` statement that calls the variant specific version of that function.
-// Each new variant of a [`ColumnScanEnum`] must be added here.
+// Each new variant of a [ColumnScanEnum] must be added here.
 // See `physical/util.rs` for a more detailed description of this macro.
 generate_forwarder!(forward_to_columnscan;
     ColumnScanVector,
     ColumnScanRle,
-    ColumnScanCast,
+    ColumnScanConstant,
+    ColumnScanFilter,
     ColumnScanJoin,
-    ColumnScanReorder,
-    ColumnScanEqualColumn,
-    ColumnScanRestrictValues,
     ColumnScanPass,
     ColumnScanPrune,
-    ColumnScanFollow,
-    ColumnScanMinus,
-    ColumnScanUnion,
-    ColumnScanConstant,
-    ColumnScanCopy,
-    ColumnScanNulls,
     ColumnScanSubtract,
-    ColumnScanArithmetic,
-    ColumnScanFilter
+    ColumnScanUnion
 );
 
 impl<'a, T> Iterator for ColumnScanEnum<'a, T>
@@ -373,18 +287,18 @@ impl<'a, T> ColumnScanCell<'a, T>
 where
     T: 'a + ColumnDataType,
 {
-    /// Construct a new `ColumnScanCell` from the given [`ColumnScanEnum`].
+    /// Construct a new `ColumnScanCell` from the given [ColumnScanEnum].
     pub fn new(cs: ColumnScanEnum<'a, T>) -> Self {
         Self(UnsafeCell::new(cs))
     }
 
-    /// Forward `next` to the underlying [`ColumnScanEnum`].
+    /// Forward `next` to the underlying [ColumnScanEnum].
     #[inline]
     pub fn next(&self) -> Option<<ColumnScanEnum<'a, T> as Iterator>::Item> {
         unsafe { &mut *self.0.get() }.next()
     }
 
-    /// Forward `seek` to the underlying [`ColumnScanEnum`].
+    /// Forward `seek` to the underlying [ColumnScanEnum].
     #[inline]
     pub fn seek(
         &self,
@@ -393,46 +307,31 @@ where
         unsafe { &mut *self.0.get() }.seek(value)
     }
 
-    /// Forward `current` to the underlying [`ColumnScanEnum`].
+    /// Forward `current` to the underlying [ColumnScanEnum].
     #[inline]
     pub fn current(&self) -> Option<<ColumnScanEnum<'a, T> as Iterator>::Item> {
         unsafe { &mut *self.0.get() }.current()
     }
 
-    /// Forward `reset` to the underlying [`ColumnScanEnum`].
+    /// Forward `reset` to the underlying [ColumnScanEnum].
     #[inline]
     pub fn reset(&self) {
         unsafe { &mut *self.0.get() }.reset()
     }
 
-    /// Forward `pos` to the underlying [`ColumnScanEnum`].
+    /// Forward `pos` to the underlying [ColumnScanEnum].
     #[inline]
     pub fn pos(&self) -> Option<usize> {
         unsafe { &(*self.0.get()) }.pos()
     }
 
-    /// Forward `narrow` to the underlying [`ColumnScanEnum`].
+    /// Forward `narrow` to the underlying [ColumnScanEnum].
     #[inline]
     pub fn narrow(&self, interval: Range<usize>) {
         unsafe { &mut *self.0.get() }.narrow(interval)
     }
 
-    /// Forward `pos_multiple` to the underlying [`ColumnScanEnum`].
-    pub fn pos_multiple(&self) -> Option<Vec<usize>> {
-        unsafe { &mut *self.0.get() }.pos_multiple()
-    }
-
-    /// Forward `narrow_ranges` to the underlying [`ColumnScanEnum`].
-    pub fn narrow_ranges(&mut self, intervals: Vec<Range<usize>>) {
-        self.0.get_mut().narrow_ranges(intervals)
-    }
-
-    /// Forward `is_equal` to the underlying [`ColumnScanEnum`].
-    pub fn is_equal(&self) -> bool {
-        unsafe { &mut *self.0.get() }.is_equal()
-    }
-
-    /// Forward `union_get_smallest` to the underlying [`ColumnScanEnum`].
+    /// Forward `union_get_smallest` to the underlying [ColumnScanEnum].
     /// This takes an exclusive reference as opposed to an immutable one, so that none of the
     /// mutating methods on &self can be called while the result is still available
     /// (see <https://github.com/knowsys/nemo/issues/137>)
@@ -440,22 +339,17 @@ where
         unsafe { &mut *self.0.get() }.union_get_smallest()
     }
 
-    /// Forward `union_get_smallest` to the underlying [`ColumnScanEnum`].
+    /// Forward `union_get_smallest` to the underlying [ColumnScanEnum].
     pub fn union_set_active(&mut self, active_scans: BitVec) {
         self.0.get_mut().union_set_active(active_scans);
     }
 
-    /// Forward `minus_enable` to the underlying [`ColumnScanEnum`].
-    pub fn minus_enable(&mut self, enabled: bool) {
-        self.0.get_mut().minus_enable(enabled);
-    }
-
-    /// Forward `subtract_get_equal` to the underlying [`ColumnScanEnum`].
+    /// Forward `subtract_get_equal` to the underlying [ColumnScanEnum].
     pub fn subtract_get_equal(&mut self) -> BitVec {
         self.0.get_mut().subtract_get_equal()
     }
 
-    /// Forward `subtract_set_active` to the underlying [`ColumnScanEnum`].
+    /// Forward `subtract_set_active` to the underlying [ColumnScanEnum].
     pub fn subtract_set_active(&mut self, active_scans: BitVec) {
         unsafe { &mut *self.0.get() }.subtract_set_active(active_scans)
     }
@@ -476,7 +370,7 @@ where
     }
 }
 
-/// Enum for [`ColumnScan`] for underlying data type
+/// Enum for [ColumnScan] for underlying data type
 #[derive(Debug)]
 pub enum ColumnScanT<'a> {
     /// Case u32
@@ -491,54 +385,31 @@ pub enum ColumnScanT<'a> {
     Double(ColumnScanCell<'a, Double>),
 }
 
-// Generate a macro forward_to_columnscan_cell!, which takes a [`ColumnScanT`] and a function as arguments
+// Generate a macro forward_to_columnscan_cell!, which takes a [ColumnScanT] and a function as arguments
 // and unfolds into a `match` statement that calls the datatype specific variant that function.
 // See `physical/util.rs` for a more detailed description of this macro.
 generate_datatype_forwarder!(forward_to_columnscan_cell);
 
 impl<'a> ColumnScanT<'a> {
-    /// Return all positions in the underlying column the cursor is currently at
-    pub fn pos_multiple(&self) -> Option<Vec<usize>> {
-        forward_to_columnscan_cell!(self, pos_multiple)
-    }
-
-    /// Assumes that column scan is a [`ColumnScanReorder`]
-    /// Set iterator to a set of possibly disjoint ranged
-    pub fn narrow_ranges(&mut self, intervals: Vec<Range<usize>>) {
-        forward_to_columnscan_cell!(self, narrow_ranges(intervals))
-    }
-
-    /// Assumes that column scan is a [`ColumnScanFollow`]
-    /// Returns whether its scans point to the same value
-    pub fn is_equal(&self) -> bool {
-        forward_to_columnscan_cell!(self, is_equal)
-    }
-
-    /// Assumes that column scan is a [`ColumnScanUnion`]
+    /// Assumes that column scan is a [ColumnScanUnion]
     /// and returns a vector containing the positions of the scans with the smallest values
     pub fn union_get_smallest(&mut self) -> BitVec {
         forward_to_columnscan_cell!(self, union_get_smallest)
     }
 
-    /// Assumes that column scan is a [`ColumnScanUnion`]
+    /// Assumes that column scan is a [ColumnScanUnion]
     /// Set a vector that indicates which scans are currently active and should be considered
     pub fn union_set_active(&mut self, active_scans: BitVec) {
         forward_to_columnscan_cell!(self, union_set_active(active_scans))
     }
 
-    /// Assumes that column scan is a [`ColumnScanMinus`]
-    /// Set a vector that indicates which scans are currently active and should be considered
-    pub fn minus_enable(&mut self, enabled: bool) {
-        forward_to_columnscan_cell!(self, minus_enable(enabled))
-    }
-
-    /// Assumes that column scan is a [`ColumnScanSubtract`]
+    /// Assumes that column scan is a [ColumnScanSubtract]
     /// Return a vector indicating which subiterators point to the same value as the main one.
     pub fn subtract_get_equal(&mut self) -> BitVec {
         forward_to_columnscan_cell!(self, subtract_get_equal)
     }
 
-    /// Assumes that column scan is a [`ColumnScanSubtract`]
+    /// Assumes that column scan is a [ColumnScanSubtract]
     /// Set which sub iterators should be enabled.
     pub fn subtract_set_active(&mut self, active_scans: BitVec) {
         forward_to_columnscan_cell!(self, subtract_set_active(active_scans))
@@ -696,7 +567,7 @@ impl<'a> ColumnScanRainbow<'a> {
         }
     }
 
-    /// Assumes that column scan is a [`ColumnScanUnion`]
+    /// Assumes that column scan is a [ColumnScanUnion]
     /// and returns a vector containing the positions of the scans with the smallest values.
     pub fn union_get_smallest(&mut self, storage_type: StorageTypeName) -> BitVec {
         match storage_type {
@@ -708,7 +579,7 @@ impl<'a> ColumnScanRainbow<'a> {
         }
     }
 
-    /// Assumes that column scan is a [`ColumnScanUnion`]
+    /// Assumes that column scan is a [ColumnScanUnion]
     /// Set a vector that indicates which scans are currently active and should be considered.
     pub fn union_set_active(&mut self, storage_type: StorageTypeName, active_scans: BitVec) {
         match storage_type {
@@ -720,7 +591,7 @@ impl<'a> ColumnScanRainbow<'a> {
         }
     }
 
-    /// Assumes that column scan is a [`ColumnScanSubtract`]
+    /// Assumes that column scan is a [ColumnScanSubtract]
     /// Return a vector indicating which subiterators point to the same value as the main one.
     pub fn subtract_get_equal(&mut self, storage_type: StorageTypeName) -> BitVec {
         match storage_type {
@@ -732,7 +603,7 @@ impl<'a> ColumnScanRainbow<'a> {
         }
     }
 
-    /// Assumes that column scan is a [`ColumnScanSubtract`]
+    /// Assumes that column scan is a [ColumnScanSubtract]
     /// Set which sub iterators should be enabled.
     pub fn subtract_set_active(&mut self, storage_type: StorageTypeName, active_scans: BitVec) {
         match storage_type {

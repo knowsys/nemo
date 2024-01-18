@@ -2,7 +2,10 @@ use std::fmt::Debug;
 
 use num::{Bounded, CheckedMul};
 
-use crate::{arithmetic::traits::ArithmeticOperations, datatypes::into_datavalue::IntoDataValue};
+use crate::{
+    datatypes::into_datavalue::IntoDataValue,
+    function::definitions::numeric::traits::ArithmeticOperations,
+};
 
 use super::{
     casting::{ImplicitCastFrom, ImplicitCastInto},

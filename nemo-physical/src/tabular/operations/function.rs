@@ -8,7 +8,7 @@ use std::{
 use crate::{
     columnar::{
         columnscan::{ColumnScanEnum, ColumnScanRainbow},
-        operations::{constant::ColumnScanConstant, ColumnScanPass},
+        operations::{constant::ColumnScanConstant, pass::ColumnScanPass},
     },
     datatypes::{into_datavalue::IntoDataValue, StorageTypeName},
     datavalues::AnyDataValue,

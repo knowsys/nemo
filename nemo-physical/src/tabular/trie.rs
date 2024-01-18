@@ -12,13 +12,13 @@ use crate::{
         },
     },
     datasources::tuple_writer::TupleWriter,
-    datatypes::{StorageTypeName, StorageValueT},
+    datatypes::StorageTypeName,
     datavalues::AnyDataValueIterator,
     management::{bytesized::sum_bytes, bytesized::ByteSized},
 };
 
 use super::{
-    buffer::{sorted_tuple_buffer::SortedTupleBuffer, tuple_buffer::TupleBuffer},
+    buffer::sorted_tuple_buffer::SortedTupleBuffer,
     operations::prune::TrieScanPrune,
     triescan::{PartialTrieScan, TrieScan, TrieScanEnum},
 };
@@ -176,7 +176,10 @@ impl Trie {
     /// Create a new [Trie] from a simple row based representation of the table.
     ///
     /// This function assumes that every row has the same number of entries.
-    pub(crate) fn from_rows(rows: Vec<Vec<StorageValueT>>) -> Self {
+    #[cfg(test)]
+    pub(crate) fn from_rows(rows: Vec<Vec<crate::datatypes::StorageValueT>>) -> Self {
+        use crate::tabular::buffer::tuple_buffer::TupleBuffer;
+
         let column_number = if let Some(first_row) = rows.first() {
             first_row.len()
         } else {

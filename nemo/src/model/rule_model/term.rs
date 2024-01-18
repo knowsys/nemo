@@ -247,19 +247,6 @@ impl BinaryOperation {
     }
 }
 
-impl From<BinaryOperation> for nemo_physical::arithmetic::expression::BinaryOperation {
-    fn from(value: BinaryOperation) -> Self {
-        use nemo_physical::arithmetic::expression::BinaryOperation::*;
-        match value {
-            BinaryOperation::Addition => Addition,
-            BinaryOperation::Subtraction => Subtraction,
-            BinaryOperation::Multiplication => Multiplication,
-            BinaryOperation::Division => Division,
-            BinaryOperation::Exponent => Exponent,
-        }
-    }
-}
-
 /// Unary operation applied to a [`Term`]
 #[derive(Debug, Eq, PartialEq, Copy, Clone, PartialOrd, Ord)]
 pub enum UnaryOperation {
@@ -269,17 +256,6 @@ pub enum UnaryOperation {
     UnaryMinus,
     /// Absolute value of the given term.
     Abs,
-}
-
-impl From<UnaryOperation> for nemo_physical::arithmetic::expression::UnaryOperation {
-    fn from(value: UnaryOperation) -> Self {
-        use nemo_physical::arithmetic::expression::UnaryOperation::*;
-        match value {
-            UnaryOperation::SquareRoot => SquareRoot,
-            UnaryOperation::UnaryMinus => Negation,
-            UnaryOperation::Abs => Abs,
-        }
-    }
 }
 
 impl UnaryOperation {

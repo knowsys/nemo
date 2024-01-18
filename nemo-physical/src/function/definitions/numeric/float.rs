@@ -3,10 +3,11 @@
 use num::{traits::CheckedNeg, CheckedAdd, CheckedDiv, CheckedMul, CheckedSub};
 
 use crate::{
-    arithmetic::traits::{CheckedPow, CheckedSquareRoot},
     datatypes::Float,
     datavalues::{AnyDataValue, FloatDataValue},
 };
+
+use super::traits::{CheckedPow, CheckedSquareRoot};
 
 /// Helper function to build results within this module. This might become
 /// obsolete or more elegant once we converge to a more uniform representation

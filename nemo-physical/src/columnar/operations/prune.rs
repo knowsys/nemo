@@ -1,10 +1,12 @@
+//! This module defines [ColumnScanPrune].
+
 use crate::columnar::columnscan::{ColumnScan, ColumnScanCell};
 use crate::datatypes::{ColumnDataType, StorageTypeName};
 use crate::tabular::operations::prune::{SharedTrieScanPruneState, TrieScanPruneState};
 use std::fmt::Debug;
 use std::ops::Range;
 
-/// Forwards calls to this column though it's [`SharedTrieScanPruneState`] to the input trie.
+/// Forwards calls to this column though it's [SharedTrieScanPruneState] to the input trie.
 /// See `TrieScanPrune` for more information.
 #[derive(Debug)]
 pub struct ColumnScanPrune<'a, T>
@@ -52,7 +54,7 @@ where
 
     /// Gets the next output value for a column.
     ///
-    /// This is forwarded to `advance()` of [`crate::tabular::operations::triescan_prune::TrieScanPruneState`]`.
+    /// This is forwarded to `advance()` of [crate::tabular::operations::triescan_prune::TrieScanPruneState]`.
     fn next(&mut self) -> Option<Self::Item> {
         let current_layer = self.column_scan_index;
         let current_type = self.column_scan_type;

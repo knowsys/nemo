@@ -123,11 +123,6 @@ impl SortedTupleBuffer {
         self.tuple_buffer.column_number()
     }
 
-    /// Returns the total number of tuples in the [`SortedTupleBuffer`]
-    pub fn size(&self) -> usize {
-        self.tuple_buffer.size()
-    }
-
     /// For a specified column, return an iterator of over its values as [StorageValueT]s.
     /// The values returned by the iterator respect to global sorting of the tuples.
     pub fn get_column(&self, column_index: usize) -> impl Iterator<Item = StorageValueT> + '_ {

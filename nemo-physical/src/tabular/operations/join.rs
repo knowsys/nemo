@@ -8,7 +8,7 @@ use std::{
 use crate::{
     columnar::{
         columnscan::{ColumnScanCell, ColumnScanEnum, ColumnScanRainbow},
-        operations::ColumnScanJoin,
+        operations::join::ColumnScanJoin,
     },
     datatypes::{Double, Float, StorageTypeName},
     dictionary::meta_dv_dict::MetaDvDictionary,

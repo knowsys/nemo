@@ -4,6 +4,8 @@ mod double;
 mod float;
 mod integer64;
 
+pub(crate) mod traits;
+
 use crate::{
     datatypes::{Double, Float},
     datavalues::{AnyDataValue, DataValue},

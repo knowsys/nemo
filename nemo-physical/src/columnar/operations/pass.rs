@@ -1,3 +1,5 @@
+//! This module defines [ColumnScanPass].
+
 use crate::columnar::columnscan::{ColumnScan, ColumnScanCell};
 use crate::datatypes::ColumnDataType;
 use std::{fmt::Debug, ops::Range};

@@ -1,10 +1,12 @@
+//! This module defines [ColumnScanJoin].
+
 use crate::columnar::columnscan::{ColumnScan, ColumnScanCell};
 use crate::datatypes::ColumnDataType;
 
 use std::fmt::Debug;
 use std::ops::Range;
 
-/// Implementation of [`ColumnScan`] for the result of joining a list of [`ColumnScan`] objects.
+/// Implementation of [ColumnScan] for the result of joining a list of [ColumnScan] objects.
 #[derive(Debug)]
 pub struct ColumnScanJoin<'a, T>
 where
@@ -16,7 +18,7 @@ where
     /// Index of the scan which is currently being advanced
     active_index: usize,
 
-    /// Current value of the [`ColumnScanJoin`]; its also the value pointed to by each sub scan
+    /// Current value of the [ColumnScanJoin]; its also the value pointed to by each sub scan
     current_value: Option<T>,
 }
 
@@ -24,7 +26,7 @@ impl<'a, T> ColumnScanJoin<'a, T>
 where
     T: 'a + ColumnDataType,
 {
-    /// Constructs a new [`ColumnScanJoin`].
+    /// Constructs a new [ColumnScanJoin].
     pub fn new(column_scans: Vec<&'a ColumnScanCell<'a, T>>) -> Self {
         ColumnScanJoin {
             column_scans,

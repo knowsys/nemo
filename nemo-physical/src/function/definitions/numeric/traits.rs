@@ -1,4 +1,4 @@
-//! Defines operations that need to be implemented on number types
+//! This module defines operations that need to be implemented on number types
 //! in order for them to be used in all the supported arithmetic expressions
 
 use num::{

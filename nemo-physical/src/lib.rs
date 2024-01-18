@@ -22,25 +22,17 @@
 #![feature(is_sorted)]
 #![feature(iter_intersperse)]
 
-pub mod columnar;
-pub mod tabular;
-
 pub mod aggregates;
+pub mod columnar;
 pub mod datasources;
 pub mod datatypes;
 pub mod datavalues;
 pub mod dictionary;
 pub mod error;
+pub mod function;
 pub mod management;
 pub mod meta;
 pub mod permutator;
 pub mod resource;
+pub mod tabular;
 pub mod util;
-
-pub mod function;
-
-/// Module defining data structures for working with numeric expressions.
-pub mod arithmetic;
-
-/// Module defining data structures for working with conditions.
-pub mod condition;

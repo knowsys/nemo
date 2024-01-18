@@ -7,7 +7,7 @@ use bitvec::bitvec;
 use crate::{
     columnar::{
         columnscan::{ColumnScanCell, ColumnScanEnum, ColumnScanRainbow},
-        operations::ColumnScanSubtract,
+        operations::subtract::ColumnScanSubtract,
     },
     datatypes::{Double, Float, StorageTypeName},
     dictionary::meta_dv_dict::MetaDvDictionary,

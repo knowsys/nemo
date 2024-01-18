@@ -37,7 +37,7 @@ pub(crate) struct SeminaiveStrategy {
 
 impl SeminaiveStrategy {
     /// Create new [`SeminaiveStrategy`] object.
-    pub(crate) fn initialize(rule: &ChaseRule, analysis: &RuleAnalysis) -> Self {
+    pub(crate) fn initialize(rule: &ChaseRule, _analysis: &RuleAnalysis) -> Self {
         Self {
             positive_atoms: rule.positive_body().clone(),
             positive_constraints: rule.positive_constraints().clone(),

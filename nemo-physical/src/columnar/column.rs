@@ -2,7 +2,6 @@
 //! as well as [ColumnEnum],
 //! which collects all implementations of [Column] into a single object.
 
-pub mod interval;
 pub mod rle;
 pub mod vector;
 

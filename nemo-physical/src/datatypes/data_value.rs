@@ -70,7 +70,7 @@ impl DataValueT {
 
     /// Get the appropriate [`StorageValueT`]` for the given [`DataValueT`].
     /// May change the given dictionary.
-    pub(crate) fn to_storage_value_mut(&self, dict: &mut Dict) -> StorageValueT {
+    pub(crate) fn _to_storage_value_mut(&self, dict: &mut Dict) -> StorageValueT {
         match self {
             Self::String(val) => {
                 // dictionary indices

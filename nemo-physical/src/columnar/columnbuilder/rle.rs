@@ -41,13 +41,6 @@ where
             count: 0,
         }
     }
-
-    /// Adds an repeated value into the currently built column.
-    pub fn add_repeated_value(&mut self, value: T, length: usize) {
-        for _ in 0..length {
-            self.add(value);
-        }
-    }
 }
 
 impl<T> ColumnBuilderRle<T>

@@ -5,7 +5,7 @@ use std::{cell::UnsafeCell, rc::Rc};
 use crate::{
     columnar::{
         columnscan::{ColumnScanCell, ColumnScanEnum, ColumnScanRainbow},
-        operations::ColumnScanPrune,
+        operations::prune::ColumnScanPrune,
     },
     datatypes::{ColumnDataType, StorageTypeName, StorageValueT},
     tabular::triescan::{PartialTrieScan, TrieScan, TrieScanEnum},
