@@ -3,7 +3,7 @@
 
 use std::{
     cell::RefCell,
-    collections::{hash_map::Entry, HashMap, HashSet},
+    collections::{hash_map::Entry, HashMap},
     fmt::Debug,
     rc::{Rc, Weak},
 };

@@ -34,7 +34,7 @@ where
 }
 
 /// Tree structure representing a series of function applications
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum FunctionTree<ReferenceType>
 where
     ReferenceType: Debug + Clone,

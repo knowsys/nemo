@@ -20,8 +20,11 @@ use crate::{
 
 use super::{OperationColumnMarker, OperationGenerator, OperationTable};
 
+/// Representation of a filter expression that can be used
+/// to eliminate certain values from a table.
+pub type Filter = FunctionTree<OperationColumnMarker>;
 /// Collection of filters to be applied to a table
-pub type Filters = Vec<FunctionTree<OperationColumnMarker>>;
+pub type Filters = Vec<Filter>;
 /// Assigns an input column to a function which filters values from that column
 type FilterAssignment = HashMap<OperationColumnMarker, FunctionTree<OperationColumnMarker>>;
 
@@ -90,9 +93,54 @@ impl GeneratorFilter {
         }
     }
 
+    /// Helper function that finds the [OperationColumnMarker] used in the given [Filter]
+    /// that appears closest to the end of the given [OperationTable].
+    fn find_last_reference(table: &OperationTable, filter: &Filter) -> OperationColumnMarker {
+        let references = filter.references();
+        for marker in table.iter().rev() {
+            if references.contains(marker) {
+                return *marker;
+            }
+        }
+
+        unreachable!("Filter must only use markers from the table.")
+    }
+
+    /// Helper function
+    ///
+    /// # Panics
+    /// Panics if zero filters are given as argument.
+    fn fold_filters(filters: Vec<&Filter>) -> Filter {
+        let mut result_filter = (*filters
+            .first()
+            .expect("Function assumes that at least one filter will be provided."))
+        .clone();
+
+        for filter in filters {
+            result_filter = Filter::boolean_conjunction(result_filter, filter.clone());
+        }
+
+        result_filter
+    }
+
     /// Compute the [FilterAssignment] from a list of [Filters].
     fn compute_assignments(input: &OperationTable, filters: &Filters) -> FilterAssignment {
-        todo!()
+        let mut grouped_filters = HashMap::<OperationColumnMarker, Vec<&Filter>>::new();
+
+        for filter in filters {
+            let marker = Self::find_last_reference(input, filter);
+            grouped_filters
+                .entry(marker)
+                .or_insert_with(Vec::new)
+                .push(filter);
+        }
+
+        let mut result = FilterAssignment::new();
+        for (marker, group_filters) in grouped_filters {
+            result.insert(marker, Self::fold_filters(group_filters));
+        }
+
+        result
     }
 }
 

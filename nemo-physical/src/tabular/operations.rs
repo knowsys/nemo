@@ -84,6 +84,11 @@ impl OperationTable {
     pub fn get(&self, index: usize) -> &OperationColumnMarker {
         &self.0[index]
     }
+
+    /// Returns an iterator over the [OperationColumnMarker]s in the table.
+    pub fn iter(&self) -> std::slice::Iter<'_, OperationColumnMarker> {
+        self.0.iter()
+    }
 }
 
 impl IntoIterator for OperationTable {
