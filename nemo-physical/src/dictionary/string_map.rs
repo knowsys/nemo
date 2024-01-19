@@ -1,6 +1,9 @@
 use hashbrown::HashMap;
 
-use super::bytes_buffer::{BytesRef, GlobalBytesBuffer};
+use super::bytes_buffer::{BytesBuffer, BytesRef, GlobalBytesBuffer};
+use crate::datavalues::AnyDataValue;
+
+use delegate::delegate;
 
 /// A struct that implements a mapping that uses Strings as keys.
 ///
@@ -12,14 +15,7 @@ pub(crate) struct StringMap<B: GlobalBytesBuffer, I> {
 }
 
 impl<B: GlobalBytesBuffer, I> StringMap<B, I> {
-    /// Construct a new and empty map.
-    pub(crate) fn new() -> Self {
-        Self::default()
-    }
-
-    /// Insert the given value at the given key. The previous entry is
-    /// returned: either None if the key was not set, or Some(v) for the
-    /// prior value v.
+    /// Insert the given value at the given key.
     pub(crate) fn insert(&mut self, k: &str, v: I) {
         // Be careful not to insert the key again if it was already buffered:
         if !self.mapping.contains_key(k.as_bytes()) {
@@ -44,6 +40,11 @@ impl<B: GlobalBytesBuffer, I> StringMap<B, I> {
     pub(crate) fn get_mut(&mut self, k: &str) -> Option<&mut I> {
         self.mapping.get_mut(k.as_bytes())
     }
+
+    /// Returns the number of entries in the map.
+    pub(crate) fn len(&self) -> usize {
+        self.mapping.len()
+    }
 }
 
 impl<B: GlobalBytesBuffer, I> Default for StringMap<B, I> {
@@ -61,6 +62,32 @@ impl<B: GlobalBytesBuffer, I> Drop for StringMap<B, I> {
     }
 }
 
+crate::dictionary::bytes_buffer::declare_bytes_buffer!(
+    DataValueMapBytesBuffer,
+    DATA_VALUE_MAP_BYTES_BUFFER
+);
+/// A memory-efficient map from string identifiers to [AnyDataValue]s.
+/// This can be used in various contexts, e.g., to translate the local
+/// string IDs of blank nodes in input files into data values.
+#[derive(Debug, Default)]
+pub struct DataValueMap(StringMap<DataValueMapBytesBuffer, AnyDataValue>);
+impl DataValueMap {
+    delegate! {
+        to self.0 {
+            /// Insert the given value at the given key.
+            pub fn insert(&mut self, k: &str, v: AnyDataValue);
+            /// Returns a reference to the current value for the given key,
+            /// or None if there is no value for this key.
+            pub fn get(&self, k: &str) -> Option<&AnyDataValue>;
+            /// Returns a mutable reference to the current value for the given key,
+            /// or None if there is no value for this key.
+            pub fn get_mut(&mut self, k: &str) -> Option<&mut AnyDataValue>;
+            /// Returns the number of entries in the map.
+            pub fn len(&self) -> usize;
+        }
+    }
+}
+
 #[cfg(test)]
 mod test {
     use crate::dictionary::bytes_buffer::{BytesBuffer, GlobalBytesBuffer};
@@ -75,7 +102,7 @@ mod test {
 
     #[test]
     fn add_and_get() {
-        let mut map: TestStringMap<u64> = TestStringMap::new();
+        let mut map: TestStringMap<u64> = TestStringMap::default();
 
         map.insert("A", 1);
         map.insert("B", 2);
@@ -87,5 +114,7 @@ mod test {
         let val_b = map.get_mut("B").expect("should be set");
         *val_b += 1;
         assert_eq!(map.get("B"), Some(3).as_ref());
+
+        assert_eq!(map.len(), 2);
     }
 }
