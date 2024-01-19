@@ -487,6 +487,13 @@ impl AnyDataValue {
     }
 
     /// Return a [StorageValueT] that corresponds to this value, adding it to the dictionary if needed.
+    ///
+    /// # Panics
+    ///
+    /// When called on a value in domain [ValueDomain::Null] that is not already present in the dictionary.
+    /// The correct process in this case is to use the dictionary to create any null value on which this
+    /// method will later be called. It is not possible to newly create a dictionary id for an arbitrary
+    /// null value (in such a way that the same ID will be returned if an equal null value is converted).
     pub(crate) fn to_storage_value_t_mut(&self, dictionary: &mut Dict) -> StorageValueT {
         match self.value_domain() {
             ValueDomain::Tuple
@@ -497,11 +504,16 @@ impl AnyDataValue {
             | ValueDomain::String
             | ValueDomain::LanguageTaggedString
             | ValueDomain::Iri => {
-                // TODO: Do we really need to clone? Typical uses of this method do not need the value after this ...
+                // TODO: Do we really need to clone? At least if the value is known, it should not be necessary. Maybe move into add method?
                 let dictionary_id = dictionary.add_datavalue(self.clone()).value();
                 Self::usize_to_storage_value_t(dictionary_id)
             }
-            ValueDomain::Null => todo!("use special dictionary method for making nulls, if needed"),
+            ValueDomain::Null => {
+                let dictionary_id = dictionary
+                    .datavalue_to_id(self)
+                    .expect("cannot create specific nulls: value must be known to the dictionary");
+                Self::usize_to_storage_value_t(dictionary_id)
+            }
             ValueDomain::Float => StorageValueT::Float(Float::from_number(self.to_f32_unchecked())),
             ValueDomain::Double => {
                 StorageValueT::Double(Double::from_number(self.to_f64_unchecked()))
