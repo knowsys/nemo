@@ -9,6 +9,7 @@ use std::{
 };
 
 use crate::{
+    columnar::column::Column,
     management::database::execution_series::{
         ExecutionTreeLeaf, ExecutionTreeNode, ExecutionTreeOperation,
     },
@@ -169,6 +170,13 @@ pub(crate) enum ExecutionResult {
     /// Table will be stored permanently in the [DatabaseInstance][super::database::DatabaseInstance]
     /// with the given [ColumnOrder] and the given name.
     Permanent(ColumnOrder, String),
+}
+
+impl ExecutionResult {
+    /// Return whether the operation will result in a permanent table.
+    pub fn is_permanent(&self) -> bool {
+        matches!(self, ExecutionResult::Permanent(_, _))
+    }
 }
 
 /// Marker for nodes within an [ExecutionPlan] that are materialized into their own tables
@@ -402,12 +410,15 @@ impl ExecutionPlan {
     /// [ExecutionTree] in the `computed_trees` vector.
     fn execution_tree(
         output_node: &ExecutionOutNode,
+        order: ColumnOrder,
         output_nodes: &[ExecutionOutNode],
         computed_trees: &mut Vec<ExecutionTree>,
-        computed_trees_map: &mut HashMap<ExecutionId, ComputedTableId>,
+        computed_trees_map: &mut HashMap<ExecutionId, Vec<(ColumnOrder, ComputedTableId)>>,
         loaded_tables: &mut HashMap<(PermanentTableId, ColumnOrder), LoadedTableId>,
     ) -> ComputedTableId {
         if let Some(id) = computed_trees_map.get(&output_node.node.id()) {
+            // Find the closest order and return a reordering if needed
+
             *id
         } else {
             let id = computed_trees.len();
@@ -415,6 +426,7 @@ impl ExecutionPlan {
             let root = Self::execution_node(
                 output_node.node.id(),
                 output_node.node.clone(),
+                order.clone(),
                 output_nodes,
                 computed_trees,
                 computed_trees_map,
@@ -431,7 +443,7 @@ impl ExecutionPlan {
 
             let computed_table_id = computed_trees.len();
             computed_trees.push(tree);
-            computed_trees_map.insert(output_node.node.id(), computed_table_id);
+            computed_trees_map.insert(output_node.node.id(), vec![(order, computed_table_id)]);
 
             id
         }
@@ -442,9 +454,10 @@ impl ExecutionPlan {
     fn execution_node(
         root_node_id: ExecutionId,
         node: ExecutionNodeRef,
+        order: ColumnOrder,
         output_nodes: &[ExecutionOutNode],
         computed_trees: &mut Vec<ExecutionTree>,
-        computed_trees_map: &mut HashMap<ExecutionId, ComputedTableId>,
+        computed_trees_map: &mut HashMap<ExecutionId, Vec<(ColumnOrder, ComputedTableId)>>,
         loaded_tables: &mut HashMap<(PermanentTableId, ColumnOrder), LoadedTableId>,
     ) -> ExecutionTreeNode {
         if node.id() != root_node_id {
@@ -454,6 +467,7 @@ impl ExecutionPlan {
             {
                 let computed_id = Self::execution_tree(
                     output_node,
+                    order,
                     output_nodes,
                     computed_trees,
                     computed_trees_map,
@@ -640,11 +654,16 @@ impl ExecutionPlan {
     pub(crate) fn finalize(self) -> ExecutionSeries {
         let mut loaded_tables = HashMap::<(PermanentTableId, ColumnOrder), LoadedTableId>::new();
         let mut trees = Vec::<ExecutionTree>::with_capacity(self.out_nodes.len());
-        let mut trees_map = HashMap::<ExecutionId, ComputedTableId>::new();
+        let mut trees_map = HashMap::<ExecutionId, Vec<(ColumnOrder, ComputedTableId)>>::new();
 
         for output_node in &self.out_nodes {
+            if !output_node.result.is_permanent() {
+                continue;
+            }
+
             Self::execution_tree(
                 output_node,
+                ColumnOrder::default(),
                 &self.out_nodes,
                 &mut trees,
                 &mut trees_map,
