@@ -4,7 +4,7 @@
 use std::cell::RefCell;
 
 use crate::{
-    datavalues::AnyDataValue,
+    datavalues::{AnyDataValue, DataValue, NullDataValue},
     dictionary::DvDict,
     management::database::Dict,
     tabular::buffer::{sorted_tuple_buffer::SortedTupleBuffer, tuple_buffer::TupleBuffer},
@@ -46,8 +46,12 @@ impl<'a> TupleWriter<'a> {
     /// should be used in the written tuples. Each null will be unequal to any other null
     /// created before, so nulls that are to be used in several places must be stored for later.
     #[must_use]
-    pub fn fresh_null(&mut self) -> AnyDataValue {
-        self.dictionary.borrow_mut().fresh_null().0
+    pub fn fresh_null(&mut self) -> NullDataValue {
+        self.dictionary
+            .borrow_mut()
+            .fresh_null()
+            .0
+            .to_null_unchecked()
     }
 
     delegate! {

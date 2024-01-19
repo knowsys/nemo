@@ -1,7 +1,7 @@
 use hashbrown::HashMap;
 
 use super::bytes_buffer::{BytesBuffer, BytesRef, GlobalBytesBuffer};
-use crate::datavalues::AnyDataValue;
+use crate::datavalues::NullDataValue;
 
 use delegate::delegate;
 
@@ -62,26 +62,23 @@ impl<B: GlobalBytesBuffer, I> Drop for StringMap<B, I> {
     }
 }
 
-crate::dictionary::bytes_buffer::declare_bytes_buffer!(
-    DataValueMapBytesBuffer,
-    DATA_VALUE_MAP_BYTES_BUFFER
-);
-/// A memory-efficient map from string identifiers to [AnyDataValue]s.
+crate::dictionary::bytes_buffer::declare_bytes_buffer!(NullMapBytesBuffer, NULL_MAP_BYTES_BUFFER);
+/// A memory-efficient map from string identifiers to [NullDataValue]s.
 /// This can be used in various contexts, e.g., to translate the local
 /// string IDs of blank nodes in input files into data values.
 #[derive(Debug, Default)]
-pub struct DataValueMap(StringMap<DataValueMapBytesBuffer, AnyDataValue>);
-impl DataValueMap {
+pub struct NullMap(StringMap<NullMapBytesBuffer, NullDataValue>);
+impl NullMap {
     delegate! {
         to self.0 {
             /// Insert the given value at the given key.
-            pub fn insert(&mut self, k: &str, v: AnyDataValue);
+            pub fn insert(&mut self, k: &str, v: NullDataValue);
             /// Returns a reference to the current value for the given key,
             /// or None if there is no value for this key.
-            pub fn get(&self, k: &str) -> Option<&AnyDataValue>;
+            pub fn get(&self, k: &str) -> Option<&NullDataValue>;
             /// Returns a mutable reference to the current value for the given key,
             /// or None if there is no value for this key.
-            pub fn get_mut(&mut self, k: &str) -> Option<&mut AnyDataValue>;
+            pub fn get_mut(&mut self, k: &str) -> Option<&mut NullDataValue>;
             /// Returns the number of entries in the map.
             pub fn len(&self) -> usize;
         }

@@ -48,6 +48,10 @@ impl DataValue for NullDataValue {
     fn canonical_string(&self) -> String {
         "_:".to_string() + &self.0.to_string()
     }
+
+    fn to_null_unchecked(&self) -> NullDataValue {
+        return self.clone();
+    }
 }
 
 impl std::hash::Hash for NullDataValue {

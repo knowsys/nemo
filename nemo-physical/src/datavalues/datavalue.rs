@@ -3,7 +3,7 @@
 
 use std::{fmt::Debug, hash::Hash};
 
-use super::{AnyDataValue, IriDataValue};
+use super::{AnyDataValue, IriDataValue, NullDataValue};
 
 /// Encloses a string in double quotes, and escapes inner quotes `\"`, newlines `\n`, carriage returns `\r`,
 /// tabs `\t`, and backslashes `\\`.
@@ -421,6 +421,24 @@ pub trait DataValue: Debug + Into<AnyDataValue> + PartialEq + Eq + Hash + Ord {
     #[must_use]
     fn to_boolean_unchecked(&self) -> bool {
         panic!("Value is not a boolean.");
+    }
+
+    /// If this value is a null, return its value.
+    #[must_use]
+    fn to_null(&self) -> Option<NullDataValue> {
+        match self.value_domain() {
+            ValueDomain::Null => Some(self.to_null_unchecked()),
+            _ => None,
+        }
+    }
+
+    /// If this value is a null, returns its value.
+    ///
+    /// # Panics
+    /// Panics if this value is not a boolean.
+    #[must_use]
+    fn to_null_unchecked(&self) -> NullDataValue {
+        panic!("Value is not a null.");
     }
 
     /// Return the IRI-valued label of this complex value if it has a label,

@@ -594,6 +594,8 @@ impl DataValue for AnyDataValue {
             fn to_u32_unchecked(&self) -> u32;
             fn to_boolean(&self) -> Option<bool>;
             fn to_boolean_unchecked(&self) -> bool;
+            fn to_null(&self) -> Option<NullDataValue>;
+            fn to_null_unchecked(&self) -> NullDataValue;
             fn tuple_element(&self, index: usize) -> Option<&AnyDataValue>;
             fn len(&self) -> Option<usize>;
             fn len_unchecked(&self) -> usize;
