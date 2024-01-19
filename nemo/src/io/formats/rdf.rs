@@ -9,6 +9,7 @@ use std::{
 use nemo_physical::{
     datasources::{table_providers::TableProvider, tuple_writer::TupleWriter},
     datavalues::{AnyDataValue, DataValueCreationError},
+    dictionary::string_map::NullMap,
     resource::Resource,
 };
 
@@ -83,12 +84,13 @@ fn is_trig(resource: &Resource) -> bool {
 }
 
 /// A [`TableProvider`] for RDF 1.1 files containing triples.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub(crate) struct RDFReader {
     resource_providers: ResourceProviders,
     resource: Resource,
     base: Option<Iri<String>>,
     variant: RDFVariant,
+    bnode_map: NullMap,
 }
 
 impl RDFReader {
@@ -115,6 +117,7 @@ impl RDFReader {
             resource,
             base: base.map(|iri| Iri::parse(iri).expect("should be a valid IRI.")),
             variant,
+            bnode_map: Default::default(),
         }
     }
 
@@ -122,9 +125,18 @@ impl RDFReader {
         AnyDataValue::new_iri(value.iri.to_string())
     }
 
-    /// FIXME: BNode handling must be more sophisticated to be correct.
-    fn datavalue_from_blank_node(value: BlankNode) -> AnyDataValue {
-        AnyDataValue::new_iri(value.to_string())
+    fn datavalue_from_blank_node(
+        bnode_map: &mut NullMap,
+        tuple_writer: &mut TupleWriter,
+        value: BlankNode,
+    ) -> AnyDataValue {
+        if let Some(null) = bnode_map.get(value.to_string().as_str()) {
+            AnyDataValue::from(null.clone())
+        } else {
+            let null = tuple_writer.fresh_null();
+            bnode_map.insert(value.to_string().as_str(), null.clone());
+            AnyDataValue::from(null)
+        }
     }
 
     /// Create [`AnyDataValue`] from a [`Literal`].
@@ -143,24 +155,36 @@ impl RDFReader {
         }
     }
 
-    fn datavalue_from_subject(value: Subject<'_>) -> Result<AnyDataValue, RdfReadingError> {
+    fn datavalue_from_subject(
+        bnode_map: &mut NullMap,
+        tuple_writer: &mut TupleWriter,
+        value: Subject<'_>,
+    ) -> Result<AnyDataValue, RdfReadingError> {
         match value {
             Subject::NamedNode(nn) => Ok(Self::datavalue_from_named_node(nn)),
-            Subject::BlankNode(bn) => Ok(Self::datavalue_from_blank_node(bn)),
+            Subject::BlankNode(bn) => {
+                Ok(Self::datavalue_from_blank_node(bnode_map, tuple_writer, bn))
+            }
             Subject::Triple(_t) => Err(RdfReadingError::RdfStarUnsupported),
         }
     }
 
-    fn datavalue_from_term(value: Term<'_>) -> Result<AnyDataValue, RdfReadingError> {
+    fn datavalue_from_term(
+        bnode_map: &mut NullMap,
+        tuple_writer: &mut TupleWriter,
+        value: Term<'_>,
+    ) -> Result<AnyDataValue, RdfReadingError> {
         match value {
             Term::NamedNode(nn) => Ok(Self::datavalue_from_named_node(nn)),
-            Term::BlankNode(bn) => Ok(Self::datavalue_from_blank_node(bn)),
+            Term::BlankNode(bn) => Ok(Self::datavalue_from_blank_node(bnode_map, tuple_writer, bn)),
             Term::Literal(lit) => Ok(Self::datavalue_from_literal(lit)?),
             Term::Triple(_t) => Err(RdfReadingError::RdfStarUnsupported),
         }
     }
 
     fn datavalue_from_graph_name(
+        bnode_map: &mut NullMap,
+        tuple_writer: &mut TupleWriter,
         value: Option<GraphName<'_>>,
     ) -> Result<AnyDataValue, RdfReadingError> {
         match value {
@@ -172,13 +196,15 @@ impl RDFReader {
                 Ok(AnyDataValue::new_iri(DEFAULT_GRAPH.to_string()))
             }
             Some(GraphName::NamedNode(nn)) => Ok(Self::datavalue_from_named_node(nn)),
-            Some(GraphName::BlankNode(bn)) => Ok(Self::datavalue_from_blank_node(bn)),
+            Some(GraphName::BlankNode(bn)) => {
+                Ok(Self::datavalue_from_blank_node(bnode_map, tuple_writer, bn))
+            }
         }
     }
 
     /// Read the RDF triples from a parser.
     fn read_triples_with_parser<Parser>(
-        &self,
+        &mut self,
         tuple_writer: &mut TupleWriter,
         make_parser: impl FnOnce() -> Parser,
     ) -> Result<(), Box<dyn std::error::Error>>
@@ -190,9 +216,11 @@ impl RDFReader {
         let mut triple_count = 0;
 
         let mut on_triple = |triple: Triple| {
-            let subject = Self::datavalue_from_subject(triple.subject)?;
+            let subject =
+                Self::datavalue_from_subject(&mut self.bnode_map, tuple_writer, triple.subject)?;
             let predicate = Self::datavalue_from_named_node(triple.predicate);
-            let object = Self::datavalue_from_term(triple.object)?;
+            let object =
+                Self::datavalue_from_term(&mut self.bnode_map, tuple_writer, triple.object)?;
 
             tuple_writer.add_tuple_value(subject);
             tuple_writer.add_tuple_value(predicate);
@@ -221,7 +249,7 @@ impl RDFReader {
 
     /// Read the RDF quads from a parser.
     fn read_quads_with_parser<Parser>(
-        &self,
+        &mut self,
         tuple_writer: &mut TupleWriter,
         make_parser: impl FnOnce() -> Parser,
     ) -> Result<(), Box<dyn std::error::Error>>
@@ -233,10 +261,15 @@ impl RDFReader {
         let mut quad_count = 0;
 
         let mut on_triple = |quad: Quad| {
-            let subject = Self::datavalue_from_subject(quad.subject)?;
+            let subject =
+                Self::datavalue_from_subject(&mut self.bnode_map, tuple_writer, quad.subject)?;
             let predicate = Self::datavalue_from_named_node(quad.predicate);
-            let object = Self::datavalue_from_term(quad.object)?;
-            let graph_name = Self::datavalue_from_graph_name(quad.graph_name)?;
+            let object = Self::datavalue_from_term(&mut self.bnode_map, tuple_writer, quad.object)?;
+            let graph_name = Self::datavalue_from_graph_name(
+                &mut self.bnode_map,
+                tuple_writer,
+                quad.graph_name,
+            )?;
 
             tuple_writer.add_tuple_value(subject);
             tuple_writer.add_tuple_value(predicate);
@@ -267,12 +300,14 @@ impl RDFReader {
 
 impl TableProvider for RDFReader {
     fn provide_table_data(
-        self: Box<Self>,
+        mut self: Box<Self>,
         tuple_writer: &mut TupleWriter,
     ) -> Result<(), Box<dyn std::error::Error>> {
         let reader = self
             .resource_providers
             .open_resource(&self.resource, true)?;
+
+        let base_iri = self.base.clone();
 
         let reader = BufReader::new(reader);
 
@@ -283,15 +318,15 @@ impl TableProvider for RDFReader {
             RDFVariant::NQuads => {
                 self.read_quads_with_parser(tuple_writer, || NQuadsParser::new(reader))
             }
-            RDFVariant::Turtle => self.read_triples_with_parser(tuple_writer, || {
-                TurtleParser::new(reader, self.base.clone())
-            }),
-            RDFVariant::RDFXML => self.read_triples_with_parser(tuple_writer, || {
-                RdfXmlParser::new(reader, self.base.clone())
-            }),
-            RDFVariant::TriG => self.read_quads_with_parser(tuple_writer, || {
-                TriGParser::new(reader, self.base.clone())
-            }),
+            RDFVariant::Turtle => {
+                self.read_triples_with_parser(tuple_writer, || TurtleParser::new(reader, base_iri))
+            }
+            RDFVariant::RDFXML => {
+                self.read_triples_with_parser(tuple_writer, || RdfXmlParser::new(reader, base_iri))
+            }
+            RDFVariant::TriG => {
+                self.read_quads_with_parser(tuple_writer, || TriGParser::new(reader, base_iri))
+            }
             RDFVariant::Unspecified => Err(Box::new(RdfReadingError::UnknownRdfFormat(
                 self.resource.clone(),
             ))),
@@ -632,7 +667,7 @@ mod test {
         <http://example.org/subject1> <http://an.example/predicate2> "string2" . # Note that duplicate triples are not eliminated here yet
         "#.as_bytes();
 
-        let reader = RDFReader::new(ResourceProviders::empty(), String::new(), None);
+        let mut reader = RDFReader::new(ResourceProviders::empty(), String::new(), None);
         let dict = RefCell::new(Dict::default());
         let mut tuple_writer = TupleWriter::new(&dict, 3);
         let result =
@@ -648,7 +683,7 @@ mod test {
         "#
         .as_bytes();
 
-        let reader = RDFReader::new(ResourceProviders::empty(), String::new(), None);
+        let mut reader = RDFReader::new(ResourceProviders::empty(), String::new(), None);
         let dict = RefCell::new(Dict::default());
         let mut tuple_writer = TupleWriter::new(&dict, 3);
         let result =
@@ -665,7 +700,7 @@ mod test {
         malformed <http://an.example/predicate2> "12"^^<http://www.w3.org/2001/XMLSchema#int> . # ignored
         "#.as_bytes();
 
-        let reader = RDFReader::new(ResourceProviders::empty(), String::new(), None);
+        let mut reader = RDFReader::new(ResourceProviders::empty(), String::new(), None);
         let dict = RefCell::new(Dict::default());
         let mut tuple_writer = TupleWriter::new(&dict, 3);
         let result =
