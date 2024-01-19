@@ -4,8 +4,10 @@ use crate::datavalues::AnyDataValue;
 
 use super::BinaryFunction;
 
-/// Compares to values and returns `true` if they are equal
-/// and `false` if they are not.
+/// Equal comparison
+///
+/// Returns `true` from the boolean value space
+/// if both input values are equal and `false` if they are not.
 #[derive(Debug, Copy, Clone)]
 pub struct Equals;
 impl BinaryFunction for Equals {
@@ -22,8 +24,10 @@ impl BinaryFunction for Equals {
     }
 }
 
-/// Compares to values and returns `false` if they are equal
-/// and `true` if they are not.
+/// Unequal comparison
+///
+/// Returns `false` from the boolean value space
+/// if both input values are equal and `true` if they are not.
 #[derive(Debug, Copy, Clone)]
 pub struct Unequals;
 impl BinaryFunction for Unequals {

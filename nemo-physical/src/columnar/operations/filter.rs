@@ -62,7 +62,7 @@ where
             .expect("It is assumed that all id already in columns are present in the dictionary.");
         let referenced = &self.referenced_values.borrow();
 
-        self.program.evaluate_bool(referenced, datavalue)
+        self.program.evaluate_bool(referenced, Some(datavalue))
     }
 
     /// Loop through `self.value_scan` until the next value passing

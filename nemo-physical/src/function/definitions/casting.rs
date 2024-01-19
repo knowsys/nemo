@@ -6,11 +6,16 @@ use super::UnaryFunction;
 
 /// Casting of values into 64-bit integers
 ///
+/// Returns an integer number representing its input
+/// as close as possible.
+///
 /// This operation is defined for
 ///   * signed 64-bit integers
 ///   * unsigned integers that can be represented in 63 bits
 ///   * floating point numbers that don't contain a fractional part
 ///   * booleans
+/// 
+/// Returns `None` when called on values outside the range described above.
 #[derive(Debug, Copy, Clone)]
 pub struct CastingIntoInteger64;
 impl UnaryFunction for CastingIntoInteger64 {
@@ -62,10 +67,15 @@ impl UnaryFunction for CastingIntoInteger64 {
 
 /// Casting of a value into a 32bit floating point number
 ///
+/// Returns a 32-bit floating point number representing its input
+/// as close as possible.
+///
 /// This operation is defined for:
 ///   * 32bit floating point numbers
 ///   * all integers
 ///   * 64bit floating point numbers
+///
+/// Returns `None` when called on values outside the range described above.
 #[derive(Debug, Copy, Clone)]
 pub struct CastingIntoFloat;
 impl UnaryFunction for CastingIntoFloat {
@@ -106,10 +116,15 @@ impl UnaryFunction for CastingIntoFloat {
 
 /// Casting of a value into a 64-bit floating point number
 ///
+/// Returns a 64-bit floating point number representing its input
+/// as close as possible.
+///
 /// This operation is defined for:
 ///   * all integers
 ///   * 32-bit floating point numbers
 ///   * 64-bit floating point numbers
+///
+/// Returns `None` when called on values outside the range described above.
 #[derive(Debug, Copy, Clone)]
 pub struct CastingIntoDouble;
 impl UnaryFunction for CastingIntoDouble {

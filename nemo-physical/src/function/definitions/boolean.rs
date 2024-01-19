@@ -22,6 +22,10 @@ fn bool_pair_from_any(
 }
 
 /// Boolean conjunction
+///
+/// Returns `true` if both of its inputs are `true`.
+///
+/// Returns `None` if one of the inputs is not in the boolean value range.
 #[derive(Debug, Copy, Clone)]
 pub struct BooleanConjunction;
 impl BinaryFunction for BooleanConjunction {
@@ -36,6 +40,10 @@ impl BinaryFunction for BooleanConjunction {
 }
 
 /// Boolean disjunction
+///
+/// Returns `true` if at least one of its inputs is `true`.
+///
+/// Returns `None` if one of the inputs is not in the boolean value range.
 #[derive(Debug, Copy, Clone)]
 pub struct BooleanDisjunction;
 impl BinaryFunction for BooleanDisjunction {
@@ -50,6 +58,11 @@ impl BinaryFunction for BooleanDisjunction {
 }
 
 /// Boolean Negation
+///
+/// Returns `true` if its input is `false`,
+/// and returns `false` if its input it `true`.
+///
+/// Returns `None` if the input is not in the boolean value range.
 #[derive(Debug, Copy, Clone)]
 pub struct BooleanNegation;
 impl UnaryFunction for BooleanNegation {

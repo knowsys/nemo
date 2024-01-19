@@ -18,7 +18,7 @@ fn some_datavalue_from_float(d: Float) -> Option<AnyDataValue> {
 
 /// Addition of 32-bit floating point numbers
 ///
-/// Doesn't return a value if the operation results in NaN.
+/// Returns `None` if the resulting value is not representable as a [Float].
 pub(super) fn numeric_addition_float(
     parameter_first: Float,
     parameter_second: Float,
@@ -28,7 +28,7 @@ pub(super) fn numeric_addition_float(
 
 /// Subtraction of 32-bit floating point numbers
 ///
-/// Doesn't return a value if the operation results in NaN.
+/// Returns `None` if the resulting value is not representable as a [Float].
 pub(super) fn numeric_subtraction_float(
     parameter_first: Float,
     parameter_second: Float,
@@ -38,7 +38,7 @@ pub(super) fn numeric_subtraction_float(
 
 /// Multiplication of 32-bit floating point numbers
 ///
-/// Doesn't return a value if the operation results in NaN.
+/// Returns `None` if the resulting value is not representable as a [Float].
 pub(super) fn numeric_multiplication_float(
     parameter_first: Float,
     parameter_second: Float,
@@ -48,7 +48,7 @@ pub(super) fn numeric_multiplication_float(
 
 /// Division of 32-bit floating point numbers
 ///
-/// Doesn't return a value if the operation results in NaN.
+/// Returns `None` if the resulting value is not representable as a [Float].
 pub(super) fn numeric_division_float(
     parameter_first: Float,
     parameter_second: Float,
@@ -96,7 +96,7 @@ pub(super) fn numeric_tan_float(parameter: Float) -> Option<AnyDataValue> {
 /// Raising a 32-bit float to some power
 ///
 /// The first parameter is the base and the second is the exponent.
-/// Returns `None` if the result cannot be represented by an 32-bit float.
+/// Returns `None` if the resulting value is not representable as a [Float].
 pub(super) fn numeric_power_float(base: Float, exponent: Float) -> Option<AnyDataValue> {
     some_datavalue_from_float(base.checked_pow(exponent)?)
 }

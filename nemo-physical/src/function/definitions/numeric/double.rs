@@ -18,7 +18,7 @@ fn some_datavalue_from_double(d: Double) -> Option<AnyDataValue> {
 
 /// Addition of 64-bit floating point numbers
 ///
-/// Doesn't return a value if the operation results in NaN.
+/// Returns `None` if the resulting value is not representable as a [Double].
 pub(super) fn numeric_addition_double(
     parameter_first: Double,
     parameter_second: Double,
@@ -28,7 +28,7 @@ pub(super) fn numeric_addition_double(
 
 /// Subtraction of 64-bit floating point numbers
 ///
-/// Doesn't return a value if the operation results in NaN.
+/// Returns `None` if the resulting value is not representable as a [Double].
 pub(super) fn numeric_subtraction_double(
     parameter_first: Double,
     parameter_second: Double,
@@ -38,7 +38,7 @@ pub(super) fn numeric_subtraction_double(
 
 /// Multiplication of 64-bit floating point numbers
 ///
-/// Doesn't return a value if the operation results in NaN.
+/// Returns `None` if the resulting value is not representable as a [Double].
 pub(super) fn numeric_multiplication_double(
     parameter_first: Double,
     parameter_second: Double,
@@ -48,7 +48,7 @@ pub(super) fn numeric_multiplication_double(
 
 /// Division of 64-bit floating point numbers
 ///
-/// Doesn't return a value if the operation results in NaN.
+/// Returns `None` if the resulting value is not representable as a [Double].
 pub(super) fn numeric_division_double(
     parameter_first: Double,
     parameter_second: Double,
@@ -68,7 +68,7 @@ pub(super) fn numeric_negation_double(parameter: Double) -> Option<AnyDataValue>
 
 /// Square root of 64-bit floating point number
 ///
-/// Returns `None` if parameter was negative
+/// Returns `None` if parameter was negative.
 pub(super) fn numeric_squareroot_double(parameter: Double) -> Option<AnyDataValue> {
     some_datavalue_from_double(parameter.checked_sqrt()?)
 }
@@ -96,7 +96,7 @@ pub(super) fn numeric_tan_double(parameter: Double) -> Option<AnyDataValue> {
 /// Raising a 64-bit float to some power
 ///
 /// The first parameter is the base and the second is the exponent.
-/// Returns `None` if the result cannot be represented by an 64-bit float.
+/// Returns `None` if the resulting value is not representable as a [Double].
 pub(super) fn numeric_power_double(base: Double, exponent: Double) -> Option<AnyDataValue> {
     some_datavalue_from_double(base.checked_pow(exponent)?)
 }

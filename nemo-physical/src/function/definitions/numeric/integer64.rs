@@ -6,7 +6,7 @@ use crate::datavalues::AnyDataValue;
 
 /// Addition of 64-bit integers
 ///
-/// Doesn't return a value if the operation results in an value outside the 64-bit integer range.s
+/// Doesn't return a value if the operation results in an value outside the 64-bit integer range.
 pub(super) fn numeric_addition_integer64(
     parameter_first: i64,
     parameter_second: i64,
@@ -18,7 +18,7 @@ pub(super) fn numeric_addition_integer64(
 
 /// Subtraction of 64-bit integers
 ///
-/// Doesn't return a value if the operation results in an value outside the 64-bit integer range.s
+/// Doesn't return a value if the operation results in an value outside the 64-bit integer range.
 pub(super) fn numeric_subtraction_integer64(
     parameter_first: i64,
     parameter_second: i64,
@@ -30,7 +30,7 @@ pub(super) fn numeric_subtraction_integer64(
 
 /// Multiplication of 64-bit integers
 ///
-/// Doesn't return a value if the operation results in an value outside the 64-bit integer range.s
+/// Doesn't return a value if the operation results in an value outside the 64-bit integer range.
 pub(super) fn numeric_multiplication_integer64(
     parameter_first: i64,
     parameter_second: i64,
@@ -42,7 +42,7 @@ pub(super) fn numeric_multiplication_integer64(
 
 /// Division of 64-bit integers
 ///
-/// Doesn't return a value if the operation results in an value outside the 64-bit integer range.s
+/// Doesn't return a value if the operation results in an value outside the 64-bit integer range.
 pub(super) fn numeric_division_integer64(
     parameter_first: i64,
     parameter_second: i64,
@@ -54,7 +54,7 @@ pub(super) fn numeric_division_integer64(
 
 /// Absolute value of a 64-bit integer
 ///
-/// Doesn't return a value if the operation results in an value outside the 64-bit integer range.s
+/// Doesn't return a value if the operation results in an value outside the 64-bit integer range.
 pub(super) fn numeric_absolute_integer64(parameter: i64) -> Option<AnyDataValue> {
     Some(AnyDataValue::new_integer_from_i64(parameter.abs()))
 }

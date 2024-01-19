@@ -8,7 +8,7 @@ pub(crate) mod traits;
 
 use crate::{
     datatypes::{Double, Float},
-    datavalues::{AnyDataValue, DataValue},
+    datavalues::{AnyDataValue, DataValue, ValueDomain},
 };
 
 use self::{
@@ -50,28 +50,26 @@ enum NumericValue {
 impl NumericValue {
     fn from_any_datavalue(value: AnyDataValue) -> Option<NumericValue> {
         match value.value_domain() {
-            crate::datavalues::ValueDomain::Tuple
-            | crate::datavalues::ValueDomain::Map
-            | crate::datavalues::ValueDomain::Null
-            | crate::datavalues::ValueDomain::Boolean
-            | crate::datavalues::ValueDomain::String
-            | crate::datavalues::ValueDomain::LanguageTaggedString
-            | crate::datavalues::ValueDomain::Other
-            | crate::datavalues::ValueDomain::Iri => None,
-            crate::datavalues::ValueDomain::Float => Some(NumericValue::Float(Float::from_number(
+            ValueDomain::Tuple
+            | ValueDomain::Map
+            | ValueDomain::Null
+            | ValueDomain::Boolean
+            | ValueDomain::String
+            | ValueDomain::LanguageTaggedString
+            | ValueDomain::Other
+            | ValueDomain::Iri => None,
+            ValueDomain::Float => Some(NumericValue::Float(Float::from_number(
                 value.to_f32_unchecked(),
             ))),
-            crate::datavalues::ValueDomain::Double => Some(NumericValue::Double(
-                Double::from_number(value.to_f64_unchecked()),
-            )),
-            crate::datavalues::ValueDomain::UnsignedLong => None, // numeric, but cannot represented in NumericValue
-            crate::datavalues::ValueDomain::NonNegativeLong
-            | crate::datavalues::ValueDomain::UnsignedInt
-            | crate::datavalues::ValueDomain::NonNegativeInt
-            | crate::datavalues::ValueDomain::Long
-            | crate::datavalues::ValueDomain::Int => {
-                Some(NumericValue::Integer(value.to_i64_unchecked()))
-            }
+            ValueDomain::Double => Some(NumericValue::Double(Double::from_number(
+                value.to_f64_unchecked(),
+            ))),
+            ValueDomain::UnsignedLong => None, // numeric, but cannot represented in NumericValue
+            ValueDomain::NonNegativeLong
+            | ValueDomain::UnsignedInt
+            | ValueDomain::NonNegativeInt
+            | ValueDomain::Long
+            | ValueDomain::Int => Some(NumericValue::Integer(value.to_i64_unchecked())),
         }
     }
 }
@@ -92,28 +90,28 @@ impl NumericPair {
         parameter_second: AnyDataValue,
     ) -> Option<NumericPair> {
         match parameter_first.value_domain() {
-            crate::datavalues::ValueDomain::String
-            | crate::datavalues::ValueDomain::Null
-            | crate::datavalues::ValueDomain::LanguageTaggedString
-            | crate::datavalues::ValueDomain::Tuple
-            | crate::datavalues::ValueDomain::Map
-            | crate::datavalues::ValueDomain::Boolean
-            | crate::datavalues::ValueDomain::Other
-            | crate::datavalues::ValueDomain::Iri => None,
-            crate::datavalues::ValueDomain::Float => Some(NumericPair::Float(
+            ValueDomain::String
+            | ValueDomain::Null
+            | ValueDomain::LanguageTaggedString
+            | ValueDomain::Tuple
+            | ValueDomain::Map
+            | ValueDomain::Boolean
+            | ValueDomain::Other
+            | ValueDomain::Iri => None,
+            ValueDomain::Float => Some(NumericPair::Float(
                 Float::from_number(parameter_first.to_f32_unchecked()),
                 Float::from_number(parameter_second.to_f32()?),
             )),
-            crate::datavalues::ValueDomain::Double => Some(NumericPair::Double(
+            ValueDomain::Double => Some(NumericPair::Double(
                 Double::from_number(parameter_first.to_f64_unchecked()),
                 Double::from_number(parameter_second.to_f64()?),
             )),
-            crate::datavalues::ValueDomain::UnsignedLong => None, // numeric, but cannot be represented in StorageValues as used in NumericPair
-            crate::datavalues::ValueDomain::NonNegativeLong
-            | crate::datavalues::ValueDomain::UnsignedInt
-            | crate::datavalues::ValueDomain::NonNegativeInt
-            | crate::datavalues::ValueDomain::Long
-            | crate::datavalues::ValueDomain::Int => Some(NumericPair::Integer(
+            ValueDomain::UnsignedLong => None, // numeric, but cannot be represented in StorageValues as used in NumericPair
+            ValueDomain::NonNegativeLong
+            | ValueDomain::UnsignedInt
+            | ValueDomain::NonNegativeInt
+            | ValueDomain::Long
+            | ValueDomain::Int => Some(NumericPair::Integer(
                 parameter_first.to_i64_unchecked(),
                 parameter_second.to_i64()?,
             )),
@@ -123,7 +121,10 @@ impl NumericPair {
 
 /// Numeric addition
 ///
-/// Does not return a value if the operation results in a value not representable by the type.
+/// Returns the sum of the given parameters.
+///
+/// Returns `None` if the input parameters are not the same numeric type
+/// or if the result cannot be represented within the range of the numeric value type.
 #[derive(Debug, Copy, Clone)]
 pub struct NumericAddition;
 impl BinaryFunction for NumericAddition {
@@ -146,7 +147,10 @@ impl BinaryFunction for NumericAddition {
 
 /// Numeric subtraction
 ///
-/// Does not return a value if the operation results in a value not representable by the type.
+/// Returns the difference between the first and the second parameter.
+///
+/// Returns `None` if the input parameters are not the same numeric type
+/// or if the result cannot be represented within the range of the numeric value type.
 #[derive(Debug, Copy, Clone)]
 pub struct NumericSubtraction;
 impl BinaryFunction for NumericSubtraction {
@@ -169,7 +173,10 @@ impl BinaryFunction for NumericSubtraction {
 
 /// Numeric multiplication
 ///
-/// Does not return a value if the operation results in a value not representable by the type.
+/// Returns the product of the given parameters.
+///
+/// Returns `None` if the input parameters are not the same numeric type
+/// or if the result cannot be represented within the range of the numeric value type.
 #[derive(Debug, Copy, Clone)]
 pub struct NumericMultiplication;
 impl BinaryFunction for NumericMultiplication {
@@ -194,7 +201,10 @@ impl BinaryFunction for NumericMultiplication {
 
 /// Numeric division
 ///
-/// Does not return a value if the operation results in a value not representable by the type.
+/// Returns the quotient resulting from dividing the first parameter by the second.
+///
+/// Returns `None` if the input parameters are not the same numeric type
+/// or if the result cannot be represented within the range of the numeric value type.
 #[derive(Debug, Copy, Clone)]
 pub struct NumericDivision;
 impl BinaryFunction for NumericDivision {
@@ -217,7 +227,11 @@ impl BinaryFunction for NumericDivision {
 
 /// Logarithm of numeric values w.r.t. an arbitraty numeric base
 ///
-/// Does not return a value if the operation results in a value not representable by the type.
+/// Returns the logarithm of the first parameter,
+/// where the base is given by the second parameter.
+///
+/// Returns `None` if the input parameters are not the same numeric type
+/// or if the result cannot be represented within the range of the numeric value type.
 #[derive(Debug, Copy, Clone)]
 pub struct NumericLogarithm;
 impl BinaryFunction for NumericLogarithm {
@@ -240,7 +254,10 @@ impl BinaryFunction for NumericLogarithm {
 
 /// Raising a numeric value to some power
 ///
-/// Does not return a value if the operation results in a value not representable by the type.
+/// Returns the first parameter raised to the power of the second parameter.
+///
+/// Returns `None` if the input parameters are not the same numeric type
+/// or if the result cannot be represented within the range of the numeric value type.
 #[derive(Debug, Copy, Clone)]
 pub struct NumericPower;
 impl BinaryFunction for NumericPower {
@@ -263,7 +280,9 @@ impl BinaryFunction for NumericPower {
 
 /// Absolute value of numeric values
 ///
-/// Does not return a value if the operation results in a value not representable by the type.
+/// Returns the absolute value of the given parameter.
+///
+/// Returns `None` if the input parameter is not a numeric value space.
 #[derive(Debug, Copy, Clone)]
 pub struct NumericAbsolute;
 impl UnaryFunction for NumericAbsolute {
@@ -282,7 +301,9 @@ impl UnaryFunction for NumericAbsolute {
 
 /// Negation of a numeric value
 ///
-/// Does not return a value if the operation results in a value not representable by the type.
+/// Returns the multiplicative inverse of the input paramter.
+///
+/// Returns `None` if the input parameter is not a numeric value space.
 #[derive(Debug, Copy, Clone)]
 pub struct NumericNegation;
 impl UnaryFunction for NumericNegation {
@@ -301,7 +322,10 @@ impl UnaryFunction for NumericNegation {
 
 /// Square root of a numeric value
 ///
-/// Does not return a value if the operation results in a value not representable by the type.
+/// Returns the square root of the given input paramter.
+///
+/// Returns `None` if the input parameter is not a numeric value space
+/// or is negative.
 #[derive(Debug, Copy, Clone)]
 pub struct NumericSquareroot;
 impl UnaryFunction for NumericSquareroot {
@@ -320,8 +344,9 @@ impl UnaryFunction for NumericSquareroot {
 
 /// Sine of a numeric value
 ///
-/// Note: This operation is only defined for floating point numbers.
-/// Does not return a value if the operation results in a value not representable by the type.
+/// Returns the sine of the input parameter.
+///
+/// Returns `None` if the input paramter is not in a floating point value space.
 #[derive(Debug, Copy, Clone)]
 pub struct NumericSine;
 impl UnaryFunction for NumericSine {
@@ -340,8 +365,9 @@ impl UnaryFunction for NumericSine {
 
 /// Cosine of a numeric value
 ///
-/// Note: This operation is only defined for floating point numbers.
-/// Does not return a value if the operation results in a value not representable by the type.
+/// Returns the cosine of the input parameter.
+///
+/// Returns `None` if the input paramter is not in a floating point value space.
 #[derive(Debug, Copy, Clone)]
 pub struct NumericCosine;
 impl UnaryFunction for NumericCosine {
@@ -360,8 +386,9 @@ impl UnaryFunction for NumericCosine {
 
 /// Tangent of a numeric value
 ///
-/// Note: This operation is only defined for floating point numbers.
-/// Does not return a value if the operation results in a value not representable by the type.
+/// Returns the tangent of the input parameter.
+///
+/// Returns `None` if the input paramter is not in a floating point value space.
 #[derive(Debug, Copy, Clone)]
 pub struct NumericTangent;
 impl UnaryFunction for NumericTangent {
@@ -379,6 +406,12 @@ impl UnaryFunction for NumericTangent {
 }
 
 /// Less than comparison of two numbers
+///
+/// Returns `true` from the boolean value space
+/// if the first argument is smaller than the second argument,
+/// and `false` otherwise.
+///
+/// Returns `None` if the arguments are not from the same numeric value space.
 #[derive(Debug, Copy, Clone)]
 pub struct NumericLessthan;
 impl BinaryFunction for NumericLessthan {
@@ -400,6 +433,12 @@ impl BinaryFunction for NumericLessthan {
 }
 
 /// Less than or equals comparison of two numbers
+///
+/// Returns `true` from the boolean value space
+/// if the first argument is smaller than or equal to the second argument,
+/// and `false` otherwise.
+///
+/// Returns `None` if the arguments are not from the same numeric value space.
 #[derive(Debug, Copy, Clone)]
 pub struct NumericLessthaneq;
 impl BinaryFunction for NumericLessthaneq {
@@ -421,6 +460,12 @@ impl BinaryFunction for NumericLessthaneq {
 }
 
 /// Greater than comparison of two numbers
+///
+/// Returns `true` from the boolean value space
+/// if the first argument is greater than the second argument,
+/// and `false` otherwise.
+///
+/// Returns `None` if the arguments are not from the same numeric value space.
 #[derive(Debug, Copy, Clone)]
 pub struct NumericGreaterthan;
 impl BinaryFunction for NumericGreaterthan {
@@ -442,6 +487,12 @@ impl BinaryFunction for NumericGreaterthan {
 }
 
 /// Greater than or equals comparison of two numbers
+///
+/// Returns `true` from the boolean value space
+/// if the first argument is greater than or equal to the second argument,
+/// and `false` otherwise.
+///
+/// Returns `None` if the arguments are not from the same numeric value space.
 #[derive(Debug, Copy, Clone)]
 pub struct NumericGreaterthaneq;
 impl BinaryFunction for NumericGreaterthaneq {

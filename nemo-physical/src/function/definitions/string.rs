@@ -47,6 +47,11 @@ impl BinaryFunction for StringCompare {
 }
 
 /// Concatenation of strings
+///
+/// Returns a string, that results from appending the second parameter
+/// to the first.
+///
+/// Returns `None` if either parameter is not a string.
 #[derive(Debug, Copy, Clone)]
 pub struct StringConcatenation;
 impl BinaryFunction for StringConcatenation {
@@ -63,10 +68,12 @@ impl BinaryFunction for StringConcatenation {
     }
 }
 
-/// Check whether a string is contained in another
+/// Containment of strings
 ///
-/// Returns `true` if the string provided as the first parameter
-/// is contained in the string provided as the second parameter.
+/// Returns `true` from the boolean value space if the string provided as the second parameter
+/// is contained in the string provided as the first parameter and `false` otherwise.
+///
+/// Returns `None` if either parameter is not a string.
 #[derive(Debug, Copy, Clone)]
 pub struct StringContains;
 impl BinaryFunction for StringContains {
@@ -87,9 +94,14 @@ impl BinaryFunction for StringContains {
     }
 }
 
-/// Computation of a substring of a given string
+/// Substring
 ///
-/// Expects a string value as the first parameter and a integer value as the second.
+/// Expects a string value as the first parameter and an integer value as the second.
+///
+/// Return a string containing the first $n$ characters from the first parameter,
+/// where $n$ equals to the value supplied as the second parameter.
+///
+/// Returns `None` if the type requirements from above are not met.
 #[derive(Debug, Copy, Clone)]
 pub struct StringSubstring;
 impl BinaryFunction for StringSubstring {
@@ -105,7 +117,11 @@ impl BinaryFunction for StringSubstring {
     }
 }
 
-/// Computation of the length of a string
+/// Length of a string
+///
+/// Returns the length of the given string as a number from the integer value space.
+///
+/// Returns `None` if the provided argument is not a string.
 #[derive(Debug, Copy, Clone)]
 pub struct StringLength;
 impl UnaryFunction for StringLength {
@@ -117,6 +133,10 @@ impl UnaryFunction for StringLength {
 }
 
 /// Transformation of a string into upper case
+///
+/// Returns the upper case version of the provided string.
+///
+/// Returns `None` if the provided argument is not a string.
 #[derive(Debug, Copy, Clone)]
 pub struct StringUppercase;
 impl UnaryFunction for StringUppercase {
@@ -128,6 +148,10 @@ impl UnaryFunction for StringUppercase {
 }
 
 /// Transformation of a string into lower case
+///
+/// Returns the lower case version of the provided string.
+///
+/// Returns `None` if the provided argument is not a string.
 #[derive(Debug, Copy, Clone)]
 pub struct StringLowercase;
 impl UnaryFunction for StringLowercase {
