@@ -4,3 +4,5 @@
 pub mod bytesized;
 pub mod database;
 pub mod execution_plan;
+
+pub(crate) mod util;

@@ -9,7 +9,6 @@ use std::{
 };
 
 use crate::{
-    columnar::column::Column,
     management::database::execution_series::{
         ExecutionTreeLeaf, ExecutionTreeNode, ExecutionTreeOperation,
     },
@@ -22,12 +21,15 @@ use crate::{
         union::GeneratorUnion,
         OperationGeneratorEnum, OperationTable,
     },
-    util::mapping::permutation::Permutation,
+    util::mapping::{permutation::Permutation, traits::NatMapping},
 };
 
-use super::database::{
-    execution_series::{ComputedTableId, ExecutionSeries, ExecutionTree, LoadedTableId},
-    id::{ExecutionId, PermanentTableId, TableId},
+use super::{
+    database::{
+        execution_series::{ComputedTableId, ExecutionSeries, ExecutionTree, LoadedTableId},
+        id::{ExecutionId, PermanentTableId, TableId},
+    },
+    util::closest_order,
 };
 
 /// Type that represents a reordering of the columns of a table.
@@ -416,13 +418,43 @@ impl ExecutionPlan {
         computed_trees_map: &mut HashMap<ExecutionId, Vec<(ColumnOrder, ComputedTableId)>>,
         loaded_tables: &mut HashMap<(PermanentTableId, ColumnOrder), LoadedTableId>,
     ) -> ComputedTableId {
-        if let Some(id) = computed_trees_map.get(&output_node.node.id()) {
-            // Find the closest order and return a reordering if needed
-
-            *id
+        // The computed tree will only be stored permanently in its original order
+        let execution_result = if order.is_identity() {
+            output_node.result.clone()
         } else {
-            let id = computed_trees.len();
+            ExecutionResult::Temporary
+        };
 
+        let new_tree = if let Some(tables) = computed_trees_map.get(&output_node.node.id()) {
+            let (closest_index, closest_order) =
+                closest_order(tables.iter().map(|(order, _id)| order), &order)
+                    .expect("Trie should exist at least in one order.")
+                    .clone();
+            let closest_computed_id = tables[closest_index].1;
+            let arity = output_node.node.markers().arity();
+            let generator = GeneratorProjectReorder::from_reordering(
+                closest_order.clone(),
+                order.clone(),
+                arity,
+            );
+
+            if generator.is_noop() {
+                return closest_computed_id;
+            }
+
+            let root = ExecutionTreeNode::ProjectReorder {
+                generator,
+                subnode: ExecutionTreeLeaf::FetchComputedTable(closest_computed_id),
+            };
+
+            ExecutionTree {
+                root,
+                id: output_node.node.id(),
+                result: execution_result,
+                operation_name: String::from("Reordering intermediate table"),
+                cut_layers: 0, // TODO: Compute cut_layers
+            }
+        } else {
             let root = Self::execution_node(
                 output_node.node.id(),
                 output_node.node.clone(),
@@ -433,20 +465,20 @@ impl ExecutionPlan {
                 loaded_tables,
             );
 
-            let tree = ExecutionTree {
+            ExecutionTree {
                 root,
                 id: output_node.node.id(),
-                result: output_node.result.clone(),
+                result: execution_result,
                 operation_name: output_node.operation_name.clone(),
                 cut_layers: 0, // TODO: Compute cut_layers
-            };
+            }
+        };
 
-            let computed_table_id = computed_trees.len();
-            computed_trees.push(tree);
-            computed_trees_map.insert(output_node.node.id(), vec![(order, computed_table_id)]);
+        let computed_table_id = computed_trees.len();
+        computed_trees.push(new_tree);
+        computed_trees_map.insert(output_node.node.id(), vec![(order, computed_table_id)]);
 
-            id
-        }
+        computed_table_id
     }
 
     /// Generate a [ExecutionTreeNode] in an [ExecutionTree]
@@ -482,12 +514,13 @@ impl ExecutionPlan {
 
         let node_rc = node.get_rc();
         let node_operation = &node_rc.borrow().operation;
-        let node_markers = node_rc.borrow().marked_columns.clone();
+        let node_markers = node_rc.borrow().marked_columns.apply_permutation(&order);
 
         match node_operation {
-            ExecutionOperation::FetchTable(id, order) => {
+            ExecutionOperation::FetchTable(id, fetch_order) => {
+                let new_loaded_order = fetch_order.chain_permutation(&order);
                 let new_loaded_id = loaded_tables.len();
-                let id = match loaded_tables.entry((*id, order.clone())) {
+                let id = match loaded_tables.entry((*id, new_loaded_order)) {
                     Entry::Occupied(entry) => *entry.get(),
                     Entry::Vacant(entry) => {
                         entry.insert(new_loaded_id);
@@ -500,13 +533,22 @@ impl ExecutionPlan {
                 ))
             }
             ExecutionOperation::Join(subnodes) => {
-                let subnode_markers = subnodes.iter().map(|node| node.markers()).collect();
+                let (subnode_markers, subnode_reorderings): (
+                    Vec<OperationTable>,
+                    Vec<Permutation>,
+                ) = subnodes
+                    .iter()
+                    .map(|node| node.markers().align(&node_markers))
+                    .unzip();
+
                 let subtrees = subnodes
                     .iter()
-                    .map(|node| {
+                    .zip(subnode_reorderings)
+                    .map(|(node, reorder)| {
                         Self::execution_node(
                             root_node_id,
                             node.clone(),
+                            reorder,
                             output_nodes,
                             computed_trees,
                             computed_trees_map,
@@ -532,6 +574,7 @@ impl ExecutionPlan {
                         Self::execution_node(
                             root_node_id,
                             node.clone(),
+                            order.clone(),
                             output_nodes,
                             computed_trees,
                             computed_trees_map,
@@ -548,20 +591,23 @@ impl ExecutionPlan {
                 })
             }
             ExecutionOperation::Subtract(subnode_main, subnodes_subtract) => {
-                let markers_main = subnode_main.markers();
-                let markers_subtract = subnodes_subtract
+                let markers_main = node_markers;
+                let (markers_subtract, subtract_reorderings): (
+                    Vec<OperationTable>,
+                    Vec<Permutation>,
+                ) = subnodes_subtract
                     .iter()
-                    .map(|subnode| subnode.markers())
-                    .collect();
+                    .map(|subnode| subnode.markers().align(&markers_main))
+                    .unzip();
 
-                let subtrees = vec![subnode_main]
-                    .iter()
-                    .cloned()
-                    .chain(subnodes_subtract.iter())
-                    .map(|node| {
+                let subtrees = vec![(subnode_main, order.clone())]
+                    .into_iter()
+                    .chain(subnodes_subtract.iter().zip(subtract_reorderings))
+                    .map(|(node, reorder)| {
                         Self::execution_node(
                             root_node_id,
                             node.clone(),
+                            reorder,
                             output_nodes,
                             computed_trees,
                             computed_trees_map,
@@ -584,6 +630,7 @@ impl ExecutionPlan {
                 let subtree = Self::execution_node(
                     root_node_id,
                     subnode.clone(),
+                    order.clone(),
                     output_nodes,
                     computed_trees,
                     computed_trees_map,
@@ -604,6 +651,7 @@ impl ExecutionPlan {
                 let subtree = Self::execution_node(
                     root_node_id,
                     subnode.clone(),
+                    order,
                     output_nodes,
                     computed_trees,
                     computed_trees_map,
@@ -611,6 +659,9 @@ impl ExecutionPlan {
                 )
                 .operation()
                 .expect("No sub node should be a project");
+
+                // TODO: A reordering may be required if the computed columns
+                // appear earlier than the argument columns they are using.
 
                 ExecutionTreeNode::Operation(ExecutionTreeOperation::Node {
                     generator: OperationGeneratorEnum::Function(GeneratorFunction::new(
@@ -626,6 +677,7 @@ impl ExecutionPlan {
                 let subtree = if let ExecutionTreeOperation::Leaf(leaf) = Self::execution_node(
                     root_node_id,
                     subnode.clone(),
+                    ColumnOrder::default(),
                     output_nodes,
                     computed_trees,
                     computed_trees_map,

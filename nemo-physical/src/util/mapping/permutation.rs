@@ -13,6 +13,7 @@ use super::traits::NatMapping;
 pub struct Permutation {
     // The function represented by this object will map `i` to `map.get(i)`.
     // All inputs that are not keys in this map are implicitly mapped to themselves.
+    // This allows us to have a canonical representation such that we can easily check for equality
     map: HashMap<usize, usize>,
 }
 
@@ -24,7 +25,6 @@ impl Permutation {
         for (value, input) in vec.into_iter().enumerate() {
             if input == value {
                 // Values that map to themselves will be represented implicitly
-                // This also allows us to have a canonical representation such that we can easily check for equality
                 continue;
             }
 
@@ -39,8 +39,7 @@ impl Permutation {
 
     /// Return an instance of the function from a hash map representation where the input `i` is mapped to `map.get(i)`.
     pub fn from_map(mut map: HashMap<usize, usize>) -> Self {
-        // Values that map to themselves will not be stored
-        // This also allows us to have a canonical representation such that we can easily check for equality
+        // Values that map to themselves will not be stored explicitly
         map.retain(|i, v| *i != *v);
 
         let result = Self { map };
@@ -49,7 +48,7 @@ impl Permutation {
         result
     }
 
-    /// Return a [`Permutation`] that when applied to the given slice of values would put them in ascending order.
+    /// Return a [Permutation] that when applied to the given slice of values would put them in ascending order.
     pub fn from_unsorted<T: Ord>(values: &[T]) -> Self {
         let mut result: Vec<usize> = (0..values.len()).collect();
         result.sort_by(|&a, &b| values[a].cmp(&values[b]));
@@ -130,7 +129,7 @@ impl Permutation {
         result
     }
 
-    /// Derive a [`Permutation`] that would transform a vector of elements into another.
+    /// Derive a [Permutation] that would transform a vector of elements into another.
     /// I.e. `this.permute(source) = target`
     /// For example `from_transformation([x, y, z, w], [z, w, y, x]) = {0->3, 1->2, 2->0, 3->1}`.
     pub fn from_transformation<T: PartialEq>(source: &[T], target: &[T]) -> Self {
@@ -149,7 +148,26 @@ impl Permutation {
         Self::from_map(map)
     }
 
-    /// Return a new [`Permutation`] that is the inverse of this.
+    /// Compute a [Permutation] that when chained to this [Permutation]
+    /// would result in the given target [Permutation].
+    pub fn permute_into(&self, target: &Self) -> Self {
+        let max_key_source = self.map.keys().max().cloned().unwrap_or(0);
+        let max_key_target = target.map.keys().max().cloned().unwrap_or(0);
+        let max_key = max_key_source.max(max_key_target);
+
+        let mut result_map = HashMap::new();
+
+        for input in 0..max_key {
+            let source_output = self.get(input);
+            let target_output = target.get(input);
+
+            result_map.insert(source_output, target_output);
+        }
+
+        Self::from_map(result_map)
+    }
+
+    /// Return a new [Permutation] that is the inverse of this.
     pub fn invert(&self) -> Self {
         let mut map = HashMap::<usize, usize>::new();
 

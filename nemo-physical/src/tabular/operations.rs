@@ -18,7 +18,7 @@ use std::{
 
 use delegate::delegate;
 
-use crate::dictionary::meta_dv_dict::MetaDvDictionary;
+use crate::{dictionary::meta_dv_dict::MetaDvDictionary, util::mapping::permutation::Permutation};
 
 use self::{
     filter::GeneratorFilter, function::GeneratorFunction, join::GeneratorJoin,
@@ -88,6 +88,34 @@ impl OperationTable {
     /// Returns an iterator over the [OperationColumnMarker]s in the table.
     pub fn iter(&self) -> std::slice::Iter<'_, OperationColumnMarker> {
         self.0.iter()
+    }
+
+    /// Reorder the columns of this table with the given [Permutation]
+    /// and return the reordered [OperationTable].
+    pub fn apply_permutation(&self, permutation: &Permutation) -> Self {
+        Self(permutation.permute(&self.0))
+    }
+
+    /// Align the markers of this table to the markers
+    /// with the markers of the target table.
+    ///
+    /// Return a pair, consisting of the [Permutation] such that if applied to this table,
+    /// would result in a table where the order of its markers
+    /// is the same as that of the target table
+    /// and the reordered [OperationTable].
+    ///
+    /// # Panics
+    /// Panics if this table contains a marker that is not available in `target`.
+    pub fn align(&self, target: &Self) -> (Self, Permutation) {
+        let mut indices = (0..self.arity()).collect::<Vec<_>>();
+        indices.sort_by_key(|&index| {
+            target
+                .position(self.get(index))
+                .expect("Function assumes that every marker in this table is available in target")
+        });
+
+        let permutation = Permutation::from_vector(indices);
+        (Self(permutation.permute(&self.0)), permutation)
     }
 }
 
