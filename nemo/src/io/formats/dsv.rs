@@ -2,9 +2,12 @@
 
 use std::collections::HashSet;
 use std::io::{BufReader, Read, Write};
+use std::mem::size_of;
 
+use bytesize::ByteSize;
 use csv::{Reader, ReaderBuilder, Writer, WriterBuilder};
 use nemo_physical::datavalues::DataValue;
+use nemo_physical::management::bytesized::ByteSized;
 use thiserror::Error;
 
 use oxiri::Iri;
@@ -249,6 +252,12 @@ impl TableProvider for DsvReader {
         let mut dsv_reader = Self::dsv_reader(reader, self.delimiter, Some(self.escape));
 
         self.read(tuple_writer, &mut dsv_reader)
+    }
+}
+
+impl ByteSized for DsvReader {
+    fn size_bytes(&self) -> ByteSize {
+        ByteSize::b(size_of::<Self>() as u64)
     }
 }
 

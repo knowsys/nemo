@@ -1,5 +1,6 @@
-//! This module defines [PermanentTableId] and [ComputedTableId],
-//! which are used to identify tables in [DatabaseInstance][super::DatabaseInstance].
+//! This module defines [PermanentTableId] and [ExecutionId],
+//! which are used to identify tables in [DatabaseInstance][super::DatabaseInstance]
+//! and in an [ExecutionPlan][super::ExecutionPlan].
 
 use std::{
     fmt::{Debug, Display},

@@ -26,7 +26,7 @@ impl InputManager {
         import_spec: &ImportSpec,
         arity: usize,
     ) -> Result<TableSource, Error> {
-        Ok(TableSource::External(
+        Ok(TableSource::new(
             import_spec.reader(self.resource_providers.clone())?,
             arity,
         ))

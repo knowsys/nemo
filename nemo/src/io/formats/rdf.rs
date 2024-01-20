@@ -3,13 +3,16 @@
 use std::{
     collections::HashSet,
     io::{BufReader, Write},
+    mem::size_of,
     str::FromStr,
 };
 
+use bytesize::ByteSize;
 use nemo_physical::{
     datasources::{table_providers::TableProvider, tuple_writer::TupleWriter},
     datavalues::{AnyDataValue, DataValueCreationError},
     dictionary::string_map::NullMap,
+    management::bytesized::ByteSized,
     resource::Resource,
 };
 
@@ -331,6 +334,12 @@ impl TableProvider for RDFReader {
                 self.resource.clone(),
             ))),
         }
+    }
+}
+
+impl ByteSized for RDFReader {
+    fn size_bytes(&self) -> ByteSize {
+        ByteSize::b(size_of::<Self>() as u64)
     }
 }
 

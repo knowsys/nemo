@@ -1,4 +1,6 @@
-//! This module defin
+//! This module defines [TableStorage],
+//! which manages tables that can either be present in memory
+//! or alternatively loaded into via an external source.
 
 use std::cell::RefCell;
 
@@ -34,26 +36,19 @@ impl TableStorage {
     fn load_sources(sources: Vec<TableSource>, dictionary: &RefCell<Dict>) -> Result<Trie, Error> {
         debug_assert!(!sources.is_empty());
 
-        let column_number = sources
+        let arity = sources
             .first()
             .expect("Function assumes that at least one source is provided")
-            .column_number();
-        let mut tuple_writer = TupleWriter::new(dictionary, column_number);
+            .arity();
+        let mut tuple_writer = TupleWriter::new(dictionary, arity);
 
         for source in sources {
             log::info!("Loading source {source}");
-            debug_assert!(source.column_number() == column_number);
+            debug_assert!(source.arity() == arity);
 
-            match source {
-                TableSource::External(provider, _) => {
-                    provider
-                        .provide_table_data(&mut tuple_writer)
-                        .map_err(ReadingError::ExternalError)?;
-                }
-                TableSource::SimpleTable(table) => {
-                    table.write_tuples(&mut tuple_writer);
-                }
-            }
+            source
+                .provide_table_data(&mut tuple_writer)
+                .map_err(ReadingError::ExternalError)?;
         }
 
         Ok(Trie::from_tuple_writer(tuple_writer))
@@ -99,15 +94,10 @@ impl TableStorage {
     pub fn arity(&self) -> usize {
         match self {
             TableStorage::InMemory(trie) => trie.arity(),
-            TableStorage::FromSources(sources) => {
-                match sources
-                    .first()
-                    .expect("At least one source must be present")
-                {
-                    TableSource::External(_, arity) => *arity,
-                    TableSource::SimpleTable(table) => table.column_number(),
-                }
-            }
+            TableStorage::FromSources(sources) => sources
+                .first()
+                .expect("At least one source must be present")
+                .arity(),
             TableStorage::Empty => 0,
         }
     }
@@ -132,5 +122,72 @@ impl ByteSized for TableStorage {
             }
             TableStorage::Empty => ByteSize::b(0),
         }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use std::cell::RefCell;
+
+    use crate::{
+        datatypes::{Float, StorageValueT},
+        datavalues::AnyDataValue,
+        management::database::{
+            sources::{SimpleTable, TableSource},
+            Dict,
+        },
+    };
+
+    use super::TableStorage;
+
+    #[test]
+    fn load_sources() {
+        let arity: usize = 2;
+
+        let mut table_a = SimpleTable::new(arity);
+        table_a.add_row(vec![
+            AnyDataValue::new_integer_from_i64(-5),
+            AnyDataValue::new_string(String::from("Test")),
+        ]);
+        table_a.add_row(vec![
+            AnyDataValue::new_float_from_f32(-2.0).unwrap(),
+            AnyDataValue::new_float_from_f32(12.0).unwrap(),
+        ]);
+
+        let mut table_b = SimpleTable::new(arity);
+        table_b.add_row(vec![
+            AnyDataValue::new_integer_from_i64(-10),
+            AnyDataValue::new_float_from_f32(12.0).unwrap(),
+        ]);
+        table_b.add_row(vec![
+            AnyDataValue::new_integer_from_i64(-5),
+            AnyDataValue::new_string(String::from("Test")),
+        ]);
+
+        let sources = vec![
+            TableSource::from_simple_table(table_a),
+            TableSource::from_simple_table(table_b),
+        ];
+        let dictionary = RefCell::new(Dict::default());
+
+        let mut storage = TableStorage::FromSources(sources);
+        let trie = storage.trie(&dictionary).unwrap();
+
+        let expected_rows = vec![
+            vec![
+                StorageValueT::Int64(-10),
+                StorageValueT::Float(Float::new(12.0).unwrap()),
+            ],
+            vec![StorageValueT::Int64(-5), StorageValueT::Id32(0)],
+            vec![
+                StorageValueT::Float(Float::new(-2.0).unwrap()),
+                StorageValueT::Float(Float::new(12.0).unwrap()),
+            ],
+        ];
+
+        let trie_rows = trie.row_iterator().collect::<Vec<_>>();
+
+        assert_eq!(trie_rows, expected_rows);
+        assert!(storage.trie_in_memory().is_some());
     }
 }

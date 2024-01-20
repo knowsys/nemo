@@ -12,8 +12,7 @@ use crate::{
         },
     },
     datasources::tuple_writer::TupleWriter,
-    datatypes::StorageTypeName,
-    datavalues::AnyDataValueIterator,
+    datatypes::{StorageTypeName, StorageValueT},
     management::{bytesized::sum_bytes, bytesized::ByteSized},
 };
 
@@ -49,7 +48,7 @@ impl Trie {
     }
 
     /// Return a [PartialTrieScan] over this trie.
-    pub fn iter(&self) -> TrieScanGeneric<'_> {
+    pub fn partial_iterator(&self) -> TrieScanGeneric<'_> {
         let column_scans = self
             .columns
             .iter()
@@ -60,13 +59,37 @@ impl Trie {
     }
 
     /// Return a [TrieScan] over this trie.
-    pub fn iter_full(&self) -> TrieScanPrune {
-        TrieScanPrune::new(TrieScanEnum::TrieScanGeneric(self.iter()))
+    pub fn full_iterator(&self) -> TrieScanPrune {
+        TrieScanPrune::new(TrieScanEnum::TrieScanGeneric(self.partial_iterator()))
     }
 
-    /// TODO: Implement this function
-    pub fn full_column_iterators(&self) -> Vec<AnyDataValueIterator> {
-        todo!()
+    /// Return a row based iterator over this trie.
+    pub fn row_iterator(&self) -> impl Iterator<Item = Vec<StorageValueT>> + '_ {
+        struct TrieRowIterator<'a> {
+            trie_scan: TrieScanPrune<'a>,
+            current_row: Vec<StorageValueT>,
+        }
+
+        impl<'a> Iterator for TrieRowIterator<'a> {
+            type Item = Vec<StorageValueT>;
+
+            fn next(&mut self) -> Option<Self::Item> {
+                let arity = self.trie_scan.arity();
+
+                let changed_layer = TrieScan::advance_on_layer(&mut self.trie_scan, arity - 1)?;
+
+                for layer in changed_layer..arity {
+                    self.current_row[layer] = self.trie_scan.current_value(layer);
+                }
+
+                Some(self.current_row.clone())
+            }
+        }
+
+        TrieRowIterator {
+            trie_scan: self.full_iterator(),
+            current_row: vec![StorageValueT::Id32(0); self.arity()],
+        }
     }
 }
 
@@ -177,7 +200,7 @@ impl Trie {
     ///
     /// This function assumes that every row has the same number of entries.
     #[cfg(test)]
-    pub(crate) fn from_rows(rows: Vec<Vec<crate::datatypes::StorageValueT>>) -> Self {
+    pub(crate) fn from_rows(rows: Vec<Vec<StorageValueT>>) -> Self {
         use crate::tabular::buffer::tuple_buffer::TupleBuffer;
 
         let column_number = if let Some(first_row) = rows.first() {
@@ -332,7 +355,7 @@ mod test {
         ];
 
         let trie = Trie::from_rows(table);
-        let mut scan = trie.iter();
+        let mut scan = trie.partial_iterator();
 
         scan.down(StorageTypeName::Id32);
         assert_eq!(

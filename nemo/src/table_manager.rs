@@ -6,7 +6,7 @@ use super::model::Identifier;
 
 use bytesize::ByteSize;
 use nemo_physical::{
-    datavalues::AnyDataValueIterator,
+    datavalues::AnyDataValue,
     management::{
         database::DatabaseInstance,
         database::{
@@ -382,11 +382,11 @@ impl TableManager {
     }
 
     /// Get a list of column iterators for the full table (i.e. the expanded trie)
-    pub(crate) fn table_column_iters(
+    pub(crate) fn table_row_iterator(
         &mut self,
         id: PermanentTableId,
-    ) -> Result<Vec<AnyDataValueIterator>, Error> {
-        Ok(self.database.get_table_column_iterators(id)?)
+    ) -> Result<impl Iterator<Item = Vec<AnyDataValue>> + '_, Error> {
+        Ok(self.database.table_row_iterator(id)?)
     }
 
     /// Combine all subtables of a predicate into one table
@@ -473,7 +473,7 @@ impl TableManager {
     /// Predicate must be registered before calling this function.
     pub(crate) fn add_edb(&mut self, predicate: Identifier, sources: Vec<TableSource>) {
         let arity = if let Some(source) = sources.first() {
-            source.column_number()
+            source.arity()
         } else {
             return;
         };

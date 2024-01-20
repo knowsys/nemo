@@ -3,7 +3,7 @@
 use std::collections::HashMap;
 
 use nemo_physical::{
-    datavalues::{AnyDataValue, AnyDataValueIterator},
+    datavalues::AnyDataValue,
     management::database::sources::{SimpleTable, TableSource},
     meta::TimedCode,
 };
@@ -165,7 +165,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
             predicate_to_sources
                 .entry(predicate)
                 .or_default()
-                .push(TableSource::SimpleTable(table));
+                .push(TableSource::from_simple_table(table));
         }
 
         // Add all the sources to the table mananager
@@ -258,8 +258,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         &self.program
     }
 
-    /// Creates an [`Iterator`] over the resulting facts of a predicate.
-    /// It switches from a column-based to a row-based view by combining column iterators.
+    /// Creates an [Iterator] over the resulting facts of a predicate.
     pub fn predicate_rows(
         &mut self,
         predicate: &Identifier,
@@ -268,20 +267,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
             return Ok(None);
         };
 
-        let iterators = self.table_manager.table_column_iters(table_id)?;
-
-        struct CombinedIters<'a>(Vec<AnyDataValueIterator<'a>>);
-
-        impl<'a> Iterator for CombinedIters<'a> {
-            type Item = Vec<AnyDataValue>;
-
-            fn next(&mut self) -> Option<Self::Item> {
-                let res: Self::Item = self.0.iter_mut().filter_map(|iter| iter.0.next()).collect();
-                (!res.is_empty()).then_some(res)
-            }
-        }
-
-        Ok(Some(CombinedIters(iterators)))
+        Ok(Some(self.table_manager.table_row_iterator(table_id)?))
     }
 
     /// Counts the facts of a single predicate.

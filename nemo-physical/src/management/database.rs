@@ -19,7 +19,7 @@ use bytesize::ByteSize;
 
 use crate::{
     datasources::table_providers::TableProvider,
-    datavalues::AnyDataValueIterator,
+    datavalues::AnyDataValue,
     error::Error,
     management::{bytesized::ByteSized, database::execution_series::ExecutionTreeNode},
     meta::TimedCode,
@@ -136,18 +136,26 @@ impl DatabaseInstance {
         self.reference_manager.count_rows(id)
     }
 
-    /// Get a list of column iterators for the full table (i.e. the expanded trie)
-    pub fn get_table_column_iterators(
+    /// Provide an iterator over the rows of the table with the given [PermanentTableId].
+    pub fn table_row_iterator(
         &mut self,
         id: PermanentTableId,
-    ) -> Result<Vec<AnyDataValueIterator>, Error> {
+    ) -> Result<impl Iterator<Item = Vec<AnyDataValue>> + '_, Error> {
         // Make sure trie is loaded
         let storage_id =
             self.reference_manager
                 .trie_id(&self.dictionary, id, ColumnOrder::default())?;
         let trie = self.reference_manager.trie(storage_id);
 
-        Ok(trie.full_column_iterators())
+        Ok(trie.row_iterator().map(|values| {
+            values
+                .into_iter()
+                .map(|value| {
+                    AnyDataValue::new_from_storage_value(value, &self.dictionary())
+                        .expect("Values from tries should be sound.")
+                })
+                .collect()
+        }))
     }
 }
 
@@ -201,7 +209,7 @@ impl DatabaseInstance {
         let arity = self.table_arity(id);
 
         self.reference_manager
-            .add_source(id, order, TableSource::External(provider, arity));
+            .add_source(id, order, TableSource::new(provider, arity));
     }
 
     /// Add a table given as [SimpleTable].
@@ -211,8 +219,10 @@ impl DatabaseInstance {
         order: ColumnOrder,
         table: SimpleTable,
     ) {
+        let arity = table.arity();
+
         self.reference_manager
-            .add_source(id, order, TableSource::SimpleTable(table));
+            .add_source(id, order, TableSource::new(Box::new(table), arity));
     }
 
     /// Add a new table that is a reordered version of an existing table.
@@ -287,7 +297,7 @@ impl DatabaseInstance {
             }
         };
 
-        trie.map(|trie| TrieScanEnum::TrieScanGeneric(trie.iter()))
+        trie.map(|trie| TrieScanEnum::TrieScanGeneric(trie.partial_iterator()))
     }
 
     /// Return a [TrieScanEnum] representing the given [ExecutionTreeOperation] node.
