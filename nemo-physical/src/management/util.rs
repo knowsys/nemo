@@ -52,3 +52,30 @@ pub(crate) fn closest_order<'a, OrderIter: Iterator<Item = &'a ColumnOrder>>(
         .enumerate()
         .min_by(|(_, x), (_, y)| distance(x, order).cmp(&distance(y, order)))
 }
+
+#[cfg(test)]
+mod test {
+    use crate::management::{execution_plan::ColumnOrder, util::closest_order};
+
+    #[test]
+    fn compute_closest_order() {
+        let orders = vec![
+            ColumnOrder::from_vector(vec![3, 0, 2, 1]),
+            ColumnOrder::from_vector(vec![0, 1, 2, 3]),
+        ];
+
+        let requested_order = ColumnOrder::from_vector(vec![0, 1, 3, 2]);
+        let expected_order = ColumnOrder::from_vector(vec![0, 1, 2, 3]);
+        assert_eq!(
+            closest_order(orders.iter(), &requested_order).unwrap(),
+            (1, &expected_order)
+        );
+
+        let requested_order = ColumnOrder::from_vector(vec![3, 2, 0, 1]);
+        let expected_order = ColumnOrder::from_vector(vec![3, 0, 2, 1]);
+        assert_eq!(
+            closest_order(orders.iter(), &requested_order).unwrap(),
+            (0, &expected_order)
+        );
+    }
+}

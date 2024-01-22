@@ -11,7 +11,7 @@ use crate::{
 };
 
 /// Simple row-based table containing [AnyDataValue]s
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct SimpleTable {
     arity: usize,
     data: Vec<AnyDataValue>,

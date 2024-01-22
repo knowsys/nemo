@@ -20,7 +20,7 @@ use crate::{
 
 use super::{id::PermanentTableId, sources::TableSource, storage::TableStorage, Dict};
 
-/// [OrderedReferenceManager] stores its table in [Vec].
+/// [OrderedReferenceManager] stores its tables in a [Vec].
 /// This id refers to an index in this vector.
 pub(super) type StorageId = usize;
 /// Associates a [ColumnOrder] with its [StorageId]
@@ -48,8 +48,12 @@ pub(super) struct OrderedReferenceManager {
 
     /// The [ColumnOrderMap] associated with each [PermanentTableId]
     /// contains all the [ColumnOrder]s this particular table is available in
+    /// as well as the [StorageId] corresponding to a table in `stored_tables`.
+    ///
+    /// Every table contained in this map refers to an actual table and is not a reference.
     storage_map: HashMap<PermanentTableId, ColumnOrderMap>,
-    /// Associates
+    /// Contains information about all reference tables
+    /// by mapping [PermanentTableId] to [Reference]s.
     reference_map: HashMap<PermanentTableId, Reference>,
 }
 
@@ -67,7 +71,7 @@ impl OrderedReferenceManager {
         if let Some(reference) = self.reference_map.get(&id) {
             (
                 reference.id,
-                order.chain_permutation(&reference.permutation.invert()),
+                order.chain_permutation(&reference.permutation),
             )
         } else {
             (id, order)
@@ -75,9 +79,24 @@ impl OrderedReferenceManager {
     }
 
     /// Return a list of all the available [ColumnOrder] for a given table.
-    pub fn _available_orders(&self, id: PermanentTableId) -> Vec<ColumnOrder> {
-        if let Some(order_map) = self.storage_map.get(&id) {
-            order_map.keys().cloned().collect()
+    #[cfg(test)]
+    pub fn available_orders(&self, id: PermanentTableId) -> Vec<ColumnOrder> {
+        let (id_stored, reorder) = self.resolve_reference(id, ColumnOrder::default());
+
+        if let Some(order_map) = self.storage_map.get(&id_stored) {
+            if reorder.is_identity() {
+                order_map.keys().cloned().collect()
+            } else {
+                order_map
+                    .keys()
+                    .cloned()
+                    .map(|order| {
+                        reorder
+                            .invert()
+                            .chain_permutation(&order.chain_permutation(&reorder))
+                    })
+                    .collect()
+            }
         } else {
             Vec::new()
         }
@@ -127,6 +146,8 @@ impl OrderedReferenceManager {
     /// # Panics
     /// Panics if there already was a table under that id and order.
     fn add_storage(&mut self, id: PermanentTableId, order: ColumnOrder) -> StorageId {
+        let (id, order) = self.resolve_reference(id, order);
+
         let storage_id = match self.storage_map.entry(id) {
             Entry::Occupied(mut entry) => match entry.get_mut().entry(order) {
                 Entry::Occupied(storage_id) => return *storage_id.get(),
@@ -304,96 +325,79 @@ impl ByteSized for OrderedReferenceManager {
     }
 }
 
-// #[cfg(test)]
-// mod test {
-//     use crate::{
-//         management::{
-//             database::{
-//                 id::PermanentTableId, order::OrderedReferenceManager, storage::TableStorage,
-//             },
-//             execution_plan::ColumnOrder,
-//         },
-//         util::mapping::permutation::Permutation,
-//     };
+#[cfg(test)]
+mod test {
+    use crate::{
+        management::{
+            database::{
+                id::{PermanentTableId, TableId},
+                order::OrderedReferenceManager,
+                sources::{SimpleTable, TableSource},
+            },
+            execution_plan::ColumnOrder,
+        },
+        util::mapping::permutation::Permutation,
+    };
 
-//     #[test]
-//     fn test_reference_manager() {
-//         let mut current_id = PermanentTableId::default();
-//         let mut manager = OrderedReferenceManager::default();
+    fn empty_source() -> TableSource {
+        TableSource::from_simple_table(SimpleTable::new(1))
+    }
 
-//         let id_present = current_id.increment();
+    #[test]
+    fn test_reference_manager() {
+        let mut current_id = PermanentTableId::default();
+        let mut manager = OrderedReferenceManager::default();
 
-//         let order_first = ColumnOrder::from_vector(vec![4, 2, 1, 0, 3]);
-//         let storage_first = TableStorage::OnDisk(TableSchema::default(), vec![]);
-//         manager.add_present(id_present, order_first, storage_first);
+        let id_present = current_id.increment();
 
-//         let order_second = ColumnOrder::from_vector(vec![4, 0, 1, 2, 3]);
-//         let storage_second = TableStorage::OnDisk(TableSchema::default(), vec![]);
-//         manager.add_present(id_present, order_second, storage_second);
+        let order_first = ColumnOrder::from_vector(vec![4, 2, 1, 0, 3]);
+        manager.add_source(id_present, order_first, empty_source());
 
-//         let id_reference = current_id.increment();
-//         let permutation_reference = Permutation::from_vector(vec![2, 3, 4, 1, 0]);
-//         manager.add_reference(id_reference, id_present, permutation_reference);
+        let id_reference = current_id.increment();
+        let permutation_reference = Permutation::from_vector(vec![2, 3, 4, 1, 0]);
+        manager.add_reference(id_present, id_reference, permutation_reference);
 
-//         let order_third = ColumnOrder::from_vector(vec![3, 4, 0, 1, 2]);
-//         let storage_third = TableStorage::OnDisk(TableSchema::default(), vec![]);
-//         manager.add_present(id_reference, order_third, storage_third);
+        let order_second = ColumnOrder::from_vector(vec![4, 0, 1, 2, 3]);
+        manager.add_source(id_present, order_second, empty_source());
 
-//         let reference_available_orders = vec![
-//             ColumnOrder::from_vector(vec![3, 0, 4, 2, 1]),
-//             ColumnOrder::from_vector(vec![3, 2, 4, 0, 1]),
-//             ColumnOrder::from_vector(vec![3, 4, 0, 1, 2]),
-//         ];
+        let order_third = ColumnOrder::from_vector(vec![3, 4, 0, 1, 2]);
+        manager.add_source(id_reference, order_third, empty_source());
 
-//         for order in manager.available_orders(id_reference).unwrap() {
-//             assert!(reference_available_orders.iter().any(|o| o == &order));
-//         }
+        let reference_available_orders = vec![
+            ColumnOrder::from_vector(vec![3, 4, 1, 0, 2]),
+            ColumnOrder::from_vector(vec![3, 0, 1, 4, 2]),
+            ColumnOrder::from_vector(vec![0, 2, 1, 3, 4]),
+        ];
 
-//         let requested_order = ColumnOrder::from_vector(vec![0, 3, 1, 2, 4]);
-//         let expected_order = ColumnOrder::from_vector(vec![1, 2, 4, 3, 0]);
-//         let resolved = manager
-//             .resolve_reference(id_reference, &requested_order)
-//             .unwrap();
-//         assert_eq!(resolved.order, expected_order);
+        let available_orders = manager.available_orders(id_reference);
+        assert_eq!(available_orders.len(), 3);
+        for order in available_orders {
+            assert!(reference_available_orders.iter().any(|o| o == &order));
+        }
 
-//         let id_second_reference = current_id.increment();
-//         let permutation_second_reference = Permutation::from_vector(vec![4, 3, 1, 2, 0]);
-//         manager.add_reference(
-//             id_second_reference,
-//             id_reference,
-//             permutation_second_reference,
-//         );
+        let requested_order = ColumnOrder::from_vector(vec![0, 3, 1, 2, 4]);
+        let expected_order = ColumnOrder::from_vector(vec![1, 2, 4, 3, 0]);
+        let resolved = manager.resolve_reference(id_reference, requested_order);
+        assert_eq!(resolved, (id_present, expected_order));
 
-//         let reference_available_orders = vec![
-//             ColumnOrder::from_vector(vec![4, 2, 3, 1, 0]),
-//             ColumnOrder::from_vector(vec![4, 0, 3, 1, 2]),
-//             ColumnOrder::from_vector(vec![0, 1, 3, 2, 4]),
-//         ];
+        let id_second_reference = current_id.increment();
+        let permutation_second_reference = Permutation::from_vector(vec![4, 3, 1, 2, 0]);
+        manager.add_reference(
+            id_reference,
+            id_second_reference,
+            permutation_second_reference,
+        );
 
-//         for order in manager.available_orders(id_second_reference).unwrap() {
-//             assert!(reference_available_orders.iter().any(|o| o == &order));
-//         }
-//     }
+        let reference_available_orders = vec![
+            ColumnOrder::from_vector(vec![3, 4, 0, 2, 1]),
+            ColumnOrder::from_vector(vec![3, 0, 4, 2, 1]),
+            ColumnOrder::from_vector(vec![0, 1, 3, 2, 4]),
+        ];
 
-//     #[test]
-//     fn test_closest_order() {
-//         let orders = vec![
-//             ColumnOrder::from_vector(vec![3, 0, 2, 1]),
-//             ColumnOrder::from_vector(vec![0, 1, 2, 3]),
-//         ];
-
-//         let requested_order = ColumnOrder::from_vector(vec![0, 1, 3, 2]);
-//         let expected_order = ColumnOrder::from_vector(vec![0, 1, 2, 3]);
-//         assert_eq!(
-//             DatabaseInstance::search_closest_order(&orders, &requested_order).unwrap(),
-//             &expected_order
-//         );
-
-//         let requested_order = ColumnOrder::from_vector(vec![3, 2, 0, 1]);
-//         let expected_order = ColumnOrder::from_vector(vec![3, 0, 2, 1]);
-//         assert_eq!(
-//             DatabaseInstance::search_closest_order(&orders, &requested_order).unwrap(),
-//             &expected_order
-//         );
-//     }
-// }
+        let available_orders = manager.available_orders(id_second_reference);
+        assert_eq!(available_orders.len(), 3);
+        for order in available_orders {
+            assert!(reference_available_orders.iter().any(|o| o == &order));
+        }
+    }
+}
