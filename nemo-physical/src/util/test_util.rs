@@ -1,155 +1,86 @@
-// TODO: Make good testing function for the new trie structure
+//! This module contains useful functions for testing trie related operations
 
-// use std::{
-//     cmp::Eq,
-//     ops::{Add, Sub},
-// };
+#[cfg(test)]
+pub(crate) mod test {
+    use hashbrown::HashMap;
 
-// use arbitrary::{Arbitrary, Result, Unstructured};
-// use num::{One, Zero};
+    use crate::{
+        datatypes::{StorageTypeName, StorageValueT},
+        tabular::{trie::Trie, triescan::PartialTrieScan},
+    };
 
-// use crate::{
-//     columnar::column::{
-//         interval::{ColumnWithIntervals, ColumnWithIntervalsT},
-//         vector::ColumnVector,
-//         Column, ColumnEnum,
-//     },
-//     datatypes::ColumnDataType,
-//     tabular::table_types::trie::Trie,
-// };
+    /// Create a [Trie] from table rows of the 32-bit id type.
+    pub(crate) fn trie_id32(rows: Vec<&[u32]>) -> Trie {
+        let rows = rows
+            .into_iter()
+            .map(|row| {
+                row.into_iter()
+                    .map(|&entry| StorageValueT::Id32(entry))
+                    .collect::<Vec<_>>()
+            })
+            .collect::<Vec<_>>();
 
-// /// Constructs ColumnWithIntervals of U64 type from Slice
-// pub fn make_column_with_intervals<'a, T>(
-//     values: &'a [T],
-//     ints: &'a [usize],
-// ) -> ColumnWithIntervals<T>
-// where
-//     T: ColumnDataType,
-// {
-//     ColumnWithIntervals::new(
-//         ColumnEnum::ColumnVector(ColumnVector::new(values.to_vec())),
-//         ColumnEnum::ColumnVector(ColumnVector::new(ints.to_vec())),
-//     )
-// }
+        Trie::from_rows(rows)
+    }
 
-// /// Constructs ColumnWithIntervalsT (of U64 type) from Slice
-// pub fn make_column_with_intervals_t<'a>(
-//     values: &'a [u64],
-//     ints: &'a [usize],
-// ) -> ColumnWithIntervalsT {
-//     ColumnWithIntervalsT::Id64(make_column_with_intervals(values, ints))
-// }
+    /// Return the current value of the [PartialTrieScan].
+    pub(crate) fn partial_scan_current<'a, Scan: PartialTrieScan<'a>>(
+        scan: &mut Scan,
+        storage_type: StorageTypeName,
+    ) -> Option<StorageValueT> {
+        let column_scan = unsafe { &mut *scan.current_scan()?.get() };
 
-// /// Constructs ColumnWithIntervalsT (of I64 type) from Slice
-// pub fn make_column_with_intervals_int_t<'a>(
-//     values: &'a [i64],
-//     ints: &'a [usize],
-// ) -> ColumnWithIntervalsT {
-//     ColumnWithIntervalsT::Int64(make_column_with_intervals(values, ints))
-// }
+        column_scan.current(storage_type)
+    }
 
-// /// Helper function which, given a slice of sorted values,
-// /// returns a slice of sorted distinct values
-// fn make_distinct<T>(values: &mut [T])
-// where
-//     T: Add<T, Output = T> + Sub<T, Output = T> + Eq + One + Zero + Copy,
-// {
-//     let mut current_increment = T::zero();
+    /// Move to the next value on the current layer of the [PartialTrieScan].
+    pub(crate) fn partial_scan_next<'a, Scan: PartialTrieScan<'a>>(
+        scan: &Scan,
+        storage_type: StorageTypeName,
+    ) -> Option<StorageValueT> {
+        let column_scan = unsafe { &mut *scan.current_scan()?.get() };
 
-//     for index in 0..values.len() {
-//         if index == 0 {
-//             continue;
-//         }
+        column_scan.next(storage_type)
+    }
 
-//         if values[index - 1] - current_increment == values[index] {
-//             current_increment = current_increment + T::one();
-//         }
+    /// Navigate a [PartialTrieScan] in a depth first search manner,
+    /// restricted to the given types,
+    /// and compare the results to a list of expected result.
+    pub(crate) fn trie_dfs<'a, Scan: PartialTrieScan<'a>>(
+        scan: &mut Scan,
+        types: &[StorageTypeName],
+        expected: &[StorageValueT],
+    ) {
+        let mut next_type_map = HashMap::<StorageTypeName, StorageTypeName>::new();
+        for adjacent_types in types.windows(2) {
+            next_type_map.insert(adjacent_types[0].clone(), adjacent_types[1].clone());
+        }
 
-//         values[index] = values[index] + current_increment;
-//     }
-// }
+        let first_type = types.first().unwrap().clone();
+        scan.down(first_type);
+        assert_eq!(partial_scan_current(scan, first_type), None);
 
-// /// Hepler function which creates an arbitrary IntervalColumnGeneric
-// /// given a number of sections and a maximum for the number of enries per section
-// fn arbitrary_column_with_intervals<'a, T>(
-//     u: &mut Unstructured<'a>,
-//     sections: usize,
-//     avg_per_section: usize,
-// ) -> Result<ColumnWithIntervals<T>>
-// where
-//     T: Arbitrary<'a> + ColumnDataType,
-// {
-//     let max_index = sections * avg_per_section;
+        let mut current_expected_index: usize = 0;
 
-//     let mut intervals = Vec::<usize>::new();
-//     for _ in 0..sections {
-//         intervals.push(usize::arbitrary(u)? % max_index);
-//     }
+        while let Some(current_type) = scan.current_layer().map(|layer| scan.path_types()[layer]) {
+            if let Some(next_value) = partial_scan_next(scan, current_type) {
+                let current_expected_value = expected[current_expected_index];
 
-//     intervals.sort_unstable();
-//     make_distinct(&mut intervals);
+                assert_eq!(current_expected_value, next_value);
+                current_expected_index += 1;
 
-//     let mut values = Vec::<T>::new();
-//     for section in 0..sections {
-//         let current_length = if section < sections - 1 {
-//             intervals[section + 1] - intervals[section]
-//         } else {
-//             avg_per_section
-//         };
+                if scan.current_layer().unwrap() < scan.arity() - 1 {
+                    scan.down(current_type);
+                    assert_eq!(partial_scan_current(scan, current_type), None);
+                }
+            } else {
+                scan.up();
 
-//         for elem_index in 0..current_length {
-//             let mut elem_inc = T::arbitrary(u)?;
-//             if elem_inc == T::zero() {
-//                 elem_inc = T::one();
-//             }
-
-//             let next_elem = if elem_index > 0 {
-//                 values[elem_index - 1] + elem_inc
-//             } else {
-//                 elem_inc
-//             };
-
-//             values.push(next_elem);
-//         }
-//     }
-
-//     Ok(make_column_with_intervals(&values, &intervals))
-// }
-
-// impl<'a, T> Arbitrary<'a> for ColumnWithIntervals<T>
-// where
-//     T: Arbitrary<'a> + ColumnDataType,
-// {
-//     fn arbitrary(u: &mut Unstructured<'a>) -> Result<Self> {
-//         const NUMBER_OF_SECTIONS: usize = 8;
-//         const AVG_PER_SECTION: usize = 4;
-//         arbitrary_column_with_intervals(u, NUMBER_OF_SECTIONS, AVG_PER_SECTION)
-//     }
-// }
-
-// impl<'a> Arbitrary<'a> for Trie {
-//     fn arbitrary(u: &mut Unstructured<'a>) -> Result<Self> {
-//         const MAX_DEPTH: usize = 4;
-//         const AVG_BRANCHING: usize = 2;
-//         const INITIAL_SECTIONS: usize = 4;
-
-//         let depth = usize::arbitrary(u)? % MAX_DEPTH;
-
-//         let mut columns = Vec::<ColumnWithIntervalsT>::new();
-//         for depth_index in 0..depth {
-//             let section_count = if depth_index == 0 {
-//                 INITIAL_SECTIONS
-//             } else {
-//                 columns[depth_index - 1].len()
-//             };
-
-//             columns.push(ColumnWithIntervalsT::Id64(arbitrary_column_with_intervals(
-//                 u,
-//                 section_count,
-//                 AVG_BRANCHING,
-//             )?));
-//         }
-
-//         Ok(Trie::new(columns))
-//     }
-// }
+                if let Some(next_type) = next_type_map.get(&current_type) {
+                    scan.down(next_type.clone());
+                    assert_eq!(partial_scan_current(scan, current_type), None);
+                }
+            }
+        }
+    }
+}

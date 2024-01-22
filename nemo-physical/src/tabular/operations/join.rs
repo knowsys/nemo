@@ -255,7 +255,7 @@ pub struct TrieScanJoin<'a> {
 
 impl<'a> PartialTrieScan<'a> for TrieScanJoin<'a> {
     fn up(&mut self) {
-        let current_layer = self.path_types.len();
+        let current_layer = self.path_types.len() - 1;
 
         let current_scans = &self.layers_to_scans[current_layer];
         for &scan_index in current_scans {
@@ -291,5 +291,421 @@ impl<'a> PartialTrieScan<'a> for TrieScanJoin<'a> {
 
     fn scan<'b>(&'b self, layer: usize) -> &'b UnsafeCell<ColumnScanRainbow<'a>> {
         &self.column_scans[layer]
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use crate::{
+        datatypes::{StorageTypeName, StorageValueT},
+        dictionary::meta_dv_dict::MetaDvDictionary,
+        tabular::{
+            operations::{OperationGenerator, OperationTableGenerator},
+            triescan::TrieScanEnum,
+        },
+        util::test_util::test::{trie_dfs, trie_id32},
+    };
+
+    use super::GeneratorJoin;
+
+    #[test]
+    fn basic_trie_join() {
+        let dictionary = MetaDvDictionary::default();
+
+        let trie_a = trie_id32(vec![&[1, 2], &[1, 3], &[1, 4], &[2, 5], &[3, 6], &[3, 7]]);
+        let trie_b = trie_id32(vec![
+            &[1, 1],
+            &[2, 8],
+            &[2, 9],
+            &[3, 10],
+            &[6, 11],
+            &[6, 12],
+        ]);
+
+        let trie_a_scan = TrieScanEnum::TrieScanGeneric(trie_a.partial_iterator());
+        let trie_b_scan = TrieScanEnum::TrieScanGeneric(trie_b.partial_iterator());
+
+        let mut marker_generator = OperationTableGenerator::new();
+        marker_generator.add_marker("x");
+        marker_generator.add_marker("y");
+        marker_generator.add_marker("z");
+
+        let markers_result = marker_generator.operation_table(["x", "y", "z"].iter());
+        let markers_a = marker_generator.operation_table(["x", "y"].iter());
+        let markers_b = marker_generator.operation_table(["y", "z"].iter());
+
+        let join_generator = GeneratorJoin::new(markers_result, vec![markers_a, markers_b]);
+        let mut join_scan = join_generator.generate(vec![trie_a_scan, trie_b_scan], &dictionary);
+
+        trie_dfs(
+            &mut join_scan,
+            &[StorageTypeName::Id32],
+            &[
+                StorageValueT::Id32(1),
+                StorageValueT::Id32(2),
+                StorageValueT::Id32(8),
+                StorageValueT::Id32(9),
+                StorageValueT::Id32(3),
+                StorageValueT::Id32(10),
+                StorageValueT::Id32(2),
+                StorageValueT::Id32(3),
+                StorageValueT::Id32(6),
+                StorageValueT::Id32(11),
+                StorageValueT::Id32(12),
+            ],
+        );
+    }
+
+    #[test]
+    fn self_join() {
+        let dictionary = MetaDvDictionary::default();
+
+        let trie = trie_id32(vec![
+            &[1, 2],
+            &[1, 3],
+            &[1, 5],
+            &[1, 10],
+            &[2, 4],
+            &[2, 7],
+            &[2, 10],
+            &[5, 9],
+            &[7, 8],
+            &[7, 9],
+            &[7, 10],
+        ]);
+
+        let trie_scan_a = TrieScanEnum::TrieScanGeneric(trie.partial_iterator());
+        let trie_scan_b = TrieScanEnum::TrieScanGeneric(trie.partial_iterator());
+
+        let mut marker_generator = OperationTableGenerator::new();
+        marker_generator.add_marker("x");
+        marker_generator.add_marker("y");
+        marker_generator.add_marker("z");
+
+        let markers_result = marker_generator.operation_table(["x", "y", "z"].iter());
+        let markers_a = marker_generator.operation_table(["x", "y"].iter());
+        let markers_b = marker_generator.operation_table(["y", "z"].iter());
+
+        let join_generator = GeneratorJoin::new(markers_result, vec![markers_a, markers_b]);
+        let mut join_scan = join_generator.generate(vec![trie_scan_a, trie_scan_b], &dictionary);
+
+        trie_dfs(
+            &mut join_scan,
+            &[StorageTypeName::Id32],
+            &[
+                StorageValueT::Id32(1),
+                StorageValueT::Id32(2),
+                StorageValueT::Id32(4),
+                StorageValueT::Id32(7),
+                StorageValueT::Id32(10),
+                StorageValueT::Id32(5),
+                StorageValueT::Id32(9),
+                StorageValueT::Id32(2),
+                StorageValueT::Id32(7),
+                StorageValueT::Id32(8),
+                StorageValueT::Id32(9),
+                StorageValueT::Id32(10),
+                StorageValueT::Id32(5),
+                StorageValueT::Id32(7),
+            ],
+        )
+    }
+
+    #[test]
+    fn self_join_inverse() {
+        let dictionary = MetaDvDictionary::default();
+
+        let trie = trie_id32(vec![
+            &[1, 2],
+            &[1, 3],
+            &[1, 5],
+            &[1, 10],
+            &[2, 4],
+            &[2, 7],
+            &[2, 10],
+            &[5, 9],
+            &[7, 8],
+            &[7, 9],
+            &[7, 10],
+        ]);
+
+        let trie_inv = trie_id32(vec![
+            &[2, 1],
+            &[3, 1],
+            &[4, 2],
+            &[5, 1],
+            &[7, 2],
+            &[8, 7],
+            &[9, 5],
+            &[9, 7],
+            &[10, 1],
+            &[10, 2],
+            &[10, 7],
+        ]);
+
+        let trie_scan = TrieScanEnum::TrieScanGeneric(trie.partial_iterator());
+        let trie_inv_scan = TrieScanEnum::TrieScanGeneric(trie_inv.partial_iterator());
+
+        let mut marker_generator = OperationTableGenerator::new();
+        marker_generator.add_marker("x");
+        marker_generator.add_marker("y");
+        marker_generator.add_marker("z");
+
+        let markers_result = marker_generator.operation_table(["x", "y", "z"].iter());
+        let markers = marker_generator.operation_table(["x", "z"].iter());
+        let markers_inv = marker_generator.operation_table(["y", "z"].iter());
+
+        let join_generator = GeneratorJoin::new(markers_result, vec![markers, markers_inv]);
+        let mut join_scan = join_generator.generate(vec![trie_scan, trie_inv_scan], &dictionary);
+
+        trie_dfs(
+            &mut join_scan,
+            &[StorageTypeName::Id32],
+            &[
+                StorageValueT::Id32(1), // x = 1
+                StorageValueT::Id32(2),
+                StorageValueT::Id32(3),
+                StorageValueT::Id32(4),
+                StorageValueT::Id32(2),
+                StorageValueT::Id32(5),
+                StorageValueT::Id32(7),
+                StorageValueT::Id32(2),
+                StorageValueT::Id32(8),
+                StorageValueT::Id32(9),
+                StorageValueT::Id32(5),
+                StorageValueT::Id32(10),
+                StorageValueT::Id32(2),
+                StorageValueT::Id32(2), // x = 2
+                StorageValueT::Id32(2),
+                StorageValueT::Id32(3),
+                StorageValueT::Id32(4),
+                StorageValueT::Id32(5),
+                StorageValueT::Id32(7),
+                StorageValueT::Id32(8),
+                StorageValueT::Id32(7),
+                StorageValueT::Id32(9),
+                StorageValueT::Id32(7),
+                StorageValueT::Id32(10),
+                StorageValueT::Id32(7),
+                StorageValueT::Id32(5), // x = 5
+                StorageValueT::Id32(2),
+                StorageValueT::Id32(3),
+                StorageValueT::Id32(4),
+                StorageValueT::Id32(5),
+                StorageValueT::Id32(7),
+                StorageValueT::Id32(8),
+                StorageValueT::Id32(9),
+                StorageValueT::Id32(10),
+                StorageValueT::Id32(7), // x = 7
+                StorageValueT::Id32(2),
+                StorageValueT::Id32(3),
+                StorageValueT::Id32(4),
+                StorageValueT::Id32(5),
+                StorageValueT::Id32(7),
+                StorageValueT::Id32(8),
+                StorageValueT::Id32(9),
+                StorageValueT::Id32(10),
+            ],
+        )
+    }
+
+    #[test]
+    fn self_join_2() {
+        let dictionary = MetaDvDictionary::default();
+
+        let trie_new = trie_id32(vec![
+            &[1, 4],
+            &[1, 7],
+            &[1, 9],
+            &[2, 8],
+            &[2, 9],
+            &[4, 1],
+            &[7, 1],
+            &[8, 2],
+            &[9, 1],
+            &[9, 2],
+            &[10, 1],
+            &[10, 2],
+        ]);
+
+        let trie_old = trie_id32(vec![
+            &[1, 2],
+            &[1, 3],
+            &[1, 4],
+            &[1, 5],
+            &[1, 7],
+            &[1, 10],
+            &[2, 4],
+            &[2, 7],
+            &[2, 8],
+            &[2, 9],
+            &[2, 10],
+            &[4, 1],
+            &[5, 9],
+            &[7, 1],
+            &[7, 8],
+            &[7, 9],
+            &[7, 10],
+            &[8, 2],
+            &[9, 1],
+            &[9, 2],
+            &[10, 1],
+            &[10, 2],
+        ]);
+
+        let trie_new_scan = TrieScanEnum::TrieScanGeneric(trie_new.partial_iterator());
+        let trie_old_scan = TrieScanEnum::TrieScanGeneric(trie_old.partial_iterator());
+
+        let mut marker_generator = OperationTableGenerator::new();
+        marker_generator.add_marker("x");
+        marker_generator.add_marker("y");
+        marker_generator.add_marker("z");
+
+        let markers_result = marker_generator.operation_table(["x", "y", "z"].iter());
+        let markers = marker_generator.operation_table(["x", "y"].iter());
+        let markers_inv = marker_generator.operation_table(["y", "z"].iter());
+
+        let join_generator = GeneratorJoin::new(markers_result, vec![markers, markers_inv]);
+        let mut join_scan =
+            join_generator.generate(vec![trie_new_scan, trie_old_scan], &dictionary);
+
+        trie_dfs(
+            &mut join_scan,
+            &[StorageTypeName::Id32],
+            &[
+                StorageValueT::Id32(1), // x = 1
+                StorageValueT::Id32(4), // y = 4
+                StorageValueT::Id32(1),
+                StorageValueT::Id32(7), // y = 7
+                StorageValueT::Id32(1),
+                StorageValueT::Id32(8),
+                StorageValueT::Id32(9),
+                StorageValueT::Id32(10),
+                StorageValueT::Id32(9), // y = 9
+                StorageValueT::Id32(1),
+                StorageValueT::Id32(2),
+                StorageValueT::Id32(2), // x = 2
+                StorageValueT::Id32(8), // y = 8
+                StorageValueT::Id32(2),
+                StorageValueT::Id32(9), // y = 9
+                StorageValueT::Id32(1),
+                StorageValueT::Id32(2),
+                StorageValueT::Id32(4), // x = 4
+                StorageValueT::Id32(1), // y = 1
+                StorageValueT::Id32(2),
+                StorageValueT::Id32(3),
+                StorageValueT::Id32(4),
+                StorageValueT::Id32(5),
+                StorageValueT::Id32(7),
+                StorageValueT::Id32(10),
+                StorageValueT::Id32(7), // x = 7
+                StorageValueT::Id32(1), // y = 1
+                StorageValueT::Id32(2),
+                StorageValueT::Id32(3),
+                StorageValueT::Id32(4),
+                StorageValueT::Id32(5),
+                StorageValueT::Id32(7),
+                StorageValueT::Id32(10),
+                StorageValueT::Id32(8), // x = 8
+                StorageValueT::Id32(2), // y = 2
+                StorageValueT::Id32(4),
+                StorageValueT::Id32(7),
+                StorageValueT::Id32(8),
+                StorageValueT::Id32(9),
+                StorageValueT::Id32(10),
+                StorageValueT::Id32(9), // x = 9
+                StorageValueT::Id32(1), // y = 1
+                StorageValueT::Id32(2),
+                StorageValueT::Id32(3),
+                StorageValueT::Id32(4),
+                StorageValueT::Id32(5),
+                StorageValueT::Id32(7),
+                StorageValueT::Id32(10),
+                StorageValueT::Id32(2), // y = 2
+                StorageValueT::Id32(4),
+                StorageValueT::Id32(7),
+                StorageValueT::Id32(8),
+                StorageValueT::Id32(9),
+                StorageValueT::Id32(10),
+                StorageValueT::Id32(10), // x = 10
+                StorageValueT::Id32(1),  // y = 1
+                StorageValueT::Id32(2),
+                StorageValueT::Id32(3),
+                StorageValueT::Id32(4),
+                StorageValueT::Id32(5),
+                StorageValueT::Id32(7),
+                StorageValueT::Id32(10),
+                StorageValueT::Id32(2), // y = 2
+                StorageValueT::Id32(4),
+                StorageValueT::Id32(7),
+                StorageValueT::Id32(8),
+                StorageValueT::Id32(9),
+                StorageValueT::Id32(10),
+            ],
+        )
+    }
+
+    #[test]
+    fn another_join_test() {
+        let dictionary = MetaDvDictionary::default();
+
+        let trie_a = trie_id32(vec![
+            &[1, 2],
+            &[1, 3],
+            &[2, 1],
+            &[2, 2],
+            &[2, 4],
+            &[3, 2],
+            &[3, 3],
+            &[4, 2],
+            &[4, 4],
+            &[5, 4],
+        ]);
+
+        let trie_b = trie_id32(vec![&[2, 2], &[2, 3], &[2, 4], &[3, 1], &[3, 2], &[3, 4]]);
+
+        let trie_a_scan = TrieScanEnum::TrieScanGeneric(trie_a.partial_iterator());
+        let trie_b_scan = TrieScanEnum::TrieScanGeneric(trie_b.partial_iterator());
+
+        let mut marker_generator = OperationTableGenerator::new();
+        marker_generator.add_marker("x");
+        marker_generator.add_marker("y");
+        marker_generator.add_marker("z");
+
+        let markers_result = marker_generator.operation_table(["x", "y", "z"].iter());
+        let markers_a = marker_generator.operation_table(["y", "z"].iter());
+        let markers_b = marker_generator.operation_table(["x", "y"].iter());
+
+        let join_generator = GeneratorJoin::new(markers_result, vec![markers_a, markers_b]);
+        let mut join_scan = join_generator.generate(vec![trie_a_scan, trie_b_scan], &dictionary);
+
+        trie_dfs(
+            &mut join_scan,
+            &[StorageTypeName::Id32],
+            &[
+                StorageValueT::Id32(2), // x = 1
+                StorageValueT::Id32(2), // y = 2
+                StorageValueT::Id32(1),
+                StorageValueT::Id32(2),
+                StorageValueT::Id32(4),
+                StorageValueT::Id32(3), // y = 3
+                StorageValueT::Id32(2),
+                StorageValueT::Id32(3),
+                StorageValueT::Id32(4), // y = 4
+                StorageValueT::Id32(2),
+                StorageValueT::Id32(4),
+                StorageValueT::Id32(3), // x = 3
+                StorageValueT::Id32(1), // y = 1
+                StorageValueT::Id32(2),
+                StorageValueT::Id32(3),
+                StorageValueT::Id32(2), // y = 2
+                StorageValueT::Id32(1),
+                StorageValueT::Id32(2),
+                StorageValueT::Id32(4),
+                StorageValueT::Id32(4), // y = 4
+                StorageValueT::Id32(2),
+                StorageValueT::Id32(4),
+            ],
+        )
     }
 }
