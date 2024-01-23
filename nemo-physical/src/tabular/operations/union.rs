@@ -162,3 +162,251 @@ impl<'a> PartialTrieScan<'a> for TrieScanUnion<'a> {
         &self.column_scans[layer]
     }
 }
+
+#[cfg(test)]
+mod test {
+    use crate::{
+        datatypes::{StorageTypeName, StorageValueT},
+        dictionary::meta_dv_dict::MetaDvDictionary,
+        tabular::{
+            operations::{join::GeneratorJoin, OperationGenerator, OperationTableGenerator},
+            triescan::TrieScanEnum,
+        },
+        util::test_util::test::{trie_dfs, trie_id32},
+    };
+
+    use super::GeneratorUnion;
+
+    #[test]
+    fn basic_union() {
+        let dictionary = MetaDvDictionary::default();
+
+        let trie_a = trie_id32(vec![&[1, 2], &[2, 5], &[4, 4]]);
+        let trie_b = trie_id32(vec![&[1, 2], &[1, 4], &[2, 4], &[7, 8], &[7, 9]]);
+        let trie_c = trie_id32(vec![&[1, 1], &[1, 4], &[1, 6], &[3, 3], &[7, 7], &[7, 8]]);
+
+        let trie_a_scan = TrieScanEnum::TrieScanGeneric(trie_a.partial_iterator());
+        let trie_b_scan = TrieScanEnum::TrieScanGeneric(trie_b.partial_iterator());
+        let trie_c_scan = TrieScanEnum::TrieScanGeneric(trie_c.partial_iterator());
+
+        let union_generator = GeneratorUnion::new();
+        let mut union_scan = union_generator
+            .generate(
+                vec![Some(trie_a_scan), Some(trie_b_scan), Some(trie_c_scan)],
+                &dictionary,
+            )
+            .unwrap();
+
+        trie_dfs(
+            &mut union_scan,
+            &[StorageTypeName::Id32],
+            &[
+                StorageValueT::Id32(1), // x = 1
+                StorageValueT::Id32(1),
+                StorageValueT::Id32(2),
+                StorageValueT::Id32(4),
+                StorageValueT::Id32(6),
+                StorageValueT::Id32(2), // x = 2
+                StorageValueT::Id32(4),
+                StorageValueT::Id32(5),
+                StorageValueT::Id32(3), // x = 3
+                StorageValueT::Id32(3),
+                StorageValueT::Id32(4), // x = 4
+                StorageValueT::Id32(4),
+                StorageValueT::Id32(7), // x = 7
+                StorageValueT::Id32(7),
+                StorageValueT::Id32(8),
+                StorageValueT::Id32(9),
+            ],
+        );
+    }
+
+    #[test]
+    fn union_2() {
+        let dictionary = MetaDvDictionary::default();
+
+        let trie_a = trie_id32(vec![
+            &[1, 2],
+            &[1, 3],
+            &[1, 5],
+            &[1, 10],
+            &[2, 4],
+            &[2, 7],
+            &[2, 10],
+            &[5, 9],
+            &[7, 8],
+            &[7, 9],
+            &[7, 10],
+        ]);
+        let trie_b = trie_id32(vec![
+            &[4, 1],
+            &[7, 1],
+            &[8, 2],
+            &[9, 1],
+            &[9, 2],
+            &[10, 1],
+            &[10, 2],
+        ]);
+
+        let trie_a_scan = TrieScanEnum::TrieScanGeneric(trie_a.partial_iterator());
+        let trie_b_scan = TrieScanEnum::TrieScanGeneric(trie_b.partial_iterator());
+
+        let union_generator = GeneratorUnion::new();
+        let mut union_scan = union_generator
+            .generate(vec![Some(trie_a_scan), Some(trie_b_scan)], &dictionary)
+            .unwrap();
+
+        trie_dfs(
+            &mut union_scan,
+            &[StorageTypeName::Id32],
+            &[
+                StorageValueT::Id32(1), // x = 1
+                StorageValueT::Id32(2),
+                StorageValueT::Id32(3),
+                StorageValueT::Id32(5),
+                StorageValueT::Id32(10),
+                StorageValueT::Id32(2), // x = 2
+                StorageValueT::Id32(4),
+                StorageValueT::Id32(7),
+                StorageValueT::Id32(10),
+                StorageValueT::Id32(4), // x = 4
+                StorageValueT::Id32(1),
+                StorageValueT::Id32(5), // x = 5
+                StorageValueT::Id32(9),
+                StorageValueT::Id32(7), // x = 7
+                StorageValueT::Id32(1),
+                StorageValueT::Id32(8),
+                StorageValueT::Id32(9),
+                StorageValueT::Id32(10),
+                StorageValueT::Id32(8), // x = 8
+                StorageValueT::Id32(2),
+                StorageValueT::Id32(9), // x = 9
+                StorageValueT::Id32(1),
+                StorageValueT::Id32(2),
+                StorageValueT::Id32(10), // x = 10
+                StorageValueT::Id32(1),
+                StorageValueT::Id32(2),
+            ],
+        );
+    }
+
+    #[test]
+    fn union_3() {
+        let dictionary = MetaDvDictionary::default();
+
+        let trie_a = trie_id32(vec![&[4, 1, 2]]);
+        let trie_b = trie_id32(vec![&[1, 4, 1], &[2, 4, 1], &[4, 1, 4]]);
+
+        let trie_a_scan = TrieScanEnum::TrieScanGeneric(trie_a.partial_iterator());
+        let trie_b_scan = TrieScanEnum::TrieScanGeneric(trie_b.partial_iterator());
+
+        let union_generator = GeneratorUnion::new();
+        let mut union_scan = union_generator
+            .generate(vec![Some(trie_a_scan), Some(trie_b_scan)], &dictionary)
+            .unwrap();
+
+        trie_dfs(
+            &mut union_scan,
+            &[StorageTypeName::Id32],
+            &[
+                StorageValueT::Id32(1), // x = 1
+                StorageValueT::Id32(4),
+                StorageValueT::Id32(1),
+                StorageValueT::Id32(2), // x = 2
+                StorageValueT::Id32(4),
+                StorageValueT::Id32(1),
+                StorageValueT::Id32(4), // x = 4
+                StorageValueT::Id32(1),
+                StorageValueT::Id32(2),
+                StorageValueT::Id32(4),
+            ],
+        );
+    }
+
+    #[test]
+    fn union_close() {
+        let dictionary = MetaDvDictionary::default();
+
+        let trie_a = trie_id32(vec![&[1, 3], &[1, 4], &[2, 5]]);
+        let trie_b = trie_id32(vec![&[2, 5], &[2, 6]]);
+
+        let trie_a_scan = TrieScanEnum::TrieScanGeneric(trie_a.partial_iterator());
+        let trie_b_scan = TrieScanEnum::TrieScanGeneric(trie_b.partial_iterator());
+
+        let union_generator = GeneratorUnion::new();
+        let mut union_scan = union_generator
+            .generate(vec![Some(trie_a_scan), Some(trie_b_scan)], &dictionary)
+            .unwrap();
+
+        trie_dfs(
+            &mut union_scan,
+            &[StorageTypeName::Id32],
+            &[
+                StorageValueT::Id32(1), // x = 1
+                StorageValueT::Id32(3),
+                StorageValueT::Id32(4),
+                StorageValueT::Id32(2), // x = 2
+                StorageValueT::Id32(5),
+                StorageValueT::Id32(6),
+            ],
+        );
+    }
+
+    #[test]
+    fn union_of_join() {
+        let dictionary = MetaDvDictionary::default();
+
+        let trie_a = trie_id32(vec![&[1, 4], &[4, 1]]);
+        let trie_b = trie_id32(vec![&[1, 2], &[2, 4]]);
+        let trie_c = trie_id32(vec![&[1, 2], &[1, 4], &[2, 4], &[4, 1]]);
+        let trie_d = trie_id32(vec![&[1, 4], &[4, 1]]);
+
+        let trie_a_scan = TrieScanEnum::TrieScanGeneric(trie_a.partial_iterator());
+        let trie_b_scan = TrieScanEnum::TrieScanGeneric(trie_b.partial_iterator());
+        let trie_c_scan = TrieScanEnum::TrieScanGeneric(trie_c.partial_iterator());
+        let trie_d_scan = TrieScanEnum::TrieScanGeneric(trie_d.partial_iterator());
+
+        let mut marker_generator = OperationTableGenerator::new();
+        marker_generator.add_marker("x");
+        marker_generator.add_marker("y");
+        marker_generator.add_marker("z");
+
+        let markers_result_ab = marker_generator.operation_table(["x", "y", "z"].iter());
+        let markers_a = marker_generator.operation_table(["x", "y"].iter());
+        let markers_b = marker_generator.operation_table(["y", "z"].iter());
+
+        let markers_result_cd = marker_generator.operation_table(["x", "y", "z"].iter());
+        let markers_c = marker_generator.operation_table(["x", "y"].iter());
+        let markers_d = marker_generator.operation_table(["y", "z"].iter());
+
+        let join_ab_generator = GeneratorJoin::new(markers_result_ab, vec![markers_a, markers_b]);
+        let join_cd_generator = GeneratorJoin::new(markers_result_cd, vec![markers_c, markers_d]);
+
+        let join_ab_scan =
+            join_ab_generator.generate(vec![Some(trie_a_scan), Some(trie_b_scan)], &dictionary);
+        let join_cd_scan =
+            join_cd_generator.generate(vec![Some(trie_c_scan), Some(trie_d_scan)], &dictionary);
+
+        let union_generator = GeneratorUnion::new();
+        let mut union_scan = union_generator
+            .generate(vec![join_ab_scan, join_cd_scan], &dictionary)
+            .unwrap();
+
+        trie_dfs(
+            &mut union_scan,
+            &[StorageTypeName::Id32],
+            &[
+                StorageValueT::Id32(1), // x = 1
+                StorageValueT::Id32(4),
+                StorageValueT::Id32(1),
+                StorageValueT::Id32(2), // x = 2
+                StorageValueT::Id32(4),
+                StorageValueT::Id32(1),
+                StorageValueT::Id32(4), // x = 4
+                StorageValueT::Id32(1),
+                StorageValueT::Id32(2),
+                StorageValueT::Id32(4),
+            ],
+        );
+    }
+}

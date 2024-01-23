@@ -233,3 +233,283 @@ impl<'a> PartialTrieScan<'a> for TrieScanSubtract<'a> {
         &self.column_scans[layer]
     }
 }
+
+#[cfg(test)]
+mod test {
+    use crate::{
+        datatypes::{StorageTypeName, StorageValueT},
+        dictionary::meta_dv_dict::MetaDvDictionary,
+        tabular::{
+            operations::{OperationGenerator, OperationTableGenerator},
+            triescan::TrieScanEnum,
+        },
+        util::test_util::test::{trie_dfs, trie_id32},
+    };
+
+    use super::GeneratorSubtract;
+
+    #[test]
+    fn subtract_single() {
+        let dictionary = MetaDvDictionary::default();
+
+        let trie_main = trie_id32(vec![&[1, 3], &[1, 6], &[1, 8], &[2, 2], &[2, 7], &[3, 5]]);
+        let trie_subtract = trie_id32(vec![&[1, 2], &[1, 6], &[1, 9], &[3, 2], &[3, 5], &[4, 8]]);
+
+        let trie_main_scan = TrieScanEnum::TrieScanGeneric(trie_main.partial_iterator());
+        let trie_subtract_scan = TrieScanEnum::TrieScanGeneric(trie_subtract.partial_iterator());
+
+        let mut marker_generator = OperationTableGenerator::new();
+        marker_generator.add_marker("x");
+        marker_generator.add_marker("y");
+
+        let markers_main = marker_generator.operation_table(["x", "y"].iter());
+        let markers_subtract = marker_generator.operation_table(["x", "y"].iter());
+
+        let subtract_generator = GeneratorSubtract::new(markers_main, vec![markers_subtract]);
+        let mut subtract_scan = subtract_generator
+            .generate(
+                vec![Some(trie_main_scan), Some(trie_subtract_scan)],
+                &dictionary,
+            )
+            .unwrap();
+
+        trie_dfs(
+            &mut subtract_scan,
+            &[StorageTypeName::Id32],
+            &[
+                StorageValueT::Id32(1), // x = 8
+                StorageValueT::Id32(3),
+                StorageValueT::Id32(8),
+                StorageValueT::Id32(2), // x = 2
+                StorageValueT::Id32(2),
+                StorageValueT::Id32(7),
+                StorageValueT::Id32(3), // x = 3
+            ],
+        );
+    }
+
+    #[test]
+    fn subtract_single_2() {
+        let dictionary = MetaDvDictionary::default();
+
+        let trie_main = trie_id32(vec![
+            &[4, 1],
+            &[7, 1],
+            &[8, 2],
+            &[9, 1],
+            &[9, 2],
+            &[10, 1],
+            &[10, 2],
+        ]);
+        let trie_subtract = trie_id32(vec![
+            &[2, 1],
+            &[3, 1],
+            &[4, 2],
+            &[5, 1],
+            &[7, 2],
+            &[8, 7],
+            &[9, 5],
+            &[9, 7],
+            &[10, 1],
+            &[10, 2],
+            &[10, 7],
+        ]);
+
+        let trie_main_scan = TrieScanEnum::TrieScanGeneric(trie_main.partial_iterator());
+        let trie_subtract_scan = TrieScanEnum::TrieScanGeneric(trie_subtract.partial_iterator());
+
+        let mut marker_generator = OperationTableGenerator::new();
+        marker_generator.add_marker("x");
+        marker_generator.add_marker("y");
+
+        let markers_main = marker_generator.operation_table(["x", "y"].iter());
+        let markers_subtract = marker_generator.operation_table(["x", "y"].iter());
+
+        let subtract_generator = GeneratorSubtract::new(markers_main, vec![markers_subtract]);
+        let mut subtract_scan = subtract_generator
+            .generate(
+                vec![Some(trie_main_scan), Some(trie_subtract_scan)],
+                &dictionary,
+            )
+            .unwrap();
+
+        trie_dfs(
+            &mut subtract_scan,
+            &[StorageTypeName::Id32],
+            &[
+                StorageValueT::Id32(4), // x = 4
+                StorageValueT::Id32(1),
+                StorageValueT::Id32(7), // x = 7
+                StorageValueT::Id32(1),
+                StorageValueT::Id32(8), // x = 8
+                StorageValueT::Id32(2),
+                StorageValueT::Id32(9), // x = 9
+                StorageValueT::Id32(1),
+                StorageValueT::Id32(2),
+                StorageValueT::Id32(10), // x = 10
+            ],
+        );
+    }
+
+    #[test]
+    fn subtract_multiple() {
+        let dictionary = MetaDvDictionary::default();
+
+        let trie_main = trie_id32(vec![
+            &[2, 0, 0],
+            &[2, 0, 1],
+            &[2, 1, 0],
+            &[2, 5, 2],
+            &[2, 5, 3],
+            &[4, 0, 0],
+            &[4, 0, 1],
+            &[4, 2, 1],
+            &[6, 2, 0],
+            &[6, 9, 2],
+            &[8, 1, 2],
+            &[8, 4, 2],
+            &[8, 5, 1],
+        ]);
+        let trie_subtract_a = trie_id32(vec![&[1, 3, 6]]);
+        let trie_subtract_b = trie_id32(vec![&[2, 5], &[4, 2]]);
+        let trie_subtract_c = trie_id32(vec![&[0, 0], &[9, 2]]);
+        let trie_subtract_d = trie_id32(vec![&[8, 2]]);
+
+        let trie_main_scan = TrieScanEnum::TrieScanGeneric(trie_main.partial_iterator());
+        let trie_subtract_a_scan =
+            TrieScanEnum::TrieScanGeneric(trie_subtract_a.partial_iterator());
+        let trie_subtract_b_scan =
+            TrieScanEnum::TrieScanGeneric(trie_subtract_b.partial_iterator());
+        let trie_subtract_c_scan =
+            TrieScanEnum::TrieScanGeneric(trie_subtract_c.partial_iterator());
+        let trie_subtract_d_scan =
+            TrieScanEnum::TrieScanGeneric(trie_subtract_d.partial_iterator());
+
+        let mut marker_generator = OperationTableGenerator::new();
+        marker_generator.add_marker("x");
+        marker_generator.add_marker("y");
+        marker_generator.add_marker("z");
+
+        let markers_main = marker_generator.operation_table(["x", "y", "z"].iter());
+        let markers_subtract_a = marker_generator.operation_table(["x", "y", "z"].iter());
+        let markers_subtract_b = marker_generator.operation_table(["x", "y"].iter());
+        let markers_subtract_c = marker_generator.operation_table(["y", "z"].iter());
+        let markers_subtract_d = marker_generator.operation_table(["x", "z"].iter());
+
+        let subtract_generator = GeneratorSubtract::new(
+            markers_main,
+            vec![
+                markers_subtract_a,
+                markers_subtract_b,
+                markers_subtract_c,
+                markers_subtract_d,
+            ],
+        );
+        let mut subtract_scan = subtract_generator
+            .generate(
+                vec![
+                    Some(trie_main_scan),
+                    Some(trie_subtract_a_scan),
+                    Some(trie_subtract_b_scan),
+                    Some(trie_subtract_c_scan),
+                    Some(trie_subtract_d_scan),
+                ],
+                &dictionary,
+            )
+            .unwrap();
+
+        trie_dfs(
+            &mut subtract_scan,
+            &[StorageTypeName::Id32],
+            &[
+                StorageValueT::Id32(2), // x = 4
+                StorageValueT::Id32(0), // y = 0
+                StorageValueT::Id32(1),
+                StorageValueT::Id32(1), // y = 1
+                StorageValueT::Id32(0),
+                StorageValueT::Id32(4), // x = 4
+                StorageValueT::Id32(0), // y = 0
+                StorageValueT::Id32(5), // x = 5
+                StorageValueT::Id32(1),
+                StorageValueT::Id32(8), // x = 8
+                StorageValueT::Id32(1), // y = 1
+                StorageValueT::Id32(4), // y = 4
+                StorageValueT::Id32(5), // y = 5
+                StorageValueT::Id32(1),
+            ],
+        );
+    }
+
+    #[test]
+    fn subtract_middle() {
+        let dictionary = MetaDvDictionary::default();
+
+        let trie_main = trie_id32(vec![&[4, 0, 0], &[4, 2, 1]]);
+        let trie_subtract = trie_id32(vec![&[0]]);
+
+        let trie_main_scan = TrieScanEnum::TrieScanGeneric(trie_main.partial_iterator());
+        let trie_subtract_scan = TrieScanEnum::TrieScanGeneric(trie_subtract.partial_iterator());
+
+        let mut marker_generator = OperationTableGenerator::new();
+        marker_generator.add_marker("x");
+        marker_generator.add_marker("y");
+        marker_generator.add_marker("z");
+
+        let markers_main = marker_generator.operation_table(["x", "y", "z"].iter());
+        let markers_subtract = marker_generator.operation_table(["y"].iter());
+
+        let subtract_generator = GeneratorSubtract::new(markers_main, vec![markers_subtract]);
+        let mut subtract_scan = subtract_generator
+            .generate(
+                vec![Some(trie_main_scan), Some(trie_subtract_scan)],
+                &dictionary,
+            )
+            .unwrap();
+
+        trie_dfs(
+            &mut subtract_scan,
+            &[StorageTypeName::Id32],
+            &[
+                StorageValueT::Id32(4), // x = 4
+                StorageValueT::Id32(2), // y = 2
+                StorageValueT::Id32(1),
+            ],
+        );
+    }
+
+    #[test]
+    fn subtract_top() {
+        let dictionary = MetaDvDictionary::default();
+
+        let trie_main = trie_id32(vec![&[2, 0, 0], &[4, 0, 0], &[8, 5, 1]]);
+        let trie_subtract = trie_id32(vec![&[2, 8]]);
+
+        let trie_main_scan = TrieScanEnum::TrieScanGeneric(trie_main.partial_iterator());
+        let trie_subtract_scan = TrieScanEnum::TrieScanGeneric(trie_subtract.partial_iterator());
+
+        let mut marker_generator = OperationTableGenerator::new();
+        marker_generator.add_marker("x");
+        marker_generator.add_marker("y");
+        marker_generator.add_marker("z");
+
+        let markers_main = marker_generator.operation_table(["x", "y", "z"].iter());
+        let markers_subtract = marker_generator.operation_table(["x"].iter());
+
+        let subtract_generator = GeneratorSubtract::new(markers_main, vec![markers_subtract]);
+        let mut subtract_scan = subtract_generator
+            .generate(
+                vec![Some(trie_main_scan), Some(trie_subtract_scan)],
+                &dictionary,
+            )
+            .unwrap();
+
+        trie_dfs(
+            &mut subtract_scan,
+            &[StorageTypeName::Id32],
+            &[
+                StorageValueT::Id32(4), // x = 4
+                StorageValueT::Id32(0), // y = 2
+            ],
+        );
+    }
+}
