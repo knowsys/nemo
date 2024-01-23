@@ -196,7 +196,7 @@ impl<'a> PartialTrieScan<'a> for TrieScanSubtract<'a> {
                 .subtract_get_equal(
                     *previous_type.expect("path_types is not empty previous_layer is not None"),
                 ),
-            None => bitvec![1; self.arity()],
+            None => bitvec![1; self.layer_maps.len()],
         };
 
         for (subtract_index, (trie_subtract, layer_map)) in
