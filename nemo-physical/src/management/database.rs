@@ -316,7 +316,7 @@ impl DatabaseInstance {
                 generator,
                 subnodes,
             } => {
-                let mut input_scans = subnodes
+                let input_scans = subnodes
                     .into_iter()
                     .map(|subnode| self.evaluate_operation(dictionary, storage, subnode))
                     .collect();

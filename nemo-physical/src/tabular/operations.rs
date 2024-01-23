@@ -201,15 +201,6 @@ where
     }
 }
 
-///
-pub(crate) enum OperationEmptyInputBehaviour {
-    /// The result of the operation is the same as it would be
-    /// when ignoring the table
-    Neutral,
-    /// The result would be the same as if no input tables were provided
-    Absorb,
-}
-
 /// Trait for objects that are able to generate [TrieScanEnum],
 /// which implement certain data base operations.
 pub(crate) trait OperationGenerator {
@@ -221,17 +212,6 @@ pub(crate) trait OperationGenerator {
         input: Vec<Option<TrieScanEnum<'a>>>,
         dictionary: &'a MetaDvDictionary,
     ) -> Option<TrieScanEnum<'a>>;
-
-    // /// Returns whether the operation is the identity its input is only a single [TrieScanEnum].
-    // fn is_single_input_identity(&self) -> bool;
-
-    // /// Returns whether the operation results in an empty table
-    // /// if no input [TrieScanEnum] is provided.
-    // fn is_no_input_empty(&self) -> bool;
-
-    // /// Return the [OperationEmptyInputBehaviour] of the operation,
-    // /// indicating what action to take on empty input tables.
-    // fn empty_input_behaviour(&self) -> OperationEmptyInputBehaviour;
 }
 
 pub(crate) enum OperationGeneratorEnum {
@@ -262,8 +242,6 @@ impl OperationGenerator for OperationGeneratorEnum {
                 dictionary: &'a MetaDvDictionary,
             ) -> Option<TrieScanEnum<'a>>;
 
-            // fn is_single_input_identity(&self) -> bool;
-            // fn is_no_input_empty(&self) -> bool;
         }
     }
 }
