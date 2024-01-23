@@ -319,18 +319,9 @@ impl DatabaseInstance {
                 let mut input_scans = subnodes
                     .into_iter()
                     .map(|subnode| self.evaluate_operation(dictionary, storage, subnode))
-                    .filter_map(|result_option| result_option)
-                    .collect::<Vec<_>>();
+                    .collect();
 
-                if input_scans.is_empty() {
-                    return None;
-                }
-
-                if generator.is_unary_identity() && input_scans.len() == 1 {
-                    return Some(input_scans.remove(0));
-                }
-
-                Some(generator.generate(input_scans, dictionary))
+                generator.generate(input_scans, dictionary)
             }
         }
     }

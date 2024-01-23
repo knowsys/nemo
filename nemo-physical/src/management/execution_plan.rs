@@ -95,7 +95,11 @@ impl ExecutionNodeRef {
         let node_operation = &mut node_rc.borrow_mut().operation;
 
         match node_operation {
-            ExecutionOperation::Join(subnodes) | ExecutionOperation::Union(subnodes) => {
+            ExecutionOperation::Join(subnodes) => subnodes.push(subnode),
+            ExecutionOperation::Union(subnodes) => {
+                debug_assert!(subnodes.iter().all(|node| node.markers().is_empty()
+                    || node.markers().len() == subnode.markers().len()));
+
                 subnodes.push(subnode)
             }
             ExecutionOperation::FetchTable(_, _) => {
@@ -277,6 +281,10 @@ impl ExecutionPlan {
         marked_columns: OperationTable,
         subtables: Vec<ExecutionNodeRef>,
     ) -> ExecutionNodeRef {
+        debug_assert!(subtables
+            .iter()
+            .all(|node| node.markers().is_empty() || node.markers().len() == marked_columns.len()));
+
         let new_operation = ExecutionOperation::Union(subtables);
         self.push_and_return_reference(new_operation, marked_columns)
     }
@@ -514,7 +522,10 @@ impl ExecutionPlan {
 
         let node_rc = node.get_rc();
         let node_operation = &node_rc.borrow().operation;
-        let node_markers = node_rc.borrow().marked_columns.apply_permutation(&order);
+        let mut node_markers = node_rc.borrow().marked_columns.clone();
+        if !node_markers.is_empty() {
+            node_markers = node_markers.apply_permutation(&order);
+        }
 
         match node_operation {
             ExecutionOperation::FetchTable(id, fetch_order) => {

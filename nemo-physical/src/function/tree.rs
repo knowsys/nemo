@@ -140,7 +140,7 @@ where
     }
 
     /// Create a tree node representing casting a value into an 32-bit float.
-    /// 
+    ///
     /// This evaluates to a 32-bit floating point representation of `sub`.
     pub fn casting_to_float(sub: Self) -> Self {
         Self::Unary(
@@ -150,7 +150,7 @@ where
     }
 
     /// Create a tree node representing casting a value into an 64-bit float.
-    /// 
+    ///
     /// This evaluates to a 64-bit floating point representation of `sub`.
     pub fn casting_to_double(sub: Self) -> Self {
         Self::Unary(
@@ -447,5 +447,10 @@ where
                 result
             }
         }
+    }
+
+    /// Return whether this tree evauluates to a constant value.
+    pub fn is_constant(&self) -> bool {
+        self.references().is_empty()
     }
 }

@@ -30,9 +30,20 @@ impl GeneratorUnion {
 impl OperationGenerator for GeneratorUnion {
     fn generate<'a>(
         &'_ self,
-        trie_scans: Vec<TrieScanEnum<'a>>,
+        trie_scans: Vec<Option<TrieScanEnum<'a>>>,
         _dictionary: &'a MetaDvDictionary,
-    ) -> TrieScanEnum<'a> {
+    ) -> Option<TrieScanEnum<'a>> {
+        // We ignore any empy tables
+        let trie_scans = trie_scans
+            .into_iter()
+            .filter_map(|scan_option| scan_option)
+            .collect::<Vec<_>>();
+
+        // We return `None` if there are no input tables left
+        if trie_scans.is_empty() {
+            return None;
+        }
+
         debug_assert!(trie_scans
             .iter()
             .all(|scan| scan.arity() == trie_scans[0].arity()));
@@ -71,15 +82,11 @@ impl OperationGenerator for GeneratorUnion {
             column_scans.push(UnsafeCell::new(new_scan));
         }
 
-        TrieScanEnum::TrieScanUnion(TrieScanUnion {
+        Some(TrieScanEnum::TrieScanUnion(TrieScanUnion {
             trie_scans,
             column_scans,
             path_types: Vec::new(),
-        })
-    }
-
-    fn is_unary_identity(&self) -> bool {
-        true
+        }))
     }
 }
 

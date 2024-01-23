@@ -87,15 +87,29 @@ impl GeneratorFunction {
             input_indices,
         }
     }
+
+    /// Returns whether this operation does not alter the input table.
+    fn is_unchaning(&self) -> bool {
+        // This operation behaves the same as the identity if
+        // no new columns are computed
+        self.output_columns
+            .iter()
+            .all(|c| matches!(c, OutputColumn::Input(_)))
+    }
 }
 
 impl OperationGenerator for GeneratorFunction {
     fn generate<'a>(
         &'_ self,
-        mut input: Vec<TrieScanEnum<'a>>,
+        mut input: Vec<Option<TrieScanEnum<'a>>>,
         dictionary: &'a MetaDvDictionary,
-    ) -> TrieScanEnum<'a> {
-        let trie_scan = input.remove(0);
+    ) -> Option<TrieScanEnum<'a>> {
+        debug_assert!(input.len() == 1);
+
+        let trie_scan = input.remove(0)?;
+        if self.is_unchaning() {
+            return Some(trie_scan);
+        }
 
         let mut column_scans: Vec<UnsafeCell<ColumnScanRainbow<'a>>> =
             Vec::with_capacity(self.output_columns.len());
@@ -141,7 +155,7 @@ impl OperationGenerator for GeneratorFunction {
             })
             .collect();
 
-        TrieScanEnum::TrieScanFunction(TrieScanFunction {
+        Some(TrieScanEnum::TrieScanFunction(TrieScanFunction {
             trie_scan: Box::new(trie_scan),
             dictionary,
             input_indices: self.input_indices.clone(),
@@ -149,15 +163,7 @@ impl OperationGenerator for GeneratorFunction {
             input_values: Vec::new(),
             column_scans,
             path_types: Vec::new(),
-        })
-    }
-
-    fn is_unary_identity(&self) -> bool {
-        // This operation behaves the same as the identity if
-        // no new columns are computed
-        self.output_columns
-            .iter()
-            .all(|c| matches!(c, OutputColumn::Input(_)))
+        }))
     }
 }
 

@@ -155,9 +155,23 @@ impl GeneratorJoin {
 impl OperationGenerator for GeneratorJoin {
     fn generate<'a>(
         &'_ self,
-        trie_scans: Vec<TrieScanEnum<'a>>,
+        trie_scans: Vec<Option<TrieScanEnum<'a>>>,
         _dictionary: &'a MetaDvDictionary,
-    ) -> TrieScanEnum<'a> {
+    ) -> Option<TrieScanEnum<'a>> {
+        // We return `None` if any of the input tables is `None`
+        let mut trie_scans = trie_scans.into_iter().collect::<Option<Vec<_>>>()?;
+
+        if trie_scans.is_empty() {
+            // An empty join results in an empty table
+            return None;
+        }
+
+        if trie_scans.len() == 1 {
+            // If the join only contains one element then we an just return
+            // the underlying table
+            return Some(trie_scans.remove(0));
+        }
+
         // `self.bindings` contains the columns used for each output index.
         // `layers_to_scans` just contains a list of the relation indices for each output.
         let layers_to_scans = self
@@ -210,16 +224,12 @@ impl OperationGenerator for GeneratorJoin {
             column_scans.push(UnsafeCell::new(new_scan));
         }
 
-        TrieScanEnum::TrieScanJoin(TrieScanJoin {
+        Some(TrieScanEnum::TrieScanJoin(TrieScanJoin {
             trie_scans,
             layers_to_scans,
             path_types: Vec::new(),
             column_scans,
-        })
-    }
-
-    fn is_unary_identity(&self) -> bool {
-        true
+        }))
     }
 }
 
@@ -335,7 +345,9 @@ mod test {
         let markers_b = marker_generator.operation_table(["y", "z"].iter());
 
         let join_generator = GeneratorJoin::new(markers_result, vec![markers_a, markers_b]);
-        let mut join_scan = join_generator.generate(vec![trie_a_scan, trie_b_scan], &dictionary);
+        let mut join_scan = join_generator
+            .generate(vec![Some(trie_a_scan), Some(trie_b_scan)], &dictionary)
+            .unwrap();
 
         trie_dfs(
             &mut join_scan,
@@ -387,7 +399,9 @@ mod test {
         let markers_b = marker_generator.operation_table(["y", "z"].iter());
 
         let join_generator = GeneratorJoin::new(markers_result, vec![markers_a, markers_b]);
-        let mut join_scan = join_generator.generate(vec![trie_scan_a, trie_scan_b], &dictionary);
+        let mut join_scan = join_generator
+            .generate(vec![Some(trie_scan_a), Some(trie_scan_b)], &dictionary)
+            .unwrap();
 
         trie_dfs(
             &mut join_scan,
@@ -456,7 +470,9 @@ mod test {
         let markers_inv = marker_generator.operation_table(["y", "z"].iter());
 
         let join_generator = GeneratorJoin::new(markers_result, vec![markers, markers_inv]);
-        let mut join_scan = join_generator.generate(vec![trie_scan, trie_inv_scan], &dictionary);
+        let mut join_scan = join_generator
+            .generate(vec![Some(trie_scan), Some(trie_inv_scan)], &dictionary)
+            .unwrap();
 
         trie_dfs(
             &mut join_scan,
@@ -566,8 +582,9 @@ mod test {
         let markers_inv = marker_generator.operation_table(["y", "z"].iter());
 
         let join_generator = GeneratorJoin::new(markers_result, vec![markers, markers_inv]);
-        let mut join_scan =
-            join_generator.generate(vec![trie_new_scan, trie_old_scan], &dictionary);
+        let mut join_scan = join_generator
+            .generate(vec![Some(trie_new_scan), Some(trie_old_scan)], &dictionary)
+            .unwrap();
 
         trie_dfs(
             &mut join_scan,
@@ -677,7 +694,9 @@ mod test {
         let markers_b = marker_generator.operation_table(["x", "y"].iter());
 
         let join_generator = GeneratorJoin::new(markers_result, vec![markers_a, markers_b]);
-        let mut join_scan = join_generator.generate(vec![trie_a_scan, trie_b_scan], &dictionary);
+        let mut join_scan = join_generator
+            .generate(vec![Some(trie_a_scan), Some(trie_b_scan)], &dictionary)
+            .unwrap();
 
         trie_dfs(
             &mut join_scan,

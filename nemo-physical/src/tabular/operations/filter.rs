@@ -147,10 +147,12 @@ impl GeneratorFilter {
 impl OperationGenerator for GeneratorFilter {
     fn generate<'a>(
         &'_ self,
-        mut trie_scans: Vec<TrieScanEnum<'a>>,
+        mut trie_scans: Vec<Option<TrieScanEnum<'a>>>,
         dictionary: &'a MetaDvDictionary,
-    ) -> TrieScanEnum<'a> {
-        let trie_scan = trie_scans.remove(0);
+    ) -> Option<TrieScanEnum<'a>> {
+        debug_assert!(trie_scans.len() == 1);
+
+        let trie_scan = trie_scans.remove(0)?;
 
         let mut column_scans: Vec<UnsafeCell<ColumnScanRainbow<'a>>> =
             Vec::with_capacity(self.output_columns.len());
@@ -194,20 +196,13 @@ impl OperationGenerator for GeneratorFilter {
             column_scans.push(UnsafeCell::new(new_scan));
         }
 
-        TrieScanEnum::TrieScanFilter(TrieScanFilter {
+        Some(TrieScanEnum::TrieScanFilter(TrieScanFilter {
             trie_scan: Box::new(trie_scan),
             dictionary,
             input_indices: self.input_indices.clone(),
             input_values,
             column_scans,
-        })
-    }
-
-    fn is_unary_identity(&self) -> bool {
-        // When no filter is applied then this behaves the same as identity
-        self.output_columns
-            .iter()
-            .all(|c| matches!(c, OutputColumn::Input))
+        }))
     }
 }
 

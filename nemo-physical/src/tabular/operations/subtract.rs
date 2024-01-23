@@ -49,16 +49,26 @@ impl GeneratorSubtract {
 impl OperationGenerator for GeneratorSubtract {
     fn generate<'a>(
         &'_ self,
-        mut trie_scans: Vec<TrieScanEnum<'a>>,
+        mut trie_scans: Vec<Option<TrieScanEnum<'a>>>,
         _dictionary: &'a MetaDvDictionary,
-    ) -> TrieScanEnum<'a> {
+    ) -> Option<TrieScanEnum<'a>> {
         debug_assert!(
-            trie_scans.len() > 1,
-            "Input needs to include the main trie and at least one trie that is to be subtracted"
+            trie_scans.len() >= 1,
+            "Input needs to include the main trie"
         );
 
-        let tries_subtract = trie_scans.split_off(1);
-        let trie_main = trie_scans.remove(0);
+        let (tries_subtract, layer_maps): (Vec<TrieScanEnum>, Vec<Vec<usize>>) = trie_scans
+            .split_off(1)
+            .into_iter()
+            .zip(self.layer_maps.clone().into_iter())
+            .flat_map(|(scan, map)| scan.map(|scan| (scan, map)))
+            .unzip();
+        let trie_main = trie_scans.remove(0)?;
+
+        if tries_subtract.is_empty() {
+            // If we don't subtract anything we can just return `trie_main`
+            return Some(trie_main);
+        }
 
         let mut column_scans: Vec<UnsafeCell<ColumnScanRainbow<'a>>> =
             Vec::with_capacity(trie_main.arity());
@@ -74,7 +84,7 @@ impl OperationGenerator for GeneratorSubtract {
                         Vec::<Option<&'a ColumnScanCell<$type>>>::with_capacity(trie_scans.len());
 
                     for (subtract_index, (trie_subtract, layer_map)) in
-                        (tries_subtract.iter().zip(self.layer_maps.iter())).enumerate()
+                        (tries_subtract.iter().zip(layer_maps.iter())).enumerate()
                     {
                         let used_layer = layer_map.iter().position(|&layer| layer == output_layer);
 
@@ -120,17 +130,13 @@ impl OperationGenerator for GeneratorSubtract {
             column_scans.push(UnsafeCell::new(new_scan));
         }
 
-        TrieScanEnum::TrieScanSubtract(TrieScanSubtract {
+        Some(TrieScanEnum::TrieScanSubtract(TrieScanSubtract {
             trie_main: Box::new(trie_main),
             tries_subtract,
-            layer_maps: self.layer_maps.clone(),
+            layer_maps,
             column_scans,
             path_types: Vec::new(),
-        })
-    }
-
-    fn is_unary_identity(&self) -> bool {
-        true
+        }))
     }
 }
 

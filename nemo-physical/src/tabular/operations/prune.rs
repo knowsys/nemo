@@ -190,15 +190,18 @@ impl<'a> TrieScanPruneState<'a> {
         self.input_trie_scan_current_layer += 1;
     }
 
-    fn input_jump_type(&mut self) -> bool {
-        let next_type = match self.input_trie_scan.path_types()[self.input_trie_scan_current_layer]
-        {
+    fn next_type(&self) -> Option<StorageTypeName> {
+        match self.input_trie_scan.path_types()[self.input_trie_scan_current_layer] {
             StorageTypeName::Id32 => Some(StorageTypeName::Id64),
             StorageTypeName::Id64 => Some(StorageTypeName::Int64),
             StorageTypeName::Int64 => Some(StorageTypeName::Float),
             StorageTypeName::Float => Some(StorageTypeName::Double),
             StorageTypeName::Double => None,
-        };
+        }
+    }
+
+    fn input_jump_type(&mut self) -> bool {
+        let next_type = self.next_type();
 
         if let Some(next_type) = next_type {
             self.input_trie_scan.up();
@@ -235,7 +238,7 @@ impl<'a> TrieScanPruneState<'a> {
             self.input_up();
         }
         for _ in self.input_trie_scan_current_layer..target_layer {
-            if self.current_value().is_none() {
+            if self.current_input_value().is_none() {
                 return false;
             }
             self.input_down();
@@ -302,7 +305,7 @@ impl<'a> TrieScanPruneState<'a> {
     ///
     /// TODO: Update to allow for direct access
     #[inline]
-    unsafe fn current_value(&self) -> Option<StorageValueT> {
+    unsafe fn current_input_value(&self) -> Option<StorageValueT> {
         debug_assert!(self.initialized);
 
         self.current_input_trie_value(self.input_trie_scan_current_layer)
@@ -499,7 +502,9 @@ impl<'a> TrieScanPruneState<'a> {
             let has_next_value = self.advance_has_next_value();
 
             if !has_next_value {
-                if self.input_trie_scan_current_layer == boundary_layer {
+                if self.input_trie_scan_current_layer == boundary_layer
+                    && self.next_type().is_none()
+                {
                     // Boundary layer has been reached and has no next value
 
                     // `highest_peeked_layer`has already been set to None
@@ -567,6 +572,14 @@ impl<'a> TrieScanPrune<'a> {
             (*self.state.get()).clear_highest_peeked_layer()
         }
     }
+
+    /// Return the current value the input trie is on for the given layer.
+    pub fn input_trie_value(&self, layer: usize) -> Option<StorageValueT> {
+        unsafe {
+            assert!((*self.state.get()).initialized);
+            (*self.state.get()).current_input_trie_value(layer)
+        }
+    }
 }
 
 impl<'a> PartialTrieScan<'a> for TrieScanPrune<'a> {
@@ -614,11 +627,7 @@ impl<'a> TrieScan for TrieScanPrune<'a> {
     }
 
     fn current_value(&mut self, layer: usize) -> StorageValueT {
-        let current_type = self.path_types()[layer];
-
-        self.output_column_scans[layer]
-            .get_mut()
-            .current(current_type)
+        self.input_trie_value(layer)
             .expect("advance_at_layer needs to return Some before this is called")
     }
 
