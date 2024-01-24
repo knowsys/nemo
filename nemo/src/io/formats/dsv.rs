@@ -1,7 +1,7 @@
 //! Reading of delimiter-separated value files
 
 use std::collections::HashSet;
-use std::io::{BufReader, Read, Write};
+use std::io::{Read, Write};
 use std::mem::size_of;
 
 use bytesize::ByteSize;
@@ -11,9 +11,6 @@ use nemo_physical::management::bytesized::ByteSized;
 use thiserror::Error;
 
 use oxiri::Iri;
-use rio_api::model::{Term, Triple};
-use rio_api::parser::TriplesParser;
-use rio_turtle::TurtleParser;
 
 use nemo_physical::{
     datasources::{table_providers::TableProvider, tuple_writer::TupleWriter},
@@ -25,7 +22,6 @@ use crate::{
     error::Error,
     io::{
         formats::{
-            rdf::RDFReader,
             types::{
                 Direction, ExportSpec, FileFormat, FileFormatError, FileFormatMeta,
                 ImportExportSpec, ImportSpec, TableWriter,
@@ -173,57 +169,58 @@ impl DsvReader {
 
     /// Best-effort parsing function for strings from CSV. True to the nature of CSV, this function
     /// will try hard to find a usable value in the string.
+    /// TODO: This function could possibly share some methods with the parser code later on.
+    /// TODO: Currently no support for guessing floating point values, ony decimal.
     fn parse_any_value_from_string(input: String) -> Result<AnyDataValue, DataValueCreationError> {
-        const BASE: &str = "a:";
-
         let trimmed = input.trim();
 
         // Represent empty cells as empty strings
         if trimmed.is_empty() {
             return Ok(AnyDataValue::new_string("".to_string()));
         }
+        assert!(trimmed.len() > 0);
 
-        // Try to interpret value as RDF term using the RIO parser
-        let data = format!("<> <> {trimmed}.");
-        let mut parser = TurtleParser::new(
-            BufReader::new(data.as_bytes()),
-            Iri::parse(BASE.to_string()).ok(),
-        );
-
-        let mut result: Option<Result<AnyDataValue, DataValueCreationError>> = None;
-        let mut triple_count = 0;
-        let mut on_triple = |triple: Triple| {
-            triple_count += 1;
-            match triple.object {
-                Term::NamedNode(nn) => {
-                    if let Some(s) = nn.iri.to_string().strip_prefix(BASE) {
-                        result = Some(Ok(AnyDataValue::new_iri(s.to_string())));
-                    } else {
-                        result = Some(Ok(AnyDataValue::new_iri(nn.iri.to_string())));
+        match trimmed.as_bytes()[0] {
+            b'<' => {
+                if trimmed.as_bytes()[trimmed.len() - 1] == b'>' {
+                    return Ok(AnyDataValue::new_iri(
+                        trimmed[1..trimmed.len() - 1].to_string(),
+                    ));
+                }
+            }
+            b'0'..=b'9' | b'+' | b'-' => {
+                if let Ok(dv) = AnyDataValue::new_from_decimal_literal(trimmed.to_string()) {
+                    return Ok(dv);
+                }
+            }
+            b'"' => {
+                if let Some(pos) = trimmed.rfind("\"") {
+                    if pos == trimmed.len() - 1 {
+                        return Ok(AnyDataValue::new_string(
+                            trimmed[1..trimmed.len() - 1].to_string(),
+                        ));
+                    } else if trimmed.as_bytes()[pos + 1] == b'@' {
+                        return Ok(AnyDataValue::new_language_tagged_string(
+                            trimmed[1..pos].to_string(),
+                            trimmed[pos + 2..trimmed.len()].to_string(),
+                        ));
+                    } else if trimmed.as_bytes()[trimmed.len() - 1] == b'>'
+                        && trimmed.len() > pos + 4
+                        && &trimmed[pos..pos + 4] == "\"^^<"
+                    {
+                        if let Ok(dv) = AnyDataValue::new_from_typed_literal(
+                            trimmed[1..pos].to_string(),
+                            trimmed[pos + 4..trimmed.len() - 1].to_string(),
+                        ) {
+                            return Ok(dv);
+                        }
                     }
                 }
-                Term::BlankNode(_) => {
-                    // do not support blank nodes in CSV (continue processing)
-                }
-                Term::Literal(lit) => {
-                    result = Some(RDFReader::datavalue_from_literal(lit));
-                }
-                Term::Triple(_) => {
-                    // do not support RDF* syntax in CSV (continue processing)
-                }
             }
-            Ok::<_, Box<dyn std::error::Error>>(())
-        };
-        let _ = parser.parse_all(&mut on_triple); // ignore errors; we will see this next anyhow
-        if triple_count == 1 {
-            if let Some(res) = result {
-                return res;
-            }
+            _ => {}
         }
 
-        // Not a valid RDF term.
         // Check if it's a valid bare name
-        // TODO: Assess whether this adds anything useful on top of the local IRIs supported in RDF.
         if let Ok((remainder, _)) = parse_bare_name(span_from_str(trimmed)) {
             if remainder.is_empty() {
                 return Ok(AnyDataValue::new_iri(trimmed.to_string()));
@@ -302,7 +299,7 @@ pub struct DsvFormat {
 }
 
 impl DsvFormat {
-    const DEFAULT_COLUMN_TYPE: PrimitiveType = PrimitiveType::String;
+    const DEFAULT_COLUMN_TYPE: PrimitiveType = PrimitiveType::Any;
 
     /// Construct a generic DSV file format, with the delimiter not
     /// yet fixed.
