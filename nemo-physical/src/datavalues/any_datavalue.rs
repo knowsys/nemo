@@ -277,6 +277,14 @@ impl AnyDataValue {
         }
     }
 
+    /// Construct a normalized datavalue in an appropriate [`ValueDomain`] from the given string representation
+    /// of a decimal number. The result can be an integer, if the decimal digits are omitted or zero.
+    pub fn new_from_decimal_literal(
+        lexical_value: String,
+    ) -> Result<AnyDataValue, DataValueCreationError> {
+        Self::new_from_decimal_type_literal(lexical_value, DecimalType::Decimal)
+    }
+
     /// Construct a normalized datavalue in an appropriate [`ValueDomain`] for a "big decimal"
     /// or "big integer" [`DecimalType`].
     fn new_from_decimal_type_literal(
