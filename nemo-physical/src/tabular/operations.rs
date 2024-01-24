@@ -241,7 +241,6 @@ impl OperationGenerator for OperationGeneratorEnum {
                 input: Vec<Option<TrieScanEnum<'a>>>,
                 dictionary: &'a MetaDvDictionary,
             ) -> Option<TrieScanEnum<'a>>;
-
         }
     }
 }

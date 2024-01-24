@@ -23,6 +23,20 @@ pub(crate) mod test {
         Trie::from_rows(rows)
     }
 
+    /// Create a [Trie] from table rows of the 64-bit integer type.
+    pub(crate) fn trie_int64(rows: Vec<&[i64]>) -> Trie {
+        let rows = rows
+            .into_iter()
+            .map(|row| {
+                row.into_iter()
+                    .map(|&entry| StorageValueT::Int64(entry))
+                    .collect::<Vec<_>>()
+            })
+            .collect::<Vec<_>>();
+
+        Trie::from_rows(rows)
+    }
+
     /// Return the current value of the [PartialTrieScan].
     pub(crate) fn partial_scan_current<'a, Scan: PartialTrieScan<'a>>(
         scan: &mut Scan,
@@ -82,5 +96,7 @@ pub(crate) mod test {
                 }
             }
         }
+
+        assert_eq!(current_expected_index, expected.len());
     }
 }

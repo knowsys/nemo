@@ -89,7 +89,7 @@ impl OperationGenerator for GeneratorSubtract {
                         let used_layer = layer_map.iter().position(|&layer| layer == output_layer);
 
                         if let Some(used_layer) = used_layer {
-                            let is_last = used_layer == layer_map.len();
+                            let is_last = used_layer == layer_map.len() - 1;
 
                             if is_last {
                                 subtract_indices.push(subtract_index);
@@ -180,6 +180,7 @@ impl<'a> PartialTrieScan<'a> for TrieScanSubtract<'a> {
         }
 
         self.trie_main.up();
+        self.path_types.pop();
     }
 
     fn down(&mut self, next_type: StorageTypeName) {
@@ -213,16 +214,17 @@ impl<'a> PartialTrieScan<'a> for TrieScanSubtract<'a> {
             }
         }
 
+        self.trie_main.down(next_type);
+        self.path_types.push(next_type);
+
         self.column_scans[next_layer]
             .get_mut()
             .subtract_set_active(next_type, previous_equal);
         self.column_scans[next_layer].get_mut().reset(next_type);
-
-        self.path_types.push(next_type);
     }
 
     fn path_types(&self) -> &[StorageTypeName] {
-        self.trie_main.path_types()
+        &self.path_types
     }
 
     fn arity(&self) -> usize {
@@ -362,15 +364,15 @@ mod test {
             &[2, 5, 2],
             &[2, 5, 3],
             &[4, 0, 0],
-            &[4, 0, 1],
             &[4, 2, 1],
+            &[4, 5, 1],
             &[6, 2, 0],
             &[6, 9, 2],
             &[8, 1, 2],
             &[8, 4, 2],
             &[8, 5, 1],
         ]);
-        let trie_subtract_a = trie_id32(vec![&[1, 3, 6]]);
+        let trie_subtract_a = trie_id32(vec![&[1], &[3], &[6]]);
         let trie_subtract_b = trie_id32(vec![&[2, 5], &[4, 2]]);
         let trie_subtract_c = trie_id32(vec![&[0, 0], &[9, 2]]);
         let trie_subtract_d = trie_id32(vec![&[8, 2]]);
@@ -391,7 +393,7 @@ mod test {
         marker_generator.add_marker("z");
 
         let markers_main = marker_generator.operation_table(["x", "y", "z"].iter());
-        let markers_subtract_a = marker_generator.operation_table(["x", "y", "z"].iter());
+        let markers_subtract_a = marker_generator.operation_table(["x"].iter());
         let markers_subtract_b = marker_generator.operation_table(["x", "y"].iter());
         let markers_subtract_c = marker_generator.operation_table(["y", "z"].iter());
         let markers_subtract_d = marker_generator.operation_table(["x", "z"].iter());
@@ -422,7 +424,7 @@ mod test {
             &mut subtract_scan,
             &[StorageTypeName::Id32],
             &[
-                StorageValueT::Id32(2), // x = 4
+                StorageValueT::Id32(2), // x = 2
                 StorageValueT::Id32(0), // y = 0
                 StorageValueT::Id32(1),
                 StorageValueT::Id32(1), // y = 1
@@ -482,7 +484,7 @@ mod test {
         let dictionary = MetaDvDictionary::default();
 
         let trie_main = trie_id32(vec![&[2, 0, 0], &[4, 0, 0], &[8, 5, 1]]);
-        let trie_subtract = trie_id32(vec![&[2, 8]]);
+        let trie_subtract = trie_id32(vec![&[2], &[8]]);
 
         let trie_main_scan = TrieScanEnum::TrieScanGeneric(trie_main.partial_iterator());
         let trie_subtract_scan = TrieScanEnum::TrieScanGeneric(trie_subtract.partial_iterator());
@@ -508,7 +510,8 @@ mod test {
             &[StorageTypeName::Id32],
             &[
                 StorageValueT::Id32(4), // x = 4
-                StorageValueT::Id32(0), // y = 2
+                StorageValueT::Id32(0), // y = 0
+                StorageValueT::Id32(0), // z = 0
             ],
         );
     }
