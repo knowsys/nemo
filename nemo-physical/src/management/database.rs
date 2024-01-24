@@ -412,6 +412,10 @@ impl DatabaseInstance {
                 ExecutionResult::Temporary => {} // Temporary table will be dropped at the end of the function
                 ExecutionResult::Permanent(order, name) => {
                     if let Some(trie) = computation.trie {
+                        if trie.is_empty() {
+                            continue;
+                        }
+
                         let permanent_id = self.register_add_trie(&name, order, trie);
                         let execution_id = computation.execution_id;
 

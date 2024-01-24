@@ -47,6 +47,11 @@ impl Trie {
         self.columns.last().map_or(0, |column| column.num_data())
     }
 
+    /// Return whether the trie is empty
+    pub fn is_empty(&self) -> bool {
+        self.num_rows() == 0
+    }
+
     /// Return a [PartialTrieScan] over this trie.
     pub fn partial_iterator(&self) -> TrieScanGeneric<'_> {
         let column_scans = self
