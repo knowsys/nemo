@@ -272,3 +272,203 @@ impl<'a> PartialTrieScan<'a> for TrieScanFilter<'a> {
         &self.column_scans[layer]
     }
 }
+
+#[cfg(test)]
+mod test {
+    use crate::{
+        datatypes::{StorageTypeName, StorageValueT},
+        datavalues::AnyDataValue,
+        dictionary::meta_dv_dict::MetaDvDictionary,
+        tabular::{
+            operations::{OperationGenerator, OperationTableGenerator},
+            triescan::TrieScanEnum,
+        },
+        util::test_util::test::{trie_dfs, trie_int64},
+    };
+
+    use super::{Filter, GeneratorFilter};
+
+    #[test]
+    fn filter_equal() {
+        let dictionary = MetaDvDictionary::default();
+
+        let trie = trie_int64(vec![
+            &[1, 4, 0, 0],
+            &[1, 4, 1, 4],
+            &[1, 4, 1, 5],
+            &[1, 4, 2, 3],
+            &[1, 4, 2, 4],
+            &[1, 5, 1, 6],
+        ]);
+
+        let trie_scan = TrieScanEnum::TrieScanGeneric(trie.partial_iterator());
+
+        let mut marker_generator = OperationTableGenerator::new();
+        marker_generator.add_marker("x");
+        marker_generator.add_marker("y");
+        marker_generator.add_marker("z");
+        marker_generator.add_marker("v");
+
+        let markers = marker_generator.operation_table(["x", "y", "z", "v"].iter());
+
+        let filters = vec![
+            Filter::equals(
+                Filter::reference(*marker_generator.get(&"x").unwrap()),
+                Filter::reference(*marker_generator.get(&"z").unwrap()),
+            ),
+            Filter::equals(
+                Filter::reference(*marker_generator.get(&"y").unwrap()),
+                Filter::reference(*marker_generator.get(&"v").unwrap()),
+            ),
+        ];
+
+        let filter_generator = GeneratorFilter::new(markers, &filters);
+        let mut filter_scan = filter_generator
+            .generate(vec![Some(trie_scan)], &dictionary)
+            .unwrap();
+
+        trie_dfs(
+            &mut filter_scan,
+            &[StorageTypeName::Int64],
+            &[
+                StorageValueT::Int64(1), // x = 1
+                StorageValueT::Int64(4), // y = 4
+                StorageValueT::Int64(1), // z = 1
+                StorageValueT::Int64(4), // v = 4
+                StorageValueT::Int64(5), // y = 5
+                StorageValueT::Int64(1), // z = 1
+            ],
+        );
+    }
+
+    #[test]
+    fn restrict_constant() {
+        let dictionary = MetaDvDictionary::default();
+
+        let trie = trie_int64(vec![
+            &[1, 4, 0, 7],
+            &[1, 4, 1, 5],
+            &[1, 4, 1, 7],
+            &[1, 4, 2, 3],
+            &[1, 4, 2, 4],
+            &[1, 5, 1, 6],
+        ]);
+
+        let trie_scan = TrieScanEnum::TrieScanGeneric(trie.partial_iterator());
+
+        let mut marker_generator = OperationTableGenerator::new();
+        marker_generator.add_marker("x");
+        marker_generator.add_marker("y");
+        marker_generator.add_marker("z");
+        marker_generator.add_marker("v");
+
+        let markers = marker_generator.operation_table(["x", "y", "z", "v"].iter());
+
+        let filters = vec![
+            Filter::equals(
+                Filter::reference(*marker_generator.get(&"y").unwrap()),
+                Filter::constant(AnyDataValue::new_integer_from_i64(4)),
+            ),
+            Filter::equals(
+                Filter::reference(*marker_generator.get(&"v").unwrap()),
+                Filter::constant(AnyDataValue::new_integer_from_i64(7)),
+            ),
+        ];
+
+        let filter_generator = GeneratorFilter::new(markers, &filters);
+        let mut filter_scan = filter_generator
+            .generate(vec![Some(trie_scan)], &dictionary)
+            .unwrap();
+
+        trie_dfs(
+            &mut filter_scan,
+            &[StorageTypeName::Int64],
+            &[
+                StorageValueT::Int64(1), // x = 1
+                StorageValueT::Int64(4), // y = 4
+                StorageValueT::Int64(0), // z = 1
+                StorageValueT::Int64(7), // v = 7
+                StorageValueT::Int64(1), // z = 1
+                StorageValueT::Int64(7), // v = 7
+                StorageValueT::Int64(2), // z = 2
+            ],
+        );
+    }
+
+    #[test]
+    fn filter_less_than() {
+        let dictionary = MetaDvDictionary::default();
+
+        let trie = trie_int64(vec![&[1, 5], &[5, 2], &[5, 4], &[5, 7], &[8, 5]]);
+
+        let trie_scan = TrieScanEnum::TrieScanGeneric(trie.partial_iterator());
+
+        let mut marker_generator = OperationTableGenerator::new();
+        marker_generator.add_marker("x");
+        marker_generator.add_marker("y");
+
+        let markers = marker_generator.operation_table(["x", "y"].iter());
+
+        let filters = vec![Filter::numeric_lessthan(
+            Filter::reference(*marker_generator.get(&"y").unwrap()),
+            Filter::reference(*marker_generator.get(&"x").unwrap()),
+        )];
+
+        let filter_generator = GeneratorFilter::new(markers, &filters);
+        let mut filter_scan = filter_generator
+            .generate(vec![Some(trie_scan)], &dictionary)
+            .unwrap();
+
+        trie_dfs(
+            &mut filter_scan,
+            &[StorageTypeName::Int64],
+            &[
+                StorageValueT::Int64(1), // x = 1
+                StorageValueT::Int64(5), // x = 5
+                StorageValueT::Int64(2), // y = 2
+                StorageValueT::Int64(4), // y = 4
+                StorageValueT::Int64(8), // x = 8
+                StorageValueT::Int64(5), // y = 5
+            ],
+        );
+    }
+
+    #[test]
+    fn filter_unequal() {
+        let dictionary = MetaDvDictionary::default();
+
+        let trie = trie_int64(vec![&[1, 5], &[5, 2], &[5, 5], &[5, 7], &[8, 5], &[8, 8]]);
+
+        let trie_scan = TrieScanEnum::TrieScanGeneric(trie.partial_iterator());
+
+        let mut marker_generator = OperationTableGenerator::new();
+        marker_generator.add_marker("x");
+        marker_generator.add_marker("y");
+
+        let markers = marker_generator.operation_table(["x", "y"].iter());
+
+        let filters = vec![Filter::unequals(
+            Filter::reference(*marker_generator.get(&"x").unwrap()),
+            Filter::reference(*marker_generator.get(&"y").unwrap()),
+        )];
+
+        let filter_generator = GeneratorFilter::new(markers, &filters);
+        let mut filter_scan = filter_generator
+            .generate(vec![Some(trie_scan)], &dictionary)
+            .unwrap();
+
+        trie_dfs(
+            &mut filter_scan,
+            &[StorageTypeName::Int64],
+            &[
+                StorageValueT::Int64(1), // x = 1
+                StorageValueT::Int64(5), // y = 5
+                StorageValueT::Int64(5), // x = 5
+                StorageValueT::Int64(2), // y = 2
+                StorageValueT::Int64(7), // y = 7
+                StorageValueT::Int64(8), // x = 8
+                StorageValueT::Int64(5), // y = 5
+            ],
+        );
+    }
+}

@@ -197,7 +197,8 @@ pub struct TrieScanFunction<'a> {
 
 impl<'a> PartialTrieScan<'a> for TrieScanFunction<'a> {
     fn up(&mut self) {
-        let current_layer = self.path_types.len();
+        let current_layer = self.path_types.len() - 1;
+        let previous_layer = current_layer.checked_sub(1);
 
         if self.output_functions[current_layer].is_none() {
             // If the current output layer corresponds to a layer in the input trie,
@@ -205,9 +206,11 @@ impl<'a> PartialTrieScan<'a> for TrieScanFunction<'a> {
             self.trie_scan.up();
         }
 
-        if self.input_indices[current_layer] {
-            // The input value is no longer valid
-            self.input_values.pop();
+        if let Some(previous_layer) = previous_layer {
+            if self.input_indices[previous_layer] {
+                // The input value is no longer valid
+                self.input_values.pop();
+            }
         }
 
         self.path_types.pop();
@@ -269,5 +272,250 @@ impl<'a> PartialTrieScan<'a> for TrieScanFunction<'a> {
 
     fn scan<'b>(&'b self, layer: usize) -> &'b UnsafeCell<ColumnScanRainbow<'a>> {
         &self.column_scans[layer]
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use crate::{
+        datatypes::{StorageTypeName, StorageValueT},
+        datavalues::AnyDataValue,
+        dictionary::meta_dv_dict::MetaDvDictionary,
+        function::tree::FunctionTree,
+        tabular::{
+            operations::{OperationGenerator, OperationTableGenerator},
+            triescan::TrieScanEnum,
+        },
+        util::test_util::test::{trie_dfs, trie_int64},
+    };
+
+    use super::{FunctionAssignment, GeneratorFunction};
+
+    #[test]
+    fn function_constant() {
+        let dictionary = MetaDvDictionary::default();
+
+        let trie = trie_int64(vec![
+            &[1, 2, 5],
+            &[1, 4, 1],
+            &[1, 4, 7],
+            &[1, 4, 9],
+            &[2, 3, 1],
+            &[3, 5, 2],
+            &[3, 5, 4],
+            &[3, 9, 8],
+        ]);
+
+        let trie_scan = TrieScanEnum::TrieScanGeneric(trie.partial_iterator());
+
+        let mut marker_generator = OperationTableGenerator::new();
+        marker_generator.add_marker("x");
+        marker_generator.add_marker("y");
+        marker_generator.add_marker("z");
+        marker_generator.add_marker("a");
+        marker_generator.add_marker("b");
+        marker_generator.add_marker("c");
+        marker_generator.add_marker("d");
+
+        let markers = marker_generator.operation_table(["a", "x", "y", "b", "c", "z", "d"].iter());
+
+        let mut assigment = FunctionAssignment::new();
+        assigment.insert(
+            *marker_generator.get(&"a").unwrap(),
+            FunctionTree::constant(AnyDataValue::new_integer_from_i64(2)),
+        );
+        assigment.insert(
+            *marker_generator.get(&"b").unwrap(),
+            FunctionTree::constant(AnyDataValue::new_integer_from_i64(3)),
+        );
+        assigment.insert(
+            *marker_generator.get(&"c").unwrap(),
+            FunctionTree::constant(AnyDataValue::new_integer_from_i64(4)),
+        );
+        assigment.insert(
+            *marker_generator.get(&"d").unwrap(),
+            FunctionTree::constant(AnyDataValue::new_integer_from_i64(1)),
+        );
+
+        let function_generator = GeneratorFunction::new(markers, &assigment);
+        let mut filter_scan = function_generator
+            .generate(vec![Some(trie_scan)], &dictionary)
+            .unwrap();
+
+        trie_dfs(
+            &mut filter_scan,
+            &[StorageTypeName::Int64],
+            &[
+                StorageValueT::Int64(2), // a = 2
+                StorageValueT::Int64(1), // x = 1
+                StorageValueT::Int64(2), // y = 2
+                StorageValueT::Int64(3), // b = 3
+                StorageValueT::Int64(4), // c = 4
+                StorageValueT::Int64(5), // z = 5
+                StorageValueT::Int64(1), // d = 1
+                StorageValueT::Int64(4), // y = 4
+                StorageValueT::Int64(3), // b = 3
+                StorageValueT::Int64(4), // c = 4
+                StorageValueT::Int64(1), // z = 1
+                StorageValueT::Int64(1), // d = 1
+                StorageValueT::Int64(7), // z = 7
+                StorageValueT::Int64(1), // d = 1
+                StorageValueT::Int64(9), // z = 9
+                StorageValueT::Int64(1), // d = 1
+                StorageValueT::Int64(2), // x = 2
+                StorageValueT::Int64(3), // y = 3
+                StorageValueT::Int64(3), // b = 3
+                StorageValueT::Int64(4), // c = 4
+                StorageValueT::Int64(1), // z = 1
+                StorageValueT::Int64(1), // d = 1
+                StorageValueT::Int64(3), // x = 3
+                StorageValueT::Int64(5), // y = 5
+                StorageValueT::Int64(3), // b = 3
+                StorageValueT::Int64(4), // c = 4
+                StorageValueT::Int64(2), // z = 2
+                StorageValueT::Int64(1), // d = 1
+                StorageValueT::Int64(4), // z = 4
+                StorageValueT::Int64(1), // d = 1
+                StorageValueT::Int64(9), // y = 9
+                StorageValueT::Int64(3), // b = 3
+                StorageValueT::Int64(4), // c = 4
+                StorageValueT::Int64(8), // z = 8
+                StorageValueT::Int64(1), // d = 1
+            ],
+        );
+    }
+
+    #[test]
+    fn function_duplicate() {
+        let dictionary = MetaDvDictionary::default();
+
+        let trie = trie_int64(vec![
+            &[1, 3, 7, 10, 4],
+            &[1, 3, 7, 10, 5],
+            &[1, 3, 7, 11, 6],
+            &[1, 3, 7, 11, 7],
+            &[1, 3, 8, 12, 8],
+            &[1, 3, 8, 13, 9],
+            &[1, 4, 9, 10, 10],
+            &[2, 5, 6, 10, 11],
+        ]);
+
+        let trie_scan = TrieScanEnum::TrieScanGeneric(trie.partial_iterator());
+
+        let mut marker_generator = OperationTableGenerator::new();
+        marker_generator.add_marker("x");
+        marker_generator.add_marker("y");
+        marker_generator.add_marker("z");
+        marker_generator.add_marker("v");
+        marker_generator.add_marker("w");
+        marker_generator.add_marker("a");
+        marker_generator.add_marker("b");
+
+        let markers = marker_generator.operation_table(["x", "a", "y", "z", "v", "b", "w"].iter());
+
+        let mut assigment = FunctionAssignment::new();
+        assigment.insert(
+            *marker_generator.get(&"a").unwrap(),
+            FunctionTree::reference(*marker_generator.get(&"x").unwrap()),
+        );
+        assigment.insert(
+            *marker_generator.get(&"b").unwrap(),
+            FunctionTree::reference(*marker_generator.get(&"y").unwrap()),
+        );
+
+        let function_generator = GeneratorFunction::new(markers, &assigment);
+        let mut filter_scan = function_generator
+            .generate(vec![Some(trie_scan)], &dictionary)
+            .unwrap();
+
+        trie_dfs(
+            &mut filter_scan,
+            &[StorageTypeName::Int64],
+            &[
+                StorageValueT::Int64(1),  // x = 1
+                StorageValueT::Int64(1),  // a = 1
+                StorageValueT::Int64(3),  // y = 3
+                StorageValueT::Int64(7),  // z = 7
+                StorageValueT::Int64(10), // v = 10
+                StorageValueT::Int64(3),  // b = 3
+                StorageValueT::Int64(4),  // w = 4
+                StorageValueT::Int64(5),  // w = 5
+                StorageValueT::Int64(11), // v = 11
+                StorageValueT::Int64(3),  // b = 3
+                StorageValueT::Int64(6),  // w = 6
+                StorageValueT::Int64(7),  // w = 7
+                StorageValueT::Int64(8),  // z = 8
+                StorageValueT::Int64(12), // v = 12
+                StorageValueT::Int64(3),  // b = 3
+                StorageValueT::Int64(8),  // w = 8
+                StorageValueT::Int64(13), // v = 13
+                StorageValueT::Int64(3),  // b = 3
+                StorageValueT::Int64(9),  // w = 9
+                StorageValueT::Int64(4),  // y = 4
+                StorageValueT::Int64(9),  // z = 9
+                StorageValueT::Int64(10), // v = 10
+                StorageValueT::Int64(4),  // b = 4
+                StorageValueT::Int64(10), // w = 10
+                StorageValueT::Int64(2),  // x = 2
+                StorageValueT::Int64(2),  // a = 2
+                StorageValueT::Int64(5),  // y = 5
+                StorageValueT::Int64(6),  // z = 6
+                StorageValueT::Int64(10), // v = 10
+                StorageValueT::Int64(5),  // b = 5
+                StorageValueT::Int64(11), // w = 11
+            ],
+        );
+    }
+
+    #[test]
+    fn function_arithmetic() {
+        let dictionary = MetaDvDictionary::default();
+
+        let trie = trie_int64(vec![&[1, 3], &[1, 4], &[2, 5]]);
+
+        let trie_scan = TrieScanEnum::TrieScanGeneric(trie.partial_iterator());
+
+        let mut marker_generator = OperationTableGenerator::new();
+        marker_generator.add_marker("x");
+        marker_generator.add_marker("y");
+        marker_generator.add_marker("r");
+
+        let markers = marker_generator.operation_table(["x", "y", "r"].iter());
+        let marker_x = *marker_generator.get(&"x").unwrap();
+        let marker_y = *marker_generator.get(&"y").unwrap();
+
+        let function = FunctionTree::numeric_division(
+            FunctionTree::numeric_multiplication(
+                FunctionTree::numeric_addition(
+                    FunctionTree::reference(marker_x),
+                    FunctionTree::constant(AnyDataValue::new_integer_from_i64(3)),
+                ),
+                FunctionTree::reference(marker_y),
+            ),
+            FunctionTree::reference(marker_x),
+        );
+
+        let mut assigment = FunctionAssignment::new();
+        assigment.insert(*marker_generator.get(&"r").unwrap(), function);
+
+        let function_generator = GeneratorFunction::new(markers, &assigment);
+        let mut filter_scan = function_generator
+            .generate(vec![Some(trie_scan)], &dictionary)
+            .unwrap();
+
+        trie_dfs(
+            &mut filter_scan,
+            &[StorageTypeName::Int64],
+            &[
+                StorageValueT::Int64(1),  // x = 1
+                StorageValueT::Int64(3),  // y = 3
+                StorageValueT::Int64(12), // r = 12
+                StorageValueT::Int64(4),  // y = 4
+                StorageValueT::Int64(16), // r = 16
+                StorageValueT::Int64(2),  // x = 2
+                StorageValueT::Int64(5),  // y = 5
+                StorageValueT::Int64(12), // r = 12
+            ],
+        );
     }
 }
