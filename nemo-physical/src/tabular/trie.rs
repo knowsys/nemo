@@ -183,8 +183,9 @@ impl Trie {
 
                 if layer != changed_layer {
                     current_builder.finish_interval(last_type);
-                    last_type = current_type;
                 }
+
+                last_type = current_type;
             }
         }
 
