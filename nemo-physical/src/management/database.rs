@@ -339,6 +339,7 @@ impl DatabaseInstance {
                 let trie_scan = self.evaluate_operation(dictionary, storage, operation);
                 trie_scan
                     .map(|scan| Trie::from_trie_scan(TrieScanPrune::new(scan), tree.cut_layers))
+                    .filter(|trie| !trie.is_empty())
             }
             ExecutionTreeNode::ProjectReorder { generator, subnode } => self
                 .evaluate_tree_leaf(storage, subnode)
@@ -412,10 +413,6 @@ impl DatabaseInstance {
                 ExecutionResult::Temporary => {} // Temporary table will be dropped at the end of the function
                 ExecutionResult::Permanent(order, name) => {
                     if let Some(trie) = computation.trie {
-                        if trie.is_empty() {
-                            continue;
-                        }
-
                         let permanent_id = self.register_add_trie(&name, order, trie);
                         let execution_id = computation.execution_id;
 
