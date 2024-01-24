@@ -117,7 +117,7 @@ mod test {
             writer.add_tuple_value(AnyDataValue::new_string(String::from("b")));
 
             writer.add_tuple_value(AnyDataValue::new_string(String::from("a")));
-            writer.add_tuple_value(null.clone());
+            writer.add_tuple_value(null.clone().into());
 
             fn retrieve_dict_id(dictionary: &MetaDvDictionary, dv: &AnyDataValue) -> u32 {
                 u32::try_from(
@@ -131,7 +131,7 @@ mod test {
             // Note: the test below is rather fragile, since it supposes a relative order of the ids that might not
             // be guaranteed. It is certainly not part of the contract. By fetching the ids, we at least allow for
             // some variability in the implementation without failing the test.
-            let id_null = retrieve_dict_id(&dictionary.borrow(), &null);
+            let id_null = retrieve_dict_id(&dictionary.borrow(), &null.into());
             let id_a = retrieve_dict_id(
                 &dictionary.borrow(),
                 &AnyDataValue::new_string(String::from("a")),
