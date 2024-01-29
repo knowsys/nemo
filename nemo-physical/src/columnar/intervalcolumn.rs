@@ -1,6 +1,5 @@
 //! This module defines a type of column,
-//! whose data entries are divided into several intervals
-//! or blocks of sorted values.
+//! whose data entries are divided into several intervals of sorted values.
 //!
 //! Such columns represent a layer in a [Trie][crate::tabular::trie::Trie].
 
@@ -29,9 +28,25 @@ where
     T: ColumnDataType,
     LookupMethod: IntervalLookup,
 {
-    /// [Column][crate::columnar::column::Column]
-    /// that stores the actual data
+    /// [Column] that stores the actual data
     data: ColumnEnum<T>,
+
+    /// [Column] that stores
+    /// the start indices of intervals in the associated `data` column,
+    /// which contain the successor nodes of the values from the previous layer
+    ///
+    /// This column contains exactly one entry
+    /// for every interval in the associated `data` column.
+    ///
+    /// The length of an interval can be obtained
+    /// subtracting the starting point of the current interval
+    /// from the start point of the next interval.
+    ///
+    /// The last entry in this column is always the length of the
+    /// data column associated with this lookup object.
+    ///
+    /// Note that this is a fully sorted column.
+    intervals: ColumnEnum<usize>,
 
     /// Associates each entry from the previous layer
     /// with a sorted interval of values in the `data` column of this layer
@@ -43,10 +58,17 @@ where
     T: ColumnDataType,
     LookupMethod: IntervalLookup,
 {
-    delegate! {
-        to self.interval_lookup {
-            pub fn interval_bounds(&self, storage_type: StorageTypeName, index: usize) -> Option<Range<usize>>;
-        }
+    pub fn interval_bounds(
+        &self,
+        storage_type: StorageTypeName,
+        index: usize,
+    ) -> Option<Range<usize>> {
+        let interval_index = self.interval_lookup.interval_index(storage_type, index)?;
+
+        let interval_start = self.intervals.get(interval_index);
+        let interval_end = self.intervals.get(interval_index + 1);
+
+        Some(interval_start..interval_end)
     }
 }
 
@@ -72,7 +94,7 @@ where
     LookupMethod: IntervalLookup,
 {
     fn size_bytes(&self) -> ByteSize {
-        self.data.size_bytes() + self.interval_lookup.size_bytes()
+        self.data.size_bytes() + self.intervals.size_bytes() + self.interval_lookup.size_bytes()
     }
 }
 
@@ -181,7 +203,10 @@ where
     LookupMethod: IntervalLookup,
 {
     data: ColumnBuilderAdaptive<T>,
-    interval: IntervalLookupBuilderT<LookupMethod>,
+    intervals: ColumnBuilderAdaptive<usize>,
+    interval_lookup: IntervalLookupBuilderT<LookupMethod>,
+
+    last_data_count: usize,
 }
 
 impl<T, LookupMethod> Default for IntervalColumnBuilder<T, LookupMethod>
@@ -192,7 +217,9 @@ where
     fn default() -> Self {
         Self {
             data: Default::default(),
-            interval: IntervalLookupBuilderT::<LookupMethod>::default(),
+            intervals: Default::default(),
+            interval_lookup: IntervalLookupBuilderT::<LookupMethod>::default(),
+            last_data_count: 0,
         }
     }
 }
@@ -207,13 +234,24 @@ where
     }
 
     pub fn finish_interval(&mut self, storage_type: StorageTypeName) {
-        self.interval.add(storage_type, self.data.count());
+        if self.data.count() > self.last_data_count {
+            self.interval_lookup
+                .add_interval(storage_type, self.intervals.count());
+            self.intervals.add(self.last_data_count);
+        } else {
+            self.interval_lookup.add_empty(storage_type);
+        }
+
+        self.last_data_count = self.data.count();
     }
 
-    fn finalize(self) -> IntervalColumn<T, LookupMethod> {
+    fn finalize(mut self) -> IntervalColumn<T, LookupMethod> {
+        self.intervals.add(self.data.count());
+
         IntervalColumn {
             data: self.data.finalize(),
-            interval_lookup: self.interval.finalize(),
+            intervals: self.intervals.finalize(),
+            interval_lookup: self.interval_lookup.finalize(),
         }
     }
 }
@@ -339,27 +377,35 @@ where
     builder_float: IntervalColumnBuilder<Float, LookupMethod>,
     /// Case [StorageTypeName::Double]
     builder_double: IntervalColumnBuilder<Double, LookupMethod>,
-}
 
-impl<LookupMethod> Default for IntervalColumnTBuilderTriescan<LookupMethod>
-where
-    LookupMethod: IntervalLookup,
-{
-    fn default() -> Self {
-        Self {
-            builder_id32: Default::default(),
-            builder_id64: Default::default(),
-            builder_int64: Default::default(),
-            builder_float: Default::default(),
-            builder_double: Default::default(),
-        }
-    }
+    /// The [StorageTypeName] of the node of the previous layer,
+    /// to which the currently built interval belongs
+    /// (i.e. to which of the above `builder_x` are new values added)  
+    type_previous_layer: StorageTypeName,
 }
 
 impl<LookupMethod> IntervalColumnTBuilderTriescan<LookupMethod>
 where
     LookupMethod: IntervalLookup,
 {
+    /// Create a new [IntervalColumnTBuilderTriescan].
+    ///
+    /// This function requires the [StorageTypeName]
+    /// under which the first interval will fall.
+    /// This can be set to `None` if it is the builder for the first column.
+    pub fn new(type_previous_layer: Option<StorageTypeName>) -> Self {
+        let type_previous_layer = type_previous_layer.unwrap_or(StorageTypeName::Id32);
+
+        Self {
+            builder_id32: Default::default(),
+            builder_id64: Default::default(),
+            builder_int64: Default::default(),
+            builder_float: Default::default(),
+            builder_double: Default::default(),
+            type_previous_layer,
+        }
+    }
+
     /// Add a new value into the builder.
     pub fn add_value(&mut self, value: StorageValueT) {
         match value {
@@ -373,15 +419,20 @@ where
 
     /// Signify to the builder that all values of the current interval have been added.
     pub fn finish_interval(&mut self, previous_type: StorageTypeName) {
-        self.builder_id32.finish_interval(previous_type);
-        self.builder_id64.finish_interval(previous_type);
-        self.builder_int64.finish_interval(previous_type);
-        self.builder_float.finish_interval(previous_type);
-        self.builder_double.finish_interval(previous_type);
+        self.builder_id32.finish_interval(self.type_previous_layer);
+        self.builder_id64.finish_interval(self.type_previous_layer);
+        self.builder_int64.finish_interval(self.type_previous_layer);
+        self.builder_float.finish_interval(self.type_previous_layer);
+        self.builder_double
+            .finish_interval(self.type_previous_layer);
+
+        self.type_previous_layer = previous_type;
     }
 
     /// Finish processing and return an [IntervalColumnT].
-    pub fn finalize(self) -> IntervalColumnT<LookupMethod> {
+    pub fn finalize(mut self) -> IntervalColumnT<LookupMethod> {
+        self.finish_interval(StorageTypeName::Id32);
+
         IntervalColumnT::new(
             self.builder_id32.finalize(),
             self.builder_id64.finalize(),
@@ -400,11 +451,7 @@ mod test {
     };
 
     use super::{
-        interval_lookup::{
-            lookup_bitvector::IntervalLookupBitVector,
-            lookup_column_dual::IntervalLookupColumnDual,
-            lookup_column_single::IntervalLookupColumnSingle, IntervalLookup,
-        },
+        interval_lookup::{lookup_column::IntervalLookupColumn, IntervalLookup},
         IntervalColumnTBuilderMatrix,
     };
 
@@ -525,20 +572,19 @@ mod test {
 
     #[test]
     fn interval_builder_matrix() {
-        test_builder_matrix::<IntervalLookupColumnSingle>();
-        test_builder_matrix::<IntervalLookupColumnDual>();
-        test_builder_matrix::<IntervalLookupBitVector>();
+        test_builder_matrix::<IntervalLookupColumn>();
     }
 
     fn test_builder_trie<LookupMethod: IntervalLookup>() {
-        let mut builder = IntervalColumnTBuilderTriescan::<LookupMethod>::default();
+        let mut builder =
+            IntervalColumnTBuilderTriescan::<LookupMethod>::new(Some(StorageTypeName::Id64));
 
         builder.add_value(StorageValueT::Id32(12));
         builder.add_value(StorageValueT::Id32(16));
         builder.add_value(StorageValueT::Int64(-10));
         builder.add_value(StorageValueT::Int64(-4));
 
-        builder.finish_interval(StorageTypeName::Id64);
+        builder.finish_interval(StorageTypeName::Double);
 
         builder.add_value(StorageValueT::Int64(-4));
         builder.add_value(StorageValueT::Int64(0));
@@ -548,8 +594,6 @@ mod test {
 
         builder.add_value(StorageValueT::Id32(6));
         builder.add_value(StorageValueT::Id32(7));
-
-        builder.finish_interval(StorageTypeName::Double);
 
         let interval_column = builder.finalize();
         let column_id32 = interval_column
@@ -638,8 +682,6 @@ mod test {
 
     #[test]
     fn interval_builder_trie() {
-        test_builder_trie::<IntervalLookupColumnSingle>();
-        test_builder_trie::<IntervalLookupColumnDual>();
-        test_builder_trie::<IntervalLookupBitVector>();
+        test_builder_trie::<IntervalLookupColumn>();
     }
 }

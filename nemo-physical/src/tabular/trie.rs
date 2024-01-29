@@ -7,7 +7,7 @@ use crate::{
     columnar::{
         columnscan::ColumnScanRainbow,
         intervalcolumn::{
-            interval_lookup::lookup_column_single::IntervalLookupColumnSingle, IntervalColumnT,
+            interval_lookup::lookup_column::IntervalLookupColumn, IntervalColumnT,
             IntervalColumnTBuilderMatrix, IntervalColumnTBuilderTriescan,
         },
     },
@@ -23,7 +23,7 @@ use super::{
 };
 
 /// Defines the lookup method used in [IntervalColumnT]
-type IntervalLookupMethod = IntervalLookupColumnSingle;
+type IntervalLookupMethod = IntervalLookupColumn;
 
 /// A tree like data structure for storing tabular data
 ///
@@ -99,6 +99,16 @@ impl Trie {
 }
 
 impl Trie {
+    /// Create a new empty [Trie].
+    pub fn empty(num_columns: usize) -> Self {
+        Self {
+            columns: (0..num_columns)
+                .map(|_| IntervalColumnTBuilderMatrix::<IntervalLookupMethod>::default().finalize())
+                .collect(),
+        }
+    }
+
+    /// Create a new [Trie] from a [SortedTupleBuffer].
     pub(crate) fn from_tuple_buffer(buffer: SortedTupleBuffer) -> Self {
         let mut intervalcolumn_builders = (0..buffer.column_number())
             .map(|_| IntervalColumnTBuilderMatrix::<IntervalLookupMethod>::default())
@@ -108,6 +118,8 @@ impl Trie {
         let mut last_tuple_types = Vec::new();
 
         for (column_index, current_builder) in intervalcolumn_builders.iter_mut().enumerate() {
+            let last_column = column_index == buffer.column_number() - 1;
+
             let mut current_tuple_intervals = Vec::<usize>::new();
             let mut current_tuple_types = Vec::<StorageTypeName>::new();
 
@@ -125,7 +137,7 @@ impl Trie {
                 let value_type = value.get_type();
                 let new_value = current_builder.add_value(value);
 
-                if new_value && tuple_index > 0 {
+                if new_value && tuple_index > 0 && !last_column {
                     current_tuple_intervals.push(tuple_index);
                     current_tuple_types.push(current_type);
                 }
@@ -133,7 +145,9 @@ impl Trie {
                 current_type = value_type;
             }
 
-            current_tuple_types.push(current_type);
+            if !last_column {
+                current_tuple_types.push(current_type);
+            }
 
             if column_index > 0 {
                 current_builder.finish_interval(
@@ -163,15 +177,35 @@ impl Trie {
     }
 
     /// Create a new [Trie] based on an a [TrieScan].
+    ///
     /// In the last `cut_layers` layers, this function will only check for the existence of a value
     /// and will not materialize it fully.
     /// To keep all the values, set `cut_layers` to 0.
+    ///
+    /// Assumes that the given `trie_scan` is not initialized
     pub fn from_trie_scan<Scan: TrieScan>(mut trie_scan: Scan, cut_layers: usize) -> Self {
         let num_columns = trie_scan.num_columns() - cut_layers;
 
-        let mut intervalcolumn_builders = (0..num_columns)
-            .map(|_| IntervalColumnTBuilderTriescan::<IntervalLookupMethod>::default())
-            .collect::<Vec<_>>();
+        let mut intervalcolumn_builders =
+            Vec::<IntervalColumnTBuilderTriescan<IntervalLookupMethod>>::with_capacity(num_columns);
+
+        if let Some(first_layer) = trie_scan.advance_on_layer(num_columns - 1) {
+            debug_assert!(first_layer == 0);
+
+            let mut last_type: Option<StorageTypeName> = None;
+            for layer in 0..num_columns {
+                let mut new_builder =
+                    IntervalColumnTBuilderTriescan::<IntervalLookupMethod>::new(last_type);
+                let current_value = trie_scan.current_value(layer);
+
+                last_type = Some(current_value.get_type());
+                new_builder.add_value(current_value);
+
+                intervalcolumn_builders.push(new_builder);
+            }
+        } else {
+            return Self::empty(trie_scan.num_columns());
+        }
 
         while let Some(changed_layer) = trie_scan.advance_on_layer(num_columns - 1) {
             let mut last_type = StorageTypeName::Id32;
@@ -184,11 +218,11 @@ impl Trie {
                 let current_value = trie_scan.current_value(layer);
                 let current_type = current_value.get_type();
 
-                current_builder.add_value(current_value);
-
                 if layer != changed_layer {
                     current_builder.finish_interval(last_type);
                 }
+
+                current_builder.add_value(current_value);
 
                 last_type = current_type;
             }
@@ -420,5 +454,100 @@ mod test {
             current_layer_next(&mut scan, StorageTypeName::Id32),
             Some(StorageValueT::Id32(102))
         );
+    }
+
+    #[test]
+    fn trie_row_iterator() {
+        let rows = vec![
+            vec![
+                StorageValueT::Id32(1),
+                StorageValueT::Id32(5),
+                StorageValueT::Id32(0),
+            ],
+            vec![
+                StorageValueT::Id32(1),
+                StorageValueT::Id32(5),
+                StorageValueT::Int64(-3),
+            ],
+            vec![
+                StorageValueT::Id32(1),
+                StorageValueT::Id32(5),
+                StorageValueT::Int64(-2),
+            ],
+            vec![
+                StorageValueT::Id32(1),
+                StorageValueT::Int64(-10),
+                StorageValueT::Id32(2),
+            ],
+            vec![
+                StorageValueT::Id32(1),
+                StorageValueT::Int64(-10),
+                StorageValueT::Int64(-1),
+            ],
+            vec![
+                StorageValueT::Int64(-7),
+                StorageValueT::Id32(5),
+                StorageValueT::Id32(6),
+            ],
+            vec![
+                StorageValueT::Int64(-7),
+                StorageValueT::Int64(-5),
+                StorageValueT::Int64(-6),
+            ],
+        ];
+        let trie = Trie::from_rows(rows.clone());
+
+        let trie_rows = trie.row_iterator().collect::<Vec<_>>();
+
+        assert_eq!(rows, trie_rows);
+    }
+
+    #[test]
+    fn from_trie_scan() {
+        let rows = vec![
+            vec![
+                StorageValueT::Id32(1),
+                StorageValueT::Id32(5),
+                StorageValueT::Id32(0),
+            ],
+            vec![
+                StorageValueT::Id32(1),
+                StorageValueT::Id32(5),
+                StorageValueT::Int64(-3),
+            ],
+            vec![
+                StorageValueT::Id32(1),
+                StorageValueT::Id32(5),
+                StorageValueT::Int64(-2),
+            ],
+            vec![
+                StorageValueT::Id32(1),
+                StorageValueT::Int64(-10),
+                StorageValueT::Id32(2),
+            ],
+            vec![
+                StorageValueT::Id32(1),
+                StorageValueT::Int64(-10),
+                StorageValueT::Int64(-1),
+            ],
+            vec![
+                StorageValueT::Int64(-7),
+                StorageValueT::Id32(5),
+                StorageValueT::Id32(6),
+            ],
+            vec![
+                StorageValueT::Int64(-7),
+                StorageValueT::Int64(-5),
+                StorageValueT::Int64(-6),
+            ],
+        ];
+        let trie = Trie::from_rows(rows.clone());
+
+        let scan = trie.full_iterator();
+        let trie_roundtrip = Trie::from_trie_scan(scan, 0);
+
+        let trie_rows = trie_roundtrip.row_iterator().collect::<Vec<_>>();
+
+        assert_eq!(rows, trie_rows);
     }
 }
