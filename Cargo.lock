@@ -1304,6 +1304,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "nemo-performance"
+version = "0.4.1-dev"
+dependencies = [
+ "assert_cmd",
+ "assert_fs",
+ "bitvec",
+ "clap 4.4.11",
+ "colored",
+ "dir-test",
+ "env_logger 0.8.4",
+ "log",
+ "nemo",
+ "nemo-physical",
+ "predicates",
+ "rand",
+ "serde_json",
+ "test-log",
+]
+
+[[package]]
 name = "nemo-physical"
 version = "0.4.1-dev"
 dependencies = [
