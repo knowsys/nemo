@@ -18,6 +18,8 @@ pub(crate) use string_dictionary::StringDictionary;
 pub mod bytes_buffer;
 /// Module to define the [BytesDictionary]
 pub mod bytes_dictionary;
+/// Module to define the [BytesPairDictionary]
+pub mod bytes_pair_dictionary;
 /// Module to define string-based datavalue dictionaries.
 pub mod string_dv_dict;
 /// Module to define the [StringMap]
