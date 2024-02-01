@@ -119,11 +119,14 @@ impl OutputArgs {
 pub(crate) struct TracingArgs {
     /// Facts for which a derivation trace should be computed;
     /// multiple facts can be separated by a semicolon
-    #[arg(long = "trace", value_delimiter = ';')]
-    pub(crate) traced_facts: Option<Vec<String>>,
+    #[arg(long = "trace", value_delimiter = ';', group = "trace-input")]
+    pub facts_to_be_traced: Option<Vec<String>>,
+    /// Specify an input file for the facts that should be explained
+    #[arg(long = "trace-input-file", value_parser, group = "trace-input")]
+    pub trace_input_file: Option<Vec<PathBuf>>,
     /// File to export the trace to
-    #[arg(long = "trace-output", requires = "traced_facts")]
-    pub(crate) output_file: Option<PathBuf>,
+    #[arg(long = "trace-output", requires = "trace-input")]
+    pub output_file: Option<PathBuf>,
 }
 
 /// Nemo CLI
