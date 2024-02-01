@@ -317,7 +317,7 @@ impl NemoEngine {
         Ok(())
     }
 
-    fn trace(&self, fact: String) -> PyResult<Option<NemoTrace>> {
+    fn trace(&mut self, fact: String) -> PyResult<Option<NemoTrace>> {
         let parsed_fact = nemo::io::parser::parse_fact(fact).py_res()?;
         let (trace, handles) = self.0.trace(vec![parsed_fact]).py_res()?;
         let handle = *handles

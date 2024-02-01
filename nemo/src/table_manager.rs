@@ -670,7 +670,7 @@ impl TableManager {
     /// Assumes that the given plan has only one output node.
     /// No tables will be saved in the database.
     pub fn execute_plan_first_match(
-        &self,
+        &mut self,
         subtable_plan: SubtableExecutionPlan,
     ) -> Result<Option<TableRow>, Error> {
         debug_assert!(subtable_plan.map_subtrees.len() == 1);

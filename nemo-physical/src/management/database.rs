@@ -916,7 +916,10 @@ impl DatabaseInstance {
     ///
     /// TODO: This code is very similar to `execute_plan`,
     /// but hard to abstract because of the timing...
-    pub fn execute_plan_first_match(&self, plan: ExecutionPlan) -> Result<Option<TableRow>, Error> {
+    pub fn execute_plan_first_match(
+        &mut self,
+        plan: ExecutionPlan,
+    ) -> Result<Option<TableRow>, Error> {
         let execution_trees = plan.split_at_write_nodes();
 
         // The variables below associate the write node ids of the given plan with some additional information
@@ -933,6 +936,10 @@ impl DatabaseInstance {
                 removed_temp_ids.insert(tree_id);
 
                 continue;
+            }
+
+            for (id, order) in execution_tree.required_tables() {
+                self.make_available_in_memory(id, &order)?;
             }
 
             let type_tree = TypeTree::from_execution_tree(self, &type_trees, &execution_tree)?;

@@ -421,7 +421,8 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
     /// Returns a handle to the derived fact in the given [`ExecutionTrace`] if a valid derivation could be found.
     /// Returns `None` otherwise.
     fn trace_recursive(
-        &self,
+        &mut self,
+        program: &ChaseProgram,
         trace: &mut ExecutionTrace,
         fact: ChaseFact,
         fact_values: Vec<StorageValueT>,
@@ -460,13 +461,14 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
 
         // Rule index of the rule that was applied to derive the given fact
         let rule_index = self.rule_history[step];
-        let rule = &self.program.rules()[rule_index];
+        let rule = &program.rules()[rule_index];
 
-        let predicate_types: &Vec<PrimitiveType> = self
+        let predicate_types: Vec<PrimitiveType> = self
             .analysis
             .predicate_types
             .get(&fact.predicate())
-            .expect("Every predicate should be associated with a type.");
+            .expect("Every predicate should be associated with a type.")
+            .clone();
 
         // Iterate over all head atoms which could have derived the given fact
         for (head_index, head_atom) in rule.head().iter().enumerate() {
@@ -694,7 +696,8 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                     }
 
                     let next_fact = ChaseFact::new(next_fact_predicate, next_fact_terms);
-                    let next_handle = self.trace_recursive(trace, next_fact, next_fact_values)?;
+                    let next_handle =
+                        self.trace_recursive(program, trace, next_fact, next_fact_values)?;
 
                     if trace.status(next_handle).is_success() {
                         subtraces.push(next_handle);
@@ -726,7 +729,10 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
 
     /// Build an [`ExecutionTrace`] for a list of facts.
     /// Also returns a list containing a [`TraceFactHandle`] for each fact.
-    pub fn trace(&self, facts: Vec<Fact>) -> Result<(ExecutionTrace, Vec<TraceFactHandle>), Error> {
+    pub fn trace(
+        &mut self,
+        facts: Vec<Fact>,
+    ) -> Result<(ExecutionTrace, Vec<TraceFactHandle>), Error> {
         let mut trace = ExecutionTrace::new(
             self.input_program.clone(),
             self.analysis.predicate_types.clone(),
@@ -750,7 +756,9 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                 }
             }
 
-            handles.push(self.trace_recursive(&mut trace, chase_fact, fact_values)?);
+            let program = self.program().clone();
+
+            handles.push(self.trace_recursive(&program, &mut trace, chase_fact, fact_values)?);
         }
 
         Ok((trace, handles))
