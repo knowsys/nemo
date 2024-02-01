@@ -116,11 +116,14 @@ impl OutputArgs {
 #[derive(Debug, clap::Args)]
 pub struct TracingArgs {
     /// Specify a fact or multiple semicolon separated facts, the origin of which should be explained
-    #[arg(long = "trace", value_delimiter = ';')]
-    pub traced_facts: Option<Vec<String>>,
+    #[arg(long = "trace", value_delimiter = ';', group = "trace-input")]
+    pub facts_to_be_traced: Option<Vec<String>>,
+    /// Specify an input file for the facts that should be explained
+    #[arg(long = "trace-input-file", value_parser, group = "trace-input")]
+    pub trace_input_file: Option<Vec<PathBuf>>,
     /// Specify a file to save the trace.
     /// (Only relevant if --trace is set.)
-    #[arg(long = "trace-output", requires = "traced_facts")]
+    #[arg(long = "trace-output", requires = "trace-input")]
     pub output_file: Option<PathBuf>,
 }
 
