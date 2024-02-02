@@ -175,8 +175,8 @@ impl DsvValueFormat {
                 Some(value.canonical_string())
             }
             nemo_physical::datavalues::ValueDomain::Iri => {
-                // TODO: Strip <> from local IRIs!
-                Some(value.canonical_string())
+                // strings that parse as IRIs should always be recognized as such, so we don't need the < and >
+                Some(value.to_iri_unchecked())
             }
             nemo_physical::datavalues::ValueDomain::LanguageTaggedString
             | nemo_physical::datavalues::ValueDomain::Float
