@@ -54,27 +54,30 @@ impl DsvReader {
             .from_reader(self.read)
     }
 
-    /// Make a list of parser functions to be used for ingesting the data in each column.
-    fn make_parsers(&self) -> Vec<DataValueParserFunction> {
-        let mut result = Vec::with_capacity(self.value_formats.len());
-        for ty in self.value_formats.iter() {
-            result.push(ty.data_value_parser_function());
-        }
-        result
-    }
-
     /// Actually reads the data from the file, using the given parsers to convert strings to [`AnyDataValue`]s.
     /// If a field cannot be read or parsed, the line will be ignored
     fn read(self, tuple_writer: &mut TupleWriter) -> Result<(), Box<dyn std::error::Error>> {
-        let parsers = self.make_parsers();
+        let parsers: Vec<DataValueParserFunction> = self
+            .value_formats
+            .iter()
+            .map(|vf| vf.data_value_parser_function())
+            .collect();
+        let skip: Vec<bool> = self
+            .value_formats
+            .iter()
+            .map(|vf| *vf == DsvValueFormat::SKIP)
+            .collect();
         let mut dsv_reader = self.reader();
 
         let mut line_count: u64 = 0;
         let mut drop_count: u64 = 0;
 
         for row in dsv_reader.records().flatten() {
-            for idx_field in row.iter().enumerate() {
-                if let Ok(dv) = parsers[idx_field.0](idx_field.1.to_string()) {
+            for (idx, value) in row.iter().enumerate() {
+                if skip[idx] {
+                    continue;
+                }
+                if let Ok(dv) = parsers[idx](value.to_string()) {
                     tuple_writer.add_tuple_value(dv);
                 } else {
                     drop_count += 1;

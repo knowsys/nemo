@@ -6,7 +6,9 @@ use oxiri::Iri;
 
 use nemo_physical::datavalues::{AnyDataValue, DataValue, DataValueCreationError};
 
-use crate::model::{VALUE_FORMAT_ANY, VALUE_FORMAT_DOUBLE, VALUE_FORMAT_INT, VALUE_FORMAT_STRING};
+use crate::model::{
+    VALUE_FORMAT_ANY, VALUE_FORMAT_DOUBLE, VALUE_FORMAT_INT, VALUE_FORMAT_SKIP, VALUE_FORMAT_STRING,
+};
 use crate::{
     io::parser::{parse_bare_name, span_from_str},
     model::FileFormat,
@@ -22,7 +24,7 @@ pub(super) type DataValueSerializerFunction = fn(&AnyDataValue) -> Option<String
 /// Enum for the various formats that are supported for encoding values
 /// in DSV. Since DSV has no own type system, the encoding of data must be
 /// controlled through this external mechanism.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum DsvValueFormat {
     /// Format that tries various heuristics to interpret and represent values
     /// in the most natural way. The format can interpret any content (the final
@@ -37,6 +39,9 @@ pub(super) enum DsvValueFormat {
     /// Format that interprets numeric DSV values as double-precision floating
     /// point numbers, and rejects all values that are not in this form.
     DOUBLE,
+    /// Special format to indicate that the value should be skipped as if the whole
+    /// column where not there.
+    SKIP,
 }
 impl DsvValueFormat {
     /// Try to convert a string name for a value format to one of the supported
@@ -47,6 +52,7 @@ impl DsvValueFormat {
             VALUE_FORMAT_STRING => Ok(DsvValueFormat::STRING),
             VALUE_FORMAT_INT => Ok(DsvValueFormat::INTEGER),
             VALUE_FORMAT_DOUBLE => Ok(DsvValueFormat::DOUBLE),
+            VALUE_FORMAT_SKIP => Ok(DsvValueFormat::SKIP),
             _ => Err(ImportExportError::InvalidValueFormat {
                 value_format: name.to_string(),
                 format: FileFormat::DSV,
@@ -61,6 +67,7 @@ impl DsvValueFormat {
             DsvValueFormat::STRING => Self::parse_string_from_string,
             DsvValueFormat::INTEGER => AnyDataValue::new_from_integer_literal,
             DsvValueFormat::DOUBLE => AnyDataValue::new_from_double_literal,
+            DsvValueFormat::SKIP => Self::parse_string_from_string, // irrelevant
         }
     }
 
@@ -71,6 +78,7 @@ impl DsvValueFormat {
             DsvValueFormat::STRING => AnyDataValue::to_string,
             DsvValueFormat::INTEGER => Self::serialize_integer_to_string,
             DsvValueFormat::DOUBLE => Self::serialize_double_to_string,
+            DsvValueFormat::SKIP => Self::serialize_any_value_to_string, // irrelevant
         }
     }
 

@@ -47,11 +47,19 @@ impl TableWriter for DsvWriter {
             .iter()
             .map(|vf| vf.data_value_serializer_function())
             .collect();
+        let skip: Vec<bool> = self
+            .value_formats
+            .iter()
+            .map(|vf| *vf == DsvValueFormat::SKIP)
+            .collect();
 
         for record in table {
             let mut string_record = Vec::with_capacity(record.len());
             let mut complete = true;
             for (i, dv) in record.iter().enumerate() {
+                if skip[i] {
+                    continue;
+                }
                 if let Some(stringvalue) = serializers[i](dv) {
                     string_record.push(stringvalue);
                 } else {

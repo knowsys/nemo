@@ -47,3 +47,6 @@ pub(crate) const VALUE_FORMAT_INT: &str = "int";
 /// integers, or floating-point numbers in scientific notation. Conversely, only double values
 /// can be written in this format.
 pub(crate) const VALUE_FORMAT_DOUBLE: &str = "double";
+/// The name of the special value format that indicates that a vlaue should be ignored altogether.
+/// The respective column/parameter will be skiped in reading/writing.
+pub(crate) const VALUE_FORMAT_SKIP: &str = "skip";

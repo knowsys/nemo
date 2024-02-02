@@ -209,7 +209,16 @@ impl ImportExportHandler for DsvHandler {
     }
 
     fn arity(&self) -> Option<usize> {
-        self.value_formats.as_ref().map(|vfs| vfs.len())
+        let res = self.value_formats.as_ref().map(|vfs| {
+            vfs.iter().fold(0, |acc, fmt| {
+                if *fmt == DsvValueFormat::SKIP {
+                    acc
+                } else {
+                    acc + 1
+                }
+            })
+        });
+        res
     }
 
     fn file_extension(&self) -> Option<String> {
