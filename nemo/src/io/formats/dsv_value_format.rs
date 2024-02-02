@@ -138,7 +138,7 @@ impl DsvValueFormat {
         }
 
         // Check if it's a valid bare name
-        if let Ok((remainder, test)) = parse_bare_name(span_from_str(input)) {
+        if let Ok((remainder, _)) = parse_bare_name(span_from_str(input)) {
             if remainder.is_empty() {
                 return Ok(AnyDataValue::new_iri(input.to_string()));
             }
