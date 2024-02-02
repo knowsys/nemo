@@ -135,6 +135,7 @@ impl Display for Constant {
                 // blank nodes and anything that starts with an ascii letter (like bare names)
                 // should not be wrapped in angle brackets
                 if !abstract_string.starts_with(LOGICAL_NULL_PREFIX)
+                    && !abstract_string.starts_with("http://")
                     && abstract_string.starts_with(|c: char| c.is_ascii_alphabetic() || c == '_')
                 {
                     write!(f, "{abstract_string}")

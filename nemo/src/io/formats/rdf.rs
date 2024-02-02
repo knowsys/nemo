@@ -711,13 +711,13 @@ mod test {
                     })
                     .collect::<Vec<_>>();
                 log::debug!("triple: {triples:?}");
-                for (value, expected) in PrimitiveType::Any.serialize_output(DataValueIteratorT::String(Box::new(triples[0].iter().cloned()))).zip(vec!["http://one.example/subject1", "http://one.example/predicate1", "http://one.example/object1"]) {
+                for (value, expected) in PrimitiveType::Any.serialize_output(DataValueIteratorT::String(Box::new(triples[0].iter().cloned()))).zip(vec!["<http://one.example/subject1>", "<http://one.example/predicate1>", "<http://one.example/object1>"]) {
                     assert_eq!(value, expected);
                 }
-                for (value, expected) in PrimitiveType::Any.serialize_output(DataValueIteratorT::String(Box::new(triples[1].iter().cloned()))).zip(vec!["_:subject1", "http://an.example/predicate1", r#""object1""#]) {
+                for (value, expected) in PrimitiveType::Any.serialize_output(DataValueIteratorT::String(Box::new(triples[1].iter().cloned()))).zip(vec!["_:subject1", "<http://an.example/predicate1>", r#""object1""#]) {
                     assert_eq!(value, expected);
                 }
-                for (value, expected) in PrimitiveType::Any.serialize_output(DataValueIteratorT::String(Box::new(triples[2].iter().cloned()))).zip(vec!["_:subject2", "http://an.example/predicate2", r#""object2""#]) {
+                for (value, expected) in PrimitiveType::Any.serialize_output(DataValueIteratorT::String(Box::new(triples[2].iter().cloned()))).zip(vec!["_:subject2", "<http://an.example/predicate2>", r#""object2""#]) {
                     assert_eq!(value, expected);
                 }
             };
