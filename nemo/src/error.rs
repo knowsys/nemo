@@ -6,7 +6,7 @@ use thiserror::Error;
 
 use crate::{
     execution::selection_strategy::strategy::SelectionStrategyError,
-    io::{formats::types::FileFormatError, parser::LocatedParseError},
+    io::{formats::import_export::ImportExportError, parser::LocatedParseError},
     model::types::error::TypeError,
     program_analysis::analysis::RuleAnalysisError,
 };
@@ -80,7 +80,7 @@ pub enum Error {
     },
     /// Error related to handling of file formats
     #[error(transparent)]
-    FileFormatError(#[from] FileFormatError),
+    FileFormatError(#[from] ImportExportError),
 }
 
 impl From<ReadingError> for Error {

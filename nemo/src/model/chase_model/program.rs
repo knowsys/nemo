@@ -4,23 +4,24 @@ use std::collections::{HashMap, HashSet};
 
 use crate::{
     error::Error,
-    io::formats::types::{ExportSpec, ImportSpec},
-    model::{Identifier, OutputPredicateSelection, PrimitiveType, Program, QualifiedPredicateName},
+    io::formats::import_export::{ImportExportHandler, ImportExportHandlers},
+    model::{ExportDirective, Identifier, ImportDirective, PrimitiveType, Program},
 };
 
 use super::{ChaseAtom, ChaseFact, ChaseRule};
 
 /// Representation of a datalog program that is used for generating execution plans for the physical layer.
 #[derive(Debug, Default, Clone)]
-pub struct ChaseProgram {
+pub(crate) struct ChaseProgram {
     base: Option<String>,
     prefixes: HashMap<String, String>,
-    imports: Vec<ImportSpec>,
-    exports: Vec<ExportSpec>,
+    import_handlers: Vec<(Identifier, Box<dyn ImportExportHandler>)>,
+    // TODO: remove exports; not sure if we need that in any way in the engine ...
+    exports: Vec<ExportDirective>,
     rules: Vec<ChaseRule>,
     facts: Vec<ChaseFact>,
     parsed_predicate_declarations: HashMap<Identifier, Vec<PrimitiveType>>,
-    output_predicates: OutputPredicateSelection,
+    output_predicates: Vec<Identifier>,
 }
 
 /// A Builder for a [ChaseProgram].
@@ -63,22 +64,28 @@ impl ChaseProgramBuilder {
     }
 
     /// Add an imported table.
-    pub fn import(mut self, import: ImportSpec) -> Self {
-        self.program.imports.push(import);
-        self
+    pub fn import(mut self, import: &ImportDirective) -> Result<Self, Error> {
+        let handler = ImportExportHandlers::import_handler(import)?;
+        self.program
+            .import_handlers
+            .push((import.predicate().clone(), handler));
+        Ok(self)
     }
 
     /// Add imported tables.
-    pub fn imports<T>(mut self, imports: T) -> Self
+    pub fn imports<T>(self, imports: T) -> Result<Self, Error>
     where
-        T: IntoIterator<Item = ImportSpec>,
+        T: IntoIterator<Item = ImportDirective>,
     {
-        self.program.imports.extend(imports);
-        self
+        let mut cur_self: Self = self;
+        for import in imports {
+            cur_self = cur_self.import(&import)?;
+        }
+        Ok(cur_self)
     }
 
     /// Add an exported table.
-    pub fn export(mut self, export: ExportSpec) -> Self {
+    pub fn export(mut self, export: ExportDirective) -> Self {
         self.program.exports.push(export);
         self
     }
@@ -86,7 +93,7 @@ impl ChaseProgramBuilder {
     /// Add exported tables.
     pub fn exports<T>(mut self, exports: T) -> Self
     where
-        T: IntoIterator<Item = ExportSpec>,
+        T: IntoIterator<Item = ExportDirective>,
     {
         self.program.exports.extend(exports);
         self
@@ -145,31 +152,17 @@ impl ChaseProgramBuilder {
         self
     }
 
-    /// Select all IDB predicates for output.
-    pub fn output_all_idb_predicates(mut self) -> Self {
-        self.program.output_predicates = OutputPredicateSelection::AllIDBPredicates;
-        self
-    }
-
     /// Select an IDB predicate for output.
-    pub fn output_predicate(self, predicate: QualifiedPredicateName) -> Self {
+    pub fn output_predicate(self, predicate: Identifier) -> Self {
         self.output_predicates([predicate])
     }
 
     /// Select IDB predicates for output.
     pub fn output_predicates<T>(mut self, predicates: T) -> Self
     where
-        T: IntoIterator<Item = QualifiedPredicateName>,
+        T: IntoIterator<Item = Identifier>,
     {
-        match self.program.output_predicates {
-            OutputPredicateSelection::SelectedPredicates(ref mut selected) => {
-                selected.extend(predicates)
-            }
-            OutputPredicateSelection::AllIDBPredicates => {
-                self.program.output_predicates =
-                    OutputPredicateSelection::SelectedPredicates(Vec::from_iter(predicates))
-            }
-        }
+        self.program.output_predicates.extend(predicates);
         self
     }
 }
@@ -239,40 +232,20 @@ impl ChaseProgram {
     }
 
     /// Return all imports in the program.
-    pub fn imports(&self) -> impl Iterator<Item = &ImportSpec> {
-        self.imports.iter()
+    pub(crate) fn imports(
+        &self,
+    ) -> impl Iterator<Item = &(Identifier, Box<dyn ImportExportHandler>)> {
+        self.import_handlers.iter()
     }
 
     /// Return all exports in the program.
-    pub fn exports(&self) -> impl Iterator<Item = &ExportSpec> {
+    pub fn exports(&self) -> impl Iterator<Item = &ExportDirective> {
         self.exports.iter()
     }
 
     /// Return an Iterator over all output predicates
-    pub fn output_predicates(&self) -> impl Iterator<Item = Identifier> {
-        let mut result: Vec<_> = match &self.output_predicates {
-            OutputPredicateSelection::AllIDBPredicates => {
-                log::debug!("outputting all IDB predicates");
-                self.idb_predicates().iter().cloned().collect()
-            }
-            OutputPredicateSelection::SelectedPredicates(predicates) => {
-                log::debug!("outputting predicates {predicates:?}");
-                predicates
-                    .iter()
-                    .map(|QualifiedPredicateName { identifier, .. }| identifier)
-                    .cloned()
-                    .collect()
-            }
-        };
-
-        let edb_predicates = self.edb_predicates();
-        for export_spec in self.exports() {
-            if edb_predicates.contains(export_spec.predicate()) {
-                result.push(export_spec.predicate().clone());
-            }
-        }
-
-        result.into_iter()
+    pub fn output_predicates(&self) -> impl Iterator<Item = &Identifier> {
+        self.output_predicates.iter()
     }
 
     /// Return all prefixes in the program.
@@ -292,14 +265,6 @@ impl ChaseProgram {
     pub fn parsed_predicate_declarations(&self) -> &HashMap<Identifier, Vec<PrimitiveType>> {
         &self.parsed_predicate_declarations
     }
-
-    /// Force the given selection of output predicates.
-    pub fn force_output_predicate_selection(
-        &mut self,
-        output_predicates: OutputPredicateSelection,
-    ) {
-        self.output_predicates = output_predicates;
-    }
 }
 
 impl TryFrom<Program> for ChaseProgram {
@@ -308,7 +273,7 @@ impl TryFrom<Program> for ChaseProgram {
     fn try_from(program: Program) -> Result<Self, Error> {
         let mut builder = Self::builder()
             .prefixes(program.prefixes().clone())
-            .imports(program.imports().cloned())
+            .imports(program.imports().cloned())?
             .exports(program.exports().cloned())
             .rules(
                 program
@@ -323,18 +288,13 @@ impl TryFrom<Program> for ChaseProgram {
                     .facts()
                     .iter()
                     .map(|fact| ChaseFact::from_flat_atom(&fact.0)),
-            )
-            .predicate_declarations(program.parsed_predicate_declarations());
+            );
 
         if let Some(base) = program.base() {
             builder = builder.base(base);
         }
 
-        if let OutputPredicateSelection::SelectedPredicates(predicates) =
-            program.output_predicate_selection()
-        {
-            builder = builder.output_predicates(predicates.clone());
-        }
+        builder = builder.output_predicates(program.output_predicates().cloned());
 
         Ok(builder.build())
     }

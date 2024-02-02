@@ -1,10 +1,8 @@
 //! Reading of RDF 1.1 triples files (N-Triples, Turtle, RDF/XML) and
 //! RDF 1.1 quads files (N-Quads, TriG)
 use std::{
-    collections::HashSet,
-    io::{BufReader, Write},
+    io::{BufRead, Write},
     mem::size_of,
-    str::FromStr,
 };
 
 use bytesize::ByteSize;
@@ -26,21 +24,19 @@ use rio_xml::RdfXmlParser;
 
 use crate::{
     error::Error,
-    io::{
-        formats::{
-            types::{
-                attributes::RESOURCE, Direction, ExportSpec, FileFormat, FileFormatError,
-                FileFormatMeta, ImportExportSpec, ImportSpec, PathWithFormatSpecificExtension,
-                TableWriter,
-            },
-            PROGRESS_NOTIFY_INCREMENT,
-        },
-        resource_providers::ResourceProviders,
+    io::formats::{
+        types::{Direction, TableWriter},
+        PROGRESS_NOTIFY_INCREMENT,
     },
-    model::{Constant, Identifier, Key, Map, TupleConstraint},
+    model::{
+        Constant, FileFormat, Identifier, Map, RdfVariant, PARAMETER_NAME_BASE,
+        PARAMETER_NAME_RESOURCE,
+    },
 };
 
 use thiserror::Error;
+
+use super::import_export::{ImportExportError, ImportExportHandler, ImportExportHandlers};
 
 /// Errors that can occur when reading RDF resources and converting them
 /// to [`AnyDataValue`]s.
@@ -66,60 +62,28 @@ pub enum RdfReadingError {
 
 const DEFAULT_GRAPH: &str = "__DEFAULT_GRAPH__";
 
-fn is_turtle(resource: &Resource) -> bool {
-    resource.ends_with(".ttl.gz") || resource.ends_with(".ttl")
-}
-
-fn is_rdf_xml(resource: &Resource) -> bool {
-    resource.ends_with(".rdf.gz") || resource.ends_with(".rdf")
-}
-
-fn is_nt(resource: &Resource) -> bool {
-    resource.ends_with(".nt.gz") || resource.ends_with(".nt")
-}
-
-fn is_nq(resource: &Resource) -> bool {
-    resource.ends_with(".nq.gz") || resource.ends_with(".nq")
-}
-
-fn is_trig(resource: &Resource) -> bool {
-    resource.ends_with(".trig.gz") || resource.ends_with(".trig")
-}
-
 /// A [`TableProvider`] for RDF 1.1 files containing triples.
-#[derive(Debug)]
-pub(crate) struct RDFReader {
-    resource_providers: ResourceProviders,
-    resource: Resource,
+pub(crate) struct RdfReader {
+    read: Box<dyn BufRead>,
+    variant: RdfVariant,
     base: Option<Iri<String>>,
-    variant: RDFVariant,
+    /// Map to store how nulls relate to blank nodes.
+    ///
+    /// TODO: An RdfReader is specific to one BufRead, which it consumes when reading.
+    /// There is little point in storing this map (which is only used during this step).
+    /// To support bnode contexts that span several files, another architecture would be needed,
+    /// where the NullMap survives the RdfReader.
     bnode_map: NullMap,
 }
 
-impl RDFReader {
+impl RdfReader {
     /// Create a new [`RDFReader`]
     #[allow(dead_code)]
-    pub fn new(
-        resource_providers: ResourceProviders,
-        resource: Resource,
-        base: Option<String>,
-    ) -> Self {
-        Self::with_variant(RDFVariant::Unspecified, resource_providers, resource, base)
-    }
-
-    /// Create a new [`RDFReader`] with the given [format
-    /// variant][RDFVariant].
-    pub fn with_variant(
-        variant: RDFVariant,
-        resource_providers: ResourceProviders,
-        resource: Resource,
-        base: Option<String>,
-    ) -> Self {
+    pub fn new(read: Box<dyn BufRead>, variant: RdfVariant, base: Option<Iri<String>>) -> Self {
         Self {
-            resource_providers,
-            resource,
-            base: base.map(|iri| Iri::parse(iri).expect("should be a valid IRI.")),
+            read,
             variant,
+            base,
             bnode_map: Default::default(),
         }
     }
@@ -207,9 +171,9 @@ impl RDFReader {
 
     /// Read the RDF triples from a parser.
     fn read_triples_with_parser<Parser>(
-        &mut self,
+        mut self,
         tuple_writer: &mut TupleWriter,
-        make_parser: impl FnOnce() -> Parser,
+        make_parser: impl Fn(Box<dyn BufRead>) -> Parser,
     ) -> Result<(), Box<dyn std::error::Error>>
     where
         Parser: TriplesParser,
@@ -237,7 +201,7 @@ impl RDFReader {
             Ok::<_, Box<dyn std::error::Error>>(())
         };
 
-        let mut parser = make_parser();
+        let mut parser = make_parser(self.read);
 
         while !parser.is_end() {
             if let Err(e) = parser.parse_step(&mut on_triple) {
@@ -252,9 +216,9 @@ impl RDFReader {
 
     /// Read the RDF quads from a parser.
     fn read_quads_with_parser<Parser>(
-        &mut self,
+        mut self,
         tuple_writer: &mut TupleWriter,
-        make_parser: impl FnOnce() -> Parser,
+        make_parser: impl Fn(Box<dyn BufRead>) -> Parser,
     ) -> Result<(), Box<dyn std::error::Error>>
     where
         Parser: QuadsParser,
@@ -287,7 +251,7 @@ impl RDFReader {
             Ok::<_, Box<dyn std::error::Error>>(())
         };
 
-        let mut parser = make_parser();
+        let mut parser = make_parser(self.read);
 
         while !parser.is_end() {
             if let Err(e) = parser.parse_step(&mut on_triple) {
@@ -301,371 +265,174 @@ impl RDFReader {
     }
 }
 
-impl TableProvider for RDFReader {
+impl TableProvider for RdfReader {
     fn provide_table_data(
-        mut self: Box<Self>,
+        self: Box<Self>,
         tuple_writer: &mut TupleWriter,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        let reader = self
-            .resource_providers
-            .open_resource(&self.resource, true)?;
-
         let base_iri = self.base.clone();
 
-        let reader = BufReader::new(reader);
-
-        match self.variant.refine_with_resource(&self.resource) {
-            RDFVariant::NTriples => {
-                self.read_triples_with_parser(tuple_writer, || NTriplesParser::new(reader))
+        match self.variant {
+            RdfVariant::NTriples => {
+                self.read_triples_with_parser(tuple_writer, |read| NTriplesParser::new(read))
             }
-            RDFVariant::NQuads => {
-                self.read_quads_with_parser(tuple_writer, || NQuadsParser::new(reader))
+            RdfVariant::NQuads => {
+                self.read_quads_with_parser(tuple_writer, |read| NQuadsParser::new(read))
             }
-            RDFVariant::Turtle => {
-                self.read_triples_with_parser(tuple_writer, || TurtleParser::new(reader, base_iri))
-            }
-            RDFVariant::RDFXML => {
-                self.read_triples_with_parser(tuple_writer, || RdfXmlParser::new(reader, base_iri))
-            }
-            RDFVariant::TriG => {
-                self.read_quads_with_parser(tuple_writer, || TriGParser::new(reader, base_iri))
-            }
-            RDFVariant::Unspecified => Err(Box::new(RdfReadingError::UnknownRdfFormat(
-                self.resource.clone(),
-            ))),
+            RdfVariant::Turtle => self.read_triples_with_parser(tuple_writer, |read| {
+                TurtleParser::new(read, base_iri.clone())
+            }),
+            RdfVariant::RDFXML => self.read_triples_with_parser(tuple_writer, |read| {
+                RdfXmlParser::new(read, base_iri.clone())
+            }),
+            RdfVariant::TriG => self.read_quads_with_parser(tuple_writer, |read| {
+                TriGParser::new(read, base_iri.clone())
+            }),
+            RdfVariant::Unspecified => unreachable!(
+                "the reader should not be instantiated with unknown format by the handler"
+            ),
         }
     }
 }
 
-impl ByteSized for RDFReader {
+impl std::fmt::Debug for RdfReader {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("RdfReader")
+            .field("read", &"<unspecified std::io::Read>")
+            .field("variant", &self.variant)
+            .field("base", &self.base)
+            .finish()
+    }
+}
+
+impl ByteSized for RdfReader {
     fn size_bytes(&self) -> ByteSize {
         ByteSize::b(size_of::<Self>() as u64)
     }
 }
 
-const BASE: &str = "base";
-
-/// The different supported variants of the RDF format.
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
-pub enum RDFVariant {
-    /// An unspecified format, using the resource name as a heuristic.
-    #[default]
-    Unspecified,
-    /// RDF 1.1 N-Triples
-    NTriples,
-    /// RDF 1.1 N-Quads
-    NQuads,
-    /// RDF 1.1 Turtle
-    Turtle,
-    /// RDF 1.1 RDF/XML
-    RDFXML,
-    /// RDF 1.1 TriG
-    TriG,
-}
-
-impl RDFVariant {
-    /// Create an appropriate format variant from the given resource,
-    /// based on the file extension.
-    pub fn from_resource(resource: &String) -> RDFVariant {
-        match resource {
-            resource if is_turtle(resource) => RDFVariant::Turtle,
-            resource if is_rdf_xml(resource) => RDFVariant::RDFXML,
-            resource if is_nt(resource) => RDFVariant::NTriples,
-            resource if is_nq(resource) => RDFVariant::NQuads,
-            resource if is_trig(resource) => RDFVariant::TriG,
-            _ => RDFVariant::Unspecified,
-        }
-    }
-
-    fn refine_with_resource(self, resource: &String) -> RDFVariant {
-        match self {
-            Self::Unspecified => Self::from_resource(resource),
-            _ => self,
-        }
-    }
-}
-
-impl PathWithFormatSpecificExtension for RDFVariant {
-    fn extension(&self) -> Option<&str> {
-        match self {
-            Self::NTriples => Some("nt"),
-            Self::NQuads => Some("nq"),
-            Self::Turtle => Some("ttl"),
-            Self::RDFXML => Some("rdf"),
-            Self::TriG => Some("trig"),
-            Self::Unspecified => None,
-        }
-    }
-}
-
-impl std::fmt::Display for RDFVariant {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::NTriples => write!(f, "RDF N-Triples"),
-            Self::NQuads => write!(f, "RDF N-Quads"),
-            Self::Turtle => write!(f, "RDF Turtle"),
-            Self::RDFXML => write!(f, "RDF/XML"),
-            Self::TriG => write!(f, "RDF TriG"),
-            Self::Unspecified => write!(f, "RDF"),
-        }
-    }
-}
-
-impl FromStr for RDFVariant {
-    type Err = FileFormatError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let canonicalised = s.to_uppercase();
-
-        match canonicalised.as_str() {
-            "NTRIPLES" => Ok(Self::NTriples),
-            "NQUADS" => Ok(Self::NQuads),
-            "TURTLE" => Ok(Self::Turtle),
-            "RDFXML" => Ok(Self::RDFXML),
-            "TRIG" => Ok(Self::TriG),
-            "RDF" => Ok(Self::Unspecified),
-            _ => Err(FileFormatError::UnknownFormat(s.to_string())),
-        }
-    }
-}
-
-/// File formats for RDF.
+/// An [ImportExportHandler] for RDF formats.
 #[derive(Debug, Default, Clone)]
-pub struct RDFFormat {
+pub struct RdfHandler {
+    /// The resource to write to/read from.
+    /// This can be `None` for writing, since one can generate a default file
+    /// name from the exported predicate in this case. This has little chance of
+    /// success for imports, so the predicate is setting there.
     resource: Option<Resource>,
-    variant: RDFVariant,
+    /// Base IRI, if given.
+    base: Option<Iri<String>>,
+    /// The specific RDF format to be used.
+    variant: RdfVariant,
 }
 
-impl RDFFormat {
-    /// Construct new RDF file format metadata.
-    pub fn new() -> Self {
-        Default::default()
-    }
-
-    /// Construct a new RDF file format metadata for the given [format
-    /// variant][RDFVariant].
-    pub fn with_variant(variant: RDFVariant) -> Self {
-        Self {
-            variant,
-            ..Default::default()
-        }
-    }
-
-    /// Construct a new RDF N-Triples file format metadata.
-    pub fn ntriples() -> Self {
-        Self::with_variant(RDFVariant::NTriples)
-    }
-
-    /// Construct a new RDF N-Quads file format metadata.
-    pub fn nquads() -> Self {
-        Self::with_variant(RDFVariant::NQuads)
-    }
-
-    /// Construct a new RDF Turtle file format metadata.
-    pub fn turtle() -> Self {
-        Self::with_variant(RDFVariant::Turtle)
-    }
-
-    /// Construct a new RDF RDF/XML file format metadata.
-    pub fn rdf_xml() -> Self {
-        Self::with_variant(RDFVariant::RDFXML)
-    }
-
-    fn try_into_import_export(
-        mut self,
+impl RdfHandler {
+    /// Construct an RDF handler of the given variant.
+    pub(crate) fn try_new(
+        variant: RdfVariant,
+        attributes: &Map,
         direction: Direction,
-        resource: Resource,
-        base: Option<String>,
-        predicate: Identifier,
-        declared_types: TupleConstraint,
-    ) -> Result<ImportExportSpec, FileFormatError> {
-        let mut attributes = Map::singleton(
-            Key::identifier_from_str(RESOURCE),
-            Constant::StringLiteral(resource),
-        );
+    ) -> Result<Box<dyn ImportExportHandler>, ImportExportError> {
+        // Basic checks for unsupported attributes:
+        ImportExportHandlers::check_attributes(
+            attributes,
+            &vec![PARAMETER_NAME_RESOURCE, PARAMETER_NAME_BASE],
+        )?;
 
-        if let Some(base) = base {
-            attributes.pairs.insert(
-                Key::identifier_from_str(BASE),
-                Constant::Abstract(Identifier(base)),
-            );
+        let resource = ImportExportHandlers::extract_resource(attributes, direction)?;
+
+        let base: Option<Iri<String>>;
+        if let Some(base_string) =
+            ImportExportHandlers::extract_iri(attributes, PARAMETER_NAME_BASE, true)?
+        {
+            if let Ok(b) = Iri::parse(base_string.clone()) {
+                base = Some(b);
+            } else {
+                return Err(ImportExportError::invalid_att_value_error(
+                    PARAMETER_NAME_BASE,
+                    Constant::Abstract(Identifier::new(base_string.clone())),
+                    "must be a valid IRI",
+                ));
+            }
+        } else {
+            base = None;
         }
 
-        let constraint =
-            self.validated_and_refined_type_declaration(direction, &attributes, declared_types)?;
+        let refined_variant: RdfVariant;
+        if variant == RdfVariant::Unspecified {
+            if let Some(ref res) = resource {
+                refined_variant = RdfVariant::from_resource(res);
+            } else {
+                refined_variant = variant;
+            }
+        } else {
+            refined_variant = variant;
+        }
 
-        Ok(ImportExportSpec {
-            predicate,
-            constraint,
-            attributes,
-            format: Box::new(self),
-        })
-    }
-
-    /// Obtain an [ImportSpec] for this format.
-    pub fn try_into_import(
-        self,
-        resource: Resource,
-        predicate: Identifier,
-        declared_types: TupleConstraint,
-        base: Option<String>,
-    ) -> Result<ImportSpec, FileFormatError> {
-        Ok(ImportSpec::from(self.try_into_import_export(
-            Direction::Reading,
-            resource,
-            base,
-            predicate,
-            declared_types,
-        )?))
-    }
-
-    /// Obtain an [ExportSpec] for this format.
-    pub fn try_into_export(
-        self,
-        resource: Resource,
-        predicate: Identifier,
-        declared_types: TupleConstraint,
-        base: Option<String>,
-    ) -> Result<ExportSpec, FileFormatError> {
-        Ok(ExportSpec::from(self.try_into_import_export(
-            Direction::Writing,
-            resource,
-            base,
-            predicate,
-            declared_types,
-        )?))
+        Ok(Box::new(Self {
+            resource: resource,
+            base: base,
+            variant: refined_variant,
+        }))
     }
 }
 
-impl FileFormatMeta for RDFFormat {
+impl ImportExportHandler for RdfHandler {
     fn file_format(&self) -> FileFormat {
         FileFormat::RDF(self.variant)
     }
 
     fn reader(
         &self,
-        attributes: &Map,
-        _declared_types: &TupleConstraint,
-        resource_providers: ResourceProviders,
+        read: Box<dyn BufRead>,
+        arity: usize,
     ) -> Result<Box<dyn TableProvider>, Error> {
-        let base = attributes
-            .pairs
-            .get(&Key::identifier_from_str(BASE))
-            .map(|term| term.as_abstract().expect("must be an identifier").name());
-
-        Ok(Box::new(RDFReader::with_variant(
+        // TODO: Arity is ignored. It is only relevant if the RDF variant was unspecified, since it could help to guess the format
+        // in this case. But we do not yet do this.
+        Ok(Box::new(RdfReader::new(
+            read,
             self.variant,
-            resource_providers,
-            self.resource.clone().expect("is a required attribute"),
-            base,
+            self.base.clone(),
         )))
     }
 
-    fn writer(
-        &self,
-        _attributes: &Map,
-        _writer: Box<dyn Write>,
-    ) -> Result<Box<dyn TableWriter>, Error> {
-        Err(FileFormatError::UnsupportedWrite(self.file_format()).into())
+    fn writer(&self, _writer: Box<dyn Write>) -> Result<Box<dyn TableWriter>, Error> {
+        Err(ImportExportError::UnsupportedWrite(self.file_format()).into())
     }
 
-    fn resources(&self, attributes: &Map) -> Vec<Resource> {
-        vec![self.resource.clone().unwrap_or(
-            attributes
-                .pairs
-                .get(&Key::identifier_from_str(RESOURCE))
-                .expect("is a required attribute")
-                .as_resource()
-                .expect("must be a string or an IRI")
-                .to_string(),
-        )]
+    fn resource(&self) -> Option<Resource> {
+        self.resource.clone()
     }
 
-    fn optional_attributes(&self, _direction: Direction) -> HashSet<Key> {
-        let mut attributes = HashSet::new();
-
-        attributes.insert(BASE);
-
-        attributes
-            .into_iter()
-            .map(Key::identifier_from_str)
-            .collect()
-    }
-
-    fn required_attributes(&self, _direction: Direction) -> HashSet<Key> {
-        let mut attributes = HashSet::new();
-
-        attributes.insert(RESOURCE);
-
-        attributes
-            .into_iter()
-            .map(Key::identifier_from_str)
-            .collect()
-    }
-
-    fn validate_attribute_values(
-        &mut self,
-        _direction: Direction,
-        attributes: &Map,
-    ) -> Result<(), FileFormatError> {
-        let resource = attributes
-            .pairs
-            .get(&Key::identifier_from_str(RESOURCE))
-            .expect("is a required attribute");
-        match resource.as_resource() {
-            Some(resource) => {
-                self.variant = RDFVariant::from_resource(resource);
-                self.resource = Some(resource.clone());
-            }
-            None => {
-                return Err(FileFormatError::InvalidAttributeValue {
-                    value: resource.clone(),
-                    attribute: Key::identifier_from_str(RESOURCE),
-                    description: "Resource should be a string literal or an IRI".to_string(),
-                })
-            }
+    fn arity(&self) -> Option<usize> {
+        match self.variant {
+            RdfVariant::Unspecified => None,
+            RdfVariant::NTriples | RdfVariant::Turtle | RdfVariant::RDFXML => Some(3),
+            RdfVariant::NQuads | RdfVariant::TriG => Some(4),
         }
-
-        Ok(())
     }
 
-    fn validate_and_refine_type_declaration(
-        &mut self,
-        declared_types: TupleConstraint,
-    ) -> Result<TupleConstraint, FileFormatError> {
-        let required = match self.variant {
-            RDFVariant::NQuads | RDFVariant::TriG => 4,
-            _ => 3,
-        };
-
-        if declared_types.arity() != required {
-            return Err(FileFormatError::InvalidArityExact {
-                arity: declared_types.arity(),
-                required,
-                format: self.file_format(),
-            });
+    fn file_extension(&self) -> Option<String> {
+        match self.variant {
+            RdfVariant::Unspecified => None,
+            RdfVariant::NTriples => Some("nt".to_string()),
+            RdfVariant::NQuads => Some("nq".to_string()),
+            RdfVariant::Turtle => Some("ttl".to_string()),
+            RdfVariant::RDFXML => Some("rdf".to_string()),
+            RdfVariant::TriG => Some("trig".to_string()),
         }
-
-        if declared_types.clone().into_flat_primitive().is_none() {
-            return Err(FileFormatError::UnsupportedComplexTypes {
-                format: self.file_format(),
-            });
-        }
-
-        Ok(declared_types)
     }
 }
 
 #[cfg(test)]
 mod test {
-    use super::RDFReader;
+    use super::RdfReader;
     use std::cell::RefCell;
 
     use nemo_physical::{datasources::tuple_writer::TupleWriter, management::database::Dict};
     use rio_turtle::{NTriplesParser, TurtleParser};
     use test_log::test;
 
-    use crate::io::resource_providers::ResourceProviders;
+    use crate::model::RdfVariant;
 
     #[test]
     fn parse_triples_nt() {
@@ -676,11 +443,11 @@ mod test {
         <http://example.org/subject1> <http://an.example/predicate2> "string2" . # Note that duplicate triples are not eliminated here yet
         "#.as_bytes();
 
-        let mut reader = RDFReader::new(ResourceProviders::empty(), String::new(), None);
+        let reader = RdfReader::new(Box::new(data), RdfVariant::NTriples, None);
         let dict = RefCell::new(Dict::default());
         let mut tuple_writer = TupleWriter::new(&dict, 3);
         let result =
-            reader.read_triples_with_parser(&mut tuple_writer, || NTriplesParser::new(data));
+            reader.read_triples_with_parser(&mut tuple_writer, |read| NTriplesParser::new(read));
         assert!(result.is_ok());
         assert_eq!(tuple_writer.size(), 4);
     }
@@ -692,11 +459,11 @@ mod test {
         "#
         .as_bytes();
 
-        let mut reader = RDFReader::new(ResourceProviders::empty(), String::new(), None);
+        let reader = RdfReader::new(Box::new(data), RdfVariant::Turtle, None);
         let dict = RefCell::new(Dict::default());
         let mut tuple_writer = TupleWriter::new(&dict, 3);
-        let result =
-            reader.read_triples_with_parser(&mut tuple_writer, || TurtleParser::new(data, None));
+        let result = reader
+            .read_triples_with_parser(&mut tuple_writer, |read| TurtleParser::new(read, None));
         assert!(result.is_ok());
         assert_eq!(tuple_writer.size(), 3);
     }
@@ -709,11 +476,11 @@ mod test {
         malformed <http://an.example/predicate2> "12"^^<http://www.w3.org/2001/XMLSchema#int> . # ignored
         "#.as_bytes();
 
-        let mut reader = RDFReader::new(ResourceProviders::empty(), String::new(), None);
+        let reader = RdfReader::new(Box::new(data), RdfVariant::NTriples, None);
         let dict = RefCell::new(Dict::default());
         let mut tuple_writer = TupleWriter::new(&dict, 3);
         let result =
-            reader.read_triples_with_parser(&mut tuple_writer, || NTriplesParser::new(data));
+            reader.read_triples_with_parser(&mut tuple_writer, |read| NTriplesParser::new(read));
         assert!(result.is_ok());
         assert_eq!(tuple_writer.size(), 1);
     }

@@ -6,10 +6,10 @@ use std::{
 use nemo::{
     datavalues::{AnyDataValue, DataValue},
     execution::{tracing::trace::ExecutionTraceTree, ExecutionEngine},
-    io::{resource_providers::ResourceProviders, OutputManager},
+    io::{resource_providers::ResourceProviders, ExportManager, ImportManager},
     model::{
         chase_model::{ChaseAtom, ChaseFact},
-        Constant, Identifier, NumericLiteral, RdfLiteral, Variable, XSD_STRING,
+        Constant, ExportDirective, Identifier, NumericLiteral, RdfLiteral, Variable, XSD_STRING,
     },
 };
 
@@ -66,24 +66,18 @@ impl NemoProgram {
 }
 
 #[pyclass]
-struct NemoOutputManager(nemo::io::OutputManager);
+struct NemoOutputManager(nemo::io::ExportManager);
 
 #[pymethods]
 impl NemoOutputManager {
     #[new]
     #[pyo3(signature=(path, overwrite=false, gzip=false))]
     fn py_new(path: String, overwrite: bool, gzip: bool) -> PyResult<Self> {
-        let mut output_manager = OutputManager::builder(path.into()).py_res()?;
-
-        if overwrite {
-            output_manager = output_manager.overwrite();
-        }
-
-        if gzip {
-            output_manager = output_manager.gzip();
-        }
-
-        Ok(NemoOutputManager(output_manager.build()))
+        let export_manager = ExportManager::new()
+            .set_base_path(path.into())
+            .overwrite(overwrite)
+            .compress(gzip);
+        Ok(NemoOutputManager(export_manager))
     }
 }
 
@@ -334,8 +328,8 @@ struct NemoEngine(nemo::execution::DefaultExecutionEngine);
 impl NemoEngine {
     #[new]
     fn py_new(program: NemoProgram) -> PyResult<Self> {
-        let engine =
-            ExecutionEngine::initialize(program.0, ResourceProviders::default()).py_res()?;
+        let import_manager = ImportManager::new(ResourceProviders::default());
+        let engine = ExecutionEngine::initialize(&program.0, import_manager).py_res()?;
         Ok(NemoEngine(engine))
     }
 
@@ -359,17 +353,13 @@ impl NemoEngine {
         predicate: String,
         output_manager: &PyCell<NemoOutputManager>,
     ) -> PyResult<()> {
-        let identifier = predicate.into();
-        let types = self
-            .0
-            .predicate_type(&identifier)
-            .expect("predicate should have a type");
+        let identifier = Identifier::from(predicate);
 
         output_manager
             .borrow()
             .0
             .export_table(
-                &OutputManager::default_export_spec(identifier.clone(), types).py_res()?,
+                &ExportDirective::default(identifier.clone()),
                 self.0.predicate_rows(&identifier).py_res()?,
             )
             .py_res()?;

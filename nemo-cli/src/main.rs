@@ -31,9 +31,10 @@ use nemo::{
     io::{
         parser::{parse_fact, parse_program},
         resource_providers::ResourceProviders,
+        ImportManager,
     },
     meta::{timing::TimedDisplay, TimedCode},
-    model::OutputPredicateSelection,
+    model::ExportDirective,
 };
 
 fn print_finished_message(new_facts: usize, saving: bool) {
@@ -116,26 +117,30 @@ fn run(mut cli: CliApp) -> Result<(), Error> {
     log::info!("Rules parsed");
     log::trace!("{:?}", program);
 
-    let parsed_facts = cli
+    let traced_facts = cli
         .tracing
         .traced_facts
         .map(|f| f.into_iter().map(parse_fact).collect::<Result<Vec<_>, _>>())
         .transpose()?;
 
     if cli.write_all_idb_predicates {
-        program.force_output_predicate_selection(OutputPredicateSelection::AllIDBPredicates)
+        program.clear_exports();
+        let mut additional_exports = Vec::new();
+        for predicate in program.idb_predicates() {
+            additional_exports.push(ExportDirective::default(predicate));
+        }
+        program.add_exports(additional_exports);
     }
 
-    let output_manager = cli.output.initialize_output_manager()?;
-
-    let mut engine: DefaultExecutionEngine = ExecutionEngine::initialize(
-        program,
-        ResourceProviders::with_base_path(cli.input_directory),
-    )?;
-
-    if let Some(output_manager) = &output_manager {
-        output_manager.check_for_forgotten_overwrite_flag(engine.output_predicates())?;
+    let export_manager = cli.output.export_manager()?;
+    // Validate exports even if we do not intend to write data:
+    for export in program.exports() {
+        export_manager.validate(export)?;
     }
+
+    let import_manager = ImportManager::new(ResourceProviders::with_base_path(cli.input_directory));
+
+    let mut engine: DefaultExecutionEngine = ExecutionEngine::initialize(&program, import_manager)?;
 
     TimedCode::instance().sub("Reading & Preprocessing").stop();
     TimedCode::instance().sub("Reasoning").start();
@@ -148,21 +153,16 @@ fn run(mut cli: CliApp) -> Result<(), Error> {
 
     TimedCode::instance().sub("Reasoning").stop();
 
-    if let Some(output_manager) = &output_manager {
+    if !export_manager.write_disabled() {
         TimedCode::instance()
             .sub("Output & Final Materialization")
             .start();
         log::info!("writing output");
 
-        // we need to collect here, since this will borrow `engine`,
-        // and `output_serialization` requires a mutable borrow on
-        // `engine`.
-        let export_specs = engine.output_predicates().collect::<Vec<_>>();
-
-        for export_spec in export_specs {
-            output_manager.export_table(
-                &export_spec,
-                engine.predicate_rows(export_spec.predicate())?,
+        for export_directive in program.exports() {
+            export_manager.export_table(
+                export_directive,
+                engine.predicate_rows(export_directive.predicate())?,
             )?;
         }
 
@@ -175,7 +175,7 @@ fn run(mut cli: CliApp) -> Result<(), Error> {
 
     print_finished_message(
         engine.count_facts_of_derived_predicates(),
-        output_manager.is_some(),
+        !export_manager.write_disabled(),
     );
 
     if cli.detailed_timing {
@@ -196,7 +196,7 @@ fn run(mut cli: CliApp) -> Result<(), Error> {
         println!("\n{}", engine.memory_usage());
     }
 
-    if let Some(facts) = parsed_facts {
+    if let Some(facts) = traced_facts {
         let (trace, handles) = engine.trace(facts.clone())?;
 
         match cli.tracing.output_file {

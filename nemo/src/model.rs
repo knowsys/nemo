@@ -4,7 +4,7 @@
 pub mod chase_model;
 
 /// Defines the "official" rule model that we expose to the outside
-/// world. Allows faithful serialisation of parsed rule programs.
+/// world. Allows faithful serialization of parsed rule programs.
 pub mod rule_model;
 
 pub mod types;

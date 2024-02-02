@@ -1,4 +1,8 @@
-use std::{fs::File, io::Read, path::PathBuf};
+use std::{
+    fs::File,
+    io::{BufRead, BufReader},
+    path::PathBuf,
+};
 
 use nemo_physical::{error::ReadingError, resource::Resource};
 use path_slash::PathBufExt;
@@ -49,14 +53,14 @@ impl FileResourceProvider {
 }
 
 impl ResourceProvider for FileResourceProvider {
-    fn open_resource(&self, resource: &Resource) -> Result<Option<Box<dyn Read>>, ReadingError> {
+    fn open_resource(&self, resource: &Resource) -> Result<Option<Box<dyn BufRead>>, ReadingError> {
         // Try to parse as file IRI
         if let Some(path) = self.parse_resource(resource)? {
             let file = File::open(&path).map_err(|e| ReadingError::IOReading {
                 error: e,
                 filename: path.to_string_lossy().to_string(),
             })?;
-            Ok(Some(Box::new(file)))
+            Ok(Some(Box::new(BufReader::new(file))))
         } else {
             Ok(None)
         }

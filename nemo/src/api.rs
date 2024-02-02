@@ -32,7 +32,7 @@ use crate::{
     io::{
         parser::{all_input_consumed, RuleParser},
         resource_providers::ResourceProviders,
-        OutputManager,
+        ExportManager, ImportManager,
     },
     model::Identifier,
 };
@@ -59,7 +59,7 @@ pub fn load(file: PathBuf) -> Result<Engine, Error> {
 /// Returns an appropriate [`Error`] variant on parsing and feature check issues.
 pub fn load_string(input: String) -> Result<Engine, Error> {
     let program = all_input_consumed(RuleParser::new().parse_program())(&input)?;
-    ExecutionEngine::initialize(program, ResourceProviders::default())
+    ExecutionEngine::initialize(&program, ImportManager::new(ResourceProviders::default()))
 }
 
 /// Executes the reasoning process of the [`Engine`].
@@ -74,16 +74,16 @@ pub fn reason(engine: &mut Engine) -> Result<(), Error> {
 
 /// Get a [`Vec`] of all output predicates that are computed by the engine.
 pub fn output_predicates(engine: &Engine) -> Vec<Identifier> {
-    engine.program().output_predicates().collect()
+    engine.program().output_predicates().cloned().collect()
 }
 
 /// Writes all result [`predicates`][Identifier] in the vector `predicates` into the directory specified in `path`.
 pub fn write(path: String, engine: &mut Engine, predicates: Vec<Identifier>) -> Result<(), Error> {
     let output_dir = PathBuf::from(path);
-    let output_manager = OutputManager::builder(output_dir.clone())?
-        .overwrite()
-        .do_not_compress()
-        .build();
+    let export_manager = ExportManager::new()
+        .set_base_path(output_dir.clone())
+        .overwrite(true)
+        .compress(false);
 
     let output_predicates = engine
         .output_predicates()
@@ -91,7 +91,7 @@ pub fn write(path: String, engine: &mut Engine, predicates: Vec<Identifier>) -> 
         .collect::<HashMap<_, _>>();
 
     for predicate in &predicates {
-        output_manager.export_table(
+        export_manager.export_table(
             output_predicates
                 .get(predicate)
                 .expect("export spec should be present"),

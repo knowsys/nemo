@@ -14,6 +14,7 @@ use nemo::execution::ExecutionEngine;
 use nemo::io::parser::parse_fact;
 use nemo::io::parser::parse_program;
 use nemo::io::resource_providers::{ResourceProvider, ResourceProviders};
+use nemo::io::ImportManager;
 use nemo::model::Identifier;
 use nemo_physical::datavalues::AnyDataValue;
 use nemo_physical::datavalues::DataValue;
@@ -63,21 +64,24 @@ impl NemoProgram {
             .map_err(NemoError)
     }
 
-    /// Get all resources that are referenced in import directives of the program
+    /// Get all resources that are referenced in import directives of the program.
+    /// Returns an error if there are problems in some import directive.
+    ///
+    /// TODO: Maybe rethink the validation mechanism of NemoProgram. We could also
+    /// just make sure that things validate upon creation, and make sure that problems
+    /// are detected early.
     #[wasm_bindgen(js_name = "getResourcesUsedInImports")]
-    pub fn resources_used_in_imports(&self) -> Set {
+    pub fn resources_used_in_imports(&self) -> Result<Set, NemoError> {
         let js_set = Set::new(&JsValue::undefined());
 
-        for resource in self
-            .0
-            .imports()
-            .flat_map(nemo::io::formats::types::ImportSpec::resources)
-            .map(JsValue::from)
-        {
-            js_set.add(&resource);
+        for directive in self.0.imports() {
+            let resource = ImportManager::resource(directive)
+                .map_err(WasmOrInternalNemoError::NemoError)
+                .map_err(NemoError)?;
+            js_set.add(&JsValue::from(resource));
         }
 
-        js_set
+        Ok(js_set)
     }
 
     #[wasm_bindgen(js_name = "getOutputPredicates")]
@@ -130,7 +134,7 @@ impl ResourceProvider for BlobResourceProvider {
     fn open_resource(
         &self,
         resource: &Resource,
-    ) -> Result<Option<Box<dyn std::io::Read>>, nemo_physical::error::ReadingError> {
+    ) -> Result<Option<Box<dyn std::io::BufRead>>, nemo_physical::error::ReadingError> {
         if let Some(blob) = self.blobs.get(resource) {
             let array_buffer: js_sys::ArrayBuffer = self
                 .file_reader_sync
@@ -229,8 +233,9 @@ impl NemoEngine {
                     .map_err(NemoError)?,
             )])
         };
+        let import_manager = ImportManager::new(resource_providers);
 
-        ExecutionEngine::initialize(program.clone().0, resource_providers)
+        ExecutionEngine::initialize(&program.0, import_manager)
             .map(NemoEngine)
             .map_err(WasmOrInternalNemoError::NemoError)
             .map_err(NemoError)
@@ -276,13 +281,12 @@ impl NemoEngine {
         predicate: String,
         sync_access_handle: web_sys::FileSystemSyncAccessHandle,
     ) -> Result<(), NemoError> {
-        use nemo::{io::OutputManager, model::Identifier};
+        use nemo::{
+            io::ExportManager,
+            model::{ExportDirective, Identifier},
+        };
 
         let identifier = Identifier::from(predicate.clone());
-        let types = self
-            .0
-            .predicate_type(&identifier)
-            .expect("predicate should have a type");
 
         let Some(record_iter) = self
             .0
@@ -295,16 +299,11 @@ impl NemoEngine {
 
         let writer = SyncAccessHandleWriter(sync_access_handle);
 
-        let export_spec = OutputManager::default_export_spec(identifier, types)
-            .map_err(WasmOrInternalNemoError::NemoError)
-            .map_err(NemoError)?;
+        let export_spec = ExportDirective::default(identifier);
+        let export_manager: ExportManager = Default::default();
 
-        let mut table_writer = export_spec
-            .writer(Box::new(writer))
-            .map_err(WasmOrInternalNemoError::NemoError)
-            .map_err(NemoError)?;
-        table_writer
-            .export_table_data(Box::new(record_iter))
+        export_manager
+            .export_table_with_writer(&export_spec, Box::new(writer), Some(record_iter))
             .map_err(WasmOrInternalNemoError::NemoError)
             .map_err(NemoError)
     }

@@ -1,8 +1,12 @@
 //! Resource providers for external resources that can be used in reasoning.
 
-use std::{io::Read, path::PathBuf, rc::Rc};
+use std::{
+    io::{BufRead, BufReader},
+    path::PathBuf,
+    rc::Rc,
+};
 
-use flate2::read::MultiGzDecoder;
+use flate2::bufread::MultiGzDecoder;
 
 use crate::io::parser::{all_input_consumed, iri::iri};
 use nemo_physical::{error::ReadingError, resource::Resource};
@@ -25,7 +29,7 @@ pub trait ResourceProvider: std::fmt::Debug {
     /// This function may be called multiple times in a row, e.g. when testing if a file can be opened using gzip.
     ///
     /// The implementation can decide wether ir wants to handle the given resource, otherwise it can return `None`, and the next `ResourceProvider` will be consulted.
-    fn open_resource(&self, resource: &Resource) -> Result<Option<Box<dyn Read>>, ReadingError>;
+    fn open_resource(&self, resource: &Resource) -> Result<Option<Box<dyn BufRead>>, ReadingError>;
 }
 
 /// A list of [`ResourceProvider`] sorted by decreasing priority.
@@ -59,11 +63,14 @@ impl ResourceProviders {
     /// Resolves a resource.
     ///
     /// First checks if the resource can be opened as gzip, otherwise opens the file directly.
+    ///
+    /// FIXME: It would be better to push the compression handling into the individual resource
+    /// providers, or use generics instead of Boxes, to avoid mutliple nested boxed BufReads.
     pub fn open_resource(
         &self,
         resource: &Resource,
         try_gzip: bool,
-    ) -> Result<Box<dyn Read>, ReadingError> {
+    ) -> Result<Box<dyn BufRead>, ReadingError> {
         for resource_provider in self.0.iter() {
             if let Some(reader) = resource_provider.open_resource(resource)? {
                 if !try_gzip {
@@ -74,7 +81,7 @@ impl ResourceProviders {
                 let gz_reader = MultiGzDecoder::new(reader);
 
                 if gz_reader.header().is_some() {
-                    return Ok(Box::new(gz_reader));
+                    return Ok(Box::new(BufReader::new(gz_reader)));
                 } else {
                     // Try again without gzip, otherwise go to next provider
                     if let Some(reader) = resource_provider.open_resource(resource)? {

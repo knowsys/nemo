@@ -1,14 +1,12 @@
 //! Reading of delimiter-separated value files
 
-use std::collections::HashSet;
-use std::io::{Read, Write};
+use std::io::{BufRead, Write};
 use std::mem::size_of;
 
 use bytesize::ByteSize;
 use csv::{Reader, ReaderBuilder, Writer, WriterBuilder};
 use nemo_physical::datavalues::DataValue;
 use nemo_physical::management::bytesized::ByteSized;
-use thiserror::Error;
 
 use oxiri::Iri;
 
@@ -18,147 +16,70 @@ use nemo_physical::{
     resource::Resource,
 };
 
+use crate::model::{
+    PARAMETER_NAME_ARITY, PARAMETER_NAME_DSV_DELIMITER, PARAMETER_NAME_FORMAT,
+    PARAMETER_NAME_RESOURCE, VALUE_FORMAT_ANY, VALUE_FORMAT_DOUBLE, VALUE_FORMAT_INT,
+    VALUE_FORMAT_STRING,
+};
 use crate::{
     error::Error,
     io::{
         formats::{
-            types::{
-                Direction, ExportSpec, FileFormat, FileFormatError, FileFormatMeta,
-                ImportExportSpec, ImportSpec, TableWriter,
-            },
+            types::{Direction, TableWriter},
             PROGRESS_NOTIFY_INCREMENT,
         },
         parser::{parse_bare_name, span_from_str},
-        resource_providers::ResourceProviders,
     },
-    model::{Constant, Identifier, Key, Map, PrimitiveType, TupleConstraint, TypeConstraint},
+    model::{Constant, FileFormat, Map},
 };
+
+use super::import_export::{ImportExportError, ImportExportHandler, ImportExportHandlers};
 
 type DataValueParserFunction = fn(String) -> Result<AnyDataValue, DataValueCreationError>;
 
-/// A reader object for reading [DSV](https://en.wikipedia.org/wiki/Delimiter-separated_values) (delimiter separated values) files.
-///
-/// By default the reader will assume the following for the input file:
-/// - no headers are given,
-/// - double quotes are allowed for string escaping
-///
-/// Parsing of individual values can be done in several ways (DSV does not specify a data model at this level),
-/// which can be set for each column separately.
-#[derive(Debug)]
-pub(crate) struct DsvReader {
-    resource_providers: ResourceProviders,
-    resource: Resource,
-    delimiter: u8,
-    escape: u8,
-    input_type_constraint: TupleConstraint,
+/// Enum for the various formats that are supported for encoding values
+/// in DSV. Since DSV has no own type system, the encoding of data must be
+/// controlled through this external mechanism.
+#[derive(Debug, Clone, Copy)]
+pub(crate) enum DsvValueFormat {
+    /// Format that tries various heuristics to interpret and represent values
+    /// in the most natural way. The format can interpret any content (the final
+    /// fallback is to use it as a string).
+    ANYTHING,
+    /// Format that interprets the DSV values as literal string values.
+    /// All data will be interpreted in this way.
+    STRING,
+    /// Format that interprets numeric DSV values as integers, and rejects
+    /// all values that are not in this form.
+    INTEGER,
+    /// Format that interprets numeric DSV values as double-precision floating
+    /// point numbers, and rejects all values that are not in this form.
+    DOUBLE,
 }
-
-impl DsvReader {
-    /// Instantiate a [`DsvReader`] for a given delimiter
-    pub fn new(
-        resource_providers: ResourceProviders,
-        resource: Resource,
-        delimiter: u8,
-        input_type_constraint: TupleConstraint,
-    ) -> Self {
-        Self {
-            resource_providers,
-            resource,
-            delimiter,
-            escape: b'\\',
-            input_type_constraint,
+impl DsvValueFormat {
+    /// Try to convert a string name for a value format to one of the supported
+    /// DSV value formats, or return an error for unsupported formats.
+    pub(crate) fn from_string(name: &str) -> Result<Self, ImportExportError> {
+        match name {
+            VALUE_FORMAT_ANY => Ok(DsvValueFormat::ANYTHING),
+            VALUE_FORMAT_STRING => Ok(DsvValueFormat::STRING),
+            VALUE_FORMAT_INT => Ok(DsvValueFormat::INTEGER),
+            VALUE_FORMAT_DOUBLE => Ok(DsvValueFormat::DOUBLE),
+            _ => Err(ImportExportError::InvalidValueFormat {
+                value_format: name.to_string(),
+                format: FileFormat::DSV,
+            }),
         }
     }
 
-    /// Static function to create a CSV reader
-    ///
-    /// The function takes an arbitrary [`Reader`][Read] and wraps it into a [`Reader`][csv::Reader] for csv
-    fn dsv_reader<R>(reader: R, delimiter: u8, escape: Option<u8>) -> Reader<R>
-    where
-        R: Read,
-    {
-        ReaderBuilder::new()
-            .delimiter(delimiter)
-            .escape(escape)
-            .has_headers(false)
-            .double_quote(true)
-            .from_reader(reader)
-    }
-
-    /// Make a list of parser functions to be used for ingesting the data in each column.
-    fn make_parsers(&self) -> Vec<DataValueParserFunction> {
-        let mut result = Vec::with_capacity(self.input_type_constraint.arity());
-        for ty in self.input_type_constraint.iter() {
-            match ty {
-                TypeConstraint::Exact(PrimitiveType::Any)
-                | TypeConstraint::AtLeast(PrimitiveType::Any) =>
-                {
-                    #[allow(trivial_casts)]
-                    result.push(Self::parse_any_value_from_string as DataValueParserFunction)
-                }
-                TypeConstraint::Exact(PrimitiveType::String)
-                | TypeConstraint::AtLeast(PrimitiveType::String) =>
-                {
-                    #[allow(trivial_casts)]
-                    result.push(Self::parse_string_from_string as DataValueParserFunction)
-                }
-                TypeConstraint::Exact(PrimitiveType::Integer)
-                | TypeConstraint::AtLeast(PrimitiveType::Integer) =>
-                {
-                    #[allow(trivial_casts)]
-                    result.push(AnyDataValue::new_from_integer_literal as DataValueParserFunction)
-                }
-                TypeConstraint::Exact(PrimitiveType::Float64)
-                | TypeConstraint::AtLeast(PrimitiveType::Float64) =>
-                {
-                    #[allow(trivial_casts)]
-                    result.push(AnyDataValue::new_from_double_literal as DataValueParserFunction)
-                }
-                TypeConstraint::None => unreachable!(
-                    "Type constraints for input types are always initialized (with fallbacks)."
-                ),
-                TypeConstraint::Tuple(_) => {
-                    todo!("We do not support tuples in CSV currently. Should we?")
-                }
-            }
+    /// Return a function for parsing value strings for this format.
+    fn data_value_parser_function(&self) -> DataValueParserFunction {
+        match self {
+            DsvValueFormat::ANYTHING => Self::parse_any_value_from_string,
+            DsvValueFormat::STRING => Self::parse_string_from_string,
+            DsvValueFormat::INTEGER => AnyDataValue::new_from_integer_literal,
+            DsvValueFormat::DOUBLE => AnyDataValue::new_from_double_literal,
         }
-        result
-    }
-
-    /// Actually reads the data from the file, using the given parsers to convert strings to [`AnyDataValue`]s.
-    /// If a field cannot be read or parsed, the line will be ignored
-    fn read<R>(
-        &self,
-        tuple_writer: &mut TupleWriter,
-        dsv_reader: &mut Reader<R>,
-    ) -> Result<(), Box<dyn std::error::Error>>
-    where
-        R: Read,
-    {
-        let parsers = self.make_parsers();
-
-        let mut line_count: u64 = 0;
-        let mut drop_count: u64 = 0;
-
-        for row in dsv_reader.records().flatten() {
-            for idx_field in row.iter().enumerate() {
-                if let Ok(dv) = parsers[idx_field.0](idx_field.1.to_string()) {
-                    tuple_writer.add_tuple_value(dv);
-                } else {
-                    drop_count += 1;
-                    tuple_writer.drop_current_tuple();
-                    break;
-                }
-            }
-
-            line_count += 1;
-            if (line_count % PROGRESS_NOTIFY_INCREMENT) == 0 {
-                log::info!("loading: processed {line_count} lines");
-            }
-        }
-        log::info!("Finished loading: processed {line_count} lines (dropped {drop_count})");
-
-        Ok(())
     }
 
     /// Simple wrapper function that makes CSV strings into [`AnyDataValue`]. We wrap this
@@ -237,18 +158,98 @@ impl DsvReader {
     }
 }
 
+/// A reader object for reading [DSV](https://en.wikipedia.org/wiki/Delimiter-separated_values) (delimiter separated values) files.
+///
+/// By default the reader will assume the following for the input file:
+/// - no headers are given,
+/// - double quotes are allowed for string escaping
+///
+/// Parsing of individual values can be done in several ways (DSV does not specify a data model at this level),
+/// which can be set for each column separately.
+pub(crate) struct DsvReader {
+    read: Box<dyn BufRead>,
+    delimiter: u8,
+    escape: u8,
+    value_formats: Vec<DsvValueFormat>,
+}
+
+impl DsvReader {
+    /// Instantiate a [`DsvReader`] for a given delimiter
+    pub fn new(read: Box<dyn BufRead>, delimiter: u8, value_formats: Vec<DsvValueFormat>) -> Self {
+        Self {
+            read,
+            delimiter,
+            escape: b'\\',
+            value_formats: value_formats,
+        }
+    }
+
+    /// Create a low-level reader for parsing the DSV format.
+    fn reader(self) -> Reader<Box<dyn BufRead>> {
+        ReaderBuilder::new()
+            .delimiter(self.delimiter)
+            .escape(Some(self.escape))
+            .has_headers(false)
+            .double_quote(true)
+            .from_reader(self.read)
+    }
+
+    /// Make a list of parser functions to be used for ingesting the data in each column.
+    fn make_parsers(&self) -> Vec<DataValueParserFunction> {
+        let mut result = Vec::with_capacity(self.value_formats.len());
+        for ty in self.value_formats.iter() {
+            result.push(ty.data_value_parser_function());
+        }
+        result
+    }
+
+    /// Actually reads the data from the file, using the given parsers to convert strings to [`AnyDataValue`]s.
+    /// If a field cannot be read or parsed, the line will be ignored
+    fn read(self, tuple_writer: &mut TupleWriter) -> Result<(), Box<dyn std::error::Error>> {
+        let parsers = self.make_parsers();
+        let mut dsv_reader = self.reader();
+
+        let mut line_count: u64 = 0;
+        let mut drop_count: u64 = 0;
+
+        for row in dsv_reader.records().flatten() {
+            for idx_field in row.iter().enumerate() {
+                if let Ok(dv) = parsers[idx_field.0](idx_field.1.to_string()) {
+                    tuple_writer.add_tuple_value(dv);
+                } else {
+                    drop_count += 1;
+                    tuple_writer.drop_current_tuple();
+                    break;
+                }
+            }
+
+            line_count += 1;
+            if (line_count % PROGRESS_NOTIFY_INCREMENT) == 0 {
+                log::info!("loading: processed {line_count} lines");
+            }
+        }
+        log::info!("Finished loading: processed {line_count} lines (dropped {drop_count})");
+
+        Ok(())
+    }
+}
+
 impl TableProvider for DsvReader {
     fn provide_table_data(
         self: Box<Self>,
         tuple_writer: &mut TupleWriter,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        let reader = self
-            .resource_providers
-            .open_resource(&self.resource, true)?;
+        self.read(tuple_writer)
+    }
+}
 
-        let mut dsv_reader = Self::dsv_reader(reader, self.delimiter, Some(self.escape));
-
-        self.read(tuple_writer, &mut dsv_reader)
+impl std::fmt::Debug for DsvReader {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("DsvReader")
+            .field("read", &"<unspecified std::io::Read>")
+            .field("delimiter", &self.delimiter)
+            .field("escape", &self.escape)
+            .finish()
     }
 }
 
@@ -291,253 +292,246 @@ impl TableWriter for DsvWriter {
     }
 }
 
-/// A file format for delimiter-separated values.
-#[derive(Debug, Clone, Copy, Default)]
-pub struct DsvFormat {
-    /// A concrete delimiter for this format.
-    delimiter: Option<u8>,
+/// Internal enum to distnguish variants of the DSV format.
+enum DsvVariant {
+    /// Delimiter-separated values
+    DSV,
+    /// Comma-separated values
+    CSV,
+    /// Tab-separated values
+    TSV,
 }
 
-impl DsvFormat {
-    const DEFAULT_COLUMN_TYPE: PrimitiveType = PrimitiveType::Any;
+/// An [ImportExportHandler] for delimiter-separated values.
+#[derive(Debug, Clone)]
+pub(crate) struct DsvHandler {
+    /// The specific delimiter for this format.
+    delimiter: u8,
+    /// The resource to write to/read from.
+    /// This can be `None` for writing, since one can generate a default file
+    /// name from the exported predicate in this case. This has little chance of
+    /// success for imports, so the predicate is setting there.
+    resource: Option<Resource>,
+    /// The list of value formats to be used for exporting this data.
+    /// If only the arity is given, this will use the most general export format
+    /// for each value (and the list will still be set). The list can be `None`
+    /// if neither formats nor arity were given for writing: in this case, a default
+    /// arity-based formats can be used if the arity is clear from another source.
+    value_formats: Option<Vec<DsvValueFormat>>,
+}
 
-    /// Construct a generic DSV file format, with the delimiter not
-    /// yet fixed.
-    pub fn new() -> Self {
-        Default::default()
-    }
-
-    /// Construct a DSV file format with a fixed delimiter.
-    pub fn with_delimiter(delimiter: u8) -> Self {
-        Self {
-            delimiter: Some(delimiter),
-        }
-    }
-
-    /// Construct a CSV file format.
-    pub fn csv() -> Self {
-        Self::with_delimiter(b',')
-    }
-
-    /// Construct a TSV file format.
-    pub fn tsv() -> Self {
-        Self::with_delimiter(b'\t')
-    }
-
-    fn try_into_import_export(
-        mut self,
+impl DsvHandler {
+    /// Construct a DSV file handler with an arbitrary delimiter.
+    pub(crate) fn try_new_dsv(
+        attributes: &Map,
         direction: Direction,
-        resource: Resource,
-        predicate: Identifier,
-        declared_types: TupleConstraint,
-    ) -> Result<ImportExportSpec, FileFormatError> {
-        let attributes = Map::singleton(
-            Key::identifier_from_str(RESOURCE),
-            Constant::StringLiteral(resource),
-        );
-        let constraint =
-            self.validated_and_refined_type_declaration(direction, &attributes, declared_types)?;
+    ) -> Result<Box<dyn ImportExportHandler>, ImportExportError> {
+        Self::try_new(DsvVariant::DSV, attributes, direction)
+    }
 
-        Ok(ImportExportSpec {
-            predicate,
-            constraint,
+    /// Construct a CSV file handler.
+    pub(crate) fn try_new_csv(
+        attributes: &Map,
+        direction: Direction,
+    ) -> Result<Box<dyn ImportExportHandler>, ImportExportError> {
+        Self::try_new(DsvVariant::CSV, attributes, direction)
+    }
+
+    /// Construct a TSV file handler.
+    pub(crate) fn try_new_tsv(
+        attributes: &Map,
+        direction: Direction,
+    ) -> Result<Box<dyn ImportExportHandler>, ImportExportError> {
+        Self::try_new(DsvVariant::TSV, attributes, direction)
+    }
+
+    /// Construct a DSV handler of the given variant.
+    fn try_new(
+        variant: DsvVariant,
+        attributes: &Map,
+        direction: Direction,
+    ) -> Result<Box<dyn ImportExportHandler>, ImportExportError> {
+        // Basic checks for unsupported attributes:
+        ImportExportHandlers::check_attributes(
             attributes,
-            format: Box::new(self),
-        })
+            &vec![
+                PARAMETER_NAME_FORMAT,
+                PARAMETER_NAME_RESOURCE,
+                PARAMETER_NAME_ARITY,
+                PARAMETER_NAME_DSV_DELIMITER,
+            ],
+        )?;
+
+        let delimiter = Self::extract_delimiter(variant, attributes)?;
+        let resource = ImportExportHandlers::extract_resource(attributes, direction)?;
+        let value_formats = Self::extract_value_formats(attributes, direction)?;
+
+        Ok(Box::new(Self {
+            delimiter: delimiter,
+            resource: resource,
+            value_formats: value_formats,
+        }))
     }
 
-    /// Obtain an [ImportSpec] for this format.
-    pub(crate) fn try_into_import(
-        self,
-        resource: Resource,
-        predicate: Identifier,
-        declared_types: TupleConstraint,
-    ) -> Result<ImportSpec, FileFormatError> {
-        Ok(ImportSpec::from(self.try_into_import_export(
-            Direction::Reading,
-            resource,
-            predicate,
-            declared_types,
-        )?))
+    fn default_value_format_strings(arity: usize) -> Vec<String> {
+        vec![VALUE_FORMAT_ANY; arity]
+            .into_iter()
+            .map(|s| s.to_string())
+            .collect()
     }
 
-    /// Obtain an [ExportSpec] for this format.
-    pub(crate) fn try_into_export(
-        self,
-        resource: Resource,
-        predicate: Identifier,
-        declared_types: TupleConstraint,
-    ) -> Result<ExportSpec, FileFormatError> {
-        Ok(ExportSpec::from(self.try_into_import_export(
-            Direction::Writing,
-            resource,
-            predicate,
-            declared_types,
-        )?))
-    }
-}
+    fn extract_value_formats(
+        attributes: &Map,
+        direction: Direction,
+    ) -> Result<Option<Vec<DsvValueFormat>>, ImportExportError> {
+        let arity = ImportExportHandlers::extract_integer(attributes, PARAMETER_NAME_ARITY, true)?;
+        let mut value_format_strings: Option<Vec<String>> =
+            ImportExportHandlers::extract_value_format_strings(attributes)?;
 
-use super::types::attributes::RESOURCE;
-const DELIMITER: &str = "delimiter";
+        if let Some(a) = arity {
+            if a <= 0 || a > 65536 {
+                // ridiculously large value, but still in usize for all conceivable platforms
+                return Err(ImportExportError::invalid_att_value_error(
+                    PARAMETER_NAME_ARITY,
+                    Constant::NumericLiteral(crate::model::NumericLiteral::Integer(a)),
+                    format!("arity should be greater than 0 and at most {}", 65536).as_str(),
+                ));
+            }
 
-/// Errors related to DSV file format specifications.
-#[derive(Debug, Clone, Eq, PartialEq, Error)]
-pub enum DsvFormatError {
-    /// Delimiter should have a string literal as a value, but was
-    /// some other term.
-    #[error("Delimiter should be a string literal")]
-    InvalidDelimiterType(Constant),
-    /// Delimiter should consist of exactly one byte, but had a
-    /// different length.
-    #[error("Delimiter should be exactly one byte")]
-    InvalidDelimiterLength(Constant),
-    /// Path should have a string literal as a value, but was some
-    /// other term.
-    #[error("Resource should be a string literal or an IRI")]
-    InvalidResourceType(Constant),
-}
+            let us_a = usize::try_from(a).expect("range was checked above");
+            if let Some(ref v) = value_format_strings {
+                // check if arity is consistent with given value formats
+                if us_a != v.len() {
+                    return Err(ImportExportError::invalid_att_value_error(
+                        PARAMETER_NAME_ARITY,
+                        Constant::NumericLiteral(crate::model::NumericLiteral::Integer(a)),
+                        format!(
+                            "arity should be {}, the number of value types given for \"{}\"",
+                            v.len(),
+                            PARAMETER_NAME_FORMAT
+                        )
+                        .as_str(),
+                    ));
+                }
+            } else {
+                // default value formats from arity:
+                value_format_strings = Some(Self::default_value_format_strings(
+                    usize::try_from(a).expect("range was checked above"),
+                ));
+            }
+        }
 
-impl From<DsvFormatError> for FileFormatError {
-    fn from(error: DsvFormatError) -> Self {
-        match &error {
-            DsvFormatError::InvalidDelimiterType(constant)
-            | DsvFormatError::InvalidDelimiterLength(constant) => Self::InvalidAttributeValue {
-                value: constant.clone(),
-                attribute: Key::identifier_from_str(DELIMITER),
-                description: error.to_string(),
-            },
-            DsvFormatError::InvalidResourceType(constant) => Self::InvalidAttributeValue {
-                value: constant.clone(),
-                attribute: Key::identifier_from_str(RESOURCE),
-                description: error.to_string(),
-            },
+        if let Some(format_strings) = value_format_strings {
+            Ok(Some(DsvHandler::formats_from_strings(format_strings)?))
+        // TODO: remove or re-instantiate ...
+        // } else if direction == Direction::Import {
+        //     Err(ImportExportError::MissingAttribute(
+        //         PARAMETER_NAME_FORMAT.to_string(),
+        //     ))
+        } else {
+            Ok(None)
         }
     }
+
+    fn formats_from_strings(
+        value_format_strings: Vec<String>,
+    ) -> Result<Vec<DsvValueFormat>, ImportExportError> {
+        let mut value_formats = Vec::with_capacity(value_format_strings.len());
+        for s in value_format_strings {
+            value_formats.push(DsvValueFormat::from_string(s.as_str())?);
+        }
+        Ok(value_formats)
+    }
+
+    fn extract_delimiter(variant: DsvVariant, attributes: &Map) -> Result<u8, ImportExportError> {
+        let delim_opt: Option<u8>;
+        if let Some(string) =
+            ImportExportHandlers::extract_string(attributes, PARAMETER_NAME_DSV_DELIMITER, true)?
+        {
+            if string.len() == 1 {
+                delim_opt = Some(string.as_bytes()[0]);
+            } else {
+                return Err(ImportExportError::invalid_att_value_error(
+                    PARAMETER_NAME_DSV_DELIMITER,
+                    Constant::StringLiteral(string.to_owned()),
+                    "delimiter should be exactly one byte",
+                ));
+            }
+        } else {
+            delim_opt = None;
+        }
+
+        let delimiter: u8;
+        match (variant, delim_opt) {
+            (DsvVariant::DSV, Some(delim)) => {
+                delimiter = delim;
+            }
+            (DsvVariant::DSV, None) => {
+                return Err(ImportExportError::MissingAttribute(
+                    PARAMETER_NAME_DSV_DELIMITER.to_string(),
+                ));
+            }
+            (DsvVariant::CSV, None) => {
+                delimiter = b',';
+            }
+            (DsvVariant::TSV, None) => {
+                delimiter = b',';
+            }
+            (DsvVariant::CSV, Some(_)) | (DsvVariant::TSV, Some(_)) => {
+                return Err(ImportExportError::UnknownAttribute(
+                    PARAMETER_NAME_DSV_DELIMITER.to_string(),
+                ));
+            }
+        }
+        return Ok(delimiter);
+    }
 }
 
-impl FileFormatMeta for DsvFormat {
+impl ImportExportHandler for DsvHandler {
     fn file_format(&self) -> FileFormat {
         match self.delimiter {
-            Some(b',') => FileFormat::CSV,
-            Some(b'\t') => FileFormat::TSV,
+            b',' => FileFormat::CSV,
+            b'\t' => FileFormat::TSV,
             _ => FileFormat::DSV,
         }
     }
 
     fn reader(
         &self,
-        attributes: &Map,
-        declared_types: &TupleConstraint,
-        resource_providers: ResourceProviders,
+        read: Box<dyn BufRead>,
+        arity: usize,
     ) -> Result<Box<dyn TableProvider>, Error> {
-        let resource = attributes
-            .pairs
-            .get(&Key::identifier_from_str(RESOURCE))
-            .expect("is a required attribute")
-            .as_resource()
-            .expect("must be a string or an IRI");
-
-        let delimiter = self.delimiter.unwrap_or_else(|| {
-            attributes
-                .pairs
-                .get(&Key::identifier_from_str(DELIMITER))
-                .expect("is a required attribute if the format has no default delimiter")
-                .as_string()
-                .expect("must be a string")
-                .as_bytes()[0]
-        });
-
-        Ok(Box::new(DsvReader::new(
-            resource_providers,
-            resource.to_string(),
-            delimiter,
-            declared_types.clone(),
-        )))
-    }
-
-    fn writer(
-        &self,
-        _attributes: &Map,
-        writer: Box<dyn Write>,
-    ) -> Result<Box<dyn TableWriter>, Error> {
-        Ok(Box::new(DsvWriter::new(
-            self.delimiter.expect("is a required attribute"),
-            writer,
-        )))
-    }
-
-    fn resources(&self, attributes: &Map) -> Vec<Resource> {
-        vec![attributes
-            .pairs
-            .get(&Key::identifier_from_str(RESOURCE))
-            .expect("is a required attribute")
-            .as_resource()
-            .expect("must be a string or an IRI")
-            .to_string()]
-    }
-
-    fn optional_attributes(&self, _direction: Direction) -> HashSet<Key> {
-        [].into()
-    }
-
-    fn required_attributes(&self, _direction: Direction) -> HashSet<Key> {
-        let mut attributes = HashSet::new();
-
-        attributes.insert(RESOURCE);
-
-        if self.delimiter.is_none() {
-            attributes.insert(DELIMITER);
+        if let Some(ref vf) = self.value_formats {
+            Ok(Box::new(DsvReader::new(read, self.delimiter, vf.clone())))
+        } else {
+            Ok(Box::new(DsvReader::new(
+                read,
+                self.delimiter,
+                DsvHandler::formats_from_strings(DsvHandler::default_value_format_strings(arity))
+                    .unwrap(),
+            )))
         }
-
-        attributes
-            .into_iter()
-            .map(Key::identifier_from_str)
-            .collect()
     }
 
-    fn validate_attribute_values(
-        &mut self,
-        _direction: Direction,
-        attributes: &Map,
-    ) -> Result<(), FileFormatError> {
-        if self.delimiter.is_none() {
-            let delimiter = attributes
-                .pairs
-                .get(&Key::identifier_from_str(DELIMITER))
-                .expect("is a required attribute");
-
-            if let Some(delim) = delimiter.as_string() {
-                if delim.len() != 1 {
-                    return Err(DsvFormatError::InvalidDelimiterLength(delimiter.clone()).into());
-                }
-
-                self.delimiter = Some(delim.as_bytes()[0]);
-            } else {
-                return Err(DsvFormatError::InvalidDelimiterType(delimiter.clone()).into());
-            }
-        }
-
-        let resource = attributes
-            .pairs
-            .get(&Key::identifier_from_str(RESOURCE))
-            .expect("is a required attribute");
-
-        if resource.as_resource().is_none() {
-            return Err(DsvFormatError::InvalidResourceType(resource.clone()).into());
-        }
-
-        Ok(())
+    fn writer(&self, writer: Box<dyn Write>) -> Result<Box<dyn TableWriter>, Error> {
+        Ok(Box::new(DsvWriter::new(self.delimiter, writer)))
     }
 
-    fn validate_and_refine_type_declaration(
-        &mut self,
-        declared_types: TupleConstraint,
-    ) -> Result<TupleConstraint, FileFormatError> {
-        declared_types
-            .into_flat_primitive_with_default(Self::DEFAULT_COLUMN_TYPE)
-            .ok_or_else(|| FileFormatError::UnsupportedComplexTypes {
-                format: self.file_format(),
-            })
+    fn resource(&self) -> Option<Resource> {
+        self.resource.clone()
+    }
+
+    fn arity(&self) -> Option<usize> {
+        self.value_formats.as_ref().map(|vfs| vfs.len())
+    }
+
+    fn file_extension(&self) -> Option<String> {
+        match self.file_format() {
+            FileFormat::CSV => Some("csv".to_string()),
+            FileFormat::DSV => Some("dsv".to_string()),
+            FileFormat::TSV => Some("tsv".to_string()),
+            _ => unreachable!(),
+        }
     }
 }
 
@@ -549,7 +543,6 @@ mod test {
     use test_log::test;
 
     use super::*;
-    use csv::ReaderBuilder;
     use nemo_physical::management::database::Dict;
 
     #[test]
@@ -564,24 +557,19 @@ mod test {
         This;line;123;fails for the double column
         "#;
 
-        let mut rdr = ReaderBuilder::new()
-            .delimiter(b';')
-            .from_reader(data.as_bytes());
-
         let reader = DsvReader::new(
-            ResourceProviders::empty(),
-            "test".to_string(),
-            b',',
-            TupleConstraint::at_least([
-                PrimitiveType::Any,
-                PrimitiveType::String,
-                PrimitiveType::Integer,
-                PrimitiveType::Float64,
-            ]),
+            Box::new(data.as_bytes()),
+            b';',
+            vec![
+                DsvValueFormat::ANYTHING,
+                DsvValueFormat::STRING,
+                DsvValueFormat::INTEGER,
+                DsvValueFormat::DOUBLE,
+            ],
         );
         let dict = RefCell::new(Dict::default());
         let mut tuple_writer = TupleWriter::new(&dict, 4);
-        let result = reader.read(&mut tuple_writer, &mut rdr);
+        let result = reader.read(&mut tuple_writer);
         assert!(result.is_ok());
         assert_eq!(tuple_writer.size(), 2);
     }

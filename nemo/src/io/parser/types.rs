@@ -8,7 +8,7 @@ use nom_locate::LocatedSpan;
 use thiserror::Error;
 
 use crate::{
-    io::formats::types::FileFormatError,
+    io::formats::import_export::ImportExportError,
     model::{
         rule_model::{Aggregate, Constraint, Literal, Term},
         PrimitiveType,
@@ -94,7 +94,7 @@ pub enum ConstraintOperator {
 
 impl ConstraintOperator {
     /// Turn operator into [`Constraint`].
-    pub fn into_constraint(self, left: Term, right: Term) -> Constraint {
+    pub(crate) fn into_constraint(self, left: Term, right: Term) -> Constraint {
         match self {
             ConstraintOperator::Equals => Constraint::Equals(left, right),
             ConstraintOperator::Unequals => Constraint::Unequals(left, right),
@@ -122,8 +122,8 @@ pub enum ParseError {
     #[error(transparent)]
     ExternalError(#[from] Box<crate::error::Error>),
     /// An error related to a file format.
-    #[error(transparent)]
-    FileFormatError(#[from] FileFormatError),
+    #[error(r#"Unknown file format "{0}""#)]
+    FileFormatError(String),
     /// A syntax error. Note that we cannot take [&'a str] here, as
     /// bounds on [std::error::Error] require ['static] lifetime.
     #[error("Syntax error: {0}")]
@@ -419,8 +419,8 @@ impl FromExternalError<Span<'_>, crate::error::ReadingError> for LocatedParseErr
     }
 }
 
-impl FromExternalError<Span<'_>, FileFormatError> for LocatedParseError {
-    fn from_external_error(input: Span<'_>, _kind: ErrorKind, e: FileFormatError) -> Self {
+impl FromExternalError<Span<'_>, ImportExportError> for LocatedParseError {
+    fn from_external_error(input: Span<'_>, _kind: ErrorKind, e: ImportExportError) -> Self {
         ParseError::ExternalError(Box::new(e.into())).at(input)
     }
 }

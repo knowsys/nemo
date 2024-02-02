@@ -1,4 +1,4 @@
-use std::io::Read;
+use std::io::{BufRead, BufReader, Read};
 
 use nemo_physical::{error::ReadingError, resource::Resource};
 
@@ -53,7 +53,7 @@ impl HTTPResourceProvider {
 }
 
 impl ResourceProvider for HTTPResourceProvider {
-    fn open_resource(&self, resource: &Resource) -> Result<Option<Box<dyn Read>>, ReadingError> {
+    fn open_resource(&self, resource: &Resource) -> Result<Option<Box<dyn BufRead>>, ReadingError> {
         if !is_iri(resource) {
             return Ok(None);
         }
@@ -71,6 +71,6 @@ impl ResourceProvider for HTTPResourceProvider {
                 filename: resource.clone(),
             })?;
         let response = rt.block_on(Self::get(resource))?;
-        Ok(Some(Box::new(response)))
+        Ok(Some(Box::new(BufReader::new(response))))
     }
 }

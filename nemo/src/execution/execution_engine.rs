@@ -10,13 +10,10 @@ use nemo_physical::{
 
 use crate::{
     error::Error,
-    io::{
-        formats::types::ExportSpec, input_manager::InputManager,
-        resource_providers::ResourceProviders, OutputManager,
-    },
+    io::import_manager::ImportManager,
     model::{
         chase_model::{ChaseAtom, ChaseProgram},
-        Fact, Identifier, Program, TupleConstraint,
+        ExportDirective, Fact, Identifier, Program,
     },
     program_analysis::analysis::ProgramAnalysis,
     table_manager::{MemoryUsage, TableManager},
@@ -56,7 +53,7 @@ pub struct ExecutionEngine<RuleSelectionStrategy> {
     rule_strategy: RuleSelectionStrategy,
 
     #[allow(dead_code)]
-    input_manager: InputManager,
+    input_manager: ImportManager,
     table_manager: TableManager,
 
     predicate_fragmentation: HashMap<Identifier, usize>,
@@ -69,16 +66,10 @@ pub struct ExecutionEngine<RuleSelectionStrategy> {
 
 impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
     /// Initialize [`ExecutionEngine`].
-    pub fn initialize(
-        program: Program,
-        resource_providers: ResourceProviders,
-    ) -> Result<Self, Error> {
+    pub fn initialize(program: &Program, input_manager: ImportManager) -> Result<Self, Error> {
         let chase_program: ChaseProgram = program.clone().try_into()?;
 
-        chase_program.check_for_unsupported_features()?;
         let analysis = chase_program.analyze()?;
-
-        let input_manager = InputManager::new(resource_providers);
 
         let mut table_manager = TableManager::new();
         Self::register_all_predicates(&mut table_manager, &analysis);
@@ -111,16 +102,8 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
 
     /// Register all predicates found in a rule program to the [`TableManager`].
     fn register_all_predicates(table_manager: &mut TableManager, analysis: &ProgramAnalysis) {
-        for (predicate, _) in &analysis.all_predicates {
-            table_manager.register_predicate(
-                predicate.clone(),
-                analysis
-                    .predicate_types
-                    .get(predicate)
-                    .cloned()
-                    .expect("All predicates should have types by now.")
-                    .len(),
-            );
+        for (predicate, arity) in &analysis.all_predicates {
+            table_manager.register_predicate(predicate.clone(), *arity);
         }
     }
 
@@ -128,20 +111,22 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
     /// based on the import declaration of the given progam.
     fn add_imports(
         table_manager: &mut TableManager,
-        input_manager: &InputManager,
+        input_manager: &ImportManager,
         program: &ChaseProgram,
     ) -> Result<(), Error> {
         let mut predicate_to_sources = HashMap::<Identifier, Vec<TableSource>>::new();
 
         // Add all the import specifications
-        for import_spec in program.imports() {
-            let import_predicate = import_spec.predicate().clone();
+        for (import_predicate, import_handler) in program.imports() {
             let import_arity = table_manager.arity(&import_predicate);
 
-            let table_source = input_manager.import_table(import_spec, import_arity)?;
+            let table_source = TableSource::new(
+                input_manager.table_provider_from_handler(&import_handler, import_arity)?,
+                import_arity,
+            );
 
             predicate_to_sources
-                .entry(import_predicate)
+                .entry(import_predicate.clone())
                 .or_default()
                 .push(table_source);
         }
@@ -254,7 +239,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
     }
 
     /// Get a reference to the loaded program.
-    pub fn program(&self) -> &ChaseProgram {
+    pub(crate) fn program(&self) -> &ChaseProgram {
         &self.program
     }
 
@@ -647,16 +632,8 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         // Ok((trace, handles))
     }
 
-    /// Return the [logical type][TupleConstraint] for the given [predicate][Identifier].
-    pub fn predicate_type(&self, predicate: &Identifier) -> Option<TupleConstraint> {
-        self.analysis
-            .predicate_types
-            .get(predicate)
-            .map(|types| TupleConstraint::exact(types.clone()))
-    }
-
     /// Iterate over all [export specifications][ExportSpec] for output predicates.
-    pub fn output_predicates(&'_ self) -> impl Iterator<Item = ExportSpec> + '_ {
+    pub fn output_predicates(&'_ self) -> impl Iterator<Item = ExportDirective> + '_ {
         let exports = self
             .program
             .exports()
@@ -668,12 +645,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
             .output_predicates()
             .map(move |predicate| match exports.get(&predicate) {
                 Some(export_spec) => export_spec.clone(),
-                None => OutputManager::default_export_spec(
-                    predicate.clone(),
-                    self.predicate_type(&predicate)
-                        .expect("all predicates should have a type by now"),
-                )
-                .expect("default export spec should always be valid"),
+                None => ExportDirective::default(predicate.clone()),
             })
     }
 }
