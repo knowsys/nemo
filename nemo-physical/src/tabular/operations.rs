@@ -117,6 +117,20 @@ impl OperationTable {
         let permutation = Permutation::from_vector(indices);
         (Self(permutation.permute(&self.0)), permutation)
     }
+
+    /// Remove all `markers` from this table
+    /// that are not in the `target` table.
+    ///
+    /// Returns the altered table as a new object.
+    pub fn restrict(&self, target: &Self) -> Self {
+        Self(
+            self.0
+                .iter()
+                .cloned()
+                .filter(|marker| target.contains(marker))
+                .collect(),
+        )
+    }
 }
 
 impl IntoIterator for OperationTable {
