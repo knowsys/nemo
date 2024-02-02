@@ -91,12 +91,15 @@ pub fn write(path: String, engine: &mut Engine, predicates: Vec<Identifier>) -> 
         .collect::<HashMap<_, _>>();
 
     for predicate in &predicates {
-        export_manager.export_table(
-            output_predicates
-                .get(predicate)
-                .expect("export spec should be present"),
-            engine.predicate_rows(predicate)?,
-        )?;
+        if let Some(arity) = engine.predicate_arity(predicate) {
+            export_manager.export_table(
+                output_predicates
+                    .get(predicate)
+                    .expect("export spec should be present"),
+                engine.predicate_rows(predicate)?,
+                arity,
+            )?;
+        }
     }
 
     Ok(())

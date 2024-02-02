@@ -1,9 +1,14 @@
 //! The input and output formats supported by Nemo.
 
-pub mod dsv;
 pub mod import_export;
-pub mod rdf;
 pub mod types;
+
+pub mod dsv;
+pub mod dsv_reader;
+pub mod dsv_value_format;
+pub mod dsv_writer;
+
+pub mod rdf;
 
 pub(crate) use dsv::DsvHandler;
 pub(crate) use rdf::RdfHandler;

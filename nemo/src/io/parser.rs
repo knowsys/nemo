@@ -199,17 +199,11 @@ pub(crate) fn parse_bare_name(input: Span<'_>) -> IntermediateResult<Span<'_>> {
     map_error(
         recognize(pair(
             alpha1,
-            opt(preceded(
-                many0(tag(" ")),
-                separated_list1(
-                    many1(tag(" ")),
-                    many1(satisfy(|c| {
-                        ['0'..='9', 'a'..='z', 'A'..='Z', '-'..='-', '_'..='_']
-                            .iter()
-                            .any(|range| range.contains(&c))
-                    })),
-                ),
-            )),
+            opt(many1(satisfy(|c| {
+                ['0'..='9', 'a'..='z', 'A'..='Z', '-'..='-', '_'..='_']
+                    .iter()
+                    .any(|range| range.contains(&c))
+            }))),
         )),
         || ParseError::ExpectedBareName,
     )(input)

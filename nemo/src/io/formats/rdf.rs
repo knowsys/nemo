@@ -395,7 +395,11 @@ impl ImportExportHandler for RdfHandler {
         )))
     }
 
-    fn writer(&self, _writer: Box<dyn Write>) -> Result<Box<dyn TableWriter>, Error> {
+    fn writer(
+        &self,
+        _writer: Box<dyn Write>,
+        _arity: usize,
+    ) -> Result<Box<dyn TableWriter>, Error> {
         Err(ImportExportError::UnsupportedWrite(self.file_format()).into())
     }
 

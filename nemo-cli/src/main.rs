@@ -160,10 +160,13 @@ fn run(mut cli: CliApp) -> Result<(), Error> {
         log::info!("writing output");
 
         for export_directive in program.exports() {
-            export_manager.export_table(
-                export_directive,
-                engine.predicate_rows(export_directive.predicate())?,
-            )?;
+            if let Some(arity) = engine.predicate_arity(export_directive.predicate()) {
+                export_manager.export_table(
+                    export_directive,
+                    engine.predicate_rows(export_directive.predicate())?,
+                    arity,
+                )?;
+            }
         }
 
         TimedCode::instance()

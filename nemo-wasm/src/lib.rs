@@ -288,6 +288,10 @@ impl NemoEngine {
 
         let identifier = Identifier::from(predicate.clone());
 
+        let Some(arity) = self.0.predicate_arity(&identifier) else {
+            return Ok(());
+        };
+
         let Some(record_iter) = self
             .0
             .predicate_rows(&identifier)
@@ -303,7 +307,7 @@ impl NemoEngine {
         let export_manager: ExportManager = Default::default();
 
         export_manager
-            .export_table_with_writer(&export_spec, Box::new(writer), Some(record_iter))
+            .export_table_with_writer(&export_spec, Box::new(writer), Some(record_iter), arity)
             .map_err(WasmOrInternalNemoError::NemoError)
             .map_err(NemoError)
     }

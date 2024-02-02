@@ -355,12 +355,17 @@ impl NemoEngine {
     ) -> PyResult<()> {
         let identifier = Identifier::from(predicate);
 
+        let Some(arity) = self.0.predicate_arity(&identifier) else {
+            return Ok(());
+        };
+
         output_manager
             .borrow()
             .0
             .export_table(
                 &ExportDirective::default(identifier.clone()),
                 self.0.predicate_rows(&identifier).py_res()?,
+                arity,
             )
             .py_res()?;
 

@@ -243,7 +243,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         &self.program
     }
 
-    /// Creates an [Iterator] over the resulting facts of a predicate.
+    /// Creates an [Iterator] over all facts of a predicate.
     pub fn predicate_rows(
         &mut self,
         predicate: &Identifier,
@@ -253,6 +253,12 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         };
 
         Ok(Some(self.table_manager.table_row_iterator(table_id)?))
+    }
+
+    /// Returns the arity of the predicate if the predicate is known to the engine,
+    /// and `None` otherwise.
+    pub fn predicate_arity(&self, predicate: &Identifier) -> Option<usize> {
+        self.analysis.all_predicates.get(predicate).copied()
     }
 
     /// Counts the facts of a single predicate.

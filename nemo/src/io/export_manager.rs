@@ -147,6 +147,7 @@ impl ExportManager {
         &self,
         export_directive: &ExportDirective,
         table: Option<impl Iterator<Item = Vec<AnyDataValue>> + 'a>,
+        arity: usize,
     ) -> Result<(), Error> {
         if self.disable_write {
             return Ok(());
@@ -156,7 +157,7 @@ impl ExportManager {
 
         let writer = self.writer(&handler, &export_directive.predicate())?;
 
-        self.export_table_with_handler_writer(&handler, writer, table)
+        self.export_table_with_handler_writer(&handler, writer, table, arity)
     }
 
     /// Export a (possibly empty) table according to the given [ExportDirective],
@@ -169,9 +170,10 @@ impl ExportManager {
         export_directive: &ExportDirective,
         writer: Box<dyn Write>,
         table: Option<impl Iterator<Item = Vec<AnyDataValue>> + 'a>,
+        arity: usize,
     ) -> Result<(), Error> {
         let handler = ImportExportHandlers::export_handler(export_directive)?;
-        self.export_table_with_handler_writer(&handler, writer, table)
+        self.export_table_with_handler_writer(&handler, writer, table, arity)
     }
 
     /// Export a (possibly empty) table according to the given [ImportExportHandler],
@@ -182,9 +184,10 @@ impl ExportManager {
         export_handler: &Box<dyn ImportExportHandler>,
         writer: Box<dyn Write>,
         table: Option<impl Iterator<Item = Vec<AnyDataValue>> + 'a>,
+        arity: usize,
     ) -> Result<(), Error> {
         if let Some(table) = table {
-            let mut table_writer = export_handler.writer(writer)?;
+            let mut table_writer = export_handler.writer(writer, arity)?;
             table_writer.export_table_data(Box::new(table))?;
         }
         Ok(())

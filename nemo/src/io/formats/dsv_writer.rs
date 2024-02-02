@@ -1,0 +1,70 @@
+//! The writer for DSV files.
+
+use std::io::Write;
+
+use csv::{Writer, WriterBuilder};
+use nemo_physical::datavalues::AnyDataValue;
+
+use crate::{error::Error, io::formats::types::TableWriter};
+
+use super::dsv_value_format::DataValueSerializerFunction;
+use super::dsv_value_format::DsvValueFormat;
+
+/// A writer object for reading [DSV](https://en.wikipedia.org/wiki/Delimiter-separated_values) (delimiter separated values) files.
+///
+/// By default the writer will use double quotes for string escaping
+///
+/// Writing of individual values can be done in several ways (DSV does not specify a data model at this level),
+/// as defined by [DsvValueFormat].
+pub(super) struct DsvWriter {
+    writer: Writer<Box<dyn Write>>,
+    value_formats: Vec<DsvValueFormat>,
+}
+
+impl DsvWriter {
+    pub(super) fn new(
+        delimiter: u8,
+        writer: Box<dyn Write>,
+        value_formats: Vec<DsvValueFormat>,
+    ) -> Self {
+        DsvWriter {
+            writer: WriterBuilder::new()
+                .delimiter(delimiter)
+                .double_quote(true)
+                .from_writer(writer),
+            value_formats: value_formats,
+        }
+    }
+}
+
+impl TableWriter for DsvWriter {
+    fn export_table_data<'a>(
+        &mut self,
+        table: Box<dyn Iterator<Item = Vec<AnyDataValue>> + 'a>,
+    ) -> Result<(), Error> {
+        let serializers: Vec<DataValueSerializerFunction> = self
+            .value_formats
+            .iter()
+            .map(|vf| vf.data_value_serializer_function())
+            .collect();
+
+        for record in table {
+            let mut string_record = Vec::with_capacity(record.len());
+            let mut complete = true;
+            for (i, dv) in record.iter().enumerate() {
+                if let Some(stringvalue) = serializers[i](dv) {
+                    string_record.push(stringvalue);
+                } else {
+                    complete = false;
+                    break;
+                }
+            }
+
+            if complete {
+                self.writer.write_record(string_record)?;
+            }
+        }
+
+        Ok(())
+    }
+}

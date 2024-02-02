@@ -1,4 +1,6 @@
-//! Definitions for [ImportExportHandler] and related types.
+//! Definitions for the [ImportExportHandler] trait that provides the main
+//! handle for supported file formats, and of [ImportExportHandlers] as a
+//! main entry point for obtaining such handlers.
 
 use std::{
     collections::HashSet,
@@ -52,7 +54,13 @@ pub(crate) trait ImportExportHandler: std::fmt::Debug + DynClone + Send {
 
     /// Obtain a [`TableWriter`] for this format and the given writer, if supported.
     /// If writing is not supported, an error will be returned.
-    fn writer(&self, writer: Box<dyn Write>) -> Result<Box<dyn TableWriter>, Error>;
+    ///
+    /// The arity is the arity of predicates that the caller would like to write. If the handler
+    /// has a fixed arity (as returned by [ImportExportHandler::arity]),
+    /// then this will normally be the same value (clashing arity requirements are detected
+    /// during program analysis). However, even if not speciied, the arity might still be known
+    /// in normal circumstances.
+    fn writer(&self, writer: Box<dyn Write>, arity: usize) -> Result<Box<dyn TableWriter>, Error>;
 
     /// Obtain the resource used for this data exchange.
     /// In typical cases, this is the name of a file to read from or write to.
@@ -292,6 +300,9 @@ impl ImportExportHandlers {
                         match c {
                             Constant::StringLiteral(string) => {
                                 value_formats.push(string.to_owned());
+                            }
+                            Constant::Abstract(id) => {
+                                value_formats.push(id.name());
                             }
                             _ => {
                                 return Err(ImportExportError::invalid_att_value_error(
