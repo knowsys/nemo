@@ -21,7 +21,7 @@ macro_rules! generate_logical_type_enum {
     ($(($variant_name:ident, $string_repr: literal)),+) => {
         /// An enum capturing the logical type names and funtionality related to parsing and translating into and from physical types
         #[derive(Copy, Clone, Debug, Hash, PartialEq, Eq)]
-        pub enum PrimitiveType {
+        pub(crate) enum PrimitiveType {
             $(
                 /// $variant_name
                 $variant_name

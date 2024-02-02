@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
 
 use crate::model::{ExportDirective, ImportDirective};
 
-use super::{Atom, Identifier, QualifiedPredicateName, Rule};
+use super::{Atom, Identifier, Rule};
 
 /// A (ground) fact.
 #[derive(Debug, Eq, PartialEq, Clone)]
@@ -21,26 +21,6 @@ pub enum Statement {
     Fact(Fact),
     /// A rule.
     Rule(Rule),
-}
-
-/// Which predicates to output
-#[derive(Debug, Eq, PartialEq, Clone, Default)]
-pub enum OutputPredicateSelection {
-    /// Output every IDB predicate
-    #[default]
-    AllIDBPredicates,
-    /// Output only selected predicates
-    SelectedPredicates(Vec<QualifiedPredicateName>),
-}
-
-impl From<Vec<QualifiedPredicateName>> for OutputPredicateSelection {
-    fn from(predicates: Vec<QualifiedPredicateName>) -> Self {
-        if predicates.is_empty() {
-            Self::AllIDBPredicates
-        } else {
-            Self::SelectedPredicates(predicates)
-        }
-    }
 }
 
 /// A complete program.

@@ -4,9 +4,7 @@ use nemo_physical::datavalues::AnyDataValue;
 
 use crate::{
     error::Error,
-    model::{
-        types::primitive_logical_value::LOGICAL_NULL_PREFIX, PrimitiveType, VariableAssignment,
-    },
+    model::{types::primitive_logical_value::LOGICAL_NULL_PREFIX, VariableAssignment},
 };
 
 use super::{Aggregate, Identifier, Map, NumericLiteral, RdfLiteral, Tuple};
@@ -83,18 +81,6 @@ pub enum Constant {
 }
 
 impl Constant {
-    /// Get primitive type that fits the constant
-    pub(crate) fn primitive_type(&self) -> Option<PrimitiveType> {
-        match self {
-            Self::Abstract(_) => Some(PrimitiveType::Any),
-            Self::RdfLiteral(_) => Some(PrimitiveType::Any),
-            Self::StringLiteral(_) => Some(PrimitiveType::String),
-            Self::NumericLiteral(nl) => Some(nl.primitive_type()),
-            Self::MapLiteral(_) => None,
-            Self::TupleLiteral(_) => None,
-        }
-    }
-
     /// If this is a string literal, return the string.
     pub fn as_string(&self) -> Option<&String> {
         match self {
@@ -195,13 +181,6 @@ impl From<Constant> for PrimitiveTerm {
 }
 
 impl PrimitiveTerm {
-    /// Get primitive type that fits the primitive term; return None for variables
-    pub fn primitive_type(&self) -> Option<PrimitiveType> {
-        match self {
-            Self::Constant(c) => c.primitive_type(),
-            Self::Variable(_) => None,
-        }
-    }
     /// Return `true` if term is not a variable.
     pub fn is_ground(&self) -> bool {
         !matches!(self, PrimitiveTerm::Variable(_))
@@ -306,21 +285,6 @@ pub enum Term {
 }
 
 impl Term {
-    /// Get primitive type that fits the term
-    pub(crate) fn primitive_type(&self) -> Option<PrimitiveType> {
-        match self {
-            Self::Primitive(pt) => pt.primitive_type(),
-            Self::Unary(_, term) => term.primitive_type(),
-            Self::Binary { lhs, rhs, .. } => lhs
-                .primitive_type()
-                .zip(rhs.primitive_type())
-                .map(|(lhs, rhs)| lhs.max_type(&rhs)),
-
-            Self::Aggregation(agg) => agg.primitive_type(),
-            Self::Function(_, _) => Some(PrimitiveType::Any),
-        }
-    }
-
     /// If the term is a simple [`PrimitiveTerm`] then return it.
     /// Otherwise return `None`.
     pub(crate) fn as_primitive(&self) -> Option<PrimitiveTerm> {

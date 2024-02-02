@@ -364,7 +364,7 @@ impl DsvHandler {
 
         let delimiter = Self::extract_delimiter(variant, attributes)?;
         let resource = ImportExportHandlers::extract_resource(attributes, direction)?;
-        let value_formats = Self::extract_value_formats(attributes, direction)?;
+        let value_formats = Self::extract_value_formats(attributes)?;
 
         Ok(Box::new(Self {
             delimiter: delimiter,
@@ -373,61 +373,13 @@ impl DsvHandler {
         }))
     }
 
-    fn default_value_format_strings(arity: usize) -> Vec<String> {
-        vec![VALUE_FORMAT_ANY; arity]
-            .into_iter()
-            .map(|s| s.to_string())
-            .collect()
-    }
-
     fn extract_value_formats(
         attributes: &Map,
-        direction: Direction,
     ) -> Result<Option<Vec<DsvValueFormat>>, ImportExportError> {
-        let arity = ImportExportHandlers::extract_integer(attributes, PARAMETER_NAME_ARITY, true)?;
-        let mut value_format_strings: Option<Vec<String>> =
-            ImportExportHandlers::extract_value_format_strings(attributes)?;
-
-        if let Some(a) = arity {
-            if a <= 0 || a > 65536 {
-                // ridiculously large value, but still in usize for all conceivable platforms
-                return Err(ImportExportError::invalid_att_value_error(
-                    PARAMETER_NAME_ARITY,
-                    Constant::NumericLiteral(crate::model::NumericLiteral::Integer(a)),
-                    format!("arity should be greater than 0 and at most {}", 65536).as_str(),
-                ));
-            }
-
-            let us_a = usize::try_from(a).expect("range was checked above");
-            if let Some(ref v) = value_format_strings {
-                // check if arity is consistent with given value formats
-                if us_a != v.len() {
-                    return Err(ImportExportError::invalid_att_value_error(
-                        PARAMETER_NAME_ARITY,
-                        Constant::NumericLiteral(crate::model::NumericLiteral::Integer(a)),
-                        format!(
-                            "arity should be {}, the number of value types given for \"{}\"",
-                            v.len(),
-                            PARAMETER_NAME_FORMAT
-                        )
-                        .as_str(),
-                    ));
-                }
-            } else {
-                // default value formats from arity:
-                value_format_strings = Some(Self::default_value_format_strings(
-                    usize::try_from(a).expect("range was checked above"),
-                ));
-            }
-        }
-
+        let value_format_strings =
+            ImportExportHandlers::extract_value_format_strings_and_arity(attributes)?;
         if let Some(format_strings) = value_format_strings {
             Ok(Some(DsvHandler::formats_from_strings(format_strings)?))
-        // TODO: remove or re-instantiate ...
-        // } else if direction == Direction::Import {
-        //     Err(ImportExportError::MissingAttribute(
-        //         PARAMETER_NAME_FORMAT.to_string(),
-        //     ))
         } else {
             Ok(None)
         }
@@ -507,8 +459,10 @@ impl ImportExportHandler for DsvHandler {
             Ok(Box::new(DsvReader::new(
                 read,
                 self.delimiter,
-                DsvHandler::formats_from_strings(DsvHandler::default_value_format_strings(arity))
-                    .unwrap(),
+                DsvHandler::formats_from_strings(
+                    ImportExportHandlers::default_value_format_strings(arity),
+                )
+                .unwrap(),
             )))
         }
     }

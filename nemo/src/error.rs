@@ -7,7 +7,6 @@ use thiserror::Error;
 use crate::{
     execution::selection_strategy::strategy::SelectionStrategyError,
     io::{formats::import_export::ImportExportError, parser::LocatedParseError},
-    model::types::error::TypeError,
     program_analysis::analysis::RuleAnalysisError,
 };
 
@@ -38,9 +37,6 @@ pub enum Error {
     /// Parse errors
     #[error(transparent)]
     ParseError(#[from] LocatedParseError),
-    /// Type errors
-    #[error(transparent)]
-    TypeError(#[from] TypeError),
     /// IO Error
     #[error(transparent)]
     IO(#[from] std::io::Error),

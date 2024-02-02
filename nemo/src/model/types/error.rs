@@ -14,7 +14,7 @@ pub struct InvalidRuleTermConversion {
 
 impl InvalidRuleTermConversion {
     /// Create new `InvalidRuleTermConversion` error
-    pub fn new(constant: Constant, target_type: PrimitiveType) -> Self {
+    pub(crate) fn new(constant: Constant, target_type: PrimitiveType) -> Self {
         Self {
             constant,
             target_type,
@@ -30,7 +30,7 @@ impl From<InvalidRuleTermConversion> for ReadingError {
 
 /// Errors that can occur during type checking
 #[derive(Error, Debug)]
-pub enum TypeError {
+pub(crate) enum TypeError {
     /// Non-numerical aggregate input type
     #[error("Aggregate operation \"{0:?}\" on input variable \"{1}\" requires a numerical input type, but the input type was \"{2}\".")]
     NonNumericalAggregateInputType(LogicalAggregateOperation, String, PrimitiveType),

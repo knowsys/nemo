@@ -384,7 +384,7 @@ impl ImportExportHandler for RdfHandler {
     fn reader(
         &self,
         read: Box<dyn BufRead>,
-        arity: usize,
+        _arity: usize,
     ) -> Result<Box<dyn TableProvider>, Error> {
         // TODO: Arity is ignored. It is only relevant if the RDF variant was unspecified, since it could help to guess the format
         // in this case. But we do not yet do this.

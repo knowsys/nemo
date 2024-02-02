@@ -13,7 +13,8 @@ use crate::{
     error::Error,
     model::{
         Constant, ExportDirective, FileFormat, ImportDirective, ImportExportDirective, Key, Map,
-        NumericLiteral, PARAMETER_NAME_FORMAT, PARAMETER_NAME_RESOURCE,
+        NumericLiteral, PARAMETER_NAME_ARITY, PARAMETER_NAME_FORMAT, PARAMETER_NAME_RESOURCE,
+        VALUE_FORMAT_ANY,
     },
 };
 
@@ -276,6 +277,9 @@ impl ImportExportHandlers {
 
     /// Extract the list of strings that specify value formats. If no list is given, `None`
     /// is returned. Errors may occur if the attribute is given but the value is not a list of strings.
+    ///
+    /// See [ImportExportHandlers::extract_value_format_strings_and_arity] for a method that also
+    /// checks the arity information, and uses it to make default formats if needed.
     pub(super) fn extract_value_format_strings(
         attributes: &Map,
     ) -> Result<Option<Vec<String>>, ImportExportError> {
@@ -311,6 +315,59 @@ impl ImportExportHandlers {
         } else {
             value_format_strings = None;
         }
+        Ok(value_format_strings)
+    }
+
+    /// Returns a list of string names of value formats that can be used as a
+    /// default if only the arity of a predicate is known.
+    pub(super) fn default_value_format_strings(arity: usize) -> Vec<String> {
+        vec![VALUE_FORMAT_ANY; arity]
+            .into_iter()
+            .map(|s| s.to_string())
+            .collect()
+    }
+
+    /// Extract given format and arity information to obtain a list of value format strings.
+    /// If both are given, it is checked that arity and value format list are coherent. If nlly
+    /// the arity is given, a default list of value formats is constructed. If neither is given,
+    /// `None` is returned.
+    pub(super) fn extract_value_format_strings_and_arity(
+        attributes: &Map,
+    ) -> Result<Option<Vec<String>>, ImportExportError> {
+        let arity = Self::extract_integer(attributes, PARAMETER_NAME_ARITY, true)?;
+        let mut value_format_strings: Option<Vec<String>> =
+            Self::extract_value_format_strings(attributes)?;
+
+        if let Some(a) = arity {
+            if a <= 0 || a > 65536 {
+                // ridiculously large value, but still in usize for all conceivable platforms
+                return Err(ImportExportError::invalid_att_value_error(
+                    PARAMETER_NAME_ARITY,
+                    Constant::NumericLiteral(crate::model::NumericLiteral::Integer(a)),
+                    format!("arity should be greater than 0 and at most {}", 65536).as_str(),
+                ));
+            }
+
+            let us_a = usize::try_from(a).expect("range was checked above");
+            if let Some(ref v) = value_format_strings {
+                // check if arity is consistent with given value formats
+                if us_a != v.len() {
+                    return Err(ImportExportError::invalid_att_value_error(
+                        PARAMETER_NAME_ARITY,
+                        Constant::NumericLiteral(crate::model::NumericLiteral::Integer(a)),
+                        format!(
+                            "arity should be {}, the number of value types given for \"{}\"",
+                            v.len(),
+                            PARAMETER_NAME_FORMAT
+                        )
+                        .as_str(),
+                    ));
+                }
+            } else {
+                value_format_strings = Some(Self::default_value_format_strings(us_a));
+            }
+        }
+
         Ok(value_format_strings)
     }
 }

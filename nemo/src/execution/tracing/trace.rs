@@ -100,7 +100,10 @@ pub struct ExecutionTrace {
 
 impl ExecutionTrace {
     /// Create an empty [`ExecutionTrace`].
-    pub fn new(program: Program, predicate_types: HashMap<Identifier, Vec<PrimitiveType>>) -> Self {
+    pub(crate) fn new(
+        program: Program,
+        predicate_types: HashMap<Identifier, Vec<PrimitiveType>>,
+    ) -> Self {
         Self {
             program,
             predicate_types,

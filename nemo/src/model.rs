@@ -12,7 +12,7 @@ pub mod types;
 /// Forward everything to the rule model.
 pub use rule_model::*;
 pub use types::complex_types::*;
-pub use types::primitive_types::PrimitiveType;
+pub(crate) use types::primitive_types::PrimitiveType;
 
 use std::collections::HashMap;
 
