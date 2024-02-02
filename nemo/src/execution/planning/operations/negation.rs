@@ -27,18 +27,23 @@ pub(crate) fn node_negation(
     let subtracted = subtracted_atoms
         .iter()
         .map(|atom| {
-            let output_markers = variable_translation.operation_table(atom.terms().iter());
+            let subtract_markers = variable_translation.operation_table(atom.terms().iter());
             let node = subplan_union(
                 plan,
                 table_manager,
                 &atom.predicate(),
                 0..current_step_number,
-                output_markers,
+                subtract_markers.clone(),
             );
 
             // We simply apply all constraints to this node
             // Constraint which do not referene this atom will be filtered in the physical layer
-            node_filter(plan, variable_translation, node, subtracted_filters)
+            let node_filtered = node_filter(plan, variable_translation, node, subtracted_filters);
+
+            // The tables may contian colums that are not part of `node_main`.
+            // These need to be projected away.
+            let markers_project_target = node_main.markers().restrict(&subtract_markers);
+            plan.projectreorder(markers_project_target, node_filtered)
         })
         .collect();
 
