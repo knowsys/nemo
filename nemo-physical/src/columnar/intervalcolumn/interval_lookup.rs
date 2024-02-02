@@ -1,11 +1,9 @@
 //! This module defines the trait [IntervalLookup] and [IntervalLookupBuilder],
 //! and provides several implementations of them.
+//!
+pub(crate) mod lookup_column;
 
-pub(crate) mod lookup_bitvector;
-pub(crate) mod lookup_column_dual;
-pub(crate) mod lookup_column_single;
-
-use std::{fmt::Debug, ops::Range};
+use std::fmt::Debug;
 
 use crate::{datatypes::StorageTypeName, management::bytesized::ByteSized};
 /// Trait for looking up interval bounds in [IntervalColumn][super::super::intervalcolumn::IntervalColumn]
@@ -14,11 +12,11 @@ pub(crate) trait IntervalLookup: Debug + Clone + ByteSized {
     type Builder: IntervalLookupBuilder<Lookup = Self>;
 
     /// Given an index of a value from the previous layer,
-    /// return a range of indices representing the slice in the data column
-    /// that is associated with the successors of that value.
+    /// return the index of the interval that representing the slice in the data column
+    /// associated with the successors of that value.
     ///
     /// Returns `None` if the value has no successor in this interval column.
-    fn interval_bounds(&self, index: usize) -> Option<Range<usize>>;
+    fn interval_index(&self, index: usize) -> Option<usize>;
 }
 
 #[derive(Debug, Clone)]
@@ -38,24 +36,17 @@ where
     LookupMethod: IntervalLookup,
 {
     /// Given a storage type and an index of a value from the previous layer,
-    /// return a range of indices representing the slice in the data column
-    /// that is associated with the successors of that value.
-    ///
-    /// The end of the interval will be [usize::MAX] and will therefore have
-    /// to be clipped to the length of the data column.
+    /// return the index of the interval that representing the slice in the data column
+    /// associated with the successors of that value.
     ///
     /// Returns `None` if the value has no successor in this interval column.
-    pub fn interval_bounds(
-        &self,
-        storage_type: StorageTypeName,
-        index: usize,
-    ) -> Option<Range<usize>> {
+    pub fn interval_index(&self, storage_type: StorageTypeName, index: usize) -> Option<usize> {
         match storage_type {
-            StorageTypeName::Id32 => self.lookup_id32.interval_bounds(index),
-            StorageTypeName::Id64 => self.lookup_id64.interval_bounds(index),
-            StorageTypeName::Int64 => self.lookup_int64.interval_bounds(index),
-            StorageTypeName::Float => self.lookup_float.interval_bounds(index),
-            StorageTypeName::Double => self.lookup_double.interval_bounds(index),
+            StorageTypeName::Id32 => self.lookup_id32.interval_index(index),
+            StorageTypeName::Id64 => self.lookup_id64.interval_index(index),
+            StorageTypeName::Int64 => self.lookup_int64.interval_index(index),
+            StorageTypeName::Float => self.lookup_float.interval_index(index),
+            StorageTypeName::Double => self.lookup_double.interval_index(index),
         }
     }
 }
@@ -78,8 +69,11 @@ pub(crate) trait IntervalLookupBuilder: Debug + Default {
     /// [IntervalLookup] that will be built
     type Lookup: IntervalLookup<Builder = Self>;
 
-    /// Add the given interval.
-    fn add(&mut self, interval: Range<usize>);
+    /// Add the given interval index.
+    fn add_interval(&mut self, interval_index: usize);
+
+    /// Add an empty entry, signaling that this node has no successor.
+    fn add_empty(&mut self);
 
     /// Return the constructed [IntervalLookup].
     fn finalize(self) -> Self::Lookup;
@@ -95,8 +89,6 @@ where
     builder_int64: LookupMethod::Builder,
     builder_float: LookupMethod::Builder,
     builder_double: LookupMethod::Builder,
-
-    current_interval: Range<usize>,
 }
 
 impl<LookupMethod> Default for IntervalLookupBuilderT<LookupMethod>
@@ -110,7 +102,6 @@ where
             builder_int64: Default::default(),
             builder_float: Default::default(),
             builder_double: Default::default(),
-            current_interval: 0..0,
         }
     }
 }
@@ -119,18 +110,23 @@ impl<LookupMethod> IntervalLookupBuilderT<LookupMethod>
 where
     LookupMethod: IntervalLookup,
 {
-    pub fn add(&mut self, storage_type: StorageTypeName, data_count: usize) {
-        self.current_interval.start = self.current_interval.end;
-        self.current_interval.end = data_count;
-
-        let current_interval = self.current_interval.clone();
-
+    pub fn add_interval(&mut self, storage_type: StorageTypeName, interval_index: usize) {
         match storage_type {
-            StorageTypeName::Id32 => self.builder_id32.add(current_interval),
-            StorageTypeName::Id64 => self.builder_id64.add(current_interval),
-            StorageTypeName::Int64 => self.builder_int64.add(current_interval),
-            StorageTypeName::Float => self.builder_float.add(current_interval),
-            StorageTypeName::Double => self.builder_double.add(current_interval),
+            StorageTypeName::Id32 => self.builder_id32.add_interval(interval_index),
+            StorageTypeName::Id64 => self.builder_id64.add_interval(interval_index),
+            StorageTypeName::Int64 => self.builder_int64.add_interval(interval_index),
+            StorageTypeName::Float => self.builder_float.add_interval(interval_index),
+            StorageTypeName::Double => self.builder_double.add_interval(interval_index),
+        }
+    }
+
+    pub fn add_empty(&mut self, storage_type: StorageTypeName) {
+        match storage_type {
+            StorageTypeName::Id32 => self.builder_id32.add_empty(),
+            StorageTypeName::Id64 => self.builder_id64.add_empty(),
+            StorageTypeName::Int64 => self.builder_int64.add_empty(),
+            StorageTypeName::Float => self.builder_float.add_empty(),
+            StorageTypeName::Double => self.builder_double.add_empty(),
         }
     }
 

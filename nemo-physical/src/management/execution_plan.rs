@@ -341,7 +341,8 @@ impl ExecutionPlan {
     /// Designate a [ExecutionNode] as an "output" node that will result in a materialized table.
     ///
     /// If table has been marked as an "ouput" node already,
-    /// this function will overwrite the name and [ExecutionResult].
+    /// this function will not overwrite the existing name
+    /// but will upgrade the [ExecutionResult] to permanent if required.
     ///
     /// Returns an [ExecutionId] which can be linked to the output table
     /// that was computed by evaluateing this node.
@@ -358,8 +359,9 @@ impl ExecutionPlan {
             .iter()
             .position(|out_node| out_node.node.id() == node.id())
         {
-            self.out_nodes[index].operation_name = String::from(operation_name);
-            self.out_nodes[index].result = result;
+            if !matches!(result, ExecutionResult::Temporary) {
+                self.out_nodes[index].result = result;
+            }
         } else {
             self.out_nodes.push(ExecutionOutNode {
                 node,

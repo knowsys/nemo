@@ -471,4 +471,54 @@ mod test {
             ],
         );
     }
+
+    #[test]
+    fn filter_top() {
+        let dictionary = MetaDvDictionary::default();
+
+        let trie = trie_int64(vec![
+            &[1, 2],
+            &[1, 4],
+            &[1, 5],
+            &[2, 7],
+            &[2, 9],
+            &[3, 1],
+            &[3, 4],
+            &[7, 8],
+            &[7, 10],
+            &[12, 9],
+            &[12, 18],
+        ]);
+
+        let trie_scan = TrieScanEnum::TrieScanGeneric(trie.partial_iterator());
+
+        let mut marker_generator = OperationTableGenerator::new();
+        marker_generator.add_marker("x");
+        marker_generator.add_marker("y");
+
+        let markers = marker_generator.operation_table(["x", "y"].iter());
+
+        let filters = vec![Filter::numeric_greaterthan(
+            Filter::reference(*marker_generator.get(&"x").unwrap()),
+            Filter::constant(AnyDataValue::new_integer_from_i64(5)),
+        )];
+
+        let filter_generator = GeneratorFilter::new(markers, &filters);
+        let mut filter_scan = filter_generator
+            .generate(vec![Some(trie_scan)], &dictionary)
+            .unwrap();
+
+        trie_dfs(
+            &mut filter_scan,
+            &[StorageTypeName::Int64],
+            &[
+                StorageValueT::Int64(7),  // x = 7
+                StorageValueT::Int64(8),  // y = 8
+                StorageValueT::Int64(10), // y = 10
+                StorageValueT::Int64(12), // y = 12
+                StorageValueT::Int64(9),  // y = 9
+                StorageValueT::Int64(18), // y = 18
+            ],
+        );
+    }
 }
