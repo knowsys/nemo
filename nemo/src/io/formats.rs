@@ -9,6 +9,7 @@ pub mod dsv_value_format;
 pub mod dsv_writer;
 
 pub mod rdf;
+pub mod rdf_reader;
 
 pub(crate) use dsv::DsvHandler;
 pub(crate) use rdf::RdfHandler;
