@@ -153,31 +153,61 @@ impl ImportExportHandlers {
     }
 
     /// Extract the compression format from the given attributes, and possibly resource.
-    /// An error is returned if an unknown compression format was explicitly specified.
+    /// An error is returned if an unknown compression format was explicitly specified,
+    /// or if the compression format of the resource is not in agreement with an explicitly
+    /// stated one.
     pub(super) fn extract_compression_format(
         attributes: &Map,
         resource: &Option<Resource>,
     ) -> Result<Option<CompressionFormat>, ImportExportError> {
         let cf_name = Self::extract_string_or_iri(attributes, PARAMETER_NAME_COMPRESSION, true)
             .expect("no errors with allow missing");
-        if let Some(cf_name) = cf_name {
+
+        let stated_compression_format: Option<CompressionFormat>;
+        if let Some(cf_name) = &cf_name {
             match cf_name.as_str() {
-                VALUE_COMPRESSION_NONE => Ok(Some(CompressionFormat::None)),
-                VALUE_COMPRESSION_GZIP => Ok(Some(CompressionFormat::Gzip)),
-                _ => Err(ImportExportError::invalid_att_value_error(
-                    PARAMETER_NAME_COMPRESSION,
-                    Constant::StringLiteral(cf_name),
-                    format!(
-                        "unknown compression format, supported formats: {:?}",
-                        [VALUE_COMPRESSION_GZIP, VALUE_COMPRESSION_NONE]
-                    )
-                    .as_str(),
-                )),
+                VALUE_COMPRESSION_NONE => stated_compression_format = Some(CompressionFormat::None),
+                VALUE_COMPRESSION_GZIP => stated_compression_format = Some(CompressionFormat::Gzip),
+                _ => {
+                    return Err(ImportExportError::invalid_att_value_error(
+                        PARAMETER_NAME_COMPRESSION,
+                        Constant::StringLiteral(cf_name.to_owned()),
+                        format!(
+                            "unknown compression format, supported formats: {:?}",
+                            [VALUE_COMPRESSION_GZIP, VALUE_COMPRESSION_NONE]
+                        )
+                        .as_str(),
+                    ));
+                }
             }
-        } else if let Some(res) = resource {
-            Ok(Some(CompressionFormat::from_resource(res).0))
         } else {
-            Ok(None)
+            stated_compression_format = None;
+        }
+
+        let resource_compression_format: Option<CompressionFormat>;
+        if let Some(res) = resource {
+            resource_compression_format = Some(CompressionFormat::from_resource(res).0);
+        } else {
+            resource_compression_format = None;
+        }
+
+        match (stated_compression_format, resource_compression_format) {
+            (Some(scf), None) => Ok(Some(scf)),
+            (None, Some(rcf)) => Ok(Some(rcf)),
+            (Some(scf), Some(rcf)) => {
+                if scf == rcf {
+                    Ok(Some(scf))
+                } else {
+                    Err(ImportExportError::invalid_att_value_error(
+                        PARAMETER_NAME_COMPRESSION,
+                        Constant::StringLiteral(
+                            cf_name.expect("given if stated compression is known"),
+                        ),
+                        format!("compression method should match resource extension").as_str(),
+                    ))
+                }
+            }
+            (None, None) => Ok(None),
         }
     }
 

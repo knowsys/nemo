@@ -22,7 +22,7 @@ use crate::error::Error;
 const GZIP_COMPRESSION_LEVEL: Compression = Compression::new(6);
 
 /// Represent the compression of a file
-#[derive(Debug, Copy, Clone, Default)]
+#[derive(Debug, Copy, Clone, Default, PartialEq, Eq)]
 pub enum CompressionFormat {
     /// No file compression
     #[default]
