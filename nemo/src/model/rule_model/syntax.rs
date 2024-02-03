@@ -29,6 +29,8 @@ pub(crate) const PARAMETER_NAME_ARITY: &str = "arity";
 pub(crate) const PARAMETER_NAME_BASE: &str = "base";
 /// Name of the parameter for specifying a delimiter in import/export directives for delimiter-separated values format.
 pub(crate) const PARAMETER_NAME_DSV_DELIMITER: &str = "delimiter";
+/// Name of the parameter for specifying the compression in import/export directives.
+pub(crate) const PARAMETER_NAME_COMPRESSION: &str = "compression";
 
 /// The name of the general, best-effort value format. Importers/exporters suporting this format will usually
 /// accept "any" input value and interpret it in the most natural way. Likewise, any value should be writable
@@ -50,3 +52,8 @@ pub(crate) const VALUE_FORMAT_DOUBLE: &str = "double";
 /// The name of the special value format that indicates that a vlaue should be ignored altogether.
 /// The respective column/parameter will be skiped in reading/writing.
 pub(crate) const VALUE_FORMAT_SKIP: &str = "skip";
+
+/// The name of the compression format that means "no compression".
+pub(crate) const VALUE_COMPRESSION_NONE: &str = "none";
+/// The name of the compression format that means "no compression".
+pub(crate) const VALUE_COMPRESSION_GZIP: &str = "gzip";

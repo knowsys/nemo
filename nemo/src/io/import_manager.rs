@@ -8,7 +8,10 @@ use crate::{
     model::{ImportDirective, PARAMETER_NAME_ARITY},
 };
 
-use super::formats::import_export::{ImportExportError, ImportExportHandler, ImportExportHandlers};
+use super::{
+    compression_format::CompressionFormat,
+    formats::import_export::{ImportExportError, ImportExportHandler, ImportExportHandlers},
+};
 
 /// Manages everything related to resolving the inputs of a Nemo program.
 /// Currently, this is only the resource providers.
@@ -55,11 +58,12 @@ impl ImportManager {
         expected_arity: Option<usize>,
     ) -> Result<Box<dyn TableProvider>, Error> {
         let handler = ImportExportHandlers::import_handler(import_directive)?;
+
         let arity;
-        if let Some(ea) = expected_arity {
-            arity = ea;
-        } else if let Some(ea) = handler.arity() {
-            arity = ea;
+        if let Some(expected_arity) = expected_arity {
+            arity = expected_arity;
+        } else if let Some(expected_arity) = handler.arity() {
+            arity = expected_arity;
         } else {
             return Err(
                 ImportExportError::MissingAttribute(PARAMETER_NAME_ARITY.to_string()).into(),
@@ -88,7 +92,9 @@ impl ImportManager {
         }
         let reader = self.resource_providers.open_resource(
             &handler.resource().expect("checked when making handler"),
-            true,
+            handler
+                .compression_format()
+                .unwrap_or(CompressionFormat::None),
         )?;
 
         Ok(handler.reader(reader, expected_arity)?)

@@ -11,6 +11,7 @@ use js_sys::Set;
 use js_sys::Uint8Array;
 use nemo::execution::ExecutionEngine;
 
+use nemo::io::compression_format::CompressionFormat;
 use nemo::io::parser::parse_fact;
 use nemo::io::parser::parse_program;
 use nemo::io::resource_providers::{ResourceProvider, ResourceProviders};
@@ -134,7 +135,11 @@ impl ResourceProvider for BlobResourceProvider {
     fn open_resource(
         &self,
         resource: &Resource,
+        _compression: CompressionFormat,
     ) -> Result<Option<Box<dyn std::io::BufRead>>, nemo_physical::error::ReadingError> {
+        // TODO: this ignores the requested compression. Is this ok for this context?
+        // If compression of blob data were a good idea, then we might also do it in all cases internally ...
+        // (the usual aspect that the format determines what the user wants to get on disk does not matter here)
         if let Some(blob) = self.blobs.get(resource) {
             let array_buffer: js_sys::ArrayBuffer = self
                 .file_reader_sync

@@ -7,10 +7,13 @@ use oxiri::Iri;
 
 use crate::{
     error::Error,
-    io::formats::types::{Direction, TableWriter},
+    io::{
+        compression_format::CompressionFormat,
+        formats::types::{Direction, TableWriter},
+    },
     model::{
         Constant, FileFormat, Identifier, Map, RdfVariant, PARAMETER_NAME_BASE,
-        PARAMETER_NAME_RESOURCE,
+        PARAMETER_NAME_COMPRESSION, PARAMETER_NAME_RESOURCE,
     },
 };
 
@@ -31,6 +34,10 @@ pub struct RdfHandler {
     base: Option<Iri<String>>,
     /// The specific RDF format to be used.
     variant: RdfVariant,
+    /// Compression format to be used, if specified. This can also be inferred
+    /// from the resource, if given. So the only case where `None` is possible
+    /// is when no resource is given (during output).
+    compression_format: Option<CompressionFormat>,
 }
 
 impl RdfHandler {
@@ -43,7 +50,11 @@ impl RdfHandler {
         // Basic checks for unsupported attributes:
         ImportExportHandlers::check_attributes(
             attributes,
-            &vec![PARAMETER_NAME_RESOURCE, PARAMETER_NAME_BASE],
+            &vec![
+                PARAMETER_NAME_RESOURCE,
+                PARAMETER_NAME_BASE,
+                PARAMETER_NAME_COMPRESSION,
+            ],
         )?;
 
         let resource = ImportExportHandlers::extract_resource(attributes, direction)?;
@@ -76,10 +87,14 @@ impl RdfHandler {
             refined_variant = variant;
         }
 
+        let compression_format =
+            ImportExportHandlers::extract_compression_format(attributes, &resource)?;
+
         Ok(Box::new(Self {
             resource: resource,
             base: base,
             variant: refined_variant,
+            compression_format: compression_format,
         }))
     }
 }
@@ -132,5 +147,9 @@ impl ImportExportHandler for RdfHandler {
             RdfVariant::RDFXML => Some("rdf".to_string()),
             RdfVariant::TriG => Some("trig".to_string()),
         }
+    }
+
+    fn compression_format(&self) -> Option<CompressionFormat> {
+        self.compression_format
     }
 }

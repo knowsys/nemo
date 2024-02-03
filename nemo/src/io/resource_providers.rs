@@ -1,15 +1,11 @@
 //! Resource providers for external resources that can be used in reasoning.
 
-use std::{
-    io::{BufRead, BufReader},
-    path::PathBuf,
-    rc::Rc,
-};
-
-use flate2::bufread::MultiGzDecoder;
+use std::{io::BufRead, path::PathBuf, rc::Rc};
 
 use crate::io::parser::{all_input_consumed, iri::iri};
 use nemo_physical::{error::ReadingError, resource::Resource};
+
+use super::compression_format::CompressionFormat;
 
 /// A resource provider for files.
 pub mod file;
@@ -22,14 +18,23 @@ fn is_iri(resource: &Resource) -> bool {
 
 /// Allows resolving resources to readers.
 ///
-/// This allows specifying how to resolve a resource independent of how the file format is going to be parsed.
+/// This allows specifying how to resolve a resource independent of how the
+/// file format is going to be parsed.
 pub trait ResourceProvider: std::fmt::Debug {
     /// Resolve and open a resource.
     ///
-    /// This function may be called multiple times in a row, e.g. when testing if a file can be opened using gzip.
+    /// The method may fail in two ways: by returning `Ok(None)` or by returning
+    /// an error. The provider should inspect the resource to decide if it is
+    /// responsible, and use `None` if it isn't. So `None` signifies that the given
+    /// resource is not supported.
     ///
-    /// The implementation can decide wether ir wants to handle the given resource, otherwise it can return `None`, and the next `ResourceProvider` will be consulted.
-    fn open_resource(&self, resource: &Resource) -> Result<Option<Box<dyn BufRead>>, ReadingError>;
+    /// If the resource is supported, the provider must try to open it with the
+    /// given compression format, and return an error if this fails.
+    fn open_resource(
+        &self,
+        resource: &Resource,
+        compression: CompressionFormat,
+    ) -> Result<Option<Box<dyn BufRead>>, ReadingError>;
 }
 
 /// A list of [`ResourceProvider`] sorted by decreasing priority.
@@ -60,34 +65,15 @@ impl ResourceProviders {
         Self(Rc::new(vec![]))
     }
 
-    /// Resolves a resource.
-    ///
-    /// First checks if the resource can be opened as gzip, otherwise opens the file directly.
-    ///
-    /// FIXME: It would be better to push the compression handling into the individual resource
-    /// providers, or use generics instead of Boxes, to avoid mutliple nested boxed BufReads.
+    /// Opens a resource.
     pub fn open_resource(
         &self,
         resource: &Resource,
-        try_gzip: bool,
+        compression: CompressionFormat,
     ) -> Result<Box<dyn BufRead>, ReadingError> {
         for resource_provider in self.0.iter() {
-            if let Some(reader) = resource_provider.open_resource(resource)? {
-                if !try_gzip {
-                    return Ok(reader);
-                }
-
-                // Try opening with gzip
-                let gz_reader = MultiGzDecoder::new(reader);
-
-                if gz_reader.header().is_some() {
-                    return Ok(Box::new(BufReader::new(gz_reader)));
-                } else {
-                    // Try again without gzip, otherwise go to next provider
-                    if let Some(reader) = resource_provider.open_resource(resource)? {
-                        return Ok(reader);
-                    };
-                }
+            if let Some(reader) = resource_provider.open_resource(resource, compression)? {
+                return Ok(reader);
             }
         }
 

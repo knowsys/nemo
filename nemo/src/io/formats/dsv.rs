@@ -4,9 +4,10 @@ use std::io::{BufRead, Write};
 
 use nemo_physical::{datasources::table_providers::TableProvider, resource::Resource};
 
+use crate::io::compression_format::CompressionFormat;
 use crate::model::{
-    PARAMETER_NAME_ARITY, PARAMETER_NAME_DSV_DELIMITER, PARAMETER_NAME_FORMAT,
-    PARAMETER_NAME_RESOURCE,
+    PARAMETER_NAME_ARITY, PARAMETER_NAME_COMPRESSION, PARAMETER_NAME_DSV_DELIMITER,
+    PARAMETER_NAME_FORMAT, PARAMETER_NAME_RESOURCE,
 };
 use crate::{
     error::Error,
@@ -45,6 +46,10 @@ pub(crate) struct DsvHandler {
     /// if neither formats nor arity were given for writing: in this case, a default
     /// arity-based formats can be used if the arity is clear from another source.
     value_formats: Option<Vec<DsvValueFormat>>,
+    /// Compression format to be used, if specified. This can also be inferred
+    /// from the resource, if given. So the only case where `None` is possible
+    /// is when no resource is given (during output).
+    compression_format: Option<CompressionFormat>,
 }
 
 impl DsvHandler {
@@ -86,17 +91,21 @@ impl DsvHandler {
                 PARAMETER_NAME_RESOURCE,
                 PARAMETER_NAME_ARITY,
                 PARAMETER_NAME_DSV_DELIMITER,
+                PARAMETER_NAME_COMPRESSION,
             ],
         )?;
 
         let delimiter = Self::extract_delimiter(variant, attributes)?;
         let resource = ImportExportHandlers::extract_resource(attributes, direction)?;
         let value_formats = Self::extract_value_formats(attributes)?;
+        let compression_format =
+            ImportExportHandlers::extract_compression_format(attributes, &resource)?;
 
         Ok(Box::new(Self {
             delimiter: delimiter,
             resource: resource,
             value_formats: value_formats,
+            compression_format: compression_format,
         }))
     }
 
@@ -228,5 +237,9 @@ impl ImportExportHandler for DsvHandler {
             FileFormat::TSV => Some("tsv".to_string()),
             _ => unreachable!(),
         }
+    }
+
+    fn compression_format(&self) -> Option<CompressionFormat> {
+        self.compression_format
     }
 }

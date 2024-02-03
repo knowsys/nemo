@@ -124,13 +124,6 @@ impl RdfVariant {
         }
     }
 
-    pub(crate) fn refine_with_resource(self, resource: &Resource) -> RdfVariant {
-        match self {
-            Self::Unspecified => Self::from_resource(resource),
-            _ => self,
-        }
-    }
-
     fn is_turtle(resource: &Resource) -> bool {
         resource.ends_with(".ttl.gz") || resource.ends_with(".ttl")
     }

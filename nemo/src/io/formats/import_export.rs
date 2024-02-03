@@ -13,10 +13,11 @@ use nemo_physical::{datasources::table_providers::TableProvider, resource::Resou
 
 use crate::{
     error::Error,
+    io::compression_format::CompressionFormat,
     model::{
         Constant, ExportDirective, FileFormat, ImportDirective, ImportExportDirective, Key, Map,
-        NumericLiteral, PARAMETER_NAME_ARITY, PARAMETER_NAME_FORMAT, PARAMETER_NAME_RESOURCE,
-        VALUE_FORMAT_ANY,
+        NumericLiteral, PARAMETER_NAME_ARITY, PARAMETER_NAME_COMPRESSION, PARAMETER_NAME_FORMAT,
+        PARAMETER_NAME_RESOURCE, VALUE_COMPRESSION_GZIP, VALUE_COMPRESSION_NONE, VALUE_FORMAT_ANY,
     },
 };
 
@@ -72,6 +73,9 @@ pub(crate) trait ImportExportHandler: std::fmt::Debug + DynClone + Send {
     /// Returns the default file extension for data of this format, if any.
     /// This will be used when making default file names.
     fn file_extension(&self) -> Option<String>;
+
+    /// Returns the chosen compression format for imported/exported data.
+    fn compression_format(&self) -> Option<CompressionFormat>;
 }
 
 dyn_clone::clone_trait_object!(ImportExportHandler);
@@ -146,6 +150,35 @@ impl ImportExportHandlers {
             ));
         }
         Ok(resource)
+    }
+
+    /// Extract the compression format from the given attributes, and possibly resource.
+    /// An error is returned if an unknown compression format was explicitly specified.
+    pub(super) fn extract_compression_format(
+        attributes: &Map,
+        resource: &Option<Resource>,
+    ) -> Result<Option<CompressionFormat>, ImportExportError> {
+        let cf_name = Self::extract_string_or_iri(attributes, PARAMETER_NAME_COMPRESSION, true)
+            .expect("no errors with allow missing");
+        if let Some(cf_name) = cf_name {
+            match cf_name.as_str() {
+                VALUE_COMPRESSION_NONE => Ok(Some(CompressionFormat::None)),
+                VALUE_COMPRESSION_GZIP => Ok(Some(CompressionFormat::Gzip)),
+                _ => Err(ImportExportError::invalid_att_value_error(
+                    PARAMETER_NAME_COMPRESSION,
+                    Constant::StringLiteral(cf_name),
+                    format!(
+                        "unknown compression format, supported formats: {:?}",
+                        [VALUE_COMPRESSION_GZIP, VALUE_COMPRESSION_NONE]
+                    )
+                    .as_str(),
+                )),
+            }
+        } else if let Some(res) = resource {
+            Ok(Some(CompressionFormat::from_resource(res).0))
+        } else {
+            Ok(None)
+        }
     }
 
     /// Extract a string value for the given attribute name. Returns an error if the

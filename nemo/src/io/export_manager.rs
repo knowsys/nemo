@@ -1,4 +1,5 @@
-//! This module contains the [OutputManager], which writes tables to files.
+//! This module contains the [ExportManager], which provides the main API to handle
+//! [ExportDirective]s and to write tables to files.
 
 use std::{
     fs::{create_dir_all, OpenOptions},
@@ -6,7 +7,6 @@ use std::{
     path::PathBuf,
 };
 
-use flate2::{write::GzEncoder, Compression};
 use nemo_physical::datavalues::AnyDataValue;
 
 use crate::{
@@ -17,50 +17,7 @@ use crate::{
 
 use sanitise_file_name::{sanitise_with_options, Options};
 
-use super::formats::import_export::ImportExportHandler;
-
-/// Compression level for gzip output, cf. gzip(1):
-///
-/// > Regulate the speed of compression using the specified digit #,
-/// > where -1 or --fast indicates the fastest compression method (less
-/// > compression) and -9 or --best indicates the slowest compression
-/// > method (best compression).  The default compression level is -6
-/// > (that is, biased towards high compression at expense of speed).
-const GZIP_COMPRESSION_LEVEL: Compression = Compression::new(6);
-
-/// Represent the compression of a file
-#[derive(Debug, Copy, Clone, Default)]
-pub enum CompressionFormat {
-    /// No file compression
-    #[default]
-    None,
-    /// Compress with Gzip
-    Gzip,
-}
-
-impl CompressionFormat {
-    /// Create a writer, that compresses the output stream with the set compression
-    pub fn writer(&self, path: PathBuf, options: OpenOptions) -> Result<Box<dyn Write>, Error> {
-        match self {
-            CompressionFormat::None => {
-                let writer = options.open(path)?;
-                Ok(Box::new(writer))
-            }
-            CompressionFormat::Gzip => {
-                let writer = GzEncoder::new(options.open(path)?, GZIP_COMPRESSION_LEVEL);
-                Ok(Box::new(writer))
-            }
-        }
-    }
-
-    /// Returns the file extension to be used in files of this compression format.
-    pub fn extension(&self) -> Option<&str> {
-        match self {
-            Self::None => None,
-            Self::Gzip => Some("gz"),
-        }
-    }
-}
+use super::{compression_format::CompressionFormat, formats::import_export::ImportExportHandler};
 
 /// Main object for exporting data to files and for accessing aspects
 /// of [ExportDirective]s that might be of public interest.
@@ -214,7 +171,9 @@ impl ExportManager {
             create_dir_all(parent)?;
         }
 
-        self.compression_format
+        export_handler
+            .compression_format()
+            .unwrap_or(self.compression_format)
             .writer(output_path, Self::open_options(self.overwrite))
     }
 
@@ -242,7 +201,10 @@ impl ExportManager {
         let file_name = sanitise_with_options(&file_name_unsafe, &sanitise_options);
         pred_path.push(file_name);
 
-        pred_path = Self::path_with_extension(pred_path, self.compression_format.extension());
+        pred_path = export_handler
+            .compression_format()
+            .unwrap_or(self.compression_format)
+            .path_with_extension(pred_path);
         pred_path
     }
 
@@ -258,26 +220,5 @@ impl ExportManager {
         };
 
         options
-    }
-
-    /// Augment the given [path][PathBuf] with an optional file extension.
-    /// Existing extentions that are different from the new extension are kept
-    /// as part of the file name.
-    fn path_with_extension(path: PathBuf, extension: Option<&str>) -> PathBuf {
-        match extension {
-            Some(new_extension) => path.with_extension(match path.extension() {
-                Some(existing_extension) => {
-                    let existing_extension = existing_extension.to_str().expect("valid UTF-8");
-
-                    if existing_extension == new_extension {
-                        existing_extension.to_string()
-                    } else {
-                        format!("{existing_extension}.{new_extension}")
-                    }
-                }
-                None => new_extension.to_string(),
-            }),
-            None => path,
-        }
     }
 }

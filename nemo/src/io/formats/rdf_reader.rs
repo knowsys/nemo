@@ -1,6 +1,5 @@
 //! Reader for various RDF formats, which supports triples files (N-Triples, Turtle, RDF/XML) and
 //! quads files (N-Quads, TriG).
-use std::{io::BufRead, mem::size_of};
 use bytesize::ByteSize;
 use nemo_physical::{
     datasources::{table_providers::TableProvider, tuple_writer::TupleWriter},
@@ -9,6 +8,7 @@ use nemo_physical::{
     management::bytesized::ByteSized,
     resource::Resource,
 };
+use std::{io::BufRead, mem::size_of};
 
 use oxiri::Iri;
 use rio_api::{

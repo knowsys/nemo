@@ -9,7 +9,7 @@ use crate::{datatypes::FloatIsNaN, resource::Resource};
 /// Trait that can be used by external libraries extending Nemo to communicate a error during reading
 pub trait ExternalReadingError: Display + std::fmt::Debug {}
 
-/// Error-Collection for errors related to reading input tables.
+/// Collection or errors related to reading input tables.
 #[allow(variant_size_differences)]
 #[derive(Error, Debug)]
 pub enum ReadingError {
@@ -27,11 +27,19 @@ pub enum ReadingError {
     ParseFloat(#[from] std::num::ParseFloatError),
     /// Errors on reading a file
     #[error("failed to read \"{filename}\": {error}")]
-    IOReading {
+    IoReading {
         /// Contains the wrapped error
         error: std::io::Error,
         /// Filename which caused the error
         filename: String,
+    },
+    /// Decompression error
+    #[error("failed to decompress \"{resource}\" with {decompression_format}")]
+    Decompression {
+        /// Resource (filename etc.) where the error originated
+        resource: String,
+        /// name of decompression method that was used
+        decompression_format: String,
     },
     /// Error when a resource could not be provided by any resource provider
     #[error("resource at \"{resource}\" was not provided by any resource provider")]

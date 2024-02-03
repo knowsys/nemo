@@ -2,6 +2,8 @@ use std::io::{BufRead, BufReader, Read};
 
 use nemo_physical::{error::ReadingError, resource::Resource};
 
+use crate::io::compression_format::CompressionFormat;
+
 use super::{is_iri, ResourceProvider};
 
 /// Resolves resources using HTTP or HTTPS.
@@ -53,20 +55,24 @@ impl HTTPResourceProvider {
 }
 
 impl ResourceProvider for HTTPResourceProvider {
-    fn open_resource(&self, resource: &Resource) -> Result<Option<Box<dyn BufRead>>, ReadingError> {
+    fn open_resource(
+        &self,
+        resource: &Resource,
+        compression: CompressionFormat,
+    ) -> Result<Option<Box<dyn BufRead>>, ReadingError> {
         if !is_iri(resource) {
             return Ok(None);
         }
 
         if !(resource.starts_with("http:") || resource.starts_with("https:")) {
-            // Non-http IRI, resource provider is not responsible
+            // Non-http IRI; resource provider is not responsible
             return Ok(None);
         }
 
         let rt = tokio::runtime::Builder::new_current_thread()
             .enable_all()
             .build()
-            .map_err(|e| ReadingError::IOReading {
+            .map_err(|e| ReadingError::IoReading {
                 error: e,
                 filename: resource.clone(),
             })?;

@@ -107,7 +107,7 @@ fn run(mut cli: CliApp) -> Result<(), Error> {
     }
 
     let rules = cli.rules.pop().ok_or(Error::NoInput)?;
-    let rules_content = read_to_string(rules.clone()).map_err(|err| ReadingError::IOReading {
+    let rules_content = read_to_string(rules.clone()).map_err(|err| ReadingError::IoReading {
         error: err,
         filename: rules.to_string_lossy().to_string(),
     })?;
