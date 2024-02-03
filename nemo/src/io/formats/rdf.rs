@@ -76,10 +76,13 @@ impl RdfHandler {
             base = None;
         }
 
+        let (compression_format, inner_resource) =
+            ImportExportHandlers::extract_compression_format(attributes, &resource)?;
+
         let refined_variant: RdfVariant;
         if variant == RdfVariant::Unspecified {
-            if let Some(ref res) = resource {
-                refined_variant = RdfVariant::from_resource(res);
+            if let Some(ref res) = inner_resource {
+                refined_variant = Self::rdf_variant_from_resource(res);
             } else {
                 refined_variant = variant;
             }
@@ -87,15 +90,25 @@ impl RdfHandler {
             refined_variant = variant;
         }
 
-        let compression_format =
-            ImportExportHandlers::extract_compression_format(attributes, &resource)?;
-
         Ok(Box::new(Self {
             resource: resource,
             base: base,
             variant: refined_variant,
             compression_format: compression_format,
         }))
+    }
+
+    /// Extract [RdfVariant] from file extension. The resource should already
+    /// have been stripped of any compression-related extensions.
+    fn rdf_variant_from_resource(resource: &Resource) -> RdfVariant {
+        match resource {
+            resource if resource.ends_with(".ttl") => RdfVariant::Turtle,
+            resource if resource.ends_with(".rdf") => RdfVariant::RDFXML,
+            resource if resource.ends_with(".nt") => RdfVariant::NTriples,
+            resource if resource.ends_with(".nq") => RdfVariant::NQuads,
+            resource if resource.ends_with(".trig") => RdfVariant::TriG,
+            _ => RdfVariant::Unspecified,
+        }
     }
 }
 

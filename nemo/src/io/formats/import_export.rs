@@ -153,13 +153,16 @@ impl ImportExportHandlers {
     }
 
     /// Extract the compression format from the given attributes, and possibly resource.
+    /// If a resource is given, then the resource name without the compression-specific
+    /// extension is also returned.
+    ///
     /// An error is returned if an unknown compression format was explicitly specified,
     /// or if the compression format of the resource is not in agreement with an explicitly
     /// stated one.
     pub(super) fn extract_compression_format(
         attributes: &Map,
         resource: &Option<Resource>,
-    ) -> Result<Option<CompressionFormat>, ImportExportError> {
+    ) -> Result<(Option<CompressionFormat>, Option<Resource>), ImportExportError> {
         let cf_name = Self::extract_string_or_iri(attributes, PARAMETER_NAME_COMPRESSION, true)
             .expect("no errors with allow missing");
 
@@ -185,18 +188,22 @@ impl ImportExportHandlers {
         }
 
         let resource_compression_format: Option<CompressionFormat>;
+        let inner_resource: Option<Resource>;
         if let Some(res) = resource {
-            resource_compression_format = Some(CompressionFormat::from_resource(res).0);
+            let (rcf, inner_res) = CompressionFormat::from_resource(res);
+            resource_compression_format = Some(rcf);
+            inner_resource = Some(inner_res);
         } else {
             resource_compression_format = None;
+            inner_resource = None;
         }
 
         match (stated_compression_format, resource_compression_format) {
-            (Some(scf), None) => Ok(Some(scf)),
-            (None, Some(rcf)) => Ok(Some(rcf)),
+            (Some(scf), None) => Ok((Some(scf), inner_resource)),
+            (None, Some(rcf)) => Ok((Some(rcf), inner_resource)),
             (Some(scf), Some(rcf)) => {
                 if scf == rcf {
-                    Ok(Some(scf))
+                    Ok((Some(scf), inner_resource))
                 } else {
                     Err(ImportExportError::invalid_att_value_error(
                         PARAMETER_NAME_COMPRESSION,
@@ -207,7 +214,7 @@ impl ImportExportHandlers {
                     ))
                 }
             }
-            (None, None) => Ok(None),
+            (None, None) => Ok((None, inner_resource)),
         }
     }
 

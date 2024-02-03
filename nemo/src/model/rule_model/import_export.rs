@@ -1,8 +1,6 @@
 //! Import and export directives are a direct representation of the syntactic information
 //! given in rule files.
 
-use nemo_physical::resource::Resource;
-
 use crate::model::{Identifier, Map};
 
 /// An import/export specification. This object captures all information that is typically
@@ -108,41 +106,6 @@ pub enum RdfVariant {
     RDFXML,
     /// RDF 1.1 TriG
     TriG,
-}
-
-impl RdfVariant {
-    /// Create an appropriate format variant from the given resource,
-    /// based on the file extension.
-    pub(crate) fn from_resource(resource: &Resource) -> RdfVariant {
-        match resource {
-            resource if Self::is_turtle(resource) => RdfVariant::Turtle,
-            resource if Self::is_rdf_xml(resource) => RdfVariant::RDFXML,
-            resource if Self::is_nt(resource) => RdfVariant::NTriples,
-            resource if Self::is_nq(resource) => RdfVariant::NQuads,
-            resource if Self::is_trig(resource) => RdfVariant::TriG,
-            _ => RdfVariant::Unspecified,
-        }
-    }
-
-    fn is_turtle(resource: &Resource) -> bool {
-        resource.ends_with(".ttl.gz") || resource.ends_with(".ttl")
-    }
-
-    fn is_rdf_xml(resource: &Resource) -> bool {
-        resource.ends_with(".rdf.gz") || resource.ends_with(".rdf")
-    }
-
-    fn is_nt(resource: &Resource) -> bool {
-        resource.ends_with(".nt.gz") || resource.ends_with(".nt")
-    }
-
-    fn is_nq(resource: &Resource) -> bool {
-        resource.ends_with(".nq.gz") || resource.ends_with(".nq")
-    }
-
-    fn is_trig(resource: &Resource) -> bool {
-        resource.ends_with(".trig.gz") || resource.ends_with(".trig")
-    }
 }
 
 impl std::fmt::Display for RdfVariant {

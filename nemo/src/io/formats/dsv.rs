@@ -98,7 +98,7 @@ impl DsvHandler {
         let delimiter = Self::extract_delimiter(variant, attributes)?;
         let resource = ImportExportHandlers::extract_resource(attributes, direction)?;
         let value_formats = Self::extract_value_formats(attributes)?;
-        let compression_format =
+        let (compression_format, _) =
             ImportExportHandlers::extract_compression_format(attributes, &resource)?;
 
         Ok(Box::new(Self {
