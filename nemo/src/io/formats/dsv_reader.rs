@@ -112,6 +112,7 @@ impl std::fmt::Debug for DsvReader {
             .field("read", &"<unspecified std::io::Read>")
             .field("delimiter", &self.delimiter)
             .field("escape", &self.escape)
+            .field("value formats", &self.value_formats)
             .finish()
     }
 }

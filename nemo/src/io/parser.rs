@@ -679,6 +679,7 @@ impl<'a> RuleParser<'a> {
                     FILE_FORMAT_RDF_NQUADS => Ok(FileFormat::RDF(RdfVariant::NQuads)),
                     FILE_FORMAT_RDF_TURTLE => Ok(FileFormat::RDF(RdfVariant::Turtle)),
                     FILE_FORMAT_RDF_TRIG => Ok(FileFormat::RDF(RdfVariant::TriG)),
+                    FILE_FORMAT_RDF_XML => Ok(FileFormat::RDF(RdfVariant::RDFXML)),
                     _ => Err(ParseError::FileFormatError(format.fragment().to_string())),
                 })(input)?;
 

@@ -20,7 +20,7 @@ pub(crate) enum Direction {
 pub trait TableWriter {
     /// Export a table.
     fn export_table_data<'a>(
-        &mut self,
+        self: Box<Self>,
         table: Box<dyn Iterator<Item = Vec<AnyDataValue>> + 'a>,
     ) -> Result<(), Error>;
 }

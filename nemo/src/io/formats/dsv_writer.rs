@@ -10,9 +10,9 @@ use crate::{error::Error, io::formats::types::TableWriter};
 use super::dsv_value_format::DataValueSerializerFunction;
 use super::dsv_value_format::DsvValueFormat;
 
-/// A writer object for reading [DSV](https://en.wikipedia.org/wiki/Delimiter-separated_values) (delimiter separated values) files.
+/// A writer object for writing [DSV](https://en.wikipedia.org/wiki/Delimiter-separated_values) (delimiter separated values) files.
 ///
-/// By default the writer will use double quotes for string escaping
+/// By default the writer will use double quotes for string escaping.
 ///
 /// Writing of individual values can be done in several ways (DSV does not specify a data model at this level),
 /// as defined by [DsvValueFormat].
@@ -35,11 +35,9 @@ impl DsvWriter {
             value_formats: value_formats,
         }
     }
-}
 
-impl TableWriter for DsvWriter {
-    fn export_table_data<'a>(
-        &mut self,
+    fn do_export<'a>(
+        mut self,
         table: Box<dyn Iterator<Item = Vec<AnyDataValue>> + 'a>,
     ) -> Result<(), Error> {
         let serializers: Vec<DataValueSerializerFunction> = self
@@ -74,5 +72,23 @@ impl TableWriter for DsvWriter {
         }
 
         Ok(())
+    }
+}
+
+impl TableWriter for DsvWriter {
+    fn export_table_data<'a>(
+        self: Box<Self>,
+        table: Box<dyn Iterator<Item = Vec<AnyDataValue>> + 'a>,
+    ) -> Result<(), Error> {
+        self.do_export(table)
+    }
+}
+
+impl std::fmt::Debug for DsvWriter {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("DsvWriter")
+            .field("writer", &"<unspecified std::io::Write>")
+            .field("value formats", &self.value_formats)
+            .finish()
     }
 }

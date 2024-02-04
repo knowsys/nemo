@@ -1,7 +1,10 @@
 //! Handler for resources of type RDF (Rsource Description Format).
 use std::io::{BufRead, Write};
 
-use nemo_physical::{datasources::table_providers::TableProvider, resource::Resource};
+use nemo_physical::{
+    datasources::table_providers::TableProvider, datavalues::DataValueCreationError,
+    resource::Resource,
+};
 
 use oxiri::Iri;
 
@@ -20,7 +23,35 @@ use crate::{
 use super::{
     import_export::{ImportExportError, ImportExportHandler, ImportExportHandlers},
     rdf_reader::RdfReader,
+    rdf_writer::RdfWriter,
 };
+
+use thiserror::Error;
+
+/// Errors that can occur when reading/writing RDF resources and converting them
+/// to/from [`AnyDataValue`]s.
+#[allow(variant_size_differences)]
+#[derive(Error, Debug)]
+pub enum RdfFormatError {
+    /// A problem occurred in converting an RDF term to a data value.
+    #[error(transparent)]
+    DataValueConversion(#[from] DataValueCreationError),
+    /// Error of encountering unsupported value in subject position
+    #[error("Values used as subjects of RDF triples must be IRIs or nulls")]
+    RdfInvalidSubject,
+    /// Error of encountering RDF* features in data
+    #[error("RDF* terms are not supported")]
+    RdfStarUnsupported,
+    /// Error in Rio's Turtle parser
+    #[error(transparent)]
+    RioTurtle(#[from] rio_turtle::TurtleError),
+    /// Error in Rio's RDF/XML parser
+    #[error(transparent)]
+    RioXml(#[from] rio_xml::RdfXmlError),
+    /// Unable to determine RDF format.
+    #[error("Could not determine which RDF parser to use for resource {0}")]
+    UnknownRdfFormat(Resource),
+}
 
 /// An [ImportExportHandler] for RDF formats.
 #[derive(Debug, Default, Clone)]
@@ -131,12 +162,8 @@ impl ImportExportHandler for RdfHandler {
         )))
     }
 
-    fn writer(
-        &self,
-        _writer: Box<dyn Write>,
-        _arity: usize,
-    ) -> Result<Box<dyn TableWriter>, Error> {
-        Err(ImportExportError::UnsupportedWrite(self.file_format()).into())
+    fn writer(&self, writer: Box<dyn Write>, _arity: usize) -> Result<Box<dyn TableWriter>, Error> {
+        Ok(Box::new(RdfWriter::new(writer, self.variant)))
     }
 
     fn resource(&self) -> Option<Resource> {

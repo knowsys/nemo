@@ -6,7 +6,6 @@ use nemo_physical::{
     datavalues::{AnyDataValue, DataValueCreationError},
     dictionary::string_map::NullMap,
     management::bytesized::ByteSized,
-    resource::Resource,
 };
 use std::{io::BufRead, mem::size_of};
 
@@ -20,29 +19,7 @@ use rio_xml::RdfXmlParser;
 
 use crate::{io::formats::PROGRESS_NOTIFY_INCREMENT, model::RdfVariant};
 
-use thiserror::Error;
-
-/// Errors that can occur when reading RDF resources and converting them
-/// to [`AnyDataValue`]s.
-#[allow(variant_size_differences)]
-#[derive(Error, Debug)]
-pub enum RdfReadingError {
-    /// A problem occurred in converting an RDF term to a data value.
-    #[error(transparent)]
-    DataValueConversion(#[from] DataValueCreationError),
-    /// Error of encountering RDF* features in data
-    #[error("RDF* terms are not supported")]
-    RdfStarUnsupported,
-    /// Error in Rio's Turtle parser
-    #[error(transparent)]
-    RioTurtle(#[from] rio_turtle::TurtleError),
-    /// Error in Rio's RDF/XML parser
-    #[error(transparent)]
-    RioXml(#[from] rio_xml::RdfXmlError),
-    /// Unable to determine RDF format.
-    #[error("Could not determine which RDF parser to use for resource {0}")]
-    UnknownRdfFormat(Resource),
-}
+use super::rdf::RdfFormatError;
 
 const DEFAULT_GRAPH: &str = "__DEFAULT_GRAPH__";
 
@@ -110,13 +87,13 @@ impl RdfReader {
         bnode_map: &mut NullMap,
         tuple_writer: &mut TupleWriter,
         value: Subject<'_>,
-    ) -> Result<AnyDataValue, RdfReadingError> {
+    ) -> Result<AnyDataValue, RdfFormatError> {
         match value {
             Subject::NamedNode(nn) => Ok(Self::datavalue_from_named_node(nn)),
             Subject::BlankNode(bn) => {
                 Ok(Self::datavalue_from_blank_node(bnode_map, tuple_writer, bn))
             }
-            Subject::Triple(_t) => Err(RdfReadingError::RdfStarUnsupported),
+            Subject::Triple(_t) => Err(RdfFormatError::RdfStarUnsupported),
         }
     }
 
@@ -124,12 +101,12 @@ impl RdfReader {
         bnode_map: &mut NullMap,
         tuple_writer: &mut TupleWriter,
         value: Term<'_>,
-    ) -> Result<AnyDataValue, RdfReadingError> {
+    ) -> Result<AnyDataValue, RdfFormatError> {
         match value {
             Term::NamedNode(nn) => Ok(Self::datavalue_from_named_node(nn)),
             Term::BlankNode(bn) => Ok(Self::datavalue_from_blank_node(bnode_map, tuple_writer, bn)),
             Term::Literal(lit) => Ok(Self::datavalue_from_literal(lit)?),
-            Term::Triple(_t) => Err(RdfReadingError::RdfStarUnsupported),
+            Term::Triple(_t) => Err(RdfFormatError::RdfStarUnsupported),
         }
     }
 
@@ -137,7 +114,7 @@ impl RdfReader {
         bnode_map: &mut NullMap,
         tuple_writer: &mut TupleWriter,
         value: Option<GraphName<'_>>,
-    ) -> Result<AnyDataValue, RdfReadingError> {
+    ) -> Result<AnyDataValue, RdfFormatError> {
         match value {
             None => {
                 assert_eq!(
