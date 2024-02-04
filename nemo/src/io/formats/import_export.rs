@@ -16,8 +16,9 @@ use crate::{
     io::compression_format::CompressionFormat,
     model::{
         Constant, ExportDirective, FileFormat, ImportDirective, ImportExportDirective, Key, Map,
-        NumericLiteral, PARAMETER_NAME_ARITY, PARAMETER_NAME_COMPRESSION, PARAMETER_NAME_FORMAT,
-        PARAMETER_NAME_RESOURCE, VALUE_COMPRESSION_GZIP, VALUE_COMPRESSION_NONE, VALUE_FORMAT_ANY,
+        NumericLiteral, Tuple, PARAMETER_NAME_ARITY, PARAMETER_NAME_COMPRESSION,
+        PARAMETER_NAME_FORMAT, PARAMETER_NAME_RESOURCE, VALUE_COMPRESSION_GZIP,
+        VALUE_COMPRESSION_NONE, VALUE_FORMAT_ANY, VALUE_FORMAT_SKIP,
     },
 };
 
@@ -354,7 +355,8 @@ impl ImportExportHandlers {
     }
 
     /// Extract the list of strings that specify value formats. If no list is given, `None`
-    /// is returned. Errors may occur if the attribute is given but the value is not a list of strings.
+    /// is returned. Errors may occur if the attribute is given but the value is not a list of strings,
+    /// or if all values are skipped.
     ///
     /// See [ImportExportHandlers::extract_value_format_strings_and_arity] for a method that also
     /// checks the arity information, and uses it to make default formats if needed.
@@ -396,6 +398,25 @@ impl ImportExportHandlers {
         } else {
             value_format_strings = None;
         }
+
+        // Check if any non-skipped value is contained
+        if let Some(true) = value_format_strings.as_ref().map(|v| {
+            v.iter()
+                .fold(true, |acc: bool, fmt| acc && *fmt == VALUE_FORMAT_SKIP)
+        }) {
+            return Err(ImportExportError::invalid_att_value_error(
+                PARAMETER_NAME_FORMAT,
+                Constant::TupleLiteral(Tuple::from_iter(
+                    value_format_strings
+                        .expect("checked above")
+                        .iter()
+                        .map(|format| Constant::StringLiteral(format.to_owned()))
+                        .collect::<Vec<Constant>>(),
+                )),
+                "cannot import zero-ary data",
+            ));
+        }
+
         Ok(value_format_strings)
     }
 
@@ -408,17 +429,9 @@ impl ImportExportHandlers {
             .collect()
     }
 
-    /// Extract given format and arity information to obtain a list of value format strings.
-    /// If both are given, it is checked that arity and value format list are coherent. If nlly
-    /// the arity is given, a default list of value formats is constructed. If neither is given,
-    /// `None` is returned.
-    pub(super) fn extract_value_format_strings_and_arity(
-        attributes: &Map,
-    ) -> Result<Option<Vec<String>>, ImportExportError> {
+    /// Extract explicitly specified arity information (based on attribute [`PARAMETER_NAME_ARITY`]).
+    pub(super) fn extract_arity(attributes: &Map) -> Result<Option<usize>, ImportExportError> {
         let arity = Self::extract_integer(attributes, PARAMETER_NAME_ARITY, true)?;
-        let mut value_format_strings: Option<Vec<String>> =
-            Self::extract_value_format_strings(attributes)?;
-
         if let Some(a) = arity {
             if a <= 0 || a > 65536 {
                 // ridiculously large value, but still in usize for all conceivable platforms
@@ -428,24 +441,54 @@ impl ImportExportHandlers {
                     format!("arity should be greater than 0 and at most {}", 65536).as_str(),
                 ));
             }
+            Ok(Some(usize::try_from(a).expect("range was checked above")))
+        } else {
+            Ok(None)
+        }
+    }
 
-            let us_a = usize::try_from(a).expect("range was checked above");
-            if let Some(ref v) = value_format_strings {
-                // check if arity is consistent with given value formats
-                if us_a != v.len() {
+    /// Get a list of value format strings by extracting the format (if given) or using the
+    /// arity (if given) to make a default.
+    ///
+    /// If formats and arity are both given, it is checked that they are coherent.
+    /// If neither is given, `None` is returned. The funciton also makes sure that the effective
+    /// arity of non-skipped values is >0.
+    ///
+    /// The given `arity` is not checked: callers are expected to have ensured that it is a non-zero
+    /// usize that fits into i64, e.g., by using [ImportExportHandlers::extract_arity].
+    pub(super) fn extract_value_format_strings_with_arity(
+        attributes: &Map,
+    ) -> Result<Option<Vec<String>>, ImportExportError> {
+        let mut value_format_strings: Option<Vec<String>> =
+            Self::extract_value_format_strings(attributes)?;
+        let arity = Self::extract_arity(attributes)?;
+
+        if let Some(a) = arity {
+            if let Some(ref vfs) = value_format_strings {
+                // Compute the effective arity of the formats, where VALUE_FORMAT_SKIP is not counted:
+                let vfs_arity = vfs.iter().fold(0, |acc: usize, fmt| {
+                    if *fmt == VALUE_FORMAT_SKIP {
+                        acc
+                    } else {
+                        acc + 1
+                    }
+                });
+                // Check if arity is consistent with given value formats.
+                if a != vfs_arity {
                     return Err(ImportExportError::invalid_att_value_error(
                         PARAMETER_NAME_ARITY,
-                        Constant::NumericLiteral(crate::model::NumericLiteral::Integer(a)),
+                        Constant::NumericLiteral(crate::model::NumericLiteral::Integer(
+                            i64::try_from(a).expect("arities are checked to fit i64"),
+                        )),
                         format!(
                             "arity should be {}, the number of value types given for \"{}\"",
-                            v.len(),
-                            PARAMETER_NAME_FORMAT
+                            vfs_arity, PARAMETER_NAME_FORMAT
                         )
                         .as_str(),
                     ));
                 }
             } else {
-                value_format_strings = Some(Self::default_value_format_strings(us_a));
+                value_format_strings = Some(Self::default_value_format_strings(a));
             }
         }
 

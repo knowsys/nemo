@@ -9,7 +9,7 @@ use rio_turtle::{NTriplesFormatter, TurtleFormatter};
 use rio_xml::RdfXmlFormatter;
 use std::io::Write;
 
-use super::types::TableWriter;
+use super::{rdf::RdfValueFormat, types::TableWriter};
 use crate::{error::Error, model::RdfVariant};
 
 /// Private struct to record the type of an RDF term that
@@ -143,19 +143,19 @@ impl<'a> QuadBuffer {
 pub(super) struct RdfWriter {
     writer: Box<dyn Write>,
     variant: RdfVariant,
-    // value_formats: Vec<DsvValueFormat>,
+    value_formats: Vec<RdfValueFormat>,
 }
 
 impl RdfWriter {
     pub(super) fn new(
         writer: Box<dyn Write>,
         variant: RdfVariant,
-        //value_formats: Vec<DsvValueFormat>,
+        value_formats: Vec<RdfValueFormat>,
     ) -> Self {
         RdfWriter {
             writer: writer,
             variant: variant,
-            // value_formats: value_formats,
+            value_formats: value_formats,
         }
     }
 
@@ -176,7 +176,7 @@ impl RdfWriter {
         // let skip: Vec<bool> = self
         //     .value_formats
         //     .iter()
-        //     .map(|vf| *vf == DsvValueFormat::SKIP)
+        //     .map(|vf| *vf == RdfValueFormat::SKIP)
         //     .collect();
 
         let mut formatter = make_formatter(self.writer)?;

@@ -144,7 +144,7 @@ impl ExportManager {
         arity: usize,
     ) -> Result<(), Error> {
         if let Some(table) = table {
-            let mut table_writer = export_handler.writer(writer, arity)?;
+            let table_writer = export_handler.writer(writer, arity)?;
             table_writer.export_table_data(Box::new(table))?;
         }
         Ok(())

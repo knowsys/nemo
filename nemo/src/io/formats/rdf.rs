@@ -15,8 +15,9 @@ use crate::{
         formats::types::{Direction, TableWriter},
     },
     model::{
-        Constant, FileFormat, Identifier, Map, RdfVariant, PARAMETER_NAME_BASE,
-        PARAMETER_NAME_COMPRESSION, PARAMETER_NAME_RESOURCE,
+        Constant, FileFormat, Identifier, Map, RdfVariant, Tuple, PARAMETER_NAME_BASE,
+        PARAMETER_NAME_COMPRESSION, PARAMETER_NAME_FORMAT, PARAMETER_NAME_RESOURCE,
+        VALUE_FORMAT_ANY, VALUE_FORMAT_SKIP,
     },
 };
 
@@ -37,7 +38,7 @@ pub enum RdfFormatError {
     #[error(transparent)]
     DataValueConversion(#[from] DataValueCreationError),
     /// Error of encountering unsupported value in subject position
-    #[error("Values used as subjects of RDF triples must be IRIs or nulls")]
+    #[error("values used as subjects of RDF triples must be IRIs or nulls")]
     RdfInvalidSubject,
     /// Error of encountering RDF* features in data
     #[error("RDF* terms are not supported")]
@@ -49,8 +50,37 @@ pub enum RdfFormatError {
     #[error(transparent)]
     RioXml(#[from] rio_xml::RdfXmlError),
     /// Unable to determine RDF format.
-    #[error("Could not determine which RDF parser to use for resource {0}")]
+    #[error("could not determine which RDF parser to use for resource {0}")]
     UnknownRdfFormat(Resource),
+}
+
+/// Enum for the value formats that are supported for RDF. In many cases,
+/// RDF defines how formatting should be done, so there is not much to select here.
+///
+/// Note that, irrespective of the format, RDF restricts the terms that are
+/// allowed in subject, predicate, and graph name positions, and only such terms
+/// will be handled there (others are dropped silently).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum RdfValueFormat {
+    /// General format that accepts any RDF term.
+    ANYTHING,
+    /// Special format to indicate that the value should be skipped as if the whole
+    /// column where not there.
+    SKIP,
+}
+impl RdfValueFormat {
+    /// Try to convert a string name for a value format to one of the supported
+    /// RDF value formats, or return an error for unsupported formats.
+    pub(super) fn from_string(name: &str) -> Result<Self, ImportExportError> {
+        match name {
+            VALUE_FORMAT_ANY => Ok(RdfValueFormat::ANYTHING),
+            VALUE_FORMAT_SKIP => Ok(RdfValueFormat::SKIP),
+            _ => Err(ImportExportError::InvalidValueFormat {
+                value_format: name.to_string(),
+                format: FileFormat::RDF(RdfVariant::Unspecified),
+            }),
+        }
+    }
 }
 
 /// An [ImportExportHandler] for RDF formats.
@@ -65,6 +95,9 @@ pub struct RdfHandler {
     base: Option<Iri<String>>,
     /// The specific RDF format to be used.
     variant: RdfVariant,
+    /// The list of value formats to be used for importing/exporting data.
+    /// Since the arity is known for
+    value_formats: Option<Vec<RdfValueFormat>>,
     /// Compression format to be used, if specified. This can also be inferred
     /// from the resource, if given. So the only case where `None` is possible
     /// is when no resource is given (during output).
@@ -85,6 +118,7 @@ impl RdfHandler {
                 PARAMETER_NAME_RESOURCE,
                 PARAMETER_NAME_BASE,
                 PARAMETER_NAME_COMPRESSION,
+                PARAMETER_NAME_FORMAT,
             ],
         )?;
 
@@ -95,6 +129,7 @@ impl RdfHandler {
             ImportExportHandlers::extract_iri(attributes, PARAMETER_NAME_BASE, true)?
         {
             if let Ok(b) = Iri::parse(base_string.clone()) {
+                // TODO: Export should not accept base as parameter, since we cannot use it
                 base = Some(b);
             } else {
                 return Err(ImportExportError::invalid_att_value_error(
@@ -115,18 +150,75 @@ impl RdfHandler {
             if let Some(ref res) = inner_resource {
                 refined_variant = Self::rdf_variant_from_resource(res);
             } else {
-                refined_variant = variant;
+                // We can still guess a default format based on the arity
+                // information provided on import/export:
+                refined_variant = RdfVariant::Unspecified;
             }
         } else {
             refined_variant = variant;
         }
 
+        let value_formats = Self::extract_value_formats(attributes, refined_variant)?;
+
         Ok(Box::new(Self {
             resource: resource,
             base: base,
             variant: refined_variant,
+            value_formats: value_formats,
             compression_format: compression_format,
         }))
+    }
+
+    fn extract_value_formats(
+        attributes: &Map,
+        variant: RdfVariant,
+    ) -> Result<Option<Vec<RdfValueFormat>>, ImportExportError> {
+        // Input arity for known formats:
+        let arity = match variant {
+            RdfVariant::Unspecified => None,
+            RdfVariant::NTriples | RdfVariant::Turtle | RdfVariant::RDFXML => Some(3),
+            RdfVariant::NQuads | RdfVariant::TriG => Some(4),
+        };
+
+        let mut value_format_strings =
+            ImportExportHandlers::extract_value_format_strings(attributes)?;
+
+        if let Some(arity) = arity {
+            if let Some(ref vfs) = value_format_strings {
+                // number of formats must match arity of chosen RDF data
+                if vfs.len() != arity {
+                    return Err(ImportExportError::invalid_att_value_error(
+                        PARAMETER_NAME_FORMAT,
+                        Constant::TupleLiteral(Tuple::from_iter(
+                            vfs.iter()
+                                .map(|format| Constant::StringLiteral(format.to_owned()))
+                                .collect::<Vec<Constant>>(),
+                        )),
+                        format!("chosen RDF variant requires {} value formats here", arity)
+                            .as_str(),
+                    ));
+                }
+            } else {
+                value_format_strings =
+                    Some(ImportExportHandlers::default_value_format_strings(arity))
+            }
+        }
+
+        if let Some(format_strings) = value_format_strings {
+            Ok(Some(Self::formats_from_strings(format_strings)?))
+        } else {
+            Ok(None)
+        }
+    }
+
+    fn formats_from_strings(
+        value_format_strings: Vec<String>,
+    ) -> Result<Vec<RdfValueFormat>, ImportExportError> {
+        let mut value_formats = Vec::with_capacity(value_format_strings.len());
+        for s in value_format_strings {
+            value_formats.push(RdfValueFormat::from_string(s.as_str())?);
+        }
+        Ok(value_formats)
     }
 
     /// Extract [RdfVariant] from file extension. The resource should already
@@ -141,6 +233,33 @@ impl RdfHandler {
             _ => RdfVariant::Unspecified,
         }
     }
+
+    /// Returns the set RDF variant, or finds a default value based on the
+    /// required arity. An error occurs if the arity is not compatible with
+    /// any variant of RDF.
+    fn rdf_variant_or_default(&self, arity: usize) -> Result<RdfVariant, ImportExportError> {
+        if self.variant == RdfVariant::Unspecified {
+            match arity {
+                3 => Ok(RdfVariant::NTriples),
+                4 => Ok(RdfVariant::NQuads),
+                _ => Err(ImportExportError::InvalidArity {
+                    arity: arity,
+                    expected: 3,
+                }),
+            }
+        } else {
+            Ok(self.variant)
+        }
+    }
+
+    /// Returns the set value formats, or finds a default value based on the
+    /// required arity.
+    fn value_formats_or_default(&self, arity: usize) -> Vec<RdfValueFormat> {
+        self.value_formats.clone().unwrap_or_else(|| {
+            Self::formats_from_strings(ImportExportHandlers::default_value_format_strings(arity))
+                .unwrap()
+        })
+    }
 }
 
 impl ImportExportHandler for RdfHandler {
@@ -151,19 +270,22 @@ impl ImportExportHandler for RdfHandler {
     fn reader(
         &self,
         read: Box<dyn BufRead>,
-        _arity: usize,
+        arity: usize,
     ) -> Result<Box<dyn TableProvider>, Error> {
-        // TODO: Arity is ignored. It is only relevant if the RDF variant was unspecified, since it could help to guess the format
-        // in this case. But we do not yet do this.
         Ok(Box::new(RdfReader::new(
             read,
-            self.variant,
+            self.rdf_variant_or_default(arity)?,
             self.base.clone(),
+            self.value_formats_or_default(arity),
         )))
     }
 
-    fn writer(&self, writer: Box<dyn Write>, _arity: usize) -> Result<Box<dyn TableWriter>, Error> {
-        Ok(Box::new(RdfWriter::new(writer, self.variant)))
+    fn writer(&self, writer: Box<dyn Write>, arity: usize) -> Result<Box<dyn TableWriter>, Error> {
+        Ok(Box::new(RdfWriter::new(
+            writer,
+            self.rdf_variant_or_default(arity)?,
+            self.value_formats_or_default(arity),
+        )))
     }
 
     fn resource(&self) -> Option<Resource> {
@@ -171,11 +293,17 @@ impl ImportExportHandler for RdfHandler {
     }
 
     fn arity(&self) -> Option<usize> {
-        match self.variant {
-            RdfVariant::Unspecified => None,
-            RdfVariant::NTriples | RdfVariant::Turtle | RdfVariant::RDFXML => Some(3),
-            RdfVariant::NQuads | RdfVariant::TriG => Some(4),
-        }
+        // Our extraction ensures that there is always a suitable default
+        // list of value formats if we know the RDF variant.
+        self.value_formats.as_ref().map(|vfs| {
+            vfs.iter().fold(0, |acc, fmt| {
+                if *fmt == RdfValueFormat::SKIP {
+                    acc
+                } else {
+                    acc + 1
+                }
+            })
+        })
     }
 
     fn file_extension(&self) -> Option<String> {

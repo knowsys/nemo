@@ -67,6 +67,9 @@ pub enum RuleAnalysisError {
         arity1: usize,
         arity2: usize,
     },
+    /// There is a predicate whose arity could not be determined  
+    #[error("arity of predicate \"{predicate}\" could not be derived")]
+    UnspecifiedPredicateArity { predicate: Identifier },
 }
 
 /// Return true if there is a predicate in the positive part of the rule that also appears in the head of the rule.
@@ -322,6 +325,12 @@ impl ChaseProgram {
             let arity = head_variables.difference(&body_variables).count();
 
             add_arity(predicate, arity, &mut result, &mut missing)?;
+        }
+
+        if !missing.is_empty() {
+            return Err(RuleAnalysisError::UnspecifiedPredicateArity {
+                predicate: missing.iter().next().expect("not empty").clone(),
+            });
         }
 
         Ok(result)

@@ -40,7 +40,7 @@ pub(crate) struct DsvHandler {
     /// name from the exported predicate in this case. This has little chance of
     /// success for imports, so the predicate is setting there.
     resource: Option<Resource>,
-    /// The list of value formats to be used for exporting this data.
+    /// The list of value formats to be used for importing/exporting data.
     /// If only the arity is given, this will use the most general export format
     /// for each value (and the list will still be set). The list can be `None`
     /// if neither formats nor arity were given for writing: in this case, a default
@@ -113,9 +113,10 @@ impl DsvHandler {
         attributes: &Map,
     ) -> Result<Option<Vec<DsvValueFormat>>, ImportExportError> {
         let value_format_strings =
-            ImportExportHandlers::extract_value_format_strings_and_arity(attributes)?;
+            ImportExportHandlers::extract_value_format_strings_with_arity(attributes)?;
+
         if let Some(format_strings) = value_format_strings {
-            Ok(Some(DsvHandler::formats_from_strings(format_strings)?))
+            Ok(Some(Self::formats_from_strings(format_strings)?))
         } else {
             Ok(None)
         }
@@ -174,12 +175,12 @@ impl DsvHandler {
         return Ok(delimiter);
     }
 
+    /// Returns the set value formats, or finds a default value based on the
+    /// required arity.
     fn value_formats_or_default(&self, arity: usize) -> Vec<DsvValueFormat> {
         self.value_formats.clone().unwrap_or_else(|| {
-            DsvHandler::formats_from_strings(ImportExportHandlers::default_value_format_strings(
-                arity,
-            ))
-            .unwrap()
+            Self::formats_from_strings(ImportExportHandlers::default_value_format_strings(arity))
+                .unwrap()
         })
     }
 }
@@ -218,7 +219,7 @@ impl ImportExportHandler for DsvHandler {
     }
 
     fn arity(&self) -> Option<usize> {
-        let res = self.value_formats.as_ref().map(|vfs| {
+        self.value_formats.as_ref().map(|vfs| {
             vfs.iter().fold(0, |acc, fmt| {
                 if *fmt == DsvValueFormat::SKIP {
                     acc
@@ -226,8 +227,7 @@ impl ImportExportHandler for DsvHandler {
                     acc + 1
                 }
             })
-        });
-        res
+        })
     }
 
     fn file_extension(&self) -> Option<String> {

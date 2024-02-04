@@ -19,15 +19,16 @@ use rio_xml::RdfXmlParser;
 
 use crate::{io::formats::PROGRESS_NOTIFY_INCREMENT, model::RdfVariant};
 
-use super::rdf::RdfFormatError;
+use super::rdf::{RdfFormatError, RdfValueFormat};
 
 const DEFAULT_GRAPH: &str = "__DEFAULT_GRAPH__";
 
 /// A [`TableProvider`] for RDF 1.1 files containing triples.
-pub(crate) struct RdfReader {
+pub(super) struct RdfReader {
     read: Box<dyn BufRead>,
     variant: RdfVariant,
     base: Option<Iri<String>>,
+    value_formats: Vec<RdfValueFormat>,
     /// Map to store how nulls relate to blank nodes.
     ///
     /// TODO: An RdfReader is specific to one BufRead, which it consumes when reading.
@@ -39,12 +40,17 @@ pub(crate) struct RdfReader {
 
 impl RdfReader {
     /// Create a new [`RDFReader`]
-    #[allow(dead_code)]
-    pub fn new(read: Box<dyn BufRead>, variant: RdfVariant, base: Option<Iri<String>>) -> Self {
+    pub(super) fn new(
+        read: Box<dyn BufRead>,
+        variant: RdfVariant,
+        base: Option<Iri<String>>,
+        value_formats: Vec<RdfValueFormat>,
+    ) -> Self {
         Self {
             read,
             variant,
             base,
+            value_formats,
             bnode_map: Default::default(),
         }
     }
@@ -68,9 +74,7 @@ impl RdfReader {
     }
 
     /// Create [`AnyDataValue`] from a [`Literal`].
-    pub(crate) fn datavalue_from_literal(
-        value: Literal<'_>,
-    ) -> Result<AnyDataValue, DataValueCreationError> {
+    fn datavalue_from_literal(value: Literal<'_>) -> Result<AnyDataValue, DataValueCreationError> {
         match value {
             Literal::Simple { value } => Ok(AnyDataValue::new_string(value.to_string())),
             Literal::LanguageTaggedString { value, language } => Ok(
@@ -139,20 +143,44 @@ impl RdfReader {
     where
         Parser: TriplesParser,
     {
-        assert_eq!(tuple_writer.column_number(), 3);
+        let skip: Vec<bool> = self
+            .value_formats
+            .iter()
+            .map(|vf| *vf == RdfValueFormat::SKIP)
+            .collect();
+
+        assert_eq!(skip.len(), 3);
+        assert_eq!(
+            tuple_writer.column_number(),
+            skip.iter().fold(0, |acc: usize, b| {
+                if *b {
+                    acc
+                } else {
+                    acc + 1
+                }
+            })
+        );
 
         let mut triple_count = 0;
 
         let mut on_triple = |triple: Triple| {
-            let subject =
-                Self::datavalue_from_subject(&mut self.bnode_map, tuple_writer, triple.subject)?;
-            let predicate = Self::datavalue_from_named_node(triple.predicate);
-            let object =
-                Self::datavalue_from_term(&mut self.bnode_map, tuple_writer, triple.object)?;
-
-            tuple_writer.add_tuple_value(subject);
-            tuple_writer.add_tuple_value(predicate);
-            tuple_writer.add_tuple_value(object);
+            if !skip[0] {
+                let subject = Self::datavalue_from_subject(
+                    &mut self.bnode_map,
+                    tuple_writer,
+                    triple.subject,
+                )?;
+                tuple_writer.add_tuple_value(subject);
+            }
+            if !skip[1] {
+                let predicate = Self::datavalue_from_named_node(triple.predicate);
+                tuple_writer.add_tuple_value(predicate);
+            }
+            if !skip[2] {
+                let object =
+                    Self::datavalue_from_term(&mut self.bnode_map, tuple_writer, triple.object)?;
+                tuple_writer.add_tuple_value(object);
+            }
 
             triple_count += 1;
             if triple_count % PROGRESS_NOTIFY_INCREMENT == 0 {
@@ -184,25 +212,49 @@ impl RdfReader {
     where
         Parser: QuadsParser,
     {
-        assert_eq!(tuple_writer.column_number(), 4);
+        let skip: Vec<bool> = self
+            .value_formats
+            .iter()
+            .map(|vf| *vf == RdfValueFormat::SKIP)
+            .collect();
+
+        assert_eq!(skip.len(), 4);
+        assert_eq!(
+            tuple_writer.column_number(),
+            skip.iter().fold(0, |acc: usize, b| {
+                if *b {
+                    acc
+                } else {
+                    acc + 1
+                }
+            })
+        );
 
         let mut quad_count = 0;
 
         let mut on_triple = |quad: Quad| {
-            let subject =
-                Self::datavalue_from_subject(&mut self.bnode_map, tuple_writer, quad.subject)?;
-            let predicate = Self::datavalue_from_named_node(quad.predicate);
-            let object = Self::datavalue_from_term(&mut self.bnode_map, tuple_writer, quad.object)?;
-            let graph_name = Self::datavalue_from_graph_name(
-                &mut self.bnode_map,
-                tuple_writer,
-                quad.graph_name,
-            )?;
-
-            tuple_writer.add_tuple_value(subject);
-            tuple_writer.add_tuple_value(predicate);
-            tuple_writer.add_tuple_value(object);
-            tuple_writer.add_tuple_value(graph_name);
+            if !skip[0] {
+                let subject =
+                    Self::datavalue_from_subject(&mut self.bnode_map, tuple_writer, quad.subject)?;
+                tuple_writer.add_tuple_value(subject);
+            }
+            if !skip[1] {
+                let predicate = Self::datavalue_from_named_node(quad.predicate);
+                tuple_writer.add_tuple_value(predicate);
+            }
+            if !skip[2] {
+                let object =
+                    Self::datavalue_from_term(&mut self.bnode_map, tuple_writer, quad.object)?;
+                tuple_writer.add_tuple_value(object);
+            }
+            if !skip[3] {
+                let graph_name = Self::datavalue_from_graph_name(
+                    &mut self.bnode_map,
+                    tuple_writer,
+                    quad.graph_name,
+                )?;
+                tuple_writer.add_tuple_value(graph_name);
+            }
 
             quad_count += 1;
             if quad_count % PROGRESS_NOTIFY_INCREMENT == 0 {
@@ -281,7 +333,7 @@ mod test {
     use rio_turtle::{NTriplesParser, TurtleParser};
     use test_log::test;
 
-    use crate::model::RdfVariant;
+    use crate::{io::formats::rdf::RdfValueFormat, model::RdfVariant};
 
     #[test]
     fn parse_triples_nt() {
@@ -292,7 +344,16 @@ mod test {
         <http://example.org/subject1> <http://an.example/predicate2> "string2" . # Note that duplicate triples are not eliminated here yet
         "#.as_bytes();
 
-        let reader = RdfReader::new(Box::new(data), RdfVariant::NTriples, None);
+        let reader = RdfReader::new(
+            Box::new(data),
+            RdfVariant::NTriples,
+            None,
+            vec![
+                RdfValueFormat::ANYTHING,
+                RdfValueFormat::ANYTHING,
+                RdfValueFormat::ANYTHING,
+            ],
+        );
         let dict = RefCell::new(Dict::default());
         let mut tuple_writer = TupleWriter::new(&dict, 3);
         let result =
@@ -308,7 +369,16 @@ mod test {
         "#
         .as_bytes();
 
-        let reader = RdfReader::new(Box::new(data), RdfVariant::Turtle, None);
+        let reader = RdfReader::new(
+            Box::new(data),
+            RdfVariant::Turtle,
+            None,
+            vec![
+                RdfValueFormat::ANYTHING,
+                RdfValueFormat::ANYTHING,
+                RdfValueFormat::ANYTHING,
+            ],
+        );
         let dict = RefCell::new(Dict::default());
         let mut tuple_writer = TupleWriter::new(&dict, 3);
         let result = reader
@@ -325,7 +395,16 @@ mod test {
         malformed <http://an.example/predicate2> "12"^^<http://www.w3.org/2001/XMLSchema#int> . # ignored
         "#.as_bytes();
 
-        let reader = RdfReader::new(Box::new(data), RdfVariant::NTriples, None);
+        let reader = RdfReader::new(
+            Box::new(data),
+            RdfVariant::NTriples,
+            None,
+            vec![
+                RdfValueFormat::ANYTHING,
+                RdfValueFormat::ANYTHING,
+                RdfValueFormat::ANYTHING,
+            ],
+        );
         let dict = RefCell::new(Dict::default());
         let mut tuple_writer = TupleWriter::new(&dict, 3);
         let result =

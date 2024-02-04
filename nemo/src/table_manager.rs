@@ -534,7 +534,7 @@ impl TableManager {
     ///
     /// # Panics
     /// Panics if the predicate has not been registered yet.
-    pub fn arity(&self, predicate: &Identifier) -> usize {
+    pub(crate) fn arity(&self, predicate: &Identifier) -> usize {
         self.predicate_to_info
             .get(predicate)
             .expect("Predicate should be registered before calling this function")
