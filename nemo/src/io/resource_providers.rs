@@ -55,7 +55,7 @@ impl ResourceProviders {
     /// Construct default with a base path for the `FileResourceProvider`
     pub fn with_base_path(base_path: Option<PathBuf>) -> Self {
         Self(Rc::new(vec![
-            Box::<http::HTTPResourceProvider>::default(),
+            Box::<http::HttpResourceProvider>::default(),
             Box::new(file::FileResourceProvider::new(base_path)),
         ]))
     }
