@@ -2,10 +2,10 @@
 
 use nemo_physical::datavalues::{AnyDataValue, DataValue, ValueDomain};
 use rio_api::{
-    formatter::TriplesFormatter,
-    model::{BlankNode, Literal, NamedNode, Subject, Term, Triple},
+    formatter::{QuadsFormatter, TriplesFormatter},
+    model::{BlankNode, GraphName, Literal, NamedNode, Quad, Subject, Term, Triple},
 };
-use rio_turtle::{NTriplesFormatter, TurtleFormatter};
+use rio_turtle::{NQuadsFormatter, NTriplesFormatter, TriGFormatter, TurtleFormatter};
 use rio_xml::RdfXmlFormatter;
 use std::io::Write;
 
@@ -29,7 +29,7 @@ enum RdfTermType {
 /// pointers internally, that must be owned elsewhere.
 #[derive(Debug, Default)]
 struct QuadBuffer {
-    graph: String,
+    graph_name: String,
     subject: String,
     predicate: String,
     object_part1: String,
@@ -71,6 +71,12 @@ impl<'a> QuadBuffer {
                 value: &self.object_part1.as_str(),
             }),
         }
+    }
+
+    fn graph_name(&'a self) -> GraphName<'a> {
+        GraphName::NamedNode(NamedNode {
+            iri: &self.graph_name.as_str(),
+        })
     }
 
     fn set_subject_from_datavalue(&mut self, datavalue: &AnyDataValue) -> bool {
@@ -136,6 +142,17 @@ impl<'a> QuadBuffer {
             }
         }
         true
+    }
+
+    fn set_graph_name_from_datavalue(&mut self, datavalue: &AnyDataValue) -> bool {
+        match datavalue.value_domain() {
+            ValueDomain::Iri => {
+                self.graph_name = datavalue.to_iri_unchecked();
+                return true;
+            }
+            ValueDomain::Null => todo!(),
+            _ => false,
+        }
     }
 }
 
@@ -207,6 +224,59 @@ impl RdfWriter {
 
         Ok(())
     }
+
+    fn export_quads<'a, Formatter>(
+        self,
+        table: Box<dyn Iterator<Item = Vec<AnyDataValue>> + 'a>,
+        make_formatter: impl Fn(Box<dyn Write>) -> std::io::Result<Formatter>,
+        finish_formatter: impl Fn(Formatter) -> (),
+    ) -> Result<(), Error>
+    where
+        Formatter: QuadsFormatter,
+    {
+        let mut quad_pos = [0; 4];
+        let mut cur = 0;
+        for (idx, format) in self.value_formats.iter().enumerate() {
+            if *format != RdfValueFormat::SKIP {
+                assert!(cur <= 3); // max number of non-skip entries is 3
+                quad_pos[cur] = idx;
+                cur += 1;
+            }
+        }
+        assert_eq!(cur, 4); // three triple components found
+        let [g_pos, s_pos, p_pos, o_pos] = quad_pos;
+
+        let mut formatter = make_formatter(self.writer)?;
+        let mut buffer: QuadBuffer = Default::default();
+
+        for record in table {
+            assert_eq!(record.len(), self.value_formats.len());
+
+            if !buffer.set_subject_from_datavalue(&record[s_pos]) {
+                continue;
+            }
+            if !buffer.set_predicate_from_datavalue(&record[p_pos]) {
+                continue;
+            }
+            if !buffer.set_object_from_datavalue(&record[o_pos]) {
+                continue;
+            }
+            if !buffer.set_graph_name_from_datavalue(&record[g_pos]) {
+                continue;
+            }
+            if let Err(e) = formatter.format(&Quad {
+                subject: buffer.subject(),
+                predicate: buffer.predicate(),
+                object: buffer.object(),
+                graph_name: Some(buffer.graph_name()),
+            }) {
+                log::info!("failed to write quad: {e}");
+            }
+        }
+        finish_formatter(formatter);
+
+        Ok(())
+    }
 }
 
 impl TableWriter for RdfWriter {
@@ -222,7 +292,13 @@ impl TableWriter for RdfWriter {
                     let _ = f.finish();
                 },
             ),
-            RdfVariant::NQuads => todo!(),
+            RdfVariant::NQuads => self.export_quads(
+                table,
+                |write| Ok(NQuadsFormatter::new(write)),
+                |f| {
+                    let _ = f.finish();
+                },
+            ),
             RdfVariant::Turtle => self.export_triples(
                 table,
                 |write| Ok(TurtleFormatter::new(write)),
@@ -237,7 +313,13 @@ impl TableWriter for RdfWriter {
                     let _ = f.finish();
                 },
             ),
-            RdfVariant::TriG => todo!(),
+            RdfVariant::TriG => self.export_quads(
+                table,
+                |write| Ok(TriGFormatter::new(write)),
+                |f| {
+                    let _ = f.finish();
+                },
+            ),
             RdfVariant::Unspecified => unreachable!(
                 "the writer should not be instantiated with unknown format by the handler"
             ),

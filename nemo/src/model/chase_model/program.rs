@@ -93,7 +93,7 @@ impl ChaseProgramBuilder {
     }
 
     /// Add exported tables.
-    pub fn exports<T>(mut self, exports: T) -> Result<Self, Error>
+    pub fn exports<T>(self, exports: T) -> Result<Self, Error>
     where
         T: IntoIterator<Item = ExportDirective>,
     {

@@ -13,7 +13,7 @@ use crate::{
     io::import_manager::ImportManager,
     model::{
         chase_model::{ChaseAtom, ChaseProgram},
-        ExportDirective, Fact, Identifier, Program,
+        Fact, Identifier, Program,
     },
     program_analysis::analysis::ProgramAnalysis,
     table_manager::{MemoryUsage, TableManager},

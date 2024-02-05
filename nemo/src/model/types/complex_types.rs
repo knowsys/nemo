@@ -1,6 +1,6 @@
 //! This module defines a model for nested type constructs
 
-use std::{iter::from_fn, ops::Deref, sync::Arc};
+use std::{iter::from_fn, sync::Arc};
 
 use crate::model::PrimitiveType;
 

@@ -24,7 +24,7 @@
 //! # }
 //! ```
 
-use std::{collections::HashMap, fs::read_to_string, path::PathBuf};
+use std::{fs::read_to_string, path::PathBuf};
 
 use crate::{
     error::{Error, ReadingError},
@@ -32,7 +32,7 @@ use crate::{
     io::{
         parser::{all_input_consumed, RuleParser},
         resource_providers::ResourceProviders,
-        ExportManager, ImportManager,
+        ImportManager,
     },
     model::Identifier,
 };
