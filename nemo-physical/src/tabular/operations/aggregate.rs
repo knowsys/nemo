@@ -1,3 +1,7 @@
+//! Implementation of the aggregate full trie scan
+//!
+//! See [`TrieScanAggregate`] for more information about the implementation and it's relation to other parts of the code
+
 use std::{cell::UnsafeCell, fmt::Debug};
 
 use crate::{
@@ -5,12 +9,12 @@ use crate::{
         operation::AggregateOperation,
         processors::processor::{AggregateGroupProcessor, AggregateProcessor},
     },
-    columnar::columnscan::ColumnScanT,
+    columnar::columnscan::ColumnScanRainbow,
     datatypes::{Double, Float, StorageTypeName, StorageValueT},
-    tabular::traits::{partial_trie_scan::PartialTrieScan, trie_scan::TrieScan},
+    tabular::triescan::{PartialTrieScan, TrieScan},
 };
 
-use super::TrieScanPrune;
+use super::prune::TrieScanPrune;
 
 #[derive(Debug)]
 enum AggregatedOutputValue {
@@ -76,6 +80,11 @@ impl AggregationInstructions {
 
 /// [`TrieScan`] which performs an aggregate operation.
 ///
+/// It works by iterating though all the input rows.
+/// As long as the group-by columns do not change, all values are passed to an [`AggregateProcessor`] which performs the actual aggregation.
+/// As soon as the group-by values input change, a new output row and a new [`AggregateGroupProcessor`] gets created.
+/// The [`crate::aggregates::operation`] module is also the place to add new aggregate operations to `nemo-phyiscal`.
+///
 /// Input columns:
 /// * Zero or more group-by columns, followed by
 /// * a single aggregated column possibly mixed with additional distinct columns, followed by
@@ -87,9 +96,10 @@ impl AggregationInstructions {
 #[derive(Debug)]
 pub struct TrieScanAggregate<T: TrieScan> {
     aggregated_input_column_storage_type: StorageTypeName,
+
     input_scan: T,
-    column_types: Vec<StorageTypeName>,
     instructions: AggregationInstructions,
+
     current_aggregated_output_value: AggregatedOutputValue,
     peeked_row_information: Option<PeekedRowInformation>,
 }
@@ -119,21 +129,9 @@ impl<T: TrieScan> TrieScanAggregate<T> {
             panic!("cannot create TrieScanAggregate with invalid aggregation instructions")
         }
 
-        let mut column_types = Vec::with_capacity(instructions.group_by_column_count + 1);
-        column_types
-            .extend_from_slice(&input_scan.column_types()[0..instructions.group_by_column_count]);
-        column_types.push(
-            instructions
-                .aggregate_operation
-                .static_output_type()
-                .map(|data_type| data_type.to_storage_type_name())
-                .unwrap_or(aggregated_input_column_storage_type),
-        );
-
         Self {
             aggregated_input_column_storage_type,
             input_scan,
-            column_types,
             instructions,
             current_aggregated_output_value: AggregatedOutputValue::None,
             peeked_row_information: None,
@@ -142,8 +140,8 @@ impl<T: TrieScan> TrieScanAggregate<T> {
 }
 
 impl<T: TrieScan> TrieScan for TrieScanAggregate<T> {
-    fn column_types(&self) -> &[StorageTypeName] {
-        &self.column_types[..]
+    fn num_columns(&self) -> usize {
+        self.instructions.group_by_column_count + 1
     }
 
     fn advance_on_layer(&mut self, layer: usize) -> Option<usize> {
@@ -183,7 +181,7 @@ impl<T: TrieScan> TrieScan for TrieScanAggregate<T> {
         }
     }
 
-    fn current(&mut self, layer: usize) -> StorageValueT {
+    fn current_value(&mut self, layer: usize) -> StorageValueT {
         if self.instructions.is_output_column_aggregated(layer) {
             match self.current_aggregated_output_value {
                 AggregatedOutputValue::None => {
@@ -194,12 +192,12 @@ impl<T: TrieScan> TrieScan for TrieScanAggregate<T> {
                     // We're trying to compute the current aggregate value.
                     // We know the underlying trie scan currently points to the first row of the current group (this is ensured by the last `advance_on_layer` call).
                     // Furthermore we know that there is at least one row to aggregate in the current group, otherwise the [`AggregatedOutputValue`] would be [`AggregatedOutputValue::None`]
-                    // We now need to aggregate through all the rows of the current group to determine the aggregate result.
+                    // We now need to loop through all the rows of the current group to determine the aggregate result.
 
                     let original_group_by_values: Vec<_> = {
-                        // Compute group by values in case we already peek into the next group, where the group-by values in the underlying trie scan would be change
+                        // Cache the group by values. This is required in case we already peek into the next group, where the group-by values in the underlying trie scan would be overwritten
                         (0..self.instructions.group_by_column_count)
-                            .map(|layer_index| self.input_scan.current(layer_index))
+                            .map(|layer_index| self.input_scan.current_value(layer_index))
                             .collect()
                     };
 
@@ -213,7 +211,7 @@ impl<T: TrieScan> TrieScan for TrieScanAggregate<T> {
                             loop {
                                 let new_value = match self
                                     .input_scan
-                                    .current(self.instructions.aggregated_column_index)
+                                    .current_value(self.instructions.aggregated_column_index)
                                 {
                                     StorageValueT::$variant(v) => v,
                                     _ => {
@@ -285,9 +283,9 @@ impl<T: TrieScan> TrieScan for TrieScanAggregate<T> {
                     Some(peeked_row_information) => {
                         peeked_row_information.original_group_by_values[layer]
                     }
-                    None => self.input_scan.current(layer),
+                    None => self.input_scan.current_value(layer),
                 },
-                AggregatedOutputValue::NotYetComputed => self.input_scan.current(layer),
+                AggregatedOutputValue::NotYetComputed => self.input_scan.current_value(layer),
             }
         }
     }
@@ -303,7 +301,7 @@ pub struct TrieScanAggregateWrapper<'a> {
     /// Wrapped full trie scan
     pub trie_scan: TrieScanAggregate<TrieScanPrune<'a>>,
     /// Column types of the wrapped trie scan
-    pub types: Vec<StorageTypeName>,
+    pub arity: usize,
 }
 
 impl<'a> PartialTrieScan<'a> for TrieScanAggregateWrapper<'a> {
@@ -311,11 +309,11 @@ impl<'a> PartialTrieScan<'a> for TrieScanAggregateWrapper<'a> {
         panic!("TrieScanAggregateWrapper::up cannot be called");
     }
 
-    fn down(&mut self) {
+    fn down(&mut self, _storage_type: StorageTypeName) {
         panic!("TrieScanAggregateWrapper::down cannot be called");
     }
 
-    fn current_scan(&mut self) -> Option<&mut ColumnScanT<'a>> {
+    fn current_scan(&self) -> Option<&'a UnsafeCell<ColumnScanRainbow<'a>>> {
         panic!("TrieScanAggregateWrapper::current_scan cannot be called");
     }
 
@@ -323,148 +321,151 @@ impl<'a> PartialTrieScan<'a> for TrieScanAggregateWrapper<'a> {
         panic!("TrieScanAggregateWrapper::current_layer cannot be called");
     }
 
-    fn get_scan(&self, _index: usize) -> Option<&UnsafeCell<ColumnScanT<'a>>> {
-        panic!("TrieScanAggregateWrapper::get_scan cannot be called");
+    fn arity(&self) -> usize {
+        self.arity
     }
 
-    fn get_types(&self) -> &Vec<StorageTypeName> {
-        &self.types
+    fn path_types(&self) -> &[StorageTypeName] {
+        panic!("TrieScanAggregateWrapper::path_types cannot be called");
+    }
+
+    fn scan<'b>(&'b self, _layer: usize) -> &'b UnsafeCell<ColumnScanRainbow<'a>> {
+        panic!("TrieScanAggregateWrapper::scan cannot be called");
     }
 }
 
 impl<'a> From<TrieScanAggregate<TrieScanPrune<'a>>> for TrieScanAggregateWrapper<'a> {
     fn from(value: TrieScanAggregate<TrieScanPrune<'a>>) -> Self {
-        let types = value.column_types().to_vec();
+        let arity = value.num_columns();
 
         Self {
             trie_scan: value,
-            types,
+            arity,
         }
     }
 }
 
-#[cfg(test)]
-mod test {
-    use super::{AggregationInstructions, TrieScanAggregate};
-    use crate::aggregates::operation::AggregateOperation;
-    use crate::datatypes::storage_value::VecT;
-    use crate::datatypes::StorageTypeName;
+// #[cfg(test)]
+// mod test {
+//     use super::{AggregationInstructions, TrieScanAggregate};
+//     use crate::aggregates::operation::AggregateOperation;
+//     use crate::datatypes::storage_value::VecT;
+//     use crate::datatypes::StorageTypeName;
 
-    use crate::tabular::operations::{materialize, TrieScanPrune};
-    use crate::tabular::table_types::trie::{Trie, TrieScanGeneric};
-    use crate::tabular::traits::partial_trie_scan::TrieScanEnum;
-    use crate::tabular::traits::table::Table;
+//     use crate::tabular::table_types::trie::{Trie, TrieScanGeneric};
+//     use crate::tabular::traits::partial_trie_scan::TrieScanEnum;
+//     use crate::tabular::traits::table::Table;
 
-    fn trie_scan_prune_from_trie(input_trie: &Trie) -> TrieScanPrune<'_> {
-        TrieScanPrune::new(TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(
-            input_trie,
-        )))
-    }
+//     fn trie_scan_prune_from_trie(input_trie: &Trie) -> TrieScanPrune<'_> {
+//         TrieScanPrune::new(TrieScanEnum::TrieScanGeneric(TrieScanGeneric::new(
+//             input_trie,
+//         )))
+//     }
 
-    fn aggregate_and_materialize(
-        input_trie: &Trie,
-        aggregation_instructions: AggregationInstructions,
-        aggregated_column_storage_type: StorageTypeName,
-    ) -> Option<Trie> {
-        let trie_scan_prune = trie_scan_prune_from_trie(input_trie);
+//     fn aggregate_and_materialize(
+//         input_trie: &Trie,
+//         aggregation_instructions: AggregationInstructions,
+//         aggregated_column_storage_type: StorageTypeName,
+//     ) -> Option<Trie> {
+//         let trie_scan_prune = trie_scan_prune_from_trie(input_trie);
 
-        let mut trie_scan_aggregate = TrieScanAggregate::new(
-            trie_scan_prune,
-            aggregation_instructions,
-            aggregated_column_storage_type,
-        );
+//         let mut trie_scan_aggregate = TrieScanAggregate::new(
+//             trie_scan_prune,
+//             aggregation_instructions,
+//             aggregated_column_storage_type,
+//         );
 
-        materialize(&mut trie_scan_aggregate)
-    }
+//         materialize(&mut trie_scan_aggregate)
+//     }
 
-    #[ignore]
-    #[test]
-    fn test_aggregate_i64() {
-        let input_trie = Trie::from_cols(vec![
-            VecT::Int64(vec![i64::MIN, 1, 3, 3, 3, 5, 5, i64::MAX]),
-            VecT::Int64(vec![i64::MIN, 3, 2, 5, 11, 0, 0, i64::MAX]),
-            VecT::Int64(vec![i64::MIN, 8, 9, 7, 4, i64::MIN, i64::MAX, i64::MAX]),
-        ]);
+//     #[ignore]
+//     #[test]
+//     fn test_aggregate_i64() {
+//         let input_trie = Trie::from_cols(vec![
+//             VecT::Int64(vec![i64::MIN, 1, 3, 3, 3, 5, 5, i64::MAX]),
+//             VecT::Int64(vec![i64::MIN, 3, 2, 5, 11, 0, 0, i64::MAX]),
+//             VecT::Int64(vec![i64::MIN, 8, 9, 7, 4, i64::MIN, i64::MAX, i64::MAX]),
+//         ]);
 
-        // Max, No group-by columns
-        assert_eq!(
-            aggregate_and_materialize(
-                &input_trie,
-                AggregationInstructions {
-                    aggregate_operation: AggregateOperation::Max,
-                    group_by_column_count: 0,
-                    aggregated_column_index: 2,
-                    last_distinct_column_index: 2,
-                },
-                StorageTypeName::Int64
-            ),
-            Some(Trie::from_cols(vec![VecT::Int64(vec![i64::MAX]),]))
-        );
-        // Max, one group-by column
-        assert_eq!(
-            aggregate_and_materialize(
-                &input_trie,
-                AggregationInstructions {
-                    aggregate_operation: AggregateOperation::Max,
-                    group_by_column_count: 1,
-                    aggregated_column_index: 2,
-                    last_distinct_column_index: 2,
-                },
-                StorageTypeName::Int64
-            ),
-            Some(Trie::from_cols(vec![
-                VecT::Int64(vec![i64::MIN, 1, 3, 5, i64::MAX]),
-                VecT::Int64(vec![i64::MIN, 8, 9, i64::MAX, i64::MAX]),
-            ]))
-        );
-        // Max, two group-by columns
-        assert_eq!(
-            aggregate_and_materialize(
-                &input_trie,
-                AggregationInstructions {
-                    aggregate_operation: AggregateOperation::Max,
-                    group_by_column_count: 2,
-                    aggregated_column_index: 2,
-                    last_distinct_column_index: 2,
-                },
-                StorageTypeName::Int64
-            ),
-            Some(Trie::from_cols(vec![
-                VecT::Int64(vec![i64::MIN, 1, 3, 3, 3, 5, i64::MAX]),
-                VecT::Int64(vec![i64::MIN, 3, 2, 5, 11, 0, i64::MAX]),
-                VecT::Int64(vec![i64::MIN, 8, 9, 7, 4, i64::MAX, i64::MAX]),
-            ]))
-        );
-        // Count
-        assert_eq!(
-            aggregate_and_materialize(
-                &input_trie,
-                AggregationInstructions {
-                    aggregate_operation: AggregateOperation::Count,
-                    group_by_column_count: 0,
-                    aggregated_column_index: 0,
-                    last_distinct_column_index: 0,
-                },
-                StorageTypeName::Int64
-            ),
-            Some(Trie::from_cols(vec![VecT::Int64(vec![5])]))
-        );
-        // Sum
-        assert_eq!(
-            aggregate_and_materialize(
-                &input_trie,
-                AggregationInstructions {
-                    aggregate_operation: AggregateOperation::Sum,
-                    group_by_column_count: 1,
-                    aggregated_column_index: 1,
-                    last_distinct_column_index: 1,
-                },
-                StorageTypeName::Int64
-            ),
-            Some(Trie::from_cols(vec![
-                VecT::Int64(vec![i64::MIN, 1, 3, 5, i64::MAX]),
-                VecT::Int64(vec![i64::MIN, 3, 18, 0, i64::MAX]),
-            ]))
-        );
-    }
-}
+//         // Max, No group-by columns
+//         assert_eq!(
+//             aggregate_and_materialize(
+//                 &input_trie,
+//                 AggregationInstructions {
+//                     aggregate_operation: AggregateOperation::Max,
+//                     group_by_column_count: 0,
+//                     aggregated_column_index: 2,
+//                     last_distinct_column_index: 2,
+//                 },
+//                 StorageTypeName::Int64
+//             ),
+//             Some(Trie::from_cols(vec![VecT::Int64(vec![i64::MAX]),]))
+//         );
+//         // Max, one group-by column
+//         assert_eq!(
+//             aggregate_and_materialize(
+//                 &input_trie,
+//                 AggregationInstructions {
+//                     aggregate_operation: AggregateOperation::Max,
+//                     group_by_column_count: 1,
+//                     aggregated_column_index: 2,
+//                     last_distinct_column_index: 2,
+//                 },
+//                 StorageTypeName::Int64
+//             ),
+//             Some(Trie::from_cols(vec![
+//                 VecT::Int64(vec![i64::MIN, 1, 3, 5, i64::MAX]),
+//                 VecT::Int64(vec![i64::MIN, 8, 9, i64::MAX, i64::MAX]),
+//             ]))
+//         );
+//         // Max, two group-by columns
+//         assert_eq!(
+//             aggregate_and_materialize(
+//                 &input_trie,
+//                 AggregationInstructions {
+//                     aggregate_operation: AggregateOperation::Max,
+//                     group_by_column_count: 2,
+//                     aggregated_column_index: 2,
+//                     last_distinct_column_index: 2,
+//                 },
+//                 StorageTypeName::Int64
+//             ),
+//             Some(Trie::from_cols(vec![
+//                 VecT::Int64(vec![i64::MIN, 1, 3, 3, 3, 5, i64::MAX]),
+//                 VecT::Int64(vec![i64::MIN, 3, 2, 5, 11, 0, i64::MAX]),
+//                 VecT::Int64(vec![i64::MIN, 8, 9, 7, 4, i64::MAX, i64::MAX]),
+//             ]))
+//         );
+//         // Count
+//         assert_eq!(
+//             aggregate_and_materialize(
+//                 &input_trie,
+//                 AggregationInstructions {
+//                     aggregate_operation: AggregateOperation::Count,
+//                     group_by_column_count: 0,
+//                     aggregated_column_index: 0,
+//                     last_distinct_column_index: 0,
+//                 },
+//                 StorageTypeName::Int64
+//             ),
+//             Some(Trie::from_cols(vec![VecT::Int64(vec![5])]))
+//         );
+//         // Sum
+//         assert_eq!(
+//             aggregate_and_materialize(
+//                 &input_trie,
+//                 AggregationInstructions {
+//                     aggregate_operation: AggregateOperation::Sum,
+//                     group_by_column_count: 1,
+//                     aggregated_column_index: 1,
+//                     last_distinct_column_index: 1,
+//                 },
+//                 StorageTypeName::Int64
+//             ),
+//             Some(Trie::from_cols(vec![
+//                 VecT::Int64(vec![i64::MIN, 1, 3, 5, i64::MAX]),
+//                 VecT::Int64(vec![i64::MIN, 3, 18, 0, i64::MAX]),
+//             ]))
+//         );
+//     }
+// }

@@ -1,5 +1,6 @@
 //! This module defines operations over tries
 
+pub mod aggregate;
 pub mod filter;
 pub mod function;
 pub mod join;
