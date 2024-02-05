@@ -132,7 +132,7 @@ mod test {
             .filter(|pred| pred.to_string().contains('i'))
             .collect::<Vec<_>>();
         assert_eq!(results.len(), 5);
-        let temp_dir = TempDir::new().unwrap();
+        let _temp_dir = TempDir::new().unwrap();
         // Disabled:
         // write(temp_dir.to_str().unwrap().to_string(), &mut engine, results).unwrap();
     }
