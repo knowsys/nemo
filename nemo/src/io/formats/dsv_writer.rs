@@ -55,6 +55,7 @@ impl DsvWriter {
             let mut string_record = Vec::with_capacity(record.len());
             let mut complete = true;
             for (i, dv) in record.iter().enumerate() {
+                assert!(i < self.value_formats.len());
                 if skip[i] {
                     continue;
                 }

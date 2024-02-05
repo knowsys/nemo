@@ -17,7 +17,10 @@ use crate::{
 
 use sanitise_file_name::{sanitise_with_options, Options};
 
-use super::{compression_format::CompressionFormat, formats::import_export::ImportExportHandler};
+use super::{
+    compression_format::CompressionFormat,
+    formats::import_export::{ImportExportError, ImportExportHandler},
+};
 
 /// Main object for exporting data to files and for accessing aspects
 /// of [ExportDirective]s that might be of public interest.
@@ -100,11 +103,15 @@ impl ExportManager {
 
     /// Export a (possibly empty) table according to the given [ExportDirective].
     /// If the table is empty (i.e., [Option<_>::None]), an empty output file will be created.
+    ///
+    /// The `predicate_arity` is the arity of the predicate that is to be exported. This information
+    /// is used for validation and as a hint to exporters that were not initialized with details
+    /// about the arity.
     pub fn export_table<'a>(
         &self,
         export_directive: &ExportDirective,
         table: Option<impl Iterator<Item = Vec<AnyDataValue>> + 'a>,
-        arity: usize,
+        predicate_arity: usize,
     ) -> Result<(), Error> {
         if self.disable_write {
             return Ok(());
@@ -114,12 +121,16 @@ impl ExportManager {
 
         let writer = self.writer(&handler, &export_directive.predicate())?;
 
-        self.export_table_with_handler_writer(&handler, writer, table, arity)
+        self.export_table_with_handler_writer(&handler, writer, table, predicate_arity)
     }
 
     /// Export a (possibly empty) table according to the given [ExportDirective],
     /// but direct output into the given writer instead of using whatever
     /// resource the directive specifies.
+    ///
+    /// The `predicate_arity` is the arity of the predicate that is to be exported. This information
+    /// is used for validation and as a hint to exporters that were not initialized with details
+    /// about the arity.
     ///
     /// This function ignores [ExportManager::disable_write].
     pub fn export_table_with_writer<'a>(
@@ -127,24 +138,39 @@ impl ExportManager {
         export_directive: &ExportDirective,
         writer: Box<dyn Write>,
         table: Option<impl Iterator<Item = Vec<AnyDataValue>> + 'a>,
-        arity: usize,
+        predicate_arity: usize,
     ) -> Result<(), Error> {
         let handler = ImportExportHandlers::export_handler(export_directive)?;
-        self.export_table_with_handler_writer(&handler, writer, table, arity)
+        self.export_table_with_handler_writer(&handler, writer, table, predicate_arity)
     }
 
     /// Export a (possibly empty) table according to the given [ImportExportHandler],
     /// and direct output into the given writer instead of using whatever
     /// resource the handler specifies.
+    ///
+    /// The `predicate_arity` is the arity of the predicate that is to be exported. This information
+    /// is used for validation and as a hint to exporters that were not initialized with details
+    /// about the arity.
+    ///
+    /// This function ignores [ExportManager::disable_write].
     pub(crate) fn export_table_with_handler_writer<'a>(
         &self,
         export_handler: &Box<dyn ImportExportHandler>,
         writer: Box<dyn Write>,
         table: Option<impl Iterator<Item = Vec<AnyDataValue>> + 'a>,
-        arity: usize,
+        predicate_arity: usize,
     ) -> Result<(), Error> {
+        if let Some(export_arity) = export_handler.predicate_arity() {
+            if export_arity != predicate_arity {
+                return Err(ImportExportError::InvalidArity {
+                    arity: export_arity,
+                    expected: predicate_arity,
+                }
+                .into());
+            }
+        }
         if let Some(table) = table {
-            let table_writer = export_handler.writer(writer, arity)?;
+            let table_writer = export_handler.writer(writer, predicate_arity)?;
             table_writer.export_table_data(Box::new(table))?;
         }
         Ok(())

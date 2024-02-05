@@ -67,6 +67,18 @@ impl DsvReader {
             .iter()
             .map(|vf| *vf == DsvValueFormat::SKIP)
             .collect();
+        let expected_file_arity = parsers.len();
+        assert_eq!(
+            tuple_writer.column_number(),
+            skip.iter().fold(0, |acc: usize, b| {
+                if *b {
+                    acc
+                } else {
+                    acc + 1
+                }
+            })
+        );
+
         let mut dsv_reader = self.reader();
 
         let mut line_count: u64 = 0;
@@ -74,7 +86,7 @@ impl DsvReader {
 
         for row in dsv_reader.records().flatten() {
             for (idx, value) in row.iter().enumerate() {
-                if skip[idx] {
+                if idx >= expected_file_arity || skip[idx] {
                     continue;
                 }
                 if let Ok(dv) = parsers[idx](value.to_string()) {

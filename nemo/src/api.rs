@@ -77,33 +77,37 @@ pub fn output_predicates(engine: &Engine) -> Vec<Identifier> {
     engine.program().output_predicates().cloned().collect()
 }
 
-/// Writes all result [`predicates`][Identifier] in the vector `predicates` into the directory specified in `path`.
-pub fn write(path: String, engine: &mut Engine, predicates: Vec<Identifier>) -> Result<(), Error> {
-    let output_dir = PathBuf::from(path);
-    let export_manager = ExportManager::new()
-        .set_base_path(output_dir.clone())
-        .overwrite(true)
-        .compress(false);
+// TODO: Disabled write API. This API is designed in a way that does not fit how Nemo controls exporting.
+// One could take a list of export directives instead of a list of predicate names, and one could also
+// have a method that works with the directives from the program.
+//
+// /// Writes all result [`predicates`][Identifier] in the vector `predicates` into the directory specified in `path`.
+// pub fn write(path: String, engine: &mut Engine, predicates: Vec<Identifier>) -> Result<(), Error> {
+//     let output_dir = PathBuf::from(path);
+//     let export_manager = ExportManager::new()
+//         .set_base_path(output_dir.clone())
+//         .overwrite(true)
+//         .compress(false);
 
-    let output_predicates = engine
-        .output_predicates()
-        .map(|export_spec| (export_spec.predicate().clone(), export_spec))
-        .collect::<HashMap<_, _>>();
+//     let output_predicates = engine
+//         .output_predicates()
+//         .map(|export_spec| (export_spec.predicate().clone(), export_spec))
+//         .collect::<HashMap<_, _>>();
 
-    for predicate in &predicates {
-        if let Some(arity) = engine.predicate_arity(predicate) {
-            export_manager.export_table(
-                output_predicates
-                    .get(predicate)
-                    .expect("export spec should be present"),
-                engine.predicate_rows(predicate)?,
-                arity,
-            )?;
-        }
-    }
+//     for predicate in &predicates {
+//         if let Some(arity) = engine.predicate_arity(predicate) {
+//             export_manager.export_table(
+//                 output_predicates
+//                     .get(predicate)
+//                     .expect("export spec should be present"),
+//                 engine.predicate_rows(predicate)?,
+//                 arity,
+//             )?;
+//         }
+//     }
 
-    Ok(())
-}
+//     Ok(())
+// }
 
 #[cfg(test)]
 mod test {
@@ -129,6 +133,7 @@ mod test {
             .collect::<Vec<_>>();
         assert_eq!(results.len(), 5);
         let temp_dir = TempDir::new().unwrap();
-        write(temp_dir.to_str().unwrap().to_string(), &mut engine, results).unwrap();
+        // Disabled:
+        // write(temp_dir.to_str().unwrap().to_string(), &mut engine, results).unwrap();
     }
 }

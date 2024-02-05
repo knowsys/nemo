@@ -491,9 +491,16 @@ impl<'a> RuleParser<'a> {
                                             Constant::StringLiteral(filename.to_string()),
                                         ),
                                         (
-                                            Key::identifier_from_str(PARAMETER_NAME_ARITY),
-                                            Constant::NumericLiteral(NumericLiteral::Integer(
-                                                arity,
+                                            Key::identifier_from_str(PARAMETER_NAME_FORMAT),
+                                            Constant::TupleLiteral(Tuple::from_iter(
+                                                vec![VALUE_FORMAT_ANY; arity]
+                                                    .iter()
+                                                    .map(|format| {
+                                                        Constant::StringLiteral(
+                                                            (*format).to_string(),
+                                                        )
+                                                    })
+                                                    .collect::<Vec<Constant>>(),
                                             )),
                                         ),
                                     ]);
@@ -517,9 +524,16 @@ impl<'a> RuleParser<'a> {
                                             Constant::StringLiteral(filename.to_string()),
                                         ),
                                         (
-                                            Key::identifier_from_str(PARAMETER_NAME_ARITY),
-                                            Constant::NumericLiteral(NumericLiteral::Integer(
-                                                arity,
+                                            Key::identifier_from_str(PARAMETER_NAME_FORMAT),
+                                            Constant::TupleLiteral(Tuple::from_iter(
+                                                vec![VALUE_FORMAT_ANY; arity]
+                                                    .iter()
+                                                    .map(|format| {
+                                                        Constant::StringLiteral(
+                                                            (*format).to_string(),
+                                                        )
+                                                    })
+                                                    .collect::<Vec<Constant>>(),
                                             )),
                                         ),
                                     ]);
@@ -543,9 +557,16 @@ impl<'a> RuleParser<'a> {
                                             Constant::StringLiteral(filename.to_string()),
                                         ),
                                         (
-                                            Key::identifier_from_str(PARAMETER_NAME_ARITY),
-                                            Constant::NumericLiteral(NumericLiteral::Integer(
-                                                arity,
+                                            Key::identifier_from_str(PARAMETER_NAME_FORMAT),
+                                            Constant::TupleLiteral(Tuple::from_iter(
+                                                vec![VALUE_FORMAT_ANY; arity]
+                                                    .iter()
+                                                    .map(|format| {
+                                                        Constant::StringLiteral(
+                                                            (*format).to_string(),
+                                                        )
+                                                    })
+                                                    .collect::<Vec<Constant>>(),
                                             )),
                                         ),
                                     ]);
@@ -1527,8 +1548,16 @@ mod test {
                     Constant::StringLiteral(filename.to_string()),
                 ),
                 (
-                    Key::identifier_from_str(PARAMETER_NAME_ARITY),
-                    Constant::NumericLiteral(NumericLiteral::Integer(arity)),
+                    Key::identifier_from_str(PARAMETER_NAME_FORMAT),
+                    Constant::TupleLiteral(Tuple::from_iter(
+                        vec![
+                            VALUE_FORMAT_ANY;
+                            usize::try_from(arity).expect("required for these tests")
+                        ]
+                        .iter()
+                        .map(|format| Constant::StringLiteral((*format).to_string()))
+                        .collect::<Vec<Constant>>(),
+                    )),
                 ),
             ]);
             ImportDirective::from(ImportExportDirective {

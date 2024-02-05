@@ -16,8 +16,7 @@ pub(crate) struct ChaseProgram {
     base: Option<String>,
     prefixes: HashMap<String, String>,
     import_handlers: Vec<(Identifier, Box<dyn ImportExportHandler>)>,
-    // TODO: remove exports; not sure if we need that in any way in the engine ...
-    exports: Vec<ExportDirective>,
+    export_handlers: Vec<(Identifier, Box<dyn ImportExportHandler>)>,
     rules: Vec<ChaseRule>,
     facts: Vec<ChaseFact>,
     parsed_predicate_declarations: HashMap<Identifier, Vec<PrimitiveType>>,
@@ -85,18 +84,24 @@ impl ChaseProgramBuilder {
     }
 
     /// Add an exported table.
-    pub fn export(mut self, export: ExportDirective) -> Self {
-        self.program.exports.push(export);
-        self
+    pub fn export(mut self, export: &ExportDirective) -> Result<Self, Error> {
+        let handler = ImportExportHandlers::export_handler(export)?;
+        self.program
+            .export_handlers
+            .push((export.predicate().clone(), handler));
+        Ok(self)
     }
 
     /// Add exported tables.
-    pub fn exports<T>(mut self, exports: T) -> Self
+    pub fn exports<T>(mut self, exports: T) -> Result<Self, Error>
     where
         T: IntoIterator<Item = ExportDirective>,
     {
-        self.program.exports.extend(exports);
-        self
+        let mut cur_self: Self = self;
+        for export in exports {
+            cur_self = cur_self.export(&export)?;
+        }
+        Ok(cur_self)
     }
 
     /// Add a rule.
@@ -239,8 +244,8 @@ impl ChaseProgram {
     }
 
     /// Return all exports in the program.
-    pub fn exports(&self) -> impl Iterator<Item = &ExportDirective> {
-        self.exports.iter()
+    pub fn exports(&self) -> impl Iterator<Item = &(Identifier, Box<dyn ImportExportHandler>)> {
+        self.export_handlers.iter()
     }
 
     /// Return an Iterator over all output predicates
@@ -274,7 +279,7 @@ impl TryFrom<Program> for ChaseProgram {
         let mut builder = Self::builder()
             .prefixes(program.prefixes().clone())
             .imports(program.imports().cloned())?
-            .exports(program.exports().cloned())
+            .exports(program.exports().cloned())?
             .rules(
                 program
                     .rules()

@@ -25,8 +25,6 @@ pub(crate) const FILE_FORMAT_RDF_XML: &str = "rdfxml";
 pub(crate) const PARAMETER_NAME_RESOURCE: &str = "resource";
 /// Name of the parameter for specifying the format in import/export directives.
 pub(crate) const PARAMETER_NAME_FORMAT: &str = "format";
-/// Name of the parameter for specifying the arity in import/export directives.
-pub(crate) const PARAMETER_NAME_ARITY: &str = "arity";
 /// Name of the parameter for specifying a base IRI in import/export directives.
 pub(crate) const PARAMETER_NAME_BASE: &str = "base";
 /// Name of the parameter for specifying a delimiter in import/export directives for delimiter-separated values format.

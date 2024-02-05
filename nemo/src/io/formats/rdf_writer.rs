@@ -168,31 +168,31 @@ impl RdfWriter {
     where
         Formatter: TriplesFormatter,
     {
-        // let serializers: Vec<DataValueSerializerFunction> = self
-        //     .value_formats
-        //     .iter()
-        //     .map(|vf| vf.data_value_serializer_function())
-        //     .collect();
-        // let skip: Vec<bool> = self
-        //     .value_formats
-        //     .iter()
-        //     .map(|vf| *vf == RdfValueFormat::SKIP)
-        //     .collect();
+        let mut triple_pos = [0; 3];
+        let mut cur = 0;
+        for (idx, format) in self.value_formats.iter().enumerate() {
+            if *format != RdfValueFormat::SKIP {
+                assert!(cur <= 2); // max number of non-skip entries is 3
+                triple_pos[cur] = idx;
+                cur += 1;
+            }
+        }
+        assert_eq!(cur, 3); // three triple components found
+        let [s_pos, p_pos, o_pos] = triple_pos;
 
         let mut formatter = make_formatter(self.writer)?;
-
         let mut buffer: QuadBuffer = Default::default();
 
         for record in table {
-            assert_eq!(record.len(), 3);
+            assert_eq!(record.len(), self.value_formats.len());
 
-            if !buffer.set_subject_from_datavalue(&record[0]) {
+            if !buffer.set_subject_from_datavalue(&record[s_pos]) {
                 continue;
             }
-            if !buffer.set_predicate_from_datavalue(&record[1]) {
+            if !buffer.set_predicate_from_datavalue(&record[p_pos]) {
                 continue;
             }
-            if !buffer.set_object_from_datavalue(&record[2]) {
+            if !buffer.set_object_from_datavalue(&record[o_pos]) {
                 continue;
             }
             if let Err(e) = formatter.format(&Triple {
@@ -203,7 +203,6 @@ impl RdfWriter {
                 log::info!("failed to write triple: {e}");
             }
         }
-        //let _ = formatter.finish();
         finish_formatter(formatter);
 
         Ok(())

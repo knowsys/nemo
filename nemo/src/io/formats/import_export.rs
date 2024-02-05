@@ -16,9 +16,9 @@ use crate::{
     io::compression_format::CompressionFormat,
     model::{
         Constant, ExportDirective, FileFormat, ImportDirective, ImportExportDirective, Key, Map,
-        NumericLiteral, Tuple, PARAMETER_NAME_ARITY, PARAMETER_NAME_COMPRESSION,
-        PARAMETER_NAME_FORMAT, PARAMETER_NAME_RESOURCE, VALUE_COMPRESSION_GZIP,
-        VALUE_COMPRESSION_NONE, VALUE_FORMAT_ANY, VALUE_FORMAT_SKIP,
+        NumericLiteral, Tuple, PARAMETER_NAME_COMPRESSION, PARAMETER_NAME_FORMAT,
+        PARAMETER_NAME_RESOURCE, VALUE_COMPRESSION_GZIP, VALUE_COMPRESSION_NONE, VALUE_FORMAT_ANY,
+        VALUE_FORMAT_SKIP,
     },
 };
 
@@ -68,8 +68,15 @@ pub(crate) trait ImportExportHandler: std::fmt::Debug + DynClone + Send {
     /// In typical cases, this is the name of a file to read from or write to.
     fn resource(&self) -> Option<Resource>;
 
-    /// Returns the arity of the data for this format, if specified.
-    fn arity(&self) -> Option<usize>;
+    /// Returns the expected arity of the predicate related to this directive, if specified.
+    /// For import, this is the arity of the data that is created, for export it is the
+    /// arity of the data that is consumed.
+    fn predicate_arity(&self) -> Option<usize>;
+
+    /// Returns the expected arity of the file (or other resource) related to this directive, if specified.
+    /// For import, this is the arity of the data that is read from the source, for export it is the
+    /// arity of the data that is written to the target.
+    fn file_arity(&self) -> Option<usize>;
 
     /// Returns the default file extension for data of this format, if any.
     /// This will be used when making default file names.
@@ -406,14 +413,8 @@ impl ImportExportHandlers {
         }) {
             return Err(ImportExportError::invalid_att_value_error(
                 PARAMETER_NAME_FORMAT,
-                Constant::TupleLiteral(Tuple::from_iter(
-                    value_format_strings
-                        .expect("checked above")
-                        .iter()
-                        .map(|format| Constant::StringLiteral(format.to_owned()))
-                        .collect::<Vec<Constant>>(),
-                )),
-                "cannot import zero-ary data",
+                Self::constant_from_format_strings(&value_format_strings.expect("checked above")),
+                "cannot import/export zero-ary data",
             ));
         }
 
@@ -429,70 +430,72 @@ impl ImportExportHandlers {
             .collect()
     }
 
-    /// Extract explicitly specified arity information (based on attribute [`PARAMETER_NAME_ARITY`]).
-    pub(super) fn extract_arity(attributes: &Map) -> Result<Option<usize>, ImportExportError> {
-        let arity = Self::extract_integer(attributes, PARAMETER_NAME_ARITY, true)?;
-        if let Some(a) = arity {
-            if a <= 0 || a > 65536 {
-                // ridiculously large value, but still in usize for all conceivable platforms
-                return Err(ImportExportError::invalid_att_value_error(
-                    PARAMETER_NAME_ARITY,
-                    Constant::NumericLiteral(crate::model::NumericLiteral::Integer(a)),
-                    format!("arity should be greater than 0 and at most {}", 65536).as_str(),
-                ));
-            }
-            Ok(Some(usize::try_from(a).expect("range was checked above")))
-        } else {
-            Ok(None)
-        }
-    }
-
-    /// Get a list of value format strings by extracting the format (if given) or using the
-    /// arity (if given) to make a default.
+    /// Get a list of value format strings while taking the expected arity of data in
+    /// the file into account.
     ///
-    /// If formats and arity are both given, it is checked that they are coherent.
-    /// If neither is given, `None` is returned. The funciton also makes sure that the effective
-    /// arity of non-skipped values is >0.
+    /// Formats will first be extracted from the attributes. For import, the total number
+    /// of formats must match the expected file arity. For export, the total number of
+    /// non-skip formats must match the expected file arity.
     ///
-    /// The given `arity` is not checked: callers are expected to have ensured that it is a non-zero
-    /// usize that fits into i64, e.g., by using [ImportExportHandlers::extract_arity].
-    pub(super) fn extract_value_format_strings_with_arity(
+    /// If no formats are given, we assume that "skip" is not used, so file arity =
+    /// predicate arity = format number, and we can make a list of default value formats.
+    /// `None` is only returned if the file arity was not given (in which case this function
+    /// is the same as [ImportExportHandlers::extract_value_format_strings]).
+    ///
+    /// The given `file_arity` is not checked: callers are expected to have ensured that it
+    /// is a non-zero usize that fits into i64.
+    pub(super) fn extract_value_format_strings_with_file_arity(
         attributes: &Map,
+        file_arity: Option<usize>,
+        direction: Direction,
     ) -> Result<Option<Vec<String>>, ImportExportError> {
-        let mut value_format_strings: Option<Vec<String>> =
+        let value_format_strings: Option<Vec<String>> =
             Self::extract_value_format_strings(attributes)?;
-        let arity = Self::extract_arity(attributes)?;
 
-        if let Some(a) = arity {
+        if let Some(file_arity) = file_arity {
             if let Some(ref vfs) = value_format_strings {
-                // Compute the effective arity of the formats, where VALUE_FORMAT_SKIP is not counted:
-                let vfs_arity = vfs.iter().fold(0, |acc: usize, fmt| {
-                    if *fmt == VALUE_FORMAT_SKIP {
-                        acc
-                    } else {
-                        acc + 1
-                    }
-                });
+                let declared_file_arity = match direction {
+                    Direction::Import => vfs.len(),
+                    Direction::Export => vfs.iter().fold(0, |acc: usize, fmt| {
+                        // Only count formats other than VALUE_FORMAT_SKIP:
+                        if *fmt == VALUE_FORMAT_SKIP {
+                            acc
+                        } else {
+                            acc + 1
+                        }
+                    }),
+                };
+
                 // Check if arity is consistent with given value formats.
-                if a != vfs_arity {
+                if file_arity != declared_file_arity {
                     return Err(ImportExportError::invalid_att_value_error(
-                        PARAMETER_NAME_ARITY,
-                        Constant::NumericLiteral(crate::model::NumericLiteral::Integer(
-                            i64::try_from(a).expect("arities are checked to fit i64"),
-                        )),
+                        PARAMETER_NAME_FORMAT,
+                        Self::constant_from_format_strings(vfs),
                         format!(
-                            "arity should be {}, the number of value types given for \"{}\"",
-                            vfs_arity, PARAMETER_NAME_FORMAT
+                            "value format declaration must be compatible with expected arity {} of tuples in file",
+                            file_arity
                         )
                         .as_str(),
                     ));
                 }
-            } else {
-                value_format_strings = Some(Self::default_value_format_strings(a));
-            }
-        }
 
-        Ok(value_format_strings)
+                Ok(value_format_strings)
+            } else {
+                Ok(Some(Self::default_value_format_strings(file_arity)))
+            }
+        } else {
+            Ok(value_format_strings)
+        }
+    }
+
+    /// Turn a list of formats into a constant for error reporting.
+    fn constant_from_format_strings(format_strings: &Vec<String>) -> Constant {
+        Constant::TupleLiteral(Tuple::from_iter(
+            format_strings
+                .iter()
+                .map(|format| Constant::StringLiteral(format.to_owned()))
+                .collect::<Vec<Constant>>(),
+        ))
     }
 }
 

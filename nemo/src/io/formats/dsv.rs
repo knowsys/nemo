@@ -6,8 +6,8 @@ use nemo_physical::{datasources::table_providers::TableProvider, resource::Resou
 
 use crate::io::compression_format::CompressionFormat;
 use crate::model::{
-    PARAMETER_NAME_ARITY, PARAMETER_NAME_COMPRESSION, PARAMETER_NAME_DSV_DELIMITER,
-    PARAMETER_NAME_FORMAT, PARAMETER_NAME_RESOURCE,
+    PARAMETER_NAME_COMPRESSION, PARAMETER_NAME_DSV_DELIMITER, PARAMETER_NAME_FORMAT,
+    PARAMETER_NAME_RESOURCE,
 };
 use crate::{
     error::Error,
@@ -50,6 +50,8 @@ pub(crate) struct DsvHandler {
     /// from the resource, if given. So the only case where `None` is possible
     /// is when no resource is given (during output).
     compression_format: Option<CompressionFormat>,
+    /// Direction of the operation.
+    direction: Direction,
 }
 
 impl DsvHandler {
@@ -89,7 +91,6 @@ impl DsvHandler {
             &vec![
                 PARAMETER_NAME_FORMAT,
                 PARAMETER_NAME_RESOURCE,
-                PARAMETER_NAME_ARITY,
                 PARAMETER_NAME_DSV_DELIMITER,
                 PARAMETER_NAME_COMPRESSION,
             ],
@@ -106,14 +107,14 @@ impl DsvHandler {
             resource: resource,
             value_formats: value_formats,
             compression_format: compression_format,
+            direction: direction,
         }))
     }
 
     fn extract_value_formats(
         attributes: &Map,
     ) -> Result<Option<Vec<DsvValueFormat>>, ImportExportError> {
-        let value_format_strings =
-            ImportExportHandlers::extract_value_format_strings_with_arity(attributes)?;
+        let value_format_strings = ImportExportHandlers::extract_value_format_strings(attributes)?;
 
         if let Some(format_strings) = value_format_strings {
             Ok(Some(Self::formats_from_strings(format_strings)?))
@@ -218,16 +219,34 @@ impl ImportExportHandler for DsvHandler {
         self.resource.clone()
     }
 
-    fn arity(&self) -> Option<usize> {
-        self.value_formats.as_ref().map(|vfs| {
-            vfs.iter().fold(0, |acc, fmt| {
-                if *fmt == DsvValueFormat::SKIP {
-                    acc
-                } else {
-                    acc + 1
-                }
-            })
-        })
+    fn predicate_arity(&self) -> Option<usize> {
+        match self.direction {
+            Direction::Import => self.value_formats.as_ref().map(|vfs| {
+                vfs.iter().fold(0, |acc, fmt| {
+                    if *fmt == DsvValueFormat::SKIP {
+                        acc
+                    } else {
+                        acc + 1
+                    }
+                })
+            }),
+            Direction::Export => self.value_formats.as_ref().map(|vfs| vfs.len()),
+        }
+    }
+
+    fn file_arity(&self) -> Option<usize> {
+        match self.direction {
+            Direction::Export => self.value_formats.as_ref().map(|vfs| {
+                vfs.iter().fold(0, |acc, fmt| {
+                    if *fmt == DsvValueFormat::SKIP {
+                        acc
+                    } else {
+                        acc + 1
+                    }
+                })
+            }),
+            Direction::Import => self.value_formats.as_ref().map(|vfs| vfs.len()),
+        }
     }
 
     fn file_extension(&self) -> Option<String> {

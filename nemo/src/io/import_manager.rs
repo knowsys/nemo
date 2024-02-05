@@ -5,7 +5,7 @@ use nemo_physical::datasources::table_providers::TableProvider;
 use crate::{
     error::Error,
     io::resource_providers::ResourceProviders,
-    model::{ImportDirective, PARAMETER_NAME_ARITY},
+    model::{ImportDirective, PARAMETER_NAME_FORMAT},
 };
 
 use super::{
@@ -50,7 +50,7 @@ impl ImportManager {
     }
 
     /// Constructs a [`TableProvider`] from the given [ImportDirective].
-    /// The arity, if given, defines the expected arity of the data: it is vaidated if
+    /// The arity, if given, defines the expected arity of the data: it is validated if
     /// the import directive is compatible with this assumption.
     pub fn table_provider(
         &self,
@@ -62,11 +62,12 @@ impl ImportManager {
         let arity;
         if let Some(expected_arity) = expected_arity {
             arity = expected_arity;
-        } else if let Some(expected_arity) = handler.arity() {
+        } else if let Some(expected_arity) = handler.predicate_arity() {
             arity = expected_arity;
         } else {
+            // Note: this only occurs if imported data is not used in any arity-determining way, which should be rare.
             return Err(
-                ImportExportError::MissingAttribute(PARAMETER_NAME_ARITY.to_string()).into(),
+                ImportExportError::MissingAttribute(PARAMETER_NAME_FORMAT.to_string()).into(),
             );
         }
         self.table_provider_from_handler(&handler, arity)
@@ -74,14 +75,14 @@ impl ImportManager {
 
     /// Constructs a [`TableProvider`] from the given [ImportExportHandler].
     /// The expeced arity can reflect additional knowledge of the caller (or might be taken
-    /// from the handler, if it has an arity). It is vaidated if the import directive is
+    /// from the handler, if it has an arity). It is validated if the import directive is
     /// compatible with this assumption.
     pub(crate) fn table_provider_from_handler(
         &self,
         handler: &Box<dyn ImportExportHandler>,
         expected_arity: usize,
     ) -> Result<Box<dyn TableProvider>, Error> {
-        if let Some(import_arity) = handler.arity() {
+        if let Some(import_arity) = handler.predicate_arity() {
             if import_arity != expected_arity {
                 return Err(ImportExportError::InvalidArity {
                     arity: import_arity,

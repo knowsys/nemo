@@ -271,13 +271,31 @@ impl ChaseProgram {
             }
             Ok(())
         }
+        fn add_missing(
+            predicate: Identifier,
+            arities: &HashMap<Identifier, usize>,
+            missing: &mut HashSet<Identifier>,
+        ) {
+            if let None = arities.get(&predicate) {
+                missing.insert(predicate);
+            }
+        }
 
         // Predicates in import statements
         for (pred, handler) in self.imports() {
-            if let Some(arity) = handler.arity() {
+            if let Some(arity) = handler.predicate_arity() {
                 add_arity(pred.clone(), arity, &mut result, &mut missing)?;
             } else {
-                missing.insert(pred.clone());
+                add_missing(pred.clone(), &result, &mut missing);
+            }
+        }
+
+        // Predicates in export statements
+        for (pred, handler) in self.exports() {
+            if let Some(arity) = handler.predicate_arity() {
+                add_arity(pred.clone(), arity, &mut result, &mut missing)?;
+            } else {
+                add_missing(pred.clone(), &result, &mut missing);
             }
         }
 

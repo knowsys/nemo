@@ -551,7 +551,8 @@ mod test {
     use crate::model::chase_model::{ChaseProgram, ChaseRule, PrimitiveAtom, VariableAtom};
     use crate::model::{
         Constant, FileFormat, Identifier, ImportDirective, ImportExportDirective, Key, Map,
-        NumericLiteral, PrimitiveTerm, Variable, PARAMETER_NAME_ARITY, PARAMETER_NAME_RESOURCE,
+        PrimitiveTerm, Tuple, Variable, PARAMETER_NAME_FORMAT, PARAMETER_NAME_RESOURCE,
+        VALUE_FORMAT_ANY,
     };
     use nemo_physical::management::execution_plan::ColumnOrder;
 
@@ -989,9 +990,12 @@ mod test {
                 Constant::StringLiteral("".to_string()),
             ),
             (
-                Key::identifier_from_str(PARAMETER_NAME_ARITY),
-                Constant::NumericLiteral(NumericLiteral::Integer(
-                    arity.try_into().expect("test arity fits i64"),
+                Key::identifier_from_str(PARAMETER_NAME_FORMAT),
+                Constant::TupleLiteral(Tuple::from_iter(
+                    vec![VALUE_FORMAT_ANY; arity]
+                        .iter()
+                        .map(|format| Constant::StringLiteral((*format).to_string()))
+                        .collect::<Vec<Constant>>(),
                 )),
             ),
         ]);

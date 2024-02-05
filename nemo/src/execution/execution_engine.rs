@@ -636,21 +636,4 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
 
         // Ok((trace, handles))
     }
-
-    /// Iterate over all [export specifications][ExportSpec] for output predicates.
-    pub fn output_predicates(&'_ self) -> impl Iterator<Item = ExportDirective> + '_ {
-        let exports = self
-            .program
-            .exports()
-            .cloned()
-            .map(|export_spec| (export_spec.predicate().clone(), export_spec))
-            .collect::<HashMap<_, _>>();
-
-        self.program
-            .output_predicates()
-            .map(move |predicate| match exports.get(&predicate) {
-                Some(export_spec) => export_spec.clone(),
-                None => ExportDirective::default(predicate.clone()),
-            })
-    }
 }
