@@ -29,7 +29,9 @@ enum RdfTermType {
 /// pointers internally, that must be owned elsewhere.
 #[derive(Debug, Default)]
 struct QuadBuffer {
+    graph_name_is_blank: bool,
     graph_name: String,
+    subject_is_blank: bool,
     subject: String,
     predicate: String,
     object_part1: String,
@@ -38,9 +40,15 @@ struct QuadBuffer {
 }
 impl<'a> QuadBuffer {
     fn subject(&'a self) -> Subject<'a> {
-        Subject::NamedNode(NamedNode {
-            iri: &self.subject.as_str(),
-        })
+        if self.subject_is_blank {
+            Subject::BlankNode(BlankNode {
+                id: &self.subject.as_str(),
+            })
+        } else {
+            Subject::NamedNode(NamedNode {
+                iri: &self.subject.as_str(),
+            })
+        }
     }
 
     fn predicate(&'a self) -> NamedNode<'a> {
@@ -74,18 +82,29 @@ impl<'a> QuadBuffer {
     }
 
     fn graph_name(&'a self) -> GraphName<'a> {
-        GraphName::NamedNode(NamedNode {
-            iri: &self.graph_name.as_str(),
-        })
+        if self.graph_name_is_blank {
+            GraphName::BlankNode(BlankNode {
+                id: &self.graph_name.as_str(),
+            })
+        } else {
+            GraphName::NamedNode(NamedNode {
+                iri: &self.graph_name.as_str(),
+            })
+        }
     }
 
     fn set_subject_from_datavalue(&mut self, datavalue: &AnyDataValue) -> bool {
         match datavalue.value_domain() {
             ValueDomain::Iri => {
                 self.subject = datavalue.to_iri_unchecked();
+                self.subject_is_blank = false;
                 return true;
             }
-            ValueDomain::Null => todo!(),
+            ValueDomain::Null => {
+                self.subject = datavalue.lexical_value();
+                self.subject_is_blank = true;
+                return true;
+            }
             _ => false,
         }
     }
@@ -137,8 +156,8 @@ impl<'a> QuadBuffer {
             }
             ValueDomain::Null => {
                 self.object_type = RdfTermType::BNode;
-                // TODO: not supported yet
-                return false;
+                self.object_part1 = datavalue.lexical_value();
+                return true;
             }
         }
         true
@@ -148,9 +167,14 @@ impl<'a> QuadBuffer {
         match datavalue.value_domain() {
             ValueDomain::Iri => {
                 self.graph_name = datavalue.to_iri_unchecked();
+                self.graph_name_is_blank = false;
                 return true;
             }
-            ValueDomain::Null => todo!(),
+            ValueDomain::Null => {
+                self.graph_name = datavalue.lexical_value();
+                self.graph_name_is_blank = true;
+                return true;
+            }
             _ => false,
         }
     }
