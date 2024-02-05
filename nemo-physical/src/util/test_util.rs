@@ -84,15 +84,15 @@ pub(crate) mod test {
                 current_expected_index += 1;
 
                 if scan.current_layer().unwrap() < scan.arity() - 1 {
-                    scan.down(current_type);
-                    assert_eq!(partial_scan_current(scan, current_type), None);
+                    scan.down(first_type);
+                    assert_eq!(partial_scan_current(scan, first_type), None);
                 }
             } else {
                 scan.up();
 
-                if let Some(next_type) = next_type_map.get(&current_type) {
-                    scan.down(next_type.clone());
-                    assert_eq!(partial_scan_current(scan, current_type), None);
+                if let Some(next_type) = next_type_map.get(&current_type).cloned() {
+                    scan.down(next_type);
+                    assert_eq!(partial_scan_current(scan, next_type), None);
                 }
             }
         }

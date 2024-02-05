@@ -241,12 +241,12 @@ impl<'a> PartialTrieScan<'a> for TrieScanFunction<'a> {
         // Otherwise we need to compute the new value and pass it into the column scan of this layer.
         if let Some(program) = &self.output_functions[next_layer] {
             let function_result = program.evaluate_data(&self.input_values);
-            match function_result {
+            match function_result
+                .map(|result| result.to_storage_value_t(self.dictionary))
+                .filter(|result| result.get_type() == next_type)
+            {
                 Some(result) => {
-                    let result_storage = result.to_storage_value_t(self.dictionary);
-                    self.column_scans[next_layer]
-                        .get_mut()
-                        .constant_set(result_storage);
+                    self.column_scans[next_layer].get_mut().constant_set(result);
                 }
                 None => {
                     self.column_scans[next_layer]
@@ -280,10 +280,11 @@ mod test {
     use crate::{
         datatypes::{StorageTypeName, StorageValueT},
         datavalues::AnyDataValue,
-        dictionary::meta_dv_dict::MetaDvDictionary,
+        dictionary::{meta_dv_dict::MetaDvDictionary, DvDict},
         function::tree::FunctionTree,
         tabular::{
             operations::{OperationGenerator, OperationTableGenerator},
+            trie::Trie,
             triescan::TrieScanEnum,
         },
         util::test_util::test::{trie_dfs, trie_int64},
@@ -515,6 +516,77 @@ mod test {
                 StorageValueT::Int64(2),  // x = 2
                 StorageValueT::Int64(5),  // y = 5
                 StorageValueT::Int64(12), // r = 12
+            ],
+        );
+    }
+
+    #[test]
+    fn function_repeat_multiple_types() {
+        let mut dictionary = MetaDvDictionary::default();
+        let a = dictionary
+            .add_datavalue(AnyDataValue::new_string(String::from("a")))
+            .value() as u32;
+        let b = dictionary
+            .add_datavalue(AnyDataValue::new_string(String::from("b")))
+            .value() as u32;
+        let foo1 = dictionary
+            .add_datavalue(AnyDataValue::new_string(String::from("foo1")))
+            .value() as u32;
+        let foo2 = dictionary
+            .add_datavalue(AnyDataValue::new_string(String::from("foo2")))
+            .value() as u32;
+        let bar = dictionary
+            .add_datavalue(AnyDataValue::new_string(String::from("bar")))
+            .value() as u32;
+
+        let trie = Trie::from_rows(vec![
+            vec![StorageValueT::Id32(a), StorageValueT::Id32(foo1)],
+            vec![StorageValueT::Id32(a), StorageValueT::Id32(foo2)],
+            vec![StorageValueT::Id32(b), StorageValueT::Int64(42)],
+            vec![StorageValueT::Id32(b), StorageValueT::Id32(bar)],
+        ]);
+
+        let trie_scan = TrieScanEnum::TrieScanGeneric(trie.partial_iterator());
+
+        let mut marker_generator = OperationTableGenerator::new();
+        marker_generator.add_marker("x");
+        marker_generator.add_marker("y");
+        marker_generator.add_marker("rx");
+        marker_generator.add_marker("ry");
+
+        let markers = marker_generator.operation_table(["x", "y", "rx", "ry"].iter());
+        let marker_x = *marker_generator.get(&"x").unwrap();
+        let marker_y = *marker_generator.get(&"y").unwrap();
+        let marker_rx = *marker_generator.get(&"rx").unwrap();
+        let marker_ry = *marker_generator.get(&"ry").unwrap();
+
+        let mut assigment = FunctionAssignment::new();
+        assigment.insert(marker_rx, FunctionTree::reference(marker_x));
+        assigment.insert(marker_ry, FunctionTree::reference(marker_y));
+
+        let function_generator = GeneratorFunction::new(markers, &assigment);
+        let mut filter_scan = function_generator
+            .generate(vec![Some(trie_scan)], &dictionary)
+            .unwrap();
+
+        trie_dfs(
+            &mut filter_scan,
+            &[StorageTypeName::Id32, StorageTypeName::Int64],
+            &[
+                StorageValueT::Id32(a),    // x = "a"
+                StorageValueT::Id32(foo1), // y = "foo1"
+                StorageValueT::Id32(a),    // rx = "a"
+                StorageValueT::Id32(foo1), // ry = "foo1"
+                StorageValueT::Id32(foo2), // y = "foo2"
+                StorageValueT::Id32(a),    // rx = "a"
+                StorageValueT::Id32(foo2), // ry = "foo2"
+                StorageValueT::Id32(b),    // x = "b"
+                StorageValueT::Id32(bar),  // y = "bar"
+                StorageValueT::Id32(b),    // rx = "b"
+                StorageValueT::Id32(bar),  // ry = "bar"
+                StorageValueT::Int64(42),  // y = 42
+                StorageValueT::Id32(b),    // rx = "b"
+                StorageValueT::Int64(42),  // ry = 42
             ],
         );
     }
