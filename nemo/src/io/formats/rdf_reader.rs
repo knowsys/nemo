@@ -234,26 +234,26 @@ impl RdfReader {
 
         let mut on_triple = |quad: Quad| {
             if !skip[0] {
-                let subject =
-                    Self::datavalue_from_subject(&mut self.bnode_map, tuple_writer, quad.subject)?;
-                tuple_writer.add_tuple_value(subject);
-            }
-            if !skip[1] {
-                let predicate = Self::datavalue_from_named_node(quad.predicate);
-                tuple_writer.add_tuple_value(predicate);
-            }
-            if !skip[2] {
-                let object =
-                    Self::datavalue_from_term(&mut self.bnode_map, tuple_writer, quad.object)?;
-                tuple_writer.add_tuple_value(object);
-            }
-            if !skip[3] {
                 let graph_name = Self::datavalue_from_graph_name(
                     &mut self.bnode_map,
                     tuple_writer,
                     quad.graph_name,
                 )?;
                 tuple_writer.add_tuple_value(graph_name);
+            }
+            if !skip[1] {
+                let subject =
+                    Self::datavalue_from_subject(&mut self.bnode_map, tuple_writer, quad.subject)?;
+                tuple_writer.add_tuple_value(subject);
+            }
+            if !skip[2] {
+                let predicate = Self::datavalue_from_named_node(quad.predicate);
+                tuple_writer.add_tuple_value(predicate);
+            }
+            if !skip[3] {
+                let object =
+                    Self::datavalue_from_term(&mut self.bnode_map, tuple_writer, quad.object)?;
+                tuple_writer.add_tuple_value(object);
             }
 
             quad_count += 1;
