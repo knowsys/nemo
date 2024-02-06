@@ -1,4 +1,4 @@
-use crate::model::{Term, Variable};
+use crate::model::{Constant, Term, Variable};
 
 /// Indicates that a new value must be creater accodring to [`Term`].
 /// The result will be "stored" in the given variable
@@ -29,5 +29,9 @@ impl Constructor {
     /// Return the term which computes the result of this constructor.
     pub fn term(&self) -> &Term {
         &self.term
+    }
+
+    pub fn constants(&self) -> impl Iterator<Item = &Constant> {
+        self.term().constants()
     }
 }

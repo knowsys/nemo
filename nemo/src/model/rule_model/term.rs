@@ -330,6 +330,16 @@ impl Term {
             })
     }
 
+    /// Return all the constants in the term.
+    pub(crate) fn constants(&self) -> impl Iterator<Item = &Constant> {
+        self.primitive_terms()
+            .into_iter()
+            .filter_map(|term| match term {
+                PrimitiveTerm::Constant(constant) => Some(constant),
+                _ => None,
+            })
+    }
+
     /// Return all universally quantified variables in the term.
     pub(crate) fn universal_variables(&self) -> impl Iterator<Item = &Variable> {
         self.variables()

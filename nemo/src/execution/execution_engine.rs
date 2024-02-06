@@ -4,6 +4,7 @@ use std::collections::HashMap;
 
 use nemo_physical::{
     datavalues::AnyDataValue,
+    dictionary::DvDict,
     management::database::sources::{SimpleTable, TableSource},
     meta::TimedCode,
 };
@@ -73,6 +74,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
 
         let mut table_manager = TableManager::new();
         Self::register_all_predicates(&mut table_manager, &analysis);
+        Self::add_all_constants(&mut table_manager, &chase_program);
         Self::add_imports(&mut table_manager, &input_manager, &chase_program)?;
 
         let mut rule_infos = Vec::<RuleInfo>::new();
@@ -104,6 +106,15 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
     fn register_all_predicates(table_manager: &mut TableManager, analysis: &ProgramAnalysis) {
         for (predicate, arity) in &analysis.all_predicates {
             table_manager.register_predicate(predicate.clone(), *arity);
+        }
+    }
+
+    /// Add all constants appearing in the rules of the program to the dictionary.
+    fn add_all_constants(table_manager: &mut TableManager, program: &ChaseProgram) {
+        for constant in program.all_constants() {
+            table_manager
+                .dictionary_mut()
+                .add_datavalue(constant.as_datavalue());
         }
     }
 

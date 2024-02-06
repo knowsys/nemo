@@ -20,7 +20,13 @@ use nemo_physical::{
     util::mapping::permutation::Permutation,
 };
 
-use std::{cell::Ref, cmp::Ordering, collections::HashMap, hash::Hash, ops::Range};
+use std::{
+    cell::{Ref, RefMut},
+    cmp::Ordering,
+    collections::HashMap,
+    hash::Hash,
+    ops::Range,
+};
 
 /// Indicates that the table contains the union of successive tables.
 /// For example assume that for predicate p there were tables derived in steps 2, 4, 7, 10, 11.
@@ -611,6 +617,11 @@ impl TableManager {
     /// Returns a reference to the constants dictionary
     pub fn dictionary(&self) -> Ref<'_, Dict> {
         self.database.dictionary()
+    }
+
+    /// Returns a mutable reference to the dictionary used for associating abstract constants with strings.
+    pub fn dictionary_mut(&mut self) -> RefMut<'_, Dict> {
+        self.database.dictionary_mut()
     }
 
     /// Return the current [MemoryUsage].

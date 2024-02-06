@@ -69,6 +69,17 @@ impl PrimitiveAtom {
                 .collect(),
         }
     }
+
+    /// Return a set of all variables used in this atom
+    pub fn get_constants(&self) -> impl Iterator<Item = &Constant> {
+        self.terms.iter().filter_map(|t| {
+            if let PrimitiveTerm::Constant(v) = t {
+                Some(v)
+            } else {
+                None
+            }
+        })
+    }
 }
 
 impl ChaseAtom for PrimitiveAtom {

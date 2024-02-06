@@ -10,7 +10,7 @@ mod order;
 mod storage;
 
 use std::{
-    cell::{Ref, RefCell},
+    cell::{Ref, RefCell, RefMut},
     collections::HashMap,
     fmt::Debug,
 };
@@ -118,6 +118,11 @@ impl DatabaseInstance {
     /// Returns a reference to the dictionary used for associating abstract constants with strings.
     pub fn dictionary(&self) -> Ref<'_, Dict> {
         self.dictionary.borrow()
+    }
+
+    /// Returns a mutable reference to the dictionary used for associating abstract constants with strings.
+    pub fn dictionary_mut(&mut self) -> RefMut<'_, Dict> {
+        self.dictionary.borrow_mut()
     }
 
     /// Return the amount of memory consumed by the table under the given [PermanentTableId].

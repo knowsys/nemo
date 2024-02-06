@@ -1,6 +1,6 @@
 use crate::model::{Term, Variable, VariableAssignment};
 
-use super::PrimitiveTerm;
+use super::{Constant, PrimitiveTerm};
 
 /// Represents a constraint which is expressed as a binary operator applied to two terms
 #[derive(Debug, Eq, PartialEq, Clone, PartialOrd, Ord)]
@@ -57,6 +57,11 @@ impl Constraint {
     /// Return All the variables used within this constraint.
     pub fn variables(&self) -> impl Iterator<Item = &Variable> {
         self.left().variables().chain(self.right().variables())
+    }
+
+    /// Return All the constants used within this constraint.
+    pub fn constants(&self) -> impl Iterator<Item = &Constant> {
+        self.left().constants().chain(self.right().constants())
     }
 
     /// Return whether this type of constraints only works on numeric values

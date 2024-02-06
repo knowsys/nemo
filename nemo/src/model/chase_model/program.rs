@@ -5,7 +5,7 @@ use std::collections::{HashMap, HashSet};
 use crate::{
     error::Error,
     io::formats::import_export::{ImportExportHandler, ImportExportHandlers},
-    model::{ExportDirective, Identifier, ImportDirective, PrimitiveType, Program},
+    model::{Constant, ExportDirective, Identifier, ImportDirective, PrimitiveType, Program},
 };
 
 use super::{ChaseAtom, ChaseFact, ChaseRule};
@@ -269,6 +269,11 @@ impl ChaseProgram {
     #[must_use]
     pub fn parsed_predicate_declarations(&self) -> &HashMap<Identifier, Vec<PrimitiveType>> {
         &self.parsed_predicate_declarations
+    }
+
+    /// Return the constants appearing in the rules of the program.
+    pub fn all_constants(&self) -> impl Iterator<Item = &Constant> {
+        self.rules.iter().flat_map(|rule| rule.all_constants())
     }
 }
 

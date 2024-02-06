@@ -31,8 +31,15 @@ use super::triescan::TrieScanEnum;
 /// Marker for a column
 ///
 /// This is used in [OperationTable].
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Ord, PartialOrd)]
 pub struct OperationColumnMarker(usize);
+
+impl OperationColumnMarker {
+    /// Return the next [OperationColumnMarker]
+    pub(crate) fn next(&self) -> Self {
+        Self(self.0 + 1)
+    }
+}
 
 /// This object is used to reference columns of input/output tables
 /// of a data base operation.
@@ -62,11 +69,21 @@ impl OperationTable {
         self.0.push(marker);
     }
 
+    /// Return an [OperationColumnMarker] that is not part of this table
+    fn first_new_marker(&self) -> OperationColumnMarker {
+        self.0
+            .iter()
+            .cloned()
+            .max()
+            .map(|marker| marker.next())
+            .unwrap_or(OperationColumnMarker(0))
+    }
+
     /// Pushes a new unique [OperationColumnMarker] at the end of the table.
     ///
     /// Returns a reference to the newly added [OperationColumnMarker].
     pub fn push_new(&mut self) -> &OperationColumnMarker {
-        self.push(OperationColumnMarker(self.0.len()));
+        self.push(self.first_new_marker());
         self.0.last().expect("Value has been pushed above")
     }
 
@@ -74,7 +91,7 @@ impl OperationTable {
     ///
     /// Returns a reference to the newly added [OperationColumnMarker].
     pub fn push_new_at(&mut self, index: usize) -> &OperationColumnMarker {
-        self.0.insert(index, OperationColumnMarker(self.0.len()));
+        self.0.insert(index, self.first_new_marker());
         &self.0[index]
     }
 

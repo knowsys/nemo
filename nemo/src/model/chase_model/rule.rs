@@ -6,7 +6,7 @@ use crate::{
     error::Error,
     model::{
         chase_model::variable::{AGGREGATE_VARIABLE_PREFIX, CONSTRUCT_VARIABLE_PREFIX},
-        Constraint, Identifier, Literal, PrimitiveTerm, Rule, Term, Variable,
+        Constant, Constraint, Identifier, Literal, PrimitiveTerm, Rule, Term, Variable,
     },
 };
 
@@ -171,6 +171,24 @@ impl ChaseRule {
             .chain(variables_constructors)
             .chain(variables_aggregates)
             .collect()
+    }
+
+    /// Return all [Constant]s used in this rule.
+    pub fn all_constants(&self) -> impl Iterator<Item = &Constant> {
+        let constants_head = self.head.iter().flat_map(|atom| atom.get_constants());
+        let constants_constructors = self
+            .constructors
+            .iter()
+            .flat_map(|constructor| constructor.constants());
+        let constants_constraints = self
+            .positive_constraints
+            .iter()
+            .chain(self.negative_constraints.iter())
+            .flat_map(|constraint| constraint.constants());
+
+        constants_head
+            .chain(constants_constructors)
+            .chain(constants_constraints)
     }
 }
 
