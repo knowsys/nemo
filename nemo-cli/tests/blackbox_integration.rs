@@ -102,6 +102,7 @@ impl TestCase {
             .arg("-D")
             .arg(self.output_dir.path())
             .arg(self.rule_file.as_path())
+            .arg("--write-all-idb-predicates")
             .assert()
             .success();
 

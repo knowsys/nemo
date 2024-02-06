@@ -1,8 +1,3 @@
-@declare main(integer, integer, integer) .
-@declare s1(integer) .
-@declare s2(integer, integer) .
-@declare s3(integer, integer, integer) .
-
 @source main[3]: load-csv("sources/main.csv").
 @source s1[1]: load-csv("sources/S1.csv").
 @source s2[2]: load-csv("sources/S2.csv").

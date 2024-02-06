@@ -1,8 +1,3 @@
-@declare ConstFolding(integer,string, integer, integer, string) .
-@declare AssignOperFrom(string, integer, string).
-@declare AssignOperFromConstant(string, integer, integer) .
-@declare AssignNumConstant(string, integer, integer, string) .
-
 AssignBinop("assign7",10,"l4A1A1104") .
 AssignOperFrom("assign7",1,"l4A1102") .
 AssignOperFromConstant("assign7",2,32) .
