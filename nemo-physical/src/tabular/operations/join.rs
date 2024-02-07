@@ -305,18 +305,43 @@ impl<'a> PartialTrieScan<'a> for TrieScanJoin<'a> {
 }
 
 #[cfg(test)]
-mod test {
+pub(crate) mod test {
     use crate::{
         datatypes::{StorageTypeName, StorageValueT},
         dictionary::meta_dv_dict::MetaDvDictionary,
         tabular::{
-            operations::{OperationGenerator, OperationTableGenerator},
+            operations::{OperationGenerator, OperationTable, OperationTableGenerator},
             triescan::TrieScanEnum,
         },
         util::test_util::test::{trie_dfs, trie_id32},
     };
 
     use super::GeneratorJoin;
+
+    /// Generate a [TrieScanEnum] for a join between the provided input scans.
+    pub(crate) fn generate_join_scan<'a>(
+        dictionary: &'a MetaDvDictionary,
+        output: Vec<&str>,
+        input: Vec<(TrieScanEnum<'a>, Vec<&str>)>,
+    ) -> TrieScanEnum<'a> {
+        let mut marker_generator = OperationTableGenerator::new();
+        for marker in output.clone() {
+            marker_generator.add_marker(marker);
+        }
+
+        for marker in input.iter().flat_map(|(_, markers)| markers.iter()) {
+            marker_generator.add_marker(marker);
+        }
+
+        let markers_output = marker_generator.operation_table(output.iter());
+        let (input, markers_input): (Vec<Option<TrieScanEnum>>, Vec<OperationTable>) = input
+            .into_iter()
+            .map(|(scan, markers)| (Some(scan), marker_generator.operation_table(markers.iter())))
+            .unzip();
+
+        let join_generator = GeneratorJoin::new(markers_output, markers_input);
+        join_generator.generate(input, dictionary).unwrap()
+    }
 
     #[test]
     fn basic_trie_join() {
@@ -335,19 +360,11 @@ mod test {
         let trie_a_scan = TrieScanEnum::TrieScanGeneric(trie_a.partial_iterator());
         let trie_b_scan = TrieScanEnum::TrieScanGeneric(trie_b.partial_iterator());
 
-        let mut marker_generator = OperationTableGenerator::new();
-        marker_generator.add_marker("x");
-        marker_generator.add_marker("y");
-        marker_generator.add_marker("z");
-
-        let markers_result = marker_generator.operation_table(["x", "y", "z"].iter());
-        let markers_a = marker_generator.operation_table(["x", "y"].iter());
-        let markers_b = marker_generator.operation_table(["y", "z"].iter());
-
-        let join_generator = GeneratorJoin::new(markers_result, vec![markers_a, markers_b]);
-        let mut join_scan = join_generator
-            .generate(vec![Some(trie_a_scan), Some(trie_b_scan)], &dictionary)
-            .unwrap();
+        let mut join_scan = generate_join_scan(
+            &dictionary,
+            vec!["x", "y", "z"],
+            vec![(trie_a_scan, vec!["x", "y"]), (trie_b_scan, vec!["y", "z"])],
+        );
 
         trie_dfs(
             &mut join_scan,
@@ -386,22 +403,14 @@ mod test {
             &[7, 10],
         ]);
 
-        let trie_scan_a = TrieScanEnum::TrieScanGeneric(trie.partial_iterator());
-        let trie_scan_b = TrieScanEnum::TrieScanGeneric(trie.partial_iterator());
+        let trie_a_scan = TrieScanEnum::TrieScanGeneric(trie.partial_iterator());
+        let trie_b_scan = TrieScanEnum::TrieScanGeneric(trie.partial_iterator());
 
-        let mut marker_generator = OperationTableGenerator::new();
-        marker_generator.add_marker("x");
-        marker_generator.add_marker("y");
-        marker_generator.add_marker("z");
-
-        let markers_result = marker_generator.operation_table(["x", "y", "z"].iter());
-        let markers_a = marker_generator.operation_table(["x", "y"].iter());
-        let markers_b = marker_generator.operation_table(["y", "z"].iter());
-
-        let join_generator = GeneratorJoin::new(markers_result, vec![markers_a, markers_b]);
-        let mut join_scan = join_generator
-            .generate(vec![Some(trie_scan_a), Some(trie_scan_b)], &dictionary)
-            .unwrap();
+        let mut join_scan = generate_join_scan(
+            &dictionary,
+            vec!["x", "y", "z"],
+            vec![(trie_a_scan, vec!["x", "y"]), (trie_b_scan, vec!["y", "z"])],
+        );
 
         trie_dfs(
             &mut join_scan,
@@ -460,19 +469,11 @@ mod test {
         let trie_scan = TrieScanEnum::TrieScanGeneric(trie.partial_iterator());
         let trie_inv_scan = TrieScanEnum::TrieScanGeneric(trie_inv.partial_iterator());
 
-        let mut marker_generator = OperationTableGenerator::new();
-        marker_generator.add_marker("x");
-        marker_generator.add_marker("y");
-        marker_generator.add_marker("z");
-
-        let markers_result = marker_generator.operation_table(["x", "y", "z"].iter());
-        let markers = marker_generator.operation_table(["x", "z"].iter());
-        let markers_inv = marker_generator.operation_table(["y", "z"].iter());
-
-        let join_generator = GeneratorJoin::new(markers_result, vec![markers, markers_inv]);
-        let mut join_scan = join_generator
-            .generate(vec![Some(trie_scan), Some(trie_inv_scan)], &dictionary)
-            .unwrap();
+        let mut join_scan = generate_join_scan(
+            &dictionary,
+            vec!["x", "y", "z"],
+            vec![(trie_scan, vec!["x", "z"]), (trie_inv_scan, vec!["y", "z"])],
+        );
 
         trie_dfs(
             &mut join_scan,
@@ -572,19 +573,14 @@ mod test {
         let trie_new_scan = TrieScanEnum::TrieScanGeneric(trie_new.partial_iterator());
         let trie_old_scan = TrieScanEnum::TrieScanGeneric(trie_old.partial_iterator());
 
-        let mut marker_generator = OperationTableGenerator::new();
-        marker_generator.add_marker("x");
-        marker_generator.add_marker("y");
-        marker_generator.add_marker("z");
-
-        let markers_result = marker_generator.operation_table(["x", "y", "z"].iter());
-        let markers = marker_generator.operation_table(["x", "y"].iter());
-        let markers_inv = marker_generator.operation_table(["y", "z"].iter());
-
-        let join_generator = GeneratorJoin::new(markers_result, vec![markers, markers_inv]);
-        let mut join_scan = join_generator
-            .generate(vec![Some(trie_new_scan), Some(trie_old_scan)], &dictionary)
-            .unwrap();
+        let mut join_scan = generate_join_scan(
+            &dictionary,
+            vec!["x", "y", "z"],
+            vec![
+                (trie_new_scan, vec!["x", "y"]),
+                (trie_old_scan, vec!["y", "z"]),
+            ],
+        );
 
         trie_dfs(
             &mut join_scan,
@@ -684,19 +680,11 @@ mod test {
         let trie_a_scan = TrieScanEnum::TrieScanGeneric(trie_a.partial_iterator());
         let trie_b_scan = TrieScanEnum::TrieScanGeneric(trie_b.partial_iterator());
 
-        let mut marker_generator = OperationTableGenerator::new();
-        marker_generator.add_marker("x");
-        marker_generator.add_marker("y");
-        marker_generator.add_marker("z");
-
-        let markers_result = marker_generator.operation_table(["x", "y", "z"].iter());
-        let markers_a = marker_generator.operation_table(["y", "z"].iter());
-        let markers_b = marker_generator.operation_table(["x", "y"].iter());
-
-        let join_generator = GeneratorJoin::new(markers_result, vec![markers_a, markers_b]);
-        let mut join_scan = join_generator
-            .generate(vec![Some(trie_a_scan), Some(trie_b_scan)], &dictionary)
-            .unwrap();
+        let mut join_scan = generate_join_scan(
+            &dictionary,
+            vec!["x", "y", "z"],
+            vec![(trie_a_scan, vec!["y", "z"]), (trie_b_scan, vec!["x", "y"])],
+        );
 
         trie_dfs(
             &mut join_scan,

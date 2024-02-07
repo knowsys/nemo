@@ -47,6 +47,17 @@ pub(crate) mod test {
         column_scan.current(storage_type)
     }
 
+    /// Return the current value of the [PartialTrieScan] at some given layer.
+    pub(crate) fn partial_scan_current_at_layer<'a, Scan: PartialTrieScan<'a>>(
+        scan: &Scan,
+        storage_type: StorageTypeName,
+        layer: usize,
+    ) -> Option<StorageValueT> {
+        let column_scan = unsafe { &mut *scan.scan(layer).get() };
+
+        column_scan.current(storage_type)
+    }
+
     /// Move to the next value on the current layer of the [PartialTrieScan].
     pub(crate) fn partial_scan_next<'a, Scan: PartialTrieScan<'a>>(
         scan: &Scan,
@@ -55,6 +66,17 @@ pub(crate) mod test {
         let column_scan = unsafe { &mut *scan.current_scan()?.get() };
 
         column_scan.next(storage_type)
+    }
+
+    /// Move to the next valu eon the current layer of the [PartialTrieScan]
+    /// that is greater than the given value.
+    pub(crate) fn partial_scan_seek<'a, Scan: PartialTrieScan<'a>>(
+        scan: &Scan,
+        value: StorageValueT,
+    ) -> Option<StorageValueT> {
+        let column_scan = unsafe { &mut *scan.current_scan()?.get() };
+
+        column_scan.seek(value)
     }
 
     /// Navigate a [PartialTrieScan] in a depth first search manner,

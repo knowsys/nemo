@@ -500,7 +500,10 @@ impl<'a> ColumnScanRainbow<'a> {
         }
     }
 
-    /// Return the current value of a scan of the given [StorageTypeName].
+    /// For the given [StorageValueT], find it in the associated [ColumnScan]
+    /// or the first value that is higher.
+    ///
+    /// Returns `None` if there is no such value.
     pub fn seek(&mut self, value: StorageValueT) -> Option<StorageValueT> {
         match value {
             StorageValueT::Id32(value) => self.scan_id32.seek(value).map(StorageValueT::Id32),
@@ -511,7 +514,10 @@ impl<'a> ColumnScanRainbow<'a> {
         }
     }
 
-    /// Return the current value of a scan of the given [StorageTypeName].
+    /// Advance the [ColumnScan] of the given [StorageTypeName] to the next value
+    /// and return it.
+    ///
+    /// Returns `None` if there is no such value.
     pub fn next(&mut self, storage_type: StorageTypeName) -> Option<StorageValueT> {
         match storage_type {
             StorageTypeName::Id32 => self.scan_id32.next().map(StorageValueT::Id32),
