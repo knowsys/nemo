@@ -1014,7 +1014,7 @@ mod test {
 
         let program = ChaseProgram::builder()
             .imports(
-                [1usize, 2, 3, 4, 5, 6]
+                [1usize, 2, 3, 4, 6]
                     .map(|idx| csv_import(predicates[idx].0.clone(), predicates[idx].1)),
             )
             .expect("these imports should not lead to errors")
@@ -1352,7 +1352,7 @@ mod test {
 
         let program = ChaseProgram::builder()
             .imports(
-                [1usize, 2, 3, 4, 6, 7, 10]
+                [1usize, 2, 3, 4, 6, 8, 10]
                     .map(|idx| csv_import(predicates[idx].0.clone(), predicates[idx].1)),
             )
             .expect("these imports should not lead to errors")
