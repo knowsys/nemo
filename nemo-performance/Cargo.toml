@@ -20,6 +20,7 @@ env_logger = "*"
 serde_json = "1.0.108"
 rand = "0.8"
 bitvec = "1.0.1"
+bytesize = "1.2"
 
 nemo = { path = "../nemo" }
 nemo-physical = { path = "../nemo-physical" }

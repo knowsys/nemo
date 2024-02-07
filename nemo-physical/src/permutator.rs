@@ -47,7 +47,7 @@ impl Permutator {
 
     /// TODO: Test if this works
     /// Creates [`Permutator`] based on [`data`][ColumnEnum]
-    pub(crate) fn _sort_from_column_range<T>(
+    pub(crate) fn sort_from_column_range<T>(
         data: &ColumnEnum<T>,
         ranges: &[Range<usize>],
     ) -> Permutator
@@ -64,24 +64,24 @@ impl Permutator {
     }
 
     /// Creates [`Permutator`] based on [`data`][ColumnEnum]
-    pub(crate) fn _sort_from_column<T>(data: &ColumnEnum<T>) -> Permutator
+    pub(crate) fn sort_from_column<T>(data: &ColumnEnum<T>) -> Permutator
     where
         T: ColumnDataType + Ord,
     {
-        Permutator::_sort_from_column_range(data, &[(0..data.len()); 1])
+        Permutator::sort_from_column_range(data, &[(0..data.len()); 1])
     }
 
     /// Create a [`Permutator`] that sorts the given slice of [`VecT`] lexicographically.
     ///
     /// Returns [`Error::PermutationSortLen`] if the given [`VecT`] differ in length.
-    pub(crate) fn _sort_from_multiple_vec(data_vec: &[VecT]) -> Result<Permutator, Error> {
-        Self::_sort_from_multiple_vec_with_offset(data_vec, 0)
+    pub fn sort_from_multiple_vec(data_vec: &[VecT]) -> Result<Permutator, Error> {
+        Self::sort_from_multiple_vec_with_offset(data_vec, 0)
     }
 
     /// Create a [`Permutator`] that sorts the given slice of [`VecT`] lexicographically, with the given `offset`.
     ///
     /// Returns [`Error::PermutationSortLen`] if the given [`VecT`] differ in length.
-    pub(crate) fn _sort_from_multiple_vec_with_offset(
+    pub(crate) fn sort_from_multiple_vec_with_offset(
         data_vec: &[VecT],
         offset: usize,
     ) -> Result<Permutator, Error> {
@@ -97,14 +97,14 @@ impl Permutator {
             0
         };
         let mut vec: Vec<usize> = (0..len).collect::<Vec<usize>>();
-        vec.sort_by(|a, b| Self::_compare_multiple_vec(*a, *b, data_vec));
+        vec.sort_by(|a, b| Self::compare_multiple_vec(*a, *b, data_vec));
         Ok(Permutator {
             sort_vec: vec,
             offset,
         })
     }
 
-    fn _compare_multiple_vec(a: usize, b: usize, data_vec: &[VecT]) -> Ordering {
+    fn compare_multiple_vec(a: usize, b: usize, data_vec: &[VecT]) -> Ordering {
         match data_vec.iter().try_for_each(|vec| {
             match vec
                 .compare_idx(a, b)
@@ -121,18 +121,18 @@ impl Permutator {
     }
 
     /// Returns the vector which contains the sorted indices
-    pub(crate) fn _get_sort_vec(&self) -> &Vec<usize> {
+    pub(crate) fn get_sort_vec(&self) -> &Vec<usize> {
         &self.sort_vec
     }
 
     /// Returns the value at a given index or [`None`] if not applicable
-    pub(crate) fn _value_at(&self, idx: usize) -> Option<usize> {
+    pub(crate) fn value_at(&self, idx: usize) -> Option<usize> {
         self.sort_vec.get(idx.checked_sub(self.offset)?).copied()
     }
 
     /// Returns the value at a given index or the identity otherwise
-    pub(crate) fn _value_id(&self, idx: usize) -> usize {
-        self._value_at(idx).unwrap_or(idx)
+    pub(crate) fn value_id(&self, idx: usize) -> usize {
+        self.value_at(idx).unwrap_or(idx)
     }
 
     /// Permutes a given slice of data with the computed sort-order
@@ -155,7 +155,7 @@ impl Permutator {
     }
 
     /// Streams the supplied vec in with the computed sort-order
-    pub(crate) fn _permute_streaming(&self, data: VecT) -> Result<PermutatorStream<'_>, Error> {
+    pub fn permute_streaming(&self, data: VecT) -> Result<PermutatorStream<'_>, Error> {
         if data.len() < (self.sort_vec.len() + self.offset) {
             Err(Error::PermutationApplyWrongLen(
                 data.len(),
@@ -174,7 +174,7 @@ impl Permutator {
     /// Applies the permutator to a given column by using a provided [`ColumnBuilder`].
     ///
     /// *Returns* either a ['Column'] or an [Error][Error::PermutationApplyWrongLen]
-    pub(crate) fn _apply_column<'a, T, U>(
+    pub(crate) fn apply_column<'a, T, U>(
         &self,
         column: &ColumnEnum<T>,
         mut cb: U,
@@ -211,7 +211,7 @@ pub(crate) struct PermutatorStream<'a> {
 
 impl PermutatorStream<'_> {
     /// Returns the type of the iterated elements as [`StorageTypeName`]
-    pub(crate) fn _get_type(&self) -> StorageTypeName {
+    pub(crate) fn get_type(&self) -> StorageTypeName {
         self.data.get_type()
     }
 }
@@ -408,7 +408,7 @@ mod test {
         let vec3 = vec![1u64, 2, 3, 4, 5, 6, 7, 8, 9, 11, 11, 11];
         let checker = vec![10, 5, 1, 9, 2, 3, 5, 4, 7, 8, 6, 0];
 
-        let permutator = Permutator::_sort_from_multiple_vec_with_offset(
+        let permutator = Permutator::sort_from_multiple_vec_with_offset(
             &[VecT::Id64(vec1), VecT::Double(vec2), VecT::Id64(vec3)],
             0,
         )
@@ -433,7 +433,7 @@ mod test {
         vec.iter().for_each(|&elem| builder.add(elem));
         let column = builder.finalize();
 
-        let permutator = Permutator::_sort_from_column(&column);
+        let permutator = Permutator::sort_from_column(&column);
         let sort_vec = permutator
             .permute(&vec)
             .expect("Applying permutation should work in this test-case")

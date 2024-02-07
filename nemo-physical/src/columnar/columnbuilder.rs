@@ -1,8 +1,8 @@
 //! This module defines the [ColumnBuilder] trait
 //! and its implementations.
 
-pub(crate) mod adaptive;
-pub(crate) mod rle;
+pub mod adaptive;
+pub mod rle;
 
 use std::fmt::Debug;
 

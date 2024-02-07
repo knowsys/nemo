@@ -1310,6 +1310,7 @@ dependencies = [
  "assert_cmd",
  "assert_fs",
  "bitvec",
+ "bytesize",
  "clap 4.4.11",
  "colored",
  "dir-test",
