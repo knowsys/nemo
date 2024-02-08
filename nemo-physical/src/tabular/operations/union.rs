@@ -1,6 +1,6 @@
 //! This module defines [TrieScanUnion] and [GeneratorUnion].
 
-use std::cell::UnsafeCell;
+use std::cell::{RefCell, UnsafeCell};
 
 use bitvec::bitvec;
 
@@ -10,7 +10,7 @@ use crate::{
         operations::union::ColumnScanUnion,
     },
     datatypes::{Double, Float, StorageTypeName},
-    dictionary::meta_dv_dict::MetaDvDictionary,
+    management::database::Dict,
     tabular::triescan::{PartialTrieScan, TrieScanEnum},
 };
 
@@ -31,7 +31,7 @@ impl OperationGenerator for GeneratorUnion {
     fn generate<'a>(
         &'_ self,
         trie_scans: Vec<Option<TrieScanEnum<'a>>>,
-        _dictionary: &'a MetaDvDictionary,
+        _dictionary: &'a RefCell<Dict>,
     ) -> Option<TrieScanEnum<'a>> {
         // We ignore any empy tables
         let trie_scans = trie_scans
@@ -165,6 +165,8 @@ impl<'a> PartialTrieScan<'a> for TrieScanUnion<'a> {
 
 #[cfg(test)]
 mod test {
+    use std::cell::RefCell;
+
     use crate::{
         datatypes::{StorageTypeName, StorageValueT},
         dictionary::meta_dv_dict::MetaDvDictionary,
@@ -179,7 +181,7 @@ mod test {
 
     #[test]
     fn basic_union() {
-        let dictionary = MetaDvDictionary::default();
+        let dictionary = RefCell::new(MetaDvDictionary::default());
 
         let trie_a = trie_id32(vec![&[1, 2], &[2, 5], &[4, 4]]);
         let trie_b = trie_id32(vec![&[1, 2], &[1, 4], &[2, 4], &[7, 8], &[7, 9]]);
@@ -223,7 +225,7 @@ mod test {
 
     #[test]
     fn union_2() {
-        let dictionary = MetaDvDictionary::default();
+        let dictionary = RefCell::new(MetaDvDictionary::default());
 
         let trie_a = trie_id32(vec![
             &[1, 2],
@@ -292,7 +294,7 @@ mod test {
 
     #[test]
     fn union_3() {
-        let dictionary = MetaDvDictionary::default();
+        let dictionary = RefCell::new(MetaDvDictionary::default());
 
         let trie_a = trie_id32(vec![&[4, 1, 2]]);
         let trie_b = trie_id32(vec![&[1, 4, 1], &[2, 4, 1], &[4, 1, 4]]);
@@ -325,7 +327,7 @@ mod test {
 
     #[test]
     fn union_close() {
-        let dictionary = MetaDvDictionary::default();
+        let dictionary = RefCell::new(MetaDvDictionary::default());
 
         let trie_a = trie_id32(vec![&[1, 3], &[1, 4], &[2, 5]]);
         let trie_b = trie_id32(vec![&[2, 5], &[2, 6]]);
@@ -354,7 +356,7 @@ mod test {
 
     #[test]
     fn union_of_join() {
-        let dictionary = MetaDvDictionary::default();
+        let dictionary = RefCell::new(MetaDvDictionary::default());
 
         let trie_a = trie_id32(vec![&[1, 4], &[4, 1]]);
         let trie_b = trie_id32(vec![&[1, 2], &[2, 4]]);

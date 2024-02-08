@@ -6,8 +6,8 @@ use crate::{
     columnar::columnscan::{ColumnScan, ColumnScanCell},
     datatypes::ColumnDataType,
     datavalues::AnyDataValue,
-    dictionary::meta_dv_dict::MetaDvDictionary,
     function::evaluation::StackProgram,
+    management::database::Dict,
 };
 
 /// [`ColumnScan`], which filters values of a "value" scan based on a [StackProgram]
@@ -26,8 +26,7 @@ where
     referenced_values: Rc<RefCell<Vec<AnyDataValue>>>,
 
     /// Dictionary used for translating values of `value_scan` into [AnyDataValue]
-    /// TODO: Lifetime probably not correct
-    dictionary: &'a MetaDvDictionary,
+    dictionary: &'a RefCell<Dict>,
 
     /// Current value
     current_value: Option<T>,
@@ -42,7 +41,7 @@ where
         value_scan: &'a ColumnScanCell<'a, T>,
         program: StackProgram,
         referenced_values: Rc<RefCell<Vec<AnyDataValue>>>,
-        dictionary: &'a MetaDvDictionary,
+        dictionary: &'a RefCell<Dict>,
     ) -> Self {
         Self {
             value_scan,
@@ -58,7 +57,7 @@ where
     /// Returns `None` if the filter could not have been evaluated.
     fn check_value(&self, value: T) -> Option<bool> {
         let datavalue = value
-            .into_datavalue(self.dictionary)
+            .into_datavalue(&self.dictionary.borrow())
             .expect("It is assumed that all id already in columns are present in the dictionary.");
         let referenced = &self.referenced_values.borrow();
 

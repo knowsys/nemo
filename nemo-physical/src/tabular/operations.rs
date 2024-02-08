@@ -10,6 +10,7 @@ pub mod subtract;
 pub mod union;
 
 use std::{
+    cell::RefCell,
     collections::{hash_map::Entry, HashMap},
     fmt::Debug,
     hash::Hash,
@@ -19,7 +20,7 @@ use std::{
 
 use delegate::delegate;
 
-use crate::{dictionary::meta_dv_dict::MetaDvDictionary, util::mapping::permutation::Permutation};
+use crate::{management::database::Dict, util::mapping::permutation::Permutation};
 
 use self::{
     filter::GeneratorFilter, function::GeneratorFunction, join::GeneratorJoin,
@@ -242,7 +243,7 @@ pub(crate) trait OperationGenerator {
     fn generate<'a>(
         &'_ self,
         input: Vec<Option<TrieScanEnum<'a>>>,
-        dictionary: &'a MetaDvDictionary,
+        dictionary: &'a RefCell<Dict>,
     ) -> Option<TrieScanEnum<'a>>;
 }
 
@@ -271,7 +272,7 @@ impl OperationGenerator for OperationGeneratorEnum {
             fn generate<'a>(
                 &'_ self,
                 input: Vec<Option<TrieScanEnum<'a>>>,
-                dictionary: &'a MetaDvDictionary,
+                dictionary: &'a RefCell<Dict>,
             ) -> Option<TrieScanEnum<'a>>;
         }
     }

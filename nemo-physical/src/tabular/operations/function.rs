@@ -1,7 +1,7 @@
 //! This module defines [TrieScanFunction] and [GeneratorFunction].
 
 use std::{
-    cell::UnsafeCell,
+    cell::{RefCell, UnsafeCell},
     collections::{hash_map::Entry, HashMap, HashSet},
 };
 
@@ -12,8 +12,8 @@ use crate::{
     },
     datatypes::{into_datavalue::IntoDataValue, StorageTypeName},
     datavalues::AnyDataValue,
-    dictionary::meta_dv_dict::MetaDvDictionary,
     function::{evaluation::StackProgram, tree::FunctionTree},
+    management::database::Dict,
     tabular::triescan::{PartialTrieScan, TrieScanEnum},
 };
 
@@ -89,7 +89,7 @@ impl GeneratorFunction {
     }
 
     /// Returns whether this operation does not alter the input table.
-    fn is_unchaning(&self) -> bool {
+    fn is_unchanging(&self) -> bool {
         // This operation behaves the same as the identity if
         // no new columns are computed
         self.output_columns
@@ -102,12 +102,12 @@ impl OperationGenerator for GeneratorFunction {
     fn generate<'a>(
         &'_ self,
         mut input: Vec<Option<TrieScanEnum<'a>>>,
-        dictionary: &'a MetaDvDictionary,
+        dictionary: &'a RefCell<Dict>,
     ) -> Option<TrieScanEnum<'a>> {
         debug_assert!(input.len() == 1);
 
         let trie_scan = input.remove(0)?;
-        if self.is_unchaning() {
+        if self.is_unchanging() {
             return Some(trie_scan);
         }
 
@@ -175,7 +175,7 @@ pub struct TrieScanFunction<'a> {
     trie_scan: Box<TrieScanEnum<'a>>,
     /// Dictionary used to translate column values in [AnyDataValue] for evaluation
     /// TODO: Check lifetimes
-    dictionary: &'a MetaDvDictionary,
+    dictionary: &'a RefCell<Dict>,
 
     /// Marks for each output index,
     /// whether the value of the corresponding layer is used as input to some function.
@@ -230,7 +230,7 @@ impl<'a> PartialTrieScan<'a> for TrieScanFunction<'a> {
                 // This value will be used in some future layer as an input to a function,
                 // so we translate it to an AnyDataValue and store it in `self.input_values`.
 
-                let column_value = self.column_scans[previous_layer].get_mut().current(previous_type).expect("It is only allowed to call down while the previous scan points to some value.").into_datavalue(self.dictionary).expect("All ids occuring in a column must be known to the dictionary");
+                let column_value = self.column_scans[previous_layer].get_mut().current(previous_type).expect("It is only allowed to call down while the previous scan points to some value.").into_datavalue(&self.dictionary.borrow()).expect("All ids occuring in a column must be known to the dictionary");
                 self.input_values.push(column_value);
             }
         }
@@ -242,7 +242,7 @@ impl<'a> PartialTrieScan<'a> for TrieScanFunction<'a> {
         if let Some(program) = &self.output_functions[next_layer] {
             let function_result = program.evaluate_data(&self.input_values);
             match function_result
-                .map(|result| result.to_storage_value_t(self.dictionary))
+                .map(|result| result.to_storage_value_t_mut(&mut self.dictionary.borrow_mut()))
                 .filter(|result| result.get_type() == next_type)
             {
                 Some(result) => {
@@ -277,13 +277,16 @@ impl<'a> PartialTrieScan<'a> for TrieScanFunction<'a> {
 
 #[cfg(test)]
 mod test {
+    use std::cell::RefCell;
+
     use crate::{
-        datatypes::{StorageTypeName, StorageValueT},
+        datatypes::{into_datavalue::IntoDataValue, StorageTypeName, StorageValueT},
         datavalues::AnyDataValue,
-        dictionary::{meta_dv_dict::MetaDvDictionary, DvDict},
+        dictionary::DvDict,
         function::tree::FunctionTree,
+        management::database::Dict,
         tabular::{
-            operations::{OperationGenerator, OperationTableGenerator},
+            operations::{prune::TrieScanPrune, OperationGenerator, OperationTableGenerator},
             trie::Trie,
             triescan::TrieScanEnum,
         },
@@ -294,7 +297,7 @@ mod test {
 
     #[test]
     fn function_constant() {
-        let dictionary = MetaDvDictionary::default();
+        let dictionary = RefCell::new(Dict::default());
 
         let trie = trie_int64(vec![
             &[1, 2, 5],
@@ -339,12 +342,12 @@ mod test {
         );
 
         let function_generator = GeneratorFunction::new(markers, &assigment);
-        let mut filter_scan = function_generator
+        let mut function_scan = function_generator
             .generate(vec![Some(trie_scan)], &dictionary)
             .unwrap();
 
         trie_dfs(
-            &mut filter_scan,
+            &mut function_scan,
             &[StorageTypeName::Int64],
             &[
                 StorageValueT::Int64(2), // a = 2
@@ -388,7 +391,7 @@ mod test {
 
     #[test]
     fn function_duplicate() {
-        let dictionary = MetaDvDictionary::default();
+        let dictionary = RefCell::new(Dict::default());
 
         let trie = trie_int64(vec![
             &[1, 3, 7, 10, 4],
@@ -425,12 +428,12 @@ mod test {
         );
 
         let function_generator = GeneratorFunction::new(markers, &assigment);
-        let mut filter_scan = function_generator
+        let mut function_scan = function_generator
             .generate(vec![Some(trie_scan)], &dictionary)
             .unwrap();
 
         trie_dfs(
-            &mut filter_scan,
+            &mut function_scan,
             &[StorageTypeName::Int64],
             &[
                 StorageValueT::Int64(1),  // x = 1
@@ -470,7 +473,7 @@ mod test {
 
     #[test]
     fn function_arithmetic() {
-        let dictionary = MetaDvDictionary::default();
+        let dictionary = RefCell::new(Dict::default());
 
         let trie = trie_int64(vec![&[1, 3], &[1, 4], &[2, 5]]);
 
@@ -500,12 +503,12 @@ mod test {
         assigment.insert(*marker_generator.get(&"r").unwrap(), function);
 
         let function_generator = GeneratorFunction::new(markers, &assigment);
-        let mut filter_scan = function_generator
+        let mut function_scan = function_generator
             .generate(vec![Some(trie_scan)], &dictionary)
             .unwrap();
 
         trie_dfs(
-            &mut filter_scan,
+            &mut function_scan,
             &[StorageTypeName::Int64],
             &[
                 StorageValueT::Int64(1),  // x = 1
@@ -522,7 +525,7 @@ mod test {
 
     #[test]
     fn function_repeat_multiple_types() {
-        let mut dictionary = MetaDvDictionary::default();
+        let mut dictionary = Dict::default();
         let a = dictionary
             .add_datavalue(AnyDataValue::new_string(String::from("a")))
             .value() as u32;
@@ -538,6 +541,7 @@ mod test {
         let bar = dictionary
             .add_datavalue(AnyDataValue::new_string(String::from("bar")))
             .value() as u32;
+        let dictionary = RefCell::new(dictionary);
 
         let trie = Trie::from_rows(vec![
             vec![StorageValueT::Id32(a), StorageValueT::Id32(foo1)],
@@ -565,12 +569,12 @@ mod test {
         assigment.insert(marker_ry, FunctionTree::reference(marker_y));
 
         let function_generator = GeneratorFunction::new(markers, &assigment);
-        let mut filter_scan = function_generator
+        let mut function_scan = function_generator
             .generate(vec![Some(trie_scan)], &dictionary)
             .unwrap();
 
         trie_dfs(
-            &mut filter_scan,
+            &mut function_scan,
             &[StorageTypeName::Id32, StorageTypeName::Int64],
             &[
                 StorageValueT::Id32(a),    // x = "a"
@@ -589,5 +593,76 @@ mod test {
                 StorageValueT::Int64(42),  // ry = 42
             ],
         );
+    }
+
+    #[test]
+    fn function_new_value() {
+        let mut dictionary = Dict::default();
+        let hello = dictionary
+            .add_datavalue(AnyDataValue::new_string(String::from("hello: ")))
+            .value() as u32;
+        let world = dictionary
+            .add_datavalue(AnyDataValue::new_string(String::from("world: ")))
+            .value() as u32;
+        let dictionary = RefCell::new(dictionary);
+
+        let trie = Trie::from_rows(vec![
+            vec![StorageValueT::Int64(10), StorageValueT::Id32(hello)],
+            vec![StorageValueT::Int64(20), StorageValueT::Id32(world)],
+        ]);
+
+        let trie_scan = TrieScanEnum::TrieScanGeneric(trie.partial_iterator());
+
+        let mut marker_generator = OperationTableGenerator::new();
+        marker_generator.add_marker("int");
+        marker_generator.add_marker("str");
+        marker_generator.add_marker("con");
+
+        let markers = marker_generator.operation_table(["int", "str", "con"].iter());
+        let marker_int = *marker_generator.get(&"int").unwrap();
+        let marker_str = *marker_generator.get(&"str").unwrap();
+        let marker_con = *marker_generator.get(&"con").unwrap();
+
+        let mut assigment = FunctionAssignment::new();
+        assigment.insert(
+            marker_con,
+            FunctionTree::string_concatenation(
+                FunctionTree::reference(marker_str),
+                FunctionTree::canonical_string(FunctionTree::reference(marker_int)),
+            ),
+        );
+
+        let function_generator = GeneratorFunction::new(markers, &assigment);
+        let function_scan = function_generator
+            .generate(vec![Some(trie_scan)], &dictionary)
+            .unwrap();
+
+        let result = Trie::from_trie_scan(TrieScanPrune::new(function_scan), 0)
+            .row_iterator()
+            .map(|row| {
+                row.into_iter()
+                    .map(|value| value.into_datavalue(&dictionary.borrow()).unwrap())
+                    .collect::<Vec<_>>()
+            })
+            .collect::<Vec<_>>();
+
+        let expected = vec![
+            vec![
+                AnyDataValue::new_integer_from_i64(10),
+                AnyDataValue::new_string(String::from("hello: ")),
+                AnyDataValue::new_string(String::from(
+                    "hello: \"10\"^^<http://www.w3.org/2001/XMLSchema#int>",
+                )),
+            ],
+            vec![
+                AnyDataValue::new_integer_from_i64(20),
+                AnyDataValue::new_string(String::from("world: ")),
+                AnyDataValue::new_string(String::from(
+                    "world: \"20\"^^<http://www.w3.org/2001/XMLSchema#int>",
+                )),
+            ],
+        ];
+
+        assert_eq!(result, expected);
     }
 }

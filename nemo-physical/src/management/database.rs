@@ -311,7 +311,7 @@ impl DatabaseInstance {
     /// or it can be known that evaulating this operation would result in an empty table.
     fn evaluate_operation<'a>(
         &'a self,
-        dictionary: &'a Dict,
+        dictionary: &'a RefCell<Dict>,
         storage: &'a TemporaryStorage,
         operation: &ExecutionTreeOperation,
     ) -> Option<TrieScanEnum<'a>> {
@@ -333,15 +333,13 @@ impl DatabaseInstance {
 
     /// Evaluate the tree of operations represented by the [ExecutionTree].
     fn execute_tree<'a>(
-        &'a self,
+        &'a mut self,
         storage: &'a TemporaryStorage,
         tree: &ExecutionTree,
     ) -> Result<ComputationResult, Error> {
-        let dictionary = &self.dictionary.borrow();
-
         let trie = match &tree.root {
             ExecutionTreeNode::Operation(operation) => {
-                let trie_scan = self.evaluate_operation(dictionary, storage, operation);
+                let trie_scan = self.evaluate_operation(&self.dictionary, storage, operation);
                 trie_scan
                     .map(|scan| Trie::from_trie_scan(TrieScanPrune::new(scan), tree.cut_layers))
                     .filter(|trie| !trie.is_empty())

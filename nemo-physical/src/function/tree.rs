@@ -7,7 +7,7 @@ use crate::datavalues::AnyDataValue;
 use super::definitions::{
     boolean::{BooleanConjunction, BooleanDisjunction, BooleanNegation},
     casting::{CastingIntoDouble, CastingIntoFloat, CastingIntoInteger64},
-    generic::{Equals, Unequals},
+    generic::{CanonicalString, Equals, Unequals},
     numeric::{
         NumericAbsolute, NumericAddition, NumericCosine, NumericDivision, NumericGreaterthan,
         NumericGreaterthaneq, NumericLessthan, NumericLessthaneq, NumericLogarithm,
@@ -92,6 +92,14 @@ where
             left: Box::new(left),
             right: Box::new(right),
         }
+    }
+
+    /// Create a tree node that evaluates to the canonical string representation of the sub node.
+    pub fn canonical_string(sub: Self) -> Self {
+        Self::Unary(
+            UnaryFunctionEnum::CanonicalString(CanonicalString),
+            Box::new(sub),
+        )
     }
 
     /// Create a tree node representing the conjunction of two boolean values.

@@ -1,8 +1,8 @@
 //! This module defines functions that are relevant for all data types.
 
-use crate::datavalues::AnyDataValue;
+use crate::datavalues::{AnyDataValue, DataValue};
 
-use super::BinaryFunction;
+use super::{BinaryFunction, UnaryFunction};
 
 /// Equal comparison
 ///
@@ -41,5 +41,16 @@ impl BinaryFunction for Unequals {
         } else {
             Some(AnyDataValue::new_boolean(true))
         }
+    }
+}
+
+/// Canonical string representation
+///
+/// Returns the canonical string representation of the given value
+#[derive(Debug, Copy, Clone)]
+pub struct CanonicalString;
+impl UnaryFunction for CanonicalString {
+    fn evaluate(&self, parameter: AnyDataValue) -> Option<AnyDataValue> {
+        Some(AnyDataValue::new_string(parameter.canonical_string()))
     }
 }

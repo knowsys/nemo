@@ -13,7 +13,7 @@ use crate::datavalues::AnyDataValue;
 use self::{
     boolean::{BooleanConjunction, BooleanDisjunction, BooleanNegation},
     casting::{CastingIntoDouble, CastingIntoFloat, CastingIntoInteger64},
-    generic::{Equals, Unequals},
+    generic::{CanonicalString, Equals, Unequals},
     numeric::{
         NumericAbsolute, NumericAddition, NumericCosine, NumericDivision, NumericGreaterthan,
         NumericGreaterthaneq, NumericLessthan, NumericLessthaneq, NumericLogarithm,
@@ -38,6 +38,7 @@ pub(crate) trait UnaryFunction {
 #[derive(Debug, Clone, Copy)]
 pub enum UnaryFunctionEnum {
     BooleanNegation(BooleanNegation),
+    CanonicalString(CanonicalString),
     CastingIntoInteger64(CastingIntoInteger64),
     CastingIntoDouble(CastingIntoDouble),
     CastingIntoFloat(CastingIntoFloat),
@@ -56,6 +57,7 @@ impl UnaryFunction for UnaryFunctionEnum {
     delegate! {
         to match self {
             Self::BooleanNegation(function) => function,
+            Self::CanonicalString(function) => function,
             Self::CastingIntoInteger64(function) => function,
             Self::CastingIntoFloat(function) => function,
             Self::CastingIntoDouble(function) => function,

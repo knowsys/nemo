@@ -638,11 +638,10 @@ impl<'a> TrieScan for TrieScanPrune<'a> {
 
 #[cfg(test)]
 mod test {
+    use std::cell::RefCell;
+
     use crate::{
-        datatypes::{StorageTypeName, StorageValueT},
-        datavalues::AnyDataValue,
-        dictionary::meta_dv_dict::MetaDvDictionary,
-        tabular::{
+        datatypes::{StorageTypeName, StorageValueT}, datavalues::AnyDataValue, dictionary::meta_dv_dict::MetaDvDictionary, management::database::Dict, tabular::{
             operations::{
                 filter::{Filter, GeneratorFilter},
                 join::test::generate_join_scan,
@@ -650,11 +649,10 @@ mod test {
             },
             trie::Trie,
             triescan::{PartialTrieScan, TrieScanEnum},
-        },
-        util::test_util::test::{
+        }, util::test_util::test::{
             partial_scan_current, partial_scan_current_at_layer, partial_scan_next,
             partial_scan_seek, trie_dfs, trie_id32, trie_int64,
-        },
+        }
     };
 
     use super::TrieScanPrune;
@@ -685,7 +683,7 @@ mod test {
 
     /// Creates an example trie with unmaterialized tuples
     fn create_example_trie_scan<'a>(
-        dictionary: &'a MetaDvDictionary,
+        dictionary: &'a RefCell<Dict>,
         input_trie: &'a Trie,
         layer_1_equality: i64,
         layer_3_equality: i64,
@@ -754,7 +752,7 @@ mod test {
 
     #[test]
     fn test_skip_unmaterialized_tuples() {
-        let dictionary = MetaDvDictionary::default();
+        let dictionary = RefCell::new(MetaDvDictionary::default());
         let trie = create_example_trie();
         let mut scan = create_example_trie_scan(&dictionary, &trie, 4, 7);
 
@@ -778,7 +776,7 @@ mod test {
 
     #[test]
     fn test_empty_input_trie() {
-        let dictionary = MetaDvDictionary::default();
+        let dictionary = RefCell::new(MetaDvDictionary::default());
         let trie = create_example_trie();
 
         // Equality on lowest layer changed to 99 to prevent any matches and create trie scan without materialized tuples
@@ -790,7 +788,7 @@ mod test {
     #[test]
     #[should_panic]
     fn test_advance_on_uninitialized_trie_scan_should_panic() {
-        let dictionary = MetaDvDictionary::default();
+        let dictionary = RefCell::new(MetaDvDictionary::default());
         let trie = create_example_trie();
         let mut scan = create_example_trie_scan(&dictionary, &trie, 4, 7);
 
@@ -799,7 +797,7 @@ mod test {
 
     #[test]
     fn test_advance_above_target_layer() {
-        let dictionary = MetaDvDictionary::default();
+        let dictionary = RefCell::new(MetaDvDictionary::default());
         let trie = create_example_trie();
         let mut scan = create_example_trie_scan(&dictionary, &trie, 4, 7);
 
@@ -1007,7 +1005,7 @@ mod test {
 
     #[test]
     fn test_partial_trie_scan_interface() {
-        let dictionary = MetaDvDictionary::default();
+        let dictionary = RefCell::new(MetaDvDictionary::default());
 
         let trie_a = trie_id32(vec![
             &[1, 0],

@@ -1,7 +1,7 @@
 //! This module defines [TrieScanJoin] and [GeneratorJoin].
 
 use std::{
-    cell::UnsafeCell,
+    cell::{RefCell, UnsafeCell},
     collections::{hash_map::Entry, HashMap},
 };
 
@@ -9,14 +9,10 @@ use crate::{
     columnar::{
         columnscan::{ColumnScanCell, ColumnScanEnum, ColumnScanRainbow},
         operations::join::ColumnScanJoin,
-    },
-    datatypes::{Double, Float, StorageTypeName},
-    dictionary::meta_dv_dict::MetaDvDictionary,
-    tabular::{
+    }, datatypes::{Double, Float, StorageTypeName}, management::database::Dict, tabular::{
         operations::OperationColumnMarker,
         triescan::{PartialTrieScan, TrieScanEnum},
-    },
-    util::mapping::{permutation::Permutation, traits::NatMapping},
+    }, util::mapping::{permutation::Permutation, traits::NatMapping}
 };
 
 use super::{OperationGenerator, OperationTable};
@@ -156,7 +152,7 @@ impl OperationGenerator for GeneratorJoin {
     fn generate<'a>(
         &'_ self,
         trie_scans: Vec<Option<TrieScanEnum<'a>>>,
-        _dictionary: &'a MetaDvDictionary,
+        _dictionary: &'a RefCell<Dict>,
     ) -> Option<TrieScanEnum<'a>> {
         // We return `None` if any of the input tables is `None`
         let mut trie_scans = trie_scans.into_iter().collect::<Option<Vec<_>>>()?;
@@ -306,21 +302,20 @@ impl<'a> PartialTrieScan<'a> for TrieScanJoin<'a> {
 
 #[cfg(test)]
 pub(crate) mod test {
+    use std::cell::RefCell;
+
     use crate::{
-        datatypes::{StorageTypeName, StorageValueT},
-        dictionary::meta_dv_dict::MetaDvDictionary,
-        tabular::{
+        datatypes::{StorageTypeName, StorageValueT}, dictionary::meta_dv_dict::MetaDvDictionary, management::database::Dict, tabular::{
             operations::{OperationGenerator, OperationTable, OperationTableGenerator},
             triescan::TrieScanEnum,
-        },
-        util::test_util::test::{trie_dfs, trie_id32},
+        }, util::test_util::test::{trie_dfs, trie_id32}
     };
 
     use super::GeneratorJoin;
 
     /// Generate a [TrieScanEnum] for a join between the provided input scans.
     pub(crate) fn generate_join_scan<'a>(
-        dictionary: &'a MetaDvDictionary,
+        dictionary: &'a RefCell<Dict>,
         output: Vec<&str>,
         input: Vec<(TrieScanEnum<'a>, Vec<&str>)>,
     ) -> TrieScanEnum<'a> {
@@ -345,7 +340,7 @@ pub(crate) mod test {
 
     #[test]
     fn basic_trie_join() {
-        let dictionary = MetaDvDictionary::default();
+        let dictionary = RefCell::new(MetaDvDictionary::default());
 
         let trie_a = trie_id32(vec![&[1, 2], &[1, 3], &[1, 4], &[2, 5], &[3, 6], &[3, 7]]);
         let trie_b = trie_id32(vec![
@@ -387,7 +382,7 @@ pub(crate) mod test {
 
     #[test]
     fn self_join() {
-        let dictionary = MetaDvDictionary::default();
+        let dictionary = RefCell::new(MetaDvDictionary::default());
 
         let trie = trie_id32(vec![
             &[1, 2],
@@ -436,7 +431,7 @@ pub(crate) mod test {
 
     #[test]
     fn self_join_inverse() {
-        let dictionary = MetaDvDictionary::default();
+        let dictionary = RefCell::new(MetaDvDictionary::default());
 
         let trie = trie_id32(vec![
             &[1, 2],
@@ -528,7 +523,7 @@ pub(crate) mod test {
 
     #[test]
     fn self_join_2() {
-        let dictionary = MetaDvDictionary::default();
+        let dictionary = RefCell::new(MetaDvDictionary::default());
 
         let trie_new = trie_id32(vec![
             &[1, 4],
@@ -660,7 +655,7 @@ pub(crate) mod test {
 
     #[test]
     fn another_join_test() {
-        let dictionary = MetaDvDictionary::default();
+        let dictionary = RefCell::new(MetaDvDictionary::default());
 
         let trie_a = trie_id32(vec![
             &[1, 2],

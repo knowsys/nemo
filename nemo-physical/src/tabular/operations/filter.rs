@@ -13,8 +13,8 @@ use crate::{
     },
     datatypes::{into_datavalue::IntoDataValue, StorageTypeName},
     datavalues::AnyDataValue,
-    dictionary::meta_dv_dict::MetaDvDictionary,
     function::{evaluation::StackProgram, tree::FunctionTree},
+    management::database::Dict,
     tabular::triescan::{PartialTrieScan, TrieScanEnum},
 };
 
@@ -152,7 +152,7 @@ impl OperationGenerator for GeneratorFilter {
     fn generate<'a>(
         &'_ self,
         mut trie_scans: Vec<Option<TrieScanEnum<'a>>>,
-        dictionary: &'a MetaDvDictionary,
+        dictionary: &'a RefCell<Dict>,
     ) -> Option<TrieScanEnum<'a>> {
         debug_assert!(trie_scans.len() == 1);
 
@@ -217,7 +217,7 @@ pub struct TrieScanFilter<'a> {
     trie_scan: Box<TrieScanEnum<'a>>,
     /// Dictionary used to translate column values in [AnyDataValue] for evaluation
     /// TODO: Check lifetimes
-    dictionary: &'a MetaDvDictionary,
+    dictionary: &'a RefCell<Dict>,
 
     /// Marks for each output index,
     /// whether the value of the corresponding layer is used as input to some function.
@@ -258,7 +258,7 @@ impl<'a> PartialTrieScan<'a> for TrieScanFilter<'a> {
             if self.input_indices[previous_layer] {
                 // This value will be used in some future layer as an input to a function,
                 // so we translate it to an AnyDataValue and store it in `self.input_values`.
-                let column_value = self.column_scans[previous_layer].get_mut().current(previous_type).expect("It is only allowed to call down while the previous scan points to some value.").into_datavalue(self.dictionary).expect("All ids occuring in a column must be known to the dictionary");
+                let column_value = self.column_scans[previous_layer].get_mut().current(previous_type).expect("It is only allowed to call down while the previous scan points to some value.").into_datavalue(&self.dictionary.borrow()).expect("All ids occuring in a column must be known to the dictionary");
                 self.input_values.borrow_mut().push(column_value);
             }
         }
@@ -282,6 +282,8 @@ impl<'a> PartialTrieScan<'a> for TrieScanFilter<'a> {
 
 #[cfg(test)]
 mod test {
+    use std::cell::RefCell;
+
     use crate::{
         datatypes::{StorageTypeName, StorageValueT},
         datavalues::AnyDataValue,
@@ -297,7 +299,7 @@ mod test {
 
     #[test]
     fn filter_equal() {
-        let dictionary = MetaDvDictionary::default();
+        let dictionary = RefCell::new(MetaDvDictionary::default());
 
         let trie = trie_int64(vec![
             &[1, 4, 0, 0],
@@ -350,7 +352,7 @@ mod test {
 
     #[test]
     fn restrict_constant() {
-        let dictionary = MetaDvDictionary::default();
+        let dictionary = RefCell::new(MetaDvDictionary::default());
 
         let trie = trie_int64(vec![
             &[1, 4, 0, 7],
@@ -404,7 +406,7 @@ mod test {
 
     #[test]
     fn filter_less_than() {
-        let dictionary = MetaDvDictionary::default();
+        let dictionary = RefCell::new(MetaDvDictionary::default());
 
         let trie = trie_int64(vec![&[1, 5], &[5, 2], &[5, 4], &[5, 7], &[8, 5]]);
 
@@ -442,7 +444,7 @@ mod test {
 
     #[test]
     fn filter_unequal() {
-        let dictionary = MetaDvDictionary::default();
+        let dictionary = RefCell::new(MetaDvDictionary::default());
 
         let trie = trie_int64(vec![&[1, 5], &[5, 2], &[5, 5], &[5, 7], &[8, 5], &[8, 8]]);
 
@@ -481,7 +483,7 @@ mod test {
 
     #[test]
     fn filter_top() {
-        let dictionary = MetaDvDictionary::default();
+        let dictionary = RefCell::new(MetaDvDictionary::default());
 
         let trie = trie_int64(vec![
             &[1, 2],
@@ -531,7 +533,7 @@ mod test {
 
     #[test]
     fn filter_constant_repeat() {
-        let dictionary = MetaDvDictionary::default();
+        let dictionary = RefCell::new(MetaDvDictionary::default());
 
         let trie = trie_int64(vec![
             &[2, 0, 0],

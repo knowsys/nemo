@@ -1,6 +1,6 @@
 //! This module defines [TrieScanSubtract] and [GeneratorSubtract].
 
-use std::cell::UnsafeCell;
+use std::cell::{RefCell, UnsafeCell};
 
 use bitvec::bitvec;
 
@@ -10,7 +10,7 @@ use crate::{
         operations::subtract::ColumnScanSubtract,
     },
     datatypes::{Double, Float, StorageTypeName},
-    dictionary::meta_dv_dict::MetaDvDictionary,
+    management::database::Dict,
     tabular::triescan::{PartialTrieScan, TrieScanEnum},
 };
 
@@ -50,7 +50,7 @@ impl OperationGenerator for GeneratorSubtract {
     fn generate<'a>(
         &'_ self,
         mut trie_scans: Vec<Option<TrieScanEnum<'a>>>,
-        _dictionary: &'a MetaDvDictionary,
+        _dictionary: &'a RefCell<Dict>,
     ) -> Option<TrieScanEnum<'a>> {
         debug_assert!(
             trie_scans.len() >= 1,
@@ -238,6 +238,8 @@ impl<'a> PartialTrieScan<'a> for TrieScanSubtract<'a> {
 
 #[cfg(test)]
 mod test {
+    use std::cell::RefCell;
+
     use crate::{
         datatypes::{StorageTypeName, StorageValueT},
         dictionary::meta_dv_dict::MetaDvDictionary,
@@ -252,7 +254,7 @@ mod test {
 
     #[test]
     fn subtract_single() {
-        let dictionary = MetaDvDictionary::default();
+        let dictionary = RefCell::new(MetaDvDictionary::default());
 
         let trie_main = trie_id32(vec![&[1, 3], &[1, 6], &[1, 8], &[2, 2], &[2, 7], &[3, 5]]);
         let trie_subtract = trie_id32(vec![&[1, 2], &[1, 6], &[1, 9], &[3, 2], &[3, 5], &[4, 8]]);
@@ -292,7 +294,7 @@ mod test {
 
     #[test]
     fn subtract_single_2() {
-        let dictionary = MetaDvDictionary::default();
+        let dictionary = RefCell::new(MetaDvDictionary::default());
 
         let trie_main = trie_id32(vec![
             &[4, 1],
@@ -355,7 +357,7 @@ mod test {
 
     #[test]
     fn subtract_multiple() {
-        let dictionary = MetaDvDictionary::default();
+        let dictionary = RefCell::new(MetaDvDictionary::default());
 
         let trie_main = trie_id32(vec![
             &[2, 0, 0],
@@ -444,7 +446,7 @@ mod test {
 
     #[test]
     fn subtract_middle() {
-        let dictionary = MetaDvDictionary::default();
+        let dictionary = RefCell::new(MetaDvDictionary::default());
 
         let trie_main = trie_id32(vec![&[4, 0, 0], &[4, 2, 1]]);
         let trie_subtract = trie_id32(vec![&[0]]);
@@ -481,7 +483,7 @@ mod test {
 
     #[test]
     fn subtract_top() {
-        let dictionary = MetaDvDictionary::default();
+        let dictionary = RefCell::new(MetaDvDictionary::default());
 
         let trie_main = trie_id32(vec![&[2, 0, 0], &[4, 0, 0], &[8, 5, 1]]);
         let trie_subtract = trie_id32(vec![&[2], &[8]]);
