@@ -319,7 +319,7 @@ impl NemoEngine {
             .map_err(WasmOrInternalNemoError::NemoError)
             .map_err(NemoError)?;
 
-        Ok(trace.tree(handles[0]).map(|tree| tree.to_ascii_art()))
+        Ok(trace.tree(handles[0]).map(|tree| tree.to_graphml()))
     }
 }
 
