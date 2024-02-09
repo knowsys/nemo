@@ -1,9 +1,14 @@
 //! This module contains basic data structures for tracing the origins of derived facts.
 
-use std::collections::{HashMap, HashSet};
+use std::{
+    borrow::Cow,
+    collections::{HashMap, HashSet},
+};
 
 use ascii_tree::write_tree;
 use nemo_physical::datavalues::AnyDataValue;
+use petgraph::graph::{DiGraph, NodeIndex};
+use petgraph_graphml::GraphMl;
 use serde::Serialize;
 
 use crate::model::{
@@ -182,13 +187,108 @@ pub struct TraceTreeRuleApplication {
     _position: usize,
 }
 
-/// Tree representation of an [ExecutionTrace] from a given start node
+impl TraceTreeRuleApplication {
+    fn to_instantiated_string(&self) -> String {
+        let mut rule = self.rule.clone();
+        rule.apply_assignment(
+            &self
+                .assignment
+                .iter()
+                .map(|(variable, constant)| {
+                    (
+                        variable.clone(),
+                        Term::Primitive(PrimitiveTerm::GroundTerm(constant.clone())),
+                    )
+                })
+                .collect(),
+        );
+        rule.to_string()
+    }
+}
+
+/// Tree representation of an [`ExecutionTrace`] from a given start node
 #[derive(Debug, Clone)]
 pub enum ExecutionTraceTree {
     /// Node represent a fact in the initial data base
     Fact(ChaseFact),
     /// Node represents a derived fact
     Rule(TraceTreeRuleApplication, Vec<ExecutionTraceTree>),
+}
+
+#[derive(Debug)]
+enum TracePetGraphNodeLabel {
+    Fact(ChaseFact),
+    Rule(TraceTreeRuleApplication),
+}
+
+impl ExecutionTraceTree {
+    fn to_ascii_tree(&self) -> ascii_tree::Tree {
+        match self {
+            Self::Fact(chase_fact) => ascii_tree::Tree::Leaf(vec![chase_fact.to_string()]),
+            Self::Rule(trace_tree_rule_application, subtrees) => ascii_tree::Tree::Node(
+                trace_tree_rule_application.to_instantiated_string(),
+                subtrees
+                    .iter()
+                    .map(ExecutionTraceTree::to_ascii_tree)
+                    .collect(),
+            ),
+        }
+    }
+
+    /// Create an ascii tree representation.
+    pub fn to_ascii_art(&self) -> String {
+        let mut result = String::new();
+        let _ = write_tree(&mut result, &self.to_ascii_tree());
+
+        result
+    }
+
+    fn to_petgraph(&self) -> DiGraph<TracePetGraphNodeLabel, ()> {
+        let mut graph = DiGraph::new();
+
+        let mut parent_node_index_opt: Option<NodeIndex> = None;
+        let mut node_stack = vec![self.clone()];
+        while let Some(next_node) = node_stack.pop() {
+            let petgraph_node = match next_node {
+                Self::Fact(ref chase_fact) => TracePetGraphNodeLabel::Fact(chase_fact.clone()),
+                Self::Rule(ref trace_tree_rule_application, _) => {
+                    TracePetGraphNodeLabel::Rule(trace_tree_rule_application.clone())
+                }
+            };
+
+            let next_node_index = graph.add_node(petgraph_node);
+            if let Some(parent_node_index) = parent_node_index_opt {
+                graph.add_edge(next_node_index, parent_node_index, ());
+            }
+            parent_node_index_opt = Some(next_node_index);
+
+            if let Self::Rule(_, subtrees) = next_node {
+                node_stack.append(&mut subtrees.clone())
+            }
+        }
+
+        graph
+    }
+
+    /// Return [`ExecutionTraceTree`] in [GraphML](http://graphml.graphdrawing.org/) format (for [Evonne](https://github.com/imldresden/evonne) integration)
+    pub fn to_graphml(&self) -> String {
+        let petgraph = self.to_petgraph();
+        GraphMl::new(&petgraph)
+            .export_node_weights(Box::new(|node_label| match node_label {
+                TracePetGraphNodeLabel::Fact(chase_fact) => vec![
+                    (Cow::from("type"), Cow::from("axiom")),
+                    (Cow::from("element"), Cow::from(chase_fact.to_string())),
+                ],
+                TracePetGraphNodeLabel::Rule(trace_tree_rule_application) => vec![
+                    (Cow::from("type"), Cow::from("axiom")),
+                    (
+                        Cow::from("element"),
+                        Cow::from(trace_tree_rule_application.to_instantiated_string()),
+                    ),
+                ],
+            }))
+            .to_string()
+    }
 }
 
 impl ExecutionTrace {
@@ -225,71 +325,7 @@ impl ExecutionTrace {
     }
 }
 
-impl ExecutionTrace {
-    /// Converts a rule to a string representation
-    /// so it can appear as a node in the ascii representation of the [ExecutionTrace].
-    fn ascii_format_rule(&self, application: &TraceRuleApplication) -> String {
-        let mut rule_applied = self.program.rules()[application.rule_index].clone();
-        rule_applied.apply_assignment(
-            &application
-                .assignment
-                .iter()
-                .map(|(variable, constant)| {
-                    (
-                        variable.clone(),
-                        Term::Primitive(PrimitiveTerm::GroundTerm(constant.clone())),
-                    )
-                })
-                .collect(),
-        );
-
-        rule_applied.to_string()
-    }
-
-    /// Create an ascii tree representation starting form a particular node.
-    ///
-    /// Returns `None` if no successful derivation can be given.
-    pub fn ascii_tree(&self, handle: TraceFactHandle) -> Option<ascii_tree::Tree> {
-        let traced_fact = self.get_fact(handle);
-
-        if let TraceStatus::Success(derivation) = &traced_fact.status {
-            match derivation {
-                TraceDerivation::Input => {
-                    Some(ascii_tree::Tree::Leaf(vec![traced_fact.fact.to_string()]))
-                }
-                TraceDerivation::Derived(application, subderivations) => {
-                    let mut subtrees = Vec::new();
-                    for &derivation in subderivations {
-                        if let Some(tree) = self.ascii_tree(derivation) {
-                            subtrees.push(tree);
-                        } else {
-                            return None;
-                        }
-                    }
-
-                    Some(ascii_tree::Tree::Node(
-                        self.ascii_format_rule(application),
-                        subtrees,
-                    ))
-                }
-            }
-        } else {
-            None
-        }
-    }
-
-    /// Create an ascii tree representation starting form a particular node.
-    ///
-    /// Returns `None` if no successful derivation can be given.
-    pub fn ascii_tree_string(&self, handle: TraceFactHandle) -> Option<String> {
-        let mut result = String::new();
-        write_tree(&mut result, &self.ascii_tree(handle)?).ok()?;
-
-        Some(result)
-    }
-}
-
-/// Represents an inference in an [ExecutionTraceJson]
+/// Represents an inference in an [`ExecutionTraceJson`]
 #[derive(Debug, Serialize)]
 struct ExecutionTraceJsonInference {
     #[serde(rename = "ruleName")]
@@ -560,7 +596,7 @@ mod test {
 "#;
 
         assert_eq!(
-            trace.ascii_tree_string(trace_r_ba).unwrap(),
+            trace.tree(trace_r_ba).unwrap().to_ascii_art(),
             trace_string.to_string()
         )
     }
