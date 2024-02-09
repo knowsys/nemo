@@ -68,7 +68,7 @@ mod test {
     use test_log::test;
 
     #[test]
-    fn test_u64() {
+    fn columnscan_pass_basic() {
         let ref_col = ColumnVector::new(vec![0u32, 4, 7]);
         let ref_col_iter = ColumnScanCell::new(ColumnScanEnum::ColumnScanVector(ref_col.iter()));
 

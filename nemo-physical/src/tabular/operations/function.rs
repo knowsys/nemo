@@ -174,7 +174,6 @@ pub struct TrieScanFunction<'a> {
     /// Input trie scan the content of which is used for the definition of the new columns
     trie_scan: Box<TrieScanEnum<'a>>,
     /// Dictionary used to translate column values in [AnyDataValue] for evaluation
-    /// TODO: Check lifetimes
     dictionary: &'a RefCell<Dict>,
 
     /// Marks for each output index,

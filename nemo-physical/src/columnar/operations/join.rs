@@ -136,7 +136,7 @@ mod test {
     use super::ColumnScanJoin;
 
     #[test]
-    fn test_u64_simple_join<'a>() {
+    fn columnscan_join_basic<'a>() {
         let data1: Vec<u64> = vec![1, 3, 5, 7, 9];
         let vc1: ColumnVector<u64> = ColumnVector::new(data1);
         let mut gcs1 = ColumnScanEnum::ColumnScanVector(ColumnScanVector::new(&vc1)).into();

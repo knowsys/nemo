@@ -4,18 +4,16 @@ use std::{fmt::Debug, ops::Range};
 
 use crate::{columnar::columnscan::ColumnScan, datatypes::ColumnDataType};
 
-/// Position of the cursor in [ColumnScanConstant]
-/// relative to the single value its going to outout
+/// [ColumnScanConstant] returns exactly one value.
+/// Therefore, it can be only in of three states.
 #[derive(Debug)]
-enum ColumnScanStatus {
-    /// Before the constant value
-    ///
-    /// This is the initial state.
-    Before,
-    /// At the constant value
-    At,
-    /// After the constant value
-    After,
+enum ColumnScanState {
+    /// [ColumnScanConstant] is in its initial position
+    Start,
+    /// [ColumnScanConstant] points to its output value
+    Value,
+    /// [ColumnScanConstant] passed its output value
+    End,
 }
 
 /// [`ColumnScan`] which represents a column which holds one value.
@@ -27,8 +25,8 @@ where
     /// The value that is always returned
     constant: Option<T>,
 
-    /// Status of this scan
-    status: ColumnScanStatus,
+    /// Current [ColumnScanState] of this scan
+    state: ColumnScanState,
 }
 impl<T> ColumnScanConstant<T>
 where
@@ -38,7 +36,7 @@ where
     pub(crate) fn new(constant: Option<T>) -> Self {
         Self {
             constant,
-            status: ColumnScanStatus::Before,
+            state: ColumnScanState::Start,
         }
     }
 
@@ -55,16 +53,16 @@ where
     type Item = T;
 
     fn next(&mut self) -> Option<Self::Item> {
-        match self.status {
-            ColumnScanStatus::Before => {
-                self.status = ColumnScanStatus::At;
+        match self.state {
+            ColumnScanState::Start => {
+                self.state = ColumnScanState::Value;
                 self.constant
             }
-            ColumnScanStatus::At => {
-                self.status = ColumnScanStatus::After;
+            ColumnScanState::Value => {
+                self.state = ColumnScanState::End;
                 None
             }
-            ColumnScanStatus::After => None,
+            ColumnScanState::End => None,
         }
     }
 }
@@ -74,25 +72,20 @@ where
     T: ColumnDataType,
 {
     fn seek(&mut self, value: T) -> Option<T> {
-        if let Some(constant) = self.constant {
-            if value <= constant {
-                if let ColumnScanStatus::After = self.status {
-                    None
-                } else {
-                    self.status = ColumnScanStatus::At;
-                    self.constant
-                }
-            } else {
-                self.status = ColumnScanStatus::After;
-                None
-            }
-        } else {
+        if value > self.constant? {
+            self.state = ColumnScanState::End;
+        }
+
+        if let ColumnScanState::End = self.state {
             None
+        } else {
+            self.state = ColumnScanState::Value;
+            self.constant
         }
     }
 
     fn current(&self) -> Option<T> {
-        if let ColumnScanStatus::At = self.status {
+        if let ColumnScanState::Value = self.state {
             self.constant
         } else {
             None
@@ -100,7 +93,7 @@ where
     }
 
     fn reset(&mut self) {
-        self.status = ColumnScanStatus::Before;
+        self.state = ColumnScanState::Start;
     }
 
     fn pos(&self) -> Option<usize> {

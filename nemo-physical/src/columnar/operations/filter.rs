@@ -126,3 +126,71 @@ where
         unimplemented!("This functions is not implemented for column operators");
     }
 }
+
+#[cfg(test)]
+mod test {
+    use std::{cell::RefCell, rc::Rc};
+
+    use crate::{
+        columnar::{
+            column::{vector::ColumnVector, Column},
+            columnscan::{ColumnScan, ColumnScanCell, ColumnScanEnum},
+        },
+        datavalues::AnyDataValue,
+        function::{evaluation::StackProgram, tree::FunctionTree},
+        management::database::Dict,
+        tabular::operations::OperationTable,
+    };
+
+    use super::ColumnScanFilter;
+
+    #[test]
+    fn columnscan_filter_basic() {
+        let dictionary = RefCell::new(Dict::default());
+
+        let value_column = ColumnVector::new(vec![0i64, 7, 14, 21]);
+        let value_scan = ColumnScanCell::new(ColumnScanEnum::ColumnScanVector(value_column.iter()));
+
+        let reference_values = vec![
+            AnyDataValue::new_integer_from_i64(10),
+            AnyDataValue::new_string(String::from("test")),
+        ];
+
+        let operation_table = OperationTable::new_unique(3);
+        let marker_int = *operation_table.get(0);
+        let marker_str = *operation_table.get(1);
+        let marker_value = *operation_table.get(2);
+
+        let function = FunctionTree::equals(
+            FunctionTree::reference(marker_value),
+            FunctionTree::numeric_addition(
+                FunctionTree::reference(marker_int),
+                FunctionTree::string_length(FunctionTree::reference(marker_str)),
+            ),
+        );
+
+        let program = StackProgram::from_function_tree(
+            &function,
+            &vec![(marker_int, 0), (marker_str, 1)].into_iter().collect(),
+            Some(marker_value),
+        );
+
+        let mut scan_filter = ColumnScanFilter::new(
+            &value_scan,
+            program,
+            Rc::new(RefCell::new(reference_values)),
+            &dictionary,
+        );
+
+        assert_eq!(scan_filter.current(), None);
+        assert_eq!(scan_filter.next(), Some(14));
+        assert_eq!(scan_filter.next(), None);
+
+        scan_filter.reset();
+        value_scan.reset();
+
+        assert_eq!(scan_filter.seek(7), Some(14));
+        assert_eq!(scan_filter.seek(12), Some(14));
+        assert_eq!(scan_filter.seek(15), None);
+    }
+}

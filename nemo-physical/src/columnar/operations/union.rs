@@ -187,7 +187,7 @@ mod test {
     use test_log::test;
 
     #[test]
-    fn union_u64() {
+    fn columnscan_union_basic() {
         let column_fst = ColumnVector::new(vec![0u64, 1, 3, 5, 15]);
         let column_snd = ColumnVector::new(vec![0u64, 1, 2, 7, 9]);
         let column_trd = ColumnVector::new(vec![0u64, 2, 4, 11]);
