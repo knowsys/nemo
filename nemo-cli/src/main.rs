@@ -241,8 +241,8 @@ fn run(mut cli: CliApp) -> Result<(), Error> {
             }
             None => {
                 for (fact, handle) in facts.into_iter().zip(handles) {
-                    if let Some(tree) = trace.ascii_tree_string(handle) {
-                        println!("\n{}", tree);
+                    if let Some(tree) = trace.tree(handle) {
+                        println!("\n{}", tree.to_ascii_art());
                     } else {
                         println!("\n{fact} was not derived");
                     }
