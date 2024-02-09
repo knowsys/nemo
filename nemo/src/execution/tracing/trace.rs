@@ -257,9 +257,8 @@ impl ExecutionTraceTree {
     fn to_petgraph(&self) -> DiGraph<TracePetGraphNodeLabel, ()> {
         let mut graph = DiGraph::new();
 
-        let mut parent_node_index_opt: Option<NodeIndex> = None;
-        let mut node_stack = vec![self.clone()];
-        while let Some(next_node) = node_stack.pop() {
+        let mut node_stack: Vec<(Option<NodeIndex>, Self)> = vec![(None, self.clone())];
+        while let Some((parent_node_index_opt, next_node)) = node_stack.pop() {
             let petgraph_node = match next_node {
                 Self::Fact(ref chase_fact) => TracePetGraphNodeLabel::Fact(chase_fact.clone()),
                 Self::Rule(ref trace_tree_rule_application, _) => {
@@ -271,10 +270,15 @@ impl ExecutionTraceTree {
             if let Some(parent_node_index) = parent_node_index_opt {
                 graph.add_edge(next_node_index, parent_node_index, ());
             }
-            parent_node_index_opt = Some(next_node_index);
 
             if let Self::Rule(_, subtrees) = next_node {
-                node_stack.append(&mut subtrees.clone())
+                let new_parent_node_index_opt = Some(next_node_index);
+                let mut entries_to_append: Vec<(Option<NodeIndex>, Self)> = subtrees
+                    .iter()
+                    .cloned()
+                    .map(|st| (new_parent_node_index_opt, st))
+                    .collect();
+                node_stack.append(&mut entries_to_append)
             }
         }
 
