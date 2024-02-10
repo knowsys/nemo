@@ -4,6 +4,7 @@ pub mod aggregate;
 pub mod filter;
 pub mod function;
 pub mod join;
+pub mod null;
 pub mod projectreorder;
 pub mod prune;
 pub mod subtract;

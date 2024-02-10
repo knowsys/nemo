@@ -63,7 +63,7 @@ where
         Self::Leaf(FunctionLeaf::Constant(constant))
     }
 
-    /// Create a leaf node with a referene.
+    /// Create a leaf node with a reference.
     pub fn reference(reference: ReferenceType) -> Self {
         Self::Leaf(FunctionLeaf::Reference(reference))
     }

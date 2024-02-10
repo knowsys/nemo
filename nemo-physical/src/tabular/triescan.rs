@@ -12,7 +12,7 @@ use crate::{
 
 use super::{
     operations::{
-        filter::TrieScanFilter, function::TrieScanFunction, join::TrieScanJoin,
+        filter::TrieScanFilter, function::TrieScanFunction, join::TrieScanJoin, null::TrieScanNull,
         prune::TrieScanPrune, subtract::TrieScanSubtract, union::TrieScanUnion,
     },
     trie::TrieScanGeneric,
@@ -62,32 +62,35 @@ pub trait PartialTrieScan<'a>: Debug {
 /// Enum containing all implementations of [PartialTrieScan]
 #[derive(Debug)]
 pub enum TrieScanEnum<'a> {
+    /// Case [TrieScanFilter]
+    TrieScanFilter(TrieScanFilter<'a>),
+    /// Case [TrieScanFunction]
+    TrieScanFunction(TrieScanFunction<'a>),
     /// Case [TrieScanGeneric]
     TrieScanGeneric(TrieScanGeneric<'a>),
     /// Case [TrieScanJoin]
     TrieScanJoin(TrieScanJoin<'a>),
-    /// Case [TrieScanUnion]
-    TrieScanUnion(TrieScanUnion<'a>),
-    /// Case [TrieScanSubtract]
-    TrieScanSubtract(TrieScanSubtract<'a>),
+    /// Case [TrieScanNull]
+    TrieScanNull(TrieScanNull<'a>),
     /// Case [TrieScanPrune]
     TrieScanPrune(TrieScanPrune<'a>),
-    /// Case [TrieScanFunction]
-    TrieScanFunction(TrieScanFunction<'a>),
-    /// Case [TrieScanFilter]
-    TrieScanFilter(TrieScanFilter<'a>),
+    /// Case [TrieScanSubtract]
+    TrieScanSubtract(TrieScanSubtract<'a>),
+    /// Case [TrieScanUnion]
+    TrieScanUnion(TrieScanUnion<'a>),
 }
 
 impl<'a> PartialTrieScan<'a> for TrieScanEnum<'a> {
     delegate! {
         to match self {
-            TrieScanEnum::TrieScanGeneric(scan) => scan,
-            TrieScanEnum::TrieScanJoin(scan) => scan,
-            TrieScanEnum::TrieScanUnion(scan) => scan,
-            TrieScanEnum::TrieScanSubtract(scan) => scan,
-            TrieScanEnum::TrieScanPrune(scan) => scan,
-            TrieScanEnum::TrieScanFunction(scan) => scan,
-            TrieScanEnum::TrieScanFilter(scan) => scan,
+            Self::TrieScanFilter(scan) => scan,
+            Self::TrieScanFunction(scan) => scan,
+            Self::TrieScanGeneric(scan) => scan,
+            Self::TrieScanJoin(scan) => scan,
+            Self::TrieScanNull(scan) => scan,
+            Self::TrieScanPrune(scan) => scan,
+            Self::TrieScanSubtract(scan) => scan,
+            Self::TrieScanUnion(scan) => scan,
         } {
             fn up(&mut self);
             fn down(&mut self, storage_type: StorageTypeName);

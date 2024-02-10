@@ -90,13 +90,13 @@ impl OperationGenerator for GeneratorUnion {
     }
 }
 
-/// [`PartialTrieScan`] which represents the union of a list of [`PartialTrieScan`]s
+/// [PartialTrieScan] which represents the union of a list of [PartialTrieScan]s
 #[derive(Debug)]
 pub struct TrieScanUnion<'a> {
     /// Input trie scans over of which the union is computed
     trie_scans: Vec<TrieScanEnum<'a>>,
 
-    /// For each layer in the resulting trie contains a [`ColumnScanRainbow`]
+    /// For each layer in the resulting trie contains a [ColumnScanRainbow]
     /// evaluating the union of the underlying columns of the input trie.
     column_scans: Vec<UnsafeCell<ColumnScanRainbow<'a>>>,
 
