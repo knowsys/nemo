@@ -1,6 +1,6 @@
 //! This module defines [GeneratorProjectReorder].
 
-use std::collections::HashMap;
+use std::{collections::HashMap, ops::Sub};
 
 use crate::{
     datatypes::StorageValueT,
@@ -70,7 +70,7 @@ impl GeneratorProjectReorder {
 
         Self {
             projectreordering: ProjectReordering::from_map(result_map, arity),
-            last_used_layer: arity - 1,
+            last_used_layer: arity.checked_sub(1).unwrap_or(0),
             arity_output: arity,
         }
     }

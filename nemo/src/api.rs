@@ -115,14 +115,13 @@ mod test {
 
     use super::*;
 
-    #[cfg_attr(miri, ignore)]
-    #[ignore = "currently broken due to ongoing refactoring"]
+    // #[cfg_attr(miri, ignore)]
+    // #[ignore = "currently broken due to ongoing refactoring"]
     #[test]
     fn reason() {
-        let mut engine =
-            load("../resources/testcases/lcs-diff-computation/run-lcs-10.rls".into()).unwrap();
+        std::env::set_current_dir("../resources/testcases/regression/restricted_chase").unwrap();
+        let mut engine = load("only_nulls.rls".into()).unwrap();
         let cur_dir = std::env::current_dir().unwrap();
-        std::env::set_current_dir("../resources/testcases/lcs-diff-computation/").unwrap();
         super::reason(&mut engine).unwrap();
         std::env::set_current_dir(cur_dir).unwrap();
 

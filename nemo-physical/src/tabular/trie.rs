@@ -186,6 +186,10 @@ impl Trie {
     pub fn from_trie_scan<Scan: TrieScan>(mut trie_scan: Scan, cut_layers: usize) -> Self {
         let num_columns = trie_scan.num_columns() - cut_layers;
 
+        if num_columns == 0 {
+            return Self::empty(0);
+        }
+
         let mut intervalcolumn_builders =
             Vec::<IntervalColumnTBuilderTriescan<IntervalLookupMethod>>::with_capacity(num_columns);
 

@@ -44,6 +44,9 @@ impl RuleExecution {
         for variable in rule.all_variables() {
             variable_translation.add_marker(variable);
         }
+        for variable in analysis.existential_aux_rule.all_variables() {
+            variable_translation.add_marker(variable);
+        }
 
         let body_strategy = Box::new(SeminaiveStrategy::initialize(rule, analysis));
         let head_strategy: Box<dyn HeadStrategy> = if analysis.is_existential {

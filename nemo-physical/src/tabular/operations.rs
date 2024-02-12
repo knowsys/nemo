@@ -24,7 +24,7 @@ use delegate::delegate;
 use crate::{management::database::Dict, util::mapping::permutation::Permutation};
 
 use self::{
-    filter::GeneratorFilter, function::GeneratorFunction, join::GeneratorJoin,
+    filter::GeneratorFilter, function::GeneratorFunction, join::GeneratorJoin, null::GeneratorNull,
     subtract::GeneratorSubtract, union::GeneratorUnion,
 };
 
@@ -259,6 +259,8 @@ pub(crate) enum OperationGeneratorEnum {
     Filter(GeneratorFilter),
     /// Function
     Function(GeneratorFunction),
+    /// Null
+    Null(GeneratorNull),
 }
 
 impl OperationGenerator for OperationGeneratorEnum {
@@ -269,6 +271,7 @@ impl OperationGenerator for OperationGeneratorEnum {
             Self::Subtract(generator) => generator,
             Self::Filter(generator) => generator,
             Self::Function(generator) => generator,
+            Self::Null(generator) => generator,
         } {
             fn generate<'a>(
                 &'_ self,
@@ -287,6 +290,7 @@ impl Debug for OperationGeneratorEnum {
             Self::Subtract(generator) => f.write_fmt(format_args!("Subtract ({generator:?})")),
             Self::Filter(generator) => f.write_fmt(format_args!("Filter ({generator:?})")),
             Self::Function(generator) => f.write_fmt(format_args!("Function ({generator:?})")),
+            Self::Null(generator) => f.write_fmt(format_args!("Null ({generator:?})")),
         }
     }
 }
