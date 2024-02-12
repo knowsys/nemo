@@ -641,7 +641,11 @@ mod test {
     use std::cell::RefCell;
 
     use crate::{
-        datatypes::{StorageTypeName, StorageValueT}, datavalues::AnyDataValue, dictionary::meta_dv_dict::MetaDvDictionary, management::database::Dict, tabular::{
+        datatypes::{StorageTypeName, StorageValueT},
+        datavalues::AnyDataValue,
+        dictionary::meta_dv_dict::MetaDvDictionary,
+        management::database::Dict,
+        tabular::{
             operations::{
                 filter::{Filter, GeneratorFilter},
                 join::test::generate_join_scan,
@@ -649,10 +653,11 @@ mod test {
             },
             trie::Trie,
             triescan::{PartialTrieScan, TrieScanEnum},
-        }, util::test_util::test::{
+        },
+        util::test_util::test::{
             partial_scan_current, partial_scan_current_at_layer, partial_scan_next,
             partial_scan_seek, trie_dfs, trie_id32, trie_int64,
-        }
+        },
     };
 
     use super::TrieScanPrune;

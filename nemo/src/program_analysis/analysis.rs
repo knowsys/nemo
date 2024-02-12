@@ -127,7 +127,7 @@ fn construct_existential_aux_rule(
     let mut generate_variable = move || {
         variable_index += 1;
         let name = format!("__GENERATED_HEAD_AUX_VARIABLE_{}", variable_index);
-        Variable::Universal(Identifier(name))
+        Variable::Universal(name)
     };
 
     let mut used_variables = HashSet::new();

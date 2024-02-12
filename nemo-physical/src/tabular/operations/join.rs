@@ -9,10 +9,14 @@ use crate::{
     columnar::{
         columnscan::{ColumnScanCell, ColumnScanEnum, ColumnScanRainbow},
         operations::join::ColumnScanJoin,
-    }, datatypes::{Double, Float, StorageTypeName}, management::database::Dict, tabular::{
+    },
+    datatypes::{Double, Float, StorageTypeName},
+    management::database::Dict,
+    tabular::{
         operations::OperationColumnMarker,
         triescan::{PartialTrieScan, TrieScanEnum},
-    }, util::mapping::{permutation::Permutation, traits::NatMapping}
+    },
+    util::mapping::{permutation::Permutation, traits::NatMapping},
 };
 
 use super::{OperationGenerator, OperationTable};
@@ -305,10 +309,14 @@ pub(crate) mod test {
     use std::cell::RefCell;
 
     use crate::{
-        datatypes::{StorageTypeName, StorageValueT}, dictionary::meta_dv_dict::MetaDvDictionary, management::database::Dict, tabular::{
+        datatypes::{StorageTypeName, StorageValueT},
+        dictionary::meta_dv_dict::MetaDvDictionary,
+        management::database::Dict,
+        tabular::{
             operations::{OperationGenerator, OperationTable, OperationTableGenerator},
             triescan::TrieScanEnum,
-        }, util::test_util::test::{trie_dfs, trie_id32}
+        },
+        util::test_util::test::{trie_dfs, trie_id32},
     };
 
     use super::GeneratorJoin;

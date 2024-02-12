@@ -6,7 +6,7 @@ use crate::{
     error::Error,
     model::{
         chase_model::variable::{AGGREGATE_VARIABLE_PREFIX, CONSTRUCT_VARIABLE_PREFIX},
-        Constant, Constraint, Identifier, Literal, PrimitiveTerm, Rule, Term, Variable,
+        Constant, Constraint, Literal, PrimitiveTerm, Rule, Term, Variable,
     },
 };
 
@@ -194,13 +194,10 @@ impl ChaseRule {
 
 impl ChaseRule {
     /// Increments `next_variable_id`, but returns it's old value with a prefix.
-    fn generate_incrementing_variable_name(
-        prefix: &str,
-        next_variable_id: &mut usize,
-    ) -> Identifier {
-        let i = Identifier(format!("{}{}", prefix, next_variable_id));
+    fn generate_incrementing_variable_name(prefix: &str, next_variable_id: &mut usize) -> String {
+        let result = format!("{}{}", prefix, next_variable_id);
         *next_variable_id += 1;
-        i
+        result
     }
 
     // Remove constraints of the form ?X = ?Y from the rule

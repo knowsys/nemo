@@ -425,7 +425,7 @@ mod test {
                 .into_iter()
                 .map(|(k, v)| {
                     (
-                        Variable::Universal(Identifier(k.to_string())),
+                        Variable::Universal(k.to_string()),
                         Constant::Abstract(Identifier(v.to_string())),
                     )
                 })
@@ -435,9 +435,9 @@ mod test {
 
     macro_rules! atom_term {
         (? $var:expr ) => {
-            Term::Primitive(PrimitiveTerm::Variable(Variable::Universal(Identifier(
+            Term::Primitive(PrimitiveTerm::Variable(Variable::Universal(
                 $var.to_string(),
-            ))))
+            )))
         };
     }
 

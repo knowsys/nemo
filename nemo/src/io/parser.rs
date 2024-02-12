@@ -11,7 +11,7 @@ use nemo_physical::error::ReadingError;
 use nom::{
     branch::alt,
     bytes::complete::{is_not, tag},
-    character::complete::{alpha1, digit1, multispace1, none_of, satisfy},
+    character::complete::{alpha1, digit1, multispace1, satisfy},
     combinator::{all_consuming, cut, map, map_res, opt, recognize, value},
     multi::{many0, many1, separated_list0, separated_list1},
     sequence::{delimited, pair, preceded, separated_pair, terminated, tuple},
@@ -437,23 +437,6 @@ impl<'a> RuleParser<'a> {
         )
     }
 
-    fn parse_type_name(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<PrimitiveType> {
-        traced("parse_type_name", move |input| {
-            let (remainder, type_name) = map_error(
-                map_res(
-                    recognize(pair(alpha1, many0(none_of(",)] ")))),
-                    |name: Span<'a>| name.parse(),
-                    // NOTE: type names may not contain commata but any
-                    // other character (they should start with [a-zA-Z]
-                    // though)
-                ),
-                || ParseError::ExpectedLogicalTypeName,
-            )(input)?;
-
-            Ok((remainder, type_name))
-        })
-    }
-
     /// Parse a data source declaration.
     /// This is a backwards compatibility feature for Rulewerk syntax. Nemo normally uses
     /// `@import` instead of `@source`. The difference in `@source` is that (1) a predicate
@@ -467,7 +450,7 @@ impl<'a> RuleParser<'a> {
                 move |input| {
                     let (remainder, (predicate, tuple_constraint)) = preceded(
                         terminated(token("@source"), cut(multispace_or_comment1)),
-                        cut(self.parse_qualified_predicate_name(true)),
+                        cut(self.parse_qualified_predicate_name()),
                     )(input)?;
 
                     let arity = tuple_constraint
@@ -851,7 +834,6 @@ impl<'a> RuleParser<'a> {
     /// FIXME: Obsolete. Can be removed in the future.
     fn parse_qualified_predicate_name(
         &'a self,
-        constraint_is_lower_bound: bool,
     ) -> impl FnMut(Span<'a>) -> IntermediateResult<(Identifier, TupleConstraint)> {
         traced(
             "parse_qualified_predicate_name",
@@ -861,21 +843,9 @@ impl<'a> RuleParser<'a> {
                     multispace_or_comment0,
                     delimited(
                         token("["),
-                        cut(alt((
-                            map_res(digit1, |number: Span<'a>| {
-                                number.parse::<usize>().map(TupleConstraint::from_arity)
-                            }),
-                            map(
-                                separated_list1(self.parse_comma(), self.parse_type_name()),
-                                move |type_names| {
-                                    if constraint_is_lower_bound {
-                                        TupleConstraint::at_least(type_names)
-                                    } else {
-                                        TupleConstraint::exact(type_names)
-                                    }
-                                },
-                            ),
-                        ))),
+                        cut(map_res(digit1, |number: Span<'a>| {
+                            number.parse::<usize>().map(TupleConstraint::from_arity)
+                        })),
                         cut(token("]")),
                     ),
                 ),
@@ -1057,14 +1027,14 @@ impl<'a> RuleParser<'a> {
     }
 
     /// Parse a variable name.
-    fn parse_variable_name(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Identifier> {
+    fn parse_variable_name(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<String> {
         traced(
             "parse_variable",
             map_error(
                 move |input| {
                     let (remainder, name) = parse_simple_name(input)?;
 
-                    Ok((remainder, Identifier(name.to_string())))
+                    Ok((remainder, name.to_string()))
                 },
                 || ParseError::ExpectedVariableName,
             ),
@@ -1162,7 +1132,7 @@ impl<'a> RuleParser<'a> {
         traced(
             "parse_wildcard",
             map_res(space_delimited_token("_"), |_| {
-                let wildcard = Variable::create_wildcard(*self.wildcard_generator.borrow());
+                let wildcard = Variable::new_unamed(*self.wildcard_generator.borrow());
                 *self.wildcard_generator.borrow_mut() += 1;
                 Ok::<_, ParseError>(Term::Primitive(PrimitiveTerm::Variable(wildcard)))
             }),
@@ -1572,8 +1542,6 @@ mod test {
         let predicate_name = "drink";
         let predicate = Identifier(predicate_name.to_string());
         let default_import = csv_import(predicate.clone(), file, 1);
-        let any_and_int_import = csv_import(predicate.clone(), file, 2);
-        let single_string_import = csv_import(predicate.clone(), file, 1);
 
         // rulewerk accepts all of these variants
         let input = format!(r#"@source {predicate_name}[1]: load-csv("{file}") ."#);
@@ -1584,15 +1552,6 @@ mod test {
         assert_parse!(parser.parse_source(), &input, default_import);
         let input = format!(r#"@source {predicate_name} [1] : load-csv ( "{file}" ) ."#);
         assert_parse!(parser.parse_source(), &input, default_import);
-        let input = format!(r#"@source {predicate_name}[string]: load-csv ( "{file}" ) ."#);
-        assert_parse!(parser.parse_source(), &input, single_string_import);
-        let input = format!(r#"@source {predicate_name} [string] : load-csv ( "{file}" ) ."#);
-        assert_parse!(parser.parse_source(), &input, single_string_import);
-        let input = format!(r#"@source {predicate_name}[any, integer]: load-csv ( "{file}" ) ."#);
-        assert_parse!(parser.parse_source(), &input, any_and_int_import);
-        let input =
-            format!(r#"@source {predicate_name} [any  ,  integer] : load-csv ( "{file}" ) ."#);
-        assert_parse!(parser.parse_source(), &input, any_and_int_import);
     }
 
     #[test]
@@ -1820,11 +1779,11 @@ mod test {
         let pp = "P";
         let p = Identifier(pp.to_string());
         let xx = "X";
-        let x = Identifier(xx.to_string());
+        let x = xx.to_string();
         let yy = "Y";
-        let y = Identifier(yy.to_string());
+        let y = yy.to_string();
         let zz = "Z";
-        let z = Identifier(zz.to_string());
+        let z = zz.to_string();
 
         let rule = format!(
             "{pp}(?{xx}) :- {aa}(?{xx}, ?{yy}), ?{yy} > ?{xx}, {bb}(?{zz}), ?{xx} = 3, ?{zz} < 7, ?{xx} <= ?{zz}, ?{zz} >= ?{yy} ."
@@ -1919,12 +1878,6 @@ mod test {
             parser.parse_base(),
             "@base <example.org .",
             ParseError::ExpectedBaseDeclaration
-        );
-
-        assert_parse_error!(
-            parser.parse_type_name(),
-            "https://example.org/non-existant-type-name",
-            ParseError::ExpectedLogicalTypeName
         );
 
         assert_parse_error!(parser.parse_variable(), "!23", ParseError::ExpectedVariable);
@@ -2198,8 +2151,8 @@ mod test {
             "#min(?VARIABLE)",
             Term::Aggregation(Aggregate {
                 logical_aggregate_operation: LogicalAggregateOperation::MinNumber,
-                terms: vec![PrimitiveTerm::Variable(Variable::Universal(Identifier(
-                    String::from("VARIABLE")
+                terms: vec![PrimitiveTerm::Variable(Variable::Universal(String::from(
+                    "VARIABLE"
                 )))]
             })
         );
@@ -2263,9 +2216,9 @@ mod test {
 
         let expression = "?X = Abs(?Y - 5) * (7 + ?Z)";
 
-        let variable = Term::Primitive(PrimitiveTerm::Variable(Variable::Universal(Identifier(
+        let variable = Term::Primitive(PrimitiveTerm::Variable(Variable::Universal(
             "X".to_string(),
-        ))));
+        )));
 
         let term = Term::Binary {
             operation: BinaryOperation::Multiplication,
@@ -2274,7 +2227,7 @@ mod test {
                 Box::new(Term::Binary {
                     operation: BinaryOperation::Subtraction,
                     lhs: Box::new(Term::Primitive(PrimitiveTerm::Variable(
-                        Variable::Universal(Identifier::new("Y".to_string())),
+                        Variable::Universal("Y".to_string()),
                     ))),
                     rhs: Box::new(Term::Primitive(PrimitiveTerm::Constant(
                         Constant::NumericLiteral(NumericLiteral::Integer(5)),
@@ -2287,7 +2240,7 @@ mod test {
                     Constant::NumericLiteral(NumericLiteral::Integer(7)),
                 ))),
                 rhs: Box::new(Term::Primitive(PrimitiveTerm::Variable(
-                    Variable::Universal(Identifier::new("Z".to_string())),
+                    Variable::Universal("Z".to_string()),
                 ))),
             }),
         };
@@ -2308,10 +2261,10 @@ mod test {
             Box::new(Term::Binary {
                 operation: BinaryOperation::Subtraction,
                 lhs: Box::new(Term::Primitive(PrimitiveTerm::Variable(
-                    Variable::Universal(Identifier(String::from("X"))),
+                    Variable::Universal(String::from("X")),
                 ))),
                 rhs: Box::new(Term::Primitive(PrimitiveTerm::Variable(
-                    Variable::Universal(Identifier(String::from("Y"))),
+                    Variable::Universal(String::from("Y")),
                 ))),
             }),
         );
@@ -2319,12 +2272,12 @@ mod test {
         let right_term = Term::Binary {
             operation: BinaryOperation::Addition,
             lhs: Box::new(Term::Primitive(PrimitiveTerm::Variable(
-                Variable::Universal(Identifier(String::from("Z"))),
+                Variable::Universal(String::from("Z")),
             ))),
             rhs: Box::new(Term::Unary(
                 UnaryOperation::SquareRoot,
                 Box::new(Term::Primitive(PrimitiveTerm::Variable(
-                    Variable::Universal(Identifier(String::from("Y"))),
+                    Variable::Universal(String::from("Y")),
                 ))),
             )),
         };
@@ -2417,36 +2370,9 @@ mod test {
         let predicate = Identifier("p".to_string());
 
         assert_parse!(
-            parser.parse_qualified_predicate_name(true),
+            parser.parse_qualified_predicate_name(),
             "p[3]",
             (predicate.clone(), TupleConstraint::from_arity(3))
-        );
-
-        assert_parse!(
-            parser.parse_qualified_predicate_name(true),
-            "p[integer, any]",
-            (
-                predicate.clone(),
-                TupleConstraint::at_least([PrimitiveType::Integer, PrimitiveType::Any])
-            )
-        );
-
-        assert_parse!(
-            parser.parse_qualified_predicate_name(false),
-            "p[float64, any]",
-            (
-                predicate.clone(),
-                TupleConstraint::exact([PrimitiveType::Float64, PrimitiveType::Any])
-            )
-        );
-
-        assert_parse!(
-            parser.parse_qualified_predicate_name(false),
-            "p[integer, float64]",
-            (
-                predicate.clone(),
-                TupleConstraint::exact([PrimitiveType::Integer, PrimitiveType::Float64])
-            )
         );
     }
 

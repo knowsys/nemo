@@ -34,7 +34,7 @@ impl Rule {
         // All the existential variables used in the rule
         let existential_variable_names = head
             .iter()
-            .flat_map(|a| a.existential_variables().map(|v| v.name()))
+            .flat_map(|a| a.existential_variables().flat_map(|v| v.name()))
             .collect::<HashSet<_>>();
 
         for variable in body
@@ -44,12 +44,14 @@ impl Rule {
         {
             // Existential variables may only occur in the head
             if variable.is_existential() {
-                return Err(ParseError::BodyExistential(variable.name()));
+                return Err(ParseError::BodyExistential(variable.clone()));
             }
 
             // There may not be a universal variable whose name is the same that of an existential
-            if existential_variable_names.contains(&variable.name()) {
-                return Err(ParseError::BothQuantifiers(variable.name()));
+            if let Some(name) = variable.name() {
+                if existential_variable_names.contains(&name) {
+                    return Err(ParseError::BothQuantifiers(name));
+                }
             }
         }
 
@@ -73,14 +75,14 @@ impl Rule {
 
                 for term_variable in term.variables() {
                     if !safe_variables.contains(term_variable) {
-                        return Err(ParseError::UnsafeDefinition(variable.name()));
+                        return Err(ParseError::UnsafeDefinition(variable.clone()));
                     }
                 }
 
                 if !derived_variables.contains(variable) {
                     derived_variables.insert(variable);
                 } else {
-                    return Err(ParseError::MultipleDefinitions(variable.name()));
+                    return Err(ParseError::MultipleDefinitions(variable.clone()));
                 }
             }
         }
@@ -102,13 +104,13 @@ impl Rule {
                 if !safe_variables.contains(variable) {
                     return Err(ParseError::UnsafeComplexTerm(
                         term.to_string(),
-                        variable.name(),
+                        variable.clone(),
                     ));
                 }
             }
         }
 
-        // Every constraint that is not an assignment mus only use derived or safe varaibles
+        // Every constraint that is not an assignment must only use derived or safe varaibles
         for constraint in &constraints {
             if let Some((variable, _)) = constraint.has_form_assignment() {
                 if derived_variables.contains(variable) {
@@ -121,7 +123,7 @@ impl Rule {
                     if !safe_variables.contains(variable) && !derived_variables.contains(variable) {
                         return Err(ParseError::UnsafeComplexTerm(
                             term.to_string(),
-                            variable.name(),
+                            variable.clone(),
                         ));
                     }
                 }
@@ -130,15 +132,15 @@ impl Rule {
 
         // Head atoms may only use variables that are either bound or derived
         for variable in head.iter().flat_map(|a| a.variables()) {
-            if variable.is_wildcard() {
-                return Err(ParseError::WildcardInHead);
+            if variable.is_unnamed() {
+                return Err(ParseError::UnnamedInHead);
             }
 
             if variable.is_universal()
                 && !safe_variables.contains(variable)
                 && !derived_variables.contains(variable)
             {
-                return Err(ParseError::UnsafeHeadVariable(variable.name()));
+                return Err(ParseError::UnsafeHeadVariable(variable.clone()));
             }
         }
 
@@ -155,7 +157,7 @@ impl Rule {
 
                     if unsafe_negative_variables.contains(variable) {
                         return Err(ParseError::UnsafeVariableInMultipleNegativeLiterals(
-                            variable.name(),
+                            variable.clone(),
                         ));
                     }
 
