@@ -14,9 +14,10 @@ use crate::{
 use super::{
     column::{rle::ColumnScanRle, vector::ColumnScanVector},
     operations::{
-        constant::ColumnScanConstant, filter::ColumnScanFilter, join::ColumnScanJoin,
-        pass::ColumnScanPass, prune::ColumnScanPrune, subtract::ColumnScanSubtract,
-        union::ColumnScanUnion,
+        constant::ColumnScanConstant, filter::ColumnScanFilter,
+        filter_constant::ColumnScanFilterConstant, filter_equal::ColumnScanFilterEqual,
+        filter_interval::ColumnScanFilterInterval, join::ColumnScanJoin, pass::ColumnScanPass,
+        prune::ColumnScanPrune, subtract::ColumnScanSubtract, union::ColumnScanUnion,
     },
 };
 
@@ -51,7 +52,7 @@ pub trait ColumnScan: Debug + Iterator {
 
 /// Enum for [ColumnScan] of all supported types
 #[derive(Debug)]
-pub enum ColumnScanEnum<'a, T>
+pub(crate) enum ColumnScanEnum<'a, T>
 where
     T: 'a + ColumnDataType,
 {
@@ -63,6 +64,12 @@ where
     ColumnScanConstant(ColumnScanConstant<T>),
     /// Case ColumnScanFilter
     ColumnScanFilter(ColumnScanFilter<'a, T>),
+    /// Case ColumnScanFilterConstant
+    ColumnScanFilterConstant(ColumnScanFilterConstant<'a, T>),
+    /// Case ColumnScanFilterEqual
+    ColumnScanFilterEqual(ColumnScanFilterEqual<'a, T>),
+    /// Case ColumnScanFilterInterval
+    ColumnScanFilterInterval(ColumnScanFilterInterval<'a, T>),
     /// Case ColumnScanJoin
     ColumnScanJoin(ColumnScanJoin<'a, T>),
     /// Case ColumnScanPass
@@ -110,6 +117,33 @@ where
 {
     fn from(cs: ColumnScanFilter<'a, T>) -> Self {
         Self::ColumnScanFilter(cs)
+    }
+}
+
+impl<'a, T> From<ColumnScanFilterConstant<'a, T>> for ColumnScanEnum<'a, T>
+where
+    T: 'a + ColumnDataType,
+{
+    fn from(cs: ColumnScanFilterConstant<'a, T>) -> Self {
+        Self::ColumnScanFilterConstant(cs)
+    }
+}
+
+impl<'a, T> From<ColumnScanFilterEqual<'a, T>> for ColumnScanEnum<'a, T>
+where
+    T: 'a + ColumnDataType,
+{
+    fn from(cs: ColumnScanFilterEqual<'a, T>) -> Self {
+        Self::ColumnScanFilterEqual(cs)
+    }
+}
+
+impl<'a, T> From<ColumnScanFilterInterval<'a, T>> for ColumnScanEnum<'a, T>
+where
+    T: 'a + ColumnDataType,
+{
+    fn from(cs: ColumnScanFilterInterval<'a, T>) -> Self {
+        Self::ColumnScanFilterInterval(cs)
     }
 }
 
@@ -224,6 +258,9 @@ generate_forwarder!(forward_to_columnscan;
     ColumnScanRle,
     ColumnScanConstant,
     ColumnScanFilter,
+    ColumnScanFilterConstant,
+    ColumnScanFilterEqual,
+    ColumnScanFilterInterval,
     ColumnScanJoin,
     ColumnScanPass,
     ColumnScanPrune,
@@ -269,7 +306,7 @@ where
 
 /// A wrapper around a cell type holding a `ColumnScanEnum`.
 #[repr(transparent)]
-pub struct ColumnScanCell<'a, T>(pub UnsafeCell<ColumnScanEnum<'a, T>>)
+pub(crate) struct ColumnScanCell<'a, T>(pub UnsafeCell<ColumnScanEnum<'a, T>>)
 where
     T: 'a + ColumnDataType;
 
@@ -371,8 +408,9 @@ where
 }
 
 /// Enum for [ColumnScan] for underlying data type
+/// TODO: Remove this after trie_scan prune is gone
 #[derive(Debug)]
-pub enum ColumnScanT<'a> {
+pub(crate) enum ColumnScanT<'a> {
     /// Case u32
     Id32(ColumnScanCell<'a, u32>),
     /// Case u64
@@ -389,32 +427,6 @@ pub enum ColumnScanT<'a> {
 // and unfolds into a `match` statement that calls the datatype specific variant that function.
 // See `physical/util.rs` for a more detailed description of this macro.
 generate_datatype_forwarder!(forward_to_columnscan_cell);
-
-impl<'a> ColumnScanT<'a> {
-    /// Assumes that column scan is a [ColumnScanUnion]
-    /// and returns a vector containing the positions of the scans with the smallest values
-    pub fn union_get_smallest(&mut self) -> BitVec {
-        forward_to_columnscan_cell!(self, union_get_smallest)
-    }
-
-    /// Assumes that column scan is a [ColumnScanUnion]
-    /// Set a vector that indicates which scans are currently active and should be considered
-    pub fn union_set_active(&mut self, active_scans: BitVec) {
-        forward_to_columnscan_cell!(self, union_set_active(active_scans))
-    }
-
-    /// Assumes that column scan is a [ColumnScanSubtract]
-    /// Return a vector indicating which subiterators point to the same value as the main one.
-    pub fn subtract_get_equal(&mut self) -> BitVec {
-        forward_to_columnscan_cell!(self, subtract_get_equal)
-    }
-
-    /// Assumes that column scan is a [ColumnScanSubtract]
-    /// Set which sub iterators should be enabled.
-    pub fn subtract_set_active(&mut self, active_scans: BitVec) {
-        forward_to_columnscan_cell!(self, subtract_set_active(active_scans))
-    }
-}
 
 impl<'a> Iterator for ColumnScanT<'a> {
     type Item = StorageValueT;
@@ -467,9 +479,9 @@ impl<'a> ColumnScan for ColumnScanT<'a> {
     }
 }
 
-// Replaces [ColumnScanT]
+/// Replaces [ColumnScanT]
 #[derive(Debug)]
-pub struct ColumnScanRainbow<'a> {
+pub(crate) struct ColumnScanRainbow<'a> {
     /// Case [StorageTypeName::Id32][super::super::datatypes::storage_type_name::StorageTypeName]
     pub scan_id32: ColumnScanCell<'a, u32>,
     /// Case [StorageTypeName::Id64][super::super::datatypes::storage_type_name::StorageTypeName]

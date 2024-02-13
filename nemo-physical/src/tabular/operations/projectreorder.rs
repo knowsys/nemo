@@ -1,6 +1,6 @@
 //! This module defines [GeneratorProjectReorder].
 
-use std::{collections::HashMap, ops::Sub};
+use std::collections::HashMap;
 
 use crate::{
     datatypes::StorageValueT,
