@@ -5,21 +5,21 @@ use crate::{
     datatypes::ColumnDataType,
 };
 
-/// [ColumnScanEqual] does only return up to one value.
+/// [ColumnScanFilterEqual] does only return up to one value.
 /// Therefore, it can be only in of three states.
 #[derive(Debug)]
 enum ColumnScanState {
-    /// [ColumnScanEqual] is in its initial position
+    /// [ColumnScanFilterEqual] is in its initial position
     Start,
-    /// [ColumnScanEqual] points to its output value
+    /// [ColumnScanFilterEqual] points to its output value
     Value,
-    /// [ColumnScanEqual] passed its output value
+    /// [ColumnScanFilterEqual] passed its output value
     End,
 }
 
 /// [ColumnScan] that restricts a [ColumnScan] to values contained in another [ColumnScan]
 #[derive(Debug)]
-pub struct ColumnScanEqual<'a, T>
+pub(crate) struct ColumnScanFilterEqual<'a, T>
 where
     T: 'a + ColumnDataType,
 {
@@ -34,11 +34,11 @@ where
     state: ColumnScanState,
 }
 
-impl<'a, T> ColumnScanEqual<'a, T>
+impl<'a, T> ColumnScanFilterEqual<'a, T>
 where
     T: 'a + ColumnDataType,
 {
-    /// Create a new [ColumnScanEqual].
+    /// Create a new [ColumnScanFilterEqual].
     ///
     /// Note: This operator assumes that `reset` is called on this scan
     /// after there has been a change in `reference_scan`,
@@ -55,7 +55,7 @@ where
     }
 }
 
-impl<'a, T> Iterator for ColumnScanEqual<'a, T>
+impl<'a, T> Iterator for ColumnScanFilterEqual<'a, T>
 where
     T: 'a + ColumnDataType + Eq,
 {
@@ -87,7 +87,7 @@ where
     }
 }
 
-impl<'a, T> ColumnScan for ColumnScanEqual<'a, T>
+impl<'a, T> ColumnScan for ColumnScanFilterEqual<'a, T>
 where
     T: 'a + ColumnDataType,
 {
@@ -134,7 +134,7 @@ mod test {
         columnscan::{ColumnScan, ColumnScanCell, ColumnScanEnum},
     };
 
-    use super::ColumnScanEqual;
+    use super::ColumnScanFilterEqual;
 
     #[test]
     fn columnscan_equal_basic() {
@@ -146,7 +146,7 @@ mod test {
 
         ref_iter.seek(4);
 
-        let mut equal_scan = ColumnScanEqual::new(&val_iter, &ref_iter);
+        let mut equal_scan = ColumnScanFilterEqual::new(&val_iter, &ref_iter);
         assert_eq!(equal_scan.current(), None);
         assert_eq!(equal_scan.next(), Some(4));
         assert_eq!(equal_scan.current(), Some(4));
@@ -160,7 +160,7 @@ mod test {
 
         ref_iter.seek(7);
 
-        let mut equal_scan = ColumnScanEqual::new(&ref_iter, &val_iter);
+        let mut equal_scan = ColumnScanFilterEqual::new(&ref_iter, &val_iter);
         assert_eq!(equal_scan.current(), None);
         assert_eq!(equal_scan.next(), None);
         assert_eq!(equal_scan.current(), None);

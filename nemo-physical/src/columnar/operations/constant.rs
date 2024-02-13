@@ -18,7 +18,7 @@ enum ColumnScanState {
 
 /// [`ColumnScan`] which represents a column which holds one value.
 #[derive(Debug)]
-pub struct ColumnScanConstant<T>
+pub(crate) struct ColumnScanConstant<T>
 where
     T: ColumnDataType,
 {

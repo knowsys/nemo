@@ -12,7 +12,7 @@ use crate::{
 
 /// [`ColumnScan`], which filters values of a "value" scan based on a [StackProgram]
 #[derive(Debug)]
-pub struct ColumnScanFilter<'a, T>
+pub(crate) struct ColumnScanFilter<'a, T>
 where
     T: 'a + ColumnDataType,
 {

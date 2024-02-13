@@ -1,4 +1,4 @@
-//! This module defines a tree representation
+//! This module defines a tree representation [FunctionTree].
 
 use std::fmt::Debug;
 
@@ -54,6 +54,105 @@ where
     },
 }
 
+/// Enumeration of special cases for [FunctionTree]s
+/// where it might be beneficial to have special handling
+/// for performance reasons within the evaluation of
+/// [TrieScanFunction][crate::tabular::operations::function::TrieScanFunction]
+#[derive(Debug)]
+pub(crate) enum SpecialCaseFunction<'a, ReferenceType>
+where
+    ReferenceType: Debug + Clone,
+{
+    /// Regular function with no special handling
+    Normal,
+    /// Function evaluates to a constant
+    Constant(&'a AnyDataValue),
+    /// Function evaluates to a referenced value
+    Reference(&'a ReferenceType),
+}
+
+/// Enumeration of special cases for [FunctionTree]s
+/// where it might be beneficial to have special handling
+/// for performance reasons within the evaluation of
+/// [TrieScanFilter][crate::tabular::operations::filter::TrieScanFilter]
+#[derive(Debug)]
+pub(crate) enum SpecialCaseFilter<'a, ReferenceType>
+where
+    ReferenceType: Debug + Clone,
+{
+    /// Regular function with no special handling
+    Normal,
+    /// Function checks whether a column is equal to a constant
+    Constant(&'a ReferenceType, &'a AnyDataValue),
+}
+
+impl<ReferenceType> FunctionTree<ReferenceType>
+where
+    ReferenceType: Debug + Clone,
+{
+    /// Check if this function correspond to some special case defined in [SpecialCaseFunction].
+    /// Returns `None` if this is not the case.
+    pub(crate) fn special_function(&self) -> SpecialCaseFunction<'_, ReferenceType> {
+        match self {
+            FunctionTree::Leaf(FunctionLeaf::Constant(constant)) => {
+                SpecialCaseFunction::Constant(constant)
+            }
+            FunctionTree::Leaf(FunctionLeaf::Reference(reference)) => {
+                SpecialCaseFunction::Reference(reference)
+            }
+            _ => SpecialCaseFunction::Normal,
+        }
+    }
+
+    /// Check if this function correspond to some special case defined in [SpecialCaseFilter].
+    /// Returns `None` if this is not the case.
+    pub(crate) fn special_filter(&self) -> SpecialCaseFilter<'_, ReferenceType> {
+        match self {
+            FunctionTree::Binary {
+                function: BinaryFunctionEnum::Equals(_),
+                left,
+                right,
+            } => {
+                if let (Some(reference), Some(constant)) =
+                    (left.get_reference(), right.get_constant_value())
+                {
+                    return SpecialCaseFilter::Constant(reference, constant);
+                }
+
+                if let (Some(reference), Some(constant)) =
+                    (right.get_reference(), left.get_constant_value())
+                {
+                    return SpecialCaseFilter::Constant(reference, constant);
+                }
+
+                SpecialCaseFilter::Normal
+            }
+            _ => SpecialCaseFilter::Normal,
+        }
+    }
+
+    /// Check if the function represented by this object evaluates to a constant.
+    /// Returns `Some(constant)` if this is the case and `None` otherwise.
+    fn get_constant_value(&self) -> Option<&AnyDataValue> {
+        if let FunctionTree::Leaf(FunctionLeaf::Constant(constant)) = self {
+            Some(constant)
+        } else {
+            None
+        }
+    }
+
+    /// Check if the function represented by this object evaluates to a referenced value.
+    /// Returns `Some(reference)` if this is the case and `None` otherwise.
+    fn get_reference(&self) -> Option<&ReferenceType> {
+        if let FunctionTree::Leaf(FunctionLeaf::Reference(reference)) = self {
+            Some(reference)
+        } else {
+            None
+        }
+    }
+}
+
+// Contains constructors for each type of operation
 impl<ReferenceType> FunctionTree<ReferenceType>
 where
     ReferenceType: Debug + Clone,

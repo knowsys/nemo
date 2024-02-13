@@ -9,11 +9,17 @@ use std::{
 use crate::{
     columnar::{
         columnscan::{ColumnScanEnum, ColumnScanRainbow},
-        operations::{filter::ColumnScanFilter, pass::ColumnScanPass},
+        operations::{
+            constant::ColumnScanConstant, filter::ColumnScanFilter,
+            filter_constant::ColumnScanFilterConstant, pass::ColumnScanPass,
+        },
     },
-    datatypes::{into_datavalue::IntoDataValue, StorageTypeName},
+    datatypes::{into_datavalue::IntoDataValue, StorageTypeName, StorageValueT},
     datavalues::AnyDataValue,
-    function::{evaluation::StackProgram, tree::FunctionTree},
+    function::{
+        evaluation::StackProgram,
+        tree::{FunctionTree, SpecialCaseFilter},
+    },
     management::database::Dict,
     tabular::triescan::{PartialTrieScan, TrieScanEnum},
 };
@@ -28,11 +34,13 @@ pub type Filters = Vec<Filter>;
 /// Assigns an input column to a function which filters values from that column
 type FilterAssignment = HashMap<OperationColumnMarker, FunctionTree<OperationColumnMarker>>;
 
-/// Marks whether an output column results from an input column or has a filter applied to it via a [StackProgram]
+/// Encodes how one particular output column is computed
 #[derive(Debug, Clone)]
 enum OutputColumn {
     /// Columns is just passed to the output
     Input,
+    /// Column is filtered by a constant
+    Constant(AnyDataValue),
     /// [StackProgram] for filtering values of the corresponding columns
     Filtered(StackProgram),
 }
@@ -40,8 +48,8 @@ enum OutputColumn {
 /// Used to create a [TrieScanFilter]
 #[derive(Debug, Clone)]
 pub struct GeneratorFilter {
-    /// For each output column
-    /// marks whether an output column results from an input column or has a filter applied to it via a [StackProgram]
+    /// For each output column,
+    /// marks whether it results from an input column or has a filter applied to it via a [StackProgram]
     output_columns: Vec<OutputColumn>,
     /// Marks for each output index,
     /// whether the value of the corresponding layer is used as input to some function.
@@ -78,13 +86,20 @@ impl GeneratorFilter {
             }
 
             match filter_assignment.get(&input_marker) {
-                Some(function) => {
-                    output_columns.push(OutputColumn::Filtered(StackProgram::from_function_tree(
-                        function,
-                        &reference_map,
-                        Some(input_marker),
-                    )));
-                }
+                Some(function) => match function.special_filter() {
+                    SpecialCaseFilter::Normal => {
+                        output_columns.push(OutputColumn::Filtered(
+                            StackProgram::from_function_tree(
+                                function,
+                                &reference_map,
+                                Some(input_marker),
+                            ),
+                        ));
+                    }
+                    SpecialCaseFilter::Constant(_, constant) => {
+                        output_columns.push(OutputColumn::Constant(constant.clone()));
+                    }
+                },
                 None => {
                     output_columns.push(OutputColumn::Input);
                 }
@@ -110,7 +125,8 @@ impl GeneratorFilter {
         unreachable!("Filter must only use markers from the table.")
     }
 
-    /// Helper function
+    /// Helper function that takes a list of boolean [Filter]s
+    /// and constructs a [Filter] that represent its conjuction.
     ///
     /// # Panics
     /// Panics if zero filters are given as argument.
@@ -120,7 +136,7 @@ impl GeneratorFilter {
             .expect("Function assumes that at least one filter will be provided."))
         .clone();
 
-        for filter in filters {
+        for filter in filters.into_iter().skip(1) {
             result_filter = Filter::boolean_conjunction(result_filter, filter.clone());
         }
 
@@ -165,7 +181,7 @@ impl OperationGenerator for GeneratorFilter {
 
         for (index, output_column) in self.output_columns.iter().enumerate() {
             macro_rules! output_scan {
-                ($type:ty, $scan:ident) => {{
+                ($type:ty, $variant:ident, $scan:ident) => {{
                     match output_column {
                         OutputColumn::Filtered(program) => {
                             let input_scan = &unsafe { &*trie_scan.scan(index).get() }.$scan;
@@ -176,6 +192,18 @@ impl OperationGenerator for GeneratorFilter {
                                 dictionary,
                             ))
                         }
+                        OutputColumn::Constant(constant) => {
+                            let input_scan = &unsafe { &*trie_scan.scan(index).get() }.$scan;
+                            if let StorageValueT::$variant(value) =
+                                constant.to_storage_value_t(&dictionary.borrow())
+                            {
+                                ColumnScanEnum::ColumnScanFilterConstant(
+                                    ColumnScanFilterConstant::new(input_scan, value),
+                                )
+                            } else {
+                                ColumnScanEnum::ColumnScanConstant(ColumnScanConstant::new(None))
+                            }
+                        }
                         OutputColumn::Input => {
                             let input_scan = &unsafe { &*trie_scan.scan(index).get() }.$scan;
                             ColumnScanEnum::ColumnScanPass(ColumnScanPass::new(input_scan))
@@ -184,11 +212,11 @@ impl OperationGenerator for GeneratorFilter {
                 }};
             }
 
-            let output_scan_id32 = output_scan!(u32, scan_id32);
-            let output_scan_id64 = output_scan!(u64, scan_id64);
-            let output_scan_i64 = output_scan!(i64, scan_i64);
-            let output_scan_float = output_scan!(Float, scan_float);
-            let output_scan_double = output_scan!(Double, scan_double);
+            let output_scan_id32 = output_scan!(u32, Id32, scan_id32);
+            let output_scan_id64 = output_scan!(u64, Id64, scan_id64);
+            let output_scan_i64 = output_scan!(i64, Int64, scan_i64);
+            let output_scan_float = output_scan!(Float, Float, scan_float);
+            let output_scan_double = output_scan!(Double, Double, scan_double);
 
             let new_scan = ColumnScanRainbow::new(
                 output_scan_id32,
@@ -216,7 +244,6 @@ pub struct TrieScanFilter<'a> {
     /// Input trie scan which will be filtered
     trie_scan: Box<TrieScanEnum<'a>>,
     /// Dictionary used to translate column values in [AnyDataValue] for evaluation
-    /// TODO: Check lifetimes
     dictionary: &'a RefCell<Dict>,
 
     /// Marks for each output index,
