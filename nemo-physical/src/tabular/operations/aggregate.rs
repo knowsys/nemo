@@ -297,11 +297,11 @@ impl<T: TrieScan> TrieScan for TrieScanAggregate<T> {
 ///
 /// TODO: Refractor execution plan code to allow for full trie scan and then remove this wrapper
 #[derive(Debug)]
-pub struct TrieScanAggregateWrapper<'a> {
+pub(crate) struct TrieScanAggregateWrapper<'a> {
     /// Wrapped full trie scan
-    pub trie_scan: TrieScanAggregate<TrieScanPrune<'a>>,
+    pub(crate) trie_scan: TrieScanAggregate<TrieScanPrune<'a>>,
     /// Column types of the wrapped trie scan
-    pub arity: usize,
+    pub(crate) arity: usize,
 }
 
 impl<'a> PartialTrieScan<'a> for TrieScanAggregateWrapper<'a> {

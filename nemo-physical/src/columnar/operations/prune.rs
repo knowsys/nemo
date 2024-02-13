@@ -9,7 +9,7 @@ use std::ops::Range;
 /// Forwards calls to this column though it's [SharedTrieScanPruneState] to the input trie.
 /// See `TrieScanPrune` for more information.
 #[derive(Debug)]
-pub struct ColumnScanPrune<'a, T>
+pub(crate) struct ColumnScanPrune<'a, T>
 where
     T: 'a + ColumnDataType,
 {
@@ -25,7 +25,7 @@ where
     T: 'a + ColumnDataType,
 {
     /// Constructs a new column scan. This should not be called directly, but only by `TrieScanPrune`
-    pub fn new(
+    pub(crate) fn new(
         state: SharedTrieScanPruneState<'a>,
         column_scan_index: usize,
         column_scan_type: StorageTypeName,

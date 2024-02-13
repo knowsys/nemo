@@ -38,22 +38,22 @@ pub struct Trie {
 
 impl Trie {
     /// Return the arity, that is the number of columns, in this trie.
-    pub fn arity(&self) -> usize {
+    pub(crate) fn arity(&self) -> usize {
         self.columns.len()
     }
 
     /// Return the number of rows contained in this trie.
-    pub fn num_rows(&self) -> usize {
+    pub(crate) fn num_rows(&self) -> usize {
         self.columns.last().map_or(0, |column| column.num_data())
     }
 
     /// Return whether the trie is empty
-    pub fn is_empty(&self) -> bool {
+    pub(crate) fn is_empty(&self) -> bool {
         self.num_rows() == 0
     }
 
     /// Return a [PartialTrieScan] over this trie.
-    pub fn partial_iterator(&self) -> TrieScanGeneric<'_> {
+    pub(crate) fn partial_iterator(&self) -> TrieScanGeneric<'_> {
         let column_scans = self
             .columns
             .iter()
@@ -64,12 +64,12 @@ impl Trie {
     }
 
     /// Return a [TrieScan] over this trie.
-    pub fn full_iterator(&self) -> TrieScanPrune {
+    pub(crate) fn full_iterator(&self) -> TrieScanPrune {
         TrieScanPrune::new(TrieScanEnum::TrieScanGeneric(self.partial_iterator()))
     }
 
     /// Return a row based iterator over this trie.
-    pub fn row_iterator(&self) -> impl Iterator<Item = Vec<StorageValueT>> + '_ {
+    pub(crate) fn row_iterator(&self) -> impl Iterator<Item = Vec<StorageValueT>> + '_ {
         struct TrieRowIterator<'a> {
             trie_scan: TrieScanPrune<'a>,
             current_row: Vec<StorageValueT>,
@@ -100,7 +100,7 @@ impl Trie {
 
 impl Trie {
     /// Create a new empty [Trie].
-    pub fn empty(num_columns: usize) -> Self {
+    pub(crate) fn empty(num_columns: usize) -> Self {
         Self {
             columns: (0..num_columns)
                 .map(|_| IntervalColumnTBuilderMatrix::<IntervalLookupMethod>::default().finalize())
@@ -172,7 +172,7 @@ impl Trie {
     }
 
     /// Create a new [Trie] from a [TupleWriter].
-    pub fn from_tuple_writer(writer: TupleWriter) -> Self {
+    pub(crate) fn from_tuple_writer(writer: TupleWriter) -> Self {
         Self::from_tuple_buffer(writer.finalize())
     }
 
@@ -183,7 +183,7 @@ impl Trie {
     /// To keep all the values, set `cut_layers` to 0.
     ///
     /// Assumes that the given `trie_scan` is not initialized
-    pub fn from_trie_scan<Scan: TrieScan>(mut trie_scan: Scan, cut_layers: usize) -> Self {
+    pub(crate) fn from_trie_scan<Scan: TrieScan>(mut trie_scan: Scan, cut_layers: usize) -> Self {
         let num_columns = trie_scan.num_columns() - cut_layers;
 
         if num_columns == 0 {
@@ -290,7 +290,10 @@ pub struct TrieScanGeneric<'a> {
 
 impl<'a> TrieScanGeneric<'a> {
     /// Construct a new [TrieScanGeneric].
-    pub fn new(trie: &'a Trie, column_scans: Vec<UnsafeCell<ColumnScanRainbow<'a>>>) -> Self {
+    pub(crate) fn new(
+        trie: &'a Trie,
+        column_scans: Vec<UnsafeCell<ColumnScanRainbow<'a>>>,
+    ) -> Self {
         Self {
             trie,
             path_types: Vec::with_capacity(column_scans.len()),

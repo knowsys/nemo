@@ -6,7 +6,7 @@ use std::{fmt::Debug, ops::Range};
 
 /// Dummy Iterator that defers everything to its sub iterator
 #[derive(Debug)]
-pub struct ColumnScanPass<'a, T>
+pub(crate) struct ColumnScanPass<'a, T>
 where
     T: 'a + ColumnDataType,
 {
@@ -17,7 +17,7 @@ where
     T: 'a + ColumnDataType,
 {
     /// Constructs a new [`ColumnScanPass`].
-    pub fn new(reference_scan: &'a ColumnScanCell<'a, T>) -> ColumnScanPass<'a, T> {
+    pub(crate) fn new(reference_scan: &'a ColumnScanCell<'a, T>) -> ColumnScanPass<'a, T> {
         ColumnScanPass { reference_scan }
     }
 }

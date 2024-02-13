@@ -61,7 +61,7 @@ pub(crate) trait PartialTrieScan<'a>: Debug {
 
 /// Enum containing all implementations of [PartialTrieScan]
 #[derive(Debug)]
-pub enum TrieScanEnum<'a> {
+pub(crate) enum TrieScanEnum<'a> {
     /// Case [TrieScanFilter]
     TrieScanFilter(TrieScanFilter<'a>),
     /// Case [TrieScanFunction]

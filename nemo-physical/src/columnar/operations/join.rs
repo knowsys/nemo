@@ -8,7 +8,7 @@ use std::ops::Range;
 
 /// Implementation of [ColumnScan] for the result of joining a list of [ColumnScan] objects.
 #[derive(Debug)]
-pub struct ColumnScanJoin<'a, T>
+pub(crate) struct ColumnScanJoin<'a, T>
 where
     T: 'a + ColumnDataType,
 {
@@ -27,7 +27,7 @@ where
     T: 'a + ColumnDataType,
 {
     /// Constructs a new [ColumnScanJoin].
-    pub fn new(column_scans: Vec<&'a ColumnScanCell<'a, T>>) -> Self {
+    pub(crate) fn new(column_scans: Vec<&'a ColumnScanCell<'a, T>>) -> Self {
         ColumnScanJoin {
             column_scans,
             active_index: 0,

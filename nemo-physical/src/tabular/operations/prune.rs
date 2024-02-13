@@ -20,7 +20,7 @@ use crate::{
 /// To achieve this behavior, before returning a value from `next()`, the input trie is traversed downwards to check if the value would exists in a materialized version of the trie scan.
 /// Therefore, every column and the trie scan itself has shared access to the input trie and associated state, through [`SharedTrieScanPruneState`].
 #[derive(Debug)]
-pub struct TrieScanPrune<'a> {
+pub(crate) struct TrieScanPrune<'a> {
     state: SharedTrieScanPruneState<'a>,
     output_column_scans: Vec<UnsafeCell<ColumnScanRainbow<'a>>>,
 }
@@ -95,11 +95,11 @@ impl<'a> TrieScanPrune<'a> {
 ///
 /// `Rc<UnsafeCell<_>>>` is required here, because we cannot guarantee that the trie scan exists longer than the individual output columns.
 /// The overhead after initialization should be negligible and the same as a single pointer indirection.
-pub type SharedTrieScanPruneState<'a> = Rc<UnsafeCell<TrieScanPruneState<'a>>>;
+pub(crate) type SharedTrieScanPruneState<'a> = Rc<UnsafeCell<TrieScanPruneState<'a>>>;
 
 /// State which is shared with the individual output column scans and the trie scan
 #[derive(Debug)]
-pub struct TrieScanPruneState<'a> {
+pub(crate) struct TrieScanPruneState<'a> {
     /// Trie scan which is being pruned
     input_trie_scan: TrieScanEnum<'a>,
     /// Whether the first `external_down()` has been made (to go to layer `0`)
@@ -121,7 +121,7 @@ pub struct TrieScanPruneState<'a> {
 
 impl<'a> TrieScanPruneState<'a> {
     /// Decrements the `external_current_layer` and goes up to the `external_current_layer` to reset already seen rows.
-    pub fn external_up(&mut self) {
+    pub(crate) fn external_up(&mut self) {
         debug_assert!(self.initialized);
 
         if self.external_current_layer == 0 {
@@ -148,7 +148,7 @@ impl<'a> TrieScanPruneState<'a> {
     }
 
     /// Increments the `external_current_layer`
-    pub fn external_down(&mut self, storage_type: StorageTypeName) {
+    pub(crate) fn external_down(&mut self, storage_type: StorageTypeName) {
         self.external_path_types.push(storage_type);
 
         if !self.initialized {
@@ -167,12 +167,12 @@ impl<'a> TrieScanPruneState<'a> {
     }
 
     /// Return the number of columns in the input trie.
-    pub fn arity(&self) -> usize {
+    pub(crate) fn arity(&self) -> usize {
         self.input_trie_scan.arity()
     }
 
     /// Return the types of each active layer in this scan.
-    pub fn path_types(&self) -> &[StorageTypeName] {
+    pub(crate) fn path_types(&self) -> &[StorageTypeName] {
         &self.external_path_types
     }
 
@@ -214,7 +214,7 @@ impl<'a> TrieScanPruneState<'a> {
     }
 
     /// Returns the current layer of this trie scan
-    pub fn current_layer(&self) -> Option<usize> {
+    pub(crate) fn current_layer(&self) -> Option<usize> {
         self.initialized.then_some(self.external_current_layer)
     }
 
@@ -251,7 +251,7 @@ impl<'a> TrieScanPruneState<'a> {
     ///
     /// See [`TrieScanPruneState`] for more information.
     #[inline]
-    pub fn is_column_peeked(
+    pub(crate) fn is_column_peeked(
         &self,
         index: usize,
         storage_type_opt: Option<StorageTypeName>,
@@ -276,7 +276,7 @@ impl<'a> TrieScanPruneState<'a> {
     ///
     /// The caller must ensure that there exists no mutable reference to the column scan at `index` and thus the [`UnsafeCell`] is safe to access.
     #[inline]
-    pub unsafe fn current_input_trie_value(&self, index: usize) -> Option<StorageValueT> {
+    pub(crate) unsafe fn current_input_trie_value(&self, index: usize) -> Option<StorageValueT> {
         let current_input_type = self.input_trie_scan.path_types()[index];
         let scan = self.input_trie_scan.scan(index);
 
@@ -333,7 +333,7 @@ impl<'a> TrieScanPruneState<'a> {
     /// Same as `advance_on_layer()`, but calls `seek()` at the target layer to find advance to the next relevant tuple more efficiently.
     ///
     /// Currently, this function does not support returning the uppermost changed layer. This can be implemented in the future.
-    pub fn advance_on_layer_with_seek<T: ColumnDataType>(
+    pub(crate) fn advance_on_layer_with_seek<T: ColumnDataType>(
         &mut self,
         _target_layer: usize,
         _allow_advancements_above_target_layer: bool,

@@ -11,7 +11,7 @@ use crate::{
 
 /// [ColumnScan] representing the union of its sub scans
 #[derive(Debug)]
-pub struct ColumnScanUnion<'a, T>
+pub(crate) struct ColumnScanUnion<'a, T>
 where
     T: 'a + ColumnDataType,
 {
@@ -36,7 +36,7 @@ where
     T: 'a + ColumnDataType,
 {
     /// Constructs a new [ColumnScanUnion].
-    pub fn new(column_scans: Vec<&'a ColumnScanCell<'a, T>>) -> ColumnScanUnion<'a, T> {
+    pub(crate) fn new(column_scans: Vec<&'a ColumnScanCell<'a, T>>) -> ColumnScanUnion<'a, T> {
         let scans_len = column_scans.len();
         ColumnScanUnion {
             column_scans,

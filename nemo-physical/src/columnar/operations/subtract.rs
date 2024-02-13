@@ -11,7 +11,7 @@ use crate::datatypes::ColumnDataType;
 /// If the main scan moves to some value then the followers will point to value equal or greater than that of main.
 /// Some of the followers can be set to "subtract" which means that the main scan will skip all the values in that specific follow scan.
 #[derive(Debug)]
-pub struct ColumnScanSubtract<'a, T>
+pub(crate) struct ColumnScanSubtract<'a, T>
 where
     T: 'a + ColumnDataType,
 {
@@ -43,7 +43,7 @@ where
     T: 'a + ColumnDataType,
 {
     /// Constructs a new [`ColumnScanSubtract`].
-    pub fn new(
+    pub(crate) fn new(
         scan_main: &'a ColumnScanCell<'a, T>,
         scans_follower: Vec<Option<&'a ColumnScanCell<'a, T>>>,
         subtract_indices: Vec<usize>,
