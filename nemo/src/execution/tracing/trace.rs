@@ -199,7 +199,7 @@ pub struct TraceTreeRuleApplication {
 }
 
 impl TraceTreeRuleApplication {
-    fn to_instantiated_string(&self) -> String {
+    fn to_instantiated_rule(&self) -> Rule {
         let mut rule = self.rule.clone();
         rule.apply_assignment(
             &self
@@ -213,7 +213,17 @@ impl TraceTreeRuleApplication {
                 })
                 .collect(),
         );
-        rule.to_string()
+        rule
+    }
+
+    fn to_derived_fact(&self) -> ChaseFact {
+        let rule = self.to_instantiated_rule();
+        let derived_atom = &rule.head()[self._position];
+        ChaseFact::from_flat_atom(derived_atom)
+    }
+
+    fn to_instantiated_string(&self) -> String {
+        self.to_instantiated_rule().to_string()
     }
 }
 
@@ -229,7 +239,7 @@ pub enum ExecutionTraceTree {
 #[derive(Debug)]
 enum TracePetGraphNodeLabel {
     Fact(ChaseFact),
-    Rule(TraceTreeRuleApplication),
+    Rule(Rule),
 }
 
 impl ExecutionTraceTree {
@@ -259,17 +269,30 @@ impl ExecutionTraceTree {
 
         let mut node_stack: Vec<(Option<NodeIndex>, Self)> = vec![(None, self.clone())];
         while let Some((parent_node_index_opt, next_node)) = node_stack.pop() {
-            let petgraph_node = match next_node {
-                Self::Fact(ref chase_fact) => TracePetGraphNodeLabel::Fact(chase_fact.clone()),
+            let next_node_index = match next_node {
+                Self::Fact(ref chase_fact) => {
+                    let next_node_index =
+                        graph.add_node(TracePetGraphNodeLabel::Fact(chase_fact.clone()));
+                    if let Some(parent_node_index) = parent_node_index_opt {
+                        graph.add_edge(next_node_index, parent_node_index, ());
+                    }
+                    next_node_index
+                }
                 Self::Rule(ref trace_tree_rule_application, _) => {
-                    TracePetGraphNodeLabel::Rule(trace_tree_rule_application.clone())
+                    let fact = trace_tree_rule_application.to_derived_fact();
+                    let rule = trace_tree_rule_application.rule.clone();
+
+                    let fact_node_index = graph.add_node(TracePetGraphNodeLabel::Fact(fact));
+                    let next_node_index = graph.add_node(TracePetGraphNodeLabel::Rule(rule));
+                    graph.add_edge(next_node_index, fact_node_index, ());
+
+                    if let Some(parent_node_index) = parent_node_index_opt {
+                        graph.add_edge(fact_node_index, parent_node_index, ());
+                    }
+
+                    next_node_index
                 }
             };
-
-            let next_node_index = graph.add_node(petgraph_node);
-            if let Some(parent_node_index) = parent_node_index_opt {
-                graph.add_edge(next_node_index, parent_node_index, ());
-            }
 
             if let Self::Rule(_, subtrees) = next_node {
                 let new_parent_node_index_opt = Some(next_node_index);
@@ -294,12 +317,9 @@ impl ExecutionTraceTree {
                     (Cow::from("type"), Cow::from("axiom")),
                     (Cow::from("element"), Cow::from(chase_fact.to_string())),
                 ],
-                TracePetGraphNodeLabel::Rule(trace_tree_rule_application) => vec![
-                    (Cow::from("type"), Cow::from("axiom")),
-                    (
-                        Cow::from("element"),
-                        Cow::from(trace_tree_rule_application.to_instantiated_string()),
-                    ),
+                TracePetGraphNodeLabel::Rule(rule) => vec![
+                    (Cow::from("type"), Cow::from("DLRule")),
+                    (Cow::from("element"), Cow::from(rule.to_string())),
                 ],
             }))
             .to_string()
