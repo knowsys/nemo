@@ -41,8 +41,6 @@ impl<'a> TrieScanPrune<'a> {
             .map(|layer| input_trie_scan.possible_types(layer).storage_types())
             .collect();
 
-        println!("{possible_types:?}");
-
         let state = Rc::new(UnsafeCell::new(TrieScanPruneState {
             input_trie_scan,
             input_trie_scan_current_layer: 0,
