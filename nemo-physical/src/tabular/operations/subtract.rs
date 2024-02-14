@@ -9,7 +9,7 @@ use crate::{
         columnscan::{ColumnScanCell, ColumnScanEnum, ColumnScanRainbow},
         operations::subtract::ColumnScanSubtract,
     },
-    datatypes::{Double, Float, StorageTypeName},
+    datatypes::{storage_type_name::StorageTypeBitSet, Double, Float, StorageTypeName},
     management::database::Dict,
     tabular::triescan::{PartialTrieScan, TrieScanEnum},
 };
@@ -233,6 +233,10 @@ impl<'a> PartialTrieScan<'a> for TrieScanSubtract<'a> {
 
     fn scan<'b>(&'b self, layer: usize) -> &'b UnsafeCell<ColumnScanRainbow<'a>> {
         &self.column_scans[layer]
+    }
+
+    fn possible_types(&self, layer: usize) -> StorageTypeBitSet {
+        self.trie_main.possible_types(layer)
     }
 }
 

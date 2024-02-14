@@ -2,6 +2,8 @@
 
 pub mod mapping;
 
+pub(crate) mod bitset;
+
 /// A macro that generates forwarding macros to dispatch along
 /// datatype-tagged enums.
 ///

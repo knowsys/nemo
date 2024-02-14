@@ -332,6 +332,13 @@ impl<'a> PartialTrieScan<'a> for TrieScanAggregateWrapper<'a> {
     fn scan<'b>(&'b self, _layer: usize) -> &'b UnsafeCell<ColumnScanRainbow<'a>> {
         panic!("TrieScanAggregateWrapper::scan cannot be called");
     }
+
+    fn possible_types(
+        &self,
+        _layer: usize,
+    ) -> crate::datatypes::storage_type_name::StorageTypeBitSet {
+        todo!()
+    }
 }
 
 impl<'a> From<TrieScanAggregate<TrieScanPrune<'a>>> for TrieScanAggregateWrapper<'a> {

@@ -10,7 +10,7 @@ use crate::{
         columnscan::{ColumnScanCell, ColumnScanEnum, ColumnScanRainbow},
         operations::join::ColumnScanJoin,
     },
-    datatypes::{Double, Float, StorageTypeName},
+    datatypes::{storage_type_name::StorageTypeBitSet, Double, Float, StorageTypeName},
     management::database::Dict,
     tabular::{
         operations::OperationColumnMarker,
@@ -185,6 +185,20 @@ impl OperationGenerator for GeneratorJoin {
             })
             .collect::<Vec<_>>();
 
+        // `self.possible_types` contains for each output index,
+        // which types at most can appear on that layer.
+        let possible_types = self
+            .bindings
+            .iter()
+            .map(|binding| {
+                binding
+                    .iter()
+                    .fold(StorageTypeBitSet::full(), |result, index| {
+                        result.intersection(trie_scans[index.relation].possible_types(index.column))
+                    })
+            })
+            .collect();
+
         let mut column_scans: Vec<UnsafeCell<ColumnScanRainbow<'a>>> =
             Vec::with_capacity(self.bindings.len());
 
@@ -228,6 +242,7 @@ impl OperationGenerator for GeneratorJoin {
             trie_scans,
             layers_to_scans,
             path_types: Vec::new(),
+            possible_types,
             column_scans,
         }))
     }
@@ -247,6 +262,9 @@ pub struct TrieScanJoin<'a> {
 
     /// Path of [StorageTypeName] indicating the the types of the current (partial) row
     path_types: Vec<StorageTypeName>,
+
+    /// For each output layer contains the possible [StorageTypeName]
+    possible_types: Vec<StorageTypeBitSet>,
 
     /// For each layer in the resulting trie, contains a [`ColumnScanRainbow`],
     /// which computed the intersection of the relevant columns of the input tries.
@@ -301,6 +319,10 @@ impl<'a> PartialTrieScan<'a> for TrieScanJoin<'a> {
 
     fn scan<'b>(&'b self, layer: usize) -> &'b UnsafeCell<ColumnScanRainbow<'a>> {
         &self.column_scans[layer]
+    }
+
+    fn possible_types(&self, layer: usize) -> StorageTypeBitSet {
+        self.possible_types[layer]
     }
 }
 

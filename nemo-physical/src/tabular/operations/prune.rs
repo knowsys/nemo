@@ -7,7 +7,9 @@ use crate::{
         columnscan::{ColumnScanCell, ColumnScanEnum, ColumnScanRainbow},
         operations::prune::ColumnScanPrune,
     },
-    datatypes::{ColumnDataType, StorageTypeName, StorageValueT},
+    datatypes::{
+        storage_type_name::StorageTypeBitSet, ColumnDataType, StorageTypeName, StorageValueT,
+    },
     tabular::triescan::{PartialTrieScan, TrieScan, TrieScanEnum},
 };
 
@@ -33,6 +35,14 @@ impl<'a> TrieScanPrune<'a> {
         let mut output_column_scans =
             Vec::<UnsafeCell<ColumnScanRainbow<'a>>>::with_capacity(input_trie_scan.arity());
 
+        // TODO: One could check if some of the entries are empty here
+        // and from that deduce that the result of this will be empty
+        let possible_types = (0..input_trie_scan_arity)
+            .map(|layer| input_trie_scan.possible_types(layer).storage_types())
+            .collect();
+
+        println!("{possible_types:?}");
+
         let state = Rc::new(UnsafeCell::new(TrieScanPruneState {
             input_trie_scan,
             input_trie_scan_current_layer: 0,
@@ -40,6 +50,8 @@ impl<'a> TrieScanPrune<'a> {
             initialized: false,
             external_current_layer: 0,
             external_path_types: Vec::new(),
+            possible_types,
+            input_trie_scan_current_type: Vec::with_capacity(input_trie_scan_arity),
         }));
 
         // Create one `ColumnScanPrune` for every input column
@@ -102,11 +114,18 @@ pub(crate) type SharedTrieScanPruneState<'a> = Rc<UnsafeCell<TrieScanPruneState<
 pub(crate) struct TrieScanPruneState<'a> {
     /// Trie scan which is being pruned
     input_trie_scan: TrieScanEnum<'a>,
+    /// Possible types in each layer of the `input_trie_scan`
+    possible_types: Vec<Vec<StorageTypeName>>,
+
     /// Whether the first `external_down()` has been made (to go to layer `0`)
     initialized: bool,
+
     /// Current column scan layer of the input trie scan
     /// Layer zero is at to top of the trie scan
     input_trie_scan_current_layer: usize,
+    /// For each layer the current type index (index in `possible`) we are at
+    input_trie_scan_current_type: Vec<usize>,
+
     /// Index of the highest layer which has been peeked into by the `advance()` function
     /// This layer and layers below this index should ignore the next call to `advance`, because they have already been advanced to the next value behind the scenes.
     /// This variable is required to implement the lookahead which checks if
@@ -129,6 +148,7 @@ impl<'a> TrieScanPruneState<'a> {
             self.input_trie_scan.up();
             self.initialized = false;
             self.highest_peeked_layer = None;
+            self.input_trie_scan_current_type.pop();
             return;
         }
 
@@ -155,6 +175,7 @@ impl<'a> TrieScanPruneState<'a> {
             // First down initializes the trie scan
             self.initialized = true;
             self.input_trie_scan.down(storage_type);
+            self.input_trie_scan_current_type.push(0);
             return;
         }
 
@@ -176,28 +197,39 @@ impl<'a> TrieScanPruneState<'a> {
         &self.external_path_types
     }
 
+    /// Return the possible types for a given layer in this scan.
+    pub(crate) fn possible_types(&self, layer: usize) -> StorageTypeBitSet {
+        self.input_trie_scan.possible_types(layer)
+    }
+
     fn input_up(&mut self) {
         assert!(self.input_trie_scan_current_layer > 0);
 
         self.input_trie_scan.up();
+        self.input_trie_scan_current_type.pop();
         self.input_trie_scan_current_layer -= 1;
     }
 
     fn input_down(&mut self) {
         assert!(self.input_trie_scan_current_layer < self.input_trie_scan.arity() - 1);
 
-        self.input_trie_scan.down(StorageTypeName::Id32);
+        let first_type = *self.possible_types[self.input_trie_scan_current_layer]
+            .first()
+            .unwrap_or(&StorageTypeName::Id32);
+
+        self.input_trie_scan.down(first_type);
+        self.input_trie_scan_current_type.push(0);
         self.input_trie_scan_current_layer += 1;
     }
 
-    fn next_type(&self) -> Option<StorageTypeName> {
-        match self.input_trie_scan.path_types()[self.input_trie_scan_current_layer] {
-            StorageTypeName::Id32 => Some(StorageTypeName::Id64),
-            StorageTypeName::Id64 => Some(StorageTypeName::Int64),
-            StorageTypeName::Int64 => Some(StorageTypeName::Float),
-            StorageTypeName::Float => Some(StorageTypeName::Double),
-            StorageTypeName::Double => None,
-        }
+    fn next_type(&mut self) -> Option<StorageTypeName> {
+        let current_type_index =
+            &mut self.input_trie_scan_current_type[self.input_trie_scan_current_layer];
+        *current_type_index += 1;
+
+        self.possible_types[self.input_trie_scan_current_layer]
+            .get(*current_type_index)
+            .cloned()
     }
 
     fn input_jump_type(&mut self) -> bool {
@@ -613,6 +645,10 @@ impl<'a> PartialTrieScan<'a> for TrieScanPrune<'a> {
 
     fn scan<'b>(&'b self, layer: usize) -> &'b UnsafeCell<ColumnScanRainbow<'a>> {
         &self.output_column_scans[layer]
+    }
+
+    fn possible_types(&self, layer: usize) -> StorageTypeBitSet {
+        unsafe { (*self.state.get()).possible_types(layer) }
     }
 }
 

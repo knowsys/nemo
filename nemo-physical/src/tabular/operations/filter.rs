@@ -14,7 +14,10 @@ use crate::{
             filter_constant::ColumnScanFilterConstant, pass::ColumnScanPass,
         },
     },
-    datatypes::{into_datavalue::IntoDataValue, StorageTypeName, StorageValueT},
+    datatypes::{
+        into_datavalue::IntoDataValue, storage_type_name::StorageTypeBitSet, StorageTypeName,
+        StorageValueT,
+    },
     datavalues::AnyDataValue,
     function::{
         evaluation::StackProgram,
@@ -304,6 +307,10 @@ impl<'a> PartialTrieScan<'a> for TrieScanFilter<'a> {
 
     fn scan<'b>(&'b self, layer: usize) -> &'b UnsafeCell<ColumnScanRainbow<'a>> {
         &self.column_scans[layer]
+    }
+
+    fn possible_types(&self, layer: usize) -> StorageTypeBitSet {
+        self.trie_scan.possible_types(layer)
     }
 }
 

@@ -7,7 +7,7 @@ use crate::{
         columnscan::{ColumnScanEnum, ColumnScanRainbow},
         operations::{constant::ColumnScanConstant, pass::ColumnScanPass},
     },
-    datatypes::{StorageTypeName, StorageValueT},
+    datatypes::{storage_type_name::StorageTypeBitSet, StorageTypeName, StorageValueT},
     dictionary::DvDict,
     management::database::Dict,
     tabular::triescan::{PartialTrieScan, TrieScanEnum},
@@ -224,6 +224,10 @@ impl<'a> PartialTrieScan<'a> for TrieScanNull<'a> {
 
     fn scan<'b>(&'b self, layer: usize) -> &'b UnsafeCell<ColumnScanRainbow<'a>> {
         &self.column_scans[layer]
+    }
+
+    fn possible_types(&self, _layer: usize) -> StorageTypeBitSet {
+        StorageTypeName::Id64.bitset()
     }
 }
 

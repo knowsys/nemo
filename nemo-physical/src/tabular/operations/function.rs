@@ -10,7 +10,9 @@ use crate::{
         columnscan::{ColumnScanEnum, ColumnScanRainbow},
         operations::{constant::ColumnScanConstant, pass::ColumnScanPass},
     },
-    datatypes::{into_datavalue::IntoDataValue, StorageTypeName},
+    datatypes::{
+        into_datavalue::IntoDataValue, storage_type_name::StorageTypeBitSet, StorageTypeName,
+    },
     datavalues::AnyDataValue,
     function::{evaluation::StackProgram, tree::FunctionTree},
     management::database::Dict,
@@ -271,6 +273,21 @@ impl<'a> PartialTrieScan<'a> for TrieScanFunction<'a> {
 
     fn scan<'b>(&'b self, layer: usize) -> &'b UnsafeCell<ColumnScanRainbow<'a>> {
         &self.column_scans[layer]
+    }
+
+    fn possible_types(&self, layer: usize) -> StorageTypeBitSet {
+        if self.output_functions[layer].is_some() {
+            StorageTypeBitSet::full()
+        } else {
+            let input_layer = self
+                .output_functions
+                .iter()
+                .take(layer)
+                .filter(|out| out.is_none())
+                .count();
+
+            self.trie_scan.possible_types(input_layer)
+        }
     }
 }
 

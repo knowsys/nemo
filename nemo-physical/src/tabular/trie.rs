@@ -12,8 +12,12 @@ use crate::{
         },
     },
     datasources::tuple_writer::TupleWriter,
-    datatypes::{StorageTypeName, StorageValueT},
-    management::{bytesized::sum_bytes, bytesized::ByteSized},
+    datatypes::{
+        storage_type_name::{StorageTypeBitSet, STORAFE_TYPES},
+        StorageTypeName, StorageValueT,
+    },
+    management::bytesized::{sum_bytes, ByteSized},
+    util::bitset::BitSet,
 };
 
 use super::{
@@ -50,6 +54,11 @@ impl Trie {
     /// Return whether the trie is empty
     pub(crate) fn is_empty(&self) -> bool {
         self.num_rows() == 0
+    }
+
+    /// Returns whether a column of a particular [StorageTypeName] contains no data values.
+    pub(crate) fn is_empty_layer(&self, layer: usize, storage_type: StorageTypeName) -> bool {
+        self.columns[layer].is_empty_typed(storage_type)
     }
 
     /// Return a [PartialTrieScan] over this trie.
@@ -351,6 +360,18 @@ impl<'a> PartialTrieScan<'a> for TrieScanGeneric<'a> {
 
     fn path_types(&self) -> &[StorageTypeName] {
         &self.path_types
+    }
+
+    fn possible_types(&self, layer: usize) -> StorageTypeBitSet {
+        let mut result = BitSet::default();
+
+        for (index, storage_type) in STORAFE_TYPES.iter().enumerate() {
+            if !self.trie.is_empty_layer(layer, *storage_type) {
+                result.set(index, true);
+            }
+        }
+
+        StorageTypeBitSet::from(result)
     }
 }
 

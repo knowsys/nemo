@@ -16,7 +16,7 @@ use crate::{
         columnbuilder::{adaptive::ColumnBuilderAdaptive, ColumnBuilder},
         columnscan::{ColumnScanCell, ColumnScanEnum, ColumnScanRainbow},
     },
-    datatypes::{ColumnDataType, Double, Float, StorageTypeName, StorageValueT},
+    datatypes::{storage_type_name, ColumnDataType, Double, Float, StorageTypeName, StorageValueT},
     management::bytesized::ByteSized,
 };
 
@@ -134,6 +134,18 @@ where
             column_int64,
             column_float,
             column_double,
+        }
+    }
+
+    /// For a given [StorageTypeName],
+    /// checks if the associated columns contains no data values.
+    pub fn is_empty_typed(&self, storage_type_name: StorageTypeName) -> bool {
+        match storage_type_name {
+            StorageTypeName::Id32 => self.column_id32.is_empty(),
+            StorageTypeName::Id64 => self.column_id64.is_empty(),
+            StorageTypeName::Int64 => self.column_int64.is_empty(),
+            StorageTypeName::Float => self.column_float.is_empty(),
+            StorageTypeName::Double => self.column_double.is_empty(),
         }
     }
 

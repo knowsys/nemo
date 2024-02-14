@@ -7,7 +7,7 @@ use delegate::delegate;
 
 use crate::{
     columnar::columnscan::ColumnScanRainbow,
-    datatypes::{StorageTypeName, StorageValueT},
+    datatypes::{storage_type_name::StorageTypeBitSet, StorageTypeName, StorageValueT},
 };
 
 use super::{
@@ -38,6 +38,9 @@ pub(crate) trait PartialTrieScan<'a>: Debug {
 
     /// Return the storage type that is "active" on each layer.
     fn path_types(&self) -> &[StorageTypeName];
+
+    /// Return a list of possible types for a given layer.
+    fn possible_types(&self, layer: usize) -> StorageTypeBitSet;
 
     /// Return the number of columns associated with this scan.
     fn arity(&self) -> usize;
@@ -95,6 +98,7 @@ impl<'a> PartialTrieScan<'a> for TrieScanEnum<'a> {
             fn up(&mut self);
             fn down(&mut self, storage_type: StorageTypeName);
             fn path_types(&self) -> &[StorageTypeName];
+            fn possible_types(&self, layer: usize) -> StorageTypeBitSet;
             fn arity(&self) -> usize;
             fn current_layer(&self) -> Option<usize>;
             fn scan<'b>(&'b self, layer: usize) -> &'b UnsafeCell<ColumnScanRainbow<'a>>;
