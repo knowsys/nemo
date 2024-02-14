@@ -61,7 +61,7 @@ where
 
         unsafe {
             let state = Self::exclusively_get_shared_state(&self.state);
-            state.advance_on_layer(current_layer, Some(current_type));
+            state.advance_on_layer(current_layer, false);
         };
 
         self.reference_scan.current()
@@ -90,10 +90,7 @@ where
     }
 
     fn current(&self) -> Option<T> {
-        if unsafe {
-            (*self.state.get())
-                .is_column_peeked(self.column_scan_index, Some(self.column_scan_type))
-        } {
+        if unsafe { (*self.state.get()).is_column_peeked(self.column_scan_index) } {
             None
         } else {
             self.reference_scan.current()

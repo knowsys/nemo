@@ -1,7 +1,7 @@
-use std::{collections::HashMap, time::Instant};
+use std::{collections::HashMap, env::current_exe, time::Instant};
 
 use nemo_physical::{
-    datatypes::{StorageTypeName, StorageValueT},
+    datatypes::{StorageTypeBitSet, StorageTypeName, StorageValueT},
     tabular::triescan::{PartialTrieScan, TrieScan},
 };
 
@@ -30,15 +30,22 @@ fn partial_scan_next<'a, Scan: PartialTrieScan<'a>>(
     column_scan.next(storage_type)
 }
 
-fn trie_dfs<'a, Scan: PartialTrieScan<'a>>(scan: &mut Scan, types: &[StorageTypeName]) -> i64 {
+fn trie_dfs<'a, Scan: PartialTrieScan<'a>>(scan: &mut Scan) -> i64 {
     let mut result: i64 = 0;
 
-    let mut next_type_map = HashMap::<StorageTypeName, StorageTypeName>::new();
-    for adjacent_types in types.windows(2) {
-        next_type_map.insert(adjacent_types[0].clone(), adjacent_types[1].clone());
-    }
+    let possible_types = (0..scan.arity())
+        .map(|layer| scan.possible_types(layer).storage_types())
+        .collect::<Vec<_>>();
 
-    let first_type = types.first().unwrap().clone();
+    // let possible_types = (0..scan.arity())
+    //     .map(|layer| StorageTypeBitSet::full().storage_types())
+    //     .collect::<Vec<_>>();
+
+    let mut type_indices = Vec::with_capacity(scan.arity());
+    type_indices.push(0);
+
+    let first_type = possible_types[0][0];
+
     scan.down(first_type);
 
     while let Some(current_type) = scan.current_layer().map(|layer| scan.path_types()[layer]) {
@@ -48,13 +55,21 @@ fn trie_dfs<'a, Scan: PartialTrieScan<'a>>(scan: &mut Scan, types: &[StorageType
             }
 
             if scan.current_layer().unwrap() < scan.arity() - 1 {
-                scan.down(first_type);
+                type_indices.push(0);
+                scan.down(possible_types[scan.current_layer().unwrap() + 1][0]);
             }
         } else {
+            let current_layer = scan.current_layer().unwrap();
+
+            let current_type_index = &mut type_indices[current_layer];
+            *current_type_index += 1;
+
             scan.up();
 
-            if let Some(next_type) = next_type_map.get(&current_type).cloned() {
-                scan.down(next_type);
+            if let Some(next_type) = possible_types[current_layer].get(*current_type_index) {
+                scan.down(*next_type);
+            } else {
+                type_indices.pop();
             }
         }
     }
@@ -92,7 +107,10 @@ pub fn time_navigation_simple_dfs(num_rows: usize, arity: usize) {
     let start_time = Instant::now();
 
     let mut iterator = trie.partial_iterator();
-    let sum = trie_dfs(&mut iterator, &[StorageTypeName::Int64]);
+    // let possible_types = iterator.possible_types(0).storage_types();
+    // let possible_types = [StorageTypeName::Int64];
+
+    let sum = trie_dfs(&mut iterator);
 
     let end_time = Instant::now();
 
@@ -102,51 +120,53 @@ pub fn time_navigation_simple_dfs(num_rows: usize, arity: usize) {
 }
 
 pub fn time_navigation_simple_dfs_all(num_rows: usize, arity: usize) {
-    let trie = random_integer_trie(num_rows, arity);
+    // let trie = random_integer_trie(num_rows, arity);
 
-    let start_time = Instant::now();
+    // let start_time = Instant::now();
 
-    let mut iterator = trie.partial_iterator();
-    let sum = trie_dfs(
-        &mut iterator,
-        &[
-            StorageTypeName::Id32,
-            StorageTypeName::Id64,
-            StorageTypeName::Int64,
-            StorageTypeName::Float,
-            StorageTypeName::Double,
-        ],
-    );
+    // let mut iterator = trie.partial_iterator();
+    // let sum = trie_dfs(
+    //     &mut iterator,
+    //     &[
+    //         StorageTypeName::Id32,
+    //         StorageTypeName::Id64,
+    //         StorageTypeName::Int64,
+    //         StorageTypeName::Float,
+    //         StorageTypeName::Double,
+    //     ],
+    // );
 
-    let end_time = Instant::now();
+    // let end_time = Instant::now();
 
-    let duration = (end_time - start_time).as_millis();
+    // let duration = (end_time - start_time).as_millis();
 
-    println!("Dfs All Time: {}ms, Sum: {}", duration, sum);
+    // println!("Dfs All Time: {}ms, Sum: {}", duration, sum);
 }
 
 pub fn time_navigation_simple_old(num_rows: usize, arity: usize) {
     let trie = random_integer_trie_old(num_rows, arity);
 
-    let start_time = Instant::now();
+    for _ in 0..1 {
+        let start_time = Instant::now();
 
-    let mut iterator = trie.scan();
-    let mut sum: i64 = 0;
-    while let Some(changed) =
-        old::trie_scan_prune::TrieScan::advance_on_layer(&mut iterator, arity - 1)
-    {
-        for layer in changed..arity {
-            if let StorageValueT::Int64(value) =
-                old::trie_scan_prune::TrieScan::current(&mut iterator, layer)
-            {
-                sum += value;
+        let mut iterator = trie.scan();
+        let mut sum: i64 = 0;
+        while let Some(changed) =
+            old::trie_scan_prune::TrieScan::advance_on_layer(&mut iterator, arity - 1)
+        {
+            for layer in changed..arity {
+                if let StorageValueT::Int64(value) =
+                    old::trie_scan_prune::TrieScan::current(&mut iterator, layer)
+                {
+                    sum += value;
+                }
             }
         }
+
+        let end_time = Instant::now();
+
+        let duration = (end_time - start_time).as_millis();
+
+        println!("Old Time: {}ms, Sum: {}", duration, sum);
     }
-
-    let end_time = Instant::now();
-
-    let duration = (end_time - start_time).as_millis();
-
-    println!("Old Time: {}ms, Sum: {}", duration, sum);
 }

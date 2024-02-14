@@ -2,6 +2,7 @@
 
 /// Module for defining [`StorageTypeName`]
 pub mod storage_type_name;
+pub use storage_type_name::StorageTypeBitSet;
 pub use storage_type_name::StorageTypeName;
 /// Module for defining [`StorageValueT`]
 pub mod storage_value;

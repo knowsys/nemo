@@ -52,6 +52,7 @@ fn main() {
     for size in sizes {
         for &arity in &arities {
             println!("{size}, {arity}");
+
             time_navigation_simple(size, arity);
             // time_navigation_simple_old(size, arity);
             // time_navigation_simple_dfs(size, arity);
