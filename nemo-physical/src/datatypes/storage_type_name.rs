@@ -24,7 +24,7 @@ pub enum StorageTypeName {
 
 /// A list of [StorageTypeName],
 /// in the order they appear in the enum.
-pub(crate) const STORAFE_TYPES: &[StorageTypeName] = &[
+pub const STORAFE_TYPES: &[StorageTypeName] = &[
     StorageTypeName::Id32,
     StorageTypeName::Id64,
     StorageTypeName::Int64,
@@ -79,7 +79,7 @@ impl Display for StorageTypeName {
 
 /// [BitSet] where each bit represents a [StorageTypeName].
 #[derive(Debug, Clone, Copy)]
-pub(crate) struct StorageTypeBitSet(BitSet<usize>);
+pub struct StorageTypeBitSet(BitSet<usize>);
 
 impl StorageTypeBitSet {
     /// Create a [StorageTypeBitSet] which contains no entries.
