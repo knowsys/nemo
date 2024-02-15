@@ -65,23 +65,25 @@ fn trie_dfs<'a, Scan: PartialTrieScan<'a>>(scan: &mut Scan, types: &[StorageType
 pub fn time_navigation_simple(num_rows: usize, arity: usize) {
     let trie = random_integer_trie(num_rows, arity);
 
-    let start_time = Instant::now();
+    for _ in 0..100 {
+        let start_time = Instant::now();
 
-    let mut iterator = trie.full_iterator();
-    let mut sum: i64 = 0;
-    while let Some(changed) = TrieScan::advance_on_layer(&mut iterator, arity - 1) {
-        for layer in changed..arity {
-            if let StorageValueT::Int64(value) = iterator.current_value(layer) {
-                sum += value;
+        let mut iterator = trie.full_iterator();
+        let mut sum: i64 = 0;
+        while let Some(changed) = TrieScan::advance_on_layer(&mut iterator, arity - 1) {
+            for layer in changed..arity {
+                if let StorageValueT::Int64(value) = iterator.current_value(layer) {
+                    sum += value;
+                }
             }
         }
+
+        let end_time = Instant::now();
+
+        let duration = (end_time - start_time).as_millis();
+
+        println!("New Time: {}ms, Sum: {}", duration, sum);
     }
-
-    let end_time = Instant::now();
-
-    let duration = (end_time - start_time).as_millis();
-
-    println!("New Time: {}ms, Sum: {}", duration, sum);
 }
 
 pub fn time_navigation_simple_dfs(num_rows: usize, arity: usize) {

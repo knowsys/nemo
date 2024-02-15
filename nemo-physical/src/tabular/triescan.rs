@@ -22,7 +22,7 @@ use super::{
 ///
 /// It allows for vertical traversal between layers via the `up` and `down` methods,
 /// and horizontal traversal via [`ColumnScanT`].
-pub(crate) trait PartialTrieScan<'a>: Debug {
+pub trait PartialTrieScan<'a>: Debug {
     /// Return to the upper layer.
     ///
     /// # Panics

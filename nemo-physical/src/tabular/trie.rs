@@ -48,7 +48,7 @@ impl Trie {
     }
 
     /// Return the number of rows contained in this trie.
-    pub(crate) fn num_rows(&self) -> usize {
+    pub fn num_rows(&self) -> usize {
         self.columns.last().map_or(0, |column| column.num_data())
     }
 
@@ -63,7 +63,7 @@ impl Trie {
     }
 
     /// Return a [PartialTrieScan] over this trie.
-    pub(crate) fn partial_iterator(&self) -> TrieScanGeneric<'_> {
+    pub fn partial_iterator(&self) -> TrieScanGeneric<'_> {
         let column_scans = self
             .columns
             .iter()
@@ -74,7 +74,7 @@ impl Trie {
     }
 
     /// Return a [TrieScan] over this trie.
-    pub(crate) fn full_iterator(&self) -> TrieScanTrim {
+    pub fn full_iterator(&self) -> TrieScanTrim {
         TrieScanTrim::new(TrieScanEnum::TrieScanGeneric(self.partial_iterator()))
     }
 
@@ -95,7 +95,7 @@ impl Trie {
     }
 
     /// Create a new [Trie] from a [SortedTupleBuffer].
-    pub(crate) fn from_tuple_buffer(buffer: SortedTupleBuffer) -> Self {
+    pub fn from_tuple_buffer(buffer: SortedTupleBuffer) -> Self {
         let mut intervalcolumn_builders = (0..buffer.column_number())
             .map(|_| IntervalColumnTBuilderMatrix::<IntervalLookupMethod>::default())
             .collect::<Vec<_>>();
@@ -158,7 +158,7 @@ impl Trie {
     }
 
     /// Create a new [Trie] from a [TupleWriter].
-    pub(crate) fn from_tuple_writer(writer: TupleWriter) -> Self {
+    pub fn from_tuple_writer(writer: TupleWriter) -> Self {
         Self::from_tuple_buffer(writer.finalize())
     }
 
@@ -169,7 +169,7 @@ impl Trie {
     /// To keep all the values, set `cut_layers` to 0.
     ///
     /// Assumes that the given `trie_scan` is not initialized
-    pub(crate) fn from_trie_scan<Scan: TrieScan>(mut trie_scan: Scan, cut_layers: usize) -> Self {
+    pub fn from_trie_scan<Scan: TrieScan>(mut trie_scan: Scan, cut_layers: usize) -> Self {
         let num_columns = trie_scan.num_columns() - cut_layers;
 
         if num_columns == 0 {

@@ -42,24 +42,27 @@ mod project;
 //     time_addition(100_000_000);
 // }
 
+fn main() {
+    // let sizes = vec![1_000_000, 10_000_000];
+    // let arities = vec![2, 3, 4];
+
+    let sizes = vec![10_000_000];
+    let arities = vec![4];
+
+    for size in sizes {
+        for &arity in &arities {
+            println!("{size}, {arity}");
+            time_navigation_simple(size, arity);
+            // time_navigation_simple_old(size, arity);
+            // time_navigation_simple_dfs(size, arity);
+            // time_navigation_simple_dfs_all(size, arity);
+        }
+    }
+}
+
 // fn main() {
 //     let sizes = vec![1_000_000, 10_000_000];
-//     let arities = vec![2, 3, 4];
-
-//     for size in sizes {
-//         for &arity in &arities {
-//             println!("{size}, {arity}");
-//             time_navigation_simple(size, arity);
-//             time_navigation_simple_old(size, arity);
-//             time_navigation_simple_dfs(size, arity);
-//             time_navigation_simple_dfs_all(size, arity);
-//         }
-//     }
-// }
-
-// fn main() {
-//     let sizes = vec![1_000_000, 10_000_000];
-//     let arities = vec![2, 3, 4];
+//     let arities = vec![2, 3];
 
 //     for size in sizes {
 //         for &arity in &arities {
@@ -70,19 +73,19 @@ mod project;
 //     }
 // }
 
-fn main() {
-    let sizes = vec![1_000_000, 10_000_000, 50_000_000];
-    let scenarios = vec![
-        (vec!["x", "y", "z"], vec!["x", "y"]),
-        (vec!["x", "y", "z"], vec!["y", "z"]),
-        (vec!["x", "y", "z"], vec!["z", "x", "y"]),
-    ];
+// fn main() {
+//     let sizes = vec![1_000_000, 10_000_000, 50_000_000];
+//     let scenarios = vec![
+//         (vec!["x", "y", "z"], vec!["x", "y"]),
+//         (vec!["x", "y", "z"], vec!["y", "z"]),
+//         (vec!["x", "y", "z"], vec!["z", "x", "y"]),
+//     ];
 
-    for size in sizes {
-        for (input, output) in &scenarios {
-            println!("Size: {}, {:?} -> {:?}", size, input, output);
-            time_old_proectreorder(size, output.clone(), input.clone());
-            time_new_projectreorder(size, output.clone(), input.clone());
-        }
-    }
-}
+//     for size in sizes {
+//         for (input, output) in &scenarios {
+//             println!("Size: {}, {:?} -> {:?}", size, input, output);
+//             time_old_proectreorder(size, output.clone(), input.clone());
+//             time_new_projectreorder(size, output.clone(), input.clone());
+//         }
+//     }
+// }

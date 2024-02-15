@@ -22,7 +22,7 @@ use crate::{
 /// To achieve this behavior, before returning a value from `next()`, the input trie is traversed downwards to check if the value would exists in a materialized version of the trie scan.
 /// Therefore, every column and the trie scan itself has shared access to the input trie and associated state, through [`SharedTrieScanPruneState`].
 #[derive(Debug)]
-pub(crate) struct TrieScanPrune<'a> {
+pub struct TrieScanPrune<'a> {
     state: SharedTrieScanPruneState<'a>,
     output_column_scans: Vec<UnsafeCell<ColumnScanRainbow<'a>>>,
 }
@@ -109,7 +109,7 @@ pub(crate) type SharedTrieScanPruneState<'a> = Rc<UnsafeCell<TrieScanPruneState<
 
 /// State which is shared with the individual output column scans and the trie scan
 #[derive(Debug)]
-pub(crate) struct TrieScanPruneState<'a> {
+pub struct TrieScanPruneState<'a> {
     /// Trie scan which is being pruned
     input_trie_scan: TrieScanEnum<'a>,
     /// Possible types in each layer of the `input_trie_scan`

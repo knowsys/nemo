@@ -52,7 +52,7 @@ pub trait ColumnScan: Debug + Iterator {
 
 /// Enum for [ColumnScan] of all supported types
 #[derive(Debug)]
-pub(crate) enum ColumnScanEnum<'a, T>
+pub enum ColumnScanEnum<'a, T>
 where
     T: 'a + ColumnDataType,
 {
@@ -481,7 +481,7 @@ impl<'a> ColumnScan for ColumnScanT<'a> {
 
 /// Replaces [ColumnScanT]
 #[derive(Debug)]
-pub(crate) struct ColumnScanRainbow<'a> {
+pub struct ColumnScanRainbow<'a> {
     /// Case [StorageTypeName::Id32][super::super::datatypes::storage_type_name::StorageTypeName]
     pub scan_id32: ColumnScanCell<'a, u32>,
     /// Case [StorageTypeName::Id64][super::super::datatypes::storage_type_name::StorageTypeName]

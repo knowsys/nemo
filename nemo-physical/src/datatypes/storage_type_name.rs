@@ -7,7 +7,7 @@ pub const NUM_STORAGETYPES: usize = 5;
 
 /// Descriptors to refer to the possible data types at runtime.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, PartialOrd, Ord, Hash)]
-pub(crate) enum StorageTypeName {
+pub enum StorageTypeName {
     /// Data type [`u32`], used to store dictionary ids that fit into 32bits. This type always refers to an entry in a
     /// dictionary, rather than to the literal numerical integer value.
     Id32,

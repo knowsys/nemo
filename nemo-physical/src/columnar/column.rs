@@ -44,7 +44,7 @@ pub trait Column<'a, T>: Debug + Clone + ByteSized {
 
 /// Enum for column implementations
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) enum ColumnEnum<T: RunLengthEncodable> {
+pub enum ColumnEnum<T: RunLengthEncodable> {
     /// Case ColumnVector
     ColumnVector(ColumnVector<T>),
     /// Case ColumnRle
