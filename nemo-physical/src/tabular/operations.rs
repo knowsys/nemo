@@ -8,6 +8,7 @@ pub mod null;
 pub mod projectreorder;
 pub mod prune;
 pub mod subtract;
+pub mod trim;
 pub mod union;
 
 use std::{

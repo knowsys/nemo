@@ -22,7 +22,7 @@ use crate::{
 
 use super::{
     buffer::sorted_tuple_buffer::SortedTupleBuffer,
-    operations::prune::TrieScanPrune,
+    operations::trim::TrieScanTrim,
     triescan::{PartialTrieScan, TrieScan, TrieScanEnum},
 };
 
@@ -73,14 +73,14 @@ impl Trie {
     }
 
     /// Return a [TrieScan] over this trie.
-    pub(crate) fn full_iterator(&self) -> TrieScanPrune {
-        TrieScanPrune::new(TrieScanEnum::TrieScanGeneric(self.partial_iterator()))
+    pub(crate) fn full_iterator(&self) -> TrieScanTrim {
+        TrieScanTrim::new(TrieScanEnum::TrieScanGeneric(self.partial_iterator()))
     }
 
     /// Return a row based iterator over this trie.
     pub(crate) fn row_iterator(&self) -> impl Iterator<Item = Vec<StorageValueT>> + '_ {
         struct TrieRowIterator<'a> {
-            trie_scan: TrieScanPrune<'a>,
+            trie_scan: TrieScanTrim<'a>,
             current_row: Vec<StorageValueT>,
         }
 
@@ -88,7 +88,7 @@ impl Trie {
             type Item = Vec<StorageValueT>;
 
             fn next(&mut self) -> Option<Self::Item> {
-                let arity = self.trie_scan.arity();
+                let arity = self.trie_scan.num_columns();
 
                 let changed_layer = TrieScan::advance_on_layer(&mut self.trie_scan, arity - 1)?;
 
