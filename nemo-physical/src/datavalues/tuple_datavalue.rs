@@ -3,7 +3,10 @@
 
 use std::sync::Arc;
 
-use super::{AnyDataValue, DataValue, IriDataValue, ValueDomain};
+use super::{
+    syntax::{DELIM_TUPLE_CLOSE, DELIM_TUPLE_OPEN, TUPLE_SEPARATOR},
+    AnyDataValue, DataValue, IriDataValue, ValueDomain,
+};
 
 /// Physical representation of a fixed-length tuple of [`DataValue`]s.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
@@ -45,13 +48,13 @@ impl DataValue for TupleDataValue {
             .iter()
             .map(|v| DataValue::canonical_string(v))
             //.by_ref()
-            .intersperse(",".to_string())
+            .intersperse(TUPLE_SEPARATOR.to_string())
             .collect::<String>();
 
         if let Some(iri) = self.label() {
-            iri.canonical_string() + "(" + values.as_str() + ")"
+            iri.canonical_string() + DELIM_TUPLE_OPEN + values.as_str() + DELIM_TUPLE_CLOSE
         } else {
-            "(".to_string() + values.as_str() + ")"
+            DELIM_TUPLE_OPEN.to_string() + values.as_str() + DELIM_TUPLE_CLOSE
         }
     }
 
@@ -60,7 +63,7 @@ impl DataValue for TupleDataValue {
     }
 
     fn canonical_string(&self) -> String {
-        super::datavalue::quote_string(self.lexical_value())
+        super::datavalue::quote_string(self.lexical_value().as_str())
             + "^^"
             + &super::datavalue::quote_iri(self.datatype_iri().as_str())
     }
@@ -86,6 +89,25 @@ impl std::hash::Hash for TupleDataValue {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         self.value_domain().hash(state);
         self.values.hash(state);
+    }
+}
+
+impl std::fmt::Display for TupleDataValue {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if let Some(iri) = self.label() {
+            iri.fmt(f)?;
+        }
+        f.write_str(DELIM_TUPLE_OPEN)?;
+        let mut first = true;
+        for v in self.values.iter() {
+            if first {
+                first = false;
+            } else {
+                f.write_str(TUPLE_SEPARATOR)?;
+            }
+            v.fmt(f)?;
+        }
+        f.write_str(DELIM_TUPLE_CLOSE)
     }
 }
 

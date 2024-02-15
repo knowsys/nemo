@@ -78,6 +78,12 @@ impl Ord for FloatDataValue {
     }
 }
 
+impl std::fmt::Display for FloatDataValue {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.canonical_string().as_str())
+    }
+}
+
 /// Physical representation of a finite 64bit floating point number as an f64.
 #[repr(transparent)]
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
@@ -146,6 +152,13 @@ impl Ord for DoubleDataValue {
         } else {
             unreachable!("all floats allowed for this type are comparable")
         }
+    }
+}
+
+impl std::fmt::Display for DoubleDataValue {
+    // TODO: Maybe this could be simplified based on the parser's rules for abbreviating doubles.
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.canonical_string().as_str())
     }
 }
 

@@ -123,7 +123,7 @@ impl<'a> QuadBuffer {
         match datavalue.value_domain() {
             ValueDomain::String => {
                 self.object_type = RdfTermType::SimpleStringLiteral;
-                self.object_part1 = datavalue.to_string_unchecked();
+                self.object_part1 = datavalue.to_plain_string_unchecked();
             }
             ValueDomain::LanguageTaggedString => {
                 self.object_type = RdfTermType::LangString;

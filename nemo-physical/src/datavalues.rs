@@ -2,6 +2,8 @@
 //! Data values are conceived on this level as canonical representations of unique (semantic)
 //! values across a number of domains (integers, strings, etc.).
 
+pub mod syntax;
+
 /// Module to define the general [DataValue] trait.
 pub mod datavalue;
 pub use datavalue::DataValue;
