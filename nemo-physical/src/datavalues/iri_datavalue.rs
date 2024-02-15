@@ -22,6 +22,34 @@ impl IriDataValue {
     pub fn new(iri: String) -> Self {
         IriDataValue(iri)
     }
+
+    /// Nemo considers "plain" identifiers, such as a constant name `a` or a predicate name `edge`, as simple forms
+    /// of relative IRIs. This function checks if the given IRI is guaranteed to be of this form.
+    ///
+    /// Not all relative IRIs are "names" in this sense, since, e.g., "/" and "#" is not allowed here. Moreover,
+    /// names in Nemo cannot start with numbers.
+    ///
+    /// TODO: This should be aligned with how the parser works. Currently restricted to basic alpha-numeric names.
+    /// Note: Failing to recognize an IRI as possible name should not have severe consequences (we just put some <>
+    /// around such IRIs in formatting).
+    pub fn is_name(&self) -> bool {
+        let mut first = true;
+        for c in self.0.chars() {
+            match c {
+                '0'..='9' | '_' | '-' => {
+                    if first {
+                        return false;
+                    }
+                }
+                'a'..='z' | 'A'..='Z' => {}
+                _ => {
+                    return false;
+                }
+            }
+            first = false;
+        }
+        true
+    }
 }
 
 impl DataValue for IriDataValue {
@@ -50,6 +78,16 @@ impl std::hash::Hash for IriDataValue {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         self.value_domain().hash(state);
         self.0.hash(state);
+    }
+}
+
+impl std::fmt::Display for IriDataValue {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if self.is_name() {
+            f.write_str(self.0.as_str())
+        } else {
+            f.write_str(self.canonical_string().as_str())
+        }
     }
 }
 

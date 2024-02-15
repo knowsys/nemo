@@ -32,7 +32,7 @@ pub(crate) struct StringDvConverter;
 impl DvConverter for StringDvConverter {
     #[inline(always)]
     fn dict_string(dv: &AnyDataValue) -> Option<String> {
-        dv.to_string()
+        dv.to_plain_string()
     }
 
     #[inline(always)]

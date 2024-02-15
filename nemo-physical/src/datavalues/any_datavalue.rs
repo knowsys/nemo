@@ -578,8 +578,8 @@ impl DataValue for AnyDataValue {
             fn lexical_value(&self) -> String;
             fn value_domain(&self) -> ValueDomain;
             fn canonical_string(&self) -> String;
-            fn to_string(&self) -> Option<String>;
-            fn to_string_unchecked(&self) -> String;
+            fn to_plain_string(&self) -> Option<String>;
+            fn to_plain_string_unchecked(&self) -> String;
             fn to_language_tagged_string(&self) -> Option<(String, String)>;
             fn to_language_tagged_string_unchecked(&self) -> (String, String);
             fn to_iri(&self) -> Option<String>;
@@ -634,6 +634,30 @@ impl std::hash::Hash for AnyDataValue {
             /// that have the potential to represent the same value can co-exist in the
             /// enum, while respecting the Hash-Eq-Contract.
             fn hash<H: std::hash::Hasher>(&self, state: &mut H);
+        }
+    }
+}
+
+impl std::fmt::Display for AnyDataValue {
+    delegate! {
+        to match &self.0 {
+            AnyDataValueEnum::Boolean(value) => value,
+            AnyDataValueEnum::String(value)=> value,
+            AnyDataValueEnum::LanguageTaggedString(value) => value,
+            AnyDataValueEnum::Iri(value) => value,
+            AnyDataValueEnum::Float(value) => value,
+            AnyDataValueEnum::Double(value) => value,
+            AnyDataValueEnum::UnsignedLong(value) => value,
+            AnyDataValueEnum::Long(value) => value,
+            AnyDataValueEnum::Null(value) => value,
+            AnyDataValueEnum::Tuple(value) => value,
+            AnyDataValueEnum::Map(value) => value,
+            AnyDataValueEnum::Other(value) => value,
+        } {
+            /// The fmt function for [AnyDataValue] is delegated to the contained value
+            /// implementations, without adding variant-specific information as the
+            /// derived implementation would do.
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result;
         }
     }
 }
@@ -828,8 +852,8 @@ mod test {
         );
         assert_eq!(dv.value_domain(), ValueDomain::String);
 
-        assert_eq!(dv.to_string(), Some(value.to_string()));
-        assert_eq!(dv.to_string_unchecked(), value.to_string());
+        assert_eq!(dv.to_plain_string(), Some(value.to_string()));
+        assert_eq!(dv.to_plain_string_unchecked(), value.to_string());
     }
 
     #[test]
@@ -974,7 +998,7 @@ mod test {
         assert_eq!(dv.datatype_iri(), datatype_iri);
         assert_eq!(dv.value_domain(), ValueDomain::Other);
 
-        assert_eq!(dv.to_string(), None);
+        assert_eq!(dv.to_plain_string(), None);
         assert_eq!(dv.to_iri(), None);
         assert_eq!(dv.to_language_tagged_string(), None);
         // ...

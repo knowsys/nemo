@@ -68,3 +68,9 @@ impl PartialOrd for BooleanDataValue {
         Some(self.cmp(&other))
     }
 }
+
+impl std::fmt::Display for BooleanDataValue {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.canonical_string().as_str())
+    }
+}

@@ -60,3 +60,9 @@ impl std::hash::Hash for NullDataValue {
         self.0.hash(state);
     }
 }
+
+impl std::fmt::Display for NullDataValue {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.canonical_string().as_str())
+    }
+}
