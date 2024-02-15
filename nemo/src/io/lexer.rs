@@ -1,198 +1,444 @@
 //! Lexical tokenization of rulewerk-style rules.
 
-use nom::{
-    branch::alt,
-    bytes::complete::{is_a, is_not, tag},
-    character::complete::multispace0,
-    combinator::{peek, recognize},
-    error::ParseError,
-    multi::many0,
-    sequence::{delimited, tuple},
-    IResult, Parser,
-};
-use nom_locate::LocatedSpan;
+use std::str::Chars;
 
-type Span<'a> = LocatedSpan<&'a str>;
+const EOF_CHAR: char = '\0';
+
+#[derive(Debug)]
+struct Lexer<'a> {
+    chars: Chars<'a>,
+}
+
+impl Lexer<'_> {
+    fn new(input: &str) -> Lexer {
+        Lexer {
+            chars: input.chars(),
+        }
+    }
+    fn peek(&self, count: usize) -> char {
+        self.chars.clone().nth(count - 1).unwrap_or(EOF_CHAR)
+    }
+    fn bump(&mut self) -> Option<char> {
+        self.chars.next()
+    }
+    fn is_eof(&self) -> bool {
+        self.chars.as_str().is_empty()
+    }
+    fn bump_while(&mut self, mut predicate: impl FnMut(char) -> bool) {
+        while predicate(self.peek(1)) && !self.is_eof() {
+            self.bump();
+        }
+    }
+    fn advance_token(&mut self) -> TokenKind {
+        use TokenKind::*;
+        let first_char = match self.bump() {
+            Some(c) => c,
+            None => return Eof,
+        };
+        match first_char {
+            '%' => match (self.peek(1), self.peek(2)) {
+                (n1, n2) if n1.is_digit(16) && n2.is_digit(16) => self.pct_encoded(),
+                _ => self.comment(),
+            },
+            '\n' => Whitespace(true),
+            c if is_whitespace(c) => self.whitespace(),
+            c if unicode_ident::is_xid_start(c) => self.ident(),
+            c @ '0'..='9' => self.number(),
+            '?' => QuestionMark,
+            '!' => ExclamationMark,
+            '(' => OpenParen,
+            ')' => CloseParen,
+            '[' => OpenBracket,
+            ']' => CloseBracket,
+            '{' => OpenBrace,
+            '}' => CloseBrace,
+            '.' => Dot,
+            ',' => Comma,
+            ':' => Colon,
+            ';' => Semicolon,
+            '>' => Greater,
+            '=' => Equal,
+            '<' => Less,
+            '~' => Tilde,
+            '^' => Caret,
+            '#' => Hash,
+            '_' => Underscore,
+            '@' => At,
+            '+' => Plus,
+            '-' => Minus,
+            '*' => Star,
+            '/' => Slash,
+            '$' => Dollar,
+            '&' => Ampersand,
+            '\'' => Apostrophe,
+            _ => todo!(),
+        }
+    }
+
+    fn number(&mut self) -> TokenKind {
+        self.bump_while(is_hex_digit);
+        TokenKind::Number
+    }
+    fn pct_encoded(&mut self) -> TokenKind {
+        self.bump();
+        self.bump();
+        TokenKind::PctEncoded
+    }
+    fn comment(&mut self) -> TokenKind {
+        self.bump_while(|c| c != '\n');
+        self.bump();
+        TokenKind::Comment
+    }
+    fn whitespace(&mut self) -> TokenKind {
+        self.bump_while(|c| is_whitespace(c) && c != '\n');
+        if '\n' == self.peek(1) {
+            self.bump();
+            return TokenKind::Whitespace(true);
+        }
+        TokenKind::Whitespace(false)
+    }
+    fn ident(&mut self) -> TokenKind {
+        self.bump_while(unicode_ident::is_xid_continue);
+        TokenKind::Ident
+    }
+}
+
+fn is_hex_digit(c: char) -> bool {
+    c.is_digit(16)
+}
+
+fn is_whitespace(c: char) -> bool {
+    // support also vertical tab, form feed, NEXT LINE (latin1),
+    // LEFT-TO-RIGHT MARK, RIGHT-TO-LEFT MARK, LINE SEPARATOR and PARAGRAPH SEPARATOR?
+    matches!(c, ' ' | '\n' | '\t' | '\r')
+}
+
+fn is_ident(s: &str) -> bool {
+    let mut chars = s.chars();
+    if let Some(char) = chars.next() {
+        unicode_ident::is_xid_start(char) && chars.all(unicode_ident::is_xid_continue)
+    } else {
+        false
+    }
+}
 
 /// All the tokens the input gets parsed into.
-#[derive(Debug, PartialEq)]
-enum Token<'a> {
-    // Directives
-    Base(Span<'a>),
-    Prefix(Span<'a>),
-    Import(Span<'a>),
-    Export(Span<'a>),
-    // Syntactic symbols
-    QuestionMark(Span<'a>),
-    BracketOpen(Span<'a>),
-    BracketClose(Span<'a>),
-    SquaredBracketOpen(Span<'a>),
-    SquaredBracketClose(Span<'a>),
-    CurlyBracketOpen(Span<'a>),
-    CurlyBracketClose(Span<'a>),
-    Dot(Span<'a>),
-    Comma(Span<'a>),
-    Colon(Span<'a>),
-    ImplicationArrow(Span<'a>),
-    Greater(Span<'a>),
-    Equal(Span<'a>),
-    Less(Span<'a>),
-    Not(Span<'a>),
-    DoubleCaret(Span<'a>),
-    Hash(Span<'a>),
-    Underscore(Span<'a>),
-    AtSign(Span<'a>),
-    // Names or values
-    Identifier(Span<'a>),
-    IRI(Span<'a>),
-    Integer(Span<'a>),
-    Float(Span<'a>),
-    String(Span<'a>),
-    // miscellaneous
-    Comment(Span<'a>),
-    Illegal(Span<'a>),
-    EOF(Span<'a>),
-}
-
-// FIXME: Figure out when erros occur
-fn tokenize<'a>(input: Span<'a>) -> Vec<Token<'a>> {
-    let (rest, vec) = many0(ignore_ws(alt((comment, base, prefix, import, export))))(input)
-        .expect("An error occured");
-    vec
-}
-
-fn ignore_ws<'a, F, O, E: ParseError<Span<'a>>>(
-    inner: F,
-) -> impl FnMut(Span<'a>) -> IResult<Span<'a>, O, E>
-where
-    F: Parser<Span<'a>, O, E>,
-{
-    delimited(multispace0, inner, multispace0)
-}
-
-fn comment<'a>(input: Span<'a>) -> IResult<Span<'a>, Token<'a>> {
-    recognize(tuple((
-        tag("%"),
-        is_not("\n\r"),
-        alt((tag("\n\r"), tag("\n"))),
-    )))(input)
-    .map(|(rest, span)| (rest, Token::Comment(span)))
-}
-
-/// Recognize the `@base` directive
-fn base<'a>(input: Span<'a>) -> IResult<Span<'a>, Token<'a>> {
-    tag("@base")(input).map(|(rest, span)| (rest, Token::Base(span)))
-}
-
-fn prefix<'a>(input: Span<'a>) -> IResult<Span<'a>, Token<'a>> {
-    tag("@prefix")(input).map(|(rest, span)| (rest, Token::Prefix(span)))
-}
-
-fn import<'a>(input: Span<'a>) -> IResult<Span<'a>, Token<'a>> {
-    tag("@import")(input).map(|(rest, span)| (rest, Token::Import(span)))
-}
-
-fn export<'a>(input: Span<'a>) -> IResult<Span<'a>, Token<'a>> {
-    tag("@export")(input).map(|(rest, span)| (rest, Token::Export(span)))
+#[derive(Debug, PartialEq, Copy, Clone)]
+enum TokenKind {
+    // Syntactic symbols:
+    /// '?'
+    QuestionMark,
+    /// '!'
+    ExclamationMark,
+    /// '('
+    OpenParen,
+    /// ')'
+    CloseParen,
+    /// '['
+    OpenBracket,
+    /// ']'
+    CloseBracket,
+    /// '{'
+    OpenBrace,
+    /// '}'
+    CloseBrace,
+    /// '.'
+    Dot,
+    /// ','
+    Comma,
+    /// ':'
+    Colon,
+    /// ';'
+    Semicolon,
+    /// '>'
+    Greater,
+    /// '='
+    Equal,
+    /// '<'
+    Less,
+    /// '~'
+    Tilde,
+    /// '^'
+    Caret,
+    /// '#'
+    Hash,
+    /// '_'
+    Underscore,
+    /// '@'
+    At,
+    /// '+'
+    Plus,
+    /// '-'
+    Minus,
+    /// '*'
+    Star,
+    /// '/'
+    Slash,
+    /// '$'
+    Dollar,
+    /// '&'
+    Ampersand,
+    /// "'"
+    Apostrophe,
+    // Multi-char tokens:
+    /// Identifier for keywords and predicate names
+    Ident,
+    /// All other Utf8 characters that can be used in an IRI
+    Utf8Chars,
+    /// Percent-encoded characters in IRIs
+    PctEncoded,
+    /// Base 10 digits
+    Number,
+    /// A string literal
+    String,
+    /// A comment, starting with `%`
+    Comment,
+    /// A comment, starting with `%%`
+    DocComment,
+    /// bool: ends_with_newline
+    Whitespace(bool),
+    /// catch all token
+    Illegal,
+    /// signals end of file
+    Eof,
 }
 
 #[cfg(test)]
 mod test {
-    use nom::multi::many0;
+    use super::TokenKind::*;
+    use crate::io::lexer::Lexer;
 
-    use super::{Span, Token};
-    // is `tag` the right denomination?
     #[test]
-    fn base_tag() {
+    fn tokenize() {
         assert_eq!(
-            super::base(Span::new("@base")).unwrap().1,
-            Token::Base(unsafe { Span::new_from_raw_offset(0, 1, "@base", ()) })
-        );
-    }
-
-    // is `tag` the right denomination?
-    #[test]
-    fn prefix_tag() {
-        assert_eq!(
-            super::prefix(Span::new("@prefix")).unwrap().1,
-            Token::Prefix(unsafe { Span::new_from_raw_offset(0, 1, "@prefix", ()) })
-        );
-    }
-
-    // is `tag` the right denomination?
-    #[test]
-    fn import_tag() {
-        assert_eq!(
-            super::import(Span::new("@import")).unwrap().1,
-            Token::Import(unsafe { Span::new_from_raw_offset(0, 1, "@import", ()) })
-        );
-    }
-
-    // is `tag` the right denomination?
-    #[test]
-    fn export_tag() {
-        assert_eq!(
-            super::export(Span::new("@export")).unwrap().1,
-            Token::Export(unsafe { Span::new_from_raw_offset(0, 1, "@export", ()) })
-        );
+            {
+                let mut vec = vec![];
+                let mut lexer = Lexer::new("P(?X) :- A(?X).\t\n    A(Human).");
+                loop {
+                    let tok = lexer.advance_token();
+                    vec.push(tok.clone());
+                    if tok == Eof {
+                        break;
+                    }
+                }
+                vec
+            },
+            vec![
+                Ident,
+                OpenParen,
+                QuestionMark,
+                Ident,
+                CloseParen,
+                Whitespace(false),
+                Colon,
+                Minus,
+                Whitespace(false),
+                Ident,
+                OpenParen,
+                QuestionMark,
+                Ident,
+                CloseParen,
+                Dot,
+                Whitespace(true),
+                Whitespace(false),
+                Ident,
+                OpenParen,
+                Ident,
+                CloseParen,
+                Dot,
+                Eof
+            ]
+        )
     }
 
     #[test]
     fn comment() {
         assert_eq!(
-            super::comment(Span::new(
-                "% Some meaningful comment with some other %'s in it\n"
-            ))
-            .unwrap()
-            .1,
-            Token::Comment(unsafe {
-                Span::new_from_raw_offset(
-                    0,
-                    1,
-                    "% Some meaningful comment with some other %'s in it\n",
-                    (),
-                )
-            })
-        );
+            {
+                let mut vec = vec![];
+                let mut lexer = Lexer::new("% Some Comment\n");
+                loop {
+                    let tok = lexer.advance_token();
+                    vec.push(tok.clone());
+                    if tok == Eof {
+                        break;
+                    }
+                }
+                vec
+            },
+            vec![Comment, Eof]
+        )
+    }
+
+    #[test]
+    fn pct_enc_with_comment() {
         assert_eq!(
-            super::comment(Span::new(
-                "% Some meaningful comment with some other %'s in it\n\r"
-            ))
-            .unwrap()
-            .1,
-            Token::Comment(unsafe {
-                Span::new_from_raw_offset(
-                    0,
-                    1,
-                    "% Some meaningful comment with some other %'s in it\n\r",
-                    (),
-                )
-            })
-        );
+            {
+                let mut vec = vec![];
+                let mut lexer = Lexer::new("%38%a3% Some Comment\n");
+                loop {
+                    let tok = lexer.advance_token();
+                    vec.push(tok.clone());
+                    if tok == Eof {
+                        break;
+                    }
+                }
+                vec
+            },
+            vec![PctEncoded, PctEncoded, Comment, Eof]
+        )
+    }
+
+    #[test]
+    fn ident() {
         assert_eq!(
-            super::comment(Span::new(
-                "% Some meaningful comment\n%that is more than one line long\n"
-            ))
-            .unwrap()
-            .1,
-            Token::Comment(unsafe {
-                Span::new_from_raw_offset(0, 1, "% Some meaningful comment\n", ())
-            })
-        );
-        assert_eq!(
-            many0(super::comment)(Span::new(
-                "% Some meaningful comment\n%that is more than one line long\n"
-            ))
-            .unwrap()
-            .1,
+            {
+                let mut vec = vec![];
+                let mut lexer = Lexer::new("some_Ident(Alice). %comment at the end of a line\n");
+                loop {
+                    let tok = lexer.advance_token();
+                    vec.push(tok.clone());
+                    if tok == Eof {
+                        break;
+                    }
+                }
+                vec
+            },
             vec![
-                Token::Comment(unsafe {
-                    Span::new_from_raw_offset(0, 1, "% Some meaningful comment\n", ())
-                }),
-                Token::Comment(unsafe {
-                    Span::new_from_raw_offset(26, 2, "%that is more than one line long\n", ())
-                })
+                Ident,
+                OpenParen,
+                Ident,
+                CloseParen,
+                Dot,
+                Whitespace(false),
+                Comment,
+                Eof
             ]
-        );
+        )
+    }
+
+    #[test]
+    #[should_panic]
+    fn forbidden_ident() {
+        assert_eq!(
+            {
+                let mut vec = vec![];
+                let mut lexer = Lexer::new("_someIdent(Alice). %comment at the end of a line\n");
+                loop {
+                    let tok = lexer.advance_token();
+                    vec.push(tok.clone());
+                    if tok == Eof {
+                        break;
+                    }
+                }
+                vec
+            },
+            vec![
+                Ident,
+                OpenParen,
+                Ident,
+                CloseParen,
+                Dot,
+                Whitespace(false),
+                Comment,
+                Eof
+            ]
+        )
+    }
+
+    #[test]
+    fn iri() {
+        assert_eq!(
+            {
+                let mut vec = vec![];
+                let mut lexer = Lexer::new("<https://résumé.example.org/>");
+                loop {
+                    let tok = lexer.advance_token();
+                    vec.push(tok.clone());
+                    if tok == Eof {
+                        break;
+                    }
+                }
+                vec
+            },
+            vec![
+                Less, Ident, Colon, Slash, Slash, Ident, Dot, Ident, Dot, Ident, Slash, Greater,
+                Eof
+            ]
+        )
+    }
+
+    #[test]
+    fn iri_pct_enc() {
+        assert_eq!(
+            {
+                let mut vec = vec![];
+                let mut lexer = Lexer::new("<http://r%C3%A9sum%C3%A9.example.org>\n");
+                loop {
+                    let tok = lexer.advance_token();
+                    vec.push(tok.clone());
+                    if tok == Eof {
+                        break;
+                    }
+                }
+                vec
+            },
+            vec![
+                Less,
+                Ident,
+                Colon,
+                Slash,
+                Slash,
+                Ident,
+                PctEncoded,
+                PctEncoded,
+                Ident,
+                PctEncoded,
+                PctEncoded,
+                Dot,
+                Ident,
+                Dot,
+                Ident,
+                Greater,
+                Whitespace(true),
+                Eof
+            ]
+        )
+    }
+
+    #[test]
+    fn pct_enc_comment() {
+        assert_eq!(
+            {
+                let mut vec = vec![];
+                let mut lexer = Lexer::new("%d4 this should be a comment,\n% but the lexer can't distinguish a percent encoded value\n% in an iri from a comment :(\n");
+                loop {
+                    let tok = lexer.advance_token();
+                    vec.push(tok.clone());
+                    if tok == Eof {
+                        break;
+                    }
+                }
+                vec
+            },
+            vec![
+                PctEncoded,
+                Whitespace(false),
+                Ident,
+                Whitespace(false),
+                Ident,
+                Whitespace(false),
+                Ident,
+                Whitespace(false),
+                Ident,
+                Whitespace(false),
+                Ident,
+                Comma,
+                Whitespace(true),
+                Comment,
+                Comment,
+                Eof
+            ]
+        )
     }
 }
