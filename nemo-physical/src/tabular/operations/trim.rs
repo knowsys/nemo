@@ -147,6 +147,8 @@ impl<'a> TrieScan for TrieScanTrim<'a> {
         let type_index = self.type_indices[layer];
         let storage_type = self.possible_types[layer][type_index];
 
+        return StorageValueT::Int64(type_index as i64);
+
         self.column_scan(layer)
             .current(storage_type)
             .expect("Function assumes that advance_on_layer has been called at least once")

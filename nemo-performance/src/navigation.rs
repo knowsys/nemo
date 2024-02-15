@@ -80,7 +80,7 @@ fn trie_dfs<'a, Scan: PartialTrieScan<'a>>(scan: &mut Scan) -> i64 {
 pub fn time_navigation_simple(num_rows: usize, arity: usize) {
     let trie = random_integer_trie(num_rows, arity);
 
-    for _ in 0..100 {
+    for _ in 0..1 {
         let start_time = Instant::now();
 
         let mut iterator = trie.full_iterator();

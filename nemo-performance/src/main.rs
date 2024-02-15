@@ -43,18 +43,18 @@ mod project;
 // }
 
 fn main() {
-    // let sizes = vec![1_000_000, 10_000_000];
-    // let arities = vec![2, 3, 4];
+    let sizes = vec![1_000_000, 10_000_000];
+    let arities = vec![2, 3, 4];
 
-    let sizes = vec![10_000_000];
-    let arities = vec![4];
+    // let sizes = vec![10_000_000];
+    // let arities = vec![4];
 
     for size in sizes {
         for &arity in &arities {
             println!("{size}, {arity}");
 
             time_navigation_simple(size, arity);
-            // time_navigation_simple_old(size, arity);
+            time_navigation_simple_old(size, arity);
             // time_navigation_simple_dfs(size, arity);
             // time_navigation_simple_dfs_all(size, arity);
         }
