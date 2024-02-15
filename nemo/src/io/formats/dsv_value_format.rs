@@ -75,7 +75,7 @@ impl DsvValueFormat {
     pub(super) fn data_value_serializer_function(&self) -> DataValueSerializerFunction {
         match self {
             DsvValueFormat::ANYTHING => Self::serialize_any_value_to_string,
-            DsvValueFormat::STRING => AnyDataValue::to_string,
+            DsvValueFormat::STRING => AnyDataValue::to_plain_string,
             DsvValueFormat::INTEGER => Self::serialize_integer_to_string,
             DsvValueFormat::DOUBLE => Self::serialize_double_to_string,
             DsvValueFormat::SKIP => Self::serialize_any_value_to_string, // irrelevant
