@@ -1,9 +1,13 @@
-use std::{collections::HashMap, env::current_exe, time::Instant};
+use std::time::Instant;
 
 use nemo_physical::{
-    datatypes::{StorageTypeBitSet, StorageTypeName, StorageValueT},
-    tabular::triescan::{PartialTrieScan, TrieScan},
+    datatypes::{StorageTypeName, StorageValueT},
+    tabular::{
+        rowscan::RowScan,
+        triescan::{PartialTrieScan, TrieScan, TrieScanEnum},
+    },
 };
+use streaming_iterator::StreamingIterator;
 
 use crate::{
     gen_trie::{random_integer_trie, random_integer_trie_old},
@@ -98,6 +102,30 @@ pub fn time_navigation_simple(num_rows: usize, arity: usize) {
         let duration = (end_time - start_time).as_millis();
 
         println!("New Time: {}ms, Sum: {}", duration, sum);
+    }
+}
+
+pub fn time_navigation_row(num_rows: usize, arity: usize) {
+    let trie = random_integer_trie(num_rows, arity);
+
+    for _ in 0..100 {
+        let start_time = Instant::now();
+
+        let mut iterator = RowScan::new(TrieScanEnum::TrieScanGeneric(trie.partial_iterator()), 0);
+        let mut sum: i64 = 0;
+        while let Some(row) = iterator.next() {
+            for value in row {
+                if let StorageValueT::Int64(value) = value {
+                    sum += value;
+                }
+            }
+        }
+
+        let end_time = Instant::now();
+
+        let duration = (end_time - start_time).as_millis();
+
+        println!("Row Time: {}ms, Sum: {}", duration, sum);
     }
 }
 
