@@ -71,6 +71,26 @@ impl Lexer<'_> {
             '$' => Dollar,
             '&' => Ampersand,
             '\'' => Apostrophe,
+            '\u{A0}'..='\u{D7FF}'
+            | '\u{F900}'..='\u{FDCF}'
+            | '\u{FDF0}'..='\u{FFEF}'
+            | '\u{10000}'..='\u{1FFFD}'
+            | '\u{20000}'..='\u{2FFFD}'
+            | '\u{30000}'..='\u{3FFFD}'
+            | '\u{40000}'..='\u{4FFFD}'
+            | '\u{50000}'..='\u{5FFFD}'
+            | '\u{60000}'..='\u{6FFFD}'
+            | '\u{70000}'..='\u{7FFFD}'
+            | '\u{80000}'..='\u{8FFFD}'
+            | '\u{90000}'..='\u{9FFFD}'
+            | '\u{A0000}'..='\u{AFFFD}'
+            | '\u{B0000}'..='\u{BFFFD}'
+            | '\u{C0000}'..='\u{CFFFD}'
+            | '\u{D0000}'..='\u{DFFFD}'
+            | '\u{E1000}'..='\u{EFFFD}' => self.ucschar(),
+            '\u{E000}'..='\u{F8FF}' | '\u{F0000}'..='\u{FFFFD}' | '\u{100000}'..='\u{10FFFD}' => {
+                self.iprivate()
+            }
             _ => todo!(),
         }
     }
@@ -101,6 +121,16 @@ impl Lexer<'_> {
         self.bump_while(unicode_ident::is_xid_continue);
         TokenKind::Ident
     }
+
+    fn ucschar(&mut self) -> TokenKind {
+        self.bump_while(is_ucschar);
+        TokenKind::UcsChars
+    }
+
+    fn iprivate(&mut self) -> TokenKind {
+        self.bump_while(is_iprivate);
+        TokenKind::Iprivate
+    }
 }
 
 fn is_hex_digit(c: char) -> bool {
@@ -120,6 +150,30 @@ fn is_ident(s: &str) -> bool {
     } else {
         false
     }
+}
+
+fn is_ucschar(c: char) -> bool {
+    matches!(c, '\u{A0}'..='\u{D7FF}'
+            | '\u{F900}'..='\u{FDCF}'
+            | '\u{FDF0}'..='\u{FFEF}'
+            | '\u{10000}'..='\u{1FFFD}'
+            | '\u{20000}'..='\u{2FFFD}'
+            | '\u{30000}'..='\u{3FFFD}'
+            | '\u{40000}'..='\u{4FFFD}'
+            | '\u{50000}'..='\u{5FFFD}'
+            | '\u{60000}'..='\u{6FFFD}'
+            | '\u{70000}'..='\u{7FFFD}'
+            | '\u{80000}'..='\u{8FFFD}'
+            | '\u{90000}'..='\u{9FFFD}'
+            | '\u{A0000}'..='\u{AFFFD}'
+            | '\u{B0000}'..='\u{BFFFD}'
+            | '\u{C0000}'..='\u{CFFFD}'
+            | '\u{D0000}'..='\u{DFFFD}'
+            | '\u{E1000}'..='\u{EFFFD}')
+}
+
+fn is_iprivate(c: char) -> bool {
+    matches!(c, '\u{E000}'..='\u{F8FF}' | '\u{F0000}'..='\u{FFFFD}' | '\u{100000}'..='\u{10FFFD}')
 }
 
 /// All the tokens the input gets parsed into.
@@ -184,7 +238,9 @@ enum TokenKind {
     /// Identifier for keywords and predicate names
     Ident,
     /// All other Utf8 characters that can be used in an IRI
-    Utf8Chars,
+    UcsChars,
+    /// Characters in private use areas
+    Iprivate,
     /// Percent-encoded characters in IRIs
     PctEncoded,
     /// Base 10 digits
