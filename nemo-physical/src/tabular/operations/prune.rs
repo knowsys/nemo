@@ -653,8 +653,10 @@ impl<'a> PartialTrieScan<'a> for TrieScanPrune<'a> {
 impl<'a> TrieScan for TrieScanPrune<'a> {
     fn advance_on_layer(&mut self, layer: usize) -> Option<usize> {
         if !unsafe { (*self.state.get()).initialized } {
-            for _ in 0..=layer {
-                self.down(StorageTypeName::Id32);
+            for current_layer in 0..=layer {
+                let first_type =
+                    unsafe { (*self.state.get()).possible_types[current_layer].first()? };
+                self.down(*first_type);
             }
         }
 

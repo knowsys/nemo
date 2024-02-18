@@ -226,8 +226,12 @@ impl<'a> PartialTrieScan<'a> for TrieScanNull<'a> {
         &self.column_scans[layer]
     }
 
-    fn possible_types(&self, _layer: usize) -> StorageTypeBitSet {
-        StorageTypeName::Id64.bitset()
+    fn possible_types(&self, layer: usize) -> StorageTypeBitSet {
+        if layer < self.trie_scan.arity() {
+            self.trie_scan.possible_types(layer)
+        } else {
+            StorageTypeName::Id64.bitset()
+        }
     }
 }
 
@@ -241,7 +245,8 @@ mod test {
         dictionary::DvDict,
         management::database::Dict,
         tabular::{
-            operations::{prune::TrieScanPrune, OperationGenerator, OperationTableGenerator},
+            operations::{OperationGenerator, OperationTableGenerator},
+            rowscan::RowScan,
             trie::Trie,
             triescan::TrieScanEnum,
         },
@@ -281,8 +286,7 @@ mod test {
             .generate(vec![Some(trie_scan)], &dictionary)
             .unwrap();
 
-        let result = Trie::from_trie_scan(TrieScanPrune::new(null_scan), 0)
-            .row_iterator()
+        let result = RowScan::new(null_scan, 0)
             .map(|row| {
                 row.into_iter()
                     .map(|value| value.into_datavalue(&dictionary.borrow()).unwrap())

@@ -1326,6 +1326,7 @@ dependencies = [
  "rand",
  "regex",
  "reqwest",
+ "streaming-iterator",
  "test-log",
  "thiserror",
 ]
@@ -2130,6 +2131,12 @@ dependencies = [
  "libc",
  "windows-sys 0.48.0",
 ]
+
+[[package]]
+name = "streaming-iterator"
+version = "0.1.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2b2231b7c3057d5e4ad0156fb3dc807d900806020c5ffa3ee6ff2c8c76fb8520"
 
 [[package]]
 name = "strsim"

@@ -5,3 +5,4 @@ pub mod trie;
 pub mod triescan;
 
 pub(crate) mod buffer;
+pub(crate) mod rowscan;

@@ -4,7 +4,8 @@ use std::ops::{BitAnd, BitOr, BitXor, Not, Shl, Shr, Sub};
 
 use num::One;
 
-trait BooleanOperations:
+/// Trait that defines an object on which boolean operations can be performed
+pub(crate) trait BooleanOperations:
     Default
     + Clone
     + Copy
@@ -26,6 +27,7 @@ impl BooleanOperations for u64 {}
 impl BooleanOperations for u32 {}
 impl BooleanOperations for usize {}
 
+/// A set implemented as a bit field
 #[derive(Debug, Copy, Clone, Default, PartialEq, Eq)]
 pub(crate) struct BitSet<T: BooleanOperations>(T);
 
@@ -40,7 +42,7 @@ where
 
     /// Create a [BitSet] where every element is included.
     pub fn full(elements: usize) -> Self {
-        let mut result = T::one() << (elements + 1);
+        let mut result = T::one() << elements;
         result = result - T::one();
 
         Self(result)
@@ -129,10 +131,10 @@ mod test {
         bits_a.set(6, true);
 
         let mut bits_b = TestBitSet::empty();
-        bits_a.set(0, true);
-        bits_a.set(1, true);
-        bits_a.set(3, true);
-        bits_a.set(4, true);
+        bits_b.set(0, true);
+        bits_b.set(1, true);
+        bits_b.set(3, true);
+        bits_b.set(4, true);
 
         let mut bits_expected = TestBitSet::empty();
         bits_expected.set(0, true);

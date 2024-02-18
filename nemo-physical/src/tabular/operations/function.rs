@@ -303,6 +303,7 @@ mod test {
         management::database::Dict,
         tabular::{
             operations::{prune::TrieScanPrune, OperationGenerator, OperationTableGenerator},
+            rowscan::RowScan,
             trie::Trie,
             triescan::TrieScanEnum,
         },
@@ -653,8 +654,7 @@ mod test {
             .generate(vec![Some(trie_scan)], &dictionary)
             .unwrap();
 
-        let result = Trie::from_trie_scan(TrieScanPrune::new(function_scan), 0)
-            .row_iterator()
+        let result = RowScan::new(function_scan, 0)
             .map(|row| {
                 row.into_iter()
                     .map(|value| value.into_datavalue(&dictionary.borrow()).unwrap())

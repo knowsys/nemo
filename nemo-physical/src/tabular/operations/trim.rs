@@ -6,7 +6,7 @@ use crate::{
     tabular::triescan::{PartialTrieScan, TrieScan, TrieScanEnum},
 };
 
-///
+/// A simple [TrieScan] implementaiton
 #[derive(Debug)]
 pub struct TrieScanTrim<'a> {
     trie_scan: TrieScanEnum<'a>,
@@ -155,13 +155,115 @@ impl<'a> TrieScan for TrieScanTrim<'a> {
 
 #[cfg(test)]
 mod test {
+    use std::cell::RefCell;
+
     use crate::{
-        tabular::{trie::Trie, triescan::TrieScanEnum},
-        util::test_util::test::trie_int64,
+        datatypes::StorageValueT,
+        management::database::Dict,
+        tabular::{
+            operations::join::test::generate_join_scan,
+            triescan::{TrieScan, TrieScanEnum},
+        },
+        util::test_util::test::trie_id32,
     };
 
     use super::TrieScanTrim;
 
+    fn trim_current_row(scan: &mut TrieScanTrim) -> Vec<StorageValueT> {
+        let mut result = Vec::new();
+
+        for layer in 0..scan.num_columns() {
+            result.push(scan.current_value(layer))
+        }
+
+        result
+    }
+
     #[test]
-    fn triescan_trim_basic() {}
+    fn triescan_trim_basic() {
+        let dictionary = RefCell::new(Dict::default());
+
+        let trie_a = trie_id32(vec![
+            &[1, 2],
+            &[1, 3],
+            &[1, 4],
+            &[2, 5],
+            &[3, 6],
+            &[3, 7],
+            &[4, 8],
+        ]);
+        let trie_b = trie_id32(vec![
+            &[1, 1],
+            &[2, 8],
+            &[2, 9],
+            &[3, 10],
+            &[6, 11],
+            &[6, 12],
+            &[8, 5],
+            &[8, 9],
+        ]);
+
+        let trie_a_scan = TrieScanEnum::TrieScanGeneric(trie_a.partial_iterator());
+        let trie_b_scan = TrieScanEnum::TrieScanGeneric(trie_b.partial_iterator());
+
+        let join_scan = generate_join_scan(
+            &dictionary,
+            vec!["x", "y", "z"],
+            vec![(trie_a_scan, vec!["x", "y"]), (trie_b_scan, vec!["y", "z"])],
+        );
+
+        let mut trim = TrieScanTrim::new(join_scan);
+
+        assert_eq!(trim.advance_on_layer(1), Some(0));
+        assert_eq!(
+            trim_current_row(&mut trim),
+            vec![
+                StorageValueT::Id32(1),
+                StorageValueT::Id32(2),
+                StorageValueT::Id32(8)
+            ]
+        );
+
+        assert_eq!(trim.advance_on_layer(2), Some(2));
+        assert_eq!(
+            trim_current_row(&mut trim),
+            vec![
+                StorageValueT::Id32(1),
+                StorageValueT::Id32(2),
+                StorageValueT::Id32(9)
+            ]
+        );
+
+        assert_eq!(trim.advance_on_layer(0), Some(0));
+        assert_eq!(
+            trim_current_row(&mut trim),
+            vec![
+                StorageValueT::Id32(3),
+                StorageValueT::Id32(6),
+                StorageValueT::Id32(11)
+            ]
+        );
+
+        assert_eq!(trim.advance_on_layer(1), Some(0));
+        assert_eq!(
+            trim_current_row(&mut trim),
+            vec![
+                StorageValueT::Id32(4),
+                StorageValueT::Id32(8),
+                StorageValueT::Id32(5)
+            ]
+        );
+
+        assert_eq!(trim.advance_on_layer(2), Some(2));
+        assert_eq!(
+            trim_current_row(&mut trim),
+            vec![
+                StorageValueT::Id32(4),
+                StorageValueT::Id32(8),
+                StorageValueT::Id32(9)
+            ]
+        );
+
+        assert_eq!(trim.advance_on_layer(2), None);
+    }
 }

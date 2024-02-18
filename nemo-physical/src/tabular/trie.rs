@@ -17,6 +17,7 @@ use crate::{
         StorageTypeName, StorageValueT,
     },
     management::bytesized::{sum_bytes, ByteSized},
+    tabular::rowscan::RowScan,
     util::bitset::BitSet,
 };
 
@@ -79,31 +80,7 @@ impl Trie {
 
     /// Return a row based iterator over this trie.
     pub(crate) fn row_iterator(&self) -> impl Iterator<Item = Vec<StorageValueT>> + '_ {
-        struct TrieRowIterator<'a> {
-            trie_scan: TrieScanTrim<'a>,
-            current_row: Vec<StorageValueT>,
-        }
-
-        impl<'a> Iterator for TrieRowIterator<'a> {
-            type Item = Vec<StorageValueT>;
-
-            fn next(&mut self) -> Option<Self::Item> {
-                let arity = self.trie_scan.num_columns();
-
-                let changed_layer = TrieScan::advance_on_layer(&mut self.trie_scan, arity - 1)?;
-
-                for layer in changed_layer..arity {
-                    self.current_row[layer] = self.trie_scan.current_value(layer);
-                }
-
-                Some(self.current_row.clone())
-            }
-        }
-
-        TrieRowIterator {
-            trie_scan: self.full_iterator(),
-            current_row: vec![StorageValueT::Id32(0); self.arity()],
-        }
+        RowScan::new(TrieScanEnum::TrieScanGeneric(self.partial_iterator()), 0)
     }
 }
 
