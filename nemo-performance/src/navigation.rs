@@ -111,9 +111,9 @@ pub fn time_navigation_row(num_rows: usize, arity: usize) {
     for _ in 0..1 {
         let start_time = Instant::now();
 
-        let mut iterator = RowScan::new(TrieScanEnum::TrieScanGeneric(trie.partial_iterator()), 0);
+        let iterator = RowScan::new(TrieScanEnum::TrieScanGeneric(trie.partial_iterator()), 0);
         let mut sum: i64 = 0;
-        while let Some(row) = iterator.next() {
+        for row in iterator {
             for value in row {
                 if let StorageValueT::Int64(value) = value {
                     sum += value;
