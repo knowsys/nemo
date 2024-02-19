@@ -54,10 +54,23 @@ impl ByteSized for IntervalLookupColumn {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub(crate) struct IntervalLookupColumnBuilder {
     /// [ColumnBuilderAdaptive] for building `predecessors`
     builder_lookup: ColumnBuilderAdaptive<usize>,
+
+    /// Whether `builder_lookup` contains no [IntervalLookupColumn::EMPTY]
+    /// and can therefore be ignored
+    exclusive: bool,
+}
+
+impl Default for IntervalLookupColumnBuilder {
+    fn default() -> Self {
+        Self {
+            builder_lookup: Default::default(),
+            exclusive: true,
+        }
+    }
 }
 
 impl IntervalLookupBuilder for IntervalLookupColumnBuilder {
@@ -69,12 +82,17 @@ impl IntervalLookupBuilder for IntervalLookupColumnBuilder {
 
     fn add_empty(&mut self) {
         self.builder_lookup.add(Self::Lookup::EMPTY);
+        self.exclusive = false;
     }
 
     fn finalize(self) -> Self::Lookup {
         Self::Lookup {
             lookup: self.builder_lookup.finalize(),
         }
+    }
+
+    fn is_exclusive(&self) -> bool {
+        self.exclusive
     }
 }
 

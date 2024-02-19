@@ -16,7 +16,7 @@ use crate::{
         columnbuilder::{adaptive::ColumnBuilderAdaptive, ColumnBuilder},
         columnscan::{ColumnScanCell, ColumnScanEnum, ColumnScanRainbow},
     },
-    datatypes::{storage_type_name, ColumnDataType, Double, Float, StorageTypeName, StorageValueT},
+    datatypes::{ColumnDataType, Double, Float, StorageTypeName, StorageValueT},
     management::bytesized::ByteSized,
 };
 
