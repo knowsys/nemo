@@ -63,8 +63,7 @@ where
         storage_type: StorageTypeName,
         index: usize,
     ) -> Option<Range<usize>> {
-        let interval_index = index;
-        // self.interval_lookup.interval_index(storage_type, index)?;
+        let interval_index = self.interval_lookup.interval_index(storage_type, index)?;
 
         let interval_start = self.intervals.get(interval_index);
         let interval_end = self.intervals.get(interval_index + 1);
