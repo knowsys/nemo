@@ -27,6 +27,9 @@ pub(crate) struct IntervalLookupColumn {
     /// to indicate that the corresponding node from the previous layer
     /// has no successor.
     lookup: ColumnEnum<usize>,
+
+    // Whether the lookup column is just the identity
+    simple: bool,
 }
 
 impl IntervalLookupColumn {
@@ -38,6 +41,12 @@ impl IntervalLookup for IntervalLookupColumn {
     type Builder = IntervalLookupColumnBuilder;
 
     fn interval_index(&self, index: usize) -> Option<usize> {
+        if self.simple {
+            debug_assert!(index == self.lookup.get(index));
+
+            return Some(index);
+        }
+
         let interval_index = self.lookup.get(index);
 
         if interval_index == Self::EMPTY {
@@ -61,14 +70,14 @@ pub(crate) struct IntervalLookupColumnBuilder {
 
     /// Whether `builder_lookup` contains no [IntervalLookupColumn::EMPTY]
     /// and can therefore be ignored
-    exclusive: bool,
+    simple: bool,
 }
 
 impl Default for IntervalLookupColumnBuilder {
     fn default() -> Self {
         Self {
             builder_lookup: Default::default(),
-            exclusive: true,
+            simple: false,
         }
     }
 }
@@ -77,22 +86,27 @@ impl IntervalLookupBuilder for IntervalLookupColumnBuilder {
     type Lookup = IntervalLookupColumn;
 
     fn add_interval(&mut self, interval_count: usize) {
+        if self.builder_lookup.count() == 0 && interval_count == 0 {
+            self.simple = true;
+        }
+
+        if self.simple && self.builder_lookup.count() != interval_count {
+            self.simple = false;
+        }
+
         self.builder_lookup.add(interval_count);
     }
 
     fn add_empty(&mut self) {
         self.builder_lookup.add(Self::Lookup::EMPTY);
-        self.exclusive = false;
+        self.simple = false;
     }
 
     fn finalize(self) -> Self::Lookup {
         Self::Lookup {
             lookup: self.builder_lookup.finalize(),
+            simple: self.simple,
         }
-    }
-
-    fn is_exclusive(&self) -> bool {
-        self.exclusive
     }
 }
 

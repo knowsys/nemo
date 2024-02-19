@@ -32,9 +32,6 @@ where
     lookup_int64: LookupMethod,
     lookup_float: LookupMethod,
     lookup_double: LookupMethod,
-
-    ///
-    skip: Option<StorageTypeName>,
 }
 
 impl<LookupMethod> IntervalLookupT<LookupMethod>
@@ -47,10 +44,6 @@ where
     ///
     /// Returns `None` if the value has no successor in this interval column.
     pub fn interval_index(&self, storage_type: StorageTypeName, index: usize) -> Option<usize> {
-        if self.skip == Some(storage_type) {
-            return Some(index);
-        }
-
         match storage_type {
             StorageTypeName::Id32 => self.lookup_id32.interval_index(index),
             StorageTypeName::Id64 => self.lookup_id64.interval_index(index),
@@ -84,9 +77,6 @@ pub(crate) trait IntervalLookupBuilder: Debug + Default {
 
     /// Add an empty entry, signaling that this node has no successor.
     fn add_empty(&mut self);
-
-    /// Returns true if this builder does not contain any gaps.
-    fn is_exclusive(&self) -> bool;
 
     /// Return the constructed [IntervalLookup].
     fn finalize(self) -> Self::Lookup;
@@ -164,29 +154,12 @@ where
     }
 
     pub fn finalize(self) -> IntervalLookupT<LookupMethod> {
-        let mut skip: Option<StorageTypeName> = None;
-
-        // If only one builder is non-empty,
-        // then we can skip the lookup
-        for (storage_type, builder) in self.builders() {
-            if builder.is_exclusive() {
-                if skip.is_none() {
-                    skip = Some(storage_type);
-                } else {
-                    skip = None;
-                    break;
-                }
-            }
-        }
-
         IntervalLookupT {
             lookup_id32: self.builder_id32.finalize(),
             lookup_id64: self.builder_id64.finalize(),
             lookup_int64: self.builder_int64.finalize(),
             lookup_float: self.builder_float.finalize(),
             lookup_double: self.builder_double.finalize(),
-
-            skip,
         }
     }
 }
