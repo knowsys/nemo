@@ -2,10 +2,17 @@
 
 use std::collections::HashMap;
 
+use streaming_iterator::StreamingIterator;
+
 use crate::{
     datatypes::StorageValueT,
     management::execution_plan::ColumnOrder,
-    tabular::{buffer::tuple_buffer::TupleBuffer, trie::Trie, triescan::TrieScan},
+    tabular::{
+        buffer::tuple_buffer::TupleBuffer,
+        rowscan::RowScan,
+        trie::Trie,
+        triescan::{PartialTrieScan, TrieScan, TrieScanEnum},
+    },
     util::mapping::{ordered_choice::SortedChoice, traits::NatMapping},
 };
 
@@ -86,6 +93,33 @@ impl GeneratorProjectReorder {
             for input_layer in changed_layer..=self.last_used_layer {
                 if let Some(output_layer) = self.projectreordering.get_partial(input_layer) {
                     current_tuple[output_layer] = trie_scan.current_value(input_layer);
+                }
+            }
+
+            for value in &current_tuple {
+                tuple_buffer.add_tuple_value(*value);
+            }
+        }
+
+        Trie::from_tuple_buffer(tuple_buffer.finalize())
+    }
+
+    /// Apply the operation to an input [TrieScan]
+    pub fn apply_operation_partial(&self, mut trie_scan: TrieScanEnum) -> Trie {
+        debug_assert!(trie_scan.arity() == self.projectreordering.domain_size());
+
+        let cut = trie_scan.arity() - self.last_used_layer - 1;
+
+        let mut rowscan = RowScan::new(trie_scan, cut);
+
+        let mut current_tuple = vec![StorageValueT::Id32(0); self.arity_output];
+        let mut tuple_buffer = TupleBuffer::new(self.arity_output);
+
+        while let Some(current_row) = StreamingIterator::next(&mut rowscan) {
+            for (row_index, current_value) in current_row.into_iter().enumerate() {
+                let input_layer = self.last_used_layer + 1 - row_index;
+                if let Some(output_layer) = self.projectreordering.get_partial(input_layer) {
+                    current_tuple[output_layer] = *current_value;
                 }
             }
 

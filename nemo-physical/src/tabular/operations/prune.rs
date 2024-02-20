@@ -480,10 +480,11 @@ impl<'a> TrieScanPruneState<'a> {
         //????
         self.external_current_layer = target_layer; // Wird vielleicht unten gamacht
                                                     // self.external_path_types = //???
-        println!(
-            "TODOa external_current_layer {target_layer} {}",
-            self.external_current_layer
-        );
+
+        // println!(
+        //     "TODOa external_current_layer {target_layer} {}",
+        //     self.external_current_layer
+        // );
 
         let allow_advancements_above_target_layer = stay_in_type.is_none();
 
@@ -1077,7 +1078,7 @@ mod test {
         );
 
         let prune = TrieScanPrune::new(join_scan);
-        let result = Trie::from_trie_scan(prune, 0)
+        let result = Trie::from_full_trie_scan(prune, 0)
             .row_iterator()
             .collect::<Vec<_>>();
 

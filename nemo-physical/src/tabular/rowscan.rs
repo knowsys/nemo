@@ -9,13 +9,22 @@ use super::triescan::{PartialTrieScan, TrieScanEnum};
 /// A [StreamingIterator] for a [PartialTrieScan]
 #[derive(Debug)]
 pub struct RowScan<'a> {
+    /// [TrieScanEnum] whose rows will be enumerated
     trie_scan: TrieScanEnum<'a>,
 
+    /// Whether it can be known a priori that this will return no rows
     empty: bool,
+    /// For each layer,
+    /// holds the possible [StorageTypeName] of that column in `trie_scan`
     possible_types: Vec<Vec<StorageTypeName>>,
 
+    /// For each layer, an index into the inner list of `possible_types`
     current_types: Vec<usize>,
+    /// A buffer containing the current row
     current_row: Vec<StorageValueT>,
+
+    /// The highest layer that has been changed by the most recent call to `next`
+    changed_layers: usize,
 }
 
 impl<'a> RowScan<'a> {
@@ -36,6 +45,7 @@ impl<'a> RowScan<'a> {
             possible_types,
             current_types: vec![0; arity],
             current_row: vec![StorageValueT::Id32(0); used_columns],
+            changed_layers: 0,
         }
     }
 
@@ -68,12 +78,18 @@ impl<'a> StreamingIterator for RowScan<'a> {
             self.trie_scan.down(first_type);
         };
 
+        self.changed_layers = self.trie_scan.arity() - 1;
+
         while let Some(current_layer) = self.trie_scan.current_layer() {
             let is_last_layer = current_layer == self.trie_scan.arity() - 1;
             let is_used_layer = current_layer < self.current_row.len();
 
             let current_type_index = self.current_types[current_layer];
             let current_type = self.possible_types[current_layer][current_type_index];
+
+            if current_layer < self.changed_layers {
+                self.changed_layers = current_layer;
+            }
 
             if let Some(next_value) = self.column_scan_next(current_type) {
                 if is_used_layer {
@@ -105,7 +121,7 @@ impl<'a> StreamingIterator for RowScan<'a> {
 
     fn get(&self) -> Option<&Self::Item> {
         if self.trie_scan.current_layer().is_some() {
-            Some(&self.current_row)
+            Some(&self.current_row[self.changed_layers..])
         } else {
             None
         }
@@ -116,7 +132,8 @@ impl<'a> Iterator for RowScan<'a> {
     type Item = Vec<StorageValueT>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        StreamingIterator::next(self).map(|row| row.to_vec())
+        StreamingIterator::advance(self);
+        Some(self.current_row.clone())
     }
 }
 

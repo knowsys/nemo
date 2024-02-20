@@ -3,6 +3,8 @@
 
 use std::cell::UnsafeCell;
 
+use streaming_iterator::StreamingIterator;
+
 use crate::{
     columnar::{
         columnscan::ColumnScanRainbow,
@@ -162,6 +164,73 @@ impl Trie {
         Self::from_tuple_buffer(writer.finalize())
     }
 
+    /// Create a new [Trie] based on a [PartialTrieScan].
+    ///
+    /// In the last `cut_layers` layers, this function will only check for the existence of a value
+    /// and will not materialize it fully.
+    /// To keep all the values, set `cut_layers` to 0.
+    ///
+    /// Assumes that the given `trie_scan` is not initialized
+    pub(crate) fn from_partial_trie_scan<'a>(
+        trie_scan: TrieScanEnum<'a>,
+        cut_layers: usize,
+    ) -> Self {
+        let num_columns = trie_scan.arity() - cut_layers;
+
+        if num_columns == 0 {
+            return Self::empty(0);
+        }
+
+        let mut rowscan = RowScan::new(trie_scan, cut_layers);
+
+        let mut intervalcolumn_builders =
+            Vec::<IntervalColumnTBuilderTriescan<IntervalLookupMethod>>::with_capacity(num_columns);
+
+        if let Some(first_row) = StreamingIterator::next(&mut rowscan) {
+            let mut last_type: Option<StorageTypeName> = None;
+            for &current_value in first_row {
+                let mut new_builder =
+                    IntervalColumnTBuilderTriescan::<IntervalLookupMethod>::new(last_type);
+
+                last_type = Some(current_value.get_type());
+                new_builder.add_value(current_value);
+
+                intervalcolumn_builders.push(new_builder);
+            }
+        } else {
+            return Self::empty(num_columns);
+        }
+
+        while let Some(current_row) = StreamingIterator::next(&mut rowscan) {
+            let changed_layers = num_columns - current_row.len();
+            let mut last_type = StorageTypeName::Id32;
+
+            for ((layer, current_builder), current_value) in intervalcolumn_builders
+                .iter_mut()
+                .enumerate()
+                .skip(changed_layers)
+                .zip(current_row)
+            {
+                let current_type = current_value.get_type();
+
+                if layer != changed_layers {
+                    current_builder.finish_interval(last_type);
+                }
+
+                current_builder.add_value(*current_value);
+
+                last_type = current_type;
+            }
+        }
+
+        Self {
+            columns: intervalcolumn_builders
+                .into_iter()
+                .map(|builder| builder.finalize())
+                .collect(),
+        }
+    }
+
     /// Create a new [Trie] based on an a [TrieScan].
     ///
     /// In the last `cut_layers` layers, this function will only check for the existence of a value
@@ -169,7 +238,7 @@ impl Trie {
     /// To keep all the values, set `cut_layers` to 0.
     ///
     /// Assumes that the given `trie_scan` is not initialized
-    pub(crate) fn from_trie_scan<Scan: TrieScan>(mut trie_scan: Scan, cut_layers: usize) -> Self {
+    pub fn from_full_trie_scan<Scan: TrieScan>(mut trie_scan: Scan, cut_layers: usize) -> Self {
         let num_columns = trie_scan.num_columns() - cut_layers;
 
         if num_columns == 0 {
@@ -356,7 +425,7 @@ impl<'a> PartialTrieScan<'a> for TrieScanGeneric<'a> {
 mod test {
     use crate::{
         datatypes::{Float, StorageTypeName, StorageValueT},
-        tabular::triescan::PartialTrieScan,
+        tabular::triescan::{PartialTrieScan, TrieScanEnum},
     };
 
     use super::{Trie, TrieScanGeneric};
@@ -549,8 +618,13 @@ mod test {
         let trie = Trie::from_rows(rows.clone());
 
         let scan = trie.full_iterator();
-        let trie_roundtrip = Trie::from_trie_scan(scan, 0);
+        let trie_roundtrip = Trie::from_full_trie_scan(scan, 0);
+        let trie_rows = trie_roundtrip.row_iterator().collect::<Vec<_>>();
 
+        assert_eq!(rows, trie_rows);
+
+        let scan = TrieScanEnum::TrieScanGeneric(trie.partial_iterator());
+        let trie_roundtrip = Trie::from_partial_trie_scan(scan, 0);
         let trie_rows = trie_roundtrip.row_iterator().collect::<Vec<_>>();
 
         assert_eq!(rows, trie_rows);

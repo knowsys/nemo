@@ -24,7 +24,7 @@ use crate::{
     management::{bytesized::ByteSized, database::execution_series::ExecutionTreeNode},
     meta::TimedCode,
     tabular::{
-        operations::{prune::TrieScanPrune, trim::TrieScanTrim, OperationGenerator},
+        operations::{trim::TrieScanTrim, OperationGenerator},
         trie::Trie,
         triescan::TrieScanEnum,
     },
@@ -341,12 +341,19 @@ impl DatabaseInstance {
             ExecutionTreeNode::Operation(operation) => {
                 let trie_scan = self.evaluate_operation(&self.dictionary, storage, operation);
                 trie_scan
-                    .map(|scan| Trie::from_trie_scan(TrieScanTrim::new(scan), tree.cut_layers))
+                    .map(|scan| Trie::from_partial_trie_scan(scan, tree.cut_layers))
                     .filter(|trie| !trie.is_empty())
             }
-            ExecutionTreeNode::ProjectReorder { generator, subnode } => self
-                .evaluate_tree_leaf(storage, subnode)
-                .map(|scan| generator.apply_operation(TrieScanTrim::new(scan))),
+            ExecutionTreeNode::ProjectReorder { generator, subnode } => {
+                if generator.is_noop() {
+                    self.evaluate_tree_leaf(storage, subnode)
+                        .map(|scan| Trie::from_partial_trie_scan(scan, tree.cut_layers))
+                        .filter(|trie| !trie.is_empty())
+                } else {
+                    self.evaluate_tree_leaf(storage, subnode)
+                        .map(|scan| generator.apply_operation(TrieScanTrim::new(scan)))
+                }
+            }
         };
 
         Ok(ComputationResult {
