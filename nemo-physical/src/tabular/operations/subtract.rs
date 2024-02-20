@@ -2,8 +2,6 @@
 
 use std::cell::{RefCell, UnsafeCell};
 
-use bitvec::bitvec;
-
 use crate::{
     columnar::{
         columnscan::{ColumnScanCell, ColumnScanEnum, ColumnScanRainbow},
@@ -197,7 +195,7 @@ impl<'a> PartialTrieScan<'a> for TrieScanSubtract<'a> {
                 .subtract_get_equal(
                     *previous_type.expect("path_types is not empty previous_layer is not None"),
                 ),
-            None => bitvec![1; self.layer_maps.len()],
+            None => vec![true; self.layer_maps.len()],
         };
 
         for (subtract_index, (trie_subtract, layer_map)) in

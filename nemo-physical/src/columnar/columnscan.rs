@@ -4,8 +4,6 @@
 
 use std::{cell::UnsafeCell, fmt::Debug, ops::Range};
 
-use bitvec::vec::BitVec;
-
 use crate::{
     datatypes::{ColumnDataType, Double, Float, StorageTypeName, StorageValueT},
     generate_datatype_forwarder, generate_forwarder,
@@ -200,7 +198,7 @@ where
 {
     /// Assumes that column scan is a [ColumnScanUnion]
     /// and returns a vector containing the positions of the scans with the smallest values
-    pub fn union_get_smallest(&self) -> BitVec {
+    pub fn union_get_smallest(&self) -> Vec<bool> {
         if let Self::ColumnScanUnion(cs) = self {
             cs.get_smallest_scans()
         } else {
@@ -210,7 +208,7 @@ where
 
     /// Assumes that column scan is a [ColumnScanUnion]
     /// Set a vector that indicates which scans are currently active and should be considered
-    pub fn union_set_active(&mut self, active_scans: BitVec) {
+    pub fn union_set_active(&mut self, active_scans: Vec<bool>) {
         if let Self::ColumnScanUnion(cs) = self {
             cs.set_active_scans(active_scans)
         } else {
@@ -220,7 +218,7 @@ where
 
     /// Assumes that column scan is a [ColumnScanSubtract]
     /// Return a vector indicating which subiterators point to the same value as the main one.
-    pub fn subtract_get_equal(&self) -> BitVec {
+    pub fn subtract_get_equal(&self) -> Vec<bool> {
         if let Self::ColumnScanSubtract(cs) = self {
             cs.get_equal_values()
         } else {
@@ -230,7 +228,7 @@ where
 
     /// Assumes that column scan is a [ColumnScanSubtract]
     /// Set which sub iterators should be active.
-    pub fn subtract_set_active(&mut self, active_scans: BitVec) {
+    pub fn subtract_set_active(&mut self, active_scans: Vec<bool>) {
         if let Self::ColumnScanSubtract(cs) = self {
             cs.set_active_scans(active_scans)
         } else {
@@ -372,22 +370,22 @@ where
     /// This takes an exclusive reference as opposed to an immutable one, so that none of the
     /// mutating methods on &self can be called while the result is still available
     /// (see <https://github.com/knowsys/nemo/issues/137>)
-    pub fn union_get_smallest(&mut self) -> BitVec {
+    pub fn union_get_smallest(&mut self) -> Vec<bool> {
         unsafe { &mut *self.0.get() }.union_get_smallest()
     }
 
     /// Forward `union_get_smallest` to the underlying [ColumnScanEnum].
-    pub fn union_set_active(&mut self, active_scans: BitVec) {
+    pub fn union_set_active(&mut self, active_scans: Vec<bool>) {
         self.0.get_mut().union_set_active(active_scans);
     }
 
     /// Forward `subtract_get_equal` to the underlying [ColumnScanEnum].
-    pub fn subtract_get_equal(&mut self) -> BitVec {
+    pub fn subtract_get_equal(&mut self) -> Vec<bool> {
         self.0.get_mut().subtract_get_equal()
     }
 
     /// Forward `subtract_set_active` to the underlying [ColumnScanEnum].
-    pub fn subtract_set_active(&mut self, active_scans: BitVec) {
+    pub fn subtract_set_active(&mut self, active_scans: Vec<bool>) {
         unsafe { &mut *self.0.get() }.subtract_set_active(active_scans)
     }
 
@@ -587,7 +585,7 @@ impl<'a> ColumnScanRainbow<'a> {
 
     /// Assumes that column scan is a [ColumnScanUnion]
     /// and returns a vector containing the positions of the scans with the smallest values.
-    pub fn union_get_smallest(&mut self, storage_type: StorageTypeName) -> BitVec {
+    pub fn union_get_smallest(&mut self, storage_type: StorageTypeName) -> Vec<bool> {
         match storage_type {
             StorageTypeName::Id32 => self.scan_id32.union_get_smallest(),
             StorageTypeName::Id64 => self.scan_id64.union_get_smallest(),
@@ -599,7 +597,7 @@ impl<'a> ColumnScanRainbow<'a> {
 
     /// Assumes that column scan is a [ColumnScanUnion]
     /// Set a vector that indicates which scans are currently active and should be considered.
-    pub fn union_set_active(&mut self, storage_type: StorageTypeName, active_scans: BitVec) {
+    pub fn union_set_active(&mut self, storage_type: StorageTypeName, active_scans: Vec<bool>) {
         match storage_type {
             StorageTypeName::Id32 => self.scan_id32.union_set_active(active_scans),
             StorageTypeName::Id64 => self.scan_id64.union_set_active(active_scans),
@@ -611,7 +609,7 @@ impl<'a> ColumnScanRainbow<'a> {
 
     /// Assumes that column scan is a [ColumnScanSubtract]
     /// Return a vector indicating which subiterators point to the same value as the main one.
-    pub fn subtract_get_equal(&mut self, storage_type: StorageTypeName) -> BitVec {
+    pub fn subtract_get_equal(&mut self, storage_type: StorageTypeName) -> Vec<bool> {
         match storage_type {
             StorageTypeName::Id32 => self.scan_id32.subtract_get_equal(),
             StorageTypeName::Id64 => self.scan_id64.subtract_get_equal(),
@@ -623,7 +621,7 @@ impl<'a> ColumnScanRainbow<'a> {
 
     /// Assumes that column scan is a [ColumnScanSubtract]
     /// Set which sub iterators should be enabled.
-    pub fn subtract_set_active(&mut self, storage_type: StorageTypeName, active_scans: BitVec) {
+    pub fn subtract_set_active(&mut self, storage_type: StorageTypeName, active_scans: Vec<bool>) {
         match storage_type {
             StorageTypeName::Id32 => self.scan_id32.subtract_set_active(active_scans),
             StorageTypeName::Id64 => self.scan_id64.subtract_set_active(active_scans),

@@ -2,8 +2,6 @@
 
 use std::{fmt::Debug, ops::Range};
 
-use bitvec::{bitvec, vec::BitVec};
-
 use crate::{
     columnar::columnscan::{ColumnScan, ColumnScanCell},
     datatypes::ColumnDataType,
@@ -21,12 +19,12 @@ where
     /// Marks which scans in `column_scans` are active
     ///
     /// Non-active scans are ignored during the computation of the union.
-    active_scans: BitVec,
+    active_scans: Vec<bool>,
 
     /// Marks which of the active scans in `column_scans` currently point to the smallest value
     ///
     /// `smallest_scans[i]` indicates whether the ith scan points to the smallest element.
-    smallest_scans: BitVec,
+    smallest_scans: Vec<bool>,
     /// Smallest value pointed to by the sub scans
     smallest_value: Option<T>,
 }
@@ -40,36 +38,36 @@ where
         let scans_len = column_scans.len();
         ColumnScanUnion {
             column_scans,
-            smallest_scans: bitvec![1; scans_len],
+            smallest_scans: vec![true; scans_len],
             smallest_value: None,
-            active_scans: bitvec![1; scans_len],
+            active_scans: vec![true; scans_len],
         }
     }
 
     /// Returns a vector containing the indices of those scans which point to the currently smallest values
-    pub fn get_smallest_scans(&self) -> BitVec {
+    pub fn get_smallest_scans(&self) -> Vec<bool> {
         self.smallest_scans.clone()
     }
 
     /// Set a vector that indicates which scans are currently active and should be considered
-    pub fn set_active_scans(&mut self, active_scans: BitVec) {
+    pub fn set_active_scans(&mut self, active_scans: Vec<bool>) {
         self.active_scans = active_scans;
     }
 
     /// Return the initial state of `self.smallest_scans`,
     /// which is a bit vector containing only zeros.
-    fn smallest_scans_default(&self) -> BitVec {
-        bitvec![0; self.smallest_scans.len()]
+    fn smallest_scans_default(&self) -> Vec<bool> {
+        vec![false; self.smallest_scans.len()]
     }
 
     /// For every iteration over all input `column_scan`,
     /// computes `self.smallest_value` and `self.smallest_scans`
     fn update_smallest(
         smallest_value: &mut Option<T>,
-        smallest_scans: &mut BitVec,
+        smallest_scans: &mut Vec<bool>,
         current_element: Option<T>,
         index: usize,
-        smallest_scans_default: BitVec,
+        smallest_scans_default: Vec<bool>,
     ) {
         if smallest_value.is_none() {
             *smallest_value = current_element;
@@ -79,7 +77,7 @@ where
         }
 
         if smallest_value.is_some() && *smallest_value == current_element {
-            smallest_scans.set(index, true);
+            smallest_scans[index] = true;
         }
     }
 }

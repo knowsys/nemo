@@ -2,8 +2,6 @@
 
 use std::cell::{RefCell, UnsafeCell};
 
-use bitvec::bitvec;
-
 use crate::{
     columnar::{
         columnscan::{ColumnScanCell, ColumnScanEnum, ColumnScanRainbow},
@@ -131,7 +129,7 @@ impl<'a> PartialTrieScan<'a> for TrieScanUnion<'a> {
                 .union_get_smallest(
                     *previous_type.expect("path_types is not empty previous_layer is not None"),
                 ),
-            None => bitvec![1; self.trie_scans.len()],
+            None => vec![true; self.trie_scans.len()],
         };
 
         for (scan_index, trie_scan) in self.trie_scans.iter_mut().enumerate() {
