@@ -123,26 +123,28 @@ impl<'a> PartialTrieScan<'a> for TrieScanUnion<'a> {
 
         debug_assert!(next_layer < self.arity());
 
-        let previous_smallest = match previous_layer {
-            Some(previous_layer) => self.column_scans[previous_layer]
-                .get_mut()
-                .union_get_smallest(
-                    *previous_type.expect("path_types is not empty previous_layer is not None"),
-                ),
-            None => vec![true; self.trie_scans.len()],
-        };
+        let previous_smallest = previous_layer.map(|layer| {
+            self.column_scans[layer].get_mut().union_get_smallest(
+                *previous_type.expect("path_types is not empty previous_layer is not None"),
+            )
+        });
+
+        let mut active_scans = Vec::<usize>::new();
 
         for (scan_index, trie_scan) in self.trie_scans.iter_mut().enumerate() {
-            if !previous_smallest[scan_index] {
+            if trie_scan.current_layer() != previous_layer {
                 continue;
             }
 
-            trie_scan.down(next_type);
+            if previous_smallest.is_none() || previous_smallest.unwrap()[scan_index] {
+                active_scans.push(scan_index);
+                trie_scan.down(next_type);
+            }
         }
 
         self.column_scans[next_layer]
             .get_mut()
-            .union_set_active(next_type, previous_smallest);
+            .union_set_active(next_type, active_scans);
         self.column_scans[next_layer].get_mut().reset(next_type);
 
         self.path_types.push(next_type);
