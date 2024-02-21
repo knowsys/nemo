@@ -30,22 +30,55 @@ pub(super) fn term_to_function_tree(
             let right = term_to_function_tree(translation, rhs);
 
             match operation {
-                BinaryOperation::Addition => FunctionTree::numeric_addition(left, right),
-                BinaryOperation::Subtraction => FunctionTree::numeric_subtraction(left, right),
-                BinaryOperation::Multiplication => {
+                BinaryOperation::NumericAddition => FunctionTree::numeric_addition(left, right),
+                BinaryOperation::NumericSubtraction => {
+                    FunctionTree::numeric_subtraction(left, right)
+                }
+                BinaryOperation::NumericMultiplication => {
                     FunctionTree::numeric_multiplication(left, right)
                 }
-                BinaryOperation::Division => FunctionTree::numeric_division(left, right),
-                BinaryOperation::Exponent => FunctionTree::numeric_power(left, right),
+                BinaryOperation::NumericDivision => FunctionTree::numeric_division(left, right),
+                BinaryOperation::NumericPower => FunctionTree::numeric_power(left, right),
+                BinaryOperation::NumericLogarithm => FunctionTree::numeric_logarithm(left, right),
+                BinaryOperation::StringCompare => FunctionTree::string_compare(left, right),
+                BinaryOperation::StringConcatenation => {
+                    FunctionTree::string_concatenation(left, right)
+                }
+                BinaryOperation::StringContains => FunctionTree::string_contains(left, right),
+                BinaryOperation::StringSubstring => FunctionTree::string_subtstring(left, right),
+                BinaryOperation::BooleanConjunction => {
+                    FunctionTree::boolean_conjunction(left, right)
+                }
+                BinaryOperation::BooleanDisjunction => {
+                    FunctionTree::boolean_disjunction(left, right)
+                }
+                BinaryOperation::Equal => FunctionTree::equals(left, right),
+                BinaryOperation::Unequals => FunctionTree::unequals(left, right),
+                BinaryOperation::NumericGreaterthan => {
+                    FunctionTree::numeric_greaterthan(left, right)
+                }
+                BinaryOperation::NumericGreaterthaneq => {
+                    FunctionTree::numeric_greaterthaneq(left, right)
+                }
+                BinaryOperation::NumericLessthan => FunctionTree::numeric_lessthan(left, right),
+                BinaryOperation::NumericLessthaneq => FunctionTree::numeric_lessthaneq(left, right),
             }
         }
         Term::Unary(operation, subterm) => {
             let sub = term_to_function_tree(translation, subterm);
 
             match operation {
-                UnaryOperation::SquareRoot => FunctionTree::numeric_squareroot(sub),
-                UnaryOperation::UnaryMinus => FunctionTree::numeric_negation(sub),
-                UnaryOperation::Abs => FunctionTree::numeric_absolute(sub),
+                UnaryOperation::BooleanNegation => FunctionTree::boolean_negation(sub),
+                UnaryOperation::CanonicalString => FunctionTree::canonical_string(sub),
+                UnaryOperation::NumericAbsolute => FunctionTree::numeric_absolute(sub),
+                UnaryOperation::NumericCosine => FunctionTree::numeric_cosine(sub),
+                UnaryOperation::NumericNegation => FunctionTree::numeric_negation(sub),
+                UnaryOperation::NumericSine => FunctionTree::numeric_sine(sub),
+                UnaryOperation::NumericSquareroot => FunctionTree::numeric_squareroot(sub),
+                UnaryOperation::NumericTangent => FunctionTree::numeric_tangent(sub),
+                UnaryOperation::StringLength => FunctionTree::string_length(sub),
+                UnaryOperation::StringLowercase => FunctionTree::string_lowercase(sub),
+                UnaryOperation::StringUppercase => FunctionTree::string_uppercase(sub),
             }
         }
         Term::Aggregation(_) => unimplemented!("Aggregates are not implement yet"),

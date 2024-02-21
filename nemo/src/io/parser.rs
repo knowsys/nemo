@@ -1114,6 +1114,7 @@ impl<'a> RuleParser<'a> {
                         multispace_or_comment0,
                         alt((
                             self.parse_arithmetic_expression(),
+                            // map(self.parse_constraint(), |c| c.as_binary_term()),
                             self.parse_parenthesised_term(),
                             self.parse_function_term(),
                             self.parse_aggregate(),
@@ -1162,6 +1163,21 @@ impl<'a> RuleParser<'a> {
                             (self.parenthesised(self.parse_term()))(remainder)?;
 
                         Ok((remainder, Term::Unary(op, Box::new(subterm))))
+                    } else if let Ok(op) = BinaryOperation::construct_from_name(&name.0) {
+                        let (remainder, (left, _, right)) = (self.parenthesised(tuple((
+                            self.parse_term(),
+                            self.parse_comma(),
+                            self.parse_term(),
+                        ))))(remainder)?;
+
+                        Ok((
+                            remainder,
+                            Term::Binary {
+                                operation: op,
+                                lhs: Box::new(left),
+                                rhs: Box::new(right),
+                            },
+                        ))
                     } else {
                         let (remainder, subterms) = (self.parenthesised(separated_list0(
                             self.parse_comma(),
@@ -1265,10 +1281,10 @@ impl<'a> RuleParser<'a> {
             use ArithmeticOperator::*;
 
             let operation = match operation {
-                Addition => BinaryOperation::Addition,
-                Subtraction => BinaryOperation::Subtraction,
-                Multiplication => BinaryOperation::Multiplication,
-                Division => BinaryOperation::Division,
+                Addition => BinaryOperation::NumericAddition,
+                Subtraction => BinaryOperation::NumericSubtraction,
+                Multiplication => BinaryOperation::NumericMultiplication,
+                Division => BinaryOperation::NumericDivision,
             };
 
             Term::Binary {
@@ -1902,7 +1918,7 @@ mod test {
             NumericLiteral::Integer(42),
         )));
         let twenty_three_times_fourty_two = Term::Binary {
-            operation: BinaryOperation::Multiplication,
+            operation: BinaryOperation::NumericMultiplication,
             lhs: Box::new(twenty_three.clone()),
             rhs: Box::new(fourty_two),
         };
@@ -1944,16 +1960,16 @@ mod test {
             parser.parse_arithmetic_expression(),
             "23 + 23 * 42 + 42 - (23 * 42)",
             Term::Binary {
-                operation: BinaryOperation::Subtraction,
+                operation: BinaryOperation::NumericSubtraction,
                 lhs: Box::new(Term::Binary {
-                    operation: BinaryOperation::Addition,
+                    operation: BinaryOperation::NumericAddition,
                     lhs: Box::new(Term::Binary {
-                        operation: BinaryOperation::Addition,
+                        operation: BinaryOperation::NumericAddition,
                         lhs: Box::new(Term::Primitive(PrimitiveTerm::Constant(
                             Constant::NumericLiteral(NumericLiteral::Integer(23),)
                         ))),
                         rhs: Box::new(Term::Binary {
-                            operation: BinaryOperation::Multiplication,
+                            operation: BinaryOperation::NumericMultiplication,
                             lhs: Box::new(Term::Primitive(PrimitiveTerm::Constant(
                                 Constant::NumericLiteral(NumericLiteral::Integer(23)),
                             ))),
@@ -1967,7 +1983,7 @@ mod test {
                     ))),
                 }),
                 rhs: Box::new(Term::Binary {
-                    operation: BinaryOperation::Multiplication,
+                    operation: BinaryOperation::NumericMultiplication,
                     lhs: Box::new(Term::Primitive(PrimitiveTerm::Constant(
                         Constant::NumericLiteral(NumericLiteral::Integer(23))
                     ))),
@@ -2029,7 +2045,7 @@ mod test {
             NumericLiteral::Integer(42),
         )));
         let twenty_three_times_fourty_two = Term::Binary {
-            operation: BinaryOperation::Multiplication,
+            operation: BinaryOperation::NumericMultiplication,
             lhs: Box::new(twenty_three.clone()),
             rhs: Box::new(fourty_two.clone()),
         };
@@ -2170,7 +2186,7 @@ mod test {
 
         let expression = "Abs(4)";
         let expected_term = Term::Unary(
-            UnaryOperation::Abs,
+            UnaryOperation::NumericAbsolute,
             Box::new(Term::Primitive(PrimitiveTerm::Constant(
                 Constant::NumericLiteral(NumericLiteral::Integer(4)),
             ))),
@@ -2186,16 +2202,16 @@ mod test {
         let expression = "5 * Abs(Sqrt(4) - 3)";
 
         let expected_term = Term::Binary {
-            operation: BinaryOperation::Multiplication,
+            operation: BinaryOperation::NumericMultiplication,
             lhs: Box::new(Term::Primitive(PrimitiveTerm::Constant(
                 Constant::NumericLiteral(NumericLiteral::Integer(5)),
             ))),
             rhs: Box::new(Term::Unary(
-                UnaryOperation::Abs,
+                UnaryOperation::NumericAbsolute,
                 Box::new(Term::Binary {
-                    operation: BinaryOperation::Subtraction,
+                    operation: BinaryOperation::NumericSubtraction,
                     lhs: Box::new(Term::Unary(
-                        UnaryOperation::SquareRoot,
+                        UnaryOperation::NumericSquareroot,
                         Box::new(Term::Primitive(PrimitiveTerm::Constant(
                             Constant::NumericLiteral(NumericLiteral::Integer(4)),
                         ))),
@@ -2221,11 +2237,11 @@ mod test {
         )));
 
         let term = Term::Binary {
-            operation: BinaryOperation::Multiplication,
+            operation: BinaryOperation::NumericMultiplication,
             lhs: Box::new(Term::Unary(
-                UnaryOperation::Abs,
+                UnaryOperation::NumericAbsolute,
                 Box::new(Term::Binary {
-                    operation: BinaryOperation::Subtraction,
+                    operation: BinaryOperation::NumericSubtraction,
                     lhs: Box::new(Term::Primitive(PrimitiveTerm::Variable(
                         Variable::Universal("Y".to_string()),
                     ))),
@@ -2235,7 +2251,7 @@ mod test {
                 }),
             )),
             rhs: Box::new(Term::Binary {
-                operation: BinaryOperation::Addition,
+                operation: BinaryOperation::NumericAddition,
                 lhs: Box::new(Term::Primitive(PrimitiveTerm::Constant(
                     Constant::NumericLiteral(NumericLiteral::Integer(7)),
                 ))),
@@ -2257,9 +2273,9 @@ mod test {
         let expression = "Abs(?X - ?Y) <= ?Z + Sqrt(?Y)";
 
         let left_term = Term::Unary(
-            UnaryOperation::Abs,
+            UnaryOperation::NumericAbsolute,
             Box::new(Term::Binary {
-                operation: BinaryOperation::Subtraction,
+                operation: BinaryOperation::NumericSubtraction,
                 lhs: Box::new(Term::Primitive(PrimitiveTerm::Variable(
                     Variable::Universal(String::from("X")),
                 ))),
@@ -2270,12 +2286,12 @@ mod test {
         );
 
         let right_term = Term::Binary {
-            operation: BinaryOperation::Addition,
+            operation: BinaryOperation::NumericAddition,
             lhs: Box::new(Term::Primitive(PrimitiveTerm::Variable(
                 Variable::Universal(String::from("Z")),
             ))),
             rhs: Box::new(Term::Unary(
-                UnaryOperation::SquareRoot,
+                UnaryOperation::NumericSquareroot,
                 Box::new(Term::Primitive(PrimitiveTerm::Variable(
                     Variable::Universal(String::from("Y")),
                 ))),

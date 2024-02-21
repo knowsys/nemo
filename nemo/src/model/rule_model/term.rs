@@ -206,51 +206,57 @@ impl Display for PrimitiveTerm {
 /// Binary operation between two [`Term`]
 #[derive(Debug, Eq, PartialEq, Copy, Clone, PartialOrd, Ord)]
 pub enum BinaryOperation {
-    /// Sum between terms.
-    Addition,
-    /// Difference between two terms.
-    Subtraction,
-    /// Product between terms.
-    Multiplication,
-    /// Ratio between the two terms.
-    Division,
-    /// First term raised to the power of the second term.
-    Exponent,
+    /// Equality
+    Equal,
+    /// Inequality
+    Unequals,
+    /// Addition between two numeric values
+    NumericAddition,
+    /// Subtraction between two numeric values
+    NumericSubtraction,
+    /// Multiplication between two numeric values
+    NumericMultiplication,
+    /// Division between two numeric values
+    NumericDivision,
+    /// Logarithm of a numeric value to some numeric base
+    NumericLogarithm,
+    /// Numeric value raised to another numeric value
+    NumericPower,
+    /// Numeric greater than comparison
+    NumericGreaterthan,
+    /// Numeric greater than or equals comparison
+    NumericGreaterthaneq,
+    /// Numeric less than comparison
+    NumericLessthan,
+    /// Numeric less than or equals comparison
+    NumericLessthaneq,
+    /// Lexicographic comparison between strings
+    StringCompare,
+    /// Concatentation of two string values
+    StringConcatenation,
+    /// Check whether string is contained in another
+    StringContains,
+    /// The first part (of specified length) of a string
+    StringSubstring,
+    /// Conjunction of boolean values
+    BooleanConjunction,
+    /// Disjunction of boolean values
+    BooleanDisjunction,
 }
 
 impl BinaryOperation {
-    /// Return the name of the operation.
-    pub fn name(&self) -> String {
-        let name = match self {
-            BinaryOperation::Addition => "Addition",
-            BinaryOperation::Subtraction => "Subtraction",
-            BinaryOperation::Multiplication => "Multiplication",
-            BinaryOperation::Division => "Division",
-            BinaryOperation::Exponent => "Exponent",
-        };
-
-        String::from(name)
-    }
-}
-
-/// Unary operation applied to a [`Term`]
-#[derive(Debug, Eq, PartialEq, Copy, Clone, PartialOrd, Ord)]
-pub enum UnaryOperation {
-    /// Squareroot of the given term
-    SquareRoot,
-    /// Additive inverse of the given term.
-    UnaryMinus,
-    /// Absolute value of the given term.
-    Abs,
-}
-
-impl UnaryOperation {
     /// Return a function which is able to construct the respective term based on the function name.
-    /// Returns `None` if the provided function name does not correspond to a know unary function.
-    pub fn construct_from_name(name: &str) -> Result<UnaryOperation, Error> {
+    /// Returns `None` if the provided function name does not correspond to a known binary function.
+    pub fn construct_from_name(name: &str) -> Result<BinaryOperation, Error> {
         match name {
-            "Abs" => Ok(UnaryOperation::Abs),
-            "Sqrt" => Ok(UnaryOperation::SquareRoot),
+            "Log" => Ok(BinaryOperation::NumericLogarithm),
+            "Pow" => Ok(BinaryOperation::NumericPower),
+            "Compare" => Ok(BinaryOperation::StringCompare),
+            "Concat" => Ok(BinaryOperation::StringConcatenation),
+            "Contains" => Ok(BinaryOperation::StringContains),
+            "Substr" => Ok(BinaryOperation::StringSubstring),
+            "And" => Ok(BinaryOperation::BooleanConjunction),
+            "Or" => Ok(BinaryOperation::BooleanDisjunction),
             s => Err(Error::UnknonwUnaryOpertation {
                 operation: s.into(),
             }),
@@ -260,9 +266,117 @@ impl UnaryOperation {
     /// Return the name of the operation.
     pub fn name(&self) -> String {
         let name = match self {
-            UnaryOperation::SquareRoot => "SquareRoot",
-            UnaryOperation::UnaryMinus => "UnaryMinus",
-            UnaryOperation::Abs => "Abs",
+            BinaryOperation::NumericAddition => "Addition",
+            BinaryOperation::NumericSubtraction => "Subtraction",
+            BinaryOperation::NumericMultiplication => "Multiplication",
+            BinaryOperation::NumericDivision => "Division",
+            BinaryOperation::NumericPower => "Power",
+            BinaryOperation::NumericLogarithm => "Logarithm",
+            BinaryOperation::StringCompare => "StirngCompare",
+            BinaryOperation::StringConcatenation => "StringConcatenation",
+            BinaryOperation::StringContains => "StringContains",
+            BinaryOperation::StringSubstring => "Substring",
+            BinaryOperation::BooleanConjunction => "BooleanAnd",
+            BinaryOperation::BooleanDisjunction => "BooleanOr",
+            BinaryOperation::Equal => "Equals",
+            BinaryOperation::Unequals => "Unequals",
+            BinaryOperation::NumericGreaterthan => "GreaterThan",
+            BinaryOperation::NumericGreaterthaneq => "GreaterThanEq",
+            BinaryOperation::NumericLessthan => "LessThan",
+            BinaryOperation::NumericLessthaneq => "LessThanEq",
+        };
+
+        String::from(name)
+    }
+
+    /// Return the infix operator for this operation
+    /// or `None` if this is not an infix operation
+    pub fn infix(&self) -> Option<&'static str> {
+        match self {
+            BinaryOperation::NumericAddition => Some("+"),
+            BinaryOperation::NumericSubtraction => Some("-"),
+            BinaryOperation::NumericMultiplication => Some("*"),
+            BinaryOperation::NumericDivision => Some("/"),
+            BinaryOperation::Equal => Some("="),
+            BinaryOperation::Unequals => Some("!="),
+            BinaryOperation::NumericGreaterthan => Some(">"),
+            BinaryOperation::NumericGreaterthaneq => Some(">="),
+            BinaryOperation::NumericLessthan => Some("<"),
+            BinaryOperation::NumericLessthaneq => Some("<="),
+            BinaryOperation::NumericLogarithm
+            | BinaryOperation::NumericPower
+            | BinaryOperation::StringCompare
+            | BinaryOperation::StringConcatenation
+            | BinaryOperation::StringContains
+            | BinaryOperation::StringSubstring
+            | BinaryOperation::BooleanConjunction
+            | BinaryOperation::BooleanDisjunction => None,
+        }
+    }
+}
+
+/// Unary operation applied to a [`Term`]
+#[derive(Debug, Eq, PartialEq, Copy, Clone, PartialOrd, Ord)]
+pub enum UnaryOperation {
+    /// Boolean negation
+    BooleanNegation,
+    /// Canonical string representation of a value
+    CanonicalString,
+    /// Absolute value of a numeric value
+    NumericAbsolute,
+    /// Cosine of a numeric value
+    NumericCosine,
+    /// Additive inverse of a numeric value
+    NumericNegation,
+    /// Sine of a numeric value
+    NumericSine,
+    /// Square root of a numeric value
+    NumericSquareroot,
+    /// Tangent of a numeric value
+    NumericTangent,
+    /// Length of a string value
+    StringLength,
+    /// String converted to lowercase letters
+    StringLowercase,
+    /// String converted to uppercase letters
+    StringUppercase,
+}
+
+impl UnaryOperation {
+    /// Return a function which is able to construct the respective term based on the function name.
+    /// Returns `None` if the provided function name does not correspond to a know unary function.
+    pub fn construct_from_name(name: &str) -> Result<UnaryOperation, Error> {
+        match name {
+            "Abs" => Ok(UnaryOperation::NumericAbsolute),
+            "Sqrt" => Ok(UnaryOperation::NumericSquareroot),
+            "Neg" => Ok(UnaryOperation::BooleanNegation),
+            "String" => Ok(UnaryOperation::CanonicalString),
+            "Sin" => Ok(UnaryOperation::NumericSine),
+            "Cos" => Ok(UnaryOperation::NumericCosine),
+            "Tan" => Ok(UnaryOperation::NumericTangent),
+            "Length" => Ok(UnaryOperation::StringLength),
+            "Lower" => Ok(UnaryOperation::StringLowercase),
+            "Upper" => Ok(UnaryOperation::StringUppercase),
+            s => Err(Error::UnknonwUnaryOpertation {
+                operation: s.into(),
+            }),
+        }
+    }
+
+    /// Return the name of the operation.
+    pub fn name(&self) -> String {
+        let name = match self {
+            UnaryOperation::NumericSquareroot => "SquareRoot",
+            UnaryOperation::NumericNegation => "UnaryMinus",
+            UnaryOperation::NumericAbsolute => "Abs",
+            UnaryOperation::BooleanNegation => "BooleanNegation",
+            UnaryOperation::CanonicalString => "CanonicalString",
+            UnaryOperation::NumericCosine => "Cosine",
+            UnaryOperation::NumericSine => "Sine",
+            UnaryOperation::NumericTangent => "Tangent",
+            UnaryOperation::StringLength => "StringLength",
+            UnaryOperation::StringLowercase => "Lowercase",
+            UnaryOperation::StringUppercase => "Uppercase",
         };
 
         String::from(name)
@@ -495,25 +609,22 @@ impl Term {
         match self {
             Term::Primitive(_) => 0,
             Term::Binary {
-                operation: BinaryOperation::Addition,
+                operation: BinaryOperation::NumericAddition,
                 ..
             } => 1,
             Term::Binary {
-                operation: BinaryOperation::Subtraction,
+                operation: BinaryOperation::NumericSubtraction,
                 ..
             } => 1,
             Term::Binary {
-                operation: BinaryOperation::Multiplication,
+                operation: BinaryOperation::NumericSubtraction,
                 ..
             } => 2,
             Term::Binary {
-                operation: BinaryOperation::Division,
+                operation: BinaryOperation::NumericDivision,
                 ..
             } => 2,
-            Term::Binary {
-                operation: BinaryOperation::Exponent,
-                ..
-            } => 3,
+            Term::Binary { .. } => 3,
             Term::Unary(_, _) => 5,
             Term::Aggregation(_) => 5,
             Term::Function(_, _) => 5,
@@ -564,15 +675,15 @@ impl Term {
         right: &Term,
         operation: BinaryOperation,
     ) -> std::fmt::Result {
-        self.format_braces_priority(f, left)?;
-        match operation {
-            BinaryOperation::Addition => write!(f, " + ")?,
-            BinaryOperation::Subtraction => write!(f, " - ")?,
-            BinaryOperation::Multiplication => write!(f, " * ")?,
-            BinaryOperation::Division => write!(f, " / ")?,
-            BinaryOperation::Exponent => write!(f, " ^ ")?,
+        if let Some(operator) = operation.infix() {
+            self.format_braces_priority(f, left)?;
+
+            write!(f, " {operator} ")?;
+
+            self.format_braces_priority(f, right)
+        } else {
+            write!(f, "{}({}, {})", operation.name(), left, right)
         }
-        self.format_braces_priority(f, right)
     }
 }
 
@@ -591,16 +702,17 @@ impl Display for Term {
                 lhs,
                 rhs,
             } => self.format_binary_operation(f, lhs, rhs, *operation),
-            Term::Unary(UnaryOperation::SquareRoot, inner) => {
-                write!(f, "sqrt({})", inner)
-            }
-            Term::Unary(UnaryOperation::UnaryMinus, inner) => {
+            Term::Unary(UnaryOperation::NumericNegation, inner) => {
                 write!(f, "-")?;
                 self.format_braces_priority(f, inner)
             }
-            Term::Unary(UnaryOperation::Abs, inner) => {
+            Term::Unary(UnaryOperation::NumericAbsolute, inner) => {
                 write!(f, "|{}|", inner)
             }
+            Term::Unary(operation, inner) => {
+                write!(f, "{}({})", operation.name(), inner)
+            }
+
             Term::Aggregation(aggregate) => write!(f, "{}", aggregate),
             Term::Function(function, subterms) => {
                 f.write_str(&function.to_string())?;
