@@ -1,16 +1,21 @@
 //! This module defines [RowScan].
 
+use std::marker::PhantomData;
+
 use streaming_iterator::StreamingIterator;
 
 use crate::datatypes::{StorageTypeName, StorageValueT};
 
-use super::triescan::{PartialTrieScan, TrieScanEnum};
+use super::triescan::PartialTrieScan;
 
 /// A [StreamingIterator] for a [PartialTrieScan]
 #[derive(Debug)]
-pub struct RowScan<'a> {
-    /// [TrieScanEnum] whose rows will be enumerated
-    trie_scan: TrieScanEnum<'a>,
+pub struct RowScan<'a, Scan: PartialTrieScan<'a>> {
+    /// Using 'a in the trait bound doesn't count
+    _phantom: PhantomData<&'a usize>,
+
+    /// [PartialTrieScan] whose rows will be enumerated
+    trie_scan: Scan,
 
     /// Whether it can be known a priori that this will return no rows
     empty: bool,
@@ -27,9 +32,9 @@ pub struct RowScan<'a> {
     changed_layers: usize,
 }
 
-impl<'a> RowScan<'a> {
+impl<'a, Scan: PartialTrieScan<'a>> RowScan<'a, Scan> {
     /// Create a new [RowScan].
-    pub fn new(trie_scan: TrieScanEnum<'a>, cut: usize) -> Self {
+    pub fn new(trie_scan: Scan, cut: usize) -> Self {
         let arity = trie_scan.arity();
         let used_columns = arity - cut;
 
@@ -40,6 +45,7 @@ impl<'a> RowScan<'a> {
         let empty = arity == 0 || possible_types.iter().any(|types| types.is_empty());
 
         Self {
+            _phantom: PhantomData::default(),
             trie_scan,
             empty,
             possible_types,
@@ -65,7 +71,7 @@ impl<'a> RowScan<'a> {
     }
 }
 
-impl<'a> StreamingIterator for RowScan<'a> {
+impl<'a, Scan: PartialTrieScan<'a>> StreamingIterator for RowScan<'a, Scan> {
     type Item = [StorageValueT];
 
     fn advance(&mut self) {
@@ -128,7 +134,7 @@ impl<'a> StreamingIterator for RowScan<'a> {
     }
 }
 
-impl<'a> Iterator for RowScan<'a> {
+impl<'a, Scan: PartialTrieScan<'a>> Iterator for RowScan<'a, Scan> {
     type Item = Vec<StorageValueT>;
 
     fn next(&mut self) -> Option<Self::Item> {

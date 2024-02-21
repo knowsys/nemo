@@ -351,7 +351,7 @@ impl DatabaseInstance {
                         .filter(|trie| !trie.is_empty())
                 } else {
                     self.evaluate_tree_leaf(storage, subnode)
-                        .map(|scan| generator.apply_operation(TrieScanTrim::new(scan)))
+                        .map(|scan| generator.apply_operation_partial(scan))
                 }
             }
         };

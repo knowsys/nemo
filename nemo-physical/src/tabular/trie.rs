@@ -82,7 +82,7 @@ impl Trie {
 
     /// Return a row based iterator over this trie.
     pub(crate) fn row_iterator(&self) -> impl Iterator<Item = Vec<StorageValueT>> + '_ {
-        RowScan::new(TrieScanEnum::TrieScanGeneric(self.partial_iterator()), 0)
+        RowScan::new(self.partial_iterator(), 0)
     }
 }
 
