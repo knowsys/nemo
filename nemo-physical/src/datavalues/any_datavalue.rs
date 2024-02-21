@@ -7,7 +7,7 @@ use delegate::delegate;
 
 use crate::{
     datatypes::{Double, Float, StorageValueT},
-    dictionary::DvDict,
+    dictionary::{AddResult, DvDict},
     management::database::Dict,
 };
 
@@ -513,7 +513,13 @@ impl AnyDataValue {
             | ValueDomain::LanguageTaggedString
             | ValueDomain::Iri => {
                 // TODO: Do we really need to clone? At least if the value is known, it should not be necessary. Maybe move into add method?
-                let dictionary_id = dictionary.add_datavalue(self.clone()).value();
+                let add_result = dictionary.add_datavalue(self.clone());
+
+                if add_result == AddResult::Rejected {
+                    panic!("Dictionary rejected the data value");
+                }
+
+                let dictionary_id = add_result.value();
                 Self::usize_to_storage_value_t(dictionary_id)
             }
             ValueDomain::Null => {
