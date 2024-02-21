@@ -116,28 +116,32 @@ impl<'a> PartialTrieScan<'a> for TrieScanUnion<'a> {
     }
 
     fn down(&mut self, next_type: StorageTypeName) {
-        let previous_layer = self.current_layer();
-        let previous_type = self.path_types.last();
-
+        let mut active_scans = Vec::<usize>::new();
         let next_layer = self.path_types.len();
 
-        debug_assert!(next_layer < self.arity());
+        if let Some(previous_layer) = self.current_layer() {
+            let previous_type = self.path_types[previous_layer];
 
-        let previous_smallest = previous_layer.map(|layer| {
-            self.column_scans[layer].get_mut().union_get_smallest(
-                *previous_type.expect("path_types is not empty previous_layer is not None"),
-            )
-        });
+            debug_assert!(next_layer < self.arity());
 
-        let mut active_scans = Vec::<usize>::new();
+            for (scan_index, trie_scan) in self.trie_scans.iter_mut().enumerate() {
+                if trie_scan.current_layer() != Some(previous_layer) {
+                    continue;
+                }
 
-        for (scan_index, trie_scan) in self.trie_scans.iter_mut().enumerate() {
-            if trie_scan.current_layer() != previous_layer {
-                continue;
+                let is_smallest = self.column_scans[previous_layer]
+                    .get_mut()
+                    .union_is_smallest(previous_type, scan_index);
+
+                if is_smallest {
+                    active_scans.push(scan_index);
+                    trie_scan.down(next_type);
+                }
             }
+        } else {
+            active_scans = (0..self.trie_scans.len()).collect();
 
-            if previous_smallest.is_none() || previous_smallest.unwrap()[scan_index] {
-                active_scans.push(scan_index);
+            for trie_scan in &mut self.trie_scans {
                 trie_scan.down(next_type);
             }
         }

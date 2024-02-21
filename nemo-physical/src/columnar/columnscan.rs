@@ -196,17 +196,19 @@ impl<'a, T> ColumnScanEnum<'a, T>
 where
     T: 'a + ColumnDataType,
 {
-    /// Assumes that column scan is a [ColumnScanUnion]
-    /// and returns a vector containing the positions of the scans with the smallest values
-    pub fn union_get_smallest(&self) -> &Vec<bool> {
+    /// Assumes that column scan is a [ColumnScanUnion].
+    ///
+    /// Check whether the input [ColumnScan] of the given index points to the currently smallest value.
+    pub fn union_is_smallest(&self, index: usize) -> bool {
         if let Self::ColumnScanUnion(cs) = self {
-            cs.get_smallest_scans()
+            cs.is_smallest_scans(index)
         } else {
-            unimplemented!("union_get_smallest is only available for ColumnScanUnion")
+            unimplemented!("union_is_smallest is only available for ColumnScanUnion")
         }
     }
 
-    /// Assumes that column scan is a [ColumnScanUnion]
+    /// Assumes that column scan is a [ColumnScanUnion].
+    ///
     /// Set a vector that indicates which scans are currently active and should be considered
     pub fn union_set_active(&mut self, active_scans: Vec<usize>) {
         if let Self::ColumnScanUnion(cs) = self {
@@ -216,7 +218,8 @@ where
         }
     }
 
-    /// Assumes that column scan is a [ColumnScanSubtract]
+    /// Assumes that column scan is a [ColumnScanSubtract].
+    ///
     /// Return a vector indicating which subiterators point to the same value as the main one.
     pub fn subtract_get_equal(&self) -> Vec<bool> {
         if let Self::ColumnScanSubtract(cs) = self {
@@ -226,7 +229,8 @@ where
         }
     }
 
-    /// Assumes that column scan is a [ColumnScanSubtract]
+    /// Assumes that column scan is a [ColumnScanSubtract].
+    ///
     /// Set which sub iterators should be active.
     pub fn subtract_set_active(&mut self, active_scans: Vec<bool>) {
         if let Self::ColumnScanSubtract(cs) = self {
@@ -237,6 +241,7 @@ where
     }
 
     /// Assumes that column scan is a [ColumnScanConstant].
+    ///
     /// Set a new constant value that will be returned by this scan.
     pub fn constant_set(&mut self, constant: Option<T>) {
         if let Self::ColumnScanConstant(scan) = self {
@@ -366,15 +371,15 @@ where
         unsafe { &mut *self.0.get() }.narrow(interval)
     }
 
-    /// Forward `union_get_smallest` to the underlying [ColumnScanEnum].
+    /// Forward `union_is_smallest` to the underlying [ColumnScanEnum].
     /// This takes an exclusive reference as opposed to an immutable one, so that none of the
     /// mutating methods on &self can be called while the result is still available
     /// (see <https://github.com/knowsys/nemo/issues/137>)
-    pub fn union_get_smallest(&mut self) -> &Vec<bool> {
-        unsafe { &mut *self.0.get() }.union_get_smallest()
+    pub fn union_is_smallest(&mut self, index: usize) -> bool {
+        unsafe { &mut *self.0.get() }.union_is_smallest(index)
     }
 
-    /// Forward `union_get_smallest` to the underlying [ColumnScanEnum].
+    /// Forward `union_is_smallest` to the underlying [ColumnScanEnum].
     pub fn union_set_active(&mut self, active_scans: Vec<usize>) {
         self.0.get_mut().union_set_active(active_scans);
     }
@@ -585,13 +590,13 @@ impl<'a> ColumnScanRainbow<'a> {
 
     /// Assumes that column scan is a [ColumnScanUnion]
     /// and returns a vector containing the positions of the scans with the smallest values.
-    pub fn union_get_smallest(&mut self, storage_type: StorageTypeName) -> &Vec<bool> {
+    pub fn union_is_smallest(&mut self, storage_type: StorageTypeName, index: usize) -> bool {
         match storage_type {
-            StorageTypeName::Id32 => self.scan_id32.union_get_smallest(),
-            StorageTypeName::Id64 => self.scan_id64.union_get_smallest(),
-            StorageTypeName::Int64 => self.scan_i64.union_get_smallest(),
-            StorageTypeName::Float => self.scan_float.union_get_smallest(),
-            StorageTypeName::Double => self.scan_double.union_get_smallest(),
+            StorageTypeName::Id32 => self.scan_id32.union_is_smallest(index),
+            StorageTypeName::Id64 => self.scan_id64.union_is_smallest(index),
+            StorageTypeName::Int64 => self.scan_i64.union_is_smallest(index),
+            StorageTypeName::Float => self.scan_float.union_is_smallest(index),
+            StorageTypeName::Double => self.scan_double.union_is_smallest(index),
         }
     }
 
