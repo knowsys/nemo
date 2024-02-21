@@ -70,10 +70,9 @@ impl CompressionFormat {
     /// to look into the data to check if decompression works.
     ///
     /// For [CompressionFormat::None], the input reader is returned unchanged.
-    pub(crate) fn try_decompression<R: BufRead + 'static>(
-        &self,
-        read: R,
-    ) -> Option<Box<dyn BufRead>> {
+    ///
+    /// This is public so that it can be used by external resource providers.
+    pub fn try_decompression<R: BufRead + 'static>(&self, read: R) -> Option<Box<dyn BufRead>> {
         match self {
             Self::None => Some(Box::new(read)),
             Self::Gzip => {
