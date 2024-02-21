@@ -139,7 +139,12 @@ impl<'a, Scan: PartialTrieScan<'a>> Iterator for RowScan<'a, Scan> {
 
     fn next(&mut self) -> Option<Self::Item> {
         StreamingIterator::advance(self);
-        Some(self.current_row.clone())
+
+        if self.trie_scan.current_layer().is_some() {
+            Some(self.current_row.clone())
+        } else {
+            None
+        }
     }
 }
 
