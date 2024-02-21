@@ -84,7 +84,7 @@ impl<'a, Scan: PartialTrieScan<'a>> StreamingIterator for RowScan<'a, Scan> {
             self.trie_scan.down(first_type);
         };
 
-        self.changed_layers = self.trie_scan.arity() - 1;
+        self.changed_layers = self.current_row.len() - 1;
 
         while let Some(current_layer) = self.trie_scan.current_layer() {
             let is_last_layer = current_layer == self.trie_scan.arity() - 1;
