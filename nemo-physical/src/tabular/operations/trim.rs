@@ -18,7 +18,7 @@ pub struct TrieScanTrim<'a> {
 }
 
 impl<'a> TrieScanTrim<'a> {
-    ///
+    /// Create a new [TrieScanTrim]
     pub fn new(trie_scan: TrieScanEnum<'a>) -> Self {
         let arity = trie_scan.arity();
 

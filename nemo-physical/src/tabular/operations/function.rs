@@ -302,7 +302,7 @@ mod test {
         function::tree::FunctionTree,
         management::database::Dict,
         tabular::{
-            operations::{prune::TrieScanPrune, OperationGenerator, OperationTableGenerator},
+            operations::{OperationGenerator, OperationTableGenerator},
             rowscan::RowScan,
             trie::Trie,
             triescan::TrieScanEnum,
