@@ -144,7 +144,7 @@ fn construct_existential_aux_rule(
 
                     new_terms.push(variable.clone());
                 }
-                PrimitiveTerm::Constant(_) => {
+                PrimitiveTerm::GroundTerm(_) => {
                     let generated_variable = generate_variable();
                     new_terms.push(generated_variable.clone());
 

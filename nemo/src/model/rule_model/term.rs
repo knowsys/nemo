@@ -71,14 +71,14 @@ impl Display for Variable {
 #[derive(Debug, Eq, PartialEq, Clone, PartialOrd, Ord)]
 pub enum PrimitiveTerm {
     /// A constant.
-    Constant(AnyDataValue),
+    GroundTerm(AnyDataValue),
     /// A variable.
     Variable(Variable),
 }
 
 impl From<AnyDataValue> for PrimitiveTerm {
     fn from(value: AnyDataValue) -> Self {
-        Self::Constant(value)
+        Self::GroundTerm(value)
     }
 }
 
@@ -92,13 +92,13 @@ impl PrimitiveTerm {
 impl Display for PrimitiveTerm {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            PrimitiveTerm::Constant(term) => write!(f, "{}", term),
+            PrimitiveTerm::GroundTerm(term) => write!(f, "{}", term),
             PrimitiveTerm::Variable(term) => write!(f, "{}", term),
         }
     }
 }
 
-/// Binary operation between two [`Term`]
+/// Binary operation between two [Term]s.
 #[derive(Debug, Eq, PartialEq, Copy, Clone, PartialOrd, Ord)]
 pub enum BinaryOperation {
     /// Equality
@@ -127,9 +127,9 @@ pub enum BinaryOperation {
     NumericLessthaneq,
     /// Lexicographic comparison between strings
     StringCompare,
-    /// Concatentation of two string values
+    /// Concatentation of two string values, correspondng to SPARQL function CONCAT.
     StringConcatenation,
-    /// Check whether string is contained in another
+    /// Check whether string is contained in another, correspondng to SPARQL function CONTAINS.
     StringContains,
     /// The first part (of specified length) of a string
     StringSubstring,
@@ -143,15 +143,15 @@ impl BinaryOperation {
     /// Return a function which is able to construct the respective term based on the function name.
     /// Returns `None` if the provided function name does not correspond to a known binary function.
     pub fn construct_from_name(name: &str) -> Result<BinaryOperation, Error> {
-        match name {
-            "Log" => Ok(BinaryOperation::NumericLogarithm),
-            "Pow" => Ok(BinaryOperation::NumericPower),
-            "Compare" => Ok(BinaryOperation::StringCompare),
-            "Concat" => Ok(BinaryOperation::StringConcatenation),
-            "Contains" => Ok(BinaryOperation::StringContains),
-            "Substr" => Ok(BinaryOperation::StringSubstring),
-            "And" => Ok(BinaryOperation::BooleanConjunction),
-            "Or" => Ok(BinaryOperation::BooleanDisjunction),
+        match name.to_uppercase().as_str() {
+            "LOG" => Ok(BinaryOperation::NumericLogarithm),
+            "POW" => Ok(BinaryOperation::NumericPower),
+            "COMPARE" => Ok(BinaryOperation::StringCompare),
+            "CONCAT" => Ok(BinaryOperation::StringConcatenation),
+            "CONTAINS" => Ok(BinaryOperation::StringContains),
+            "SUBSTR" => Ok(BinaryOperation::StringSubstring),
+            "AND" => Ok(BinaryOperation::BooleanConjunction),
+            "OR" => Ok(BinaryOperation::BooleanDisjunction),
             s => Err(Error::UnknownUnaryOpertation {
                 operation: s.into(),
             }),
@@ -167,9 +167,9 @@ impl BinaryOperation {
             BinaryOperation::NumericDivision => "Division",
             BinaryOperation::NumericPower => "Power",
             BinaryOperation::NumericLogarithm => "Logarithm",
-            BinaryOperation::StringCompare => "StirngCompare",
-            BinaryOperation::StringConcatenation => "StringConcatenation",
-            BinaryOperation::StringContains => "StringContains",
+            BinaryOperation::StringCompare => "StringCompare",
+            BinaryOperation::StringConcatenation => "CONCAT",
+            BinaryOperation::StringContains => "CONTAINS",
             BinaryOperation::StringSubstring => "Substring",
             BinaryOperation::BooleanConjunction => "BooleanAnd",
             BinaryOperation::BooleanDisjunction => "BooleanOr",
@@ -351,7 +351,7 @@ impl Term {
         self.primitive_terms()
             .into_iter()
             .filter_map(|term| match term {
-                PrimitiveTerm::Constant(datavalue) => Some(datavalue),
+                PrimitiveTerm::GroundTerm(datavalue) => Some(datavalue),
                 _ => None,
             })
     }

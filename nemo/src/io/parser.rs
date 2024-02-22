@@ -283,7 +283,7 @@ pub fn parse_ground_term<'a>(
     traced(
         "parse_ground_term",
         map_error(
-            map(parse_constant_term(prefixes), PrimitiveTerm::Constant),
+            map(parse_constant_term(prefixes), PrimitiveTerm::GroundTerm),
             || ParseError::ExpectedGroundTerm,
         ),
     )
@@ -1586,7 +1586,7 @@ mod test {
 
         let expected_fact = Fact(Atom::new(
             p,
-            vec![Term::Primitive(PrimitiveTerm::Constant(
+            vec![Term::Primitive(PrimitiveTerm::GroundTerm(
                 AnyDataValue::new_from_typed_literal(v, t).expect("unknown types should work"),
             ))],
         ));
@@ -1611,7 +1611,7 @@ mod test {
 
         let expected_fact = Fact(Atom::new(
             p,
-            vec![Term::Primitive(PrimitiveTerm::Constant(
+            vec![Term::Primitive(PrimitiveTerm::GroundTerm(
                 AnyDataValue::new_iri(v),
             ))],
         ));
@@ -1630,7 +1630,7 @@ mod test {
 
         let expected_fact = Fact(Atom::new(
             p,
-            vec![Term::Primitive(PrimitiveTerm::Constant(
+            vec![Term::Primitive(PrimitiveTerm::GroundTerm(
                 AnyDataValue::new_iri(pn),
             ))],
         ));
@@ -1651,13 +1651,13 @@ mod test {
         let expected_fact = Fact(Atom::new(
             p,
             vec![
-                Term::Primitive(PrimitiveTerm::Constant(AnyDataValue::new_integer_from_i64(
+                Term::Primitive(PrimitiveTerm::GroundTerm(AnyDataValue::new_integer_from_i64(
                     int,
                 ))),
-                Term::Primitive(PrimitiveTerm::Constant(
+                Term::Primitive(PrimitiveTerm::GroundTerm(
                     AnyDataValue::new_double_from_f64(dbl).expect("is not NaN"),
                 )),
-                Term::Primitive(PrimitiveTerm::Constant(
+                Term::Primitive(PrimitiveTerm::GroundTerm(
                     AnyDataValue::new_double_from_f64(dec).expect("is not NaN"),
                 )),
             ],
@@ -1686,7 +1686,7 @@ mod test {
 
         let expected_fact = Fact(Atom::new(
             p,
-            vec![Term::Primitive(PrimitiveTerm::Constant(
+            vec![Term::Primitive(PrimitiveTerm::GroundTerm(
                 AnyDataValue::new_string(v),
             ))],
         ));
@@ -1705,7 +1705,7 @@ mod test {
 
         let expected_fact = Fact(Atom::new(
             p,
-            vec![Term::Primitive(PrimitiveTerm::Constant(
+            vec![Term::Primitive(PrimitiveTerm::GroundTerm(
                 AnyDataValue::new_string(v),
             ))],
         ));
@@ -1726,7 +1726,7 @@ mod test {
 
         let expected_fact = Fact(Atom::new(
             p,
-            vec![Term::Primitive(PrimitiveTerm::Constant(
+            vec![Term::Primitive(PrimitiveTerm::GroundTerm(
                 AnyDataValue::new_language_tagged_string(value, tag),
             ))],
         ));
@@ -1744,7 +1744,7 @@ mod test {
 
         let expected_fact = Fact(Atom::new(
             p,
-            vec![Term::Primitive(PrimitiveTerm::Constant(
+            vec![Term::Primitive(PrimitiveTerm::GroundTerm(
                 AnyDataValue::new_iri(name.to_string()),
             ))],
         ));
@@ -1771,7 +1771,7 @@ mod test {
 
         let expected_fact = Fact(Atom::new(
             p,
-            vec![Term::Primitive(PrimitiveTerm::Constant(
+            vec![Term::Primitive(PrimitiveTerm::GroundTerm(
                 AnyDataValue::new_from_typed_literal(v, t)
                     .expect("unknown datatype should always work"),
             ))],
@@ -1830,13 +1830,13 @@ mod test {
                 ),
                 Constraint::Equals(
                     Term::Primitive(PrimitiveTerm::Variable(Variable::Universal(x.clone()))),
-                    Term::Primitive(PrimitiveTerm::Constant(AnyDataValue::new_integer_from_i64(
+                    Term::Primitive(PrimitiveTerm::GroundTerm(AnyDataValue::new_integer_from_i64(
                         3,
                     ))),
                 ),
                 Constraint::LessThan(
                     Term::Primitive(PrimitiveTerm::Variable(Variable::Universal(z.clone()))),
-                    Term::Primitive(PrimitiveTerm::Constant(AnyDataValue::new_integer_from_i64(
+                    Term::Primitive(PrimitiveTerm::GroundTerm(AnyDataValue::new_integer_from_i64(
                         7,
                     ))),
                 ),
@@ -1907,10 +1907,10 @@ mod test {
     fn parse_arithmetic_expressions() {
         let parser = RuleParser::new();
 
-        let twenty_three = Term::Primitive(PrimitiveTerm::Constant(
+        let twenty_three = Term::Primitive(PrimitiveTerm::GroundTerm(
             AnyDataValue::new_integer_from_i64(23),
         ));
-        let fourty_two = Term::Primitive(PrimitiveTerm::Constant(
+        let fourty_two = Term::Primitive(PrimitiveTerm::GroundTerm(
             AnyDataValue::new_integer_from_i64(42),
         ));
         let twenty_three_times_fourty_two = Term::Binary {
@@ -1961,29 +1961,29 @@ mod test {
                     operation: BinaryOperation::NumericAddition,
                     lhs: Box::new(Term::Binary {
                         operation: BinaryOperation::NumericAddition,
-                        lhs: Box::new(Term::Primitive(PrimitiveTerm::Constant(
+                        lhs: Box::new(Term::Primitive(PrimitiveTerm::GroundTerm(
                             AnyDataValue::new_integer_from_i64(23)
                         ))),
                         rhs: Box::new(Term::Binary {
                             operation: BinaryOperation::NumericMultiplication,
-                            lhs: Box::new(Term::Primitive(PrimitiveTerm::Constant(
+                            lhs: Box::new(Term::Primitive(PrimitiveTerm::GroundTerm(
                                 AnyDataValue::new_integer_from_i64(23),
                             ))),
-                            rhs: Box::new(Term::Primitive(PrimitiveTerm::Constant(
+                            rhs: Box::new(Term::Primitive(PrimitiveTerm::GroundTerm(
                                 AnyDataValue::new_integer_from_i64(42),
                             ))),
                         })
                     }),
-                    rhs: Box::new(Term::Primitive(PrimitiveTerm::Constant(
+                    rhs: Box::new(Term::Primitive(PrimitiveTerm::GroundTerm(
                         AnyDataValue::new_integer_from_i64(42)
                     ))),
                 }),
                 rhs: Box::new(Term::Binary {
                     operation: BinaryOperation::NumericMultiplication,
-                    lhs: Box::new(Term::Primitive(PrimitiveTerm::Constant(
+                    lhs: Box::new(Term::Primitive(PrimitiveTerm::GroundTerm(
                         AnyDataValue::new_integer_from_i64(23)
                     ))),
-                    rhs: Box::new(Term::Primitive(PrimitiveTerm::Constant(
+                    rhs: Box::new(Term::Primitive(PrimitiveTerm::GroundTerm(
                         AnyDataValue::new_integer_from_i64(42)
                     )))
                 })
@@ -2034,10 +2034,10 @@ mod test {
     fn parse_function_terms() {
         let parser = RuleParser::new();
 
-        let twenty_three = Term::Primitive(PrimitiveTerm::Constant(
+        let twenty_three = Term::Primitive(PrimitiveTerm::GroundTerm(
             AnyDataValue::new_integer_from_i64(23),
         ));
-        let fourty_two = Term::Primitive(PrimitiveTerm::Constant(
+        let fourty_two = Term::Primitive(PrimitiveTerm::GroundTerm(
             AnyDataValue::new_integer_from_i64(42),
         ));
         let twenty_three_times_fourty_two = Term::Binary {
@@ -2146,7 +2146,7 @@ mod test {
         assert_parse!(
             parser.parse_term(),
             "constant",
-            Term::Primitive(PrimitiveTerm::Constant(AnyDataValue::new_iri(
+            Term::Primitive(PrimitiveTerm::GroundTerm(AnyDataValue::new_iri(
                 String::from("constant")
             )))
         );
@@ -2183,7 +2183,7 @@ mod test {
         let expression = "Abs(4)";
         let expected_term = Term::Unary(
             UnaryOperation::NumericAbsolute,
-            Box::new(Term::Primitive(PrimitiveTerm::Constant(
+            Box::new(Term::Primitive(PrimitiveTerm::GroundTerm(
                 AnyDataValue::new_integer_from_i64(4),
             ))),
         );
@@ -2199,7 +2199,7 @@ mod test {
 
         let expected_term = Term::Binary {
             operation: BinaryOperation::NumericMultiplication,
-            lhs: Box::new(Term::Primitive(PrimitiveTerm::Constant(
+            lhs: Box::new(Term::Primitive(PrimitiveTerm::GroundTerm(
                 AnyDataValue::new_integer_from_i64(5),
             ))),
             rhs: Box::new(Term::Unary(
@@ -2208,11 +2208,11 @@ mod test {
                     operation: BinaryOperation::NumericSubtraction,
                     lhs: Box::new(Term::Unary(
                         UnaryOperation::NumericSquareroot,
-                        Box::new(Term::Primitive(PrimitiveTerm::Constant(
+                        Box::new(Term::Primitive(PrimitiveTerm::GroundTerm(
                             AnyDataValue::new_integer_from_i64(4),
                         ))),
                     )),
-                    rhs: Box::new(Term::Primitive(PrimitiveTerm::Constant(
+                    rhs: Box::new(Term::Primitive(PrimitiveTerm::GroundTerm(
                         AnyDataValue::new_integer_from_i64(3),
                     ))),
                 }),
@@ -2241,14 +2241,14 @@ mod test {
                     lhs: Box::new(Term::Primitive(PrimitiveTerm::Variable(
                         Variable::Universal("Y".to_string()),
                     ))),
-                    rhs: Box::new(Term::Primitive(PrimitiveTerm::Constant(
+                    rhs: Box::new(Term::Primitive(PrimitiveTerm::GroundTerm(
                         AnyDataValue::new_integer_from_i64(5),
                     ))),
                 }),
             )),
             rhs: Box::new(Term::Binary {
                 operation: BinaryOperation::NumericAddition,
-                lhs: Box::new(Term::Primitive(PrimitiveTerm::Constant(
+                lhs: Box::new(Term::Primitive(PrimitiveTerm::GroundTerm(
                     AnyDataValue::new_integer_from_i64(7),
                 ))),
                 rhs: Box::new(Term::Primitive(PrimitiveTerm::Variable(

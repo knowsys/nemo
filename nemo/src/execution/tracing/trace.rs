@@ -235,7 +235,7 @@ impl ExecutionTrace {
                 .map(|(variable, constant)| {
                     (
                         variable.clone(),
-                        Term::Primitive(PrimitiveTerm::Constant(constant.clone())),
+                        Term::Primitive(PrimitiveTerm::GroundTerm(constant.clone())),
                     )
                 })
                 .collect(),

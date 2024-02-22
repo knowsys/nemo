@@ -75,7 +75,7 @@ impl PrimitiveAtom {
     /// Returns all [AnyDataValue]s used as constants in this atom
     pub fn datavalues(&self) -> impl Iterator<Item = &AnyDataValue> {
         self.terms.iter().filter_map(|t| {
-            if let PrimitiveTerm::Constant(v) = t {
+            if let PrimitiveTerm::GroundTerm(v) = t {
                 Some(v)
             } else {
                 None
@@ -219,7 +219,7 @@ impl ChaseFact {
                 .terms()
                 .iter()
                 .map(|t| {
-                    if let Term::Primitive(PrimitiveTerm::Constant(constant)) = t {
+                    if let Term::Primitive(PrimitiveTerm::GroundTerm(constant)) = t {
                         constant.clone()
                     } else {
                         unreachable!("Function assumes that input atom only contains constants.")
