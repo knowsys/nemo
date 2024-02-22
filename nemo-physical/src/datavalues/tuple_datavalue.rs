@@ -120,7 +120,7 @@ mod test {
     #[test]
     fn test_tuple() {
         let dv1 = AnyDataValue::new_integer_from_i64(42);
-        let dv2 = AnyDataValue::new_string("test".to_string());
+        let dv2 = AnyDataValue::new_plain_string("test".to_string());
         let dv3 = AnyDataValue::new_boolean(true);
         let label = IriDataValue::new("http://example.org/label".to_string());
 
@@ -158,7 +158,7 @@ mod test {
     #[test]
     fn test_tuple_eq() {
         let dv1 = AnyDataValue::new_integer_from_i64(42);
-        let dv2 = AnyDataValue::new_string("test".to_string());
+        let dv2 = AnyDataValue::new_plain_string("test".to_string());
         let dv3 = AnyDataValue::new_boolean(true);
         let label1 = IriDataValue::new("http://example.org/label1".to_string());
         let label2 = IriDataValue::new("http://example.org/label2".to_string());

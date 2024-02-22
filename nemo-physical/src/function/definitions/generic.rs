@@ -51,6 +51,6 @@ impl BinaryFunction for Unequals {
 pub struct CanonicalString;
 impl UnaryFunction for CanonicalString {
     fn evaluate(&self, parameter: AnyDataValue) -> Option<AnyDataValue> {
-        Some(AnyDataValue::new_string(parameter.canonical_string()))
+        Some(AnyDataValue::new_plain_string(parameter.canonical_string()))
     }
 }

@@ -28,7 +28,7 @@ impl DataValue for StringDataValue {
     }
 
     fn value_domain(&self) -> ValueDomain {
-        ValueDomain::String
+        ValueDomain::PlainString
     }
 
     fn to_plain_string_unchecked(&self) -> String {
@@ -68,7 +68,7 @@ mod test {
             dv.datatype_iri(),
             "http://www.w3.org/2001/XMLSchema#string".to_string()
         );
-        assert_eq!(dv.value_domain(), ValueDomain::String);
+        assert_eq!(dv.value_domain(), ValueDomain::PlainString);
         assert_eq!(dv.canonical_string(), "\"".to_string() + value + "\"");
 
         assert_eq!(dv.to_plain_string(), Some(value.to_string()));

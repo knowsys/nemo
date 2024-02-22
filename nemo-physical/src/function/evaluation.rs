@@ -221,7 +221,7 @@ mod test {
     type Function = FunctionTree<OperationColumnMarker>;
 
     fn any_string(string: &str) -> AnyDataValue {
-        AnyDataValue::new_string(String::from(string))
+        AnyDataValue::new_plain_string(String::from(string))
     }
 
     fn any_int(integer: i64) -> AnyDataValue {

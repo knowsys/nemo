@@ -40,7 +40,7 @@ pub(crate) fn quote_iri(s: &str) -> String {
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub enum ValueDomain {
     /// Domain of all strings of Unicode glyphs.
-    String,
+    PlainString,
     /// Domain of all strings of Unicode glyphs, together with additional language tags
     /// (which are non-empty strings).
     LanguageTaggedString,
@@ -93,7 +93,7 @@ impl ValueDomain {
     /// which does not have a canonical type that is determined by the domain.
     pub(crate) fn type_iri(&self) -> String {
         match self {
-            ValueDomain::String => "http://www.w3.org/2001/XMLSchema#string".to_string(),
+            ValueDomain::PlainString => "http://www.w3.org/2001/XMLSchema#string".to_string(),
             ValueDomain::LanguageTaggedString => "http://www.w3.org/1999/02/22-rdf-syntax-ns#langString".to_string(),
             ValueDomain::Iri => "http://www.w3.org/2001/XMLSchema#anyURI".to_string(),
             ValueDomain::Float => "http://www.w3.org/2001/XMLSchema#float".to_string(),
@@ -131,7 +131,7 @@ impl ValueDomain {
             ValueDomain::Null => 10,
             ValueDomain::Iri => 13,
             // Continuing with elements we keep in dictionaries
-            ValueDomain::String => 20,
+            ValueDomain::PlainString => 20,
             ValueDomain::LanguageTaggedString => 22,
             ValueDomain::Other => 24,
             ValueDomain::Tuple => 26,
@@ -229,7 +229,7 @@ pub trait DataValue: Debug + Display + Into<AnyDataValue> + PartialEq + Eq + Has
     #[must_use]
     fn to_plain_string(&self) -> Option<String> {
         match self.value_domain() {
-            ValueDomain::String => Some(self.to_plain_string_unchecked()),
+            ValueDomain::PlainString => Some(self.to_plain_string_unchecked()),
             _ => None,
         }
     }

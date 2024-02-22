@@ -121,7 +121,7 @@ impl<'a> QuadBuffer {
 
     fn set_object_from_datavalue(&mut self, datavalue: &AnyDataValue) -> bool {
         match datavalue.value_domain() {
-            ValueDomain::String => {
+            ValueDomain::PlainString => {
                 self.object_type = RdfTermType::SimpleStringLiteral;
                 self.object_part1 = datavalue.to_plain_string_unchecked();
             }

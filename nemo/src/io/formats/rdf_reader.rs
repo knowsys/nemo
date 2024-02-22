@@ -76,7 +76,7 @@ impl RdfReader {
     /// Create [`AnyDataValue`] from a [`Literal`].
     fn datavalue_from_literal(value: Literal<'_>) -> Result<AnyDataValue, DataValueCreationError> {
         match value {
-            Literal::Simple { value } => Ok(AnyDataValue::new_string(value.to_string())),
+            Literal::Simple { value } => Ok(AnyDataValue::new_plain_string(value.to_string())),
             Literal::LanguageTaggedString { value, language } => Ok(
                 AnyDataValue::new_language_tagged_string(value.to_string(), language.to_string()),
             ),

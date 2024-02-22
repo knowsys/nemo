@@ -189,7 +189,7 @@ impl ImportExportHandlers {
                 _ => {
                     return Err(ImportExportError::invalid_att_value_error(
                         PARAMETER_NAME_COMPRESSION,
-                        AnyDataValue::new_string(cf_name.to_owned()),
+                        AnyDataValue::new_plain_string(cf_name.to_owned()),
                         format!(
                             "unknown compression format, supported formats: {:?}",
                             [VALUE_COMPRESSION_GZIP, VALUE_COMPRESSION_NONE]
@@ -222,7 +222,7 @@ impl ImportExportHandlers {
                 } else {
                     Err(ImportExportError::invalid_att_value_error(
                         PARAMETER_NAME_COMPRESSION,
-                        AnyDataValue::new_string(
+                        AnyDataValue::new_plain_string(
                             cf_name.expect("given if stated compression is known"),
                         ),
                         format!("compression method should match resource extension").as_str(),
@@ -244,7 +244,7 @@ impl ImportExportHandlers {
     ) -> Result<Option<String>, ImportExportError> {
         if let Some(c) = Self::extract_att_value(attributes, attribute_name, allow_missing)? {
             match c.value_domain() {
-                ValueDomain::String => {
+                ValueDomain::PlainString => {
                     return Ok(Some(c.to_plain_string_unchecked()));
                 }
                 _ => {
@@ -481,7 +481,7 @@ impl ImportExportHandlers {
         TupleDataValue::from_iter(
             format_strings
                 .iter()
-                .map(|format| AnyDataValue::new_string(format.to_owned()))
+                .map(|format| AnyDataValue::new_plain_string(format.to_owned()))
                 .collect::<Vec<AnyDataValue>>(),
         )
         .into()
@@ -492,7 +492,7 @@ impl ImportExportHandlers {
     /// around simple attribute values.
     fn string_from_datavalue(v: &AnyDataValue) -> Option<String> {
         match v.value_domain() {
-            ValueDomain::String => Some(v.to_plain_string_unchecked()),
+            ValueDomain::PlainString => Some(v.to_plain_string_unchecked()),
             ValueDomain::Iri => Some(v.to_iri_unchecked()),
             _ => None,
         }

@@ -153,7 +153,7 @@ mod test {
 
         let reference_values = vec![
             AnyDataValue::new_integer_from_i64(10),
-            AnyDataValue::new_string(String::from("test")),
+            AnyDataValue::new_plain_string(String::from("test")),
         ];
 
         let operation_table = OperationTable::new_unique(3);

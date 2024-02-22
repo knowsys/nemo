@@ -142,9 +142,9 @@ mod test {
     #[test]
     fn test_map() {
         let dv1 = AnyDataValue::new_integer_from_i64(42);
-        let dv2 = AnyDataValue::new_string("test".to_string());
+        let dv2 = AnyDataValue::new_plain_string("test".to_string());
         let dv3 = AnyDataValue::new_boolean(true);
-        let dv4 = AnyDataValue::new_string("test2".to_string());
+        let dv4 = AnyDataValue::new_plain_string("test2".to_string());
         let label = IriDataValue::new("http://example.org/label".to_string());
 
         let map = MapDataValue::new(
@@ -178,9 +178,9 @@ mod test {
     #[test]
     fn test_map_equality() {
         let dv1 = AnyDataValue::new_integer_from_i64(42);
-        let dv2 = AnyDataValue::new_string("test".to_string());
+        let dv2 = AnyDataValue::new_plain_string("test".to_string());
         let dv3 = AnyDataValue::new_boolean(true);
-        let dv4 = AnyDataValue::new_string("test2".to_string());
+        let dv4 = AnyDataValue::new_plain_string("test2".to_string());
 
         let map1 = MapDataValue::from_iter(vec![
             (dv1.clone(), dv2.clone()),

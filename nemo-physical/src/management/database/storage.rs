@@ -147,7 +147,7 @@ mod test {
         let mut table_a = SimpleTable::new(arity);
         table_a.add_row(vec![
             AnyDataValue::new_integer_from_i64(-5),
-            AnyDataValue::new_string(String::from("Test")),
+            AnyDataValue::new_plain_string(String::from("Test")),
         ]);
         table_a.add_row(vec![
             AnyDataValue::new_float_from_f32(-2.0).unwrap(),
@@ -161,7 +161,7 @@ mod test {
         ]);
         table_b.add_row(vec![
             AnyDataValue::new_integer_from_i64(-5),
-            AnyDataValue::new_string(String::from("Test")),
+            AnyDataValue::new_plain_string(String::from("Test")),
         ]);
 
         let sources = vec![

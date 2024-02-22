@@ -93,16 +93,16 @@ mod test {
             let null = writer.fresh_null();
 
             writer.add_tuple_value(AnyDataValue::new_integer_from_i64(1));
-            writer.add_tuple_value(AnyDataValue::new_string(String::from("a")));
+            writer.add_tuple_value(AnyDataValue::new_plain_string(String::from("a")));
 
             writer.add_tuple_value(AnyDataValue::new_integer_from_i64(5));
-            writer.add_tuple_value(AnyDataValue::new_string(String::from("b")));
+            writer.add_tuple_value(AnyDataValue::new_plain_string(String::from("b")));
 
             writer.add_tuple_value(AnyDataValue::new_integer_from_i64(2));
-            writer.add_tuple_value(AnyDataValue::new_string(String::from("b")));
+            writer.add_tuple_value(AnyDataValue::new_plain_string(String::from("b")));
 
             writer.add_tuple_value(AnyDataValue::new_integer_from_i64(5));
-            writer.add_tuple_value(AnyDataValue::new_string(String::from("a")));
+            writer.add_tuple_value(AnyDataValue::new_plain_string(String::from("a")));
 
             writer.add_tuple_value(AnyDataValue::new_integer_from_i64(3));
             writer.add_tuple_value(AnyDataValue::new_float_from_f32(1.2).unwrap());
@@ -113,10 +113,10 @@ mod test {
             writer.add_tuple_value(AnyDataValue::new_integer_from_i64(0));
             writer.add_tuple_value(AnyDataValue::new_float_from_f32(1.8).unwrap());
 
-            writer.add_tuple_value(AnyDataValue::new_string(String::from("a")));
-            writer.add_tuple_value(AnyDataValue::new_string(String::from("b")));
+            writer.add_tuple_value(AnyDataValue::new_plain_string(String::from("a")));
+            writer.add_tuple_value(AnyDataValue::new_plain_string(String::from("b")));
 
-            writer.add_tuple_value(AnyDataValue::new_string(String::from("a")));
+            writer.add_tuple_value(AnyDataValue::new_plain_string(String::from("a")));
             writer.add_tuple_value(null.clone().into());
 
             fn retrieve_dict_id(dictionary: &MetaDvDictionary, dv: &AnyDataValue) -> u32 {
@@ -134,11 +134,11 @@ mod test {
             let id_null = retrieve_dict_id(&dictionary.borrow(), &null.into());
             let id_a = retrieve_dict_id(
                 &dictionary.borrow(),
-                &AnyDataValue::new_string(String::from("a")),
+                &AnyDataValue::new_plain_string(String::from("a")),
             );
             let id_b = retrieve_dict_id(
                 &dictionary.borrow(),
-                &AnyDataValue::new_string(String::from("b")),
+                &AnyDataValue::new_plain_string(String::from("b")),
             );
 
             let sorted_buffer = writer.finalize();

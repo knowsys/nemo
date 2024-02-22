@@ -48,7 +48,7 @@ impl DecimalType {
 #[derive(Debug, Clone)]
 enum AnyDataValueEnum {
     /// Variant for representing [`DataValue`]s in [`ValueDomain::String`].
-    String(StringDataValue),
+    PlainString(StringDataValue),
     /// Variant for representing [`DataValue`]s in [`ValueDomain::LanguageTaggedString`].
     LanguageTaggedString(LangStringDataValue),
     /// Variant for representing [`DataValue`]s in [`ValueDomain::Iri`].
@@ -109,12 +109,12 @@ impl AnyDataValue {
         )))
     }
 
-    /// Construct a datavalue in [`ValueDomain::String`] that represents the given string.
-    pub fn new_string(value: String) -> Self {
-        AnyDataValue(AnyDataValueEnum::String(StringDataValue::new(value)))
+    /// Construct a datavalue in [`ValueDomain::PlainString`] that represents the given string.
+    pub fn new_plain_string(value: String) -> Self {
+        AnyDataValue(AnyDataValueEnum::PlainString(StringDataValue::new(value)))
     }
 
-    /// Construct a datavalue in [`ValueDomain::IRI`] that represents the given IRI.
+    /// Construct a datavalue in [`ValueDomain::Iri`] that represents the given IRI.
     pub fn new_iri(value: String) -> Self {
         AnyDataValue(AnyDataValueEnum::Iri(IriDataValue::new(value)))
     }
@@ -199,7 +199,7 @@ impl AnyDataValue {
 
         if let Some(xsd_type) = datatype_iri.strip_prefix(XSD_PREFIX) {
             match xsd_type {
-                "string" => Ok(Self::new_string(lexical_value)),
+                "string" => Ok(Self::new_plain_string(lexical_value)),
                 "long" => parse_integer!(lexical_value),
                 "int" => parse_integer!(lexical_value; i32::MIN as i64; i32::MAX as i64; "xsd:int"),
                 "short" => parse_integer!(lexical_value; -32768; 32767; "xsd:short"),
@@ -470,7 +470,7 @@ impl AnyDataValue {
             | ValueDomain::UnsignedLong
             | ValueDomain::Boolean
             | ValueDomain::Other
-            | ValueDomain::String
+            | ValueDomain::PlainString
             | ValueDomain::LanguageTaggedString
             | ValueDomain::Iri
             | ValueDomain::Null => {
@@ -506,7 +506,7 @@ impl AnyDataValue {
             | ValueDomain::UnsignedLong
             | ValueDomain::Boolean
             | ValueDomain::Other
-            | ValueDomain::String
+            | ValueDomain::PlainString
             | ValueDomain::LanguageTaggedString
             | ValueDomain::Iri => {
                 // TODO: Do we really need to clone? At least if the value is known, it should not be necessary. Maybe move into add method?
@@ -565,7 +565,7 @@ impl DataValue for AnyDataValue {
     delegate! {
         to match &self.0 {
             AnyDataValueEnum::Boolean(value) => value,
-            AnyDataValueEnum::String(value)=> value,
+            AnyDataValueEnum::PlainString(value)=> value,
             AnyDataValueEnum::LanguageTaggedString(value) => value,
             AnyDataValueEnum::Iri(value) => value,
             AnyDataValueEnum::Float(value) => value,
@@ -619,7 +619,7 @@ impl std::hash::Hash for AnyDataValue {
     delegate! {
         to match &self.0 {
             AnyDataValueEnum::Boolean(value) => value,
-            AnyDataValueEnum::String(value)=> value,
+            AnyDataValueEnum::PlainString(value)=> value,
             AnyDataValueEnum::LanguageTaggedString(value) => value,
             AnyDataValueEnum::Iri(value) => value,
             AnyDataValueEnum::Float(value) => value,
@@ -645,7 +645,7 @@ impl std::fmt::Display for AnyDataValue {
     delegate! {
         to match &self.0 {
             AnyDataValueEnum::Boolean(value) => value,
-            AnyDataValueEnum::String(value)=> value,
+            AnyDataValueEnum::PlainString(value)=> value,
             AnyDataValueEnum::LanguageTaggedString(value) => value,
             AnyDataValueEnum::Iri(value) => value,
             AnyDataValueEnum::Float(value) => value,
@@ -678,7 +678,9 @@ impl std::fmt::Display for AnyDataValue {
 impl PartialEq for AnyDataValue {
     fn eq(&self, other: &Self) -> bool {
         match (&self.0, &other.0) {
-            (AnyDataValueEnum::String(dv), AnyDataValueEnum::String(dv_other)) => dv == dv_other,
+            (AnyDataValueEnum::PlainString(dv), AnyDataValueEnum::PlainString(dv_other)) => {
+                dv == dv_other
+            }
             (AnyDataValueEnum::Iri(dv), AnyDataValueEnum::Iri(dv_other)) => dv == dv_other,
             (
                 AnyDataValueEnum::LanguageTaggedString(dv),
@@ -711,7 +713,7 @@ impl Ord for AnyDataValue {
         let dom_order = self.value_domain().cmp(&other.value_domain());
         if let std::cmp::Ordering::Equal = dom_order {
             match (&self.0, &other.0) {
-                (AnyDataValueEnum::String(dv), AnyDataValueEnum::String(dv_other)) => {
+                (AnyDataValueEnum::PlainString(dv), AnyDataValueEnum::PlainString(dv_other)) => {
                     dv.cmp(&dv_other)
                 }
                 (AnyDataValueEnum::Iri(dv), AnyDataValueEnum::Iri(dv_other)) => dv.cmp(&dv_other),
@@ -816,7 +818,7 @@ impl From<OtherDataValue> for AnyDataValue {
 
 impl From<StringDataValue> for AnyDataValue {
     fn from(value: StringDataValue) -> Self {
-        AnyDataValue(AnyDataValueEnum::String(value))
+        AnyDataValue(AnyDataValueEnum::PlainString(value))
     }
 }
 
@@ -846,14 +848,14 @@ mod test {
     #[test]
     fn anydatavalue_string() {
         let value = "Hello world";
-        let dv = AnyDataValue::new_string(value.to_string());
+        let dv = AnyDataValue::new_plain_string(value.to_string());
 
         assert_eq!(dv.lexical_value(), value.to_string());
         assert_eq!(
             dv.datatype_iri(),
             "http://www.w3.org/2001/XMLSchema#string".to_string()
         );
-        assert_eq!(dv.value_domain(), ValueDomain::String);
+        assert_eq!(dv.value_domain(), ValueDomain::PlainString);
 
         assert_eq!(dv.to_plain_string(), Some(value.to_string()));
         assert_eq!(dv.to_plain_string_unchecked(), value.to_string());
@@ -1019,7 +1021,7 @@ mod test {
         let dv_i64 = AnyDataValue::new_integer_from_i64(42);
         let dv_u64 = AnyDataValue::new_integer_from_u64(42);
         let dv_u64_2 = AnyDataValue::new_integer_from_u64(43);
-        let dv_string = AnyDataValue::new_string("42".to_string());
+        let dv_string = AnyDataValue::new_plain_string("42".to_string());
         let dv_iri = AnyDataValue::new_iri("42".to_string());
         let dv_lang_string =
             AnyDataValue::new_language_tagged_string("42".to_string(), "en-GB".to_string());
@@ -1143,7 +1145,7 @@ mod test {
 
         assert_eq!(
             string_res,
-            Ok(AnyDataValue::new_string("Hello World.".to_string()))
+            Ok(AnyDataValue::new_plain_string("Hello World.".to_string()))
         );
     }
 

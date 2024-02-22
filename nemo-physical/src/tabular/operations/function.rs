@@ -544,19 +544,19 @@ mod test {
     fn function_repeat_multiple_types() {
         let mut dictionary = Dict::default();
         let a = dictionary
-            .add_datavalue(AnyDataValue::new_string(String::from("a")))
+            .add_datavalue(AnyDataValue::new_plain_string(String::from("a")))
             .value() as u32;
         let b = dictionary
-            .add_datavalue(AnyDataValue::new_string(String::from("b")))
+            .add_datavalue(AnyDataValue::new_plain_string(String::from("b")))
             .value() as u32;
         let foo1 = dictionary
-            .add_datavalue(AnyDataValue::new_string(String::from("foo1")))
+            .add_datavalue(AnyDataValue::new_plain_string(String::from("foo1")))
             .value() as u32;
         let foo2 = dictionary
-            .add_datavalue(AnyDataValue::new_string(String::from("foo2")))
+            .add_datavalue(AnyDataValue::new_plain_string(String::from("foo2")))
             .value() as u32;
         let bar = dictionary
-            .add_datavalue(AnyDataValue::new_string(String::from("bar")))
+            .add_datavalue(AnyDataValue::new_plain_string(String::from("bar")))
             .value() as u32;
         let dictionary = RefCell::new(dictionary);
 
@@ -616,10 +616,10 @@ mod test {
     fn function_new_value() {
         let mut dictionary = Dict::default();
         let hello = dictionary
-            .add_datavalue(AnyDataValue::new_string(String::from("hello: ")))
+            .add_datavalue(AnyDataValue::new_plain_string(String::from("hello: ")))
             .value() as u32;
         let world = dictionary
-            .add_datavalue(AnyDataValue::new_string(String::from("world: ")))
+            .add_datavalue(AnyDataValue::new_plain_string(String::from("world: ")))
             .value() as u32;
         let dictionary = RefCell::new(dictionary);
 
@@ -665,15 +665,15 @@ mod test {
         let expected = vec![
             vec![
                 AnyDataValue::new_integer_from_i64(10),
-                AnyDataValue::new_string(String::from("hello: ")),
-                AnyDataValue::new_string(String::from(
+                AnyDataValue::new_plain_string(String::from("hello: ")),
+                AnyDataValue::new_plain_string(String::from(
                     "hello: \"10\"^^<http://www.w3.org/2001/XMLSchema#int>",
                 )),
             ],
             vec![
                 AnyDataValue::new_integer_from_i64(20),
-                AnyDataValue::new_string(String::from("world: ")),
-                AnyDataValue::new_string(String::from(
+                AnyDataValue::new_plain_string(String::from("world: ")),
+                AnyDataValue::new_plain_string(String::from(
                     "world: \"20\"^^<http://www.w3.org/2001/XMLSchema#int>",
                 )),
             ],

@@ -258,10 +258,10 @@ mod test {
     fn triescan_null_basic() {
         let mut dictionary = Dict::default();
         let a = dictionary
-            .add_datavalue(AnyDataValue::new_string(String::from("a")))
+            .add_datavalue(AnyDataValue::new_plain_string(String::from("a")))
             .value() as u32;
         let b = dictionary
-            .add_datavalue(AnyDataValue::new_string(String::from("b")))
+            .add_datavalue(AnyDataValue::new_plain_string(String::from("b")))
             .value() as u32;
         let dictionary = RefCell::new(dictionary);
 
@@ -295,10 +295,16 @@ mod test {
             .collect::<Vec<_>>();
 
         assert_eq!(result.len(), 2);
-        assert_eq!(result[0][0], AnyDataValue::new_string(String::from("a")));
+        assert_eq!(
+            result[0][0],
+            AnyDataValue::new_plain_string(String::from("a"))
+        );
         assert_eq!(result[0][1], AnyDataValue::new_integer_from_i64(12));
         assert_eq!(result[1][0], AnyDataValue::new_integer_from_i64(-12));
-        assert_eq!(result[1][1], AnyDataValue::new_string(String::from("b")));
+        assert_eq!(
+            result[1][1],
+            AnyDataValue::new_plain_string(String::from("b"))
+        );
 
         for row in 0..1 {
             for column in 2..5 {

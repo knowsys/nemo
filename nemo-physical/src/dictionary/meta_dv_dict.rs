@@ -112,7 +112,7 @@ impl DictionaryType {
     fn supports(&self, dv: &AnyDataValue) -> bool {
         match (self, dv.value_domain()) {
             (DictionaryType::IriDv, ValueDomain::Iri) => true,
-            (DictionaryType::StringDv, ValueDomain::String) => true,
+            (DictionaryType::StringDv, ValueDomain::PlainString) => true,
             (DictionaryType::LangStringDv, ValueDomain::LanguageTaggedString) => true,
             (DictionaryType::OtherDv, ValueDomain::Other) => true,
             (DictionaryType::NullDv, ValueDomain::Null) => true,
@@ -175,7 +175,7 @@ impl DictIterator {
         if self.position == 1 {
             self.position = 2; // move on, whatever happens
             match dv.value_domain() {
-                ValueDomain::String => return md.string_dict,
+                ValueDomain::PlainString => return md.string_dict,
                 ValueDomain::LanguageTaggedString => return md.langstring_dict,
                 ValueDomain::Iri => return md.iri_dict,
                 ValueDomain::Other => return md.other_dict,
@@ -609,8 +609,10 @@ mod test {
         let mut dict = MetaDvDictionary::new();
 
         let mut dvs = Vec::new();
-        dvs.push(AnyDataValue::new_string("http://example.org".to_string()));
-        dvs.push(AnyDataValue::new_string("another string".to_string()));
+        dvs.push(AnyDataValue::new_plain_string(
+            "http://example.org".to_string(),
+        ));
+        dvs.push(AnyDataValue::new_plain_string("another string".to_string()));
         dvs.push(AnyDataValue::new_iri("http://example.org".to_string()));
         dvs.push(AnyDataValue::new_language_tagged_string(
             "Hallo".to_string(),

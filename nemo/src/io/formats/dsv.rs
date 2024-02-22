@@ -147,7 +147,7 @@ impl DsvHandler {
             } else {
                 return Err(ImportExportError::invalid_att_value_error(
                     PARAMETER_NAME_DSV_DELIMITER,
-                    AnyDataValue::new_string(string.to_owned()),
+                    AnyDataValue::new_plain_string(string.to_owned()),
                     "delimiter should be exactly one byte",
                 ));
             }

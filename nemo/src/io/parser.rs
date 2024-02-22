@@ -270,7 +270,7 @@ fn parse_constant_term<'a>(
                 resolve_prefixed_rdf_literal(&prefixes.borrow(), literal)
             }),
             map(turtle::string, move |literal| {
-                AnyDataValue::new_string(literal.to_string())
+                AnyDataValue::new_plain_string(literal.to_string())
             }),
         )),
     )
@@ -472,7 +472,7 @@ impl<'a> RuleParser<'a> {
                                             AnyDataValue::new_iri(
                                                 PARAMETER_NAME_RESOURCE.to_string(),
                                             ),
-                                            AnyDataValue::new_string(filename.to_string()),
+                                            AnyDataValue::new_plain_string(filename.to_string()),
                                         ),
                                         (
                                             AnyDataValue::new_iri(
@@ -482,7 +482,7 @@ impl<'a> RuleParser<'a> {
                                                 vec![VALUE_FORMAT_ANY; arity]
                                                     .iter()
                                                     .map(|format| {
-                                                        AnyDataValue::new_string(
+                                                        AnyDataValue::new_plain_string(
                                                             (*format).to_string(),
                                                         )
                                                     })
@@ -510,7 +510,7 @@ impl<'a> RuleParser<'a> {
                                             AnyDataValue::new_iri(
                                                 PARAMETER_NAME_RESOURCE.to_string(),
                                             ),
-                                            AnyDataValue::new_string(filename.to_string()),
+                                            AnyDataValue::new_plain_string(filename.to_string()),
                                         ),
                                         (
                                             AnyDataValue::new_iri(
@@ -520,7 +520,7 @@ impl<'a> RuleParser<'a> {
                                                 vec![VALUE_FORMAT_ANY; arity]
                                                     .iter()
                                                     .map(|format| {
-                                                        AnyDataValue::new_string(
+                                                        AnyDataValue::new_plain_string(
                                                             (*format).to_string(),
                                                         )
                                                     })
@@ -548,7 +548,7 @@ impl<'a> RuleParser<'a> {
                                             AnyDataValue::new_iri(
                                                 PARAMETER_NAME_RESOURCE.to_string(),
                                             ),
-                                            AnyDataValue::new_string(filename.to_string()),
+                                            AnyDataValue::new_plain_string(filename.to_string()),
                                         ),
                                         (
                                             AnyDataValue::new_iri(
@@ -558,7 +558,7 @@ impl<'a> RuleParser<'a> {
                                                 vec![VALUE_FORMAT_ANY; arity]
                                                     .iter()
                                                     .map(|format| {
-                                                        AnyDataValue::new_string(
+                                                        AnyDataValue::new_plain_string(
                                                             (*format).to_string(),
                                                         )
                                                     })
@@ -1533,7 +1533,7 @@ mod test {
             let attributes = MapDataValue::from_iter([
                 (
                     AnyDataValue::new_iri(PARAMETER_NAME_RESOURCE.to_string()),
-                    AnyDataValue::new_string(filename.to_string()),
+                    AnyDataValue::new_plain_string(filename.to_string()),
                 ),
                 (
                     AnyDataValue::new_iri(PARAMETER_NAME_FORMAT.to_string()),
@@ -1543,7 +1543,7 @@ mod test {
                             usize::try_from(arity).expect("required for these tests")
                         ]
                         .iter()
-                        .map(|format| AnyDataValue::new_string((*format).to_string()))
+                        .map(|format| AnyDataValue::new_plain_string((*format).to_string()))
                         .collect::<Vec<AnyDataValue>>(),
                     )
                     .into(),
@@ -1687,7 +1687,7 @@ mod test {
         let expected_fact = Fact(Atom::new(
             p,
             vec![Term::Primitive(PrimitiveTerm::GroundTerm(
-                AnyDataValue::new_string(v),
+                AnyDataValue::new_plain_string(v),
             ))],
         ));
 
@@ -1706,7 +1706,7 @@ mod test {
         let expected_fact = Fact(Atom::new(
             p,
             vec![Term::Primitive(PrimitiveTerm::GroundTerm(
-                AnyDataValue::new_string(v),
+                AnyDataValue::new_plain_string(v),
             ))],
         ));
 
@@ -2320,7 +2320,7 @@ mod test {
 
         let pairs = vec![
             (
-                AnyDataValue::new_string("23".to_string()),
+                AnyDataValue::new_plain_string("23".to_string()),
                 AnyDataValue::new_integer_from_i64(42),
             ),
             (

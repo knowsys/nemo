@@ -989,14 +989,14 @@ mod test {
         let attributes = MapDataValue::from_iter([
             (
                 AnyDataValue::new_iri(PARAMETER_NAME_RESOURCE.to_string()),
-                AnyDataValue::new_string("".to_string()),
+                AnyDataValue::new_plain_string("".to_string()),
             ),
             (
                 AnyDataValue::new_iri(PARAMETER_NAME_FORMAT.to_string()),
                 TupleDataValue::from_iter(
                     vec![VALUE_FORMAT_ANY; arity]
                         .iter()
-                        .map(|format| AnyDataValue::new_string((*format).to_string()))
+                        .map(|format| AnyDataValue::new_plain_string((*format).to_string()))
                         .collect::<Vec<AnyDataValue>>(),
                 )
                 .into(),

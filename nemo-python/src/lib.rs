@@ -151,7 +151,7 @@ fn datavalue_to_python(py: Python<'_>, v: AnyDataValue) -> PyResult<&PyAny> {
             };
             Ok(Py::new(py, lit)?.to_object(py).into_ref(py))
         }
-        nemo::datavalues::ValueDomain::String | nemo::datavalues::ValueDomain::Iri => {
+        nemo::datavalues::ValueDomain::PlainString | nemo::datavalues::ValueDomain::Iri => {
             Ok(v.canonical_string().into_py(py).into_ref(py))
         }
         nemo::datavalues::ValueDomain::Double => Ok(v.to_f64_unchecked().into_py(py).into_ref(py)),
