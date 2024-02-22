@@ -46,7 +46,8 @@ where
     T: ColumnDataType,
 {
     /// Create a new inclusive [IntervalBoundConstant].
-    pub fn inclusive(value: T) -> Self {
+    #[allow(dead_code)]
+    pub(crate) fn inclusive(value: T) -> Self {
         Self {
             boundary_type: BoundaryType::Inclusive,
             value,
@@ -54,7 +55,8 @@ where
     }
 
     /// Create a new exclusive [IntervalBoundConstant].
-    pub fn exclusive(value: T) -> Self {
+    #[allow(dead_code)]
+    pub(crate) fn exclusive(value: T) -> Self {
         Self {
             boundary_type: BoundaryType::Exclusive,
             value,
@@ -98,7 +100,8 @@ pub(crate) struct IntervalBoundVariable {
 
 impl IntervalBoundVariable {
     /// Create a new inclusive [IntervalBoundVariable].
-    pub fn inclusive(input_index: usize) -> Self {
+    #[allow(dead_code)]
+    pub(crate) fn inclusive(input_index: usize) -> Self {
         Self {
             boundary_type: BoundaryType::Inclusive,
             input_index,
@@ -106,7 +109,8 @@ impl IntervalBoundVariable {
     }
 
     /// Create a new inclusive [IntervalBoundVariable].
-    pub fn exclusive(input_index: usize) -> Self {
+    #[allow(dead_code)]
+    pub(crate) fn exclusive(input_index: usize) -> Self {
         Self {
             boundary_type: BoundaryType::Exclusive,
             input_index,
@@ -145,7 +149,8 @@ where
     T: 'a + ColumnDataType,
 {
     /// Create a new [ColumnScanFilterInterval].
-    pub fn new(
+    #[allow(dead_code)]
+    pub(crate) fn new(
         value_scan: &'a ColumnScanCell<'a, T>,
         input_scans: Vec<&'a ColumnScanCell<'a, T>>,
         input_lower: Vec<IntervalBoundVariable>,

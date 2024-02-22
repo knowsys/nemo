@@ -2,7 +2,7 @@
 //! Data values are conceived on this level as canonical representations of unique (semantic)
 //! values across a number of domains (integers, strings, etc.).
 
-pub mod syntax;
+pub(crate) mod syntax;
 
 /// Module to define the general [DataValue] trait.
 pub mod datavalue;
@@ -43,6 +43,7 @@ pub use tuple_datavalue::TupleDataValue;
 /// Module to define [DataValue] implementation for map values.
 pub mod map_datavalue;
 pub use map_datavalue::MapDataValue;
+
 /// Module to define [DataValue] implementations for arbitrary values.
 pub mod any_datavalue;
 pub use any_datavalue::AnyDataValue;

@@ -12,11 +12,6 @@ pub(crate) struct GenericStringDictionary<B: GlobalBytesBuffer> {
     bytes_dict: BytesDictionary<B>,
 }
 impl<B: GlobalBytesBuffer> GenericStringDictionary<B> {
-    /// Construct a new and empty string dictionary.
-    pub(crate) fn new() -> Self {
-        Self::default()
-    }
-
     /// Adds a new string to the dictionary. If the string is not known yet, it will
     /// be assigned a new id.
     ///
@@ -171,7 +166,7 @@ mod test {
 
     #[test]
     fn empty_str() {
-        let mut dict = StringDictionary::new();
+        let mut dict = StringDictionary::default();
         assert_eq!(dict.add_str(""), AddResult::Fresh(0));
         assert_eq!(dict.id_to_string(0), Some("".to_string()));
         assert_eq!(dict.str_to_id(""), Some(0));
@@ -181,7 +176,7 @@ mod test {
 
     #[test]
     fn mark_str() {
-        let mut dict = StringDictionary::new();
+        let mut dict = StringDictionary::default();
 
         assert_eq!(dict.add_str("entry1"), AddResult::Fresh(0));
         assert_eq!(dict.add_str("entry2"), AddResult::Fresh(1));

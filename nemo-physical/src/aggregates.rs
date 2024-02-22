@@ -4,5 +4,6 @@
 //! where these values may correspond to dictionary entries in arbitrary order.
 //! Thus, any users of this module have to ensure they use the aggregate operations in a logically meaningful way.
 
-pub mod operation;
 pub(crate) mod processors;
+
+pub mod operation;

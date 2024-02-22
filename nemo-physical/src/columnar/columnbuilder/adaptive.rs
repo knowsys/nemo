@@ -72,7 +72,7 @@ where
     T: ColumnDataType + Default,
 {
     /// Constructor.
-    pub fn _new(
+    pub(crate) fn _new(
         decision_threshold: ColumnImplDecisionThreshold,
         target_min_length_for_rle_elements: TargetMinLengthForRleElements,
     ) -> ColumnBuilderAdaptive<T> {

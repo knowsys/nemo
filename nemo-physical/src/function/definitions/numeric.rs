@@ -4,7 +4,7 @@ mod double;
 mod float;
 mod integer64;
 
-pub(crate) mod traits;
+pub mod traits;
 
 use crate::{
     datatypes::{Double, Float},

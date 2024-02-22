@@ -1,5 +1,5 @@
 use super::run_length_encodable::FloatingStep;
-use super::{Float, FloatIsNaN, FloorToUsize, RunLengthEncodable};
+use super::{FloatIsNaN, FloorToUsize, RunLengthEncodable};
 use crate::error::{Error, ReadingError};
 use crate::function::definitions::numeric::traits::{CheckedPow, CheckedSquareRoot};
 use num::traits::CheckedNeg;
@@ -40,36 +40,6 @@ impl Double {
         }
 
         Self(value)
-    }
-
-    /// Return this value as an [i64], provided that
-    /// this is a finite number without any fractional part
-    /// that can fit into an [i64].
-    ///
-    /// Returns `None` otherwise.
-    pub(crate) fn as_i64(&self) -> Option<i64> {
-        if self.0.round() == self.0 {
-            #[allow(clippy::cast_possible_truncation)]
-            Some(self.0 as i64)
-        } else {
-            None
-        }
-    }
-
-    /// Create a [Double] from a [i64].
-    pub(crate) fn from_i64(value: i64) -> Option<Double> {
-        Double::new(value as f64).ok()
-    }
-
-    /// Create a [Double] from a [u64].
-    pub(crate) fn from_u64(value: u64) -> Option<Double> {
-        Double::new(value as f64).ok()
-    }
-
-    /// Converts this value into [Float].
-    pub(crate) fn as_float(&self) -> Option<Float> {
-        #[allow(clippy::cast_possible_truncation)]
-        Float::new(self.0 as f32).ok()
     }
 
     /// Computes the absolute value.

@@ -156,43 +156,16 @@ impl ChaseProgram {
         Default::default()
     }
 
-    /// Get the base IRI, if set.
-    #[must_use]
-    pub fn base(&self) -> Option<String> {
-        self.base.clone()
-    }
-
     /// Return all rules in the program - immutable.
     #[must_use]
     pub fn rules(&self) -> &Vec<ChaseRule> {
         &self.rules
     }
 
-    /// Return all rules in the program - mutable.
-    #[must_use]
-    pub fn rules_mut(&mut self) -> &mut Vec<ChaseRule> {
-        &mut self.rules
-    }
-
     /// Return all facts in the program.
     #[must_use]
     pub fn facts(&self) -> &Vec<ChaseFact> {
         &self.facts
-    }
-
-    /// Return a HashSet of all predicates in the program (in rules and facts).
-    #[must_use]
-    pub fn predicates(&self) -> HashSet<Identifier> {
-        self.rules()
-            .iter()
-            .flat_map(|rule| {
-                rule.head()
-                    .iter()
-                    .map(|atom| atom.predicate())
-                    .chain(rule.all_body().map(|atom| atom.predicate()))
-            })
-            .chain(self.facts().iter().map(|atom| atom.predicate()))
-            .collect()
     }
 
     /// Return a HashSet of all idb predicates (predicates occuring rule heads) in the program.
@@ -202,15 +175,6 @@ impl ChaseProgram {
             .iter()
             .flat_map(|rule| rule.head())
             .map(|atom| atom.predicate())
-            .collect()
-    }
-
-    /// Return a HashSet of all edb predicates (all predicates minus idb predicates) in the program.
-    #[must_use]
-    pub fn edb_predicates(&self) -> HashSet<Identifier> {
-        self.predicates()
-            .difference(&self.idb_predicates())
-            .cloned()
             .collect()
     }
 
@@ -224,23 +188,6 @@ impl ChaseProgram {
     /// Return all exports in the program.
     pub fn exports(&self) -> impl Iterator<Item = &(Identifier, Box<dyn ImportExportHandler>)> {
         self.export_handlers.iter()
-    }
-
-    /// Return an Iterator over all output predicates
-    pub fn output_predicates(&self) -> impl Iterator<Item = &Identifier> {
-        self.output_predicates.iter()
-    }
-
-    /// Return all prefixes in the program.
-    #[must_use]
-    pub fn prefixes(&self) -> &HashMap<String, String> {
-        &self.prefixes
-    }
-
-    /// Look up a given prefix.
-    #[must_use]
-    pub fn resolve_prefix(&self, tag: &str) -> Option<String> {
-        self.prefixes.get(tag).cloned()
     }
 
     /// Returns the [AnyDataValue]s used as constants in the rules of the program.

@@ -20,7 +20,7 @@ impl LangStringDataValue {
     ///
     /// TODO: Should we normalize the lang_tag to lower case? This is allowed and might be needed to correct
     /// equality, but it does undo the (common?) formatting of things like `en-GB`.
-    pub fn new(string: String, lang_tag: String) -> Self {
+    pub(crate) fn new(string: String, lang_tag: String) -> Self {
         LangStringDataValue(string, lang_tag)
     }
 }

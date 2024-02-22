@@ -25,7 +25,7 @@ pub struct MapDataValue {
 
 impl MapDataValue {
     /// Constructor.
-    pub fn new<T: IntoIterator<Item = (AnyDataValue, AnyDataValue)>>(
+    pub(crate) fn new<T: IntoIterator<Item = (AnyDataValue, AnyDataValue)>>(
         label: Option<IriDataValue>,
         pairs_iter: T,
     ) -> Self {

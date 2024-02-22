@@ -35,7 +35,7 @@ enum OutputColumn {
 
 /// Used to create [TrieScanFunction]
 #[derive(Debug, Clone)]
-pub struct GeneratorFunction {
+pub(crate) struct GeneratorFunction {
     /// For each output column
     /// either contains the index to the input columns it is derived from
     /// or the [StackProgram] used to compute it
@@ -47,7 +47,7 @@ pub struct GeneratorFunction {
 
 impl GeneratorFunction {
     /// Create a new [GeneratorFunction]
-    pub fn new(output: OperationTable, functions: &FunctionAssignment) -> Self {
+    pub(crate) fn new(output: OperationTable, functions: &FunctionAssignment) -> Self {
         let mut output_columns = Vec::<OutputColumn>::new();
         let mut input_indices = Vec::<bool>::new();
 
@@ -172,7 +172,7 @@ impl OperationGenerator for GeneratorFunction {
 /// [PartialTrieScan] which introduced additional columns which contain the result
 /// of evaluating provided functions over the columns of an input trie
 #[derive(Debug)]
-pub struct TrieScanFunction<'a> {
+pub(crate) struct TrieScanFunction<'a> {
     /// Input trie scan the content of which is used for the definition of the new columns
     trie_scan: Box<TrieScanEnum<'a>>,
     /// Dictionary used to translate column values in [AnyDataValue] for evaluation

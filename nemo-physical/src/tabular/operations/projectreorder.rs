@@ -39,7 +39,7 @@ impl GeneratorProjectReorder {
     ///
     /// # Panics
     /// Panics if the above condition is not met.
-    pub fn new(output: OperationTable, input: OperationTable) -> Self {
+    pub(crate) fn new(output: OperationTable, input: OperationTable) -> Self {
         let projectreordering = ProjectReordering::from_transformation(&input, &output);
         let arity_output = output.len();
         let mut last_used_layer: usize = 0;
@@ -62,7 +62,7 @@ impl GeneratorProjectReorder {
     /// Create a [GeneratorProjectReorder],
     /// which transforms a [Trie] with a given input [ColumnOrder]
     /// into a [Trie] with the same contents but in the output [ColumnOrder].
-    pub fn from_reordering(source: ColumnOrder, target: ColumnOrder, arity: usize) -> Self {
+    pub(crate) fn from_reordering(source: ColumnOrder, target: ColumnOrder, arity: usize) -> Self {
         let mut result_map = HashMap::<usize, usize>::new();
 
         for input in 0..arity {
@@ -80,7 +80,10 @@ impl GeneratorProjectReorder {
     }
 
     /// Apply the operation to a [PartialTrieScan].
-    pub fn apply_operation_partial<'a, Scan: PartialTrieScan<'a>>(&self, trie_scan: Scan) -> Trie {
+    pub(crate) fn apply_operation_partial<'a, Scan: PartialTrieScan<'a>>(
+        &self,
+        trie_scan: Scan,
+    ) -> Trie {
         debug_assert!(trie_scan.arity() == self.projectreordering.domain_size());
         debug_assert!(self.last_used_layer < trie_scan.arity());
 
@@ -112,7 +115,7 @@ impl GeneratorProjectReorder {
     }
 
     /// Return whether this operation would leave the input [Trie] unchanged.
-    pub fn is_noop(&self) -> bool {
+    pub(crate) fn is_noop(&self) -> bool {
         self.projectreordering.is_identity()
     }
 }

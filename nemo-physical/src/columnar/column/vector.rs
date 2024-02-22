@@ -14,13 +14,13 @@ use super::Column;
 
 /// Simple implementation of [`Column`] that uses Vec to store data.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ColumnVector<T> {
+pub(crate) struct ColumnVector<T> {
     data: Vec<T>,
 }
 
 impl<T: Debug + Copy + Ord> ColumnVector<T> {
     /// Constructs a new ColumnVector from a vector of the suitable type.
-    pub fn new(data: Vec<T>) -> ColumnVector<T> {
+    pub(crate) fn new(data: Vec<T>) -> ColumnVector<T> {
         let mut data = data;
         data.shrink_to_fit();
 
@@ -61,7 +61,7 @@ impl<T> ByteSized for ColumnVector<T> {
 
 /// Simple implementation of [`ColumnScan`] for a [`ColumnVector`].
 #[derive(Debug)]
-pub struct ColumnScanVector<'a, T> {
+pub(crate) struct ColumnScanVector<'a, T> {
     column: &'a ColumnVector<T>,
     pos: Option<usize>,
     interval: Range<usize>,
@@ -75,7 +75,7 @@ where
     const SEEK_BINARY_SEARCH: usize = 10;
 
     /// Constructs a new [`ColumnScanVector`] for a Column.
-    pub fn new(column: &'a ColumnVector<T>) -> Self {
+    pub(crate) fn new(column: &'a ColumnVector<T>) -> Self {
         Self {
             column,
             pos: None,
@@ -83,43 +83,11 @@ where
         }
     }
 
-    /// Constructs a new [`ColumnScanVector`] for a Column, narrowed
-    /// to the given interval.
-    pub fn narrowed(column: &'a ColumnVector<T>, interval: Range<usize>) -> Self {
-        debug_assert!(interval.end > interval.start);
-
-        let result = Self {
-            column,
-            pos: None,
-            interval,
-        };
-        result.validate_interval();
-        result
-    }
-
     fn validate_interval(&self) {
         assert!(
             self.interval.end <= self.column.len(),
             "Cannot narrow to an interval larger than the column."
         );
-    }
-
-    /// Lifts any restriction of the interval to some interval.
-    pub fn widen(&mut self) -> &mut Self {
-        self.interval = 0..self.column.len();
-        self.pos = None;
-        self
-    }
-
-    /// Returns the first column index of the iterator.
-    pub fn lower_bound(&self) -> usize {
-        self.interval.start
-    }
-
-    /// Returns the smallest column index of that is not part of the
-    /// iterator). This need not be a valid column index.
-    pub fn upper_bound(&self) -> usize {
-        self.interval.end
     }
 }
 
@@ -293,43 +261,11 @@ mod test {
     }
 
     #[test]
-    fn u64_narrowed() {
-        let test_column = get_test_column();
-        let gcs = ColumnScanVector::narrowed(&test_column, 0..2);
-        assert_eq!(gcs.collect::<Vec<_>>(), vec![1, 2]);
-        let gcs = ColumnScanVector::narrowed(&test_column, 1..2);
-        assert_eq!(gcs.collect::<Vec<_>>(), vec![2]);
-        let gcs = ColumnScanVector::narrowed(&test_column, 1..3);
-        assert_eq!(gcs.collect::<Vec<_>>(), vec![2, 5]);
-        let gcs = ColumnScanVector::narrowed(&test_column, 0..3);
-        assert_eq!(gcs.collect::<Vec<_>>(), vec![1, 2, 5]);
-    }
-
-    #[test]
-    fn u64_narrow_and_widen() {
-        let test_column = get_test_column();
-        let mut gcs = ColumnScanVector::new(&test_column);
-        gcs.narrow(1..2);
-        gcs.widen();
-        assert_eq!(gcs.collect::<Vec<_>>(), vec![1, 2, 5]);
-        let mut gcs = ColumnScanVector::new(&test_column);
-        gcs.widen().narrow(1..2);
-        assert_eq!(gcs.collect::<Vec<_>>(), vec![2]);
-    }
-
-    #[test]
     #[should_panic(expected = "Cannot narrow to an interval larger than the column.")]
     fn u64_narrow_to_invalid() {
         let test_column = get_test_column();
         let mut gcs = ColumnScanVector::new(&test_column);
         gcs.narrow(1..23);
-    }
-
-    #[test]
-    #[should_panic(expected = "Cannot narrow to an interval larger than the column.")]
-    fn u64_narrowed_to_invalid() {
-        let test_column = get_test_column();
-        let _ = ColumnScanVector::narrowed(&test_column, 1..23);
     }
 
     #[test]
@@ -339,16 +275,6 @@ mod test {
         assert_eq!(gcs.next(), Some(1));
         gcs.narrow(0..2);
         assert_eq!(gcs.collect::<Vec<_>>(), vec![1, 2]);
-    }
-
-    #[test]
-    fn u64_widen_after_use() {
-        let test_column = get_test_column();
-        let mut gcs = ColumnScanVector::new(&test_column);
-        gcs.narrow(1..2);
-        assert_eq!(gcs.next(), Some(2));
-        gcs.widen();
-        assert_eq!(gcs.collect::<Vec<_>>(), vec![1, 2, 5]);
     }
 
     #[test]

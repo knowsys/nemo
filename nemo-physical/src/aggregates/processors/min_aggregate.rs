@@ -18,7 +18,7 @@ where
 }
 
 impl<A: Aggregate> MinAggregateProcessor<A> {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             phantom_data: PhantomData,
         }
@@ -44,7 +44,7 @@ where
 }
 
 impl<A: Aggregate> MinAggregateGroupProcessor<A> {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             current_min_value: None,
         }

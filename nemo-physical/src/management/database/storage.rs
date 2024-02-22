@@ -58,7 +58,7 @@ impl TableStorage {
     ///
     /// If the table is not already loaded into memory as a [Trie],
     /// this function will load the [TableSource] and transform it into a [Trie].
-    pub fn trie<'a>(&'a mut self, dictionary: &RefCell<Dict>) -> Result<&'a Trie, Error> {
+    pub(crate) fn trie<'a>(&'a mut self, dictionary: &RefCell<Dict>) -> Result<&'a Trie, Error> {
         // Load trie if not already in memory
         match self {
             TableStorage::InMemory(_) => {}
@@ -82,7 +82,7 @@ impl TableStorage {
     /// Return the [Trie] stored by this object if it is already loaded in memory.
     ///
     /// Returns `None` otherwise.
-    pub fn trie_in_memory(&self) -> Option<&Trie> {
+    pub(crate) fn trie_in_memory(&self) -> Option<&Trie> {
         match self {
             TableStorage::InMemory(trie) => Some(trie),
             TableStorage::FromSources(_) => None,
@@ -91,7 +91,7 @@ impl TableStorage {
     }
 
     /// Returns the number of columns for the table associated with this storage object.
-    pub fn arity(&self) -> usize {
+    pub(crate) fn arity(&self) -> usize {
         match self {
             TableStorage::InMemory(trie) => trie.arity(),
             TableStorage::FromSources(sources) => sources
@@ -103,7 +103,7 @@ impl TableStorage {
     }
 
     /// Return the number of rows that are stored in this table.
-    pub fn count_rows(&self) -> usize {
+    pub(crate) fn count_rows(&self) -> usize {
         match self {
             TableStorage::InMemory(trie) => trie.num_rows(),
             // TODO: Currently only counting of in-memory facts is supported, see <https://github.com/knowsys/nemo/issues/335>

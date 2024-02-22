@@ -1,15 +1,19 @@
 //! This module defines operations over tries
 
-pub mod aggregate;
-pub mod filter;
-pub mod function;
-pub mod join;
-pub mod null;
-pub mod projectreorder;
-pub mod prune;
-pub mod subtract;
-pub mod trim;
-pub mod union;
+pub(crate) mod aggregate;
+pub(crate) mod filter;
+pub(crate) mod function;
+pub(crate) mod join;
+pub(crate) mod null;
+pub(crate) mod projectreorder;
+pub(crate) mod prune;
+pub(crate) mod subtract;
+pub(crate) mod trim;
+pub(crate) mod union;
+
+pub use filter::Filter;
+pub use filter::Filters;
+pub use function::FunctionAssignment;
 
 use std::{
     cell::RefCell,

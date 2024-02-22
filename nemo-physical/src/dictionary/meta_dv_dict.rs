@@ -123,7 +123,7 @@ impl DictionaryType {
 
 /// Struct to hold relevant information about a sub-dictionary.
 #[derive(Debug)]
-pub struct DictRecord {
+pub(crate) struct DictRecord {
     /// Pointer to the actual dictionary object
     dict: Box<dyn DvDict>,
     /// Type of the dictionary

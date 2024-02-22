@@ -33,7 +33,7 @@ use nemo::{
         resource_providers::ResourceProviders,
         ImportManager,
     },
-    meta::{timing::TimedDisplay, TimedCode},
+    meta::timing::{TimedCode, TimedDisplay},
     model::ExportDirective,
 };
 

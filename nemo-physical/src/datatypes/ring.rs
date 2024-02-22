@@ -5,7 +5,7 @@ use std::{
 };
 
 /// Trait representing rings (summarizes various arithmetic traits for brevity)
-pub trait Ring:
+pub(crate) trait Ring:
     Add<Output = Self> + Sub<Output = Self> + Mul<Output = Self> + Sum + Product + Zero + One
 {
 }

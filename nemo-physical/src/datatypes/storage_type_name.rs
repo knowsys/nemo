@@ -3,7 +3,7 @@ use std::{fmt::Display, hash::Hash};
 use crate::util::bitset::BitSet;
 
 /// Number of storage types
-pub const NUM_STORAGETYPES: usize = 5;
+pub(crate) const NUM_STORAGETYPES: usize = 5;
 
 /// Descriptors to refer to the possible data types at runtime.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, PartialOrd, Ord, Hash)]
@@ -35,7 +35,7 @@ pub(crate) const STORAFE_TYPES: &[StorageTypeName] = &[
 impl StorageTypeName {
     /// Returns a number that corresponds to the position of that [StorageTypeName]
     /// in the defining enum.
-    pub fn order(&self) -> usize {
+    pub(crate) fn order(&self) -> usize {
         match self {
             StorageTypeName::Id32 => 0,
             StorageTypeName::Id64 => 1,
@@ -47,7 +47,7 @@ impl StorageTypeName {
 
     /// Return a [StorageTypeName] from a number which points to a position
     /// in the defining enum.
-    pub fn from_order(index: usize) -> Self {
+    pub(crate) fn from_order(index: usize) -> Self {
         match index {
             0 => StorageTypeName::Id32,
             1 => StorageTypeName::Id64,
@@ -60,7 +60,7 @@ impl StorageTypeName {
 
     /// Return a [StorageTypeBitSet]
     /// with the bit set to 1 which corresponds to this [StorageTypeName].
-    pub fn bitset(&self) -> StorageTypeBitSet {
+    pub(crate) fn bitset(&self) -> StorageTypeBitSet {
         StorageTypeBitSet::from(BitSet::single(self.order()))
     }
 }
@@ -83,27 +83,27 @@ pub(crate) struct StorageTypeBitSet(BitSet<usize>);
 
 impl StorageTypeBitSet {
     /// Create a [StorageTypeBitSet] which contains no entries.
-    pub fn empty() -> Self {
+    pub(crate) fn empty() -> Self {
         Self(BitSet::empty())
     }
 
     /// Create a [StorageTypeBitSet] which contains every [StorageTypeName].
-    pub fn full() -> Self {
+    pub(crate) fn full() -> Self {
         Self(BitSet::full(NUM_STORAGETYPES))
     }
 
     /// Only contains the storage types included both `self` and `other`.
-    pub fn intersection(&self, other: Self) -> Self {
+    pub(crate) fn intersection(&self, other: Self) -> Self {
         Self(self.0.intersection(other.0))
     }
 
     /// Contains the storage types included in `self` or `other` (or both).
-    pub fn union(&self, other: Self) -> Self {
+    pub(crate) fn union(&self, other: Self) -> Self {
         Self(self.0.union(other.0))
     }
 
     /// Return a list of [StorageTypeName] that are contained in this [BitSet].
-    pub fn storage_types(&self) -> Vec<StorageTypeName> {
+    pub(crate) fn storage_types(&self) -> Vec<StorageTypeName> {
         let mut result = Vec::with_capacity(NUM_STORAGETYPES);
         for index in 0..NUM_STORAGETYPES {
             if self.0.get(index) {

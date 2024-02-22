@@ -17,7 +17,7 @@ impl FloatDataValue {
     ///
     /// # Errors
     /// The given `value` is NaN.
-    pub fn from_f32(value: f32) -> Result<Self, DataValueCreationError> {
+    pub(crate) fn from_f32(value: f32) -> Result<Self, DataValueCreationError> {
         if !value.is_finite() {
             return Err(DataValueCreationError::NonFiniteFloat {});
         }
@@ -28,7 +28,7 @@ impl FloatDataValue {
     ///
     /// # Panics
     /// The given `value` is NaN.
-    pub fn from_f32_unchecked(value: f32) -> Self {
+    pub(crate) fn from_f32_unchecked(value: f32) -> Self {
         if !value.is_finite() {
             panic!("floating point number must represent a finite value (neither infinity nor NaN are allowed).");
         }
@@ -94,7 +94,7 @@ impl DoubleDataValue {
     ///
     /// # Errors
     /// The given `value` is NaN or an infinity.
-    pub fn from_f64(value: f64) -> Result<Self, DataValueCreationError> {
+    pub(crate) fn from_f64(value: f64) -> Result<Self, DataValueCreationError> {
         if !value.is_finite() {
             return Err(DataValueCreationError::NonFiniteFloat {});
         }
@@ -105,7 +105,7 @@ impl DoubleDataValue {
     ///
     /// # Panics
     /// The given `value` is NaN or an infinity.
-    pub fn from_f64_unchecked(value: f64) -> Self {
+    pub(crate) fn from_f64_unchecked(value: f64) -> Self {
         if !value.is_finite() {
             panic!("floating point number must represent a finite value (neither infinity nor NaN are allowed).");
         }

@@ -43,7 +43,8 @@ where
     /// Note: This operator assumes that `reset` is called on this scan
     /// after there has been a change in `reference_scan`,
     /// i.e. this scan should appear at a lower level in the trie than the `reference_scan`.
-    pub fn new(
+    #[allow(dead_code)]
+    pub(crate) fn new(
         value_scan: &'a ColumnScanCell<'a, T>,
         reference_scan: &'a ColumnScanCell<'a, T>,
     ) -> Self {

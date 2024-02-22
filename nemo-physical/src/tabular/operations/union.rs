@@ -16,11 +16,11 @@ use super::OperationGenerator;
 
 /// Used to create a [TrieScanUnion]
 #[derive(Debug, Clone, Copy, Default)]
-pub struct GeneratorUnion {}
+pub(crate) struct GeneratorUnion {}
 
 impl GeneratorUnion {
     /// Create a new [GeneratorUnion].
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {}
     }
 }
@@ -90,7 +90,7 @@ impl OperationGenerator for GeneratorUnion {
 
 /// [PartialTrieScan] which represents the union of a list of [PartialTrieScan]s
 #[derive(Debug)]
-pub struct TrieScanUnion<'a> {
+pub(crate) struct TrieScanUnion<'a> {
     /// Input trie scans over of which the union is computed
     trie_scans: Vec<TrieScanEnum<'a>>,
 

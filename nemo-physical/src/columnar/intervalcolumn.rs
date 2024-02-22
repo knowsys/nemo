@@ -58,7 +58,7 @@ where
     T: ColumnDataType,
     LookupMethod: IntervalLookup,
 {
-    pub fn interval_bounds(
+    pub(crate) fn interval_bounds(
         &self,
         storage_type: StorageTypeName,
         index: usize,
@@ -121,7 +121,7 @@ where
     LookupMethod: IntervalLookup,
 {
     /// Create a new [IntervalColumnT].
-    pub fn new(
+    pub(crate) fn new(
         column_id32: IntervalColumn<u32, LookupMethod>,
         column_id64: IntervalColumn<u64, LookupMethod>,
         column_int64: IntervalColumn<i64, LookupMethod>,
@@ -139,7 +139,7 @@ where
 
     /// For a given [StorageTypeName],
     /// checks if the associated columns contains no data values.
-    pub fn is_empty_typed(&self, storage_type_name: StorageTypeName) -> bool {
+    pub(crate) fn is_empty_typed(&self, storage_type_name: StorageTypeName) -> bool {
         match storage_type_name {
             StorageTypeName::Id32 => self.column_id32.is_empty(),
             StorageTypeName::Id64 => self.column_id64.is_empty(),
@@ -150,7 +150,7 @@ where
     }
 
     /// Create a [ColumnScanRainbow] from iterators of the internal columns.
-    pub fn iter(&self) -> ColumnScanRainbow {
+    pub(crate) fn iter(&self) -> ColumnScanRainbow {
         ColumnScanRainbow {
             scan_id32: ColumnScanCell::new(self.column_id32.iter()),
             scan_id64: ColumnScanCell::new(self.column_id64.iter()),
@@ -160,7 +160,7 @@ where
         }
     }
 
-    pub fn interval_bounds(
+    pub(crate) fn interval_bounds(
         &self,
         previous_type: StorageTypeName,
         previous_index: usize,
@@ -186,7 +186,7 @@ where
     }
 
     /// Return the number of data entries in this column
-    pub fn num_data(&self) -> usize {
+    pub(crate) fn num_data(&self) -> usize {
         self.column_id32.data.len()
             + self.column_id64.data.len()
             + self.column_int64.data.len()
@@ -241,11 +241,11 @@ where
     T: ColumnDataType + Default,
     LookupMethod: IntervalLookup,
 {
-    pub fn add_data(&mut self, value: T) {
+    pub(crate) fn add_data(&mut self, value: T) {
         self.data.add(value);
     }
 
-    pub fn finish_interval(&mut self, storage_type: StorageTypeName) {
+    pub(crate) fn finish_interval(&mut self, storage_type: StorageTypeName) {
         if self.data.count() > self.last_data_count {
             self.interval_lookup
                 .add_interval(storage_type, self.intervals.count());
@@ -313,7 +313,7 @@ where
     LookupMethod: IntervalLookup,
 {
     /// Add currently cached value into the data column builder.
-    pub fn commit_value(&mut self) {
+    pub(crate) fn commit_value(&mut self) {
         if let Some(value) = self.current_data_item {
             match value {
                 StorageValueT::Id32(value) => self.builder_id32.add_data(value),
@@ -328,7 +328,7 @@ where
     /// Add a new value into the builder.
     ///
     /// Returns `true` if the value is different from the last added value and `false` otherwise.
-    pub fn add_value(&mut self, value: StorageValueT) -> bool {
+    pub(crate) fn add_value(&mut self, value: StorageValueT) -> bool {
         match self.current_data_item {
             None => {
                 self.current_data_item = Some(value);
@@ -348,7 +348,7 @@ where
     }
 
     /// Signify to the builder that all values of the current interval have been added.
-    pub fn finish_interval(&mut self, previous_type: StorageTypeName) {
+    pub(crate) fn finish_interval(&mut self, previous_type: StorageTypeName) {
         self.commit_value();
 
         self.builder_id32.finish_interval(previous_type);
@@ -361,7 +361,7 @@ where
     }
 
     /// Finish processing and return an [IntervalColumnT].
-    pub fn finalize(self) -> IntervalColumnT<LookupMethod> {
+    pub(crate) fn finalize(self) -> IntervalColumnT<LookupMethod> {
         IntervalColumnT::new(
             self.builder_id32.finalize(),
             self.builder_id64.finalize(),
@@ -405,7 +405,7 @@ where
     /// This function requires the [StorageTypeName]
     /// under which the first interval will fall.
     /// This can be set to `None` if it is the builder for the first column.
-    pub fn new(type_previous_layer: Option<StorageTypeName>) -> Self {
+    pub(crate) fn new(type_previous_layer: Option<StorageTypeName>) -> Self {
         let type_previous_layer = type_previous_layer.unwrap_or(StorageTypeName::Id32);
 
         Self {
@@ -419,7 +419,7 @@ where
     }
 
     /// Add a new value into the builder.
-    pub fn add_value(&mut self, value: StorageValueT) {
+    pub(crate) fn add_value(&mut self, value: StorageValueT) {
         match value {
             StorageValueT::Id32(value) => self.builder_id32.add_data(value),
             StorageValueT::Id64(value) => self.builder_id64.add_data(value),
@@ -430,7 +430,7 @@ where
     }
 
     /// Signify to the builder that all values of the current interval have been added.
-    pub fn finish_interval(&mut self, previous_type: StorageTypeName) {
+    pub(crate) fn finish_interval(&mut self, previous_type: StorageTypeName) {
         self.builder_id32.finish_interval(self.type_previous_layer);
         self.builder_id64.finish_interval(self.type_previous_layer);
         self.builder_int64.finish_interval(self.type_previous_layer);
@@ -442,7 +442,7 @@ where
     }
 
     /// Finish processing and return an [IntervalColumnT].
-    pub fn finalize(mut self) -> IntervalColumnT<LookupMethod> {
+    pub(crate) fn finalize(mut self) -> IntervalColumnT<LookupMethod> {
         self.finish_interval(StorageTypeName::Id32);
 
         IntervalColumnT::new(

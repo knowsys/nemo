@@ -29,7 +29,7 @@ pub(crate) struct TrieScanPrune<'a> {
 
 impl<'a> TrieScanPrune<'a> {
     /// Create a new [TrieScanPrune].
-    pub fn new(input_trie_scan: TrieScanEnum<'a>) -> Self {
+    pub(crate) fn new(input_trie_scan: TrieScanEnum<'a>) -> Self {
         let input_trie_scan_arity = input_trie_scan.arity();
 
         let mut output_column_scans =
@@ -471,7 +471,7 @@ impl<'a> TrieScanPruneState<'a> {
     /// Moves to the next value on a given layer while ensuring that only materialized tuples are returned (see guarantees provided by [`TrieScanPrune`]).
     ///
     /// See documentation of function `advance_on_layer()` of [`TrieScanPrune`].
-    pub fn advance_on_layer(
+    pub(crate) fn advance_on_layer(
         &mut self,
         target_layer: usize,
         stay_in_type: Option<StorageTypeName>,
@@ -582,7 +582,7 @@ impl<'a> TrieScanPrune<'a> {
     /// # Panics
     ///
     /// If the underlying trie scan has not been initialized.
-    pub fn advance_on_layer(
+    pub(crate) fn advance_on_layer(
         &mut self,
         target_layer: usize,
         stay_in_type: Option<StorageTypeName>,
@@ -596,7 +596,7 @@ impl<'a> TrieScanPrune<'a> {
     /// Resets the highest peeked layer.
     ///
     /// This is required when using the [`TrieScanPrune`] as a full [`TrieScan`], where there are no column peek semantics as in a [`PartialTrieScan`].
-    pub fn clear_column_peeks(&mut self) {
+    pub(crate) fn clear_column_peeks(&mut self) {
         unsafe {
             assert!((*self.state.get()).initialized);
             (*self.state.get()).clear_highest_peeked_layer()
@@ -604,7 +604,7 @@ impl<'a> TrieScanPrune<'a> {
     }
 
     /// Return the current value the input trie is on for the given layer.
-    pub fn input_trie_value(&self, layer: usize) -> Option<StorageValueT> {
+    pub(crate) fn input_trie_value(&self, layer: usize) -> Option<StorageValueT> {
         unsafe {
             assert!((*self.state.get()).initialized);
             (*self.state.get()).current_input_trie_value(layer)

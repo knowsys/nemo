@@ -512,7 +512,7 @@ impl Term {
                 ..
             } => 1,
             Term::Binary {
-                operation: BinaryOperation::NumericSubtraction,
+                operation: BinaryOperation::NumericMultiplication,
                 ..
             } => 2,
             Term::Binary {

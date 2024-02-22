@@ -28,7 +28,7 @@ enum AggregatedOutputValue {
 
 /// Describes which columns of the input trie scan will be group-by, distinct and aggregate columns and other information about the aggregation.
 #[derive(Debug, Clone, Copy)]
-pub struct AggregationInstructions {
+pub(crate) struct AggregationInstructions {
     /// Type of the aggregate operation, which determines the aggregate processor that will be used
     pub aggregate_operation: AggregateOperation,
     /// Number of group-by columns
@@ -48,13 +48,13 @@ pub struct AggregationInstructions {
 
 impl AggregationInstructions {
     /// Returns true iff the column indices are not conflicting with each other.
-    pub fn is_valid(&self) -> bool {
+    pub(crate) fn is_valid(&self) -> bool {
         self.aggregated_column_index >= self.group_by_column_count
             && self.last_distinct_column_index >= self.aggregated_column_index
     }
 
     /// Returns the index of the aggregate output column in the output scan
-    pub fn aggregate_output_column_index(&self) -> usize {
+    pub(crate) fn aggregate_output_column_index(&self) -> usize {
         self.group_by_column_count
     }
 
@@ -94,7 +94,7 @@ impl AggregationInstructions {
 /// * Zero or more group-by columns, followed by
 /// * one aggregate output column
 #[derive(Debug)]
-pub struct TrieScanAggregate<T: TrieScan> {
+pub(crate) struct TrieScanAggregate<T: TrieScan> {
     aggregated_input_column_storage_type: StorageTypeName,
 
     input_scan: T,
@@ -120,7 +120,7 @@ struct PeekedRowInformation {
 
 impl<T: TrieScan> TrieScanAggregate<T> {
     /// Creates a new [`TrieScanAggregate`] for processing an input full [`TrieScan`]. The group-by layers will get copied, an aggregate column will be computed based on the input aggregate/distinct columns, and any other columns will get dismissed.
-    pub fn new(
+    pub(crate) fn new(
         input_scan: T,
         instructions: AggregationInstructions,
         aggregated_input_column_storage_type: StorageTypeName,
@@ -379,7 +379,7 @@ mod test {
             aggregated_column_storage_type,
         );
 
-        Trie::from_trie_scan(trie_scan_aggregate, 0)
+        Trie::from_full_trie_scan(trie_scan_aggregate, 0)
     }
 
     fn do_tries_equal(trie1: Trie, trie2: Trie) -> bool {

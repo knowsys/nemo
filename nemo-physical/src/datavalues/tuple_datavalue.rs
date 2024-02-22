@@ -17,7 +17,7 @@ pub struct TupleDataValue {
 
 impl TupleDataValue {
     /// Constructor.
-    pub fn new<T: IntoIterator<Item = AnyDataValue>>(
+    pub(crate) fn new<T: IntoIterator<Item = AnyDataValue>>(
         label: Option<IriDataValue>,
         values: T,
     ) -> Self {

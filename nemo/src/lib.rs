@@ -33,10 +33,6 @@ mod program_analysis;
 mod table_manager;
 mod util;
 
-pub use nemo_physical::meta;
-
-// we use datavalues from nemo_physical in our API, so re-export it here.
+// we use datavalues and meta from nemo_physical in our API, so re-export it here.
 pub use nemo_physical::datavalues;
-
-// TODO: this is a temporary reexport, as long as the datatype mapping is not fully implemented
-pub use nemo_physical::datatypes;
+pub use nemo_physical::meta;

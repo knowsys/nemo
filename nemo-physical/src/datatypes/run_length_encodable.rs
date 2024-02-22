@@ -9,7 +9,7 @@ use num::Zero;
 use crate::management::bytesized::ByteSized;
 
 /// Data, which can be run length compressed with increments of [`RunLengthEncodable::Step`]
-pub trait RunLengthEncodable: Zero {
+pub(crate) trait RunLengthEncodable: Zero {
     /// Increment / Decrement values in run length encoded elements
     type Step: Debug + Copy + Eq + ByteSized;
 
@@ -31,7 +31,7 @@ pub trait RunLengthEncodable: Zero {
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 /// Step value for unsigned integer types (u32, u64, usize)
-pub struct IntStep(i16);
+pub(crate) struct IntStep(i16);
 
 impl From<i16> for IntStep {
     fn from(value: i16) -> Self {
@@ -163,7 +163,7 @@ impl RunLengthEncodable for i64 {
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 /// Step type for small unsigned types like u8
-pub struct SmallIntStep(i8);
+pub(crate) struct SmallIntStep(i8);
 
 impl ByteSized for SmallIntStep {
     fn size_bytes(&self) -> ByteSize {
@@ -210,7 +210,7 @@ impl RunLengthEncodable for i8 {
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
 /// Zero-sized marker type for floating-point run-length encoding
 /// (only 0-increment is supported)
-pub struct FloatingStep;
+pub(crate) struct FloatingStep;
 
 impl ByteSized for FloatingStep {
     fn size_bytes(&self) -> ByteSize {

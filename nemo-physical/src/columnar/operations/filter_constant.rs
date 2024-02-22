@@ -38,7 +38,7 @@ where
     T: 'a + ColumnDataType,
 {
     /// Create a new [ColumnScanFilterConstant].
-    pub fn new(value_scan: &'a ColumnScanCell<'a, T>, constant: T) -> Self {
+    pub(crate) fn new(value_scan: &'a ColumnScanCell<'a, T>, constant: T) -> Self {
         Self {
             value_scan,
             constant,

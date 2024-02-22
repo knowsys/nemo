@@ -6,7 +6,7 @@ use std::{cell::UnsafeCell, fmt::Debug, ops::Range};
 
 use crate::{
     datatypes::{ColumnDataType, Double, Float, StorageTypeName, StorageValueT},
-    generate_datatype_forwarder, generate_forwarder,
+    generate_forwarder,
 };
 
 use super::{
@@ -199,7 +199,7 @@ where
     /// Assumes that column scan is a [ColumnScanUnion].
     ///
     /// Check whether the input [ColumnScan] of the given index points to the currently smallest value.
-    pub fn union_is_smallest(&self, index: usize) -> bool {
+    pub(crate) fn union_is_smallest(&self, index: usize) -> bool {
         if let Self::ColumnScanUnion(cs) = self {
             cs.is_smallest_scans(index)
         } else {
@@ -210,7 +210,7 @@ where
     /// Assumes that column scan is a [ColumnScanUnion].
     ///
     /// Set a vector that indicates which scans are currently active and should be considered
-    pub fn union_set_active(&mut self, active_scans: Vec<usize>) {
+    pub(crate) fn union_set_active(&mut self, active_scans: Vec<usize>) {
         if let Self::ColumnScanUnion(cs) = self {
             cs.set_active_scans(active_scans)
         } else {
@@ -221,7 +221,7 @@ where
     /// Assumes that column scan is a [ColumnScanSubtract].
     ///
     /// Return a vector indicating which subiterators point to the same value as the main one.
-    pub fn subtract_get_equal(&self) -> Vec<bool> {
+    pub(crate) fn subtract_get_equal(&self) -> Vec<bool> {
         if let Self::ColumnScanSubtract(cs) = self {
             cs.get_equal_values()
         } else {
@@ -232,7 +232,7 @@ where
     /// Assumes that column scan is a [ColumnScanSubtract].
     ///
     /// Set which sub iterators should be active.
-    pub fn subtract_set_active(&mut self, active_scans: Vec<bool>) {
+    pub(crate) fn subtract_set_active(&mut self, active_scans: Vec<bool>) {
         if let Self::ColumnScanSubtract(cs) = self {
             cs.set_active_scans(active_scans)
         } else {
@@ -243,7 +243,7 @@ where
     /// Assumes that column scan is a [ColumnScanConstant].
     ///
     /// Set a new constant value that will be returned by this scan.
-    pub fn constant_set(&mut self, constant: Option<T>) {
+    pub(crate) fn constant_set(&mut self, constant: Option<T>) {
         if let Self::ColumnScanConstant(scan) = self {
             scan.set_constant(constant)
         } else {
@@ -328,19 +328,19 @@ where
     T: 'a + ColumnDataType,
 {
     /// Construct a new `ColumnScanCell` from the given [ColumnScanEnum].
-    pub fn new(cs: ColumnScanEnum<'a, T>) -> Self {
+    pub(crate) fn new(cs: ColumnScanEnum<'a, T>) -> Self {
         Self(UnsafeCell::new(cs))
     }
 
     /// Forward `next` to the underlying [ColumnScanEnum].
     #[inline]
-    pub fn next(&self) -> Option<<ColumnScanEnum<'a, T> as Iterator>::Item> {
+    pub(crate) fn next(&self) -> Option<<ColumnScanEnum<'a, T> as Iterator>::Item> {
         unsafe { &mut *self.0.get() }.next()
     }
 
     /// Forward `seek` to the underlying [ColumnScanEnum].
     #[inline]
-    pub fn seek(
+    pub(crate) fn seek(
         &self,
         value: <ColumnScanEnum<'a, T> as Iterator>::Item,
     ) -> Option<<ColumnScanEnum<'a, T> as Iterator>::Item> {
@@ -349,25 +349,25 @@ where
 
     /// Forward `current` to the underlying [ColumnScanEnum].
     #[inline]
-    pub fn current(&self) -> Option<<ColumnScanEnum<'a, T> as Iterator>::Item> {
+    pub(crate) fn current(&self) -> Option<<ColumnScanEnum<'a, T> as Iterator>::Item> {
         unsafe { &mut *self.0.get() }.current()
     }
 
     /// Forward `reset` to the underlying [ColumnScanEnum].
     #[inline]
-    pub fn reset(&self) {
+    pub(crate) fn reset(&self) {
         unsafe { &mut *self.0.get() }.reset()
     }
 
     /// Forward `pos` to the underlying [ColumnScanEnum].
     #[inline]
-    pub fn pos(&self) -> Option<usize> {
+    pub(crate) fn pos(&self) -> Option<usize> {
         unsafe { &(*self.0.get()) }.pos()
     }
 
     /// Forward `narrow` to the underlying [ColumnScanEnum].
     #[inline]
-    pub fn narrow(&self, interval: Range<usize>) {
+    pub(crate) fn narrow(&self, interval: Range<usize>) {
         unsafe { &mut *self.0.get() }.narrow(interval)
     }
 
@@ -375,27 +375,27 @@ where
     /// This takes an exclusive reference as opposed to an immutable one, so that none of the
     /// mutating methods on &self can be called while the result is still available
     /// (see <https://github.com/knowsys/nemo/issues/137>)
-    pub fn union_is_smallest(&mut self, index: usize) -> bool {
+    pub(crate) fn union_is_smallest(&mut self, index: usize) -> bool {
         unsafe { &mut *self.0.get() }.union_is_smallest(index)
     }
 
     /// Forward `union_is_smallest` to the underlying [ColumnScanEnum].
-    pub fn union_set_active(&mut self, active_scans: Vec<usize>) {
+    pub(crate) fn union_set_active(&mut self, active_scans: Vec<usize>) {
         self.0.get_mut().union_set_active(active_scans);
     }
 
     /// Forward `subtract_get_equal` to the underlying [ColumnScanEnum].
-    pub fn subtract_get_equal(&mut self) -> Vec<bool> {
+    pub(crate) fn subtract_get_equal(&mut self) -> Vec<bool> {
         self.0.get_mut().subtract_get_equal()
     }
 
     /// Forward `subtract_set_active` to the underlying [ColumnScanEnum].
-    pub fn subtract_set_active(&mut self, active_scans: Vec<bool>) {
+    pub(crate) fn subtract_set_active(&mut self, active_scans: Vec<bool>) {
         unsafe { &mut *self.0.get() }.subtract_set_active(active_scans)
     }
 
     /// Forward `constant_set` to the underlying [ColumnScanEnum].
-    pub fn constant_set(&mut self, constant: Option<T>) {
+    pub(crate) fn constant_set(&mut self, constant: Option<T>) {
         unsafe { &mut *self.0.get() }.constant_set(constant)
     }
 }
@@ -407,78 +407,6 @@ where
 {
     fn from(cs: S) -> Self {
         Self(UnsafeCell::new(cs.into()))
-    }
-}
-
-/// Enum for [ColumnScan] for underlying data type
-/// TODO: Remove this after trie_scan prune is gone
-#[derive(Debug)]
-pub(crate) enum ColumnScanT<'a> {
-    /// Case u32
-    Id32(ColumnScanCell<'a, u32>),
-    /// Case u64
-    Id64(ColumnScanCell<'a, u64>),
-    /// Case i64
-    Int64(ColumnScanCell<'a, i64>),
-    /// Case Float
-    Float(ColumnScanCell<'a, Float>),
-    /// Case Double
-    Double(ColumnScanCell<'a, Double>),
-}
-
-// Generate a macro forward_to_columnscan_cell!, which takes a [ColumnScanT] and a function as arguments
-// and unfolds into a `match` statement that calls the datatype specific variant that function.
-// See `physical/util.rs` for a more detailed description of this macro.
-generate_datatype_forwarder!(forward_to_columnscan_cell);
-
-impl<'a> Iterator for ColumnScanT<'a> {
-    type Item = StorageValueT;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        forward_to_columnscan_cell!(self, next.map_to(StorageValueT))
-    }
-}
-
-impl<'a> ColumnScan for ColumnScanT<'a> {
-    fn seek(&mut self, value: Self::Item) -> Option<Self::Item> {
-        match self {
-            Self::Id32(cs) => match value {
-                Self::Item::Id32(val) => cs.seek(val).map(StorageValueT::Id32),
-                _ => None,
-            },
-            Self::Id64(cs) => match value {
-                Self::Item::Id64(val) => cs.seek(val).map(StorageValueT::Id64),
-                _ => None,
-            },
-            Self::Int64(cs) => match value {
-                Self::Item::Int64(val) => cs.seek(val).map(StorageValueT::Int64),
-                _ => None,
-            },
-            Self::Float(cs) => match value {
-                Self::Item::Float(val) => cs.seek(val).map(StorageValueT::Float),
-                _ => None,
-            },
-            Self::Double(cs) => match value {
-                Self::Item::Double(val) => cs.seek(val).map(StorageValueT::Double),
-                _ => None,
-            },
-        }
-    }
-
-    fn current(&self) -> Option<Self::Item> {
-        forward_to_columnscan_cell!(self, current.map_to(StorageValueT))
-    }
-
-    fn reset(&mut self) {
-        forward_to_columnscan_cell!(self, reset)
-    }
-
-    fn pos(&self) -> Option<usize> {
-        forward_to_columnscan_cell!(self, pos)
-    }
-
-    fn narrow(&mut self, interval: Range<usize>) {
-        forward_to_columnscan_cell!(self, narrow(interval))
     }
 }
 
@@ -499,7 +427,7 @@ pub(crate) struct ColumnScanRainbow<'a> {
 
 impl<'a> ColumnScanRainbow<'a> {
     /// Create a new [ColumnScanRainbow].
-    pub fn new(
+    pub(crate) fn new(
         scan_id32: ColumnScanEnum<'a, u32>,
         scan_id64: ColumnScanEnum<'a, u64>,
         scan_i64: ColumnScanEnum<'a, i64>,
@@ -519,7 +447,8 @@ impl<'a> ColumnScanRainbow<'a> {
     /// or the first value that is higher.
     ///
     /// Returns `None` if there is no such value.
-    pub fn seek(&mut self, value: StorageValueT) -> Option<StorageValueT> {
+    #[allow(dead_code)]
+    pub(crate) fn seek(&mut self, value: StorageValueT) -> Option<StorageValueT> {
         match value {
             StorageValueT::Id32(value) => self.scan_id32.seek(value).map(StorageValueT::Id32),
             StorageValueT::Id64(value) => self.scan_id64.seek(value).map(StorageValueT::Id64),
@@ -533,7 +462,7 @@ impl<'a> ColumnScanRainbow<'a> {
     /// and return it.
     ///
     /// Returns `None` if there is no such value.
-    pub fn next(&mut self, storage_type: StorageTypeName) -> Option<StorageValueT> {
+    pub(crate) fn next(&mut self, storage_type: StorageTypeName) -> Option<StorageValueT> {
         match storage_type {
             StorageTypeName::Id32 => self.scan_id32.next().map(StorageValueT::Id32),
             StorageTypeName::Id64 => self.scan_id64.next().map(StorageValueT::Id64),
@@ -544,7 +473,7 @@ impl<'a> ColumnScanRainbow<'a> {
     }
 
     /// Return the current value of a scan of the given [StorageTypeName].
-    pub fn current(&self, storage_type: StorageTypeName) -> Option<StorageValueT> {
+    pub(crate) fn current(&self, storage_type: StorageTypeName) -> Option<StorageValueT> {
         match storage_type {
             StorageTypeName::Id32 => self.scan_id32.current().map(StorageValueT::Id32),
             StorageTypeName::Id64 => self.scan_id64.current().map(StorageValueT::Id64),
@@ -555,7 +484,7 @@ impl<'a> ColumnScanRainbow<'a> {
     }
 
     /// Return the current position of a scan of the given [StorageTypeName].
-    pub fn pos(&mut self, storage_type: StorageTypeName) -> Option<usize> {
+    pub(crate) fn pos(&mut self, storage_type: StorageTypeName) -> Option<usize> {
         match storage_type {
             StorageTypeName::Id32 => self.scan_id32.pos(),
             StorageTypeName::Id64 => self.scan_id64.pos(),
@@ -566,7 +495,7 @@ impl<'a> ColumnScanRainbow<'a> {
     }
 
     /// Return a scan of the given [StorageTypeName] to its initial state.
-    pub fn reset(&mut self, storage_type: StorageTypeName) {
+    pub(crate) fn reset(&mut self, storage_type: StorageTypeName) {
         match storage_type {
             StorageTypeName::Id32 => self.scan_id32.reset(),
             StorageTypeName::Id64 => self.scan_id64.reset(),
@@ -578,7 +507,7 @@ impl<'a> ColumnScanRainbow<'a> {
 
     /// Restricts the iterator of the given [StorageTypeName] to the given `interval`.
     /// Resets the iterator just before the start of the interval.
-    pub fn narrow(&mut self, storage_type: StorageTypeName, interval: Range<usize>) {
+    pub(crate) fn narrow(&mut self, storage_type: StorageTypeName, interval: Range<usize>) {
         match storage_type {
             StorageTypeName::Id32 => self.scan_id32.narrow(interval),
             StorageTypeName::Id64 => self.scan_id64.narrow(interval),
@@ -590,7 +519,11 @@ impl<'a> ColumnScanRainbow<'a> {
 
     /// Assumes that column scan is a [ColumnScanUnion]
     /// and returns a vector containing the positions of the scans with the smallest values.
-    pub fn union_is_smallest(&mut self, storage_type: StorageTypeName, index: usize) -> bool {
+    pub(crate) fn union_is_smallest(
+        &mut self,
+        storage_type: StorageTypeName,
+        index: usize,
+    ) -> bool {
         match storage_type {
             StorageTypeName::Id32 => self.scan_id32.union_is_smallest(index),
             StorageTypeName::Id64 => self.scan_id64.union_is_smallest(index),
@@ -602,7 +535,11 @@ impl<'a> ColumnScanRainbow<'a> {
 
     /// Assumes that column scan is a [ColumnScanUnion]
     /// Set a vector that indicates which scans are currently active and should be considered.
-    pub fn union_set_active(&mut self, storage_type: StorageTypeName, active_scans: Vec<usize>) {
+    pub(crate) fn union_set_active(
+        &mut self,
+        storage_type: StorageTypeName,
+        active_scans: Vec<usize>,
+    ) {
         match storage_type {
             StorageTypeName::Id32 => self.scan_id32.union_set_active(active_scans),
             StorageTypeName::Id64 => self.scan_id64.union_set_active(active_scans),
@@ -614,7 +551,7 @@ impl<'a> ColumnScanRainbow<'a> {
 
     /// Assumes that column scan is a [ColumnScanSubtract]
     /// Return a vector indicating which subiterators point to the same value as the main one.
-    pub fn subtract_get_equal(&mut self, storage_type: StorageTypeName) -> Vec<bool> {
+    pub(crate) fn subtract_get_equal(&mut self, storage_type: StorageTypeName) -> Vec<bool> {
         match storage_type {
             StorageTypeName::Id32 => self.scan_id32.subtract_get_equal(),
             StorageTypeName::Id64 => self.scan_id64.subtract_get_equal(),
@@ -626,7 +563,11 @@ impl<'a> ColumnScanRainbow<'a> {
 
     /// Assumes that column scan is a [ColumnScanSubtract]
     /// Set which sub iterators should be enabled.
-    pub fn subtract_set_active(&mut self, storage_type: StorageTypeName, active_scans: Vec<bool>) {
+    pub(crate) fn subtract_set_active(
+        &mut self,
+        storage_type: StorageTypeName,
+        active_scans: Vec<bool>,
+    ) {
         match storage_type {
             StorageTypeName::Id32 => self.scan_id32.subtract_set_active(active_scans),
             StorageTypeName::Id64 => self.scan_id64.subtract_set_active(active_scans),
@@ -638,7 +579,7 @@ impl<'a> ColumnScanRainbow<'a> {
 
     /// Assumes that column scan is a [ColumnScanConstant].
     /// Set a new constant value that will be returned by this scan.
-    pub fn constant_set(&mut self, constant: StorageValueT) {
+    pub(crate) fn constant_set(&mut self, constant: StorageValueT) {
         match constant {
             StorageValueT::Id32(value) => self.scan_id32.constant_set(Some(value)),
             StorageValueT::Id64(value) => self.scan_id64.constant_set(Some(value)),
@@ -650,7 +591,7 @@ impl<'a> ColumnScanRainbow<'a> {
 
     /// Assumes that column scan is a [ColumnScanConstant].
     /// Set its value to `None`.
-    pub fn constant_set_none(&mut self, storage_type: StorageTypeName) {
+    pub(crate) fn constant_set_none(&mut self, storage_type: StorageTypeName) {
         match storage_type {
             StorageTypeName::Id32 => self.scan_id32.constant_set(None),
             StorageTypeName::Id64 => self.scan_id64.constant_set(None),

@@ -58,7 +58,10 @@ where
 /// where it might be beneficial to have special handling
 /// for performance reasons within the evaluation of
 /// [TrieScanFunction][crate::tabular::operations::function::TrieScanFunction]
+///
+/// TODO: This is not yet used anywhere
 #[derive(Debug)]
+#[allow(dead_code)]
 pub(crate) enum SpecialCaseFunction<'a, ReferenceType>
 where
     ReferenceType: Debug + Clone,
@@ -76,6 +79,7 @@ where
 /// for performance reasons within the evaluation of
 /// [TrieScanFilter][crate::tabular::operations::filter::TrieScanFilter]
 #[derive(Debug)]
+#[allow(dead_code)]
 pub(crate) enum SpecialCaseFilter<'a, ReferenceType>
 where
     ReferenceType: Debug + Clone,
@@ -92,6 +96,7 @@ where
 {
     /// Check if this function correspond to some special case defined in [SpecialCaseFunction].
     /// Returns `None` if this is not the case.
+    #[allow(dead_code)]
     pub(crate) fn special_function(&self) -> SpecialCaseFunction<'_, ReferenceType> {
         match self {
             FunctionTree::Leaf(FunctionLeaf::Constant(constant)) => {

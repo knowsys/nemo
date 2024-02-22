@@ -71,12 +71,12 @@ where
 
     /// Return a vector where the ith value indicates
     /// whether the ith "follow" scan points to the same value as the main scan.
-    pub fn get_equal_values(&self) -> Vec<bool> {
+    pub(crate) fn get_equal_values(&self) -> Vec<bool> {
         self.equal_values.clone()
     }
 
     /// Set which sub iterators should be enabled.
-    pub fn set_active_scans(&mut self, active_scans: Vec<bool>) {
+    pub(crate) fn set_active_scans(&mut self, active_scans: Vec<bool>) {
         self.active_scans = active_scans;
     }
 

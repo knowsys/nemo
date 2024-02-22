@@ -1,10 +1,10 @@
 //! This module defines functions operating on [AnyDataValue].
 
-pub mod boolean;
-pub mod casting;
-pub mod generic;
-pub mod numeric;
-pub mod string;
+pub(crate) mod boolean;
+pub(crate) mod casting;
+pub(crate) mod generic;
+pub(crate) mod numeric;
+pub(crate) mod string;
 
 use delegate::delegate;
 
@@ -77,7 +77,7 @@ impl UnaryFunction for UnaryFunctionEnum {
 }
 
 /// Defines a binary function on [AnyDataValue]
-pub(crate) trait BinaryFunction {
+pub trait BinaryFunction {
     /// Evaluate this function on the given parameters.
     ///
     /// Returns `None` if the result of the operation is undefined.

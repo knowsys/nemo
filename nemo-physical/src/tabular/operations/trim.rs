@@ -8,7 +8,7 @@ use crate::{
 
 /// A simple [TrieScan] implementaiton
 #[derive(Debug)]
-pub struct TrieScanTrim<'a> {
+pub(crate) struct TrieScanTrim<'a> {
     trie_scan: TrieScanEnum<'a>,
 
     possible_types: Vec<Vec<StorageTypeName>>,
@@ -19,7 +19,8 @@ pub struct TrieScanTrim<'a> {
 
 impl<'a> TrieScanTrim<'a> {
     /// Create a new [TrieScanTrim]
-    pub fn new(trie_scan: TrieScanEnum<'a>) -> Self {
+    #[allow(dead_code)]
+    pub(crate) fn new(trie_scan: TrieScanEnum<'a>) -> Self {
         let arity = trie_scan.arity();
 
         let possible_types = (0..arity)

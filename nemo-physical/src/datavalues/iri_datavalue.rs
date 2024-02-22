@@ -19,7 +19,7 @@ pub struct IriDataValue(String);
 impl IriDataValue {
     /// Constructor. It is currently not checked whether the IRI is valid according to applicable specifications
     /// and standards -- we just treat it like a string.
-    pub fn new(iri: String) -> Self {
+    pub(crate) fn new(iri: String) -> Self {
         IriDataValue(iri)
     }
 
@@ -32,7 +32,7 @@ impl IriDataValue {
     /// TODO: This should be aligned with how the parser works. Currently restricted to basic alpha-numeric names.
     /// Note: Failing to recognize an IRI as possible name should not have severe consequences (we just put some <>
     /// around such IRIs in formatting).
-    pub fn is_name(&self) -> bool {
+    pub(crate) fn is_name(&self) -> bool {
         let mut first = true;
         for c in self.0.chars() {
             match c {

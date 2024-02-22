@@ -6,7 +6,7 @@ use nemo_physical::{
     datavalues::AnyDataValue,
     dictionary::DvDict,
     management::database::sources::{SimpleTable, TableSource},
-    meta::TimedCode,
+    meta::timing::TimedCode,
 };
 
 use crate::{

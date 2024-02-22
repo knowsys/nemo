@@ -29,7 +29,7 @@ enum NullInstruction {
 
 /// Used to create a [TrieScanNull]
 #[derive(Debug, Clone)]
-pub struct GeneratorNull {
+pub(crate) struct GeneratorNull {
     /// What to do on each layer that outputs a null
     instructions: Vec<NullInstruction>,
 }
@@ -46,7 +46,7 @@ impl GeneratorNull {
     ///
     /// Additional markers in `output` may repeat.
     /// In this case the fresh null will appear multiple times.
-    pub fn new(output: OperationTable, input: OperationTable) -> Self {
+    pub(crate) fn new(output: OperationTable, input: OperationTable) -> Self {
         debug_assert!(output.arity() >= input.arity());
         debug_assert!(input
             .iter()
@@ -144,7 +144,7 @@ impl OperationGenerator for GeneratorNull {
 
 /// [PartialTrieScan] that appends columns containing fresh nulls to an in input [PartialTrieScan]
 #[derive(Debug)]
-pub struct TrieScanNull<'a> {
+pub(crate) struct TrieScanNull<'a> {
     /// Input trie scan
     trie_scan: Box<TrieScanEnum<'a>>,
     /// Dictionary used to create the fresh nulls

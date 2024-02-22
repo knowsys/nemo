@@ -22,12 +22,8 @@ use crate::{
     datavalues::AnyDataValue,
     error::Error,
     management::{bytesized::ByteSized, database::execution_series::ExecutionTreeNode},
-    meta::TimedCode,
-    tabular::{
-        operations::{trim::TrieScanTrim, OperationGenerator},
-        trie::Trie,
-        triescan::TrieScanEnum,
-    },
+    meta::timing::TimedCode,
+    tabular::{operations::OperationGenerator, trie::Trie, triescan::TrieScanEnum},
     util::mapping::permutation::Permutation,
 };
 

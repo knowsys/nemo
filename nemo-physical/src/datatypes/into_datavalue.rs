@@ -12,7 +12,7 @@ use super::{Double, Float};
 /// TODO: Is this really a good design? We already have methods for creating AnyDatavalue from
 /// a variety of types, and from arbitrary StorageValueT. Why do we need additional conversions
 /// that duplicate code of the cases already implemented?  
-pub trait IntoDataValue {
+pub(crate) trait IntoDataValue {
     /// Convert this value into the appropriate [AnyDataValue].
     fn into_datavalue(self, dictionary: &Dict) -> Option<AnyDataValue>;
 }

@@ -45,17 +45,17 @@ pub struct Trie {
 
 impl Trie {
     /// Return the arity, that is the number of columns, in this trie.
-    pub(crate) fn arity(&self) -> usize {
+    pub fn arity(&self) -> usize {
         self.columns.len()
     }
 
     /// Return the number of rows contained in this trie.
-    pub(crate) fn num_rows(&self) -> usize {
+    pub fn num_rows(&self) -> usize {
         self.columns.last().map_or(0, |column| column.num_data())
     }
 
     /// Return whether the trie is empty
-    pub(crate) fn is_empty(&self) -> bool {
+    pub fn is_empty(&self) -> bool {
         self.num_rows() == 0
     }
 
@@ -76,6 +76,7 @@ impl Trie {
     }
 
     /// Return a [TrieScan] over this trie.
+    #[allow(dead_code)]
     pub(crate) fn full_iterator(&self) -> TrieScanTrim {
         TrieScanTrim::new(TrieScanEnum::TrieScanGeneric(self.partial_iterator()))
     }
@@ -238,7 +239,11 @@ impl Trie {
     /// To keep all the values, set `cut_layers` to 0.
     ///
     /// Assumes that the given `trie_scan` is not initialized
-    pub fn from_full_trie_scan<Scan: TrieScan>(mut trie_scan: Scan, cut_layers: usize) -> Self {
+    #[allow(dead_code)]
+    pub(crate) fn from_full_trie_scan<Scan: TrieScan>(
+        mut trie_scan: Scan,
+        cut_layers: usize,
+    ) -> Self {
         let num_columns = trie_scan.num_columns() - cut_layers;
 
         if num_columns == 0 {
@@ -332,7 +337,7 @@ impl ByteSized for Trie {
 
 /// Implementation of [PartialTrieScan] for a [Trie]
 #[derive(Debug)]
-pub struct TrieScanGeneric<'a> {
+pub(crate) struct TrieScanGeneric<'a> {
     /// Underlying [Trie] over which we are iterating
     trie: &'a Trie,
 

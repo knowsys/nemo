@@ -36,12 +36,12 @@ where
     T: BooleanOperations,
 {
     /// Create a [BitSet] with no entries.
-    pub fn empty() -> Self {
+    pub(crate) fn empty() -> Self {
         Self::default()
     }
 
     /// Create a [BitSet] where every element is included.
-    pub fn full(elements: usize) -> Self {
+    pub(crate) fn full(elements: usize) -> Self {
         let mut result = T::one() << elements;
         result = result - T::one();
 
@@ -49,12 +49,12 @@ where
     }
 
     /// Create a [BitSet] with a single set bit.
-    pub fn single(index: usize) -> Self {
+    pub(crate) fn single(index: usize) -> Self {
         Self(T::one() << index)
     }
 
     /// Set a single bit to some value
-    pub fn set(&mut self, index: usize, value: bool) {
+    pub(crate) fn set(&mut self, index: usize, value: bool) {
         if value {
             let mask = Self::single(index);
             *self = self.union(mask);
@@ -65,17 +65,17 @@ where
     }
 
     /// Get the value of a spefic bit
-    pub fn get(&self, index: usize) -> bool {
+    pub(crate) fn get(&self, index: usize) -> bool {
         self.intersection(Self::single(index)) != Self::default()
     }
 
     /// Compute the intersection of two [BitSet]s.
-    pub fn intersection(&self, other: Self) -> Self {
+    pub(crate) fn intersection(&self, other: Self) -> Self {
         Self(self.0 & other.0)
     }
 
     /// Compute the union of two [BitSet]s.
-    pub fn union(&self, other: Self) -> Self {
+    pub(crate) fn union(&self, other: Self) -> Self {
         Self(self.0 | other.0)
     }
 }

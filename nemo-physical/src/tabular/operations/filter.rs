@@ -50,7 +50,7 @@ enum OutputColumn {
 
 /// Used to create a [TrieScanFilter]
 #[derive(Debug, Clone)]
-pub struct GeneratorFilter {
+pub(crate) struct GeneratorFilter {
     /// For each output column,
     /// marks whether it results from an input column or has a filter applied to it via a [StackProgram]
     output_columns: Vec<OutputColumn>,
@@ -61,7 +61,7 @@ pub struct GeneratorFilter {
 
 impl GeneratorFilter {
     /// Create a new [GeneratorFilter].
-    pub fn new(input: OperationTable, filters: &Filters) -> Self {
+    pub(crate) fn new(input: OperationTable, filters: &Filters) -> Self {
         let filter_assignment = Self::compute_assignments(&input, filters);
 
         let mut output_columns = Vec::<OutputColumn>::new();
@@ -243,7 +243,7 @@ impl OperationGenerator for GeneratorFilter {
 
 /// [PartialTrieScan] which filters values of an input [PartialTrieScan]
 #[derive(Debug)]
-pub struct TrieScanFilter<'a> {
+pub(crate) struct TrieScanFilter<'a> {
     /// Input trie scan which will be filtered
     trie_scan: Box<TrieScanEnum<'a>>,
     /// Dictionary used to translate column values in [AnyDataValue] for evaluation

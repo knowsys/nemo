@@ -16,7 +16,7 @@ use super::{OperationGenerator, OperationTable};
 
 /// Used to create a [TrieScanSubtract]
 #[derive(Debug, Clone)]
-pub struct GeneratorSubtract {
+pub(crate) struct GeneratorSubtract {
     /// For each [`PartialTrieScan`] in `trie_subtract`,
     /// specifies which of its layers correspond to which layers from the "main" trie
     layer_maps: Vec<SubtractedLayerMap>,
@@ -30,7 +30,7 @@ impl GeneratorSubtract {
     ///
     /// # Panics
     /// Panics if the above condition is not met.
-    pub fn new(output: OperationTable, inputs: Vec<OperationTable>) -> Self {
+    pub(crate) fn new(output: OperationTable, inputs: Vec<OperationTable>) -> Self {
         let mut layer_maps = Vec::<SubtractedLayerMap>::new();
 
         for input in inputs {
@@ -142,7 +142,7 @@ impl OperationGenerator for GeneratorSubtract {
 /// The results contains all elements that are in main but not in one of the subtract scans.
 /// This can also handle subtracting tables of different arities.
 #[derive(Debug)]
-pub struct TrieScanSubtract<'a> {
+pub(crate) struct TrieScanSubtract<'a> {
     /// [`PartialTrieScan`] from which elements are being subtracted
     trie_main: Box<TrieScanEnum<'a>>,
     /// Elements that are subtracted

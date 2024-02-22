@@ -9,7 +9,7 @@ use crate::{
 
 /// [ColumnScan] representing the union of its sub scans
 #[derive(Debug)]
-pub struct ColumnScanUnion<'a, T>
+pub(crate) struct ColumnScanUnion<'a, T>
 where
     T: 'a + ColumnDataType,
 {
@@ -35,7 +35,7 @@ where
     T: 'a + ColumnDataType,
 {
     /// Constructs a new [ColumnScanUnion].
-    pub fn new(column_scans: Vec<&'a ColumnScanCell<'a, T>>) -> ColumnScanUnion<'a, T> {
+    pub(crate) fn new(column_scans: Vec<&'a ColumnScanCell<'a, T>>) -> ColumnScanUnion<'a, T> {
         let scans_len = column_scans.len();
         ColumnScanUnion {
             column_scans,
@@ -46,12 +46,12 @@ where
     }
 
     /// Check whether the [ColumnScan] of the given index points the currently smallest value.
-    pub fn is_smallest_scans(&self, index: usize) -> bool {
+    pub(crate) fn is_smallest_scans(&self, index: usize) -> bool {
         self.smallest_scans[index]
     }
 
     /// Set a vector that indicates which scans are currently active and should be considered
-    pub fn set_active_scans(&mut self, active_scans: Vec<usize>) {
+    pub(crate) fn set_active_scans(&mut self, active_scans: Vec<usize>) {
         self.active_scans = active_scans;
     }
 }

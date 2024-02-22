@@ -44,12 +44,12 @@ struct ExecutionNodeOwned(Rc<RefCell<ExecutionNode>>);
 
 impl ExecutionNodeOwned {
     /// Create new [ExecutionNodeOwned]
-    pub fn new(node: ExecutionNode) -> Self {
+    pub(crate) fn new(node: ExecutionNode) -> Self {
         Self(Rc::new(RefCell::new(node)))
     }
 
     /// Return an [ExecutionNodeRef] pointing to this node
-    pub fn get_ref(&self) -> ExecutionNodeRef {
+    pub(crate) fn get_ref(&self) -> ExecutionNodeRef {
         ExecutionNodeRef(Rc::downgrade(&self.0))
     }
 }
@@ -62,7 +62,7 @@ impl ExecutionNodeRef {
     /// Return an referenced counted cell of an [ExecutionNode].
     /// # Panics
     /// Throws a panic if the referenced [ExecutionNode] does not exist.
-    pub fn get_rc(&self) -> Rc<RefCell<ExecutionNode>> {
+    pub(crate) fn get_rc(&self) -> Rc<RefCell<ExecutionNode>> {
         self.0
             .upgrade()
             .expect("Referenced execution node has been deleted")
@@ -113,7 +113,8 @@ impl ExecutionNodeRef {
     }
 
     /// Return the list of subnodes.
-    pub fn subnodes(&self) -> Vec<ExecutionNodeRef> {
+    #[allow(dead_code)]
+    pub(crate) fn subnodes(&self) -> Vec<ExecutionNodeRef> {
         let node_rc = self.get_rc();
         let node_operation = &node_rc.borrow().operation;
 
@@ -138,7 +139,7 @@ impl ExecutionNodeRef {
 
 /// Represents a node in an [ExecutionPlan]
 #[derive(Debug)]
-pub struct ExecutionNode {
+pub(crate) struct ExecutionNode {
     /// Identifier of the node.
     pub id: ExecutionId,
 
@@ -150,7 +151,7 @@ pub struct ExecutionNode {
 
 #[derive(Debug)]
 /// Represents an operation in [ExecutionPlan]
-pub enum ExecutionOperation {
+pub(crate) enum ExecutionOperation {
     /// Fetch a table that is already present in the database instance
     FetchTable(PermanentTableId, ColumnOrder),
     /// Join the tables represented by the subnodes
@@ -184,7 +185,7 @@ pub(crate) enum ExecutionResult {
 
 impl ExecutionResult {
     /// Return whether the operation will result in a permanent table.
-    pub fn is_permanent(&self) -> bool {
+    pub(crate) fn is_permanent(&self) -> bool {
         matches!(self, ExecutionResult::Permanent(_, _))
     }
 }

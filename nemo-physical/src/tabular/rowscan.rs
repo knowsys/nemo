@@ -10,7 +10,7 @@ use super::triescan::PartialTrieScan;
 
 /// A [StreamingIterator] for a [PartialTrieScan]
 #[derive(Debug)]
-pub struct RowScan<'a, Scan: PartialTrieScan<'a>> {
+pub(crate) struct RowScan<'a, Scan: PartialTrieScan<'a>> {
     /// Using 'a in the trait bound doesn't count
     _phantom: PhantomData<&'a usize>,
 
@@ -34,7 +34,7 @@ pub struct RowScan<'a, Scan: PartialTrieScan<'a>> {
 
 impl<'a, Scan: PartialTrieScan<'a>> RowScan<'a, Scan> {
     /// Create a new [RowScan].
-    pub fn new(trie_scan: Scan, cut: usize) -> Self {
+    pub(crate) fn new(trie_scan: Scan, cut: usize) -> Self {
         let arity = trie_scan.arity();
         let used_columns = arity - cut;
 

@@ -2,8 +2,8 @@
 //! as well as [ColumnEnum],
 //! which collects all implementations of [Column] into a single object.
 
-pub mod rle;
-pub mod vector;
+pub(crate) mod rle;
+pub(crate) mod vector;
 
 use std::{fmt::Debug, mem::size_of};
 

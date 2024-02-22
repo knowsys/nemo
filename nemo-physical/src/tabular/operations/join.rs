@@ -16,7 +16,6 @@ use crate::{
         operations::OperationColumnMarker,
         triescan::{PartialTrieScan, TrieScanEnum},
     },
-    util::mapping::{permutation::Permutation, traits::NatMapping},
 };
 
 use super::{OperationGenerator, OperationTable};
@@ -33,13 +32,11 @@ struct ColumnIndex {
 
 /// Used to create a [TrieScanJoin]
 #[derive(Debug)]
-pub struct GeneratorJoin {
+pub(crate) struct GeneratorJoin {
     /// In the order of the output column,
     /// contains all the columns (identified by its [ColumnIndex])
     /// that should be joined
     bindings: Vec<Vec<ColumnIndex>>,
-    /// The overall number of input relations
-    num_input_relations: usize,
 }
 
 impl GeneratorJoin {
@@ -52,9 +49,7 @@ impl GeneratorJoin {
     ///
     /// # Panics
     /// Panics if any of the above conditions is not met.
-    pub fn new(output: OperationTable, input: Vec<OperationTable>) -> Self {
-        let num_input_relations = input.len();
-
+    pub(crate) fn new(output: OperationTable, input: Vec<OperationTable>) -> Self {
         // Associates the marker of each output column
         // with a list of columns that need to be joined
         let mut output_map = HashMap::<OperationColumnMarker, Vec<ColumnIndex>>::new();
@@ -96,59 +91,7 @@ impl GeneratorJoin {
             )
         }
 
-        Self {
-            bindings,
-            num_input_relations,
-        }
-    }
-
-    /// Change the bindings such as to take into account a reordering of the output table.
-    pub fn apply_permutation(&mut self, permutation: &Permutation) {
-        self.bindings = permutation.permute(&self.bindings);
-    }
-
-    fn binding_vector(&self) -> Vec<Vec<usize>> {
-        let mut result = vec![vec![]; self.num_input_relations];
-
-        for (output_index, input_columns) in self.bindings.iter().enumerate() {
-            for input_column in input_columns {
-                for _ in result[input_column.relation].len()..=input_column.column {
-                    result[input_column.relation].push(0);
-                }
-
-                result[input_column.relation][input_column.column] = output_index;
-            }
-        }
-
-        result
-    }
-
-    fn sort_input_relations(&self) -> Vec<Permutation> {
-        let bindings_vector = self.binding_vector();
-        bindings_vector
-            .into_iter()
-            .map(|v| Permutation::from_unsorted(&v))
-            .collect()
-    }
-
-    /// Returns whether or not this binding is compatible with the leapfrog triejoin algorithm.
-    pub fn is_leapfrog_compatible(&self) -> bool {
-        self.sort_input_relations().iter().all(|p| p.is_identity())
-    }
-
-    /// This function makes sure that the join is possible to execute with the leapfrog triejoin algorithm.
-    /// It returns a list of permutations where the ith entry indicates the needed reordering for the ith input table.
-    pub fn comply_with_leapfrog(&mut self) -> Vec<Permutation> {
-        let sort_permutations = self.sort_input_relations();
-
-        for input_columns in self.bindings.iter_mut() {
-            for input_column in input_columns {
-                input_column.column =
-                    sort_permutations[input_column.relation].get(input_column.column);
-            }
-        }
-
-        sort_permutations
+        Self { bindings }
     }
 }
 
@@ -250,7 +193,7 @@ impl OperationGenerator for GeneratorJoin {
 
 /// [`PartialTrieScan`] which represents the result from joining a list of [`PartialTrieScan`]s
 #[derive(Debug)]
-pub struct TrieScanJoin<'a> {
+pub(crate) struct TrieScanJoin<'a> {
     /// Input trie scans over of which the join is computed
     trie_scans: Vec<TrieScanEnum<'a>>,
 

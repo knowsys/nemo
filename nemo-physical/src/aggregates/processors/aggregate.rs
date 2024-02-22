@@ -14,7 +14,7 @@ use crate::datatypes::StorageValueT;
 /// [`Default`] is required to initialize the aggregator in sum aggregates.
 /// [`PartialOrd`] is required for min/max aggregates.
 /// `'static` is required to store the value e.g. in min/max aggregates.
-pub trait Aggregate:
+pub(crate) trait Aggregate:
     CheckedAdd + Clone + Debug + Default + Into<StorageValueT> + PartialEq + PartialOrd + 'static
 {
 }

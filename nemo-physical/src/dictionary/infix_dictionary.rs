@@ -7,7 +7,7 @@ use super::DictionaryString;
 /// with a certain fixed prefix and postfix, respectively. Strings that do not have this shape will be
 /// rejected.
 #[derive(Debug)]
-pub struct InfixDictionary {
+pub(crate) struct InfixDictionary {
     dict: HashMapDictionary,
     prefix: String,
     suffix: String,
@@ -15,7 +15,7 @@ pub struct InfixDictionary {
 
 impl InfixDictionary {
     /// Construct a new and empty dictionary for the given prefix and suffix.
-    pub fn new(prefix: String, suffix: String) -> Self {
+    pub(crate) fn new(prefix: String, suffix: String) -> Self {
         InfixDictionary {
             dict: HashMapDictionary::new(),
             prefix,

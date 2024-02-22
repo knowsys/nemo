@@ -6,10 +6,7 @@ use ascii_tree::write_tree;
 use nemo_physical::datavalues::AnyDataValue;
 use serde::Serialize;
 
-use crate::model::{
-    chase_model::{ChaseAtom, ChaseFact},
-    PrimitiveTerm, Program, Rule, Term, Variable,
-};
+use crate::model::{chase_model::ChaseFact, PrimitiveTerm, Program, Rule, Term, Variable};
 
 /// Index of a rule within a [`Program`]
 type RuleIndex = usize;
@@ -116,26 +113,28 @@ impl ExecutionTrace {
 
     /// Search a given [`ChaseFact`] in `self.facts`.
     /// Also takes into account that the interpretation of a constant depends on its type.
-    fn find_fact(&self, fact: &ChaseFact) -> Option<TraceFactHandle> {
-        for (fact_index, traced_fact) in self.facts.iter().enumerate() {
-            if traced_fact.fact.predicate() != fact.predicate()
-                || traced_fact.fact.arity() != fact.arity()
-            {
-                continue;
-            }
+    ///
+    /// TODO: Reimplement tracing
+    fn find_fact(&self, _fact: &ChaseFact) -> Option<TraceFactHandle> {
+        // for (fact_index, traced_fact) in self.facts.iter().enumerate() {
+        //     if traced_fact.fact.predicate() != fact.predicate()
+        //         || traced_fact.fact.arity() != fact.arity()
+        //     {
+        //         continue;
+        //     }
 
-            let mut identical = true;
-            for (term_fact, term_traced_fact) in fact.terms().iter().zip(traced_fact.fact.terms()) {
-                if term_fact != term_traced_fact {
-                    identical = false;
-                    break;
-                }
-            }
+        // let mut identical = true;
+        // for (term_fact, term_traced_fact) in fact.terms().iter().zip(traced_fact.fact.terms()) {
+        //     if term_fact != term_traced_fact {
+        //         identical = false;
+        //         break;
+        //     }
+        // }
 
-            if identical {
-                return Some(TraceFactHandle(fact_index));
-            }
-        }
+        //     if identical {
+        //         return Some(TraceFactHandle(fact_index));
+        //     }
+        // }
 
         None
     }

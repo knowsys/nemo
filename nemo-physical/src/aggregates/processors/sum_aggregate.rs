@@ -18,7 +18,7 @@ where
 }
 
 impl<A: Aggregate> SumAggregateProcessor<A> {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             phantom_data: PhantomData,
         }
@@ -44,7 +44,7 @@ where
 }
 
 impl<A: Aggregate> SumAggregateGroupProcessor<A> {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             current_sum: A::default(),
         }

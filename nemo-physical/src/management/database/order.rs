@@ -13,7 +13,7 @@ use crate::{
         bytesized::sum_bytes, bytesized::ByteSized, execution_plan::ColumnOrder,
         util::closest_order,
     },
-    meta::TimedCode,
+    meta::timing::TimedCode,
     tabular::{operations::projectreorder::GeneratorProjectReorder, trie::Trie},
     util::mapping::{permutation::Permutation, traits::NatMapping},
 };
@@ -80,7 +80,7 @@ impl OrderedReferenceManager {
 
     /// Return a list of all the available [ColumnOrder] for a given table.
     #[cfg(test)]
-    pub fn available_orders(&self, id: PermanentTableId) -> Vec<ColumnOrder> {
+    pub(crate) fn available_orders(&self, id: PermanentTableId) -> Vec<ColumnOrder> {
         let (id_stored, reorder) = self.resolve_reference(id, ColumnOrder::default());
 
         if let Some(order_map) = self.storage_map.get(&id_stored) {
@@ -105,7 +105,7 @@ impl OrderedReferenceManager {
     /// Return the number of rows contained in this table.
     ///
     /// TODO: Currently only counting of in-memory facts is supported, see <https://github.com/knowsys/nemo/issues/335>
-    pub fn count_rows(&self, id: PermanentTableId) -> usize {
+    pub(crate) fn count_rows(&self, id: PermanentTableId) -> usize {
         let (id, _) = self.resolve_reference(id, ColumnOrder::default());
 
         if let Some(order_map) = self.storage_map.get(&id) {
@@ -124,7 +124,7 @@ impl OrderedReferenceManager {
     ///
     /// # Panics
     /// Panics if the given id does not exist.
-    pub fn memory_consumption(&self, id: PermanentTableId) -> ByteSize {
+    pub(crate) fn memory_consumption(&self, id: PermanentTableId) -> ByteSize {
         let (id, _) = self.resolve_reference(id, ColumnOrder::default());
 
         let mut result = ByteSize::b(0);
@@ -177,7 +177,12 @@ impl OrderedReferenceManager {
     /// and return its [StorageId].
     ///
     /// This overwrites any existing tables with the same id and order.
-    pub fn add_trie(&mut self, id: PermanentTableId, order: ColumnOrder, trie: Trie) -> StorageId {
+    pub(crate) fn add_trie(
+        &mut self,
+        id: PermanentTableId,
+        order: ColumnOrder,
+        trie: Trie,
+    ) -> StorageId {
         let storage_id = self.add_storage(id, order);
         self.stored_tables[storage_id] = TableStorage::InMemory(trie);
 
@@ -188,7 +193,7 @@ impl OrderedReferenceManager {
     /// and return its [StorageId].
     ///
     /// This overwrites any existing tables with the same id and order.
-    pub fn add_sources(
+    pub(crate) fn add_sources(
         &mut self,
         id: PermanentTableId,
         order: ColumnOrder,
@@ -206,7 +211,7 @@ impl OrderedReferenceManager {
     /// will be overwritten.
     ///
     /// Table that are given as a list of sources will have this source appended to it.
-    pub fn add_source(
+    pub(crate) fn add_source(
         &mut self,
         id: PermanentTableId,
         order: ColumnOrder,
@@ -222,7 +227,7 @@ impl OrderedReferenceManager {
     }
 
     /// Add a (ordered) reference to an existing table.
-    pub fn add_reference(
+    pub(crate) fn add_reference(
         &mut self,
         existing_id: PermanentTableId,
         reference_id: PermanentTableId,
@@ -257,7 +262,7 @@ impl OrderedReferenceManager {
     ///
     /// # Panics
     /// Panics if the given id does not exist.
-    pub fn trie_id(
+    pub(crate) fn trie_id(
         &mut self,
         dictionary: &RefCell<Dict>,
         id: PermanentTableId,
@@ -313,7 +318,7 @@ impl OrderedReferenceManager {
     /// # Panics
     /// Panics if the table is not available as a trie.
     /// This can be ensured by obtaining this id from the function `trie_id`.
-    pub fn trie(&self, id: StorageId) -> &Trie {
+    pub(crate) fn trie(&self, id: StorageId) -> &Trie {
         self.stored_tables[id]
             .trie_in_memory()
             .expect("This function assumes that the given id corresponds to an in memory trie")

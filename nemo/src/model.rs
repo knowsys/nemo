@@ -10,7 +10,5 @@ pub mod rule_model;
 /// Forward everything to the rule model.
 pub use rule_model::*;
 
-use std::collections::HashMap;
-
 /// Map from variables to terms
-pub type VariableAssignment = HashMap<Variable, Term>;
+pub type VariableAssignment = std::collections::HashMap<Variable, Term>;

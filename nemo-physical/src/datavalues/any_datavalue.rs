@@ -552,7 +552,7 @@ impl AnyDataValue {
     /// # Panics
     ///
     /// If the value domain is not [ValueDomain::Null].
-    pub(crate) fn null_id_unchecked(&self) -> usize {
+    pub fn null_id_unchecked(&self) -> usize {
         if let AnyDataValueEnum::Null(ndv) = self.0 {
             ndv.id()
         } else {

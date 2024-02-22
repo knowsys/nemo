@@ -23,7 +23,7 @@ pub(crate) struct RleElement<T: RunLengthEncodable> {
 
 /// Implementation of [`ColumnBuilder`] that allows the use of incremental run length encoding.
 #[derive(Debug, Default, PartialEq)]
-pub struct ColumnBuilderRle<T: RunLengthEncodable> {
+pub(crate) struct ColumnBuilderRle<T: RunLengthEncodable> {
     elements: Vec<RleElement<T>>,
     previous_value_opt: Option<T>,
     count: usize,
@@ -34,7 +34,7 @@ where
     T: ColumnDataType + Default,
 {
     /// Constructor.
-    pub fn new() -> ColumnBuilderRle<T> {
+    pub(crate) fn new() -> ColumnBuilderRle<T> {
         ColumnBuilderRle {
             elements: Vec::new(),
             previous_value_opt: None,
@@ -48,7 +48,7 @@ where
     T: ColumnDataType + Default,
 {
     /// Get the average length of RleElements to get a feeling for how much memory the encoding will take.
-    pub fn avg_length_of_rle_elements(&self) -> usize {
+    pub(crate) fn avg_length_of_rle_elements(&self) -> usize {
         if self.elements.is_empty() {
             return 0;
         }
@@ -57,7 +57,7 @@ where
     }
 
     /// Get number of RleElements in builder.
-    pub fn number_of_rle_elements(&self) -> usize {
+    pub(crate) fn number_of_rle_elements(&self) -> usize {
         self.elements.len()
     }
 }

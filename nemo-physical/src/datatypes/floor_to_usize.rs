@@ -1,5 +1,5 @@
 /// Trait representing datatypes that can be rounded down to usize
-pub trait FloorToUsize {
+pub(crate) trait FloorToUsize {
     /// round down to nearest integer and convert to usize if possible
     fn floor_to_usize(self) -> Option<usize>;
 }
