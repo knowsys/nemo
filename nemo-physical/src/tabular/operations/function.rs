@@ -12,6 +12,7 @@ use crate::{
     },
     datatypes::{
         into_datavalue::IntoDataValue, storage_type_name::StorageTypeBitSet, StorageTypeName,
+        StorageValueT,
     },
     datavalues::AnyDataValue,
     function::{evaluation::StackProgram, tree::FunctionTree},
@@ -24,79 +25,116 @@ use super::{OperationColumnMarker, OperationGenerator, OperationTable};
 /// Assigns an output column to a function which determines how to compute the values of that column
 pub type FunctionAssignment = HashMap<OperationColumnMarker, FunctionTree<OperationColumnMarker>>;
 
-/// Marks whether an output column results from an input column or is computed via a [StackProgram]
+/// Marks an output column as either being the same as an input column
+/// or computing a new value
+#[derive(Debug, PartialEq, Eq, Clone)]
+enum ComputedMarker {
+    /// Layer copies value from input trie
+    Copy,
+    /// Layer computes new value from input layers
+    Computed,
+}
+
+/// Contains information about a layer in [TrieScanFunction]
 #[derive(Debug, Clone)]
-enum OutputColumn {
-    /// Index of the input column
-    Input(usize),
-    /// [StackProgram] for computing the output
-    Computed(StackProgram),
+struct LayerInformation {
+    /// Whether layer is the same as input or contains a computed value
+    pub(self) computed: ComputedMarker,
+    /// Whether output of this layer is used as an input value for some function.
+    /// If this is the case, then this value will be `Some(list)`
+    /// where `list` contains the indices of programs that can be computed in this layer.
+    pub(self) input: Option<Vec<usize>>,
 }
 
 /// Used to create [TrieScanFunction]
-#[derive(Debug, Clone)]
-pub(crate) struct GeneratorFunction {
-    /// For each output column
-    /// either contains the index to the input columns it is derived from
-    /// or the [StackProgram] used to compute it
-    output_columns: Vec<OutputColumn>,
-    /// Marks for each output index,
-    /// whether the value of the corresponding layer is used as input to some function.
-    input_indices: Vec<bool>,
+#[derive(Debug)]
+pub struct GeneratorFunction {
+    /// Encodes for each layer information about what to do via [LayerInformation].
+    layer_information: Vec<LayerInformation>,
+    /// Contains all [StackProgram]s used to compute new values
+    programs: Vec<StackProgram>,
 }
 
 impl GeneratorFunction {
     /// Create a new [GeneratorFunction]
-    pub(crate) fn new(output: OperationTable, functions: &FunctionAssignment) -> Self {
-        let mut output_columns = Vec::<OutputColumn>::new();
-        let mut input_indices = Vec::<bool>::new();
+    pub fn new(output: OperationTable, functions: &FunctionAssignment) -> Self {
+        let mut layer_information = Vec::with_capacity(output.len());
+        let mut programs = Vec::with_capacity(output.len());
 
         let referenced_columns: HashSet<OperationColumnMarker> = functions
             .iter()
             .flat_map(|(_, function)| function.references())
             .collect();
-        let mut input_index: usize = 0;
+
+        let mut last_input_layers = vec![Vec::new(); output.len()];
+        for (function_layer, function) in output
+            .iter()
+            .filter_map(|marker| functions.get(marker))
+            .enumerate()
+        {
+            let last_input = Self::last_reference(&output, &function.references()).unwrap_or(0);
+            last_input_layers[last_input].push(function_layer);
+        }
+
         let mut reference_map = HashMap::<OperationColumnMarker, usize>::new();
 
-        for output_marker in output.into_iter() {
+        for (output_index, output_marker) in output.into_iter().enumerate() {
             let is_function_input = referenced_columns.contains(&output_marker);
-            input_indices.push(is_function_input);
 
-            if is_function_input {
+            let input = if is_function_input {
                 let num_function_input = reference_map.len();
                 if let Entry::Vacant(entry) = reference_map.entry(output_marker) {
                     entry.insert(num_function_input);
                 }
-            }
 
-            match functions.get(&output_marker) {
+                Some(last_input_layers[output_index].clone())
+            } else {
+                None
+            };
+
+            let computed = match functions.get(&output_marker) {
                 Some(function) => {
-                    output_columns.push(OutputColumn::Computed(StackProgram::from_function_tree(
+                    programs.push(StackProgram::from_function_tree(
                         function,
                         &reference_map,
                         None,
-                    )));
+                    ));
+
+                    ComputedMarker::Computed
                 }
-                None => {
-                    output_columns.push(OutputColumn::Input(input_index));
-                    input_index += 1;
-                }
-            }
+                None => ComputedMarker::Copy,
+            };
+
+            layer_information.push(LayerInformation { computed, input });
         }
 
         Self {
-            output_columns,
-            input_indices,
+            layer_information,
+            programs,
         }
+    }
+
+    fn last_reference(
+        table: &OperationTable,
+        references: &[OperationColumnMarker],
+    ) -> Option<usize> {
+        references
+            .into_iter()
+            .map(|marker| {
+                table
+                    .position(marker)
+                    .expect("Every reference must occur in the table")
+            })
+            .max()
     }
 
     /// Returns whether this operation does not alter the input table.
     fn is_unchanging(&self) -> bool {
         // This operation behaves the same as the identity if
         // no new columns are computed
-        self.output_columns
+        self.layer_information
             .iter()
-            .all(|c| matches!(c, OutputColumn::Input(_)))
+            .all(|info| info.computed == ComputedMarker::Copy)
     }
 }
 
@@ -114,17 +152,21 @@ impl OperationGenerator for GeneratorFunction {
         }
 
         let mut column_scans: Vec<UnsafeCell<ColumnScanRainbow<'a>>> =
-            Vec::with_capacity(self.output_columns.len());
+            Vec::with_capacity(self.layer_information.len());
 
-        for output_column in &self.output_columns {
+        let mut input_index: usize = 0;
+
+        for information in &self.layer_information {
             macro_rules! output_scan {
                 ($type:ty, $scan:ident) => {{
-                    match output_column {
-                        OutputColumn::Computed(_) => {
+                    match information.computed {
+                        ComputedMarker::Computed => {
                             ColumnScanEnum::ColumnScanConstant(ColumnScanConstant::new(None))
                         }
-                        OutputColumn::Input(input_index) => {
-                            let input_scan = &unsafe { &*trie_scan.scan(*input_index).get() }.$scan;
+                        ComputedMarker::Copy => {
+                            let input_scan = &unsafe { &*trie_scan.scan(input_index).get() }.$scan;
+                            input_index += 1;
+
                             ColumnScanEnum::ColumnScanPass(ColumnScanPass::new(input_scan))
                         }
                     }
@@ -147,24 +189,16 @@ impl OperationGenerator for GeneratorFunction {
             column_scans.push(UnsafeCell::new(new_scan));
         }
 
-        let output_functions = self
-            .output_columns
-            .iter()
-            .cloned()
-            .map(|output| match output {
-                OutputColumn::Input(_) => None,
-                OutputColumn::Computed(program) => Some(program),
-            })
-            .collect();
-
         Some(TrieScanEnum::TrieScanFunction(TrieScanFunction {
             trie_scan: Box::new(trie_scan),
             dictionary,
-            input_indices: self.input_indices.clone(),
-            output_functions,
             input_values: Vec::new(),
             column_scans,
             path_types: Vec::new(),
+            layer_information: self.layer_information.clone(),
+            programs: self.programs.clone(),
+            output_values: Vec::new(),
+            output_index: 0,
         }))
     }
 }
@@ -178,14 +212,16 @@ pub(crate) struct TrieScanFunction<'a> {
     /// Dictionary used to translate column values in [AnyDataValue] for evaluation
     dictionary: &'a RefCell<Dict>,
 
-    /// Marks for each output index,
-    /// whether the value of the corresponding layer is used as input to some function.
-    input_indices: Vec<bool>,
-    /// For each output layer contains the stack program used to evaluate its content,
-    /// or alternatively contains `None` if the input colums should passed instead
-    output_functions: Vec<Option<StackProgram>>,
-    /// Values that will be used as input for evaluating
+    /// Encodes for each layer information about what to do via [LayerInformation].
+    layer_information: Vec<LayerInformation>,
+    /// Contains all [StackProgram]s used to compute new values
+    programs: Vec<StackProgram>,
+    /// Values that will be used as input when evaluating a [StackProgram] from `programs`
     input_values: Vec<AnyDataValue>,
+    /// The results of evaluating the [StackProgram] from `programs`
+    output_values: Vec<Option<StorageValueT>>,
+    /// Current value in `output_values`,
+    output_index: usize,
 
     /// For each layer in the resulting trie contains a [`ColumnScanRainbow`]
     /// evaluating the functions on columns of the input trie
@@ -201,16 +237,22 @@ impl<'a> PartialTrieScan<'a> for TrieScanFunction<'a> {
         let current_layer = self.path_types.len() - 1;
         let previous_layer = current_layer.checked_sub(1);
 
-        if self.output_functions[current_layer].is_none() {
+        if self.layer_information[current_layer].computed == ComputedMarker::Copy {
             // If the current output layer corresponds to a layer in the input trie,
             // we need to call up on that
             self.trie_scan.up();
+        } else {
+            self.output_index -= 1;
         }
 
         if let Some(previous_layer) = previous_layer {
-            if self.input_indices[previous_layer] {
+            if let Some(programs) = &self.layer_information[previous_layer].input {
                 // The input value is no longer valid
                 self.input_values.pop();
+
+                for _ in 0..programs.len() {
+                    self.output_values.pop();
+                }
             }
         }
 
@@ -218,45 +260,47 @@ impl<'a> PartialTrieScan<'a> for TrieScanFunction<'a> {
     }
 
     fn down(&mut self, next_type: StorageTypeName) {
-        let previous_layer = self.current_layer();
-        let previous_type = self.path_types.last();
-
         let next_layer = self.path_types.len();
 
-        if let Some(previous_layer) = previous_layer {
-            let previous_type =
-                *previous_type.expect("If previous_layer is not None so is previuos_type.");
-
-            if self.input_indices[previous_layer] {
-                // This value will be used in some future layer as an input to a function,
-                // so we translate it to an AnyDataValue and store it in `self.input_values`.
-
+        if let Some((previous_layer, previous_type)) =
+            self.current_layer().zip(self.path_types.last().cloned())
+        {
+            if let Some(programs) = &self.layer_information[previous_layer].input {
+                // The current value will be used as input for some program
                 let column_value = self.column_scans[previous_layer].get_mut().current(previous_type).expect("It is only allowed to call down while the previous scan points to some value.").into_datavalue(&self.dictionary.borrow()).expect("All ids occuring in a column must be known to the dictionary");
                 self.input_values.push(column_value);
+
+                // All inputs for every program in `programs` is now defined
+                for program in programs.into_iter().map(|&index| &self.programs[index]) {
+                    let dictionary = &mut self.dictionary.borrow_mut();
+                    let program_result = program.evaluate_data(&self.input_values);
+
+                    self.output_values.push(
+                        program_result.map(|result| result.to_storage_value_t_mut(dictionary)),
+                    );
+                }
+            }
+
+            if self.layer_information[previous_layer].computed == ComputedMarker::Computed {
+                self.output_index += 1;
             }
         }
 
-        // There are two cases.
-        // Either we enter a layer which simply corresponds to an input layer.
-        // In this case we need to call down in the input trie.
-        // Otherwise we need to compute the new value and pass it into the column scan of this layer.
-        if let Some(program) = &self.output_functions[next_layer] {
-            let function_result = program.evaluate_data(&self.input_values);
-            match function_result
-                .map(|result| result.to_storage_value_t_mut(&mut self.dictionary.borrow_mut()))
-                .filter(|result| result.get_type() == next_type)
-            {
-                Some(result) => {
-                    self.column_scans[next_layer].get_mut().constant_set(result);
-                }
-                None => {
-                    self.column_scans[next_layer]
-                        .get_mut()
-                        .constant_set_none(next_type);
+        match self.layer_information[next_layer].computed {
+            ComputedMarker::Copy => self.trie_scan.down(next_type),
+            ComputedMarker::Computed => {
+                if let Some(output_value) = &self.output_values[self.output_index] {
+                    if output_value.get_type() == next_type {
+                        self.column_scans[next_layer]
+                            .get_mut()
+                            .constant_set(output_value.clone());
+                    } else {
+                        self.column_scans[next_layer]
+                            .get_mut()
+                            .constant_set_none(next_type);
+                    }
                 }
             }
-        } else {
-            self.trie_scan.down(next_type);
         }
 
         self.column_scans[next_layer].get_mut().reset(next_type);
@@ -276,17 +320,18 @@ impl<'a> PartialTrieScan<'a> for TrieScanFunction<'a> {
     }
 
     fn possible_types(&self, layer: usize) -> StorageTypeBitSet {
-        if self.output_functions[layer].is_some() {
-            StorageTypeBitSet::full()
-        } else {
-            let input_layer = self
-                .output_functions
-                .iter()
-                .take(layer)
-                .filter(|out| out.is_none())
-                .count();
+        match self.layer_information[layer].computed {
+            ComputedMarker::Copy => {
+                let input_layer = self
+                    .layer_information
+                    .iter()
+                    .take(layer)
+                    .filter(|info| info.computed == ComputedMarker::Copy)
+                    .count();
 
-            self.trie_scan.possible_types(input_layer)
+                self.trie_scan.possible_types(input_layer)
+            }
+            ComputedMarker::Computed => StorageTypeBitSet::full(),
         }
     }
 }
