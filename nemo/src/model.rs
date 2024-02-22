@@ -7,8 +7,6 @@ pub mod chase_model;
 /// world. Allows faithful serialization of parsed rule programs.
 pub mod rule_model;
 
-pub mod types;
-
 /// Forward everything to the rule model.
 pub use rule_model::*;
 
