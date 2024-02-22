@@ -24,6 +24,8 @@ pub(crate) trait DvConverter: Debug {
     fn dict_string(dv: &AnyDataValue) -> Option<String>;
     /// Converts a string to a datavalue, if supported.
     fn string_to_datavalue(string: &str) -> Option<AnyDataValue>;
+    /// Each converter supports exactly one domain, returned by this function.
+    fn supported_value_domain() -> ValueDomain;
 }
 
 /// Implementation of [`DvConverter`] to handle [`AnyDataValue::String`] values.
@@ -39,6 +41,10 @@ impl DvConverter for StringDvConverter {
     fn string_to_datavalue(string: &str) -> Option<AnyDataValue> {
         Some(AnyDataValue::new_string(string.to_string()))
     }
+
+    fn supported_value_domain() -> ValueDomain {
+        ValueDomain::String
+    }
 }
 
 /// Implementation of [`DvConverter`] to handle [`AnyDataValue::Iri`] values.
@@ -53,6 +59,10 @@ impl DvConverter for IriDvConverter {
     #[inline(always)]
     fn string_to_datavalue(string: &str) -> Option<AnyDataValue> {
         Some(AnyDataValue::new_iri(string.to_string()))
+    }
+
+    fn supported_value_domain() -> ValueDomain {
+        ValueDomain::Iri
     }
 }
 
@@ -142,6 +152,10 @@ impl DvConverter for OtherDvConverter {
             AnyDataValue::new_other(lexical_value, datatype_iri)
         })
     }
+
+    fn supported_value_domain() -> ValueDomain {
+        ValueDomain::Other
+    }
 }
 
 /// Implementation of [`DvConverter`] to handle [`AnyDataValue::LangStringDataValue`] values.
@@ -162,6 +176,10 @@ impl DvConverter for LangStringDvConverter {
     fn string_to_datavalue(string: &str) -> Option<AnyDataValue> {
         one_string_to_two(string)
             .map(|(value, language)| AnyDataValue::new_language_tagged_string(value, language))
+    }
+
+    fn supported_value_domain() -> ValueDomain {
+        ValueDomain::LanguageTaggedString
     }
 }
 
@@ -225,6 +243,23 @@ impl<C: DvConverter> DvDict for StringBasedDvDictionary<C> {
 
     fn len(&self) -> usize {
         self.string_dict.len()
+    }
+
+    fn is_iri(&self, id: usize) -> bool {
+        C::supported_value_domain() == ValueDomain::Iri && self.string_dict.knows_id(id)
+    }
+
+    fn is_plain_string(&self, id: usize) -> bool {
+        C::supported_value_domain() == ValueDomain::String && self.string_dict.knows_id(id)
+    }
+
+    fn is_lang_string(&self, id: usize) -> bool {
+        C::supported_value_domain() == ValueDomain::LanguageTaggedString
+            && self.string_dict.knows_id(id)
+    }
+
+    fn is_null(&self, _id: usize) -> bool {
+        false
     }
 
     fn mark_dv(&mut self, dv: AnyDataValue) -> AddResult {

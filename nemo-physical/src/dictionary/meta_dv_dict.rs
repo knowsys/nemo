@@ -294,6 +294,18 @@ impl MetaDvDictionary {
         (gblock << BLOCKSIZE) + offset
     }
 
+    /// Find the dictionary ID and local ID for a given global id. The function
+    /// returns ([NO_DICT],0) if the global id is not in any dictionary.
+    fn global_to_local(&self, global_id: usize) -> (usize, usize) {
+        let gblock = global_id >> BLOCKSIZE;
+        let offset = global_id % (1 << BLOCKSIZE);
+        if self.dictblocks.len() <= gblock || self.dictblocks[gblock] == (usize::MAX, usize::MAX) {
+            return (NO_DICT, 0);
+        }
+        let (dict_id, lblock) = self.dictblocks[gblock];
+        (dict_id, (lblock >> BLOCKSIZE) + offset)
+    }
+
     /// Find a global block that is allocated for the given dictionary and local block. If not
     /// allocated yet, a new block is reserved for this purpose. Allocation tries to preserve relative
     /// order and distance, and to keep some distance from other dictionary's blocks.
@@ -519,16 +531,12 @@ impl DvDict for MetaDvDictionary {
     }
 
     fn id_to_datavalue(&self, id: usize) -> Option<AnyDataValue> {
-        let gblock = id >> BLOCKSIZE;
-        let offset = id % (1 << BLOCKSIZE);
-        if self.dictblocks.len() <= gblock || self.dictblocks[gblock] == (usize::MAX, usize::MAX) {
-            return None;
+        let (dict_id, local_id) = self.global_to_local(id);
+        if dict_id == NO_DICT {
+            None
+        } else {
+            self.dicts[dict_id].dict.id_to_datavalue(local_id)
         }
-        let (dict_id, lblock) = self.dictblocks[gblock];
-
-        self.dicts[dict_id]
-            .dict
-            .id_to_datavalue((lblock >> BLOCKSIZE) + offset)
     }
 
     fn len(&self) -> usize {
@@ -540,6 +548,42 @@ impl DvDict for MetaDvDictionary {
         }
         log::info!("Total len {}", len);
         len
+    }
+
+    fn is_iri(&self, id: usize) -> bool {
+        let (dict_id, local_id) = self.global_to_local(id);
+        if dict_id == NO_DICT {
+            false
+        } else {
+            self.dicts[dict_id].dict.is_iri(local_id)
+        }
+    }
+
+    fn is_plain_string(&self, id: usize) -> bool {
+        let (dict_id, local_id) = self.global_to_local(id);
+        if dict_id == NO_DICT {
+            false
+        } else {
+            self.dicts[dict_id].dict.is_plain_string(local_id)
+        }
+    }
+
+    fn is_lang_string(&self, id: usize) -> bool {
+        let (dict_id, local_id) = self.global_to_local(id);
+        if dict_id == NO_DICT {
+            false
+        } else {
+            self.dicts[dict_id].dict.is_lang_string(local_id)
+        }
+    }
+
+    fn is_null(&self, id: usize) -> bool {
+        let (dict_id, local_id) = self.global_to_local(id);
+        if dict_id == NO_DICT {
+            false
+        } else {
+            self.dicts[dict_id].dict.is_null(local_id)
+        }
     }
 
     fn mark_dv(&mut self, _dv: AnyDataValue) -> AddResult {
@@ -591,6 +635,34 @@ mod test {
             assert_eq!(dict.id_to_datavalue(ids[i]), Some(dvs[i].clone()));
         }
 
+        assert_eq!(dict.is_iri(ids[0]), false);
+        assert_eq!(dict.is_iri(ids[1]), false);
+        assert_eq!(dict.is_iri(ids[2]), true);
+        assert_eq!(dict.is_iri(ids[3]), false);
+        assert_eq!(dict.is_iri(ids[3]), false);
+        assert_eq!(dict.is_iri(ids[4] * 500), false);
+
+        assert_eq!(dict.is_plain_string(ids[0]), true);
+        assert_eq!(dict.is_plain_string(ids[1]), true);
+        assert_eq!(dict.is_plain_string(ids[2]), false);
+        assert_eq!(dict.is_plain_string(ids[3]), false);
+        assert_eq!(dict.is_plain_string(ids[4]), false);
+        assert_eq!(dict.is_plain_string(ids[4] * 500), false);
+
+        assert_eq!(dict.is_lang_string(ids[0]), false);
+        assert_eq!(dict.is_lang_string(ids[1]), false);
+        assert_eq!(dict.is_lang_string(ids[2]), false);
+        assert_eq!(dict.is_lang_string(ids[3]), true);
+        assert_eq!(dict.is_lang_string(ids[4]), false);
+        assert_eq!(dict.is_lang_string(ids[4] * 500), false);
+
+        assert_eq!(dict.is_null(ids[0]), false);
+        assert_eq!(dict.is_null(ids[1]), false);
+        assert_eq!(dict.is_null(ids[2]), false);
+        assert_eq!(dict.is_null(ids[3]), false);
+        assert_eq!(dict.is_null(ids[4]), false);
+        assert_eq!(dict.is_null(ids[4] * 500), false);
+
         assert_eq!(dict.len(), dvs.len());
     }
 
@@ -609,6 +681,10 @@ mod test {
         assert_eq!(dict.add_datavalue(nv2.clone()), AddResult::Known(n2_id));
 
         assert_eq!(dict.add_datavalue(nv3.clone()), AddResult::Rejected);
+
+        assert_eq!(dict.is_null(n1_id), true);
+        assert_eq!(dict.is_null(n2_id), true);
+        assert_eq!(dict.is_null(n2_id + 10), false);
 
         assert_eq!(dict.len(), 2);
     }

@@ -77,6 +77,22 @@ pub trait DvDict: Debug {
         self.len() == 0
     }
 
+    /// Returns true if the given ID is associated with an IRI, and false
+    /// if it is associated with anything else or nothing at all.
+    fn is_iri(&self, id: usize) -> bool;
+
+    /// Returns true if the given ID is associated with a plain string, and false
+    /// if it is associated with anything else or nothing at all.
+    fn is_plain_string(&self, id: usize) -> bool;
+
+    /// Returns true if the given ID is associated with a language-tagged string, and false
+    /// if it is associated with anything else or nothing at all.
+    fn is_lang_string(&self, id: usize) -> bool;
+
+    /// Returns true if the given ID is associated with a null, and false
+    /// if it is associated with anything else or nothing at all.
+    fn is_null(&self, id: usize) -> bool;
+
     /// Marks the given datavalue as being known, without assigning an own id to it.
     /// If the entry exists already, the existing id will be kept and returned. Otherwise,
     /// the virtual id [`KNOWN_ID_MARK`] is assigned.

@@ -1651,9 +1651,9 @@ mod test {
         let expected_fact = Fact(Atom::new(
             p,
             vec![
-                Term::Primitive(PrimitiveTerm::GroundTerm(AnyDataValue::new_integer_from_i64(
-                    int,
-                ))),
+                Term::Primitive(PrimitiveTerm::GroundTerm(
+                    AnyDataValue::new_integer_from_i64(int),
+                )),
                 Term::Primitive(PrimitiveTerm::GroundTerm(
                     AnyDataValue::new_double_from_f64(dbl).expect("is not NaN"),
                 )),
@@ -1830,15 +1830,15 @@ mod test {
                 ),
                 Constraint::Equals(
                     Term::Primitive(PrimitiveTerm::Variable(Variable::Universal(x.clone()))),
-                    Term::Primitive(PrimitiveTerm::GroundTerm(AnyDataValue::new_integer_from_i64(
-                        3,
-                    ))),
+                    Term::Primitive(PrimitiveTerm::GroundTerm(
+                        AnyDataValue::new_integer_from_i64(3),
+                    )),
                 ),
                 Constraint::LessThan(
                     Term::Primitive(PrimitiveTerm::Variable(Variable::Universal(z.clone()))),
-                    Term::Primitive(PrimitiveTerm::GroundTerm(AnyDataValue::new_integer_from_i64(
-                        7,
-                    ))),
+                    Term::Primitive(PrimitiveTerm::GroundTerm(
+                        AnyDataValue::new_integer_from_i64(7),
+                    )),
                 ),
                 Constraint::LessThanEq(
                     Term::Primitive(PrimitiveTerm::Variable(Variable::Universal(x))),

@@ -60,6 +60,11 @@ impl<B: GlobalBytesBuffer> BytesDictionary<B> {
         self.store.get(id).map(|entry| entry.to_vec())
     }
 
+    /// Returns true if a value is associated with the id.
+    pub(crate) fn knows_id(&self, id: usize) -> bool {
+        id < self.store.len()
+    }
+
     /// Returns the number of elements in the dictionary. Strings that are merely
     /// marked are not counted here.
     pub(crate) fn len(&self) -> usize {

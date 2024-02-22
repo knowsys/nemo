@@ -37,6 +37,11 @@ impl<B: GlobalBytesBuffer> GenericStringDictionary<B> {
             .map(|bytes| unsafe { String::from_utf8_unchecked(bytes) })
     }
 
+    /// Returns true if a value is associated with the id.
+    pub(crate) fn knows_id(&self, id: usize) -> bool {
+        self.bytes_dict.knows_id(id)
+    }
+
     /// Returns the number of elements in the dictionary. Strings that are merely
     /// marked are not counted here.
     pub(crate) fn len(&self) -> usize {

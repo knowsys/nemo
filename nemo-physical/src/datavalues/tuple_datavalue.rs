@@ -81,7 +81,9 @@ impl DataValue for TupleDataValue {
     }
 
     fn tuple_element_unchecked(&self, index: usize) -> &AnyDataValue {
-        self.values.get(index).expect("unchecked access to tuple element requires index to be valid")
+        self.values
+            .get(index)
+            .expect("unchecked access to tuple element requires index to be valid")
     }
 }
 
