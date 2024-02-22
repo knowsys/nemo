@@ -62,8 +62,8 @@ pub(crate) fn head_instruction_from_atom(atom: &PrimitiveAtom) -> HeadInstructio
                     current_append_vector = append_instructions.last_mut().unwrap();
                 }
             }
-            PrimitiveTerm::Constant(constant) => {
-                let instruction = AppendInstruction::Constant(constant.as_datavalue());
+            PrimitiveTerm::Constant(datavalue) => {
+                let instruction = AppendInstruction::Constant(datavalue.clone());
                 current_append_vector.push(instruction);
             }
         }

@@ -4,7 +4,7 @@ use super::{Constant, Identifier};
 
 /// A key in a [Map].
 #[derive(Debug, Eq, PartialEq, Clone, Hash, PartialOrd, Ord)]
-pub enum Key {
+enum Key {
     /// A string key.
     String(String),
     /// An identifier key.
@@ -40,7 +40,7 @@ impl std::fmt::Display for Key {
 /// A Map: a [Constant] assigning values (which can be arbitrary
 /// [Constants][Constant]) to [Keys][Key].
 #[derive(Debug, Eq, PartialEq, Clone, PartialOrd, Ord, Default)]
-pub struct Map {
+struct Map {
     pub(crate) pairs: BTreeMap<Key, Constant>,
 }
 

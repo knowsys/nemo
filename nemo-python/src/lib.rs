@@ -9,7 +9,7 @@ use nemo::{
     io::{resource_providers::ResourceProviders, ExportManager, ImportManager},
     model::{
         chase_model::{ChaseAtom, ChaseFact},
-        Constant, ExportDirective, Identifier, NumericLiteral, RdfLiteral, Variable, XSD_STRING,
+        ExportDirective, Identifier, Variable,
     },
 };
 
@@ -18,6 +18,7 @@ use pyo3::{create_exception, exceptions::PyNotImplementedError, prelude::*, type
 create_exception!(module, NemoError, pyo3::exceptions::PyException);
 
 pub const RDF_LANG_STRING: &str = "http://www.w3.org/1999/02/22-rdf-syntax-ns#langString";
+pub const XSD_STRING: &str = "http://www.w3.org/2001/XMLSchema#string";
 
 trait PythonResult {
     type Value;
@@ -139,40 +140,6 @@ impl NemoLiteral {
 #[pyclass]
 struct NemoResults(Box<dyn Iterator<Item = Vec<AnyDataValue>> + Send>);
 
-/// TODO: This function may not be in synch with `datavalue_to_python` now. It should
-/// make use of the latter in some later version, once the Nemo model also used DataValues
-/// in its constants.
-fn constant_to_python<'a>(py: Python<'a>, v: &Constant) -> PyResult<&'a PyAny> {
-    let decimal = py.import("decimal")?.getattr("Decimal")?;
-    match v {
-        Constant::Abstract(c) => Ok(c.to_string().into_py(py).into_ref(py)),
-        Constant::NumericLiteral(NumericLiteral::Integer(i)) => Ok(i.into_py(py).into_ref(py)),
-        Constant::NumericLiteral(NumericLiteral::Double(d)) => {
-            Ok(f64::from(*d).into_py(py).into_ref(py))
-        }
-        // currently we pack decimals into strings, maybe this should change
-        Constant::NumericLiteral(_) => decimal.call1((v.to_string(),)),
-        Constant::StringLiteral(s) => Ok(s.into_py(py).into_ref(py)),
-        Constant::RdfLiteral(lit) => (|| {
-            let lit = match lit {
-                RdfLiteral::DatatypeValue { value, datatype } => NemoLiteral {
-                    value: value.clone(),
-                    language: None,
-                    datatype: datatype.clone(),
-                },
-                RdfLiteral::LanguageString { value, tag } => NemoLiteral {
-                    value: value.clone(),
-                    language: Some(tag.clone()),
-                    datatype: RDF_LANG_STRING.to_string(),
-                },
-            };
-            Ok(Py::new(py, lit)?.to_object(py).into_ref(py))
-        })(),
-        Constant::MapLiteral(_map) => todo!("maps are not yet supported"),
-        Constant::TupleLiteral(_tuple) => todo!("tuples are not yet supported"),
-    }
-}
-
 fn datavalue_to_python(py: Python<'_>, v: AnyDataValue) -> PyResult<&PyAny> {
     match v.value_domain() {
         nemo::datavalues::ValueDomain::LanguageTaggedString => {
@@ -222,7 +189,7 @@ impl NemoFact {
         self.0
             .terms()
             .iter()
-            .map(|c| constant_to_python(py, c))
+            .map(|c| datavalue_to_python(py, c.clone()))
             .collect()
     }
 
@@ -273,10 +240,16 @@ impl NemoTrace {
     }
 }
 
-fn assignement_to_dict(assignment: &HashMap<Variable, Constant>, py: Python) -> PyResult<PyObject> {
+fn assignement_to_dict(
+    assignment: &HashMap<Variable, AnyDataValue>,
+    py: Python,
+) -> PyResult<PyObject> {
     let dict = PyDict::new(py);
     for (variable, value) in assignment {
-        dict.set_item(variable.to_string(), constant_to_python(py, value)?)?;
+        dict.set_item(
+            variable.to_string(),
+            datavalue_to_python(py, value.clone())?,
+        )?;
     }
 
     Ok(dict.to_object(py))

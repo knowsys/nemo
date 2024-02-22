@@ -688,7 +688,7 @@ mod test {
                 OperationGenerator, OperationTable,
             },
             trie::Trie,
-            triescan::{PartialTrieScan, TrieScan, TrieScanEnum},
+            triescan::{PartialTrieScan, TrieScanEnum},
         },
         util::test_util::test::{
             partial_scan_current, partial_scan_current_at_layer, partial_scan_next,

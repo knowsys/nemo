@@ -16,3 +16,6 @@ pub const MAP_ASSIGN: &str = "=";
 pub const MAP_SEPARATOR: &str = ",";
 /// Separator for elements of tuples
 pub const TUPLE_SEPARATOR: &str = ",";
+
+/// Initial part of IRI in all XML Schema types:
+pub const XSD_PREFIX: &str = "http://www.w3.org/2001/XMLSchema#";

@@ -552,10 +552,10 @@ mod test {
 
     use crate::model::chase_model::{ChaseProgram, ChaseRule, PrimitiveAtom, VariableAtom};
     use crate::model::{
-        Constant, FileFormat, Identifier, ImportDirective, ImportExportDirective, Key, Map,
-        PrimitiveTerm, Tuple, Variable, PARAMETER_NAME_FORMAT, PARAMETER_NAME_RESOURCE,
-        VALUE_FORMAT_ANY,
+        FileFormat, Identifier, ImportDirective, ImportExportDirective, PrimitiveTerm, Variable,
+        PARAMETER_NAME_FORMAT, PARAMETER_NAME_RESOURCE, VALUE_FORMAT_ANY,
     };
+    use nemo_physical::datavalues::{AnyDataValue, MapDataValue, TupleDataValue};
     use nemo_physical::management::execution_plan::ColumnOrder;
 
     use std::collections::{HashMap, HashSet};
@@ -986,19 +986,20 @@ mod test {
 
     /// Helper function to create source-like imports
     fn csv_import(predicate: Identifier, arity: usize) -> ImportDirective {
-        let attributes = Map::from_iter([
+        let attributes = MapDataValue::from_iter([
             (
-                Key::identifier_from_str(PARAMETER_NAME_RESOURCE),
-                Constant::StringLiteral("".to_string()),
+                AnyDataValue::new_iri(PARAMETER_NAME_RESOURCE.to_string()),
+                AnyDataValue::new_string("".to_string()),
             ),
             (
-                Key::identifier_from_str(PARAMETER_NAME_FORMAT),
-                Constant::TupleLiteral(Tuple::from_iter(
+                AnyDataValue::new_iri(PARAMETER_NAME_FORMAT.to_string()),
+                TupleDataValue::from_iter(
                     vec![VALUE_FORMAT_ANY; arity]
                         .iter()
-                        .map(|format| Constant::StringLiteral((*format).to_string()))
-                        .collect::<Vec<Constant>>(),
-                )),
+                        .map(|format| AnyDataValue::new_string((*format).to_string()))
+                        .collect::<Vec<AnyDataValue>>(),
+                )
+                .into(),
             ),
         ]);
         ImportDirective::from(ImportExportDirective {

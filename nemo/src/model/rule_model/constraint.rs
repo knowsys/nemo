@@ -1,8 +1,8 @@
-use nemo_physical::aggregates::operation;
+use nemo_physical::datavalues::AnyDataValue;
 
 use crate::model::{Term, Variable, VariableAssignment};
 
-use super::{BinaryOperation, Constant, PrimitiveTerm};
+use super::{BinaryOperation, PrimitiveTerm};
 
 /// Represents a constraint which is expressed as a binary operator applied to two terms
 #[derive(Debug, Eq, PartialEq, Clone, PartialOrd, Ord)]
@@ -88,9 +88,9 @@ impl Constraint {
         self.left().variables().chain(self.right().variables())
     }
 
-    /// Return All the constants used within this constraint.
-    pub fn constants(&self) -> impl Iterator<Item = &Constant> {
-        self.left().constants().chain(self.right().constants())
+    /// Returns all [AnyDataValue]s used within this constraint.
+    pub fn datavalues(&self) -> impl Iterator<Item = &AnyDataValue> {
+        self.left().datavalues().chain(self.right().datavalues())
     }
 
     /// Return whether this type of constraints only works on numeric values

@@ -2,12 +2,9 @@ use std::fmt::{Debug, Display};
 
 use nemo_physical::datavalues::AnyDataValue;
 
-use crate::{
-    error::Error,
-    model::{types::primitive_logical_value::LOGICAL_NULL_PREFIX, VariableAssignment},
-};
+use crate::{error::Error, model::VariableAssignment};
 
-use super::{Aggregate, Identifier, Map, NumericLiteral, RdfLiteral, Tuple};
+use super::{Aggregate, Identifier};
 
 /// Variable that can be bound to a specific value.
 /// Variables are identified by a string name or (in the case of
@@ -70,119 +67,17 @@ impl Display for Variable {
     }
 }
 
-/// A term with a specific constant value
-#[derive(Debug, Eq, PartialEq, Clone, PartialOrd, Ord)]
-pub enum Constant {
-    /// An (abstract) constant.
-    Abstract(Identifier),
-    /// A numeric literal.
-    NumericLiteral(NumericLiteral),
-    /// A string literal.
-    StringLiteral(String),
-    /// An RDF-literal.
-    RdfLiteral(RdfLiteral),
-    /// A map literal.
-    MapLiteral(Map),
-    /// A tuple literal
-    TupleLiteral(Tuple),
-}
-
-impl Constant {
-    /// If this is a string literal, return the string.
-    pub fn as_string(&self) -> Option<&String> {
-        match self {
-            Self::StringLiteral(string) => Some(string),
-            _ => None,
-        }
-    }
-
-    /// If this is a constant, return the [Identifier].
-    pub fn as_abstract(&self) -> Option<&Identifier> {
-        match self {
-            Self::Abstract(identifier) => Some(identifier),
-            _ => None,
-        }
-    }
-
-    /// If this is a resource (either a string literal, or a constant identifier), return it.
-    pub fn as_resource(&self) -> Option<&nemo_physical::resource::Resource> {
-        match self {
-            Self::StringLiteral(string) => Some(string),
-            Self::Abstract(identifier) => Some(&identifier.0),
-            _ => None,
-        }
-    }
-
-    /// Translate [Constant] into [AnyDataValue],
-    /// ignoring type information
-    /// TODO: Refactor rule model and get rid of this
-    pub fn as_datavalue(&self) -> AnyDataValue {
-        match self {
-            Constant::Abstract(constant) => AnyDataValue::new_iri(constant.to_string()),
-            Constant::NumericLiteral(constant) => match constant {
-                NumericLiteral::Integer(integer) => AnyDataValue::new_integer_from_i64(*integer),
-                NumericLiteral::Decimal(_integer, _fraction) => todo!(),
-                NumericLiteral::Double(double) => {
-                    AnyDataValue::new_double_from_f64(f64::from(*double))
-                        .expect("We don't parse infinity or NaN")
-                }
-            },
-            Constant::StringLiteral(string) => AnyDataValue::new_string(string.clone()),
-            Constant::RdfLiteral(literal) => {
-                match literal {
-                    RdfLiteral::LanguageString { value, tag } => {
-                        AnyDataValue::new_language_tagged_string(value.clone(), tag.clone())
-                    }
-                    RdfLiteral::DatatypeValue { value, datatype } => {
-                        // TODO: Handle error
-                        AnyDataValue::new_from_typed_literal(value.clone(), datatype.clone())
-                            .expect("TOOD: Handle RDFLiteral Error")
-                    }
-                }
-            }
-            Constant::MapLiteral(_) => todo!(),
-            Constant::TupleLiteral(_) => todo!(),
-        }
-    }
-}
-
-impl Display for Constant {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Constant::Abstract(Identifier(abstract_string)) => {
-                // Nulls on logical level start with __Null# and shall be wrapped in angle brackets
-                // blank nodes and anything that starts with an ascii letter (like bare names)
-                // should not be wrapped in angle brackets
-                if !abstract_string.starts_with(LOGICAL_NULL_PREFIX)
-                    && abstract_string.starts_with(|c: char| c.is_ascii_alphabetic() || c == '_')
-                {
-                    write!(f, "{abstract_string}")
-                }
-                // everything else (including nulls) shall be wrapped in angle_brackets
-                else {
-                    write!(f, "<{abstract_string}>")
-                }
-            }
-            Constant::NumericLiteral(literal) => write!(f, "{}", literal),
-            Constant::StringLiteral(literal) => write!(f, "\"{}\"", literal),
-            Constant::RdfLiteral(literal) => write!(f, "{}", literal),
-            Constant::MapLiteral(term) => write!(f, "{term}"),
-            Constant::TupleLiteral(tuple) => write!(f, "{tuple}"),
-        }
-    }
-}
-
 /// Simple term that is either a constant or a variable
 #[derive(Debug, Eq, PartialEq, Clone, PartialOrd, Ord)]
 pub enum PrimitiveTerm {
     /// A constant.
-    Constant(Constant),
+    Constant(AnyDataValue),
     /// A variable.
     Variable(Variable),
 }
 
-impl From<Constant> for PrimitiveTerm {
-    fn from(value: Constant) -> Self {
+impl From<AnyDataValue> for PrimitiveTerm {
+    fn from(value: AnyDataValue) -> Self {
         Self::Constant(value)
     }
 }
@@ -257,7 +152,7 @@ impl BinaryOperation {
             "Substr" => Ok(BinaryOperation::StringSubstring),
             "And" => Ok(BinaryOperation::BooleanConjunction),
             "Or" => Ok(BinaryOperation::BooleanDisjunction),
-            s => Err(Error::UnknonwUnaryOpertation {
+            s => Err(Error::UnknownUnaryOpertation {
                 operation: s.into(),
             }),
         }
@@ -357,7 +252,7 @@ impl UnaryOperation {
             "Length" => Ok(UnaryOperation::StringLength),
             "Lower" => Ok(UnaryOperation::StringLowercase),
             "Upper" => Ok(UnaryOperation::StringUppercase),
-            s => Err(Error::UnknonwUnaryOpertation {
+            s => Err(Error::UnknownUnaryOpertation {
                 operation: s.into(),
             }),
         }
@@ -451,12 +346,12 @@ impl Term {
             })
     }
 
-    /// Return all the constants in the term.
-    pub(crate) fn constants(&self) -> impl Iterator<Item = &Constant> {
+    /// Return all [AnyDataValue]s that appear in the term.
+    pub(crate) fn datavalues(&self) -> impl Iterator<Item = &AnyDataValue> {
         self.primitive_terms()
             .into_iter()
             .filter_map(|term| match term {
-                PrimitiveTerm::Constant(constant) => Some(constant),
+                PrimitiveTerm::Constant(datavalue) => Some(datavalue),
                 _ => None,
             })
     }
@@ -725,179 +620,4 @@ impl Display for Term {
 }
 
 #[cfg(test)]
-mod test {
-    use std::assert_eq;
-
-    use nemo_physical::datatypes::Double;
-
-    use crate::model::{
-        InvalidRdfLiteral, NumericLiteral, RdfLiteral, XSD_DECIMAL, XSD_DOUBLE, XSD_INTEGER,
-        XSD_STRING,
-    };
-
-    use super::*;
-
-    #[test]
-    fn rdf_literal_normalization() {
-        let language_string_literal = RdfLiteral::LanguageString {
-            value: "language string".to_string(),
-            tag: "en".to_string(),
-        };
-        let random_datavalue_literal = RdfLiteral::DatatypeValue {
-            value: "some random datavalue".to_string(),
-            datatype: "a datatype that I totally did not just make up".to_string(),
-        };
-        let string_datavalue_literal = RdfLiteral::DatatypeValue {
-            value: "string datavalue".to_string(),
-            datatype: XSD_STRING.to_string(),
-        };
-        let integer_datavalue_literal = RdfLiteral::DatatypeValue {
-            value: "73".to_string(),
-            datatype: XSD_INTEGER.to_string(),
-        };
-        let decimal_datavalue_literal = RdfLiteral::DatatypeValue {
-            value: "1.23".to_string(),
-            datatype: XSD_DECIMAL.to_string(),
-        };
-        let signed_decimal_datavalue_literal = RdfLiteral::DatatypeValue {
-            value: "+1.23".to_string(),
-            datatype: XSD_DECIMAL.to_string(),
-        };
-        let negative_decimal_datavalue_literal = RdfLiteral::DatatypeValue {
-            value: "-1.23".to_string(),
-            datatype: XSD_DECIMAL.to_string(),
-        };
-        let pointless_decimal_datavalue_literal = RdfLiteral::DatatypeValue {
-            value: "23".to_string(),
-            datatype: XSD_DECIMAL.to_string(),
-        };
-        let signed_pointless_decimal_datavalue_literal = RdfLiteral::DatatypeValue {
-            value: "+23".to_string(),
-            datatype: XSD_DECIMAL.to_string(),
-        };
-        let negative_pointless_decimal_datavalue_literal = RdfLiteral::DatatypeValue {
-            value: "-23".to_string(),
-            datatype: XSD_DECIMAL.to_string(),
-        };
-        let double_datavalue_literal = RdfLiteral::DatatypeValue {
-            value: "3.33".to_string(),
-            datatype: XSD_DOUBLE.to_string(),
-        };
-        let large_integer_literal = RdfLiteral::DatatypeValue {
-            value: "9950000000000000000".to_string(),
-            datatype: XSD_INTEGER.to_string(),
-        };
-        let large_decimal_literal = RdfLiteral::DatatypeValue {
-            value: "9950000000000000001".to_string(),
-            datatype: XSD_DECIMAL.to_string(),
-        };
-        let invalid_integer_literal = RdfLiteral::DatatypeValue {
-            value: "123.45".to_string(),
-            datatype: XSD_INTEGER.to_string(),
-        };
-        let invalid_decimal_literal = RdfLiteral::DatatypeValue {
-            value: "123.45a".to_string(),
-            datatype: XSD_DECIMAL.to_string(),
-        };
-
-        let expected_language_string_literal =
-            Constant::RdfLiteral(language_string_literal.clone());
-        let expected_random_datavalue_literal =
-            Constant::RdfLiteral(random_datavalue_literal.clone());
-        let expected_string_datavalue_literal =
-            Constant::StringLiteral("string datavalue".to_string());
-        let expected_integer_datavalue_literal =
-            Constant::NumericLiteral(NumericLiteral::Integer(73));
-        let expected_decimal_datavalue_literal =
-            Constant::NumericLiteral(NumericLiteral::Decimal(1, 23));
-        let expected_signed_decimal_datavalue_literal =
-            Constant::NumericLiteral(NumericLiteral::Decimal(1, 23));
-        let expected_negative_decimal_datavalue_literal =
-            Constant::NumericLiteral(NumericLiteral::Decimal(-1, 23));
-        let expected_pointless_decimal_datavalue_literal =
-            Constant::NumericLiteral(NumericLiteral::Decimal(23, 0));
-        let expected_signed_pointless_decimal_datavalue_literal =
-            Constant::NumericLiteral(NumericLiteral::Decimal(23, 0));
-        let expected_negative_pointless_decimal_datavalue_literal =
-            Constant::NumericLiteral(NumericLiteral::Decimal(-23, 0));
-        let expected_double_datavalue_literal =
-            Constant::NumericLiteral(NumericLiteral::Double(Double::new(3.33).unwrap()));
-        let expected_large_integer_literal = Constant::RdfLiteral(RdfLiteral::DatatypeValue {
-            value: "9950000000000000000".to_string(),
-            datatype: XSD_INTEGER.to_string(),
-        });
-        let expected_large_decimal_literal = Constant::RdfLiteral(RdfLiteral::DatatypeValue {
-            value: "9950000000000000001".to_string(),
-            datatype: XSD_DECIMAL.to_string(),
-        });
-        let expected_invalid_integer_literal = InvalidRdfLiteral::new(RdfLiteral::DatatypeValue {
-            value: "123.45".to_string(),
-            datatype: XSD_INTEGER.to_string(),
-        });
-        let expected_invalid_decimal_literal = InvalidRdfLiteral::new(RdfLiteral::DatatypeValue {
-            value: "123.45a".to_string(),
-            datatype: XSD_DECIMAL.to_string(),
-        });
-
-        assert_eq!(
-            Constant::try_from(language_string_literal).unwrap(),
-            expected_language_string_literal
-        );
-        assert_eq!(
-            Constant::try_from(random_datavalue_literal).unwrap(),
-            expected_random_datavalue_literal
-        );
-        assert_eq!(
-            Constant::try_from(string_datavalue_literal).unwrap(),
-            expected_string_datavalue_literal
-        );
-        assert_eq!(
-            Constant::try_from(integer_datavalue_literal).unwrap(),
-            expected_integer_datavalue_literal
-        );
-        assert_eq!(
-            Constant::try_from(decimal_datavalue_literal).unwrap(),
-            expected_decimal_datavalue_literal
-        );
-        assert_eq!(
-            Constant::try_from(signed_decimal_datavalue_literal).unwrap(),
-            expected_signed_decimal_datavalue_literal
-        );
-        assert_eq!(
-            Constant::try_from(negative_decimal_datavalue_literal).unwrap(),
-            expected_negative_decimal_datavalue_literal
-        );
-        assert_eq!(
-            Constant::try_from(pointless_decimal_datavalue_literal).unwrap(),
-            expected_pointless_decimal_datavalue_literal
-        );
-        assert_eq!(
-            Constant::try_from(signed_pointless_decimal_datavalue_literal).unwrap(),
-            expected_signed_pointless_decimal_datavalue_literal
-        );
-        assert_eq!(
-            Constant::try_from(negative_pointless_decimal_datavalue_literal).unwrap(),
-            expected_negative_pointless_decimal_datavalue_literal
-        );
-        assert_eq!(
-            Constant::try_from(double_datavalue_literal).unwrap(),
-            expected_double_datavalue_literal
-        );
-        assert_eq!(
-            Constant::try_from(large_integer_literal).unwrap(),
-            expected_large_integer_literal
-        );
-        assert_eq!(
-            Constant::try_from(large_decimal_literal).unwrap(),
-            expected_large_decimal_literal
-        );
-        assert_eq!(
-            Constant::try_from(invalid_integer_literal).unwrap_err(),
-            expected_invalid_integer_literal
-        );
-        assert_eq!(
-            Constant::try_from(invalid_decimal_literal).unwrap_err(),
-            expected_invalid_decimal_literal
-        );
-    }
-}
+mod test {}

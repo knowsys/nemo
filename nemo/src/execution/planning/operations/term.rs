@@ -14,7 +14,7 @@ pub(super) fn term_to_function_tree(
 ) -> FunctionTree<OperationColumnMarker> {
     match term {
         Term::Primitive(primitive) => match primitive {
-            PrimitiveTerm::Constant(constant) => FunctionTree::constant(constant.as_datavalue()),
+            PrimitiveTerm::Constant(datavalue) => FunctionTree::constant(datavalue.clone()),
             PrimitiveTerm::Variable(variable) => FunctionTree::reference(
                 *translation
                     .get(variable)

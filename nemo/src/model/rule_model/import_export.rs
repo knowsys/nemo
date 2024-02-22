@@ -1,7 +1,9 @@
 //! Import and export directives are a direct representation of the syntactic information
 //! given in rule files.
 
-use crate::model::{Identifier, Map};
+use nemo_physical::datavalues::MapDataValue;
+
+use crate::model::Identifier;
 
 /// An import/export specification. This object captures all information that is typically
 /// present in an import or export directive in a Nemo program, including the main format,
@@ -14,7 +16,7 @@ pub(crate) struct ImportExportDirective {
     /// The file format and resource we're using.
     pub(crate) format: FileFormat,
     /// The attributes we've been given.
-    pub(crate) attributes: Map,
+    pub(crate) attributes: MapDataValue,
 }
 
 impl PartialEq for ImportExportDirective {
@@ -43,7 +45,7 @@ impl ImportDirective {
     }
 
     /// Return the attributes.
-    pub fn attributes(&self) -> &Map {
+    pub fn attributes(&self) -> &MapDataValue {
         &self.0.attributes
     }
 }
@@ -70,7 +72,7 @@ impl ExportDirective {
     }
 
     /// Return the attributes.
-    pub fn attributes(&self) -> &Map {
+    pub fn attributes(&self) -> &MapDataValue {
         &self.0.attributes
     }
 
@@ -79,7 +81,7 @@ impl ExportDirective {
         ExportDirective(ImportExportDirective {
             format: FileFormat::CSV,
             predicate: predicate,
-            attributes: Map::new(),
+            attributes: MapDataValue::from_iter([]),
         })
     }
 }

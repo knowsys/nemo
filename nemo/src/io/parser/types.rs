@@ -1,5 +1,6 @@
 use std::num::{ParseFloatError, ParseIntError};
 
+use nemo_physical::datavalues::DataValueCreationError;
 use nom::{
     error::{ErrorKind, FromExternalError},
     IResult,
@@ -412,6 +413,12 @@ impl FromExternalError<Span<'_>, crate::error::ReadingError> for LocatedParseErr
 
 impl FromExternalError<Span<'_>, ImportExportError> for LocatedParseError {
     fn from_external_error(input: Span<'_>, _kind: ErrorKind, e: ImportExportError) -> Self {
+        ParseError::ExternalError(Box::new(e.into())).at(input)
+    }
+}
+
+impl FromExternalError<Span<'_>, DataValueCreationError> for LocatedParseError {
+    fn from_external_error(input: Span<'_>, _kind: ErrorKind, e: DataValueCreationError) -> Self {
         ParseError::ExternalError(Box::new(e.into())).at(input)
     }
 }

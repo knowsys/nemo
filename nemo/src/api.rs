@@ -8,7 +8,7 @@
 //! # fn main() {}
 //! # #[cfg(not(miri))]
 //! # fn main() {
-//! use nemo::api::{load, reason, output_predicates, write};
+//! use nemo::api::{load, reason, output_predicates};
 //! # let path = String::from("../resources/testcases/lcs-diff-computation/run-lcs-10.rls");
 //! // assume path is a string with the path to a rules file
 //! let mut engine = load(path.into()).unwrap();
@@ -20,7 +20,8 @@
 //! // write the results to a temporary directory
 //! let temp_dir = TempDir::new().unwrap();
 //! let predicates = output_predicates(&engine);
-//! write(temp_dir.to_str().unwrap().to_string(), &mut engine, predicates).unwrap();
+//! // TODO: Write API disabled due to refactoring.
+//! // write(temp_dir.to_str().unwrap().to_string(), &mut engine, predicates).unwrap();
 //! # }
 //! ```
 

@@ -2,10 +2,12 @@
 
 use std::collections::{HashMap, HashSet};
 
+use nemo_physical::datavalues::AnyDataValue;
+
 use crate::{
     error::Error,
     io::formats::import_export::{ImportExportHandler, ImportExportHandlers},
-    model::{Constant, ExportDirective, Identifier, ImportDirective, PrimitiveType, Program},
+    model::{ExportDirective, Identifier, ImportDirective, Program},
 };
 
 use super::{ChaseAtom, ChaseFact, ChaseRule};
@@ -19,7 +21,6 @@ pub(crate) struct ChaseProgram {
     export_handlers: Vec<(Identifier, Box<dyn ImportExportHandler>)>,
     rules: Vec<ChaseRule>,
     facts: Vec<ChaseFact>,
-    parsed_predicate_declarations: HashMap<Identifier, Vec<PrimitiveType>>,
     output_predicates: Vec<Identifier>,
 }
 
@@ -134,29 +135,6 @@ impl ChaseProgramBuilder {
         self
     }
 
-    /// Add a predicate declaration.
-    pub fn predicate_declaration(
-        mut self,
-        predicate: Identifier,
-        declared_type: Vec<PrimitiveType>,
-    ) -> Self {
-        self.program
-            .parsed_predicate_declarations
-            .insert(predicate, declared_type);
-        self
-    }
-
-    /// Add predicate declarations.
-    pub fn predicate_declarations<T>(mut self, declarations: T) -> Self
-    where
-        T: IntoIterator<Item = (Identifier, Vec<PrimitiveType>)>,
-    {
-        self.program
-            .parsed_predicate_declarations
-            .extend(declarations);
-        self
-    }
-
     /// Select an IDB predicate for output.
     pub fn output_predicate(self, predicate: Identifier) -> Self {
         self.output_predicates([predicate])
@@ -265,15 +243,9 @@ impl ChaseProgram {
         self.prefixes.get(tag).cloned()
     }
 
-    /// Return parsed predicate declarations
-    #[must_use]
-    pub fn parsed_predicate_declarations(&self) -> &HashMap<Identifier, Vec<PrimitiveType>> {
-        &self.parsed_predicate_declarations
-    }
-
-    /// Return the constants appearing in the rules of the program.
-    pub fn all_constants(&self) -> impl Iterator<Item = &Constant> {
-        self.rules.iter().flat_map(|rule| rule.all_constants())
+    /// Returns the [AnyDataValue]s used as constants in the rules of the program.
+    pub fn all_datavalues(&self) -> impl Iterator<Item = &AnyDataValue> {
+        self.rules.iter().flat_map(|rule| rule.all_datavalues())
     }
 }
 

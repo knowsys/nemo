@@ -13,13 +13,10 @@ use crate::{
 
 use super::{
     boolean_datavalue::BooleanDataValue, errors::InternalDataValueCreationError,
-    float_datavalues::FloatDataValue, DataValue, DataValueCreationError, DoubleDataValue,
-    IriDataValue, LangStringDataValue, LongDataValue, MapDataValue, NullDataValue, OtherDataValue,
-    StringDataValue, TupleDataValue, UnsignedLongDataValue, ValueDomain,
+    float_datavalues::FloatDataValue, syntax::XSD_PREFIX, DataValue, DataValueCreationError,
+    DoubleDataValue, IriDataValue, LangStringDataValue, LongDataValue, MapDataValue, NullDataValue,
+    OtherDataValue, StringDataValue, TupleDataValue, UnsignedLongDataValue, ValueDomain,
 };
-
-// Initial part of IRI in all XML Schema types:
-const XSD_PREFIX: &str = "http://www.w3.org/2001/XMLSchema#";
 
 /// Supported kinds of arbitrary size numbers.
 /// The variants we consider are taken from the XML Schema

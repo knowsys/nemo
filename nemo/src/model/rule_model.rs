@@ -21,20 +21,8 @@ pub use term::*;
 mod predicate;
 pub use predicate::*;
 
-mod rdf_literal;
-pub use rdf_literal::*;
-
-mod numeric_literal;
-pub use numeric_literal::*;
-
 mod constraint;
 pub use constraint::*;
-
-mod map;
-pub use map::*;
-
-mod tuple;
-pub use tuple::*;
 
 pub mod import_export;
 pub use import_export::*;

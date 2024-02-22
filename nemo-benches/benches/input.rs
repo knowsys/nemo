@@ -1,14 +1,6 @@
 use criterion::{criterion_group, criterion_main, BatchSize, Criterion};
-use nemo::{
-    builder_proxy::{LogicalAnyColumnBuilderProxy, LogicalStringColumnBuilderProxy},
-    model::{Constant, Identifier},
-};
-use nemo_physical::{
-    builder_proxy::{
-        ColumnBuilderProxy, PhysicalBuilderProxyEnum, PhysicalStringColumnBuilderProxy,
-    },
-    dictionary::HashMapDictionary,
-};
+use nemo::model::{Constant, Identifier};
+use nemo_physical::{datavalues::AnyDataValue, dictionary::HashMapDictionary};
 use rand::{distributions::Alphanumeric, prelude::*};
 use rand_pcg::Pcg64;
 
@@ -26,7 +18,7 @@ pub fn benchmark_input(c: &mut Criterion) {
         .collect::<Vec<_>>();
     let terms = strings
         .iter()
-        .map(|s| Constant::Abstract(Identifier::new(format!("http://example.org/{s}"))))
+        .map(|s| AnyDataValue::new_iri(format!("http://example.org/{s}")))
         .collect::<Vec<_>>();
     let iris = terms.iter().map(|t| t.to_string()).collect::<Vec<_>>();
 

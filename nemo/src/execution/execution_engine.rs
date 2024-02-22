@@ -111,10 +111,8 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
 
     /// Add all constants appearing in the rules of the program to the dictionary.
     fn add_all_constants(table_manager: &mut TableManager, program: &ChaseProgram) {
-        for constant in program.all_constants() {
-            table_manager
-                .dictionary_mut()
-                .add_datavalue(constant.as_datavalue());
+        for dv in program.all_datavalues() {
+            table_manager.dictionary_mut().add_datavalue(dv.clone());
         }
     }
 
@@ -148,12 +146,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
             let table = predicate_to_rows
                 .entry(fact.predicate())
                 .or_insert(SimpleTable::new(fact.arity()));
-            table.add_row(
-                fact.terms()
-                    .iter()
-                    .map(|term| term.as_datavalue())
-                    .collect(),
-            );
+            table.add_row(fact.terms().iter().map(|term| term.clone()).collect());
         }
 
         for (predicate, table) in predicate_to_rows.into_iter() {

@@ -3,11 +3,12 @@
 use std::collections::{HashMap, HashSet};
 
 use ascii_tree::write_tree;
+use nemo_physical::datavalues::AnyDataValue;
 use serde::Serialize;
 
 use crate::model::{
     chase_model::{ChaseAtom, ChaseFact},
-    Constant, Identifier, PrimitiveTerm, PrimitiveType, Program, Rule, Term, Variable,
+    PrimitiveTerm, Program, Rule, Term, Variable,
 };
 
 /// Index of a rule within a [`Program`]
@@ -19,7 +20,7 @@ pub(crate) struct TraceRuleApplication {
     /// Index of the rule that was applied
     rule_index: RuleIndex,
     /// Variable assignment used during the rule application
-    assignment: HashMap<Variable, Constant>,
+    assignment: HashMap<Variable, AnyDataValue>,
     /// Index of the head atom which produced the fact under consideration
     _position: usize,
 }
@@ -28,7 +29,7 @@ impl TraceRuleApplication {
     /// Create new [`TraceRuleApplication`].
     pub fn new(
         rule_index: RuleIndex,
-        assignment: HashMap<Variable, Constant>,
+        assignment: HashMap<Variable, AnyDataValue>,
         _position: usize,
     ) -> Self {
         Self {
@@ -91,8 +92,6 @@ struct TracedFact {
 pub struct ExecutionTrace {
     /// Input program
     program: Program,
-    /// Logical types associated with each predicate
-    predicate_types: HashMap<Identifier, Vec<PrimitiveType>>,
 
     /// All the facts considered during tracing
     facts: Vec<TracedFact>,
@@ -100,13 +99,9 @@ pub struct ExecutionTrace {
 
 impl ExecutionTrace {
     /// Create an empty [`ExecutionTrace`].
-    pub(crate) fn new(
-        program: Program,
-        predicate_types: HashMap<Identifier, Vec<PrimitiveType>>,
-    ) -> Self {
+    pub(crate) fn new(program: Program) -> Self {
         Self {
             program,
-            predicate_types,
             facts: Vec::new(),
         }
     }
@@ -129,19 +124,9 @@ impl ExecutionTrace {
                 continue;
             }
 
-            let types = self
-                .predicate_types
-                .get(&fact.predicate())
-                .expect("Every predicate must have received type information");
-
             let mut identical = true;
-            for (ty, (term_fact, term_traced_fact)) in types
-                .iter()
-                .zip(fact.terms().iter().zip(traced_fact.fact.terms()))
-            {
-                if ty.ground_term_to_data_value_t(term_fact.clone())
-                    != ty.ground_term_to_data_value_t(term_traced_fact.clone())
-                {
+            for (term_fact, term_traced_fact) in fact.terms().iter().zip(traced_fact.fact.terms()) {
+                if term_fact != term_traced_fact {
                     identical = false;
                     break;
                 }
@@ -191,7 +176,7 @@ pub struct TraceTreeRuleApplication {
     /// Rule that was applied
     pub rule: Rule,
     /// Variable assignment used during the rule application
-    pub assignment: HashMap<Variable, Constant>,
+    pub assignment: HashMap<Variable, AnyDataValue>,
     /// Index of the head atom which produced the fact under consideration
     _position: usize,
 }
@@ -409,11 +394,13 @@ impl ExecutionTrace {
 mod test {
     use std::collections::HashMap;
 
+    use nemo_physical::datavalues::AnyDataValue;
+
     use crate::{
         execution::tracing::trace::{TraceDerivation, TraceStatus},
         model::{
-            chase_model::ChaseFact, Atom, Constant, Identifier, Literal, PrimitiveTerm,
-            PrimitiveType, Program, Rule, Term, Variable,
+            chase_model::ChaseFact, Atom, Identifier, Literal, PrimitiveTerm, Program, Rule, Term,
+            Variable,
         },
     };
 
@@ -426,7 +413,7 @@ mod test {
                 .map(|(k, v)| {
                     (
                         Variable::Universal(k.to_string()),
-                        Constant::Abstract(Identifier(v.to_string())),
+                        AnyDataValue::new_iri(v.to_string()),
                     )
                 })
                 .collect()
@@ -479,35 +466,35 @@ mod test {
         let q_ab = ChaseFact::new(
             Identifier("Q".to_string()),
             vec![
-                Constant::Abstract(Identifier("a".to_string())),
-                Constant::Abstract(Identifier("b".to_string())),
+                AnyDataValue::new_iri("a".to_string()),
+                AnyDataValue::new_iri("b".to_string()),
             ],
         );
 
         let p_ba = ChaseFact::new(
             Identifier("P".to_string()),
             vec![
-                Constant::Abstract(Identifier("b".to_string())),
-                Constant::Abstract(Identifier("a".to_string())),
+                AnyDataValue::new_iri("b".to_string()),
+                AnyDataValue::new_iri("a".to_string()),
             ],
         );
 
         let r_ba = ChaseFact::new(
             Identifier("R".to_string()),
             vec![
-                Constant::Abstract(Identifier("b".to_string())),
-                Constant::Abstract(Identifier("a".to_string())),
+                AnyDataValue::new_iri("b".to_string()),
+                AnyDataValue::new_iri("a".to_string()),
             ],
         );
 
         let s_a = ChaseFact::new(
             Identifier("S".to_string()),
-            vec![Constant::Abstract(Identifier("a".to_string()))],
+            vec![AnyDataValue::new_iri("a".to_string())],
         );
 
         let t_a = ChaseFact::new(
             Identifier("T".to_string()),
-            vec![Constant::Abstract(Identifier("a".to_string()))],
+            vec![AnyDataValue::new_iri("a".to_string())],
         );
 
         let rules = vec![rule_1, rule_2, rule_3];
@@ -517,23 +504,7 @@ mod test {
 
         let program = Program::builder().rules(rules).build();
 
-        let mut predicate_types = HashMap::new();
-        predicate_types.insert(Identifier(String::from("S")), vec![PrimitiveType::Any]);
-        predicate_types.insert(Identifier(String::from("T")), vec![PrimitiveType::Any]);
-        predicate_types.insert(
-            Identifier(String::from("Q")),
-            vec![PrimitiveType::Any, PrimitiveType::Any],
-        );
-        predicate_types.insert(
-            Identifier(String::from("P")),
-            vec![PrimitiveType::Any, PrimitiveType::Any],
-        );
-        predicate_types.insert(
-            Identifier(String::from("R")),
-            vec![PrimitiveType::Any, PrimitiveType::Any],
-        );
-
-        let mut trace = ExecutionTrace::new(program, predicate_types);
+        let mut trace = ExecutionTrace::new(program);
 
         let trace_s_a = trace.register_fact(s_a);
         let trace_t_a = trace.register_fact(t_a);
@@ -574,8 +545,8 @@ mod test {
         let r_ba = ChaseFact::new(
             Identifier("R".to_string()),
             vec![
-                Constant::Abstract(Identifier("b".to_string())),
-                Constant::Abstract(Identifier("a".to_string())),
+                AnyDataValue::new_iri("b".to_string()),
+                AnyDataValue::new_iri("a".to_string()),
             ],
         );
         let trace_r_ba = trace.find_fact(&r_ba).unwrap();
@@ -600,15 +571,15 @@ mod test {
         let r_ba = ChaseFact::new(
             Identifier("R".to_string()),
             vec![
-                Constant::Abstract(Identifier("b".to_string())),
-                Constant::Abstract(Identifier("a".to_string())),
+                AnyDataValue::new_iri("b".to_string()),
+                AnyDataValue::new_iri("a".to_string()),
             ],
         );
         let p_ba = ChaseFact::new(
             Identifier("P".to_string()),
             vec![
-                Constant::Abstract(Identifier("b".to_string())),
-                Constant::Abstract(Identifier("a".to_string())),
+                AnyDataValue::new_iri("b".to_string()),
+                AnyDataValue::new_iri("a".to_string()),
             ],
         );
 

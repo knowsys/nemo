@@ -2,6 +2,7 @@
 
 use std::path::PathBuf;
 
+use nemo_physical::datavalues::DataValueCreationError;
 use thiserror::Error;
 
 use crate::{
@@ -64,7 +65,7 @@ pub enum Error {
     PhysicalError(#[from] nemo_physical::error::Error),
     /// Error when trying to lookup unary operations
     #[error("The unary operation {operation} is unknown.")]
-    UnknonwUnaryOpertation {
+    UnknownUnaryOpertation {
         /// The operation causing the failure
         operation: String,
     },
@@ -77,6 +78,9 @@ pub enum Error {
     /// Error related to handling of file formats
     #[error(transparent)]
     FileFormatError(#[from] ImportExportError),
+    /// Error related to the creation of data values
+    #[error(transparent)]
+    DataValueCreationError(#[from] DataValueCreationError),
 }
 
 impl From<ReadingError> for Error {
