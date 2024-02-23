@@ -1,16 +1,14 @@
 //! This module defines [TrieScanUnion] and [GeneratorUnion].
 
-use std::cell::UnsafeCell;
-
-use bitvec::bitvec;
+use std::cell::{RefCell, UnsafeCell};
 
 use crate::{
     columnar::{
         columnscan::{ColumnScanCell, ColumnScanEnum, ColumnScanRainbow},
         operations::union::ColumnScanUnion,
     },
-    datatypes::{Double, Float, StorageTypeName},
-    dictionary::meta_dv_dict::MetaDvDictionary,
+    datatypes::{storage_type_name::StorageTypeBitSet, Double, Float, StorageTypeName},
+    management::database::Dict,
     tabular::triescan::{PartialTrieScan, TrieScanEnum},
 };
 
@@ -18,11 +16,11 @@ use super::OperationGenerator;
 
 /// Used to create a [TrieScanUnion]
 #[derive(Debug, Clone, Copy, Default)]
-pub struct GeneratorUnion {}
+pub(crate) struct GeneratorUnion {}
 
 impl GeneratorUnion {
     /// Create a new [GeneratorUnion].
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {}
     }
 }
@@ -31,7 +29,7 @@ impl OperationGenerator for GeneratorUnion {
     fn generate<'a>(
         &'_ self,
         trie_scans: Vec<Option<TrieScanEnum<'a>>>,
-        _dictionary: &'a MetaDvDictionary,
+        _dictionary: &'a RefCell<Dict>,
     ) -> Option<TrieScanEnum<'a>> {
         // We ignore any empy tables
         let trie_scans = trie_scans
@@ -90,13 +88,13 @@ impl OperationGenerator for GeneratorUnion {
     }
 }
 
-/// [`PartialTrieScan`] which represents the union of a list of [`PartialTrieScan`]s
+/// [PartialTrieScan] which represents the union of a list of [PartialTrieScan]s
 #[derive(Debug)]
-pub struct TrieScanUnion<'a> {
+pub(crate) struct TrieScanUnion<'a> {
     /// Input trie scans over of which the union is computed
     trie_scans: Vec<TrieScanEnum<'a>>,
 
-    /// For each layer in the resulting trie contains a [`ColumnScanRainbow`]
+    /// For each layer in the resulting trie contains a [ColumnScanRainbow]
     /// evaluating the union of the underlying columns of the input trie.
     column_scans: Vec<UnsafeCell<ColumnScanRainbow<'a>>>,
 
@@ -118,33 +116,39 @@ impl<'a> PartialTrieScan<'a> for TrieScanUnion<'a> {
     }
 
     fn down(&mut self, next_type: StorageTypeName) {
-        let previous_layer = self.current_layer();
-        let previous_type = self.path_types.last();
-
+        let mut active_scans = Vec::<usize>::new();
         let next_layer = self.path_types.len();
 
-        debug_assert!(next_layer < self.arity());
+        if let Some(previous_layer) = self.current_layer() {
+            let previous_type = self.path_types[previous_layer];
 
-        let previous_smallest = match previous_layer {
-            Some(previous_layer) => self.column_scans[previous_layer]
-                .get_mut()
-                .union_get_smallest(
-                    *previous_type.expect("path_types is not empty previous_layer is not None"),
-                ),
-            None => bitvec![1; self.trie_scans.len()],
-        };
+            debug_assert!(next_layer < self.arity());
 
-        for (scan_index, trie_scan) in self.trie_scans.iter_mut().enumerate() {
-            if !previous_smallest[scan_index] {
-                continue;
+            for (scan_index, trie_scan) in self.trie_scans.iter_mut().enumerate() {
+                if trie_scan.current_layer() != Some(previous_layer) {
+                    continue;
+                }
+
+                let is_smallest = self.column_scans[previous_layer]
+                    .get_mut()
+                    .union_is_smallest(previous_type, scan_index);
+
+                if is_smallest {
+                    active_scans.push(scan_index);
+                    trie_scan.down(next_type);
+                }
             }
+        } else {
+            active_scans = (0..self.trie_scans.len()).collect();
 
-            trie_scan.down(next_type);
+            for trie_scan in &mut self.trie_scans {
+                trie_scan.down(next_type);
+            }
         }
 
         self.column_scans[next_layer]
             .get_mut()
-            .union_set_active(next_type, previous_smallest);
+            .union_set_active(next_type, active_scans);
         self.column_scans[next_layer].get_mut().reset(next_type);
 
         self.path_types.push(next_type);
@@ -161,10 +165,20 @@ impl<'a> PartialTrieScan<'a> for TrieScanUnion<'a> {
     fn scan<'b>(&'b self, layer: usize) -> &'b UnsafeCell<ColumnScanRainbow<'a>> {
         &self.column_scans[layer]
     }
+
+    fn possible_types(&self, layer: usize) -> StorageTypeBitSet {
+        self.trie_scans
+            .iter()
+            .fold(StorageTypeBitSet::empty(), |result, scan| {
+                result.union(scan.possible_types(layer))
+            })
+    }
 }
 
 #[cfg(test)]
 mod test {
+    use std::cell::RefCell;
+
     use crate::{
         datatypes::{StorageTypeName, StorageValueT},
         dictionary::meta_dv_dict::MetaDvDictionary,
@@ -179,7 +193,7 @@ mod test {
 
     #[test]
     fn basic_union() {
-        let dictionary = MetaDvDictionary::default();
+        let dictionary = RefCell::new(MetaDvDictionary::default());
 
         let trie_a = trie_id32(vec![&[1, 2], &[2, 5], &[4, 4]]);
         let trie_b = trie_id32(vec![&[1, 2], &[1, 4], &[2, 4], &[7, 8], &[7, 9]]);
@@ -223,7 +237,7 @@ mod test {
 
     #[test]
     fn union_2() {
-        let dictionary = MetaDvDictionary::default();
+        let dictionary = RefCell::new(MetaDvDictionary::default());
 
         let trie_a = trie_id32(vec![
             &[1, 2],
@@ -292,7 +306,7 @@ mod test {
 
     #[test]
     fn union_3() {
-        let dictionary = MetaDvDictionary::default();
+        let dictionary = RefCell::new(MetaDvDictionary::default());
 
         let trie_a = trie_id32(vec![&[4, 1, 2]]);
         let trie_b = trie_id32(vec![&[1, 4, 1], &[2, 4, 1], &[4, 1, 4]]);
@@ -325,7 +339,7 @@ mod test {
 
     #[test]
     fn union_close() {
-        let dictionary = MetaDvDictionary::default();
+        let dictionary = RefCell::new(MetaDvDictionary::default());
 
         let trie_a = trie_id32(vec![&[1, 3], &[1, 4], &[2, 5]]);
         let trie_b = trie_id32(vec![&[2, 5], &[2, 6]]);
@@ -354,7 +368,7 @@ mod test {
 
     #[test]
     fn union_of_join() {
-        let dictionary = MetaDvDictionary::default();
+        let dictionary = RefCell::new(MetaDvDictionary::default());
 
         let trie_a = trie_id32(vec![&[1, 4], &[4, 1]]);
         let trie_b = trie_id32(vec![&[1, 2], &[2, 4]]);

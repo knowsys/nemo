@@ -1,7 +1,7 @@
 //! This module defines [TrieScanJoin] and [GeneratorJoin].
 
 use std::{
-    cell::UnsafeCell,
+    cell::{RefCell, UnsafeCell},
     collections::{hash_map::Entry, HashMap},
 };
 
@@ -10,13 +10,12 @@ use crate::{
         columnscan::{ColumnScanCell, ColumnScanEnum, ColumnScanRainbow},
         operations::join::ColumnScanJoin,
     },
-    datatypes::{Double, Float, StorageTypeName},
-    dictionary::meta_dv_dict::MetaDvDictionary,
+    datatypes::{storage_type_name::StorageTypeBitSet, Double, Float, StorageTypeName},
+    management::database::Dict,
     tabular::{
         operations::OperationColumnMarker,
         triescan::{PartialTrieScan, TrieScanEnum},
     },
-    util::mapping::{permutation::Permutation, traits::NatMapping},
 };
 
 use super::{OperationGenerator, OperationTable};
@@ -33,13 +32,11 @@ struct ColumnIndex {
 
 /// Used to create a [TrieScanJoin]
 #[derive(Debug)]
-pub struct GeneratorJoin {
+pub(crate) struct GeneratorJoin {
     /// In the order of the output column,
     /// contains all the columns (identified by its [ColumnIndex])
     /// that should be joined
     bindings: Vec<Vec<ColumnIndex>>,
-    /// The overall number of input relations
-    num_input_relations: usize,
 }
 
 impl GeneratorJoin {
@@ -52,9 +49,7 @@ impl GeneratorJoin {
     ///
     /// # Panics
     /// Panics if any of the above conditions is not met.
-    pub fn new(output: OperationTable, input: Vec<OperationTable>) -> Self {
-        let num_input_relations = input.len();
-
+    pub(crate) fn new(output: OperationTable, input: Vec<OperationTable>) -> Self {
         // Associates the marker of each output column
         // with a list of columns that need to be joined
         let mut output_map = HashMap::<OperationColumnMarker, Vec<ColumnIndex>>::new();
@@ -96,59 +91,7 @@ impl GeneratorJoin {
             )
         }
 
-        Self {
-            bindings,
-            num_input_relations,
-        }
-    }
-
-    /// Change the bindings such as to take into account a reordering of the output table.
-    pub fn apply_permutation(&mut self, permutation: &Permutation) {
-        self.bindings = permutation.permute(&self.bindings);
-    }
-
-    fn binding_vector(&self) -> Vec<Vec<usize>> {
-        let mut result = vec![vec![]; self.num_input_relations];
-
-        for (output_index, input_columns) in self.bindings.iter().enumerate() {
-            for input_column in input_columns {
-                for _ in result[input_column.relation].len()..=input_column.column {
-                    result[input_column.relation].push(0);
-                }
-
-                result[input_column.relation][input_column.column] = output_index;
-            }
-        }
-
-        result
-    }
-
-    fn sort_input_relations(&self) -> Vec<Permutation> {
-        let bindings_vector = self.binding_vector();
-        bindings_vector
-            .into_iter()
-            .map(|v| Permutation::from_unsorted(&v))
-            .collect()
-    }
-
-    /// Returns whether or not this binding is compatible with the leapfrog triejoin algorithm.
-    pub fn is_leapfrog_compatible(&self) -> bool {
-        self.sort_input_relations().iter().all(|p| p.is_identity())
-    }
-
-    /// This function makes sure that the join is possible to execute with the leapfrog triejoin algorithm.
-    /// It returns a list of permutations where the ith entry indicates the needed reordering for the ith input table.
-    pub fn comply_with_leapfrog(&mut self) -> Vec<Permutation> {
-        let sort_permutations = self.sort_input_relations();
-
-        for input_columns in self.bindings.iter_mut() {
-            for input_column in input_columns {
-                input_column.column =
-                    sort_permutations[input_column.relation].get(input_column.column);
-            }
-        }
-
-        sort_permutations
+        Self { bindings }
     }
 }
 
@@ -156,7 +99,7 @@ impl OperationGenerator for GeneratorJoin {
     fn generate<'a>(
         &'_ self,
         trie_scans: Vec<Option<TrieScanEnum<'a>>>,
-        _dictionary: &'a MetaDvDictionary,
+        _dictionary: &'a RefCell<Dict>,
     ) -> Option<TrieScanEnum<'a>> {
         // We return `None` if any of the input tables is `None`
         let mut trie_scans = trie_scans.into_iter().collect::<Option<Vec<_>>>()?;
@@ -184,6 +127,20 @@ impl OperationGenerator for GeneratorJoin {
                     .collect::<Vec<usize>>()
             })
             .collect::<Vec<_>>();
+
+        // `self.possible_types` contains for each output index,
+        // which types at most can appear on that layer.
+        let possible_types = self
+            .bindings
+            .iter()
+            .map(|binding| {
+                binding
+                    .iter()
+                    .fold(StorageTypeBitSet::full(), |result, index| {
+                        result.intersection(trie_scans[index.relation].possible_types(index.column))
+                    })
+            })
+            .collect();
 
         let mut column_scans: Vec<UnsafeCell<ColumnScanRainbow<'a>>> =
             Vec::with_capacity(self.bindings.len());
@@ -228,6 +185,7 @@ impl OperationGenerator for GeneratorJoin {
             trie_scans,
             layers_to_scans,
             path_types: Vec::new(),
+            possible_types,
             column_scans,
         }))
     }
@@ -235,7 +193,7 @@ impl OperationGenerator for GeneratorJoin {
 
 /// [`PartialTrieScan`] which represents the result from joining a list of [`PartialTrieScan`]s
 #[derive(Debug)]
-pub struct TrieScanJoin<'a> {
+pub(crate) struct TrieScanJoin<'a> {
     /// Input trie scans over of which the join is computed
     trie_scans: Vec<TrieScanEnum<'a>>,
 
@@ -247,6 +205,9 @@ pub struct TrieScanJoin<'a> {
 
     /// Path of [StorageTypeName] indicating the the types of the current (partial) row
     path_types: Vec<StorageTypeName>,
+
+    /// For each output layer contains the possible [StorageTypeName]
+    possible_types: Vec<StorageTypeBitSet>,
 
     /// For each layer in the resulting trie, contains a [`ColumnScanRainbow`],
     /// which computed the intersection of the relevant columns of the input tries.
@@ -302,13 +263,20 @@ impl<'a> PartialTrieScan<'a> for TrieScanJoin<'a> {
     fn scan<'b>(&'b self, layer: usize) -> &'b UnsafeCell<ColumnScanRainbow<'a>> {
         &self.column_scans[layer]
     }
+
+    fn possible_types(&self, layer: usize) -> StorageTypeBitSet {
+        self.possible_types[layer]
+    }
 }
 
 #[cfg(test)]
 pub(crate) mod test {
+    use std::cell::RefCell;
+
     use crate::{
         datatypes::{StorageTypeName, StorageValueT},
         dictionary::meta_dv_dict::MetaDvDictionary,
+        management::database::Dict,
         tabular::{
             operations::{OperationGenerator, OperationTable, OperationTableGenerator},
             triescan::TrieScanEnum,
@@ -320,7 +288,7 @@ pub(crate) mod test {
 
     /// Generate a [TrieScanEnum] for a join between the provided input scans.
     pub(crate) fn generate_join_scan<'a>(
-        dictionary: &'a MetaDvDictionary,
+        dictionary: &'a RefCell<Dict>,
         output: Vec<&str>,
         input: Vec<(TrieScanEnum<'a>, Vec<&str>)>,
     ) -> TrieScanEnum<'a> {
@@ -345,7 +313,7 @@ pub(crate) mod test {
 
     #[test]
     fn basic_trie_join() {
-        let dictionary = MetaDvDictionary::default();
+        let dictionary = RefCell::new(MetaDvDictionary::default());
 
         let trie_a = trie_id32(vec![&[1, 2], &[1, 3], &[1, 4], &[2, 5], &[3, 6], &[3, 7]]);
         let trie_b = trie_id32(vec![
@@ -387,7 +355,7 @@ pub(crate) mod test {
 
     #[test]
     fn self_join() {
-        let dictionary = MetaDvDictionary::default();
+        let dictionary = RefCell::new(MetaDvDictionary::default());
 
         let trie = trie_id32(vec![
             &[1, 2],
@@ -436,7 +404,7 @@ pub(crate) mod test {
 
     #[test]
     fn self_join_inverse() {
-        let dictionary = MetaDvDictionary::default();
+        let dictionary = RefCell::new(MetaDvDictionary::default());
 
         let trie = trie_id32(vec![
             &[1, 2],
@@ -528,7 +496,7 @@ pub(crate) mod test {
 
     #[test]
     fn self_join_2() {
-        let dictionary = MetaDvDictionary::default();
+        let dictionary = RefCell::new(MetaDvDictionary::default());
 
         let trie_new = trie_id32(vec![
             &[1, 4],
@@ -660,7 +628,7 @@ pub(crate) mod test {
 
     #[test]
     fn another_join_test() {
-        let dictionary = MetaDvDictionary::default();
+        let dictionary = RefCell::new(MetaDvDictionary::default());
 
         let trie_a = trie_id32(vec![
             &[1, 2],

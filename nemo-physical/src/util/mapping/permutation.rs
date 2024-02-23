@@ -57,7 +57,7 @@ impl Permutation {
     }
 
     /// Return the largest input value that is not mapped to itself.
-    pub fn last_mapped(&self) -> Option<usize> {
+    pub(crate) fn last_mapped(&self) -> Option<usize> {
         self.map.keys().max().copied()
     }
 
@@ -132,7 +132,8 @@ impl Permutation {
     /// Derive a [Permutation] that would transform a vector of elements into another.
     /// I.e. `this.permute(source) = target`
     /// For example `from_transformation([x, y, z, w], [z, w, y, x]) = {0->3, 1->2, 2->0, 3->1}`.
-    pub fn from_transformation<T: PartialEq>(source: &[T], target: &[T]) -> Self {
+    #[allow(dead_code)]
+    pub(crate) fn from_transformation<T: PartialEq>(source: &[T], target: &[T]) -> Self {
         debug_assert!(source.len() == target.len());
 
         let mut map = HashMap::<usize, usize>::new();
@@ -150,7 +151,8 @@ impl Permutation {
 
     /// Compute a [Permutation] that when chained to this [Permutation]
     /// would result in the given target [Permutation].
-    pub fn permute_into(&self, target: &Self) -> Self {
+    #[allow(dead_code)]
+    pub(crate) fn permute_into(&self, target: &Self) -> Self {
         let max_key_source = self.map.keys().max().cloned().unwrap_or(0);
         let max_key_target = target.map.keys().max().cloned().unwrap_or(0);
         let max_key = max_key_source.max(max_key_target);
@@ -168,7 +170,7 @@ impl Permutation {
     }
 
     /// Return a new [Permutation] that is the inverse of this.
-    pub fn invert(&self) -> Self {
+    pub(crate) fn invert(&self) -> Self {
         let mut map = HashMap::<usize, usize>::new();
 
         for (input, value) in &self.map {
@@ -179,7 +181,7 @@ impl Permutation {
     }
 
     /// Apply this permutation to a slice of things.
-    pub fn permute<T: Clone>(&self, vec: &[T]) -> Vec<T> {
+    pub(crate) fn permute<T: Clone>(&self, vec: &[T]) -> Vec<T> {
         let mut result: Vec<T> = vec.to_vec();
         for (input, value) in self.map.iter() {
             result[*value] = vec[*input].clone();
@@ -189,7 +191,7 @@ impl Permutation {
     }
 
     /// Return the value of the function for a given input.
-    pub fn get(&self, input: usize) -> usize {
+    pub(crate) fn get(&self, input: usize) -> usize {
         self.get_partial(input)
             .expect("Permutations map each value")
     }
@@ -221,10 +223,6 @@ impl NatMapping for Permutation {
         }
 
         Self { map: result_map }
-    }
-
-    fn domain_contains(&self, _value: usize) -> bool {
-        true
     }
 
     fn is_identity(&self) -> bool {

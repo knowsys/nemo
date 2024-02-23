@@ -8,7 +8,7 @@
 //! # fn main() {}
 //! # #[cfg(not(miri))]
 //! # fn main() {
-//! use nemo::api::{load, reason, output_predicates, write};
+//! use nemo::api::{load, reason, output_predicates};
 //! # let path = String::from("../resources/testcases/lcs-diff-computation/run-lcs-10.rls");
 //! // assume path is a string with the path to a rules file
 //! let mut engine = load(path.into()).unwrap();
@@ -20,7 +20,8 @@
 //! // write the results to a temporary directory
 //! let temp_dir = TempDir::new().unwrap();
 //! let predicates = output_predicates(&engine);
-//! write(temp_dir.to_str().unwrap().to_string(), &mut engine, predicates).unwrap();
+//! // TODO: Write API disabled due to refactoring.
+//! // write(temp_dir.to_str().unwrap().to_string(), &mut engine, predicates).unwrap();
 //! # }
 //! ```
 
@@ -34,7 +35,7 @@ use crate::{
         resource_providers::ResourceProviders,
         ImportManager,
     },
-    model::Identifier,
+    model::{ExportDirective, Identifier},
 };
 
 /// Reasoning Engine exposed by the API
@@ -58,7 +59,13 @@ pub fn load(file: PathBuf) -> Result<Engine, Error> {
 /// # Error
 /// Returns an appropriate [`Error`] variant on parsing and feature check issues.
 pub fn load_string(input: String) -> Result<Engine, Error> {
-    let program = all_input_consumed(RuleParser::new().parse_program())(&input)?;
+    let mut program = all_input_consumed(RuleParser::new().parse_program())(&input)?;
+    let mut additional_exports = Vec::new();
+    for predicate in program.idb_predicates() {
+        additional_exports.push(ExportDirective::default(predicate));
+    }
+    program.add_exports(additional_exports);
+
     ExecutionEngine::initialize(&program, ImportManager::new(ResourceProviders::default()))
 }
 
@@ -74,7 +81,12 @@ pub fn reason(engine: &mut Engine) -> Result<(), Error> {
 
 /// Get a [`Vec`] of all output predicates that are computed by the engine.
 pub fn output_predicates(engine: &Engine) -> Vec<Identifier> {
-    engine.program().output_predicates().cloned().collect()
+    engine
+        .program()
+        .exports()
+        .map(|(id, _)| id)
+        .cloned()
+        .collect()
 }
 
 // TODO: Disabled write API. This API is designed in a way that does not fit how Nemo controls exporting.
@@ -116,15 +128,11 @@ mod test {
     use super::*;
 
     #[cfg_attr(miri, ignore)]
-    #[ignore = "currently broken due to ongoing refactoring"]
     #[test]
     fn reason() {
-        let mut engine =
-            load("../resources/testcases/lcs-diff-computation/run-lcs-10.rls".into()).unwrap();
-        let cur_dir = std::env::current_dir().unwrap();
         std::env::set_current_dir("../resources/testcases/lcs-diff-computation/").unwrap();
+        let mut engine = load("run-lcs-10.rls".into()).unwrap();
         super::reason(&mut engine).unwrap();
-        std::env::set_current_dir(cur_dir).unwrap();
 
         // writing only the results where the predicates contain an "i"
         let results = output_predicates(&engine)

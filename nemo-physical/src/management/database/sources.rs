@@ -27,7 +27,7 @@ impl SimpleTable {
     }
 
     /// Return the number of columns of this table.
-    pub fn arity(&self) -> usize {
+    pub(crate) fn arity(&self) -> usize {
         self.arity
     }
 

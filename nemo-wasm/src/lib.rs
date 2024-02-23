@@ -16,6 +16,7 @@ use nemo::io::parser::parse_fact;
 use nemo::io::parser::parse_program;
 use nemo::io::resource_providers::{ResourceProvider, ResourceProviders};
 use nemo::io::ImportManager;
+use nemo::model::ExportDirective;
 use nemo::model::Identifier;
 use nemo_physical::datavalues::AnyDataValue;
 use nemo_physical::datavalues::DataValue;
@@ -85,6 +86,18 @@ impl NemoProgram {
         Ok(js_set)
     }
 
+    // If there are no exports, marks all idb predicates as exports.
+    #[wasm_bindgen(js_name = "markDefaultExports")]
+    pub fn mark_default_output_predicates(&mut self) {
+        if self.0.exports().next().is_none() {
+            let mut additional_exports = Vec::new();
+            for predicate in self.0.idb_predicates() {
+                additional_exports.push(ExportDirective::default(predicate));
+            }
+            self.0.add_exports(additional_exports);
+        }
+    }
+
     #[wasm_bindgen(js_name = "getOutputPredicates")]
     pub fn output_predicates(&self) -> Array {
         self.0
@@ -135,11 +148,8 @@ impl ResourceProvider for BlobResourceProvider {
     fn open_resource(
         &self,
         resource: &Resource,
-        _compression: CompressionFormat,
+        compression: CompressionFormat,
     ) -> Result<Option<Box<dyn std::io::BufRead>>, nemo_physical::error::ReadingError> {
-        // TODO: this ignores the requested compression. Is this ok for this context?
-        // If compression of blob data were a good idea, then we might also do it in all cases internally ...
-        // (the usual aspect that the format determines what the user wants to get on disk does not matter here)
         if let Some(blob) = self.blobs.get(resource) {
             let array_buffer: js_sys::ArrayBuffer = self
                 .file_reader_sync
@@ -152,7 +162,17 @@ impl ResourceProvider for BlobResourceProvider {
 
             let cursor = Cursor::new(data);
 
-            Ok(Some(Box::new(cursor)))
+            // Decompress blob
+            // We currently do this in Rust after the Blob has been transferred to the WebAssembly, to reuse Nemo's compression logic.
+            // We could also to this on the JavaScript side, see https://developer.mozilla.org/en-US/docs/Web/API/Compression_Streams_API .
+            if let Some(reader) = compression.try_decompression(cursor) {
+                Ok(Some(reader))
+            } else {
+                Err(ReadingError::Decompression {
+                    resource: resource.to_owned(),
+                    decompression_format: compression.to_string(),
+                })
+            }
         } else {
             Ok(None)
         }
@@ -354,7 +374,7 @@ impl NemoResults {
             let array: Array = next
                 .into_iter()
                 .map(|v| match v.value_domain() {
-                    nemo_physical::datavalues::ValueDomain::String
+                    nemo_physical::datavalues::ValueDomain::PlainString
                     | nemo::datavalues::ValueDomain::Null
                     | nemo_physical::datavalues::ValueDomain::LanguageTaggedString
                     | nemo_physical::datavalues::ValueDomain::Iri
@@ -378,13 +398,13 @@ impl NemoResults {
                         JsValue::from(v.to_i64_unchecked())
                     }
                     nemo_physical::datavalues::ValueDomain::Boolean => {
-                        todo!("boolean not supported yet")
+                        JsValue::from(v.to_boolean_unchecked())
                     }
-                    nemo_physical::datavalues::ValueDomain::Tuple => {
-                        todo!("tuple values are not supported yet")
-                    }
-                    nemo_physical::datavalues::ValueDomain::Map => {
-                        todo!("map values are not supported yet")
+                    nemo_physical::datavalues::ValueDomain::Tuple
+                    | nemo_physical::datavalues::ValueDomain::Map => {
+                        // Currently we only create a string representation of the tuple or map
+                        // We convert the tuples/maps to arrays/objects in the future if we require this in JavaScript
+                        JsValue::from(v.to_string())
                     }
                 })
                 .collect();

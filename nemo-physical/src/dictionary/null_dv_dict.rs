@@ -76,6 +76,22 @@ impl DvDict for NullDvDictionary {
         self.unused_ids.start
     }
 
+    fn is_iri(&self, _id: usize) -> bool {
+        false
+    }
+
+    fn is_plain_string(&self, _id: usize) -> bool {
+        false
+    }
+
+    fn is_lang_string(&self, _id: usize) -> bool {
+        false
+    }
+
+    fn is_null(&self, id: usize) -> bool {
+        id < self.unused_ids.start
+    }
+
     fn mark_dv(&mut self, _dv: AnyDataValue) -> AddResult {
         AddResult::Rejected
     }

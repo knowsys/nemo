@@ -4,7 +4,7 @@
 
 use nemo_physical::{
     management::execution_plan::{ExecutionNodeRef, ExecutionPlan},
-    tabular::operations::function::FunctionAssignment,
+    tabular::operations::FunctionAssignment,
 };
 
 use crate::{execution::rule_execution::VariableTranslation, model::chase_model::Constructor};

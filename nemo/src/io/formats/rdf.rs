@@ -2,7 +2,8 @@
 use std::io::{BufRead, Write};
 
 use nemo_physical::{
-    datasources::table_providers::TableProvider, datavalues::DataValueCreationError,
+    datasources::table_providers::TableProvider,
+    datavalues::{AnyDataValue, DataValueCreationError, MapDataValue},
     resource::Resource,
 };
 
@@ -15,9 +16,8 @@ use crate::{
         formats::types::{Direction, TableWriter},
     },
     model::{
-        Constant, FileFormat, Identifier, Map, RdfVariant, PARAMETER_NAME_BASE,
-        PARAMETER_NAME_COMPRESSION, PARAMETER_NAME_FORMAT, PARAMETER_NAME_RESOURCE,
-        VALUE_FORMAT_ANY, VALUE_FORMAT_SKIP,
+        FileFormat, RdfVariant, PARAMETER_NAME_BASE, PARAMETER_NAME_COMPRESSION,
+        PARAMETER_NAME_FORMAT, PARAMETER_NAME_RESOURCE, VALUE_FORMAT_ANY, VALUE_FORMAT_SKIP,
     },
 };
 
@@ -110,7 +110,7 @@ impl RdfHandler {
     /// Construct an RDF handler of the given variant.
     pub(crate) fn try_new(
         variant: RdfVariant,
-        attributes: &Map,
+        attributes: &MapDataValue,
         direction: Direction,
     ) -> Result<Box<dyn ImportExportHandler>, ImportExportError> {
         // Basic checks for unsupported attributes:
@@ -136,7 +136,7 @@ impl RdfHandler {
             } else {
                 return Err(ImportExportError::invalid_att_value_error(
                     PARAMETER_NAME_BASE,
-                    Constant::Abstract(Identifier::new(base_string.clone())),
+                    AnyDataValue::new_iri(base_string.clone()),
                     "must be a valid IRI",
                 ));
             }
@@ -173,7 +173,7 @@ impl RdfHandler {
     }
 
     fn extract_value_formats(
-        attributes: &Map,
+        attributes: &MapDataValue,
         variant: RdfVariant,
         direction: Direction,
     ) -> Result<Option<Vec<RdfValueFormat>>, ImportExportError> {

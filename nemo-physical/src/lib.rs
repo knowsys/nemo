@@ -22,8 +22,9 @@
 #![feature(is_sorted)]
 #![feature(iter_intersperse)]
 
+pub(crate) mod columnar;
+
 pub mod aggregates;
-pub mod columnar;
 pub mod datasources;
 pub mod datatypes;
 pub mod datavalues;

@@ -32,7 +32,7 @@ struct TypedTableStorage {
 
 impl TypedTableStorage {
     /// Add a tuple to a table identified by `table_record` and the types used in `tuple`.
-    pub fn push_tuple(&mut self, tuple: &[StorageValueT], table_record: &TypedTableRecord) {
+    pub(crate) fn push_tuple(&mut self, tuple: &[StorageValueT], table_record: &TypedTableRecord) {
         for (&value, &id) in tuple.iter().zip(table_record.storage_indices.iter()) {
             match value {
                 StorageValueT::Id32(value) => self.columns_id32[id].push(value),
@@ -53,7 +53,7 @@ impl TypedTableStorage {
     }
 
     /// Add empty columns of the appropriate types.
-    pub fn initialize_new_subtable(
+    pub(crate) fn initialize_new_subtable(
         &mut self,
         storage_types: &[StorageTypeName],
     ) -> TypedTableRecord {
@@ -101,7 +101,7 @@ impl TypedTableStorage {
     }
 
     /// Compare two stored values of the same type-
-    pub fn compare_stored_values(
+    pub(crate) fn compare_stored_values(
         &self,
         storage_type: StorageTypeName,
         column_id_first: usize,
@@ -142,7 +142,7 @@ impl TypedTableLookup {
     const NO_SUCCESSOR: usize = usize::MAX;
 
     /// Create a new [TypedTableLookup].
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         let lookup_trie = vec![Self::NO_SUCCESSOR; NUM_STORAGETYPES];
 
         Self { lookup_trie }
@@ -162,7 +162,7 @@ impl TypedTableLookup {
     /// If no subtable for the combination of types exist, then it will be given a new subtable id,
     /// which will be the same as the parameter `num_subtables`, which is the number of subtables
     /// before this function call.
-    pub fn subtable_id(
+    pub(crate) fn subtable_id(
         &mut self,
         storage_types: &[StorageTypeName],
         num_subtables: usize,

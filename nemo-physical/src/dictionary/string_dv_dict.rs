@@ -24,6 +24,8 @@ pub(crate) trait DvConverter: Debug {
     fn dict_string(dv: &AnyDataValue) -> Option<String>;
     /// Converts a string to a datavalue, if supported.
     fn string_to_datavalue(string: &str) -> Option<AnyDataValue>;
+    /// Each converter supports exactly one domain, returned by this function.
+    fn supported_value_domain() -> ValueDomain;
 }
 
 /// Implementation of [`DvConverter`] to handle [`AnyDataValue::String`] values.
@@ -32,12 +34,16 @@ pub(crate) struct StringDvConverter;
 impl DvConverter for StringDvConverter {
     #[inline(always)]
     fn dict_string(dv: &AnyDataValue) -> Option<String> {
-        dv.to_string()
+        dv.to_plain_string()
     }
 
     #[inline(always)]
     fn string_to_datavalue(string: &str) -> Option<AnyDataValue> {
-        Some(AnyDataValue::new_string(string.to_string()))
+        Some(AnyDataValue::new_plain_string(string.to_string()))
+    }
+
+    fn supported_value_domain() -> ValueDomain {
+        ValueDomain::PlainString
     }
 }
 
@@ -53,6 +59,10 @@ impl DvConverter for IriDvConverter {
     #[inline(always)]
     fn string_to_datavalue(string: &str) -> Option<AnyDataValue> {
         Some(AnyDataValue::new_iri(string.to_string()))
+    }
+
+    fn supported_value_domain() -> ValueDomain {
+        ValueDomain::Iri
     }
 }
 
@@ -142,6 +152,10 @@ impl DvConverter for OtherDvConverter {
             AnyDataValue::new_other(lexical_value, datatype_iri)
         })
     }
+
+    fn supported_value_domain() -> ValueDomain {
+        ValueDomain::Other
+    }
 }
 
 /// Implementation of [`DvConverter`] to handle [`AnyDataValue::LangStringDataValue`] values.
@@ -162,6 +176,10 @@ impl DvConverter for LangStringDvConverter {
     fn string_to_datavalue(string: &str) -> Option<AnyDataValue> {
         one_string_to_two(string)
             .map(|(value, language)| AnyDataValue::new_language_tagged_string(value, language))
+    }
+
+    fn supported_value_domain() -> ValueDomain {
+        ValueDomain::LanguageTaggedString
     }
 }
 
@@ -227,6 +245,23 @@ impl<C: DvConverter> DvDict for StringBasedDvDictionary<C> {
         self.string_dict.len()
     }
 
+    fn is_iri(&self, id: usize) -> bool {
+        C::supported_value_domain() == ValueDomain::Iri && self.string_dict.knows_id(id)
+    }
+
+    fn is_plain_string(&self, id: usize) -> bool {
+        C::supported_value_domain() == ValueDomain::PlainString && self.string_dict.knows_id(id)
+    }
+
+    fn is_lang_string(&self, id: usize) -> bool {
+        C::supported_value_domain() == ValueDomain::LanguageTaggedString
+            && self.string_dict.knows_id(id)
+    }
+
+    fn is_null(&self, _id: usize) -> bool {
+        false
+    }
+
     fn mark_dv(&mut self, dv: AnyDataValue) -> AddResult {
         if let Some(s) = C::dict_string(&dv) {
             self.string_dict.mark_str(s.as_str())
@@ -254,8 +289,8 @@ mod test {
     fn string_dict_add_and_mark() {
         let mut dict = StringDvDictionary::new();
 
-        let dv1 = AnyDataValue::new_string("http://example.org".to_string());
-        let dv2 = AnyDataValue::new_string("another string".to_string());
+        let dv1 = AnyDataValue::new_plain_string("http://example.org".to_string());
+        let dv2 = AnyDataValue::new_plain_string("another string".to_string());
         let dv_wrongtype = AnyDataValue::new_iri("http://example.org".to_string());
 
         assert_eq!(dict.add_datavalue(dv1.clone()), AddResult::Fresh(0));
@@ -283,7 +318,7 @@ mod test {
 
         let dv1 = AnyDataValue::new_iri("http://example.org".to_string());
         let dv2 = AnyDataValue::new_iri("http://example.org/another".to_string());
-        let dv_wrongtype = AnyDataValue::new_string("http://example.org".to_string());
+        let dv_wrongtype = AnyDataValue::new_plain_string("http://example.org".to_string());
 
         assert_eq!(dict.add_datavalue(dv1.clone()), AddResult::Fresh(0));
         assert_eq!(dict.add_datavalue(dv1.clone()), AddResult::Known(0));
@@ -329,7 +364,7 @@ mod test {
             "string witt < and > and \\".to_string(),
             "http://example.org/verylong/".to_string() + long_string().as_str(),
         );
-        let dv_wrongtype = AnyDataValue::new_string("http://example.org".to_string());
+        let dv_wrongtype = AnyDataValue::new_plain_string("http://example.org".to_string());
 
         assert_eq!(dict.add_datavalue(dv1.clone()), AddResult::Fresh(0));
         assert_eq!(dict.add_datavalue(dv1.clone()), AddResult::Known(0));
@@ -373,7 +408,7 @@ mod test {
             "string witt < and > and \\".to_string(),
             "verylonglanguage-".to_string() + long_string().as_str(),
         );
-        let dv_wrongtype = AnyDataValue::new_string("http://example.org".to_string());
+        let dv_wrongtype = AnyDataValue::new_plain_string("http://example.org".to_string());
 
         assert_eq!(dict.add_datavalue(dv1.clone()), AddResult::Fresh(0));
         assert_eq!(dict.add_datavalue(dv1.clone()), AddResult::Known(0));

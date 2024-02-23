@@ -23,7 +23,7 @@ pub(crate) struct SortedTupleBuffer {
 
 impl SortedTupleBuffer {
     /// Create a new [SortedTupleBuffer] by sorting the tuples in [TupleBuffer].
-    pub fn new(tuple_buffer: TupleBuffer) -> Self {
+    pub(crate) fn new(tuple_buffer: TupleBuffer) -> Self {
         let mut subtable_ids = vec![0usize];
 
         for &subtable_length in tuple_buffer.subtable_lengths() {
@@ -119,13 +119,16 @@ impl SortedTupleBuffer {
     }
 
     /// Returns the number of columns in the [`SortedTupleBuffer`]
-    pub fn column_number(&self) -> usize {
+    pub(crate) fn column_number(&self) -> usize {
         self.tuple_buffer.column_number()
     }
 
     /// For a specified column, return an iterator of over its values as [StorageValueT]s.
     /// The values returned by the iterator respect to global sorting of the tuples.
-    pub fn get_column(&self, column_index: usize) -> impl Iterator<Item = StorageValueT> + '_ {
+    pub(crate) fn get_column(
+        &self,
+        column_index: usize,
+    ) -> impl Iterator<Item = StorageValueT> + '_ {
         self.tuple_order.iter().map(move |&tuple_index| {
             let (subtable_id, local_tuple_index) =
                 Self::get_subtable_id(&self.subtable_ids, tuple_index);

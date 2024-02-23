@@ -15,13 +15,13 @@ pub use datavalue_dictionary::NONEXISTING_ID_MARK;
 pub mod string_dictionary;
 pub(crate) use string_dictionary::StringDictionary;
 /// Module to define [GlobalBytesBuffer] and related code
-pub mod bytes_buffer;
+pub(crate) mod bytes_buffer;
 /// Module to define the [BytesDictionary]
-pub mod bytes_dictionary;
+pub(crate) mod bytes_dictionary;
 /// Module to define the [BytesPairDictionary]
-pub mod bytes_pair_dictionary;
+pub(crate) mod bytes_pair_dictionary;
 /// Module to define string-based datavalue dictionaries.
-pub mod string_dv_dict;
+pub(crate) mod string_dv_dict;
 /// Module to define the [StringMap]
 pub mod string_map;
 pub(crate) use string_dv_dict::IriDvDictionary;
@@ -29,23 +29,22 @@ pub(crate) use string_dv_dict::LangStringDvDictionary;
 pub(crate) use string_dv_dict::OtherDvDictionary;
 pub(crate) use string_dv_dict::StringDvDictionary;
 /// Module to define a datavalue dictionary for nulls.
-pub mod null_dv_dict;
+pub(crate) mod null_dv_dict;
 pub(crate) use null_dv_dict::NullDvDictionary;
 /// Module to define a general-purpose datavalue dictionary.
 pub mod meta_dv_dict;
 
 /// Module to define the [DictionaryString]
-pub mod dictionary_string;
+pub(crate) mod dictionary_string;
 pub use dictionary_string::DictionaryString;
 /// Module to define [HashMapDictionary]
 pub mod hash_map_dictionary;
-pub use hash_map_dictionary::HashMapDictionary;
+pub(crate) use hash_map_dictionary::HashMapDictionary;
 /// Module to define [InfixDictionary]
-pub mod infix_dictionary;
-pub use infix_dictionary::InfixDictionary;
+pub(crate) mod infix_dictionary;
+pub(crate) use infix_dictionary::InfixDictionary;
 /// Module to define [MetaDictionary]
 pub mod meta_dictionary;
-pub use meta_dictionary::MetaDictionary;
 
 /// A Dictionary represents a bijective (invertible) mapping from objects to numeric ids.
 /// The "objects" are provided when the dictionary is used, whereas the ids are newly

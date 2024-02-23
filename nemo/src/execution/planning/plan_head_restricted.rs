@@ -36,13 +36,19 @@ use super::{
 /// Strategy for the restricted chase.
 #[derive(Debug)]
 pub(crate) struct RestrictedChaseStrategy {
+    /// Atoms for computing the table "new satisfied matches"
     head_join_atoms: Vec<VariableAtom>,
+    /// Constraints associated with computing the table "new satisfied matches"
     head_join_constraints: Vec<Constraint>,
 
     predicate_to_instructions: HashMap<Identifier, Vec<HeadInstruction>>,
     predicate_to_full_existential: HashMap<Identifier, bool>,
 
+    /// The calculation of "new statified matches" is represented by an auxillary rule
+    /// "head -> aux_predicate(frontier_variables)".
+    /// This is the order of those variables
     aux_head_order: VariableOrder,
+    /// This is the predicate of the auxillary table containing the "satisfied matches"
     aux_predicate: Identifier,
 
     analysis: RuleAnalysis,
@@ -254,22 +260,21 @@ impl HeadStrategy for RestrictedChaseStrategy {
 
         // 6. Compute "Unsatisfied Matches Nulls"
 
-        // let node_unsatisfied_matches_nulls = current_plan.plan_mut().append_nulls(
-        //     node_unsatisfied_matches_frontier,
-        //     self.analysis.num_existential,
-        // );
-        // TODO: Adding nulls is not yet avaiable as an operation
-        let node_unsatisfied_matches_nulls: ExecutionNodeRef = todo!();
-        let markers_unsatisfied_matches_nulls = todo!();
+        let variables_unsatisfied_matches_nulls = append_existential_at_the_end(
+            self.aux_head_order.clone(),
+            &self.analysis.head_variables,
+        );
+        let markers_unsatisfied_matches_nulls = variable_translation
+            .operation_table(variables_unsatisfied_matches_nulls.as_ordered_list().iter());
+
+        let node_unsatisfied_matches_nulls = current_plan.plan_mut().null(
+            markers_unsatisfied_matches_nulls.clone(),
+            node_unsatisfied_matches_frontier,
+        );
 
         current_plan.add_temporary_table(
             node_unsatisfied_matches_nulls.clone(),
             "Head (Restricted): Unsat. Matches",
-        );
-
-        let variables_unsatisfied_matches_nulls = append_existential_at_the_end(
-            self.aux_head_order.clone(),
-            &self.analysis.head_variables,
         );
 
         // 7. For each head atom project from "Unsatisfied Matches Nulls"
@@ -278,6 +283,7 @@ impl HeadStrategy for RestrictedChaseStrategy {
                 .first()
                 .map(|instruction| instruction.arity)
                 .unwrap_or(0);
+            let result_markers = OperationTable::new_unique(arity);
 
             let final_head_nodes = head_instructions
                 .iter()
@@ -293,7 +299,7 @@ impl HeadStrategy for RestrictedChaseStrategy {
 
             let new_tables_union = current_plan
                 .plan_mut()
-                .union(markers_unsatisfied_matches_nulls, final_head_nodes);
+                .union(result_markers.clone(), final_head_nodes);
 
             let result_table_name =
                 table_manager.generate_table_name(predicate, &ColumnOrder::default(), step);
@@ -322,7 +328,7 @@ impl HeadStrategy for RestrictedChaseStrategy {
                     .collect();
                 let old_table_union = current_plan
                     .plan_mut()
-                    .union(OperationTable::new_unique(arity), old_table_nodes);
+                    .union(result_markers, old_table_nodes);
 
                 let remove_duplicate_node = current_plan
                     .plan_mut()

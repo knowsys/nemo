@@ -4,7 +4,7 @@
 use nemo_physical::{
     function::tree::FunctionTree,
     management::execution_plan::{ExecutionNodeRef, ExecutionPlan},
-    tabular::operations::{filter::Filters, OperationColumnMarker},
+    tabular::operations::{Filters, OperationColumnMarker},
 };
 
 use crate::{execution::rule_execution::VariableTranslation, model::Constraint};

@@ -2,6 +2,7 @@
 
 use std::io::{BufRead, Write};
 
+use nemo_physical::datavalues::{AnyDataValue, MapDataValue};
 use nemo_physical::{datasources::table_providers::TableProvider, resource::Resource};
 
 use crate::io::compression_format::CompressionFormat;
@@ -12,7 +13,7 @@ use crate::model::{
 use crate::{
     error::Error,
     io::formats::types::{Direction, TableWriter},
-    model::{Constant, FileFormat, Map},
+    model::FileFormat,
 };
 
 use super::dsv_reader::DsvReader;
@@ -57,7 +58,7 @@ pub(crate) struct DsvHandler {
 impl DsvHandler {
     /// Construct a DSV file handler with an arbitrary delimiter.
     pub(crate) fn try_new_dsv(
-        attributes: &Map,
+        attributes: &MapDataValue,
         direction: Direction,
     ) -> Result<Box<dyn ImportExportHandler>, ImportExportError> {
         Self::try_new(DsvVariant::DSV, attributes, direction)
@@ -65,7 +66,7 @@ impl DsvHandler {
 
     /// Construct a CSV file handler.
     pub(crate) fn try_new_csv(
-        attributes: &Map,
+        attributes: &MapDataValue,
         direction: Direction,
     ) -> Result<Box<dyn ImportExportHandler>, ImportExportError> {
         Self::try_new(DsvVariant::CSV, attributes, direction)
@@ -73,7 +74,7 @@ impl DsvHandler {
 
     /// Construct a TSV file handler.
     pub(crate) fn try_new_tsv(
-        attributes: &Map,
+        attributes: &MapDataValue,
         direction: Direction,
     ) -> Result<Box<dyn ImportExportHandler>, ImportExportError> {
         Self::try_new(DsvVariant::TSV, attributes, direction)
@@ -82,7 +83,7 @@ impl DsvHandler {
     /// Construct a DSV handler of the given variant.
     fn try_new(
         variant: DsvVariant,
-        attributes: &Map,
+        attributes: &MapDataValue,
         direction: Direction,
     ) -> Result<Box<dyn ImportExportHandler>, ImportExportError> {
         // Basic checks for unsupported attributes:
@@ -112,7 +113,7 @@ impl DsvHandler {
     }
 
     fn extract_value_formats(
-        attributes: &Map,
+        attributes: &MapDataValue,
     ) -> Result<Option<Vec<DsvValueFormat>>, ImportExportError> {
         let value_format_strings = ImportExportHandlers::extract_value_format_strings(attributes)?;
 
@@ -133,7 +134,10 @@ impl DsvHandler {
         Ok(value_formats)
     }
 
-    fn extract_delimiter(variant: DsvVariant, attributes: &Map) -> Result<u8, ImportExportError> {
+    fn extract_delimiter(
+        variant: DsvVariant,
+        attributes: &MapDataValue,
+    ) -> Result<u8, ImportExportError> {
         let delim_opt: Option<u8>;
         if let Some(string) =
             ImportExportHandlers::extract_string(attributes, PARAMETER_NAME_DSV_DELIMITER, true)?
@@ -143,7 +147,7 @@ impl DsvHandler {
             } else {
                 return Err(ImportExportError::invalid_att_value_error(
                     PARAMETER_NAME_DSV_DELIMITER,
-                    Constant::StringLiteral(string.to_owned()),
+                    AnyDataValue::new_plain_string(string.to_owned()),
                     "delimiter should be exactly one byte",
                 ));
             }

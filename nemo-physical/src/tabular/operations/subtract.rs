@@ -1,16 +1,14 @@
 //! This module defines [TrieScanSubtract] and [GeneratorSubtract].
 
-use std::cell::UnsafeCell;
-
-use bitvec::bitvec;
+use std::cell::{RefCell, UnsafeCell};
 
 use crate::{
     columnar::{
         columnscan::{ColumnScanCell, ColumnScanEnum, ColumnScanRainbow},
         operations::subtract::ColumnScanSubtract,
     },
-    datatypes::{Double, Float, StorageTypeName},
-    dictionary::meta_dv_dict::MetaDvDictionary,
+    datatypes::{storage_type_name::StorageTypeBitSet, Double, Float, StorageTypeName},
+    management::database::Dict,
     tabular::triescan::{PartialTrieScan, TrieScanEnum},
 };
 
@@ -18,7 +16,7 @@ use super::{OperationGenerator, OperationTable};
 
 /// Used to create a [TrieScanSubtract]
 #[derive(Debug, Clone)]
-pub struct GeneratorSubtract {
+pub(crate) struct GeneratorSubtract {
     /// For each [`PartialTrieScan`] in `trie_subtract`,
     /// specifies which of its layers correspond to which layers from the "main" trie
     layer_maps: Vec<SubtractedLayerMap>,
@@ -32,7 +30,7 @@ impl GeneratorSubtract {
     ///
     /// # Panics
     /// Panics if the above condition is not met.
-    pub fn new(output: OperationTable, inputs: Vec<OperationTable>) -> Self {
+    pub(crate) fn new(output: OperationTable, inputs: Vec<OperationTable>) -> Self {
         let mut layer_maps = Vec::<SubtractedLayerMap>::new();
 
         for input in inputs {
@@ -50,7 +48,7 @@ impl OperationGenerator for GeneratorSubtract {
     fn generate<'a>(
         &'_ self,
         mut trie_scans: Vec<Option<TrieScanEnum<'a>>>,
-        _dictionary: &'a MetaDvDictionary,
+        _dictionary: &'a RefCell<Dict>,
     ) -> Option<TrieScanEnum<'a>> {
         debug_assert!(
             trie_scans.len() >= 1,
@@ -144,7 +142,7 @@ impl OperationGenerator for GeneratorSubtract {
 /// The results contains all elements that are in main but not in one of the subtract scans.
 /// This can also handle subtracting tables of different arities.
 #[derive(Debug)]
-pub struct TrieScanSubtract<'a> {
+pub(crate) struct TrieScanSubtract<'a> {
     /// [`PartialTrieScan`] from which elements are being subtracted
     trie_main: Box<TrieScanEnum<'a>>,
     /// Elements that are subtracted
@@ -197,7 +195,7 @@ impl<'a> PartialTrieScan<'a> for TrieScanSubtract<'a> {
                 .subtract_get_equal(
                     *previous_type.expect("path_types is not empty previous_layer is not None"),
                 ),
-            None => bitvec![1; self.layer_maps.len()],
+            None => vec![true; self.layer_maps.len()],
         };
 
         for (subtract_index, (trie_subtract, layer_map)) in
@@ -234,10 +232,16 @@ impl<'a> PartialTrieScan<'a> for TrieScanSubtract<'a> {
     fn scan<'b>(&'b self, layer: usize) -> &'b UnsafeCell<ColumnScanRainbow<'a>> {
         &self.column_scans[layer]
     }
+
+    fn possible_types(&self, layer: usize) -> StorageTypeBitSet {
+        self.trie_main.possible_types(layer)
+    }
 }
 
 #[cfg(test)]
 mod test {
+    use std::cell::RefCell;
+
     use crate::{
         datatypes::{StorageTypeName, StorageValueT},
         dictionary::meta_dv_dict::MetaDvDictionary,
@@ -252,7 +256,7 @@ mod test {
 
     #[test]
     fn subtract_single() {
-        let dictionary = MetaDvDictionary::default();
+        let dictionary = RefCell::new(MetaDvDictionary::default());
 
         let trie_main = trie_id32(vec![&[1, 3], &[1, 6], &[1, 8], &[2, 2], &[2, 7], &[3, 5]]);
         let trie_subtract = trie_id32(vec![&[1, 2], &[1, 6], &[1, 9], &[3, 2], &[3, 5], &[4, 8]]);
@@ -292,7 +296,7 @@ mod test {
 
     #[test]
     fn subtract_single_2() {
-        let dictionary = MetaDvDictionary::default();
+        let dictionary = RefCell::new(MetaDvDictionary::default());
 
         let trie_main = trie_id32(vec![
             &[4, 1],
@@ -355,7 +359,7 @@ mod test {
 
     #[test]
     fn subtract_multiple() {
-        let dictionary = MetaDvDictionary::default();
+        let dictionary = RefCell::new(MetaDvDictionary::default());
 
         let trie_main = trie_id32(vec![
             &[2, 0, 0],
@@ -444,7 +448,7 @@ mod test {
 
     #[test]
     fn subtract_middle() {
-        let dictionary = MetaDvDictionary::default();
+        let dictionary = RefCell::new(MetaDvDictionary::default());
 
         let trie_main = trie_id32(vec![&[4, 0, 0], &[4, 2, 1]]);
         let trie_subtract = trie_id32(vec![&[0]]);
@@ -481,7 +485,7 @@ mod test {
 
     #[test]
     fn subtract_top() {
-        let dictionary = MetaDvDictionary::default();
+        let dictionary = RefCell::new(MetaDvDictionary::default());
 
         let trie_main = trie_id32(vec![&[2, 0, 0], &[4, 0, 0], &[8, 5, 1]]);
         let trie_subtract = trie_id32(vec![&[2], &[8]]);

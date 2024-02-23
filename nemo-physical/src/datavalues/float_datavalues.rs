@@ -17,7 +17,7 @@ impl FloatDataValue {
     ///
     /// # Errors
     /// The given `value` is NaN.
-    pub fn from_f32(value: f32) -> Result<Self, DataValueCreationError> {
+    pub(crate) fn from_f32(value: f32) -> Result<Self, DataValueCreationError> {
         if !value.is_finite() {
             return Err(DataValueCreationError::NonFiniteFloat {});
         }
@@ -28,7 +28,7 @@ impl FloatDataValue {
     ///
     /// # Panics
     /// The given `value` is NaN.
-    pub fn from_f32_unchecked(value: f32) -> Self {
+    pub(crate) fn from_f32_unchecked(value: f32) -> Self {
         if !value.is_finite() {
             panic!("floating point number must represent a finite value (neither infinity nor NaN are allowed).");
         }
@@ -78,6 +78,12 @@ impl Ord for FloatDataValue {
     }
 }
 
+impl std::fmt::Display for FloatDataValue {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.canonical_string().as_str())
+    }
+}
+
 /// Physical representation of a finite 64bit floating point number as an f64.
 #[repr(transparent)]
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
@@ -88,7 +94,7 @@ impl DoubleDataValue {
     ///
     /// # Errors
     /// The given `value` is NaN or an infinity.
-    pub fn from_f64(value: f64) -> Result<Self, DataValueCreationError> {
+    pub(crate) fn from_f64(value: f64) -> Result<Self, DataValueCreationError> {
         if !value.is_finite() {
             return Err(DataValueCreationError::NonFiniteFloat {});
         }
@@ -99,7 +105,7 @@ impl DoubleDataValue {
     ///
     /// # Panics
     /// The given `value` is NaN or an infinity.
-    pub fn from_f64_unchecked(value: f64) -> Self {
+    pub(crate) fn from_f64_unchecked(value: f64) -> Self {
         if !value.is_finite() {
             panic!("floating point number must represent a finite value (neither infinity nor NaN are allowed).");
         }
@@ -146,6 +152,13 @@ impl Ord for DoubleDataValue {
         } else {
             unreachable!("all floats allowed for this type are comparable")
         }
+    }
+}
+
+impl std::fmt::Display for DoubleDataValue {
+    // TODO: Maybe this could be simplified based on the parser's rules for abbreviating doubles.
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.canonical_string().as_str())
     }
 }
 

@@ -1,4 +1,6 @@
-use crate::model::{Constant, Term, Variable};
+use nemo_physical::datavalues::AnyDataValue;
+
+use crate::model::{Term, Variable};
 
 /// Indicates that a new value must be creater accodring to [`Term`].
 /// The result will be "stored" in the given variable
@@ -31,7 +33,8 @@ impl Constructor {
         &self.term
     }
 
-    pub fn constants(&self) -> impl Iterator<Item = &Constant> {
-        self.term().constants()
+    /// Returns all [AnyDataValue]s used in this expression.
+    pub fn datavalues(&self) -> impl Iterator<Item = &AnyDataValue> {
+        self.term().datavalues()
     }
 }

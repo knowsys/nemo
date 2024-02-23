@@ -1,5 +1,4 @@
 use criterion::{criterion_group, criterion_main, BatchSize, Criterion};
-use nemo::model::PrimitiveType;
 use nemo_physical::datatypes::data_value::{DataValueIteratorT, PhysicalString};
 use rand::{distributions::Alphanumeric, prelude::*};
 use rand_pcg::Pcg64;

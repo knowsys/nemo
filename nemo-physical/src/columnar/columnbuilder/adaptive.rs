@@ -13,7 +13,7 @@ use super::{rle::ColumnBuilderRle, ColumnBuilder};
 
 /// Number of rle elements in rle column builder after which to decide which column type to use.
 #[derive(Copy, Clone, Debug, PartialEq)]
-pub enum ColumnImplDecisionThreshold {
+pub(crate) enum ColumnImplDecisionThreshold {
     /// Number of RleElements after that a decision shall be made
     NumberOfRleElements(usize),
     /// Decide only when builder is finalized
@@ -29,7 +29,7 @@ impl Default for ColumnImplDecisionThreshold {
 /// The average minimum length of the elements in the incremental RLE
 #[repr(transparent)]
 #[derive(Copy, Clone, Debug, PartialEq)]
-pub struct TargetMinLengthForRleElements(usize);
+pub(crate) struct TargetMinLengthForRleElements(usize);
 
 impl Default for TargetMinLengthForRleElements {
     fn default() -> Self {
@@ -58,7 +58,7 @@ where
 /// Implementation of [`ColumnBuilder`] that may adaptively decide for the
 /// best possible column implementation for the given data.
 #[derive(Debug, Default, PartialEq)]
-pub struct ColumnBuilderAdaptive<T>
+pub(crate) struct ColumnBuilderAdaptive<T>
 where
     T: ColumnDataType,
 {
@@ -72,7 +72,7 @@ where
     T: ColumnDataType + Default,
 {
     /// Constructor.
-    pub fn _new(
+    pub(crate) fn _new(
         decision_threshold: ColumnImplDecisionThreshold,
         target_min_length_for_rle_elements: TargetMinLengthForRleElements,
     ) -> ColumnBuilderAdaptive<T> {

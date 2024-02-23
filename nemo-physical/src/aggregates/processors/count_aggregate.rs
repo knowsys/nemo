@@ -18,7 +18,7 @@ where
 }
 
 impl<A: Aggregate> CountAggregateProcessor<A> {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             phantom_data: PhantomData,
         }
@@ -45,7 +45,7 @@ where
 }
 
 impl<A: Aggregate> CountAggregateGroupProcessor<A> {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             current_count: 0,
             phantom_data: PhantomData,

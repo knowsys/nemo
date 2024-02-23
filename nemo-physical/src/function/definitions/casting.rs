@@ -25,7 +25,7 @@ impl UnaryFunction for CastingIntoInteger64 {
             | crate::datavalues::ValueDomain::Map
             | crate::datavalues::ValueDomain::Other
             | crate::datavalues::ValueDomain::Null
-            | crate::datavalues::ValueDomain::String
+            | crate::datavalues::ValueDomain::PlainString
             | crate::datavalues::ValueDomain::LanguageTaggedString
             | crate::datavalues::ValueDomain::Iri => None,
             // FIXME: This seems suspicious. Can't f32 also represent integer numbers *without any fraction) that are still too large for i64?
@@ -85,7 +85,7 @@ impl UnaryFunction for CastingIntoFloat {
             | crate::datavalues::ValueDomain::Map
             | crate::datavalues::ValueDomain::Null
             | crate::datavalues::ValueDomain::Other
-            | crate::datavalues::ValueDomain::String
+            | crate::datavalues::ValueDomain::PlainString
             | crate::datavalues::ValueDomain::LanguageTaggedString
             | crate::datavalues::ValueDomain::Boolean
             | crate::datavalues::ValueDomain::Iri => None,
@@ -134,7 +134,7 @@ impl UnaryFunction for CastingIntoDouble {
             | crate::datavalues::ValueDomain::Map
             | crate::datavalues::ValueDomain::Other
             | crate::datavalues::ValueDomain::Null
-            | crate::datavalues::ValueDomain::String
+            | crate::datavalues::ValueDomain::PlainString
             | crate::datavalues::ValueDomain::LanguageTaggedString
             | crate::datavalues::ValueDomain::Boolean
             | crate::datavalues::ValueDomain::Iri => None,

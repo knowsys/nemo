@@ -1,6 +1,8 @@
 use std::fmt::Display;
 
-use crate::model::{Atom, Constant, Identifier, PrimitiveTerm, Term, Variable};
+use nemo_physical::datavalues::AnyDataValue;
+
+use crate::model::{Atom, Identifier, PrimitiveTerm, Term, Variable};
 
 /// An atom used within a [`super::ChaseRule`]
 pub trait ChaseAtom {
@@ -70,10 +72,10 @@ impl PrimitiveAtom {
         }
     }
 
-    /// Return a set of all variables used in this atom
-    pub fn get_constants(&self) -> impl Iterator<Item = &Constant> {
+    /// Returns all [AnyDataValue]s used as constants in this atom
+    pub fn datavalues(&self) -> impl Iterator<Item = &AnyDataValue> {
         self.terms.iter().filter_map(|t| {
-            if let PrimitiveTerm::Constant(v) = t {
+            if let PrimitiveTerm::GroundTerm(v) = t {
                 Some(v)
             } else {
                 None
@@ -194,12 +196,12 @@ impl ChaseAtom for VariableAtom {
 #[derive(Debug, Clone)]
 pub struct ChaseFact {
     predicate: Identifier,
-    constants: Vec<Constant>,
+    constants: Vec<AnyDataValue>,
 }
 
 impl ChaseFact {
     /// Create a new [`ChaseFact`].
-    pub fn new(predicate: Identifier, constants: Vec<Constant>) -> Self {
+    pub fn new(predicate: Identifier, constants: Vec<AnyDataValue>) -> Self {
         Self {
             predicate,
             constants,
@@ -217,7 +219,7 @@ impl ChaseFact {
                 .terms()
                 .iter()
                 .map(|t| {
-                    if let Term::Primitive(PrimitiveTerm::Constant(constant)) = t {
+                    if let Term::Primitive(PrimitiveTerm::GroundTerm(constant)) = t {
                         constant.clone()
                     } else {
                         unreachable!("Function assumes that input atom only contains constants.")
@@ -229,7 +231,7 @@ impl ChaseFact {
 }
 
 impl ChaseAtom for ChaseFact {
-    type TypeTerm = Constant;
+    type TypeTerm = AnyDataValue;
 
     fn predicate(&self) -> Identifier {
         self.predicate.clone()
@@ -239,11 +241,11 @@ impl ChaseAtom for ChaseFact {
         vec![]
     }
 
-    fn terms(&self) -> &Vec<Constant> {
+    fn terms(&self) -> &Vec<AnyDataValue> {
         &self.constants
     }
 
-    fn terms_mut(&mut self) -> &mut Vec<Constant> {
+    fn terms_mut(&mut self) -> &mut Vec<AnyDataValue> {
         &mut self.constants
     }
 }

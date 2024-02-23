@@ -2,8 +2,8 @@
 //! as well as [ColumnEnum],
 //! which collects all implementations of [Column] into a single object.
 
-pub mod rle;
-pub mod vector;
+pub(crate) mod rle;
+pub(crate) mod vector;
 
 use std::{fmt::Debug, mem::size_of};
 
@@ -44,7 +44,7 @@ pub trait Column<'a, T>: Debug + Clone + ByteSized {
 
 /// Enum for column implementations
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum ColumnEnum<T: RunLengthEncodable> {
+pub(crate) enum ColumnEnum<T: RunLengthEncodable> {
     /// Case ColumnVector
     ColumnVector(ColumnVector<T>),
     /// Case ColumnRle

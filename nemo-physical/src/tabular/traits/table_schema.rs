@@ -14,86 +14,86 @@ use crate::{
 /// Type that stores the datatype used in each column of the table.
 #[repr(transparent)]
 #[derive(Clone, Debug, Default)]
-pub struct TableSchema(Vec<DataTypeName>);
+pub(crate) struct TableSchema(Vec<DataTypeName>);
 
 impl TableSchema {
     /// Constructs new (empty) [`TableSchema`].
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self(Vec::new())
     }
 
     /// Turns Vector into [`TableSchema`].
-    pub fn from_vec(vec: Vec<DataTypeName>) -> Self {
+    pub(crate) fn from_vec(vec: Vec<DataTypeName>) -> Self {
         Self(vec)
     }
 
     /// Construct a new [`TableSchema`]  which is a reordered version of this schema
-    pub fn reordered(&self, reordering: &ProjectReordering) -> Self {
+    pub(crate) fn reordered(&self, reordering: &ProjectReordering) -> Self {
         Self(reordering.transform(&self.0))
     }
 
     /// Contruct a new [`TableSchema`] which is a permuted version of this schema.
-    pub fn permuted(&self, permutation: &Permutation) -> Self {
+    pub(crate) fn permuted(&self, permutation: &Permutation) -> Self {
         Self(permutation.permute(&self.0))
     }
 
     /// Constructs new (empty) [`TableSchema`] with reserved space.
-    pub fn with_capacity(arity: usize) -> Self {
+    pub(crate) fn with_capacity(arity: usize) -> Self {
         Self(Vec::with_capacity(arity))
     }
 
     /// Constructs new (empty) [`TableSchema`] with reserved space.
-    pub fn reserve(arity: usize) -> Self {
+    pub(crate) fn reserve(arity: usize) -> Self {
         Self::with_capacity(arity)
     }
 
     /// Push to the underlying vector.
-    pub fn push(&mut self, type_name: DataTypeName) {
+    pub(crate) fn push(&mut self, type_name: DataTypeName) {
         self.0.push(type_name);
     }
 
     /// Add new entry to the schema.
-    pub fn add_entry(&mut self, type_name: DataTypeName) {
+    pub(crate) fn add_entry(&mut self, type_name: DataTypeName) {
         self.push(type_name);
     }
 
     /// Add new entry to the schema by cloning it.
-    pub fn add_entry_cloned(&mut self, entry: &DataTypeName) {
+    pub(crate) fn add_entry_cloned(&mut self, entry: &DataTypeName) {
         self.push(*entry);
     }
 
     /// The length of the underlying vector.
-    pub fn len(&self) -> usize {
+    pub(crate) fn len(&self) -> usize {
         self.0.len()
     }
 
     /// The arity of the table.
-    pub fn arity(&self) -> usize {
+    pub(crate) fn arity(&self) -> usize {
         self.len()
     }
 
     /// Bool indicating if the table is empty.
-    pub fn is_empty(&self) -> bool {
+    pub(crate) fn is_empty(&self) -> bool {
         self.0.is_empty()
     }
 
     /// Returns the [`DataTypeName`] associated with the column of the given index.
-    pub fn get_entry(&self, index: usize) -> &DataTypeName {
+    pub(crate) fn get_entry(&self, index: usize) -> &DataTypeName {
         &self[index]
     }
 
     /// Returns the [`DataTypeName`] associated with the column of the given index.
-    pub fn get_entry_mut(&mut self, index: usize) -> &mut DataTypeName {
+    pub(crate) fn get_entry_mut(&mut self, index: usize) -> &mut DataTypeName {
         &mut self[index]
     }
 
     /// Returns an iterator for the underlying vector
-    pub fn iter(&self) -> Iter<DataTypeName> {
+    pub(crate) fn iter(&self) -> Iter<DataTypeName> {
         self.0.iter()
     }
 
     /// return fitting storage types for schema
-    pub fn get_storage_types(&self) -> Vec<StorageTypeName> {
+    pub(crate) fn get_storage_types(&self) -> Vec<StorageTypeName> {
         self.iter()
             .map(DataTypeName::to_storage_type_name)
             .collect()

@@ -75,7 +75,7 @@ impl DsvValueFormat {
     pub(super) fn data_value_serializer_function(&self) -> DataValueSerializerFunction {
         match self {
             DsvValueFormat::ANYTHING => Self::serialize_any_value_to_string,
-            DsvValueFormat::STRING => AnyDataValue::to_string,
+            DsvValueFormat::STRING => AnyDataValue::to_plain_string,
             DsvValueFormat::INTEGER => Self::serialize_integer_to_string,
             DsvValueFormat::DOUBLE => Self::serialize_double_to_string,
             DsvValueFormat::SKIP => Self::serialize_any_value_to_string, // irrelevant
@@ -87,7 +87,7 @@ impl DsvValueFormat {
     pub(super) fn parse_string_from_string(
         input: String,
     ) -> Result<AnyDataValue, DataValueCreationError> {
-        Ok(AnyDataValue::new_string(input))
+        Ok(AnyDataValue::new_plain_string(input))
     }
 
     /// Best-effort parsing function for strings from CSV. True to the nature of CSV, this function
@@ -103,7 +103,7 @@ impl DsvValueFormat {
 
         // Represent empty cells as empty strings
         if input.is_empty() {
-            return Ok(AnyDataValue::new_string("".to_string()));
+            return Ok(AnyDataValue::new_plain_string("".to_string()));
         }
         assert!(input.len() > 0);
 
@@ -121,7 +121,7 @@ impl DsvValueFormat {
             b'"' => {
                 if let Some(pos) = input.rfind("\"") {
                     if pos == input.len() - 1 {
-                        return Ok(AnyDataValue::new_string(
+                        return Ok(AnyDataValue::new_plain_string(
                             input[1..input.len() - 1].to_string(),
                         ));
                     } else if input.as_bytes()[pos + 1] == b'@' {
@@ -158,7 +158,7 @@ impl DsvValueFormat {
         }
 
         // Otherwise treat the input as a string literal
-        Ok(AnyDataValue::new_string(input.to_string()))
+        Ok(AnyDataValue::new_plain_string(input.to_string()))
     }
 
     /// Serialize [AnyDataValue]s into CSV strings. This method handles
@@ -178,7 +178,7 @@ impl DsvValueFormat {
             | nemo_physical::datavalues::ValueDomain::Int => {
                 unreachable!("we checked for integers above")
             }
-            nemo_physical::datavalues::ValueDomain::String => {
+            nemo_physical::datavalues::ValueDomain::PlainString => {
                 // This is already a short version without XSD type
                 Some(value.canonical_string())
             }
@@ -206,7 +206,7 @@ impl DsvValueFormat {
             | nemo_physical::datavalues::ValueDomain::NonNegativeInt
             | nemo_physical::datavalues::ValueDomain::Long
             | nemo_physical::datavalues::ValueDomain::Int => Some(value.lexical_value()),
-            nemo_physical::datavalues::ValueDomain::String
+            nemo_physical::datavalues::ValueDomain::PlainString
             | nemo_physical::datavalues::ValueDomain::LanguageTaggedString
             | nemo_physical::datavalues::ValueDomain::Iri
             | nemo_physical::datavalues::ValueDomain::Float
@@ -240,7 +240,7 @@ impl DsvValueFormat {
             | nemo_physical::datavalues::ValueDomain::NonNegativeInt
             | nemo_physical::datavalues::ValueDomain::Long
             | nemo_physical::datavalues::ValueDomain::Int
-            | nemo_physical::datavalues::ValueDomain::String
+            | nemo_physical::datavalues::ValueDomain::PlainString
             | nemo_physical::datavalues::ValueDomain::LanguageTaggedString
             | nemo_physical::datavalues::ValueDomain::Iri
             | nemo_physical::datavalues::ValueDomain::Float

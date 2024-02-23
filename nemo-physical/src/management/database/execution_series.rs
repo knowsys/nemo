@@ -45,7 +45,7 @@ impl ExecutionTreeNode {
     /// Returns [ExecutionTreeOperation] if this is not a project node.
     ///
     /// Returns `None` otherwise.
-    pub fn operation(self) -> Option<ExecutionTreeOperation> {
+    pub(crate) fn operation(self) -> Option<ExecutionTreeOperation> {
         if let Self::Operation(result) = self {
             Some(result)
         } else {
@@ -104,7 +104,7 @@ impl ExecutionTree {
     }
 
     /// Return an ascii tree representation of the [ExecutionTree].
-    pub fn ascii_tree(&self) -> ascii_tree::Tree {
+    pub(crate) fn ascii_tree(&self) -> ascii_tree::Tree {
         let tree = match &self.root {
             ExecutionTreeNode::Operation(operation_tree) => {
                 Self::ascii_tree_recursive(operation_tree)
@@ -145,7 +145,7 @@ pub(crate) struct ExecutionSeries {
 
 // impl ExecutionTree {
 //     /// Create a [ExecutionTree] from a [ExecutionPlan] with one write node
-//     pub fn new(plan: ExecutionPlan) -> Self {
+//     pub(crate) fn new(plan: ExecutionPlan) -> Self {
 //         debug_assert!(plan.out_nodes.len() == 1);
 
 //         ExecutionTree(plan)
@@ -157,17 +157,17 @@ pub(crate) struct ExecutionSeries {
 //     }
 
 //     /// Return the name of this tree.
-//     pub fn name(&self) -> &str {
+//     pub(crate) fn name(&self) -> &str {
 //         &self.0.out_nodes[0].name
 //     }
 
 //     /// Return the root of the trie.
-//     pub fn root(&self) -> ExecutionNodeRef {
+//     pub(crate) fn root(&self) -> ExecutionNodeRef {
 //         self.0.out_nodes[0].node.clone()
 //     }
 
 //     /// How many of the final layers will be dropped in the end result
-//     pub fn cut_bottom(&self) -> usize {
+//     pub(crate) fn cut_bottom(&self) -> usize {
 //         self.0.out_nodes[0].cut_bottom_layers
 //     }
 
@@ -355,7 +355,7 @@ pub(crate) struct ExecutionSeries {
 //     /// like, e.g., performing a join over one subtable.
 //     /// Will also exclude the supplied set of temporary tables.
 //     /// Returns None if the simplified tree results in a no-op.
-//     pub fn simplify(&self, removed_temp_indices: &HashSet<usize>) -> Option<Self> {
+//     pub(crate) fn simplify(&self, removed_temp_indices: &HashSet<usize>) -> Option<Self> {
 //         let mut simplified_tree = ExecutionPlan::default();
 //         let new_root =
 //             Self::simplify_recursive(&mut simplified_tree, self.root(), removed_temp_indices)?;
@@ -371,7 +371,7 @@ pub(crate) struct ExecutionSeries {
 //     }
 
 //     /// Return a list of fetched tables that are required by this tree.
-//     pub fn required_tables(&self) -> Vec<(TableId, ColumnOrder)> {
+//     pub(crate) fn required_tables(&self) -> Vec<(TableId, ColumnOrder)> {
 //         let mut result = Vec::<(TableId, ColumnOrder)>::new();
 //         for node in &self.0.nodes {
 //             if let ExecutionOperation::FetchExisting(id, order) =
@@ -389,7 +389,7 @@ pub(crate) struct ExecutionSeries {
 // impl ExecutionTree {
 //     /// Alters the given [ExecutionTree] in such a way as to comply with the constraints of the leapfrog trie join algorithm.
 //     /// Specifically, this will reorder tables if necessary
-//     pub fn satisfy_leapfrog_triejoin(&mut self) {
+//     pub(crate) fn satisfy_leapfrog_triejoin(&mut self) {
 //         Self::satisfy_leapfrog_recursive(self.root(), Permutation::default());
 //     }
 

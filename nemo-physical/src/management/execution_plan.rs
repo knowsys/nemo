@@ -16,6 +16,7 @@ use crate::{
         filter::{Filters, GeneratorFilter},
         function::{FunctionAssignment, GeneratorFunction},
         join::GeneratorJoin,
+        null::GeneratorNull,
         projectreorder::GeneratorProjectReorder,
         subtract::GeneratorSubtract,
         union::GeneratorUnion,
@@ -43,12 +44,12 @@ struct ExecutionNodeOwned(Rc<RefCell<ExecutionNode>>);
 
 impl ExecutionNodeOwned {
     /// Create new [ExecutionNodeOwned]
-    pub fn new(node: ExecutionNode) -> Self {
+    pub(crate) fn new(node: ExecutionNode) -> Self {
         Self(Rc::new(RefCell::new(node)))
     }
 
-    /// Return a [ExecutionNodeRef] pointing to this node
-    pub fn get_ref(&self) -> ExecutionNodeRef {
+    /// Return an [ExecutionNodeRef] pointing to this node
+    pub(crate) fn get_ref(&self) -> ExecutionNodeRef {
         ExecutionNodeRef(Rc::downgrade(&self.0))
     }
 }
@@ -61,7 +62,7 @@ impl ExecutionNodeRef {
     /// Return an referenced counted cell of an [ExecutionNode].
     /// # Panics
     /// Throws a panic if the referenced [ExecutionNode] does not exist.
-    pub fn get_rc(&self) -> Rc<RefCell<ExecutionNode>> {
+    pub(crate) fn get_rc(&self) -> Rc<RefCell<ExecutionNode>> {
         self.0
             .upgrade()
             .expect("Referenced execution node has been deleted")
@@ -112,7 +113,8 @@ impl ExecutionNodeRef {
     }
 
     /// Return the list of subnodes.
-    pub fn subnodes(&self) -> Vec<ExecutionNodeRef> {
+    #[allow(dead_code)]
+    pub(crate) fn subnodes(&self) -> Vec<ExecutionNodeRef> {
         let node_rc = self.get_rc();
         let node_operation = &node_rc.borrow().operation;
 
@@ -126,9 +128,10 @@ impl ExecutionNodeRef {
 
                 result
             }
-            ExecutionOperation::ProjectReorder(subnode) => vec![subnode.clone()],
-            ExecutionOperation::Filter(subnode, _) => vec![subnode.clone()],
-            ExecutionOperation::Function(subnode, _) => vec![subnode.clone()],
+            ExecutionOperation::ProjectReorder(subnode)
+            | ExecutionOperation::Filter(subnode, _)
+            | ExecutionOperation::Function(subnode, _)
+            | ExecutionOperation::Null(subnode) => vec![subnode.clone()],
             ExecutionOperation::Aggregate() => todo!(),
         }
     }
@@ -136,7 +139,7 @@ impl ExecutionNodeRef {
 
 /// Represents a node in an [ExecutionPlan]
 #[derive(Debug)]
-pub struct ExecutionNode {
+pub(crate) struct ExecutionNode {
     /// Identifier of the node.
     pub id: ExecutionId,
 
@@ -148,7 +151,7 @@ pub struct ExecutionNode {
 
 #[derive(Debug)]
 /// Represents an operation in [ExecutionPlan]
-pub enum ExecutionOperation {
+pub(crate) enum ExecutionOperation {
     /// Fetch a table that is already present in the database instance
     FetchTable(PermanentTableId, ColumnOrder),
     /// Join the tables represented by the subnodes
@@ -163,6 +166,8 @@ pub enum ExecutionOperation {
     Filter(ExecutionNodeRef, Filters),
     /// Introduce new columns by applying a function to the columns of the table represented by the subnode
     Function(ExecutionNodeRef, FunctionAssignment),
+    /// Append columns with fresh nulls to the table represented by the subnode
+    Null(ExecutionNodeRef),
     /// Aggreagte
     /// TODO: Implement aggregates again
     Aggregate(),
@@ -180,7 +185,7 @@ pub(crate) enum ExecutionResult {
 
 impl ExecutionResult {
     /// Return whether the operation will result in a permanent table.
-    pub fn is_permanent(&self) -> bool {
+    pub(crate) fn is_permanent(&self) -> bool {
         matches!(self, ExecutionResult::Permanent(_, _))
     }
 }
@@ -229,7 +234,7 @@ impl ExecutionPlan {
             .get_ref()
     }
 
-    /// Return [ExecutionNodeRef] for fetching a table from the [DatabaseInstance][super::database::DatabaseInstance].
+    /// Return an [ExecutionNodeRef] for fetching a table from the [DatabaseInstance][super::database::DatabaseInstance].
     pub fn fetch_table(
         &mut self,
         marked_columns: OperationTable,
@@ -239,7 +244,7 @@ impl ExecutionPlan {
         self.push_and_return_reference(new_operation, marked_columns)
     }
 
-    /// Return [ExecutionNodeRef] for fetching a table from the [DatabaseInstance][super::database::DatabaseInstance]
+    /// Return an [ExecutionNodeRef] for fetching a table from the [DatabaseInstance][super::database::DatabaseInstance]
     /// in a given [ColumnOrder].
     pub fn fetch_table_reordered(
         &mut self,
@@ -251,14 +256,14 @@ impl ExecutionPlan {
         self.push_and_return_reference(new_operation, marked_columns)
     }
 
-    /// Return [ExecutionNodeRef] for joining tables.
+    /// Return an [ExecutionNodeRef] for joining tables.
     /// Starts out empty; add subnodes with `add_subnode`.
     pub fn join_empty(&mut self, marked_columns: OperationTable) -> ExecutionNodeRef {
         let new_operation = ExecutionOperation::Join(Vec::new());
         self.push_and_return_reference(new_operation, marked_columns)
     }
 
-    /// Return [ExecutionNodeRef] for joining tables.
+    /// Return an [ExecutionNodeRef] for joining tables.
     pub fn join(
         &mut self,
         marked_columns: OperationTable,
@@ -268,14 +273,14 @@ impl ExecutionPlan {
         self.push_and_return_reference(new_operation, marked_columns)
     }
 
-    /// Return [ExecutionNodeRef] for the union of several tables.
+    /// Return an [ExecutionNodeRef] for the union of several tables.
     /// Starts out empty; add subnodes with `add_subnode`.
     pub fn union_empty(&mut self, marked_columns: OperationTable) -> ExecutionNodeRef {
         let new_operation = ExecutionOperation::Union(Vec::new());
         self.push_and_return_reference(new_operation, marked_columns)
     }
 
-    /// Return [ExecutionNodeRef] for joining tables.
+    /// Return an [ExecutionNodeRef] for joining tables.
     pub fn union(
         &mut self,
         marked_columns: OperationTable,
@@ -289,7 +294,7 @@ impl ExecutionPlan {
         self.push_and_return_reference(new_operation, marked_columns)
     }
 
-    /// Return [ExecutionNodeRef] for subtracting one table from another.
+    /// Return an [ExecutionNodeRef] for subtracting one table from another.
     pub fn subtract(
         &mut self,
         main: ExecutionNodeRef,
@@ -300,7 +305,7 @@ impl ExecutionPlan {
         self.push_and_return_reference(new_operation, marked_columns)
     }
 
-    /// Return [ExecutionNodeRef] for applying project to a table.
+    /// Return an [ExecutionNodeRef] for applying project to a table.
     pub fn projectreorder(
         &mut self,
         marked_columns: OperationTable,
@@ -318,14 +323,14 @@ impl ExecutionPlan {
         project_node
     }
 
-    /// Return [ExecutionNodeRef] for restricing a column to a certain value.
+    /// Return an [ExecutionNodeRef] for restricing a column to a certain value.
     pub fn filter(&mut self, subnode: ExecutionNodeRef, filters: Filters) -> ExecutionNodeRef {
         let marked_columns = subnode.markers();
         let new_operation = ExecutionOperation::Filter(subnode, filters);
         self.push_and_return_reference(new_operation, marked_columns)
     }
 
-    /// Return [ExecutionNodeRef] for restricting a column to values of certain other columns.
+    /// Return an [ExecutionNodeRef] for restricting a column to values of certain other columns.
     pub fn function(
         &mut self,
         marked_columns: OperationTable,
@@ -333,6 +338,16 @@ impl ExecutionPlan {
         functions: FunctionAssignment,
     ) -> ExecutionNodeRef {
         let new_operation = ExecutionOperation::Function(subnode, functions);
+        self.push_and_return_reference(new_operation, marked_columns)
+    }
+
+    /// Return an [ExecutionNodeRef] for appending columns with fresh null.
+    pub fn null(
+        &mut self,
+        marked_columns: OperationTable,
+        subnode: ExecutionNodeRef,
+    ) -> ExecutionNodeRef {
+        let new_operation = ExecutionOperation::Null(subnode);
         self.push_and_return_reference(new_operation, marked_columns)
     }
 }
@@ -708,6 +723,27 @@ impl ExecutionPlan {
                     generator: GeneratorProjectReorder::new(node_markers, marker_subnode),
                     subnode: subtree,
                 }
+            }
+            ExecutionOperation::Null(subnode) => {
+                let subtree = Self::execution_node(
+                    root_node_id,
+                    subnode.clone(),
+                    order,
+                    output_nodes,
+                    computed_trees,
+                    computed_trees_map,
+                    loaded_tables,
+                )
+                .operation()
+                .expect("No sub node should be a project");
+
+                ExecutionTreeNode::Operation(ExecutionTreeOperation::Node {
+                    generator: OperationGeneratorEnum::Null(GeneratorNull::new(
+                        node_markers,
+                        subnode.markers(),
+                    )),
+                    subnodes: vec![subtree],
+                })
             }
         }
     }

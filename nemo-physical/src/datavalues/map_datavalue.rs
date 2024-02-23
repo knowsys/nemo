@@ -3,7 +3,10 @@
 
 use std::collections::BTreeMap;
 
-use super::{AnyDataValue, DataValue, IriDataValue, ValueDomain};
+use super::{
+    syntax::{DELIM_MAP_CLOSE, DELIM_MAP_OPEN, MAP_ASSIGN, MAP_SEPARATOR},
+    AnyDataValue, DataValue, IriDataValue, ValueDomain,
+};
 
 /// Physical representation of a finite map on [`DataValue`]s.
 ///
@@ -22,7 +25,7 @@ pub struct MapDataValue {
 
 impl MapDataValue {
     /// Constructor.
-    pub fn new<T: IntoIterator<Item = (AnyDataValue, AnyDataValue)>>(
+    pub(crate) fn new<T: IntoIterator<Item = (AnyDataValue, AnyDataValue)>>(
         label: Option<IriDataValue>,
         pairs_iter: T,
     ) -> Self {
@@ -52,15 +55,17 @@ impl DataValue for MapDataValue {
             .pairs
             .iter()
             .map(|v| {
-                DataValue::canonical_string(v.0) + "=" + DataValue::canonical_string(v.1).as_str()
+                DataValue::canonical_string(v.0)
+                    + MAP_ASSIGN
+                    + DataValue::canonical_string(v.1).as_str()
             })
-            .intersperse(",".to_string())
+            .intersperse(MAP_SEPARATOR.to_string())
             .collect::<String>();
 
         if let Some(iri) = self.label() {
-            iri.canonical_string() + "{" + pairs.as_str() + "}"
+            iri.canonical_string() + DELIM_MAP_OPEN + pairs.as_str() + DELIM_MAP_CLOSE
         } else {
-            "{".to_string() + pairs.as_str() + "}"
+            DELIM_MAP_OPEN.to_string() + pairs.as_str() + DELIM_MAP_CLOSE
         }
     }
 
@@ -69,7 +74,7 @@ impl DataValue for MapDataValue {
     }
 
     fn canonical_string(&self) -> String {
-        super::datavalue::quote_string(self.lexical_value())
+        super::datavalue::quote_string(self.lexical_value().as_str())
             + "^^"
             + &super::datavalue::quote_iri(self.datatype_iri().as_str())
     }
@@ -106,6 +111,27 @@ impl std::hash::Hash for MapDataValue {
     }
 }
 
+impl std::fmt::Display for MapDataValue {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if let Some(iri) = self.label() {
+            iri.fmt(f)?;
+        }
+        f.write_str(DELIM_MAP_OPEN)?;
+        let mut first = true;
+        for (key, value) in self.pairs.iter() {
+            if first {
+                first = false;
+            } else {
+                f.write_str(MAP_SEPARATOR)?;
+            }
+            key.fmt(f)?;
+            f.write_str(MAP_ASSIGN)?;
+            value.fmt(f)?;
+        }
+        f.write_str(DELIM_MAP_CLOSE)
+    }
+}
+
 #[cfg(test)]
 mod test {
 
@@ -116,9 +142,9 @@ mod test {
     #[test]
     fn test_map() {
         let dv1 = AnyDataValue::new_integer_from_i64(42);
-        let dv2 = AnyDataValue::new_string("test".to_string());
+        let dv2 = AnyDataValue::new_plain_string("test".to_string());
         let dv3 = AnyDataValue::new_boolean(true);
-        let dv4 = AnyDataValue::new_string("test2".to_string());
+        let dv4 = AnyDataValue::new_plain_string("test2".to_string());
         let label = IriDataValue::new("http://example.org/label".to_string());
 
         let map = MapDataValue::new(
@@ -152,9 +178,9 @@ mod test {
     #[test]
     fn test_map_equality() {
         let dv1 = AnyDataValue::new_integer_from_i64(42);
-        let dv2 = AnyDataValue::new_string("test".to_string());
+        let dv2 = AnyDataValue::new_plain_string("test".to_string());
         let dv3 = AnyDataValue::new_boolean(true);
-        let dv4 = AnyDataValue::new_string("test2".to_string());
+        let dv4 = AnyDataValue::new_plain_string("test2".to_string());
 
         let map1 = MapDataValue::from_iter(vec![
             (dv1.clone(), dv2.clone()),

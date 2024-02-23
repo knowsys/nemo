@@ -6,7 +6,7 @@ use super::model::Identifier;
 
 use bytesize::ByteSize;
 use nemo_physical::{
-    datavalues::AnyDataValue,
+    datavalues::any_datavalue::AnyDataValue,
     management::{
         database::DatabaseInstance,
         database::{
@@ -255,11 +255,6 @@ impl SubtableExecutionPlan {
         node_id
     }
 
-    /// Return a reference to the underlying [ExecutionPlan].
-    pub fn plan(&self) -> &ExecutionPlan {
-        &self.execution_plan
-    }
-
     /// Return a mutable reference to the underlying [ExecutionPlan].
     pub fn plan_mut(&mut self) -> &mut ExecutionPlan {
         &mut self.execution_plan
@@ -357,11 +352,6 @@ impl TableManager {
             predicate_subtables: HashMap::new(),
             predicate_to_info: HashMap::new(),
         }
-    }
-
-    /// Return a reference to the underlying [DatabaseInstance].
-    pub(crate) fn database(&self) -> &DatabaseInstance {
-        &self.database
     }
 
     /// Return the [PermanentTableId] that is associated with a given subtable.
@@ -466,6 +456,7 @@ impl TableManager {
     }
 
     /// Check whether a predicate has been registered.
+    #[allow(dead_code)]
     fn predicate_exists(&self, predicate: &Identifier) -> bool {
         self.predicate_subtables.get(predicate).is_some()
     }
@@ -501,6 +492,7 @@ impl TableManager {
 
     /// Add a [Trie] as a subtable of a predicate.
     /// Predicate must be registered before calling this function.
+    #[allow(dead_code)]
     fn add_table(&mut self, predicate: Identifier, step: usize, order: ColumnOrder, trie: Trie) {
         let name = self.generate_table_name(&predicate, &order, step);
 
@@ -510,6 +502,7 @@ impl TableManager {
 
     /// Add a reference to another table under a new name.
     /// Predicate must be registered before calling this function and referenced table must exist.
+    #[allow(dead_code)]
     fn add_reference(
         &mut self,
         subtable: SubtableIdentifier,
@@ -615,6 +608,7 @@ impl TableManager {
     }
 
     /// Returns a reference to the constants dictionary
+    #[allow(dead_code)]
     pub fn dictionary(&self) -> Ref<'_, Dict> {
         self.database.dictionary()
     }

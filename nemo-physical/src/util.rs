@@ -2,6 +2,8 @@
 
 pub mod mapping;
 
+pub(crate) mod bitset;
+
 /// A macro that generates forwarding macros to dispatch along
 /// datatype-tagged enums.
 ///
@@ -94,10 +96,10 @@ macro_rules! generate_datatype_forwarder {
 
 // // clippy complains if these occur after mod test_util...
 // #[cfg(test)]
-// pub use test_util::make_column_with_intervals;
+// pub(crate) use test_util::make_column_with_intervals;
 // #[cfg(test)]
-// pub use test_util::make_column_with_intervals_t;
+// pub(crate) use test_util::make_column_with_intervals_t;
 
 /// Module for utility functions used in tests
 #[cfg(test)]
-pub mod test_util;
+pub(crate) mod test_util;

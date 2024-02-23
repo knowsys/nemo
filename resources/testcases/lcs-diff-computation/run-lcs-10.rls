@@ -16,10 +16,10 @@
 
 % These files can be created with the python script call
 %  python make-test-strings.py 10 lcs10
-@source docA[any, any]: load-csv("lcs10-doca.csv") .
-@source docB[any, any]: load-csv("lcs10-docb.csv") .
-@source s[any, any]: load-csv("lcs10-succ.csv") .
-@source sLetter[any, any]: load-csv("lcs10-letters.csv") .
+@import docA :- csv{resource="lcs10-doca.csv", format=(any,any)} .
+@import docB :- csv{resource="lcs10-docb.csv", format=(any,any)} .
+@import s :- csv{resource="lcs10-succ.csv", format=(any,any)} .
+@import sLetter :- csv{resource="lcs10-letters.csv", format=(any,any)} .
 
 docAend(?X) :- docA(?X,ENDOFA) .
 docBend(?X) :- docB(?X,ENDOFB) .

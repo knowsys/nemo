@@ -2,7 +2,7 @@
 
 use std::{iter::from_fn, sync::Arc};
 
-use crate::model::PrimitiveType;
+use super::primitive_types::PrimitiveType;
 
 /// A nested type
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]

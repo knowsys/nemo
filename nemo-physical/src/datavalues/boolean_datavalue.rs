@@ -9,7 +9,7 @@ pub struct BooleanDataValue(bool);
 
 impl BooleanDataValue {
     /// Create a new [BooleanDataValue].
-    pub fn new(value: bool) -> Self {
+    pub(crate) fn new(value: bool) -> Self {
         Self(value)
     }
 }
@@ -66,5 +66,11 @@ impl Ord for BooleanDataValue {
 impl PartialOrd for BooleanDataValue {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         Some(self.cmp(&other))
+    }
+}
+
+impl std::fmt::Display for BooleanDataValue {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.canonical_string().as_str())
     }
 }

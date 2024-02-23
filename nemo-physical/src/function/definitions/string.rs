@@ -14,8 +14,8 @@ fn string_pair_from_any(
     parameter_first: AnyDataValue,
     parameter_second: AnyDataValue,
 ) -> Option<(String, String)> {
-    if let Some(first_string) = parameter_first.to_string() {
-        if let Some(second_string) = parameter_second.to_string() {
+    if let Some(first_string) = parameter_first.to_plain_string() {
+        if let Some(second_string) = parameter_second.to_plain_string() {
             return Some((first_string, second_string));
         }
     }
@@ -62,7 +62,7 @@ impl BinaryFunction for StringConcatenation {
     ) -> Option<AnyDataValue> {
         string_pair_from_any(parameter_first, parameter_second).map(
             |(first_string, second_string)| {
-                AnyDataValue::new_string([first_string, second_string].concat())
+                AnyDataValue::new_plain_string([first_string, second_string].concat())
             },
         )
     }
@@ -110,10 +110,12 @@ impl BinaryFunction for StringSubstring {
         parameter_first: AnyDataValue,
         parameter_second: AnyDataValue,
     ) -> Option<AnyDataValue> {
-        let string = parameter_first.to_string()?;
+        let string = parameter_first.to_plain_string()?;
         let length = parameter_second.to_u64()? as usize;
 
-        Some(AnyDataValue::new_string(string[0..length].to_string()))
+        Some(AnyDataValue::new_plain_string(
+            string[0..length].to_string(),
+        ))
     }
 }
 
@@ -127,7 +129,7 @@ pub struct StringLength;
 impl UnaryFunction for StringLength {
     fn evaluate(&self, parameter: AnyDataValue) -> Option<AnyDataValue> {
         parameter
-            .to_string()
+            .to_plain_string()
             .map(|string| AnyDataValue::new_integer_from_u64(string.len() as u64))
     }
 }
@@ -142,8 +144,8 @@ pub struct StringUppercase;
 impl UnaryFunction for StringUppercase {
     fn evaluate(&self, parameter: AnyDataValue) -> Option<AnyDataValue> {
         parameter
-            .to_string()
-            .map(|string| AnyDataValue::new_string(string.to_ascii_uppercase()))
+            .to_plain_string()
+            .map(|string| AnyDataValue::new_plain_string(string.to_ascii_uppercase()))
     }
 }
 
@@ -157,7 +159,7 @@ pub struct StringLowercase;
 impl UnaryFunction for StringLowercase {
     fn evaluate(&self, parameter: AnyDataValue) -> Option<AnyDataValue> {
         parameter
-            .to_string()
-            .map(|string| AnyDataValue::new_string(string.to_ascii_lowercase()))
+            .to_plain_string()
+            .map(|string| AnyDataValue::new_plain_string(string.to_ascii_lowercase()))
     }
 }

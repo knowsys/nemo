@@ -29,7 +29,7 @@ pub struct UnsignedLongDataValue(u64);
 
 impl UnsignedLongDataValue {
     /// Constructor.
-    pub fn new(value: u64) -> Self {
+    pub(crate) fn new(value: u64) -> Self {
         UnsignedLongDataValue(value)
     }
 }
@@ -100,6 +100,12 @@ impl std::hash::Hash for UnsignedLongDataValue {
     }
 }
 
+impl std::fmt::Display for UnsignedLongDataValue {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
 /// Physical representation of an integer as an i64.
 #[repr(transparent)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -107,7 +113,7 @@ pub struct LongDataValue(i64);
 
 impl LongDataValue {
     /// Constructor.
-    pub fn new(value: i64) -> Self {
+    pub(crate) fn new(value: i64) -> Self {
         LongDataValue(value)
     }
 }
@@ -183,6 +189,12 @@ impl std::hash::Hash for LongDataValue {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         self.value_domain().hash(state);
         self.0.hash(state);
+    }
+}
+
+impl std::fmt::Display for LongDataValue {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
     }
 }
 

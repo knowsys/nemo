@@ -5,13 +5,7 @@ use std::{fmt::Debug, mem::size_of, num::NonZeroUsize, ops::Range};
 use bytesize::ByteSize;
 
 use crate::{
-    columnar::{
-        columnbuilder::{
-            rle::{ColumnBuilderRle, RleElement},
-            ColumnBuilder,
-        },
-        columnscan::ColumnScan,
-    },
+    columnar::{columnbuilder::rle::RleElement, columnscan::ColumnScan},
     datatypes::{ColumnDataType, RunLengthEncodable},
     management::bytesized::ByteSized,
 };
@@ -20,7 +14,7 @@ use super::Column;
 
 /// Implementation of [`Column`] that allows the use of incremental run length encoding.
 #[derive(Debug, PartialEq, Eq, Clone)]
-pub struct ColumnRle<T: RunLengthEncodable> {
+pub(crate) struct ColumnRle<T: RunLengthEncodable> {
     values: Vec<T>,
     end_indices: Vec<NonZeroUsize>,
     increments: Vec<T::Step>,
@@ -59,35 +53,16 @@ where
     }
 
     /// Constructs a new [`ColumnRle`] from a vector of the suitable type.
-    pub fn new(data: Vec<T>) -> ColumnRle<T> {
+    #[cfg(test)]
+    pub(crate) fn new(data: Vec<T>) -> ColumnRle<T> {
+        use crate::columnar::columnbuilder::{rle::ColumnBuilderRle, ColumnBuilder};
+
         let mut builder = ColumnBuilderRle::new();
         for value in data {
             builder.add(value);
         }
 
         builder.finalize()
-    }
-
-    /// Construct a new [`ColumnRle`] consisting of one value that is repeated a given number of times.
-    pub fn constant(value: T, length: NonZeroUsize) -> ColumnRle<T> {
-        let element = RleElement {
-            value,
-            length,
-            increment: T::zero_step(),
-        };
-
-        Self::from_rle_elements(vec![element])
-    }
-
-    /// Construct new [`ColumnScanRle`] consisting of a single continuous range of values.
-    pub fn range(start_value: T, increment: T::Step, length: NonZeroUsize) -> ColumnRle<T> {
-        let element = RleElement {
-            value: start_value,
-            length,
-            increment,
-        };
-
-        Self::from_rle_elements(vec![element])
     }
 }
 
@@ -171,7 +146,7 @@ impl<T: RunLengthEncodable> ByteSized for ColumnRle<T> {
 
 /// Column Scan tailored towards ColumnRles
 #[derive(Debug)]
-pub struct ColumnScanRle<'a, T: RunLengthEncodable> {
+pub(crate) struct ColumnScanRle<'a, T: RunLengthEncodable> {
     column: &'a ColumnRle<T>,
     element_index: usize,
     increment_index: usize,
@@ -186,7 +161,7 @@ where
     T: ColumnDataType,
 {
     /// Constructor for ColumnScanRle
-    pub fn new(column: &'a ColumnRle<T>) -> ColumnScanRle<'a, T> {
+    pub(crate) fn new(column: &'a ColumnRle<T>) -> ColumnScanRle<'a, T> {
         ColumnScanRle {
             column,
             element_index: Default::default(),

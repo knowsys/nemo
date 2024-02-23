@@ -2,15 +2,8 @@ use std::fmt::Display;
 use std::str::FromStr;
 
 use crate::io::parser::ParseError;
-use nemo_physical::datatypes::data_value::DataValueIteratorT;
-use nemo_physical::datatypes::{DataTypeName, DataValueT};
 
-use super::error::InvalidRuleTermConversion;
-use super::primitive_logical_value::{
-    AnyOutputMapper, DefaultSerializedIterator, Float64OutputMapper, IntegerOutputMapper,
-    PrimitiveLogicalValueIteratorT, StringOutputMapper,
-};
-use crate::model::{Constant, NestedType};
+use crate::model::NestedType;
 
 macro_rules! count {
     () => (0usize);
@@ -53,7 +46,7 @@ macro_rules! generate_logical_type_enum {
             fn from_str(s: &str) -> Result<Self, Self::Err> {
                 match s {
                     $($string_repr => Ok(Self::$variant_name)),+,
-                    _ => Err(Self::Err::ParseUnknownType(s.to_string()))
+                    _ => panic!("types no longer used, will soon go") //Err(Self::Err::ParseUnknownType(s.to_string()))
                 }
             }
         }
@@ -100,17 +93,6 @@ impl Default for PrimitiveType {
     }
 }
 
-impl From<PrimitiveType> for DataTypeName {
-    fn from(source: PrimitiveType) -> Self {
-        match source {
-            PrimitiveType::Any => Self::String,
-            PrimitiveType::String => Self::String,
-            PrimitiveType::Integer => Self::I64,
-            PrimitiveType::Float64 => Self::Double,
-        }
-    }
-}
-
 impl TryFrom<NestedType> for PrimitiveType {
     type Error = ();
 
@@ -147,31 +129,6 @@ impl PrimitiveType {
         }
     }
 
-    /// Convert a given ground term to a DataValueT fitting the current logical type
-    pub fn ground_term_to_data_value_t(
-        &self,
-        constant: Constant,
-    ) -> Result<DataValueT, InvalidRuleTermConversion> {
-        let result = match self {
-            Self::Any => DataValueT::String(constant.try_into()?),
-            Self::String => DataValueT::String(constant.try_into()?),
-            Self::Integer => DataValueT::I64(constant.try_into()?),
-            Self::Float64 => DataValueT::Double(constant.try_into()?),
-        };
-
-        Ok(result)
-    }
-
-    /// Associate a physical data type to this primitive logical type
-    pub fn datatype_name(&self) -> DataTypeName {
-        match self {
-            PrimitiveType::Any => DataTypeName::String,
-            PrimitiveType::String => DataTypeName::String,
-            PrimitiveType::Integer => DataTypeName::I64,
-            PrimitiveType::Float64 => DataTypeName::Double,
-        }
-    }
-
     /// Whether this logical type can be used to perform numeric operations.
     pub fn allows_numeric_operations(&self) -> bool {
         match self {
@@ -179,41 +136,6 @@ impl PrimitiveType {
             Self::String => false,
             Self::Integer => true,
             Self::Float64 => true,
-        }
-    }
-
-    /// Convert physical data value iterator into iterator over logical types
-    pub fn primitive_logical_value_iterator<'a>(
-        &self,
-        physical_iter: DataValueIteratorT<'a>,
-    ) -> PrimitiveLogicalValueIteratorT<'a> {
-        match self {
-            Self::Any => {
-                PrimitiveLogicalValueIteratorT::Any(AnyOutputMapper::new(physical_iter).into())
-            }
-            Self::String => PrimitiveLogicalValueIteratorT::String(
-                StringOutputMapper::new(physical_iter).into(),
-            ),
-            Self::Integer => PrimitiveLogicalValueIteratorT::Integer(
-                IntegerOutputMapper::new(physical_iter).into(),
-            ),
-            Self::Float64 => PrimitiveLogicalValueIteratorT::Float64(
-                Float64OutputMapper::new(physical_iter).into(),
-            ),
-        }
-    }
-
-    /// Convert physical data value iterator into iterator over logical types directly transformed
-    /// to their string representation to be able to take some shortcuts when performing this mapping
-    pub fn serialize_output<'a>(
-        &self,
-        physical_iter: DataValueIteratorT<'a>,
-    ) -> DefaultSerializedIterator<'a> {
-        match self {
-            Self::Any => AnyOutputMapper::new(physical_iter).into(),
-            Self::String => StringOutputMapper::new(physical_iter).into(),
-            Self::Integer => IntegerOutputMapper::new(physical_iter).into(),
-            Self::Float64 => Float64OutputMapper::new(physical_iter).into(),
         }
     }
 }

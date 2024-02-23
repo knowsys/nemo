@@ -2,11 +2,13 @@
 
 use std::collections::{HashMap, HashSet};
 
+use nemo_physical::datavalues::AnyDataValue;
+
 use crate::{
     error::Error,
     model::{
         chase_model::variable::{AGGREGATE_VARIABLE_PREFIX, CONSTRUCT_VARIABLE_PREFIX},
-        Constant, Constraint, Identifier, Literal, PrimitiveTerm, Rule, Term, Variable,
+        Constraint, Literal, PrimitiveTerm, Rule, Term, Variable,
     },
 };
 
@@ -173,34 +175,31 @@ impl ChaseRule {
             .collect()
     }
 
-    /// Return all [Constant]s used in this rule.
-    pub fn all_constants(&self) -> impl Iterator<Item = &Constant> {
-        let constants_head = self.head.iter().flat_map(|atom| atom.get_constants());
-        let constants_constructors = self
+    /// Returns the [AnyDataValue]s used as constants in this rule.
+    pub fn all_datavalues(&self) -> impl Iterator<Item = &AnyDataValue> {
+        let datavalues_head = self.head.iter().flat_map(|atom| atom.datavalues());
+        let datavalues_constructors = self
             .constructors
             .iter()
-            .flat_map(|constructor| constructor.constants());
-        let constants_constraints = self
+            .flat_map(|constructor| constructor.datavalues());
+        let datavalues_constraints = self
             .positive_constraints
             .iter()
             .chain(self.negative_constraints.iter())
-            .flat_map(|constraint| constraint.constants());
+            .flat_map(|constraint| constraint.datavalues());
 
-        constants_head
-            .chain(constants_constructors)
-            .chain(constants_constraints)
+        datavalues_head
+            .chain(datavalues_constructors)
+            .chain(datavalues_constraints)
     }
 }
 
 impl ChaseRule {
     /// Increments `next_variable_id`, but returns it's old value with a prefix.
-    fn generate_incrementing_variable_name(
-        prefix: &str,
-        next_variable_id: &mut usize,
-    ) -> Identifier {
-        let i = Identifier(format!("{}{}", prefix, next_variable_id));
+    fn generate_incrementing_variable_name(prefix: &str, next_variable_id: &mut usize) -> String {
+        let result = format!("{}{}", prefix, next_variable_id);
         *next_variable_id += 1;
-        i
+        result
     }
 
     // Remove constraints of the form ?X = ?Y from the rule

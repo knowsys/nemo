@@ -127,7 +127,7 @@ fn construct_existential_aux_rule(
     let mut generate_variable = move || {
         variable_index += 1;
         let name = format!("__GENERATED_HEAD_AUX_VARIABLE_{}", variable_index);
-        Variable::Universal(Identifier(name))
+        Variable::Universal(name)
     };
 
     let mut used_variables = HashSet::new();
@@ -144,11 +144,14 @@ fn construct_existential_aux_rule(
 
                     new_terms.push(variable.clone());
                 }
-                PrimitiveTerm::Constant(_) => {
-                    let generated_variable =
-                        Term::Primitive(PrimitiveTerm::Variable(generate_variable()));
-                    let new_constraint =
-                        Constraint::Equals(generated_variable, Term::Primitive(term.clone()));
+                PrimitiveTerm::GroundTerm(_) => {
+                    let generated_variable = generate_variable();
+                    new_terms.push(generated_variable.clone());
+
+                    let new_constraint = Constraint::Equals(
+                        Term::Primitive(PrimitiveTerm::Variable(generated_variable)),
+                        Term::Primitive(term.clone()),
+                    );
 
                     constraints.push(new_constraint);
                 }

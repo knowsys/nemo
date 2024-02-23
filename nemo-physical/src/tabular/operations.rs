@@ -1,15 +1,22 @@
 //! This module defines operations over tries
 
-pub mod aggregate;
-pub mod filter;
-pub mod function;
-pub mod join;
-pub mod projectreorder;
-pub mod prune;
-pub mod subtract;
-pub mod union;
+pub(crate) mod aggregate;
+pub(crate) mod filter;
+pub(crate) mod function;
+pub(crate) mod join;
+pub(crate) mod null;
+pub(crate) mod projectreorder;
+pub(crate) mod prune;
+pub(crate) mod subtract;
+pub(crate) mod trim;
+pub(crate) mod union;
+
+pub use filter::Filter;
+pub use filter::Filters;
+pub use function::FunctionAssignment;
 
 use std::{
+    cell::RefCell,
     collections::{hash_map::Entry, HashMap},
     fmt::Debug,
     hash::Hash,
@@ -19,10 +26,10 @@ use std::{
 
 use delegate::delegate;
 
-use crate::{dictionary::meta_dv_dict::MetaDvDictionary, util::mapping::permutation::Permutation};
+use crate::{management::database::Dict, util::mapping::permutation::Permutation};
 
 use self::{
-    filter::GeneratorFilter, function::GeneratorFunction, join::GeneratorJoin,
+    filter::GeneratorFilter, function::GeneratorFunction, join::GeneratorJoin, null::GeneratorNull,
     subtract::GeneratorSubtract, union::GeneratorUnion,
 };
 
@@ -242,7 +249,7 @@ pub(crate) trait OperationGenerator {
     fn generate<'a>(
         &'_ self,
         input: Vec<Option<TrieScanEnum<'a>>>,
-        dictionary: &'a MetaDvDictionary,
+        dictionary: &'a RefCell<Dict>,
     ) -> Option<TrieScanEnum<'a>>;
 }
 
@@ -257,6 +264,8 @@ pub(crate) enum OperationGeneratorEnum {
     Filter(GeneratorFilter),
     /// Function
     Function(GeneratorFunction),
+    /// Null
+    Null(GeneratorNull),
 }
 
 impl OperationGenerator for OperationGeneratorEnum {
@@ -267,11 +276,12 @@ impl OperationGenerator for OperationGeneratorEnum {
             Self::Subtract(generator) => generator,
             Self::Filter(generator) => generator,
             Self::Function(generator) => generator,
+            Self::Null(generator) => generator,
         } {
             fn generate<'a>(
                 &'_ self,
                 input: Vec<Option<TrieScanEnum<'a>>>,
-                dictionary: &'a MetaDvDictionary,
+                dictionary: &'a RefCell<Dict>,
             ) -> Option<TrieScanEnum<'a>>;
         }
     }
@@ -285,6 +295,7 @@ impl Debug for OperationGeneratorEnum {
             Self::Subtract(generator) => f.write_fmt(format_args!("Subtract ({generator:?})")),
             Self::Filter(generator) => f.write_fmt(format_args!("Filter ({generator:?})")),
             Self::Function(generator) => f.write_fmt(format_args!("Function ({generator:?})")),
+            Self::Null(generator) => f.write_fmt(format_args!("Null ({generator:?})")),
         }
     }
 }

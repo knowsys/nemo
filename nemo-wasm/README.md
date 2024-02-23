@@ -12,6 +12,7 @@ This crate provides a Web Assembly build and JavaScript/TypeScript bindings for 
 
 ```
 wasm-pack build --target bundler --weak-refs
+wasm-pack build --target bundler --weak-refs --release
 ```
 
 -   In order to use the `FileSystemSyncAccessHandle` APIs, the `web_sys_unstable_apis` `cfg` flag needs to be set

@@ -29,7 +29,7 @@ pub struct DictionaryString {
 }
 impl DictionaryString {
     /// Constructor
-    pub fn new(s: &str) -> Self {
+    pub(crate) fn new(s: &str) -> Self {
         DictionaryString {
             string: s.to_string(),
             positions: UnsafeCell::new(DictionaryStringLocations::new()),
@@ -37,7 +37,7 @@ impl DictionaryString {
     }
 
     /// Constructor, taking ownership of the given string
-    pub fn from_string(s: String) -> Self {
+    pub(crate) fn from_string(s: String) -> Self {
         DictionaryString {
             string: s,
             positions: UnsafeCell::new(DictionaryStringLocations::new()),
@@ -46,17 +46,17 @@ impl DictionaryString {
 
     /// Returns true if the string is considered "long". Long strings may be handled differently
     /// in some dictionaries.
-    pub fn is_long(&self) -> bool {
+    pub(crate) fn is_long(&self) -> bool {
         self.string.len() > LONG_STRING_THRESHOLD
     }
 
     /// Returns the complete string data.
-    pub fn as_str(&self) -> &str {
+    pub(crate) fn as_str(&self) -> &str {
         self.string.as_str()
     }
 
     /// Returns the first part of the standard split into pieces
-    pub fn prefix(&self) -> &str {
+    pub(crate) fn prefix(&self) -> &str {
         self.set_pieces();
         unsafe {
             let prefix_length = (*self.positions.get()).prefix_length;
@@ -65,7 +65,7 @@ impl DictionaryString {
     }
 
     /// Returns the middle part of the standard split into pieces
-    pub fn infix(&self) -> &str {
+    pub(crate) fn infix(&self) -> &str {
         self.set_pieces();
         unsafe {
             let prefix_end = (*self.positions.get()).prefix_length;
@@ -75,7 +75,7 @@ impl DictionaryString {
     }
 
     /// Returns the last part of the standard split into pieces
-    pub fn suffix(&self) -> &str {
+    pub(crate) fn suffix(&self) -> &str {
         self.set_pieces();
         unsafe {
             let prefix_end = (*self.positions.get()).prefix_length;
@@ -88,12 +88,12 @@ impl DictionaryString {
     /// Note that this uses the standard splitting approach to determine prefix and suffix, which means
     /// that the funciton may return `false` even if the string actually starts and ends with the prefix
     /// and suffix given (if these are not the ones detected).
-    pub fn has_infix(&self, prefix: &str, suffix: &str) -> bool {
+    pub(crate) fn has_infix(&self, prefix: &str, suffix: &str) -> bool {
         self.prefix() == prefix && self.suffix() == suffix
     }
 
     /// Checks if the string has a non-empty prefix or suffix.
-    pub fn infixable(&self) -> bool {
+    pub(crate) fn infixable(&self) -> bool {
         self.set_pieces();
         unsafe { (*self.positions.get()).infix_length < self.string.len() }
     }

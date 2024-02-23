@@ -48,6 +48,7 @@ where
 
     /// Return a [`NodeIndex`] for a given node label or `None`
     /// if there is no node in the graph associated with that label.
+    #[allow(dead_code)]
     pub fn get_node(&self, node: &NodeLabel) -> Option<NodeIndex> {
         self.label_map.get(node).cloned()
     }
@@ -61,6 +62,7 @@ where
     }
 
     /// Return a reference to the underlying [`Graph`].
+    #[allow(dead_code)]
     pub fn graph(&self) -> &Graph<NodeLabel, EdgeLabel, Type> {
         &self.graph
     }

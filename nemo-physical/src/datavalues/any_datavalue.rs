@@ -7,19 +7,16 @@ use delegate::delegate;
 
 use crate::{
     datatypes::{Double, Float, StorageValueT},
-    dictionary::DvDict,
+    dictionary::{AddResult, DvDict},
     management::database::Dict,
 };
 
 use super::{
     boolean_datavalue::BooleanDataValue, errors::InternalDataValueCreationError,
-    float_datavalues::FloatDataValue, DataValue, DataValueCreationError, DoubleDataValue,
-    IriDataValue, LangStringDataValue, LongDataValue, MapDataValue, NullDataValue, OtherDataValue,
-    StringDataValue, TupleDataValue, UnsignedLongDataValue, ValueDomain,
+    float_datavalues::FloatDataValue, syntax::XSD_PREFIX, DataValue, DataValueCreationError,
+    DoubleDataValue, IriDataValue, LangStringDataValue, LongDataValue, MapDataValue, NullDataValue,
+    OtherDataValue, StringDataValue, TupleDataValue, UnsignedLongDataValue, ValueDomain,
 };
-
-// Initial part of IRI in all XML Schema types:
-const XSD_PREFIX: &str = "http://www.w3.org/2001/XMLSchema#";
 
 /// Supported kinds of arbitrary size numbers.
 /// The variants we consider are taken from the XML Schema
@@ -51,7 +48,7 @@ impl DecimalType {
 #[derive(Debug, Clone)]
 enum AnyDataValueEnum {
     /// Variant for representing [`DataValue`]s in [`ValueDomain::String`].
-    String(StringDataValue),
+    PlainString(StringDataValue),
     /// Variant for representing [`DataValue`]s in [`ValueDomain::LanguageTaggedString`].
     LanguageTaggedString(LangStringDataValue),
     /// Variant for representing [`DataValue`]s in [`ValueDomain::Iri`].
@@ -112,12 +109,12 @@ impl AnyDataValue {
         )))
     }
 
-    /// Construct a datavalue in [`ValueDomain::String`] that represents the given string.
-    pub fn new_string(value: String) -> Self {
-        AnyDataValue(AnyDataValueEnum::String(StringDataValue::new(value)))
+    /// Construct a datavalue in [`ValueDomain::PlainString`] that represents the given string.
+    pub fn new_plain_string(value: String) -> Self {
+        AnyDataValue(AnyDataValueEnum::PlainString(StringDataValue::new(value)))
     }
 
-    /// Construct a datavalue in [`ValueDomain::IRI`] that represents the given IRI.
+    /// Construct a datavalue in [`ValueDomain::Iri`] that represents the given IRI.
     pub fn new_iri(value: String) -> Self {
         AnyDataValue(AnyDataValueEnum::Iri(IriDataValue::new(value)))
     }
@@ -202,7 +199,7 @@ impl AnyDataValue {
 
         if let Some(xsd_type) = datatype_iri.strip_prefix(XSD_PREFIX) {
             match xsd_type {
-                "string" => Ok(Self::new_string(lexical_value)),
+                "string" => Ok(Self::new_plain_string(lexical_value)),
                 "long" => parse_integer!(lexical_value),
                 "int" => parse_integer!(lexical_value; i32::MIN as i64; i32::MAX as i64; "xsd:int"),
                 "short" => parse_integer!(lexical_value; -32768; 32767; "xsd:short"),
@@ -473,7 +470,7 @@ impl AnyDataValue {
             | ValueDomain::UnsignedLong
             | ValueDomain::Boolean
             | ValueDomain::Other
-            | ValueDomain::String
+            | ValueDomain::PlainString
             | ValueDomain::LanguageTaggedString
             | ValueDomain::Iri
             | ValueDomain::Null => {
@@ -509,11 +506,17 @@ impl AnyDataValue {
             | ValueDomain::UnsignedLong
             | ValueDomain::Boolean
             | ValueDomain::Other
-            | ValueDomain::String
+            | ValueDomain::PlainString
             | ValueDomain::LanguageTaggedString
             | ValueDomain::Iri => {
                 // TODO: Do we really need to clone? At least if the value is known, it should not be necessary. Maybe move into add method?
-                let dictionary_id = dictionary.add_datavalue(self.clone()).value();
+                let add_result = dictionary.add_datavalue(self.clone());
+
+                if add_result == AddResult::Rejected {
+                    panic!("Dictionary rejected the data value");
+                }
+
+                let dictionary_id = add_result.value();
                 Self::usize_to_storage_value_t(dictionary_id)
             }
             ValueDomain::Null => {
@@ -549,7 +552,7 @@ impl AnyDataValue {
     /// # Panics
     ///
     /// If the value domain is not [ValueDomain::Null].
-    pub(crate) fn null_id_unchecked(&self) -> usize {
+    pub fn null_id_unchecked(&self) -> usize {
         if let AnyDataValueEnum::Null(ndv) = self.0 {
             ndv.id()
         } else {
@@ -562,7 +565,7 @@ impl DataValue for AnyDataValue {
     delegate! {
         to match &self.0 {
             AnyDataValueEnum::Boolean(value) => value,
-            AnyDataValueEnum::String(value)=> value,
+            AnyDataValueEnum::PlainString(value)=> value,
             AnyDataValueEnum::LanguageTaggedString(value) => value,
             AnyDataValueEnum::Iri(value) => value,
             AnyDataValueEnum::Float(value) => value,
@@ -578,8 +581,8 @@ impl DataValue for AnyDataValue {
             fn lexical_value(&self) -> String;
             fn value_domain(&self) -> ValueDomain;
             fn canonical_string(&self) -> String;
-            fn to_string(&self) -> Option<String>;
-            fn to_string_unchecked(&self) -> String;
+            fn to_plain_string(&self) -> Option<String>;
+            fn to_plain_string_unchecked(&self) -> String;
             fn to_language_tagged_string(&self) -> Option<(String, String)>;
             fn to_language_tagged_string_unchecked(&self) -> (String, String);
             fn to_iri(&self) -> Option<String>;
@@ -616,7 +619,7 @@ impl std::hash::Hash for AnyDataValue {
     delegate! {
         to match &self.0 {
             AnyDataValueEnum::Boolean(value) => value,
-            AnyDataValueEnum::String(value)=> value,
+            AnyDataValueEnum::PlainString(value)=> value,
             AnyDataValueEnum::LanguageTaggedString(value) => value,
             AnyDataValueEnum::Iri(value) => value,
             AnyDataValueEnum::Float(value) => value,
@@ -638,6 +641,30 @@ impl std::hash::Hash for AnyDataValue {
     }
 }
 
+impl std::fmt::Display for AnyDataValue {
+    delegate! {
+        to match &self.0 {
+            AnyDataValueEnum::Boolean(value) => value,
+            AnyDataValueEnum::PlainString(value)=> value,
+            AnyDataValueEnum::LanguageTaggedString(value) => value,
+            AnyDataValueEnum::Iri(value) => value,
+            AnyDataValueEnum::Float(value) => value,
+            AnyDataValueEnum::Double(value) => value,
+            AnyDataValueEnum::UnsignedLong(value) => value,
+            AnyDataValueEnum::Long(value) => value,
+            AnyDataValueEnum::Null(value) => value,
+            AnyDataValueEnum::Tuple(value) => value,
+            AnyDataValueEnum::Map(value) => value,
+            AnyDataValueEnum::Other(value) => value,
+        } {
+            /// The fmt function for [AnyDataValue] is delegated to the contained value
+            /// implementations, without adding variant-specific information as the
+            /// derived implementation would do.
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result;
+        }
+    }
+}
+
 /// The intended implementation of equality for [`AnyDataValue`] is based on identity in the value space,
 /// i.e., we ask whether two values syntactically represent the same elements. In most cases, this agrees with
 /// the identity of representations, especially since our values are self-normalizing in the sense that they
@@ -651,7 +678,9 @@ impl std::hash::Hash for AnyDataValue {
 impl PartialEq for AnyDataValue {
     fn eq(&self, other: &Self) -> bool {
         match (&self.0, &other.0) {
-            (AnyDataValueEnum::String(dv), AnyDataValueEnum::String(dv_other)) => dv == dv_other,
+            (AnyDataValueEnum::PlainString(dv), AnyDataValueEnum::PlainString(dv_other)) => {
+                dv == dv_other
+            }
             (AnyDataValueEnum::Iri(dv), AnyDataValueEnum::Iri(dv_other)) => dv == dv_other,
             (
                 AnyDataValueEnum::LanguageTaggedString(dv),
@@ -684,7 +713,7 @@ impl Ord for AnyDataValue {
         let dom_order = self.value_domain().cmp(&other.value_domain());
         if let std::cmp::Ordering::Equal = dom_order {
             match (&self.0, &other.0) {
-                (AnyDataValueEnum::String(dv), AnyDataValueEnum::String(dv_other)) => {
+                (AnyDataValueEnum::PlainString(dv), AnyDataValueEnum::PlainString(dv_other)) => {
                     dv.cmp(&dv_other)
                 }
                 (AnyDataValueEnum::Iri(dv), AnyDataValueEnum::Iri(dv_other)) => dv.cmp(&dv_other),
@@ -789,7 +818,7 @@ impl From<OtherDataValue> for AnyDataValue {
 
 impl From<StringDataValue> for AnyDataValue {
     fn from(value: StringDataValue) -> Self {
-        AnyDataValue(AnyDataValueEnum::String(value))
+        AnyDataValue(AnyDataValueEnum::PlainString(value))
     }
 }
 
@@ -819,17 +848,17 @@ mod test {
     #[test]
     fn anydatavalue_string() {
         let value = "Hello world";
-        let dv = AnyDataValue::new_string(value.to_string());
+        let dv = AnyDataValue::new_plain_string(value.to_string());
 
         assert_eq!(dv.lexical_value(), value.to_string());
         assert_eq!(
             dv.datatype_iri(),
             "http://www.w3.org/2001/XMLSchema#string".to_string()
         );
-        assert_eq!(dv.value_domain(), ValueDomain::String);
+        assert_eq!(dv.value_domain(), ValueDomain::PlainString);
 
-        assert_eq!(dv.to_string(), Some(value.to_string()));
-        assert_eq!(dv.to_string_unchecked(), value.to_string());
+        assert_eq!(dv.to_plain_string(), Some(value.to_string()));
+        assert_eq!(dv.to_plain_string_unchecked(), value.to_string());
     }
 
     #[test]
@@ -974,7 +1003,7 @@ mod test {
         assert_eq!(dv.datatype_iri(), datatype_iri);
         assert_eq!(dv.value_domain(), ValueDomain::Other);
 
-        assert_eq!(dv.to_string(), None);
+        assert_eq!(dv.to_plain_string(), None);
         assert_eq!(dv.to_iri(), None);
         assert_eq!(dv.to_language_tagged_string(), None);
         // ...
@@ -992,7 +1021,7 @@ mod test {
         let dv_i64 = AnyDataValue::new_integer_from_i64(42);
         let dv_u64 = AnyDataValue::new_integer_from_u64(42);
         let dv_u64_2 = AnyDataValue::new_integer_from_u64(43);
-        let dv_string = AnyDataValue::new_string("42".to_string());
+        let dv_string = AnyDataValue::new_plain_string("42".to_string());
         let dv_iri = AnyDataValue::new_iri("42".to_string());
         let dv_lang_string =
             AnyDataValue::new_language_tagged_string("42".to_string(), "en-GB".to_string());
@@ -1116,7 +1145,7 @@ mod test {
 
         assert_eq!(
             string_res,
-            Ok(AnyDataValue::new_string("Hello World.".to_string()))
+            Ok(AnyDataValue::new_plain_string("Hello World.".to_string()))
         );
     }
 

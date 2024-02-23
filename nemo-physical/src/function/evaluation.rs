@@ -94,7 +94,7 @@ impl StackProgram {
     }
 
     /// Construct a [StackProgram] from [FunctionTree].
-    pub fn from_function_tree(
+    pub(crate) fn from_function_tree(
         tree: &FunctionTree<OperationColumnMarker>,
         reference_map: &HashMap<OperationColumnMarker, usize>,
         this: Option<OperationColumnMarker>,
@@ -190,14 +190,14 @@ impl StackProgram {
 
     /// Evaluate the stack program and return the result.
     /// Returns `None` if some function could not be evaluated.
-    pub fn evaluate_data(&self, referenced_values: &[AnyDataValue]) -> Option<AnyDataValue> {
+    pub(crate) fn evaluate_data(&self, referenced_values: &[AnyDataValue]) -> Option<AnyDataValue> {
         self.evaluate(referenced_values, None)
     }
 
     /// Evaluate the stack program and return the result.
     /// This function assumes that the result will be a boolean.
     /// Returns `None` if some function could not be evaluated.
-    pub fn evaluate_bool(
+    pub(crate) fn evaluate_bool(
         &self,
         referenced_values: &[AnyDataValue],
         this: Option<AnyDataValue>,
@@ -221,7 +221,7 @@ mod test {
     type Function = FunctionTree<OperationColumnMarker>;
 
     fn any_string(string: &str) -> AnyDataValue {
-        AnyDataValue::new_string(String::from(string))
+        AnyDataValue::new_plain_string(String::from(string))
     }
 
     fn any_int(integer: i64) -> AnyDataValue {

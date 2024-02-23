@@ -143,9 +143,7 @@ mod test {
     use test_log::test;
 
     use crate::io::formats::{dsv_reader::DsvReader, dsv_value_format::DsvValueFormat};
-
-    use super::*;
-    use nemo_physical::management::database::Dict;
+    use nemo_physical::{datasources::tuple_writer::TupleWriter, management::database::Dict};
 
     #[test]
     fn dsv_reading_basic() {

@@ -109,7 +109,7 @@ impl DictionaryType {
 
 /// Struct to hold relevant information about a sub-dictionary.
 #[derive(Debug)]
-pub struct DictRecord {
+pub(crate) struct DictRecord {
     /// Pointer to the actual dictionary object
     dict: Box<dyn Dictionary>,
     /// Type of the dictionary
@@ -203,11 +203,6 @@ impl Default for MetaDictionary {
 }
 
 impl MetaDictionary {
-    /// Construct a new and empty dictionary.
-    pub fn new() -> Self {
-        Self::default()
-    }
-
     /// Convert the local ID of a given dictionary to a global ID.
     /// The function assumes that the given local id exists, and will crash
     /// otherwise. It can safely be used for conversion of previously stored data.

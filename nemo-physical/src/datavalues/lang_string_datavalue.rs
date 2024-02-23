@@ -20,7 +20,7 @@ impl LangStringDataValue {
     ///
     /// TODO: Should we normalize the lang_tag to lower case? This is allowed and might be needed to correct
     /// equality, but it does undo the (common?) formatting of things like `en-GB`.
-    pub fn new(string: String, lang_tag: String) -> Self {
+    pub(crate) fn new(string: String, lang_tag: String) -> Self {
         LangStringDataValue(string, lang_tag)
     }
 }
@@ -48,7 +48,7 @@ impl DataValue for LangStringDataValue {
     }
 
     fn canonical_string(&self) -> String {
-        super::datavalue::quote_string(self.0.to_owned()) + "@" + &self.1
+        super::datavalue::quote_string(self.0.as_str()) + "@" + &self.1
     }
 }
 
@@ -57,6 +57,12 @@ impl std::hash::Hash for LangStringDataValue {
         self.value_domain().hash(state);
         self.0.hash(state);
         self.1.hash(state);
+    }
+}
+
+impl std::fmt::Display for LangStringDataValue {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.canonical_string().as_str())
     }
 }
 

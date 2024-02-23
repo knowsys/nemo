@@ -3,7 +3,10 @@
 
 use std::sync::Arc;
 
-use super::{AnyDataValue, DataValue, IriDataValue, ValueDomain};
+use super::{
+    syntax::{DELIM_TUPLE_CLOSE, DELIM_TUPLE_OPEN, TUPLE_SEPARATOR},
+    AnyDataValue, DataValue, IriDataValue, ValueDomain,
+};
 
 /// Physical representation of a fixed-length tuple of [`DataValue`]s.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
@@ -14,7 +17,7 @@ pub struct TupleDataValue {
 
 impl TupleDataValue {
     /// Constructor.
-    pub fn new<T: IntoIterator<Item = AnyDataValue>>(
+    pub(crate) fn new<T: IntoIterator<Item = AnyDataValue>>(
         label: Option<IriDataValue>,
         values: T,
     ) -> Self {
@@ -45,13 +48,13 @@ impl DataValue for TupleDataValue {
             .iter()
             .map(|v| DataValue::canonical_string(v))
             //.by_ref()
-            .intersperse(",".to_string())
+            .intersperse(TUPLE_SEPARATOR.to_string())
             .collect::<String>();
 
         if let Some(iri) = self.label() {
-            iri.canonical_string() + "(" + values.as_str() + ")"
+            iri.canonical_string() + DELIM_TUPLE_OPEN + values.as_str() + DELIM_TUPLE_CLOSE
         } else {
-            "(".to_string() + values.as_str() + ")"
+            DELIM_TUPLE_OPEN.to_string() + values.as_str() + DELIM_TUPLE_CLOSE
         }
     }
 
@@ -60,7 +63,7 @@ impl DataValue for TupleDataValue {
     }
 
     fn canonical_string(&self) -> String {
-        super::datavalue::quote_string(self.lexical_value())
+        super::datavalue::quote_string(self.lexical_value().as_str())
             + "^^"
             + &super::datavalue::quote_iri(self.datatype_iri().as_str())
     }
@@ -78,7 +81,9 @@ impl DataValue for TupleDataValue {
     }
 
     fn tuple_element_unchecked(&self, index: usize) -> &AnyDataValue {
-        self.values.get(index).expect("this method is unchecked")
+        self.values
+            .get(index)
+            .expect("unchecked access to tuple element requires index to be valid")
     }
 }
 
@@ -89,6 +94,25 @@ impl std::hash::Hash for TupleDataValue {
     }
 }
 
+impl std::fmt::Display for TupleDataValue {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if let Some(iri) = self.label() {
+            iri.fmt(f)?;
+        }
+        f.write_str(DELIM_TUPLE_OPEN)?;
+        let mut first = true;
+        for v in self.values.iter() {
+            if first {
+                first = false;
+            } else {
+                f.write_str(TUPLE_SEPARATOR)?;
+            }
+            v.fmt(f)?;
+        }
+        f.write_str(DELIM_TUPLE_CLOSE)
+    }
+}
+
 #[cfg(test)]
 mod test {
     use crate::datavalues::{AnyDataValue, DataValue, IriDataValue, TupleDataValue, ValueDomain};
@@ -96,7 +120,7 @@ mod test {
     #[test]
     fn test_tuple() {
         let dv1 = AnyDataValue::new_integer_from_i64(42);
-        let dv2 = AnyDataValue::new_string("test".to_string());
+        let dv2 = AnyDataValue::new_plain_string("test".to_string());
         let dv3 = AnyDataValue::new_boolean(true);
         let label = IriDataValue::new("http://example.org/label".to_string());
 
@@ -134,7 +158,7 @@ mod test {
     #[test]
     fn test_tuple_eq() {
         let dv1 = AnyDataValue::new_integer_from_i64(42);
-        let dv2 = AnyDataValue::new_string("test".to_string());
+        let dv2 = AnyDataValue::new_plain_string("test".to_string());
         let dv3 = AnyDataValue::new_boolean(true);
         let label1 = IriDataValue::new("http://example.org/label1".to_string());
         let label2 = IriDataValue::new("http://example.org/label2".to_string());

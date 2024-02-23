@@ -40,7 +40,11 @@ where
     /// associated with the successors of that value.
     ///
     /// Returns `None` if the value has no successor in this interval column.
-    pub fn interval_index(&self, storage_type: StorageTypeName, index: usize) -> Option<usize> {
+    pub(crate) fn interval_index(
+        &self,
+        storage_type: StorageTypeName,
+        index: usize,
+    ) -> Option<usize> {
         match storage_type {
             StorageTypeName::Id32 => self.lookup_id32.interval_index(index),
             StorageTypeName::Id64 => self.lookup_id64.interval_index(index),
@@ -110,7 +114,7 @@ impl<LookupMethod> IntervalLookupBuilderT<LookupMethod>
 where
     LookupMethod: IntervalLookup,
 {
-    pub fn add_interval(&mut self, storage_type: StorageTypeName, interval_index: usize) {
+    pub(crate) fn add_interval(&mut self, storage_type: StorageTypeName, interval_index: usize) {
         match storage_type {
             StorageTypeName::Id32 => self.builder_id32.add_interval(interval_index),
             StorageTypeName::Id64 => self.builder_id64.add_interval(interval_index),
@@ -120,7 +124,7 @@ where
         }
     }
 
-    pub fn add_empty(&mut self, storage_type: StorageTypeName) {
+    pub(crate) fn add_empty(&mut self, storage_type: StorageTypeName) {
         match storage_type {
             StorageTypeName::Id32 => self.builder_id32.add_empty(),
             StorageTypeName::Id64 => self.builder_id64.add_empty(),
@@ -130,7 +134,7 @@ where
         }
     }
 
-    pub fn finalize(self) -> IntervalLookupT<LookupMethod> {
+    pub(crate) fn finalize(self) -> IntervalLookupT<LookupMethod> {
         IntervalLookupT {
             lookup_id32: self.builder_id32.finalize(),
             lookup_id64: self.builder_id64.finalize(),

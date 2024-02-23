@@ -4,7 +4,7 @@ mod double;
 mod float;
 mod integer64;
 
-pub(crate) mod traits;
+pub mod traits;
 
 use crate::{
     datatypes::{Double, Float},
@@ -54,7 +54,7 @@ impl NumericValue {
             | ValueDomain::Map
             | ValueDomain::Null
             | ValueDomain::Boolean
-            | ValueDomain::String
+            | ValueDomain::PlainString
             | ValueDomain::LanguageTaggedString
             | ValueDomain::Other
             | ValueDomain::Iri => None,
@@ -90,7 +90,7 @@ impl NumericPair {
         parameter_second: AnyDataValue,
     ) -> Option<NumericPair> {
         match parameter_first.value_domain() {
-            ValueDomain::String
+            ValueDomain::PlainString
             | ValueDomain::Null
             | ValueDomain::LanguageTaggedString
             | ValueDomain::Tuple

@@ -9,16 +9,19 @@ use std::{
 };
 
 use dyn_clone::DynClone;
-use nemo_physical::{datasources::table_providers::TableProvider, resource::Resource};
+use nemo_physical::{
+    datasources::table_providers::TableProvider,
+    datavalues::{AnyDataValue, DataValue, MapDataValue, TupleDataValue, ValueDomain},
+    resource::Resource,
+};
 
 use crate::{
     error::Error,
     io::compression_format::CompressionFormat,
     model::{
-        Constant, ExportDirective, FileFormat, ImportDirective, ImportExportDirective, Key, Map,
-        NumericLiteral, Tuple, PARAMETER_NAME_COMPRESSION, PARAMETER_NAME_FORMAT,
-        PARAMETER_NAME_RESOURCE, VALUE_COMPRESSION_GZIP, VALUE_COMPRESSION_NONE, VALUE_FORMAT_ANY,
-        VALUE_FORMAT_SKIP,
+        ExportDirective, FileFormat, ImportDirective, ImportExportDirective,
+        PARAMETER_NAME_COMPRESSION, PARAMETER_NAME_FORMAT, PARAMETER_NAME_RESOURCE,
+        VALUE_COMPRESSION_GZIP, VALUE_COMPRESSION_NONE, VALUE_FORMAT_ANY, VALUE_FORMAT_SKIP,
     },
 };
 
@@ -128,13 +131,17 @@ impl ImportExportHandlers {
     /// Check if all given attributes are among the valid attributes,
     /// and return an error otherwise.
     pub(super) fn check_attributes(
-        attributes: &Map,
+        attributes: &MapDataValue,
         valid_attributes: &Vec<&str>,
     ) -> Result<(), ImportExportError> {
-        let given: HashSet<Key> = attributes.pairs.keys().cloned().collect();
-        let valid: HashSet<Key> = valid_attributes
+        let given: HashSet<AnyDataValue> = attributes
+            .map_keys()
+            .expect("map values always have keys")
+            .cloned()
+            .collect();
+        let valid: HashSet<AnyDataValue> = valid_attributes
             .into_iter()
-            .map(|att| Key::identifier_from_str(att))
+            .map(|att| AnyDataValue::new_iri(att.to_string()))
             .collect();
 
         if let Some(unknown) = given.difference(&valid).next() {
@@ -147,7 +154,7 @@ impl ImportExportHandlers {
     /// we can use default names). If the value is invalid or missing for import, an error
     /// is returned.
     pub(super) fn extract_resource(
-        attributes: &Map,
+        attributes: &MapDataValue,
         direction: Direction,
     ) -> Result<Option<Resource>, ImportExportError> {
         let resource: Option<Resource> =
@@ -168,7 +175,7 @@ impl ImportExportHandlers {
     /// or if the compression format of the resource is not in agreement with an explicitly
     /// stated one.
     pub(super) fn extract_compression_format(
-        attributes: &Map,
+        attributes: &MapDataValue,
         resource: &Option<Resource>,
     ) -> Result<(Option<CompressionFormat>, Option<Resource>), ImportExportError> {
         let cf_name = Self::extract_string_or_iri(attributes, PARAMETER_NAME_COMPRESSION, true)
@@ -182,7 +189,7 @@ impl ImportExportHandlers {
                 _ => {
                     return Err(ImportExportError::invalid_att_value_error(
                         PARAMETER_NAME_COMPRESSION,
-                        Constant::StringLiteral(cf_name.to_owned()),
+                        AnyDataValue::new_plain_string(cf_name.to_owned()),
                         format!(
                             "unknown compression format, supported formats: {:?}",
                             [VALUE_COMPRESSION_GZIP, VALUE_COMPRESSION_NONE]
@@ -215,7 +222,7 @@ impl ImportExportHandlers {
                 } else {
                     Err(ImportExportError::invalid_att_value_error(
                         PARAMETER_NAME_COMPRESSION,
-                        Constant::StringLiteral(
+                        AnyDataValue::new_plain_string(
                             cf_name.expect("given if stated compression is known"),
                         ),
                         format!("compression method should match resource extension").as_str(),
@@ -231,14 +238,14 @@ impl ImportExportHandlers {
     /// It can be specified whether it should be allowed that the atttribute is not set at all (and
     /// `None` would then be returned). If given, the value must always be a string, however.
     pub(super) fn extract_string(
-        attributes: &Map,
+        attributes: &MapDataValue,
         attribute_name: &str,
         allow_missing: bool,
     ) -> Result<Option<String>, ImportExportError> {
         if let Some(c) = Self::extract_att_value(attributes, attribute_name, allow_missing)? {
-            match c {
-                Constant::StringLiteral(string) => {
-                    return Ok(Some(string.to_owned()));
+            match c.value_domain() {
+                ValueDomain::PlainString => {
+                    return Ok(Some(c.to_plain_string_unchecked()));
                 }
                 _ => {
                     return Err(ImportExportError::invalid_att_value_error(
@@ -260,25 +267,19 @@ impl ImportExportHandlers {
     /// This method is used for parameters that are actually strings in nature, but where we conveniently want to
     /// allow the user to omit the quotes.
     pub(super) fn extract_string_or_iri(
-        attributes: &Map,
+        attributes: &MapDataValue,
         attribute_name: &str,
         allow_missing: bool,
     ) -> Result<Option<String>, ImportExportError> {
         if let Some(c) = Self::extract_att_value(attributes, attribute_name, allow_missing)? {
-            match c {
-                Constant::StringLiteral(string) => {
-                    return Ok(Some(string.to_owned()));
-                }
-                Constant::Abstract(id) => {
-                    return Ok(Some(id.name()));
-                }
-                _ => {
-                    return Err(ImportExportError::invalid_att_value_error(
-                        attribute_name,
-                        c.clone(),
-                        "expecting string or IRI value",
-                    ))
-                }
+            if let Some(s) = Self::string_from_datavalue(&c) {
+                return Ok(Some(s));
+            } else {
+                return Err(ImportExportError::invalid_att_value_error(
+                    attribute_name,
+                    c.clone(),
+                    "expecting string or IRI value",
+                ));
             }
         } else {
             return Ok(None);
@@ -290,22 +291,19 @@ impl ImportExportHandlers {
     /// It can be specified whether it should be allowed that the atttribute is not set at all (and
     /// `None` would then be returned). If given, the value must always be an integer, however.
     pub(super) fn extract_integer(
-        attributes: &Map,
+        attributes: &MapDataValue,
         attribute_name: &str,
         allow_missing: bool,
     ) -> Result<Option<i64>, ImportExportError> {
         if let Some(c) = Self::extract_att_value(attributes, attribute_name, allow_missing)? {
-            match c {
-                Constant::NumericLiteral(NumericLiteral::Integer(i)) => {
-                    return Ok(Some(i));
-                }
-                _ => {
-                    return Err(ImportExportError::invalid_att_value_error(
-                        attribute_name,
-                        c.clone(),
-                        "expecting integer value",
-                    ))
-                }
+            if c.fits_into_i64() {
+                return Ok(Some(c.to_i64_unchecked()));
+            } else {
+                return Err(ImportExportError::invalid_att_value_error(
+                    attribute_name,
+                    c.clone(),
+                    "expecting integer value",
+                ));
             }
         } else {
             return Ok(None);
@@ -317,14 +315,14 @@ impl ImportExportHandlers {
     /// It can be specified whether it should be allowed that the atttribute is not set at all (and
     /// `None` would then be returned). If given, the value must always be an IRI, however.
     pub(super) fn extract_iri(
-        attributes: &Map,
+        attributes: &MapDataValue,
         attribute_name: &str,
         allow_missing: bool,
     ) -> Result<Option<String>, ImportExportError> {
         if let Some(c) = Self::extract_att_value(attributes, attribute_name, allow_missing)? {
-            match c {
-                Constant::Abstract(id) => {
-                    return Ok(Some(id.name()));
+            match c.value_domain() {
+                ValueDomain::Iri => {
+                    return Ok(Some(c.to_iri_unchecked()));
                 }
                 _ => {
                     return Err(ImportExportError::invalid_att_value_error(
@@ -343,13 +341,11 @@ impl ImportExportHandlers {
     /// if an error should be generated if the attribute is missing, or if `Ok(None)`
     /// should be returned in this case.
     pub(super) fn extract_att_value(
-        attributes: &Map,
+        attributes: &MapDataValue,
         attribute_name: &str,
         allow_missing: bool,
-    ) -> Result<Option<Constant>, ImportExportError> {
-        if let Some(c) = attributes
-            .pairs
-            .get(&Key::identifier_from_str(attribute_name))
+    ) -> Result<Option<AnyDataValue>, ImportExportError> {
+        if let Some(c) = attributes.map_element(&AnyDataValue::new_iri(attribute_name.to_string()))
         {
             return Ok(Some(c.clone()));
         } else if allow_missing {
@@ -368,38 +364,30 @@ impl ImportExportHandlers {
     /// See [ImportExportHandlers::extract_value_format_strings_and_arity] for a method that also
     /// checks the arity information, and uses it to make default formats if needed.
     pub(super) fn extract_value_format_strings(
-        attributes: &Map,
+        attributes: &MapDataValue,
     ) -> Result<Option<Vec<String>>, ImportExportError> {
         let value_format_strings: Option<Vec<String>>;
         if let Some(c) = Self::extract_att_value(attributes, PARAMETER_NAME_FORMAT, true)? {
             let mut value_formats: Vec<String> = Vec::new();
-            match c {
-                Constant::TupleLiteral(tuple) => {
-                    for c in (*tuple).iter() {
-                        match c {
-                            Constant::StringLiteral(string) => {
-                                value_formats.push(string.to_owned());
-                            }
-                            Constant::Abstract(id) => {
-                                value_formats.push(id.name());
-                            }
-                            _ => {
-                                return Err(ImportExportError::invalid_att_value_error(
-                                    PARAMETER_NAME_FORMAT,
-                                    c.clone(),
-                                    "list must contain strings only",
-                                ))
-                            }
-                        }
+            if c.value_domain() == ValueDomain::Tuple {
+                for i in 0..c.len_unchecked() {
+                    let v = c.tuple_element_unchecked(i);
+                    if let Some(s) = Self::string_from_datavalue(v) {
+                        value_formats.push(s);
+                    } else {
+                        return Err(ImportExportError::invalid_att_value_error(
+                            PARAMETER_NAME_FORMAT,
+                            v.clone(),
+                            "list must contain strings only",
+                        ));
                     }
                 }
-                _ => {
-                    return Err(ImportExportError::invalid_att_value_error(
-                        PARAMETER_NAME_FORMAT,
-                        c.clone(),
-                        "expecting list of value formats",
-                    ))
-                }
+            } else {
+                return Err(ImportExportError::invalid_att_value_error(
+                    PARAMETER_NAME_FORMAT,
+                    c.clone(),
+                    "expecting list of value formats",
+                ));
             }
             value_format_strings = Some(value_formats);
         } else {
@@ -413,7 +401,7 @@ impl ImportExportHandlers {
         }) {
             return Err(ImportExportError::invalid_att_value_error(
                 PARAMETER_NAME_FORMAT,
-                Self::constant_from_format_strings(&value_format_strings.expect("checked above")),
+                Self::datavalue_from_format_strings(&value_format_strings.expect("checked above")),
                 "cannot import/export zero-ary data",
             ));
         }
@@ -445,7 +433,7 @@ impl ImportExportHandlers {
     /// The given `file_arity` is not checked: callers are expected to have ensured that it
     /// is a non-zero usize that fits into i64.
     pub(super) fn extract_value_format_strings_with_file_arity(
-        attributes: &Map,
+        attributes: &MapDataValue,
         file_arity: Option<usize>,
         direction: Direction,
     ) -> Result<Option<Vec<String>>, ImportExportError> {
@@ -470,7 +458,7 @@ impl ImportExportHandlers {
                 if file_arity != declared_file_arity {
                     return Err(ImportExportError::invalid_att_value_error(
                         PARAMETER_NAME_FORMAT,
-                        Self::constant_from_format_strings(vfs),
+                        Self::datavalue_from_format_strings(vfs),
                         format!(
                             "value format declaration must be compatible with expected arity {} of tuples in file",
                             file_arity
@@ -488,14 +476,26 @@ impl ImportExportHandlers {
         }
     }
 
-    /// Turn a list of formats into a constant for error reporting.
-    fn constant_from_format_strings(format_strings: &Vec<String>) -> Constant {
-        Constant::TupleLiteral(Tuple::from_iter(
+    /// Turn a list of formats into a data value for error reporting.
+    fn datavalue_from_format_strings(format_strings: &Vec<String>) -> AnyDataValue {
+        TupleDataValue::from_iter(
             format_strings
                 .iter()
-                .map(|format| Constant::StringLiteral(format.to_owned()))
-                .collect::<Vec<Constant>>(),
-        ))
+                .map(|format| AnyDataValue::new_plain_string(format.to_owned()))
+                .collect::<Vec<AnyDataValue>>(),
+        )
+        .into()
+    }
+
+    /// Extract a string from an [AnyDataValue] that is a plain string
+    /// or IRI. This is in particularly used to allow users to omit the quotes
+    /// around simple attribute values.
+    fn string_from_datavalue(v: &AnyDataValue) -> Option<String> {
+        match v.value_domain() {
+            ValueDomain::PlainString => Some(v.to_plain_string_unchecked()),
+            ValueDomain::Iri => Some(v.to_iri_unchecked()),
+            _ => None,
+        }
     }
 }
 
@@ -521,9 +521,9 @@ pub enum ImportExportError {
     #[error(r#"Invalid attribute value "{value}" for attribute "{attribute}": {description}"#)]
     InvalidAttributeValue {
         /// The given value.
-        value: Constant,
+        value: AnyDataValue,
         /// The attribute the value was given for.
-        attribute: Key,
+        attribute: AnyDataValue,
         /// A description of why the value was invalid.
         description: String,
     },
@@ -574,11 +574,11 @@ impl ImportExportError {
     /// task in handlers.
     pub(crate) fn invalid_att_value_error(
         attribute: &str,
-        value: Constant,
+        value: AnyDataValue,
         reason: &str,
     ) -> ImportExportError {
         ImportExportError::InvalidAttributeValue {
-            attribute: Key::identifier_from_str(attribute),
+            attribute: AnyDataValue::new_iri(attribute.to_string()),
             value: value.clone(),
             description: reason.to_string(),
         }

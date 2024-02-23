@@ -1,13 +1,16 @@
 //! This module provides the general trait for representing a [`DataValue`], its relevant
 //! [`ValueDomain`]s, and possible errors that occur when dealing with them.
 
-use std::{fmt::Debug, hash::Hash};
+use std::{
+    fmt::{Debug, Display},
+    hash::Hash,
+};
 
 use super::{AnyDataValue, IriDataValue, NullDataValue};
 
 /// Encloses a string in double quotes, and escapes inner quotes `\"`, newlines `\n`, carriage returns `\r`,
 /// tabs `\t`, and backslashes `\\`.
-pub(crate) fn quote_string(s: String) -> String {
+pub(crate) fn quote_string(s: &str) -> String {
     "\"".to_owned()
         + &s.replace("\\", "\\\\")
             .replace("\"", "\\\"")
@@ -37,7 +40,7 @@ pub(crate) fn quote_iri(s: &str) -> String {
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub enum ValueDomain {
     /// Domain of all strings of Unicode glyphs.
-    String,
+    PlainString,
     /// Domain of all strings of Unicode glyphs, together with additional language tags
     /// (which are non-empty strings).
     LanguageTaggedString,
@@ -90,7 +93,7 @@ impl ValueDomain {
     /// which does not have a canonical type that is determined by the domain.
     pub(crate) fn type_iri(&self) -> String {
         match self {
-            ValueDomain::String => "http://www.w3.org/2001/XMLSchema#string".to_string(),
+            ValueDomain::PlainString => "http://www.w3.org/2001/XMLSchema#string".to_string(),
             ValueDomain::LanguageTaggedString => "http://www.w3.org/1999/02/22-rdf-syntax-ns#langString".to_string(),
             ValueDomain::Iri => "http://www.w3.org/2001/XMLSchema#anyURI".to_string(),
             ValueDomain::Float => "http://www.w3.org/2001/XMLSchema#float".to_string(),
@@ -128,7 +131,7 @@ impl ValueDomain {
             ValueDomain::Null => 10,
             ValueDomain::Iri => 13,
             // Continuing with elements we keep in dictionaries
-            ValueDomain::String => 20,
+            ValueDomain::PlainString => 20,
             ValueDomain::LanguageTaggedString => 22,
             ValueDomain::Other => 24,
             ValueDomain::Tuple => 26,
@@ -192,7 +195,7 @@ impl PartialOrd for ValueDomain {
 /// mean different values (i.e., the representation is canonical). The possible
 /// set of datatypes is unrestricted, but values of unknown types are treated
 /// literally and cannot be canonized.
-pub trait DataValue: Debug + Into<AnyDataValue> + PartialEq + Eq + Hash + Ord {
+pub trait DataValue: Debug + Display + Into<AnyDataValue> + PartialEq + Eq + Hash + Ord {
     /// Return the datatype of this value, specified by an IRI.
     /// For example, the RDF literal `"abc"^^<http://www.w3.org/2001/XMLSchema#string>`
     /// has datatype IRI `http://www.w3.org/2001/XMLSchema#string`, without any surrounding
@@ -219,10 +222,14 @@ pub trait DataValue: Debug + Into<AnyDataValue> + PartialEq + Eq + Hash + Ord {
 
     /// Return the string that this value represents, if it is a value in
     /// the domain [`ValueDomain::String`].
+    ///
+    /// Note: `to_string` is already used as a standard method in the Display trait,
+    /// which is defined for all datavalues (not just for strings). Hence we use a
+    /// different naming here.
     #[must_use]
-    fn to_string(&self) -> Option<String> {
+    fn to_plain_string(&self) -> Option<String> {
         match self.value_domain() {
-            ValueDomain::String => Some(self.to_string_unchecked()),
+            ValueDomain::PlainString => Some(self.to_plain_string_unchecked()),
             _ => None,
         }
     }
@@ -230,7 +237,7 @@ pub trait DataValue: Debug + Into<AnyDataValue> + PartialEq + Eq + Hash + Ord {
     /// Return the string that this value represents, if it is a value in
     /// the domain [`ValueDomain::String`]. Otherwise it panics.
     #[must_use]
-    fn to_string_unchecked(&self) -> String {
+    fn to_plain_string_unchecked(&self) -> String {
         panic!("Value is not a string.");
     }
 

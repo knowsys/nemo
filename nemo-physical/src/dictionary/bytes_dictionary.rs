@@ -26,11 +26,6 @@ pub(crate) struct BytesDictionary<B: GlobalBytesBuffer> {
 }
 
 impl<B: GlobalBytesBuffer> BytesDictionary<B> {
-    /// Construct a new and empty bytes dictionary.
-    pub(crate) fn new() -> Self {
-        Self::default()
-    }
-
     /// Adds a new byte array to the dictionary. If the array is not known yet, it will
     /// be assigned a new id.
     ///
@@ -63,6 +58,11 @@ impl<B: GlobalBytesBuffer> BytesDictionary<B> {
     /// associated to this id.
     pub(crate) fn id_to_bytes(&self, id: usize) -> Option<Vec<u8>> {
         self.store.get(id).map(|entry| entry.to_vec())
+    }
+
+    /// Returns true if a value is associated with the id.
+    pub(crate) fn knows_id(&self, id: usize) -> bool {
+        id < self.store.len()
     }
 
     /// Returns the number of elements in the dictionary. Strings that are merely
@@ -196,8 +196,8 @@ mod test {
 
     #[test]
     fn add_and_get() {
-        let mut dict: TestBytesDictionary = BytesDictionary::new();
-        let mut dict2: TestBytesDictionary = BytesDictionary::new();
+        let mut dict: TestBytesDictionary = BytesDictionary::default();
+        let mut dict2: TestBytesDictionary = BytesDictionary::default();
 
         let res1 = dict.add_bytes(&[1, 2, 3]);
         dict.add_bytes(&[42]);
@@ -226,7 +226,7 @@ mod test {
 
     #[test]
     fn fetch_id() {
-        let mut dict: TestBytesDictionary = BytesDictionary::new();
+        let mut dict: TestBytesDictionary = BytesDictionary::default();
 
         dict.add_bytes(&[1, 2, 3]);
         dict.add_bytes(&[42]);
@@ -239,7 +239,7 @@ mod test {
 
     #[test]
     fn empty_bytes() {
-        let mut dict: TestBytesDictionary = BytesDictionary::new();
+        let mut dict: TestBytesDictionary = BytesDictionary::default();
 
         assert_eq!(dict.add_bytes(&[]), AddResult::Fresh(0));
         assert_eq!(dict.id_to_bytes(0), Some(vec![]));
@@ -250,7 +250,7 @@ mod test {
 
     #[test]
     fn mark_str() {
-        let mut dict: TestBytesDictionary = BytesDictionary::new();
+        let mut dict: TestBytesDictionary = BytesDictionary::default();
 
         assert_eq!(dict.add_bytes(&[1]), AddResult::Fresh(0));
         assert_eq!(dict.add_bytes(&[2]), AddResult::Fresh(1));

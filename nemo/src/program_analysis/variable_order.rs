@@ -107,10 +107,10 @@ impl VariableOrder {
     }
 
     /// Return [`String`] with the contents of this object for debugging.
-    pub fn debug(&self) -> String {
+    pub(crate) fn debug(&self) -> String {
         let mut variable_vector = Vec::<Variable>::new();
         variable_vector.resize_with(self.0.len(), || {
-            Variable::Universal(Identifier("PLACEHOLDER".to_string()))
+            Variable::Universal("PLACEHOLDER".to_string())
         });
 
         for (variable, index) in &self.0 {
@@ -126,11 +126,12 @@ impl VariableOrder {
         result += "[";
         for (index, variable) in variable_vector.iter().enumerate() {
             let identifier = match variable {
-                Variable::Universal(id) => id,
-                Variable::Existential(id) => id,
+                Variable::Universal(id) => id.to_owned(),
+                Variable::Existential(id) => id.to_owned(),
+                Variable::UnnamedUniversal(id) => format!("_{}", id),
             };
 
-            result += &identifier.0;
+            result += &identifier;
 
             if index < variable_vector.len() - 1 {
                 result += ", ";
@@ -150,8 +151,9 @@ impl std::fmt::Debug for VariableOrder {
                     .as_ordered_list()
                     .iter()
                     .map(|var| match var {
-                        Variable::Universal(v) => "?".to_string() + v.name().as_str(),
-                        Variable::Existential(v) => "!".to_string() + v.name().as_str(),
+                        Variable::Universal(v) => "?".to_string() + v.as_str(),
+                        Variable::Existential(v) => "!".to_string() + v.as_str(),
+                        Variable::UnnamedUniversal(v) => format!("_{}", v).to_string(),
                     })
                     .collect::<Vec<_>>(),
             )
@@ -550,10 +552,10 @@ mod test {
 
     use crate::model::chase_model::{ChaseProgram, ChaseRule, PrimitiveAtom, VariableAtom};
     use crate::model::{
-        Constant, FileFormat, Identifier, ImportDirective, ImportExportDirective, Key, Map,
-        PrimitiveTerm, Tuple, Variable, PARAMETER_NAME_FORMAT, PARAMETER_NAME_RESOURCE,
-        VALUE_FORMAT_ANY,
+        FileFormat, Identifier, ImportDirective, ImportExportDirective, PrimitiveTerm, Variable,
+        PARAMETER_NAME_FORMAT, PARAMETER_NAME_RESOURCE, VALUE_FORMAT_ANY,
     };
+    use nemo_physical::datavalues::{AnyDataValue, MapDataValue, TupleDataValue};
     use nemo_physical::management::execution_plan::ColumnOrder;
 
     use std::collections::{HashMap, HashSet};
@@ -617,9 +619,9 @@ mod test {
         let b = Identifier("b".to_string());
         let c = Identifier("c".to_string());
 
-        let x = Variable::Universal(Identifier("x".to_string()));
-        let y = Variable::Universal(Identifier("y".to_string()));
-        let z = Variable::Universal(Identifier("z".to_string()));
+        let x = Variable::Universal("x".to_string());
+        let y = Variable::Universal("y".to_string());
+        let z = Variable::Universal("z".to_string());
 
         let tx = PrimitiveTerm::Variable(x.clone());
         let _ty = PrimitiveTerm::Variable(y.clone());
@@ -645,9 +647,9 @@ mod test {
     fn get_test_rule_with_vars_where_predicates_are_the_same() -> (ChaseRule, Vec<Variable>) {
         let a = Identifier("a".to_string());
 
-        let x = Variable::Universal(Identifier("x".to_string()));
-        let y = Variable::Universal(Identifier("y".to_string()));
-        let z = Variable::Universal(Identifier("z".to_string()));
+        let x = Variable::Universal("x".to_string());
+        let y = Variable::Universal("y".to_string());
+        let z = Variable::Universal("z".to_string());
 
         let tx = PrimitiveTerm::Variable(x.clone());
         let _ty = PrimitiveTerm::Variable(y.clone());
@@ -877,12 +879,12 @@ mod test {
             (exists.clone(), 3),
         ];
 
-        let c = Variable::Universal(Identifier("c".to_string()));
-        let d1 = Variable::Universal(Identifier("d1".to_string()));
-        let d2 = Variable::Universal(Identifier("d2".to_string()));
-        let y = Variable::Universal(Identifier("y".to_string()));
-        let r = Variable::Universal(Identifier("r".to_string()));
-        let e = Variable::Universal(Identifier("e".to_string()));
+        let c = Variable::Universal("c".to_string());
+        let d1 = Variable::Universal("d1".to_string());
+        let d2 = Variable::Universal("d2".to_string());
+        let y = Variable::Universal("y".to_string());
+        let r = Variable::Universal("r".to_string());
+        let e = Variable::Universal("e".to_string());
 
         let tc = PrimitiveTerm::Variable(c.clone());
         let td1 = PrimitiveTerm::Variable(d1.clone());
@@ -984,19 +986,20 @@ mod test {
 
     /// Helper function to create source-like imports
     fn csv_import(predicate: Identifier, arity: usize) -> ImportDirective {
-        let attributes = Map::from_iter([
+        let attributes = MapDataValue::from_iter([
             (
-                Key::identifier_from_str(PARAMETER_NAME_RESOURCE),
-                Constant::StringLiteral("".to_string()),
+                AnyDataValue::new_iri(PARAMETER_NAME_RESOURCE.to_string()),
+                AnyDataValue::new_plain_string("".to_string()),
             ),
             (
-                Key::identifier_from_str(PARAMETER_NAME_FORMAT),
-                Constant::TupleLiteral(Tuple::from_iter(
+                AnyDataValue::new_iri(PARAMETER_NAME_FORMAT.to_string()),
+                TupleDataValue::from_iter(
                     vec![VALUE_FORMAT_ANY; arity]
                         .iter()
-                        .map(|format| Constant::StringLiteral((*format).to_string()))
-                        .collect::<Vec<Constant>>(),
-                )),
+                        .map(|format| AnyDataValue::new_plain_string((*format).to_string()))
+                        .collect::<Vec<AnyDataValue>>(),
+                )
+                .into(),
             ),
         ]);
         ImportDirective::from(ImportExportDirective {
@@ -1099,20 +1102,20 @@ mod test {
             (main_sub_class_of.clone(), 2),
         ];
 
-        let c = Variable::Universal(Identifier("c".to_string()));
-        let d1 = Variable::Universal(Identifier("d1".to_string()));
-        let d2 = Variable::Universal(Identifier("d2".to_string()));
-        let y = Variable::Universal(Identifier("y".to_string()));
-        let r = Variable::Universal(Identifier("r".to_string()));
-        let e = Variable::Universal(Identifier("e".to_string()));
-        let s = Variable::Universal(Identifier("s".to_string()));
-        let r1 = Variable::Universal(Identifier("r1".to_string()));
-        let r2 = Variable::Universal(Identifier("r2".to_string()));
-        let s1 = Variable::Universal(Identifier("s1".to_string()));
-        let s2 = Variable::Universal(Identifier("s2".to_string()));
-        let d = Variable::Universal(Identifier("d".to_string()));
-        let a = Variable::Universal(Identifier("a".to_string()));
-        let b = Variable::Universal(Identifier("b".to_string()));
+        let c = Variable::Universal("c".to_string());
+        let d1 = Variable::Universal("d1".to_string());
+        let d2 = Variable::Universal("d2".to_string());
+        let y = Variable::Universal("y".to_string());
+        let r = Variable::Universal("r".to_string());
+        let e = Variable::Universal("e".to_string());
+        let s = Variable::Universal("s".to_string());
+        let r1 = Variable::Universal("r1".to_string());
+        let r2 = Variable::Universal("r2".to_string());
+        let s1 = Variable::Universal("s1".to_string());
+        let s2 = Variable::Universal("s2".to_string());
+        let d = Variable::Universal("d".to_string());
+        let a = Variable::Universal("a".to_string());
+        let b = Variable::Universal("b".to_string());
 
         let tc = PrimitiveTerm::Variable(c.clone());
         let td1 = PrimitiveTerm::Variable(d1.clone());

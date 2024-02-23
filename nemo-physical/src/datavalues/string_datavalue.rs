@@ -13,7 +13,7 @@ pub struct StringDataValue(String);
 
 impl StringDataValue {
     /// Constructor.
-    pub fn new(string: String) -> Self {
+    pub(crate) fn new(string: String) -> Self {
         StringDataValue(string)
     }
 }
@@ -28,15 +28,15 @@ impl DataValue for StringDataValue {
     }
 
     fn value_domain(&self) -> ValueDomain {
-        ValueDomain::String
+        ValueDomain::PlainString
     }
 
-    fn to_string_unchecked(&self) -> String {
+    fn to_plain_string_unchecked(&self) -> String {
         self.0.to_owned()
     }
 
     fn canonical_string(&self) -> String {
-        super::datavalue::quote_string(self.0.to_owned())
+        super::datavalue::quote_string(self.0.as_str())
     }
 }
 
@@ -44,6 +44,12 @@ impl std::hash::Hash for StringDataValue {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         self.value_domain().hash(state);
         self.0.hash(state);
+    }
+}
+
+impl std::fmt::Display for StringDataValue {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&super::datavalue::quote_string(self.0.as_str()).as_str())
     }
 }
 
@@ -62,11 +68,11 @@ mod test {
             dv.datatype_iri(),
             "http://www.w3.org/2001/XMLSchema#string".to_string()
         );
-        assert_eq!(dv.value_domain(), ValueDomain::String);
+        assert_eq!(dv.value_domain(), ValueDomain::PlainString);
         assert_eq!(dv.canonical_string(), "\"".to_string() + value + "\"");
 
-        assert_eq!(dv.to_string(), Some(value.to_string()));
-        assert_eq!(dv.to_string_unchecked(), value.to_string());
+        assert_eq!(dv.to_plain_string(), Some(value.to_string()));
+        assert_eq!(dv.to_plain_string_unchecked(), value.to_string());
     }
 
     #[test]

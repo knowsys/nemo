@@ -35,36 +35,36 @@ class TestExample(unittest.TestCase):
         self.engine.reason()
 
         self.expected_api_result = [
-            [2, "__Null#9223372036854775809"],
-            [42, "__Null#9223372036854775810"],
-            ["world", "__Null#9223372036854775811"],
-            [Decimal("3.14"), "__Null#9223372036854775812"],
+            [2, "_:0"],
+            [42, "_:1"],
+            ["world", "_:2"],
+            [Decimal("3.14"), "_:3"],
             [
                 NemoLiteral("hello world", lang="en"),
-                "__Null#9223372036854775813",
+                "_:4",
             ],
-            ["circle", "__Null#9223372036854775814"],
+            ["circle", "_:5"],
         ]
 
         self.expected_serialized_result = [
             [
                 '"2"^^<http://www.w3.org/2001/XMLSchema#integer>',
-                "<__Null#9223372036854775809>",
+                "_:0",
             ],
             [
                 '"42"^^<http://www.w3.org/2001/XMLSchema#integer>',
-                "<__Null#9223372036854775810>",
+                "_:1",
             ],
-            ["world", "<__Null#9223372036854775811>"],
+            ["world", "_:2"],
             [
                 '"3.14"^^<http://www.w3.org/2001/XMLSchema#decimal>',
-                "<__Null#9223372036854775812>",
+                "_:3",
             ],
             [
                 '"hello world"@en',
-                "<__Null#9223372036854775813>",
+                "_:4",
             ],
-            ["circle", "<__Null#9223372036854775814>"],
+            ["circle", "_:5"],
         ]
 
     def test_result(self):

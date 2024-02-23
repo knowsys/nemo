@@ -7,14 +7,8 @@ pub mod chase_model;
 /// world. Allows faithful serialization of parsed rule programs.
 pub mod rule_model;
 
-pub mod types;
-
 /// Forward everything to the rule model.
 pub use rule_model::*;
-pub use types::complex_types::*;
-pub(crate) use types::primitive_types::PrimitiveType;
-
-use std::collections::HashMap;
 
 /// Map from variables to terms
-pub type VariableAssignment = HashMap<Variable, Term>;
+pub type VariableAssignment = std::collections::HashMap<Variable, Term>;
