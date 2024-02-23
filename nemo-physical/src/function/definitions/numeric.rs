@@ -13,18 +13,19 @@ use crate::{
 
 use self::{
     double::{
-        numeric_absolute_double, numeric_addition_double, numeric_cos_double,
-        numeric_division_double, numeric_greaterthan_double, numeric_greaterthaneq_double,
-        numeric_lessthan_double, numeric_lessthaneq_double, numeric_logarithm_double,
-        numeric_multiplication_double, numeric_negation_double, numeric_power_double,
-        numeric_sin_double, numeric_squareroot_double, numeric_subtraction_double,
-        numeric_tan_double,
+        numeric_absolute_double, numeric_addition_double, numeric_ceil_double, numeric_cos_double,
+        numeric_division_double, numeric_floor_double, numeric_greaterthan_double,
+        numeric_greaterthaneq_double, numeric_lessthan_double, numeric_lessthaneq_double,
+        numeric_logarithm_double, numeric_multiplication_double, numeric_negation_double,
+        numeric_power_double, numeric_round_double, numeric_sin_double, numeric_squareroot_double,
+        numeric_subtraction_double, numeric_tan_double,
     },
     float::{
-        numeric_absolute_float, numeric_addition_float, numeric_cos_float, numeric_division_float,
-        numeric_greaterthan_float, numeric_greaterthaneq_float, numeric_lessthan_float,
-        numeric_lessthaneq_float, numeric_logarithm_float, numeric_multiplication_float,
-        numeric_negation_float, numeric_power_float, numeric_sin_float, numeric_squareroot_float,
+        numeric_absolute_float, numeric_addition_float, numeric_ceil_float, numeric_cos_float,
+        numeric_division_float, numeric_floor_float, numeric_greaterthan_float,
+        numeric_greaterthaneq_float, numeric_lessthan_float, numeric_lessthaneq_float,
+        numeric_logarithm_float, numeric_multiplication_float, numeric_negation_float,
+        numeric_power_float, numeric_round_float, numeric_sin_float, numeric_squareroot_float,
         numeric_subtraction_float, numeric_tan_float,
     },
     integer64::{
@@ -287,8 +288,8 @@ impl BinaryFunction for NumericPower {
 pub struct NumericAbsolute;
 impl UnaryFunction for NumericAbsolute {
     fn evaluate(&self, parameter: AnyDataValue) -> Option<AnyDataValue> {
-        if let Some(pair) = NumericValue::from_any_datavalue(parameter) {
-            return match pair {
+        if let Some(numeric_value) = NumericValue::from_any_datavalue(parameter) {
+            return match numeric_value {
                 NumericValue::Integer(value) => numeric_absolute_integer64(value),
                 NumericValue::Float(value) => numeric_absolute_float(value),
                 NumericValue::Double(value) => numeric_absolute_double(value),
@@ -308,8 +309,8 @@ impl UnaryFunction for NumericAbsolute {
 pub struct NumericNegation;
 impl UnaryFunction for NumericNegation {
     fn evaluate(&self, parameter: AnyDataValue) -> Option<AnyDataValue> {
-        if let Some(pair) = NumericValue::from_any_datavalue(parameter) {
-            return match pair {
+        if let Some(numeric_value) = NumericValue::from_any_datavalue(parameter) {
+            return match numeric_value {
                 NumericValue::Integer(value) => numeric_negation_integer64(value),
                 NumericValue::Float(value) => numeric_negation_float(value),
                 NumericValue::Double(value) => numeric_negation_double(value),
@@ -330,8 +331,8 @@ impl UnaryFunction for NumericNegation {
 pub struct NumericSquareroot;
 impl UnaryFunction for NumericSquareroot {
     fn evaluate(&self, parameter: AnyDataValue) -> Option<AnyDataValue> {
-        if let Some(pair) = NumericValue::from_any_datavalue(parameter) {
-            return match pair {
+        if let Some(numeric_value) = NumericValue::from_any_datavalue(parameter) {
+            return match numeric_value {
                 NumericValue::Integer(value) => numeric_squareroot_integer64(value),
                 NumericValue::Float(value) => numeric_squareroot_float(value),
                 NumericValue::Double(value) => numeric_squareroot_double(value),
@@ -351,8 +352,8 @@ impl UnaryFunction for NumericSquareroot {
 pub struct NumericSine;
 impl UnaryFunction for NumericSine {
     fn evaluate(&self, parameter: AnyDataValue) -> Option<AnyDataValue> {
-        if let Some(pair) = NumericValue::from_any_datavalue(parameter) {
-            return match pair {
+        if let Some(numeric_value) = NumericValue::from_any_datavalue(parameter) {
+            return match numeric_value {
                 NumericValue::Integer(_value) => None,
                 NumericValue::Float(value) => numeric_sin_float(value),
                 NumericValue::Double(value) => numeric_sin_double(value),
@@ -372,8 +373,8 @@ impl UnaryFunction for NumericSine {
 pub struct NumericCosine;
 impl UnaryFunction for NumericCosine {
     fn evaluate(&self, parameter: AnyDataValue) -> Option<AnyDataValue> {
-        if let Some(pair) = NumericValue::from_any_datavalue(parameter) {
-            return match pair {
+        if let Some(numeric_value) = NumericValue::from_any_datavalue(parameter) {
+            return match numeric_value {
                 NumericValue::Integer(_value) => None,
                 NumericValue::Float(value) => numeric_cos_float(value),
                 NumericValue::Double(value) => numeric_cos_double(value),
@@ -393,11 +394,76 @@ impl UnaryFunction for NumericCosine {
 pub struct NumericTangent;
 impl UnaryFunction for NumericTangent {
     fn evaluate(&self, parameter: AnyDataValue) -> Option<AnyDataValue> {
-        if let Some(pair) = NumericValue::from_any_datavalue(parameter) {
-            return match pair {
+        if let Some(numeric_value) = NumericValue::from_any_datavalue(parameter) {
+            return match numeric_value {
                 NumericValue::Integer(_value) => None,
                 NumericValue::Float(value) => numeric_tan_float(value),
                 NumericValue::Double(value) => numeric_tan_double(value),
+            };
+        }
+
+        None
+    }
+}
+
+/// Rounding of a numeric value
+///
+/// Returns the nearest integer of the input parameter.
+/// If the result is half-way between two integers, round away from 0.0.
+///
+/// Returns `None` if the input parameter is not from a numeric value space.
+#[derive(Debug, Copy, Clone)]
+pub struct NumericRound;
+impl UnaryFunction for NumericRound {
+    fn evaluate(&self, parameter: AnyDataValue) -> Option<AnyDataValue> {
+        if let Some(numeric_value) = NumericValue::from_any_datavalue(parameter) {
+            return match numeric_value {
+                NumericValue::Integer(value) => Some(AnyDataValue::new_integer_from_i64(value)),
+                NumericValue::Float(value) => numeric_round_float(value),
+                NumericValue::Double(value) => numeric_round_double(value),
+            };
+        }
+
+        None
+    }
+}
+
+/// Rounding up to the smallest integer less than or equal than input parameter
+///
+/// Returns the smallest integer less than or equal than input parameter
+///
+/// Returns `None` if the input parameter is not from a numeric value space.
+#[derive(Debug, Copy, Clone)]
+pub struct NumericCeil;
+impl UnaryFunction for NumericCeil {
+    fn evaluate(&self, parameter: AnyDataValue) -> Option<AnyDataValue> {
+        if let Some(numeric_value) = NumericValue::from_any_datavalue(parameter) {
+            return match numeric_value {
+                NumericValue::Integer(value) => Some(AnyDataValue::new_integer_from_i64(value)),
+                NumericValue::Float(value) => numeric_ceil_float(value),
+                NumericValue::Double(value) => numeric_ceil_double(value),
+            };
+        }
+
+        None
+    }
+}
+
+/// Rounding of a numeric value
+///
+/// Returns the nearest integer of the input parameter.
+/// If the result is half-way between two integers, round away from 0.0.
+///
+/// Returns `None` if the input parameter is not from a numeric value space.
+#[derive(Debug, Copy, Clone)]
+pub struct NumericFloor;
+impl UnaryFunction for NumericFloor {
+    fn evaluate(&self, parameter: AnyDataValue) -> Option<AnyDataValue> {
+        if let Some(numeric_value) = NumericValue::from_any_datavalue(parameter) {
+            return match numeric_value {
+                NumericValue::Integer(value) => Some(AnyDataValue::new_integer_from_i64(value)),
+                NumericValue::Float(value) => numeric_floor_float(value),
+                NumericValue::Double(value) => numeric_floor_double(value),
             };
         }
 

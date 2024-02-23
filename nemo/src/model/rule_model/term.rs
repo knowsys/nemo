@@ -131,8 +131,16 @@ pub enum BinaryOperation {
     StringConcatenation,
     /// Check whether string is contained in another, correspondng to SPARQL function CONTAINS.
     StringContains,
-    /// The first part (of specified length) of a string
+    /// String starting at some start position
     StringSubstring,
+    /// First part of a string split by some other string
+    StringBefore,
+    /// Second part of a string split by some other string
+    StringAfter,
+    /// Whether string starts with a certain string
+    StringStarts,
+    /// Whether string ends with a certain string
+    StringEnds,
     /// Conjunction of boolean values
     BooleanConjunction,
     /// Disjunction of boolean values
@@ -144,14 +152,18 @@ impl BinaryOperation {
     /// Returns `None` if the provided function name does not correspond to a known binary function.
     pub fn construct_from_name(name: &str) -> Result<BinaryOperation, Error> {
         match name.to_uppercase().as_str() {
-            "LOG" => Ok(BinaryOperation::NumericLogarithm),
-            "POW" => Ok(BinaryOperation::NumericPower),
-            "COMPARE" => Ok(BinaryOperation::StringCompare),
-            "CONCAT" => Ok(BinaryOperation::StringConcatenation),
-            "CONTAINS" => Ok(BinaryOperation::StringContains),
-            "SUBSTR" => Ok(BinaryOperation::StringSubstring),
-            "AND" => Ok(BinaryOperation::BooleanConjunction),
-            "OR" => Ok(BinaryOperation::BooleanDisjunction),
+            "LOG" => Ok(Self::NumericLogarithm),
+            "POW" => Ok(Self::NumericPower),
+            "COMPARE" => Ok(Self::StringCompare),
+            "CONCAT" => Ok(Self::StringConcatenation),
+            "CONTAINS" => Ok(Self::StringContains),
+            "SUBSTR" => Ok(Self::StringSubstring),
+            "AND" => Ok(Self::BooleanConjunction),
+            "OR" => Ok(Self::BooleanDisjunction),
+            "STRSTARTS" => Ok(Self::StringStarts),
+            "STRENDS" => Ok(Self::StringEnds),
+            "STRBEFORE" => Ok(Self::StringBefore),
+            "STRAFTER" => Ok(Self::StringAfter),
             s => Err(Error::UnknownUnaryOpertation {
                 operation: s.into(),
             }),
@@ -161,24 +173,28 @@ impl BinaryOperation {
     /// Return the name of the operation.
     pub fn name(&self) -> String {
         let name = match self {
-            BinaryOperation::NumericAddition => "Addition",
-            BinaryOperation::NumericSubtraction => "Subtraction",
-            BinaryOperation::NumericMultiplication => "Multiplication",
-            BinaryOperation::NumericDivision => "Division",
-            BinaryOperation::NumericPower => "Power",
-            BinaryOperation::NumericLogarithm => "Logarithm",
-            BinaryOperation::StringCompare => "StringCompare",
-            BinaryOperation::StringConcatenation => "CONCAT",
-            BinaryOperation::StringContains => "CONTAINS",
-            BinaryOperation::StringSubstring => "Substring",
-            BinaryOperation::BooleanConjunction => "BooleanAnd",
-            BinaryOperation::BooleanDisjunction => "BooleanOr",
-            BinaryOperation::Equal => "Equals",
-            BinaryOperation::Unequals => "Unequals",
-            BinaryOperation::NumericGreaterthan => "GreaterThan",
-            BinaryOperation::NumericGreaterthaneq => "GreaterThanEq",
-            BinaryOperation::NumericLessthan => "LessThan",
-            BinaryOperation::NumericLessthaneq => "LessThanEq",
+            Self::NumericAddition => "Addition",
+            Self::NumericSubtraction => "Subtraction",
+            Self::NumericMultiplication => "Multiplication",
+            Self::NumericDivision => "Division",
+            Self::NumericPower => "Power",
+            Self::NumericLogarithm => "Logarithm",
+            Self::StringCompare => "StringCompare",
+            Self::StringConcatenation => "CONCAT",
+            Self::StringContains => "CONTAINS",
+            Self::StringSubstring => "Substring",
+            Self::BooleanConjunction => "BooleanAnd",
+            Self::BooleanDisjunction => "BooleanOr",
+            Self::Equal => "Equals",
+            Self::Unequals => "Unequals",
+            Self::NumericGreaterthan => "GreaterThan",
+            Self::NumericGreaterthaneq => "GreaterThanEq",
+            Self::NumericLessthan => "LessThan",
+            Self::NumericLessthaneq => "LessThanEq",
+            Self::StringBefore => "STRBEFORE",
+            Self::StringAfter => "STRAFTER",
+            Self::StringStarts => "STRSTARTS",
+            Self::StringEnds => "STRENDS",
         };
 
         String::from(name)
@@ -188,24 +204,28 @@ impl BinaryOperation {
     /// or `None` if this is not an infix operation
     pub fn infix(&self) -> Option<&'static str> {
         match self {
-            BinaryOperation::NumericAddition => Some("+"),
-            BinaryOperation::NumericSubtraction => Some("-"),
-            BinaryOperation::NumericMultiplication => Some("*"),
-            BinaryOperation::NumericDivision => Some("/"),
-            BinaryOperation::Equal => Some("="),
-            BinaryOperation::Unequals => Some("!="),
-            BinaryOperation::NumericGreaterthan => Some(">"),
-            BinaryOperation::NumericGreaterthaneq => Some(">="),
-            BinaryOperation::NumericLessthan => Some("<"),
-            BinaryOperation::NumericLessthaneq => Some("<="),
-            BinaryOperation::NumericLogarithm
-            | BinaryOperation::NumericPower
-            | BinaryOperation::StringCompare
-            | BinaryOperation::StringConcatenation
-            | BinaryOperation::StringContains
-            | BinaryOperation::StringSubstring
-            | BinaryOperation::BooleanConjunction
-            | BinaryOperation::BooleanDisjunction => None,
+            Self::NumericAddition => Some("+"),
+            Self::NumericSubtraction => Some("-"),
+            Self::NumericMultiplication => Some("*"),
+            Self::NumericDivision => Some("/"),
+            Self::Equal => Some("="),
+            Self::Unequals => Some("!="),
+            Self::NumericGreaterthan => Some(">"),
+            Self::NumericGreaterthaneq => Some(">="),
+            Self::NumericLessthan => Some("<"),
+            Self::NumericLessthaneq => Some("<="),
+            Self::NumericLogarithm
+            | Self::NumericPower
+            | Self::StringCompare
+            | Self::StringConcatenation
+            | Self::StringContains
+            | Self::StringSubstring
+            | Self::StringStarts
+            | Self::StringEnds
+            | Self::StringBefore
+            | Self::StringAfter
+            | Self::BooleanConjunction
+            | Self::BooleanDisjunction => None,
         }
     }
 }
@@ -217,12 +237,36 @@ pub enum UnaryOperation {
     BooleanNegation,
     /// Canonical string representation of a value
     CanonicalString,
+    /// Check if value is an integer
+    CheckIsInteger,
+    /// Check if value is a float
+    CheckIsFloat,
+    /// Check if value is a double
+    CheckIsDouble,
+    /// Check if value is an iri
+    CheckIsIri,
+    /// Check if value is numeric
+    CheckIsNumeric,
+    /// Check if value is a null
+    CheckIsNull,
+    /// Check if value is a string
+    CheckIsString,
+    /// Get datatype of a value
+    Datatype,
+    /// Get language tag of a languaged tagged stirng
+    LanguageTag,
     /// Absolute value of a numeric value
     NumericAbsolute,
     /// Cosine of a numeric value
     NumericCosine,
+    /// Rounding up of a numeric value
+    NumericCeil,
+    /// Rounding down of a numeric value
+    NumericFloor,
     /// Additive inverse of a numeric value
     NumericNegation,
+    /// Rounding of a numeric value
+    NumericRound,
     /// Sine of a numeric value
     NumericSine,
     /// Square root of a numeric value
@@ -242,16 +286,28 @@ impl UnaryOperation {
     /// Returns `None` if the provided function name does not correspond to a know unary function.
     pub fn construct_from_name(name: &str) -> Result<UnaryOperation, Error> {
         match name {
-            "Abs" => Ok(UnaryOperation::NumericAbsolute),
-            "Sqrt" => Ok(UnaryOperation::NumericSquareroot),
-            "Neg" => Ok(UnaryOperation::BooleanNegation),
-            "String" => Ok(UnaryOperation::CanonicalString),
-            "Sin" => Ok(UnaryOperation::NumericSine),
-            "Cos" => Ok(UnaryOperation::NumericCosine),
-            "Tan" => Ok(UnaryOperation::NumericTangent),
-            "Length" => Ok(UnaryOperation::StringLength),
-            "Lower" => Ok(UnaryOperation::StringLowercase),
-            "Upper" => Ok(UnaryOperation::StringUppercase),
+            "isInteger" => Ok(UnaryOperation::CheckIsInteger),
+            "isFloat" => Ok(UnaryOperation::CheckIsFloat),
+            "isDouble" => Ok(UnaryOperation::CheckIsDouble),
+            "isIri" => Ok(UnaryOperation::CheckIsIri),
+            "isNumeric" => Ok(UnaryOperation::CheckIsNumeric),
+            "isNull" => Ok(UnaryOperation::CheckIsNull),
+            "isString" => Ok(UnaryOperation::CheckIsString),
+            "ABS" => Ok(UnaryOperation::NumericAbsolute),
+            "SQRT" => Ok(UnaryOperation::NumericSquareroot),
+            "NOT" => Ok(UnaryOperation::BooleanNegation),
+            "STR" => Ok(UnaryOperation::CanonicalString),
+            "SIN" => Ok(UnaryOperation::NumericSine),
+            "COS" => Ok(UnaryOperation::NumericCosine),
+            "TAN" => Ok(UnaryOperation::NumericTangent),
+            "STRLEN" => Ok(UnaryOperation::StringLength),
+            "UCASE" => Ok(UnaryOperation::StringLowercase),
+            "LCASE" => Ok(UnaryOperation::StringUppercase),
+            "ROUND" => Ok(UnaryOperation::NumericRound),
+            "CEIL" => Ok(UnaryOperation::NumericCeil),
+            "FLOOR" => Ok(UnaryOperation::NumericFloor),
+            "DATATYPE" => Ok(UnaryOperation::Datatype),
+            "LANG" => Ok(UnaryOperation::LanguageTag),
             s => Err(Error::UnknownUnaryOpertation {
                 operation: s.into(),
             }),
@@ -261,17 +317,29 @@ impl UnaryOperation {
     /// Return the name of the operation.
     pub fn name(&self) -> String {
         let name = match self {
-            UnaryOperation::NumericSquareroot => "SquareRoot",
-            UnaryOperation::NumericNegation => "UnaryMinus",
-            UnaryOperation::NumericAbsolute => "Abs",
-            UnaryOperation::BooleanNegation => "BooleanNegation",
-            UnaryOperation::CanonicalString => "CanonicalString",
-            UnaryOperation::NumericCosine => "Cosine",
-            UnaryOperation::NumericSine => "Sine",
-            UnaryOperation::NumericTangent => "Tangent",
-            UnaryOperation::StringLength => "StringLength",
-            UnaryOperation::StringLowercase => "Lowercase",
-            UnaryOperation::StringUppercase => "Uppercase",
+            UnaryOperation::NumericSquareroot => "SQRT",
+            UnaryOperation::NumericNegation => "MINUS",
+            UnaryOperation::NumericAbsolute => "ABS",
+            UnaryOperation::BooleanNegation => "NOT",
+            UnaryOperation::CanonicalString => "STR",
+            UnaryOperation::NumericCosine => "COS",
+            UnaryOperation::NumericSine => "SIN",
+            UnaryOperation::NumericTangent => "TAN",
+            UnaryOperation::StringLength => "STRLEN",
+            UnaryOperation::StringLowercase => "LCASE",
+            UnaryOperation::StringUppercase => "UCASE",
+            UnaryOperation::NumericCeil => "CEIL",
+            UnaryOperation::NumericFloor => "FLOOR",
+            UnaryOperation::NumericRound => "ROUND",
+            UnaryOperation::CheckIsInteger => "isInteger",
+            UnaryOperation::CheckIsFloat => "isFloat",
+            UnaryOperation::CheckIsDouble => "isDouble",
+            UnaryOperation::CheckIsIri => "isIri",
+            UnaryOperation::CheckIsNumeric => "IsNumeric",
+            UnaryOperation::CheckIsNull => "isNull",
+            UnaryOperation::CheckIsString => "isString",
+            UnaryOperation::Datatype => "DATATYPE",
+            UnaryOperation::LanguageTag => "LANG",
         };
 
         String::from(name)

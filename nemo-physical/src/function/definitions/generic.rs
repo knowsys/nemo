@@ -54,3 +54,14 @@ impl UnaryFunction for CanonicalString {
         Some(AnyDataValue::new_plain_string(parameter.canonical_string()))
     }
 }
+
+/// Datatype of a value
+///
+/// Returns the data type of the input parameter as a string.
+#[derive(Debug, Copy, Clone)]
+pub struct Datatype;
+impl UnaryFunction for Datatype {
+    fn evaluate(&self, parameter: AnyDataValue) -> Option<AnyDataValue> {
+        Some(AnyDataValue::new_plain_string(parameter.datatype_iri()))
+    }
+}

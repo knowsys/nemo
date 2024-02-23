@@ -212,7 +212,8 @@ mod test {
     use std::collections::HashMap;
 
     use crate::{
-        datavalues::AnyDataValue, function::tree::FunctionTree,
+        datavalues::{AnyDataValue, DataValue},
+        function::tree::FunctionTree,
         tabular::operations::OperationColumnMarker,
     };
 
@@ -289,9 +290,45 @@ mod test {
 
         let tree_substring = Function::string_subtstring(
             Function::constant(any_string("Hello World")),
-            Function::constant(AnyDataValue::new_integer_from_u64(5)),
+            Function::constant(AnyDataValue::new_integer_from_u64(6)),
         );
-        evaluate_expect(&tree_substring, Some(any_string("Hello")));
+        evaluate_expect(&tree_substring, Some(any_string("World")));
+
+        let tree_starts = Function::string_starts(
+            Function::constant(any_string("Hello World")),
+            Function::constant(any_string("Hell")),
+        );
+        evaluate_expect(&tree_starts, Some(any_bool(true)));
+
+        let tree_not_starts = Function::string_starts(
+            Function::constant(any_string("Hello World")),
+            Function::constant(any_string("World")),
+        );
+        evaluate_expect(&tree_not_starts, Some(any_bool(false)));
+
+        let tree_ends = Function::string_ends(
+            Function::constant(any_string("Hello World")),
+            Function::constant(any_string(" World")),
+        );
+        evaluate_expect(&tree_ends, Some(any_bool(true)));
+
+        let tree_not_ends = Function::string_ends(
+            Function::constant(any_string("Hello World")),
+            Function::constant(any_string("Hello")),
+        );
+        evaluate_expect(&tree_not_ends, Some(any_bool(false)));
+
+        let tree_before = Function::string_before(
+            Function::constant(any_string("Hello World")),
+            Function::constant(any_string(" ")),
+        );
+        evaluate_expect(&tree_before, Some(any_string("Hello")));
+
+        let tree_after = Function::string_after(
+            Function::constant(any_string("Hello World")),
+            Function::constant(any_string(" ")),
+        );
+        evaluate_expect(&tree_after, Some(any_string("World")));
     }
 
     #[test]
@@ -384,6 +421,13 @@ mod test {
             &tree_greatereq_greater,
             Some(AnyDataValue::new_boolean(true)),
         );
+
+        let tree_round = Function::numeric_round(Function::constant(any_int(-5)));
+        let tree_ceil = Function::numeric_round(Function::constant(any_int(-5)));
+        let tree_floor = Function::numeric_round(Function::constant(any_int(-5)));
+        evaluate_expect(&tree_round, Some(AnyDataValue::new_integer_from_i64(-5)));
+        evaluate_expect(&tree_ceil, Some(AnyDataValue::new_integer_from_i64(-5)));
+        evaluate_expect(&tree_floor, Some(AnyDataValue::new_integer_from_i64(-5)));
     }
 
     #[test]
@@ -485,6 +529,51 @@ mod test {
 
         let tree_tan = Function::numeric_tangent(Function::constant(any_float(0.0)));
         evaluate_expect(&tree_tan, Some(any_float(0.0)));
+
+        let tree_round = Function::numeric_round(Function::constant(any_float(-5.0)));
+        evaluate_expect(&tree_round, Some(any_float(-5.0)));
+        let tree_round = Function::numeric_round(Function::constant(any_float(-10.5)));
+        evaluate_expect(&tree_round, Some(any_float(-11.0)));
+        let tree_round = Function::numeric_round(Function::constant(any_float(-10.2)));
+        evaluate_expect(&tree_round, Some(any_float(-10.0)));
+        let tree_round = Function::numeric_round(Function::constant(any_float(-10.8)));
+        evaluate_expect(&tree_round, Some(any_float(-11.0)));
+        let tree_round = Function::numeric_round(Function::constant(any_float(10.5)));
+        evaluate_expect(&tree_round, Some(any_float(11.0)));
+        let tree_round = Function::numeric_round(Function::constant(any_float(10.2)));
+        evaluate_expect(&tree_round, Some(any_float(10.0)));
+        let tree_round = Function::numeric_round(Function::constant(any_float(10.8)));
+        evaluate_expect(&tree_round, Some(any_float(11.0)));
+
+        let tree_floor = Function::numeric_floor(Function::constant(any_float(-5.0)));
+        evaluate_expect(&tree_floor, Some(any_float(-5.0)));
+        let tree_floor = Function::numeric_floor(Function::constant(any_float(-10.5)));
+        evaluate_expect(&tree_floor, Some(any_float(-11.0)));
+        let tree_floor = Function::numeric_floor(Function::constant(any_float(-10.2)));
+        evaluate_expect(&tree_floor, Some(any_float(-11.0)));
+        let tree_floor = Function::numeric_floor(Function::constant(any_float(-10.8)));
+        evaluate_expect(&tree_floor, Some(any_float(-11.0)));
+        let tree_floor = Function::numeric_floor(Function::constant(any_float(10.5)));
+        evaluate_expect(&tree_floor, Some(any_float(10.0)));
+        let tree_floor = Function::numeric_floor(Function::constant(any_float(10.2)));
+        evaluate_expect(&tree_floor, Some(any_float(10.0)));
+        let tree_floor = Function::numeric_floor(Function::constant(any_float(10.8)));
+        evaluate_expect(&tree_floor, Some(any_float(10.0)));
+
+        let tree_ceil = Function::numeric_ceil(Function::constant(any_float(-5.0)));
+        evaluate_expect(&tree_ceil, Some(any_float(-5.0)));
+        let tree_ceil = Function::numeric_ceil(Function::constant(any_float(-10.5)));
+        evaluate_expect(&tree_ceil, Some(any_float(-10.0)));
+        let tree_ceil = Function::numeric_ceil(Function::constant(any_float(-10.2)));
+        evaluate_expect(&tree_ceil, Some(any_float(-10.0)));
+        let tree_ceil = Function::numeric_ceil(Function::constant(any_float(-10.8)));
+        evaluate_expect(&tree_ceil, Some(any_float(-10.0)));
+        let tree_ceil = Function::numeric_ceil(Function::constant(any_float(10.5)));
+        evaluate_expect(&tree_ceil, Some(any_float(11.0)));
+        let tree_ceil = Function::numeric_ceil(Function::constant(any_float(10.2)));
+        evaluate_expect(&tree_ceil, Some(any_float(11.0)));
+        let tree_ceil = Function::numeric_ceil(Function::constant(any_float(10.8)));
+        evaluate_expect(&tree_ceil, Some(any_float(11.0)));
     }
 
     #[test]
@@ -586,6 +675,51 @@ mod test {
 
         let tree_tan = Function::numeric_tangent(Function::constant(any_double(0.0)));
         evaluate_expect(&tree_tan, Some(any_double(0.0)));
+
+        let tree_round = Function::numeric_round(Function::constant(any_double(-5.0)));
+        evaluate_expect(&tree_round, Some(any_double(-5.0)));
+        let tree_round = Function::numeric_round(Function::constant(any_double(-10.5)));
+        evaluate_expect(&tree_round, Some(any_double(-11.0)));
+        let tree_round = Function::numeric_round(Function::constant(any_double(-10.2)));
+        evaluate_expect(&tree_round, Some(any_double(-10.0)));
+        let tree_round = Function::numeric_round(Function::constant(any_double(-10.8)));
+        evaluate_expect(&tree_round, Some(any_double(-11.0)));
+        let tree_round = Function::numeric_round(Function::constant(any_double(10.5)));
+        evaluate_expect(&tree_round, Some(any_double(11.0)));
+        let tree_round = Function::numeric_round(Function::constant(any_double(10.2)));
+        evaluate_expect(&tree_round, Some(any_double(10.0)));
+        let tree_round = Function::numeric_round(Function::constant(any_double(10.8)));
+        evaluate_expect(&tree_round, Some(any_double(11.0)));
+
+        let tree_floor = Function::numeric_floor(Function::constant(any_double(-5.0)));
+        evaluate_expect(&tree_floor, Some(any_double(-5.0)));
+        let tree_floor = Function::numeric_floor(Function::constant(any_double(-10.5)));
+        evaluate_expect(&tree_floor, Some(any_double(-11.0)));
+        let tree_floor = Function::numeric_floor(Function::constant(any_double(-10.2)));
+        evaluate_expect(&tree_floor, Some(any_double(-11.0)));
+        let tree_floor = Function::numeric_floor(Function::constant(any_double(-10.8)));
+        evaluate_expect(&tree_floor, Some(any_double(-11.0)));
+        let tree_floor = Function::numeric_floor(Function::constant(any_double(10.5)));
+        evaluate_expect(&tree_floor, Some(any_double(10.0)));
+        let tree_floor = Function::numeric_floor(Function::constant(any_double(10.2)));
+        evaluate_expect(&tree_floor, Some(any_double(10.0)));
+        let tree_floor = Function::numeric_floor(Function::constant(any_double(10.8)));
+        evaluate_expect(&tree_floor, Some(any_double(10.0)));
+
+        let tree_ceil = Function::numeric_ceil(Function::constant(any_double(-5.0)));
+        evaluate_expect(&tree_ceil, Some(any_double(-5.0)));
+        let tree_ceil = Function::numeric_ceil(Function::constant(any_double(-10.5)));
+        evaluate_expect(&tree_ceil, Some(any_double(-10.0)));
+        let tree_ceil = Function::numeric_ceil(Function::constant(any_double(-10.2)));
+        evaluate_expect(&tree_ceil, Some(any_double(-10.0)));
+        let tree_ceil = Function::numeric_ceil(Function::constant(any_double(-10.8)));
+        evaluate_expect(&tree_ceil, Some(any_double(-10.0)));
+        let tree_ceil = Function::numeric_ceil(Function::constant(any_double(10.5)));
+        evaluate_expect(&tree_ceil, Some(any_double(11.0)));
+        let tree_ceil = Function::numeric_ceil(Function::constant(any_double(10.2)));
+        evaluate_expect(&tree_ceil, Some(any_double(11.0)));
+        let tree_ceil = Function::numeric_ceil(Function::constant(any_double(10.8)));
+        evaluate_expect(&tree_ceil, Some(any_double(11.0)));
     }
 
     #[test]
@@ -632,5 +766,74 @@ mod test {
 
         let tree_neg_false = Function::boolean_negation(Function::constant(any_bool(true)));
         evaluate_bool_expect(&tree_neg_false, false);
+    }
+
+    #[test]
+    fn evaluate_generic() {
+        let tree_integer = Function::constant(any_int(1));
+        let tree_float = FunctionTree::constant(any_float(1.0));
+
+        let tree_equals_same = Function::equals(tree_integer.clone(), tree_integer.clone());
+        evaluate_bool_expect(&tree_equals_same, true);
+        let tree_equals_different = Function::equals(tree_integer.clone(), tree_float.clone());
+        evaluate_bool_expect(&tree_equals_different, false);
+
+        let tree_unequals_same = Function::unequals(tree_integer.clone(), tree_integer.clone());
+        evaluate_bool_expect(&tree_unequals_same, false);
+        let tree_unequals_different = Function::unequals(tree_integer.clone(), tree_float.clone());
+        evaluate_bool_expect(&tree_unequals_different, true);
+
+        let tree_datatype = Function::datatype(tree_integer);
+        evaluate_expect(
+            &tree_datatype,
+            Some(any_string("http://www.w3.org/2001/XMLSchema#int")),
+        );
+    }
+
+    #[test]
+    fn evaluate_language() {
+        let tree_tag = Function::languagetag(FunctionTree::constant(
+            AnyDataValue::new_language_tagged_string(String::from("test"), String::from("en")),
+        ));
+        evaluate_expect(&tree_tag, Some(any_string("en")));
+    }
+
+    #[test]
+    fn evaluate_check_type() {
+        let tree_integer = Function::constant(any_int(1));
+        let tree_float = Function::constant(any_float(1.0));
+        let tree_double = Function::constant(any_double(1.0));
+        let tree_string = Function::constant(any_string("test"));
+        let tree_iri = Function::constant(AnyDataValue::new_iri(String::from("http://test.com")));
+
+        let tree_is_integer = Function::check_is_integer(tree_integer.clone());
+        evaluate_bool_expect(&tree_is_integer, true);
+        let tree_not_integer = Function::check_is_integer(tree_double.clone());
+        evaluate_bool_expect(&tree_not_integer, false);
+
+        let tree_is_double = Function::check_is_double(tree_double.clone());
+        evaluate_bool_expect(&tree_is_double, true);
+        let tree_not_double = Function::check_is_double(tree_float.clone());
+        evaluate_bool_expect(&tree_not_double, false);
+
+        let tree_is_float = Function::check_is_float(tree_float.clone());
+        evaluate_bool_expect(&tree_is_float, true);
+        let tree_not_float = Function::check_is_float(tree_string.clone());
+        evaluate_bool_expect(&tree_not_float, false);
+
+        let tree_is_numeric = Function::check_is_numeric(tree_integer.clone());
+        evaluate_bool_expect(&tree_is_numeric, true);
+        let tree_not_numeric = Function::check_is_numeric(tree_string.clone());
+        evaluate_bool_expect(&tree_not_numeric, false);
+
+        let tree_is_iri = Function::check_is_iri(tree_iri.clone());
+        evaluate_bool_expect(&tree_is_iri, true);
+        let tree_not_iri = Function::check_is_iri(tree_string.clone());
+        evaluate_bool_expect(&tree_not_iri, false);
+
+        let tree_is_string = Function::check_is_string(tree_string.clone());
+        evaluate_bool_expect(&tree_is_string, true);
+        let tree_not_string = Function::check_is_string(tree_double.clone());
+        evaluate_bool_expect(&tree_not_string, false);
     }
 }

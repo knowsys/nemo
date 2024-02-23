@@ -148,3 +148,19 @@ pub(super) fn numeric_greaterthaneq_double(
         Some(AnyDataValue::new_boolean(false))
     }
 }
+
+/// Rounding to the nearest integer.
+/// If the result is half-way between two integers, round away from 0.0.
+pub(super) fn numeric_round_double(parameter: Double) -> Option<AnyDataValue> {
+    some_datavalue_from_double(parameter.round())
+}
+
+/// Rounding up to the smallest integer less than or equal to `parameter`.
+pub(super) fn numeric_ceil_double(parameter: Double) -> Option<AnyDataValue> {
+    some_datavalue_from_double(parameter.ceil())
+}
+
+/// Rounding down to the largest integer less than or equal to `parameter`.
+pub(super) fn numeric_floor_double(parameter: Double) -> Option<AnyDataValue> {
+    some_datavalue_from_double(parameter.floor())
+}

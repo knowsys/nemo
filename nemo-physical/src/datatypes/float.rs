@@ -5,7 +5,6 @@ use crate::function::definitions::numeric::traits::{CheckedPow, CheckedSquareRoo
 use num::traits::CheckedNeg;
 use num::{Bounded, CheckedAdd, CheckedDiv, CheckedMul, CheckedSub, FromPrimitive, One, Zero};
 use std::cmp::Ordering;
-use std::convert::TryFrom;
 use std::fmt;
 use std::iter::{Product, Sum};
 use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Sub, SubAssign};
@@ -65,6 +64,22 @@ impl Float {
     /// Computes the tangent of a number (in radians).
     pub(crate) fn tan(self) -> Self {
         Float::new(self.0.tan()).expect("Operation does not result in NaN")
+    }
+
+    /// Returns the nearest integer to `self`.
+    /// If a value is half-way between two integers, round away from 0.0.
+    pub(crate) fn round(self) -> Self {
+        Float::new(self.0.round()).expect("Operation does not result in NaN")
+    }
+
+    /// Returns the smallest integer greater than or equal to `self`.
+    pub(crate) fn ceil(self) -> Self {
+        Float::new(self.0.ceil()).expect("Operation does not result in NaN")
+    }
+
+    /// Returns the largest integer less than or equal to `self`.
+    pub(crate) fn floor(self) -> Self {
+        Float::new(self.0.floor()).expect("Operation does not result in NaN")
     }
 }
 

@@ -7,16 +7,21 @@ use crate::datavalues::AnyDataValue;
 use super::definitions::{
     boolean::{BooleanConjunction, BooleanDisjunction, BooleanNegation},
     casting::{CastingIntoDouble, CastingIntoFloat, CastingIntoInteger64},
-    generic::{CanonicalString, Equals, Unequals},
+    checktype::{
+        CheckIsDouble, CheckIsFloat, CheckIsInteger, CheckIsIri, CheckIsNull, CheckIsNumeric,
+        CheckIsString,
+    },
+    generic::{CanonicalString, Datatype, Equals, Unequals},
+    language::LanguageTag,
     numeric::{
-        NumericAbsolute, NumericAddition, NumericCosine, NumericDivision, NumericGreaterthan,
-        NumericGreaterthaneq, NumericLessthan, NumericLessthaneq, NumericLogarithm,
-        NumericMultiplication, NumericNegation, NumericPower, NumericSine, NumericSquareroot,
-        NumericSubtraction, NumericTangent,
+        NumericAbsolute, NumericAddition, NumericCeil, NumericCosine, NumericDivision,
+        NumericFloor, NumericGreaterthan, NumericGreaterthaneq, NumericLessthan, NumericLessthaneq,
+        NumericLogarithm, NumericMultiplication, NumericNegation, NumericPower, NumericRound,
+        NumericSine, NumericSquareroot, NumericSubtraction, NumericTangent,
     },
     string::{
-        StringCompare, StringConcatenation, StringContains, StringLength, StringLowercase,
-        StringSubstring, StringUppercase,
+        StringAfter, StringBefore, StringCompare, StringConcatenation, StringContains, StringEnds,
+        StringLength, StringLowercase, StringStarts, StringSubstring, StringUppercase,
     },
     BinaryFunctionEnum, UnaryFunctionEnum,
 };
@@ -202,6 +207,63 @@ where
     pub fn canonical_string(sub: Self) -> Self {
         Self::Unary(
             UnaryFunctionEnum::CanonicalString(CanonicalString),
+            Box::new(sub),
+        )
+    }
+
+    /// Create a tree node that evaluates to the data type string of the sub node.
+    pub fn datatype(sub: Self) -> Self {
+        Self::Unary(UnaryFunctionEnum::Datatype(Datatype), Box::new(sub))
+    }
+
+    /// Create a tree node that evaluates to the language tag of the sub node.
+    pub fn languagetag(sub: Self) -> Self {
+        Self::Unary(UnaryFunctionEnum::LanguageTag(LanguageTag), Box::new(sub))
+    }
+
+    /// Create a tree node the checks whether the sub node is an integer.
+    pub fn check_is_integer(sub: Self) -> Self {
+        Self::Unary(
+            UnaryFunctionEnum::CheckIsInteger(CheckIsInteger),
+            Box::new(sub),
+        )
+    }
+
+    /// Create a tree node the checks whether the sub node is a float.
+    pub fn check_is_float(sub: Self) -> Self {
+        Self::Unary(UnaryFunctionEnum::CheckIsFloat(CheckIsFloat), Box::new(sub))
+    }
+
+    /// Create a tree node the checks whether the sub node is a double.
+    pub fn check_is_double(sub: Self) -> Self {
+        Self::Unary(
+            UnaryFunctionEnum::CheckIsDouble(CheckIsDouble),
+            Box::new(sub),
+        )
+    }
+
+    /// Create a tree node the checks whether the sub node is numeric.
+    pub fn check_is_numeric(sub: Self) -> Self {
+        Self::Unary(
+            UnaryFunctionEnum::CheckIsNumeric(CheckIsNumeric),
+            Box::new(sub),
+        )
+    }
+
+    /// Create a tree node the checks whether the sub node is a null.
+    pub fn check_is_null(sub: Self) -> Self {
+        Self::Unary(UnaryFunctionEnum::CheckIsNull(CheckIsNull), Box::new(sub))
+    }
+
+    /// Create a tree node the checks whether the sub node is an iri.
+    pub fn check_is_iri(sub: Self) -> Self {
+        Self::Unary(UnaryFunctionEnum::CheckIsIri(CheckIsIri), Box::new(sub))
+    }
+
+    /// Create a tree node the checks whether the sub node is a string.
+    pub fn check_is_string(sub: Self) -> Self {
+        Self::Unary(
+            UnaryFunctionEnum::CheckIsString(CheckIsString),
             Box::new(sub),
         )
     }
@@ -442,6 +504,27 @@ where
         )
     }
 
+    /// Create a tree node representing the rounding of a number.
+    ///
+    /// This evaluates to the rounded value of `sub`.
+    pub fn numeric_round(sub: Self) -> Self {
+        Self::Unary(UnaryFunctionEnum::NumericRound(NumericRound), Box::new(sub))
+    }
+
+    /// Create a tree node representing rounding up of a number.
+    ///
+    /// This evaluates to the rounded value of `sub`.
+    pub fn numeric_ceil(sub: Self) -> Self {
+        Self::Unary(UnaryFunctionEnum::NumericCeil(NumericCeil), Box::new(sub))
+    }
+
+    /// Create a tree node representing rounding down of a number.
+    ///
+    /// This evaluates to the rounded value of `sub`.
+    pub fn numeric_floor(sub: Self) -> Self {
+        Self::Unary(UnaryFunctionEnum::NumericFloor(NumericFloor), Box::new(sub))
+    }
+
     /// Create a tree node representing the tangent of a number.
     ///
     /// This evaluates to the tangent of `sub`.
@@ -473,6 +556,56 @@ where
     pub fn string_concatenation(left: Self, right: Self) -> Self {
         Self::Binary {
             function: BinaryFunctionEnum::StringConcatenation(StringConcatenation),
+            left: Box::new(left),
+            right: Box::new(right),
+        }
+    }
+
+    /// Create a tree node representing the comparison of the beginning of a string.
+    ///
+    /// This evaluates to a boolean indicating whether
+    /// the string resulting from evaluating `left` starts with
+    /// the string resulting from evaluating `right`.
+    pub fn string_starts(left: Self, right: Self) -> Self {
+        Self::Binary {
+            function: BinaryFunctionEnum::StringStarts(StringStarts),
+            left: Box::new(left),
+            right: Box::new(right),
+        }
+    }
+
+    /// Create a tree node representing the comparison of the beginning of a string.
+    ///
+    /// This evaluates to a boolean indicating whether
+    /// the string resulting from evaluating `left` ends with
+    /// the string resulting from evaluating `right`.
+    pub fn string_ends(left: Self, right: Self) -> Self {
+        Self::Binary {
+            function: BinaryFunctionEnum::StringEnds(StringEnds),
+            left: Box::new(left),
+            right: Box::new(right),
+        }
+    }
+
+    /// Create a tree node representing the first part of a string
+    ///
+    /// This evaluates to a string resulting from taking the first half
+    /// of evaluating `left` when split at the string resulting from evaluating `right`.
+    pub fn string_before(left: Self, right: Self) -> Self {
+        Self::Binary {
+            function: BinaryFunctionEnum::StringBefore(StringBefore),
+            left: Box::new(left),
+            right: Box::new(right),
+        }
+    }
+
+    /// Create a tree node representing the first part of a string
+    ///
+    /// This evaluates to a string resulting from taking the second half
+    /// of evaluating `left` when split at the string resulting from evaluating `right`.
+    pub fn string_after(left: Self, right: Self) -> Self {
+        Self::Binary {
+            function: BinaryFunctionEnum::StringAfter(StringAfter),
             left: Box::new(left),
             right: Box::new(right),
         }
@@ -524,14 +657,14 @@ where
 
     /// Create a tree node representing a substring operation.
     ///
-    /// This evaluates to a string containing the first $n$
+    /// This evaluates to a string containing the
     /// characters from the string that results from evaluating `string`,
-    /// where $n$ is the integer that results from evaluating `length`.
-    pub fn string_subtstring(string: Self, length: Self) -> Self {
+    /// starting from the position that results from evaluating `start`.
+    pub fn string_subtstring(string: Self, start: Self) -> Self {
         Self::Binary {
             function: BinaryFunctionEnum::StringSubstring(StringSubstring),
             left: Box::new(string),
-            right: Box::new(length),
+            right: Box::new(start),
         }
     }
 }

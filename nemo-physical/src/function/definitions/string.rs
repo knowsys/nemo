@@ -94,12 +94,120 @@ impl BinaryFunction for StringContains {
     }
 }
 
+/// Start of a string
+///
+/// Returns `true` from the boolean value space if the string provided as the first parameter
+/// starts with the string provided as the first paramter and `false` otherwise.
+///
+/// Returns `None` if either parameter is not a string.
+#[derive(Debug, Copy, Clone)]
+pub struct StringStarts;
+impl BinaryFunction for StringStarts {
+    fn evaluate(
+        &self,
+        parameter_first: AnyDataValue,
+        parameter_second: AnyDataValue,
+    ) -> Option<AnyDataValue> {
+        string_pair_from_any(parameter_first, parameter_second).map(
+            |(first_string, second_string)| {
+                if first_string.starts_with(&second_string) {
+                    AnyDataValue::new_boolean(true)
+                } else {
+                    AnyDataValue::new_boolean(false)
+                }
+            },
+        )
+    }
+}
+
+/// End of a string
+///
+/// Returns `true` from the boolean value space if the string provided as the first parameter
+/// ends with the string provided as the first paramter and `false` otherwise.
+///
+/// Returns `None` if either parameter is not a string.
+#[derive(Debug, Copy, Clone)]
+pub struct StringEnds;
+impl BinaryFunction for StringEnds {
+    fn evaluate(
+        &self,
+        parameter_first: AnyDataValue,
+        parameter_second: AnyDataValue,
+    ) -> Option<AnyDataValue> {
+        string_pair_from_any(parameter_first, parameter_second).map(
+            |(first_string, second_string)| {
+                if first_string.ends_with(&second_string) {
+                    AnyDataValue::new_boolean(true)
+                } else {
+                    AnyDataValue::new_boolean(false)
+                }
+            },
+        )
+    }
+}
+
+/// First part of a string
+///
+/// Returns the part of the string given in the first parameter which comes before
+/// the string provided as the second parameter.
+///
+/// Returns `None` if either parameter is not a string.
+#[derive(Debug, Copy, Clone)]
+pub struct StringBefore;
+impl BinaryFunction for StringBefore {
+    fn evaluate(
+        &self,
+        parameter_first: AnyDataValue,
+        parameter_second: AnyDataValue,
+    ) -> Option<AnyDataValue> {
+        string_pair_from_any(parameter_first, parameter_second).map(
+            |(first_string, second_string)| {
+                let result = first_string
+                    .find(&second_string)
+                    .map_or("", |position| &first_string[0..position])
+                    .to_string();
+
+                AnyDataValue::new_plain_string(result)
+            },
+        )
+    }
+}
+
+/// Second part of a string
+///
+/// Returns the part of the string given in the first parameter which comes after
+/// the string provided as the second parameter.
+///
+/// Returns `None` if either parameter is not a string.
+#[derive(Debug, Copy, Clone)]
+pub struct StringAfter;
+impl BinaryFunction for StringAfter {
+    fn evaluate(
+        &self,
+        parameter_first: AnyDataValue,
+        parameter_second: AnyDataValue,
+    ) -> Option<AnyDataValue> {
+        string_pair_from_any(parameter_first, parameter_second).map(
+            |(first_string, second_string)| {
+                let result = first_string
+                    .find(&second_string)
+                    .map_or("", |position| {
+                        &first_string[(position + second_string.len())..]
+                    })
+                    .to_string();
+
+                AnyDataValue::new_plain_string(result)
+            },
+        )
+    }
+}
+
 /// Substring
 ///
 /// Expects a string value as the first parameter and an integer value as the second.
 ///
-/// Return a string containing the first $n$ characters from the first parameter,
-/// where $n$ equals to the value supplied as the second parameter.
+/// Return a string containing the characters from the first parameter,
+/// starting from the position given by the second paramter.
 ///
 /// Returns `None` if the type requirements from above are not met.
 #[derive(Debug, Copy, Clone)]
@@ -111,11 +219,9 @@ impl BinaryFunction for StringSubstring {
         parameter_second: AnyDataValue,
     ) -> Option<AnyDataValue> {
         let string = parameter_first.to_plain_string()?;
-        let length = parameter_second.to_u64()? as usize;
+        let start = parameter_second.to_u64()? as usize;
 
-        Some(AnyDataValue::new_plain_string(
-            string[0..length].to_string(),
-        ))
+        Some(AnyDataValue::new_plain_string(string[start..].to_string()))
     }
 }
 
