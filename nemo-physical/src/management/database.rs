@@ -21,7 +21,6 @@ use bytesize::ByteSize;
 use crate::{
     datasources::table_providers::TableProvider,
     datavalues::AnyDataValue,
-    dictionary::DvDict,
     error::Error,
     management::{bytesized::ByteSized, database::execution_series::ExecutionTreeNode},
     meta::timing::TimedCode,
@@ -174,9 +173,9 @@ impl DatabaseInstance {
         let dictionary: &Dict = &self.dictionary();
 
         let mut row_storage = Vec::with_capacity(row.len());
-        for value in row.into_iter() {
-            if dictionary.datavalue_to_id(value).is_some() {
-                row_storage.push(value.to_storage_value_t(dictionary));
+        for data_value in row.into_iter() {
+            if let Some(storage_value) = data_value.try_to_storage_value_t(dictionary) {
+                row_storage.push(storage_value);
             } else {
                 // `value` is not know to the dictionary and therefore
                 // not be part of a table.
@@ -392,14 +391,14 @@ impl DatabaseInstance {
         &mut self,
         plan: ExecutionPlan,
     ) -> Result<HashMap<ExecutionId, PermanentTableId>, Error> {
-        let exeuction_series = plan.finalize();
+        let execution_series = plan.finalize();
 
         TimedCode::instance()
             .sub("Reasoning/Execution/Load Table")
             .start();
 
         let mut temporary_storage = TemporaryStorage {
-            loaded_tables: self.collect_requiured_tries(&exeuction_series.loaded_tries)?,
+            loaded_tables: self.collect_requiured_tries(&execution_series.loaded_tries)?,
             computed_tables: Vec::<ComputationResult>::new(),
         };
 
@@ -407,7 +406,7 @@ impl DatabaseInstance {
             .sub("Reasoning/Execution/Load Table")
             .stop();
 
-        for tree in &exeuction_series.trees {
+        for tree in &execution_series.trees {
             log::info!("Execution step: {}", tree.operation_name);
             let timed_string = format!("Reasoning/Execution/{}", tree.operation_name);
 
@@ -461,44 +460,56 @@ impl DatabaseInstance {
 
     /// Evaluate a given [ExecutionPlan] until the first row is found and return it.
     ///
-    /// Assumes that it only contains one marked node.
+    /// Assumes that it only contains one permanent output node.
     ///
     /// Returns `None` if this evaluates to an empty table.
     pub fn execute_first_match(&mut self, plan: ExecutionPlan) -> Option<Vec<AnyDataValue>> {
-        let mut exeuction_series = plan.finalize();
+        let execution_series = plan.finalize();
 
-        let temporary_storage = TemporaryStorage {
+        let mut temporary_storage = TemporaryStorage {
             loaded_tables: self
-                .collect_requiured_tries(&exeuction_series.loaded_tries)
+                .collect_requiured_tries(&execution_series.loaded_tries)
                 .ok()?,
             computed_tables: Vec::<ComputationResult>::new(),
         };
 
-        debug_assert!(exeuction_series.trees.len() == 1);
-        let tree = exeuction_series
-            .trees
-            .pop()
-            .expect("Function assumes that exactly one node is marked.");
+        for tree in execution_series.trees {
+            match &tree.result {
+                ExecutionResult::Temporary => {
+                    let result = self.execute_tree(&temporary_storage, &tree).ok()?;
+                    temporary_storage.computed_tables.push(result);
+                }
+                ExecutionResult::Permanent(_, _) => {
+                    let row_storage = match &tree.root {
+                        ExecutionTreeNode::Operation(operation) => {
+                            let trie_scan = self.evaluate_operation(
+                                &self.dictionary,
+                                &temporary_storage,
+                                operation,
+                            );
+                            trie_scan.and_then(|scan| {
+                                Iterator::next(&mut RowScan::new(scan, tree.cut_layers))
+                            })
+                        }
+                        ExecutionTreeNode::ProjectReorder { generator, subnode } => self
+                            .evaluate_tree_leaf(&temporary_storage, subnode)
+                            .and_then(|scan| generator.apply_operation_first(scan)),
+                    }?;
 
-        let row_storage = match &tree.root {
-            ExecutionTreeNode::Operation(operation) => {
-                let trie_scan =
-                    self.evaluate_operation(&self.dictionary, &temporary_storage, operation);
-                trie_scan.and_then(|scan| Iterator::next(&mut RowScan::new(scan, tree.cut_layers)))
+                    let row_datavalue = row_storage
+                        .into_iter()
+                        .map(|value| {
+                            AnyDataValue::new_from_storage_value(value, &self.dictionary().borrow())
+                                .ok()
+                        })
+                        .collect::<Option<Vec<_>>>()?;
+
+                    return Some(row_datavalue);
+                }
             }
-            ExecutionTreeNode::ProjectReorder { generator, subnode } => self
-                .evaluate_tree_leaf(&temporary_storage, subnode)
-                .and_then(|scan| generator.apply_operation_first(scan)),
-        }?;
+        }
 
-        Some(
-            row_storage
-                .into_iter()
-                .map(|value| {
-                    AnyDataValue::new_from_storage_value(value, &self.dictionary().borrow()).ok()
-                })
-                .collect::<Option<Vec<_>>>()?,
-        )
+        None
     }
 }
 

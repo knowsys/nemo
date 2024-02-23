@@ -24,7 +24,7 @@ use crate::{
 };
 
 use super::{
-    buffer::sorted_tuple_buffer::{self, SortedTupleBuffer},
+    buffer::sorted_tuple_buffer::SortedTupleBuffer,
     operations::trim::TrieScanTrim,
     triescan::{PartialTrieScan, TrieScan, TrieScanEnum},
 };

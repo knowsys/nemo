@@ -8,10 +8,10 @@ use crate::{
     execution::rule_execution::VariableTranslation,
     model::{
         chase_model::{ChaseRule, VariableAtom},
-        Constraint, PrimitiveTerm, Term, Variable,
+        Constraint, Identifier, PrimitiveTerm, Term, Variable,
     },
     program_analysis::variable_order::VariableOrder,
-    table_manager::{SubtableExecutionPlan, TableManager},
+    table_manager::{SubtableExecutionPlan, SubtableIdentifier, TableManager},
 };
 
 use super::operations::{filter::node_filter, join::node_join, negation::node_negation};
@@ -47,15 +47,15 @@ impl TracingStrategy {
         for (variable, value) in grounding {
             if let Some(term) = constructors.get(&variable) {
                 positive_constraints.push(Constraint::Equals(
-                    Term::Primitive(PrimitiveTerm::Variable(variable.clone())),
                     term.clone(),
+                    Term::Primitive(PrimitiveTerm::GroundTerm(value)),
+                ));
+            } else {
+                positive_constraints.push(Constraint::Equals(
+                    Term::Primitive(PrimitiveTerm::Variable(variable)),
+                    Term::Primitive(PrimitiveTerm::GroundTerm(value)),
                 ));
             }
-
-            positive_constraints.push(Constraint::Equals(
-                Term::Primitive(PrimitiveTerm::Variable(variable)),
-                Term::Primitive(PrimitiveTerm::GroundTerm(value)),
-            ));
         }
 
         Self {
@@ -104,12 +104,12 @@ impl TracingStrategy {
             &self.negatie_constraints,
         );
 
-        // current_plan.add_temporary_table(
-        //     node_negation.clone(),
-        //     "Tracing Query",
-        //     "Tracing Query",
-        //     SubtableIdentifier::new(fact.predicate(), step_number),
-        // );
+        current_plan.add_permanent_table(
+            node_negation.clone(),
+            "Tracing Query",
+            "Tracing Query",
+            SubtableIdentifier::new(Identifier::new(String::from("_TRACING")), step_number),
+        );
 
         node_negation
     }
