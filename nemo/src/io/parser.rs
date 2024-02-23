@@ -2180,7 +2180,7 @@ mod test {
     fn parse_unary_function() {
         let parser = RuleParser::new();
 
-        let expression = "Abs(4)";
+        let expression = "ABS(4)";
         let expected_term = Term::Unary(
             UnaryOperation::NumericAbsolute,
             Box::new(Term::Primitive(PrimitiveTerm::GroundTerm(
@@ -2195,7 +2195,7 @@ mod test {
     fn parse_arithmetic_and_functions() {
         let parser = RuleParser::new();
 
-        let expression = "5 * Abs(Sqrt(4) - 3)";
+        let expression = "5 * ABS(SQRT(4) - 3)";
 
         let expected_term = Term::Binary {
             operation: BinaryOperation::NumericMultiplication,
@@ -2226,7 +2226,7 @@ mod test {
     fn parse_assignment() {
         let parser = RuleParser::new();
 
-        let expression = "?X = Abs(?Y - 5) * (7 + ?Z)";
+        let expression = "?X = ABS(?Y - 5) * (7 + ?Z)";
 
         let variable = Term::Primitive(PrimitiveTerm::Variable(Variable::Universal(
             "X".to_string(),
@@ -2266,7 +2266,7 @@ mod test {
     fn parse_complex_condition() {
         let parser = RuleParser::new();
 
-        let expression = "Abs(?X - ?Y) <= ?Z + Sqrt(?Y)";
+        let expression = "ABS(?X - ?Y) <= ?Z + SQRT(?Y)";
 
         let left_term = Term::Unary(
             UnaryOperation::NumericAbsolute,
