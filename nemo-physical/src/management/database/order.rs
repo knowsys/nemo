@@ -294,8 +294,7 @@ impl OrderedReferenceManager {
                         .start();
 
                     let closest_trie = self.stored_tables[closest_storage_id].trie(dictionary)?;
-                    let trie_reordered =
-                        generator.apply_operation_partial(closest_trie.partial_iterator());
+                    let trie_reordered = generator.apply_operation(closest_trie.partial_iterator());
                     let result_storage_id = self.add_trie(id, column_order, trie_reordered);
 
                     TimedCode::instance()

@@ -10,6 +10,7 @@ mod order;
 mod storage;
 
 use std::{
+    borrow::Borrow,
     cell::{Ref, RefCell, RefMut},
     collections::HashMap,
     fmt::Debug,
@@ -20,10 +21,13 @@ use bytesize::ByteSize;
 use crate::{
     datasources::table_providers::TableProvider,
     datavalues::AnyDataValue,
+    dictionary::DvDict,
     error::Error,
     management::{bytesized::ByteSized, database::execution_series::ExecutionTreeNode},
     meta::timing::TimedCode,
-    tabular::{operations::OperationGenerator, trie::Trie, triescan::TrieScanEnum},
+    tabular::{
+        operations::OperationGenerator, rowscan::RowScan, trie::Trie, triescan::TrieScanEnum,
+    },
     util::mapping::permutation::Permutation,
 };
 
@@ -81,13 +85,6 @@ impl DatabaseInstance {
         self.table_infos.len()
     }
 
-    /// Return the number of rows for a given table.
-    ///
-    /// TODO: Currently only counting of in-memory facts is supported, see <https://github.com/knowsys/nemo/issues/335>
-    pub fn table_rows(&self, table_id: PermanentTableId) -> usize {
-        self.reference_manager.count_rows(table_id)
-    }
-
     /// Return the name of a table given its [PermanentTableId].
     ///
     /// # Panics
@@ -138,14 +135,18 @@ impl DatabaseInstance {
     }
 
     /// Provide an iterator over the rows of the table with the given [PermanentTableId].
+    ///
+    /// # Panics
+    /// Panics if the given id does not exist.
     pub fn table_row_iterator(
         &mut self,
         id: PermanentTableId,
     ) -> Result<impl Iterator<Item = Vec<AnyDataValue>> + '_, Error> {
         // Make sure trie is loaded
-        let storage_id =
-            self.reference_manager
-                .trie_id(&self.dictionary, id, ColumnOrder::default())?;
+        let storage_id = self
+            .reference_manager
+            .trie_id(&self.dictionary, id, ColumnOrder::default())
+            .expect("No table with id {id} exists.");
         let trie = self.reference_manager.trie(storage_id);
 
         Ok(trie.row_iterator().map(|values| {
@@ -157,6 +158,33 @@ impl DatabaseInstance {
                 })
                 .collect()
         }))
+    }
+
+    /// Return whether a table of the given [PermanentTableId] contains a given row.
+    ///
+    /// # Panics
+    /// Panics if the given id does not exist.
+    pub fn table_contains_row(&mut self, id: PermanentTableId, row: &[AnyDataValue]) -> bool {
+        let storage_id = self
+            .reference_manager
+            .trie_id(&self.dictionary, id, ColumnOrder::default())
+            .expect("No table with id {id} exists.");
+        let trie = self.reference_manager.trie(storage_id);
+
+        let dictionary: &Dict = &self.dictionary();
+
+        let mut row_storage = Vec::with_capacity(row.len());
+        for value in row.into_iter() {
+            if dictionary.datavalue_to_id(value).is_some() {
+                row_storage.push(value.to_storage_value_t(dictionary));
+            } else {
+                // `value` is not know to the dictionary and therefore
+                // not be part of a table.
+                return false;
+            }
+        }
+
+        trie.contains_row(&row_storage)
     }
 }
 
@@ -347,7 +375,7 @@ impl DatabaseInstance {
                         .filter(|trie| !trie.is_empty())
                 } else {
                     self.evaluate_tree_leaf(storage, subnode)
-                        .map(|scan| generator.apply_operation_partial(scan))
+                        .map(|scan| generator.apply_operation(scan))
                 }
             }
         };
@@ -429,6 +457,48 @@ impl DatabaseInstance {
         }
 
         Ok(result)
+    }
+
+    /// Evaluate a given [ExecutionPlan] until the first row is found and return it.
+    ///
+    /// Assumes that it only contains one marked node.
+    ///
+    /// Returns `None` if this evaluates to an empty table.
+    pub fn execute_first_match(&mut self, plan: ExecutionPlan) -> Option<Vec<AnyDataValue>> {
+        let mut exeuction_series = plan.finalize();
+
+        let temporary_storage = TemporaryStorage {
+            loaded_tables: self
+                .collect_requiured_tries(&exeuction_series.loaded_tries)
+                .ok()?,
+            computed_tables: Vec::<ComputationResult>::new(),
+        };
+
+        debug_assert!(exeuction_series.trees.len() == 1);
+        let tree = exeuction_series
+            .trees
+            .pop()
+            .expect("Function assumes that exactly one node is marked.");
+
+        let row_storage = match &tree.root {
+            ExecutionTreeNode::Operation(operation) => {
+                let trie_scan =
+                    self.evaluate_operation(&self.dictionary, &temporary_storage, operation);
+                trie_scan.and_then(|scan| Iterator::next(&mut RowScan::new(scan, tree.cut_layers)))
+            }
+            ExecutionTreeNode::ProjectReorder { generator, subnode } => self
+                .evaluate_tree_leaf(&temporary_storage, subnode)
+                .and_then(|scan| generator.apply_operation_first(scan)),
+        }?;
+
+        Some(
+            row_storage
+                .into_iter()
+                .map(|value| {
+                    AnyDataValue::new_from_storage_value(value, &self.dictionary().borrow()).ok()
+                })
+                .collect::<Option<Vec<_>>>()?,
+        )
     }
 }
 

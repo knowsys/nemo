@@ -80,10 +80,7 @@ impl GeneratorProjectReorder {
     }
 
     /// Apply the operation to a [PartialTrieScan].
-    pub(crate) fn apply_operation_partial<'a, Scan: PartialTrieScan<'a>>(
-        &self,
-        trie_scan: Scan,
-    ) -> Trie {
+    pub(crate) fn apply_operation<'a, Scan: PartialTrieScan<'a>>(&self, trie_scan: Scan) -> Trie {
         debug_assert!(trie_scan.arity() == self.projectreordering.domain_size());
         debug_assert!(self.last_used_layer < trie_scan.arity());
 
@@ -112,6 +109,19 @@ impl GeneratorProjectReorder {
         }
 
         Trie::from_tuple_buffer(tuple_buffer.finalize())
+    }
+
+    /// Apply the reordering operation returning only the first row, if available.
+    pub(crate) fn apply_operation_first<'a, Scan: PartialTrieScan<'a>>(
+        &self,
+        trie_scan: Scan,
+    ) -> Option<Vec<StorageValueT>> {
+        let cut = trie_scan.arity() - self.last_used_layer - 1;
+
+        let mut rowscan = RowScan::new(trie_scan, cut);
+
+        let first_row = Iterator::next(&mut rowscan)?;
+        Some(self.projectreordering.transform(&first_row))
     }
 
     /// Return whether this operation would leave the input [Trie] unchanged.
@@ -163,15 +173,15 @@ mod test {
         let generator_no_last = GeneratorProjectReorder::new(markers_no_last, markers_trie);
 
         let result_no_first = generator_no_first
-            .apply_operation_partial(trie_scan_no_first)
+            .apply_operation(trie_scan_no_first)
             .row_iterator()
             .collect::<Vec<_>>();
         let result_no_middle = generator_no_middle
-            .apply_operation_partial(trie_scan_no_middle)
+            .apply_operation(trie_scan_no_middle)
             .row_iterator()
             .collect::<Vec<_>>();
         let result_no_last = generator_no_last
-            .apply_operation_partial(trie_scan_no_last)
+            .apply_operation(trie_scan_no_last)
             .row_iterator()
             .collect::<Vec<_>>();
 
@@ -250,7 +260,7 @@ mod test {
         let project_generator = GeneratorProjectReorder::new(markers_projected, markers_trie);
 
         let result = project_generator
-            .apply_operation_partial(trie_scan)
+            .apply_operation(trie_scan)
             .row_iterator()
             .collect::<Vec<_>>();
 
@@ -386,7 +396,7 @@ mod test {
         let reorder_generator = GeneratorProjectReorder::new(markers_reorder, markers_trie);
 
         let result = reorder_generator
-            .apply_operation_partial(trie_scan)
+            .apply_operation(trie_scan)
             .row_iterator()
             .collect::<Vec<_>>();
 
@@ -462,7 +472,7 @@ mod test {
         let reorder_generator = GeneratorProjectReorder::new(markers_reorder, markers_trie);
 
         let result = reorder_generator
-            .apply_operation_partial(trie_scan)
+            .apply_operation(trie_scan)
             .row_iterator()
             .collect::<Vec<_>>();
 

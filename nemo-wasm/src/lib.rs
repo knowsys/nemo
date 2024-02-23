@@ -180,7 +180,10 @@ impl ResourceProvider for BlobResourceProvider {
 }
 
 #[wasm_bindgen]
-pub struct NemoEngine(nemo::execution::DefaultExecutionEngine);
+pub struct NemoEngine {
+    program: NemoProgram,
+    engine: nemo::execution::DefaultExecutionEngine,
+}
 
 #[cfg(web_sys_unstable_apis)]
 fn std_io_error_from_js_value(js_value: JsValue, prefix: &str) -> std::io::Error {
@@ -260,15 +263,19 @@ impl NemoEngine {
         };
         let import_manager = ImportManager::new(resource_providers);
 
-        ExecutionEngine::initialize(&program.0, import_manager)
-            .map(NemoEngine)
+        let engine = ExecutionEngine::initialize(&program.0, import_manager)
             .map_err(WasmOrInternalNemoError::NemoError)
-            .map_err(NemoError)
+            .map_err(NemoError)?;
+
+        Ok(NemoEngine {
+            program: program.clone(),
+            engine,
+        })
     }
 
     #[wasm_bindgen]
     pub fn reason(&mut self) -> Result<(), NemoError> {
-        self.0
+        self.engine
             .execute()
             .map_err(WasmOrInternalNemoError::NemoError)
             .map_err(NemoError)
@@ -276,18 +283,18 @@ impl NemoEngine {
 
     #[wasm_bindgen(js_name = "countFactsOfDerivedPredicates")]
     pub fn count_facts_of_derived_predicates(&mut self) -> usize {
-        self.0.count_facts_of_derived_predicates()
+        self.engine.count_facts_of_derived_predicates()
     }
 
     #[wasm_bindgen(js_name = "countFactsOfPredicate")]
     pub fn count_facts_of_predicate(&mut self, predicate: String) -> Option<usize> {
-        self.0.count_facts_of_predicate(&predicate.into())
+        self.engine.count_facts_of_predicate(&predicate.into())
     }
 
     #[wasm_bindgen(js_name = "getResult")]
     pub fn result(&mut self, predicate: String) -> Result<NemoResults, NemoError> {
         let iter = self
-            .0
+            .engine
             .predicate_rows(&Identifier::from(predicate))
             .map_err(WasmOrInternalNemoError::NemoError)
             .map_err(NemoError)?;
@@ -313,12 +320,12 @@ impl NemoEngine {
 
         let identifier = Identifier::from(predicate.clone());
 
-        let Some(arity) = self.0.predicate_arity(&identifier) else {
+        let Some(arity) = self.engine.predicate_arity(&identifier) else {
             return Ok(());
         };
 
         let Some(record_iter) = self
-            .0
+            .engine
             .predicate_rows(&identifier)
             .map_err(WasmOrInternalNemoError::NemoError)
             .map_err(NemoError)?
@@ -338,18 +345,15 @@ impl NemoEngine {
     }
 
     #[wasm_bindgen(js_name = "parseAndTraceFact")]
-    pub fn parse_and_trace_fact(&mut self, fact: &str) -> Result<Option<String>, NemoError> {
+    pub fn parse_and_trace_fact(&mut self, fact: &str) -> Option<String> {
         let parsed_fact = parse_fact(fact.to_owned())
             .map_err(WasmOrInternalNemoError::NemoError)
-            .map_err(NemoError)?;
+            .map_err(NemoError)
+            .ok()?;
 
-        let (trace, handles) = self
-            .0
-            .trace(vec![parsed_fact])
-            .map_err(WasmOrInternalNemoError::NemoError)
-            .map_err(NemoError)?;
+        let (trace, handles) = self.engine.trace(self.program.0.clone(), vec![parsed_fact]);
 
-        Ok(trace.ascii_tree_string(handles[0]))
+        trace.ascii_tree_string(handles[0])
     }
 }
 

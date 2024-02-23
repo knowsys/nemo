@@ -491,51 +491,6 @@ impl Term {
             }
         }
     }
-
-    // TODO: Was needed for tracing which will be reimplemented after the refactoring
-    // /// Evaluates a constant (numeric) term.
-    // pub fn evaluate_constant_numeric(
-    //     &self,
-    //     ty: &PrimitiveType,
-    //     dict: &Dict,
-    // ) -> Option<StorageValueT> {
-    //     let arithmetic_tree = compile_termtree(self, &VariableOrder::new(), ty);
-    //     let storage_type = ty.datatype_name().to_storage_type_name();
-
-    //     macro_rules! translate_data_type {
-    //         ($variant:ident, $type:ty) => {{
-    //             let translate_function = |l: &StackValue<DataValueT>| match l {
-    //                 StackValue::Constant(t) => {
-    //                     if let StorageValueT::$variant(value) = t
-    //                         .to_storage_value(dict)
-    //                         .expect("We expect all strings to be known at this point.")
-    //                     {
-    //                         StackValue::Constant(value)
-    //                     } else {
-    //                         panic!(
-    //                             "Expected a operation tree value of type {}",
-    //                             stringify!($src_name)
-    //                         );
-    //                     }
-    //                 }
-    //                 StackValue::Reference(index) => StackValue::Reference(*index),
-    //             };
-
-    //             let arithmetic_tree_typed = arithmetic_tree.map_values(&translate_function);
-    //             Some(StorageValueT::$variant(
-    //                 arithmetic_tree_typed.evaluate(&mut Vec::new(), &[])?,
-    //             ))
-    //         }};
-    //     }
-
-    //     match storage_type {
-    //         StorageTypeName::Id32 => translate_data_type!(Id32, u32),
-    //         StorageTypeName::Id64 => translate_data_type!(Id64, u64),
-    //         StorageTypeName::Int64 => translate_data_type!(Int64, i64),
-    //         StorageTypeName::Float => translate_data_type!(Float, f32),
-    //         StorageTypeName::Double => translate_data_type!(Double, f64),
-    //     }
-    // }
 }
 
 impl From<PrimitiveTerm> for Term {

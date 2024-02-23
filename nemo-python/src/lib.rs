@@ -295,7 +295,10 @@ impl NemoResults {
 }
 
 #[pyclass(unsendable)]
-struct NemoEngine(nemo::execution::DefaultExecutionEngine);
+struct NemoEngine {
+    program: NemoProgram,
+    engine: nemo::execution::DefaultExecutionEngine,
+}
 
 #[pymethods]
 impl NemoEngine {
@@ -303,22 +306,22 @@ impl NemoEngine {
     fn py_new(program: NemoProgram) -> PyResult<Self> {
         let import_manager = ImportManager::new(ResourceProviders::default());
         let engine = ExecutionEngine::initialize(&program.0, import_manager).py_res()?;
-        Ok(NemoEngine(engine))
+        Ok(NemoEngine { program, engine })
     }
 
     fn reason(&mut self) -> PyResult<()> {
-        self.0.execute().py_res()?;
+        self.engine.execute().py_res()?;
         Ok(())
     }
 
-    fn trace(&self, fact: String) -> PyResult<Option<NemoTrace>> {
-        let parsed_fact = nemo::io::parser::parse_fact(fact).py_res()?;
-        let (trace, handles) = self.0.trace(vec![parsed_fact]).py_res()?;
+    fn trace(&mut self, fact: String) -> Option<NemoTrace> {
+        let parsed_fact = nemo::io::parser::parse_fact(fact).py_res().ok()?;
+        let (trace, handles) = self.engine.trace(self.program.0.clone(), vec![parsed_fact]);
         let handle = *handles
             .first()
             .expect("Function trace always returns a handle for each input fact");
 
-        Ok(trace.tree(handle).map(NemoTrace))
+        trace.tree(handle).map(NemoTrace)
     }
 
     fn write_result(
@@ -328,7 +331,7 @@ impl NemoEngine {
     ) -> PyResult<()> {
         let identifier = Identifier::from(predicate);
 
-        let Some(arity) = self.0.predicate_arity(&identifier) else {
+        let Some(arity) = self.engine.predicate_arity(&identifier) else {
             return Ok(());
         };
 
@@ -337,7 +340,7 @@ impl NemoEngine {
             .0
             .export_table(
                 &ExportDirective::default(identifier.clone()),
-                self.0.predicate_rows(&identifier).py_res()?,
+                self.engine.predicate_rows(&identifier).py_res()?,
                 arity,
             )
             .py_res()?;
@@ -347,7 +350,7 @@ impl NemoEngine {
 
     fn result(mut slf: PyRefMut<'_, Self>, predicate: String) -> PyResult<Py<NemoResults>> {
         let iter = slf
-            .0
+            .engine
             .predicate_rows(&Identifier::from(predicate))
             .py_res()?;
         let results = NemoResults(Box::new(

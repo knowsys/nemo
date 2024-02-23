@@ -643,39 +643,38 @@ impl TableManager {
         result
     }
 
-    // TODO: This was needed for tracing; reimplement this
-    // /// Return the chase step of the sub table that contains the given row within the given predicate.
-    // /// Returns None if the row does not exist.
-    // pub fn find_table_row(&self, predicate: &Identifier, row: &TableRow) -> Option<usize> {
-    //     let handler = self.predicate_subtables.get(predicate)?;
+    /// Return the chase step of the sub table that contains the given row within the given predicate.
+    /// Returns None if the row does not exist.
+    pub fn find_table_row(
+        &mut self,
+        predicate: &Identifier,
+        row: &[AnyDataValue],
+    ) -> Option<usize> {
+        let handler = self.predicate_subtables.get(predicate)?;
 
-    //     for (step, id) in &handler.single {
-    //         if self.database.contains_row(*id, row) {
-    //             return Some(*step);
-    //         }
-    //     }
+        for (step, id) in &handler.single {
+            if self.database.table_contains_row(*id, row) {
+                return Some(*step);
+            }
+        }
 
-    //     None
-    // }
+        None
+    }
 
-    // TODO: This was needed for tracing; reimplement this
-    // /// Execute a given [SubtableExecutionPlan]
-    // /// but evaluate it only until the first row of the result table
-    // /// or return None if it is empty.
-    // /// The result table is considered to be the (unique) table marked as permanent output.
-    // ///
-    // /// Assumes that the given plan has only one output node.
-    // /// No tables will be saved in the database.
-    // pub fn execute_plan_first_match(
-    //     &self,
-    //     subtable_plan: SubtableExecutionPlan,
-    // ) -> Result<Option<TableRow>, Error> {
-    //     debug_assert!(subtable_plan.map_subtrees.len() == 1);
-
-    //     Ok(self
-    //         .database
-    //         .execute_plan_first_match(subtable_plan.execution_plan)?)
-    // }
+    /// Execute a given [SubtableExecutionPlan]
+    /// but evaluate it only until the first row of the result table
+    /// or return None if it is empty.
+    /// The result table is considered to be the (unique) table marked as permanent output.
+    ///
+    /// Assumes that the given plan has only one output node.
+    /// No tables will be saved in the database.
+    pub fn execute_plan_first_match(
+        &mut self,
+        subtable_plan: SubtableExecutionPlan,
+    ) -> Option<Vec<AnyDataValue>> {
+        self.database
+            .execute_first_match(subtable_plan.execution_plan)
+    }
 }
 
 #[cfg(test)]

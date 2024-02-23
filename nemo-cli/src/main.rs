@@ -200,7 +200,7 @@ fn run(mut cli: CliApp) -> Result<(), Error> {
     }
 
     if let Some(facts) = traced_facts {
-        let (trace, handles) = engine.trace(facts.clone())?;
+        let (trace, handles) = engine.trace(program.clone(), facts.clone());
 
         match cli.tracing.output_file {
             Some(output_file) => {
