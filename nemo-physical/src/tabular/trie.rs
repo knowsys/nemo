@@ -85,6 +85,35 @@ impl Trie {
     pub(crate) fn row_iterator(&self) -> impl Iterator<Item = Vec<StorageValueT>> + '_ {
         RowScan::new(self.partial_iterator(), 0)
     }
+
+    /// Return whether this [Trie] contains a given row of values.
+    pub(crate) fn contains_row(&self, row: &[StorageValueT]) -> bool {
+        if self.arity() != row.len() {
+            return false;
+        }
+
+        let mut trie_scan = self.partial_iterator();
+
+        for value in row.into_iter() {
+            trie_scan.down(value.get_type());
+            let column_scan = unsafe {
+                &mut *trie_scan
+                    .current_scan()
+                    .expect("We called down above")
+                    .get()
+            };
+
+            if let Some(found) = column_scan.seek(*value) {
+                if found == *value {
+                    continue;
+                }
+            }
+
+            return false;
+        }
+
+        true
+    }
 }
 
 impl Trie {
@@ -633,5 +662,43 @@ mod test {
         let trie_rows = trie_roundtrip.row_iterator().collect::<Vec<_>>();
 
         assert_eq!(rows, trie_rows);
+    }
+
+    #[test]
+    fn trie_contains_row() {
+        let rows = vec![
+            vec![
+                StorageValueT::Id32(1),
+                StorageValueT::Id32(5),
+                StorageValueT::Id32(0),
+            ],
+            vec![
+                StorageValueT::Id32(1),
+                StorageValueT::Id32(5),
+                StorageValueT::Int64(-3),
+            ],
+            vec![
+                StorageValueT::Id32(1),
+                StorageValueT::Id32(5),
+                StorageValueT::Int64(-2),
+            ],
+            vec![
+                StorageValueT::Id32(1),
+                StorageValueT::Int64(-10),
+                StorageValueT::Id32(2),
+            ],
+        ];
+        let trie = Trie::from_rows(rows.clone());
+
+        for row in rows.iter() {
+            assert!(trie.contains_row(row));
+        }
+
+        assert!(!trie.contains_row(&[
+            StorageValueT::Id32(1),
+            StorageValueT::Int64(-12),
+            StorageValueT::Id32(2),
+        ]));
+        assert!(!trie.contains_row(&[StorageValueT::Id32(1)]));
     }
 }

@@ -458,13 +458,13 @@ impl AnyDataValue {
         })
     }
 
-    /// Return the corresponding [StorageValueT] for this value, under the assumption that
-    /// the value is known in the dictionary.
+    /// Return the corresponding [StorageValueT] for this value.
+    /// Returns `None` if this value is unknown to the dictionary.
     ///
     /// # Panics
     /// Panics if the data value is of a type that is managed in the dictionary but cannot be found there.
-    pub(crate) fn to_storage_value_t(&self, dictionary: &Dict) -> StorageValueT {
-        match self.value_domain() {
+    pub(crate) fn try_to_storage_value_t(&self, dictionary: &Dict) -> Option<StorageValueT> {
+        Some(match self.value_domain() {
             ValueDomain::Tuple
             | ValueDomain::Map
             | ValueDomain::UnsignedLong
@@ -472,11 +472,8 @@ impl AnyDataValue {
             | ValueDomain::Other
             | ValueDomain::PlainString
             | ValueDomain::LanguageTaggedString
-            | ValueDomain::Iri
-            | ValueDomain::Null => {
-                let dictionary_id = dictionary
-                    .datavalue_to_id(self)
-                    .expect("value should be known to the dictionary");
+            | ValueDomain::Iri => {
+                let dictionary_id = dictionary.datavalue_to_id(self)?;
                 Self::usize_to_storage_value_t(dictionary_id)
             }
             ValueDomain::Float => StorageValueT::Float(Float::from_number(self.to_f32_unchecked())),
@@ -488,7 +485,21 @@ impl AnyDataValue {
             | ValueDomain::NonNegativeInt
             | ValueDomain::Long
             | ValueDomain::Int => StorageValueT::Int64(self.to_i64_unchecked()),
-        }
+            ValueDomain::Null => {
+                let dictionary_id = dictionary.datavalue_to_id(self)?;
+                StorageValueT::Id64(dictionary_id as u64)
+            }
+        })
+    }
+
+    /// Return the corresponding [StorageValueT] for this value, under the assumption that
+    /// the value is known in the dictionary.
+    ///
+    /// # Panics
+    /// Panics if the data value is of a type that is managed in the dictionary but cannot be found there.
+    pub(crate) fn to_storage_value_t(&self, dictionary: &Dict) -> StorageValueT {
+        self.try_to_storage_value_t(dictionary)
+            .expect("Function assumes that value is known by the dictionary")
     }
 
     /// Return a [StorageValueT] that corresponds to this value, adding it to the dictionary if needed.
@@ -523,7 +534,7 @@ impl AnyDataValue {
                 let dictionary_id = dictionary
                     .datavalue_to_id(self)
                     .expect("cannot create specific nulls: value must be known to the dictionary");
-                Self::usize_to_storage_value_t(dictionary_id)
+                StorageValueT::Id64(dictionary_id as u64)
             }
             ValueDomain::Float => StorageValueT::Float(Float::from_number(self.to_f32_unchecked())),
             ValueDomain::Double => {
