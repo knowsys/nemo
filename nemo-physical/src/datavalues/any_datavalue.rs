@@ -976,7 +976,7 @@ mod test {
         let lang = "en-GB";
         let dv = AnyDataValue::new_language_tagged_string(value.to_string(), lang.to_string());
 
-        assert_eq!(dv.lexical_value(), "Hello world@en-GB");
+        assert_eq!(dv.lexical_value(), "Hello world@en-gb");
         assert_eq!(
             dv.datatype_iri(),
             "http://www.w3.org/1999/02/22-rdf-syntax-ns#langString".to_string()
@@ -985,11 +985,11 @@ mod test {
 
         assert_eq!(
             dv.to_language_tagged_string(),
-            Some((value.to_string(), lang.to_string()))
+            Some((value.to_string(), lang.to_ascii_lowercase()))
         );
         assert_eq!(
             dv.to_language_tagged_string_unchecked(),
-            (value.to_string(), lang.to_string())
+            (value.to_string(), lang.to_ascii_lowercase())
         );
     }
 
