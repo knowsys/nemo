@@ -37,6 +37,8 @@ use nemo::{
     model::ExportDirective,
 };
 
+use crate::cli::{EXPORT_ALL, EXPORT_EDB, EXPORT_IDB, EXPORT_NONE};
+
 fn print_finished_message(new_facts: usize, saving: bool) {
     let overall_time = TimedCode::instance().total_system_time().as_millis();
     let reading_time = TimedCode::instance()
@@ -123,11 +125,30 @@ fn run(mut cli: CliApp) -> Result<(), Error> {
         .map(|f| f.into_iter().map(parse_fact).collect::<Result<Vec<_>, _>>())
         .transpose()?;
 
-    if cli.write_all_idb_predicates {
+    if let Some(ref value) = cli.output.export_setting {
         program.clear_exports();
+
         let mut additional_exports = Vec::new();
-        for predicate in program.idb_predicates() {
-            additional_exports.push(ExportDirective::default(predicate));
+        match value.as_str() {
+            EXPORT_IDB => {
+                for predicate in program.idb_predicates() {
+                    additional_exports.push(ExportDirective::default(predicate));
+                }
+            }
+            EXPORT_EDB => {
+                for predicate in program.edb_predicates() {
+                    additional_exports.push(ExportDirective::default(predicate));
+                }
+            }
+            EXPORT_ALL => {
+                for predicate in program.predicates() {
+                    additional_exports.push(ExportDirective::default(predicate));
+                }
+            }
+            EXPORT_NONE => {}
+            _ => {
+                unreachable!("invalid option is filtered by argument parser");
+            }
         }
         program.add_exports(additional_exports);
     }
@@ -138,7 +159,8 @@ fn run(mut cli: CliApp) -> Result<(), Error> {
         export_manager.validate(export)?;
     }
 
-    let import_manager = ImportManager::new(ResourceProviders::with_base_path(cli.input_directory));
+    let import_manager =
+        ImportManager::new(ResourceProviders::with_base_path(cli.import_directory));
 
     let mut engine: DefaultExecutionEngine = ExecutionEngine::initialize(&program, import_manager)?;
 
