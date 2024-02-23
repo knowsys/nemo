@@ -13,15 +13,18 @@ Arguments:
   <RULES>...  One or more rule program files
 
 Options:
-      --log <LOG_LEVEL>                Sets the verbosity of logging if the flags -v and -q are not used [possible values: error, warn, info, debug, trace]
-  -v, --verbose...                     Sets log verbosity (multiple times means more verbose)
-  -q, --quiet                          Sets log verbosity to only log errors
-  -s, --save-results                   Save results to files. (Also see --output-dir)
-  -D, --output-dir <OUTPUT_DIRECTORY>  Specify directory for output files. (Only relevant if --save-results is set.) [default: results]
-  -o, --overwrite-results              Overwrite existing files in --output-dir. (Only relevant if --save-results is set.)
-  -g, --gzip                           Gzip output files
-      --write-all-idb-predicates       Override @output directives and save every IDB predicate
+  -e, --export <EXPORT_SETTING>        Override export directives in the program [possible values: none, all, idb, edb]
+  -D, --export-dir <EXPORT_DIRECTORY>  Base directory for exporting files [default: results]
+  -o, --overwrite-results              Replace any existing files during export
+  -g, --gzip                           Use gzip to compress exports by default; does not affect export directives that already specify a compression
+  -I, --import-dir <IMPORT_DIRECTORY>  Base directory for importing files (default is working directory)
+      --trace <TRACED_FACTS>           Facts for which a derivation trace should be computed; multiple facts can be separated by a semicolon
+      --trace-output <OUTPUT_FILE>     File to export the trace to
       --detailed-timing                Display detailed timing information
+      --detailed-memory                Display detailed memory information
+  -v, --verbose...                     Increase log verbosity (multiple uses increase verbosity further)
+  -q, --quiet                          Reduce log verbosity to show only errors (equivalent to --log error)
+      --log <LOG_LEVEL>                Set log verbosity (default is "warn") [possible values: error, warn, info, debug, trace]
   -h, --help                           Print help
   -V, --version                        Print version
 ```
