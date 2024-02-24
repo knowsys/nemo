@@ -42,7 +42,7 @@ pub(crate) fn node_negation(
 
             // The tables may contain columns that are not part of `node_main`.
             // These need to be projected away.
-            let markers_project_target = node_main.markers().restrict(&subtract_markers);
+            let markers_project_target = node_main.markers_cloned().restrict(&subtract_markers);
             plan.projectreorder(markers_project_target, node_filtered)
         })
         .collect();

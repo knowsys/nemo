@@ -208,6 +208,12 @@ impl Trie {
             return Self::empty(0);
         }
 
+        if let TrieScanEnum::TrieScanAggregateWrapper(wrapper) = trie_scan {
+            // `wrapper` can not be iterated as a partial trie scan, only as a full trie scan
+            let trie = Trie::from_full_trie_scan(wrapper.trie_scan, cut_layers);
+            return trie;
+        }
+
         let mut rowscan = RowScan::new(trie_scan, cut_layers);
 
         let mut intervalcolumn_builders =

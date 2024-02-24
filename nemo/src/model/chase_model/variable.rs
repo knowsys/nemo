@@ -12,18 +12,18 @@ fn is_aggregate_identifier(var_name: &str) -> bool {
 }
 
 /// Check if a variable is a aggregate placeholder variable, representing the output of an aggregate.
-pub(crate) fn is_aggregate_variable(_variable: &Variable) -> bool {
-    // match variable {
-    //     Variable::Universal(var_name) => is_aggregate_identifier(var_name),
-    //     Variable::Existential(var_name) => {
-    //         debug_assert!(
-    //             !is_aggregate_identifier(var_name),
-    //             "aggregate variables must be universal variables"
-    //         );
-    //         false
-    //     }
-    // }
-    false
+pub(crate) fn is_aggregate_variable(variable: &Variable) -> bool {
+    match variable {
+        Variable::Universal(var_name) => is_aggregate_identifier(var_name),
+        Variable::Existential(var_name) => {
+            debug_assert!(
+                !is_aggregate_identifier(var_name),
+                "aggregate variables must be universal variables"
+            );
+            false
+        }
+        Variable::UnnamedUniversal(_) => false,
+    }
 }
 
 fn is_construct_identifier(var_name: &str) -> bool {

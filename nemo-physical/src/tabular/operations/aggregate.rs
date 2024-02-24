@@ -13,22 +13,12 @@ use crate::{
         processors::processor::{AggregateGroupProcessor, AggregateProcessor},
     },
     columnar::columnscan::ColumnScanRainbow,
-    datatypes::{StorageTypeName, StorageValueT},
+    datatypes::{storage_type_name::StorageTypeBitSet, StorageTypeName, StorageValueT},
     management::database::Dict,
     tabular::triescan::{PartialTrieScan, TrieScan, TrieScanEnum},
 };
 
 use super::{prune::TrieScanPrune, OperationGenerator};
-
-#[derive(Debug)]
-enum AggregatedOutputValue {
-    /// The end for the current group has been reached, panic if `current()` is called
-    None,
-    /// Compute the aggregate value when `current()` is called
-    NotYetComputed,
-    /// The aggregate value has already been computed for the current group
-    Some(StorageValueT),
-}
 
 #[derive(Debug, Clone)]
 pub(crate) struct GeneratorAggregate {
@@ -163,6 +153,16 @@ impl<T: TrieScan> TrieScanAggregate<T> {
             peeked_row_information: None,
         }
     }
+}
+
+#[derive(Debug)]
+enum AggregatedOutputValue {
+    /// The end for the current group has been reached, panic if `current()` is called
+    None,
+    /// Compute the aggregate value when `current()` is called
+    NotYetComputed,
+    /// The aggregate value has already been computed for the current group
+    Some(StorageValueT),
 }
 
 impl<T: TrieScan> TrieScan for TrieScanAggregate<T> {
@@ -339,11 +339,8 @@ impl<'a> PartialTrieScan<'a> for TrieScanAggregateWrapper<'a> {
         panic!("TrieScanAggregateWrapper::scan cannot be called");
     }
 
-    fn possible_types(
-        &self,
-        _layer: usize,
-    ) -> crate::datatypes::storage_type_name::StorageTypeBitSet {
-        todo!()
+    fn possible_types(&self, _layer: usize) -> StorageTypeBitSet {
+        panic!("TrieScanAggregateWrapper::possible_types cannot be called");
     }
 }
 

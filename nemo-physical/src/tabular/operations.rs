@@ -1,6 +1,6 @@
 //! This module defines operations over tries
 
-pub mod aggregate; // TODOa
+pub mod aggregate;
 pub(crate) mod filter;
 pub(crate) mod function;
 pub(crate) mod join;
@@ -39,8 +39,9 @@ use super::triescan::TrieScanEnum;
 /// Marker for a column
 ///
 /// This is used in [OperationTable].
+/// TODO: Make inner value private, needs some refractoring of aggregates in `nemo` crate
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Ord, PartialOrd)]
-pub struct OperationColumnMarker(usize);
+pub struct OperationColumnMarker(pub usize);
 
 impl OperationColumnMarker {
     /// Return the next [OperationColumnMarker]

@@ -81,8 +81,8 @@ impl ExecutionNodeRef {
     }
 
     /// Return [OperationTable],
-    /// which marks the colums of the table represented by this node.
-    pub fn markers(&self) -> OperationTable {
+    /// which marks the columns of the table represented by this node.
+    pub fn markers_cloned(&self) -> OperationTable {
         let node_rc = self.get_rc();
         let node_borrow = node_rc.borrow();
 
@@ -99,8 +99,8 @@ impl ExecutionNodeRef {
         match node_operation {
             ExecutionOperation::Join(subnodes) => subnodes.push(subnode),
             ExecutionOperation::Union(subnodes) => {
-                debug_assert!(subnodes.iter().all(|node| node.markers().is_empty()
-                    || node.markers().len() == subnode.markers().len()));
+                debug_assert!(subnodes.iter().all(|node| node.markers_cloned().is_empty()
+                    || node.markers_cloned().len() == subnode.markers_cloned().len()));
 
                 subnodes.push(subnode)
             }
@@ -287,9 +287,8 @@ impl ExecutionPlan {
         marked_columns: OperationTable,
         subtables: Vec<ExecutionNodeRef>,
     ) -> ExecutionNodeRef {
-        debug_assert!(subtables
-            .iter()
-            .all(|node| node.markers().is_empty() || node.markers().len() == marked_columns.len()));
+        debug_assert!(subtables.iter().all(|node| node.markers_cloned().is_empty()
+            || node.markers_cloned().len() == marked_columns.len()));
 
         let new_operation = ExecutionOperation::Union(subtables);
         self.push_and_return_reference(new_operation, marked_columns)
@@ -301,7 +300,7 @@ impl ExecutionPlan {
         main: ExecutionNodeRef,
         subtracted: Vec<ExecutionNodeRef>,
     ) -> ExecutionNodeRef {
-        let marked_columns = main.markers();
+        let marked_columns = main.markers_cloned();
         let new_operation = ExecutionOperation::Subtract(main, subtracted);
         self.push_and_return_reference(new_operation, marked_columns)
     }
@@ -326,7 +325,7 @@ impl ExecutionPlan {
 
     /// Return an [ExecutionNodeRef] for restricing a column to a certain value.
     pub fn filter(&mut self, subnode: ExecutionNodeRef, filters: Filters) -> ExecutionNodeRef {
-        let marked_columns = subnode.markers();
+        let marked_columns = subnode.markers_cloned();
         let new_operation = ExecutionOperation::Filter(subnode, filters);
         self.push_and_return_reference(new_operation, marked_columns)
     }
@@ -347,9 +346,9 @@ impl ExecutionPlan {
         &mut self,
         marked_columns: OperationTable,
         subnode: ExecutionNodeRef,
-        functions: FunctionAssignment,
+        aggregation_instructions: AggregationInstructions,
     ) -> ExecutionNodeRef {
-        let new_operation = ExecutionOperation::Function(subnode, functions);
+        let new_operation = ExecutionOperation::Aggregate(subnode, aggregation_instructions);
         self.push_and_return_reference(new_operation, marked_columns)
     }
 
@@ -367,12 +366,12 @@ impl ExecutionPlan {
 impl ExecutionPlan {
     /// Designate a [ExecutionNode] as an "output" node that will result in a materialized table.
     ///
-    /// If table has been marked as an "ouput" node already,
+    /// If table has been marked as an "output" node already,
     /// this function will not overwrite the existing name
     /// but will upgrade the [ExecutionResult] to permanent if required.
     ///
     /// Returns an [ExecutionId] which can be linked to the output table
-    /// that was computed by evaluateing this node.
+    /// that was computed by evaluating this node.
     fn push_out_node(
         &mut self,
         node: ExecutionNodeRef,
@@ -467,7 +466,7 @@ impl ExecutionPlan {
                 closest_order(tables.iter().map(|(order, _id)| order), &order)
                     .expect("Trie should exist at least in one order.");
             let closest_computed_id = tables[closest_index].1;
-            let arity = output_node.node.markers().arity();
+            let arity = output_node.node.markers_cloned().arity();
             let generator = GeneratorProjectReorder::from_reordering(
                 closest_order.clone(),
                 order.clone(),
@@ -577,7 +576,7 @@ impl ExecutionPlan {
                     Vec<Permutation>,
                 ) = subnodes
                     .iter()
-                    .map(|node| node.markers().align(&node_markers))
+                    .map(|node| node.markers_cloned().align(&node_markers))
                     .unzip();
 
                 let subtrees = subnodes
@@ -636,7 +635,7 @@ impl ExecutionPlan {
                     Vec<Permutation>,
                 ) = subnodes_subtract
                     .iter()
-                    .map(|subnode| subnode.markers().align(&markers_main))
+                    .map(|subnode| subnode.markers_cloned().align(&markers_main))
                     .unzip();
 
                 let subtrees = vec![(subnode_main, order.clone())]
@@ -736,7 +735,7 @@ impl ExecutionPlan {
                 // }
             }
             ExecutionOperation::ProjectReorder(subnode) => {
-                let marker_subnode = subnode.markers();
+                let marker_subnode = subnode.markers_cloned();
                 let subtree = if let ExecutionTreeOperation::Leaf(leaf) = Self::execution_node(
                     root_node_id,
                     subnode.clone(),
@@ -775,7 +774,7 @@ impl ExecutionPlan {
                 ExecutionTreeNode::Operation(ExecutionTreeOperation::Node {
                     generator: OperationGeneratorEnum::Null(GeneratorNull::new(
                         node_markers,
-                        subnode.markers(),
+                        subnode.markers_cloned(),
                     )),
                     subnodes: vec![subtree],
                 })
