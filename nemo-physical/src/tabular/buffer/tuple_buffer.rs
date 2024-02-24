@@ -402,29 +402,29 @@ mod test {
         let v2 = StorageValueT::Int64(42);
 
         // new table #0, row #0
-        tuple_buffer.add_tuple_value(v1.clone());
-        tuple_buffer.add_tuple_value(v1.clone());
-        tuple_buffer.add_tuple_value(v1.clone());
+        tuple_buffer.add_tuple_value(v1);
+        tuple_buffer.add_tuple_value(v1);
+        tuple_buffer.add_tuple_value(v1);
         // new table #1, row #0
-        tuple_buffer.add_tuple_value(v1.clone());
-        tuple_buffer.add_tuple_value(v2.clone());
-        tuple_buffer.add_tuple_value(v1.clone());
+        tuple_buffer.add_tuple_value(v1);
+        tuple_buffer.add_tuple_value(v2);
+        tuple_buffer.add_tuple_value(v1);
         // table #0, row #1
-        tuple_buffer.add_tuple_value(v1.clone());
-        tuple_buffer.add_tuple_value(v1.clone());
-        tuple_buffer.add_tuple_value(v1.clone());
+        tuple_buffer.add_tuple_value(v1);
+        tuple_buffer.add_tuple_value(v1);
+        tuple_buffer.add_tuple_value(v1);
         // new table #2, row #0
-        tuple_buffer.add_tuple_value(v1.clone());
-        tuple_buffer.add_tuple_value(v1.clone());
-        tuple_buffer.add_tuple_value(v2.clone());
+        tuple_buffer.add_tuple_value(v1);
+        tuple_buffer.add_tuple_value(v1);
+        tuple_buffer.add_tuple_value(v2);
         // table #2, row #1
-        tuple_buffer.add_tuple_value(v1.clone());
-        tuple_buffer.add_tuple_value(v1.clone());
-        tuple_buffer.add_tuple_value(v2.clone());
+        tuple_buffer.add_tuple_value(v1);
+        tuple_buffer.add_tuple_value(v1);
+        tuple_buffer.add_tuple_value(v2);
         // table #2, row #2
-        tuple_buffer.add_tuple_value(v1.clone());
-        tuple_buffer.add_tuple_value(v1.clone());
-        tuple_buffer.add_tuple_value(v2.clone());
+        tuple_buffer.add_tuple_value(v1);
+        tuple_buffer.add_tuple_value(v1);
+        tuple_buffer.add_tuple_value(v2);
 
         assert_eq!(tuple_buffer.typed_subtables.len(), 3);
 

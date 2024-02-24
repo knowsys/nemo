@@ -176,7 +176,7 @@ mod test {
         assert_eq!(dict.id_to_string(0), Some("".to_string()));
         assert_eq!(dict.str_to_id(""), Some(0));
         assert_eq!(dict.len(), 1);
-        assert_eq!(dict.has_marked(), false);
+        assert!(!dict.has_marked());
     }
 
     #[test]
@@ -191,7 +191,7 @@ mod test {
         assert_eq!(dict.add_str("entry3"), AddResult::Known(KNOWN_ID_MARK));
 
         assert_eq!(dict.len(), 2);
-        assert_eq!(dict.has_marked(), true);
+        assert!(dict.has_marked());
 
         assert_eq!(dict.id_to_string(0), Some("entry1".to_string()));
         assert_eq!(dict.str_to_id("entry1"), Some(0));

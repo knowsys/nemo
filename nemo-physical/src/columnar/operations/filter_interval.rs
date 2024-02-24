@@ -224,10 +224,10 @@ where
     fn check_upper_bound(&self, upper_bound_option: &Option<IntervalBoundConstant<T>>) -> bool {
         if let Some(current_value) = self.value_scan.current() {
             if let Some(upper_bound) = upper_bound_option {
-                return match upper_bound.boundary_type {
+                match upper_bound.boundary_type {
                     BoundaryType::Inclusive => current_value <= upper_bound.value,
                     BoundaryType::Exclusive => current_value < upper_bound.value,
-                };
+                }
             } else {
                 true
             }

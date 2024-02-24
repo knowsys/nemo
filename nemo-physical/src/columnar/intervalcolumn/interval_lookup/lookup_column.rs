@@ -50,7 +50,7 @@ impl IntervalLookup for IntervalLookupColumn {
         let interval_index = self.lookup.get(index);
 
         if interval_index == Self::EMPTY {
-            return None;
+            None
         } else {
             Some(interval_index)
         }
@@ -64,6 +64,7 @@ impl ByteSized for IntervalLookupColumn {
 }
 
 #[derive(Debug)]
+#[derive(Default)]
 pub(crate) struct IntervalLookupColumnBuilder {
     /// [ColumnBuilderAdaptive] for building `predecessors`
     builder_lookup: ColumnBuilderAdaptive<usize>,
@@ -73,14 +74,7 @@ pub(crate) struct IntervalLookupColumnBuilder {
     simple: bool,
 }
 
-impl Default for IntervalLookupColumnBuilder {
-    fn default() -> Self {
-        Self {
-            builder_lookup: Default::default(),
-            simple: false,
-        }
-    }
-}
+
 
 impl IntervalLookupBuilder for IntervalLookupColumnBuilder {
     type Lookup = IntervalLookupColumn;

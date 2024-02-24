@@ -494,7 +494,7 @@ impl<'a> RuleParser<'a> {
                                     Ok(ImportDirective::from(ImportExportDirective {
                                         predicate: predicate.clone(),
                                         format: FileFormat::CSV,
-                                        attributes: attributes,
+                                        attributes,
                                     }))
                                 },
                             ),
@@ -532,7 +532,7 @@ impl<'a> RuleParser<'a> {
                                     Ok(ImportDirective::from(ImportExportDirective {
                                         predicate: predicate.clone(),
                                         format: FileFormat::TSV,
-                                        attributes: attributes,
+                                        attributes,
                                     }))
                                 },
                             ),
@@ -579,7 +579,7 @@ impl<'a> RuleParser<'a> {
                                     Ok(ImportDirective::from(ImportExportDirective {
                                         predicate: predicate.clone(),
                                         format: FileFormat::RDF(RdfVariant::Unspecified),
-                                        attributes: attributes,
+                                        attributes,
                                     }))
                                 },
                             ),
@@ -625,7 +625,7 @@ impl<'a> RuleParser<'a> {
                     terminated(token("@output"), cut(multispace_or_comment1)),
                     cut(map_res::<_, _, _, _, Error, _, _>(
                         self.parse_iri_like_identifier(),
-                        |identifier| Ok(identifier),
+                        Ok,
                     )),
                     cut(self.parse_dot()),
                 ),
@@ -717,7 +717,7 @@ impl<'a> RuleParser<'a> {
             Ok((
                 remainder,
                 ImportExportDirective {
-                    predicate: predicate,
+                    predicate,
                     format,
                     attributes,
                 },
@@ -1550,9 +1550,9 @@ mod test {
                 ),
             ]);
             ImportDirective::from(ImportExportDirective {
-                predicate: predicate,
+                predicate,
                 format: FileFormat::CSV,
-                attributes: attributes,
+                attributes,
             })
         }
 

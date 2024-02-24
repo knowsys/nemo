@@ -51,14 +51,14 @@ impl OperationGenerator for GeneratorSubtract {
         _dictionary: &'a RefCell<Dict>,
     ) -> Option<TrieScanEnum<'a>> {
         debug_assert!(
-            trie_scans.len() >= 1,
+            !trie_scans.is_empty(),
             "Input needs to include the main trie"
         );
 
         let (tries_subtract, layer_maps): (Vec<TrieScanEnum>, Vec<Vec<usize>>) = trie_scans
             .split_off(1)
             .into_iter()
-            .zip(self.layer_maps.clone().into_iter())
+            .zip(self.layer_maps.clone())
             .flat_map(|(scan, map)| scan.map(|scan| (scan, map)))
             .unzip();
         let trie_main = trie_scans.remove(0)?;

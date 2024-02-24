@@ -1003,9 +1003,9 @@ mod test {
             ),
         ]);
         ImportDirective::from(ImportExportDirective {
-            predicate: predicate,
+            predicate,
             format: FileFormat::CSV,
-            attributes: attributes,
+            attributes,
         })
     }
 

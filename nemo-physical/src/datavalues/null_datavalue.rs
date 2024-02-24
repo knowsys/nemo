@@ -50,7 +50,7 @@ impl DataValue for NullDataValue {
     }
 
     fn to_null_unchecked(&self) -> NullDataValue {
-        return self.clone();
+        *self
     }
 }
 

@@ -34,7 +34,7 @@ impl OperationGenerator for GeneratorUnion {
         // We ignore any empy tables
         let trie_scans = trie_scans
             .into_iter()
-            .filter_map(|scan_option| scan_option)
+            .flatten()
             .collect::<Vec<_>>();
 
         // We return `None` if there are no input tables left

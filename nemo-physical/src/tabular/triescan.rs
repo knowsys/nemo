@@ -12,8 +12,9 @@ use crate::{
 
 use super::{
     operations::{
-        filter::TrieScanFilter, function::TrieScanFunction, join::TrieScanJoin, null::TrieScanNull,
-        prune::TrieScanPrune, subtract::TrieScanSubtract, union::TrieScanUnion,
+        aggregate::TrieScanAggregateWrapper, filter::TrieScanFilter, function::TrieScanFunction,
+        join::TrieScanJoin, null::TrieScanNull, prune::TrieScanPrune, subtract::TrieScanSubtract,
+        union::TrieScanUnion,
     },
     trie::TrieScanGeneric,
 };
@@ -65,6 +66,8 @@ pub(crate) trait PartialTrieScan<'a>: Debug {
 /// Enum containing all implementations of [PartialTrieScan]
 #[derive(Debug)]
 pub(crate) enum TrieScanEnum<'a> {
+    /// Case [TrieScanAggregate]
+    TrieScanAggregateWrapper(TrieScanAggregateWrapper<'a>),
     /// Case [TrieScanFilter]
     TrieScanFilter(TrieScanFilter<'a>),
     /// Case [TrieScanFunction]
@@ -86,6 +89,7 @@ pub(crate) enum TrieScanEnum<'a> {
 impl<'a> PartialTrieScan<'a> for TrieScanEnum<'a> {
     delegate! {
         to match self {
+            Self::TrieScanAggregateWrapper(scan) => scan,
             Self::TrieScanFilter(scan) => scan,
             Self::TrieScanFunction(scan) => scan,
             Self::TrieScanGeneric(scan) => scan,

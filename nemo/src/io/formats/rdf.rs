@@ -163,12 +163,12 @@ impl RdfHandler {
         let value_formats = Self::extract_value_formats(attributes, refined_variant, direction)?;
 
         Ok(Box::new(Self {
-            resource: resource,
-            base: base,
+            resource,
+            base,
             variant: refined_variant,
-            value_formats: value_formats,
-            compression_format: compression_format,
-            direction: direction,
+            value_formats,
+            compression_format,
+            direction,
         }))
     }
 
@@ -228,7 +228,7 @@ impl RdfHandler {
                 3 => Ok(RdfVariant::NTriples),
                 4 => Ok(RdfVariant::NQuads),
                 _ => Err(ImportExportError::InvalidArity {
-                    arity: arity,
+                    arity,
                     expected: 3,
                 }),
             }

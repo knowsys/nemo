@@ -140,7 +140,7 @@ impl ImportExportHandlers {
             .cloned()
             .collect();
         let valid: HashSet<AnyDataValue> = valid_attributes
-            .into_iter()
+            .iter()
             .map(|att| AnyDataValue::new_iri(att.to_string()))
             .collect();
 
@@ -225,7 +225,7 @@ impl ImportExportHandlers {
                         AnyDataValue::new_plain_string(
                             cf_name.expect("given if stated compression is known"),
                         ),
-                        format!("compression method should match resource extension").as_str(),
+                        "compression method should match resource extension".to_string().as_str(),
                     ))
                 }
             }
@@ -245,10 +245,10 @@ impl ImportExportHandlers {
         if let Some(c) = Self::extract_att_value(attributes, attribute_name, allow_missing)? {
             match c.value_domain() {
                 ValueDomain::PlainString => {
-                    return Ok(Some(c.to_plain_string_unchecked()));
+                    Ok(Some(c.to_plain_string_unchecked()))
                 }
                 _ => {
-                    return Err(ImportExportError::invalid_att_value_error(
+                    Err(ImportExportError::invalid_att_value_error(
                         attribute_name,
                         c.clone(),
                         "expecting string value",
@@ -256,7 +256,7 @@ impl ImportExportHandlers {
                 }
             }
         } else {
-            return Ok(None);
+            Ok(None)
         }
     }
 
@@ -273,16 +273,16 @@ impl ImportExportHandlers {
     ) -> Result<Option<String>, ImportExportError> {
         if let Some(c) = Self::extract_att_value(attributes, attribute_name, allow_missing)? {
             if let Some(s) = Self::string_from_datavalue(&c) {
-                return Ok(Some(s));
+                Ok(Some(s))
             } else {
-                return Err(ImportExportError::invalid_att_value_error(
+                Err(ImportExportError::invalid_att_value_error(
                     attribute_name,
                     c.clone(),
                     "expecting string or IRI value",
-                ));
+                ))
             }
         } else {
-            return Ok(None);
+            Ok(None)
         }
     }
 
@@ -297,16 +297,16 @@ impl ImportExportHandlers {
     ) -> Result<Option<i64>, ImportExportError> {
         if let Some(c) = Self::extract_att_value(attributes, attribute_name, allow_missing)? {
             if c.fits_into_i64() {
-                return Ok(Some(c.to_i64_unchecked()));
+                Ok(Some(c.to_i64_unchecked()))
             } else {
-                return Err(ImportExportError::invalid_att_value_error(
+                Err(ImportExportError::invalid_att_value_error(
                     attribute_name,
                     c.clone(),
                     "expecting integer value",
-                ));
+                ))
             }
         } else {
-            return Ok(None);
+            Ok(None)
         }
     }
 
@@ -322,10 +322,10 @@ impl ImportExportHandlers {
         if let Some(c) = Self::extract_att_value(attributes, attribute_name, allow_missing)? {
             match c.value_domain() {
                 ValueDomain::Iri => {
-                    return Ok(Some(c.to_iri_unchecked()));
+                    Ok(Some(c.to_iri_unchecked()))
                 }
                 _ => {
-                    return Err(ImportExportError::invalid_att_value_error(
+                    Err(ImportExportError::invalid_att_value_error(
                         attribute_name,
                         c.clone(),
                         "expecting IRI value",
@@ -333,7 +333,7 @@ impl ImportExportHandlers {
                 }
             }
         } else {
-            return Ok(None);
+            Ok(None)
         }
     }
 
@@ -347,7 +347,7 @@ impl ImportExportHandlers {
     ) -> Result<Option<AnyDataValue>, ImportExportError> {
         if let Some(c) = attributes.map_element(&AnyDataValue::new_iri(attribute_name.to_string()))
         {
-            return Ok(Some(c.clone()));
+            Ok(Some(c.clone()))
         } else if allow_missing {
             return Ok(None);
         } else {
@@ -397,7 +397,7 @@ impl ImportExportHandlers {
         // Check if any non-skipped value is contained
         if let Some(true) = value_format_strings.as_ref().map(|v| {
             v.iter()
-                .fold(true, |acc: bool, fmt| acc && *fmt == VALUE_FORMAT_SKIP)
+                .all(|fmt| *fmt == VALUE_FORMAT_SKIP)
         }) {
             return Err(ImportExportError::invalid_att_value_error(
                 PARAMETER_NAME_FORMAT,

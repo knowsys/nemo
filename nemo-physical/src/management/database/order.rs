@@ -278,7 +278,7 @@ impl OrderedReferenceManager {
                 let (_, closest_order) = closest_order(order_map.keys(), &column_order)
                     .expect("Trie should exist at least in one order.");
                 let closest_storage_id = *order_map
-                    .get(&closest_order)
+                    .get(closest_order)
                     .expect("clostest_order must be an order that exists");
                 let closest_arity = self.stored_tables[closest_storage_id].arity();
 

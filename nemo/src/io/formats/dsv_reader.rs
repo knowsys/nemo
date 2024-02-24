@@ -40,7 +40,7 @@ impl DsvReader {
             delimiter,
             //escape: b'\\',
             escape: None,
-            value_formats: value_formats,
+            value_formats,
         }
     }
 

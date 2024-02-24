@@ -37,10 +37,10 @@ pub(crate) fn node_negation(
             );
 
             // We simply apply all constraints to this node
-            // Constraint which do not referene this atom will be filtered in the physical layer
+            // Constraints which do not reference this atom will be filtered in the physical layer
             let node_filtered = node_filter(plan, variable_translation, node, subtracted_filters);
 
-            // The tables may contian colums that are not part of `node_main`.
+            // The tables may contain columns that are not part of `node_main`.
             // These need to be projected away.
             let markers_project_target = node_main.markers().restrict(&subtract_markers);
             plan.projectreorder(markers_project_target, node_filtered)

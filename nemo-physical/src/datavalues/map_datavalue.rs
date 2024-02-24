@@ -30,7 +30,7 @@ impl MapDataValue {
         pairs_iter: T,
     ) -> Self {
         Self {
-            label: label,
+            label,
             pairs: pairs_iter.into_iter().collect(),
         }
     }

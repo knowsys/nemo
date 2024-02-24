@@ -12,10 +12,10 @@ use super::{AnyDataValue, IriDataValue, NullDataValue};
 /// tabs `\t`, and backslashes `\\`.
 pub(crate) fn quote_string(s: &str) -> String {
     "\"".to_owned()
-        + &s.replace("\\", "\\\\")
-            .replace("\"", "\\\"")
-            .replace("\r", "\\r")
-            .replace("\n", "\\n")
+        + &s.replace('\\', "\\\\")
+            .replace('\"', "\\\"")
+            .replace('\r', "\\r")
+            .replace('\n', "\\n")
         + "\""
 }
 
@@ -185,7 +185,7 @@ impl Ord for ValueDomain {
 
 impl PartialOrd for ValueDomain {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        Some(self.cmp(&other))
+        Some(self.cmp(other))
     }
 }
 

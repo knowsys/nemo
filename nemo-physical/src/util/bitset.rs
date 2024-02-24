@@ -115,11 +115,11 @@ mod test {
     fn bitset_get() {
         let bits = TestBitSet::full(3);
 
-        assert_eq!(bits.get(0), true);
-        assert_eq!(bits.get(1), true);
-        assert_eq!(bits.get(2), true);
-        assert_eq!(bits.get(3), false);
-        assert_eq!(bits.get(4), false);
+        assert!(bits.get(0));
+        assert!(bits.get(1));
+        assert!(bits.get(2));
+        assert!(!bits.get(3));
+        assert!(!bits.get(4));
     }
 
     #[test]

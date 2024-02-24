@@ -128,9 +128,9 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
 
         // Add all the import specifications
         for (import_predicate, import_handler) in program.imports() {
-            let import_arity = table_manager.arity(&import_predicate);
+            let import_arity = table_manager.arity(import_predicate);
             let table_source = TableSource::new(
-                input_manager.table_provider_from_handler(&import_handler, import_arity)?,
+                input_manager.table_provider_from_handler(import_handler, import_arity)?,
                 import_arity,
             );
 
@@ -147,7 +147,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
             let table = predicate_to_rows
                 .entry(fact.predicate())
                 .or_insert(SimpleTable::new(fact.arity()));
-            table.add_row(fact.terms().iter().map(|term| term.clone()).collect());
+            table.add_row(fact.terms().to_vec());
         }
 
         for (predicate, table) in predicate_to_rows.into_iter() {
@@ -404,7 +404,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                     let next_fact_predicate = body_atom.predicate();
                     let next_fact_terms = body_atom
                         .terms()
-                        .into_iter()
+                        .iter()
                         .map(|variable| {
                             variable_assignment
                                 .get(variable)

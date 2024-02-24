@@ -263,7 +263,7 @@ impl ChaseProgram {
             if let Some(current) = arities.get(&predicate) {
                 if *current != arity {
                     return Err(RuleAnalysisError::UnsupportedFeaturePredicateOverloading {
-                        predicate: predicate,
+                        predicate,
                         arity1: *current,
                         arity2: arity,
                     });
@@ -279,7 +279,7 @@ impl ChaseProgram {
             arities: &HashMap<Identifier, usize>,
             missing: &mut HashSet<Identifier>,
         ) {
-            if let None = arities.get(&predicate) {
+            if arities.get(&predicate).is_none() {
                 missing.insert(predicate);
             }
         }

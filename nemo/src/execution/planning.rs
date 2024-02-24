@@ -1,5 +1,4 @@
 //! This module implements the functionality for planing the execution of a rule.
-mod aggregates;
 
 pub(crate) mod operations;
 

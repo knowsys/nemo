@@ -45,7 +45,7 @@ impl<'a, Scan: PartialTrieScan<'a>> RowScan<'a, Scan> {
         let empty = arity == 0 || possible_types.iter().any(|types| types.is_empty());
 
         Self {
-            _phantom: PhantomData::default(),
+            _phantom: PhantomData,
             trie_scan,
             empty,
             possible_types,

@@ -88,7 +88,7 @@ fn two_strings_to_one(string1: &str, string2: &str) -> String {
         result = String::with_capacity(string1.len() + string2.len() + 2);
         result.push(0 as char);
         // Escape \ as \\ and > as \a (so no more > in type IRI after this)
-        result.push_str(string2.replace("\\", "\\\\").replace(">", "\\a").as_str());
+        result.push_str(string2.replace('\\', "\\\\").replace('>', "\\a").as_str());
         result.push('>'); // separator
         result.push_str(string1);
     }

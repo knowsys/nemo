@@ -173,7 +173,7 @@ impl DatabaseInstance {
         let dictionary: &Dict = &self.dictionary();
 
         let mut row_storage = Vec::with_capacity(row.len());
-        for data_value in row.into_iter() {
+        for data_value in row.iter() {
             if let Some(storage_value) = data_value.try_to_storage_value_t(dictionary) {
                 row_storage.push(storage_value);
             } else {
@@ -345,7 +345,7 @@ impl DatabaseInstance {
                 subnodes,
             } => {
                 let input_scans = subnodes
-                    .into_iter()
+                    .iter()
                     .map(|subnode| self.evaluate_operation(dictionary, storage, subnode))
                     .collect();
 
@@ -499,7 +499,7 @@ impl DatabaseInstance {
                     let row_datavalue = row_storage
                         .into_iter()
                         .map(|value| {
-                            AnyDataValue::new_from_storage_value(value, &self.dictionary().borrow())
+                            AnyDataValue::new_from_storage_value(value, self.dictionary().borrow())
                                 .ok()
                         })
                         .collect::<Option<Vec<_>>>()?;

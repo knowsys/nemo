@@ -80,7 +80,7 @@ impl ExportDirective {
     pub fn default(predicate: Identifier) -> ExportDirective {
         ExportDirective(ImportExportDirective {
             format: FileFormat::CSV,
-            predicate: predicate,
+            predicate,
             attributes: MapDataValue::from_iter([]),
         })
     }

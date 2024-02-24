@@ -3,6 +3,7 @@
 
 pub(super) mod term;
 
+pub(crate) mod aggregate;
 pub(crate) mod append;
 pub(crate) mod filter;
 pub(crate) mod functions;

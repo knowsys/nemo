@@ -74,7 +74,7 @@ impl GeneratorProjectReorder {
 
         Self {
             projectreordering: ProjectReordering::from_map(result_map, arity),
-            last_used_layer: arity.checked_sub(1).unwrap_or(0),
+            last_used_layer: arity.saturating_sub(1),
             arity_output: arity,
         }
     }
@@ -96,7 +96,7 @@ impl GeneratorProjectReorder {
 
             let start_change = self.last_used_layer + 1 - current_row.len();
 
-            for (row_index, current_value) in current_row.into_iter().enumerate() {
+            for (row_index, current_value) in current_row.iter().enumerate() {
                 let input_layer = start_change + row_index;
                 if let Some(output_layer) = self.projectreordering.get_partial(input_layer) {
                     current_tuple[output_layer] = *current_value;

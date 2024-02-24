@@ -50,7 +50,7 @@ impl DataValue for UnsignedLongDataValue {
     /// The function needs to find the tightest domain for the given value.
     fn value_domain(&self) -> ValueDomain {
         if self.0 <= I32MAX_AS_U64 {
-            return ValueDomain::NonNegativeInt;
+            ValueDomain::NonNegativeInt
         } else if self.0 <= U32MAX_AS_U64 {
             return ValueDomain::UnsignedInt;
         } else if self.0 <= I64MAX_AS_U64 {
@@ -135,7 +135,7 @@ impl DataValue for LongDataValue {
     fn value_domain(&self) -> ValueDomain {
         if self.0 >= 0 {
             if self.0 <= I32MAX_AS_I64 {
-                return ValueDomain::NonNegativeInt;
+                ValueDomain::NonNegativeInt
             } else if self.0 <= U32MAX_AS_I64 {
                 return ValueDomain::UnsignedInt;
             } else {
@@ -228,10 +228,10 @@ mod test {
                 + "\"^^<http://www.w3.org/2001/XMLSchema#unsignedLong>"
         );
 
-        assert_eq!(long1.fits_into_i32(), false);
-        assert_eq!(long1.fits_into_u32(), false);
-        assert_eq!(long1.fits_into_i64(), false);
-        assert_eq!(long1.fits_into_u64(), true);
+        assert!(!long1.fits_into_i32());
+        assert!(!long1.fits_into_u32());
+        assert!(!long1.fits_into_i64());
+        assert!(long1.fits_into_u64());
 
         assert_eq!(long1.to_i32(), None);
         assert_eq!(long1.to_u32(), None);
@@ -252,10 +252,10 @@ mod test {
         );
         assert_eq!(long1.value_domain(), ValueDomain::NonNegativeLong);
 
-        assert_eq!(long1.fits_into_i32(), false);
-        assert_eq!(long1.fits_into_u32(), false);
-        assert_eq!(long1.fits_into_i64(), true);
-        assert_eq!(long1.fits_into_u64(), true);
+        assert!(!long1.fits_into_i32());
+        assert!(!long1.fits_into_u32());
+        assert!(long1.fits_into_i64());
+        assert!(long1.fits_into_u64());
 
         assert_eq!(long1.to_i32(), None);
         assert_eq!(long1.to_u32(), None);
@@ -277,10 +277,10 @@ mod test {
         );
         assert_eq!(long1.value_domain(), ValueDomain::UnsignedInt);
 
-        assert_eq!(long1.fits_into_i32(), false);
-        assert_eq!(long1.fits_into_u32(), true);
-        assert_eq!(long1.fits_into_i64(), true);
-        assert_eq!(long1.fits_into_u64(), true);
+        assert!(!long1.fits_into_i32());
+        assert!(long1.fits_into_u32());
+        assert!(long1.fits_into_i64());
+        assert!(long1.fits_into_u64());
 
         assert_eq!(long1.to_i32(), None);
         assert_eq!(long1.to_u32(), Some(value as u32));
@@ -302,10 +302,10 @@ mod test {
         );
         assert_eq!(long1.value_domain(), ValueDomain::NonNegativeInt);
 
-        assert_eq!(long1.fits_into_i32(), true);
-        assert_eq!(long1.fits_into_u32(), true);
-        assert_eq!(long1.fits_into_i64(), true);
-        assert_eq!(long1.fits_into_u64(), true);
+        assert!(long1.fits_into_i32());
+        assert!(long1.fits_into_u32());
+        assert!(long1.fits_into_i64());
+        assert!(long1.fits_into_u64());
 
         assert_eq!(long1.to_i32(), Some(42));
         assert_eq!(long1.to_i32_unchecked(), 42);
@@ -329,10 +329,10 @@ mod test {
         );
         assert_eq!(long1.value_domain(), ValueDomain::NonNegativeLong);
 
-        assert_eq!(long1.fits_into_i32(), false);
-        assert_eq!(long1.fits_into_u32(), false);
-        assert_eq!(long1.fits_into_i64(), true);
-        assert_eq!(long1.fits_into_u64(), true);
+        assert!(!long1.fits_into_i32());
+        assert!(!long1.fits_into_u32());
+        assert!(long1.fits_into_i64());
+        assert!(long1.fits_into_u64());
 
         assert_eq!(long1.to_i32(), None);
         assert_eq!(long1.to_u32(), None);
@@ -360,10 +360,10 @@ mod test {
                 + "\"^^<http://www.w3.org/2001/XMLSchema#long>"
         );
 
-        assert_eq!(long1.fits_into_i32(), false);
-        assert_eq!(long1.fits_into_u32(), true);
-        assert_eq!(long1.fits_into_i64(), true);
-        assert_eq!(long1.fits_into_u64(), true);
+        assert!(!long1.fits_into_i32());
+        assert!(long1.fits_into_u32());
+        assert!(long1.fits_into_i64());
+        assert!(long1.fits_into_u64());
 
         assert_eq!(long1.to_i32(), None);
         assert_eq!(long1.to_u32(), Some((I32MAX_AS_U64 + 42) as u32));
@@ -385,10 +385,10 @@ mod test {
         );
         assert_eq!(long1.value_domain(), ValueDomain::NonNegativeInt);
 
-        assert_eq!(long1.fits_into_i32(), true);
-        assert_eq!(long1.fits_into_u32(), true);
-        assert_eq!(long1.fits_into_i64(), true);
-        assert_eq!(long1.fits_into_u64(), true);
+        assert!(long1.fits_into_i32());
+        assert!(long1.fits_into_u32());
+        assert!(long1.fits_into_i64());
+        assert!(long1.fits_into_u64());
 
         assert_eq!(long1.to_i32(), Some(42));
         assert_eq!(long1.to_i32_unchecked(), 42);
@@ -412,10 +412,10 @@ mod test {
         );
         assert_eq!(long1.value_domain(), ValueDomain::Int);
 
-        assert_eq!(long1.fits_into_i32(), true);
-        assert_eq!(long1.fits_into_u32(), false);
-        assert_eq!(long1.fits_into_i64(), true);
-        assert_eq!(long1.fits_into_u64(), false);
+        assert!(long1.fits_into_i32());
+        assert!(!long1.fits_into_u32());
+        assert!(long1.fits_into_i64());
+        assert!(!long1.fits_into_u64());
 
         assert_eq!(long1.to_i32(), Some(-42));
         assert_eq!(long1.to_i32_unchecked(), -42);
@@ -437,10 +437,10 @@ mod test {
         );
         assert_eq!(long1.value_domain(), ValueDomain::Long);
 
-        assert_eq!(long1.fits_into_i32(), false);
-        assert_eq!(long1.fits_into_u32(), false);
-        assert_eq!(long1.fits_into_i64(), true);
-        assert_eq!(long1.fits_into_u64(), false);
+        assert!(!long1.fits_into_i32());
+        assert!(!long1.fits_into_u32());
+        assert!(long1.fits_into_i64());
+        assert!(!long1.fits_into_u64());
 
         assert_eq!(long1.to_i32(), None);
         assert_eq!(long1.to_u32(), None);

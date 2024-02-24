@@ -39,7 +39,7 @@ impl DataValue for LangStringDataValue {
     fn lexical_value(&self) -> String {
         // We escape any existing @ in self.1 to avoid confusion with the final @ we inserted.
         // This should not occur, but it is cheaper to escape here than to validate all language tags.
-        self.0.to_owned() + "@" + &self.1.replace("@", "@@")
+        self.0.to_owned() + "@" + &self.1.replace('@', "@@")
     }
 
     fn value_domain(&self) -> ValueDomain {

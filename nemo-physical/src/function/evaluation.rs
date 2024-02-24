@@ -212,7 +212,7 @@ mod test {
     use std::collections::HashMap;
 
     use crate::{
-        datavalues::{AnyDataValue, DataValue},
+        datavalues::{AnyDataValue},
         function::tree::FunctionTree,
         tabular::operations::OperationColumnMarker,
     };

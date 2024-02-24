@@ -22,7 +22,7 @@ impl TupleDataValue {
         values: T,
     ) -> Self {
         Self {
-            label: label,
+            label,
             values: values.into_iter().collect(),
         }
     }
@@ -46,7 +46,7 @@ impl DataValue for TupleDataValue {
         let values = self
             .values
             .iter()
-            .map(|v| DataValue::canonical_string(v))
+            .map(DataValue::canonical_string)
             //.by_ref()
             .intersperse(TUPLE_SEPARATOR.to_string())
             .collect::<String>();

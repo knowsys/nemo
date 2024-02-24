@@ -104,11 +104,11 @@ impl DsvHandler {
             ImportExportHandlers::extract_compression_format(attributes, &resource)?;
 
         Ok(Box::new(Self {
-            delimiter: delimiter,
-            resource: resource,
-            value_formats: value_formats,
-            compression_format: compression_format,
-            direction: direction,
+            delimiter,
+            resource,
+            value_formats,
+            compression_format,
+            direction,
         }))
     }
 
@@ -177,7 +177,7 @@ impl DsvHandler {
                 ));
             }
         }
-        return Ok(delimiter);
+        Ok(delimiter)
     }
 
     /// Returns the set value formats, or finds a default value based on the

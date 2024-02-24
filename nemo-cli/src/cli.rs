@@ -69,21 +69,11 @@ pub struct OutputArgs {
     #[arg(short='D', long = "export-dir", default_value = DEFAULT_OUTPUT_DIRECTORY)]
     export_directory: PathBuf,
     /// Replace any existing files during export
-    #[arg(
-        short,
-        long = "overwrite-results",
-        default_value = "false",
-        requires = "save_results"
-    )]
+    #[arg(short, long = "overwrite-results", default_value = "false")]
     overwrite: bool,
     /// Use gzip to compress exports by default;
     /// does not affect export directives that already specify a compression
-    #[arg(
-        short,
-        long = "gzip",
-        default_value = "false",
-        requires = "save_results"
-    )]
+    #[arg(short, long = "gzip", default_value = "false")]
     gz: bool,
 }
 

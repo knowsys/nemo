@@ -56,7 +56,7 @@ impl GeneratorJoin {
 
         for (relation_index, relation_table) in input.iter().enumerate() {
             for (column_index, marker) in relation_table.iter().enumerate() {
-                let output_vec = match output_map.entry(marker.clone()) {
+                let output_vec = match output_map.entry(*marker) {
                     Entry::Occupied(entry) => entry.into_mut(),
                     Entry::Vacant(entry) => entry.insert(Vec::new()),
                 };
@@ -71,7 +71,7 @@ impl GeneratorJoin {
                     let previous_marker = &relation_table[previous_column_index];
 
                     let current_output_position = output
-                        .position(&marker)
+                        .position(marker)
                         .expect("Every input marker must appear in the output");
                     let previous_output_position = output
                         .position(previous_marker)

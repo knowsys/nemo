@@ -145,7 +145,7 @@ fn datavalue_to_python(py: Python<'_>, v: AnyDataValue) -> PyResult<&PyAny> {
         nemo::datavalues::ValueDomain::LanguageTaggedString => {
             let (value, tag) = v.to_language_tagged_string_unchecked();
             let lit = NemoLiteral {
-                value: value,
+                value,
                 language: Some(tag),
                 datatype: RDF_LANG_STRING.to_string(),
             };

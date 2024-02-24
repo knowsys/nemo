@@ -65,7 +65,7 @@ impl Ord for BooleanDataValue {
 
 impl PartialOrd for BooleanDataValue {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        Some(self.cmp(&other))
+        Some(self.cmp(other))
     }
 }
 

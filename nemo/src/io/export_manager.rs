@@ -82,7 +82,7 @@ impl ExportManager {
     /// This also checks whether the specified file could (likely) be written.
     pub fn validate(&self, export_directive: &ExportDirective) -> Result<(), Error> {
         let handler = ImportExportHandlers::export_handler(export_directive)?;
-        let path = self.output_file_path(&handler, &export_directive.predicate());
+        let path = self.output_file_path(&handler, export_directive.predicate());
 
         let meta_info = path.metadata();
         if let Err(err) = meta_info {
@@ -119,7 +119,7 @@ impl ExportManager {
 
         let handler = ImportExportHandlers::export_handler(export_directive)?;
 
-        let writer = self.writer(&handler, &export_directive.predicate())?;
+        let writer = self.writer(&handler, export_directive.predicate())?;
 
         self.export_table_with_handler_writer(&handler, writer, table, predicate_arity)
     }

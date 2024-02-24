@@ -117,12 +117,12 @@ mod test {
             writer.add_tuple_value(AnyDataValue::new_plain_string(String::from("b")));
 
             writer.add_tuple_value(AnyDataValue::new_plain_string(String::from("a")));
-            writer.add_tuple_value(null.clone().into());
+            writer.add_tuple_value(null.into());
 
             fn retrieve_dict_id(dictionary: &MetaDvDictionary, dv: &AnyDataValue) -> u32 {
                 u32::try_from(
                     dictionary
-                        .datavalue_to_id(&dv)
+                        .datavalue_to_id(dv)
                         .expect("should have been added"),
                 )
                 .expect("expecting small value here")

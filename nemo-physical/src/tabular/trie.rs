@@ -94,7 +94,7 @@ impl Trie {
 
         let mut trie_scan = self.partial_iterator();
 
-        for value in row.into_iter() {
+        for value in row.iter() {
             trie_scan.down(value.get_type());
             let column_scan = unsafe {
                 &mut *trie_scan
@@ -201,8 +201,8 @@ impl Trie {
     /// To keep all the values, set `cut_layers` to 0.
     ///
     /// Assumes that the given `trie_scan` is not initialized
-    pub(crate) fn from_partial_trie_scan<'a>(
-        trie_scan: TrieScanEnum<'a>,
+    pub(crate) fn from_partial_trie_scan(
+        trie_scan: TrieScanEnum<'_>,
         cut_layers: usize,
     ) -> Self {
         let num_columns = trie_scan.arity() - cut_layers;

@@ -13,6 +13,7 @@ use crate::{
         ExecutionTreeLeaf, ExecutionTreeNode, ExecutionTreeOperation,
     },
     tabular::operations::{
+        aggregate::{AggregationInstructions, GeneratorAggregate},
         filter::{Filters, GeneratorFilter},
         function::{FunctionAssignment, GeneratorFunction},
         join::GeneratorJoin,
@@ -131,8 +132,8 @@ impl ExecutionNodeRef {
             ExecutionOperation::ProjectReorder(subnode)
             | ExecutionOperation::Filter(subnode, _)
             | ExecutionOperation::Function(subnode, _)
-            | ExecutionOperation::Null(subnode) => vec![subnode.clone()],
-            ExecutionOperation::Aggregate() => todo!(),
+            | ExecutionOperation::Null(subnode)
+            | ExecutionOperation::Aggregate(subnode, _) => vec![subnode.clone()],
         }
     }
 }
@@ -168,9 +169,9 @@ pub(crate) enum ExecutionOperation {
     Function(ExecutionNodeRef, FunctionAssignment),
     /// Append columns with fresh nulls to the table represented by the subnode
     Null(ExecutionNodeRef),
-    /// Aggreagte
+    /// Aggregates
     /// TODO: Implement aggregates again
-    Aggregate(),
+    Aggregate(ExecutionNodeRef, AggregationInstructions),
 }
 
 /// Declares whether the resulting table form executing a plan should be kept temporarily or permamently
@@ -341,6 +342,17 @@ impl ExecutionPlan {
         self.push_and_return_reference(new_operation, marked_columns)
     }
 
+    /// Return an [ExecutionNodeRef] for restricting a column to values of certain other columns.
+    pub fn aggregate(
+        &mut self,
+        marked_columns: OperationTable,
+        subnode: ExecutionNodeRef,
+        functions: FunctionAssignment,
+    ) -> ExecutionNodeRef {
+        let new_operation = ExecutionOperation::Function(subnode, functions);
+        self.push_and_return_reference(new_operation, marked_columns)
+    }
+
     /// Return an [ExecutionNodeRef] for appending columns with fresh null.
     pub fn null(
         &mut self,
@@ -453,8 +465,7 @@ impl ExecutionPlan {
         let new_tree = if let Some(tables) = computed_trees_map.get(&output_node.node.id()) {
             let (closest_index, closest_order) =
                 closest_order(tables.iter().map(|(order, _id)| order), &order)
-                    .expect("Trie should exist at least in one order.")
-                    .clone();
+                    .expect("Trie should exist at least in one order.");
             let closest_computed_id = tables[closest_index].1;
             let arity = output_node.node.markers().arity();
             let generator = GeneratorProjectReorder::from_reordering(
@@ -699,7 +710,31 @@ impl ExecutionPlan {
                     subnodes: vec![subtree],
                 })
             }
-            ExecutionOperation::Aggregate() => todo!(),
+            ExecutionOperation::Aggregate(subnode, aggregation_instructions) => {
+                let subtree = Self::execution_node(
+                    root_node_id,
+                    subnode.clone(),
+                    order,
+                    output_nodes,
+                    computed_trees,
+                    computed_trees_map,
+                    loaded_tables,
+                )
+                .operation()
+                .expect("No sub node should be a project");
+
+                ExecutionTreeNode::Operation(ExecutionTreeOperation::Node {
+                    generator: OperationGeneratorEnum::Aggregate(GeneratorAggregate::new(
+                        *aggregation_instructions,
+                    )),
+                    subnodes: vec![subtree],
+                })
+
+                // ExecutionTreeNode::Aggregate {
+                //     aggregation_instructions: aggregation_instructions.clone(),
+                //     subnode: subtree,
+                // }
+            }
             ExecutionOperation::ProjectReorder(subnode) => {
                 let marker_subnode = subnode.markers();
                 let subtree = if let ExecutionTreeOperation::Leaf(leaf) = Self::execution_node(

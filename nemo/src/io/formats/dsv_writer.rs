@@ -32,7 +32,7 @@ impl DsvWriter {
                 .delimiter(delimiter)
                 .double_quote(true)
                 .from_writer(writer),
-            value_formats: value_formats,
+            value_formats,
         }
     }
 

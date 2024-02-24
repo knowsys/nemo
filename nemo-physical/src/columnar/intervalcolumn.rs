@@ -470,30 +470,28 @@ mod test {
     fn test_builder_matrix<LookupMethod: IntervalLookup>() {
         let mut builder = IntervalColumnTBuilderMatrix::<LookupMethod>::default();
 
-        assert_eq!(builder.add_value(StorageValueT::Id32(12)), true);
-        assert_eq!(builder.add_value(StorageValueT::Id32(16)), true);
-        assert_eq!(builder.add_value(StorageValueT::Id32(16)), false);
-        assert_eq!(builder.add_value(StorageValueT::Int64(-10)), true);
-        assert_eq!(builder.add_value(StorageValueT::Int64(-4)), true);
+        assert!(builder.add_value(StorageValueT::Id32(12)));
+        assert!(builder.add_value(StorageValueT::Id32(16)));
+        assert!(!builder.add_value(StorageValueT::Id32(16)));
+        assert!(builder.add_value(StorageValueT::Int64(-10)));
+        assert!(builder.add_value(StorageValueT::Int64(-4)));
 
         builder.finish_interval(StorageTypeName::Id64);
 
-        assert_eq!(builder.add_value(StorageValueT::Int64(-4)), true);
-        assert_eq!(builder.add_value(StorageValueT::Int64(-4)), false);
-        assert_eq!(builder.add_value(StorageValueT::Int64(0)), true);
-        assert_eq!(
-            builder.add_value(StorageValueT::Float(Float::new(3.1).unwrap())),
-            true
+        assert!(builder.add_value(StorageValueT::Int64(-4)));
+        assert!(!builder.add_value(StorageValueT::Int64(-4)));
+        assert!(builder.add_value(StorageValueT::Int64(0)));
+        assert!(
+            builder.add_value(StorageValueT::Float(Float::new(3.1).unwrap()))
         );
-        assert_eq!(
-            builder.add_value(StorageValueT::Float(Float::new(3.1).unwrap())),
-            false
+        assert!(
+            !builder.add_value(StorageValueT::Float(Float::new(3.1).unwrap()))
         );
 
         builder.finish_interval(StorageTypeName::Double);
 
-        assert_eq!(builder.add_value(StorageValueT::Id32(6)), true);
-        assert_eq!(builder.add_value(StorageValueT::Id32(7)), true);
+        assert!(builder.add_value(StorageValueT::Id32(6)));
+        assert!(builder.add_value(StorageValueT::Id32(7)));
 
         builder.finish_interval(StorageTypeName::Double);
 

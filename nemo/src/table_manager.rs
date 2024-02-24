@@ -445,9 +445,9 @@ impl TableManager {
     pub(crate) fn register_predicate(&mut self, predicate: Identifier, arity: usize) {
         let predicate_info = PredicateInfo { arity };
 
-        if let Some(_) = self
+        if self
             .predicate_to_info
-            .insert(predicate.clone(), predicate_info)
+            .insert(predicate.clone(), predicate_info).is_some()
         {
             panic!("predicates must uniquely identify one relation");
         }

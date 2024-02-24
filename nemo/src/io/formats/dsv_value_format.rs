@@ -105,7 +105,7 @@ impl DsvValueFormat {
         if input.is_empty() {
             return Ok(AnyDataValue::new_plain_string("".to_string()));
         }
-        assert!(input.len() > 0);
+        assert!(!input.is_empty());
 
         match input.as_bytes()[0] {
             b'<' => {
@@ -119,7 +119,7 @@ impl DsvValueFormat {
                 }
             }
             b'"' => {
-                if let Some(pos) = input.rfind("\"") {
+                if let Some(pos) = input.rfind('\"') {
                     if pos == input.len() - 1 {
                         return Ok(AnyDataValue::new_plain_string(
                             input[1..input.len() - 1].to_string(),

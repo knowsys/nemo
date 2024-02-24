@@ -1,49 +1,34 @@
 //! Computes the maximum of all input values.
 
-use std::marker::PhantomData;
-
 use crate::datatypes::StorageValueT;
 
-use super::{
-    aggregate::Aggregate,
-    processor::{AggregateGroupProcessor, AggregateProcessor},
-};
+use super::processor::{AggregateGroupProcessor, AggregateProcessor};
 
 #[derive(Debug)]
-pub(crate) struct MaxAggregateProcessor<A>
-where
-    A: PartialEq + PartialOrd + 'static,
-{
-    phantom_data: PhantomData<A>,
-}
+pub(crate) struct MaxAggregateProcessor {}
 
-impl<A: Aggregate> MaxAggregateProcessor<A> {
+impl MaxAggregateProcessor {
     pub(crate) fn new() -> Self {
-        Self {
-            phantom_data: PhantomData,
-        }
+        Self {}
     }
 }
 
-impl<A: Aggregate> AggregateProcessor<A> for MaxAggregateProcessor<A> {
+impl AggregateProcessor for MaxAggregateProcessor {
     fn idempotent(&self) -> bool {
         true
     }
 
-    fn group(&self) -> Box<dyn AggregateGroupProcessor<A>> {
+    fn group(&self) -> Box<dyn AggregateGroupProcessor> {
         Box::new(MaxAggregateGroupProcessor::new())
     }
 }
 
 #[derive(Debug)]
-pub(crate) struct MaxAggregateGroupProcessor<A>
-where
-    A: Aggregate,
-{
-    current_max_value: Option<A>,
+pub(crate) struct MaxAggregateGroupProcessor {
+    current_max_value: Option<StorageValueT>,
 }
 
-impl<A: Aggregate> MaxAggregateGroupProcessor<A> {
+impl MaxAggregateGroupProcessor {
     pub(crate) fn new() -> Self {
         Self {
             current_max_value: None,
@@ -51,8 +36,8 @@ impl<A: Aggregate> MaxAggregateGroupProcessor<A> {
     }
 }
 
-impl<A: Aggregate> AggregateGroupProcessor<A> for MaxAggregateGroupProcessor<A> {
-    fn write_aggregate_input_value(&mut self, value: A) {
+impl AggregateGroupProcessor for MaxAggregateGroupProcessor {
+    fn write_aggregate_input_value(&mut self, value: StorageValueT) {
         match &self.current_max_value {
             Some(current_max_value) => {
                 if value > *current_max_value {
@@ -65,7 +50,6 @@ impl<A: Aggregate> AggregateGroupProcessor<A> for MaxAggregateGroupProcessor<A> 
 
     fn finish(&self) -> Option<StorageValueT> {
         self.current_max_value
-            .as_ref()
-            .map(|value| value.clone().into())
+            .as_ref().copied()
     }
 }

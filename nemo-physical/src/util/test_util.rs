@@ -14,7 +14,7 @@ pub(crate) mod test {
         let rows = rows
             .into_iter()
             .map(|row| {
-                row.into_iter()
+                row.iter()
                     .map(|&entry| StorageValueT::Id32(entry))
                     .collect::<Vec<_>>()
             })
@@ -28,7 +28,7 @@ pub(crate) mod test {
         let rows = rows
             .into_iter()
             .map(|row| {
-                row.into_iter()
+                row.iter()
                     .map(|&entry| StorageValueT::Int64(entry))
                     .collect::<Vec<_>>()
             })
@@ -89,10 +89,10 @@ pub(crate) mod test {
     ) {
         let mut next_type_map = HashMap::<StorageTypeName, StorageTypeName>::new();
         for adjacent_types in types.windows(2) {
-            next_type_map.insert(adjacent_types[0].clone(), adjacent_types[1].clone());
+            next_type_map.insert(adjacent_types[0], adjacent_types[1]);
         }
 
-        let first_type = types.first().unwrap().clone();
+        let first_type = *types.first().unwrap();
         scan.down(first_type);
         assert_eq!(partial_scan_current(scan, first_type), None);
 

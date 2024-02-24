@@ -65,10 +65,10 @@ impl RdfReader {
         value: BlankNode,
     ) -> AnyDataValue {
         if let Some(null) = bnode_map.get(value.to_string().as_str()) {
-            AnyDataValue::from(null.clone())
+            AnyDataValue::from(*null)
         } else {
             let null = tuple_writer.fresh_null();
-            bnode_map.insert(value.to_string().as_str(), null.clone());
+            bnode_map.insert(value.to_string().as_str(), null);
             AnyDataValue::from(null)
         }
     }
@@ -287,10 +287,10 @@ impl TableProvider for RdfReader {
 
         match self.variant {
             RdfVariant::NTriples => {
-                self.read_triples_with_parser(tuple_writer, |read| NTriplesParser::new(read))
+                self.read_triples_with_parser(tuple_writer, NTriplesParser::new)
             }
             RdfVariant::NQuads => {
-                self.read_quads_with_parser(tuple_writer, |read| NQuadsParser::new(read))
+                self.read_quads_with_parser(tuple_writer, NQuadsParser::new)
             }
             RdfVariant::Turtle => self.read_triples_with_parser(tuple_writer, |read| {
                 TurtleParser::new(read, base_iri.clone())
@@ -357,7 +357,7 @@ mod test {
         let dict = RefCell::new(Dict::default());
         let mut tuple_writer = TupleWriter::new(&dict, 3);
         let result =
-            reader.read_triples_with_parser(&mut tuple_writer, |read| NTriplesParser::new(read));
+            reader.read_triples_with_parser(&mut tuple_writer, NTriplesParser::new);
         assert!(result.is_ok());
         assert_eq!(tuple_writer.size(), 4);
     }
@@ -408,7 +408,7 @@ mod test {
         let dict = RefCell::new(Dict::default());
         let mut tuple_writer = TupleWriter::new(&dict, 3);
         let result =
-            reader.read_triples_with_parser(&mut tuple_writer, |read| NTriplesParser::new(read));
+            reader.read_triples_with_parser(&mut tuple_writer, NTriplesParser::new);
         assert!(result.is_ok());
         assert_eq!(tuple_writer.size(), 1);
     }

@@ -245,7 +245,7 @@ impl AnyDataValue {
                     "true" | "1" => Ok(Self::new_boolean(true)),
                     "false" | "0" => Ok(Self::new_boolean(false)),
                     _ => Err(DataValueCreationError::BooleanNotParsed {
-                        lexical_value: lexical_value,
+                        lexical_value,
                     }),
                 },
                 _ => Ok(Self::new_other(lexical_value, datatype_iri)),
@@ -322,15 +322,15 @@ impl AnyDataValue {
                 Self::decimal_parse_error(lexical_value, decimal_type)
             }
             (DecimalType::NonNegativeInteger, v) if v < 0 => {
-                return Self::decimal_parse_error(lexical_value, decimal_type)
+                Self::decimal_parse_error(lexical_value, decimal_type)
             }
             (DecimalType::NegativeInteger, v) if v >= 0 => {
-                return Self::decimal_parse_error(lexical_value, decimal_type)
+                Self::decimal_parse_error(lexical_value, decimal_type)
             }
             (DecimalType::NonPositiveInteger, v) if v > 0 => {
-                return Self::decimal_parse_error(lexical_value, decimal_type)
+                Self::decimal_parse_error(lexical_value, decimal_type)
             }
-            _ => return Ok(Self::new_integer_from_i64(value)),
+            _ => Ok(Self::new_integer_from_i64(value)),
         }
     }
 
@@ -413,16 +413,16 @@ impl AnyDataValue {
 
             match (decimal_type, sign_plus) {
                 (DecimalType::PositiveInteger, p) | (DecimalType::NonNegativeInteger, p) if !p => {
-                    return Self::decimal_parse_error(lexical_value, decimal_type);
+                    Self::decimal_parse_error(lexical_value, decimal_type)
                 }
                 (DecimalType::NegativeInteger, p) | (DecimalType::NonPositiveInteger, p) if p => {
-                    return Self::decimal_parse_error(lexical_value, decimal_type);
+                    Self::decimal_parse_error(lexical_value, decimal_type)
                 }
                 _ => {
-                    return Ok(AnyDataValue::new_other(
+                    Ok(AnyDataValue::new_other(
                         trimmed_value,
                         XSD_PREFIX.to_owned() + "integer",
-                    ));
+                    ))
                 }
             }
         } else if let DecimalType::Decimal = decimal_type {
@@ -725,18 +725,18 @@ impl Ord for AnyDataValue {
         if let std::cmp::Ordering::Equal = dom_order {
             match (&self.0, &other.0) {
                 (AnyDataValueEnum::PlainString(dv), AnyDataValueEnum::PlainString(dv_other)) => {
-                    dv.cmp(&dv_other)
+                    dv.cmp(dv_other)
                 }
-                (AnyDataValueEnum::Iri(dv), AnyDataValueEnum::Iri(dv_other)) => dv.cmp(&dv_other),
+                (AnyDataValueEnum::Iri(dv), AnyDataValueEnum::Iri(dv_other)) => dv.cmp(dv_other),
                 (
                     AnyDataValueEnum::LanguageTaggedString(dv),
                     AnyDataValueEnum::LanguageTaggedString(dv_other),
-                ) => dv.cmp(&dv_other),
+                ) => dv.cmp(dv_other),
                 (AnyDataValueEnum::Float(dv), AnyDataValueEnum::Float(dv_other)) => {
-                    dv.cmp(&dv_other)
+                    dv.cmp(dv_other)
                 }
                 (AnyDataValueEnum::Double(dv), AnyDataValueEnum::Double(dv_other)) => {
-                    dv.cmp(&dv_other)
+                    dv.cmp(dv_other)
                 }
                 (AnyDataValueEnum::Long(_), _) => {
                     self.to_i64_unchecked().cmp(&other.to_i64_unchecked())
@@ -745,15 +745,15 @@ impl Ord for AnyDataValue {
                     self.to_u64_unchecked().cmp(&other.to_u64_unchecked())
                 }
                 (AnyDataValueEnum::Boolean(dv), AnyDataValueEnum::Boolean(dv_other)) => {
-                    dv.cmp(&dv_other)
+                    dv.cmp(dv_other)
                 }
-                (AnyDataValueEnum::Null(dv), AnyDataValueEnum::Null(dv_other)) => dv.cmp(&dv_other),
+                (AnyDataValueEnum::Null(dv), AnyDataValueEnum::Null(dv_other)) => dv.cmp(dv_other),
                 (AnyDataValueEnum::Tuple(dv), AnyDataValueEnum::Tuple(dv_other)) => {
-                    dv.cmp(&dv_other)
+                    dv.cmp(dv_other)
                 }
-                (AnyDataValueEnum::Map(dv), AnyDataValueEnum::Map(dv_other)) => dv.cmp(&dv_other),
+                (AnyDataValueEnum::Map(dv), AnyDataValueEnum::Map(dv_other)) => dv.cmp(dv_other),
                 (AnyDataValueEnum::Other(dv), AnyDataValueEnum::Other(dv_other)) => {
-                    dv.cmp(&dv_other)
+                    dv.cmp(dv_other)
                 }
                 _ => unreachable!("no other combination of values can have equal domains"),
             }
@@ -765,7 +765,7 @@ impl Ord for AnyDataValue {
 
 impl PartialOrd for AnyDataValue {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        Some(self.cmp(&other))
+        Some(self.cmp(other))
     }
 }
 
@@ -939,10 +939,10 @@ mod test {
         );
         assert_eq!(dv.value_domain(), ValueDomain::NonNegativeInt);
 
-        assert_eq!(dv.fits_into_i32(), true);
-        assert_eq!(dv.fits_into_u32(), true);
-        assert_eq!(dv.fits_into_i64(), true);
-        assert_eq!(dv.fits_into_u64(), true);
+        assert!(dv.fits_into_i32());
+        assert!(dv.fits_into_u32());
+        assert!(dv.fits_into_i64());
+        assert!(dv.fits_into_u64());
 
         assert_eq!(dv.to_i32(), Some(42));
         assert_eq!(dv.to_i32_unchecked(), 42);
@@ -969,10 +969,10 @@ mod test {
         );
         assert_eq!(dv.value_domain(), ValueDomain::UnsignedLong);
 
-        assert_eq!(dv.fits_into_i32(), false);
-        assert_eq!(dv.fits_into_u32(), false);
-        assert_eq!(dv.fits_into_i64(), false);
-        assert_eq!(dv.fits_into_u64(), true);
+        assert!(!dv.fits_into_i32());
+        assert!(!dv.fits_into_u32());
+        assert!(!dv.fits_into_i64());
+        assert!(dv.fits_into_u64());
 
         assert_eq!(dv.to_i32(), None);
         assert_eq!(dv.to_u32(), None);
@@ -1116,15 +1116,13 @@ mod test {
         let dv_other_hash = hash(dv_other);
 
         assert_eq!(dv_i64_hash, dv_u64_hash);
-        let vec = vec![
-            dv_f64_hash,
+        let vec = [dv_f64_hash,
             dv_i64_hash,
             dv_u64_2_hash,
             dv_string_hash,
             dv_iri_hash,
             dv_lang_string_hash,
-            dv_other_hash,
-        ];
+            dv_other_hash];
         let set: HashSet<_> = vec.iter().collect();
         assert_eq!(set.len(), 7);
     }

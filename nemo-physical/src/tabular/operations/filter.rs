@@ -154,7 +154,7 @@ impl GeneratorFilter {
             let marker = Self::find_last_reference(input, filter);
             grouped_filters
                 .entry(marker)
-                .or_insert_with(Vec::new)
+                .or_default()
                 .push(filter);
         }
 

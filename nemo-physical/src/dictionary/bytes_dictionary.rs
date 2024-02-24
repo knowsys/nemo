@@ -100,14 +100,14 @@ impl<B: GlobalBytesBuffer> BytesDictionary<B> {
         match self.map_short.get(bytes) {
             Some(idx) => {
                 if *idx == SMALL_KNOWN_ID_MARK {
-                    return AddResult::Known(KNOWN_ID_MARK);
+                    AddResult::Known(KNOWN_ID_MARK)
                 } else {
-                    return AddResult::Known(Self::id32_to_id(*idx));
+                    AddResult::Known(Self::id32_to_id(*idx))
                 }
             }
             None => match self.map_long.get(bytes) {
                 Some(idx) => {
-                    return AddResult::Known(Self::id64_to_id(*idx));
+                    AddResult::Known(Self::id64_to_id(*idx))
                 }
                 None => {
                     let sref = B::push_bytes(self.buffer_id, bytes);
@@ -124,10 +124,10 @@ impl<B: GlobalBytesBuffer> BytesDictionary<B> {
                                     .expect("no support for platforms with more than 64bits"),
                             );
                         }
-                        return AddResult::Fresh(id);
+                        AddResult::Fresh(id)
                     } else {
                         self.map_short.insert(sref, SMALL_KNOWN_ID_MARK);
-                        return AddResult::Fresh(KNOWN_ID_MARK);
+                        AddResult::Fresh(KNOWN_ID_MARK)
                     }
                 }
             },
@@ -221,7 +221,7 @@ mod test {
         assert_eq!(res2, AddResult::Known(0));
 
         assert_eq!(dict.len(), 3);
-        assert_eq!(dict.has_marked(), false);
+        assert!(!dict.has_marked());
     }
 
     #[test]
@@ -245,7 +245,7 @@ mod test {
         assert_eq!(dict.id_to_bytes(0), Some(vec![]));
         assert_eq!(dict.bytes_to_id(&[]), Some(0));
         assert_eq!(dict.len(), 1);
-        assert_eq!(dict.has_marked(), false);
+        assert!(!dict.has_marked());
     }
 
     #[test]
@@ -260,7 +260,7 @@ mod test {
         assert_eq!(dict.add_bytes(&[3]), AddResult::Known(KNOWN_ID_MARK));
 
         assert_eq!(dict.len(), 2);
-        assert_eq!(dict.has_marked(), true);
+        assert!(dict.has_marked());
 
         assert_eq!(dict.id_to_bytes(0), Some(vec![1]));
         assert_eq!(dict.bytes_to_id(&[1]), Some(0));

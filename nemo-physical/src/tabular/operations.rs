@@ -1,6 +1,6 @@
 //! This module defines operations over tries
 
-pub(crate) mod aggregate;
+pub mod aggregate; // TODOa
 pub(crate) mod filter;
 pub(crate) mod function;
 pub(crate) mod join;
@@ -28,6 +28,7 @@ use delegate::delegate;
 
 use crate::{management::database::Dict, util::mapping::permutation::Permutation};
 
+use self::aggregate::GeneratorAggregate;
 use self::{
     filter::GeneratorFilter, function::GeneratorFunction, join::GeneratorJoin, null::GeneratorNull,
     subtract::GeneratorSubtract, union::GeneratorUnion,
@@ -56,7 +57,7 @@ pub struct OperationTable(Vec<OperationColumnMarker>);
 impl OperationTable {
     /// Create a [OperationTable] which marks each column with a distinct [OperationColumnMarker].
     pub fn new_unique(arity: usize) -> Self {
-        Self((0..arity).map(|i| OperationColumnMarker(i)).collect())
+        Self((0..arity).map(OperationColumnMarker).collect())
     }
 
     /// Return the number of columns associated with this table.
@@ -225,10 +226,9 @@ where
         OperationTable(
             iterator
                 .map(|marker| {
-                    self.map
+                    *self.map
                         .get(marker)
                         .expect("Function assumes that every relevant external marker is known")
-                        .clone()
                 })
                 .collect(),
         )
@@ -254,6 +254,8 @@ pub(crate) trait OperationGenerator {
 }
 
 pub(crate) enum OperationGeneratorEnum {
+    /// Aggregate
+    Aggregate(GeneratorAggregate),
     /// Join
     Join(GeneratorJoin),
     /// Union
@@ -271,6 +273,7 @@ pub(crate) enum OperationGeneratorEnum {
 impl OperationGenerator for OperationGeneratorEnum {
     delegate! {
         to match self {
+            Self::Aggregate(generator) => generator,
             Self::Join(generator) => generator,
             Self::Union(generator) => generator,
             Self::Subtract(generator) => generator,
@@ -290,6 +293,7 @@ impl OperationGenerator for OperationGeneratorEnum {
 impl Debug for OperationGeneratorEnum {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            Self::Aggregate(generator) => f.write_fmt(format_args!("Aggregate ({generator:?})")),
             Self::Join(generator) => f.write_fmt(format_args!("Join ({generator:?})")),
             Self::Union(_generator) => f.write_fmt(format_args!("Union")),
             Self::Subtract(generator) => f.write_fmt(format_args!("Subtract ({generator:?})")),

@@ -42,41 +42,41 @@ impl<'a> QuadBuffer {
     fn subject(&'a self) -> Subject<'a> {
         if self.subject_is_blank {
             Subject::BlankNode(BlankNode {
-                id: &self.subject.as_str(),
+                id: self.subject.as_str(),
             })
         } else {
             Subject::NamedNode(NamedNode {
-                iri: &self.subject.as_str(),
+                iri: self.subject.as_str(),
             })
         }
     }
 
     fn predicate(&'a self) -> NamedNode<'a> {
         NamedNode {
-            iri: &&self.predicate.as_str(),
+            iri: self.predicate.as_str(),
         }
     }
 
     fn object(&'a self) -> Term<'a> {
         match self.object_type {
             RdfTermType::Iri => Term::NamedNode(NamedNode {
-                iri: &self.object_part1.as_str(),
+                iri: self.object_part1.as_str(),
             }),
             RdfTermType::BNode => Term::BlankNode(BlankNode {
-                id: &self.object_part1.as_str(),
+                id: self.object_part1.as_str(),
             }),
             RdfTermType::TypedLiteral => Term::Literal(Literal::Typed {
-                value: &self.object_part1.as_str(),
+                value: self.object_part1.as_str(),
                 datatype: NamedNode {
-                    iri: &self.object_part2.as_str(),
+                    iri: self.object_part2.as_str(),
                 },
             }),
             RdfTermType::LangString => Term::Literal(Literal::LanguageTaggedString {
-                value: &self.object_part1.as_str(),
-                language: &self.object_part2.as_str(),
+                value: self.object_part1.as_str(),
+                language: self.object_part2.as_str(),
             }),
             RdfTermType::SimpleStringLiteral => Term::Literal(Literal::Simple {
-                value: &self.object_part1.as_str(),
+                value: self.object_part1.as_str(),
             }),
         }
     }
@@ -84,11 +84,11 @@ impl<'a> QuadBuffer {
     fn graph_name(&'a self) -> GraphName<'a> {
         if self.graph_name_is_blank {
             GraphName::BlankNode(BlankNode {
-                id: &self.graph_name.as_str(),
+                id: self.graph_name.as_str(),
             })
         } else {
             GraphName::NamedNode(NamedNode {
-                iri: &self.graph_name.as_str(),
+                iri: self.graph_name.as_str(),
             })
         }
     }
@@ -98,12 +98,12 @@ impl<'a> QuadBuffer {
             ValueDomain::Iri => {
                 self.subject = datavalue.to_iri_unchecked();
                 self.subject_is_blank = false;
-                return true;
+                true
             }
             ValueDomain::Null => {
                 self.subject = datavalue.lexical_value();
                 self.subject_is_blank = true;
-                return true;
+                true
             }
             _ => false,
         }
@@ -113,7 +113,7 @@ impl<'a> QuadBuffer {
         match datavalue.value_domain() {
             ValueDomain::Iri => {
                 self.predicate = datavalue.to_iri_unchecked();
-                return true;
+                true
             }
             _ => false,
         }
@@ -168,12 +168,12 @@ impl<'a> QuadBuffer {
             ValueDomain::Iri => {
                 self.graph_name = datavalue.to_iri_unchecked();
                 self.graph_name_is_blank = false;
-                return true;
+                true
             }
             ValueDomain::Null => {
                 self.graph_name = datavalue.lexical_value();
                 self.graph_name_is_blank = true;
-                return true;
+                true
             }
             _ => false,
         }
@@ -194,9 +194,9 @@ impl RdfWriter {
         value_formats: Vec<RdfValueFormat>,
     ) -> Self {
         RdfWriter {
-            writer: writer,
-            variant: variant,
-            value_formats: value_formats,
+            writer,
+            variant,
+            value_formats,
         }
     }
 
@@ -204,7 +204,7 @@ impl RdfWriter {
         self,
         table: Box<dyn Iterator<Item = Vec<AnyDataValue>> + 'a>,
         make_formatter: impl Fn(Box<dyn Write>) -> std::io::Result<Formatter>,
-        finish_formatter: impl Fn(Formatter) -> (),
+        finish_formatter: impl Fn(Formatter),
     ) -> Result<(), Error>
     where
         Formatter: TriplesFormatter,
@@ -253,7 +253,7 @@ impl RdfWriter {
         self,
         table: Box<dyn Iterator<Item = Vec<AnyDataValue>> + 'a>,
         make_formatter: impl Fn(Box<dyn Write>) -> std::io::Result<Formatter>,
-        finish_formatter: impl Fn(Formatter) -> (),
+        finish_formatter: impl Fn(Formatter),
     ) -> Result<(), Error>
     where
         Formatter: QuadsFormatter,
@@ -332,7 +332,7 @@ impl TableWriter for RdfWriter {
             ),
             RdfVariant::RDFXML => self.export_triples(
                 table,
-                |write| RdfXmlFormatter::new(write),
+                RdfXmlFormatter::new,
                 |f| {
                     let _ = f.finish();
                 },

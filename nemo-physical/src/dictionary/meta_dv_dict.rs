@@ -519,7 +519,7 @@ impl DvDict for MetaDvDictionary {
         let mut d_it = DictIterator::new();
         let mut dict_idx: usize;
         while {
-            dict_idx = d_it.next(&dv, self);
+            dict_idx = d_it.next(dv, self);
             dict_idx
         } != usize::MAX
         {
@@ -637,33 +637,33 @@ mod test {
             assert_eq!(dict.id_to_datavalue(ids[i]), Some(dvs[i].clone()));
         }
 
-        assert_eq!(dict.is_iri(ids[0]), false);
-        assert_eq!(dict.is_iri(ids[1]), false);
-        assert_eq!(dict.is_iri(ids[2]), true);
-        assert_eq!(dict.is_iri(ids[3]), false);
-        assert_eq!(dict.is_iri(ids[3]), false);
-        assert_eq!(dict.is_iri(ids[4] * 500), false);
+        assert!(!dict.is_iri(ids[0]));
+        assert!(!dict.is_iri(ids[1]));
+        assert!(dict.is_iri(ids[2]));
+        assert!(!dict.is_iri(ids[3]));
+        assert!(!dict.is_iri(ids[3]));
+        assert!(!dict.is_iri(ids[4] * 500));
 
-        assert_eq!(dict.is_plain_string(ids[0]), true);
-        assert_eq!(dict.is_plain_string(ids[1]), true);
-        assert_eq!(dict.is_plain_string(ids[2]), false);
-        assert_eq!(dict.is_plain_string(ids[3]), false);
-        assert_eq!(dict.is_plain_string(ids[4]), false);
-        assert_eq!(dict.is_plain_string(ids[4] * 500), false);
+        assert!(dict.is_plain_string(ids[0]));
+        assert!(dict.is_plain_string(ids[1]));
+        assert!(!dict.is_plain_string(ids[2]));
+        assert!(!dict.is_plain_string(ids[3]));
+        assert!(!dict.is_plain_string(ids[4]));
+        assert!(!dict.is_plain_string(ids[4] * 500));
 
-        assert_eq!(dict.is_lang_string(ids[0]), false);
-        assert_eq!(dict.is_lang_string(ids[1]), false);
-        assert_eq!(dict.is_lang_string(ids[2]), false);
-        assert_eq!(dict.is_lang_string(ids[3]), true);
-        assert_eq!(dict.is_lang_string(ids[4]), false);
-        assert_eq!(dict.is_lang_string(ids[4] * 500), false);
+        assert!(!dict.is_lang_string(ids[0]));
+        assert!(!dict.is_lang_string(ids[1]));
+        assert!(!dict.is_lang_string(ids[2]));
+        assert!(dict.is_lang_string(ids[3]));
+        assert!(!dict.is_lang_string(ids[4]));
+        assert!(!dict.is_lang_string(ids[4] * 500));
 
-        assert_eq!(dict.is_null(ids[0]), false);
-        assert_eq!(dict.is_null(ids[1]), false);
-        assert_eq!(dict.is_null(ids[2]), false);
-        assert_eq!(dict.is_null(ids[3]), false);
-        assert_eq!(dict.is_null(ids[4]), false);
-        assert_eq!(dict.is_null(ids[4] * 500), false);
+        assert!(!dict.is_null(ids[0]));
+        assert!(!dict.is_null(ids[1]));
+        assert!(!dict.is_null(ids[2]));
+        assert!(!dict.is_null(ids[3]));
+        assert!(!dict.is_null(ids[4]));
+        assert!(!dict.is_null(ids[4] * 500));
 
         assert_eq!(dict.len(), dvs.len());
     }
@@ -684,9 +684,9 @@ mod test {
 
         assert_eq!(dict.add_datavalue(nv3.clone()), AddResult::Rejected);
 
-        assert_eq!(dict.is_null(n1_id), true);
-        assert_eq!(dict.is_null(n2_id), true);
-        assert_eq!(dict.is_null(n2_id + 10), false);
+        assert!(dict.is_null(n1_id));
+        assert!(dict.is_null(n2_id));
+        assert!(!dict.is_null(n2_id + 10));
 
         assert_eq!(dict.len(), 2);
     }

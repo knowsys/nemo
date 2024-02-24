@@ -2,7 +2,10 @@
 //!
 //! See [`TrieScanAggregate`] for more information about the implementation and it's relation to other parts of the code
 
-use std::{cell::UnsafeCell, fmt::Debug};
+use std::{
+    cell::{RefCell, UnsafeCell},
+    fmt::Debug,
+};
 
 use crate::{
     aggregates::{
@@ -10,11 +13,12 @@ use crate::{
         processors::processor::{AggregateGroupProcessor, AggregateProcessor},
     },
     columnar::columnscan::ColumnScanRainbow,
-    datatypes::{Double, Float, StorageTypeName, StorageValueT},
-    tabular::triescan::{PartialTrieScan, TrieScan},
+    datatypes::{StorageTypeName, StorageValueT},
+    management::database::Dict,
+    tabular::triescan::{PartialTrieScan, TrieScan, TrieScanEnum},
 };
 
-use super::prune::TrieScanPrune;
+use super::{prune::TrieScanPrune, OperationGenerator};
 
 #[derive(Debug)]
 enum AggregatedOutputValue {
@@ -26,9 +30,38 @@ enum AggregatedOutputValue {
     Some(StorageValueT),
 }
 
+#[derive(Debug, Clone)]
+pub(crate) struct GeneratorAggregate {
+    pub instructions: AggregationInstructions,
+}
+
+impl GeneratorAggregate {
+    pub(crate) fn new(instructions: AggregationInstructions) -> Self {
+        Self { instructions }
+    }
+}
+
+impl OperationGenerator for GeneratorAggregate {
+    fn generate<'a>(
+        &'_ self,
+        mut input: Vec<Option<TrieScanEnum<'a>>>,
+        _dictionary: &'a RefCell<Dict>,
+    ) -> Option<TrieScanEnum<'a>> {
+        debug_assert!(input.len() == 1);
+
+        let input_scan = input.remove(0)?;
+
+        let prune = TrieScanPrune::new(input_scan);
+
+        Some(TrieScanEnum::TrieScanAggregateWrapper(
+            TrieScanAggregate::new(prune, self.instructions).into(),
+        ))
+    }
+}
+
 /// Describes which columns of the input trie scan will be group-by, distinct and aggregate columns and other information about the aggregation.
 #[derive(Debug, Clone, Copy)]
-pub(crate) struct AggregationInstructions {
+pub struct AggregationInstructions {
     /// Type of the aggregate operation, which determines the aggregate processor that will be used
     pub aggregate_operation: AggregateOperation,
     /// Number of group-by columns
@@ -95,8 +128,6 @@ impl AggregationInstructions {
 /// * one aggregate output column
 #[derive(Debug)]
 pub(crate) struct TrieScanAggregate<T: TrieScan> {
-    aggregated_input_column_storage_type: StorageTypeName,
-
     input_scan: T,
     instructions: AggregationInstructions,
 
@@ -120,17 +151,12 @@ struct PeekedRowInformation {
 
 impl<T: TrieScan> TrieScanAggregate<T> {
     /// Creates a new [`TrieScanAggregate`] for processing an input full [`TrieScan`]. The group-by layers will get copied, an aggregate column will be computed based on the input aggregate/distinct columns, and any other columns will get dismissed.
-    pub(crate) fn new(
-        input_scan: T,
-        instructions: AggregationInstructions,
-        aggregated_input_column_storage_type: StorageTypeName,
-    ) -> Self {
+    pub(crate) fn new(input_scan: T, instructions: AggregationInstructions) -> Self {
         if !instructions.is_valid() {
             panic!("cannot create TrieScanAggregate with invalid aggregation instructions")
         }
 
         Self {
-            aggregated_input_column_storage_type,
             input_scan,
             instructions,
             current_aggregated_output_value: AggregatedOutputValue::None,
@@ -201,77 +227,57 @@ impl<T: TrieScan> TrieScan for TrieScanAggregate<T> {
                             .collect()
                     };
 
-                    macro_rules! aggregate_for_storage_type {
-                        ($variant:ident, $type:ty) => {{
+                    // TODO: Update use of dynamic dispatch
+                    let processor = self.instructions.aggregate_operation.create_processor();
+                    let mut group_processor: Box<dyn AggregateGroupProcessor> = processor.group();
 
-                            // TODO: Update use of dynamic dispatch
-                            let processor = self.instructions.aggregate_operation.create_processor();
-                            let mut group_processor: Box<dyn AggregateGroupProcessor<$type>> = processor.group();
+                    loop {
+                        let new_value = self
+                            .input_scan
+                            .current_value(self.instructions.aggregated_column_index);
 
-                            loop {
-                                let new_value = match self
-                                    .input_scan
-                                    .current_value(self.instructions.aggregated_column_index)
-                                {
-                                    StorageValueT::$variant(v) => v,
-                                    _ => {
-                                        panic!("invalid storage value during aggregation")
-                                    }
-                                };
+                        // Perform aggregation
+                        group_processor.write_aggregate_input_value(new_value);
 
-                                // Perform aggregation
-                                group_processor.write_aggregate_input_value(new_value);
-
-                                // Advance the underlying trie scan to find out if the is another row with the same group-by values.
-                                if let Some(uppermost_modified_column_index) = self
-                                    .input_scan
-                                    .advance_on_layer(self.instructions.last_distinct_column_index)
-                                {
-                                    // Check if a group-by column was modified
-                                    if uppermost_modified_column_index < self.instructions.group_by_column_count {
-                                        // We have left the current aggregation group
-                                        self.peeked_row_information = Some(PeekedRowInformation {
-                                            uppermost_modified_column_index: Some(uppermost_modified_column_index),
-                                            original_group_by_values,
-                                        });
-                                        // Thus, there are no more values to aggregate in the current group.
-                                        break;
-                                    } else {
-                                        // We have new values for at least one of the distinct columns, but all group by columns are still the same.
-                                        // Thus, continue aggregating.
-                                        continue;
-                                    }
-                                } else {
-                                    self.peeked_row_information = Some(PeekedRowInformation {
-                                        uppermost_modified_column_index: None,
-                                        original_group_by_values,
-                                    });
-                                    // There are no more values to aggregate, because the input trie scan is fully consumed
-                                    break;
-                                }
-                            }
-
-                            if let Some(result) = group_processor.finish() {
-                                self.current_aggregated_output_value =
-                                    AggregatedOutputValue::Some(result);
-                                return result;
+                        // Advance the underlying trie scan to find out if the is another row with the same group-by values.
+                        if let Some(uppermost_modified_column_index) = self
+                            .input_scan
+                            .advance_on_layer(self.instructions.last_distinct_column_index)
+                        {
+                            // Check if a group-by column was modified
+                            if uppermost_modified_column_index
+                                < self.instructions.group_by_column_count
+                            {
+                                // We have left the current aggregation group
+                                self.peeked_row_information = Some(PeekedRowInformation {
+                                    uppermost_modified_column_index: Some(
+                                        uppermost_modified_column_index,
+                                    ),
+                                    original_group_by_values,
+                                });
+                                // Thus, there are no more values to aggregate in the current group.
+                                break;
                             } else {
-                                panic!("failed to compute aggregate result");
+                                // We have new values for at least one of the distinct columns, but all group by columns are still the same.
+                                // Thus, continue aggregating.
+                                continue;
                             }
-                        }};
+                        } else {
+                            self.peeked_row_information = Some(PeekedRowInformation {
+                                uppermost_modified_column_index: None,
+                                original_group_by_values,
+                            });
+                            // There are no more values to aggregate, because the input trie scan is fully consumed
+                            break;
+                        }
                     }
 
-                    match self.aggregated_input_column_storage_type {
-                        StorageTypeName::Id32 => aggregate_for_storage_type!(Id32, u32),
-                        StorageTypeName::Id64 => aggregate_for_storage_type!(Id64, u64),
-                        StorageTypeName::Int64 => aggregate_for_storage_type!(Int64, i64),
-                        StorageTypeName::Float => {
-                            aggregate_for_storage_type!(Float, Float)
-                        }
-                        StorageTypeName::Double => {
-                            aggregate_for_storage_type!(Double, Double)
-                        }
-                    };
+                    if let Some(result) = group_processor.finish() {
+                        self.current_aggregated_output_value = AggregatedOutputValue::Some(result);
+                        result
+                    } else {
+                        panic!("failed to compute aggregate result");
+                    }
                 }
             }
         } else {
@@ -369,15 +375,11 @@ mod test {
     fn aggregate_and_materialize(
         input_trie: &Trie,
         aggregation_instructions: AggregationInstructions,
-        aggregated_column_storage_type: StorageTypeName,
+        _aggregated_column_storage_type: StorageTypeName,
     ) -> Trie {
         let trie_scan_prune = trie_scan_prune_from_trie(input_trie);
 
-        let trie_scan_aggregate = TrieScanAggregate::new(
-            trie_scan_prune,
-            aggregation_instructions,
-            aggregated_column_storage_type,
-        );
+        let trie_scan_aggregate = TrieScanAggregate::new(trie_scan_prune, aggregation_instructions);
 
         Trie::from_full_trie_scan(trie_scan_aggregate, 0)
     }
@@ -397,7 +399,7 @@ mod test {
         }
 
         // Check that `iter2` reached it's end, too
-        return iter2.next().is_none();
+        iter2.next().is_none()
     }
 
     #[test]

@@ -98,6 +98,6 @@ impl ImportManager {
                 .unwrap_or(CompressionFormat::None),
         )?;
 
-        Ok(handler.reader(reader, expected_arity)?)
+        handler.reader(reader, expected_arity)
     }
 }
