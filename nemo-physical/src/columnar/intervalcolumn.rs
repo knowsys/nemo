@@ -481,12 +481,8 @@ mod test {
         assert!(builder.add_value(StorageValueT::Int64(-4)));
         assert!(!builder.add_value(StorageValueT::Int64(-4)));
         assert!(builder.add_value(StorageValueT::Int64(0)));
-        assert!(
-            builder.add_value(StorageValueT::Float(Float::new(3.1).unwrap()))
-        );
-        assert!(
-            !builder.add_value(StorageValueT::Float(Float::new(3.1).unwrap()))
-        );
+        assert!(builder.add_value(StorageValueT::Float(Float::new(3.1).unwrap())));
+        assert!(!builder.add_value(StorageValueT::Float(Float::new(3.1).unwrap())));
 
         builder.finish_interval(StorageTypeName::Double);
 

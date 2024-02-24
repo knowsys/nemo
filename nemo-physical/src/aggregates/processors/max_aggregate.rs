@@ -49,7 +49,6 @@ impl AggregateGroupProcessor for MaxAggregateGroupProcessor {
     }
 
     fn finish(&self) -> Option<StorageValueT> {
-        self.current_max_value
-            .as_ref().copied()
+        self.current_max_value.as_ref().copied()
     }
 }

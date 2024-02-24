@@ -201,10 +201,7 @@ impl Trie {
     /// To keep all the values, set `cut_layers` to 0.
     ///
     /// Assumes that the given `trie_scan` is not initialized
-    pub(crate) fn from_partial_trie_scan(
-        trie_scan: TrieScanEnum<'_>,
-        cut_layers: usize,
-    ) -> Self {
+    pub(crate) fn from_partial_trie_scan(trie_scan: TrieScanEnum<'_>, cut_layers: usize) -> Self {
         let num_columns = trie_scan.arity() - cut_layers;
 
         if num_columns == 0 {

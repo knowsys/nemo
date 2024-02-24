@@ -289,9 +289,7 @@ impl TableProvider for RdfReader {
             RdfVariant::NTriples => {
                 self.read_triples_with_parser(tuple_writer, NTriplesParser::new)
             }
-            RdfVariant::NQuads => {
-                self.read_quads_with_parser(tuple_writer, NQuadsParser::new)
-            }
+            RdfVariant::NQuads => self.read_quads_with_parser(tuple_writer, NQuadsParser::new),
             RdfVariant::Turtle => self.read_triples_with_parser(tuple_writer, |read| {
                 TurtleParser::new(read, base_iri.clone())
             }),
@@ -356,8 +354,7 @@ mod test {
         );
         let dict = RefCell::new(Dict::default());
         let mut tuple_writer = TupleWriter::new(&dict, 3);
-        let result =
-            reader.read_triples_with_parser(&mut tuple_writer, NTriplesParser::new);
+        let result = reader.read_triples_with_parser(&mut tuple_writer, NTriplesParser::new);
         assert!(result.is_ok());
         assert_eq!(tuple_writer.size(), 4);
     }
@@ -407,8 +404,7 @@ mod test {
         );
         let dict = RefCell::new(Dict::default());
         let mut tuple_writer = TupleWriter::new(&dict, 3);
-        let result =
-            reader.read_triples_with_parser(&mut tuple_writer, NTriplesParser::new);
+        let result = reader.read_triples_with_parser(&mut tuple_writer, NTriplesParser::new);
         assert!(result.is_ok());
         assert_eq!(tuple_writer.size(), 1);
     }

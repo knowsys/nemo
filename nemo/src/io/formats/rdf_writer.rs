@@ -330,13 +330,9 @@ impl TableWriter for RdfWriter {
                     let _ = f.finish();
                 },
             ),
-            RdfVariant::RDFXML => self.export_triples(
-                table,
-                RdfXmlFormatter::new,
-                |f| {
-                    let _ = f.finish();
-                },
-            ),
+            RdfVariant::RDFXML => self.export_triples(table, RdfXmlFormatter::new, |f| {
+                let _ = f.finish();
+            }),
             RdfVariant::TriG => self.export_quads(
                 table,
                 |write| Ok(TriGFormatter::new(write)),

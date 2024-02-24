@@ -447,7 +447,8 @@ impl TableManager {
 
         if self
             .predicate_to_info
-            .insert(predicate.clone(), predicate_info).is_some()
+            .insert(predicate.clone(), predicate_info)
+            .is_some()
         {
             panic!("predicates must uniquely identify one relation");
         }

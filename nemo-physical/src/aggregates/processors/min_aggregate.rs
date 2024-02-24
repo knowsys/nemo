@@ -49,7 +49,6 @@ impl AggregateGroupProcessor for MinAggregateGroupProcessor {
     }
 
     fn finish(&self) -> Option<StorageValueT> {
-        self.current_min_value
-            .as_ref().copied()
+        self.current_min_value.as_ref().copied()
     }
 }

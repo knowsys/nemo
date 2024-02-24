@@ -6,10 +6,7 @@ use std::fmt::Debug;
 
 use crate::{
     management::execution_plan::{ColumnOrder, ExecutionResult},
-    tabular::operations::{
-        projectreorder::GeneratorProjectReorder,
-        OperationGeneratorEnum,
-    },
+    tabular::operations::{projectreorder::GeneratorProjectReorder, OperationGeneratorEnum},
 };
 
 use super::id::{ExecutionId, PermanentTableId};
@@ -96,10 +93,7 @@ impl ExecutionTree {
                 generator,
                 subnodes,
             } => {
-                let subtrees = subnodes
-                    .iter()
-                    .map(Self::ascii_tree_recursive)
-                    .collect();
+                let subtrees = subnodes.iter().map(Self::ascii_tree_recursive).collect();
 
                 ascii_tree::Tree::Node(format!("{generator:?}"), subtrees)
             }

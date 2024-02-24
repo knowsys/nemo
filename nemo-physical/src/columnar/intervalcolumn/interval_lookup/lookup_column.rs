@@ -63,8 +63,7 @@ impl ByteSized for IntervalLookupColumn {
     }
 }
 
-#[derive(Debug)]
-#[derive(Default)]
+#[derive(Debug, Default)]
 pub(crate) struct IntervalLookupColumnBuilder {
     /// [ColumnBuilderAdaptive] for building `predecessors`
     builder_lookup: ColumnBuilderAdaptive<usize>,
@@ -73,8 +72,6 @@ pub(crate) struct IntervalLookupColumnBuilder {
     /// and can therefore be ignored
     simple: bool,
 }
-
-
 
 impl IntervalLookupBuilder for IntervalLookupColumnBuilder {
     type Lookup = IntervalLookupColumn;

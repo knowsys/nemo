@@ -225,7 +225,9 @@ impl ImportExportHandlers {
                         AnyDataValue::new_plain_string(
                             cf_name.expect("given if stated compression is known"),
                         ),
-                        "compression method should match resource extension".to_string().as_str(),
+                        "compression method should match resource extension"
+                            .to_string()
+                            .as_str(),
                     ))
                 }
             }
@@ -244,16 +246,12 @@ impl ImportExportHandlers {
     ) -> Result<Option<String>, ImportExportError> {
         if let Some(c) = Self::extract_att_value(attributes, attribute_name, allow_missing)? {
             match c.value_domain() {
-                ValueDomain::PlainString => {
-                    Ok(Some(c.to_plain_string_unchecked()))
-                }
-                _ => {
-                    Err(ImportExportError::invalid_att_value_error(
-                        attribute_name,
-                        c.clone(),
-                        "expecting string value",
-                    ))
-                }
+                ValueDomain::PlainString => Ok(Some(c.to_plain_string_unchecked())),
+                _ => Err(ImportExportError::invalid_att_value_error(
+                    attribute_name,
+                    c.clone(),
+                    "expecting string value",
+                )),
             }
         } else {
             Ok(None)
@@ -321,16 +319,12 @@ impl ImportExportHandlers {
     ) -> Result<Option<String>, ImportExportError> {
         if let Some(c) = Self::extract_att_value(attributes, attribute_name, allow_missing)? {
             match c.value_domain() {
-                ValueDomain::Iri => {
-                    Ok(Some(c.to_iri_unchecked()))
-                }
-                _ => {
-                    Err(ImportExportError::invalid_att_value_error(
-                        attribute_name,
-                        c.clone(),
-                        "expecting IRI value",
-                    ))
-                }
+                ValueDomain::Iri => Ok(Some(c.to_iri_unchecked())),
+                _ => Err(ImportExportError::invalid_att_value_error(
+                    attribute_name,
+                    c.clone(),
+                    "expecting IRI value",
+                )),
             }
         } else {
             Ok(None)
@@ -395,10 +389,10 @@ impl ImportExportHandlers {
         }
 
         // Check if any non-skipped value is contained
-        if let Some(true) = value_format_strings.as_ref().map(|v| {
-            v.iter()
-                .all(|fmt| *fmt == VALUE_FORMAT_SKIP)
-        }) {
+        if let Some(true) = value_format_strings
+            .as_ref()
+            .map(|v| v.iter().all(|fmt| *fmt == VALUE_FORMAT_SKIP))
+        {
             return Err(ImportExportError::invalid_att_value_error(
                 PARAMETER_NAME_FORMAT,
                 Self::datavalue_from_format_strings(&value_format_strings.expect("checked above")),

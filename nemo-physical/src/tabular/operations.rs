@@ -226,7 +226,8 @@ where
         OperationTable(
             iterator
                 .map(|marker| {
-                    *self.map
+                    *self
+                        .map
                         .get(marker)
                         .expect("Function assumes that every relevant external marker is known")
                 })

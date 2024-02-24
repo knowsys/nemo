@@ -32,10 +32,7 @@ impl OperationGenerator for GeneratorUnion {
         _dictionary: &'a RefCell<Dict>,
     ) -> Option<TrieScanEnum<'a>> {
         // We ignore any empy tables
-        let trie_scans = trie_scans
-            .into_iter()
-            .flatten()
-            .collect::<Vec<_>>();
+        let trie_scans = trie_scans.into_iter().flatten().collect::<Vec<_>>();
 
         // We return `None` if there are no input tables left
         if trie_scans.is_empty() {

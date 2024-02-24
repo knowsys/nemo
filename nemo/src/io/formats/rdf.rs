@@ -227,10 +227,7 @@ impl RdfHandler {
             match arity {
                 3 => Ok(RdfVariant::NTriples),
                 4 => Ok(RdfVariant::NQuads),
-                _ => Err(ImportExportError::InvalidArity {
-                    arity,
-                    expected: 3,
-                }),
+                _ => Err(ImportExportError::InvalidArity { arity, expected: 3 }),
             }
         } else {
             Ok(self.variant)

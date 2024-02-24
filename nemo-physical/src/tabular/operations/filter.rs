@@ -152,10 +152,7 @@ impl GeneratorFilter {
 
         for filter in filters {
             let marker = Self::find_last_reference(input, filter);
-            grouped_filters
-                .entry(marker)
-                .or_default()
-                .push(filter);
+            grouped_filters.entry(marker).or_default().push(filter);
         }
 
         let mut result = FilterAssignment::new();
