@@ -180,6 +180,7 @@ impl DictIterator {
                 ValueDomain::Iri => return md.iri_dict,
                 ValueDomain::Other => return md.other_dict,
                 ValueDomain::Null => return md.null_dict,
+                ValueDomain::Boolean => return md.other_dict, // TODO: maybe not the best place, using a whole page for two values if there is not much "other"
                 _ => {}
             }
         }

@@ -56,7 +56,9 @@ impl<B: GlobalBytesBuffer> BytesPairDictionary<B> {
     /// Returns the bytes pair associated with the `id`, or `None` if `id` doesn't
     /// exists in the dictionary.
     pub(crate) fn id_to_bytes_pair(&self, id: usize) -> Option<(Vec<u8>, Vec<u8>)> {
-        self.store.get(id).map(|[first_bref, second_bref]| (first_bref.to_vec(), second_bref.to_vec()))
+        self.store
+            .get(id)
+            .map(|[first_bref, second_bref]| (first_bref.to_vec(), second_bref.to_vec()))
     }
 
     /// Returns the number of elements in the dictionary

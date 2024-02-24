@@ -244,9 +244,7 @@ impl AnyDataValue {
                 "boolean" => match lexical_value.as_str() {
                     "true" | "1" => Ok(Self::new_boolean(true)),
                     "false" | "0" => Ok(Self::new_boolean(false)),
-                    _ => Err(DataValueCreationError::BooleanNotParsed {
-                        lexical_value,
-                    }),
+                    _ => Err(DataValueCreationError::BooleanNotParsed { lexical_value }),
                 },
                 _ => Ok(Self::new_other(lexical_value, datatype_iri)),
             }
@@ -418,12 +416,10 @@ impl AnyDataValue {
                 (DecimalType::NegativeInteger, p) | (DecimalType::NonPositiveInteger, p) if p => {
                     Self::decimal_parse_error(lexical_value, decimal_type)
                 }
-                _ => {
-                    Ok(AnyDataValue::new_other(
-                        trimmed_value,
-                        XSD_PREFIX.to_owned() + "integer",
-                    ))
-                }
+                _ => Ok(AnyDataValue::new_other(
+                    trimmed_value,
+                    XSD_PREFIX.to_owned() + "integer",
+                )),
             }
         } else if let DecimalType::Decimal = decimal_type {
             if has_nonzero_fraction {
@@ -1116,13 +1112,15 @@ mod test {
         let dv_other_hash = hash(dv_other);
 
         assert_eq!(dv_i64_hash, dv_u64_hash);
-        let vec = [dv_f64_hash,
+        let vec = [
+            dv_f64_hash,
             dv_i64_hash,
             dv_u64_2_hash,
             dv_string_hash,
             dv_iri_hash,
             dv_lang_string_hash,
-            dv_other_hash];
+            dv_other_hash,
+        ];
         let set: HashSet<_> = vec.iter().collect();
         assert_eq!(set.len(), 7);
     }

@@ -106,9 +106,7 @@ impl<B: GlobalBytesBuffer> BytesDictionary<B> {
                 }
             }
             None => match self.map_long.get(bytes) {
-                Some(idx) => {
-                    AddResult::Known(Self::id64_to_id(*idx))
-                }
+                Some(idx) => AddResult::Known(Self::id64_to_id(*idx)),
                 None => {
                     let sref = B::push_bytes(self.buffer_id, bytes);
                     if insert {

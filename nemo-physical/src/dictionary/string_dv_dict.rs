@@ -131,12 +131,16 @@ fn one_string_to_two(string: &str) -> Option<(String, String)> {
 }
 
 /// Implementation of [`DvConverter`] to handle [`AnyDataValue::Other`] values.
+///
+/// FIXME: This currently also handles booleans, but our API is not designed for having several
+/// value domains in one dictionary, so the supported_value_domain() is just Other. Should not
+/// hurt much once we do not have "isOther" as a check in DV dicts, but is still not a clean solution.
 #[derive(Debug)]
 pub(crate) struct OtherDvConverter;
 impl DvConverter for OtherDvConverter {
     #[inline(always)]
     fn dict_string(dv: &AnyDataValue) -> Option<String> {
-        if dv.value_domain() == ValueDomain::Other {
+        if dv.value_domain() == ValueDomain::Other || dv.value_domain() == ValueDomain::Boolean {
             Some(two_strings_to_one(
                 dv.lexical_value().as_str(),
                 dv.datatype_iri().as_str(),
@@ -149,7 +153,11 @@ impl DvConverter for OtherDvConverter {
     #[inline(always)]
     fn string_to_datavalue(string: &str) -> Option<AnyDataValue> {
         one_string_to_two(string).map(|(lexical_value, datatype_iri)| {
-            AnyDataValue::new_other(lexical_value, datatype_iri)
+            if datatype_iri.as_str() == "http://www.w3.org/2001/XMLSchema#boolean" {
+                AnyDataValue::new_boolean(lexical_value == "true")
+            } else {
+                AnyDataValue::new_other(lexical_value, datatype_iri)
+            }
         })
     }
 

@@ -2,8 +2,7 @@ use super::{AddResult, Dictionary, DictionaryString, StringDictionary};
 
 /// A read-only, hashmap-based [Dictionary] to implement a bijection between strings and integers.  
 /// Strings are stored in a compact buffer to reduce memory overhead and fragmentation.
-#[derive(Debug)]
-#[derive(Default)]
+#[derive(Debug, Default)]
 pub struct HashMapDictionary {
     string_dict: StringDictionary,
 }
@@ -14,8 +13,6 @@ impl HashMapDictionary {
         Self::default()
     }
 }
-
-
 
 impl Dictionary for HashMapDictionary {
     fn add_string(&mut self, string: String) -> AddResult {
