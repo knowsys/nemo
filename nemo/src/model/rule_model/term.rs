@@ -253,8 +253,10 @@ pub enum UnaryOperation {
     CheckIsString,
     /// Get datatype of a value
     Datatype,
-    /// Get language tag of a languaged tagged stirng
+    /// Get language tag of a languaged tagged string
     LanguageTag,
+    /// Lexical value
+    LexicalValue,
     /// Absolute value of a numeric value
     NumericAbsolute,
     /// Cosine of a numeric value
@@ -296,7 +298,8 @@ impl UnaryOperation {
             "ABS" => Ok(UnaryOperation::NumericAbsolute),
             "SQRT" => Ok(UnaryOperation::NumericSquareroot),
             "NOT" => Ok(UnaryOperation::BooleanNegation),
-            "STR" => Ok(UnaryOperation::CanonicalString),
+            "fullStr" => Ok(UnaryOperation::CanonicalString),
+            "STR" => Ok(UnaryOperation::LexicalValue),
             "SIN" => Ok(UnaryOperation::NumericSine),
             "COS" => Ok(UnaryOperation::NumericCosine),
             "TAN" => Ok(UnaryOperation::NumericTangent),
@@ -317,29 +320,30 @@ impl UnaryOperation {
     /// Return the name of the operation.
     pub fn name(&self) -> String {
         let name = match self {
-            UnaryOperation::NumericSquareroot => "SQRT",
-            UnaryOperation::NumericNegation => "MINUS",
-            UnaryOperation::NumericAbsolute => "ABS",
-            UnaryOperation::BooleanNegation => "NOT",
-            UnaryOperation::CanonicalString => "STR",
-            UnaryOperation::NumericCosine => "COS",
-            UnaryOperation::NumericSine => "SIN",
-            UnaryOperation::NumericTangent => "TAN",
-            UnaryOperation::StringLength => "STRLEN",
-            UnaryOperation::StringLowercase => "LCASE",
-            UnaryOperation::StringUppercase => "UCASE",
-            UnaryOperation::NumericCeil => "CEIL",
-            UnaryOperation::NumericFloor => "FLOOR",
-            UnaryOperation::NumericRound => "ROUND",
-            UnaryOperation::CheckIsInteger => "isInteger",
-            UnaryOperation::CheckIsFloat => "isFloat",
-            UnaryOperation::CheckIsDouble => "isDouble",
-            UnaryOperation::CheckIsIri => "isIri",
-            UnaryOperation::CheckIsNumeric => "IsNumeric",
-            UnaryOperation::CheckIsNull => "isNull",
-            UnaryOperation::CheckIsString => "isString",
-            UnaryOperation::Datatype => "DATATYPE",
-            UnaryOperation::LanguageTag => "LANG",
+            Self::NumericSquareroot => "SQRT",
+            Self::NumericNegation => "MINUS",
+            Self::NumericAbsolute => "ABS",
+            Self::BooleanNegation => "NOT",
+            Self::CanonicalString => "fullStr",
+            Self::NumericCosine => "COS",
+            Self::NumericSine => "SIN",
+            Self::NumericTangent => "TAN",
+            Self::StringLength => "STRLEN",
+            Self::StringLowercase => "LCASE",
+            Self::StringUppercase => "UCASE",
+            Self::NumericCeil => "CEIL",
+            Self::NumericFloor => "FLOOR",
+            Self::NumericRound => "ROUND",
+            Self::CheckIsInteger => "isInteger",
+            Self::CheckIsFloat => "isFloat",
+            Self::CheckIsDouble => "isDouble",
+            Self::CheckIsIri => "isIri",
+            Self::CheckIsNumeric => "IsNumeric",
+            Self::CheckIsNull => "isNull",
+            Self::CheckIsString => "isString",
+            Self::Datatype => "DATATYPE",
+            Self::LanguageTag => "LANG",
+            Self::LexicalValue => "STR",
         };
 
         String::from(name)

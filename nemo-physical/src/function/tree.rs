@@ -11,7 +11,7 @@ use super::definitions::{
         CheckIsDouble, CheckIsFloat, CheckIsInteger, CheckIsIri, CheckIsNull, CheckIsNumeric,
         CheckIsString,
     },
-    generic::{CanonicalString, Datatype, Equals, Unequals},
+    generic::{CanonicalString, Datatype, Equals, LexicalValue, Unequals},
     language::LanguageTag,
     numeric::{
         NumericAbsolute, NumericAddition, NumericCeil, NumericCosine, NumericDivision,
@@ -209,6 +209,11 @@ where
             UnaryFunctionEnum::CanonicalString(CanonicalString),
             Box::new(sub),
         )
+    }
+
+    /// Create a tree node that evaluates to the lexical value of the sub node.
+    pub fn lexical_value(sub: Self) -> Self {
+        Self::Unary(UnaryFunctionEnum::LexicalValue(LexicalValue), Box::new(sub))
     }
 
     /// Create a tree node that evaluates to the data type string of the sub node.

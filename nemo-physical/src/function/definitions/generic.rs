@@ -55,6 +55,26 @@ impl UnaryFunction for CanonicalString {
     }
 }
 
+/// Lexical value
+///
+/// Return the lexical value of the given value as a string.
+#[derive(Debug, Copy, Clone)]
+pub struct LexicalValue;
+impl UnaryFunction for LexicalValue {
+    fn evaluate(&self, parameter: AnyDataValue) -> Option<AnyDataValue> {
+        let result = if let Some(value) = parameter
+            .to_language_tagged_string()
+            .map(|(value, _)| value)
+        {
+            value
+        } else {
+            parameter.lexical_value()
+        };
+
+        Some(AnyDataValue::new_plain_string(result))
+    }
+}
+
 /// Datatype of a value
 ///
 /// Returns the data type of the input parameter as a string.
