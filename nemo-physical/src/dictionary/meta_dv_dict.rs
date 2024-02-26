@@ -304,7 +304,7 @@ impl MetaDvDictionary {
             return (NO_DICT, 0);
         }
         let (dict_id, lblock) = self.dictblocks[gblock];
-        (dict_id, (lblock >> BLOCKSIZE) + offset)
+        (dict_id, (lblock << BLOCKSIZE) + offset)
     }
 
     /// Find a global block that is allocated for the given dictionary and local block. If not
