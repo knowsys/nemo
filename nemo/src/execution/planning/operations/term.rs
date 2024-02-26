@@ -96,6 +96,7 @@ pub(super) fn term_to_function_tree(
                 UnaryOperation::Datatype => FunctionTree::datatype(sub),
                 UnaryOperation::LanguageTag => FunctionTree::languagetag(sub),
                 UnaryOperation::LexicalValue => FunctionTree::lexical_value(sub),
+                UnaryOperation::CaseToInteger => FunctionTree::casting_to_integer64(sub),
             }
         }
         Term::Aggregation(_) => unimplemented!("Aggregates are not implement yet"),

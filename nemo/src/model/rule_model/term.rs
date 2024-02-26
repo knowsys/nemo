@@ -235,6 +235,8 @@ impl BinaryOperation {
 pub enum UnaryOperation {
     /// Boolean negation
     BooleanNegation,
+    /// Cast to integer
+    CaseToInteger,
     /// Canonical string representation of a value
     CanonicalString,
     /// Check if value is an integer
@@ -311,6 +313,7 @@ impl UnaryOperation {
             "FLOOR" => Ok(UnaryOperation::NumericFloor),
             "DATATYPE" => Ok(UnaryOperation::Datatype),
             "LANG" => Ok(UnaryOperation::LanguageTag),
+            "INT" => Ok(UnaryOperation::CaseToInteger),
             s => Err(Error::UnknownUnaryOpertation {
                 operation: s.into(),
             }),
@@ -334,6 +337,7 @@ impl UnaryOperation {
             Self::NumericCeil => "CEIL",
             Self::NumericFloor => "FLOOR",
             Self::NumericRound => "ROUND",
+            Self::CaseToInteger => "INT",
             Self::CheckIsInteger => "isInteger",
             Self::CheckIsFloat => "isFloat",
             Self::CheckIsDouble => "isDouble",

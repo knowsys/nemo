@@ -23,11 +23,14 @@ impl UnaryFunction for CastingIntoInteger64 {
         match parameter.value_domain() {
             crate::datavalues::ValueDomain::Tuple
             | crate::datavalues::ValueDomain::Map
-            | crate::datavalues::ValueDomain::Other
             | crate::datavalues::ValueDomain::Null
-            | crate::datavalues::ValueDomain::PlainString
-            | crate::datavalues::ValueDomain::LanguageTaggedString
-            | crate::datavalues::ValueDomain::Iri => None,
+            | crate::datavalues::ValueDomain::Iri
+            | crate::datavalues::ValueDomain::LanguageTaggedString => None,
+            crate::datavalues::ValueDomain::PlainString | crate::datavalues::ValueDomain::Other => {
+                let result = parameter.lexical_value().parse::<i64>().ok()?;
+
+                Some(AnyDataValue::new_integer_from_i64(result))
+            }
             // FIXME: This seems suspicious. Can't f32 also represent integer numbers *without any fraction) that are still too large for i64?
             crate::datavalues::ValueDomain::Float => {
                 let value = parameter.to_f32_unchecked();
