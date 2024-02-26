@@ -12,7 +12,6 @@ use crate::model::{Aggregate, LogicalAggregateOperation, PrimitiveTerm, Variable
 #[derive(Debug, Clone)]
 pub struct ChaseAggregate {
     pub(crate) aggregate_operation: AggregateOperation,
-    pub(crate) logical_aggregate_operation: LogicalAggregateOperation,
 
     pub(crate) input_variables: Vec<Variable>,
     pub(crate) output_variable: Variable,
@@ -44,7 +43,6 @@ impl ChaseAggregate {
 
         Self {
             aggregate_operation: physical_operation,
-            logical_aggregate_operation,
             input_variables: variables,
             output_variable,
         }

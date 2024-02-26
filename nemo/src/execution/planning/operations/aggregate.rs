@@ -163,3 +163,86 @@ fn reorder_required(
 
     false
 }
+
+#[cfg(test)]
+mod test {
+    use std::collections::HashSet;
+
+    use nemo_physical::aggregates::operation::AggregateOperation;
+
+    use crate::{
+        execution::{
+            planning::operations::aggregate::reorder_required, rule_execution::VariableTranslation,
+        },
+        model::{chase_model::ChaseAggregate, LogicalAggregateOperation, Variable},
+    };
+
+    #[test]
+    fn required_reordering() {
+        let aggregated_input_variable = Variable::Universal("aggregated".to_string());
+
+        let mut variable_translation = VariableTranslation::new();
+        variable_translation.add_marker(Variable::Universal("group_by_1".to_string()));
+        variable_translation.add_marker(Variable::Universal("group_by_2".to_string()));
+        variable_translation.add_marker(Variable::Universal("other_1".to_string()));
+        variable_translation.add_marker(aggregated_input_variable.clone());
+        variable_translation.add_marker(Variable::Universal("other_2".to_string()));
+
+        let idempotent_aggregate = ChaseAggregate {
+            aggregate_operation: AggregateOperation::Min,
+            input_variables: vec![aggregated_input_variable.clone()],
+            output_variable: Variable::Universal("output_1".to_string()),
+            logical_aggregate_operation: LogicalAggregateOperation::MinNumber,
+        };
+
+        assert!(!reorder_required(
+            &variable_translation,
+            &HashSet::new(),
+            &idempotent_aggregate
+        ),);
+
+        let non_idempotent_aggregate = ChaseAggregate {
+            aggregate_operation: AggregateOperation::Count,
+            input_variables: vec![aggregated_input_variable.clone()],
+            output_variable: Variable::Universal("output_1".to_string()),
+            logical_aggregate_operation: LogicalAggregateOperation::CountValues,
+        };
+
+        assert!(reorder_required(
+            &variable_translation,
+            &HashSet::new(),
+            &non_idempotent_aggregate
+        ));
+
+        let mut group_by_variables = HashSet::from_iter(vec![
+            Variable::Universal("group_by_1".to_string()),
+            Variable::Universal("group_by_2".to_string()),
+        ]);
+
+        assert!(!reorder_required(
+            &variable_translation,
+            &group_by_variables,
+            &idempotent_aggregate
+        ));
+
+        assert!(reorder_required(
+            &variable_translation,
+            &group_by_variables,
+            &non_idempotent_aggregate
+        ));
+
+        group_by_variables.insert(Variable::Universal("other_1".to_string()));
+
+        assert!(!reorder_required(
+            &variable_translation,
+            &group_by_variables,
+            &non_idempotent_aggregate
+        ));
+
+        assert!(reorder_required(
+            &variable_translation,
+            &HashSet::from_iter(vec![Variable::Universal("other_1".to_string()),].into_iter(),),
+            &idempotent_aggregate
+        ));
+    }
+}

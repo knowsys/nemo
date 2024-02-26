@@ -76,11 +76,6 @@ impl AggregationInstructions {
             && self.last_distinct_column_index >= self.aggregated_column_index
     }
 
-    /// Returns the index of the aggregate output column in the output scan
-    pub(crate) fn aggregate_output_column_index(&self) -> usize {
-        self.group_by_column_count
-    }
-
     /// Returns whether a given index of `column_types` is an group-by layer
     fn is_output_column_group_by(&self, layer: usize) -> bool {
         layer < self.group_by_column_count

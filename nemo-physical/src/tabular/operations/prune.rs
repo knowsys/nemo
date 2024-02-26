@@ -220,16 +220,7 @@ impl<'a> TrieScanPruneState<'a> {
         self.input_trie_scan_current_layer += 1;
     }
 
-    fn check_next_type(&self) -> bool {
-        let current_type_index =
-            self.input_trie_scan_current_type[self.input_trie_scan_current_layer];
-
-        self.possible_types[self.input_trie_scan_current_layer]
-            .get(current_type_index + 1)
-            .is_some()
-    }
-
-    fn next_type(&mut self) -> Option<StorageTypeName> {
+    fn go_to_next_type(&mut self) -> Option<StorageTypeName> {
         let current_type_index =
             &mut self.input_trie_scan_current_type[self.input_trie_scan_current_layer];
         *current_type_index += 1;
@@ -240,7 +231,7 @@ impl<'a> TrieScanPruneState<'a> {
     }
 
     fn input_jump_type(&mut self) -> bool {
-        let next_type = self.next_type();
+        let next_type = self.go_to_next_type();
 
         if let Some(next_type) = next_type {
             self.input_trie_scan.up();
@@ -541,14 +532,14 @@ impl<'a> TrieScanPruneState<'a> {
             let has_next_value = self.advance_has_next_value();
 
             if !has_next_value {
-                if self.input_trie_scan_current_layer == boundary_layer && !self.check_next_type() {
-                    // Boundary layer has been reached and has no next value
-
-                    // `highest_peeked_layer`has already been set to None
-                    return None;
-                }
-
                 if !self.input_jump_type() {
+                    if self.input_trie_scan_current_layer == boundary_layer {
+                        // Boundary layer has been reached and has no next value
+
+                        // `highest_peeked_layer`has already been set to None
+                        return None;
+                    }
+
                     self.input_up();
 
                     if self.input_trie_scan_current_layer < uppermost_advanced_layer_index {

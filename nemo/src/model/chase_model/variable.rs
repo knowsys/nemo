@@ -25,22 +25,3 @@ pub(crate) fn is_aggregate_variable(variable: &Variable) -> bool {
         Variable::UnnamedUniversal(_) => false,
     }
 }
-
-fn is_construct_identifier(var_name: &str) -> bool {
-    var_name.starts_with(CONSTRUCT_VARIABLE_PREFIX)
-}
-
-/// Check if a variable is a constructor variable
-pub(crate) fn is_construct_variable(_variable: &Variable) -> bool {
-    false
-    // match variable {
-    //     Variable::Universal(var_name) => is_construct_identifier(var_name),
-    //     Variable::Existential(var_name) => {
-    //         debug_assert!(
-    //             !is_construct_identifier(var_name),
-    //             "construct variables must be universal variables"
-    //         );
-    //         false
-    //     }
-    // }
-}
