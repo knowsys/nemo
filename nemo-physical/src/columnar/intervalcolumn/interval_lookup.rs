@@ -61,10 +61,10 @@ where
 {
     fn size_bytes(&self) -> bytesize::ByteSize {
         self.lookup_id32.size_bytes()
-            + self.lookup_id32.size_bytes()
-            + self.lookup_id32.size_bytes()
-            + self.lookup_id32.size_bytes()
-            + self.lookup_id32.size_bytes()
+            + self.lookup_id64.size_bytes()
+            + self.lookup_int64.size_bytes()
+            + self.lookup_float.size_bytes()
+            + self.lookup_double.size_bytes()
     }
 }
 
