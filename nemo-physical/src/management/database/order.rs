@@ -128,10 +128,11 @@ impl OrderedReferenceManager {
         let (id, _) = self.resolve_reference(id, ColumnOrder::default());
 
         let mut result = ByteSize::b(0);
-        for (_, &storage_id) in self
+        for &storage_id in self
             .storage_map
             .get(&id)
             .expect("No table with the id {id} exists.")
+            .values()
         {
             result += self.stored_tables[storage_id].size_bytes();
         }

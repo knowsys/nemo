@@ -1,7 +1,5 @@
 //! Exposes supported aggregate operations and allows created the associated processors
 
-use crate::datatypes::StorageTypeName;
-
 use super::processors::{
     count_aggregate::CountAggregateProcessor,
     max_aggregate::MaxAggregateProcessor,
@@ -42,15 +40,5 @@ impl AggregateOperation {
     /// If `true` is returned this allows for additional optimizations when creating the execution plan. In particular, peripheral variables (not group-by, aggregate or distinct variables) can be converted to distinct variables in an idempotent aggregate processor without changing the semantics of the aggregate.
     pub fn idempotent(&self) -> bool {
         self.create_processor().idempotent()
-    }
-
-    /// Returns whether the aggregate operation always produces an aggregate output column of the same type.
-    /// If [`Some`] is returned, this is the static output type of the aggregate operation.
-    /// If [`None`] is returned, the aggregate operation will always have the same output and input type.
-    pub(crate) fn static_output_type(&self) -> Option<StorageTypeName> {
-        match self {
-            AggregateOperation::Count => Some(StorageTypeName::Int64),
-            _ => None,
-        }
     }
 }

@@ -286,7 +286,7 @@ impl ImportExportHandlers {
 
     /// Extract an integer value for the given attribute name. Returns an error if the
     /// value is mistyped ([ImportExportError::InvalidAttributeValue]) or missing ([ImportExportError::MissingAttribute]).
-    /// It can be specified whether it should be allowed that the atttribute is not set at all (and
+    /// It can be specified whether it should be allowed that the attribute is not set at all (and
     /// `None` would then be returned). If given, the value must always be an integer, however.
     pub(super) fn extract_integer(
         attributes: &MapDataValue,
