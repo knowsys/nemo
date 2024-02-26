@@ -211,13 +211,14 @@ impl<'a> TrieScanPruneState<'a> {
     fn input_down(&mut self) {
         assert!(self.input_trie_scan_current_layer < self.input_trie_scan.arity() - 1);
 
+        self.input_trie_scan_current_layer += 1;
+
         let first_type = *self.possible_types[self.input_trie_scan_current_layer]
             .first()
-            .unwrap_or(&StorageTypeName::Id32);
+            .unwrap();
 
         self.input_trie_scan.down(first_type);
         self.input_trie_scan_current_type.push(0);
-        self.input_trie_scan_current_layer += 1;
     }
 
     fn go_to_next_type(&mut self) -> Option<StorageTypeName> {
