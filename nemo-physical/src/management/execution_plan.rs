@@ -806,17 +806,12 @@ impl ExecutionPlan {
             );
         }
 
-        let mut loaded_tries = loaded_tables.keys().cloned().collect::<Vec<_>>();
-        loaded_tries.sort_by(|left, right| {
-            loaded_tables
-                .get(left)
-                .expect("Keys were generated from the map")
-                .cmp(
-                    loaded_tables
-                        .get(right)
-                        .expect("Keys were generated from the map"),
-                )
-        });
+        let mut loaded_tries =
+            vec![(PermanentTableId::default(), ColumnOrder::default()); loaded_tables.len()];
+
+        for (key, index) in loaded_tables.into_iter() {
+            loaded_tries[index] = key;
+        }
 
         ExecutionSeries {
             loaded_tries,
