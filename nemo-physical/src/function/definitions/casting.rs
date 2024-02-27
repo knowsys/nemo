@@ -80,8 +80,11 @@ impl UnaryFunction for CastingIntoInteger64 {
 ///   * 32bit floating point numbers
 ///   * all integers
 ///   * 64bit floating point numbers
+///   * strings
+///   * other
 ///
-/// Returns `None` when called on values outside the range described above.
+/// Returns `None` when called on values outside the range described above
+/// or if value cannot be converted into a 32-bit float.
 #[derive(Debug, Copy, Clone)]
 pub struct CastingIntoFloat;
 impl UnaryFunction for CastingIntoFloat {
@@ -90,11 +93,15 @@ impl UnaryFunction for CastingIntoFloat {
             crate::datavalues::ValueDomain::Tuple
             | crate::datavalues::ValueDomain::Map
             | crate::datavalues::ValueDomain::Null
-            | crate::datavalues::ValueDomain::Other
-            | crate::datavalues::ValueDomain::PlainString
             | crate::datavalues::ValueDomain::LanguageTaggedString
-            | crate::datavalues::ValueDomain::Boolean
-            | crate::datavalues::ValueDomain::Iri => None,
+            | crate::datavalues::ValueDomain::Iri
+            | crate::datavalues::ValueDomain::Boolean => None,
+            crate::datavalues::ValueDomain::PlainString | crate::datavalues::ValueDomain::Other => {
+                // TODO: This is uses rusts string to float implementation and not ours
+                let result = parameter.lexical_value().parse::<f32>().ok()?;
+
+                Some(AnyDataValue::new_float_from_f32(result).ok()?)
+            }
             crate::datavalues::ValueDomain::Float => Some(parameter),
             crate::datavalues::ValueDomain::Double =>
             {
@@ -126,11 +133,14 @@ impl UnaryFunction for CastingIntoFloat {
 /// as close as possible.
 ///
 /// This operation is defined for:
+///   * 64bit floating point numbers
 ///   * all integers
 ///   * 32-bit floating point numbers
-///   * 64-bit floating point numbers
+///   * strings
+///   * other
 ///
-/// Returns `None` when called on values outside the range described above.
+/// Returns `None` when called on values outside the range described above
+/// or if value cannot be converted into a 64-bit float.
 #[derive(Debug, Copy, Clone)]
 pub struct CastingIntoDouble;
 impl UnaryFunction for CastingIntoDouble {
@@ -138,12 +148,16 @@ impl UnaryFunction for CastingIntoDouble {
         match parameter.value_domain() {
             crate::datavalues::ValueDomain::Tuple
             | crate::datavalues::ValueDomain::Map
-            | crate::datavalues::ValueDomain::Other
             | crate::datavalues::ValueDomain::Null
-            | crate::datavalues::ValueDomain::PlainString
             | crate::datavalues::ValueDomain::LanguageTaggedString
-            | crate::datavalues::ValueDomain::Boolean
-            | crate::datavalues::ValueDomain::Iri => None,
+            | crate::datavalues::ValueDomain::Iri
+            | crate::datavalues::ValueDomain::Boolean => None,
+            crate::datavalues::ValueDomain::PlainString | crate::datavalues::ValueDomain::Other => {
+                // TODO: This is uses rusts string to float implementation and not ours
+                let result = parameter.lexical_value().parse::<f64>().ok()?;
+
+                Some(AnyDataValue::new_double_from_f64(result).ok()?)
+            }
             crate::datavalues::ValueDomain::Double => Some(parameter),
             crate::datavalues::ValueDomain::Float =>
             {
