@@ -1,12 +1,11 @@
 //! This module defines the structures for evaluating functions on column data.
 
-use std::collections::HashMap;
+use std::{collections::HashMap, fmt::Debug, hash::Hash};
 
 use crate::{
     datavalues::{AnyDataValue, DataValue},
     error::Error,
     function::tree::FunctionLeaf,
-    tabular::operations::OperationColumnMarker,
 };
 
 use super::{
@@ -94,22 +93,22 @@ impl StackProgram {
     }
 
     /// Construct a [StackProgram] from [FunctionTree].
-    pub(crate) fn from_function_tree(
-        tree: &FunctionTree<OperationColumnMarker>,
-        reference_map: &HashMap<OperationColumnMarker, usize>,
-        this: Option<OperationColumnMarker>,
+    pub(crate) fn from_function_tree<ReferenceType: Hash + Eq + Debug + Clone>(
+        tree: &FunctionTree<ReferenceType>,
+        reference_map: &HashMap<ReferenceType, usize>,
+        this: Option<ReferenceType>,
     ) -> StackProgram {
-        fn build_operations(
-            term: &FunctionTree<OperationColumnMarker>,
-            this: &Option<OperationColumnMarker>,
-            reference_map: &HashMap<OperationColumnMarker, usize>,
+        fn build_operations<ReferenceType: Hash + Eq + Debug + Clone>(
+            term: &FunctionTree<ReferenceType>,
+            this: &Option<ReferenceType>,
+            reference_map: &HashMap<ReferenceType, usize>,
             operations: &mut Vec<StackOperation>,
         ) {
             match term {
                 FunctionTree::Leaf(leaf) => operations.push(StackOperation::Push(match leaf {
                     FunctionLeaf::Constant(constant) => StackValue::Constant(constant.clone()),
                     FunctionLeaf::Reference(reference) => {
-                        if Some(*reference) == *this {
+                        if Some(reference) == this.as_ref() {
                             StackValue::This
                         } else {
                             StackValue::Reference(

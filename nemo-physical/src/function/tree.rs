@@ -1,29 +1,34 @@
 //! This module defines a tree representation [FunctionTree].
 
-use std::fmt::Debug;
+use std::{collections::HashMap, fmt::Debug, hash::Hash};
 
 use crate::datavalues::AnyDataValue;
 
-use super::definitions::{
-    boolean::{BooleanConjunction, BooleanDisjunction, BooleanNegation},
-    casting::{CastingIntoDouble, CastingIntoFloat, CastingIntoInteger64},
-    checktype::{
-        CheckIsDouble, CheckIsFloat, CheckIsInteger, CheckIsIri, CheckIsNull, CheckIsNumeric,
-        CheckIsString,
+use super::{
+    definitions::{
+        boolean::{BooleanConjunction, BooleanDisjunction, BooleanNegation},
+        casting::{CastingIntoDouble, CastingIntoFloat, CastingIntoInteger64},
+        checktype::{
+            CheckIsDouble, CheckIsFloat, CheckIsInteger, CheckIsIri, CheckIsNull, CheckIsNumeric,
+            CheckIsString,
+        },
+        generic::{CanonicalString, Datatype, Equals, LexicalValue, Unequals},
+        language::LanguageTag,
+        numeric::{
+            NumericAbsolute, NumericAddition, NumericCeil, NumericCosine, NumericDivision,
+            NumericFloor, NumericGreaterthan, NumericGreaterthaneq, NumericLessthan,
+            NumericLessthaneq, NumericLogarithm, NumericMultiplication, NumericNegation,
+            NumericPower, NumericRound, NumericSine, NumericSquareroot, NumericSubtraction,
+            NumericTangent,
+        },
+        string::{
+            StringAfter, StringBefore, StringCompare, StringConcatenation, StringContains,
+            StringEnds, StringLength, StringLowercase, StringStarts, StringSubstring,
+            StringUppercase,
+        },
+        BinaryFunctionEnum, UnaryFunctionEnum,
     },
-    generic::{CanonicalString, Datatype, Equals, LexicalValue, Unequals},
-    language::LanguageTag,
-    numeric::{
-        NumericAbsolute, NumericAddition, NumericCeil, NumericCosine, NumericDivision,
-        NumericFloor, NumericGreaterthan, NumericGreaterthaneq, NumericLessthan, NumericLessthaneq,
-        NumericLogarithm, NumericMultiplication, NumericNegation, NumericPower, NumericRound,
-        NumericSine, NumericSquareroot, NumericSubtraction, NumericTangent,
-    },
-    string::{
-        StringAfter, StringBefore, StringCompare, StringConcatenation, StringContains, StringEnds,
-        StringLength, StringLowercase, StringStarts, StringSubstring, StringUppercase,
-    },
-    BinaryFunctionEnum, UnaryFunctionEnum,
+    evaluation::StackProgram,
 };
 
 /// Leaf node of a [FunctionTree]
@@ -74,7 +79,7 @@ where
     /// Regular function with no special handling
     Normal,
     /// Function evaluates to a constant
-    Constant(&'a AnyDataValue),
+    Constant(Option<AnyDataValue>),
     /// Function evaluates to a referenced value
     Reference(&'a ReferenceType),
 }
@@ -97,16 +102,20 @@ where
 
 impl<ReferenceType> FunctionTree<ReferenceType>
 where
-    ReferenceType: Debug + Clone,
+    ReferenceType: Debug + Clone + Hash + Eq,
 {
     /// Check if this function correspond to some special case defined in [SpecialCaseFunction].
     /// Returns `None` if this is not the case.
     #[allow(dead_code)]
     pub(crate) fn special_function(&self) -> SpecialCaseFunction<'_, ReferenceType> {
+        if self.references().is_empty() {
+            let constant_program =
+                StackProgram::from_function_tree(self, &HashMap::default(), None);
+        
+            return SpecialCaseFunction::Constant(constant_program.evaluate_data(&[]))
+        }
+
         match self {
-            FunctionTree::Leaf(FunctionLeaf::Constant(constant)) => {
-                SpecialCaseFunction::Constant(constant)
-            }
             FunctionTree::Leaf(FunctionLeaf::Reference(reference)) => {
                 SpecialCaseFunction::Reference(reference)
             }

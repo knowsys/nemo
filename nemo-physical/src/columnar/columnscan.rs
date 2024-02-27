@@ -600,4 +600,14 @@ impl<'a> ColumnScanRainbow<'a> {
             StorageTypeName::Double => self.scan_double.constant_set(None),
         }
     }
+
+    /// Assumes that column scan is a [ColumnScanConstant].
+    /// Set the value of all types to `None`.
+    pub(crate) fn constant_set_none_all(&mut self) {
+        self.scan_id32.constant_set(None);
+        self.scan_id64.constant_set(None);
+        self.scan_i64.constant_set(None);
+        self.scan_float.constant_set(None);
+        self.scan_double.constant_set(None);
+    }
 }
