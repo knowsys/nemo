@@ -235,8 +235,12 @@ impl BinaryOperation {
 pub enum UnaryOperation {
     /// Boolean negation
     BooleanNegation,
+    /// Cast to double
+    CastToDouble,
+    /// Cast to float
+    CastToFloat,
     /// Cast to integer
-    CaseToInteger,
+    CastToInteger,
     /// Canonical string representation of a value
     CanonicalString,
     /// Check if value is an integer
@@ -313,7 +317,9 @@ impl UnaryOperation {
             "FLOOR" => Ok(UnaryOperation::NumericFloor),
             "DATATYPE" => Ok(UnaryOperation::Datatype),
             "LANG" => Ok(UnaryOperation::LanguageTag),
-            "INT" => Ok(UnaryOperation::CaseToInteger),
+            "INT" => Ok(UnaryOperation::CastToInteger),
+            "DOUBLE" => Ok(UnaryOperation::CastToDouble),
+            "FLOAT" => Ok(UnaryOperation::CastToFloat),
             s => Err(Error::UnknownUnaryOpertation {
                 operation: s.into(),
             }),
@@ -337,7 +343,9 @@ impl UnaryOperation {
             Self::NumericCeil => "CEIL",
             Self::NumericFloor => "FLOOR",
             Self::NumericRound => "ROUND",
-            Self::CaseToInteger => "INT",
+            Self::CastToInteger => "INT",
+            Self::CastToDouble => "DOUBLE",
+            Self::CastToFloat => "FLOAT",
             Self::CheckIsInteger => "isInteger",
             Self::CheckIsFloat => "isFloat",
             Self::CheckIsDouble => "isDouble",

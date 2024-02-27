@@ -14,8 +14,11 @@ use super::UnaryFunction;
 ///   * unsigned integers that can be represented in 63 bits
 ///   * floating point numbers that don't contain a fractional part
 ///   * booleans
+///   * strings
+///   * other
 ///
-/// Returns `None` when called on values outside the range described above.
+/// Returns `None` when called on values outside the range described above
+/// or if the value cannot be converted to an integer.
 #[derive(Debug, Copy, Clone)]
 pub struct CastingIntoInteger64;
 impl UnaryFunction for CastingIntoInteger64 {
