@@ -374,7 +374,7 @@ impl<'a> PartialTrieScan<'a> for TrieScanFunction<'a> {
                 } else {
                     self.column_scans[next_layer]
                         .get_mut()
-                        .constant_set_none_all();
+                        .constant_set_none(next_type);
                 }
             }
             ComputedMarker::Computed => {}
