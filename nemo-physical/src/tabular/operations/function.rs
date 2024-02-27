@@ -85,6 +85,8 @@ enum PossibleTypeInformation {
     Known(StorageTypeBitSet),
     /// Layer has the same possible types as another
     Inferred(usize),
+    /// Layer has the same possible types as the input trie of the given layer
+    Input(usize),
 }
 
 /// Used to create [TrieScanFunction]
@@ -106,23 +108,30 @@ impl GeneratorFunction {
             .flat_map(|(_, function)| function.references())
             .collect();
 
+        let mut type_information = vec![PossibleTypeInformation::Unkown; output.len()];
         let mut reference_map = HashMap::<OperationColumnMarker, usize>::new();
 
-        for marker_output in output.iter() {
-            let is_function_input = referenced_columns.contains(marker_output);
+        let mut layer_input: usize = 0;
 
-            if is_function_input {
+        for (layer_output, marker_output) in output.iter().enumerate() {
+            if referenced_columns.contains(marker_output) {
+                // Column is input to some function
                 let num_function_input = reference_map.len();
                 if let Entry::Vacant(entry) = reference_map.entry(marker_output.clone()) {
                     entry.insert(num_function_input);
                 }
+            }
+
+            if functions.get(&marker_output).is_none() {
+                // Column is part of the input trie
+                type_information[layer_output] = PossibleTypeInformation::Input(layer_input);
+                layer_input += 1;
             }
         }
 
         let mut input_information = vec![InputMarker::Unused; output.len()];
         let mut computed_information = vec![ComputedMarker::Input; output.len()];
         let mut constant_functions = Vec::new();
-        let mut type_information = vec![PossibleTypeInformation::Unkown; output.len()];
 
         for (marker_result, function) in functions {
             let layer_output = output
@@ -401,6 +410,7 @@ impl<'a> PartialTrieScan<'a> for TrieScanFunction<'a> {
             PossibleTypeInformation::Unkown => StorageTypeBitSet::full(),
             PossibleTypeInformation::Known(value) => value,
             PossibleTypeInformation::Inferred(index) => self.possible_types(index),
+            PossibleTypeInformation::Input(layer) => self.trie_scan.possible_types(layer),
         }
     }
 }
