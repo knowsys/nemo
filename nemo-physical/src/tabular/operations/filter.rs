@@ -162,6 +162,15 @@ impl GeneratorFilter {
 
         result
     }
+
+    /// Returns whether this operation does not alter the input table.
+    fn is_unchanging(&self) -> bool {
+        // This operation behaves the same as the identity if
+        // no new columns are computed
+        self.output_columns
+            .iter()
+            .all(|output| matches!(output, OutputColumn::Input))
+    }
 }
 
 impl OperationGenerator for GeneratorFilter {
@@ -173,6 +182,10 @@ impl OperationGenerator for GeneratorFilter {
         debug_assert!(trie_scans.len() == 1);
 
         let trie_scan = trie_scans.remove(0)?;
+
+        if self.is_unchanging() {
+            return Some(trie_scan);
+        }
 
         let mut column_scans: Vec<UnsafeCell<ColumnScanRainbow<'a>>> =
             Vec::with_capacity(self.output_columns.len());
