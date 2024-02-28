@@ -34,8 +34,11 @@ use super::{OperationColumnMarker, OperationGenerator, OperationTable};
 pub type Filter = FunctionTree<OperationColumnMarker>;
 /// Collection of filters to be applied to a table
 pub type Filters = Vec<Filter>;
+
+/// Filter that can be decomposed into several special cases
+type SpecialFilter = SpecialCaseFilter<OperationColumnMarker>;
 /// Assigns an input column to a function which filters values from that column
-type FilterAssignment = HashMap<OperationColumnMarker, FunctionTree<OperationColumnMarker>>;
+type FilterAssignment = HashMap<OperationColumnMarker, SpecialFilter>;
 
 /// Encodes how one particular output column is computed
 #[derive(Debug, Clone)]
@@ -89,11 +92,11 @@ impl GeneratorFilter {
             }
 
             match filter_assignment.get(&input_marker) {
-                Some(function) => match function.special_filter() {
-                    SpecialCaseFilter::Normal => {
+                Some(special_filter) => match special_filter {
+                    SpecialCaseFilter::Normal(filter) => {
                         output_columns.push(OutputColumn::Filtered(
                             StackProgram::from_function_tree(
-                                function,
+                                filter,
                                 &reference_map,
                                 Some(input_marker),
                             ),
@@ -102,6 +105,7 @@ impl GeneratorFilter {
                     SpecialCaseFilter::Constant(_, constant) => {
                         output_columns.push(OutputColumn::Constant(constant.clone()));
                     }
+                    SpecialCaseFilter::Bound(_) => todo!(),
                 },
                 None => {
                     output_columns.push(OutputColumn::Input);
@@ -133,34 +137,42 @@ impl GeneratorFilter {
     ///
     /// # Panics
     /// Panics if zero filters are given as argument.
-    fn fold_filters(filters: Vec<&Filter>) -> Filter {
+    fn fold_filters(
+        filters: Vec<&SpecialCaseFilter<OperationColumnMarker>>,
+    ) -> SpecialCaseFilter<OperationColumnMarker> {
         let mut result_filter = (*filters
             .first()
             .expect("Function assumes that at least one filter will be provided."))
         .clone();
 
-        for filter in filters.into_iter().skip(1) {
-            result_filter = Filter::boolean_conjunction(result_filter, filter.clone());
-        }
+        // for filter in filters.into_iter().skip(1) {
+        //     result_filter = Filter::boolean_conjunction(result_filter, filter.clone());
+        // }
 
-        result_filter
+        // result_filter
+        todo!()
     }
 
     /// Compute the [FilterAssignment] from a list of [Filters].
     fn compute_assignments(input: &OperationTable, filters: &Filters) -> FilterAssignment {
-        let mut grouped_filters = HashMap::<OperationColumnMarker, Vec<&Filter>>::new();
+        let mut grouped_filters =
+            HashMap::<OperationColumnMarker, Vec<SpecialCaseFilter<OperationColumnMarker>>>::new();
 
         for filter in filters {
             let marker = Self::find_last_reference(input, filter);
-            grouped_filters.entry(marker).or_default().push(filter);
+            grouped_filters
+                .entry(marker)
+                .or_default()
+                .push(filter.clone().special_filter());
         }
 
-        let mut result = FilterAssignment::new();
-        for (marker, group_filters) in grouped_filters {
-            result.insert(marker, Self::fold_filters(group_filters));
-        }
+        // let mut result = FilterAssignment::new();
+        // for (marker, group_filters) in grouped_filters {
+        //     result.insert(marker, Self::fold_filters(group_filters));
+        // }
 
-        result
+        // result
+        todo!()
     }
 }
 

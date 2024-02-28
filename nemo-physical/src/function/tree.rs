@@ -2,7 +2,11 @@
 
 use std::{collections::HashMap, fmt::Debug, hash::Hash};
 
-use crate::datavalues::AnyDataValue;
+use crate::{
+    columnar::operations::filter_interval::{IntervalBoundConstant, IntervalBoundReference},
+    datavalues::AnyDataValue,
+    tabular::operations::OperationColumnMarker,
+};
 
 use super::{
     definitions::{
@@ -90,14 +94,26 @@ where
 /// [TrieScanFilter][crate::tabular::operations::filter::TrieScanFilter]
 #[derive(Debug)]
 #[allow(dead_code)]
-pub(crate) enum SpecialCaseFilter<'a, ReferenceType>
+pub(crate) enum SpecialCaseFilter<ReferenceType>
 where
     ReferenceType: Debug + Clone,
 {
     /// Regular function with no special handling
-    Normal,
+    Normal(FunctionTree<ReferenceType>),
     /// Function checks whether a column is equal to a constant
-    Constant(&'a ReferenceType, &'a AnyDataValue),
+    Constant(ReferenceType, AnyDataValue),
+    /// Filter checks if the value of a column is within certain bounds
+    Bound(SpecialCaseBound<ReferenceType>),
+}
+
+///
+#[derive(Debug)]
+pub(crate) enum SpecialCaseBound<ReferenceType>
+where
+    ReferenceType: Debug + Clone,
+{
+    Constant(IntervalBoundConstant<AnyDataValue>),
+    Reference(IntervalBoundReference<ReferenceType>),
 }
 
 impl<ReferenceType> FunctionTree<ReferenceType>
@@ -111,8 +127,8 @@ where
         if self.references().is_empty() {
             let constant_program =
                 StackProgram::from_function_tree(self, &HashMap::default(), None);
-        
-            return SpecialCaseFunction::Constant(constant_program.evaluate_data(&[]))
+
+            return SpecialCaseFunction::Constant(constant_program.evaluate_data(&[]));
         }
 
         match self {
@@ -125,28 +141,30 @@ where
 
     /// Check if this function correspond to some special case defined in [SpecialCaseFilter].
     /// Returns `None` if this is not the case.
-    pub(crate) fn special_filter(&self) -> SpecialCaseFilter<'_, ReferenceType> {
-        match self {
+    pub(crate) fn special_filter(self) -> SpecialCaseFilter<ReferenceType> {
+        match &self {
             FunctionTree::Binary {
                 function: BinaryFunctionEnum::Equals(_),
                 left,
                 right,
             } => {
-                if let (Some(reference), Some(constant)) =
-                    (left.get_reference(), right.get_constant_value())
-                {
+                if let (Some(reference), Some(constant)) = (
+                    left.get_reference().cloned(),
+                    right.get_constant_value().cloned(),
+                ) {
                     return SpecialCaseFilter::Constant(reference, constant);
                 }
 
-                if let (Some(reference), Some(constant)) =
-                    (right.get_reference(), left.get_constant_value())
-                {
+                if let (Some(reference), Some(constant)) = (
+                    right.get_reference().cloned(),
+                    left.get_constant_value().cloned(),
+                ) {
                     return SpecialCaseFilter::Constant(reference, constant);
                 }
 
-                SpecialCaseFilter::Normal
+                SpecialCaseFilter::Normal(self)
             }
-            _ => SpecialCaseFilter::Normal,
+            _ => SpecialCaseFilter::Normal(self),
         }
     }
 
@@ -168,6 +186,17 @@ where
         } else {
             None
         }
+    }
+
+    fn is_simple_filter(
+        &self,
+        this: &OperationColumnMarker,
+    ) -> Option<SpecialCaseBound<ReferenceType>> {
+        // if let FunctionTree::Binary { BinaryFunctionEnum::Equals(_), left, right } = self {
+
+        // }
+
+        todo!()
     }
 }
 

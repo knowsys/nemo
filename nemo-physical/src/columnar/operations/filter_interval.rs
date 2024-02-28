@@ -1,6 +1,6 @@
 //! This module defines [ColumnScanFilterInterval]
 
-use std::cmp::Ordering;
+use std::{cmp::Ordering, fmt::Debug};
 
 use crate::{
     columnar::columnscan::{ColumnScan, ColumnScanCell},
@@ -31,20 +31,14 @@ pub(crate) enum BoundaryType {
 
 /// Constant interval bound
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct IntervalBoundConstant<T>
-where
-    T: ColumnDataType,
-{
+pub(crate) struct IntervalBoundConstant<T> {
     /// Whether the value is included or excluded in this bound
     boundary_type: BoundaryType,
     /// The value
     value: T,
 }
 
-impl<T> IntervalBoundConstant<T>
-where
-    T: ColumnDataType,
-{
+impl<T> IntervalBoundConstant<T> {
     /// Create a new inclusive [IntervalBoundConstant].
     #[allow(dead_code)]
     pub(crate) fn inclusive(value: T) -> Self {
@@ -91,29 +85,35 @@ where
 
 /// Interval bound whose value is derived from an input [ColumnScan]
 #[derive(Debug)]
-pub(crate) struct IntervalBoundVariable {
+pub(crate) struct IntervalBoundReference<ReferenceType>
+where
+    ReferenceType: Debug,
+{
     /// Whether the value is included or excluded in this bound
     boundary_type: BoundaryType,
-    /// Index of the input [ColumnScan] from which the value is derived
-    input_index: usize,
+    /// Reference to a [ColumnScan]
+    reference: ReferenceType,
 }
 
-impl IntervalBoundVariable {
-    /// Create a new inclusive [IntervalBoundVariable].
+impl<ReferenceType> IntervalBoundReference<ReferenceType>
+where
+    ReferenceType: Debug,
+{
+    /// Create a new inclusive [IntervalBoundReference].
     #[allow(dead_code)]
-    pub(crate) fn inclusive(input_index: usize) -> Self {
+    pub(crate) fn inclusive(reference: ReferenceType) -> Self {
         Self {
             boundary_type: BoundaryType::Inclusive,
-            input_index,
+            reference,
         }
     }
 
-    /// Create a new inclusive [IntervalBoundVariable].
+    /// Create a new inclusive [IntervalBoundReference].
     #[allow(dead_code)]
-    pub(crate) fn exclusive(input_index: usize) -> Self {
+    pub(crate) fn exclusive(reference: ReferenceType) -> Self {
         Self {
             boundary_type: BoundaryType::Exclusive,
-            input_index,
+            reference,
         }
     }
 }
@@ -131,9 +131,9 @@ where
     input_scans: Vec<&'a ColumnScanCell<'a, T>>,
 
     /// The current value has to satisfy all the lower bounds in this list
-    input_lower: Vec<IntervalBoundVariable>,
+    input_lower: Vec<IntervalBoundReference<usize>>,
     /// The current value has to satisfy all the upper bounds in this list
-    input_upper: Vec<IntervalBoundVariable>,
+    input_upper: Vec<IntervalBoundReference<usize>>,
 
     /// The current value has to satisfy this constant lower bound.
     constant_lower: Option<IntervalBoundConstant<T>>,
@@ -153,8 +153,8 @@ where
     pub(crate) fn new(
         value_scan: &'a ColumnScanCell<'a, T>,
         input_scans: Vec<&'a ColumnScanCell<'a, T>>,
-        input_lower: Vec<IntervalBoundVariable>,
-        input_upper: Vec<IntervalBoundVariable>,
+        input_lower: Vec<IntervalBoundReference<usize>>,
+        input_upper: Vec<IntervalBoundReference<usize>>,
         constant_lower: Vec<IntervalBoundConstant<T>>,
         constant_upper: Vec<IntervalBoundConstant<T>>,
     ) -> Self {
@@ -189,7 +189,7 @@ where
             self.input_lower.iter().map(|bound| {
                 IntervalBoundConstant {
                     boundary_type: bound.boundary_type,
-                    value: self.input_scans[bound.input_index]
+                    value: self.input_scans[bound.reference]
                         .current()
                         .expect("Every input scan must return a value."),
                 }
@@ -203,7 +203,7 @@ where
             self.input_upper.iter().map(|bound| {
                 IntervalBoundConstant {
                     boundary_type: bound.boundary_type,
-                    value: self.input_scans[bound.input_index]
+                    value: self.input_scans[bound.reference]
                         .current()
                         .expect("Every input scan must return a value."),
                 }
@@ -342,7 +342,7 @@ mod test {
         column::{vector::ColumnVector, Column},
         columnscan::{ColumnScan, ColumnScanCell, ColumnScanEnum},
         operations::filter_interval::{
-            ColumnScanFilterInterval, IntervalBoundConstant, IntervalBoundVariable,
+            ColumnScanFilterInterval, IntervalBoundConstant, IntervalBoundReference,
         },
     };
 
@@ -412,8 +412,8 @@ mod test {
         let mut scan_filter = ColumnScanFilterInterval::new(
             &scan_value,
             vec![&scan_lower, &scan_upper],
-            vec![IntervalBoundVariable::inclusive(0)],
-            vec![IntervalBoundVariable::exclusive(1)],
+            vec![IntervalBoundReference::inclusive(0)],
+            vec![IntervalBoundReference::exclusive(1)],
             vec![IntervalBoundConstant::exclusive(-2)],
             vec![IntervalBoundConstant::inclusive(11)],
         );
