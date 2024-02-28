@@ -50,9 +50,10 @@ where
         self.smallest_scans[index]
     }
 
-    /// Set a vector that indicates which scans are currently active and should be considered
-    pub(crate) fn set_active_scans(&mut self, active_scans: Vec<usize>) {
-        self.active_scans = active_scans;
+    /// Return a mutable reference to a vector
+    /// that indicates which scans are currently active and should be considered.
+    pub(crate) fn active_scans_mut(&mut self) -> &mut Vec<usize> {
+        &mut self.active_scans
     }
 }
 

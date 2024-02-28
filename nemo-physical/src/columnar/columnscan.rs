@@ -209,12 +209,13 @@ where
 
     /// Assumes that column scan is a [ColumnScanUnion].
     ///
-    /// Set a vector that indicates which scans are currently active and should be considered
-    pub(crate) fn union_set_active(&mut self, active_scans: Vec<usize>) {
+    /// Return a mutable reference to a vector
+    /// that indicates which scans are currently active and should be considered
+    pub(crate) fn union_active_scans(&mut self) -> &mut Vec<usize> {
         if let Self::ColumnScanUnion(cs) = self {
-            cs.set_active_scans(active_scans)
+            cs.active_scans_mut()
         } else {
-            unimplemented!("union_set_active is only available for ColumnScanUnion")
+            unimplemented!("union_active_scans is only available for ColumnScanUnion")
         }
     }
 
@@ -380,8 +381,8 @@ where
     }
 
     /// Forward `union_is_smallest` to the underlying [ColumnScanEnum].
-    pub(crate) fn union_set_active(&mut self, active_scans: Vec<usize>) {
-        self.0.get_mut().union_set_active(active_scans);
+    pub(crate) fn union_active_scans(&mut self) -> &mut Vec<usize> {
+        self.0.get_mut().union_active_scans()
     }
 
     /// Forward `subtract_get_equal` to the underlying [ColumnScanEnum].
@@ -534,18 +535,15 @@ impl<'a> ColumnScanRainbow<'a> {
     }
 
     /// Assumes that column scan is a [ColumnScanUnion]
-    /// Set a vector that indicates which scans are currently active and should be considered.
-    pub(crate) fn union_set_active(
-        &mut self,
-        storage_type: StorageTypeName,
-        active_scans: Vec<usize>,
-    ) {
+    /// Return a mutable reference to  a vector
+    /// that indicates which scans are currently active and should be considered.
+    pub(crate) fn union_active_scans(&mut self, storage_type: StorageTypeName) -> &mut Vec<usize> {
         match storage_type {
-            StorageTypeName::Id32 => self.scan_id32.union_set_active(active_scans),
-            StorageTypeName::Id64 => self.scan_id64.union_set_active(active_scans),
-            StorageTypeName::Int64 => self.scan_i64.union_set_active(active_scans),
-            StorageTypeName::Float => self.scan_float.union_set_active(active_scans),
-            StorageTypeName::Double => self.scan_double.union_set_active(active_scans),
+            StorageTypeName::Id32 => self.scan_id32.union_active_scans(),
+            StorageTypeName::Id64 => self.scan_id64.union_active_scans(),
+            StorageTypeName::Int64 => self.scan_i64.union_active_scans(),
+            StorageTypeName::Float => self.scan_float.union_active_scans(),
+            StorageTypeName::Double => self.scan_double.union_active_scans(),
         }
     }
 

@@ -113,8 +113,12 @@ impl<'a> PartialTrieScan<'a> for TrieScanUnion<'a> {
     }
 
     fn down(&mut self, next_type: StorageTypeName) {
-        let mut active_scans = Vec::<usize>::new();
         let next_layer = self.path_types.len();
+
+        self.column_scans[next_layer]
+            .get_mut()
+            .union_active_scans(next_type)
+            .clear();
 
         if let Some(previous_layer) = self.current_layer() {
             let previous_type = self.path_types[previous_layer];
@@ -131,21 +135,26 @@ impl<'a> PartialTrieScan<'a> for TrieScanUnion<'a> {
                     .union_is_smallest(previous_type, scan_index);
 
                 if is_smallest {
+                    let active_scans = self.column_scans[next_layer]
+                        .get_mut()
+                        .union_active_scans(next_type);
+
                     active_scans.push(scan_index);
                     trie_scan.down(next_type);
                 }
             }
         } else {
-            active_scans = (0..self.trie_scans.len()).collect();
+            let active_scans = self.column_scans[next_layer]
+                .get_mut()
+                .union_active_scans(next_type);
+
+            *active_scans = (0..self.trie_scans.len()).collect();
 
             for trie_scan in &mut self.trie_scans {
                 trie_scan.down(next_type);
             }
         }
 
-        self.column_scans[next_layer]
-            .get_mut()
-            .union_set_active(next_type, active_scans);
         self.column_scans[next_layer].get_mut().reset(next_type);
 
         self.path_types.push(next_type);
