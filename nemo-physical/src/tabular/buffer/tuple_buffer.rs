@@ -148,16 +148,6 @@ impl TypedTableLookup {
         Self { lookup_trie }
     }
 
-    fn storage_type_number(storage_type: &StorageTypeName) -> usize {
-        match storage_type {
-            StorageTypeName::Id32 => 0,
-            StorageTypeName::Id64 => 1,
-            StorageTypeName::Int64 => 2,
-            StorageTypeName::Float => 3,
-            StorageTypeName::Double => 4,
-        }
-    }
-
     /// Return the subtable id corresponding to the provided series of [StorageTypeName]s.
     /// If no subtable for the combination of types exist, then it will be given a new subtable id,
     /// which will be the same as the parameter `num_subtables`, which is the number of subtables
@@ -170,8 +160,7 @@ impl TypedTableLookup {
         let mut lookup_trie_block: usize = 0;
 
         for (lookup_trie_layer, storage_type) in storage_types.iter().enumerate() {
-            let next_block =
-                self.lookup_trie[lookup_trie_block + Self::storage_type_number(storage_type)];
+            let next_block = self.lookup_trie[lookup_trie_block + storage_type.order()];
 
             if next_block == Self::NO_SUCCESSOR {
                 self.add_new_lookup_trie_(
@@ -211,15 +200,14 @@ impl TypedTableLookup {
 
             for storage_type in missing_types {
                 // For every layer that is not the last add a pointer to the next block
-                self.lookup_trie[current_block + Self::storage_type_number(storage_type)] =
-                    next_block;
+                self.lookup_trie[current_block + storage_type.order()] = next_block;
 
                 current_block = next_block;
                 next_block += NUM_STORAGETYPES;
             }
 
             // In the last layer add a pointer to the new id
-            self.lookup_trie[current_block + Self::storage_type_number(last_type)] = new_id;
+            self.lookup_trie[current_block + last_type.order()] = new_id;
         }
     }
 }
