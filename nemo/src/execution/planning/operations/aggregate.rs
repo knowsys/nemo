@@ -192,7 +192,6 @@ mod test {
             aggregate_operation: AggregateOperation::Min,
             input_variables: vec![aggregated_input_variable.clone()],
             output_variable: Variable::Universal("output_1".to_string()),
-            logical_aggregate_operation: LogicalAggregateOperation::MinNumber,
         };
 
         assert!(!reorder_required(
@@ -205,7 +204,6 @@ mod test {
             aggregate_operation: AggregateOperation::Count,
             input_variables: vec![aggregated_input_variable.clone()],
             output_variable: Variable::Universal("output_1".to_string()),
-            logical_aggregate_operation: LogicalAggregateOperation::CountValues,
         };
 
         assert!(reorder_required(
