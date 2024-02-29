@@ -215,9 +215,9 @@ impl<'a> PartialTrieScan<'a> for TrieScanSubtract<'a> {
         self.trie_main.down(next_type);
         self.path_types.push(next_type);
 
-        self.column_scans[next_layer]
+        *self.column_scans[next_layer]
             .get_mut()
-            .subtract_set_active(next_type, previous_equal);
+            .subtract_active_scans(next_type) = previous_equal;
         self.column_scans[next_layer].get_mut().reset(next_type);
     }
 

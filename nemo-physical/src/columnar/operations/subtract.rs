@@ -75,9 +75,9 @@ where
         self.equal_values.clone()
     }
 
-    /// Set which sub iterators should be enabled.
-    pub(crate) fn set_active_scans(&mut self, active_scans: Vec<bool>) {
-        self.active_scans = active_scans;
+    /// Return a mutable reference to a list indicating which sub iterators should be enabled.
+    pub(crate) fn active_scans_mut(&mut self) -> &mut Vec<bool> {
+        &mut self.active_scans
     }
 
     fn move_follow_scans(&mut self, mut next_value: T) -> Option<T> {

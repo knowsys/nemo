@@ -232,10 +232,10 @@ where
 
     /// Assumes that column scan is a [ColumnScanSubtract].
     ///
-    /// Set which sub iterators should be active.
-    pub(crate) fn subtract_set_active(&mut self, active_scans: Vec<bool>) {
+    /// Return a mutable reference to a list indicating which sub iterators should be enabled.
+    pub(crate) fn subtract_active_scans(&mut self) -> &mut Vec<bool> {
         if let Self::ColumnScanSubtract(cs) = self {
-            cs.set_active_scans(active_scans)
+            cs.active_scans_mut()
         } else {
             unimplemented!("subtract_set_active is only available for ColumnScanSubtract")
         }
@@ -390,9 +390,9 @@ where
         self.0.get_mut().subtract_get_equal()
     }
 
-    /// Forward `subtract_set_active` to the underlying [ColumnScanEnum].
-    pub(crate) fn subtract_set_active(&mut self, active_scans: Vec<bool>) {
-        unsafe { &mut *self.0.get() }.subtract_set_active(active_scans)
+    /// Forward `subtract_active_scans` to the underlying [ColumnScanEnum].
+    pub(crate) fn subtract_active_scans(&mut self) -> &mut Vec<bool> {
+        unsafe { &mut *self.0.get() }.subtract_active_scans()
     }
 
     /// Forward `constant_set` to the underlying [ColumnScanEnum].
@@ -560,18 +560,17 @@ impl<'a> ColumnScanRainbow<'a> {
     }
 
     /// Assumes that column scan is a [ColumnScanSubtract]
-    /// Set which sub iterators should be enabled.
-    pub(crate) fn subtract_set_active(
+    /// Return a mutable reference to a list indicating which sub iterators should be enabled.
+    pub(crate) fn subtract_active_scans(
         &mut self,
         storage_type: StorageTypeName,
-        active_scans: Vec<bool>,
-    ) {
+    ) -> &mut Vec<bool> {
         match storage_type {
-            StorageTypeName::Id32 => self.scan_id32.subtract_set_active(active_scans),
-            StorageTypeName::Id64 => self.scan_id64.subtract_set_active(active_scans),
-            StorageTypeName::Int64 => self.scan_i64.subtract_set_active(active_scans),
-            StorageTypeName::Float => self.scan_float.subtract_set_active(active_scans),
-            StorageTypeName::Double => self.scan_double.subtract_set_active(active_scans),
+            StorageTypeName::Id32 => self.scan_id32.subtract_active_scans(),
+            StorageTypeName::Id64 => self.scan_id64.subtract_active_scans(),
+            StorageTypeName::Int64 => self.scan_i64.subtract_active_scans(),
+            StorageTypeName::Float => self.scan_float.subtract_active_scans(),
+            StorageTypeName::Double => self.scan_double.subtract_active_scans(),
         }
     }
 
