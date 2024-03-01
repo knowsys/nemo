@@ -1,5 +1,7 @@
+//! This module collects benchmarks for assessing the impact of using dynamic dispatch in columns.
+
 #[cfg(test)]
-mod tests {
+mod test {
     use rand::{thread_rng, Rng};
 
     use crate::{
