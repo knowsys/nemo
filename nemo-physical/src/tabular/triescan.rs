@@ -13,8 +13,7 @@ use crate::{
 use super::{
     operations::{
         aggregate::TrieScanAggregateWrapper, filter::TrieScanFilter, function::TrieScanFunction,
-        join::TrieScanJoin, null::TrieScanNull, prune::TrieScanPrune, subtract::TrieScanSubtract,
-        union::TrieScanUnion,
+        join::TrieScanJoin, null::TrieScanNull, subtract::TrieScanSubtract, union::TrieScanUnion,
     },
     trie::TrieScanGeneric,
 };
@@ -78,12 +77,13 @@ pub(crate) enum TrieScanEnum<'a> {
     TrieScanJoin(TrieScanJoin<'a>),
     /// Case [TrieScanNull]
     TrieScanNull(TrieScanNull<'a>),
-    /// Case [TrieScanPrune]
-    TrieScanPrune(TrieScanPrune<'a>),
     /// Case [TrieScanSubtract]
     TrieScanSubtract(TrieScanSubtract<'a>),
     /// Case [TrieScanUnion]
     TrieScanUnion(TrieScanUnion<'a>),
+    #[cfg(test)]
+    /// Case [super::operations::prune::TrieScanPrune]
+    TrieScanPrune(super::operations::prune::TrieScanPrune<'a>),
 }
 
 impl<'a> PartialTrieScan<'a> for TrieScanEnum<'a> {
@@ -95,6 +95,7 @@ impl<'a> PartialTrieScan<'a> for TrieScanEnum<'a> {
             Self::TrieScanGeneric(scan) => scan,
             Self::TrieScanJoin(scan) => scan,
             Self::TrieScanNull(scan) => scan,
+            #[cfg(test)]
             Self::TrieScanPrune(scan) => scan,
             Self::TrieScanSubtract(scan) => scan,
             Self::TrieScanUnion(scan) => scan,

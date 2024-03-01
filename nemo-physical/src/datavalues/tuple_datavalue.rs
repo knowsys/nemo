@@ -17,6 +17,7 @@ pub struct TupleDataValue {
 
 impl TupleDataValue {
     /// Constructor.
+    #[allow(dead_code)]
     pub(crate) fn new<T: IntoIterator<Item = AnyDataValue>>(
         label: Option<IriDataValue>,
         values: T,

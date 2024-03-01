@@ -82,7 +82,7 @@ enum PossibleTypeInformation {
     /// Layer could be of all types
     Unkown,
     /// Layer can only have the type specified by the [StorageTypeBitSet]
-    Known(StorageTypeBitSet),
+    _Known(StorageTypeBitSet),
     /// Layer has the same possible types as another
     Inferred(usize),
     /// Layer has the same possible types as the input trie of the given layer
@@ -408,7 +408,7 @@ impl<'a> PartialTrieScan<'a> for TrieScanFunction<'a> {
     fn possible_types(&self, layer: usize) -> StorageTypeBitSet {
         match self.type_information[layer] {
             PossibleTypeInformation::Unkown => StorageTypeBitSet::full(),
-            PossibleTypeInformation::Known(value) => value,
+            PossibleTypeInformation::_Known(value) => value,
             PossibleTypeInformation::Inferred(index) => self.possible_types(index),
             PossibleTypeInformation::Input(layer) => self.trie_scan.possible_types(layer),
         }
