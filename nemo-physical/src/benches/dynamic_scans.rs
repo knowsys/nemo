@@ -12,7 +12,9 @@ mod tests {
         datatypes::{StorageTypeName, StorageValueT},
     };
 
-    fn vector(length: usize) -> Vec<u64> {
+    fn vector() -> Vec<u64> {
+        let length: usize = 10_000_000;
+
         let mut rng = thread_rng();
         let mut numbers: Vec<u64> = (0..length).map(|_| rng.gen()).collect();
 
@@ -23,8 +25,7 @@ mod tests {
 
     #[bench]
     fn scan_next_regular(bencher: &mut Bencher) {
-        let length: usize = 10_000_000;
-        let column = ColumnVector::new(vector(length));
+        let column = ColumnVector::new(vector());
 
         bencher.iter(|| {
             let mut scan = black_box(ColumnScanVector::new(&column));
@@ -38,8 +39,7 @@ mod tests {
 
     #[bench]
     fn scan_next_enum(bencher: &mut Bencher) {
-        let length: usize = 10_000_000;
-        let column = ColumnVector::new(vector(length));
+        let column = ColumnVector::new(vector());
 
         bencher.iter(|| {
             let mut scan = black_box(ColumnScanEnum::ColumnScanVector(ColumnScanVector::new(
@@ -55,8 +55,7 @@ mod tests {
 
     #[bench]
     fn scan_next_rainbow(bencher: &mut Bencher) {
-        let length: usize = 10_000_000;
-        let column = ColumnVector::new(vector(length));
+        let column = ColumnVector::new(vector());
 
         bencher.iter(|| {
             let mut scan = black_box(ColumnScanRainbow::new(
