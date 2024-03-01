@@ -900,7 +900,7 @@ mod test {
         assert_eq!(dv.to_f64(), None);
         assert_eq!(dv.to_f32_unchecked(), value);
         assert_eq!(dv, AnyDataValue::new_float_from_f32(value).unwrap());
-        assert_ne!(dv, AnyDataValue::new_float_from_f32(3.14).unwrap());
+        assert_ne!(dv, AnyDataValue::new_float_from_f32(3.41).unwrap());
         assert_ne!(dv, AnyDataValue::new_double_from_f64(2.3456e3).unwrap());
     }
 
@@ -920,7 +920,7 @@ mod test {
         assert_eq!(dv.to_f32(), None);
         assert_eq!(dv.to_f64_unchecked(), value);
         assert_eq!(dv, AnyDataValue::new_double_from_f64(value).unwrap());
-        assert_ne!(dv, AnyDataValue::new_double_from_f64(3.14).unwrap());
+        assert_ne!(dv, AnyDataValue::new_double_from_f64(3.41).unwrap());
         assert_ne!(dv, AnyDataValue::new_float_from_f32(2.3456e3).unwrap());
     }
 

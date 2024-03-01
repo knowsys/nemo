@@ -369,7 +369,7 @@ mod test {
         let order_third = ColumnOrder::from_vector(vec![3, 4, 0, 1, 2]);
         manager.add_source(id_reference, order_third, empty_source());
 
-        let reference_available_orders = vec![
+        let reference_available_orders = [
             ColumnOrder::from_vector(vec![3, 4, 1, 0, 2]),
             ColumnOrder::from_vector(vec![3, 0, 1, 4, 2]),
             ColumnOrder::from_vector(vec![0, 2, 1, 3, 4]),
@@ -394,7 +394,7 @@ mod test {
             permutation_second_reference,
         );
 
-        let reference_available_orders = vec![
+        let reference_available_orders = [
             ColumnOrder::from_vector(vec![3, 4, 0, 2, 1]),
             ColumnOrder::from_vector(vec![3, 0, 4, 2, 1]),
             ColumnOrder::from_vector(vec![0, 1, 3, 2, 4]),

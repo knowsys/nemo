@@ -612,20 +612,16 @@ mod test {
     fn add_and_get() {
         let mut dict = MetaDvDictionary::new();
 
-        let mut dvs = Vec::new();
-        dvs.push(AnyDataValue::new_plain_string(
-            "http://example.org".to_string(),
-        ));
-        dvs.push(AnyDataValue::new_plain_string("another string".to_string()));
-        dvs.push(AnyDataValue::new_iri("http://example.org".to_string()));
-        dvs.push(AnyDataValue::new_language_tagged_string(
-            "Hallo".to_string(),
-            "de".to_string(),
-        ));
-        dvs.push(AnyDataValue::new_other(
-            "abc".to_string(),
-            "http://example.org/mydatatype".to_string(),
-        ));
+        let dvs = vec![
+            AnyDataValue::new_plain_string("http://example.org".to_string()),
+            AnyDataValue::new_plain_string("another string".to_string()),
+            AnyDataValue::new_iri("http://example.org".to_string()),
+            AnyDataValue::new_language_tagged_string("Hallo".to_string(), "de".to_string()),
+            AnyDataValue::new_other(
+                "abc".to_string(),
+                "http://example.org/mydatatype".to_string(),
+            ),
+        ];
 
         let mut ids = Vec::new();
         for dv in &dvs {

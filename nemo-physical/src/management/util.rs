@@ -59,7 +59,7 @@ mod test {
 
     #[test]
     fn compute_closest_order() {
-        let orders = vec![
+        let orders = [
             ColumnOrder::from_vector(vec![3, 0, 2, 1]),
             ColumnOrder::from_vector(vec![0, 1, 2, 3]),
         ];

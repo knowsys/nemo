@@ -39,7 +39,7 @@ pub(crate) mod test {
 
     /// Return the current value of the [PartialTrieScan].
     pub(crate) fn partial_scan_current<'a, Scan: PartialTrieScan<'a>>(
-        scan: &mut Scan,
+        scan: &Scan,
         storage_type: StorageTypeName,
     ) -> Option<StorageValueT> {
         let column_scan = unsafe { &mut *scan.current_scan()?.get() };

@@ -667,21 +667,36 @@ mod test {
     #[test]
     fn function_repeat_multiple_types() {
         let mut dictionary = Dict::default();
-        let a = dictionary
-            .add_datavalue(AnyDataValue::new_plain_string(String::from("a")))
-            .value() as u32;
-        let b = dictionary
-            .add_datavalue(AnyDataValue::new_plain_string(String::from("b")))
-            .value() as u32;
-        let foo1 = dictionary
-            .add_datavalue(AnyDataValue::new_plain_string(String::from("foo1")))
-            .value() as u32;
-        let foo2 = dictionary
-            .add_datavalue(AnyDataValue::new_plain_string(String::from("foo2")))
-            .value() as u32;
-        let bar = dictionary
-            .add_datavalue(AnyDataValue::new_plain_string(String::from("bar")))
-            .value() as u32;
+        let a = u32::try_from(
+            dictionary
+                .add_datavalue(AnyDataValue::new_plain_string(String::from("a")))
+                .value(),
+        )
+        .expect("The dictionary should not immediately return large ids");
+        let b = u32::try_from(
+            dictionary
+                .add_datavalue(AnyDataValue::new_plain_string(String::from("b")))
+                .value(),
+        )
+        .expect("The dictionary should not immediately return large ids");
+        let foo1 = u32::try_from(
+            dictionary
+                .add_datavalue(AnyDataValue::new_plain_string(String::from("foo1")))
+                .value(),
+        )
+        .expect("The dictionary should not immediately return large ids");
+        let foo2 = u32::try_from(
+            dictionary
+                .add_datavalue(AnyDataValue::new_plain_string(String::from("foo2")))
+                .value(),
+        )
+        .expect("The dictionary should not immediately return large ids");
+        let bar = u32::try_from(
+            dictionary
+                .add_datavalue(AnyDataValue::new_plain_string(String::from("bar")))
+                .value(),
+        )
+        .expect("The dictionary should not immediately return large ids");
         let dictionary = RefCell::new(dictionary);
 
         let trie = Trie::from_rows(vec![
@@ -739,12 +754,18 @@ mod test {
     #[test]
     fn function_new_value() {
         let mut dictionary = Dict::default();
-        let hello = dictionary
-            .add_datavalue(AnyDataValue::new_plain_string(String::from("hello: ")))
-            .value() as u32;
-        let world = dictionary
-            .add_datavalue(AnyDataValue::new_plain_string(String::from("world: ")))
-            .value() as u32;
+        let hello = u32::try_from(
+            dictionary
+                .add_datavalue(AnyDataValue::new_plain_string(String::from("hello: ")))
+                .value(),
+        )
+        .expect("The dictionary should not immediately return large ids");
+        let world = u32::try_from(
+            dictionary
+                .add_datavalue(AnyDataValue::new_plain_string(String::from("world: ")))
+                .value(),
+        )
+        .expect("The dictionary should not immediately return large ids");
         let dictionary = RefCell::new(dictionary);
 
         let trie = Trie::from_rows(vec![

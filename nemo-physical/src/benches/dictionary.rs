@@ -24,7 +24,7 @@ mod test {
             }
             "meta" => {
                 println!("Using MetaDictionary.");
-                Box::new(MetaDictionary::default())
+                Box::<MetaDictionary>::default()
             }
             _ => panic!("Unexpected dictionary type '{}'.", dict_type),
         }

@@ -845,19 +845,19 @@ mod test {
 
         // Initialize trie
         scan.down(StorageTypeName::Int64);
-        assert_eq!(partial_scan_current_at_layer(&mut scan, ty, low), None);
+        assert_eq!(partial_scan_current_at_layer(&scan, ty, low), None);
 
         assert_eq!(scan.advance_on_layer(low, None), Some(0));
-        assert_eq!(partial_scan_current_at_layer(&mut scan, ty, low), svo_i(7));
+        assert_eq!(partial_scan_current_at_layer(&scan, ty, low), svo_i(7));
 
         assert_eq!(scan.advance_on_layer(low, None), Some(2));
-        assert_eq!(partial_scan_current_at_layer(&mut scan, ty, low), svo_i(7));
+        assert_eq!(partial_scan_current_at_layer(&scan, ty, low), svo_i(7));
 
         assert_eq!(scan.advance_on_layer(low, None), Some(0));
-        assert_eq!(partial_scan_current_at_layer(&mut scan, ty, low), svo_i(7));
+        assert_eq!(partial_scan_current_at_layer(&scan, ty, low), svo_i(7));
 
         assert_eq!(scan.advance_on_layer(low, None), None);
-        assert_eq!(partial_scan_current_at_layer(&mut scan, ty, low), None);
+        assert_eq!(partial_scan_current_at_layer(&scan, ty, low), None);
     }
 
     #[test]
@@ -871,34 +871,34 @@ mod test {
 
         // Initialize trie
         scan.down(StorageTypeName::Int64);
-        assert_eq!(partial_scan_current_at_layer(&mut scan, ty, low), None);
+        assert_eq!(partial_scan_current_at_layer(&scan, ty, low), None);
 
         assert_eq!(scan.advance_on_layer(low, None), Some(0));
-        assert_eq!(partial_scan_current_at_layer(&mut scan, ty, low), svo_i(3));
+        assert_eq!(partial_scan_current_at_layer(&scan, ty, low), svo_i(3));
 
         assert_eq!(scan.advance_on_layer(low, None), Some(3));
-        assert_eq!(partial_scan_current_at_layer(&mut scan, ty, low), svo_i(7));
+        assert_eq!(partial_scan_current_at_layer(&scan, ty, low), svo_i(7));
 
         assert_eq!(scan.advance_on_layer(low, None), Some(2));
-        assert_eq!(partial_scan_current_at_layer(&mut scan, ty, low), svo_i(5));
+        assert_eq!(partial_scan_current_at_layer(&scan, ty, low), svo_i(5));
 
         assert_eq!(scan.advance_on_layer(low, None), Some(3));
-        assert_eq!(partial_scan_current_at_layer(&mut scan, ty, low), svo_i(7));
+        assert_eq!(partial_scan_current_at_layer(&scan, ty, low), svo_i(7));
 
         assert_eq!(scan.advance_on_layer(low, None), Some(2));
-        assert_eq!(partial_scan_current_at_layer(&mut scan, ty, low), svo_i(3));
+        assert_eq!(partial_scan_current_at_layer(&scan, ty, low), svo_i(3));
 
         assert_eq!(scan.advance_on_layer(low, None), Some(3));
-        assert_eq!(partial_scan_current_at_layer(&mut scan, ty, low), svo_i(4));
+        assert_eq!(partial_scan_current_at_layer(&scan, ty, low), svo_i(4));
 
         assert_eq!(scan.advance_on_layer(low, None), Some(1));
-        assert_eq!(partial_scan_current_at_layer(&mut scan, ty, low), svo_i(6));
+        assert_eq!(partial_scan_current_at_layer(&scan, ty, low), svo_i(6));
 
         assert_eq!(scan.advance_on_layer(low, None), Some(0));
-        assert_eq!(partial_scan_current_at_layer(&mut scan, ty, low), svo_i(7));
+        assert_eq!(partial_scan_current_at_layer(&scan, ty, low), svo_i(7));
 
         assert_eq!(scan.advance_on_layer(low, None), None);
-        assert_eq!(partial_scan_current_at_layer(&mut scan, ty, low), None);
+        assert_eq!(partial_scan_current_at_layer(&scan, ty, low), None);
     }
 
     #[test]
@@ -912,56 +912,56 @@ mod test {
         // Initialize trie
         scan.down(ty);
 
-        assert_eq!(partial_scan_current_at_layer(&mut scan, ty, 0), None);
-        assert_eq!(partial_scan_current_at_layer(&mut scan, ty, 1), None);
-        assert_eq!(partial_scan_current_at_layer(&mut scan, ty, 2), None);
-        assert_eq!(partial_scan_current_at_layer(&mut scan, ty, 3), None);
+        assert_eq!(partial_scan_current_at_layer(&scan, ty, 0), None);
+        assert_eq!(partial_scan_current_at_layer(&scan, ty, 1), None);
+        assert_eq!(partial_scan_current_at_layer(&scan, ty, 2), None);
+        assert_eq!(partial_scan_current_at_layer(&scan, ty, 3), None);
 
         // Only advance on highest layer
         assert_eq!(scan.advance_on_layer(0, None), Some(0));
-        assert_eq!(partial_scan_current_at_layer(&mut scan, ty, 0), svo_i(1));
-        assert_eq!(partial_scan_current_at_layer(&mut scan, ty, 1), None);
-        assert_eq!(partial_scan_current_at_layer(&mut scan, ty, 2), None);
-        assert_eq!(partial_scan_current_at_layer(&mut scan, ty, 3), None);
+        assert_eq!(partial_scan_current_at_layer(&scan, ty, 0), svo_i(1));
+        assert_eq!(partial_scan_current_at_layer(&scan, ty, 1), None);
+        assert_eq!(partial_scan_current_at_layer(&scan, ty, 2), None);
+        assert_eq!(partial_scan_current_at_layer(&scan, ty, 3), None);
 
         // On one layer below
         assert_eq!(scan.advance_on_layer(1, None), Some(1));
-        assert_eq!(partial_scan_current_at_layer(&mut scan, ty, 0), svo_i(1));
-        assert_eq!(partial_scan_current_at_layer(&mut scan, ty, 1), svo_i(4));
-        assert_eq!(partial_scan_current_at_layer(&mut scan, ty, 2), None);
-        assert_eq!(partial_scan_current_at_layer(&mut scan, ty, 3), None);
+        assert_eq!(partial_scan_current_at_layer(&scan, ty, 0), svo_i(1));
+        assert_eq!(partial_scan_current_at_layer(&scan, ty, 1), svo_i(4));
+        assert_eq!(partial_scan_current_at_layer(&scan, ty, 2), None);
+        assert_eq!(partial_scan_current_at_layer(&scan, ty, 3), None);
 
         // On lowest layer
         assert_eq!(scan.advance_on_layer(3, None), Some(2));
-        assert_eq!(partial_scan_current_at_layer(&mut scan, ty, 0), svo_i(1));
-        assert_eq!(partial_scan_current_at_layer(&mut scan, ty, 1), svo_i(4));
-        assert_eq!(partial_scan_current_at_layer(&mut scan, ty, 2), svo_i(0));
-        assert_eq!(partial_scan_current_at_layer(&mut scan, ty, 3), svo_i(3));
+        assert_eq!(partial_scan_current_at_layer(&scan, ty, 0), svo_i(1));
+        assert_eq!(partial_scan_current_at_layer(&scan, ty, 1), svo_i(4));
+        assert_eq!(partial_scan_current_at_layer(&scan, ty, 2), svo_i(0));
+        assert_eq!(partial_scan_current_at_layer(&scan, ty, 3), svo_i(3));
 
         assert_eq!(scan.advance_on_layer(3, None), Some(3));
-        assert_eq!(partial_scan_current_at_layer(&mut scan, ty, 0), svo_i(1));
-        assert_eq!(partial_scan_current_at_layer(&mut scan, ty, 1), svo_i(4));
-        assert_eq!(partial_scan_current_at_layer(&mut scan, ty, 2), svo_i(0));
-        assert_eq!(partial_scan_current_at_layer(&mut scan, ty, 3), svo_i(7));
+        assert_eq!(partial_scan_current_at_layer(&scan, ty, 0), svo_i(1));
+        assert_eq!(partial_scan_current_at_layer(&scan, ty, 1), svo_i(4));
+        assert_eq!(partial_scan_current_at_layer(&scan, ty, 2), svo_i(0));
+        assert_eq!(partial_scan_current_at_layer(&scan, ty, 3), svo_i(7));
 
         assert_eq!(scan.advance_on_layer(3, None), Some(2));
-        assert_eq!(partial_scan_current_at_layer(&mut scan, ty, 0), svo_i(1));
-        assert_eq!(partial_scan_current_at_layer(&mut scan, ty, 1), svo_i(4));
-        assert_eq!(partial_scan_current_at_layer(&mut scan, ty, 2), svo_i(1));
-        assert_eq!(partial_scan_current_at_layer(&mut scan, ty, 3), svo_i(5));
+        assert_eq!(partial_scan_current_at_layer(&scan, ty, 0), svo_i(1));
+        assert_eq!(partial_scan_current_at_layer(&scan, ty, 1), svo_i(4));
+        assert_eq!(partial_scan_current_at_layer(&scan, ty, 2), svo_i(1));
+        assert_eq!(partial_scan_current_at_layer(&scan, ty, 3), svo_i(5));
 
         assert_eq!(scan.advance_on_layer(1, None), Some(1));
-        assert_eq!(partial_scan_current_at_layer(&mut scan, ty, 0), svo_i(1));
-        assert_eq!(partial_scan_current_at_layer(&mut scan, ty, 1), svo_i(5));
-        assert_eq!(partial_scan_current_at_layer(&mut scan, ty, 2), None);
-        assert_eq!(partial_scan_current_at_layer(&mut scan, ty, 3), None);
+        assert_eq!(partial_scan_current_at_layer(&scan, ty, 0), svo_i(1));
+        assert_eq!(partial_scan_current_at_layer(&scan, ty, 1), svo_i(5));
+        assert_eq!(partial_scan_current_at_layer(&scan, ty, 2), None);
+        assert_eq!(partial_scan_current_at_layer(&scan, ty, 3), None);
 
         // Advance on highest layer
         assert_eq!(scan.advance_on_layer(0, None), Some(0));
-        assert_eq!(partial_scan_current_at_layer(&mut scan, ty, 0), svo_i(2));
-        assert_eq!(partial_scan_current_at_layer(&mut scan, ty, 1), None);
-        assert_eq!(partial_scan_current_at_layer(&mut scan, ty, 2), None);
-        assert_eq!(partial_scan_current_at_layer(&mut scan, ty, 3), None);
+        assert_eq!(partial_scan_current_at_layer(&scan, ty, 0), svo_i(2));
+        assert_eq!(partial_scan_current_at_layer(&scan, ty, 1), None);
+        assert_eq!(partial_scan_current_at_layer(&scan, ty, 2), None);
+        assert_eq!(partial_scan_current_at_layer(&scan, ty, 3), None);
     }
 
     #[ignore]
@@ -975,37 +975,37 @@ mod test {
 
         // Initialize trie
         scan.down(ty);
-        assert_eq!(partial_scan_seek(&mut scan, sv_i(0)), svo_i(1));
+        assert_eq!(partial_scan_seek(&scan, sv_i(0)), svo_i(1));
 
         scan.down(ty);
-        assert_eq!(partial_scan_seek(&mut scan, sv_i(0)), svo_i(4));
+        assert_eq!(partial_scan_seek(&scan, sv_i(0)), svo_i(4));
 
         scan.down(ty);
-        assert_eq!(partial_scan_seek(&mut scan, sv_i(0)), svo_i(0));
+        assert_eq!(partial_scan_seek(&scan, sv_i(0)), svo_i(0));
 
         scan.down(ty);
-        assert_eq!(partial_scan_seek(&mut scan, sv_i(5)), svo_i(7));
-        assert_eq!(partial_scan_seek(&mut scan, sv_i(0)), svo_i(7));
-        assert_eq!(partial_scan_seek(&mut scan, sv_i(7)), svo_i(7));
+        assert_eq!(partial_scan_seek(&scan, sv_i(5)), svo_i(7));
+        assert_eq!(partial_scan_seek(&scan, sv_i(0)), svo_i(7));
+        assert_eq!(partial_scan_seek(&scan, sv_i(7)), svo_i(7));
 
-        assert_eq!(partial_scan_current_at_layer(&mut scan, ty, 0), svo_i(1));
-        assert_eq!(partial_scan_current_at_layer(&mut scan, ty, 1), svo_i(4));
-        assert_eq!(partial_scan_current_at_layer(&mut scan, ty, 2), svo_i(0));
-        assert_eq!(partial_scan_current_at_layer(&mut scan, ty, 3), svo_i(7));
+        assert_eq!(partial_scan_current_at_layer(&scan, ty, 0), svo_i(1));
+        assert_eq!(partial_scan_current_at_layer(&scan, ty, 1), svo_i(4));
+        assert_eq!(partial_scan_current_at_layer(&scan, ty, 2), svo_i(0));
+        assert_eq!(partial_scan_current_at_layer(&scan, ty, 3), svo_i(7));
 
-        assert_eq!(partial_scan_seek(&mut scan, sv_i(8)), None);
+        assert_eq!(partial_scan_seek(&scan, sv_i(8)), None);
 
-        assert_eq!(partial_scan_current_at_layer(&mut scan, ty, 0), svo_i(1));
-        assert_eq!(partial_scan_current_at_layer(&mut scan, ty, 1), svo_i(4));
-        assert_eq!(partial_scan_current_at_layer(&mut scan, ty, 2), svo_i(0));
-        assert_eq!(partial_scan_current_at_layer(&mut scan, ty, 3), None);
+        assert_eq!(partial_scan_current_at_layer(&scan, ty, 0), svo_i(1));
+        assert_eq!(partial_scan_current_at_layer(&scan, ty, 1), svo_i(4));
+        assert_eq!(partial_scan_current_at_layer(&scan, ty, 2), svo_i(0));
+        assert_eq!(partial_scan_current_at_layer(&scan, ty, 3), None);
 
         scan.up();
-        assert_eq!(partial_scan_seek(&mut scan, sv_i(2)), svo_i(2));
-        assert_eq!(partial_scan_current_at_layer(&mut scan, ty, 0), svo_i(1));
-        assert_eq!(partial_scan_current_at_layer(&mut scan, ty, 1), svo_i(4));
-        assert_eq!(partial_scan_current_at_layer(&mut scan, ty, 2), svo_i(2));
-        assert_eq!(partial_scan_current_at_layer(&mut scan, ty, 3), None);
+        assert_eq!(partial_scan_seek(&scan, sv_i(2)), svo_i(2));
+        assert_eq!(partial_scan_current_at_layer(&scan, ty, 0), svo_i(1));
+        assert_eq!(partial_scan_current_at_layer(&scan, ty, 1), svo_i(4));
+        assert_eq!(partial_scan_current_at_layer(&scan, ty, 2), svo_i(2));
+        assert_eq!(partial_scan_current_at_layer(&scan, ty, 3), None);
     }
 
     #[test]
@@ -1019,28 +1019,28 @@ mod test {
         // Initialize trie
         scan.down(ty);
 
-        assert_eq!(partial_scan_next(&mut scan, ty), svo_i(1));
-        assert_eq!(partial_scan_current(&mut scan, ty), svo_i(1));
+        assert_eq!(partial_scan_next(&scan, ty), svo_i(1));
+        assert_eq!(partial_scan_current(&scan, ty), svo_i(1));
 
         scan.down(ty);
-        assert_eq!(partial_scan_current(&mut scan, ty), None);
-        assert_eq!(partial_scan_next(&mut scan, ty), svo_i(4));
-        assert_eq!(partial_scan_current(&mut scan, ty), svo_i(4));
-        assert_eq!(partial_scan_next(&mut scan, ty), svo_i(5));
-        assert_eq!(partial_scan_current(&mut scan, ty), svo_i(5));
-        assert_eq!(partial_scan_next(&mut scan, ty), None);
-        assert_eq!(partial_scan_current(&mut scan, ty), None);
+        assert_eq!(partial_scan_current(&scan, ty), None);
+        assert_eq!(partial_scan_next(&scan, ty), svo_i(4));
+        assert_eq!(partial_scan_current(&scan, ty), svo_i(4));
+        assert_eq!(partial_scan_next(&scan, ty), svo_i(5));
+        assert_eq!(partial_scan_current(&scan, ty), svo_i(5));
+        assert_eq!(partial_scan_next(&scan, ty), None);
+        assert_eq!(partial_scan_current(&scan, ty), None);
 
         // Trie scan should return the same results after going up and down again
         scan.up();
         scan.down(ty);
-        assert_eq!(partial_scan_current(&mut scan, ty), None);
-        assert_eq!(partial_scan_next(&mut scan, ty), svo_i(4));
-        assert_eq!(partial_scan_current(&mut scan, ty), svo_i(4));
-        assert_eq!(partial_scan_next(&mut scan, ty), svo_i(5));
-        assert_eq!(partial_scan_current(&mut scan, ty), svo_i(5));
-        assert_eq!(partial_scan_next(&mut scan, ty), None);
-        assert_eq!(partial_scan_current(&mut scan, ty), None);
+        assert_eq!(partial_scan_current(&scan, ty), None);
+        assert_eq!(partial_scan_next(&scan, ty), svo_i(4));
+        assert_eq!(partial_scan_current(&scan, ty), svo_i(4));
+        assert_eq!(partial_scan_next(&scan, ty), svo_i(5));
+        assert_eq!(partial_scan_current(&scan, ty), svo_i(5));
+        assert_eq!(partial_scan_next(&scan, ty), None);
+        assert_eq!(partial_scan_current(&scan, ty), None);
     }
 
     #[ignore]

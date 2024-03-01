@@ -242,10 +242,12 @@ mod test {
 
     #[test]
     fn test_unsigned_long_nonnegative_long() {
-        let value: u64 = U32MAX_AS_U64 + 42;
-        let long1 = UnsignedLongDataValue::new(value);
+        let value_u64: u64 = U32MAX_AS_U64 + 42;
+        let value_i64 = value_u64.try_into().expect("Value is small enough");
 
-        assert_eq!(long1.lexical_value(), value.to_string());
+        let long1 = UnsignedLongDataValue::new(value_u64);
+
+        assert_eq!(long1.lexical_value(), value_u64.to_string());
         assert_eq!(
             long1.datatype_iri(),
             "http://www.w3.org/2001/XMLSchema#long".to_string()
@@ -259,18 +261,21 @@ mod test {
 
         assert_eq!(long1.to_i32(), None);
         assert_eq!(long1.to_u32(), None);
-        assert_eq!(long1.to_i64(), Some(value as i64));
-        assert_eq!(long1.to_i64_unchecked(), value as i64);
-        assert_eq!(long1.to_u64(), Some(value));
-        assert_eq!(long1.to_u64_unchecked(), value);
+        assert_eq!(long1.to_i64(), Some(value_i64));
+        assert_eq!(long1.to_i64_unchecked(), value_i64);
+        assert_eq!(long1.to_u64(), Some(value_u64));
+        assert_eq!(long1.to_u64_unchecked(), value_u64);
     }
 
     #[test]
     fn test_unsigned_long_unsigned_int() {
-        let value: u64 = I32MAX_AS_U64 + 42;
-        let long1 = UnsignedLongDataValue::new(value);
+        let value_u64: u64 = I32MAX_AS_U64 + 42;
+        let value_i64 = value_u64.try_into().expect("Value is small enough");
+        let value_u32 = value_u64.try_into().expect("Value is small enough");
 
-        assert_eq!(long1.lexical_value(), value.to_string());
+        let long1 = UnsignedLongDataValue::new(value_u64);
+
+        assert_eq!(long1.lexical_value(), value_u64.to_string());
         assert_eq!(
             long1.datatype_iri(),
             "http://www.w3.org/2001/XMLSchema#long".to_string()
@@ -283,12 +288,12 @@ mod test {
         assert!(long1.fits_into_u64());
 
         assert_eq!(long1.to_i32(), None);
-        assert_eq!(long1.to_u32(), Some(value as u32));
-        assert_eq!(long1.to_u32_unchecked(), value as u32);
-        assert_eq!(long1.to_i64(), Some(value as i64));
-        assert_eq!(long1.to_i64_unchecked(), value as i64);
-        assert_eq!(long1.to_u64(), Some(value));
-        assert_eq!(long1.to_u64_unchecked(), value);
+        assert_eq!(long1.to_u32(), Some(value_u32));
+        assert_eq!(long1.to_u32_unchecked(), value_u32);
+        assert_eq!(long1.to_i64(), Some(value_i64));
+        assert_eq!(long1.to_i64_unchecked(), value_i64);
+        assert_eq!(long1.to_u64(), Some(value_u64));
+        assert_eq!(long1.to_u64_unchecked(), value_u64);
     }
 
     #[test]
@@ -319,10 +324,12 @@ mod test {
 
     #[test]
     fn test_long_nonnegative_long() {
-        let long_value: i64 = U32MAX_AS_I64 + 42;
-        let long1 = LongDataValue::new(long_value);
+        let value_i64: i64 = U32MAX_AS_I64 + 42;
+        let value_u64 = value_i64.try_into().expect("Value is small enough");
 
-        assert_eq!(long1.lexical_value(), long_value.to_string());
+        let long1 = LongDataValue::new(value_i64);
+
+        assert_eq!(long1.lexical_value(), value_i64.to_string());
         assert_eq!(
             long1.datatype_iri(),
             "http://www.w3.org/2001/XMLSchema#long".to_string()
@@ -336,18 +343,21 @@ mod test {
 
         assert_eq!(long1.to_i32(), None);
         assert_eq!(long1.to_u32(), None);
-        assert_eq!(long1.to_i64(), Some(long_value));
-        assert_eq!(long1.to_i64_unchecked(), long_value);
-        assert_eq!(long1.to_u64(), Some(long_value as u64));
-        assert_eq!(long1.to_u64_unchecked(), long_value as u64);
+        assert_eq!(long1.to_i64(), Some(value_i64));
+        assert_eq!(long1.to_i64_unchecked(), value_i64);
+        assert_eq!(long1.to_u64(), Some(value_u64));
+        assert_eq!(long1.to_u64_unchecked(), value_u64);
     }
 
     #[test]
     fn test_long_unsigned_int() {
-        let long_value: i64 = I32MAX_AS_I64 + 42;
-        let long1 = LongDataValue::new(long_value);
+        let value_i64: i64 = I32MAX_AS_I64 + 42;
+        let value_u64 = value_i64.try_into().expect("Value is small_enough");
+        let value_u32 = value_i64.try_into().expect("Value is small_enough");
 
-        assert_eq!(long1.lexical_value(), long_value.to_string());
+        let long1 = LongDataValue::new(value_i64);
+
+        assert_eq!(long1.lexical_value(), value_i64.to_string());
         assert_eq!(
             long1.datatype_iri(),
             "http://www.w3.org/2001/XMLSchema#long".to_string()
@@ -356,7 +366,7 @@ mod test {
         assert_eq!(
             long1.canonical_string(),
             "\"".to_string()
-                + &long_value.to_string()
+                + &value_i64.to_string()
                 + "\"^^<http://www.w3.org/2001/XMLSchema#long>"
         );
 
@@ -366,12 +376,12 @@ mod test {
         assert!(long1.fits_into_u64());
 
         assert_eq!(long1.to_i32(), None);
-        assert_eq!(long1.to_u32(), Some((I32MAX_AS_U64 + 42) as u32));
-        assert_eq!(long1.to_u32_unchecked(), long_value as u32);
-        assert_eq!(long1.to_i64(), Some(long_value));
-        assert_eq!(long1.to_i64_unchecked(), long_value);
-        assert_eq!(long1.to_u64(), Some(long_value as u64));
-        assert_eq!(long1.to_u64_unchecked(), long_value as u64);
+        assert_eq!(long1.to_u32(), Some(value_u32));
+        assert_eq!(long1.to_u32_unchecked(), value_u32);
+        assert_eq!(long1.to_i64(), Some(value_i64));
+        assert_eq!(long1.to_i64_unchecked(), value_i64);
+        assert_eq!(long1.to_u64(), Some(value_u64));
+        assert_eq!(long1.to_u64_unchecked(), value_u64);
     }
 
     #[test]

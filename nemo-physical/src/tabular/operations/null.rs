@@ -257,12 +257,18 @@ mod test {
     #[test]
     fn triescan_null_basic() {
         let mut dictionary = Dict::default();
-        let a = dictionary
-            .add_datavalue(AnyDataValue::new_plain_string(String::from("a")))
-            .value() as u32;
-        let b = dictionary
-            .add_datavalue(AnyDataValue::new_plain_string(String::from("b")))
-            .value() as u32;
+        let a = u32::try_from(
+            dictionary
+                .add_datavalue(AnyDataValue::new_plain_string(String::from("a")))
+                .value(),
+        )
+        .expect("The dictionary should not immediately return large ids");
+        let b = u32::try_from(
+            dictionary
+                .add_datavalue(AnyDataValue::new_plain_string(String::from("b")))
+                .value(),
+        )
+        .expect("The dictionary should not immediately return large ids");
         let dictionary = RefCell::new(dictionary);
 
         let trie = Trie::from_rows(vec![
@@ -306,9 +312,9 @@ mod test {
             AnyDataValue::new_plain_string(String::from("b"))
         );
 
-        for row in 0..1 {
-            for column in 2..5 {
-                assert_eq!(result[row][column].value_domain(), ValueDomain::Null);
+        for row in &result {
+            for value in &row[2..5] {
+                assert_eq!(value.value_domain(), ValueDomain::Null);
             }
         }
 
