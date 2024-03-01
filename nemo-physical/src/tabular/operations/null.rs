@@ -98,7 +98,7 @@ impl OperationGenerator for GeneratorNull {
                 ($type:ty, $scan:ident) => {{
                     let input_scan = &unsafe { &*trie_scan.scan(layer).get() }.$scan;
 
-                    ColumnScanEnum::ColumnScanPass(ColumnScanPass::new(input_scan))
+                    ColumnScanEnum::Pass(ColumnScanPass::new(input_scan))
                 }};
             }
 
@@ -120,11 +120,11 @@ impl OperationGenerator for GeneratorNull {
         }
 
         for _ in &self.instructions {
-            let scan_id32 = ColumnScanEnum::ColumnScanConstant(ColumnScanConstant::new(None));
-            let scan_id64 = ColumnScanEnum::ColumnScanConstant(ColumnScanConstant::new(None));
-            let scan_i64 = ColumnScanEnum::ColumnScanConstant(ColumnScanConstant::new(None));
-            let scan_float = ColumnScanEnum::ColumnScanConstant(ColumnScanConstant::new(None));
-            let scan_double = ColumnScanEnum::ColumnScanConstant(ColumnScanConstant::new(None));
+            let scan_id32 = ColumnScanEnum::Constant(ColumnScanConstant::new(None));
+            let scan_id64 = ColumnScanEnum::Constant(ColumnScanConstant::new(None));
+            let scan_i64 = ColumnScanEnum::Constant(ColumnScanConstant::new(None));
+            let scan_float = ColumnScanEnum::Constant(ColumnScanConstant::new(None));
+            let scan_double = ColumnScanEnum::Constant(ColumnScanConstant::new(None));
 
             let new_scan =
                 ColumnScanRainbow::new(scan_id32, scan_id64, scan_i64, scan_float, scan_double);
@@ -132,7 +132,7 @@ impl OperationGenerator for GeneratorNull {
             column_scans.push(UnsafeCell::new(new_scan));
         }
 
-        Some(TrieScanEnum::TrieScanNull(TrieScanNull {
+        Some(TrieScanEnum::Null(TrieScanNull {
             trie_scan: Box::new(trie_scan),
             dictionary,
             column_scans,
@@ -279,7 +279,7 @@ mod test {
         let markers_input = marker_generator.operation_table(["x", "y"].iter());
         let markers_output = marker_generator.operation_table(["x", "y", "v", "w", "v"].iter());
 
-        let trie_scan = TrieScanEnum::TrieScanGeneric(trie.partial_iterator());
+        let trie_scan = TrieScanEnum::Generic(trie.partial_iterator());
 
         let generator_null = GeneratorNull::new(markers_output, markers_input);
         let null_scan = generator_null

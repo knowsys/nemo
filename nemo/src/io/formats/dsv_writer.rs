@@ -48,7 +48,7 @@ impl DsvWriter {
         let skip: Vec<bool> = self
             .value_formats
             .iter()
-            .map(|vf| *vf == DsvValueFormat::SKIP)
+            .map(|vf| *vf == DsvValueFormat::Skip)
             .collect();
 
         for record in table {

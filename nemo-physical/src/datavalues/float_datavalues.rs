@@ -9,7 +9,7 @@ use super::{DataValue, DataValueCreationError, ValueDomain};
 
 /// Physical representation of a finite 32bit floating point number as an `f32`.
 #[repr(transparent)]
-#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct FloatDataValue(f32);
 
 impl FloatDataValue {
@@ -68,13 +68,17 @@ impl std::hash::Hash for FloatDataValue {
     }
 }
 
+impl PartialOrd for FloatDataValue {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
 impl Ord for FloatDataValue {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        if let Some(comp) = self.partial_cmp(other) {
-            comp
-        } else {
-            unreachable!("all floats allowed for this type are comparable")
-        }
+        self.0
+            .partial_cmp(&other.0)
+            .expect("all floats allowed for this type are comparable")
     }
 }
 
@@ -86,7 +90,7 @@ impl std::fmt::Display for FloatDataValue {
 
 /// Physical representation of a finite 64bit floating point number as an f64.
 #[repr(transparent)]
-#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct DoubleDataValue(f64);
 
 impl DoubleDataValue {
@@ -145,13 +149,17 @@ impl std::hash::Hash for DoubleDataValue {
     }
 }
 
+impl PartialOrd for DoubleDataValue {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
 impl Ord for DoubleDataValue {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        if let Some(comp) = self.partial_cmp(other) {
-            comp
-        } else {
-            unreachable!("all floats allowed for this type are comparable")
-        }
+        self.0
+            .partial_cmp(&other.0)
+            .expect("all floats allowed for this type are comparable")
     }
 }
 

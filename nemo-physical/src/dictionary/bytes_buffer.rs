@@ -246,7 +246,7 @@ impl<B: GlobalBytesBuffer> BytesRef<B> {
     }
 
     /// Returns a copy of the data that this reference points to.
-    pub(crate) fn to_vec(&self) -> Vec<u8> {
+    pub(crate) fn as_vec(&self) -> Vec<u8> {
         unsafe {
             let bytes = self.as_bytes();
             // TODO: Presumably the following is faster than extend_from_slice(), but this needs benchmarking
@@ -286,7 +286,7 @@ impl<B: GlobalBytesBuffer> hashbrown::Equivalent<BytesRef<B>> for [u8] {
 
 impl<B: GlobalBytesBuffer> PartialEq for BytesRef<B> {
     fn eq(&self, other: &BytesRef<B>) -> bool {
-        unsafe { self.as_bytes().eq(other.as_bytes()) }
+        unsafe { self.as_bytes() == (other.as_bytes()) }
     }
 }
 
@@ -342,10 +342,10 @@ mod test {
         let data4: [u8; 4] = [8, 9, 10, 11];
         let bytes_ref4 = TestGlobalBuffer2::push_bytes(bufid3, &data4);
 
-        assert_eq!(bytes_ref1.to_vec(), vec!(1, 2, 3, 4));
-        assert_eq!(bytes_ref2.to_vec(), vec!(5, 6));
-        assert_eq!(bytes_ref3.to_vec(), vec!(10, 20, 30, 40));
-        assert_eq!(bytes_ref4.to_vec(), vec!(8, 9, 10, 11));
+        assert_eq!(bytes_ref1.as_vec(), vec!(1, 2, 3, 4));
+        assert_eq!(bytes_ref2.as_vec(), vec!(5, 6));
+        assert_eq!(bytes_ref3.as_vec(), vec!(10, 20, 30, 40));
+        assert_eq!(bytes_ref4.as_vec(), vec!(8, 9, 10, 11));
         // The two global buffers should behave identical on this data of same length, yet have distinct memory:
         assert_eq!(bufid1, bufid3); // < Note that this check would be subject to a race if the TestGlobalBuffers would be used in any other test!
         assert_eq!(bytes_ref1.len(), bytes_ref4.len());

@@ -171,7 +171,7 @@ impl PositionGraph {
             for constructor in rule.constructors() {
                 for head_position in variables_to_head_positions
                     .get(constructor.variable())
-                    .unwrap_or(&vec![])
+                    .unwrap_or(&[])
                 {
                     for term in constructor.term().primitive_terms() {
                         if let PrimitiveTerm::Variable(body_variable) = term {

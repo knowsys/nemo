@@ -127,7 +127,7 @@ mod test {
     #[test]
     fn columnscan_filter_constant_basic() {
         let column_value = ColumnVector::new(vec![1i64, 4, 8]);
-        let value_scan = ColumnScanCell::new(ColumnScanEnum::ColumnScanVector(column_value.iter()));
+        let value_scan = ColumnScanCell::new(ColumnScanEnum::Vector(column_value.iter()));
 
         let mut constant_scan = ColumnScanFilterConstant::new(&value_scan, 4);
 

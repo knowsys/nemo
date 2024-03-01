@@ -57,7 +57,7 @@ impl<B: GlobalBytesBuffer> BytesDictionary<B> {
     /// Returns the vector of bytes associated with the `id`, or `None`` if no byte array has been
     /// associated to this id.
     pub(crate) fn id_to_bytes(&self, id: usize) -> Option<Vec<u8>> {
-        self.store.get(id).map(|entry| entry.to_vec())
+        self.store.get(id).map(|entry| entry.as_vec())
     }
 
     /// Returns true if a value is associated with the id.

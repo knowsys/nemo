@@ -325,7 +325,7 @@ impl DatabaseInstance {
             }
         };
 
-        trie.map(|trie| TrieScanEnum::TrieScanGeneric(trie.partial_iterator()))
+        trie.map(|trie| TrieScanEnum::Generic(trie.partial_iterator()))
     }
 
     /// Return a [TrieScanEnum] representing the given [ExecutionTreeOperation] node.

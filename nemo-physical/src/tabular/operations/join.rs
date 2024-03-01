@@ -161,7 +161,7 @@ impl OperationGenerator for GeneratorJoin {
                         input_scans.push(input_scan)
                     }
 
-                    ColumnScanEnum::ColumnScanJoin(ColumnScanJoin::new(input_scans))
+                    ColumnScanEnum::Join(ColumnScanJoin::new(input_scans))
                 }};
             }
 
@@ -181,7 +181,7 @@ impl OperationGenerator for GeneratorJoin {
             column_scans.push(UnsafeCell::new(new_scan));
         }
 
-        Some(TrieScanEnum::TrieScanJoin(TrieScanJoin {
+        Some(TrieScanEnum::Join(TrieScanJoin {
             trie_scans,
             layers_to_scans,
             path_types: Vec::new(),
@@ -325,8 +325,8 @@ pub(crate) mod test {
             &[6, 12],
         ]);
 
-        let trie_a_scan = TrieScanEnum::TrieScanGeneric(trie_a.partial_iterator());
-        let trie_b_scan = TrieScanEnum::TrieScanGeneric(trie_b.partial_iterator());
+        let trie_a_scan = TrieScanEnum::Generic(trie_a.partial_iterator());
+        let trie_b_scan = TrieScanEnum::Generic(trie_b.partial_iterator());
 
         let mut join_scan = generate_join_scan(
             &dictionary,
@@ -371,8 +371,8 @@ pub(crate) mod test {
             &[7, 10],
         ]);
 
-        let trie_a_scan = TrieScanEnum::TrieScanGeneric(trie.partial_iterator());
-        let trie_b_scan = TrieScanEnum::TrieScanGeneric(trie.partial_iterator());
+        let trie_a_scan = TrieScanEnum::Generic(trie.partial_iterator());
+        let trie_b_scan = TrieScanEnum::Generic(trie.partial_iterator());
 
         let mut join_scan = generate_join_scan(
             &dictionary,
@@ -434,8 +434,8 @@ pub(crate) mod test {
             &[10, 7],
         ]);
 
-        let trie_scan = TrieScanEnum::TrieScanGeneric(trie.partial_iterator());
-        let trie_inv_scan = TrieScanEnum::TrieScanGeneric(trie_inv.partial_iterator());
+        let trie_scan = TrieScanEnum::Generic(trie.partial_iterator());
+        let trie_inv_scan = TrieScanEnum::Generic(trie_inv.partial_iterator());
 
         let mut join_scan = generate_join_scan(
             &dictionary,
@@ -538,8 +538,8 @@ pub(crate) mod test {
             &[10, 2],
         ]);
 
-        let trie_new_scan = TrieScanEnum::TrieScanGeneric(trie_new.partial_iterator());
-        let trie_old_scan = TrieScanEnum::TrieScanGeneric(trie_old.partial_iterator());
+        let trie_new_scan = TrieScanEnum::Generic(trie_new.partial_iterator());
+        let trie_old_scan = TrieScanEnum::Generic(trie_old.partial_iterator());
 
         let mut join_scan = generate_join_scan(
             &dictionary,
@@ -645,8 +645,8 @@ pub(crate) mod test {
 
         let trie_b = trie_id32(vec![&[2, 2], &[2, 3], &[2, 4], &[3, 1], &[3, 2], &[3, 4]]);
 
-        let trie_a_scan = TrieScanEnum::TrieScanGeneric(trie_a.partial_iterator());
-        let trie_b_scan = TrieScanEnum::TrieScanGeneric(trie_b.partial_iterator());
+        let trie_a_scan = TrieScanEnum::Generic(trie_a.partial_iterator());
+        let trie_b_scan = TrieScanEnum::Generic(trie_b.partial_iterator());
 
         let mut join_scan = generate_join_scan(
             &dictionary,

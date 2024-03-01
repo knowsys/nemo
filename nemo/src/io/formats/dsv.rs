@@ -22,6 +22,7 @@ use super::dsv_writer::DsvWriter;
 use super::import_export::{ImportExportError, ImportExportHandler, ImportExportHandlers};
 
 /// Internal enum to distnguish variants of the DSV format.
+#[allow(clippy::upper_case_acronyms)]
 enum DsvVariant {
     /// Delimiter-separated values
     DSV,
@@ -89,7 +90,7 @@ impl DsvHandler {
         // Basic checks for unsupported attributes:
         ImportExportHandlers::check_attributes(
             attributes,
-            &vec![
+            &[
                 PARAMETER_NAME_FORMAT,
                 PARAMETER_NAME_RESOURCE,
                 PARAMETER_NAME_DSV_DELIMITER,
@@ -155,28 +156,22 @@ impl DsvHandler {
             delim_opt = None;
         }
 
-        let delimiter: u8;
-        match (variant, delim_opt) {
-            (DsvVariant::DSV, Some(delim)) => {
-                delimiter = delim;
-            }
+        let delimiter: u8 = match (variant, delim_opt) {
+            (DsvVariant::DSV, Some(delim)) => delim,
             (DsvVariant::DSV, None) => {
                 return Err(ImportExportError::MissingAttribute(
                     PARAMETER_NAME_DSV_DELIMITER.to_string(),
                 ));
             }
-            (DsvVariant::CSV, None) => {
-                delimiter = b',';
-            }
-            (DsvVariant::TSV, None) => {
-                delimiter = b',';
-            }
+            (DsvVariant::CSV, None) => b',',
+            (DsvVariant::TSV, None) => b',',
             (DsvVariant::CSV, Some(_)) | (DsvVariant::TSV, Some(_)) => {
                 return Err(ImportExportError::UnknownAttribute(
                     PARAMETER_NAME_DSV_DELIMITER.to_string(),
                 ));
             }
-        }
+        };
+
         Ok(delimiter)
     }
 
@@ -227,7 +222,7 @@ impl ImportExportHandler for DsvHandler {
         match self.direction {
             Direction::Import => self.value_formats.as_ref().map(|vfs| {
                 vfs.iter().fold(0, |acc, fmt| {
-                    if *fmt == DsvValueFormat::SKIP {
+                    if *fmt == DsvValueFormat::Skip {
                         acc
                     } else {
                         acc + 1
@@ -242,7 +237,7 @@ impl ImportExportHandler for DsvHandler {
         match self.direction {
             Direction::Export => self.value_formats.as_ref().map(|vfs| {
                 vfs.iter().fold(0, |acc, fmt| {
-                    if *fmt == DsvValueFormat::SKIP {
+                    if *fmt == DsvValueFormat::Skip {
                         acc
                     } else {
                         acc + 1

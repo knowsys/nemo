@@ -117,12 +117,12 @@ impl GeneratorFunction {
             if referenced_columns.contains(marker_output) {
                 // Column is input to some function
                 let num_function_input = reference_map.len();
-                if let Entry::Vacant(entry) = reference_map.entry(marker_output.clone()) {
+                if let Entry::Vacant(entry) = reference_map.entry(*marker_output) {
                     entry.insert(num_function_input);
                 }
             }
 
-            if functions.get(&marker_output).is_none() {
+            if functions.get(marker_output).is_none() {
                 // Column is part of the input trie
                 type_information[layer_output] = PossibleTypeInformation::Input(layer_input);
                 layer_input += 1;
@@ -186,7 +186,7 @@ impl GeneratorFunction {
 
         let layer_information = input_information
             .into_iter()
-            .zip(computed_information.into_iter())
+            .zip(computed_information)
             .map(|(input, computed)| LayerInformation { computed, input })
             .collect::<Vec<_>>();
 
@@ -230,12 +230,12 @@ impl OperationGenerator for GeneratorFunction {
                 ($type:ty, $scan:ident) => {{
                     match information.computed {
                         ComputedMarker::Computed | ComputedMarker::Copy(_) => {
-                            ColumnScanEnum::ColumnScanConstant(ColumnScanConstant::new(None))
+                            ColumnScanEnum::Constant(ColumnScanConstant::new(None))
                         }
                         ComputedMarker::Input => {
                             let input_scan = &unsafe { &*trie_scan.scan(input_index).get() }.$scan;
 
-                            ColumnScanEnum::ColumnScanPass(ColumnScanPass::new(input_scan))
+                            ColumnScanEnum::Pass(ColumnScanPass::new(input_scan))
                         }
                     }
                 }};
@@ -264,7 +264,7 @@ impl OperationGenerator for GeneratorFunction {
         for (any_value, output_layer) in &self.constant_functions {
             let storage_value = any_value
                 .as_ref()
-                .map(|value| value.to_storage_value_t_mut(&mut dictionary.borrow_mut()));
+                .map(|value| value.to_storage_value_t_dict(&mut dictionary.borrow_mut()));
 
             if let Some(storage_value) = storage_value {
                 column_scans[*output_layer]
@@ -273,7 +273,7 @@ impl OperationGenerator for GeneratorFunction {
             }
         }
 
-        Some(TrieScanEnum::TrieScanFunction(TrieScanFunction {
+        Some(TrieScanEnum::Function(TrieScanFunction {
             trie_scan: Box::new(trie_scan),
             dictionary,
             input_values: Vec::new(),
@@ -354,7 +354,7 @@ impl<'a> PartialTrieScan<'a> for TrieScanFunction<'a> {
                     let dictionary = &mut self.dictionary.borrow_mut();
                     let program_result = program
                         .evaluate_data(&self.input_values)
-                        .map(|result| result.to_storage_value_t_mut(dictionary));
+                        .map(|result| result.to_storage_value_t_dict(dictionary));
 
                     self.column_scans[*output_layer]
                         .get_mut()
@@ -451,7 +451,7 @@ mod test {
             &[3, 9, 8],
         ]);
 
-        let trie_scan = TrieScanEnum::TrieScanGeneric(trie.partial_iterator());
+        let trie_scan = TrieScanEnum::Generic(trie.partial_iterator());
 
         let mut marker_generator = OperationTableGenerator::new();
         marker_generator.add_marker("x");
@@ -545,7 +545,7 @@ mod test {
             &[2, 5, 6, 10, 11],
         ]);
 
-        let trie_scan = TrieScanEnum::TrieScanGeneric(trie.partial_iterator());
+        let trie_scan = TrieScanEnum::Generic(trie.partial_iterator());
 
         let mut marker_generator = OperationTableGenerator::new();
         marker_generator.add_marker("x");
@@ -618,7 +618,7 @@ mod test {
 
         let trie = trie_int64(vec![&[1, 3], &[1, 4], &[2, 5]]);
 
-        let trie_scan = TrieScanEnum::TrieScanGeneric(trie.partial_iterator());
+        let trie_scan = TrieScanEnum::Generic(trie.partial_iterator());
 
         let mut marker_generator = OperationTableGenerator::new();
         marker_generator.add_marker("x");
@@ -691,7 +691,7 @@ mod test {
             vec![StorageValueT::Id32(b), StorageValueT::Id32(bar)],
         ]);
 
-        let trie_scan = TrieScanEnum::TrieScanGeneric(trie.partial_iterator());
+        let trie_scan = TrieScanEnum::Generic(trie.partial_iterator());
 
         let mut marker_generator = OperationTableGenerator::new();
         marker_generator.add_marker("x");
@@ -752,7 +752,7 @@ mod test {
             vec![StorageValueT::Int64(20), StorageValueT::Id32(world)],
         ]);
 
-        let trie_scan = TrieScanEnum::TrieScanGeneric(trie.partial_iterator());
+        let trie_scan = TrieScanEnum::Generic(trie.partial_iterator());
 
         let mut marker_generator = OperationTableGenerator::new();
         marker_generator.add_marker("int");

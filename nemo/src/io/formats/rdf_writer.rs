@@ -212,7 +212,7 @@ impl RdfWriter {
         let mut triple_pos = [0; 3];
         let mut cur = 0;
         for (idx, format) in self.value_formats.iter().enumerate() {
-            if *format != RdfValueFormat::SKIP {
+            if *format != RdfValueFormat::Skip {
                 assert!(cur <= 2); // max number of non-skip entries is 3
                 triple_pos[cur] = idx;
                 cur += 1;
@@ -261,7 +261,7 @@ impl RdfWriter {
         let mut quad_pos = [0; 4];
         let mut cur = 0;
         for (idx, format) in self.value_formats.iter().enumerate() {
-            if *format != RdfValueFormat::SKIP {
+            if *format != RdfValueFormat::Skip {
                 assert!(cur <= 3); // max number of non-skip entries is 3
                 quad_pos[cur] = idx;
                 cur += 1;

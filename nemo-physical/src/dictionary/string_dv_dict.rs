@@ -77,9 +77,10 @@ fn two_strings_to_one(string1: &str, string2: &str) -> String {
     // Note: We do not use the full first byte to ensure that the result is a valid UTF-8 string. If we would use
     // byte sequences instead of strings internally, we could go higher here.
     assert!(!string2.is_empty());
+
     if string2.len() <= 127 {
         result = String::with_capacity(string1.len() + string2.len() + 1);
-        let tiny_len: u8 = string2.len() as u8;
+        let tiny_len = u8::try_from(string2.len()).expect("length is less than 128");
         result.push(tiny_len as char);
         result.push_str(string2);
         result.push_str(string1);

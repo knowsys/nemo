@@ -67,7 +67,7 @@ impl<'a> TrieScanPrune<'a> {
                     // let mut input_scan: &'a ColumnScanCell<$type> =
                     //     &unsafe { &*input_trie_scan.scan(layer).get() }.$scan;
 
-                    ColumnScanEnum::ColumnScanPrune(ColumnScanPrune::new(
+                    ColumnScanEnum::Prune(ColumnScanPrune::new(
                         Rc::clone(&state),
                         layer,
                         StorageTypeName::$variant,
@@ -728,7 +728,7 @@ mod test {
         layer_1_equality: i64,
         layer_3_equality: i64,
     ) -> TrieScanPrune<'a> {
-        let scan_generic = TrieScanEnum::TrieScanGeneric(input_trie.partial_iterator());
+        let scan_generic = TrieScanEnum::Generic(input_trie.partial_iterator());
 
         let input_markers = OperationTable::new_unique(input_trie.arity());
         let marker_layer_1 = *input_markers.get(1);
@@ -767,8 +767,7 @@ mod test {
             &[4, 5],
         ]);
 
-        let mut scan =
-            TrieScanPrune::new(TrieScanEnum::TrieScanGeneric(input_trie.partial_iterator()));
+        let mut scan = TrieScanPrune::new(TrieScanEnum::Generic(input_trie.partial_iterator()));
 
         trie_dfs(
             &mut scan,
@@ -864,7 +863,7 @@ mod test {
     #[test]
     fn test_advance_highest_advanced_layer() {
         let trie = create_example_trie();
-        let scan = TrieScanEnum::TrieScanGeneric(trie.partial_iterator());
+        let scan = TrieScanEnum::Generic(trie.partial_iterator());
         let mut scan = TrieScanPrune::new(scan);
 
         let low = scan.arity() - 1;
@@ -905,7 +904,7 @@ mod test {
     #[test]
     fn test_advance_with_column_peeks() {
         let trie = create_example_trie();
-        let scan = TrieScanEnum::TrieScanGeneric(trie.partial_iterator());
+        let scan = TrieScanEnum::Generic(trie.partial_iterator());
         let mut scan = TrieScanPrune::new(scan);
 
         let ty = StorageTypeName::Int64;
@@ -969,7 +968,7 @@ mod test {
     #[test]
     fn test_advance_with_seek() {
         let trie = create_example_trie();
-        let scan = TrieScanEnum::TrieScanGeneric(trie.partial_iterator());
+        let scan = TrieScanEnum::Generic(trie.partial_iterator());
         let mut scan = TrieScanPrune::new(scan);
 
         let ty = StorageTypeName::Int64;
@@ -1012,7 +1011,7 @@ mod test {
     #[test]
     fn test_return_to_previous_layer() {
         let trie = create_example_trie();
-        let scan = TrieScanEnum::TrieScanGeneric(trie.partial_iterator());
+        let scan = TrieScanEnum::Generic(trie.partial_iterator());
         let mut scan = TrieScanPrune::new(scan);
 
         let ty = StorageTypeName::Int64;
@@ -1060,12 +1059,12 @@ mod test {
         ]);
         let trie_b = trie_id32(vec![&[0], &[4]]);
 
-        let scan_a = TrieScanEnum::TrieScanPrune(TrieScanPrune::new(
-            TrieScanEnum::TrieScanGeneric(trie_a.partial_iterator()),
-        ));
-        let scan_b = TrieScanEnum::TrieScanPrune(TrieScanPrune::new(
-            TrieScanEnum::TrieScanGeneric(trie_b.partial_iterator()),
-        ));
+        let scan_a = TrieScanEnum::Prune(TrieScanPrune::new(TrieScanEnum::Generic(
+            trie_a.partial_iterator(),
+        )));
+        let scan_b = TrieScanEnum::Prune(TrieScanPrune::new(TrieScanEnum::Generic(
+            trie_b.partial_iterator(),
+        )));
 
         let join_scan = generate_join_scan(
             &dictionary,

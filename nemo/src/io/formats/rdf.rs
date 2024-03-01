@@ -63,18 +63,18 @@ pub enum RdfFormatError {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum RdfValueFormat {
     /// General format that accepts any RDF term.
-    ANYTHING,
+    Anything,
     /// Special format to indicate that the value should be skipped as if the whole
     /// column where not there.
-    SKIP,
+    Skip,
 }
 impl RdfValueFormat {
     /// Try to convert a string name for a value format to one of the supported
     /// RDF value formats, or return an error for unsupported formats.
     pub(super) fn from_string(name: &str) -> Result<Self, ImportExportError> {
         match name {
-            VALUE_FORMAT_ANY => Ok(RdfValueFormat::ANYTHING),
-            VALUE_FORMAT_SKIP => Ok(RdfValueFormat::SKIP),
+            VALUE_FORMAT_ANY => Ok(RdfValueFormat::Anything),
+            VALUE_FORMAT_SKIP => Ok(RdfValueFormat::Skip),
             _ => Err(ImportExportError::InvalidValueFormat {
                 value_format: name.to_string(),
                 format: FileFormat::RDF(RdfVariant::Unspecified),
@@ -116,7 +116,7 @@ impl RdfHandler {
         // Basic checks for unsupported attributes:
         ImportExportHandlers::check_attributes(
             attributes,
-            &vec![
+            &[
                 PARAMETER_NAME_RESOURCE,
                 PARAMETER_NAME_BASE,
                 PARAMETER_NAME_COMPRESSION,
@@ -280,7 +280,7 @@ impl ImportExportHandler for RdfHandler {
         match self.direction {
             Direction::Import => self.value_formats.as_ref().map(|vfs| {
                 vfs.iter().fold(0, |acc, fmt| {
-                    if *fmt == RdfValueFormat::SKIP {
+                    if *fmt == RdfValueFormat::Skip {
                         acc
                     } else {
                         acc + 1
@@ -297,7 +297,7 @@ impl ImportExportHandler for RdfHandler {
         match self.direction {
             Direction::Export => self.value_formats.as_ref().map(|vfs| {
                 vfs.iter().fold(0, |acc, fmt| {
-                    if *fmt == RdfValueFormat::SKIP {
+                    if *fmt == RdfValueFormat::Skip {
                         acc
                     } else {
                         acc + 1

@@ -180,8 +180,8 @@ mod test {
             vec![StorageValueT::Int64(2), StorageValueT::Id32(3)],
         ]);
 
-        let trie_scan_a = TrieScanEnum::TrieScanGeneric(trie_a.partial_iterator());
-        let trie_scan_b = TrieScanEnum::TrieScanGeneric(trie_b.partial_iterator());
+        let trie_scan_a = TrieScanEnum::Generic(trie_a.partial_iterator());
+        let trie_scan_b = TrieScanEnum::Generic(trie_b.partial_iterator());
 
         let union_generator = GeneratorUnion::new();
         let trie_scan = union_generator

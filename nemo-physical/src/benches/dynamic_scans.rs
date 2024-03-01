@@ -30,11 +30,13 @@ mod test {
         let column = ColumnVector::new(vector());
 
         bencher.iter(|| {
-            let mut scan = black_box(ColumnScanVector::new(&column));
-            let mut sum = 0;
-            black_box(while let Some(value) = scan.next() {
-                sum += value;
-            });
+            let scan = black_box(ColumnScanVector::new(&column));
+            let mut sum: u64 = 0;
+
+            for value in scan {
+                sum = sum.wrapping_add(value);
+            }
+
             println!("{sum}");
         })
     }
@@ -44,13 +46,13 @@ mod test {
         let column = ColumnVector::new(vector());
 
         bencher.iter(|| {
-            let mut scan = black_box(ColumnScanEnum::ColumnScanVector(ColumnScanVector::new(
-                &column,
-            )));
-            let mut sum = 0;
-            black_box(while let Some(value) = scan.next() {
-                sum += value;
-            });
+            let scan = black_box(ColumnScanEnum::Vector(ColumnScanVector::new(&column)));
+            let mut sum: u64 = 0;
+
+            for value in scan {
+                sum = sum.wrapping_add(value);
+            }
+
             println!("{sum}");
         })
     }
@@ -61,26 +63,25 @@ mod test {
 
         bencher.iter(|| {
             let mut scan = black_box(ColumnScanRainbow::new(
-                ColumnScanEnum::ColumnScanConstant(ColumnScanConstant::new(None)),
-                ColumnScanEnum::ColumnScanVector(ColumnScanVector::new(&column)),
-                ColumnScanEnum::ColumnScanConstant(ColumnScanConstant::new(None)),
-                ColumnScanEnum::ColumnScanConstant(ColumnScanConstant::new(None)),
-                ColumnScanEnum::ColumnScanConstant(ColumnScanConstant::new(None)),
+                ColumnScanEnum::Constant(ColumnScanConstant::new(None)),
+                ColumnScanEnum::Vector(ColumnScanVector::new(&column)),
+                ColumnScanEnum::Constant(ColumnScanConstant::new(None)),
+                ColumnScanEnum::Constant(ColumnScanConstant::new(None)),
+                ColumnScanEnum::Constant(ColumnScanConstant::new(None)),
             ));
 
-            let mut sum = 0;
+            let mut sum: u64 = 0;
             let storage_types = black_box(vec![StorageTypeName::Id64, StorageTypeName::Int64]);
             let current_type = black_box(vec![0]);
 
-            black_box(
-                while let Some(value) = scan.next(black_box(storage_types[current_type[0]])) {
-                    sum += if let StorageValueT::Id64(value) = value {
-                        value
-                    } else {
-                        unreachable!();
-                    }
-                },
-            );
+            while let Some(value) = scan.next(black_box(storage_types[current_type[0]])) {
+                sum = sum.wrapping_add(if let StorageValueT::Id64(value) = value {
+                    value
+                } else {
+                    unreachable!();
+                });
+            }
+
             println!("{sum}");
         })
     }

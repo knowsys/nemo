@@ -58,7 +58,7 @@ impl<B: GlobalBytesBuffer> BytesPairDictionary<B> {
     pub(crate) fn id_to_bytes_pair(&self, id: usize) -> Option<(Vec<u8>, Vec<u8>)> {
         self.store
             .get(id)
-            .map(|[first_bref, second_bref]| (first_bref.to_vec(), second_bref.to_vec()))
+            .map(|[first_bref, second_bref]| (first_bref.as_vec(), second_bref.as_vec()))
     }
 
     /// Returns the number of elements in the dictionary

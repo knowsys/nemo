@@ -75,8 +75,8 @@ where
 
     fn iter(&'a self) -> Self::Scan {
         match self {
-            Self::ColumnVector(col) => ColumnScanEnum::ColumnScanVector(col.iter()),
-            Self::ColumnRle(col) => ColumnScanEnum::ColumnScanRle(col.iter()),
+            Self::ColumnVector(col) => ColumnScanEnum::Vector(col.iter()),
+            Self::ColumnRle(col) => ColumnScanEnum::Rle(col.iter()),
         }
     }
 }

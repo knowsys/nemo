@@ -66,39 +66,39 @@ pub(crate) trait PartialTrieScan<'a>: Debug {
 #[derive(Debug)]
 pub(crate) enum TrieScanEnum<'a> {
     /// Case [TrieScanAggregate]
-    TrieScanAggregateWrapper(TrieScanAggregateWrapper<'a>),
+    AggregateWrapper(TrieScanAggregateWrapper<'a>),
     /// Case [TrieScanFilter]
-    TrieScanFilter(TrieScanFilter<'a>),
+    Filter(TrieScanFilter<'a>),
     /// Case [TrieScanFunction]
-    TrieScanFunction(TrieScanFunction<'a>),
+    Function(TrieScanFunction<'a>),
     /// Case [TrieScanGeneric]
-    TrieScanGeneric(TrieScanGeneric<'a>),
+    Generic(TrieScanGeneric<'a>),
     /// Case [TrieScanJoin]
-    TrieScanJoin(TrieScanJoin<'a>),
+    Join(TrieScanJoin<'a>),
     /// Case [TrieScanNull]
-    TrieScanNull(TrieScanNull<'a>),
+    Null(TrieScanNull<'a>),
     /// Case [TrieScanSubtract]
-    TrieScanSubtract(TrieScanSubtract<'a>),
+    Subtract(TrieScanSubtract<'a>),
     /// Case [TrieScanUnion]
-    TrieScanUnion(TrieScanUnion<'a>),
+    Union(TrieScanUnion<'a>),
     #[cfg(test)]
     /// Case [super::operations::prune::TrieScanPrune]
-    TrieScanPrune(super::operations::prune::TrieScanPrune<'a>),
+    Prune(super::operations::prune::TrieScanPrune<'a>),
 }
 
 impl<'a> PartialTrieScan<'a> for TrieScanEnum<'a> {
     delegate! {
         to match self {
-            Self::TrieScanAggregateWrapper(scan) => scan,
-            Self::TrieScanFilter(scan) => scan,
-            Self::TrieScanFunction(scan) => scan,
-            Self::TrieScanGeneric(scan) => scan,
-            Self::TrieScanJoin(scan) => scan,
-            Self::TrieScanNull(scan) => scan,
+            Self::AggregateWrapper(scan) => scan,
+            Self::Filter(scan) => scan,
+            Self::Function(scan) => scan,
+            Self::Generic(scan) => scan,
+            Self::Join(scan) => scan,
+            Self::Null(scan) => scan,
             #[cfg(test)]
-            Self::TrieScanPrune(scan) => scan,
-            Self::TrieScanSubtract(scan) => scan,
-            Self::TrieScanUnion(scan) => scan,
+            Self::Prune(scan) => scan,
+            Self::Subtract(scan) => scan,
+            Self::Union(scan) => scan,
         } {
             fn up(&mut self);
             fn down(&mut self, storage_type: StorageTypeName);

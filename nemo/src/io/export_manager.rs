@@ -82,7 +82,7 @@ impl ExportManager {
     /// This also checks whether the specified file could (likely) be written.
     pub fn validate(&self, export_directive: &ExportDirective) -> Result<(), Error> {
         let handler = ImportExportHandlers::export_handler(export_directive)?;
-        let path = self.output_file_path(&handler, export_directive.predicate());
+        let path = self.output_file_path(&*handler, export_directive.predicate());
 
         let meta_info = path.metadata();
         if let Err(err) = meta_info {
@@ -119,9 +119,9 @@ impl ExportManager {
 
         let handler = ImportExportHandlers::export_handler(export_directive)?;
 
-        let writer = self.writer(&handler, export_directive.predicate())?;
+        let writer = self.writer(&*handler, export_directive.predicate())?;
 
-        self.export_table_with_handler_writer(&handler, writer, table, predicate_arity)
+        self.export_table_with_handler_writer(&*handler, writer, table, predicate_arity)
     }
 
     /// Export a (possibly empty) table according to the given [ExportDirective],
@@ -141,7 +141,7 @@ impl ExportManager {
         predicate_arity: usize,
     ) -> Result<(), Error> {
         let handler = ImportExportHandlers::export_handler(export_directive)?;
-        self.export_table_with_handler_writer(&handler, writer, table, predicate_arity)
+        self.export_table_with_handler_writer(&*handler, writer, table, predicate_arity)
     }
 
     /// Export a (possibly empty) table according to the given [ImportExportHandler],
@@ -155,7 +155,7 @@ impl ExportManager {
     /// This function ignores [ExportManager::disable_write].
     pub(crate) fn export_table_with_handler_writer<'a>(
         &self,
-        export_handler: &Box<dyn ImportExportHandler>,
+        export_handler: &dyn ImportExportHandler,
         writer: Box<dyn Write>,
         table: Option<impl Iterator<Item = Vec<AnyDataValue>> + 'a>,
         predicate_arity: usize,
@@ -183,7 +183,7 @@ impl ExportManager {
     /// [ExportManager::disable_write] is `true`.
     fn writer(
         &self,
-        export_handler: &Box<dyn ImportExportHandler>,
+        export_handler: &dyn ImportExportHandler,
         predicate: &Identifier,
     ) -> Result<Box<dyn Write>, Error> {
         let output_path = self.output_file_path(export_handler, predicate);
@@ -207,7 +207,7 @@ impl ExportManager {
     /// which includes all extensions.
     fn output_file_path(
         &self,
-        export_handler: &Box<dyn ImportExportHandler>,
+        export_handler: &dyn ImportExportHandler,
         predicate: &Identifier,
     ) -> PathBuf {
         let mut pred_path = self.base_path.to_path_buf();

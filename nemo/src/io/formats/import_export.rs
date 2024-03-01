@@ -132,7 +132,7 @@ impl ImportExportHandlers {
     /// and return an error otherwise.
     pub(super) fn check_attributes(
         attributes: &MapDataValue,
-        valid_attributes: &Vec<&str>,
+        valid_attributes: &[&str],
     ) -> Result<(), ImportExportError> {
         let given: HashSet<AnyDataValue> = attributes
             .map_keys()
@@ -471,7 +471,7 @@ impl ImportExportHandlers {
     }
 
     /// Turn a list of formats into a data value for error reporting.
-    fn datavalue_from_format_strings(format_strings: &Vec<String>) -> AnyDataValue {
+    fn datavalue_from_format_strings(format_strings: &[String]) -> AnyDataValue {
         TupleDataValue::from_iter(
             format_strings
                 .iter()

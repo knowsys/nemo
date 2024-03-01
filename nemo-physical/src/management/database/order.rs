@@ -109,7 +109,7 @@ impl OrderedReferenceManager {
         let (id, _) = self.resolve_reference(id, ColumnOrder::default());
 
         if let Some(order_map) = self.storage_map.get(&id) {
-            for (_, &storage_id) in order_map {
+            if let Some(&storage_id) = order_map.values().next() {
                 return self.stored_tables[storage_id].count_rows();
             }
 

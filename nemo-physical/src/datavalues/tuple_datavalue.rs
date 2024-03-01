@@ -131,7 +131,7 @@ mod test {
         );
 
         assert_eq!(dv_tuple.label(), Some(&label));
-        assert_eq!(dv_tuple.len(), Some(3));
+        assert_eq!(dv_tuple.length(), Some(3));
         assert_eq!(dv_tuple.len_unchecked(), 3);
         assert_eq!(dv_tuple.tuple_element(0), Some(&dv1));
         assert_eq!(dv_tuple.tuple_element_unchecked(0), &dv1);
@@ -188,7 +188,7 @@ mod test {
     fn test_empty_tuple() {
         let dv_tuple = TupleDataValue::new(None, vec![]);
 
-        assert_eq!(dv_tuple.len(), Some(0));
+        assert_eq!(dv_tuple.length(), Some(0));
         assert_eq!(dv_tuple.len_unchecked(), 0);
         assert_eq!(dv_tuple.tuple_element(0), None);
         assert_eq!(dv_tuple.lexical_value(), "()".to_string());

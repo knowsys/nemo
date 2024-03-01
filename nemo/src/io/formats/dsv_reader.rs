@@ -65,7 +65,7 @@ impl DsvReader {
         let skip: Vec<bool> = self
             .value_formats
             .iter()
-            .map(|vf| *vf == DsvValueFormat::SKIP)
+            .map(|vf| *vf == DsvValueFormat::Skip)
             .collect();
         let expected_file_arity = parsers.len();
         assert_eq!(
@@ -161,10 +161,10 @@ mod test {
             Box::new(data.as_bytes()),
             b';',
             vec![
-                DsvValueFormat::ANYTHING,
-                DsvValueFormat::STRING,
-                DsvValueFormat::INTEGER,
-                DsvValueFormat::DOUBLE,
+                DsvValueFormat::Anything,
+                DsvValueFormat::String,
+                DsvValueFormat::Integer,
+                DsvValueFormat::Double,
             ],
         );
         let dict = RefCell::new(Dict::default());

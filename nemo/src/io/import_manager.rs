@@ -70,7 +70,7 @@ impl ImportManager {
                 ImportExportError::MissingAttribute(PARAMETER_NAME_FORMAT.to_string()).into(),
             );
         }
-        self.table_provider_from_handler(&handler, arity)
+        self.table_provider_from_handler(&*handler, arity)
     }
 
     /// Constructs a [`TableProvider`] from the given [ImportExportHandler].
@@ -79,7 +79,7 @@ impl ImportManager {
     /// compatible with this assumption.
     pub(crate) fn table_provider_from_handler(
         &self,
-        handler: &Box<dyn ImportExportHandler>,
+        handler: &dyn ImportExportHandler,
         expected_arity: usize,
     ) -> Result<Box<dyn TableProvider>, Error> {
         if let Some(import_arity) = handler.predicate_arity() {

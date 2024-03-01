@@ -162,7 +162,7 @@ mod test {
 
         assert_eq!(map.label(), Some(&label));
 
-        assert_eq!(map.len(), Some(2));
+        assert_eq!(map.length(), Some(2));
         assert_eq!(map.len_unchecked(), 2);
 
         let keys: HashSet<&AnyDataValue> = map.map_keys().expect("maps should have keys").collect();

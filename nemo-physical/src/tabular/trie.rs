@@ -78,7 +78,7 @@ impl Trie {
     /// Return a [TrieScan] over this trie.
     #[allow(dead_code)]
     pub(crate) fn full_iterator(&self) -> TrieScanTrim {
-        TrieScanTrim::new(TrieScanEnum::TrieScanGeneric(self.partial_iterator()))
+        TrieScanTrim::new(TrieScanEnum::Generic(self.partial_iterator()))
     }
 
     /// Return a row based iterator over this trie.
@@ -208,7 +208,7 @@ impl Trie {
             return Self::empty(0);
         }
 
-        if let TrieScanEnum::TrieScanAggregateWrapper(wrapper) = trie_scan {
+        if let TrieScanEnum::AggregateWrapper(wrapper) = trie_scan {
             // `wrapper` can not be iterated as a partial trie scan, only as a full trie scan
             let trie = Trie::from_full_trie_scan(wrapper.trie_scan, cut_layers);
             return trie;
@@ -660,7 +660,7 @@ mod test {
 
         assert_eq!(rows, trie_rows);
 
-        let scan = TrieScanEnum::TrieScanGeneric(trie.partial_iterator());
+        let scan = TrieScanEnum::Generic(trie.partial_iterator());
         let trie_roundtrip = Trie::from_partial_trie_scan(scan, 0);
         let trie_rows = trie_roundtrip.row_iterator().collect::<Vec<_>>();
 
