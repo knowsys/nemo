@@ -409,19 +409,19 @@ impl<'a> PartialTrieScan<'a> for TrieScanGeneric<'a> {
             None => {
                 self.column_scans[0].get_mut().reset(next_type);
             }
-            Some(&current_type) => {
+            Some(&previous_type) => {
                 let next_layer = self.path_types.len();
-                let current_layer = next_layer - 1;
+                let previous_layer = next_layer - 1;
 
-                let current_index = self.column_scans[current_layer]
+                let current_index = self.column_scans[previous_layer]
                     .get_mut()
-                    .pos(current_type)
+                    .pos(previous_type)
                     .expect(
-                        "Calling down on a trie is only allowed when currently pointing at an element.",
+                        "Calling TrieScanGeneric::down is only allowed when currently pointing at an element.",
                     );
 
                 let next_interval = self.trie.columns[next_layer]
-                    .interval_bounds(current_type, current_index, next_type)
+                    .interval_bounds(previous_type, current_index, next_type)
                     .unwrap_or(0..0);
 
                 self.column_scans[next_layer]
@@ -441,10 +441,6 @@ impl<'a> PartialTrieScan<'a> for TrieScanGeneric<'a> {
         &self.column_scans[layer]
     }
 
-    fn path_types(&self) -> &[StorageTypeName] {
-        &self.path_types
-    }
-
     fn possible_types(&self, layer: usize) -> StorageTypeBitSet {
         let mut result = BitSet::default();
 
@@ -455,6 +451,10 @@ impl<'a> PartialTrieScan<'a> for TrieScanGeneric<'a> {
         }
 
         StorageTypeBitSet::from(result)
+    }
+
+    fn current_layer(&self) -> Option<usize> {
+        self.path_types.len().checked_sub(1)
     }
 }
 

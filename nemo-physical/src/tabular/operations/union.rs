@@ -1,6 +1,9 @@
 //! This module defines [TrieScanUnion] and [GeneratorUnion].
 
-use std::cell::{RefCell, UnsafeCell};
+use std::{
+    cell::{RefCell, UnsafeCell},
+    rc::Rc,
+};
 
 use crate::{
     columnar::{
@@ -44,9 +47,15 @@ impl OperationGenerator for GeneratorUnion {
             .all(|scan| scan.arity() == trie_scans[0].arity()));
 
         let arity = trie_scans.first().map_or(0, |s| s.arity());
+
+        let mut active_scans = Vec::with_capacity(arity + 1);
         let mut column_scans = Vec::<UnsafeCell<ColumnScanRainbow<'a>>>::with_capacity(arity);
 
+        active_scans.push(Rc::new(RefCell::new((0..trie_scans.len()).collect())));
+
         for layer in 0..arity {
+            active_scans.push(Rc::new(RefCell::new(Vec::with_capacity(trie_scans.len()))));
+
             macro_rules! union_scan {
                 ($type:ty, $scan:ident) => {{
                     let mut input_scans =
@@ -57,7 +66,14 @@ impl OperationGenerator for GeneratorUnion {
                         input_scans.push(input_scan);
                     }
 
-                    ColumnScanEnum::Union(ColumnScanUnion::new(input_scans))
+                    let smallest_scans = active_scans[layer + 1].clone();
+                    let active_scans = active_scans[layer].clone();
+
+                    ColumnScanEnum::Union(ColumnScanUnion::new(
+                        input_scans,
+                        active_scans,
+                        smallest_scans,
+                    ))
                 }};
             }
 
@@ -80,7 +96,8 @@ impl OperationGenerator for GeneratorUnion {
         Some(TrieScanEnum::Union(TrieScanUnion {
             trie_scans,
             column_scans,
-            path_types: Vec::new(),
+            active_scans,
+            current_layer: None,
         }))
     }
 }
@@ -88,80 +105,45 @@ impl OperationGenerator for GeneratorUnion {
 /// [PartialTrieScan] which represents the union of a list of [PartialTrieScan]s
 #[derive(Debug)]
 pub(crate) struct TrieScanUnion<'a> {
-    /// Input trie scans over of which the union is computed
+    /// Input trie scans over which the union is computed
     trie_scans: Vec<TrieScanEnum<'a>>,
+
+    /// For each layer, contains a list of indices into `trie_scans`
+    /// inidicating which input scans point to the same partial row of values
+    active_scans: Vec<Rc<RefCell<Vec<usize>>>>,
+    /// Current layer of this [PartialTrieScan]
+    current_layer: Option<usize>,
 
     /// For each layer in the resulting trie contains a [ColumnScanRainbow]
     /// evaluating the union of the underlying columns of the input trie.
     column_scans: Vec<UnsafeCell<ColumnScanRainbow<'a>>>,
-
-    /// Path of [StorageTypeName] indicating the the types of the current (partial) row
-    path_types: Vec<StorageTypeName>,
 }
 
 impl<'a> PartialTrieScan<'a> for TrieScanUnion<'a> {
     fn up(&mut self) {
-        let current_layer = self.current_layer();
+        let previous_layer = self.current_layer();
 
         for trie_scan in &mut self.trie_scans {
-            if trie_scan.current_layer() == current_layer {
+            if trie_scan.current_layer() == previous_layer {
                 trie_scan.up();
             }
         }
 
-        self.path_types.pop();
+        self.current_layer = self
+            .current_layer
+            .expect("Cannot call PartialTrieScan::up when in starting position")
+            .checked_sub(1);
     }
 
     fn down(&mut self, next_type: StorageTypeName) {
-        let next_layer = self.path_types.len();
+        let next_layer = self.current_layer.map_or(0, |layer| layer + 1);
 
-        self.column_scans[next_layer]
-            .get_mut()
-            .union_active_scans(next_type)
-            .clear();
-
-        if let Some(previous_layer) = self.current_layer() {
-            let previous_type = self.path_types[previous_layer];
-
-            debug_assert!(next_layer < self.arity());
-
-            for (scan_index, trie_scan) in self.trie_scans.iter_mut().enumerate() {
-                if trie_scan.current_layer() != Some(previous_layer) {
-                    continue;
-                }
-
-                let is_smallest = self.column_scans[previous_layer]
-                    .get_mut()
-                    .union_is_smallest(previous_type, scan_index);
-
-                if is_smallest {
-                    let active_scans = self.column_scans[next_layer]
-                        .get_mut()
-                        .union_active_scans(next_type);
-
-                    active_scans.push(scan_index);
-                    trie_scan.down(next_type);
-                }
-            }
-        } else {
-            let active_scans = self.column_scans[next_layer]
-                .get_mut()
-                .union_active_scans(next_type);
-
-            *active_scans = (0..self.trie_scans.len()).collect();
-
-            for trie_scan in &mut self.trie_scans {
-                trie_scan.down(next_type);
-            }
+        for &scan_index in self.active_scans[next_layer].borrow().iter() {
+            self.trie_scans[scan_index].down(next_type);
         }
 
         self.column_scans[next_layer].get_mut().reset(next_type);
-
-        self.path_types.push(next_type);
-    }
-
-    fn path_types(&self) -> &[StorageTypeName] {
-        &self.path_types
+        self.current_layer = Some(next_layer);
     }
 
     fn arity(&self) -> usize {
@@ -178,6 +160,10 @@ impl<'a> PartialTrieScan<'a> for TrieScanUnion<'a> {
             .fold(StorageTypeBitSet::empty(), |result, scan| {
                 result.union(scan.possible_types(layer))
             })
+    }
+
+    fn current_layer(&self) -> Option<usize> {
+        self.current_layer
     }
 }
 

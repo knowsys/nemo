@@ -36,9 +36,6 @@ pub(crate) trait PartialTrieScan<'a>: Debug {
     /// or if this method is called while the iterator of the current layer does not point to any element.
     fn down(&mut self, storage_type: StorageTypeName);
 
-    /// Return the storage type that is "active" on each layer.
-    fn path_types(&self) -> &[StorageTypeName];
-
     /// Return a list of possible types for a given layer.
     fn possible_types(&self, layer: usize) -> StorageTypeBitSet;
 
@@ -46,9 +43,7 @@ pub(crate) trait PartialTrieScan<'a>: Debug {
     fn arity(&self) -> usize;
 
     /// Return the index of the current layer for this scan.
-    fn current_layer(&self) -> Option<usize> {
-        self.path_types().len().checked_sub(1)
-    }
+    fn current_layer(&self) -> Option<usize>;
 
     /// Return the underlying [ColumnScanT] given an index.
     ///
@@ -102,7 +97,6 @@ impl<'a> PartialTrieScan<'a> for TrieScanEnum<'a> {
         } {
             fn up(&mut self);
             fn down(&mut self, storage_type: StorageTypeName);
-            fn path_types(&self) -> &[StorageTypeName];
             fn possible_types(&self, layer: usize) -> StorageTypeBitSet;
             fn arity(&self) -> usize;
             fn current_layer(&self) -> Option<usize>;

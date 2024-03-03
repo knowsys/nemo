@@ -9,7 +9,6 @@ use std::fmt;
 use std::{
     str::FromStr,
     sync::{Mutex, MutexGuard},
-    time::Duration,
 };
 
 // See https://doc.rust-lang.org/cargo/reference/features.html#mutually-exclusive-features

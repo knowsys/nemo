@@ -20,7 +20,6 @@ use std::{
     collections::{hash_map::Entry, HashMap},
     fmt::Debug,
     hash::Hash,
-    iter::IntoIterator,
     ops::Deref,
 };
 
