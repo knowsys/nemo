@@ -92,13 +92,17 @@ pub(crate) mod test {
             next_type_map.insert(adjacent_types[0], adjacent_types[1]);
         }
 
+        let mut types_layer = vec![0; scan.arity()];
+
         let first_type = *types.first().unwrap();
         scan.down(first_type);
         assert_eq!(partial_scan_current(scan, first_type), None);
 
         let mut current_expected_index: usize = 0;
 
-        while let Some(current_type) = scan.current_layer().map(|layer| scan.path_types()[layer]) {
+        while let Some(current_layer) = scan.current_layer() {
+            let current_type = types[types_layer[current_layer]];
+
             if let Some(next_value) = partial_scan_next(scan, current_type) {
                 let current_expected_value = expected[current_expected_index];
 
@@ -113,8 +117,12 @@ pub(crate) mod test {
                 scan.up();
 
                 if let Some(next_type) = next_type_map.get(&current_type).cloned() {
+                    types_layer[current_layer] += 1;
+
                     scan.down(next_type);
                     assert_eq!(partial_scan_current(scan, next_type), None);
+                } else {
+                    types_layer[current_layer] = 0;
                 }
             }
         }

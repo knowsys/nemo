@@ -190,11 +190,6 @@ impl<'a> TrieScanPruneState<'a> {
         self.input_trie_scan.arity()
     }
 
-    /// Return the types of each active layer in this scan.
-    pub(crate) fn path_types(&self) -> &[StorageTypeName] {
-        &self.external_path_types
-    }
-
     /// Return the possible types for a given layer in this scan.
     pub(crate) fn possible_types(&self, layer: usize) -> StorageTypeBitSet {
         self.input_trie_scan.possible_types(layer)
@@ -292,7 +287,9 @@ impl<'a> TrieScanPruneState<'a> {
         self.highest_peeked_layer.map_or(false, |p| {
             index >= p
                 && if let Some(storage_type) = storage_type_opt {
-                    if let Some(&input_type) = self.input_trie_scan.path_types().get(index) {
+                    if let Some(&input_type) =
+                        self.possible_types[index].get(self.input_trie_scan_current_type[index])
+                    {
                         input_type == storage_type
                     } else {
                         false
@@ -308,7 +305,8 @@ impl<'a> TrieScanPruneState<'a> {
     /// The caller must ensure that there exists no mutable reference to the column scan at `index` and thus the [`UnsafeCell`] is safe to access.
     #[inline]
     pub(crate) unsafe fn current_input_trie_value(&self, index: usize) -> Option<StorageValueT> {
-        let current_input_type = self.input_trie_scan.path_types()[index];
+        let current_input_type =
+            self.possible_types[index][self.input_trie_scan_current_type[index]];
         let scan = self.input_trie_scan.scan(index);
 
         unsafe { (*scan.get()).current(current_input_type) }
@@ -319,8 +317,8 @@ impl<'a> TrieScanPruneState<'a> {
     /// The caller must ensure that there exists no immutable/mutable references to the column scan at `index` and thus the value inside the [`UnsafeCell`] is safe to mutate.
     #[inline]
     unsafe fn next_input_trie_value(&mut self) -> Option<StorageValueT> {
-        let current_input_type =
-            self.input_trie_scan.path_types()[self.input_trie_scan_current_layer];
+        let current_input_type = self.possible_types[self.input_trie_scan_current_layer]
+            [self.input_trie_scan_current_type[self.input_trie_scan_current_layer]];
         let scan = self
             .input_trie_scan
             .scan(self.input_trie_scan_current_layer);
@@ -626,10 +624,6 @@ impl<'a> PartialTrieScan<'a> for TrieScanPrune<'a> {
 
     fn current_layer(&self) -> Option<usize> {
         unsafe { (*self.state.get()).current_layer() }
-    }
-
-    fn path_types(&self) -> &[StorageTypeName] {
-        unsafe { (*self.state.get()).path_types() }
     }
 
     fn arity(&self) -> usize {

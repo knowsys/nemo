@@ -326,10 +326,6 @@ impl<'a> PartialTrieScan<'a> for TrieScanAggregateWrapper<'a> {
         self.arity
     }
 
-    fn path_types(&self) -> &[StorageTypeName] {
-        panic!("TrieScanAggregateWrapper::path_types cannot be called");
-    }
-
     fn scan<'b>(&'b self, _layer: usize) -> &'b UnsafeCell<ColumnScanRainbow<'a>> {
         panic!("TrieScanAggregateWrapper::scan cannot be called");
     }

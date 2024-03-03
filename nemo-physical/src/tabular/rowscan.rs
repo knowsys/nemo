@@ -12,8 +12,11 @@ use super::triescan::PartialTrieScan;
 /// and which one of them is currently used.
 #[derive(Debug)]
 struct PossibleTypes {
+    /// Possible storage types for this layer
     storage_types: [StorageTypeName; NUM_STORAGETYPES],
+    /// Index indicating the current type
     current_type: usize,
+    /// Number of possible types
     num_types: usize,
 }
 

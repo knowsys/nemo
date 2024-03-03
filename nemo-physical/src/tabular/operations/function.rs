@@ -321,13 +321,13 @@ pub(crate) struct TrieScanFunction<'a> {
     /// For each output layer, holds information about the possible output types via [PossibleTypeInformation]
     type_information: Vec<PossibleTypeInformation>,
 
+    /// Path of [StorageTypeName] indicating the the types of the current (partial) row
+    path_types: Vec<StorageTypeName>,
+
     /// For each layer in the resulting trie contains a [`ColumnScanRainbow`]
     /// evaluating the functions on columns of the input trie
     /// or simply passing the values from the input trie to the output.
     column_scans: Vec<UnsafeCell<ColumnScanRainbow<'a>>>,
-
-    /// Path of [StorageTypeName] indicating the the types of the current (partial) row
-    path_types: Vec<StorageTypeName>,
 }
 
 impl<'a> PartialTrieScan<'a> for TrieScanFunction<'a> {
@@ -413,10 +413,6 @@ impl<'a> PartialTrieScan<'a> for TrieScanFunction<'a> {
         self.path_types.push(next_type);
     }
 
-    fn path_types(&self) -> &[StorageTypeName] {
-        &self.path_types
-    }
-
     fn arity(&self) -> usize {
         self.column_scans.len()
     }
@@ -432,6 +428,10 @@ impl<'a> PartialTrieScan<'a> for TrieScanFunction<'a> {
             PossibleTypeInformation::Inferred(index) => self.possible_types(index),
             PossibleTypeInformation::Input(layer) => self.trie_scan.possible_types(layer),
         }
+    }
+
+    fn current_layer(&self) -> Option<usize> {
+        self.path_types.len().checked_sub(1)
     }
 }
 

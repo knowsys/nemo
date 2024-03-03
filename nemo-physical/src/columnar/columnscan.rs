@@ -196,51 +196,6 @@ impl<'a, T> ColumnScanEnum<'a, T>
 where
     T: 'a + ColumnDataType,
 {
-    /// Assumes that column scan is a [ColumnScanUnion].
-    ///
-    /// Check whether the input [ColumnScan] of the given index points to the currently smallest value.
-    pub(crate) fn union_is_smallest(&self, index: usize) -> bool {
-        if let Self::Union(cs) = self {
-            cs.is_smallest_scans(index)
-        } else {
-            unimplemented!("union_is_smallest is only available for ColumnScanUnion")
-        }
-    }
-
-    /// Assumes that column scan is a [ColumnScanUnion].
-    ///
-    /// Return a mutable reference to a vector
-    /// that indicates which scans are currently active and should be considered
-    pub(crate) fn union_active_scans(&mut self) -> &mut Vec<usize> {
-        if let Self::Union(cs) = self {
-            cs.active_scans_mut()
-        } else {
-            unimplemented!("union_active_scans is only available for ColumnScanUnion")
-        }
-    }
-
-    /// Assumes that column scan is a [ColumnScanSubtract].
-    ///
-    /// Return a vector indicating which subiterators point to the same value as the main one.
-    pub(crate) fn subtract_get_equal(&self) -> Vec<bool> {
-        if let Self::Subtract(cs) = self {
-            cs.get_equal_values()
-        } else {
-            unimplemented!("subtract_get_equal is only available for ColumnScanSubtract")
-        }
-    }
-
-    /// Assumes that column scan is a [ColumnScanSubtract].
-    ///
-    /// Return a mutable reference to a list indicating which sub iterators should be enabled.
-    pub(crate) fn subtract_active_scans(&mut self) -> &mut Vec<bool> {
-        if let Self::Subtract(cs) = self {
-            cs.active_scans_mut()
-        } else {
-            unimplemented!("subtract_set_active is only available for ColumnScanSubtract")
-        }
-    }
-
     /// Assumes that column scan is a [ColumnScanConstant].
     ///
     /// Set a new constant value that will be returned by this scan.
@@ -372,29 +327,6 @@ where
         unsafe { &mut *self.0.get() }.narrow(interval)
     }
 
-    /// Forward `union_is_smallest` to the underlying [ColumnScanEnum].
-    /// This takes an exclusive reference as opposed to an immutable one, so that none of the
-    /// mutating methods on &self can be called while the result is still available
-    /// (see <https://github.com/knowsys/nemo/issues/137>)
-    pub(crate) fn union_is_smallest(&mut self, index: usize) -> bool {
-        unsafe { &mut *self.0.get() }.union_is_smallest(index)
-    }
-
-    /// Forward `union_is_smallest` to the underlying [ColumnScanEnum].
-    pub(crate) fn union_active_scans(&mut self) -> &mut Vec<usize> {
-        self.0.get_mut().union_active_scans()
-    }
-
-    /// Forward `subtract_get_equal` to the underlying [ColumnScanEnum].
-    pub(crate) fn subtract_get_equal(&mut self) -> Vec<bool> {
-        self.0.get_mut().subtract_get_equal()
-    }
-
-    /// Forward `subtract_active_scans` to the underlying [ColumnScanEnum].
-    pub(crate) fn subtract_active_scans(&mut self) -> &mut Vec<bool> {
-        unsafe { &mut *self.0.get() }.subtract_active_scans()
-    }
-
     /// Forward `constant_set` to the underlying [ColumnScanEnum].
     pub(crate) fn constant_set(&mut self, constant: Option<T>) {
         unsafe { &mut *self.0.get() }.constant_set(constant)
@@ -515,62 +447,6 @@ impl<'a> ColumnScanRainbow<'a> {
             StorageTypeName::Int64 => self.scan_i64.narrow(interval),
             StorageTypeName::Float => self.scan_float.narrow(interval),
             StorageTypeName::Double => self.scan_double.narrow(interval),
-        }
-    }
-
-    /// Assumes that column scan is a [ColumnScanUnion]
-    /// and returns a vector containing the positions of the scans with the smallest values.
-    pub(crate) fn union_is_smallest(
-        &mut self,
-        storage_type: StorageTypeName,
-        index: usize,
-    ) -> bool {
-        match storage_type {
-            StorageTypeName::Id32 => self.scan_id32.union_is_smallest(index),
-            StorageTypeName::Id64 => self.scan_id64.union_is_smallest(index),
-            StorageTypeName::Int64 => self.scan_i64.union_is_smallest(index),
-            StorageTypeName::Float => self.scan_float.union_is_smallest(index),
-            StorageTypeName::Double => self.scan_double.union_is_smallest(index),
-        }
-    }
-
-    /// Assumes that column scan is a [ColumnScanUnion]
-    /// Return a mutable reference to  a vector
-    /// that indicates which scans are currently active and should be considered.
-    pub(crate) fn union_active_scans(&mut self, storage_type: StorageTypeName) -> &mut Vec<usize> {
-        match storage_type {
-            StorageTypeName::Id32 => self.scan_id32.union_active_scans(),
-            StorageTypeName::Id64 => self.scan_id64.union_active_scans(),
-            StorageTypeName::Int64 => self.scan_i64.union_active_scans(),
-            StorageTypeName::Float => self.scan_float.union_active_scans(),
-            StorageTypeName::Double => self.scan_double.union_active_scans(),
-        }
-    }
-
-    /// Assumes that column scan is a [ColumnScanSubtract]
-    /// Return a vector indicating which subiterators point to the same value as the main one.
-    pub(crate) fn subtract_get_equal(&mut self, storage_type: StorageTypeName) -> Vec<bool> {
-        match storage_type {
-            StorageTypeName::Id32 => self.scan_id32.subtract_get_equal(),
-            StorageTypeName::Id64 => self.scan_id64.subtract_get_equal(),
-            StorageTypeName::Int64 => self.scan_i64.subtract_get_equal(),
-            StorageTypeName::Float => self.scan_float.subtract_get_equal(),
-            StorageTypeName::Double => self.scan_double.subtract_get_equal(),
-        }
-    }
-
-    /// Assumes that column scan is a [ColumnScanSubtract]
-    /// Return a mutable reference to a list indicating which sub iterators should be enabled.
-    pub(crate) fn subtract_active_scans(
-        &mut self,
-        storage_type: StorageTypeName,
-    ) -> &mut Vec<bool> {
-        match storage_type {
-            StorageTypeName::Id32 => self.scan_id32.subtract_active_scans(),
-            StorageTypeName::Id64 => self.scan_id64.subtract_active_scans(),
-            StorageTypeName::Int64 => self.scan_i64.subtract_active_scans(),
-            StorageTypeName::Float => self.scan_float.subtract_active_scans(),
-            StorageTypeName::Double => self.scan_double.subtract_active_scans(),
         }
     }
 
