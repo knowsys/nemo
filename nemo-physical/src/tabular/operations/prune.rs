@@ -306,10 +306,10 @@ impl<'a> TrieScanPruneState<'a> {
     #[inline]
     pub(crate) unsafe fn current_input_trie_value(&self, index: usize) -> Option<StorageValueT> {
         let current_input_type =
-            self.possible_types[index][self.input_trie_scan_current_type[index]];
+            self.possible_types[index].get(self.input_trie_scan_current_type[index])?;
         let scan = self.input_trie_scan.scan(index);
 
-        unsafe { (*scan.get()).current(current_input_type) }
+        unsafe { (*scan.get()).current(*current_input_type) }
     }
 
     /// # Safety
@@ -318,12 +318,12 @@ impl<'a> TrieScanPruneState<'a> {
     #[inline]
     unsafe fn next_input_trie_value(&mut self) -> Option<StorageValueT> {
         let current_input_type = self.possible_types[self.input_trie_scan_current_layer]
-            [self.input_trie_scan_current_type[self.input_trie_scan_current_layer]];
+            .get(self.input_trie_scan_current_type[self.input_trie_scan_current_layer])?;
         let scan = self
             .input_trie_scan
             .scan(self.input_trie_scan_current_layer);
 
-        unsafe { (*scan.get()).next(current_input_type) }
+        unsafe { (*scan.get()).next(*current_input_type) }
     }
 
     /// Directly gets the current output value for a column ignoring layer peeks (see `highest_peeked_layer`).

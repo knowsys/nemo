@@ -40,7 +40,7 @@ mod test {
         })
     }
 
-    /// TODO: This performs quite a lot worse than the others (even the other rle one?)
+    /// TODO: This performs quite a lot worse than the others
     #[bench]
     fn seek_rle_random(bencher: &mut Bencher) {
         let (data, seek) = random_data();

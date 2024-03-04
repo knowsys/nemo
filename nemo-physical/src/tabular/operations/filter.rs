@@ -306,6 +306,7 @@ impl<'a> PartialTrieScan<'a> for TrieScanFilter<'a> {
         }
 
         self.trie_scan.down(next_type);
+        self.path_types.push(next_type);
         self.column_scans[next_layer].get_mut().reset(next_type);
     }
 
