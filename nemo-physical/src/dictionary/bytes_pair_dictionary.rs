@@ -61,7 +61,7 @@ impl<B: GlobalBytesBuffer> BytesPairDictionary<B> {
     pub(crate) fn id_to_bytes_pair(&self, id: usize) -> Option<[Vec<u8>; 2]> {
         self.store
             .get(id)
-            .map(|[first_bref, second_bref]| (first_bref.as_vec(), second_bref.as_vec()))
+            .map(|[first_bref, second_bref]| [first_bref.as_vec(), second_bref.as_vec()])
     }
 
     /// Returns true if a value is associated with the id.
