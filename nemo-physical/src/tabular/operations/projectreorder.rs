@@ -72,8 +72,10 @@ impl GeneratorProjectReorder {
             result_map.insert(source_output, target_output);
         }
 
+        let projectreordering = ProjectReordering::from_map(result_map, arity);
+
         Self {
-            projectreordering: ProjectReordering::from_map(result_map, arity),
+            projectreordering,
             last_used_layer: arity.saturating_sub(1),
             arity_output: arity,
         }
@@ -91,6 +93,8 @@ impl GeneratorProjectReorder {
         let mut current_tuple = vec![StorageValueT::Id32(0); self.arity_output];
         let mut tuple_buffer = TupleBuffer::new(self.arity_output);
 
+        let projectreordering = Self::reordering_vector(&self.projectreordering);
+
         while let Some(current_row) = StreamingIterator::next(&mut rowscan) {
             debug_assert!(current_row.len() <= self.last_used_layer + 1);
 
@@ -98,9 +102,13 @@ impl GeneratorProjectReorder {
 
             for (row_index, current_value) in current_row.iter().enumerate() {
                 let input_layer = start_change + row_index;
-                if let Some(output_layer) = self.projectreordering.get_partial(input_layer) {
-                    current_tuple[output_layer] = *current_value;
+                let output_layer = projectreordering[input_layer];
+
+                if output_layer == usize::MAX {
+                    continue;
                 }
+
+                current_tuple[output_layer] = *current_value;
             }
 
             for value in &current_tuple {
@@ -127,6 +135,22 @@ impl GeneratorProjectReorder {
     /// Return whether this operation would leave the input [Trie] unchanged.
     pub(crate) fn is_noop(&self) -> bool {
         self.projectreordering.is_identity()
+    }
+
+    /// Creates an optmized representation of a [ProjectReordering] as a [Vec],
+    /// such that the ith entry in the vector represents the output of the function
+    /// for the input i.
+    /// If the output is `None`, then the vector contains [usize::MAX].
+    fn reordering_vector(projectreordering: &ProjectReordering) -> Vec<usize> {
+        let mut result = vec![usize::MAX; projectreordering.domain_size()];
+
+        for input in 0..projectreordering.domain_size() {
+            if let Some(output) = projectreordering.get_partial(input) {
+                result[input] = output;
+            }
+        }
+
+        result
     }
 }
 
