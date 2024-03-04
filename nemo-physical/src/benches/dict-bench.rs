@@ -5,11 +5,11 @@ use std::{
     io::{stdin, BufRead, BufReader},
 };
 
+use nemo_physical::dictionary::hash_map_dictionary::HashMapDictionary;
 use nemo_physical::{
     dictionary::{meta_dictionary::MetaDictionary, AddResult, Dictionary},
     meta::timing::{TimedCode, TimedDisplay, TimedSorting},
 };
-use nemo_physical::dictionary::hash_map_dictionary::HashMapDictionary;
 
 use flate2::read::MultiGzDecoder;
 
@@ -27,7 +27,6 @@ fn create_dictionary(dict_type: &str) -> Box<dyn Dictionary> {
     }
 }
 
-
 fn main() {
     let supported_dicts = ["hashmap", "meta"];
 
@@ -36,7 +35,9 @@ fn main() {
     let args: Vec<_> = env::args().collect();
     if args.len() < 3 {
         println!("Usage: dict-bench <filename> <dicttype> <nonstop>");
-        println!("  <filename> File with dictionary entries, one per line, possibly with duplicates.");
+        println!(
+            "  <filename> File with dictionary entries, one per line, possibly with duplicates."
+        );
         println!(
             "  <dicttype> Identifier for the dictionary to test, e.g., \"hashmap\" or \"meta\"."
         );
@@ -48,7 +49,10 @@ fn main() {
     let filename = &args[1];
     let dicttype = &args[2];
 
-    assert!(supported_dicts.contains(&dicttype.as_str()), "Unsuported dictionary identifier. Expected values: \"hashmap\" or \"meta\"");
+    assert!(
+        supported_dicts.contains(&dicttype.as_str()),
+        "Unsuported dictionary identifier. Expected values: \"hashmap\" or \"meta\""
+    );
 
     let reader = BufReader::new(MultiGzDecoder::new(
         File::open(filename).expect("Cannot open file."),
