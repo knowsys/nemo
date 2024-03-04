@@ -1,4 +1,5 @@
-@source data[any, any]: load-csv("sources/data.csv").
+@import data :- csv { resource = "sources/data.csv" }.
+@export result :- csv { }.
 
 result(?X, ?X) :- data(?X, ?X) .
 result(!W, ?X), result(?Y, !V) :- data(?X, ?Y) .

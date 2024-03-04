@@ -18,6 +18,6 @@ r1(?X) :- r2(?X).
 
 r3(#count(?X)) :- r1(?X).
 
-@output r1.
-@output r2.
-@output r3.
+@export r1 :- csv {}.
+@export r2 :- csv {}.
+@export r3 :- csv {}.

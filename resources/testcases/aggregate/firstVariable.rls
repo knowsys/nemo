@@ -4,3 +4,8 @@ r0(#min(?X)) :- sourceA(?X, ?Y, ?Z).
 r1(#max(?X)) :- sourceA(?X, ?Y, ?Z).
 r2(#count(?X)) :- sourceA(?X, ?Y, ?Z).
 r3(#sum(?X)) :- sourceA(?X, ?Y, ?Z).
+
+@export r3 :- csv {}.
+@export r0 :- csv {}.
+@export r1 :- csv {}.
+@export r2 :- csv {}.

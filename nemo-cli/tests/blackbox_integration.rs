@@ -98,8 +98,6 @@ impl TestCase {
         let mut cmd = Command::cargo_bin("nmo")?;
 
         cmd.current_dir(self.test_dir.as_path())
-            .arg("-e")
-            .arg("all")
             .arg("-D")
             .arg(self.output_dir.path())
             .arg(self.rule_file.as_path())

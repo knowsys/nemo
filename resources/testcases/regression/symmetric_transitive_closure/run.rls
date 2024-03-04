@@ -4,3 +4,5 @@
 connected(?X,?Y) :- city(?X), city(?Y), conn(?X,?Y).
 conn(?X,?Y) :- conn(?Y,?X).
 connected(?X,?Y) :- city(?X), city(?XY), city(?Y), connected(?X,?XY), conn(?XY, ?Y).
+
+@export connected :- csv {}.
