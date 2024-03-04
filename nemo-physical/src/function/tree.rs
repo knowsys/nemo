@@ -111,8 +111,8 @@ where
         if self.references().is_empty() {
             let constant_program =
                 StackProgram::from_function_tree(self, &HashMap::default(), None);
-        
-            return SpecialCaseFunction::Constant(constant_program.evaluate_data(&[]))
+
+            return SpecialCaseFunction::Constant(constant_program.evaluate_data(&[]));
         }
 
         match self {

@@ -14,6 +14,8 @@ pub use datavalue_dictionary::NONEXISTING_ID_MARK;
 /// code.
 pub mod string_dictionary;
 pub(crate) use string_dictionary::StringDictionary;
+pub mod string_pair_dictionary;
+pub(crate) use string_pair_dictionary::StringPairDictionary;
 /// Module to define [GlobalBytesBuffer] and related code
 pub(crate) mod bytes_buffer;
 /// Module to define the [BytesDictionary]
@@ -22,6 +24,9 @@ pub(crate) mod bytes_dictionary;
 pub(crate) mod bytes_pair_dictionary;
 /// Module to define string-based datavalue dictionaries.
 pub(crate) mod string_dv_dict;
+/// Module to define string-pair-based datavalue dictionaries.
+pub(crate) mod string_pair_dv_dict;
+pub(crate) use string_pair_dv_dict::StringPairBasedDvDictionary;
 /// Module to define the [StringMap]
 pub mod string_map;
 pub(crate) use string_dv_dict::IriDvDictionary;

@@ -2,16 +2,41 @@ use hashbrown::HashMap;
 
 use super::bytes_buffer::{BytesRef, GlobalBytesBuffer};
 use super::{AddResult, KNOWN_ID_MARK};
+use crate::dictionary::datavalue_dictionary::{SMALL_KNOWN_ID_MARK, SMALL_KNOWN_ID_MARK_AS_USIZE};
 
-/// A marker id reserved for playing the role of [KNOWN_ID_MARK] while we are workin
-/// with 32bit ids. This is internal and always replaced by [KNOWN_ID_MARK] to the outside.
-#[cfg(not(test))]
-const SMALL_KNOWN_ID_MARK: u32 = u32::MAX;
-#[cfg(test)]
-// Note: A smaller value is used to exercise the relevant code in the unit tests as well.
-const SMALL_KNOWN_ID_MARK: u32 = 3;
+pub(crate) struct IdUtils {}
 
-const SMALL_KNOWN_ID_MARK_AS_USIZE: usize = SMALL_KNOWN_ID_MARK as usize;
+impl IdUtils {
+    /// Convert an id as reported to the outside to the value that
+    /// would be stored to represent it in our maps (leaving space for
+    /// [SMALL_KNOWN_ID_MARK]).
+    pub(crate) fn id_to_innerid(id: usize) -> usize {
+        if id < SMALL_KNOWN_ID_MARK_AS_USIZE {
+            id
+        } else {
+            id + 1
+        }
+    }
+
+    /// Convert a 32bit id that is stored in our maps to the id that should
+    /// be reported to the outside (removing the space for
+    /// [SMALL_KNOWN_ID_MARK]).
+    pub(crate) fn id32_to_id(id32: u32) -> usize {
+        if id32 < SMALL_KNOWN_ID_MARK {
+            id32 as usize
+        } else {
+            (id32 - 1) as usize
+        }
+    }
+
+    /// Convert a 64bit id that is stored in our maps to the id that should
+    /// be reported to the outside (removing the space for
+    /// [SMALL_KNOWN_ID_MARK]).
+    pub(crate) fn id64_to_id(id64: u64) -> usize {
+        assert!(id64 > u32::MAX as u64);
+        usize::try_from(id64 - 1).expect("64bit ids should only occur on 64bit platforms")
+    }
+}
 
 /// A struct that implements a bijection between byte arrays and integers, where the integers
 /// are automatically assigned upon insertion.
@@ -44,11 +69,11 @@ impl<B: GlobalBytesBuffer> BytesDictionary<B> {
             if id == SMALL_KNOWN_ID_MARK {
                 return Some(KNOWN_ID_MARK);
             } else {
-                return Some(Self::id32_to_id(id));
+                return Some(IdUtils::id32_to_id(id));
             }
         } else if !self.map_long.is_empty() {
             if let Some(id) = self.map_long.get(bytes).copied() {
-                return Some(Self::id64_to_id(id));
+                return Some(IdUtils::id64_to_id(id));
             }
         }
         None
@@ -89,7 +114,7 @@ impl<B: GlobalBytesBuffer> BytesDictionary<B> {
 
     /// Check if a bytes array is already in the dictionary, and if not,
     /// add it. If `insert` is true, the bytes will be given a new id and
-    /// sotred under this id. Otherwise, the bytes will merely be marked as
+    /// stored under this id. Otherwise, the bytes will merely be marked as
     /// known.
     ///
     /// If the given array is known but not assigned an ID (indicated by
@@ -102,16 +127,16 @@ impl<B: GlobalBytesBuffer> BytesDictionary<B> {
                 if *idx == SMALL_KNOWN_ID_MARK {
                     AddResult::Known(KNOWN_ID_MARK)
                 } else {
-                    AddResult::Known(Self::id32_to_id(*idx))
+                    AddResult::Known(IdUtils::id32_to_id(*idx))
                 }
             }
             None => match self.map_long.get(bytes) {
-                Some(idx) => AddResult::Known(Self::id64_to_id(*idx)),
+                Some(idx) => AddResult::Known(IdUtils::id64_to_id(*idx)),
                 None => {
                     let sref = B::push_bytes(self.buffer_id, bytes);
                     if insert {
                         let id = self.store.len();
-                        let inner_id = Self::id_to_innerid(id);
+                        let inner_id = IdUtils::id_to_innerid(id);
                         self.store.push(sref);
                         if let Ok(id_u32) = u32::try_from(inner_id) {
                             self.map_short.insert(sref, id_u32);
@@ -130,36 +155,6 @@ impl<B: GlobalBytesBuffer> BytesDictionary<B> {
                 }
             },
         }
-    }
-
-    /// Convert an id as reported to the outside to the value that
-    /// would be stored to represent it in our maps (leaving space for
-    /// [SMALL_KNOWN_ID_MARK]).
-    fn id_to_innerid(id: usize) -> usize {
-        if id < SMALL_KNOWN_ID_MARK_AS_USIZE {
-            id
-        } else {
-            id + 1
-        }
-    }
-
-    /// Convert a 32bit id that is stored in our maps to the id that should
-    /// be reported to the outside (removing the space for
-    /// [SMALL_KNOWN_ID_MARK]).
-    fn id32_to_id(id32: u32) -> usize {
-        if id32 < SMALL_KNOWN_ID_MARK {
-            id32 as usize
-        } else {
-            (id32 - 1) as usize
-        }
-    }
-
-    /// Convert a 64bit id that is stored in our maps to the id that should
-    /// be reported to the outside (removing the space for
-    /// [SMALL_KNOWN_ID_MARK]).
-    fn id64_to_id(id64: u64) -> usize {
-        assert!(id64 > u32::MAX as u64);
-        usize::try_from(id64 - 1).expect("64bit ids should only occur on 64bit platforms")
     }
 }
 

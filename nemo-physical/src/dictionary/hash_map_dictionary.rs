@@ -105,14 +105,14 @@ mod test {
     #[test]
     fn fetch_id() {
         let dict = create_dict();
-        assert_eq!(dict.fetch_id("a".to_string().borrow()), Some(0));
-        assert_eq!(dict.fetch_id("b".to_string().borrow()), Some(1));
-        assert_eq!(dict.fetch_id("c".to_string().borrow()), Some(2));
-        assert_eq!(dict.fetch_id("Position 3".to_string().borrow()), Some(3));
-        assert_eq!(dict.fetch_id("Position 4".to_string().borrow()), Some(4));
-        assert_eq!(dict.fetch_id("Position 5".to_string().borrow()), Some(5));
-        assert_eq!(dict.fetch_id("d".to_string().borrow()), None);
-        assert_eq!(dict.fetch_id("Pos".to_string().borrow()), None);
+        assert_eq!(dict.fetch_id("a"), Some(0));
+        assert_eq!(dict.fetch_id("b"), Some(1));
+        assert_eq!(dict.fetch_id("c"), Some(2));
+        assert_eq!(dict.fetch_id("Position 3"), Some(3));
+        assert_eq!(dict.fetch_id("Position 4"), Some(4));
+        assert_eq!(dict.fetch_id("Position 5"), Some(5));
+        assert_eq!(dict.fetch_id("d"), None);
+        assert_eq!(dict.fetch_id("Pos"), None);
         assert_eq!(dict.fetch_id("Pos"), None);
         assert_eq!(dict.fetch_id("b"), Some(1));
     }

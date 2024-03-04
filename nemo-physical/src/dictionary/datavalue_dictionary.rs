@@ -8,6 +8,16 @@ pub const NONEXISTING_ID_MARK: usize = usize::MAX;
 /// Fake id that dictionaries use for marked entries.
 pub const KNOWN_ID_MARK: usize = usize::MAX - 1;
 
+/// A marker id reserved for playing the role of [KNOWN_ID_MARK] while we are workin
+/// with 32bit ids. This is internal and always replaced by [KNOWN_ID_MARK] to the outside.
+#[cfg(not(test))]
+pub(crate) const SMALL_KNOWN_ID_MARK: u32 = u32::MAX;
+#[cfg(test)]
+// Note: A smaller value is used to exercise the relevant code in the unit tests as well.
+pub(crate) const SMALL_KNOWN_ID_MARK: u32 = 3;
+
+pub(crate) const SMALL_KNOWN_ID_MARK_AS_USIZE: usize = SMALL_KNOWN_ID_MARK as usize;
+
 /// Result of adding new values to a dictionary.
 /// It indicates if the operation was successful, and whether the value was previously present or not.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

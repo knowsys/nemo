@@ -5,6 +5,7 @@
 
 use super::{AddResult, DvDict, StringDictionary};
 use crate::datavalues::{AnyDataValue, DataValue, ValueDomain};
+use crate::dictionary::StringPairBasedDvDictionary;
 use std::{fmt::Debug, marker::PhantomData};
 
 /// Implementation of [`DvDict`] that will only handle [`AnyDataValue::String`] values.
@@ -12,9 +13,9 @@ pub(crate) type StringDvDictionary = StringBasedDvDictionary<StringDvConverter>;
 /// Implementation of [`DvDict`] that will only handle [`AnyDataValue::Iri`] values.
 pub(crate) type IriDvDictionary = StringBasedDvDictionary<IriDvConverter>;
 /// Implementation of [`DvDict`] that will only handle [`AnyDataValue::Other`] values.
-pub(crate) type OtherDvDictionary = StringBasedDvDictionary<OtherDvConverter>;
+pub(crate) type OtherDvDictionary = StringPairBasedDvDictionary<OtherDvConverter>;
 /// Implementation of [`DvDict`] that will only handle [`AnyDataValue::LanguageTaggedString`] values.
-pub(crate) type LangStringDvDictionary = StringBasedDvDictionary<LangStringDvConverter>;
+pub(crate) type LangStringDvDictionary = StringPairBasedDvDictionary<LangStringDvConverter>;
 
 /// Trait to encapsulate (static) functions for converting datavalues to strings
 /// and vice versa. The mapping must therefore be invertible, but otherwise it
@@ -22,8 +23,12 @@ pub(crate) type LangStringDvDictionary = StringBasedDvDictionary<LangStringDvCon
 pub(crate) trait DvConverter: Debug {
     /// Converts a datavalue to a string, if supported.
     fn dict_string(dv: &AnyDataValue) -> Option<String>;
+    /// Converts a datavalue to a string pair, when supported.
+    fn dict_string_pair(dv: &AnyDataValue) -> Option<[String; 2]>;
     /// Converts a string to a datavalue, if supported.
     fn string_to_datavalue(string: &str) -> Option<AnyDataValue>;
+    /// Converts a string pair to a datavalue, if supported.
+    fn string_pair_to_datavalue(first: &str, second: &str) -> Option<AnyDataValue>;
     /// Each converter supports exactly one domain, returned by this function.
     fn supported_value_domain() -> ValueDomain;
 }
@@ -37,9 +42,17 @@ impl DvConverter for StringDvConverter {
         dv.to_plain_string()
     }
 
+    fn dict_string_pair(dv: &AnyDataValue) -> Option<[String; 2]> {
+        None
+    }
+
     #[inline(always)]
     fn string_to_datavalue(string: &str) -> Option<AnyDataValue> {
         Some(AnyDataValue::new_plain_string(string.to_string()))
+    }
+
+    fn string_pair_to_datavalue(first: &str, second: &str) -> Option<AnyDataValue> {
+        None
     }
 
     fn supported_value_domain() -> ValueDomain {
@@ -56,9 +69,17 @@ impl DvConverter for IriDvConverter {
         dv.to_iri()
     }
 
+    fn dict_string_pair(dv: &AnyDataValue) -> Option<[String; 2]> {
+        None
+    }
+
     #[inline(always)]
     fn string_to_datavalue(string: &str) -> Option<AnyDataValue> {
         Some(AnyDataValue::new_iri(string.to_string()))
+    }
+
+    fn string_pair_to_datavalue(first: &str, second: &str) -> Option<AnyDataValue> {
+        None
     }
 
     fn supported_value_domain() -> ValueDomain {
@@ -66,6 +87,7 @@ impl DvConverter for IriDvConverter {
     }
 }
 
+/// TODO remove this function
 /// Combine two strings into one in an invertible way.
 /// If either of the strings is typically shorter than 127 bytes, it
 /// should be given as `string2` to enable more efficient coding.
@@ -95,6 +117,7 @@ fn two_strings_to_one(string1: &str, string2: &str) -> String {
     result
 }
 
+/// TODO remove this function
 /// Extract two strings from one that uses the format of [two_strings_to_one].
 #[inline(always)]
 fn one_string_to_two(string: &str) -> Option<(String, String)> {
@@ -151,14 +174,32 @@ impl DvConverter for OtherDvConverter {
     }
 
     #[inline(always)]
+    fn dict_string_pair(dv: &AnyDataValue) -> Option<[String; 2]> {
+        Some([dv.lexical_value(), dv.datatype_iri()])
+    }
+
+    #[inline(always)]
     fn string_to_datavalue(string: &str) -> Option<AnyDataValue> {
-        one_string_to_two(string).map(|(lexical_value, datatype_iri)| {
+        /* one_string_to_two(string).map(|(lexical_value, datatype_iri)| {
             if datatype_iri.as_str() == "http://www.w3.org/2001/XMLSchema#boolean" {
                 AnyDataValue::new_boolean(lexical_value == "true")
             } else {
                 AnyDataValue::new_other(lexical_value, datatype_iri)
             }
-        })
+        }) */
+        None
+    }
+
+    #[inline(always)]
+    fn string_pair_to_datavalue(first: &str, second: &str) -> Option<AnyDataValue> {
+        if second == "http://www.w3.org/2001/XMLSchema#boolean" {
+            Some(AnyDataValue::new_boolean(first == "true"))
+        } else {
+            Some(AnyDataValue::new_other(
+                first.to_string(),
+                second.to_string(),
+            ))
+        }
     }
 
     fn supported_value_domain() -> ValueDomain {
@@ -172,18 +213,34 @@ pub(crate) struct LangStringDvConverter;
 impl DvConverter for LangStringDvConverter {
     #[inline(always)]
     fn dict_string(dv: &AnyDataValue) -> Option<String> {
-        if dv.value_domain() == ValueDomain::LanguageTaggedString {
+        None
+        /* if dv.value_domain() == ValueDomain::LanguageTaggedString {
             let (string, lang) = dv.to_language_tagged_string_unchecked();
             Some(two_strings_to_one(string.as_str(), lang.as_str()))
         } else {
             None
-        }
+        } */
+    }
+
+    #[inline(always)]
+    fn dict_string_pair(dv: &AnyDataValue) -> Option<[String; 2]> {
+        let (string, lang) = dv.to_language_tagged_string_unchecked();
+        Some([string, lang])
     }
 
     #[inline(always)]
     fn string_to_datavalue(string: &str) -> Option<AnyDataValue> {
-        one_string_to_two(string)
-            .map(|(value, language)| AnyDataValue::new_language_tagged_string(value, language))
+        /* one_string_to_two(string)
+        .map(|(value, language)| AnyDataValue::new_language_tagged_string(value, language)) */
+        None
+    }
+
+    #[inline(always)]
+    fn string_pair_to_datavalue(first: &str, second: &str) -> Option<AnyDataValue> {
+        Some(AnyDataValue::new_language_tagged_string(
+            first.to_string(),
+            second.to_string(),
+        ))
     }
 
     fn supported_value_domain() -> ValueDomain {
