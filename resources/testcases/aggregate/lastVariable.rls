@@ -2,3 +2,6 @@
 
 r0(#min(?Z)) :- sourceA(?X, ?Y, ?Z).
 r1(#max(?Z)) :- sourceA(?X, ?Y, ?Z).
+
+@export r0 :- csv {}.
+@export r1 :- csv {}.

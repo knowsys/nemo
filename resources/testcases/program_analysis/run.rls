@@ -8,4 +8,4 @@ ConstFolding(?val2 +?val1, ?ins,  ?val1, ?val2,"+") :-
     AssignOperFrom(?ins, ?pos2, ?var2) ,
     AssignNumConstant(?ins2, ?ln, ?val2, ?var2).
 
-@output ConstFolding .
+@export ConstFolding :- csv {}.

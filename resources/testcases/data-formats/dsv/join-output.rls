@@ -1,6 +1,6 @@
-@import sourceA[3]: csv{resource = "sources/dataA.csv"}.
-@import sourceB[3]: dsv{resource = "sources/dataB.csv", delimiter = ","}.
-@import sourceC[3]: csv{resource = "sources/dataC.csv"}.
+@import sourceA :- csv{resource = "sources/dataA.csv"}.
+@import sourceB :- dsv{resource = "sources/dataB.csv", delimiter = ","}.
+@import sourceC :- csv{resource = "sources/dataC.csv"}.
 
 @output sourceA.
 @output sourceB.

@@ -3,3 +3,5 @@ sourceA(2).
 sourceA(test2).
 
 r0(#count(?X)) :- sourceA(?X).
+
+@export r0 :- csv {}.

@@ -1,14 +1,14 @@
-@import sourceA[3]: csv{resource = "sources/dataA.csv"}.
-@import sourceB[3]: dsv{resource = "sources/dataB.csv", delimiter = ","}.
-@import sourceC[3]: csv{resource = "sources/dataC.csv"}.
+@import sourceA :- csv{resource = "sources/dataA.csv"}.
+@import sourceB :- dsv{resource = "sources/dataB.csv", delimiter = ","}.
+@import sourceC :- csv{resource = "sources/dataC.csv"}.
 
-@export sourceA[3]: tsv{resource = "sourceA.tsv"}.
-@export sourceB[3]: dsv{resource = "sourceB.dsv", delimiter = ";"}.
-@export sourceC[3]: csv{resource = "sourceC"}.
+@export sourceA :- tsv{resource = "sourceA.tsv"}.
+@export sourceB :- dsv{resource = "sourceB.dsv", delimiter = ";"}.
+@export sourceC :- csv{resource = "sourceC"}.
 
-@export J1[3]: tsv{resource = "J1.sv"}.
-@export J2[3]: dsv{resource = "J2.dsv", delimiter = ";"}.
-@export J3[3]: csv{resource = "J3.csv"}.
+@export J1 :- tsv{resource = "J1.sv"}.
+@export J2 :- dsv{resource = "J2.dsv", delimiter = ";"}.
+@export J3 :- csv{resource = "J3.csv"}.
 
 J1(?X, ?Y, ?Z) :- sourceA(?X, ?Z, ?Y), sourceB(?X, ?Y, ?T) .
 J2(?X, ?Y, ?Z) :- sourceA(?Z, ?Y, ?X), sourceC(?X, ?Y, ?T) .

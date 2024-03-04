@@ -1,10 +1,6 @@
 @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
 
-@declare a(any) .
-@declare b(any) .
-@declare c(any) .
-
-@source b[any]: load-csv("../sources/b.csv") .
+@import b:- csv { resource = "../sources/b.csv" }.
 
 a(Some Constant With Spaces).
 a(<AnotherConstant>).
@@ -17,3 +13,5 @@ a(12345).
 a("6789"^^xsd:integer).
 
 c(?X) :- a(?X), b(?X).
+
+@export c :- csv {}.
