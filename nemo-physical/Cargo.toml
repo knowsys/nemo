@@ -1,4 +1,3 @@
-
 [package]
 name = "nemo-physical"
 description.workspace = true
@@ -15,6 +14,10 @@ default = ["timing"]
 # Enables time measurements using the "howlong" crate
 # If this feature is not enabled, all time measurements will display zero instead
 timing = ["dep:howlong"]
+
+[[bin]]
+name = "dict-bench"
+path = "src/benches/dict-bench.rs"
 
 [dependencies]
 enum_dispatch = "0.3.12"
@@ -33,6 +36,7 @@ regex = "1.9.5"
 hashbrown = "0.14"
 bitvec = "1.0.1"
 streaming-iterator = "0.1.9"
+flate2 = "1"
 
 [dev-dependencies]
 arbitrary = { version = "1", features = ["derive"] }
