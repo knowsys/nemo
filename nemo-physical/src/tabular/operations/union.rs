@@ -51,10 +51,12 @@ impl OperationGenerator for GeneratorUnion {
         let mut active_scans = Vec::with_capacity(arity + 1);
         let mut column_scans = Vec::<UnsafeCell<ColumnScanRainbow<'a>>>::with_capacity(arity);
 
-        active_scans.push(Rc::new(RefCell::new((0..trie_scans.len()).collect())));
+        active_scans.push(Rc::new(UnsafeCell::new((0..trie_scans.len()).collect())));
 
         for layer in 0..arity {
-            active_scans.push(Rc::new(RefCell::new(Vec::with_capacity(trie_scans.len()))));
+            active_scans.push(Rc::new(UnsafeCell::new(Vec::with_capacity(
+                trie_scans.len(),
+            ))));
 
             macro_rules! union_scan {
                 ($type:ty, $scan:ident) => {{
@@ -110,7 +112,7 @@ pub(crate) struct TrieScanUnion<'a> {
 
     /// For each layer, contains a list of indices into `trie_scans`
     /// inidicating which input scans point to the same partial row of values
-    active_scans: Vec<Rc<RefCell<Vec<usize>>>>,
+    active_scans: Vec<Rc<UnsafeCell<Vec<usize>>>>,
     /// Current layer of this [PartialTrieScan]
     current_layer: Option<usize>,
 
@@ -137,8 +139,9 @@ impl<'a> PartialTrieScan<'a> for TrieScanUnion<'a> {
 
     fn down(&mut self, next_type: StorageTypeName) {
         let next_layer = self.current_layer.map_or(0, |layer| layer + 1);
+        let active_scans = unsafe { &*self.active_scans[next_layer].get() };
 
-        for &scan_index in self.active_scans[next_layer].borrow().iter() {
+        for &scan_index in active_scans.iter() {
             self.trie_scans[scan_index].down(next_type);
         }
 

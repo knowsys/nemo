@@ -1,6 +1,6 @@
 //! This module defines [ColumnScanUnion].
 
-use std::{cell::RefCell, fmt::Debug, ops::Range, rc::Rc};
+use std::{cell::UnsafeCell, fmt::Debug, ops::Range, rc::Rc};
 
 use crate::{
     columnar::columnscan::{ColumnScan, ColumnScanCell},
@@ -19,12 +19,12 @@ where
     /// Contains the indices of the entries in `column_scans` that are active
     ///
     /// Non-active scans are ignored during the computation of the union.
-    active_scans: Rc<RefCell<Vec<usize>>>,
+    active_scans: Rc<UnsafeCell<Vec<usize>>>,
 
     /// Contains the indices of the entries in `column_scans` that are pointing to the smallest element
     ///
     /// Non-active scans are ignored during the computation of the union.
-    smallest_scans: Rc<RefCell<Vec<usize>>>,
+    smallest_scans: Rc<UnsafeCell<Vec<usize>>>,
 
     /// Smallest value pointed to by the sub scans
     smallest_value: Option<T>,
@@ -37,8 +37,8 @@ where
     /// Constructs a new [ColumnScanUnion].
     pub(crate) fn new(
         column_scans: Vec<&'a ColumnScanCell<'a, T>>,
-        active_scans: Rc<RefCell<Vec<usize>>>,
-        smallest_scans: Rc<RefCell<Vec<usize>>>,
+        active_scans: Rc<UnsafeCell<Vec<usize>>>,
+        smallest_scans: Rc<UnsafeCell<Vec<usize>>>,
     ) -> ColumnScanUnion<'a, T> {
         ColumnScanUnion {
             column_scans,
@@ -59,10 +59,11 @@ where
         let mut next_smallest: Option<T> = None;
         let current_smallest = self.current();
 
-        let smallest_scans: &mut Vec<usize> = &mut *self.smallest_scans.borrow_mut();
+        let active_scans: &Vec<usize> = unsafe { &*self.active_scans.get() };
+        let smallest_scans: &mut Vec<usize> = unsafe { &mut *self.smallest_scans.get() };
         smallest_scans.clear();
 
-        for &scan_index in self.active_scans.borrow().iter() {
+        for &scan_index in active_scans {
             let current_element = self.column_scans[scan_index].current();
 
             let compare_element = if current_element == current_smallest {
@@ -95,12 +96,13 @@ where
     T: 'a + ColumnDataType,
 {
     fn seek(&mut self, value: T) -> Option<T> {
-        let smallest_scans: &mut Vec<usize> = &mut *self.smallest_scans.borrow_mut();
+        let active_scans: &Vec<usize> = unsafe { &*self.active_scans.get() };
+        let smallest_scans: &mut Vec<usize> = unsafe { &mut *self.smallest_scans.get() };
         smallest_scans.clear();
 
         let mut next_smallest: Option<T> = None;
 
-        for &scan_index in self.active_scans.borrow().iter() {
+        for &scan_index in active_scans {
             let current_element = self.column_scans[scan_index].seek(value);
 
             if next_smallest.is_none() {
@@ -139,7 +141,7 @@ where
 
 #[cfg(test)]
 mod test {
-    use std::{cell::RefCell, rc::Rc};
+    use std::{cell::UnsafeCell, rc::Rc};
 
     use crate::columnar::{
         column::{vector::ColumnVector, Column},
@@ -151,8 +153,8 @@ mod test {
 
     #[test]
     fn columnscan_union_basic() {
-        let active = Rc::new(RefCell::new((0..3).collect::<Vec<usize>>()));
-        let smallest = Rc::new(RefCell::new(vec![]));
+        let active = Rc::new(UnsafeCell::new((0..3).collect::<Vec<usize>>()));
+        let smallest = Rc::new(UnsafeCell::new(vec![]));
 
         let column_fst = ColumnVector::new(vec![0u64, 1, 3, 5, 15]);
         let column_snd = ColumnVector::new(vec![0u64, 1, 2, 7, 9]);
