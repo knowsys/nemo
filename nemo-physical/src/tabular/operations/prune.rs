@@ -67,7 +67,7 @@ impl<'a> TrieScanPrune<'a> {
                     // let mut input_scan: &'a ColumnScanCell<$type> =
                     //     &unsafe { &*input_trie_scan.scan(layer).get() }.$scan;
 
-                    ColumnScanEnum::ColumnScanPrune(ColumnScanPrune::new(
+                    ColumnScanEnum::Prune(ColumnScanPrune::new(
                         Rc::clone(&state),
                         layer,
                         StorageTypeName::$variant,
@@ -728,7 +728,7 @@ mod test {
         layer_1_equality: i64,
         layer_3_equality: i64,
     ) -> TrieScanPrune<'a> {
-        let scan_generic = TrieScanEnum::TrieScanGeneric(input_trie.partial_iterator());
+        let scan_generic = TrieScanEnum::Generic(input_trie.partial_iterator());
 
         let input_markers = OperationTable::new_unique(input_trie.arity());
         let marker_layer_1 = *input_markers.get(1);
@@ -767,8 +767,7 @@ mod test {
             &[4, 5],
         ]);
 
-        let mut scan =
-            TrieScanPrune::new(TrieScanEnum::TrieScanGeneric(input_trie.partial_iterator()));
+        let mut scan = TrieScanPrune::new(TrieScanEnum::Generic(input_trie.partial_iterator()));
 
         trie_dfs(
             &mut scan,
@@ -846,25 +845,25 @@ mod test {
 
         // Initialize trie
         scan.down(StorageTypeName::Int64);
-        assert_eq!(partial_scan_current_at_layer(&mut scan, ty, low), None);
+        assert_eq!(partial_scan_current_at_layer(&scan, ty, low), None);
 
         assert_eq!(scan.advance_on_layer(low, None), Some(0));
-        assert_eq!(partial_scan_current_at_layer(&mut scan, ty, low), svo_i(7));
+        assert_eq!(partial_scan_current_at_layer(&scan, ty, low), svo_i(7));
 
         assert_eq!(scan.advance_on_layer(low, None), Some(2));
-        assert_eq!(partial_scan_current_at_layer(&mut scan, ty, low), svo_i(7));
+        assert_eq!(partial_scan_current_at_layer(&scan, ty, low), svo_i(7));
 
         assert_eq!(scan.advance_on_layer(low, None), Some(0));
-        assert_eq!(partial_scan_current_at_layer(&mut scan, ty, low), svo_i(7));
+        assert_eq!(partial_scan_current_at_layer(&scan, ty, low), svo_i(7));
 
         assert_eq!(scan.advance_on_layer(low, None), None);
-        assert_eq!(partial_scan_current_at_layer(&mut scan, ty, low), None);
+        assert_eq!(partial_scan_current_at_layer(&scan, ty, low), None);
     }
 
     #[test]
     fn test_advance_highest_advanced_layer() {
         let trie = create_example_trie();
-        let scan = TrieScanEnum::TrieScanGeneric(trie.partial_iterator());
+        let scan = TrieScanEnum::Generic(trie.partial_iterator());
         let mut scan = TrieScanPrune::new(scan);
 
         let low = scan.arity() - 1;
@@ -872,40 +871,40 @@ mod test {
 
         // Initialize trie
         scan.down(StorageTypeName::Int64);
-        assert_eq!(partial_scan_current_at_layer(&mut scan, ty, low), None);
+        assert_eq!(partial_scan_current_at_layer(&scan, ty, low), None);
 
         assert_eq!(scan.advance_on_layer(low, None), Some(0));
-        assert_eq!(partial_scan_current_at_layer(&mut scan, ty, low), svo_i(3));
+        assert_eq!(partial_scan_current_at_layer(&scan, ty, low), svo_i(3));
 
         assert_eq!(scan.advance_on_layer(low, None), Some(3));
-        assert_eq!(partial_scan_current_at_layer(&mut scan, ty, low), svo_i(7));
+        assert_eq!(partial_scan_current_at_layer(&scan, ty, low), svo_i(7));
 
         assert_eq!(scan.advance_on_layer(low, None), Some(2));
-        assert_eq!(partial_scan_current_at_layer(&mut scan, ty, low), svo_i(5));
+        assert_eq!(partial_scan_current_at_layer(&scan, ty, low), svo_i(5));
 
         assert_eq!(scan.advance_on_layer(low, None), Some(3));
-        assert_eq!(partial_scan_current_at_layer(&mut scan, ty, low), svo_i(7));
+        assert_eq!(partial_scan_current_at_layer(&scan, ty, low), svo_i(7));
 
         assert_eq!(scan.advance_on_layer(low, None), Some(2));
-        assert_eq!(partial_scan_current_at_layer(&mut scan, ty, low), svo_i(3));
+        assert_eq!(partial_scan_current_at_layer(&scan, ty, low), svo_i(3));
 
         assert_eq!(scan.advance_on_layer(low, None), Some(3));
-        assert_eq!(partial_scan_current_at_layer(&mut scan, ty, low), svo_i(4));
+        assert_eq!(partial_scan_current_at_layer(&scan, ty, low), svo_i(4));
 
         assert_eq!(scan.advance_on_layer(low, None), Some(1));
-        assert_eq!(partial_scan_current_at_layer(&mut scan, ty, low), svo_i(6));
+        assert_eq!(partial_scan_current_at_layer(&scan, ty, low), svo_i(6));
 
         assert_eq!(scan.advance_on_layer(low, None), Some(0));
-        assert_eq!(partial_scan_current_at_layer(&mut scan, ty, low), svo_i(7));
+        assert_eq!(partial_scan_current_at_layer(&scan, ty, low), svo_i(7));
 
         assert_eq!(scan.advance_on_layer(low, None), None);
-        assert_eq!(partial_scan_current_at_layer(&mut scan, ty, low), None);
+        assert_eq!(partial_scan_current_at_layer(&scan, ty, low), None);
     }
 
     #[test]
     fn test_advance_with_column_peeks() {
         let trie = create_example_trie();
-        let scan = TrieScanEnum::TrieScanGeneric(trie.partial_iterator());
+        let scan = TrieScanEnum::Generic(trie.partial_iterator());
         let mut scan = TrieScanPrune::new(scan);
 
         let ty = StorageTypeName::Int64;
@@ -913,106 +912,106 @@ mod test {
         // Initialize trie
         scan.down(ty);
 
-        assert_eq!(partial_scan_current_at_layer(&mut scan, ty, 0), None);
-        assert_eq!(partial_scan_current_at_layer(&mut scan, ty, 1), None);
-        assert_eq!(partial_scan_current_at_layer(&mut scan, ty, 2), None);
-        assert_eq!(partial_scan_current_at_layer(&mut scan, ty, 3), None);
+        assert_eq!(partial_scan_current_at_layer(&scan, ty, 0), None);
+        assert_eq!(partial_scan_current_at_layer(&scan, ty, 1), None);
+        assert_eq!(partial_scan_current_at_layer(&scan, ty, 2), None);
+        assert_eq!(partial_scan_current_at_layer(&scan, ty, 3), None);
 
         // Only advance on highest layer
         assert_eq!(scan.advance_on_layer(0, None), Some(0));
-        assert_eq!(partial_scan_current_at_layer(&mut scan, ty, 0), svo_i(1));
-        assert_eq!(partial_scan_current_at_layer(&mut scan, ty, 1), None);
-        assert_eq!(partial_scan_current_at_layer(&mut scan, ty, 2), None);
-        assert_eq!(partial_scan_current_at_layer(&mut scan, ty, 3), None);
+        assert_eq!(partial_scan_current_at_layer(&scan, ty, 0), svo_i(1));
+        assert_eq!(partial_scan_current_at_layer(&scan, ty, 1), None);
+        assert_eq!(partial_scan_current_at_layer(&scan, ty, 2), None);
+        assert_eq!(partial_scan_current_at_layer(&scan, ty, 3), None);
 
         // On one layer below
         assert_eq!(scan.advance_on_layer(1, None), Some(1));
-        assert_eq!(partial_scan_current_at_layer(&mut scan, ty, 0), svo_i(1));
-        assert_eq!(partial_scan_current_at_layer(&mut scan, ty, 1), svo_i(4));
-        assert_eq!(partial_scan_current_at_layer(&mut scan, ty, 2), None);
-        assert_eq!(partial_scan_current_at_layer(&mut scan, ty, 3), None);
+        assert_eq!(partial_scan_current_at_layer(&scan, ty, 0), svo_i(1));
+        assert_eq!(partial_scan_current_at_layer(&scan, ty, 1), svo_i(4));
+        assert_eq!(partial_scan_current_at_layer(&scan, ty, 2), None);
+        assert_eq!(partial_scan_current_at_layer(&scan, ty, 3), None);
 
         // On lowest layer
         assert_eq!(scan.advance_on_layer(3, None), Some(2));
-        assert_eq!(partial_scan_current_at_layer(&mut scan, ty, 0), svo_i(1));
-        assert_eq!(partial_scan_current_at_layer(&mut scan, ty, 1), svo_i(4));
-        assert_eq!(partial_scan_current_at_layer(&mut scan, ty, 2), svo_i(0));
-        assert_eq!(partial_scan_current_at_layer(&mut scan, ty, 3), svo_i(3));
+        assert_eq!(partial_scan_current_at_layer(&scan, ty, 0), svo_i(1));
+        assert_eq!(partial_scan_current_at_layer(&scan, ty, 1), svo_i(4));
+        assert_eq!(partial_scan_current_at_layer(&scan, ty, 2), svo_i(0));
+        assert_eq!(partial_scan_current_at_layer(&scan, ty, 3), svo_i(3));
 
         assert_eq!(scan.advance_on_layer(3, None), Some(3));
-        assert_eq!(partial_scan_current_at_layer(&mut scan, ty, 0), svo_i(1));
-        assert_eq!(partial_scan_current_at_layer(&mut scan, ty, 1), svo_i(4));
-        assert_eq!(partial_scan_current_at_layer(&mut scan, ty, 2), svo_i(0));
-        assert_eq!(partial_scan_current_at_layer(&mut scan, ty, 3), svo_i(7));
+        assert_eq!(partial_scan_current_at_layer(&scan, ty, 0), svo_i(1));
+        assert_eq!(partial_scan_current_at_layer(&scan, ty, 1), svo_i(4));
+        assert_eq!(partial_scan_current_at_layer(&scan, ty, 2), svo_i(0));
+        assert_eq!(partial_scan_current_at_layer(&scan, ty, 3), svo_i(7));
 
         assert_eq!(scan.advance_on_layer(3, None), Some(2));
-        assert_eq!(partial_scan_current_at_layer(&mut scan, ty, 0), svo_i(1));
-        assert_eq!(partial_scan_current_at_layer(&mut scan, ty, 1), svo_i(4));
-        assert_eq!(partial_scan_current_at_layer(&mut scan, ty, 2), svo_i(1));
-        assert_eq!(partial_scan_current_at_layer(&mut scan, ty, 3), svo_i(5));
+        assert_eq!(partial_scan_current_at_layer(&scan, ty, 0), svo_i(1));
+        assert_eq!(partial_scan_current_at_layer(&scan, ty, 1), svo_i(4));
+        assert_eq!(partial_scan_current_at_layer(&scan, ty, 2), svo_i(1));
+        assert_eq!(partial_scan_current_at_layer(&scan, ty, 3), svo_i(5));
 
         assert_eq!(scan.advance_on_layer(1, None), Some(1));
-        assert_eq!(partial_scan_current_at_layer(&mut scan, ty, 0), svo_i(1));
-        assert_eq!(partial_scan_current_at_layer(&mut scan, ty, 1), svo_i(5));
-        assert_eq!(partial_scan_current_at_layer(&mut scan, ty, 2), None);
-        assert_eq!(partial_scan_current_at_layer(&mut scan, ty, 3), None);
+        assert_eq!(partial_scan_current_at_layer(&scan, ty, 0), svo_i(1));
+        assert_eq!(partial_scan_current_at_layer(&scan, ty, 1), svo_i(5));
+        assert_eq!(partial_scan_current_at_layer(&scan, ty, 2), None);
+        assert_eq!(partial_scan_current_at_layer(&scan, ty, 3), None);
 
         // Advance on highest layer
         assert_eq!(scan.advance_on_layer(0, None), Some(0));
-        assert_eq!(partial_scan_current_at_layer(&mut scan, ty, 0), svo_i(2));
-        assert_eq!(partial_scan_current_at_layer(&mut scan, ty, 1), None);
-        assert_eq!(partial_scan_current_at_layer(&mut scan, ty, 2), None);
-        assert_eq!(partial_scan_current_at_layer(&mut scan, ty, 3), None);
+        assert_eq!(partial_scan_current_at_layer(&scan, ty, 0), svo_i(2));
+        assert_eq!(partial_scan_current_at_layer(&scan, ty, 1), None);
+        assert_eq!(partial_scan_current_at_layer(&scan, ty, 2), None);
+        assert_eq!(partial_scan_current_at_layer(&scan, ty, 3), None);
     }
 
     #[ignore]
     #[test]
     fn test_advance_with_seek() {
         let trie = create_example_trie();
-        let scan = TrieScanEnum::TrieScanGeneric(trie.partial_iterator());
+        let scan = TrieScanEnum::Generic(trie.partial_iterator());
         let mut scan = TrieScanPrune::new(scan);
 
         let ty = StorageTypeName::Int64;
 
         // Initialize trie
         scan.down(ty);
-        assert_eq!(partial_scan_seek(&mut scan, sv_i(0)), svo_i(1));
+        assert_eq!(partial_scan_seek(&scan, sv_i(0)), svo_i(1));
 
         scan.down(ty);
-        assert_eq!(partial_scan_seek(&mut scan, sv_i(0)), svo_i(4));
+        assert_eq!(partial_scan_seek(&scan, sv_i(0)), svo_i(4));
 
         scan.down(ty);
-        assert_eq!(partial_scan_seek(&mut scan, sv_i(0)), svo_i(0));
+        assert_eq!(partial_scan_seek(&scan, sv_i(0)), svo_i(0));
 
         scan.down(ty);
-        assert_eq!(partial_scan_seek(&mut scan, sv_i(5)), svo_i(7));
-        assert_eq!(partial_scan_seek(&mut scan, sv_i(0)), svo_i(7));
-        assert_eq!(partial_scan_seek(&mut scan, sv_i(7)), svo_i(7));
+        assert_eq!(partial_scan_seek(&scan, sv_i(5)), svo_i(7));
+        assert_eq!(partial_scan_seek(&scan, sv_i(0)), svo_i(7));
+        assert_eq!(partial_scan_seek(&scan, sv_i(7)), svo_i(7));
 
-        assert_eq!(partial_scan_current_at_layer(&mut scan, ty, 0), svo_i(1));
-        assert_eq!(partial_scan_current_at_layer(&mut scan, ty, 1), svo_i(4));
-        assert_eq!(partial_scan_current_at_layer(&mut scan, ty, 2), svo_i(0));
-        assert_eq!(partial_scan_current_at_layer(&mut scan, ty, 3), svo_i(7));
+        assert_eq!(partial_scan_current_at_layer(&scan, ty, 0), svo_i(1));
+        assert_eq!(partial_scan_current_at_layer(&scan, ty, 1), svo_i(4));
+        assert_eq!(partial_scan_current_at_layer(&scan, ty, 2), svo_i(0));
+        assert_eq!(partial_scan_current_at_layer(&scan, ty, 3), svo_i(7));
 
-        assert_eq!(partial_scan_seek(&mut scan, sv_i(8)), None);
+        assert_eq!(partial_scan_seek(&scan, sv_i(8)), None);
 
-        assert_eq!(partial_scan_current_at_layer(&mut scan, ty, 0), svo_i(1));
-        assert_eq!(partial_scan_current_at_layer(&mut scan, ty, 1), svo_i(4));
-        assert_eq!(partial_scan_current_at_layer(&mut scan, ty, 2), svo_i(0));
-        assert_eq!(partial_scan_current_at_layer(&mut scan, ty, 3), None);
+        assert_eq!(partial_scan_current_at_layer(&scan, ty, 0), svo_i(1));
+        assert_eq!(partial_scan_current_at_layer(&scan, ty, 1), svo_i(4));
+        assert_eq!(partial_scan_current_at_layer(&scan, ty, 2), svo_i(0));
+        assert_eq!(partial_scan_current_at_layer(&scan, ty, 3), None);
 
         scan.up();
-        assert_eq!(partial_scan_seek(&mut scan, sv_i(2)), svo_i(2));
-        assert_eq!(partial_scan_current_at_layer(&mut scan, ty, 0), svo_i(1));
-        assert_eq!(partial_scan_current_at_layer(&mut scan, ty, 1), svo_i(4));
-        assert_eq!(partial_scan_current_at_layer(&mut scan, ty, 2), svo_i(2));
-        assert_eq!(partial_scan_current_at_layer(&mut scan, ty, 3), None);
+        assert_eq!(partial_scan_seek(&scan, sv_i(2)), svo_i(2));
+        assert_eq!(partial_scan_current_at_layer(&scan, ty, 0), svo_i(1));
+        assert_eq!(partial_scan_current_at_layer(&scan, ty, 1), svo_i(4));
+        assert_eq!(partial_scan_current_at_layer(&scan, ty, 2), svo_i(2));
+        assert_eq!(partial_scan_current_at_layer(&scan, ty, 3), None);
     }
 
     #[test]
     fn test_return_to_previous_layer() {
         let trie = create_example_trie();
-        let scan = TrieScanEnum::TrieScanGeneric(trie.partial_iterator());
+        let scan = TrieScanEnum::Generic(trie.partial_iterator());
         let mut scan = TrieScanPrune::new(scan);
 
         let ty = StorageTypeName::Int64;
@@ -1020,28 +1019,28 @@ mod test {
         // Initialize trie
         scan.down(ty);
 
-        assert_eq!(partial_scan_next(&mut scan, ty), svo_i(1));
-        assert_eq!(partial_scan_current(&mut scan, ty), svo_i(1));
+        assert_eq!(partial_scan_next(&scan, ty), svo_i(1));
+        assert_eq!(partial_scan_current(&scan, ty), svo_i(1));
 
         scan.down(ty);
-        assert_eq!(partial_scan_current(&mut scan, ty), None);
-        assert_eq!(partial_scan_next(&mut scan, ty), svo_i(4));
-        assert_eq!(partial_scan_current(&mut scan, ty), svo_i(4));
-        assert_eq!(partial_scan_next(&mut scan, ty), svo_i(5));
-        assert_eq!(partial_scan_current(&mut scan, ty), svo_i(5));
-        assert_eq!(partial_scan_next(&mut scan, ty), None);
-        assert_eq!(partial_scan_current(&mut scan, ty), None);
+        assert_eq!(partial_scan_current(&scan, ty), None);
+        assert_eq!(partial_scan_next(&scan, ty), svo_i(4));
+        assert_eq!(partial_scan_current(&scan, ty), svo_i(4));
+        assert_eq!(partial_scan_next(&scan, ty), svo_i(5));
+        assert_eq!(partial_scan_current(&scan, ty), svo_i(5));
+        assert_eq!(partial_scan_next(&scan, ty), None);
+        assert_eq!(partial_scan_current(&scan, ty), None);
 
         // Trie scan should return the same results after going up and down again
         scan.up();
         scan.down(ty);
-        assert_eq!(partial_scan_current(&mut scan, ty), None);
-        assert_eq!(partial_scan_next(&mut scan, ty), svo_i(4));
-        assert_eq!(partial_scan_current(&mut scan, ty), svo_i(4));
-        assert_eq!(partial_scan_next(&mut scan, ty), svo_i(5));
-        assert_eq!(partial_scan_current(&mut scan, ty), svo_i(5));
-        assert_eq!(partial_scan_next(&mut scan, ty), None);
-        assert_eq!(partial_scan_current(&mut scan, ty), None);
+        assert_eq!(partial_scan_current(&scan, ty), None);
+        assert_eq!(partial_scan_next(&scan, ty), svo_i(4));
+        assert_eq!(partial_scan_current(&scan, ty), svo_i(4));
+        assert_eq!(partial_scan_next(&scan, ty), svo_i(5));
+        assert_eq!(partial_scan_current(&scan, ty), svo_i(5));
+        assert_eq!(partial_scan_next(&scan, ty), None);
+        assert_eq!(partial_scan_current(&scan, ty), None);
     }
 
     #[ignore]
@@ -1060,12 +1059,12 @@ mod test {
         ]);
         let trie_b = trie_id32(vec![&[0], &[4]]);
 
-        let scan_a = TrieScanEnum::TrieScanPrune(TrieScanPrune::new(
-            TrieScanEnum::TrieScanGeneric(trie_a.partial_iterator()),
-        ));
-        let scan_b = TrieScanEnum::TrieScanPrune(TrieScanPrune::new(
-            TrieScanEnum::TrieScanGeneric(trie_b.partial_iterator()),
-        ));
+        let scan_a = TrieScanEnum::Prune(TrieScanPrune::new(TrieScanEnum::Generic(
+            trie_a.partial_iterator(),
+        )));
+        let scan_b = TrieScanEnum::Prune(TrieScanPrune::new(TrieScanEnum::Generic(
+            trie_b.partial_iterator(),
+        )));
 
         let join_scan = generate_join_scan(
             &dictionary,

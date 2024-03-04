@@ -198,7 +198,7 @@ impl OperationGenerator for GeneratorFilter {
                     match output_column {
                         OutputColumn::Filtered(program) => {
                             let input_scan = &unsafe { &*trie_scan.scan(index).get() }.$scan;
-                            ColumnScanEnum::ColumnScanFilter(ColumnScanFilter::new(
+                            ColumnScanEnum::Filter(ColumnScanFilter::new(
                                 input_scan,
                                 program.clone(),
                                 input_values.clone(),
@@ -210,16 +210,16 @@ impl OperationGenerator for GeneratorFilter {
                             if let StorageValueT::$variant(value) =
                                 constant.to_storage_value_t(&dictionary.borrow())
                             {
-                                ColumnScanEnum::ColumnScanFilterConstant(
-                                    ColumnScanFilterConstant::new(input_scan, value),
-                                )
+                                ColumnScanEnum::FilterConstant(ColumnScanFilterConstant::new(
+                                    input_scan, value,
+                                ))
                             } else {
-                                ColumnScanEnum::ColumnScanConstant(ColumnScanConstant::new(None))
+                                ColumnScanEnum::Constant(ColumnScanConstant::new(None))
                             }
                         }
                         OutputColumn::Input => {
                             let input_scan = &unsafe { &*trie_scan.scan(index).get() }.$scan;
-                            ColumnScanEnum::ColumnScanPass(ColumnScanPass::new(input_scan))
+                            ColumnScanEnum::Pass(ColumnScanPass::new(input_scan))
                         }
                     }
                 }};
@@ -241,7 +241,7 @@ impl OperationGenerator for GeneratorFilter {
             column_scans.push(UnsafeCell::new(new_scan));
         }
 
-        Some(TrieScanEnum::TrieScanFilter(TrieScanFilter {
+        Some(TrieScanEnum::Filter(TrieScanFilter {
             trie_scan: Box::new(trie_scan),
             dictionary,
             input_indices: self.input_indices.clone(),
@@ -354,7 +354,7 @@ mod test {
             &[1, 5, 1, 6],
         ]);
 
-        let trie_scan = TrieScanEnum::TrieScanGeneric(trie.partial_iterator());
+        let trie_scan = TrieScanEnum::Generic(trie.partial_iterator());
 
         let mut marker_generator = OperationTableGenerator::new();
         marker_generator.add_marker("x");
@@ -407,7 +407,7 @@ mod test {
             &[1, 5, 1, 6],
         ]);
 
-        let trie_scan = TrieScanEnum::TrieScanGeneric(trie.partial_iterator());
+        let trie_scan = TrieScanEnum::Generic(trie.partial_iterator());
 
         let mut marker_generator = OperationTableGenerator::new();
         marker_generator.add_marker("x");
@@ -454,7 +454,7 @@ mod test {
 
         let trie = trie_int64(vec![&[1, 5], &[5, 2], &[5, 4], &[5, 7], &[8, 5]]);
 
-        let trie_scan = TrieScanEnum::TrieScanGeneric(trie.partial_iterator());
+        let trie_scan = TrieScanEnum::Generic(trie.partial_iterator());
 
         let mut marker_generator = OperationTableGenerator::new();
         marker_generator.add_marker("x");
@@ -492,7 +492,7 @@ mod test {
 
         let trie = trie_int64(vec![&[1, 5], &[5, 2], &[5, 5], &[5, 7], &[8, 5], &[8, 8]]);
 
-        let trie_scan = TrieScanEnum::TrieScanGeneric(trie.partial_iterator());
+        let trie_scan = TrieScanEnum::Generic(trie.partial_iterator());
 
         let mut marker_generator = OperationTableGenerator::new();
         marker_generator.add_marker("x");
@@ -543,7 +543,7 @@ mod test {
             &[12, 18],
         ]);
 
-        let trie_scan = TrieScanEnum::TrieScanGeneric(trie.partial_iterator());
+        let trie_scan = TrieScanEnum::Generic(trie.partial_iterator());
 
         let mut marker_generator = OperationTableGenerator::new();
         marker_generator.add_marker("x");
@@ -588,7 +588,7 @@ mod test {
             &[8, 5, 8],
         ]);
 
-        let trie_scan = TrieScanEnum::TrieScanGeneric(trie.partial_iterator());
+        let trie_scan = TrieScanEnum::Generic(trie.partial_iterator());
 
         let mut marker_generator = OperationTableGenerator::new();
         marker_generator.add_marker("x");

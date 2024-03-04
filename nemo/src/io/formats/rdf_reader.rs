@@ -146,7 +146,7 @@ impl RdfReader {
         let skip: Vec<bool> = self
             .value_formats
             .iter()
-            .map(|vf| *vf == RdfValueFormat::SKIP)
+            .map(|vf| *vf == RdfValueFormat::Skip)
             .collect();
 
         assert_eq!(skip.len(), 3);
@@ -215,7 +215,7 @@ impl RdfReader {
         let skip: Vec<bool> = self
             .value_formats
             .iter()
-            .map(|vf| *vf == RdfValueFormat::SKIP)
+            .map(|vf| *vf == RdfValueFormat::Skip)
             .collect();
 
         assert_eq!(skip.len(), 4);
@@ -347,9 +347,9 @@ mod test {
             RdfVariant::NTriples,
             None,
             vec![
-                RdfValueFormat::ANYTHING,
-                RdfValueFormat::ANYTHING,
-                RdfValueFormat::ANYTHING,
+                RdfValueFormat::Anything,
+                RdfValueFormat::Anything,
+                RdfValueFormat::Anything,
             ],
         );
         let dict = RefCell::new(Dict::default());
@@ -371,9 +371,9 @@ mod test {
             RdfVariant::Turtle,
             None,
             vec![
-                RdfValueFormat::ANYTHING,
-                RdfValueFormat::ANYTHING,
-                RdfValueFormat::ANYTHING,
+                RdfValueFormat::Anything,
+                RdfValueFormat::Anything,
+                RdfValueFormat::Anything,
             ],
         );
         let dict = RefCell::new(Dict::default());
@@ -397,9 +397,9 @@ mod test {
             RdfVariant::NTriples,
             None,
             vec![
-                RdfValueFormat::ANYTHING,
-                RdfValueFormat::ANYTHING,
-                RdfValueFormat::ANYTHING,
+                RdfValueFormat::Anything,
+                RdfValueFormat::Anything,
+                RdfValueFormat::Anything,
             ],
         );
         let dict = RefCell::new(Dict::default());

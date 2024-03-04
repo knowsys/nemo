@@ -187,7 +187,7 @@ impl AnyDataValue {
             ($lexical_value:expr$(;$min:expr;$max:expr;$typename:expr)?) => {
                 match i64::from_str(&$lexical_value) {
                     Ok(value) => {
-                        $(if value < $min || value > $max {
+                        $(if !($min..=$max).contains(&value) {
                             return Err(DataValueCreationError::IntegerRange{min: $min, max: $max, value, datatype_name: $typename.to_string()})
                         })?
                         Ok(Self::new_integer_from_i64(value))
@@ -506,7 +506,7 @@ impl AnyDataValue {
     /// The correct process in this case is to use the dictionary to create any null value on which this
     /// method will later be called. It is not possible to newly create a dictionary id for an arbitrary
     /// null value (in such a way that the same ID will be returned if an equal null value is converted).
-    pub(crate) fn to_storage_value_t_mut(&self, dictionary: &mut Dict) -> StorageValueT {
+    pub(crate) fn to_storage_value_t_dict(&self, dictionary: &mut Dict) -> StorageValueT {
         match self.value_domain() {
             ValueDomain::Tuple
             | ValueDomain::Map
@@ -615,7 +615,7 @@ impl DataValue for AnyDataValue {
             fn to_null(&self) -> Option<NullDataValue>;
             fn to_null_unchecked(&self) -> NullDataValue;
             fn tuple_element(&self, index: usize) -> Option<&AnyDataValue>;
-            fn len(&self) -> Option<usize>;
+            fn length(&self) -> Option<usize>;
             fn len_unchecked(&self) -> usize;
             fn tuple_element_unchecked(&self, _index: usize) -> &AnyDataValue;
         }
@@ -900,7 +900,7 @@ mod test {
         assert_eq!(dv.to_f64(), None);
         assert_eq!(dv.to_f32_unchecked(), value);
         assert_eq!(dv, AnyDataValue::new_float_from_f32(value).unwrap());
-        assert_ne!(dv, AnyDataValue::new_float_from_f32(3.14).unwrap());
+        assert_ne!(dv, AnyDataValue::new_float_from_f32(3.41).unwrap());
         assert_ne!(dv, AnyDataValue::new_double_from_f64(2.3456e3).unwrap());
     }
 
@@ -920,7 +920,7 @@ mod test {
         assert_eq!(dv.to_f32(), None);
         assert_eq!(dv.to_f64_unchecked(), value);
         assert_eq!(dv, AnyDataValue::new_double_from_f64(value).unwrap());
-        assert_ne!(dv, AnyDataValue::new_double_from_f64(3.14).unwrap());
+        assert_ne!(dv, AnyDataValue::new_double_from_f64(3.41).unwrap());
         assert_ne!(dv, AnyDataValue::new_float_from_f32(2.3456e3).unwrap());
     }
 

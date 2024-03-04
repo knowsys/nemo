@@ -57,7 +57,7 @@ impl OperationGenerator for GeneratorUnion {
                         input_scans.push(input_scan);
                     }
 
-                    ColumnScanEnum::ColumnScanUnion(ColumnScanUnion::new(input_scans))
+                    ColumnScanEnum::Union(ColumnScanUnion::new(input_scans))
                 }};
             }
 
@@ -77,7 +77,7 @@ impl OperationGenerator for GeneratorUnion {
             column_scans.push(UnsafeCell::new(new_scan));
         }
 
-        Some(TrieScanEnum::TrieScanUnion(TrieScanUnion {
+        Some(TrieScanEnum::Union(TrieScanUnion {
             trie_scans,
             column_scans,
             path_types: Vec::new(),
@@ -205,9 +205,9 @@ mod test {
         let trie_b = trie_id32(vec![&[1, 2], &[1, 4], &[2, 4], &[7, 8], &[7, 9]]);
         let trie_c = trie_id32(vec![&[1, 1], &[1, 4], &[1, 6], &[3, 3], &[7, 7], &[7, 8]]);
 
-        let trie_a_scan = TrieScanEnum::TrieScanGeneric(trie_a.partial_iterator());
-        let trie_b_scan = TrieScanEnum::TrieScanGeneric(trie_b.partial_iterator());
-        let trie_c_scan = TrieScanEnum::TrieScanGeneric(trie_c.partial_iterator());
+        let trie_a_scan = TrieScanEnum::Generic(trie_a.partial_iterator());
+        let trie_b_scan = TrieScanEnum::Generic(trie_b.partial_iterator());
+        let trie_c_scan = TrieScanEnum::Generic(trie_c.partial_iterator());
 
         let union_generator = GeneratorUnion::new();
         let mut union_scan = union_generator
@@ -268,8 +268,8 @@ mod test {
             &[10, 2],
         ]);
 
-        let trie_a_scan = TrieScanEnum::TrieScanGeneric(trie_a.partial_iterator());
-        let trie_b_scan = TrieScanEnum::TrieScanGeneric(trie_b.partial_iterator());
+        let trie_a_scan = TrieScanEnum::Generic(trie_a.partial_iterator());
+        let trie_b_scan = TrieScanEnum::Generic(trie_b.partial_iterator());
 
         let union_generator = GeneratorUnion::new();
         let mut union_scan = union_generator
@@ -317,8 +317,8 @@ mod test {
         let trie_a = trie_id32(vec![&[4, 1, 2]]);
         let trie_b = trie_id32(vec![&[1, 4, 1], &[2, 4, 1], &[4, 1, 4]]);
 
-        let trie_a_scan = TrieScanEnum::TrieScanGeneric(trie_a.partial_iterator());
-        let trie_b_scan = TrieScanEnum::TrieScanGeneric(trie_b.partial_iterator());
+        let trie_a_scan = TrieScanEnum::Generic(trie_a.partial_iterator());
+        let trie_b_scan = TrieScanEnum::Generic(trie_b.partial_iterator());
 
         let union_generator = GeneratorUnion::new();
         let mut union_scan = union_generator
@@ -350,8 +350,8 @@ mod test {
         let trie_a = trie_id32(vec![&[1, 3], &[1, 4], &[2, 5]]);
         let trie_b = trie_id32(vec![&[2, 5], &[2, 6]]);
 
-        let trie_a_scan = TrieScanEnum::TrieScanGeneric(trie_a.partial_iterator());
-        let trie_b_scan = TrieScanEnum::TrieScanGeneric(trie_b.partial_iterator());
+        let trie_a_scan = TrieScanEnum::Generic(trie_a.partial_iterator());
+        let trie_b_scan = TrieScanEnum::Generic(trie_b.partial_iterator());
 
         let union_generator = GeneratorUnion::new();
         let mut union_scan = union_generator
@@ -381,10 +381,10 @@ mod test {
         let trie_c = trie_id32(vec![&[1, 2], &[1, 4], &[2, 4], &[4, 1]]);
         let trie_d = trie_id32(vec![&[1, 4], &[4, 1]]);
 
-        let trie_a_scan = TrieScanEnum::TrieScanGeneric(trie_a.partial_iterator());
-        let trie_b_scan = TrieScanEnum::TrieScanGeneric(trie_b.partial_iterator());
-        let trie_c_scan = TrieScanEnum::TrieScanGeneric(trie_c.partial_iterator());
-        let trie_d_scan = TrieScanEnum::TrieScanGeneric(trie_d.partial_iterator());
+        let trie_a_scan = TrieScanEnum::Generic(trie_a.partial_iterator());
+        let trie_b_scan = TrieScanEnum::Generic(trie_b.partial_iterator());
+        let trie_c_scan = TrieScanEnum::Generic(trie_c.partial_iterator());
+        let trie_d_scan = TrieScanEnum::Generic(trie_d.partial_iterator());
 
         let mut marker_generator = OperationTableGenerator::new();
         marker_generator.add_marker("x");

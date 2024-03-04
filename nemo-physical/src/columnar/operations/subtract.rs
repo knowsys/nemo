@@ -191,11 +191,9 @@ mod test {
         let column_subtract = ColumnVector::new(vec![0u64, 2, 4, 8, 9, 12, 17]);
         let column_follow = ColumnVector::new(vec![0u64, 1, 2, 5, 8, 10, 12, 14]);
 
-        let iter_main = ColumnScanCell::new(ColumnScanEnum::ColumnScanVector(column_main.iter()));
-        let iter_subtract =
-            ColumnScanCell::new(ColumnScanEnum::ColumnScanVector(column_subtract.iter()));
-        let iter_follow =
-            ColumnScanCell::new(ColumnScanEnum::ColumnScanVector(column_follow.iter()));
+        let iter_main = ColumnScanCell::new(ColumnScanEnum::Vector(column_main.iter()));
+        let iter_subtract = ColumnScanCell::new(ColumnScanEnum::Vector(column_subtract.iter()));
+        let iter_follow = ColumnScanCell::new(ColumnScanEnum::Vector(column_follow.iter()));
 
         let mut subtract_scan = ColumnScanSubtract::new(
             &iter_main,

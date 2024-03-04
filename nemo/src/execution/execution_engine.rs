@@ -130,7 +130,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         for (import_predicate, import_handler) in program.imports() {
             let import_arity = table_manager.arity(import_predicate);
             let table_source = TableSource::new(
-                input_manager.table_provider_from_handler(import_handler, import_arity)?,
+                input_manager.table_provider_from_handler(&**import_handler, import_arity)?,
                 import_arity,
             );
 

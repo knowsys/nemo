@@ -109,7 +109,7 @@ impl OrderedReferenceManager {
         let (id, _) = self.resolve_reference(id, ColumnOrder::default());
 
         if let Some(order_map) = self.storage_map.get(&id) {
-            for (_, &storage_id) in order_map {
+            if let Some(&storage_id) = order_map.values().next() {
                 return self.stored_tables[storage_id].count_rows();
             }
 
@@ -369,7 +369,7 @@ mod test {
         let order_third = ColumnOrder::from_vector(vec![3, 4, 0, 1, 2]);
         manager.add_source(id_reference, order_third, empty_source());
 
-        let reference_available_orders = vec![
+        let reference_available_orders = [
             ColumnOrder::from_vector(vec![3, 4, 1, 0, 2]),
             ColumnOrder::from_vector(vec![3, 0, 1, 4, 2]),
             ColumnOrder::from_vector(vec![0, 2, 1, 3, 4]),
@@ -394,7 +394,7 @@ mod test {
             permutation_second_reference,
         );
 
-        let reference_available_orders = vec![
+        let reference_available_orders = [
             ColumnOrder::from_vector(vec![3, 4, 0, 2, 1]),
             ColumnOrder::from_vector(vec![3, 0, 4, 2, 1]),
             ColumnOrder::from_vector(vec![0, 1, 3, 2, 4]),

@@ -219,7 +219,7 @@ impl BinaryFunction for StringSubstring {
         parameter_second: AnyDataValue,
     ) -> Option<AnyDataValue> {
         let string = parameter_first.to_plain_string()?;
-        let start = parameter_second.to_u64()? as usize;
+        let start = usize::try_from(parameter_second.to_u64()?).ok()?;
 
         Some(AnyDataValue::new_plain_string(string[start..].to_string()))
     }

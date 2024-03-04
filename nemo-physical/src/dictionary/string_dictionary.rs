@@ -78,24 +78,6 @@ crate::dictionary::bytes_buffer::declare_bytes_buffer!(
 );
 pub(crate) type StringDictionary = GenericStringDictionary<StringDictBytesBuffer>;
 
-/// This implementation is only provided public to benchmark this part of the code.
-/// May be removed at some point. Don't use.
-#[derive(Debug, Default)]
-pub struct BenchmarkStringDictionary(StringDictionary);
-impl BenchmarkStringDictionary {
-    /// Adds a new string to the dictionary. If the string is not known yet, it will
-    /// be assigned a new id.
-    pub fn add_str(&mut self, string: &str) -> AddResult {
-        self.0.add_str(string)
-    }
-
-    /// Returns the number of elements in the dictionary. Strings that are merely
-    /// marked are not counted here.
-    pub fn len(&self) -> usize {
-        self.0.len()
-    }
-}
-
 #[cfg(test)]
 mod test {
     use super::StringDictionary;

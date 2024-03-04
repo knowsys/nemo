@@ -82,7 +82,7 @@ enum PossibleTypeInformation {
     /// Layer could be of all types
     Unkown,
     /// Layer can only have the type specified by the [StorageTypeBitSet]
-    Known(StorageTypeBitSet),
+    _Known(StorageTypeBitSet),
     /// Layer has the same possible types as another
     Inferred(usize),
     /// Layer has the same possible types as the input trie of the given layer
@@ -117,12 +117,12 @@ impl GeneratorFunction {
             if referenced_columns.contains(marker_output) {
                 // Column is input to some function
                 let num_function_input = reference_map.len();
-                if let Entry::Vacant(entry) = reference_map.entry(marker_output.clone()) {
+                if let Entry::Vacant(entry) = reference_map.entry(*marker_output) {
                     entry.insert(num_function_input);
                 }
             }
 
-            if functions.get(&marker_output).is_none() {
+            if functions.get(marker_output).is_none() {
                 // Column is part of the input trie
                 type_information[layer_output] = PossibleTypeInformation::Input(layer_input);
                 layer_input += 1;
@@ -186,7 +186,7 @@ impl GeneratorFunction {
 
         let layer_information = input_information
             .into_iter()
-            .zip(computed_information.into_iter())
+            .zip(computed_information)
             .map(|(input, computed)| LayerInformation { computed, input })
             .collect::<Vec<_>>();
 
@@ -230,12 +230,12 @@ impl OperationGenerator for GeneratorFunction {
                 ($type:ty, $scan:ident) => {{
                     match information.computed {
                         ComputedMarker::Computed | ComputedMarker::Copy(_) => {
-                            ColumnScanEnum::ColumnScanConstant(ColumnScanConstant::new(None))
+                            ColumnScanEnum::Constant(ColumnScanConstant::new(None))
                         }
                         ComputedMarker::Input => {
                             let input_scan = &unsafe { &*trie_scan.scan(input_index).get() }.$scan;
 
-                            ColumnScanEnum::ColumnScanPass(ColumnScanPass::new(input_scan))
+                            ColumnScanEnum::Pass(ColumnScanPass::new(input_scan))
                         }
                     }
                 }};
@@ -264,7 +264,7 @@ impl OperationGenerator for GeneratorFunction {
         for (any_value, output_layer) in &self.constant_functions {
             let storage_value = any_value
                 .as_ref()
-                .map(|value| value.to_storage_value_t_mut(&mut dictionary.borrow_mut()));
+                .map(|value| value.to_storage_value_t_dict(&mut dictionary.borrow_mut()));
 
             if let Some(storage_value) = storage_value {
                 column_scans[*output_layer]
@@ -273,7 +273,7 @@ impl OperationGenerator for GeneratorFunction {
             }
         }
 
-        Some(TrieScanEnum::TrieScanFunction(TrieScanFunction {
+        Some(TrieScanEnum::Function(TrieScanFunction {
             trie_scan: Box::new(trie_scan),
             dictionary,
             input_values: Vec::new(),
@@ -354,7 +354,7 @@ impl<'a> PartialTrieScan<'a> for TrieScanFunction<'a> {
                     let dictionary = &mut self.dictionary.borrow_mut();
                     let program_result = program
                         .evaluate_data(&self.input_values)
-                        .map(|result| result.to_storage_value_t_mut(dictionary));
+                        .map(|result| result.to_storage_value_t_dict(dictionary));
 
                     self.column_scans[*output_layer]
                         .get_mut()
@@ -408,7 +408,7 @@ impl<'a> PartialTrieScan<'a> for TrieScanFunction<'a> {
     fn possible_types(&self, layer: usize) -> StorageTypeBitSet {
         match self.type_information[layer] {
             PossibleTypeInformation::Unkown => StorageTypeBitSet::full(),
-            PossibleTypeInformation::Known(value) => value,
+            PossibleTypeInformation::_Known(value) => value,
             PossibleTypeInformation::Inferred(index) => self.possible_types(index),
             PossibleTypeInformation::Input(layer) => self.trie_scan.possible_types(layer),
         }
@@ -451,7 +451,7 @@ mod test {
             &[3, 9, 8],
         ]);
 
-        let trie_scan = TrieScanEnum::TrieScanGeneric(trie.partial_iterator());
+        let trie_scan = TrieScanEnum::Generic(trie.partial_iterator());
 
         let mut marker_generator = OperationTableGenerator::new();
         marker_generator.add_marker("x");
@@ -545,7 +545,7 @@ mod test {
             &[2, 5, 6, 10, 11],
         ]);
 
-        let trie_scan = TrieScanEnum::TrieScanGeneric(trie.partial_iterator());
+        let trie_scan = TrieScanEnum::Generic(trie.partial_iterator());
 
         let mut marker_generator = OperationTableGenerator::new();
         marker_generator.add_marker("x");
@@ -618,7 +618,7 @@ mod test {
 
         let trie = trie_int64(vec![&[1, 3], &[1, 4], &[2, 5]]);
 
-        let trie_scan = TrieScanEnum::TrieScanGeneric(trie.partial_iterator());
+        let trie_scan = TrieScanEnum::Generic(trie.partial_iterator());
 
         let mut marker_generator = OperationTableGenerator::new();
         marker_generator.add_marker("x");
@@ -667,21 +667,36 @@ mod test {
     #[test]
     fn function_repeat_multiple_types() {
         let mut dictionary = Dict::default();
-        let a = dictionary
-            .add_datavalue(AnyDataValue::new_plain_string(String::from("a")))
-            .value() as u32;
-        let b = dictionary
-            .add_datavalue(AnyDataValue::new_plain_string(String::from("b")))
-            .value() as u32;
-        let foo1 = dictionary
-            .add_datavalue(AnyDataValue::new_plain_string(String::from("foo1")))
-            .value() as u32;
-        let foo2 = dictionary
-            .add_datavalue(AnyDataValue::new_plain_string(String::from("foo2")))
-            .value() as u32;
-        let bar = dictionary
-            .add_datavalue(AnyDataValue::new_plain_string(String::from("bar")))
-            .value() as u32;
+        let a = u32::try_from(
+            dictionary
+                .add_datavalue(AnyDataValue::new_plain_string(String::from("a")))
+                .value(),
+        )
+        .expect("The dictionary should not immediately return large ids");
+        let b = u32::try_from(
+            dictionary
+                .add_datavalue(AnyDataValue::new_plain_string(String::from("b")))
+                .value(),
+        )
+        .expect("The dictionary should not immediately return large ids");
+        let foo1 = u32::try_from(
+            dictionary
+                .add_datavalue(AnyDataValue::new_plain_string(String::from("foo1")))
+                .value(),
+        )
+        .expect("The dictionary should not immediately return large ids");
+        let foo2 = u32::try_from(
+            dictionary
+                .add_datavalue(AnyDataValue::new_plain_string(String::from("foo2")))
+                .value(),
+        )
+        .expect("The dictionary should not immediately return large ids");
+        let bar = u32::try_from(
+            dictionary
+                .add_datavalue(AnyDataValue::new_plain_string(String::from("bar")))
+                .value(),
+        )
+        .expect("The dictionary should not immediately return large ids");
         let dictionary = RefCell::new(dictionary);
 
         let trie = Trie::from_rows(vec![
@@ -691,7 +706,7 @@ mod test {
             vec![StorageValueT::Id32(b), StorageValueT::Id32(bar)],
         ]);
 
-        let trie_scan = TrieScanEnum::TrieScanGeneric(trie.partial_iterator());
+        let trie_scan = TrieScanEnum::Generic(trie.partial_iterator());
 
         let mut marker_generator = OperationTableGenerator::new();
         marker_generator.add_marker("x");
@@ -739,12 +754,18 @@ mod test {
     #[test]
     fn function_new_value() {
         let mut dictionary = Dict::default();
-        let hello = dictionary
-            .add_datavalue(AnyDataValue::new_plain_string(String::from("hello: ")))
-            .value() as u32;
-        let world = dictionary
-            .add_datavalue(AnyDataValue::new_plain_string(String::from("world: ")))
-            .value() as u32;
+        let hello = u32::try_from(
+            dictionary
+                .add_datavalue(AnyDataValue::new_plain_string(String::from("hello: ")))
+                .value(),
+        )
+        .expect("The dictionary should not immediately return large ids");
+        let world = u32::try_from(
+            dictionary
+                .add_datavalue(AnyDataValue::new_plain_string(String::from("world: ")))
+                .value(),
+        )
+        .expect("The dictionary should not immediately return large ids");
         let dictionary = RefCell::new(dictionary);
 
         let trie = Trie::from_rows(vec![
@@ -752,7 +773,7 @@ mod test {
             vec![StorageValueT::Int64(20), StorageValueT::Id32(world)],
         ]);
 
-        let trie_scan = TrieScanEnum::TrieScanGeneric(trie.partial_iterator());
+        let trie_scan = TrieScanEnum::Generic(trie.partial_iterator());
 
         let mut marker_generator = OperationTableGenerator::new();
         marker_generator.add_marker("int");

@@ -82,7 +82,7 @@ impl SortedChoice {
     /// Turn this function into a permutation.
     /// All inputs outside of this domain will be mapped to themselves.
     #[cfg(test)]
-    pub(crate) fn into_permutation(&self) -> Permutation {
+    pub(crate) fn as_permutation(&self) -> Permutation {
         debug_assert!(self.is_permutation());
         Permutation::from_map(self.map.clone())
     }
@@ -254,12 +254,12 @@ mod test {
         let vector = vec![2, 0, 1];
         let choice = SortedChoice::from_vector(vector.clone(), vector.len());
         let permutation = Permutation::from_vector(vector);
-        assert_eq!(permutation, choice.into_permutation());
+        assert_eq!(permutation, choice.as_permutation());
 
         let vector = vec![2, 0, 1, 4, 3];
         let choice = SortedChoice::from_vector(vector.clone(), vector.len());
         let permutation = Permutation::from_vector(vector);
-        assert_eq!(permutation, choice.into_permutation());
+        assert_eq!(permutation, choice.as_permutation());
     }
 
     #[test]

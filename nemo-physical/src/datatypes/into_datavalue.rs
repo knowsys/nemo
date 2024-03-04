@@ -37,7 +37,7 @@ impl IntoDataValue for u32 {
 
 impl IntoDataValue for u64 {
     fn into_datavalue(self, dictionary: &Dict) -> Option<AnyDataValue> {
-        dictionary.id_to_datavalue(self as usize)
+        dictionary.id_to_datavalue(usize::try_from(self).ok()?)
     }
 }
 

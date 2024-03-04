@@ -204,8 +204,8 @@ mod test {
             &[8, 9],
         ]);
 
-        let trie_a_scan = TrieScanEnum::TrieScanGeneric(trie_a.partial_iterator());
-        let trie_b_scan = TrieScanEnum::TrieScanGeneric(trie_b.partial_iterator());
+        let trie_a_scan = TrieScanEnum::Generic(trie_a.partial_iterator());
+        let trie_b_scan = TrieScanEnum::Generic(trie_b.partial_iterator());
 
         let join_scan = generate_join_scan(
             &dictionary,

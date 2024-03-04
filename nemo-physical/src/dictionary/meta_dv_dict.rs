@@ -88,15 +88,15 @@ const BLOCKSIZE: u32 = 24;
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 enum DictionaryType {
     /// Dictionary for string datavalues
-    StringDv,
+    String,
     /// Dictionary for language-tagged string datavalues
-    LangStringDv,
+    LangString,
     /// Dictionary for IRI datavalues
-    IriDv,
+    Iri,
     /// Dictionary for other datavalues
-    OtherDv,
+    Other,
     /// Dictionary for null datavalues
-    NullDv,
+    Null,
     // /// Dictionary for long strings (blobs)
     // Blob,
     // /// Dictionary for strings with a fixed prefix and suffix
@@ -110,14 +110,17 @@ enum DictionaryType {
 impl DictionaryType {
     /// Returns true if the given value is supported by a dictionary of this type.
     fn supports(&self, dv: &AnyDataValue) -> bool {
-        match (self, dv.value_domain()) {
-            (DictionaryType::IriDv, ValueDomain::Iri) => true,
-            (DictionaryType::StringDv, ValueDomain::PlainString) => true,
-            (DictionaryType::LangStringDv, ValueDomain::LanguageTaggedString) => true,
-            (DictionaryType::OtherDv, ValueDomain::Other) => true,
-            (DictionaryType::NullDv, ValueDomain::Null) => true,
-            _ => false,
-        }
+        matches!(
+            (self, dv.value_domain()),
+            (DictionaryType::Iri, ValueDomain::Iri)
+                | (DictionaryType::String, ValueDomain::PlainString)
+                | (
+                    DictionaryType::LangString,
+                    ValueDomain::LanguageTaggedString
+                )
+                | (DictionaryType::Other, ValueDomain::Other)
+                | (DictionaryType::Null, ValueDomain::Null)
+        )
     }
 }
 
@@ -256,11 +259,11 @@ impl Default for MetaDvDictionary {
             size: 0,
         };
 
-        result.add_dictionary(DictionaryType::IriDv);
-        result.add_dictionary(DictionaryType::StringDv);
-        result.add_dictionary(DictionaryType::LangStringDv);
-        result.add_dictionary(DictionaryType::OtherDv);
-        result.add_dictionary(DictionaryType::NullDv);
+        result.add_dictionary(DictionaryType::Iri);
+        result.add_dictionary(DictionaryType::String);
+        result.add_dictionary(DictionaryType::LangString);
+        result.add_dictionary(DictionaryType::Other);
+        result.add_dictionary(DictionaryType::Null);
 
         result
     }
@@ -351,35 +354,35 @@ impl MetaDvDictionary {
     fn add_dictionary(&mut self, dt: DictionaryType) {
         let dict: Box<dyn DvDict>;
         match dt {
-            DictionaryType::StringDv => {
+            DictionaryType::String => {
                 if self.string_dict != NO_DICT {
                     return;
                 }
                 dict = Box::new(StringDvDictionary::new());
                 self.string_dict = self.dicts.len();
             }
-            DictionaryType::LangStringDv => {
+            DictionaryType::LangString => {
                 if self.langstring_dict != NO_DICT {
                     return;
                 }
                 dict = Box::new(LangStringDvDictionary::new());
                 self.langstring_dict = self.dicts.len();
             }
-            DictionaryType::IriDv => {
+            DictionaryType::Iri => {
                 if self.iri_dict != NO_DICT {
                     return;
                 }
                 dict = Box::new(IriDvDictionary::new());
                 self.iri_dict = self.dicts.len();
             }
-            DictionaryType::OtherDv => {
+            DictionaryType::Other => {
                 if self.other_dict != NO_DICT {
                     return;
                 }
                 dict = Box::new(OtherDvDictionary::new());
                 self.other_dict = self.dicts.len();
             }
-            DictionaryType::NullDv => {
+            DictionaryType::Null => {
                 if self.null_dict != NO_DICT {
                     return;
                 }
@@ -609,20 +612,16 @@ mod test {
     fn add_and_get() {
         let mut dict = MetaDvDictionary::new();
 
-        let mut dvs = Vec::new();
-        dvs.push(AnyDataValue::new_plain_string(
-            "http://example.org".to_string(),
-        ));
-        dvs.push(AnyDataValue::new_plain_string("another string".to_string()));
-        dvs.push(AnyDataValue::new_iri("http://example.org".to_string()));
-        dvs.push(AnyDataValue::new_language_tagged_string(
-            "Hallo".to_string(),
-            "de".to_string(),
-        ));
-        dvs.push(AnyDataValue::new_other(
-            "abc".to_string(),
-            "http://example.org/mydatatype".to_string(),
-        ));
+        let dvs = vec![
+            AnyDataValue::new_plain_string("http://example.org".to_string()),
+            AnyDataValue::new_plain_string("another string".to_string()),
+            AnyDataValue::new_iri("http://example.org".to_string()),
+            AnyDataValue::new_language_tagged_string("Hallo".to_string(), "de".to_string()),
+            AnyDataValue::new_other(
+                "abc".to_string(),
+                "http://example.org/mydatatype".to_string(),
+            ),
+        ];
 
         let mut ids = Vec::new();
         for dv in &dvs {

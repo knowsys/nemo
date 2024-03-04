@@ -22,7 +22,7 @@ pub(crate) fn quote_string(s: &str) -> String {
 /// Encloses a string in pointy brackets. No other escaping is done, since we assume that the IRI has already
 /// been processed to be in a suitable form without inner `<` or `>`.
 pub(crate) fn quote_iri(s: &str) -> String {
-    "<".to_owned() + &s + ">"
+    "<".to_owned() + s + ">"
 }
 
 /// Enum of different value domains that are distinguished in this code,
@@ -460,7 +460,7 @@ pub trait DataValue: Debug + Display + Into<AnyDataValue> + PartialEq + Eq + Has
     /// value in the domain [`ValueDomain::Tuple`] or
     /// [`ValueDomain::Map`].
     #[must_use]
-    fn len(&self) -> Option<usize> {
+    fn length(&self) -> Option<usize> {
         match self.value_domain() {
             ValueDomain::Tuple | ValueDomain::Map => Some(self.len_unchecked()),
             _ => None,

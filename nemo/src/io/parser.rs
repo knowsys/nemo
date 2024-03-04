@@ -178,7 +178,6 @@ fn resolve_prefixed_name(
 }
 
 /// Resolve prefixes in a [`turtle::RdfLiteral`].
-#[must_use]
 fn resolve_prefixed_rdf_literal(
     prefixes: &HashMap<&str, &str>,
     literal: turtle::RdfLiteral,

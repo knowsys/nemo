@@ -166,9 +166,9 @@ mod test {
         let column_snd = ColumnVector::new(vec![0u64, 1, 2, 7, 9]);
         let column_trd = ColumnVector::new(vec![0u64, 2, 4, 11]);
 
-        let mut iter_fst = ColumnScanCell::new(ColumnScanEnum::ColumnScanVector(column_fst.iter()));
-        let mut iter_snd = ColumnScanCell::new(ColumnScanEnum::ColumnScanVector(column_snd.iter()));
-        let mut iter_trd = ColumnScanCell::new(ColumnScanEnum::ColumnScanVector(column_trd.iter()));
+        let mut iter_fst = ColumnScanCell::new(ColumnScanEnum::Vector(column_fst.iter()));
+        let mut iter_snd = ColumnScanCell::new(ColumnScanEnum::Vector(column_snd.iter()));
+        let mut iter_trd = ColumnScanCell::new(ColumnScanEnum::Vector(column_trd.iter()));
 
         let mut union_iter =
             ColumnScanUnion::new(vec![&mut iter_fst, &mut iter_snd, &mut iter_trd]);

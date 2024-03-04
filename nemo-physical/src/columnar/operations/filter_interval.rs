@@ -349,7 +349,7 @@ mod test {
     #[test]
     fn columnscan_filter_constant() {
         let column = ColumnVector::new(vec![-1i64, 1, 2, 4, 8]);
-        let scan_column = ColumnScanCell::new(ColumnScanEnum::ColumnScanVector(column.iter()));
+        let scan_column = ColumnScanCell::new(ColumnScanEnum::Vector(column.iter()));
 
         let mut scan_filter = ColumnScanFilterInterval::new(
             &scan_column,
@@ -399,11 +399,9 @@ mod test {
         let column_value = ColumnVector::new(vec![1i64, 2, 4, 6, 8, 11, 15]);
         let column_bounds = ColumnVector::new(vec![2i64, 7, 12]);
 
-        let scan_value = ColumnScanCell::new(ColumnScanEnum::ColumnScanVector(column_value.iter()));
-        let scan_lower =
-            ColumnScanCell::new(ColumnScanEnum::ColumnScanVector(column_bounds.iter()));
-        let scan_upper =
-            ColumnScanCell::new(ColumnScanEnum::ColumnScanVector(column_bounds.iter()));
+        let scan_value = ColumnScanCell::new(ColumnScanEnum::Vector(column_value.iter()));
+        let scan_lower = ColumnScanCell::new(ColumnScanEnum::Vector(column_bounds.iter()));
+        let scan_upper = ColumnScanCell::new(ColumnScanEnum::Vector(column_bounds.iter()));
 
         scan_lower.next(); // lower_bound = 2
         scan_upper.next();

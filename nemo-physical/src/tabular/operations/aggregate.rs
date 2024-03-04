@@ -43,7 +43,7 @@ impl OperationGenerator for GeneratorAggregate {
 
         let prune = TrieScanPrune::new(input_scan);
 
-        Some(TrieScanEnum::TrieScanAggregateWrapper(
+        Some(TrieScanEnum::AggregateWrapper(
             TrieScanAggregate::new(prune, self.instructions).into(),
         ))
     }
@@ -361,7 +361,7 @@ mod test {
     use crate::util::test_util::test::trie_int64;
 
     fn trie_scan_prune_from_trie(input_trie: &Trie) -> TrieScanPrune<'_> {
-        TrieScanPrune::new(TrieScanEnum::TrieScanGeneric(input_trie.partial_iterator()))
+        TrieScanPrune::new(TrieScanEnum::Generic(input_trie.partial_iterator()))
     }
 
     fn aggregate_and_materialize(

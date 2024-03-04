@@ -103,7 +103,7 @@ impl OperationGenerator for GeneratorSubtract {
                         }
                     }
 
-                    ColumnScanEnum::ColumnScanSubtract(ColumnScanSubtract::new(
+                    ColumnScanEnum::Subtract(ColumnScanSubtract::new(
                         input_main,
                         input_follower,
                         subtract_indices,
@@ -128,7 +128,7 @@ impl OperationGenerator for GeneratorSubtract {
             column_scans.push(UnsafeCell::new(new_scan));
         }
 
-        Some(TrieScanEnum::TrieScanSubtract(TrieScanSubtract {
+        Some(TrieScanEnum::Subtract(TrieScanSubtract {
             trie_main: Box::new(trie_main),
             tries_subtract,
             layer_maps,
@@ -261,8 +261,8 @@ mod test {
         let trie_main = trie_id32(vec![&[1, 3], &[1, 6], &[1, 8], &[2, 2], &[2, 7], &[3, 5]]);
         let trie_subtract = trie_id32(vec![&[1, 2], &[1, 6], &[1, 9], &[3, 2], &[3, 5], &[4, 8]]);
 
-        let trie_main_scan = TrieScanEnum::TrieScanGeneric(trie_main.partial_iterator());
-        let trie_subtract_scan = TrieScanEnum::TrieScanGeneric(trie_subtract.partial_iterator());
+        let trie_main_scan = TrieScanEnum::Generic(trie_main.partial_iterator());
+        let trie_subtract_scan = TrieScanEnum::Generic(trie_subtract.partial_iterator());
 
         let mut marker_generator = OperationTableGenerator::new();
         marker_generator.add_marker("x");
@@ -321,8 +321,8 @@ mod test {
             &[10, 7],
         ]);
 
-        let trie_main_scan = TrieScanEnum::TrieScanGeneric(trie_main.partial_iterator());
-        let trie_subtract_scan = TrieScanEnum::TrieScanGeneric(trie_subtract.partial_iterator());
+        let trie_main_scan = TrieScanEnum::Generic(trie_main.partial_iterator());
+        let trie_subtract_scan = TrieScanEnum::Generic(trie_subtract.partial_iterator());
 
         let mut marker_generator = OperationTableGenerator::new();
         marker_generator.add_marker("x");
@@ -381,15 +381,11 @@ mod test {
         let trie_subtract_c = trie_id32(vec![&[0, 0], &[9, 2]]);
         let trie_subtract_d = trie_id32(vec![&[8, 2]]);
 
-        let trie_main_scan = TrieScanEnum::TrieScanGeneric(trie_main.partial_iterator());
-        let trie_subtract_a_scan =
-            TrieScanEnum::TrieScanGeneric(trie_subtract_a.partial_iterator());
-        let trie_subtract_b_scan =
-            TrieScanEnum::TrieScanGeneric(trie_subtract_b.partial_iterator());
-        let trie_subtract_c_scan =
-            TrieScanEnum::TrieScanGeneric(trie_subtract_c.partial_iterator());
-        let trie_subtract_d_scan =
-            TrieScanEnum::TrieScanGeneric(trie_subtract_d.partial_iterator());
+        let trie_main_scan = TrieScanEnum::Generic(trie_main.partial_iterator());
+        let trie_subtract_a_scan = TrieScanEnum::Generic(trie_subtract_a.partial_iterator());
+        let trie_subtract_b_scan = TrieScanEnum::Generic(trie_subtract_b.partial_iterator());
+        let trie_subtract_c_scan = TrieScanEnum::Generic(trie_subtract_c.partial_iterator());
+        let trie_subtract_d_scan = TrieScanEnum::Generic(trie_subtract_d.partial_iterator());
 
         let mut marker_generator = OperationTableGenerator::new();
         marker_generator.add_marker("x");
@@ -453,8 +449,8 @@ mod test {
         let trie_main = trie_id32(vec![&[4, 0, 0], &[4, 2, 1]]);
         let trie_subtract = trie_id32(vec![&[0]]);
 
-        let trie_main_scan = TrieScanEnum::TrieScanGeneric(trie_main.partial_iterator());
-        let trie_subtract_scan = TrieScanEnum::TrieScanGeneric(trie_subtract.partial_iterator());
+        let trie_main_scan = TrieScanEnum::Generic(trie_main.partial_iterator());
+        let trie_subtract_scan = TrieScanEnum::Generic(trie_subtract.partial_iterator());
 
         let mut marker_generator = OperationTableGenerator::new();
         marker_generator.add_marker("x");
@@ -490,8 +486,8 @@ mod test {
         let trie_main = trie_id32(vec![&[2, 0, 0], &[4, 0, 0], &[8, 5, 1]]);
         let trie_subtract = trie_id32(vec![&[2], &[8]]);
 
-        let trie_main_scan = TrieScanEnum::TrieScanGeneric(trie_main.partial_iterator());
-        let trie_subtract_scan = TrieScanEnum::TrieScanGeneric(trie_subtract.partial_iterator());
+        let trie_main_scan = TrieScanEnum::Generic(trie_main.partial_iterator());
+        let trie_subtract_scan = TrieScanEnum::Generic(trie_subtract.partial_iterator());
 
         let mut marker_generator = OperationTableGenerator::new();
         marker_generator.add_marker("x");

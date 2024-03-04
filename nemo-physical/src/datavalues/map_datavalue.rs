@@ -25,6 +25,7 @@ pub struct MapDataValue {
 
 impl MapDataValue {
     /// Constructor.
+    #[allow(dead_code)]
     pub(crate) fn new<T: IntoIterator<Item = (AnyDataValue, AnyDataValue)>>(
         label: Option<IriDataValue>,
         pairs_iter: T,
@@ -161,7 +162,7 @@ mod test {
 
         assert_eq!(map.label(), Some(&label));
 
-        assert_eq!(map.len(), Some(2));
+        assert_eq!(map.length(), Some(2));
         assert_eq!(map.len_unchecked(), 2);
 
         let keys: HashSet<&AnyDataValue> = map.map_keys().expect("maps should have keys").collect();

@@ -149,7 +149,7 @@ mod test {
         let dictionary = RefCell::new(Dict::default());
 
         let value_column = ColumnVector::new(vec![0i64, 7, 14, 21]);
-        let value_scan = ColumnScanCell::new(ColumnScanEnum::ColumnScanVector(value_column.iter()));
+        let value_scan = ColumnScanCell::new(ColumnScanEnum::Vector(value_column.iter()));
 
         let reference_values = vec![
             AnyDataValue::new_integer_from_i64(10),
@@ -171,7 +171,7 @@ mod test {
 
         let program = StackProgram::from_function_tree(
             &function,
-            &vec![(marker_int, 0), (marker_str, 1)].into_iter().collect(),
+            &[(marker_int, 0), (marker_str, 1)].into_iter().collect(),
             Some(marker_value),
         );
 
