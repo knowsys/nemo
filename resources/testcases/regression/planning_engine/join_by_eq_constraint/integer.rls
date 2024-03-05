@@ -13,3 +13,4 @@ intInBody(?a,?b):-
     odd(?a),
     prime(?b),
     ?a = ?b.
+@export intInBody :- csv {}.

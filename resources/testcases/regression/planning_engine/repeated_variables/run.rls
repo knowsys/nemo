@@ -6,3 +6,8 @@ RepeatBody(?R, ?S) :- sourceA(?X, ?X, ?R), sourceB(?S, ?Y, ?Y) .
 RepeatHead(?X, ?Y, ?X, ?Y, ?Z, ?Z, ?X) :- sourceA(?X, ?Z, ?Y), sourceB(?X, ?Y, ?T) .
 RepeatAll(?X, ?X, ?X, ?X) :- sourceC(?X, ?X, ?X) .
 RepeatAlternative(?R, ?S) :- sourceA(?R, ?X, ?X), sourceB(?S, ?Y, ?Y) .
+
+@export RepeatBody :- csv {}.
+@export RepeatAll :- csv {}.
+@export RepeatAlternative :- csv {}.
+@export RepeatHead :- csv {}.
