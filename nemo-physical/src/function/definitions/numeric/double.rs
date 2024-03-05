@@ -101,6 +101,23 @@ pub(super) fn numeric_power_double(base: Double, exponent: Double) -> Option<Any
     some_datavalue_from_double(base.checked_pow(exponent)?)
 }
 
+/// Remainder operation
+///
+/// Returns the remainder of the (truncated) division `parameter_first / parameter.second`.
+/// The value of the result has always the same sign as `paramter_second`.
+///
+/// Returns `None` if `parameter_second` is zero.
+pub(super) fn numeric_remainder_double(
+    parameter_first: Double,
+    parameter_second: Double,
+) -> Option<AnyDataValue> {
+    if parameter_second == Double::new(0.0).expect("Zero is not NaN/inf") {
+        return None;
+    }
+
+    some_datavalue_from_double(parameter_first % parameter_second)
+}
+
 /// Less than comparison between 64-bit floating point numbers
 pub(super) fn numeric_lessthan_double(
     parameter_first: Double,

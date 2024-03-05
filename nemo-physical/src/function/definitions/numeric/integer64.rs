@@ -102,6 +102,25 @@ pub(super) fn numeric_power_integer64(base: i64, exponent: i64) -> Option<AnyDat
     )?))
 }
 
+/// Remainder operation
+///
+/// Returns the remainder of the (truncated) division `parameter_first / parameter.second`.
+/// The value of the result has always the same sign as `paramter_second`.
+///
+/// Returns `None` if `parameter_second` is zero.
+pub(super) fn numeric_remainder_integer64(
+    parameter_first: i64,
+    parameter_second: i64,
+) -> Option<AnyDataValue> {
+    if parameter_second == 0 {
+        return None;
+    }
+
+    Some(AnyDataValue::new_integer_from_i64(
+        parameter_first % parameter_second,
+    ))
+}
+
 /// Less than comparison between 64-bit integers
 pub(super) fn numeric_lessthan_integer64(
     parameter_first: i64,

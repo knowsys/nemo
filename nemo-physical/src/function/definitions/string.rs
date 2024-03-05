@@ -221,6 +221,10 @@ impl BinaryFunction for StringSubstring {
         let string = parameter_first.to_plain_string()?;
         let start = usize::try_from(parameter_second.to_u64()?).ok()?;
 
+        if start >= string.len() {
+            return None;
+        }
+
         Some(AnyDataValue::new_plain_string(string[start..].to_string()))
     }
 }

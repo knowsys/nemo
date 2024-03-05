@@ -117,6 +117,8 @@ pub enum BinaryOperation {
     NumericLogarithm,
     /// Numeric value raised to another numeric value
     NumericPower,
+    /// Remainder of a division between two numeric values
+    NumericRemainder,
     /// Numeric greater than comparison
     NumericGreaterthan,
     /// Numeric greater than or equals comparison
@@ -164,6 +166,7 @@ impl BinaryOperation {
             "STRENDS" => Ok(Self::StringEnds),
             "STRBEFORE" => Ok(Self::StringBefore),
             "STRAFTER" => Ok(Self::StringAfter),
+            "REM" => Ok(Self::NumericRemainder),
             s => Err(Error::UnknownUnaryOpertation {
                 operation: s.into(),
             }),
@@ -178,6 +181,7 @@ impl BinaryOperation {
             Self::NumericMultiplication => "Multiplication",
             Self::NumericDivision => "Division",
             Self::NumericPower => "Power",
+            Self::NumericRemainder => "Remainder",
             Self::NumericLogarithm => "Logarithm",
             Self::StringCompare => "StringCompare",
             Self::StringConcatenation => "CONCAT",
@@ -214,6 +218,7 @@ impl BinaryOperation {
             Self::NumericGreaterthaneq => Some(">="),
             Self::NumericLessthan => Some("<"),
             Self::NumericLessthaneq => Some("<="),
+            Self::NumericRemainder => Some("%"),
             Self::NumericLogarithm
             | Self::NumericPower
             | Self::StringCompare
