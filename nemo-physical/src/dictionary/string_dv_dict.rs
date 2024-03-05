@@ -12,6 +12,7 @@ use std::{fmt::Debug, marker::PhantomData};
 pub(crate) type StringDvDictionary = StringBasedDvDictionary<StringDvConverter>;
 /// Implementation of [`DvDict`] that will only handle [`AnyDataValue::Iri`] values.
 pub(crate) type IriDvDictionary = StringBasedDvDictionary<IriDvConverter>;
+
 /// Implementation of [`DvDict`] that will only handle [`AnyDataValue::Other`] values.
 pub(crate) type OtherDvDictionary = StringPairBasedDvDictionary<OtherDvConverter>;
 /// Implementation of [`DvDict`] that will only handle [`AnyDataValue::LanguageTaggedString`] values.
@@ -162,6 +163,7 @@ fn one_string_to_two(string: &str) -> Option<(String, String)> {
 #[derive(Debug)]
 pub(crate) struct OtherDvConverter;
 impl DvConverter for OtherDvConverter {
+    /// Function to use with StringBasedDvDictionary
     #[inline(always)]
     fn dict_string(dv: &AnyDataValue) -> Option<String> {
         if dv.value_domain() == ValueDomain::Other || dv.value_domain() == ValueDomain::Boolean {
@@ -174,23 +176,25 @@ impl DvConverter for OtherDvConverter {
         }
     }
 
+    /// Function to use with StringPairBasedDvDictionary
     #[inline(always)]
     fn dict_string_pair(dv: &AnyDataValue) -> Option<[String; 2]> {
         Some([dv.lexical_value(), dv.datatype_iri()])
     }
 
+    /// Function to use with StringBasedDvDictionary
     #[inline(always)]
     fn string_to_datavalue(string: &str) -> Option<AnyDataValue> {
-        /* one_string_to_two(string).map(|(lexical_value, datatype_iri)| {
+        one_string_to_two(string).map(|(lexical_value, datatype_iri)| {
             if datatype_iri.as_str() == "http://www.w3.org/2001/XMLSchema#boolean" {
                 AnyDataValue::new_boolean(lexical_value == "true")
             } else {
                 AnyDataValue::new_other(lexical_value, datatype_iri)
             }
-        }) */
-        None
+        })
     }
 
+    /// Function to use with StringPairBasedDvDictionary
     #[inline(always)]
     fn string_pair_to_datavalue(first: &str, second: &str) -> Option<AnyDataValue> {
         if second == "http://www.w3.org/2001/XMLSchema#boolean" {
@@ -212,30 +216,32 @@ impl DvConverter for OtherDvConverter {
 #[derive(Debug)]
 pub(crate) struct LangStringDvConverter;
 impl DvConverter for LangStringDvConverter {
+    /// Function to use with StringBasedDvDictionary
     #[inline(always)]
     fn dict_string(dv: &AnyDataValue) -> Option<String> {
-        None
-        /* if dv.value_domain() == ValueDomain::LanguageTaggedString {
+        if dv.value_domain() == ValueDomain::LanguageTaggedString {
             let (string, lang) = dv.to_language_tagged_string_unchecked();
             Some(two_strings_to_one(string.as_str(), lang.as_str()))
         } else {
             None
-        } */
+        }
     }
 
+    /// Function to use with StringPairBasedDvDictionary
     #[inline(always)]
     fn dict_string_pair(dv: &AnyDataValue) -> Option<[String; 2]> {
         let (string, lang) = dv.to_language_tagged_string_unchecked();
         Some([string, lang])
     }
 
+    /// Function to use with StringBasedDvDictionary
     #[inline(always)]
     fn string_to_datavalue(string: &str) -> Option<AnyDataValue> {
-        /* one_string_to_two(string)
-        .map(|(value, language)| AnyDataValue::new_language_tagged_string(value, language)) */
-        None
+        one_string_to_two(string)
+        .map(|(value, language)| AnyDataValue::new_language_tagged_string(value, language))
     }
 
+    /// Function to use with StringPairBasedDvDictionary
     #[inline(always)]
     fn string_pair_to_datavalue(first: &str, second: &str) -> Option<AnyDataValue> {
         Some(AnyDataValue::new_language_tagged_string(
