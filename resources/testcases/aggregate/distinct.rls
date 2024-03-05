@@ -1,5 +1,5 @@
-@source sourceA[integer,integer,integer]: load-csv("sources/dataA.csv").
-@source sourceB[integer,integer,integer,integer]: load-csv("sources/dataB.csv").
+@import sourceA :- csv{ resource = "sources/dataA.csv" }.
+@import sourceB :- csv{ resource = "sources/dataB.csv" }.
 
 r0(#count(?X, ?Y)) :- sourceA(?X, ?Y, ?Z).
 r1(#count(?X, ?Y, ?Z)) :- sourceA(?X, ?Y, ?Z).

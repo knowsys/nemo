@@ -1,4 +1,4 @@
-@source sourceA[integer,integer,integer]: load-csv("sources/dataA.csv").
+@import sourceA :- csv{resource="sources/dataA.csv"}.
 
 r0(?X + 2, ?Y, #count(?Z)) :- sourceA(?X, ?Y, ?Z).
 

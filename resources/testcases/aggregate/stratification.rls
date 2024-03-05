@@ -1,8 +1,3 @@
-@declare r0(integer).
-@declare r1(integer).
-@declare r2(integer).
-@declare r3(integer).
-
 r0(1).
 r0(2).
 r0(3).
