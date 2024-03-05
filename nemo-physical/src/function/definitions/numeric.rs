@@ -7,7 +7,7 @@ mod integer64;
 pub mod traits;
 
 use crate::{
-    datatypes::{Double, Float},
+    datatypes::{Double, Float, StorageTypeName},
     datavalues::{AnyDataValue, DataValue, ValueDomain},
 };
 
@@ -37,7 +37,7 @@ use self::{
     },
 };
 
-use super::{BinaryFunction, UnaryFunction};
+use super::{BinaryFunction, FunctionTypePropagation, UnaryFunction};
 
 /// Numeric value
 ///
@@ -144,6 +144,10 @@ impl BinaryFunction for NumericAddition {
 
         None
     }
+
+    fn type_propagation(&self) -> FunctionTypePropagation {
+        FunctionTypePropagation::Preserve
+    }
 }
 
 /// Numeric subtraction
@@ -169,6 +173,10 @@ impl BinaryFunction for NumericSubtraction {
         }
 
         None
+    }
+
+    fn type_propagation(&self) -> FunctionTypePropagation {
+        FunctionTypePropagation::Preserve
     }
 }
 
@@ -198,6 +206,10 @@ impl BinaryFunction for NumericMultiplication {
 
         None
     }
+
+    fn type_propagation(&self) -> FunctionTypePropagation {
+        FunctionTypePropagation::Preserve
+    }
 }
 
 /// Numeric division
@@ -223,6 +235,10 @@ impl BinaryFunction for NumericDivision {
         }
 
         None
+    }
+
+    fn type_propagation(&self) -> FunctionTypePropagation {
+        FunctionTypePropagation::Preserve
     }
 }
 
@@ -251,6 +267,10 @@ impl BinaryFunction for NumericLogarithm {
 
         None
     }
+
+    fn type_propagation(&self) -> FunctionTypePropagation {
+        FunctionTypePropagation::Preserve
+    }
 }
 
 /// Raising a numeric value to some power
@@ -276,6 +296,10 @@ impl BinaryFunction for NumericPower {
         }
 
         None
+    }
+
+    fn type_propagation(&self) -> FunctionTypePropagation {
+        FunctionTypePropagation::Preserve
     }
 }
 
@@ -303,6 +327,10 @@ impl BinaryFunction for NumericRemainder {
 
         None
     }
+
+    fn type_propagation(&self) -> FunctionTypePropagation {
+        FunctionTypePropagation::Preserve
+    }
 }
 
 /// Absolute value of numeric values
@@ -324,6 +352,10 @@ impl UnaryFunction for NumericAbsolute {
 
         None
     }
+
+    fn type_propagation(&self) -> FunctionTypePropagation {
+        FunctionTypePropagation::Preserve
+    }
 }
 
 /// Negation of a numeric value
@@ -344,6 +376,10 @@ impl UnaryFunction for NumericNegation {
         }
 
         None
+    }
+
+    fn type_propagation(&self) -> FunctionTypePropagation {
+        FunctionTypePropagation::Preserve
     }
 }
 
@@ -367,6 +403,10 @@ impl UnaryFunction for NumericSquareroot {
 
         None
     }
+
+    fn type_propagation(&self) -> FunctionTypePropagation {
+        FunctionTypePropagation::Preserve
+    }
 }
 
 /// Sine of a numeric value
@@ -387,6 +427,10 @@ impl UnaryFunction for NumericSine {
         }
 
         None
+    }
+
+    fn type_propagation(&self) -> FunctionTypePropagation {
+        FunctionTypePropagation::Preserve
     }
 }
 
@@ -409,6 +453,10 @@ impl UnaryFunction for NumericCosine {
 
         None
     }
+
+    fn type_propagation(&self) -> FunctionTypePropagation {
+        FunctionTypePropagation::Preserve
+    }
 }
 
 /// Tangent of a numeric value
@@ -429,6 +477,10 @@ impl UnaryFunction for NumericTangent {
         }
 
         None
+    }
+
+    fn type_propagation(&self) -> FunctionTypePropagation {
+        FunctionTypePropagation::Preserve
     }
 }
 
@@ -452,6 +504,10 @@ impl UnaryFunction for NumericRound {
 
         None
     }
+
+    fn type_propagation(&self) -> FunctionTypePropagation {
+        FunctionTypePropagation::Preserve
+    }
 }
 
 /// Rounding up to the smallest integer less than or equal than input parameter
@@ -472,6 +528,10 @@ impl UnaryFunction for NumericCeil {
         }
 
         None
+    }
+
+    fn type_propagation(&self) -> FunctionTypePropagation {
+        FunctionTypePropagation::Preserve
     }
 }
 
@@ -494,6 +554,10 @@ impl UnaryFunction for NumericFloor {
         }
 
         None
+    }
+
+    fn type_propagation(&self) -> FunctionTypePropagation {
+        FunctionTypePropagation::Preserve
     }
 }
 
@@ -522,6 +586,15 @@ impl BinaryFunction for NumericLessthan {
 
         None
     }
+
+    fn type_propagation(&self) -> FunctionTypePropagation {
+        // TODO: This is playing it save, one should probably give booleans a special status
+        FunctionTypePropagation::KnownOutput(
+            StorageTypeName::Id32
+                .bitset()
+                .union(StorageTypeName::Id64.bitset()),
+        )
+    }
 }
 
 /// Less than or equals comparison of two numbers
@@ -549,6 +622,15 @@ impl BinaryFunction for NumericLessthaneq {
 
         None
     }
+
+    fn type_propagation(&self) -> FunctionTypePropagation {
+        // TODO: This is playing it save, one should probably give booleans a special status
+        FunctionTypePropagation::KnownOutput(
+            StorageTypeName::Id32
+                .bitset()
+                .union(StorageTypeName::Id64.bitset()),
+        )
+    }
 }
 
 /// Greater than comparison of two numbers
@@ -575,6 +657,15 @@ impl BinaryFunction for NumericGreaterthan {
         }
 
         None
+    }
+
+    fn type_propagation(&self) -> FunctionTypePropagation {
+        // TODO: This is playing it save, one should probably give booleans a special status
+        FunctionTypePropagation::KnownOutput(
+            StorageTypeName::Id32
+                .bitset()
+                .union(StorageTypeName::Id64.bitset()),
+        )
     }
 }
 
@@ -604,5 +695,14 @@ impl BinaryFunction for NumericGreaterthaneq {
         }
 
         None
+    }
+
+    fn type_propagation(&self) -> FunctionTypePropagation {
+        // TODO: This is playing it save, one should probably give booleans a special status
+        FunctionTypePropagation::KnownOutput(
+            StorageTypeName::Id32
+                .bitset()
+                .union(StorageTypeName::Id64.bitset()),
+        )
     }
 }
