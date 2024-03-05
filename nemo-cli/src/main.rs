@@ -250,7 +250,7 @@ fn run(mut cli: CliApp) -> Result<(), Error> {
 }
 
 fn main() {
-    let cli = cli::CliApp::parse();
+    let cli = CliApp::parse();
 
     cli.logging.initialize_logging();
     log::info!("Version: {}", clap::crate_version!());
