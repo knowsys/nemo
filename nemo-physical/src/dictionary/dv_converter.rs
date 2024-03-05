@@ -8,12 +8,8 @@ use std::fmt::Debug;
 pub(crate) trait DvConverter: Debug {
     /// Converts a datavalue to a string, if supported.
     fn dict_string(dv: &AnyDataValue) -> Option<String>;
-    /// Converts a datavalue to a string pair, when supported.
-    fn dict_string_pair(dv: &AnyDataValue) -> Option<[String; 2]>;
     /// Converts a string to a datavalue, if supported.
     fn string_to_datavalue(string: &str) -> Option<AnyDataValue>;
-    /// Converts a string pair to a datavalue, if supported.
-    fn string_pair_to_datavalue(first: &str, second: &str) -> Option<AnyDataValue>;
     /// Each converter supports exactly one domain, returned by this function.
     fn supported_value_domain() -> ValueDomain;
 }
@@ -27,17 +23,9 @@ impl DvConverter for StringDvConverter {
         dv.to_plain_string()
     }
 
-    fn dict_string_pair(dv: &AnyDataValue) -> Option<[String; 2]> {
-        None
-    }
-
     #[inline(always)]
     fn string_to_datavalue(string: &str) -> Option<AnyDataValue> {
         Some(AnyDataValue::new_plain_string(string.to_string()))
-    }
-
-    fn string_pair_to_datavalue(first: &str, second: &str) -> Option<AnyDataValue> {
-        None
     }
 
     fn supported_value_domain() -> ValueDomain {
@@ -54,17 +42,9 @@ impl DvConverter for IriDvConverter {
         dv.to_iri()
     }
 
-    fn dict_string_pair(dv: &AnyDataValue) -> Option<[String; 2]> {
-        None
-    }
-
     #[inline(always)]
     fn string_to_datavalue(string: &str) -> Option<AnyDataValue> {
         Some(AnyDataValue::new_iri(string.to_string()))
-    }
-
-    fn string_pair_to_datavalue(first: &str, second: &str) -> Option<AnyDataValue> {
-        None
     }
 
     fn supported_value_domain() -> ValueDomain {
@@ -72,7 +52,7 @@ impl DvConverter for IriDvConverter {
     }
 }
 
-/// TODO remove this function
+
 /// Combine two strings into one in an invertible way.
 /// If either of the strings is typically shorter than 127 bytes, it
 /// should be given as `string2` to enable more efficient coding.
@@ -103,7 +83,6 @@ fn two_strings_to_one(string1: &str, string2: &str) -> String {
     result
 }
 
-/// TODO remove this function
 /// Extract two strings from one that uses the format of [two_strings_to_one].
 #[inline(always)]
 fn one_string_to_two(string: &str) -> Option<(String, String)> {
@@ -160,12 +139,6 @@ impl DvConverter for OtherDvConverter {
         }
     }
 
-    /// Function to use with StringPairBasedDvDictionary
-    #[inline(always)]
-    fn dict_string_pair(dv: &AnyDataValue) -> Option<[String; 2]> {
-        Some([dv.lexical_value(), dv.datatype_iri()])
-    }
-
     /// Function to use with StringBasedDvDictionary
     #[inline(always)]
     fn string_to_datavalue(string: &str) -> Option<AnyDataValue> {
@@ -176,19 +149,6 @@ impl DvConverter for OtherDvConverter {
                 AnyDataValue::new_other(lexical_value, datatype_iri)
             }
         })
-    }
-
-    /// Function to use with StringPairBasedDvDictionary
-    #[inline(always)]
-    fn string_pair_to_datavalue(first: &str, second: &str) -> Option<AnyDataValue> {
-        if second == "http://www.w3.org/2001/XMLSchema#boolean" {
-            Some(AnyDataValue::new_boolean(first == "true"))
-        } else {
-            Some(AnyDataValue::new_other(
-                first.to_string(),
-                second.to_string(),
-            ))
-        }
     }
 
     fn supported_value_domain() -> ValueDomain {
@@ -211,27 +171,11 @@ impl DvConverter for LangStringDvConverter {
         }
     }
 
-    /// Function to use with StringPairBasedDvDictionary
-    #[inline(always)]
-    fn dict_string_pair(dv: &AnyDataValue) -> Option<[String; 2]> {
-        let (string, lang) = dv.to_language_tagged_string_unchecked();
-        Some([string, lang])
-    }
-
     /// Function to use with StringBasedDvDictionary
     #[inline(always)]
     fn string_to_datavalue(string: &str) -> Option<AnyDataValue> {
         one_string_to_two(string)
             .map(|(value, language)| AnyDataValue::new_language_tagged_string(value, language))
-    }
-
-    /// Function to use with StringPairBasedDvDictionary
-    #[inline(always)]
-    fn string_pair_to_datavalue(first: &str, second: &str) -> Option<AnyDataValue> {
-        Some(AnyDataValue::new_language_tagged_string(
-            first.to_string(),
-            second.to_string(),
-        ))
     }
 
     fn supported_value_domain() -> ValueDomain {
