@@ -5,7 +5,7 @@
 
 use super::{AddResult, DvDict, StringPairDictionary};
 use crate::datavalues::{AnyDataValue, ValueDomain};
-use crate::dictionary::dv_converter::{DvConverter, LangStringDvConverter, OtherDvConverter};
+use crate::dictionary::pair_dv_converter::{PairDvConverter, LangStringDvConverter, OtherDvConverter};
 use std::{fmt::Debug, marker::PhantomData};
 
 #[cfg(feature = "stringpairdictionary")]
@@ -19,19 +19,19 @@ pub(crate) type LangStringDvDictionary = StringPairBasedDvDictionary<LangStringD
 /// type parameter defines how the conversion is to be done, making sure that we have
 /// compile-time knowledge about this.
 #[derive(Debug)]
-pub(crate) struct StringPairBasedDvDictionary<C: DvConverter> {
+pub(crate) struct StringPairBasedDvDictionary<C: PairDvConverter> {
     string_pair_dict: StringPairDictionary,
     _phantom: PhantomData<C>, // do I need this??
 }
 
-impl<C: DvConverter> StringPairBasedDvDictionary<C> {
+impl<C: PairDvConverter> StringPairBasedDvDictionary<C> {
     /// Construct a new and empty dictionary.
     pub(crate) fn new() -> Self {
         Self::default()
     }
 }
 
-impl<C: DvConverter> Default for StringPairBasedDvDictionary<C> {
+impl<C: PairDvConverter> Default for StringPairBasedDvDictionary<C> {
     fn default() -> Self {
         StringPairBasedDvDictionary {
             string_pair_dict: StringPairDictionary::default(),
@@ -40,7 +40,7 @@ impl<C: DvConverter> Default for StringPairBasedDvDictionary<C> {
     }
 }
 
-impl<C: DvConverter> DvDict for StringPairBasedDvDictionary<C> {
+impl<C: PairDvConverter> DvDict for StringPairBasedDvDictionary<C> {
     fn add_datavalue(&mut self, dv: AnyDataValue) -> AddResult {
         if let Some([first, second]) = C::dict_string_pair(&dv) {
             self.string_pair_dict.add_str_pair(&first, &second)
