@@ -7,7 +7,7 @@ use num::{Bounded, CheckedAdd, CheckedDiv, CheckedMul, CheckedSub, FromPrimitive
 use std::cmp::Ordering;
 use std::fmt;
 use std::iter::{Product, Sum};
-use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Sub, SubAssign};
+use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Rem, Sub, SubAssign};
 
 #[cfg(test)]
 use quickcheck::{Arbitrary, Gen};
@@ -153,6 +153,14 @@ impl Div for Double {
 impl DivAssign for Double {
     fn div_assign(&mut self, rhs: Self) {
         self.0.div_assign(rhs.0)
+    }
+}
+
+impl Rem for Double {
+    type Output = Double;
+
+    fn rem(self, rhs: Self) -> Self::Output {
+        Double(self.0.rem(rhs.0))
     }
 }
 

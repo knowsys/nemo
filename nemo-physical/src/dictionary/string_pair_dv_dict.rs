@@ -4,9 +4,16 @@
 //! string representations without any risk of confusion.
 
 use super::{AddResult, DvDict, StringPairDictionary};
-use crate::datavalues::{AnyDataValue, DataValue, ValueDomain};
-use crate::dictionary::string_dv_dict::DvConverter;
+use crate::datavalues::{AnyDataValue, ValueDomain};
+use crate::dictionary::dv_converter::{DvConverter, LangStringDvConverter, OtherDvConverter};
 use std::{fmt::Debug, marker::PhantomData};
+
+#[cfg(feature = "stringpairdictionary")]
+/// Implementation of [`DvDict`] that will only handle [`AnyDataValue::Other`] values.
+pub(crate) type OtherDvDictionary = StringPairBasedDvDictionary<OtherDvConverter>;
+#[cfg(feature = "stringpairdictionary")]
+/// Implementation of [`DvDict`] that will only handle [`AnyDataValue::LanguageTaggedString`] values.
+pub(crate) type LangStringDvDictionary = StringPairBasedDvDictionary<LangStringDvConverter>;
 
 /// A generic [`DvDict`] dictionary based on converting datavalues to strings. The
 /// type parameter defines how the conversion is to be done, making sure that we have
@@ -102,71 +109,16 @@ impl<C: DvConverter> DvDict for StringPairBasedDvDictionary<C> {
 }
 
 #[cfg(test)]
+#[cfg(feature = "stringpairdictionary")]
 mod test {
 
-    use crate::dictionary::{
-        IriDvDictionary, LangStringDvDictionary, OtherDvDictionary, StringDvDictionary,
-    };
+    use crate::dictionary::string_pair_dv_dict::{LangStringDvDictionary, OtherDvDictionary};
     use crate::{
         datavalues::AnyDataValue,
         dictionary::{AddResult, DvDict, KNOWN_ID_MARK},
     };
 
-    //use super::{IriDvDictionary, LangStringDvDictionary, OtherDvDictionary, StringDvDictionary};
-
-    #[test]
-    fn string_dict_add_and_mark() {
-        let mut dict = StringDvDictionary::new();
-
-        let dv1 = AnyDataValue::new_plain_string("http://example.org".to_string());
-        let dv2 = AnyDataValue::new_plain_string("another string".to_string());
-        let dv_wrongtype = AnyDataValue::new_iri("http://example.org".to_string());
-
-        assert_eq!(dict.add_datavalue(dv1.clone()), AddResult::Fresh(0));
-        assert_eq!(dict.add_datavalue(dv1.clone()), AddResult::Known(0));
-        assert_eq!(
-            dict.add_datavalue(dv_wrongtype.clone()),
-            AddResult::Rejected
-        );
-
-        assert_eq!(dict.mark_dv(dv2.clone()), AddResult::Fresh(KNOWN_ID_MARK));
-        assert_eq!(dict.mark_dv(dv_wrongtype.clone()), AddResult::Rejected);
-
-        assert_eq!(dict.datavalue_to_id(&dv1), Some(0));
-        assert_eq!(dict.datavalue_to_id(&dv_wrongtype), None);
-        assert_eq!(dict.datavalue_to_id(&dv2), Some(KNOWN_ID_MARK));
-
-        assert_eq!(dict.id_to_datavalue(0), Some(dv1.clone()));
-        assert_eq!(dict.id_to_datavalue(KNOWN_ID_MARK), None);
-        assert_eq!(dict.len(), 1);
-    }
-
-    #[test]
-    fn iri_dict_add_and_mark() {
-        let mut dict = IriDvDictionary::new();
-
-        let dv1 = AnyDataValue::new_iri("http://example.org".to_string());
-        let dv2 = AnyDataValue::new_iri("http://example.org/another".to_string());
-        let dv_wrongtype = AnyDataValue::new_plain_string("http://example.org".to_string());
-
-        assert_eq!(dict.add_datavalue(dv1.clone()), AddResult::Fresh(0));
-        assert_eq!(dict.add_datavalue(dv1.clone()), AddResult::Known(0));
-        assert_eq!(
-            dict.add_datavalue(dv_wrongtype.clone()),
-            AddResult::Rejected
-        );
-
-        assert_eq!(dict.mark_dv(dv2.clone()), AddResult::Fresh(KNOWN_ID_MARK));
-        assert_eq!(dict.mark_dv(dv_wrongtype.clone()), AddResult::Rejected);
-
-        assert_eq!(dict.datavalue_to_id(&dv1), Some(0));
-        assert_eq!(dict.datavalue_to_id(&dv_wrongtype), None);
-        assert_eq!(dict.datavalue_to_id(&dv2), Some(KNOWN_ID_MARK));
-
-        assert_eq!(dict.id_to_datavalue(0), Some(dv1.clone()));
-        assert_eq!(dict.id_to_datavalue(KNOWN_ID_MARK), None);
-        assert_eq!(dict.len(), 1);
-    }
+    //use super::{LangStringDvDictionary, OtherDvDictionary};
 
     #[test]
     fn other_dict_add_and_mark() {

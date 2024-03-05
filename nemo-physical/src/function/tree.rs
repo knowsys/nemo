@@ -18,8 +18,8 @@ use super::{
             NumericAbsolute, NumericAddition, NumericCeil, NumericCosine, NumericDivision,
             NumericFloor, NumericGreaterthan, NumericGreaterthaneq, NumericLessthan,
             NumericLessthaneq, NumericLogarithm, NumericMultiplication, NumericNegation,
-            NumericPower, NumericRound, NumericSine, NumericSquareroot, NumericSubtraction,
-            NumericTangent,
+            NumericPower, NumericRemainder, NumericRound, NumericSine, NumericSquareroot,
+            NumericSubtraction, NumericTangent,
         },
         string::{
             StringAfter, StringBefore, StringCompare, StringConcatenation, StringContains,
@@ -416,6 +416,18 @@ where
             function: BinaryFunctionEnum::NumericPower(NumericPower),
             left: Box::new(base),
             right: Box::new(exponent),
+        }
+    }
+
+    /// Create a tree node representing the numeric remainder opreation.
+    ///
+    /// This evaluates to the remainder of the (truncated) division
+    /// between the value of the left and the value of the right subnode.
+    pub fn numeric_remainder(left: Self, right: Self) -> Self {
+        Self::Binary {
+            function: BinaryFunctionEnum::NumericRemainder(NumericRemainder),
+            left: Box::new(left),
+            right: Box::new(right),
         }
     }
 
