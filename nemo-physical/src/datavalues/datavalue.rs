@@ -6,6 +6,8 @@ use std::{
     hash::Hash,
 };
 
+use crate::datatypes::{storage_type_name::StorageTypeBitSet, StorageTypeName};
+
 use super::{AnyDataValue, IriDataValue, NullDataValue};
 
 /// Encloses a string in double quotes, and escapes inner quotes `\"`, newlines `\n`, carriage returns `\r`,
@@ -113,6 +115,31 @@ impl ValueDomain {
             ValueDomain::Other => panic!("There is no canonical datatype for {:?}. Use the type of the value directly.", self),
             ValueDomain::Boolean => "http://www.w3.org/2001/XMLSchema#boolean".to_string(),
             ValueDomain::Null => panic!("There is no canonical datatype for {:?} defined in Nemo yet. Nulls can be serialized as blank nodes.", self),
+        }
+    }
+
+    /// This function specifies under which storage types
+    /// values of a particular [ValueDomain] can be stored.
+    pub(crate) fn storage_type(&self) -> StorageTypeBitSet {
+        match self {
+            ValueDomain::Long
+            | ValueDomain::Int
+            | ValueDomain::UnsignedLong
+            | ValueDomain::NonNegativeLong
+            | ValueDomain::UnsignedInt
+            | ValueDomain::NonNegativeInt => StorageTypeName::Int64.bitset(),
+            ValueDomain::Float => StorageTypeName::Float.bitset(),
+            ValueDomain::Double => StorageTypeName::Double.bitset(),
+            ValueDomain::Null => StorageTypeName::Id64.bitset(),
+            ValueDomain::PlainString
+            | ValueDomain::LanguageTaggedString
+            | ValueDomain::Iri
+            | ValueDomain::Tuple
+            | ValueDomain::Map
+            | ValueDomain::Boolean
+            | ValueDomain::Other => StorageTypeName::Id32
+                .bitset()
+                .union(StorageTypeName::Id64.bitset()),
         }
     }
 

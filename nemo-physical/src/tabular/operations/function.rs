@@ -11,8 +11,9 @@ use crate::{
         operations::{constant::ColumnScanConstant, pass::ColumnScanPass},
     },
     datatypes::{storage_type_name::StorageTypeBitSet, StorageTypeName},
-    datavalues::AnyDataValue,
+    datavalues::{AnyDataValue, DataValue},
     function::{
+        definitions::FunctionTypePropagation,
         evaluation::StackProgram,
         tree::{FunctionTree, SpecialCaseFunction},
     },
@@ -77,12 +78,12 @@ struct LayerInformation {
 }
 
 /// Encodes a priori knowlegde about the the possible types of a particular layer
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 enum PossibleTypeInformation {
     /// Layer could be of all types
     Unkown,
     /// Layer can only have the type specified by the [StorageTypeBitSet]
-    _Known(StorageTypeBitSet),
+    Known(StorageTypeBitSet),
     /// Layer has the same possible types as another
     Inferred(usize),
     /// Layer has the same possible types as the input trie of the given layer
@@ -165,12 +166,31 @@ impl GeneratorFunction {
 
                         input_information[layer_last_reference]
                             .append_used((stack_program, layer_output));
+
+                        let possible_types = match function.type_propagation() {
+                            FunctionTypePropagation::KnownOutput(output_type) => {
+                                PossibleTypeInformation::Known(output_type)
+                            }
+                            FunctionTypePropagation::Preserve => {
+                                PossibleTypeInformation::Inferred(layer_last_reference)
+                            }
+                            FunctionTypePropagation::_Unknown => PossibleTypeInformation::Unkown,
+                        };
+
+                        type_information[layer_output] = possible_types;
                     } else {
                         unreachable!("If the function has no references it is constant");
                     }
                 }
                 SpecialCaseFunction::Constant(constant) => {
-                    constant_functions.push((constant, layer_output))
+                    type_information[layer_output] = PossibleTypeInformation::Known(
+                        constant
+                            .as_ref()
+                            .map_or(StorageTypeBitSet::empty(), |constant| {
+                                constant.value_domain().storage_type()
+                            }),
+                    );
+                    constant_functions.push((constant, layer_output));
                 }
                 SpecialCaseFunction::Reference(reference) => {
                     let layer_reference = output
@@ -408,7 +428,7 @@ impl<'a> PartialTrieScan<'a> for TrieScanFunction<'a> {
     fn possible_types(&self, layer: usize) -> StorageTypeBitSet {
         match self.type_information[layer] {
             PossibleTypeInformation::Unkown => StorageTypeBitSet::full(),
-            PossibleTypeInformation::_Known(value) => value,
+            PossibleTypeInformation::Known(value) => value,
             PossibleTypeInformation::Inferred(index) => self.possible_types(index),
             PossibleTypeInformation::Input(layer) => self.trie_scan.possible_types(layer),
         }
@@ -429,7 +449,7 @@ mod test {
             operations::{OperationGenerator, OperationTableGenerator},
             rowscan::RowScan,
             trie::Trie,
-            triescan::TrieScanEnum,
+            triescan::{PartialTrieScan, TrieScanEnum},
         },
         util::test_util::test::{trie_dfs, trie_int64},
     };
@@ -486,6 +506,13 @@ mod test {
         let mut function_scan = function_generator
             .generate(vec![Some(trie_scan)], &dictionary)
             .unwrap();
+
+        for layer in 0..function_scan.arity() {
+            assert_eq!(
+                function_scan.possible_types(layer),
+                StorageTypeName::Int64.bitset()
+            );
+        }
 
         trie_dfs(
             &mut function_scan,
@@ -573,6 +600,13 @@ mod test {
             .generate(vec![Some(trie_scan)], &dictionary)
             .unwrap();
 
+        for layer in 0..function_scan.arity() {
+            assert_eq!(
+                function_scan.possible_types(layer),
+                StorageTypeName::Int64.bitset()
+            );
+        }
+
         trie_dfs(
             &mut function_scan,
             &[StorageTypeName::Int64],
@@ -647,6 +681,13 @@ mod test {
         let mut function_scan = function_generator
             .generate(vec![Some(trie_scan)], &dictionary)
             .unwrap();
+
+        for layer in 0..function_scan.arity() {
+            assert_eq!(
+                function_scan.possible_types(layer),
+                StorageTypeName::Int64.bitset()
+            );
+        }
 
         trie_dfs(
             &mut function_scan,
@@ -729,6 +770,27 @@ mod test {
             .generate(vec![Some(trie_scan)], &dictionary)
             .unwrap();
 
+        assert_eq!(
+            function_scan.possible_types(0),
+            StorageTypeName::Id32.bitset(),
+        );
+        assert_eq!(
+            function_scan.possible_types(1),
+            StorageTypeName::Id32
+                .bitset()
+                .union(StorageTypeName::Int64.bitset()),
+        );
+        assert_eq!(
+            function_scan.possible_types(2),
+            StorageTypeName::Id32.bitset(),
+        );
+        assert_eq!(
+            function_scan.possible_types(3),
+            StorageTypeName::Id32
+                .bitset()
+                .union(StorageTypeName::Int64.bitset()),
+        );
+
         trie_dfs(
             &mut function_scan,
             &[StorageTypeName::Id32, StorageTypeName::Int64],
@@ -798,6 +860,21 @@ mod test {
         let function_scan = function_generator
             .generate(vec![Some(trie_scan)], &dictionary)
             .unwrap();
+
+        assert_eq!(
+            function_scan.possible_types(0),
+            StorageTypeName::Int64.bitset(),
+        );
+        assert_eq!(
+            function_scan.possible_types(1),
+            StorageTypeName::Id32.bitset(),
+        );
+        assert_eq!(
+            function_scan.possible_types(2),
+            StorageTypeName::Id32
+                .bitset()
+                .union(StorageTypeName::Id64.bitset()),
+        );
 
         let result = RowScan::new(function_scan, 0)
             .map(|row| {

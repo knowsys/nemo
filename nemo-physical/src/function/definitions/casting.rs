@@ -1,8 +1,11 @@
 //! This module defines functions on string.
 
-use crate::datavalues::{AnyDataValue, DataValue};
+use crate::{
+    datatypes::StorageTypeName,
+    datavalues::{AnyDataValue, DataValue},
+};
 
-use super::UnaryFunction;
+use super::{FunctionTypePropagation, UnaryFunction};
 
 /// Casting of values into 64-bit integers
 ///
@@ -69,6 +72,10 @@ impl UnaryFunction for CastingIntoInteger64 {
             | crate::datavalues::ValueDomain::Int => Some(parameter),
         }
     }
+
+    fn type_propagation(&self) -> FunctionTypePropagation {
+        FunctionTypePropagation::KnownOutput(StorageTypeName::Int64.bitset())
+    }
 }
 
 /// Casting of a value into a 32bit floating point number
@@ -125,6 +132,10 @@ impl UnaryFunction for CastingIntoFloat {
             ),
         }
     }
+
+    fn type_propagation(&self) -> FunctionTypePropagation {
+        FunctionTypePropagation::KnownOutput(StorageTypeName::Float.bitset())
+    }
 }
 
 /// Casting of a value into a 64-bit floating point number
@@ -180,5 +191,9 @@ impl UnaryFunction for CastingIntoDouble {
                     .expect("resulting float must be finite"),
             ),
         }
+    }
+
+    fn type_propagation(&self) -> FunctionTypePropagation {
+        FunctionTypePropagation::KnownOutput(StorageTypeName::Double.bitset())
     }
 }

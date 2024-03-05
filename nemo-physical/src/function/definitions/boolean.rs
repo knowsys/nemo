@@ -1,8 +1,11 @@
 //! This module defines operations on boolean values
 
-use crate::datavalues::{AnyDataValue, DataValue};
+use crate::{
+    datatypes::StorageTypeName,
+    datavalues::{AnyDataValue, DataValue},
+};
 
-use super::{BinaryFunction, UnaryFunction};
+use super::{BinaryFunction, FunctionTypePropagation, UnaryFunction};
 
 /// Given two [AnyDataValue]s,
 /// check if both are boolean and return a pair of [bool]
@@ -37,6 +40,15 @@ impl BinaryFunction for BooleanConjunction {
         bool_pair_from_any(parameter_first, parameter_second)
             .map(|(first_bool, second_bool)| AnyDataValue::new_boolean(first_bool && second_bool))
     }
+
+    fn type_propagation(&self) -> FunctionTypePropagation {
+        // TODO: This is playing it save, one should probably give booleans a special status
+        FunctionTypePropagation::KnownOutput(
+            StorageTypeName::Id32
+                .bitset()
+                .union(StorageTypeName::Id64.bitset()),
+        )
+    }
 }
 
 /// Boolean disjunction
@@ -55,6 +67,15 @@ impl BinaryFunction for BooleanDisjunction {
         bool_pair_from_any(parameter_first, parameter_second)
             .map(|(first_bool, second_bool)| AnyDataValue::new_boolean(first_bool || second_bool))
     }
+
+    fn type_propagation(&self) -> FunctionTypePropagation {
+        // TODO: This is playing it save, one should probably give booleans a special status
+        FunctionTypePropagation::KnownOutput(
+            StorageTypeName::Id32
+                .bitset()
+                .union(StorageTypeName::Id64.bitset()),
+        )
+    }
 }
 
 /// Boolean Negation
@@ -70,5 +91,14 @@ impl UnaryFunction for BooleanNegation {
         parameter
             .to_boolean()
             .map(|value| AnyDataValue::new_boolean(!value))
+    }
+
+    fn type_propagation(&self) -> FunctionTypePropagation {
+        // TODO: This is playing it save, one should probably give booleans a special status
+        FunctionTypePropagation::KnownOutput(
+            StorageTypeName::Id32
+                .bitset()
+                .union(StorageTypeName::Id64.bitset()),
+        )
     }
 }
