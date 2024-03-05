@@ -1,7 +1,3 @@
-@declare a(integer, integer).
-
-@declare r0(integer, integer).
-
 a(1, 0).
 a(1, 1).
 a(2, 2).
@@ -12,3 +8,6 @@ r0(?a, ?b) :- a(?a, ?b), ?a / ?b < 2.
 r1(?x) :- a(?x, ?y), 2 / ?y = 1.
 
 r2(?x) :- a(?x, ?y), 2 / ?y != 1.
+@export r0 :- csv {}.
+@export r1 :- csv {}.
+@export r2 :- csv {}.

@@ -1,11 +1,11 @@
-AssignBinop("assign7",10,"l4A1A1104") .
-AssignOperFrom("assign7",1,"l4A1102") .
-AssignOperFromConstant("assign7",2,32) .
-AssignNumConstant("assign6",8,256,"l4A1102").
+AssignBinop(assign7,10,"l4A1A1104") .
+AssignOperFrom(assign7,1,"l4A1102") .
+AssignOperFromConstant(assign7,2,32) .
+AssignNumConstant(assign6,8,256,"l4A1102").
 
-ConstFolding(?val2 +?val1, ?ins,  ?val1, ?val2,"+") :-
+ConstFolding(?val2 +?val1, ?ins,  ?val1, ?val2,<+>) :-
     AssignOperFromConstant(?ins, ?pos1, ?val1) ,
     AssignOperFrom(?ins, ?pos2, ?var2) ,
     AssignNumConstant(?ins2, ?ln, ?val2, ?var2).
 
-@output ConstFolding .
+@export ConstFolding :- csv {}.

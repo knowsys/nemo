@@ -1,3 +1,5 @@
 @source input[3]: load-csv("sources/main.csv").
 
 result(?x) :- input(?x, _, _).
+
+@export result :- csv {}.

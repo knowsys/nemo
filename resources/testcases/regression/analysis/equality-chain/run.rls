@@ -2,4 +2,4 @@ b(3). b(4).
 
 r(?x) :- b(?x), ?x = ?y, ?y = 3.
 
-@output r.
+@export r :- csv {}.

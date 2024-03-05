@@ -1,5 +1,5 @@
-@source sourceA[3]: load-csv("sources/dataA.csv").
-@source sourceB[3]: load-csv("sources/dataB.csv").
+@import sourceA :- csv { resource = "sources/dataA.csv" }.
+@import sourceB :- csv { resource = "sources/dataB.csv" }.
 
 ConstantBodyXY(?X, ?Y) :- sourceA(?X, ?Y, D) .
 ConstantBodyYZ(?Y, ?Z) :- sourceA(A, ?Y, ?Z) .
@@ -24,3 +24,19 @@ OnlyNewConstantsEmpty(A, B, C) :- sourceA(C, C, C) .
 sourceC(A, B, X).
 
 Unknown(?X) :- sourceC(?X, ?Y, R) .
+
+@export ConstantBodyHead :- csv {}.
+@export ConstantBodyX :- csv {}.
+@export ConstantBodyXY :- csv {}.
+@export ConstantBodyXZ :- csv {}.
+@export ConstantBodyY :- csv {}.
+@export ConstantBodyYZ :- csv {}.
+@export ConstantBodyZ :- csv {}.
+@export ConstantHeadAfter :- csv {}.
+@export ConstantHeadBefore :- csv {}.
+@export ConstantHeadEverywhere :- csv {}.
+@export Exist :- csv {}.
+@export NotExist :- csv {}.
+@export OnlyNewConstants :- csv {}.
+@export OnlyNewConstantsEmpty :- csv {}.
+@export Unknown :- csv {}.

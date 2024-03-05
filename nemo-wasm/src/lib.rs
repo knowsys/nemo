@@ -52,7 +52,7 @@ impl NemoError {
     #[allow(clippy::inherent_to_string)]
     #[wasm_bindgen(js_name = "toString")]
     pub fn to_string(&self) -> String {
-        format!("{:#?}", self)
+        format!("NemoError: {:#?}", self.0)
     }
 }
 
@@ -138,7 +138,7 @@ struct BlobReadingError(JsValue);
 
 impl std::fmt::Display for BlobReadingError {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
-        write!(f, "Error while reading blob: {:#?}", self)
+        write!(f, "Error while reading blob: {:#?}", self.0)
     }
 }
 

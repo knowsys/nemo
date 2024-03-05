@@ -149,18 +149,18 @@ impl BytesBuffer {
 /// implicit capacity limit of any single buffer).
 pub(crate) unsafe trait GlobalBytesBuffer: Debug + Sized {
     /// Returns a specific global buffer.
-    unsafe fn get() -> &'static mut BytesBuffer;
+    unsafe fn get() -> *mut BytesBuffer;
 
     /// Initializes a new (sub)buffer of this buffer, and returns a handle that can henceforth be used to access it.
     #[must_use = "don't forget to take your buffer id"]
     fn init_buffer() -> usize {
-        unsafe { Self::get().init_buffer() }
+        unsafe { BytesBuffer::init_buffer(&mut *Self::get()) }
     }
 
     /// Inserts a byte array into the buffer and returns its address and length.
     fn push_bytes(buffer: usize, bytes: &[u8]) -> BytesRef<Self> {
         unsafe {
-            let (address, len) = Self::get().push_bytes(buffer, bytes);
+            let (address, len) = BytesBuffer::push_bytes(&mut *Self::get(), buffer, bytes);
             BytesRef::new(address, len)
         }
     }
@@ -168,13 +168,13 @@ pub(crate) unsafe trait GlobalBytesBuffer: Debug + Sized {
     /// Returns a reference to a slice of a byte array for this data.
     /// This is a pointer to global mutable data, and cannot be used safely.
     unsafe fn get_bytes(address: usize, length: usize) -> &'static [u8] {
-        Self::get().get_bytes(address, length)
+        BytesBuffer::get_bytes(&mut *Self::get(), address, length)
     }
 
     /// Frees the memory used by the pages of the dropped buffer.
     fn drop_buffer(buffer: usize) {
         unsafe {
-            Self::get().drop_buffer(buffer);
+            BytesBuffer::drop_buffer(&mut *Self::get(), buffer);
         }
     }
 }
@@ -312,8 +312,8 @@ macro_rules! declare_bytes_buffer {
         #[derive(Debug)]
         pub(crate) struct $buf_name;
         unsafe impl GlobalBytesBuffer for $buf_name {
-            unsafe fn get() -> &'static mut BytesBuffer {
-                &mut $buf_name_upper
+            unsafe fn get() -> *mut BytesBuffer {
+                std::ptr::addr_of_mut!($buf_name_upper)
             }
         }
     };
