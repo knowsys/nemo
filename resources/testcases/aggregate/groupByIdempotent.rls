@@ -1,8 +1,5 @@
 @import sourceA :- csv { resource = "sources/dataA.csv" }.
 
-@declare r0(integer, integer).
-@declare r1(integer, integer).
-
 r0(?X, #min(?Z)) :- sourceA(?X, ?Y, ?Z).
 r1(?X, #max(?Z)) :- sourceA(?X, ?Y, ?Z).
 
