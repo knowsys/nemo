@@ -24,8 +24,8 @@ use self::{
     numeric::{
         NumericAbsolute, NumericAddition, NumericCeil, NumericCosine, NumericDivision,
         NumericFloor, NumericGreaterthan, NumericGreaterthaneq, NumericLessthan, NumericLessthaneq,
-        NumericLogarithm, NumericMultiplication, NumericNegation, NumericPower, NumericRound,
-        NumericSine, NumericSquareroot, NumericSubtraction, NumericTangent,
+        NumericLogarithm, NumericMultiplication, NumericNegation, NumericPower, NumericRemainder,
+        NumericRound, NumericSine, NumericSquareroot, NumericSubtraction, NumericTangent,
     },
     string::{
         StringAfter, StringBefore, StringCompare, StringConcatenation, StringContains, StringEnds,
@@ -132,6 +132,7 @@ pub enum BinaryFunctionEnum {
     NumericDivision(NumericDivision),
     NumericLogarithm(NumericLogarithm),
     NumericPower(NumericPower),
+    NumericRemainder(NumericRemainder),
     NumericLessthan(NumericLessthan),
     NumericLessthaneq(NumericLessthaneq),
     NumericGreaterthan(NumericGreaterthan),
@@ -159,6 +160,7 @@ impl BinaryFunction for BinaryFunctionEnum {
             Self::NumericDivision(function) => function,
             Self::NumericLogarithm(function) => function,
             Self::NumericPower(function) => function,
+            Self::NumericRemainder(function) => function,
             Self::NumericLessthan(function) => function,
             Self::NumericLessthaneq(function) => function,
             Self::NumericGreaterthan(function) => function,

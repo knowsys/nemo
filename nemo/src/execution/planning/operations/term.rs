@@ -39,6 +39,7 @@ pub(super) fn term_to_function_tree(
                 }
                 BinaryOperation::NumericDivision => FunctionTree::numeric_division(left, right),
                 BinaryOperation::NumericPower => FunctionTree::numeric_power(left, right),
+                BinaryOperation::NumericRemainder => FunctionTree::numeric_remainder(left, right),
                 BinaryOperation::NumericLogarithm => FunctionTree::numeric_logarithm(left, right),
                 BinaryOperation::StringCompare => FunctionTree::string_compare(left, right),
                 BinaryOperation::StringConcatenation => {
