@@ -85,6 +85,7 @@ fn main() {
         println!("             One of \"oldhash\", \"oldmeta\", \"string\", or \"meta\".");
         println!("  <nonstop>  If anything is given here, the program will terminate");
         println!("             without asking for a prompt.");
+        std::process::exit(0);
     }
 
     let filename = &args[1];
