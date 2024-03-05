@@ -100,7 +100,6 @@ impl BenchmarkStringDictionary {
 mod test {
     use super::StringDictionary;
     use crate::dictionary::{AddResult, KNOWN_ID_MARK};
-    use std::borrow::Borrow;
 
     fn create_dict() -> StringDictionary {
         let mut dict = StringDictionary::default();
