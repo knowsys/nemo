@@ -1,6 +1,6 @@
-@declare goal(integer).
 
-@source triples[3]: load-rdf("sources/example2.nt") .
+@import triples :- rdf{resource="sources/example2.nt"} .
 
 goal(42) :- triples(<http://example.org/#spiderman>, <http://www.perceive.net/schemas/relationship/enemyOf>, <http://example.org/#green-goblin>) .
+
 @export goal :- csv {}.
