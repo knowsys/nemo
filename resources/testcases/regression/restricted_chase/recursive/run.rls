@@ -1,5 +1,8 @@
-@source sourceA[any, any]: load-csv("sources/dataA.csv").
-@source sourceB[any, any]: load-csv("sources/dataB.csv").
+@import sourceA :- csv { resource = "sources/dataA.csv" }.
+@import sourceB :- csv { resource = "sources/dataB.csv" }.
+
+@export resultA :- csv {}.
+@export resultB :- csv {}.
 
 resultA(?X, ?Y) :- sourceA(?X, ?Y) .
 resultB(?X, ?Y) :- sourceB(?X, ?Y) .

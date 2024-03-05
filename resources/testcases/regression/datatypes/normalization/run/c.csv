@@ -1,9 +1,9 @@
-Some Constant With Spaces
+<Some%20Constant%20With%20Spaces>
 AnotherConstant
 YetAnotherConstant
-"""An invalid constant that will be handled as string literal when parsed from CSV because of the exclamation mark!"""
+"""An invalid constant that will be handled as string literal when parsed from CSV because of the white spaces"""
 """String Litral"""
 """Another String Literal"""
 """"""
-"""12345""^^<http://www.w3.org/2001/XMLSchema#integer>"
-"""6789""^^<http://www.w3.org/2001/XMLSchema#integer>"
+12345
+6789
