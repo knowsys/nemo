@@ -14,3 +14,7 @@ r0(12 + 25) :- b(?X, ?Y).
 r1((?X + 3) * ?Z / (?Y - 1)) :- a(?X, ?Y, ?T), b(?Z, ?X).
 r2(?T, (?T + 2) * ?X, ?Y) :- a(?X, ?Y, ?T), b(?Z, ?X).
 r3(Abs(Sqrt(?Y) - ?Z) * ?X) :- a(?X, ?Y, ?Z).
+@export r3 :- csv {}.
+@export r0 :- csv {}.
+@export r1 :- csv {}.
+@export r2 :- csv {}.

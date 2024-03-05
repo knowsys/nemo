@@ -5,3 +5,6 @@
 
 labels(?X, ?Y) :- triples(?X, rdfs:label, ?Y) .
 atoms(?X, ?Y, ?Z) :- triples(?X, eg:atomicNumber, ?Y), triples(?X, eg:specificGravity, ?Z) .
+
+@export atoms :- csv {}.
+@export labels :- csv {}.

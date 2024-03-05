@@ -11,3 +11,4 @@ goal(42) :- quads(eg:bob, dc:publisher, "Bob", ?default_graph),
             quads(?a, foaf:knows, ?b, eg:bob),
             quads(?b, foaf:name, "Alice", eg:alice),
             quads(?b, foaf:mbox, <mailto:alice@work.example.org>, eg:alice).
+@export goal :- csv {}.

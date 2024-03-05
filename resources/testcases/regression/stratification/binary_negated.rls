@@ -10,3 +10,4 @@ end(z) .
 equal(?X, ?X) :- start(?X) .
 result(?X, ?Y) :- data(?X, ?Y), ~equal(?X, ?Y).
 equal(?X, ?X) :- end(?X) .
+@export result :- csv {}.

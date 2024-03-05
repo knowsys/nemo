@@ -16,3 +16,4 @@ test(?X) :- result(?X, A) .
 test(?X) :- result(?X, B) .
 test(?X) :- result(?X, C) .
 test(?X) :- result(?X, D) .
+@export test :- csv {}.

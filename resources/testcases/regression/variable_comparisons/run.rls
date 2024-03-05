@@ -39,3 +39,14 @@ multi(?x, ?y) :- a(?x, ?y), ?x > 2, ?x >= ?y, 4 >= ?y, ?x != ?y.
 
 combine(?x, ?y, ?z) :- b(?x, ?y, ?x), a(?x, ?z), ?y > ?x, ?z < 4.
 
+@export l_un :- csv {}.
+@export contra :- csv {}.
+@export g_un :- csv {}.
+@export equal :- csv {}.
+@export r_xy :- csv {}.
+@export multi :- csv {}.
+@export r_yx :- csv {}.
+@export l_eq :- csv {}.
+@export uneq :- csv {}.
+@export g_eq :- csv {}.
+@export combine :- csv {}.
