@@ -1,11 +1,3 @@
-@declare a(integer, integer, integer).
-@declare b(integer, integer).
-
-@declare r0(integer).
-@declare r1(integer).
-@declare r2(integer, integer, integer).
-@declare r3(integer).
-
 a(2, 4, 10).
 b(3, 2).
 b(5, 1).
@@ -13,7 +5,8 @@ b(5, 1).
 r0(12 + 25) :- b(?X, ?Y).
 r1((?X + 3) * ?Z / (?Y - 1)) :- a(?X, ?Y, ?T), b(?Z, ?X).
 r2(?T, (?T + 2) * ?X, ?Y) :- a(?X, ?Y, ?T), b(?Z, ?X).
-r3(Abs(Sqrt(?Y) - ?Z) * ?X) :- a(?X, ?Y, ?Z).
+r3(ABS(SQRT(?Y) - ?Z) * ?X) :- a(?X, ?Y, ?Z).
+
 @export r3 :- csv {}.
 @export r0 :- csv {}.
 @export r1 :- csv {}.

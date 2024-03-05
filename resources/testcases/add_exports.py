@@ -21,8 +21,10 @@ def visit_test_case(case_dir, case_file):
         for line in rules_file.readlines():
             if line.startswith("@export"):
                 predicate = line.removeprefix("@export").split(sep=":-")[0].strip()
-                print(f'\tfound: {predicate}')
                 existing_exports.append(predicate)
+
+            if line.startswith("@declare"):
+                print("\tfound @declare")
 
     for export_file in listdir(export_dir):
         export_type = None
