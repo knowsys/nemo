@@ -21,7 +21,12 @@ use crate::{io::formats::PROGRESS_NOTIFY_INCREMENT, model::RdfVariant};
 
 use super::rdf::{RdfFormatError, RdfValueFormat};
 
-const DEFAULT_GRAPH: &str = "__DEFAULT_GRAPH__";
+/// IRI to be used for the default graph used by Nemo when loading RDF data with
+/// named graphs (quads).
+///
+/// SPARQL 1.1 has failed to provide any standard identifier for this purpose.
+/// If future SPARQL or RDF versions are adding this, we could align accordingly.
+const DEFAULT_GRAPH: &str = "tag:nemo:defaultgraph";
 
 /// A [`TableProvider`] for RDF 1.1 files containing triples.
 pub(super) struct RdfReader {
@@ -120,13 +125,7 @@ impl RdfReader {
         value: Option<GraphName<'_>>,
     ) -> Result<AnyDataValue, RdfFormatError> {
         match value {
-            None => {
-                assert_eq!(
-                    Iri::parse(DEFAULT_GRAPH.to_string()).unwrap().to_string(),
-                    DEFAULT_GRAPH.to_string()
-                );
-                Ok(AnyDataValue::new_iri(DEFAULT_GRAPH.to_string()))
-            }
+            None => Ok(AnyDataValue::new_iri(DEFAULT_GRAPH.to_string())),
             Some(GraphName::NamedNode(nn)) => Ok(Self::datavalue_from_named_node(nn)),
             Some(GraphName::BlankNode(bn)) => {
                 Ok(Self::datavalue_from_blank_node(bnode_map, tuple_writer, bn))
@@ -324,10 +323,14 @@ impl ByteSized for RdfReader {
 
 #[cfg(test)]
 mod test {
-    use super::RdfReader;
+    use super::{RdfReader, DEFAULT_GRAPH};
     use std::cell::RefCell;
 
-    use nemo_physical::{datasources::tuple_writer::TupleWriter, management::database::Dict};
+    use nemo_physical::{
+        datasources::tuple_writer::TupleWriter, datavalues::AnyDataValue,
+        dictionary::string_map::NullMap, management::database::Dict,
+    };
+    use oxiri::Iri;
     use rio_turtle::{NTriplesParser, TurtleParser};
     use test_log::test;
 
@@ -407,6 +410,25 @@ mod test {
         let result = reader.read_triples_with_parser(&mut tuple_writer, NTriplesParser::new);
         assert!(result.is_ok());
         assert_eq!(tuple_writer.size(), 1);
+    }
+
+    #[test]
+    fn default_graph_name() {
+        let dict = RefCell::new(Dict::default());
+        let mut tuple_writer = TupleWriter::new(&dict, 3);
+        let mut null_map = NullMap::default();
+        let graph_dv = AnyDataValue::new_iri(DEFAULT_GRAPH.to_string());
+
+        // check that we use our own default graph IRI
+        assert_eq!(
+            RdfReader::datavalue_from_graph_name(&mut null_map, &mut tuple_writer, None).expect(""),
+            graph_dv
+        );
+        // check that our default graph is a valid IRI in the first place
+        assert_eq!(
+            Iri::parse(DEFAULT_GRAPH.to_string()).unwrap().to_string(),
+            DEFAULT_GRAPH.to_string()
+        );
     }
 
     // #[test]

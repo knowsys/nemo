@@ -164,7 +164,7 @@ impl DsvHandler {
                 ));
             }
             (DsvVariant::CSV, None) => b',',
-            (DsvVariant::TSV, None) => b',',
+            (DsvVariant::TSV, None) => b'\t',
             (DsvVariant::CSV, Some(_)) | (DsvVariant::TSV, Some(_)) => {
                 return Err(ImportExportError::UnknownAttribute(
                     PARAMETER_NAME_DSV_DELIMITER.to_string(),
