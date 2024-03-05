@@ -9,12 +9,6 @@ use super::OtherDvDictionary;
 use super::StringDvDictionary;
 use super::{AddResult, NullDvDictionary};
 
-// use lru::LruCache;
-// use std::borrow::Borrow;
-// use std::collections::HashMap;
-// use std::hash::{Hash, Hasher};
-// use std::num::NonZeroUsize;
-
 // /// Number of recent occurrences of a string pattern required for creating a bespoke dictionary
 // const DICT_THRESHOLD: u32 = 500;
 
@@ -23,66 +17,6 @@ use super::{AddResult, NullDvDictionary};
 /// 2^8=256 such blocks available within the u32 address range (and
 /// 2^40 in 64bits).
 const BLOCKSIZE: u32 = 24;
-
-// The code for [StringPair] and [StringPairKey] is inspired by
-// https://stackoverflow.com/a/50478038 ("How to avoid temporary allocations when using a complex key for a HashMap?").
-// The goal is just that, since we have very frequent hashmap lookups here.
-// #[derive(Debug, Eq, Hash, PartialEq)]
-// struct StringPair {
-//     first: String,
-//     second: String,
-// }
-
-// impl StringPair {
-//     fn new(first: impl Into<String>, second: impl Into<String>) -> Self {
-//         StringPair {
-//             first: first.into(),
-//             second: second.into(),
-//         }
-//     }
-// }
-
-// trait StringPairKey {
-//     fn to_key(&self) -> (&str, &str);
-// }
-
-// impl Hash for dyn StringPairKey + '_ {
-//     fn hash<H: Hasher>(&self, state: &mut H) {
-//         self.to_key().hash(state)
-//     }
-// }
-
-// impl PartialEq for dyn StringPairKey + '_ {
-//     fn eq(&self, other: &Self) -> bool {
-//         self.to_key() == other.to_key()
-//     }
-// }
-
-// impl Eq for dyn StringPairKey + '_ {}
-
-// impl StringPairKey for StringPair {
-//     fn to_key(&self) -> (&str, &str) {
-//         (&self.first, &self.second)
-//     }
-// }
-
-// impl<'a> StringPairKey for (&'a str, &'a str) {
-//     fn to_key(&self) -> (&str, &str) {
-//         (self.0, self.1)
-//     }
-// }
-
-// impl<'a> Borrow<dyn StringPairKey + 'a> for StringPair {
-//     fn borrow(&self) -> &(dyn StringPairKey + 'a) {
-//         self
-//     }
-// }
-// impl<'a> Borrow<dyn StringPairKey + 'a> for (&'a str, &'a str) {
-//     fn borrow(&self) -> &(dyn StringPairKey + 'a) {
-//         self
-//     }
-// }
-// End of code for [StringPair].
 
 /// Enum to specify what kind of data a dictionary supports.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]

@@ -22,25 +22,31 @@ pub(crate) mod bytes_buffer;
 pub(crate) mod bytes_dictionary;
 /// Module to define the [BytesPairDictionary]
 pub(crate) mod bytes_pair_dictionary;
+/// Module to define dv_converters
+pub(crate) mod dv_converter;
 /// Module to define string-based datavalue dictionaries.
 pub(crate) mod string_dv_dict;
-/// Module to define string-pair-based datavalue dictionaries.
-pub(crate) mod string_pair_dv_dict;
-pub(crate) use string_pair_dv_dict::StringPairBasedDvDictionary;
 /// Module to define the [StringMap]
 pub mod string_map;
+/// Module to define string-pair-based datavalue dictionaries.
+pub(crate) mod string_pair_dv_dict;
 pub(crate) use string_dv_dict::IriDvDictionary;
+#[cfg(not(feature = "stringpairdictionary"))]
 pub(crate) use string_dv_dict::LangStringDvDictionary;
+#[cfg(not(feature = "stringpairdictionary"))]
 pub(crate) use string_dv_dict::OtherDvDictionary;
 pub(crate) use string_dv_dict::StringDvDictionary;
+#[cfg(feature = "stringpairdictionary")]
+pub(crate) use string_pair_dv_dict::LangStringDvDictionary;
+#[cfg(feature = "stringpairdictionary")]
+pub(crate) use string_pair_dv_dict::OtherDvDictionary;
 /// Module to define a datavalue dictionary for nulls.
 pub(crate) mod null_dv_dict;
 pub(crate) use null_dv_dict::NullDvDictionary;
-/// Module to define a general-purpose datavalue dictionary.
-pub mod meta_dv_dict;
-
 /// Module to define the [DictionaryString]
 pub(crate) mod dictionary_string;
+/// Module to define a general-purpose datavalue dictionary.
+pub mod meta_dv_dict;
 pub use dictionary_string::DictionaryString;
 /// Module to define [HashMapDictionary]
 pub mod hash_map_dictionary;

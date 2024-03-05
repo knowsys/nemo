@@ -10,10 +10,11 @@ readme = "README.md"
 repository.workspace = true
 
 [features]
-default = ["timing"]
+default = ["timing", "stringpairdictionary"]
 # Enables time measurements using the "howlong" crate
 # If this feature is not enabled, all time measurements will display zero instead
 timing = ["dep:howlong"]
+stringpairdictionary = []
 
 [[bin]]
 name = "dict-bench"

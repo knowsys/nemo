@@ -1,5 +1,4 @@
-@declare data(integer, integer) .
-@source data[2]: load-csv("sources/data.csv") .
+@import data :- csv { resource = "sources/data.csv" } .
 
 x_less_than_three(?X, ?Y) :- data(?X, ?Y), ?X < 3 .
 y_less_than_eq_five(?X, ?Y) :- data(?X, ?Y), ?Y <= 5 .
@@ -9,4 +8,13 @@ y_greater_than_eq_seven(?X, ?Y) :- data(?X, ?Y), ?Y >= 7 .
 x_unequals_three(?X, ?Y) :- data(?X, ?Y), ?X != 3 .
 y_unequals_five(?X, ?Y) :- data(?X, ?Y), ?Y != 5 .
 
-complex(?X, ?Y) :- data(?X, ?Y), Abs(?X - ?Y) >= ?X * ?X.
+complex(?X, ?Y) :- data(?X, ?Y), ABS(?X - ?Y) >= ?X * ?X.
+
+@export x_greater_than_five :- csv {}.
+@export x_unequals_three :- csv {}.
+@export y_greater_than_eq_seven :- csv {}.
+@export y_unequals_five :- csv {}.
+@export complex :- csv {}.
+@export y_equals_nine :- csv {}.
+@export y_less_than_eq_five :- csv {}.
+@export x_less_than_three :- csv {}.
