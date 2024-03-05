@@ -203,6 +203,11 @@ impl Default for MetaDictionary {
 }
 
 impl MetaDictionary {
+    ///Default constructor
+    pub fn new() -> Self {
+        Self::default()
+    }
+
     /// Convert the local ID of a given dictionary to a global ID.
     /// The function assumes that the given local id exists, and will crash
     /// otherwise. It can safely be used for conversion of previously stored data.
