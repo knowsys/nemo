@@ -52,7 +52,6 @@ impl DvConverter for IriDvConverter {
     }
 }
 
-
 /// Combine two strings into one in an invertible way.
 /// If either of the strings is typically shorter than 127 bytes, it
 /// should be given as `string2` to enable more efficient coding.
