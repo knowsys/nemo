@@ -142,6 +142,8 @@ impl RdfReader {
     where
         Parser: TriplesParser,
     {
+        log::info!("Starting RDF import (format {})", self.variant);
+
         let skip: Vec<bool> = self
             .value_formats
             .iter()
@@ -211,6 +213,8 @@ impl RdfReader {
     where
         Parser: QuadsParser,
     {
+        log::info!("Starting RDF import (format {})", self.variant);
+
         let skip: Vec<bool> = self
             .value_formats
             .iter()

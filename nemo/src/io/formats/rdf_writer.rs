@@ -209,6 +209,8 @@ impl RdfWriter {
     where
         Formatter: TriplesFormatter,
     {
+        log::info!("Starting RDF export (format {})", self.variant);
+
         let mut triple_pos = [0; 3];
         let mut cur = 0;
         for (idx, format) in self.value_formats.iter().enumerate() {
@@ -269,6 +271,8 @@ impl RdfWriter {
     where
         Formatter: QuadsFormatter,
     {
+        log::info!("Starting RDF export (format {})", self.variant);
+
         let mut quad_pos = [0; 4];
         let mut cur = 0;
         for (idx, format) in self.value_formats.iter().enumerate() {

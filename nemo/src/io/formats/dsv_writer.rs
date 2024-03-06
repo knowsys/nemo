@@ -41,6 +41,8 @@ impl DsvWriter {
         mut self,
         table: Box<dyn Iterator<Item = Vec<AnyDataValue>> + 'a>,
     ) -> Result<(), Error> {
+        log::info!("Starting data export");
+
         let serializers: Vec<DataValueSerializerFunction> = self
             .value_formats
             .iter()

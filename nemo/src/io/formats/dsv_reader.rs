@@ -57,6 +57,8 @@ impl DsvReader {
     /// Actually reads the data from the file, using the given parsers to convert strings to [`AnyDataValue`]s.
     /// If a field cannot be read or parsed, the line will be ignored
     fn read(self, tuple_writer: &mut TupleWriter) -> Result<(), Box<dyn std::error::Error>> {
+        log::info!("Starting data import");
+
         let parsers: Vec<DataValueParserFunction> = self
             .value_formats
             .iter()
