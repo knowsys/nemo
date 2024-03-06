@@ -26,7 +26,6 @@ Options:
       --log <LOG_LEVEL>                Set log verbosity (default is "warn") [possible values: error, warn, info, debug, trace]
   -h, --help                           Print help (see more with '--help')
   -V, --version                        Print version
-
 ```
 
 ## Log-Levels
