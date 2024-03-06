@@ -10,6 +10,8 @@ use std::{
     str::FromStr,
     sync::{Mutex, MutexGuard},
 };
+#[cfg(not(feature = "timing"))]
+use std::time::Duration;
 
 // See https://doc.rust-lang.org/cargo/reference/features.html#mutually-exclusive-features
 #[cfg(all(feature = "js", feature = "timing"))]
