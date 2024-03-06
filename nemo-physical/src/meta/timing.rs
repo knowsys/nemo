@@ -5,13 +5,13 @@ use ascii_tree::{write_tree, Tree};
 use howlong::*;
 use linked_hash_map::LinkedHashMap;
 use once_cell::sync::Lazy;
+#[cfg(not(feature = "timing"))]
+use std::time::Duration;
 use std::{
     fmt,
     str::FromStr,
     sync::{Mutex, MutexGuard},
 };
-#[cfg(not(feature = "timing"))]
-use std::time::Duration;
 
 // See https://doc.rust-lang.org/cargo/reference/features.html#mutually-exclusive-features
 #[cfg(all(feature = "js", feature = "timing"))]
