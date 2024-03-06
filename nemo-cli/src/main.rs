@@ -23,7 +23,7 @@ pub mod cli;
 use std::fs::{read_to_string, File};
 
 use clap::Parser;
-use cli::CliApp;
+use cli::{CliApp, Exporting, Reporting};
 use colored::Colorize;
 use nemo::{
     error::{Error, ReadingError},
@@ -34,13 +34,40 @@ use nemo::{
         ImportManager,
     },
     meta::timing::{TimedCode, TimedDisplay},
-    model::ExportDirective,
+    model::{ExportDirective, Program},
 };
 
-use crate::cli::{
-    EXPORT_ALL, EXPORT_EDB, EXPORT_IDB, EXPORT_NONE, REPORT_ALL, REPORT_MEM, REPORT_NONE,
-    REPORT_SHORT, REPORT_TIME,
-};
+/// Set exports according to command-line parameter.
+/// This disables all existing exports.
+fn override_exports(program: &mut Program, value: Exporting) {
+    if value == Exporting::Keep {
+        return;
+    }
+
+    program.clear_exports();
+
+    let mut additional_exports = Vec::new();
+    match value {
+        Exporting::Idb => {
+            for predicate in program.idb_predicates() {
+                additional_exports.push(ExportDirective::default(predicate));
+            }
+        }
+        Exporting::Edb => {
+            for predicate in program.edb_predicates() {
+                additional_exports.push(ExportDirective::default(predicate));
+            }
+        }
+        Exporting::All => {
+            for predicate in program.predicates() {
+                additional_exports.push(ExportDirective::default(predicate));
+            }
+        }
+        Exporting::None => {}
+        Exporting::Keep => unreachable!("already checked above"),
+    }
+    program.add_exports(additional_exports);
+}
 
 /// Prints short summary message.
 fn print_finished_message(new_facts: usize, saving: bool) {
@@ -149,33 +176,7 @@ fn run(mut cli: CliApp) -> Result<(), Error> {
         .map(|f| f.into_iter().map(parse_fact).collect::<Result<Vec<_>, _>>())
         .transpose()?;
 
-    if let Some(ref value) = cli.output.export_setting {
-        program.clear_exports();
-
-        let mut additional_exports = Vec::new();
-        match value.as_str() {
-            EXPORT_IDB => {
-                for predicate in program.idb_predicates() {
-                    additional_exports.push(ExportDirective::default(predicate));
-                }
-            }
-            EXPORT_EDB => {
-                for predicate in program.edb_predicates() {
-                    additional_exports.push(ExportDirective::default(predicate));
-                }
-            }
-            EXPORT_ALL => {
-                for predicate in program.predicates() {
-                    additional_exports.push(ExportDirective::default(predicate));
-                }
-            }
-            EXPORT_NONE => {}
-            _ => {
-                unreachable!("invalid option is filtered by argument parser");
-            }
-        }
-        program.add_exports(additional_exports);
-    }
+    override_exports(&mut program, cli.output.export_setting);
 
     let export_manager = cli.output.export_manager()?;
     // Validate exports even if we do not intend to write data:
@@ -219,13 +220,12 @@ fn run(mut cli: CliApp) -> Result<(), Error> {
 
     TimedCode::instance().stop();
 
-    let (print_summary, print_times, print_memory) = match cli.reporting.as_deref() {
-        Some(REPORT_ALL) => (true, true, true),
-        Some(REPORT_SHORT) => (true, false, false),
-        Some(REPORT_TIME) => (true, true, false),
-        Some(REPORT_MEM) => (true, false, true),
-        Some(REPORT_NONE) => (false, false, false),
-        _ => (true, false, false),
+    let (print_summary, print_times, print_memory) = match cli.reporting {
+        Reporting::All => (true, true, true),
+        Reporting::Short => (true, false, false),
+        Reporting::Time => (true, true, false),
+        Reporting::Mem => (true, false, true),
+        Reporting::None => (false, false, false),
     };
 
     if print_summary {

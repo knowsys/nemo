@@ -5,25 +5,38 @@ use nemo::{error::Error, io::ExportManager};
 
 /// Default export directory.
 const DEFAULT_OUTPUT_DIRECTORY: &str = "results";
-/// Value used to indicate export should be disabled.
-pub(crate) const EXPORT_NONE: &str = "none";
-/// Value used to indicate export should be overridden to export all IDB predicates instead.
-pub(crate) const EXPORT_IDB: &str = "idb";
-/// Value used to indicate export should be overridden to export all EDB predicates instead.
-pub(crate) const EXPORT_EDB: &str = "edb";
-/// Value used to indicate export should be overridden to export all predicates instead.
-pub(crate) const EXPORT_ALL: &str = "all";
 
-/// Value used to disable reporting.
-pub(crate) const REPORT_NONE: &str = "none";
-/// Value used to print short report.
-pub(crate) const REPORT_SHORT: &str = "short";
-/// Value used to print short report and detailed memory usage.
-pub(crate) const REPORT_MEM: &str = "mem";
-/// Value used to print short report and detailed timing.
-pub(crate) const REPORT_TIME: &str = "time";
-/// Value used to print short report and all details on timing and memory usage.
-pub(crate) const REPORT_ALL: &str = "all";
+/// Possible settings for the export option.
+#[derive(clap::ValueEnum, Clone, Copy, Default, Debug, PartialEq, Eq)]
+pub(crate) enum Exporting {
+    /// Export data as specified in program
+    #[default]
+    Keep,
+    /// Disable all exports.
+    None,
+    /// Export all IDB predicates (those used in rule heads)
+    Idb,
+    /// Export all EDB predicates (those for which facts are given or imported)
+    Edb,
+    /// Export all predicates.
+    All,
+}
+
+/// Possible settings for the reporting option.
+#[derive(clap::ValueEnum, Clone, Copy, Default, Debug, PartialEq, Eq)]
+pub(crate) enum Reporting {
+    /// Disable reporting.
+    None,
+    /// Print short report.
+    #[default]
+    Short,
+    /// Print short report and detailed memory timing.
+    Time,
+    /// Print short report and detailed memory usage.
+    Mem,
+    /// Print short report and all details on timing and memory usage.
+    All,
+}
 
 /// Cli Arguments related to logging
 #[derive(clap::Args, Debug)]
@@ -74,8 +87,8 @@ impl LoggingArgs {
 #[derive(Debug, clap::Args)]
 pub(crate) struct OutputArgs {
     /// Override export directives in the program
-    #[arg(short, long = "export", value_parser=clap::builder::PossibleValuesParser::new([EXPORT_NONE, EXPORT_ALL, EXPORT_IDB, EXPORT_EDB]))]
-    pub(crate) export_setting: Option<String>,
+    #[arg(long = "export", value_enum, default_value_t)]
+    pub(crate) export_setting: Exporting,
     /// Base directory for exporting files
     #[arg(short='D', long = "export-dir", default_value = DEFAULT_OUTPUT_DIRECTORY)]
     export_directory: PathBuf,
@@ -128,8 +141,8 @@ pub(crate) struct CliApp {
     #[command(flatten)]
     pub(crate) tracing: TracingArgs,
     /// Control amount of reporting printed by the program
-    #[arg(short, long = "report", value_parser=clap::builder::PossibleValuesParser::new([REPORT_NONE, REPORT_SHORT, REPORT_MEM, REPORT_TIME, REPORT_ALL]))]
-    pub(crate) reporting: Option<String>,
+    #[arg(long = "report", value_enum, default_value_t)]
+    pub(crate) reporting: Reporting,
     /// Arguments related to logging
     #[command(flatten)]
     pub(crate) logging: LoggingArgs,
