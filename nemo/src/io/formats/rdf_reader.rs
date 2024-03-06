@@ -183,7 +183,7 @@ impl RdfReader {
 
             triple_count += 1;
             if triple_count % PROGRESS_NOTIFY_INCREMENT == 0 {
-                log::info!("Loading: processed {triple_count} triples")
+                log::info!("... processed {triple_count} triples")
             }
 
             Ok::<_, Box<dyn std::error::Error>>(())
@@ -197,7 +197,7 @@ impl RdfReader {
             }
         }
 
-        log::info!("Finished loading: processed {triple_count} triples");
+        log::info!("Finished import: processed {triple_count} triples");
 
         Ok(())
     }
@@ -257,7 +257,7 @@ impl RdfReader {
 
             quad_count += 1;
             if quad_count % PROGRESS_NOTIFY_INCREMENT == 0 {
-                log::info!("Loading: processed {quad_count} triples")
+                log::info!("... processed {quad_count} quads")
             }
 
             Ok::<_, Box<dyn std::error::Error>>(())
@@ -271,7 +271,7 @@ impl RdfReader {
             }
         }
 
-        log::info!("Finished loading: processed {quad_count} quad");
+        log::info!("Finished import: processed {quad_count} quads");
 
         Ok(())
     }

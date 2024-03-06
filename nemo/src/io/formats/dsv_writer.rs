@@ -9,6 +9,7 @@ use crate::{error::Error, io::formats::types::TableWriter};
 
 use super::dsv_value_format::DataValueSerializerFunction;
 use super::dsv_value_format::DsvValueFormat;
+use super::PROGRESS_NOTIFY_INCREMENT;
 
 /// A writer object for writing [DSV](https://en.wikipedia.org/wiki/Delimiter-separated_values) (delimiter separated values) files.
 ///
@@ -51,6 +52,9 @@ impl DsvWriter {
             .map(|vf| *vf == DsvValueFormat::Skip)
             .collect();
 
+        let mut line_count: u64 = 0;
+        let mut drop_count: u64 = 0;
+
         for record in table {
             let mut string_record = Vec::with_capacity(record.len());
             let mut complete = true;
@@ -69,8 +73,16 @@ impl DsvWriter {
 
             if complete {
                 self.writer.write_record(string_record)?;
+                line_count += 1;
+                if (line_count % PROGRESS_NOTIFY_INCREMENT) == 0 {
+                    log::info!("... processed {line_count} tuples");
+                }
+            } else {
+                drop_count += 1;
             }
         }
+
+        log::info!("Finished export: processed {line_count} tuples (dropped {drop_count})");
 
         Ok(())
     }

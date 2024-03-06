@@ -10,7 +10,7 @@ use rio_xml::RdfXmlFormatter;
 use std::io::Write;
 
 use super::{rdf::RdfValueFormat, types::TableWriter};
-use crate::{error::Error, model::RdfVariant};
+use crate::{error::Error, io::formats::PROGRESS_NOTIFY_INCREMENT, model::RdfVariant};
 
 /// Private struct to record the type of an RDF term that
 /// is to be created on demand.
@@ -224,6 +224,9 @@ impl RdfWriter {
         let mut formatter = make_formatter(self.writer)?;
         let mut buffer: QuadBuffer = Default::default();
 
+        let mut triple_count: u64 = 0;
+        let mut drop_count: u64 = 0;
+
         for record in table {
             assert_eq!(record.len(), self.value_formats.len());
 
@@ -241,10 +244,18 @@ impl RdfWriter {
                 predicate: buffer.predicate(),
                 object: buffer.object(),
             }) {
-                log::info!("failed to write triple: {e}");
+                log::debug!("failed to write triple: {e}");
+                drop_count += 1;
+            } else {
+                triple_count += 1;
+                if (triple_count % PROGRESS_NOTIFY_INCREMENT) == 0 {
+                    log::info!("... processed {triple_count} triples");
+                }
             }
         }
         finish_formatter(formatter);
+
+        log::info!("Finished export: processed {triple_count} triples (dropped {drop_count})");
 
         Ok(())
     }
@@ -273,6 +284,9 @@ impl RdfWriter {
         let mut formatter = make_formatter(self.writer)?;
         let mut buffer: QuadBuffer = Default::default();
 
+        let mut quad_count: u64 = 0;
+        let mut drop_count: u64 = 0;
+
         for record in table {
             assert_eq!(record.len(), self.value_formats.len());
 
@@ -294,10 +308,18 @@ impl RdfWriter {
                 object: buffer.object(),
                 graph_name: Some(buffer.graph_name()),
             }) {
-                log::info!("failed to write quad: {e}");
+                log::debug!("failed to write quad: {e}");
+                drop_count += 1;
+            } else {
+                quad_count += 1;
+                if (quad_count % PROGRESS_NOTIFY_INCREMENT) == 0 {
+                    log::info!("... processed {quad_count} triples");
+                }
             }
         }
         finish_formatter(formatter);
+
+        log::info!("Finished export: processed {quad_count} quads (dropped {drop_count})");
 
         Ok(())
     }

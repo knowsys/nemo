@@ -100,10 +100,10 @@ impl DsvReader {
 
             line_count += 1;
             if (line_count % PROGRESS_NOTIFY_INCREMENT) == 0 {
-                log::info!("loading: processed {line_count} lines");
+                log::info!("... processed {line_count} lines");
             }
         }
-        log::info!("Finished loading: processed {line_count} lines (dropped {drop_count})");
+        log::info!("Finished import: processed {line_count} lines (dropped {drop_count})");
 
         Ok(())
     }
