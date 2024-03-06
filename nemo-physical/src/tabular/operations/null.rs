@@ -4,7 +4,7 @@ use std::cell::{RefCell, UnsafeCell};
 
 use crate::{
     columnar::{
-        columnscan::{ColumnScanEnum, ColumnScanRainbow},
+        columnscan::{ColumnScanEnum, ColumnScanT},
         operations::{constant::ColumnScanConstant, pass::ColumnScanPass},
     },
     datatypes::{storage_type_name::StorageTypeBitSet, StorageTypeName, StorageValueT},
@@ -91,7 +91,7 @@ impl OperationGenerator for GeneratorNull {
         let trie_scan = trie_scans.remove(0)?;
 
         let arity = trie_scan.arity() + self.instructions.len();
-        let mut column_scans = Vec::<UnsafeCell<ColumnScanRainbow<'a>>>::with_capacity(arity);
+        let mut column_scans = Vec::<UnsafeCell<ColumnScanT<'a>>>::with_capacity(arity);
 
         for layer in 0..trie_scan.arity() {
             macro_rules! pass_scan {
@@ -108,7 +108,7 @@ impl OperationGenerator for GeneratorNull {
             let pass_scan_float = pass_scan!(Float, scan_float);
             let pass_scan_double = pass_scan!(Double, scan_double);
 
-            let new_scan = ColumnScanRainbow::new(
+            let new_scan = ColumnScanT::new(
                 pass_scan_id32,
                 pass_scan_id64,
                 pass_scan_i64,
@@ -127,7 +127,7 @@ impl OperationGenerator for GeneratorNull {
             let scan_double = ColumnScanEnum::Constant(ColumnScanConstant::new(None));
 
             let new_scan =
-                ColumnScanRainbow::new(scan_id32, scan_id64, scan_i64, scan_float, scan_double);
+                ColumnScanT::new(scan_id32, scan_id64, scan_i64, scan_float, scan_double);
 
             column_scans.push(UnsafeCell::new(new_scan));
         }
@@ -159,7 +159,7 @@ pub(crate) struct TrieScanNull<'a> {
     /// For each layer in the resulting trie contains a [ColumnScanRainbow]
     /// which either just pass the values from the input `trie_scan`
     /// or contain fresh nulls.
-    column_scans: Vec<UnsafeCell<ColumnScanRainbow<'a>>>,
+    column_scans: Vec<UnsafeCell<ColumnScanT<'a>>>,
 }
 
 impl<'a> PartialTrieScan<'a> for TrieScanNull<'a> {
@@ -222,7 +222,7 @@ impl<'a> PartialTrieScan<'a> for TrieScanNull<'a> {
         self.trie_scan.arity() + self.instructions.len()
     }
 
-    fn scan<'b>(&'b self, layer: usize) -> &'b UnsafeCell<ColumnScanRainbow<'a>> {
+    fn scan<'b>(&'b self, layer: usize) -> &'b UnsafeCell<ColumnScanT<'a>> {
         &self.column_scans[layer]
     }
 

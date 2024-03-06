@@ -7,7 +7,7 @@ use streaming_iterator::StreamingIterator;
 
 use crate::{
     columnar::{
-        columnscan::ColumnScanRainbow,
+        columnscan::ColumnScanT,
         intervalcolumn::{
             interval_lookup::lookup_column::IntervalLookupColumn, IntervalColumnT,
             IntervalColumnTBuilderMatrix, IntervalColumnTBuilderTriescan,
@@ -377,15 +377,12 @@ pub(crate) struct TrieScanGeneric<'a> {
     path_types: Vec<StorageTypeName>,
 
     /// [ColumnScan] for each layer in the [PartialTrieScan]
-    column_scans: Vec<UnsafeCell<ColumnScanRainbow<'a>>>,
+    column_scans: Vec<UnsafeCell<ColumnScanT<'a>>>,
 }
 
 impl<'a> TrieScanGeneric<'a> {
     /// Construct a new [TrieScanGeneric].
-    pub(crate) fn new(
-        trie: &'a Trie,
-        column_scans: Vec<UnsafeCell<ColumnScanRainbow<'a>>>,
-    ) -> Self {
+    pub(crate) fn new(trie: &'a Trie, column_scans: Vec<UnsafeCell<ColumnScanT<'a>>>) -> Self {
         Self {
             trie,
             path_types: Vec::with_capacity(column_scans.len()),
@@ -437,7 +434,7 @@ impl<'a> PartialTrieScan<'a> for TrieScanGeneric<'a> {
         self.trie.arity()
     }
 
-    fn scan<'b>(&'b self, layer: usize) -> &'b UnsafeCell<ColumnScanRainbow<'a>> {
+    fn scan<'b>(&'b self, layer: usize) -> &'b UnsafeCell<ColumnScanT<'a>> {
         &self.column_scans[layer]
     }
 

@@ -6,7 +6,7 @@ use std::{cell::UnsafeCell, fmt::Debug};
 use delegate::delegate;
 
 use crate::{
-    columnar::columnscan::ColumnScanRainbow,
+    columnar::columnscan::ColumnScanT,
     datatypes::{storage_type_name::StorageTypeBitSet, StorageTypeName, StorageValueT},
 };
 
@@ -49,10 +49,10 @@ pub(crate) trait PartialTrieScan<'a>: Debug {
     ///
     /// # Panics
     /// Panics if the requested layer is higher than the arity of this scan.
-    fn scan<'b>(&'b self, layer: usize) -> &'b UnsafeCell<ColumnScanRainbow<'a>>;
+    fn scan<'b>(&'b self, layer: usize) -> &'b UnsafeCell<ColumnScanT<'a>>;
 
     /// Return the [ColumnScanT] at the current layer.
-    fn current_scan<'b>(&'b self) -> Option<&UnsafeCell<ColumnScanRainbow<'a>>> {
+    fn current_scan<'b>(&'b self) -> Option<&UnsafeCell<ColumnScanT<'a>>> {
         Some(self.scan(self.current_layer()?))
     }
 }
@@ -100,8 +100,8 @@ impl<'a> PartialTrieScan<'a> for TrieScanEnum<'a> {
             fn possible_types(&self, layer: usize) -> StorageTypeBitSet;
             fn arity(&self) -> usize;
             fn current_layer(&self) -> Option<usize>;
-            fn scan<'b>(&'b self, layer: usize) -> &'b UnsafeCell<ColumnScanRainbow<'a>>;
-            fn current_scan<'b>(&'b self) -> Option<&UnsafeCell<ColumnScanRainbow<'a>>>;
+            fn scan<'b>(&'b self, layer: usize) -> &'b UnsafeCell<ColumnScanT<'a>>;
+            fn current_scan<'b>(&'b self) -> Option<&UnsafeCell<ColumnScanT<'a>>>;
         }
     }
 }

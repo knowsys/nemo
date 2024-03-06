@@ -343,9 +343,9 @@ where
     }
 }
 
-/// Replaces [ColumnScanT]
+/// Contains a [ColumnScan] for every used [super::super::datatypes::storage_type_name::StorageTypeName]
 #[derive(Debug)]
-pub(crate) struct ColumnScanRainbow<'a> {
+pub(crate) struct ColumnScanT<'a> {
     /// Case [StorageTypeName::Id32][super::super::datatypes::storage_type_name::StorageTypeName]
     pub scan_id32: ColumnScanCell<'a, u32>,
     /// Case [StorageTypeName::Id64][super::super::datatypes::storage_type_name::StorageTypeName]
@@ -358,7 +358,7 @@ pub(crate) struct ColumnScanRainbow<'a> {
     pub scan_double: ColumnScanCell<'a, Double>,
 }
 
-impl<'a> ColumnScanRainbow<'a> {
+impl<'a> ColumnScanT<'a> {
     /// Create a new [ColumnScanRainbow].
     pub(crate) fn new(
         scan_id32: ColumnScanEnum<'a, u32>,
@@ -366,7 +366,7 @@ impl<'a> ColumnScanRainbow<'a> {
         scan_i64: ColumnScanEnum<'a, i64>,
         scan_float: ColumnScanEnum<'a, Float>,
         scan_double: ColumnScanEnum<'a, Double>,
-    ) -> ColumnScanRainbow<'a> {
+    ) -> ColumnScanT<'a> {
         Self {
             scan_id32: ColumnScanCell::new(scan_id32),
             scan_id64: ColumnScanCell::new(scan_id64),

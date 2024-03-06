@@ -106,7 +106,6 @@ where
 {
     /// Check if this function correspond to some special case defined in [SpecialCaseFunction].
     /// Returns `None` if this is not the case.
-    #[allow(dead_code)]
     pub(crate) fn special_function(&self) -> SpecialCaseFunction<'_, ReferenceType> {
         if self.references().is_empty() {
             let constant_program =

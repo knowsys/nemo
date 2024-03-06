@@ -7,7 +7,7 @@ use std::{
 
 use crate::{
     columnar::{
-        columnscan::{ColumnScanCell, ColumnScanEnum, ColumnScanRainbow},
+        columnscan::{ColumnScanCell, ColumnScanEnum, ColumnScanT},
         operations::union::ColumnScanUnion,
     },
     datatypes::{storage_type_name::StorageTypeBitSet, Double, Float, StorageTypeName},
@@ -49,7 +49,7 @@ impl OperationGenerator for GeneratorUnion {
         let arity = trie_scans.first().map_or(0, |s| s.arity());
 
         let mut active_scans = Vec::with_capacity(arity + 1);
-        let mut column_scans = Vec::<UnsafeCell<ColumnScanRainbow<'a>>>::with_capacity(arity);
+        let mut column_scans = Vec::<UnsafeCell<ColumnScanT<'a>>>::with_capacity(arity);
 
         active_scans.push(Rc::new(UnsafeCell::new((0..trie_scans.len()).collect())));
 
@@ -85,7 +85,7 @@ impl OperationGenerator for GeneratorUnion {
             let union_scan_float = union_scan!(Float, scan_float);
             let union_scan_double = union_scan!(Double, scan_double);
 
-            let new_scan = ColumnScanRainbow::new(
+            let new_scan = ColumnScanT::new(
                 union_scan_id32,
                 union_scan_id64,
                 union_scan_i64,
@@ -118,7 +118,7 @@ pub(crate) struct TrieScanUnion<'a> {
 
     /// For each layer in the resulting trie contains a [ColumnScanRainbow]
     /// evaluating the union of the underlying columns of the input trie.
-    column_scans: Vec<UnsafeCell<ColumnScanRainbow<'a>>>,
+    column_scans: Vec<UnsafeCell<ColumnScanT<'a>>>,
 }
 
 impl<'a> PartialTrieScan<'a> for TrieScanUnion<'a> {
@@ -153,7 +153,7 @@ impl<'a> PartialTrieScan<'a> for TrieScanUnion<'a> {
         self.trie_scans[0].arity()
     }
 
-    fn scan<'b>(&'b self, layer: usize) -> &'b UnsafeCell<ColumnScanRainbow<'a>> {
+    fn scan<'b>(&'b self, layer: usize) -> &'b UnsafeCell<ColumnScanT<'a>> {
         &self.column_scans[layer]
     }
 

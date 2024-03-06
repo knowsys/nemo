@@ -8,7 +8,7 @@ use std::{
 
 use crate::{
     columnar::{
-        columnscan::{ColumnScanEnum, ColumnScanRainbow},
+        columnscan::{ColumnScanEnum, ColumnScanT},
         operations::{
             constant::ColumnScanConstant, filter::ColumnScanFilter,
             filter_constant::ColumnScanFilterConstant, pass::ColumnScanPass,
@@ -188,7 +188,7 @@ impl OperationGenerator for GeneratorFilter {
             return Some(trie_scan);
         }
 
-        let mut column_scans: Vec<UnsafeCell<ColumnScanRainbow<'a>>> =
+        let mut column_scans: Vec<UnsafeCell<ColumnScanT<'a>>> =
             Vec::with_capacity(self.output_columns.len());
 
         let input_values = Rc::new(RefCell::new(Vec::<AnyDataValue>::new()));
@@ -232,7 +232,7 @@ impl OperationGenerator for GeneratorFilter {
             let output_scan_float = output_scan!(Float, Float, scan_float);
             let output_scan_double = output_scan!(Double, Double, scan_double);
 
-            let new_scan = ColumnScanRainbow::new(
+            let new_scan = ColumnScanT::new(
                 output_scan_id32,
                 output_scan_id64,
                 output_scan_i64,
@@ -271,7 +271,7 @@ pub(crate) struct TrieScanFilter<'a> {
 
     /// For each layer in the resulting trie contains a [`ColumnScanRainbow`]
     /// evaluating the union of the underlying columns of the input trie.
-    column_scans: Vec<UnsafeCell<ColumnScanRainbow<'a>>>,
+    column_scans: Vec<UnsafeCell<ColumnScanT<'a>>>,
 }
 
 impl<'a> PartialTrieScan<'a> for TrieScanFilter<'a> {
@@ -314,7 +314,7 @@ impl<'a> PartialTrieScan<'a> for TrieScanFilter<'a> {
         self.trie_scan.arity()
     }
 
-    fn scan<'b>(&'b self, layer: usize) -> &'b UnsafeCell<ColumnScanRainbow<'a>> {
+    fn scan<'b>(&'b self, layer: usize) -> &'b UnsafeCell<ColumnScanT<'a>> {
         &self.column_scans[layer]
     }
 

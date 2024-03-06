@@ -8,7 +8,7 @@ mod test {
         benches::test::{black_box, Bencher},
         columnar::{
             column::vector::{ColumnScanVector, ColumnVector},
-            columnscan::{ColumnScanEnum, ColumnScanRainbow},
+            columnscan::{ColumnScanEnum, ColumnScanT},
             operations::constant::ColumnScanConstant,
         },
         datatypes::{storage_type_name::NUM_STORAGETYPES, StorageTypeName, StorageValueT},
@@ -62,7 +62,7 @@ mod test {
         let column = ColumnVector::new(vector());
 
         bencher.iter(|| {
-            let mut scan = black_box(ColumnScanRainbow::new(
+            let mut scan = black_box(ColumnScanT::new(
                 ColumnScanEnum::Constant(ColumnScanConstant::new(None)),
                 ColumnScanEnum::Vector(ColumnScanVector::new(&column)),
                 ColumnScanEnum::Constant(ColumnScanConstant::new(None)),
@@ -119,7 +119,7 @@ mod test {
         let column = ColumnVector::new(vector());
 
         bencher.iter(|| {
-            let mut scan = black_box(ColumnScanRainbow::new(
+            let mut scan = black_box(ColumnScanT::new(
                 ColumnScanEnum::Constant(ColumnScanConstant::new(None)),
                 ColumnScanEnum::Vector(ColumnScanVector::new(&column)),
                 ColumnScanEnum::Constant(ColumnScanConstant::new(None)),

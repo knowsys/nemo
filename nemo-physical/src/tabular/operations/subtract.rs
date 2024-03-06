@@ -7,7 +7,7 @@ use std::{
 
 use crate::{
     columnar::{
-        columnscan::{ColumnScanCell, ColumnScanEnum, ColumnScanRainbow},
+        columnscan::{ColumnScanCell, ColumnScanEnum, ColumnScanT},
         operations::subtract::ColumnScanSubtract,
     },
     datatypes::{storage_type_name::StorageTypeBitSet, Double, Float, StorageTypeName},
@@ -74,7 +74,7 @@ impl OperationGenerator for GeneratorSubtract {
         let mut active_scans = Vec::with_capacity(trie_main.arity() + 1);
         active_scans.push(Rc::new(RefCell::new(vec![true; tries_subtract.len()])));
 
-        let mut column_scans: Vec<UnsafeCell<ColumnScanRainbow<'a>>> =
+        let mut column_scans: Vec<UnsafeCell<ColumnScanT<'a>>> =
             Vec::with_capacity(trie_main.arity());
 
         for output_layer in 0..trie_main.arity() {
@@ -133,7 +133,7 @@ impl OperationGenerator for GeneratorSubtract {
             let subtract_scan_float = subtract_scan!(Float, scan_float);
             let subtract_scan_double = subtract_scan!(Double, scan_double);
 
-            let new_scan = ColumnScanRainbow::new(
+            let new_scan = ColumnScanT::new(
                 subtract_scan_id32,
                 subtract_scan_id64,
                 subtract_scan_i64,
@@ -171,7 +171,7 @@ pub(crate) struct TrieScanSubtract<'a> {
     active_scans: Vec<Rc<RefCell<Vec<bool>>>>,
 
     /// List of `ColumnScanSubtract` where every entry represents one level of the resulting trie.
-    column_scans: Vec<UnsafeCell<ColumnScanRainbow<'a>>>,
+    column_scans: Vec<UnsafeCell<ColumnScanT<'a>>>,
 }
 
 /// Associates each layer in a "subtract" trie with a layer in the "main" trie
@@ -224,7 +224,7 @@ impl<'a> PartialTrieScan<'a> for TrieScanSubtract<'a> {
         self.trie_main.arity()
     }
 
-    fn scan<'b>(&'b self, layer: usize) -> &'b UnsafeCell<ColumnScanRainbow<'a>> {
+    fn scan<'b>(&'b self, layer: usize) -> &'b UnsafeCell<ColumnScanT<'a>> {
         &self.column_scans[layer]
     }
 

@@ -4,7 +4,7 @@ use std::{cell::UnsafeCell, rc::Rc};
 
 use crate::{
     columnar::{
-        columnscan::{ColumnScanCell, ColumnScanEnum, ColumnScanRainbow},
+        columnscan::{ColumnScanCell, ColumnScanEnum, ColumnScanT},
         operations::prune::ColumnScanPrune,
     },
     datatypes::{
@@ -24,7 +24,7 @@ use crate::{
 #[derive(Debug)]
 pub(crate) struct TrieScanPrune<'a> {
     state: SharedTrieScanPruneState<'a>,
-    output_column_scans: Vec<UnsafeCell<ColumnScanRainbow<'a>>>,
+    output_column_scans: Vec<UnsafeCell<ColumnScanT<'a>>>,
 }
 
 impl<'a> TrieScanPrune<'a> {
@@ -33,7 +33,7 @@ impl<'a> TrieScanPrune<'a> {
         let input_trie_scan_arity = input_trie_scan.arity();
 
         let mut output_column_scans =
-            Vec::<UnsafeCell<ColumnScanRainbow<'a>>>::with_capacity(input_trie_scan.arity());
+            Vec::<UnsafeCell<ColumnScanT<'a>>>::with_capacity(input_trie_scan.arity());
 
         // TODO: One could check if some of the entries are empty here
         // and from that deduce that the result of this will be empty
@@ -82,7 +82,7 @@ impl<'a> TrieScanPrune<'a> {
             let prune_scan_float = prune_scan!(Float, Float, scan_float);
             let prune_scan_double = prune_scan!(Double, Double, scan_double);
 
-            let new_scan = ColumnScanRainbow::new(
+            let new_scan = ColumnScanT::new(
                 prune_scan_id32,
                 prune_scan_id64,
                 prune_scan_i64,
@@ -630,7 +630,7 @@ impl<'a> PartialTrieScan<'a> for TrieScanPrune<'a> {
         unsafe { (*self.state.get()).arity() }
     }
 
-    fn scan<'b>(&'b self, layer: usize) -> &'b UnsafeCell<ColumnScanRainbow<'a>> {
+    fn scan<'b>(&'b self, layer: usize) -> &'b UnsafeCell<ColumnScanT<'a>> {
         &self.output_column_scans[layer]
     }
 

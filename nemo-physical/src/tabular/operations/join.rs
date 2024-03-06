@@ -7,7 +7,7 @@ use std::{
 
 use crate::{
     columnar::{
-        columnscan::{ColumnScanCell, ColumnScanEnum, ColumnScanRainbow},
+        columnscan::{ColumnScanCell, ColumnScanEnum, ColumnScanT},
         operations::join::ColumnScanJoin,
     },
     datatypes::{storage_type_name::StorageTypeBitSet, Double, Float, StorageTypeName},
@@ -142,7 +142,7 @@ impl OperationGenerator for GeneratorJoin {
             })
             .collect();
 
-        let mut column_scans: Vec<UnsafeCell<ColumnScanRainbow<'a>>> =
+        let mut column_scans: Vec<UnsafeCell<ColumnScanT<'a>>> =
             Vec::with_capacity(self.bindings.len());
 
         for output_index in 0..self.bindings.len() {
@@ -171,7 +171,7 @@ impl OperationGenerator for GeneratorJoin {
             let join_scan_float = join_scan!(Float, scan_float);
             let join_scan_double = join_scan!(Double, scan_double);
 
-            let new_scan = ColumnScanRainbow::new(
+            let new_scan = ColumnScanT::new(
                 join_scan_id32,
                 join_scan_id64,
                 join_scan_i64,
@@ -221,7 +221,7 @@ pub(crate) struct TrieScanJoin<'a> {
     ///
     /// TODO: find a nicer solution for this that
     /// doesn't expose [`UnsafeCell`] as part of the API.
-    column_scans: Vec<UnsafeCell<ColumnScanRainbow<'a>>>,
+    column_scans: Vec<UnsafeCell<ColumnScanT<'a>>>,
 }
 
 impl<'a> PartialTrieScan<'a> for TrieScanJoin<'a> {
@@ -257,7 +257,7 @@ impl<'a> PartialTrieScan<'a> for TrieScanJoin<'a> {
         self.layers_to_scans.len()
     }
 
-    fn scan<'b>(&'b self, layer: usize) -> &'b UnsafeCell<ColumnScanRainbow<'a>> {
+    fn scan<'b>(&'b self, layer: usize) -> &'b UnsafeCell<ColumnScanT<'a>> {
         &self.column_scans[layer]
     }
 
