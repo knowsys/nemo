@@ -14,9 +14,20 @@ pub(crate) const EXPORT_EDB: &str = "edb";
 /// Value used to indicate export should be overridden to export all predicates instead.
 pub(crate) const EXPORT_ALL: &str = "all";
 
+/// Value used to disable reporting.
+pub(crate) const REPORT_NONE: &str = "none";
+/// Value used to print short report.
+pub(crate) const REPORT_SHORT: &str = "short";
+/// Value used to print short report and detailed memory usage.
+pub(crate) const REPORT_MEM: &str = "mem";
+/// Value used to print short report and detailed timing.
+pub(crate) const REPORT_TIME: &str = "time";
+/// Value used to print short report and all details on timing and memory usage.
+pub(crate) const REPORT_ALL: &str = "all";
+
 /// Cli Arguments related to logging
 #[derive(clap::Args, Debug)]
-pub struct LoggingArgs {
+pub(crate) struct LoggingArgs {
     /// Increase log verbosity (multiple uses increase verbosity further)
     #[arg(short, long, action = clap::builder::ArgAction::Count, group = "verbosity")]
     verbose: u8,
@@ -36,7 +47,7 @@ impl LoggingArgs {
     ///  * `Error` when `-q` is used
     ///  * The `NMO_LOG` environment variable value
     ///  * `Warn` otherwise
-    pub fn initialize_logging(&self) {
+    pub(crate) fn initialize_logging(&self) {
         let mut builder = env_logger::Builder::new();
 
         // Default log level
@@ -61,7 +72,7 @@ impl LoggingArgs {
 
 /// Cli arguments related to file output
 #[derive(Debug, clap::Args)]
-pub struct OutputArgs {
+pub(crate) struct OutputArgs {
     /// Override export directives in the program
     #[arg(short, long = "export", value_parser=clap::builder::PossibleValuesParser::new([EXPORT_NONE, EXPORT_ALL, EXPORT_IDB, EXPORT_EDB]))]
     pub(crate) export_setting: Option<String>,
@@ -79,7 +90,7 @@ pub struct OutputArgs {
 
 impl OutputArgs {
     /// Creates an output file manager with the current options
-    pub fn export_manager(self) -> Result<ExportManager, Error> {
+    pub(crate) fn export_manager(self) -> Result<ExportManager, Error> {
         let export_manager = ExportManager::new()
             .set_base_path(self.export_directory)
             .overwrite(self.overwrite)
@@ -90,39 +101,36 @@ impl OutputArgs {
 
 /// Cli arguments related to tracing
 #[derive(Debug, clap::Args)]
-pub struct TracingArgs {
+pub(crate) struct TracingArgs {
     /// Facts for which a derivation trace should be computed;
     /// multiple facts can be separated by a semicolon
     #[arg(long = "trace", value_delimiter = ';')]
-    pub traced_facts: Option<Vec<String>>,
+    pub(crate) traced_facts: Option<Vec<String>>,
     /// File to export the trace to
     #[arg(long = "trace-output", requires = "traced_facts")]
-    pub output_file: Option<PathBuf>,
+    pub(crate) output_file: Option<PathBuf>,
 }
 
 /// Nemo CLI
 #[derive(clap::Parser, Debug)]
 #[command(author, version, about)]
-pub struct CliApp {
+pub(crate) struct CliApp {
     /// One or more rule program files
     #[arg(value_parser, required = true)]
-    pub rules: Vec<PathBuf>,
+    pub(crate) rules: Vec<PathBuf>,
     /// Arguments related to output
     #[command(flatten)]
-    pub output: OutputArgs,
+    pub(crate) output: OutputArgs,
     /// Base directory for importing files (default is working directory)
     #[arg(short = 'I', long = "import-dir")]
-    pub import_directory: Option<PathBuf>,
+    pub(crate) import_directory: Option<PathBuf>,
     /// Arguments related to tracing
     #[command(flatten)]
-    pub tracing: TracingArgs,
-    /// Display detailed timing information
-    #[arg(long = "detailed-timing", default_value = "false")]
-    pub detailed_timing: bool,
-    /// Display detailed memory information
-    #[arg(long = "detailed-memory", default_value = "false")]
-    pub detailed_memory: bool,
+    pub(crate) tracing: TracingArgs,
+    /// Control amount of reporting printed by the program
+    #[arg(short, long = "report", value_parser=clap::builder::PossibleValuesParser::new([REPORT_NONE, REPORT_SHORT, REPORT_MEM, REPORT_TIME, REPORT_ALL]))]
+    pub(crate) reporting: Option<String>,
     /// Arguments related to logging
     #[command(flatten)]
-    pub logging: LoggingArgs,
+    pub(crate) logging: LoggingArgs,
 }

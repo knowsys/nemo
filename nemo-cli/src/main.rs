@@ -37,8 +37,12 @@ use nemo::{
     model::ExportDirective,
 };
 
-use crate::cli::{EXPORT_ALL, EXPORT_EDB, EXPORT_IDB, EXPORT_NONE};
+use crate::cli::{
+    EXPORT_ALL, EXPORT_EDB, EXPORT_IDB, EXPORT_NONE, REPORT_ALL, REPORT_MEM, REPORT_NONE,
+    REPORT_SHORT, REPORT_TIME,
+};
 
+/// Prints short summary message.
 fn print_finished_message(new_facts: usize, saving: bool) {
     let overall_time = TimedCode::instance().total_system_time().as_millis();
     let reading_time = TimedCode::instance()
@@ -54,7 +58,7 @@ fn print_finished_message(new_facts: usize, saving: bool) {
         .total_system_time()
         .as_millis();
 
-    // NOTE: for some reason the subtraction produced on overflow for me once when running the tests; so better safe than sorry now :)
+    // NOTE: for some reason the subtraction produced an overflow for me once when running the tests; so better safe than sorry now :)
     let loading_preprocessing = reading_time.saturating_add(loading_time);
     let reasoning_time = execution_time.saturating_sub(loading_time);
 
@@ -83,7 +87,7 @@ fn print_finished_message(new_facts: usize, saving: bool) {
 
     println!(
         "   {0: <14} {1:>max_string_len$}ms",
-        "Loading input:", loading_preprocessing
+        "Data import:", loading_preprocessing
     );
     println!(
         "   {0: <14} {1:>max_string_len$}ms",
@@ -93,9 +97,29 @@ fn print_finished_message(new_facts: usize, saving: bool) {
     if saving {
         println!(
             "   {0: <14} {1:>max_string_len$}ms",
-            "Saving output:", writing_time
+            "Data export:", writing_time
         );
     }
+}
+
+/// Prints detailed timing information.
+fn print_timing_details() {
+    println!(
+        "\nTiming report:\n\n{}",
+        TimedCode::instance().create_tree_string(
+            "nemo",
+            &[
+                TimedDisplay::default(),
+                TimedDisplay::default(),
+                TimedDisplay::new(nemo::meta::timing::TimedSorting::LongestThreadTime, 0)
+            ]
+        )
+    );
+}
+
+/// Prints detailed memory information.
+fn print_memory_details(engine: &DefaultExecutionEngine) {
+    println!("\nMemory report:\n\n{}", engine.memory_usage());
 }
 
 fn run(mut cli: CliApp) -> Result<(), Error> {
@@ -165,14 +189,11 @@ fn run(mut cli: CliApp) -> Result<(), Error> {
     let mut engine: DefaultExecutionEngine = ExecutionEngine::initialize(&program, import_manager)?;
 
     TimedCode::instance().sub("Reading & Preprocessing").stop();
+
     TimedCode::instance().sub("Reasoning").start();
-
     log::info!("Reasoning ... ");
-
     engine.execute()?;
-
     log::info!("Reasoning done");
-
     TimedCode::instance().sub("Reasoning").stop();
 
     if !export_manager.write_disabled() {
@@ -198,27 +219,26 @@ fn run(mut cli: CliApp) -> Result<(), Error> {
 
     TimedCode::instance().stop();
 
-    print_finished_message(
-        engine.count_facts_of_derived_predicates(),
-        !export_manager.write_disabled(),
-    );
+    let (print_summary, print_times, print_memory) = match cli.reporting.as_deref() {
+        Some(REPORT_ALL) => (true, true, true),
+        Some(REPORT_SHORT) => (true, false, false),
+        Some(REPORT_TIME) => (true, true, false),
+        Some(REPORT_MEM) => (true, false, true),
+        Some(REPORT_NONE) => (false, false, false),
+        _ => (true, false, false),
+    };
 
-    if cli.detailed_timing {
-        println!(
-            "\n{}",
-            TimedCode::instance().create_tree_string(
-                "nemo",
-                &[
-                    TimedDisplay::default(),
-                    TimedDisplay::default(),
-                    TimedDisplay::new(nemo::meta::timing::TimedSorting::LongestThreadTime, 0)
-                ]
-            )
+    if print_summary {
+        print_finished_message(
+            engine.count_facts_of_derived_predicates(),
+            !export_manager.write_disabled(),
         );
     }
-
-    if cli.detailed_memory {
-        println!("\n{}", engine.memory_usage());
+    if print_times {
+        print_timing_details();
+    }
+    if print_memory {
+        print_memory_details(&engine);
     }
 
     if let Some(facts) = traced_facts {
