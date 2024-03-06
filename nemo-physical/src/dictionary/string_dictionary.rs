@@ -48,6 +48,11 @@ impl<B: GlobalBytesBuffer> GenericStringDictionary<B> {
         self.bytes_dict.len()
     }
 
+    /// True when the dictionary is empty. False otherwise.
+    pub(crate) fn is_empty(&self) -> bool {
+        self.bytes_dict.is_empty()
+    }
+
     /// Marks the given string as being known without storing it under an own id.
     /// If the entry exists already, the old id will be kept and returned.
     ///
@@ -93,6 +98,11 @@ impl BenchmarkStringDictionary {
     /// marked are not counted here.
     pub fn len(&self) -> usize {
         self.0.len()
+    }
+
+    /// True when the dictionary is empty. False otherwise.
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
     }
 }
 

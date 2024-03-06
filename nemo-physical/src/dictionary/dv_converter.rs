@@ -1,4 +1,3 @@
-use super::DvDict;
 use crate::datavalues::{AnyDataValue, DataValue, ValueDomain};
 use std::fmt::Debug;
 
@@ -51,7 +50,6 @@ impl DvConverter for IriDvConverter {
         ValueDomain::Iri
     }
 }
-
 
 /// Combine two strings into one in an invertible way.
 /// If either of the strings is typically shorter than 127 bytes, it

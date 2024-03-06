@@ -96,6 +96,11 @@ impl<B: GlobalBytesBuffer> BytesDictionary<B> {
         self.store.len()
     }
 
+    /// True when the dictionary is empty. False otherwise.
+    pub(crate) fn is_empty(&self) -> bool {
+        self.store.is_empty()
+    }
+
     /// Marks the given byte array as being known without storing it under an own id.
     /// If the entry exists already, the old id will be kept and returned.
     ///

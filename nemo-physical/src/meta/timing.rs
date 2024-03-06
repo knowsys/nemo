@@ -6,10 +6,11 @@ use howlong::*;
 use linked_hash_map::LinkedHashMap;
 use once_cell::sync::Lazy;
 use std::fmt;
+#[cfg(not(feature = "timing"))]
+use std::time::Duration;
 use std::{
     str::FromStr,
     sync::{Mutex, MutexGuard},
-    time::Duration,
 };
 
 // See https://doc.rust-lang.org/cargo/reference/features.html#mutually-exclusive-features

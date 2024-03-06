@@ -43,11 +43,11 @@ pub(crate) use hash_map_dictionary::HashMapDictionary;
 /// Module to define [InfixDictionary]
 pub(crate) mod infix_dictionary;
 pub(crate) use infix_dictionary::InfixDictionary;
-/// Module to define [MetaDictionary]
-pub mod meta_dictionary;
 #[cfg(feature = "stringpairdictionary")]
 /// Module to define the [BytesPairDictionary]
 pub(crate) mod bytes_pair_dictionary;
+/// Module to define [MetaDictionary]
+pub mod meta_dictionary;
 #[cfg(feature = "stringpairdictionary")]
 pub mod string_pair_dictionary;
 #[cfg(feature = "stringpairdictionary")]

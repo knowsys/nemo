@@ -5,7 +5,9 @@
 
 use super::{AddResult, DvDict, StringPairDictionary};
 use crate::datavalues::{AnyDataValue, ValueDomain};
-use crate::dictionary::pair_dv_converter::{PairDvConverter, LangStringDvConverter, OtherDvConverter};
+use crate::dictionary::pair_dv_converter::{
+    LangStringDvConverter, OtherDvConverter, PairDvConverter,
+};
 use std::{fmt::Debug, marker::PhantomData};
 
 #[cfg(feature = "stringpairdictionary")]

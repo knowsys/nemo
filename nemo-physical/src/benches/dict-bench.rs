@@ -124,7 +124,7 @@ fn main() {
 
         let dv: AnyDataValue;
         // Simple ad hoc parsing to get realisitc data; some errors would be ok
-        match s.chars().nth(0) {
+        match s.chars().next() {
             Some('"') => {
                 if let Some(type_pos) = s.find("\"^^<") {
                     // println!("Lit {} | {}", &s[1..type_pos], &s[type_pos+4..s.len()-1]);
