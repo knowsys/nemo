@@ -1,3 +1,5 @@
+use std::cell::RefCell;
+use std::rc::Rc;
 use std::{fmt::Debug, ops::Range};
 
 use crate::columnar::columnscan::{ColumnScan, ColumnScanCell};
@@ -27,10 +29,10 @@ where
     follow_indices: Vec<usize>,
 
     /// Whether the ith follow scan points to the same value as `scan_main`.
-    equal_values: Vec<bool>,
+    equal_values: Rc<RefCell<Vec<bool>>>,
 
     /// `enabled[i] == false` means to skip the ith follow scan.
-    active_scans: Vec<bool>,
+    active_scans: Rc<RefCell<Vec<bool>>>,
 
     /// Current value of this scan.
     current_value: Option<T>,
@@ -46,6 +48,8 @@ where
         scans_follower: Vec<Option<&'a ColumnScanCell<'a, T>>>,
         subtract_indices: Vec<usize>,
         follow_indices: Vec<usize>,
+        active_scans: Rc<RefCell<Vec<bool>>>,
+        equal_values: Rc<RefCell<Vec<bool>>>,
     ) -> Self {
         debug_assert!(
             subtract_indices.is_empty()
@@ -56,42 +60,30 @@ where
                 || *follow_indices.iter().max().unwrap() < scans_follower.len()
         );
 
-        let follower_count = scans_follower.len();
-
         Self {
             scan_main,
             scans_follower,
             subtract_indices,
             follow_indices,
-            equal_values: vec![true; follower_count],
-            active_scans: vec![true; follower_count],
+            equal_values,
+            active_scans,
             current_value: None,
         }
-    }
-
-    /// Return a vector where the ith value indicates
-    /// whether the ith "follow" scan points to the same value as the main scan.
-    pub(crate) fn get_equal_values(&self) -> Vec<bool> {
-        self.equal_values.clone()
-    }
-
-    /// Return a mutable reference to a list indicating which sub iterators should be enabled.
-    pub(crate) fn active_scans_mut(&mut self) -> &mut Vec<bool> {
-        &mut self.active_scans
     }
 
     fn move_follow_scans(&mut self, mut next_value: T) -> Option<T> {
         let mut subtracted_values = true;
 
-        self.equal_values = self.active_scans.clone();
+        let equal_values = &mut *self.equal_values.borrow_mut();
+        *equal_values = self.active_scans.borrow().clone();
 
         while subtracted_values {
             subtracted_values = false;
 
             for &subtract_index in &self.subtract_indices {
-                self.equal_values[subtract_index] = false;
+                equal_values[subtract_index] = false;
 
-                if !self.active_scans[subtract_index] {
+                if !self.active_scans.borrow()[subtract_index] {
                     continue;
                 }
 
@@ -108,7 +100,7 @@ where
         }
 
         for &follow_index in &self.follow_indices {
-            if !self.active_scans[follow_index] {
+            if !self.active_scans.borrow()[follow_index] {
                 continue;
             }
 
@@ -117,10 +109,10 @@ where
 
             if let Some(follow_value) = follow_scan.seek(next_value) {
                 if next_value != follow_value {
-                    self.equal_values[follow_index] = false;
+                    equal_values[follow_index] = false;
                 }
             } else {
-                self.equal_values[follow_index] = false;
+                equal_values[follow_index] = false;
             }
         }
 
@@ -162,7 +154,6 @@ where
     }
 
     fn reset(&mut self) {
-        self.equal_values.fill(true);
         self.current_value = None;
     }
 
@@ -176,6 +167,8 @@ where
 
 #[cfg(test)]
 mod test {
+    use std::{cell::RefCell, rc::Rc};
+
     use test_log::test;
 
     use crate::columnar::{
@@ -187,6 +180,9 @@ mod test {
 
     #[test]
     fn columnscan_subtract() {
+        let active = Rc::new(RefCell::new(vec![true; 3]));
+        let equal = Rc::new(RefCell::new(vec![true; 3]));
+
         let column_main = ColumnVector::new(vec![1u64, 2, 4, 5, 7, 10, 12, 14, 15]);
         let column_subtract = ColumnVector::new(vec![0u64, 2, 4, 8, 9, 12, 17]);
         let column_follow = ColumnVector::new(vec![0u64, 1, 2, 5, 8, 10, 12, 14]);
@@ -200,33 +196,53 @@ mod test {
             vec![Some(&iter_subtract), None, Some(&iter_follow)],
             vec![0],
             vec![2],
+            active,
+            equal,
         );
 
         assert!(subtract_scan.current().is_none());
-        assert_eq!(subtract_scan.get_equal_values(), vec![true, true, true]);
+        assert_eq!(*subtract_scan.equal_values.borrow(), vec![true, true, true]);
 
         assert_eq!(subtract_scan.next(), Some(1));
         assert_eq!(subtract_scan.current(), Some(1));
-        assert_eq!(subtract_scan.get_equal_values(), vec![false, true, true]);
+        assert_eq!(
+            *subtract_scan.equal_values.borrow(),
+            vec![false, true, true]
+        );
 
         assert_eq!(subtract_scan.next(), Some(5));
         assert_eq!(subtract_scan.current(), Some(5));
-        assert_eq!(subtract_scan.get_equal_values(), vec![false, true, true]);
+        assert_eq!(
+            *subtract_scan.equal_values.borrow(),
+            vec![false, true, true]
+        );
 
         assert_eq!(subtract_scan.next(), Some(7));
         assert_eq!(subtract_scan.current(), Some(7));
-        assert_eq!(subtract_scan.get_equal_values(), vec![false, true, false]);
+        assert_eq!(
+            *subtract_scan.equal_values.borrow(),
+            vec![false, true, false]
+        );
 
         assert_eq!(subtract_scan.seek(11), Some(14));
         assert_eq!(subtract_scan.current(), Some(14));
-        assert_eq!(subtract_scan.get_equal_values(), vec![false, true, true]);
+        assert_eq!(
+            *subtract_scan.equal_values.borrow(),
+            vec![false, true, true]
+        );
 
         assert_eq!(subtract_scan.next(), Some(15));
         assert_eq!(subtract_scan.current(), Some(15));
-        assert_eq!(subtract_scan.get_equal_values(), vec![false, true, false]);
+        assert_eq!(
+            *subtract_scan.equal_values.borrow(),
+            vec![false, true, false]
+        );
 
         assert_eq!(subtract_scan.next(), None);
         assert_eq!(subtract_scan.current(), None);
-        assert_eq!(subtract_scan.get_equal_values(), vec![false, true, false]);
+        assert_eq!(
+            *subtract_scan.equal_values.borrow(),
+            vec![false, true, false]
+        );
     }
 }

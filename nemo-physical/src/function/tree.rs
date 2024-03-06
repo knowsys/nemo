@@ -2,7 +2,7 @@
 
 use std::{collections::HashMap, fmt::Debug, hash::Hash};
 
-use crate::datavalues::AnyDataValue;
+use crate::{datavalues::AnyDataValue, function::definitions::BinaryFunction};
 
 use super::{
     definitions::{
@@ -26,7 +26,7 @@ use super::{
             StringEnds, StringLength, StringLowercase, StringStarts, StringSubstring,
             StringUppercase,
         },
-        BinaryFunctionEnum, UnaryFunctionEnum,
+        BinaryFunctionEnum, FunctionTypePropagation, UnaryFunction, UnaryFunctionEnum,
     },
     evaluation::StackProgram,
 };
@@ -106,7 +106,6 @@ where
 {
     /// Check if this function correspond to some special case defined in [SpecialCaseFunction].
     /// Returns `None` if this is not the case.
-    #[allow(dead_code)]
     pub(crate) fn special_function(&self) -> SpecialCaseFunction<'_, ReferenceType> {
         if self.references().is_empty() {
             let constant_program =
@@ -167,6 +166,54 @@ where
             Some(reference)
         } else {
             None
+        }
+    }
+
+    /// Computes how storage types of the input to the (overall) function defined by this tree,
+    /// relate to its output type.
+    pub(crate) fn type_propagation(&self) -> FunctionTypePropagation {
+        match self {
+            FunctionTree::Leaf(_) => FunctionTypePropagation::Preserve,
+            FunctionTree::Unary(function, sub) => match function.type_propagation() {
+                FunctionTypePropagation::KnownOutput(output) => {
+                    FunctionTypePropagation::KnownOutput(output)
+                }
+                FunctionTypePropagation::_Unknown => FunctionTypePropagation::_Unknown,
+                FunctionTypePropagation::Preserve => sub.type_propagation(),
+            },
+            FunctionTree::Binary {
+                function,
+                left,
+                right,
+            } => match function.type_propagation() {
+                FunctionTypePropagation::KnownOutput(output) => {
+                    FunctionTypePropagation::KnownOutput(output)
+                }
+                FunctionTypePropagation::_Unknown => FunctionTypePropagation::_Unknown,
+                FunctionTypePropagation::Preserve => {
+                    match (left.type_propagation(), right.type_propagation()) {
+                        (
+                            FunctionTypePropagation::KnownOutput(output_left),
+                            FunctionTypePropagation::KnownOutput(output_right),
+                        ) => FunctionTypePropagation::KnownOutput(
+                            output_left.intersection(output_right),
+                        ),
+                        (
+                            FunctionTypePropagation::KnownOutput(output),
+                            FunctionTypePropagation::Preserve,
+                        )
+                        | (
+                            FunctionTypePropagation::Preserve,
+                            FunctionTypePropagation::KnownOutput(output),
+                        ) => FunctionTypePropagation::KnownOutput(output),
+                        (FunctionTypePropagation::Preserve, FunctionTypePropagation::Preserve) => {
+                            FunctionTypePropagation::Preserve
+                        }
+                        (_, FunctionTypePropagation::_Unknown) => todo!(),
+                        (FunctionTypePropagation::_Unknown, _) => todo!(),
+                    }
+                }
+            },
         }
     }
 }

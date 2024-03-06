@@ -7,7 +7,7 @@ use std::{
 
 use crate::{
     columnar::{
-        columnscan::{ColumnScanCell, ColumnScanEnum, ColumnScanRainbow},
+        columnscan::{ColumnScanCell, ColumnScanEnum, ColumnScanT},
         operations::join::ColumnScanJoin,
     },
     datatypes::{storage_type_name::StorageTypeBitSet, Double, Float, StorageTypeName},
@@ -142,7 +142,7 @@ impl OperationGenerator for GeneratorJoin {
             })
             .collect();
 
-        let mut column_scans: Vec<UnsafeCell<ColumnScanRainbow<'a>>> =
+        let mut column_scans: Vec<UnsafeCell<ColumnScanT<'a>>> =
             Vec::with_capacity(self.bindings.len());
 
         for output_index in 0..self.bindings.len() {
@@ -171,7 +171,7 @@ impl OperationGenerator for GeneratorJoin {
             let join_scan_float = join_scan!(Float, scan_float);
             let join_scan_double = join_scan!(Double, scan_double);
 
-            let new_scan = ColumnScanRainbow::new(
+            let new_scan = ColumnScanT::new(
                 join_scan_id32,
                 join_scan_id64,
                 join_scan_i64,
@@ -184,7 +184,7 @@ impl OperationGenerator for GeneratorJoin {
         Some(TrieScanEnum::Join(TrieScanJoin {
             trie_scans,
             layers_to_scans,
-            path_types: Vec::new(),
+            current_layer: None,
             possible_types,
             column_scans,
         }))
@@ -203,8 +203,8 @@ pub(crate) struct TrieScanJoin<'a> {
     /// or rather `layers_to_scans = [[0, 2], [0, 1], [1, 2]]` if `trie_scans = [R, S, T]`
     layers_to_scans: Vec<Vec<usize>>,
 
-    /// Path of [StorageTypeName] indicating the the types of the current (partial) row
-    path_types: Vec<StorageTypeName>,
+    /// Current layer of this [PartialTrieScan]
+    current_layer: Option<usize>,
 
     /// For each output layer contains the possible [StorageTypeName]
     possible_types: Vec<StorageTypeBitSet>,
@@ -217,27 +217,29 @@ pub(crate) struct TrieScanJoin<'a> {
     /// `trie_scans`. We're not actually modifying through these
     /// references (since there's another layer of Cells hidden in
     /// [`ColumnScanRainbow`], we're just using this satisfy the
-    /// borrow checker.  
+    /// borrow checker).  
     ///
     /// TODO: find a nicer solution for this that
     /// doesn't expose [`UnsafeCell`] as part of the API.
-    column_scans: Vec<UnsafeCell<ColumnScanRainbow<'a>>>,
+    column_scans: Vec<UnsafeCell<ColumnScanT<'a>>>,
 }
 
 impl<'a> PartialTrieScan<'a> for TrieScanJoin<'a> {
     fn up(&mut self) {
-        let current_layer = self.path_types.len() - 1;
+        let previous_layer = self
+            .current_layer
+            .expect("Cannot call PartialTrieScan::up when in starting position");
 
-        let current_scans = &self.layers_to_scans[current_layer];
+        let current_scans = &self.layers_to_scans[previous_layer];
         for &scan_index in current_scans {
             self.trie_scans[scan_index].up();
         }
 
-        self.path_types.pop();
+        self.current_layer = previous_layer.checked_sub(1);
     }
 
     fn down(&mut self, next_type: StorageTypeName) {
-        let next_layer = self.path_types.len();
+        let next_layer = self.current_layer.map_or(0, |layer| layer + 1);
         debug_assert!(next_layer < self.arity());
 
         let affected_scans = &self.layers_to_scans[next_layer];
@@ -248,24 +250,23 @@ impl<'a> PartialTrieScan<'a> for TrieScanJoin<'a> {
         // The above down call has changed the sub scans of the current layer.
         // Hence, we need to reset its state.
         self.column_scans[next_layer].get_mut().reset(next_type);
-
-        self.path_types.push(next_type);
-    }
-
-    fn path_types(&self) -> &[StorageTypeName] {
-        &self.path_types
+        self.current_layer = Some(next_layer)
     }
 
     fn arity(&self) -> usize {
         self.layers_to_scans.len()
     }
 
-    fn scan<'b>(&'b self, layer: usize) -> &'b UnsafeCell<ColumnScanRainbow<'a>> {
+    fn scan<'b>(&'b self, layer: usize) -> &'b UnsafeCell<ColumnScanT<'a>> {
         &self.column_scans[layer]
     }
 
     fn possible_types(&self, layer: usize) -> StorageTypeBitSet {
         self.possible_types[layer]
+    }
+
+    fn current_layer(&self) -> Option<usize> {
+        self.current_layer
     }
 }
 

@@ -4,7 +4,7 @@ use std::{cell::UnsafeCell, rc::Rc};
 
 use crate::{
     columnar::{
-        columnscan::{ColumnScanCell, ColumnScanEnum, ColumnScanRainbow},
+        columnscan::{ColumnScanCell, ColumnScanEnum, ColumnScanT},
         operations::prune::ColumnScanPrune,
     },
     datatypes::{
@@ -24,7 +24,7 @@ use crate::{
 #[derive(Debug)]
 pub(crate) struct TrieScanPrune<'a> {
     state: SharedTrieScanPruneState<'a>,
-    output_column_scans: Vec<UnsafeCell<ColumnScanRainbow<'a>>>,
+    output_column_scans: Vec<UnsafeCell<ColumnScanT<'a>>>,
 }
 
 impl<'a> TrieScanPrune<'a> {
@@ -33,7 +33,7 @@ impl<'a> TrieScanPrune<'a> {
         let input_trie_scan_arity = input_trie_scan.arity();
 
         let mut output_column_scans =
-            Vec::<UnsafeCell<ColumnScanRainbow<'a>>>::with_capacity(input_trie_scan.arity());
+            Vec::<UnsafeCell<ColumnScanT<'a>>>::with_capacity(input_trie_scan.arity());
 
         // TODO: One could check if some of the entries are empty here
         // and from that deduce that the result of this will be empty
@@ -82,7 +82,7 @@ impl<'a> TrieScanPrune<'a> {
             let prune_scan_float = prune_scan!(Float, Float, scan_float);
             let prune_scan_double = prune_scan!(Double, Double, scan_double);
 
-            let new_scan = ColumnScanRainbow::new(
+            let new_scan = ColumnScanT::new(
                 prune_scan_id32,
                 prune_scan_id64,
                 prune_scan_i64,
@@ -190,11 +190,6 @@ impl<'a> TrieScanPruneState<'a> {
         self.input_trie_scan.arity()
     }
 
-    /// Return the types of each active layer in this scan.
-    pub(crate) fn path_types(&self) -> &[StorageTypeName] {
-        &self.external_path_types
-    }
-
     /// Return the possible types for a given layer in this scan.
     pub(crate) fn possible_types(&self, layer: usize) -> StorageTypeBitSet {
         self.input_trie_scan.possible_types(layer)
@@ -292,7 +287,9 @@ impl<'a> TrieScanPruneState<'a> {
         self.highest_peeked_layer.map_or(false, |p| {
             index >= p
                 && if let Some(storage_type) = storage_type_opt {
-                    if let Some(&input_type) = self.input_trie_scan.path_types().get(index) {
+                    if let Some(&input_type) =
+                        self.possible_types[index].get(self.input_trie_scan_current_type[index])
+                    {
                         input_type == storage_type
                     } else {
                         false
@@ -308,10 +305,11 @@ impl<'a> TrieScanPruneState<'a> {
     /// The caller must ensure that there exists no mutable reference to the column scan at `index` and thus the [`UnsafeCell`] is safe to access.
     #[inline]
     pub(crate) unsafe fn current_input_trie_value(&self, index: usize) -> Option<StorageValueT> {
-        let current_input_type = self.input_trie_scan.path_types()[index];
+        let current_input_type =
+            self.possible_types[index].get(self.input_trie_scan_current_type[index])?;
         let scan = self.input_trie_scan.scan(index);
 
-        unsafe { (*scan.get()).current(current_input_type) }
+        unsafe { (*scan.get()).current(*current_input_type) }
     }
 
     /// # Safety
@@ -319,13 +317,13 @@ impl<'a> TrieScanPruneState<'a> {
     /// The caller must ensure that there exists no immutable/mutable references to the column scan at `index` and thus the value inside the [`UnsafeCell`] is safe to mutate.
     #[inline]
     unsafe fn next_input_trie_value(&mut self) -> Option<StorageValueT> {
-        let current_input_type =
-            self.input_trie_scan.path_types()[self.input_trie_scan_current_layer];
+        let current_input_type = self.possible_types[self.input_trie_scan_current_layer]
+            .get(self.input_trie_scan_current_type[self.input_trie_scan_current_layer])?;
         let scan = self
             .input_trie_scan
             .scan(self.input_trie_scan_current_layer);
 
-        unsafe { (*scan.get()).next(current_input_type) }
+        unsafe { (*scan.get()).next(*current_input_type) }
     }
 
     /// Directly gets the current output value for a column ignoring layer peeks (see `highest_peeked_layer`).
@@ -628,15 +626,11 @@ impl<'a> PartialTrieScan<'a> for TrieScanPrune<'a> {
         unsafe { (*self.state.get()).current_layer() }
     }
 
-    fn path_types(&self) -> &[StorageTypeName] {
-        unsafe { (*self.state.get()).path_types() }
-    }
-
     fn arity(&self) -> usize {
         unsafe { (*self.state.get()).arity() }
     }
 
-    fn scan<'b>(&'b self, layer: usize) -> &'b UnsafeCell<ColumnScanRainbow<'a>> {
+    fn scan<'b>(&'b self, layer: usize) -> &'b UnsafeCell<ColumnScanT<'a>> {
         &self.output_column_scans[layer]
     }
 

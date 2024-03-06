@@ -18,15 +18,14 @@ where
 {
     /// Current scan whose values are being filtered
     value_scan: &'a ColumnScanCell<'a, T>,
+    /// Dictionary used for translating values of `value_scan` into [AnyDataValue]
+    dictionary: &'a RefCell<Dict>,
 
     /// [StackProgram] based on which the values will be filtered
     program: StackProgram,
 
     /// Values referenced by the program
     referenced_values: Rc<RefCell<Vec<AnyDataValue>>>,
-
-    /// Dictionary used for translating values of `value_scan` into [AnyDataValue]
-    dictionary: &'a RefCell<Dict>,
 
     /// Current value
     current_value: Option<T>,

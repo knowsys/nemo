@@ -6,7 +6,7 @@ use std::{cell::UnsafeCell, fmt::Debug};
 use delegate::delegate;
 
 use crate::{
-    columnar::columnscan::ColumnScanRainbow,
+    columnar::columnscan::ColumnScanT,
     datatypes::{storage_type_name::StorageTypeBitSet, StorageTypeName, StorageValueT},
 };
 
@@ -36,9 +36,6 @@ pub(crate) trait PartialTrieScan<'a>: Debug {
     /// or if this method is called while the iterator of the current layer does not point to any element.
     fn down(&mut self, storage_type: StorageTypeName);
 
-    /// Return the storage type that is "active" on each layer.
-    fn path_types(&self) -> &[StorageTypeName];
-
     /// Return a list of possible types for a given layer.
     fn possible_types(&self, layer: usize) -> StorageTypeBitSet;
 
@@ -46,18 +43,16 @@ pub(crate) trait PartialTrieScan<'a>: Debug {
     fn arity(&self) -> usize;
 
     /// Return the index of the current layer for this scan.
-    fn current_layer(&self) -> Option<usize> {
-        self.path_types().len().checked_sub(1)
-    }
+    fn current_layer(&self) -> Option<usize>;
 
     /// Return the underlying [ColumnScanT] given an index.
     ///
     /// # Panics
     /// Panics if the requested layer is higher than the arity of this scan.
-    fn scan<'b>(&'b self, layer: usize) -> &'b UnsafeCell<ColumnScanRainbow<'a>>;
+    fn scan<'b>(&'b self, layer: usize) -> &'b UnsafeCell<ColumnScanT<'a>>;
 
     /// Return the [ColumnScanT] at the current layer.
-    fn current_scan<'b>(&'b self) -> Option<&UnsafeCell<ColumnScanRainbow<'a>>> {
+    fn current_scan<'b>(&'b self) -> Option<&UnsafeCell<ColumnScanT<'a>>> {
         Some(self.scan(self.current_layer()?))
     }
 }
@@ -102,12 +97,11 @@ impl<'a> PartialTrieScan<'a> for TrieScanEnum<'a> {
         } {
             fn up(&mut self);
             fn down(&mut self, storage_type: StorageTypeName);
-            fn path_types(&self) -> &[StorageTypeName];
             fn possible_types(&self, layer: usize) -> StorageTypeBitSet;
             fn arity(&self) -> usize;
             fn current_layer(&self) -> Option<usize>;
-            fn scan<'b>(&'b self, layer: usize) -> &'b UnsafeCell<ColumnScanRainbow<'a>>;
-            fn current_scan<'b>(&'b self) -> Option<&UnsafeCell<ColumnScanRainbow<'a>>>;
+            fn scan<'b>(&'b self, layer: usize) -> &'b UnsafeCell<ColumnScanT<'a>>;
+            fn current_scan<'b>(&'b self) -> Option<&UnsafeCell<ColumnScanT<'a>>>;
         }
     }
 }

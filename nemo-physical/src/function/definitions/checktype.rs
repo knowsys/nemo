@@ -1,8 +1,11 @@
 //! This module defines functions that check for a data type of a value.
 
-use crate::datavalues::{AnyDataValue, DataValue};
+use crate::{
+    datatypes::StorageTypeName,
+    datavalues::{AnyDataValue, DataValue},
+};
 
-use super::UnaryFunction;
+use super::{FunctionTypePropagation, UnaryFunction};
 
 /// Check if value is integer
 ///
@@ -16,6 +19,15 @@ impl UnaryFunction for CheckIsInteger {
         } else {
             Some(AnyDataValue::new_boolean(false))
         }
+    }
+
+    fn type_propagation(&self) -> FunctionTypePropagation {
+        // TODO: This is playing it save, one should probably give booleans a special status
+        FunctionTypePropagation::KnownOutput(
+            StorageTypeName::Id32
+                .bitset()
+                .union(StorageTypeName::Id64.bitset()),
+        )
     }
 }
 
@@ -32,6 +44,15 @@ impl UnaryFunction for CheckIsFloat {
             Some(AnyDataValue::new_boolean(false))
         }
     }
+
+    fn type_propagation(&self) -> FunctionTypePropagation {
+        // TODO: This is playing it save, one should probably give booleans a special status
+        FunctionTypePropagation::KnownOutput(
+            StorageTypeName::Id32
+                .bitset()
+                .union(StorageTypeName::Id64.bitset()),
+        )
+    }
 }
 
 /// Check if value is double
@@ -46,6 +67,15 @@ impl UnaryFunction for CheckIsDouble {
         } else {
             Some(AnyDataValue::new_boolean(false))
         }
+    }
+
+    fn type_propagation(&self) -> FunctionTypePropagation {
+        // TODO: This is playing it save, one should probably give booleans a special status
+        FunctionTypePropagation::KnownOutput(
+            StorageTypeName::Id32
+                .bitset()
+                .union(StorageTypeName::Id64.bitset()),
+        )
     }
 }
 
@@ -65,6 +95,15 @@ impl UnaryFunction for CheckIsNumeric {
             Some(AnyDataValue::new_boolean(false))
         }
     }
+
+    fn type_propagation(&self) -> FunctionTypePropagation {
+        // TODO: This is playing it save, one should probably give booleans a special status
+        FunctionTypePropagation::KnownOutput(
+            StorageTypeName::Id32
+                .bitset()
+                .union(StorageTypeName::Id64.bitset()),
+        )
+    }
 }
 
 /// Check if value is a null
@@ -79,6 +118,15 @@ impl UnaryFunction for CheckIsNull {
         } else {
             Some(AnyDataValue::new_boolean(false))
         }
+    }
+
+    fn type_propagation(&self) -> FunctionTypePropagation {
+        // TODO: This is playing it save, one should probably give booleans a special status
+        FunctionTypePropagation::KnownOutput(
+            StorageTypeName::Id32
+                .bitset()
+                .union(StorageTypeName::Id64.bitset()),
+        )
     }
 }
 
@@ -95,6 +143,15 @@ impl UnaryFunction for CheckIsIri {
             Some(AnyDataValue::new_boolean(false))
         }
     }
+
+    fn type_propagation(&self) -> FunctionTypePropagation {
+        // TODO: This is playing it save, one should probably give booleans a special status
+        FunctionTypePropagation::KnownOutput(
+            StorageTypeName::Id32
+                .bitset()
+                .union(StorageTypeName::Id64.bitset()),
+        )
+    }
 }
 
 /// Check if value is a string
@@ -109,5 +166,14 @@ impl UnaryFunction for CheckIsString {
         } else {
             Some(AnyDataValue::new_boolean(false))
         }
+    }
+
+    fn type_propagation(&self) -> FunctionTypePropagation {
+        // TODO: This is playing it save, one should probably give booleans a special status
+        FunctionTypePropagation::KnownOutput(
+            StorageTypeName::Id32
+                .bitset()
+                .union(StorageTypeName::Id64.bitset()),
+        )
     }
 }

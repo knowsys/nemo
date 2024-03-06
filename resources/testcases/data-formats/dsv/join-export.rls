@@ -4,9 +4,9 @@
 
 @export sourceA :- tsv{resource = "sourceA.tsv"}.
 @export sourceB :- dsv{resource = "sourceB.dsv", delimiter = ";"}.
-@export sourceC :- csv{resource = "sourceC"}.
+@export sourceC :- csv{resource = "sourceC.csv"}.
 
-@export J1 :- tsv{resource = "J1.sv"}.
+@export J1 :- tsv{resource = "J1.tsv"}.
 @export J2 :- dsv{resource = "J2.dsv", delimiter = ";"}.
 @export J3 :- csv{resource = "J3.csv"}.
 

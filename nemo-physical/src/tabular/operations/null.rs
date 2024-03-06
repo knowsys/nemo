@@ -4,7 +4,7 @@ use std::cell::{RefCell, UnsafeCell};
 
 use crate::{
     columnar::{
-        columnscan::{ColumnScanEnum, ColumnScanRainbow},
+        columnscan::{ColumnScanEnum, ColumnScanT},
         operations::{constant::ColumnScanConstant, pass::ColumnScanPass},
     },
     datatypes::{storage_type_name::StorageTypeBitSet, StorageTypeName, StorageValueT},
@@ -91,7 +91,7 @@ impl OperationGenerator for GeneratorNull {
         let trie_scan = trie_scans.remove(0)?;
 
         let arity = trie_scan.arity() + self.instructions.len();
-        let mut column_scans = Vec::<UnsafeCell<ColumnScanRainbow<'a>>>::with_capacity(arity);
+        let mut column_scans = Vec::<UnsafeCell<ColumnScanT<'a>>>::with_capacity(arity);
 
         for layer in 0..trie_scan.arity() {
             macro_rules! pass_scan {
@@ -108,7 +108,7 @@ impl OperationGenerator for GeneratorNull {
             let pass_scan_float = pass_scan!(Float, scan_float);
             let pass_scan_double = pass_scan!(Double, scan_double);
 
-            let new_scan = ColumnScanRainbow::new(
+            let new_scan = ColumnScanT::new(
                 pass_scan_id32,
                 pass_scan_id64,
                 pass_scan_i64,
@@ -127,7 +127,7 @@ impl OperationGenerator for GeneratorNull {
             let scan_double = ColumnScanEnum::Constant(ColumnScanConstant::new(None));
 
             let new_scan =
-                ColumnScanRainbow::new(scan_id32, scan_id64, scan_i64, scan_float, scan_double);
+                ColumnScanT::new(scan_id32, scan_id64, scan_i64, scan_float, scan_double);
 
             column_scans.push(UnsafeCell::new(new_scan));
         }
@@ -137,7 +137,7 @@ impl OperationGenerator for GeneratorNull {
             dictionary,
             column_scans,
             instructions: self.instructions.clone(),
-            path_types: Vec::new(),
+            current_layer: None,
         }))
     }
 }
@@ -153,28 +153,31 @@ pub(crate) struct TrieScanNull<'a> {
     /// What to do on each layer that outputs a null
     instructions: Vec<NullInstruction>,
 
+    /// Current layer of this [PartialTrieScan]
+    current_layer: Option<usize>,
+
     /// For each layer in the resulting trie contains a [ColumnScanRainbow]
     /// which either just pass the values from the input `trie_scan`
     /// or contain fresh nulls.
-    column_scans: Vec<UnsafeCell<ColumnScanRainbow<'a>>>,
-
-    /// Path of [StorageTypeName] indicating the the types of the current (partial) row
-    path_types: Vec<StorageTypeName>,
+    column_scans: Vec<UnsafeCell<ColumnScanT<'a>>>,
 }
 
 impl<'a> PartialTrieScan<'a> for TrieScanNull<'a> {
     fn up(&mut self) {
-        if let Some(current_layer) = self.current_layer() {
-            if current_layer < self.trie_scan.arity() {
+        if let Some(previous_layer) = self.current_layer() {
+            if previous_layer < self.trie_scan.arity() {
                 self.trie_scan.up();
             }
         }
 
-        self.path_types.pop();
+        self.current_layer = self
+            .current_layer
+            .expect("Cannot call PartialTrieScan::up when in starting position")
+            .checked_sub(1);
     }
 
     fn down(&mut self, next_type: StorageTypeName) {
-        let next_layer = self.path_types.len();
+        let next_layer = self.current_layer.map_or(0, |layer| layer + 1);
 
         debug_assert!(next_layer < self.arity());
 
@@ -182,6 +185,7 @@ impl<'a> PartialTrieScan<'a> for TrieScanNull<'a> {
             self.trie_scan.down(next_type);
         } else {
             // We store null in Id64 section
+            // TODO: Rethink this
             if next_type != StorageTypeName::Id64 {
                 self.column_scans[next_layer]
                     .get_mut()
@@ -211,18 +215,14 @@ impl<'a> PartialTrieScan<'a> for TrieScanNull<'a> {
         }
 
         self.column_scans[next_layer].get_mut().reset(next_type);
-        self.path_types.push(next_type);
-    }
-
-    fn path_types(&self) -> &[StorageTypeName] {
-        &self.path_types
+        self.current_layer = Some(next_layer);
     }
 
     fn arity(&self) -> usize {
         self.trie_scan.arity() + self.instructions.len()
     }
 
-    fn scan<'b>(&'b self, layer: usize) -> &'b UnsafeCell<ColumnScanRainbow<'a>> {
+    fn scan<'b>(&'b self, layer: usize) -> &'b UnsafeCell<ColumnScanT<'a>> {
         &self.column_scans[layer]
     }
 
@@ -232,6 +232,10 @@ impl<'a> PartialTrieScan<'a> for TrieScanNull<'a> {
         } else {
             StorageTypeName::Id64.bitset()
         }
+    }
+
+    fn current_layer(&self) -> Option<usize> {
+        self.current_layer
     }
 }
 

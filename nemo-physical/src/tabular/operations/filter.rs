@@ -8,7 +8,7 @@ use std::{
 
 use crate::{
     columnar::{
-        columnscan::{ColumnScanEnum, ColumnScanRainbow},
+        columnscan::{ColumnScanEnum, ColumnScanT},
         operations::{
             constant::ColumnScanConstant, filter::ColumnScanFilter,
             filter_constant::ColumnScanFilterConstant, pass::ColumnScanPass,
@@ -182,12 +182,13 @@ impl OperationGenerator for GeneratorFilter {
         debug_assert!(trie_scans.len() == 1);
 
         let trie_scan = trie_scans.remove(0)?;
+        let arity = trie_scan.arity();
 
         if self.is_unchanging() {
             return Some(trie_scan);
         }
 
-        let mut column_scans: Vec<UnsafeCell<ColumnScanRainbow<'a>>> =
+        let mut column_scans: Vec<UnsafeCell<ColumnScanT<'a>>> =
             Vec::with_capacity(self.output_columns.len());
 
         let input_values = Rc::new(RefCell::new(Vec::<AnyDataValue>::new()));
@@ -231,7 +232,7 @@ impl OperationGenerator for GeneratorFilter {
             let output_scan_float = output_scan!(Float, Float, scan_float);
             let output_scan_double = output_scan!(Double, Double, scan_double);
 
-            let new_scan = ColumnScanRainbow::new(
+            let new_scan = ColumnScanT::new(
                 output_scan_id32,
                 output_scan_id64,
                 output_scan_i64,
@@ -247,6 +248,7 @@ impl OperationGenerator for GeneratorFilter {
             input_indices: self.input_indices.clone(),
             input_values,
             column_scans,
+            path_types: Vec::with_capacity(arity),
         }))
     }
 }
@@ -264,63 +266,64 @@ pub(crate) struct TrieScanFilter<'a> {
     input_indices: Vec<bool>,
     /// Values that will be used as input for evaluating
     input_values: Rc<RefCell<Vec<AnyDataValue>>>,
+    /// Path of [StorageTypeName] indicating the the types of the current (partial) row
+    path_types: Vec<StorageTypeName>,
 
     /// For each layer in the resulting trie contains a [`ColumnScanRainbow`]
     /// evaluating the union of the underlying columns of the input trie.
-    column_scans: Vec<UnsafeCell<ColumnScanRainbow<'a>>>,
+    column_scans: Vec<UnsafeCell<ColumnScanT<'a>>>,
 }
 
 impl<'a> PartialTrieScan<'a> for TrieScanFilter<'a> {
     fn up(&mut self) {
-        let current_layer = self.path_types().len() - 1;
-        let previous_layer = current_layer.checked_sub(1);
+        let previous_layer = self.path_types.len() - 1;
+        let next_layer = previous_layer.checked_sub(1);
 
-        if let Some(previous_layer) = previous_layer {
-            if self.input_indices[previous_layer] {
+        if let Some(layer) = next_layer {
+            if self.input_indices[layer] {
                 // The input value is no longer valid
                 self.input_values.borrow_mut().pop();
             }
         }
 
         self.trie_scan.up();
+        self.path_types.pop();
     }
 
     fn down(&mut self, next_type: StorageTypeName) {
         let previous_layer = self.current_layer();
-        let previous_type = self.path_types().last();
+        let previous_type = self.path_types.last();
 
         let next_layer = previous_layer.map_or(0, |layer| layer + 1);
 
-        if let Some(previous_layer) = previous_layer {
-            let previous_type =
-                *previous_type.expect("If previous_layer is not None so is previuos_type.");
-
+        if let Some((previous_layer, previous_type)) = previous_layer.zip(previous_type) {
             if self.input_indices[previous_layer] {
                 // This value will be used in some future layer as an input to a function,
                 // so we translate it to an AnyDataValue and store it in `self.input_values`.
-                let column_value = self.column_scans[previous_layer].get_mut().current(previous_type).expect("It is only allowed to call down while the previous scan points to some value.").into_datavalue(&self.dictionary.borrow()).expect("All ids occuring in a column must be known to the dictionary");
+                let column_value = self.column_scans[previous_layer].get_mut().current(*previous_type).expect("It is only allowed to call down while the previous scan points to some value.").into_datavalue(&self.dictionary.borrow()).expect("All ids occuring in a column must be known to the dictionary");
                 self.input_values.borrow_mut().push(column_value);
             }
         }
 
         self.trie_scan.down(next_type);
+        self.path_types.push(next_type);
         self.column_scans[next_layer].get_mut().reset(next_type);
-    }
-
-    fn path_types(&self) -> &[StorageTypeName] {
-        self.trie_scan.path_types()
     }
 
     fn arity(&self) -> usize {
         self.trie_scan.arity()
     }
 
-    fn scan<'b>(&'b self, layer: usize) -> &'b UnsafeCell<ColumnScanRainbow<'a>> {
+    fn scan<'b>(&'b self, layer: usize) -> &'b UnsafeCell<ColumnScanT<'a>> {
         &self.column_scans[layer]
     }
 
     fn possible_types(&self, layer: usize) -> StorageTypeBitSet {
         self.trie_scan.possible_types(layer)
+    }
+
+    fn current_layer(&self) -> Option<usize> {
+        self.path_types.len().checked_sub(1)
     }
 }
 

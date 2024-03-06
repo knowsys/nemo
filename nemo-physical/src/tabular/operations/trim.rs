@@ -1,7 +1,7 @@
 //! This module defines [TrieScanTrim].
 
 use crate::{
-    columnar::columnscan::ColumnScanRainbow,
+    columnar::columnscan::ColumnScanT,
     datatypes::{StorageTypeName, StorageValueT},
     tabular::triescan::{PartialTrieScan, TrieScan, TrieScanEnum},
 };
@@ -37,7 +37,7 @@ impl<'a> TrieScanTrim<'a> {
         }
     }
 
-    fn column_scan(&mut self, layer: usize) -> &mut ColumnScanRainbow<'a> {
+    fn column_scan(&mut self, layer: usize) -> &mut ColumnScanT<'a> {
         unsafe { &mut *self.trie_scan.scan(layer).get() }
     }
 

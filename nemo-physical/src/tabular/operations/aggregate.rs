@@ -12,7 +12,7 @@ use crate::{
         operation::AggregateOperation,
         processors::processor::{AggregateGroupProcessor, AggregateProcessor},
     },
-    columnar::columnscan::ColumnScanRainbow,
+    columnar::columnscan::ColumnScanT,
     datatypes::{storage_type_name::StorageTypeBitSet, StorageTypeName, StorageValueT},
     management::database::Dict,
     tabular::triescan::{PartialTrieScan, TrieScan, TrieScanEnum},
@@ -314,7 +314,7 @@ impl<'a> PartialTrieScan<'a> for TrieScanAggregateWrapper<'a> {
         panic!("TrieScanAggregateWrapper::down cannot be called");
     }
 
-    fn current_scan(&self) -> Option<&'a UnsafeCell<ColumnScanRainbow<'a>>> {
+    fn current_scan(&self) -> Option<&'a UnsafeCell<ColumnScanT<'a>>> {
         panic!("TrieScanAggregateWrapper::current_scan cannot be called");
     }
 
@@ -326,11 +326,7 @@ impl<'a> PartialTrieScan<'a> for TrieScanAggregateWrapper<'a> {
         self.arity
     }
 
-    fn path_types(&self) -> &[StorageTypeName] {
-        panic!("TrieScanAggregateWrapper::path_types cannot be called");
-    }
-
-    fn scan<'b>(&'b self, _layer: usize) -> &'b UnsafeCell<ColumnScanRainbow<'a>> {
+    fn scan<'b>(&'b self, _layer: usize) -> &'b UnsafeCell<ColumnScanT<'a>> {
         panic!("TrieScanAggregateWrapper::scan cannot be called");
     }
 

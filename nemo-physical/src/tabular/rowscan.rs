@@ -4,55 +4,80 @@ use std::marker::PhantomData;
 
 use streaming_iterator::StreamingIterator;
 
-use crate::datatypes::{storage_type_name::NUM_STORAGETYPES, StorageTypeName, StorageValueT};
+use crate::datatypes::{StorageTypeName, StorageValueT};
 
 use super::triescan::PartialTrieScan;
 
+#[derive(Debug)]
+struct TypeIndex {
+    start: usize,
+    used: usize,
+}
+
 /// Stores the possible [StorageTypeName] for each layer,
-/// and which one of them is currently used.
+/// and which of those are currently in use
 #[derive(Debug)]
 struct PossibleTypes {
-    storage_types: [StorageTypeName; NUM_STORAGETYPES],
-    current_type: usize,
-    num_types: usize,
+    /// All possible storage types
+    storage_types: Vec<StorageTypeName>,
+    /// For each layer, contains a [TypeIndex]
+    used_types: Vec<TypeIndex>,
 }
 
 impl PossibleTypes {
-    pub fn new(input_types: Vec<StorageTypeName>) -> Self {
-        let mut storage_types = [StorageTypeName::Id32; NUM_STORAGETYPES];
-        let num_types = input_types.len();
+    pub fn new(input_types: Vec<Vec<StorageTypeName>>) -> Self {
+        let mut storage_types = Vec::<StorageTypeName>::new();
+        let mut used_types = Vec::<TypeIndex>::new();
 
-        for (index, input_type) in input_types.into_iter().enumerate() {
-            storage_types[index] = input_type;
+        for types_layer in input_types {
+            let new_index = TypeIndex {
+                start: storage_types.len(),
+                used: storage_types.len(),
+            };
+
+            used_types.push(new_index);
+
+            if types_layer.is_empty() {
+                return Self {
+                    storage_types: Vec::new(),
+                    used_types: Vec::new(),
+                };
+            }
+
+            for storage_type in types_layer {
+                storage_types.push(storage_type);
+            }
         }
+
+        used_types.push(TypeIndex {
+            start: storage_types.len(),
+            used: storage_types.len(),
+        });
 
         Self {
             storage_types,
-            current_type: 0,
-            num_types,
+            used_types,
         }
     }
 
-    pub fn next_type(&mut self) -> Option<StorageTypeName> {
-        if self.current_type == self.num_types - 1 {
-            self.current_type = 0;
+    pub fn next_type(&mut self, layer: usize) -> Option<StorageTypeName> {
+        let next_index = self.used_types[layer].used + 1;
+
+        if next_index == self.used_types[layer + 1].start {
+            self.used_types[layer].used = self.used_types[layer].start;
             None
         } else {
-            self.current_type += 1;
-            Some(self.storage_types[self.current_type])
+            self.used_types[layer].used = next_index;
+            Some(self.storage_types[next_index])
         }
     }
 
-    pub fn first_type(&self) -> StorageTypeName {
-        self.storage_types[0]
+    pub fn first_type(&self, layer: usize) -> StorageTypeName {
+        self.storage_types[self.used_types[layer].start]
     }
 
-    pub fn current_type(&self) -> StorageTypeName {
-        self.storage_types[self.current_type]
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.num_types == 0
+    pub fn current_type(&self, layer: usize) -> StorageTypeName {
+        self.storage_types[self.used_types[layer].used]
     }
 }
 
@@ -67,9 +92,8 @@ pub(crate) struct RowScan<'a, Scan: PartialTrieScan<'a>> {
 
     /// Whether it can be known a priori that this will return no rows
     empty: bool,
-    /// For each layer,
-    /// holds the possible [StorageTypeName]s of that column in `trie_scan`
-    possible_types: Vec<PossibleTypes>,
+    /// For each layer, holds the possible [StorageTypeName]s of that column in `trie_scan`
+    possible_types: PossibleTypes,
 
     /// A buffer containing the current row
     current_row: Vec<StorageValueT>,
@@ -85,7 +109,7 @@ impl<'a, Scan: PartialTrieScan<'a>> RowScan<'a, Scan> {
         let used_columns = arity - cut;
 
         let possible_types = (0..arity)
-            .map(|layer| PossibleTypes::new(trie_scan.possible_types(layer).storage_types()))
+            .map(|layer| trie_scan.possible_types(layer).storage_types())
             .collect::<Vec<_>>();
 
         let empty = arity == 0 || possible_types.iter().any(|types| types.is_empty());
@@ -94,7 +118,7 @@ impl<'a, Scan: PartialTrieScan<'a>> RowScan<'a, Scan> {
             _phantom: PhantomData,
             trie_scan,
             empty,
-            possible_types,
+            possible_types: PossibleTypes::new(possible_types),
             current_row: vec![StorageValueT::Id32(0); used_columns],
             changed_layers: 0,
         }
@@ -125,7 +149,7 @@ impl<'a, Scan: PartialTrieScan<'a>> StreamingIterator for RowScan<'a, Scan> {
         }
 
         if self.trie_scan.current_layer().is_none() {
-            let first_type = self.possible_types[0].first_type();
+            let first_type = self.possible_types.first_type(0);
             self.trie_scan.down(first_type);
         };
 
@@ -135,7 +159,7 @@ impl<'a, Scan: PartialTrieScan<'a>> StreamingIterator for RowScan<'a, Scan> {
             let is_last_layer = current_layer == self.trie_scan.arity() - 1;
             let is_used_layer = current_layer < self.current_row.len();
 
-            let current_type = self.possible_types[current_layer].current_type();
+            let current_type = self.possible_types.current_type(current_layer);
 
             if current_layer < self.changed_layers {
                 self.changed_layers = current_layer;
@@ -150,14 +174,14 @@ impl<'a, Scan: PartialTrieScan<'a>> StreamingIterator for RowScan<'a, Scan> {
                     return;
                 } else {
                     let next_layer = current_layer + 1;
-                    let next_layer_first_type = self.possible_types[next_layer].first_type();
+                    let next_layer_first_type = self.possible_types.first_type(next_layer);
 
                     self.trie_scan.down(next_layer_first_type);
                 }
             } else {
                 self.trie_scan.up();
 
-                if let Some(next_type) = self.possible_types[current_layer].next_type() {
+                if let Some(next_type) = self.possible_types.next_type(current_layer) {
                     self.trie_scan.down(next_type);
                 }
             }

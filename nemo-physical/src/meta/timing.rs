@@ -5,10 +5,10 @@ use ascii_tree::{write_tree, Tree};
 use howlong::*;
 use linked_hash_map::LinkedHashMap;
 use once_cell::sync::Lazy;
-use std::fmt;
 #[cfg(not(feature = "timing"))]
 use std::time::Duration;
 use std::{
+    fmt,
     str::FromStr,
     sync::{Mutex, MutexGuard},
 };

@@ -10,7 +10,7 @@ pub(crate) mod string;
 
 use delegate::delegate;
 
-use crate::datavalues::AnyDataValue;
+use crate::{datatypes::storage_type_name::StorageTypeBitSet, datavalues::AnyDataValue};
 
 use self::{
     boolean::{BooleanConjunction, BooleanDisjunction, BooleanNegation},
@@ -33,12 +33,26 @@ use self::{
     },
 };
 
+/// Specifies how storage values are propagated by a function.
+pub(crate) enum FunctionTypePropagation {
+    /// Possible outputs are knonw in advance
+    KnownOutput(StorageTypeBitSet),
+    /// Types are preserved, i.e. the output has the same types as the inputs
+    /// (the function returns `None` if input values differ in type)
+    Preserve,
+    /// Nothing is known about the the type propagation
+    _Unknown,
+}
 /// Defines a unary function on [AnyDataValue].
 pub(crate) trait UnaryFunction {
     /// Evaluate this function on the given parameter.
     ///
     /// Returns `None` if the result of the operation is undefined.
     fn evaluate(&self, parameter: AnyDataValue) -> Option<AnyDataValue>;
+
+    /// Return a [FunctionTypePropagation] indicating how storage types are propagated
+    /// when applying this function.
+    fn type_propagation(&self) -> FunctionTypePropagation;
 }
 
 /// Enum containing all implementations of [UnaryFunction]
@@ -105,6 +119,7 @@ impl UnaryFunction for UnaryFunctionEnum {
             Self::StringUppercase(function) => function,
         } {
             fn evaluate(&self, parameter: AnyDataValue) -> Option<AnyDataValue>;
+            fn type_propagation(&self) -> FunctionTypePropagation;
         }
     }
 }
@@ -119,6 +134,10 @@ pub trait BinaryFunction {
         parameter_first: AnyDataValue,
         parameter_second: AnyDataValue,
     ) -> Option<AnyDataValue>;
+
+    /// Return a [FunctionTypePropagation] indicating how storage types are propagated
+    /// when applying this function.
+    fn type_propagation(&self) -> FunctionTypePropagation;
 }
 
 /// Enum containing all implementations of [BinaryFunction]
@@ -177,6 +196,7 @@ impl BinaryFunction for BinaryFunctionEnum {
             Self::BooleanDisjunction(function) => function,
         } {
             fn evaluate(&self, first_parameter: AnyDataValue, second_parameter: AnyDataValue) -> Option<AnyDataValue>;
+            fn type_propagation(&self) -> FunctionTypePropagation;
         }
     }
 }

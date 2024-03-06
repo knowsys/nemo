@@ -2,9 +2,12 @@
 
 use std::cmp::Ordering;
 
-use crate::datavalues::{AnyDataValue, DataValue};
+use crate::{
+    datatypes::StorageTypeName,
+    datavalues::{AnyDataValue, DataValue},
+};
 
-use super::{BinaryFunction, UnaryFunction};
+use super::{BinaryFunction, FunctionTypePropagation, UnaryFunction};
 
 /// Given two [AnyDataValue]s,
 /// check if both are strings and return a pair of [String]
@@ -44,6 +47,10 @@ impl BinaryFunction for StringCompare {
             },
         )
     }
+
+    fn type_propagation(&self) -> FunctionTypePropagation {
+        FunctionTypePropagation::KnownOutput(StorageTypeName::Int64.bitset())
+    }
 }
 
 /// Concatenation of strings
@@ -64,6 +71,14 @@ impl BinaryFunction for StringConcatenation {
             |(first_string, second_string)| {
                 AnyDataValue::new_plain_string([first_string, second_string].concat())
             },
+        )
+    }
+
+    fn type_propagation(&self) -> FunctionTypePropagation {
+        FunctionTypePropagation::KnownOutput(
+            StorageTypeName::Id32
+                .bitset()
+                .union(StorageTypeName::Id64.bitset()),
         )
     }
 }
@@ -92,6 +107,15 @@ impl BinaryFunction for StringContains {
             },
         )
     }
+
+    fn type_propagation(&self) -> FunctionTypePropagation {
+        // TODO: This is playing it save, one should probably give booleans a special status
+        FunctionTypePropagation::KnownOutput(
+            StorageTypeName::Id32
+                .bitset()
+                .union(StorageTypeName::Id64.bitset()),
+        )
+    }
 }
 
 /// Start of a string
@@ -116,6 +140,15 @@ impl BinaryFunction for StringStarts {
                     AnyDataValue::new_boolean(false)
                 }
             },
+        )
+    }
+
+    fn type_propagation(&self) -> FunctionTypePropagation {
+        // TODO: This is playing it save, one should probably give booleans a special status
+        FunctionTypePropagation::KnownOutput(
+            StorageTypeName::Id32
+                .bitset()
+                .union(StorageTypeName::Id64.bitset()),
         )
     }
 }
@@ -144,6 +177,15 @@ impl BinaryFunction for StringEnds {
             },
         )
     }
+
+    fn type_propagation(&self) -> FunctionTypePropagation {
+        // TODO: This is playing it save, one should probably give booleans a special status
+        FunctionTypePropagation::KnownOutput(
+            StorageTypeName::Id32
+                .bitset()
+                .union(StorageTypeName::Id64.bitset()),
+        )
+    }
 }
 
 /// First part of a string
@@ -169,6 +211,14 @@ impl BinaryFunction for StringBefore {
 
                 AnyDataValue::new_plain_string(result)
             },
+        )
+    }
+
+    fn type_propagation(&self) -> FunctionTypePropagation {
+        FunctionTypePropagation::KnownOutput(
+            StorageTypeName::Id32
+                .bitset()
+                .union(StorageTypeName::Id64.bitset()),
         )
     }
 }
@@ -200,6 +250,14 @@ impl BinaryFunction for StringAfter {
             },
         )
     }
+
+    fn type_propagation(&self) -> FunctionTypePropagation {
+        FunctionTypePropagation::KnownOutput(
+            StorageTypeName::Id32
+                .bitset()
+                .union(StorageTypeName::Id64.bitset()),
+        )
+    }
 }
 
 /// Substring
@@ -227,6 +285,14 @@ impl BinaryFunction for StringSubstring {
 
         Some(AnyDataValue::new_plain_string(string[start..].to_string()))
     }
+
+    fn type_propagation(&self) -> FunctionTypePropagation {
+        FunctionTypePropagation::KnownOutput(
+            StorageTypeName::Id32
+                .bitset()
+                .union(StorageTypeName::Id64.bitset()),
+        )
+    }
 }
 
 /// Length of a string
@@ -241,6 +307,10 @@ impl UnaryFunction for StringLength {
         parameter
             .to_plain_string()
             .map(|string| AnyDataValue::new_integer_from_u64(string.len() as u64))
+    }
+
+    fn type_propagation(&self) -> FunctionTypePropagation {
+        FunctionTypePropagation::KnownOutput(StorageTypeName::Int64.bitset())
     }
 }
 
@@ -257,6 +327,14 @@ impl UnaryFunction for StringUppercase {
             .to_plain_string()
             .map(|string| AnyDataValue::new_plain_string(string.to_ascii_uppercase()))
     }
+
+    fn type_propagation(&self) -> FunctionTypePropagation {
+        FunctionTypePropagation::KnownOutput(
+            StorageTypeName::Id32
+                .bitset()
+                .union(StorageTypeName::Id64.bitset()),
+        )
+    }
 }
 
 /// Transformation of a string into lower case
@@ -271,5 +349,13 @@ impl UnaryFunction for StringLowercase {
         parameter
             .to_plain_string()
             .map(|string| AnyDataValue::new_plain_string(string.to_ascii_lowercase()))
+    }
+
+    fn type_propagation(&self) -> FunctionTypePropagation {
+        FunctionTypePropagation::KnownOutput(
+            StorageTypeName::Id32
+                .bitset()
+                .union(StorageTypeName::Id64.bitset()),
+        )
     }
 }

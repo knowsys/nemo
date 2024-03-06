@@ -14,7 +14,7 @@ use crate::{
     columnar::{
         column::{Column, ColumnEnum},
         columnbuilder::{adaptive::ColumnBuilderAdaptive, ColumnBuilder},
-        columnscan::{ColumnScanCell, ColumnScanEnum, ColumnScanRainbow},
+        columnscan::{ColumnScanCell, ColumnScanEnum, ColumnScanT},
     },
     datatypes::{ColumnDataType, Double, Float, StorageTypeName, StorageValueT},
     management::bytesized::ByteSized,
@@ -150,8 +150,8 @@ where
     }
 
     /// Create a [ColumnScanRainbow] from iterators of the internal columns.
-    pub(crate) fn iter(&self) -> ColumnScanRainbow {
-        ColumnScanRainbow {
+    pub(crate) fn iter(&self) -> ColumnScanT {
+        ColumnScanT {
             scan_id32: ColumnScanCell::new(self.column_id32.iter()),
             scan_id64: ColumnScanCell::new(self.column_id64.iter()),
             scan_i64: ColumnScanCell::new(self.column_int64.iter()),
