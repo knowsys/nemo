@@ -76,11 +76,6 @@ pub(crate) trait ImportExportHandler: std::fmt::Debug + DynClone + Send {
     /// arity of the data that is consumed.
     fn predicate_arity(&self) -> Option<usize>;
 
-    /// Returns the expected arity of the file (or other resource) related to this directive, if specified.
-    /// For import, this is the arity of the data that is read from the source, for export it is the
-    /// arity of the data that is written to the target.
-    fn file_arity(&self) -> Option<usize>;
-
     /// Returns the default file extension for data of this format, if any.
     /// This will be used when making default file names.
     fn file_extension(&self) -> Option<String>;

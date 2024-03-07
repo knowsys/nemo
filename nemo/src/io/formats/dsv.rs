@@ -233,21 +233,6 @@ impl ImportExportHandler for DsvHandler {
         }
     }
 
-    fn file_arity(&self) -> Option<usize> {
-        match self.direction {
-            Direction::Export => self.value_formats.as_ref().map(|vfs| {
-                vfs.iter().fold(0, |acc, fmt| {
-                    if *fmt == DsvValueFormat::Skip {
-                        acc
-                    } else {
-                        acc + 1
-                    }
-                })
-            }),
-            Direction::Import => self.value_formats.as_ref().map(|vfs| vfs.len()),
-        }
-    }
-
     fn file_extension(&self) -> Option<String> {
         match self.file_format() {
             FileFormat::CSV => Some("csv".to_string()),

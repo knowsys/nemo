@@ -291,23 +291,6 @@ impl ImportExportHandler for RdfHandler {
         }
     }
 
-    fn file_arity(&self) -> Option<usize> {
-        // Our extraction ensures that there is always a suitable default
-        // list of value formats if we know the RDF variant.
-        match self.direction {
-            Direction::Export => self.value_formats.as_ref().map(|vfs| {
-                vfs.iter().fold(0, |acc, fmt| {
-                    if *fmt == RdfValueFormat::Skip {
-                        acc
-                    } else {
-                        acc + 1
-                    }
-                })
-            }),
-            Direction::Import => self.value_formats.as_ref().map(|vfs| vfs.len()),
-        }
-    }
-
     fn file_extension(&self) -> Option<String> {
         match self.variant {
             RdfVariant::Unspecified => None,
