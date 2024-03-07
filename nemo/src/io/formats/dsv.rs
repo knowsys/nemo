@@ -2,8 +2,8 @@
 
 use std::io::{BufRead, Write};
 
+use nemo_physical::datasources::table_providers::TableProvider;
 use nemo_physical::datavalues::{AnyDataValue, MapDataValue};
-use nemo_physical::{datasources::table_providers::TableProvider, resource::Resource};
 
 use crate::io::compression_format::CompressionFormat;
 use crate::model::{
@@ -19,7 +19,9 @@ use crate::{
 use super::dsv_reader::DsvReader;
 use super::dsv_value_format::DsvValueFormat;
 use super::dsv_writer::DsvWriter;
-use super::import_export::{ImportExportError, ImportExportHandler, ImportExportHandlers};
+use super::import_export::{
+    ImportExportError, ImportExportHandler, ImportExportHandlers, ImportExportResource,
+};
 
 /// Internal enum to distnguish variants of the DSV format.
 #[allow(clippy::upper_case_acronyms)]
@@ -38,10 +40,10 @@ pub(crate) struct DsvHandler {
     /// The specific delimiter for this format.
     delimiter: u8,
     /// The resource to write to/read from.
-    /// This can be `None` for writing, since one can generate a default file
+    /// This can be [ImportExportResource::Unspecified] for writing, since one can generate a default file
     /// name from the exported predicate in this case. This has little chance of
-    /// success for imports, so the predicate is setting there.
-    resource: Option<Resource>,
+    /// success for imports, so a concrete value is required there.
+    resource: ImportExportResource,
     /// The list of value formats to be used for importing/exporting data.
     /// If only the arity is given, this will use the most general export format
     /// for each value (and the list will still be set). The list can be `None`
@@ -214,10 +216,6 @@ impl ImportExportHandler for DsvHandler {
         )))
     }
 
-    fn resource(&self) -> Option<Resource> {
-        self.resource.clone()
-    }
-
     fn predicate_arity(&self) -> Option<usize> {
         match self.direction {
             Direction::Import => self.value_formats.as_ref().map(|vfs| {
@@ -244,5 +242,9 @@ impl ImportExportHandler for DsvHandler {
 
     fn compression_format(&self) -> Option<CompressionFormat> {
         self.compression_format
+    }
+
+    fn import_export_resource(&self) -> &ImportExportResource {
+        &self.resource
     }
 }

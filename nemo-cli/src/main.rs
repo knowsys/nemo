@@ -197,6 +197,7 @@ fn run(mut cli: CliApp) -> Result<(), Error> {
     log::info!("Reasoning done");
     TimedCode::instance().sub("Reasoning").stop();
 
+    let mut stdout_used = false;
     if !export_manager.write_disabled() {
         TimedCode::instance()
             .sub("Output & Final Materialization")
@@ -205,7 +206,7 @@ fn run(mut cli: CliApp) -> Result<(), Error> {
 
         for export_directive in program.exports() {
             if let Some(arity) = engine.predicate_arity(export_directive.predicate()) {
-                export_manager.export_table(
+                stdout_used |= export_manager.export_table(
                     export_directive,
                     engine.predicate_rows(export_directive.predicate())?,
                     arity,
@@ -226,6 +227,7 @@ fn run(mut cli: CliApp) -> Result<(), Error> {
         Reporting::Time => (true, true, false),
         Reporting::Mem => (true, false, true),
         Reporting::None => (false, false, false),
+        Reporting::Auto => (!stdout_used, false, false),
     };
 
     if print_summary {

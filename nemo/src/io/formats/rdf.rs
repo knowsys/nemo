@@ -22,7 +22,9 @@ use crate::{
 };
 
 use super::{
-    import_export::{ImportExportError, ImportExportHandler, ImportExportHandlers},
+    import_export::{
+        ImportExportError, ImportExportHandler, ImportExportHandlers, ImportExportResource,
+    },
     rdf_reader::RdfReader,
     rdf_writer::RdfWriter,
 };
@@ -87,10 +89,10 @@ impl RdfValueFormat {
 #[derive(Debug, Clone)]
 pub struct RdfHandler {
     /// The resource to write to/read from.
-    /// This can be `None` for writing, since one can generate a default file
+    /// This can be [ImportExportResource::Unspecified] for writing, since one can generate a default file
     /// name from the exported predicate in this case. This has little chance of
-    /// success for imports, so the predicate is setting there.
-    resource: Option<Resource>,
+    /// success for imports, so a concrete value is required there.
+    resource: ImportExportResource,
     /// Base IRI, if given.
     base: Option<Iri<String>>,
     /// The specific RDF format to be used.
@@ -270,10 +272,6 @@ impl ImportExportHandler for RdfHandler {
         )))
     }
 
-    fn resource(&self) -> Option<Resource> {
-        self.resource.clone()
-    }
-
     fn predicate_arity(&self) -> Option<usize> {
         // Our extraction ensures that there is always a suitable default
         // list of value formats if we know the RDF variant.
@@ -304,5 +302,9 @@ impl ImportExportHandler for RdfHandler {
 
     fn compression_format(&self) -> Option<CompressionFormat> {
         self.compression_format
+    }
+
+    fn import_export_resource(&self) -> &ImportExportResource {
+        &self.resource
     }
 }

@@ -27,8 +27,10 @@ pub(crate) enum Exporting {
 pub(crate) enum Reporting {
     /// Disable reporting.
     None,
-    /// Print short report.
+    /// Print short report if no other results are printed. Otherwise disable reporting.
     #[default]
+    Auto,
+    /// Print short report.
     Short,
     /// Print short report and detailed memory timing.
     Time,
@@ -87,7 +89,7 @@ impl LoggingArgs {
 #[derive(Debug, clap::Args)]
 pub(crate) struct OutputArgs {
     /// Override export directives in the program
-    #[arg(long = "export", value_enum, default_value_t)]
+    #[arg(short, long = "export", value_enum, default_value_t)]
     pub(crate) export_setting: Exporting,
     /// Base directory for exporting files
     #[arg(short='D', long = "export-dir", default_value = DEFAULT_OUTPUT_DIRECTORY)]

@@ -32,6 +32,28 @@ use super::{
     DsvHandler, RdfHandler,
 };
 
+/// Representation of a resource (file, URL, etc.) for import or export.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) enum ImportExportResource {
+    /// Value to indicate that the resource was not given.
+    Unspecified,
+    /// A concrete resource string.
+    Resource(Resource),
+    /// Use stdout (only for export)
+    Stdout,
+}
+
+impl ImportExportResource {
+    /// Retrieve the contained resource, if any.
+    pub(crate) fn resource(&self) -> Option<Resource> {
+        if let ImportExportResource::Resource(resource) = &self {
+            Some(resource.clone())
+        } else {
+            None
+        }
+    }
+}
+
 /// An [ImportExportHandler] represents a data format for input and/or output, and provides
 /// specific methods for handling data of that format. Each handler is configured by format-specific
 /// attributes, which define the behavior in detail, including the kind of data that this format
@@ -69,7 +91,16 @@ pub(crate) trait ImportExportHandler: std::fmt::Debug + DynClone + Send {
 
     /// Obtain the resource used for this data exchange.
     /// In typical cases, this is the name of a file to read from or write to.
-    fn resource(&self) -> Option<Resource>;
+    /// If no resource was specified, or if the resource is not identified by a
+    /// name (such as stdout), then `None` is returned.
+    fn resource(&self) -> Option<Resource> {
+        self.import_export_resource().resource()
+    }
+
+    /// Returns true if the selected resource is stdout.
+    fn resource_is_stdout(&self) -> bool {
+        self.import_export_resource() == &ImportExportResource::Stdout
+    }
 
     /// Returns the expected arity of the predicate related to this directive, if specified.
     /// For import, this is the arity of the data that is created, for export it is the
@@ -82,6 +113,9 @@ pub(crate) trait ImportExportHandler: std::fmt::Debug + DynClone + Send {
 
     /// Returns the chosen compression format for imported/exported data.
     fn compression_format(&self) -> Option<CompressionFormat>;
+
+    /// Returns the [ImportExportResource] used for this data exchange.
+    fn import_export_resource(&self) -> &ImportExportResource;
 }
 
 dyn_clone::clone_trait_object!(ImportExportHandler);
@@ -145,21 +179,30 @@ impl ImportExportHandlers {
         Ok(())
     }
 
-    /// Extract the resource from the given attributes. This can be `None` for export (where
-    /// we can use default names). If the value is invalid or missing for import, an error
-    /// is returned.
+    /// Extract the resource from the given attributes. This can be [ImportExportResource::Unspecified]
+    /// for export (where we can use default names). If the value is invalid or missing for import, an
+    /// error is returned.
     pub(super) fn extract_resource(
         attributes: &MapDataValue,
         direction: Direction,
-    ) -> Result<Option<Resource>, ImportExportError> {
+    ) -> Result<ImportExportResource, ImportExportError> {
         let resource: Option<Resource> =
             Self::extract_string_or_iri(attributes, PARAMETER_NAME_RESOURCE, true)?;
-        if resource.is_none() && direction == Direction::Import {
-            return Err(ImportExportError::MissingAttribute(
-                PARAMETER_NAME_RESOURCE.to_string(),
-            ));
+
+        if let Some(string) = resource {
+            if string.is_empty() {
+                Ok(ImportExportResource::Stdout)
+            } else {
+                Ok(ImportExportResource::Resource(string))
+            }
+        } else {
+            if direction == Direction::Import {
+                return Err(ImportExportError::MissingAttribute(
+                    PARAMETER_NAME_RESOURCE.to_string(),
+                ));
+            }
+            Ok(ImportExportResource::Unspecified)
         }
-        Ok(resource)
     }
 
     /// Extract the compression format from the given attributes, and possibly resource.
@@ -171,7 +214,7 @@ impl ImportExportHandlers {
     /// stated one.
     pub(super) fn extract_compression_format(
         attributes: &MapDataValue,
-        resource: &Option<Resource>,
+        resource: &ImportExportResource,
     ) -> Result<(Option<CompressionFormat>, Option<Resource>), ImportExportError> {
         let cf_name = Self::extract_string_or_iri(attributes, PARAMETER_NAME_COMPRESSION, true)
             .expect("no errors with allow missing");
@@ -199,7 +242,7 @@ impl ImportExportHandlers {
 
         let resource_compression_format: Option<CompressionFormat>;
         let inner_resource: Option<Resource>;
-        if let Some(res) = resource {
+        if let ImportExportResource::Resource(res) = resource {
             let (rcf, inner_res) = CompressionFormat::from_resource(res);
             resource_compression_format = Some(rcf);
             inner_resource = Some(inner_res);
