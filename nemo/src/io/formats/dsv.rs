@@ -8,7 +8,7 @@ use nemo_physical::datavalues::{AnyDataValue, MapDataValue};
 use crate::io::compression_format::CompressionFormat;
 use crate::model::{
     PARAMETER_NAME_COMPRESSION, PARAMETER_NAME_DSV_DELIMITER, PARAMETER_NAME_FORMAT,
-    PARAMETER_NAME_RESOURCE,
+    PARAMETER_NAME_LIMIT, PARAMETER_NAME_RESOURCE,
 };
 use crate::{
     error::Error,
@@ -50,6 +50,8 @@ pub(crate) struct DsvHandler {
     /// if neither formats nor arity were given for writing: in this case, a default
     /// arity-based formats can be used if the arity is clear from another source.
     value_formats: Option<Vec<DsvValueFormat>>,
+    /// Maximum number of statements that should be imported/exported.
+    limit: Option<u64>,
     /// Compression format to be used, if specified. This can also be inferred
     /// from the resource, if given. So the only case where `None` is possible
     /// is when no resource is given (during output).
@@ -97,6 +99,7 @@ impl DsvHandler {
                 PARAMETER_NAME_RESOURCE,
                 PARAMETER_NAME_DSV_DELIMITER,
                 PARAMETER_NAME_COMPRESSION,
+                PARAMETER_NAME_LIMIT,
             ],
         )?;
 
@@ -105,11 +108,14 @@ impl DsvHandler {
         let value_formats = Self::extract_value_formats(attributes)?;
         let (compression_format, _) =
             ImportExportHandlers::extract_compression_format(attributes, &resource)?;
+        let limit =
+            ImportExportHandlers::extract_unsigned_integer(attributes, PARAMETER_NAME_LIMIT, true)?;
 
         Ok(Box::new(Self {
             delimiter,
             resource,
             value_formats,
+            limit,
             compression_format,
             direction,
         }))
@@ -205,6 +211,7 @@ impl ImportExportHandler for DsvHandler {
             read,
             self.delimiter,
             self.value_formats_or_default(arity),
+            self.limit,
         )))
     }
 
@@ -213,6 +220,7 @@ impl ImportExportHandler for DsvHandler {
             self.delimiter,
             writer,
             self.value_formats_or_default(arity),
+            self.limit,
         )))
     }
 

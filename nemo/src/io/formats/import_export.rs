@@ -322,23 +322,23 @@ impl ImportExportHandlers {
         }
     }
 
-    /// Extract an integer value for the given attribute name. Returns an error if the
+    /// Extract an unsigned integer value for the given attribute name. Returns an error if the
     /// value is mistyped ([ImportExportError::InvalidAttributeValue]) or missing ([ImportExportError::MissingAttribute]).
     /// It can be specified whether it should be allowed that the attribute is not set at all (and
     /// `None` would then be returned). If given, the value must always be an integer, however.
-    pub(super) fn extract_integer(
+    pub(super) fn extract_unsigned_integer(
         attributes: &MapDataValue,
         attribute_name: &str,
         allow_missing: bool,
-    ) -> Result<Option<i64>, ImportExportError> {
+    ) -> Result<Option<u64>, ImportExportError> {
         if let Some(c) = Self::extract_att_value(attributes, attribute_name, allow_missing)? {
-            if c.fits_into_i64() {
-                Ok(Some(c.to_i64_unchecked()))
+            if c.fits_into_u64() {
+                Ok(Some(c.to_u64_unchecked()))
             } else {
                 Err(ImportExportError::invalid_att_value_error(
                     attribute_name,
                     c.clone(),
-                    "expecting integer value",
+                    "expecting unsigned integer value that fits into 64bits",
                 ))
             }
         } else {

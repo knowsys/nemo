@@ -20,6 +20,7 @@ use super::PROGRESS_NOTIFY_INCREMENT;
 pub(super) struct DsvWriter {
     writer: Writer<Box<dyn Write>>,
     value_formats: Vec<DsvValueFormat>,
+    limit: Option<u64>,
 }
 
 impl DsvWriter {
@@ -27,6 +28,7 @@ impl DsvWriter {
         delimiter: u8,
         writer: Box<dyn Write>,
         value_formats: Vec<DsvValueFormat>,
+        limit: Option<u64>,
     ) -> Self {
         DsvWriter {
             writer: WriterBuilder::new()
@@ -34,6 +36,7 @@ impl DsvWriter {
                 .double_quote(true)
                 .from_writer(writer),
             value_formats,
+            limit,
         }
     }
 
@@ -54,9 +57,10 @@ impl DsvWriter {
             .map(|vf| *vf == DsvValueFormat::Skip)
             .collect();
 
+        let stop_limit = self.limit.unwrap_or(0);
+
         let mut line_count: u64 = 0;
         let mut drop_count: u64 = 0;
-
         for record in table {
             let mut string_record = Vec::with_capacity(record.len());
             let mut complete = true;
@@ -78,6 +82,9 @@ impl DsvWriter {
                 line_count += 1;
                 if (line_count % PROGRESS_NOTIFY_INCREMENT) == 0 {
                     log::info!("... processed {line_count} tuples");
+                }
+                if line_count == stop_limit {
+                    break;
                 }
             } else {
                 drop_count += 1;

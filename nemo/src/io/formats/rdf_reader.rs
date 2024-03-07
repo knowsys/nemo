@@ -7,7 +7,7 @@ use nemo_physical::{
     dictionary::string_map::NullMap,
     management::bytesized::ByteSized,
 };
-use std::{io::BufRead, mem::size_of};
+use std::{cell::Cell, io::BufRead, mem::size_of};
 
 use oxiri::Iri;
 use rio_api::{
@@ -34,6 +34,7 @@ pub(super) struct RdfReader {
     variant: RdfVariant,
     base: Option<Iri<String>>,
     value_formats: Vec<RdfValueFormat>,
+    limit: Option<u64>,
     /// Map to store how nulls relate to blank nodes.
     ///
     /// TODO: An RdfReader is specific to one BufRead, which it consumes when reading.
@@ -50,12 +51,14 @@ impl RdfReader {
         variant: RdfVariant,
         base: Option<Iri<String>>,
         value_formats: Vec<RdfValueFormat>,
+        limit: Option<u64>,
     ) -> Self {
         Self {
             read,
             variant,
             base,
             value_formats,
+            limit,
             bnode_map: Default::default(),
         }
     }
@@ -162,9 +165,16 @@ impl RdfReader {
             })
         );
 
-        let mut triple_count = 0;
+        let stop_limit = self.limit.unwrap_or(u64::MAX);
+        let triple_count = Cell::new(0);
 
         let mut on_triple = |triple: Triple| {
+            // This is needed since a parser might process several RDF statements
+            // before giving us a chance to stop in the outer loop.
+            if triple_count.get() == stop_limit {
+                return Ok::<_, Box<dyn std::error::Error>>(());
+            }
+
             if !skip[0] {
                 let subject = Self::datavalue_from_subject(
                     &mut self.bnode_map,
@@ -183,9 +193,9 @@ impl RdfReader {
                 tuple_writer.add_tuple_value(object);
             }
 
-            triple_count += 1;
-            if triple_count % PROGRESS_NOTIFY_INCREMENT == 0 {
-                log::info!("... processed {triple_count} triples")
+            triple_count.set(triple_count.get() + 1);
+            if triple_count.get() % PROGRESS_NOTIFY_INCREMENT == 0 {
+                log::info!("... processed {} triples", triple_count.get())
             }
 
             Ok::<_, Box<dyn std::error::Error>>(())
@@ -195,11 +205,14 @@ impl RdfReader {
 
         while !parser.is_end() {
             if let Err(e) = parser.parse_step(&mut on_triple) {
-                log::info!("Ignoring malformed triple: {e}");
+                log::info!("Ignoring malformed RDF: {e}");
+            }
+            if triple_count.get() == stop_limit {
+                break;
             }
         }
 
-        log::info!("Finished import: processed {triple_count} triples");
+        log::info!("Finished import: processed {} triples", triple_count.get());
 
         Ok(())
     }
@@ -233,9 +246,16 @@ impl RdfReader {
             })
         );
 
-        let mut quad_count = 0;
+        let stop_limit = self.limit.unwrap_or(u64::MAX);
+        let quad_count = Cell::new(0);
 
-        let mut on_triple = |quad: Quad| {
+        let mut on_quad = |quad: Quad| {
+            // This is needed since a parser might process several RDF statements
+            // before giving us a chance to stop in the outer loop.
+            if quad_count.get() == stop_limit {
+                return Ok::<_, Box<dyn std::error::Error>>(());
+            }
+
             if !skip[0] {
                 let graph_name = Self::datavalue_from_graph_name(
                     &mut self.bnode_map,
@@ -259,9 +279,9 @@ impl RdfReader {
                 tuple_writer.add_tuple_value(object);
             }
 
-            quad_count += 1;
-            if quad_count % PROGRESS_NOTIFY_INCREMENT == 0 {
-                log::info!("... processed {quad_count} quads")
+            quad_count.set(quad_count.get() + 1);
+            if quad_count.get() % PROGRESS_NOTIFY_INCREMENT == 0 {
+                log::info!("... processed {} triples", quad_count.get())
             }
 
             Ok::<_, Box<dyn std::error::Error>>(())
@@ -270,12 +290,15 @@ impl RdfReader {
         let mut parser = make_parser(self.read);
 
         while !parser.is_end() {
-            if let Err(e) = parser.parse_step(&mut on_triple) {
-                log::info!("Ignoring malformed quad: {e}");
+            if let Err(e) = parser.parse_step(&mut on_quad) {
+                log::info!("Ignoring malformed RDF: {e}");
+            }
+            if quad_count.get() == stop_limit {
+                break;
             }
         }
 
-        log::info!("Finished import: processed {quad_count} quads");
+        log::info!("Finished import: processed {} quads", quad_count.get());
 
         Ok(())
     }
@@ -358,6 +381,7 @@ mod test {
                 RdfValueFormat::Anything,
                 RdfValueFormat::Anything,
             ],
+            None,
         );
         let dict = RefCell::new(Dict::default());
         let mut tuple_writer = TupleWriter::new(&dict, 3);
@@ -382,6 +406,7 @@ mod test {
                 RdfValueFormat::Anything,
                 RdfValueFormat::Anything,
             ],
+            None,
         );
         let dict = RefCell::new(Dict::default());
         let mut tuple_writer = TupleWriter::new(&dict, 3);
@@ -408,6 +433,7 @@ mod test {
                 RdfValueFormat::Anything,
                 RdfValueFormat::Anything,
             ],
+            None,
         );
         let dict = RefCell::new(Dict::default());
         let mut tuple_writer = TupleWriter::new(&dict, 3);

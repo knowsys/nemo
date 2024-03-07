@@ -17,7 +17,8 @@ use crate::{
     },
     model::{
         FileFormat, RdfVariant, PARAMETER_NAME_BASE, PARAMETER_NAME_COMPRESSION,
-        PARAMETER_NAME_FORMAT, PARAMETER_NAME_RESOURCE, VALUE_FORMAT_ANY, VALUE_FORMAT_SKIP,
+        PARAMETER_NAME_FORMAT, PARAMETER_NAME_LIMIT, PARAMETER_NAME_RESOURCE, VALUE_FORMAT_ANY,
+        VALUE_FORMAT_SKIP,
     },
 };
 
@@ -100,6 +101,8 @@ pub struct RdfHandler {
     /// The list of value formats to be used for importing/exporting data.
     /// Since the arity is known for
     value_formats: Option<Vec<RdfValueFormat>>,
+    /// Maximum number of statements that should be imported/exported.
+    limit: Option<u64>,
     /// Compression format to be used, if specified. This can also be inferred
     /// from the resource, if given. So the only case where `None` is possible
     /// is when no resource is given (during output).
@@ -123,6 +126,7 @@ impl RdfHandler {
                 PARAMETER_NAME_BASE,
                 PARAMETER_NAME_COMPRESSION,
                 PARAMETER_NAME_FORMAT,
+                PARAMETER_NAME_LIMIT,
             ],
         )?;
 
@@ -163,12 +167,15 @@ impl RdfHandler {
         }
 
         let value_formats = Self::extract_value_formats(attributes, refined_variant, direction)?;
+        let limit =
+            ImportExportHandlers::extract_unsigned_integer(attributes, PARAMETER_NAME_LIMIT, true)?;
 
         Ok(Box::new(Self {
             resource,
             base,
             variant: refined_variant,
             value_formats,
+            limit,
             compression_format,
             direction,
         }))
@@ -261,6 +268,7 @@ impl ImportExportHandler for RdfHandler {
             self.rdf_variant_or_default(arity)?,
             self.base.clone(),
             self.value_formats_or_default(arity),
+            self.limit,
         )))
     }
 
@@ -269,6 +277,7 @@ impl ImportExportHandler for RdfHandler {
             writer,
             self.rdf_variant_or_default(arity)?,
             self.value_formats_or_default(arity),
+            self.limit,
         )))
     }
 

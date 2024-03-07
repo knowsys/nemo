@@ -26,6 +26,7 @@ pub(super) struct DsvReader {
     delimiter: u8,
     escape: Option<u8>,
     value_formats: Vec<DsvValueFormat>,
+    limit: Option<u64>,
 }
 
 impl DsvReader {
@@ -34,6 +35,7 @@ impl DsvReader {
         read: Box<dyn BufRead>,
         delimiter: u8,
         value_formats: Vec<DsvValueFormat>,
+        limit: Option<u64>,
     ) -> Self {
         Self {
             read,
@@ -41,6 +43,7 @@ impl DsvReader {
             //escape: b'\\',
             escape: None,
             value_formats,
+            limit,
         }
     }
 
@@ -81,11 +84,12 @@ impl DsvReader {
             })
         );
 
+        let stop_limit = self.limit.unwrap_or(0);
+
         let mut dsv_reader = self.reader();
 
         let mut line_count: u64 = 0;
         let mut drop_count: u64 = 0;
-
         for row in dsv_reader.records().flatten() {
             for (idx, value) in row.iter().enumerate() {
                 if idx >= expected_file_arity || skip[idx] {
@@ -103,6 +107,9 @@ impl DsvReader {
             line_count += 1;
             if (line_count % PROGRESS_NOTIFY_INCREMENT) == 0 {
                 log::info!("... processed {line_count} lines");
+            }
+            if line_count == stop_limit {
+                break;
             }
         }
         log::info!("Finished import: processed {line_count} lines (dropped {drop_count})");
@@ -168,6 +175,7 @@ mod test {
                 DsvValueFormat::Integer,
                 DsvValueFormat::Double,
             ],
+            None,
         );
         let dict = RefCell::new(Dict::default());
         let mut tuple_writer = TupleWriter::new(&dict, 4);

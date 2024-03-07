@@ -185,6 +185,7 @@ pub(super) struct RdfWriter {
     writer: Box<dyn Write>,
     variant: RdfVariant,
     value_formats: Vec<RdfValueFormat>,
+    limit: Option<u64>,
 }
 
 impl RdfWriter {
@@ -192,11 +193,13 @@ impl RdfWriter {
         writer: Box<dyn Write>,
         variant: RdfVariant,
         value_formats: Vec<RdfValueFormat>,
+        limit: Option<u64>,
     ) -> Self {
         RdfWriter {
             writer,
             variant,
             value_formats,
+            limit,
         }
     }
 
@@ -226,6 +229,7 @@ impl RdfWriter {
         let mut formatter = make_formatter(self.writer)?;
         let mut buffer: QuadBuffer = Default::default();
 
+        let stop_limit = self.limit.unwrap_or(u64::MAX);
         let mut triple_count: u64 = 0;
         let mut drop_count: u64 = 0;
 
@@ -252,6 +256,9 @@ impl RdfWriter {
                 triple_count += 1;
                 if (triple_count % PROGRESS_NOTIFY_INCREMENT) == 0 {
                     log::info!("... processed {triple_count} triples");
+                }
+                if triple_count == stop_limit {
+                    break;
                 }
             }
         }
@@ -288,6 +295,7 @@ impl RdfWriter {
         let mut formatter = make_formatter(self.writer)?;
         let mut buffer: QuadBuffer = Default::default();
 
+        let stop_limit = self.limit.unwrap_or(u64::MAX);
         let mut quad_count: u64 = 0;
         let mut drop_count: u64 = 0;
 
@@ -318,6 +326,9 @@ impl RdfWriter {
                 quad_count += 1;
                 if (quad_count % PROGRESS_NOTIFY_INCREMENT) == 0 {
                     log::info!("... processed {quad_count} triples");
+                }
+                if quad_count == stop_limit {
+                    break;
                 }
             }
         }

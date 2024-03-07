@@ -31,6 +31,8 @@ pub(crate) const PARAMETER_NAME_BASE: &str = "base";
 pub(crate) const PARAMETER_NAME_DSV_DELIMITER: &str = "delimiter";
 /// Name of the parameter for specifying the compression in import/export directives.
 pub(crate) const PARAMETER_NAME_COMPRESSION: &str = "compression";
+/// Name of the parameter for specifying the limit in import/export directives.
+pub(crate) const PARAMETER_NAME_LIMIT: &str = "limit";
 
 /// The name of the general, best-effort value format. Importers/exporters suporting this format will usually
 /// accept "any" input value and interpret it in the most natural way. Likewise, any value should be writable
