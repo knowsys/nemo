@@ -130,11 +130,11 @@ impl ValueDomain {
             | ValueDomain::NonNegativeInt => StorageTypeName::Int64.bitset(),
             ValueDomain::Float => StorageTypeName::Float.bitset(),
             ValueDomain::Double => StorageTypeName::Double.bitset(),
-            ValueDomain::Null => StorageTypeName::Id64.bitset(),
             ValueDomain::PlainString
             | ValueDomain::LanguageTaggedString
             | ValueDomain::Iri
             | ValueDomain::Tuple
+            | ValueDomain::Null
             | ValueDomain::Map
             | ValueDomain::Boolean
             | ValueDomain::Other => StorageTypeName::Id32

@@ -8,6 +8,7 @@ use crate::{
         operations::{constant::ColumnScanConstant, pass::ColumnScanPass},
     },
     datatypes::{storage_type_name::StorageTypeBitSet, StorageTypeName, StorageValueT},
+    datavalues::ValueDomain,
     dictionary::DvDict,
     management::database::Dict,
     tabular::triescan::{PartialTrieScan, TrieScanEnum},
@@ -67,7 +68,7 @@ impl GeneratorNull {
             if first_index == index {
                 instructions.push(NullInstruction::FreshNull);
             } else {
-                instructions.push(NullInstruction::RepeatNull(first_index));
+                instructions.push(NullInstruction::RepeatNull(first_index - input.arity()));
             }
         }
 
@@ -138,6 +139,7 @@ impl OperationGenerator for GeneratorNull {
             column_scans,
             instructions: self.instructions.clone(),
             current_layer: None,
+            null_cache: Vec::with_capacity(self.instructions.len()),
         }))
     }
 }
@@ -153,6 +155,9 @@ pub(crate) struct TrieScanNull<'a> {
     /// What to do on each layer that outputs a null
     instructions: Vec<NullInstruction>,
 
+    /// Stores all the created nulls in case a column wants to repeat the same value
+    null_cache: Vec<StorageValueT>,
+
     /// Current layer of this [PartialTrieScan]
     current_layer: Option<usize>,
 
@@ -167,6 +172,8 @@ impl<'a> PartialTrieScan<'a> for TrieScanNull<'a> {
         if let Some(previous_layer) = self.current_layer() {
             if previous_layer < self.trie_scan.arity() {
                 self.trie_scan.up();
+            } else {
+                self.null_cache.pop();
             }
         }
 
@@ -184,33 +191,35 @@ impl<'a> PartialTrieScan<'a> for TrieScanNull<'a> {
         if next_layer < self.trie_scan.arity() {
             self.trie_scan.down(next_type);
         } else {
-            // We store null in Id64 section
-            // TODO: Rethink this
-            if next_type != StorageTypeName::Id64 {
-                self.column_scans[next_layer]
-                    .get_mut()
-                    .constant_set_none(next_type);
-            } else {
+            if next_type == StorageTypeName::Id32 {
+                // Generation of the new null always happens when entering the Id32 type.
+                // When the resulting null-id doesn't fit in 32bit, we write it in the Id64 column
+
                 let instruction_index = next_layer - self.trie_scan.arity();
                 let next_null = match self.instructions[instruction_index] {
                     NullInstruction::FreshNull => {
-                        self.dictionary.borrow_mut().fresh_null_id() as u64
-                    }
-                    NullInstruction::RepeatNull(null_index) => {
-                        if let Some(StorageValueT::Id64(null)) = self.column_scans[null_index]
-                            .get_mut()
-                            .current(StorageTypeName::Id64)
-                        {
-                            null
+                        let id = self.dictionary.borrow_mut().fresh_null_id() as u64;
+                        if let Ok(id_u32) = u32::try_from(id) {
+                            StorageValueT::Id32(id_u32)
                         } else {
-                            unreachable!("Null must have been set during the previous layer");
+                            StorageValueT::Id64(id)
                         }
                     }
+                    NullInstruction::RepeatNull(null_index) => self.null_cache[null_index],
                 };
+
+                self.null_cache.push(next_null);
 
                 self.column_scans[next_layer]
                     .get_mut()
-                    .constant_set(StorageValueT::Id64(next_null));
+                    .constant_set_none(StorageTypeName::Id32);
+                self.column_scans[next_layer]
+                    .get_mut()
+                    .constant_set_none(StorageTypeName::Id64);
+
+                self.column_scans[next_layer]
+                    .get_mut()
+                    .constant_set(next_null);
             }
         }
 
@@ -230,7 +239,7 @@ impl<'a> PartialTrieScan<'a> for TrieScanNull<'a> {
         if layer < self.trie_scan.arity() {
             self.trie_scan.possible_types(layer)
         } else {
-            StorageTypeName::Id64.bitset()
+            ValueDomain::Null.storage_type()
         }
     }
 

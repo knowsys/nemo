@@ -468,7 +468,8 @@ impl AnyDataValue {
             | ValueDomain::Other
             | ValueDomain::PlainString
             | ValueDomain::LanguageTaggedString
-            | ValueDomain::Iri => {
+            | ValueDomain::Iri
+            | ValueDomain::Null => {
                 let dictionary_id = dictionary.datavalue_to_id(self)?;
                 Self::usize_to_storage_value_t(dictionary_id)
             }
@@ -481,10 +482,6 @@ impl AnyDataValue {
             | ValueDomain::NonNegativeInt
             | ValueDomain::Long
             | ValueDomain::Int => StorageValueT::Int64(self.to_i64_unchecked()),
-            ValueDomain::Null => {
-                let dictionary_id = dictionary.datavalue_to_id(self)?;
-                StorageValueT::Id64(dictionary_id as u64)
-            }
         })
     }
 
@@ -530,7 +527,7 @@ impl AnyDataValue {
                 let dictionary_id = dictionary
                     .datavalue_to_id(self)
                     .expect("cannot create specific nulls: value must be known to the dictionary");
-                StorageValueT::Id64(dictionary_id as u64)
+                Self::usize_to_storage_value_t(dictionary_id)
             }
             ValueDomain::Float => StorageValueT::Float(Float::from_number(self.to_f32_unchecked())),
             ValueDomain::Double => {
