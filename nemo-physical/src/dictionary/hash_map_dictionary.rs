@@ -50,8 +50,6 @@ impl Dictionary for HashMapDictionary {
 
 #[cfg(test)]
 mod test {
-    use std::borrow::Borrow;
-
     use crate::dictionary::AddResult;
     use crate::dictionary::Dictionary;
 
