@@ -91,6 +91,8 @@ impl DsvWriter {
             }
         }
 
+        self.writer.flush()?;
+
         log::info!("Finished export: processed {line_count} tuples (dropped {drop_count})");
 
         Ok(())
