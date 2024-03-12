@@ -464,6 +464,8 @@ impl ExecutionPlan {
             ExecutionResult::Temporary
         };
 
+        let computed_table_id = computed_trees.len();
+
         let new_tree = if let Some(tables) = computed_trees_map.get(&output_node.node.id()) {
             let (closest_index, closest_order) =
                 closest_order(tables.iter().map(|(order, _id)| order), &order)
@@ -475,6 +477,8 @@ impl ExecutionPlan {
                 order.clone(),
                 arity,
             );
+
+            computed_trees[closest_computed_id].used += 1;
 
             if generator.is_noop() {
                 return closest_computed_id;
@@ -491,6 +495,8 @@ impl ExecutionPlan {
                 result: execution_result,
                 operation_name: String::from("Reordering intermediate table"),
                 cut_layers: 0, // TODO: Compute cut_layers
+                used: 1,
+                dependents: Vec::new(),
             }
         } else {
             let root = Self::execution_node(
@@ -503,16 +509,28 @@ impl ExecutionPlan {
                 loaded_tables,
             );
 
+            if let ExecutionTreeNode::ProjectReorder { generator, subnode } = &root {
+                if let ExecutionTreeLeaf::FetchComputedTable(computed) = subnode {
+                    if !&computed_trees[*computed].result.is_permanent() {
+                        computed_trees[*computed]
+                            .dependents
+                            .push((computed_table_id, generator.projectreordering()));
+                        computed_trees[*computed].used -= 1;
+                    }
+                }
+            }
+
             ExecutionTree {
                 root,
                 id: output_node.node.id(),
                 result: execution_result,
                 operation_name: output_node.operation_name.clone(),
                 cut_layers: 0, // TODO: Compute cut_layers
+                used: 1,
+                dependents: Vec::new(),
             }
         };
 
-        let computed_table_id = computed_trees.len();
         computed_trees.push(new_tree);
         computed_trees_map.insert(output_node.node.id(), vec![(order, computed_table_id)]);
 

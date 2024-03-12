@@ -6,7 +6,10 @@ use std::fmt::Debug;
 
 use crate::{
     management::execution_plan::{ColumnOrder, ExecutionResult},
-    tabular::operations::{projectreorder::GeneratorProjectReorder, OperationGeneratorEnum},
+    tabular::operations::{
+        projectreorder::{GeneratorProjectReorder, ProjectReordering},
+        OperationGeneratorEnum,
+    },
 };
 
 use super::id::{ExecutionId, PermanentTableId};
@@ -65,6 +68,11 @@ pub(crate) struct ExecutionTree {
     pub id: ExecutionId,
     /// Name of the of tree, e.g. for debugging purposes
     pub operation_name: String,
+
+    ///
+    pub dependents: Vec<(ComputedTableId, ProjectReordering)>,
+    ///
+    pub used: usize,
 
     /// Starting from the bottom most layer,
     /// how many layers are not used in the computation

@@ -83,7 +83,6 @@ impl GeneratorProjectReorder {
 
     /// Apply the operation to a [PartialTrieScan].
     pub(crate) fn apply_operation<'a, Scan: PartialTrieScan<'a>>(&self, trie_scan: Scan) -> Trie {
-        debug_assert!(trie_scan.arity() == self.projectreordering.domain_size());
         debug_assert!(self.last_used_layer < trie_scan.arity());
 
         let cut = trie_scan.arity() - self.last_used_layer - 1;
@@ -137,11 +136,16 @@ impl GeneratorProjectReorder {
         self.projectreordering.is_identity()
     }
 
+    /// Return the [ProjectReordering] used by this generator.
+    pub(crate) fn projectreordering(&self) -> ProjectReordering {
+        self.projectreordering.clone()
+    }
+
     /// Creates an optmized representation of a [ProjectReordering] as a [Vec],
     /// such that the ith entry in the vector represents the output of the function
     /// for the input i.
     /// If the output is `None`, then the vector contains [usize::MAX].
-    fn reordering_vector(projectreordering: &ProjectReordering) -> Vec<usize> {
+    pub(crate) fn reordering_vector(projectreordering: &ProjectReordering) -> Vec<usize> {
         let mut result = vec![usize::MAX; projectreordering.domain_size()];
 
         for (input, item) in result

@@ -25,7 +25,10 @@ use crate::{
     management::{bytesized::ByteSized, database::execution_series::ExecutionTreeNode},
     meta::timing::TimedCode,
     tabular::{
-        operations::OperationGenerator, rowscan::RowScan, trie::Trie, triescan::TrieScanEnum,
+        operations::{projectreorder::ProjectReordering, OperationGenerator},
+        rowscan::RowScan,
+        trie::Trie,
+        triescan::TrieScanEnum,
     },
     util::mapping::permutation::Permutation,
 };
@@ -266,24 +269,14 @@ impl DatabaseInstance {
     }
 }
 
-/// Result of the computation of an [ExecutionTree]
-#[derive(Debug)]
-struct ComputationResult {
-    /// How to store the result
-    storage: ExecutionResult,
-    /// Id of the execution node
-    execution_id: ExecutionId,
-    /// The result of the computation
-    trie: Option<Trie>,
-}
-
-/// Contains
+/// Contains [Trie]s computed during the evaluation of an [ExecutionPlan]
+/// and the [StorageId]s of the tables needed for that
 #[derive(Debug)]
 struct TemporaryStorage {
     /// Tables that were loaded from the [DatabaseInstance] before the computation
     loaded_tables: Vec<StorageId>,
     /// Tables that were computed during the execution of an [ExecutionPlan]
-    computed_tables: Vec<ComputationResult>,
+    computed_tables: Vec<Option<Trie>>,
 }
 
 // Functions for computing results of execution plans
@@ -318,14 +311,19 @@ impl DatabaseInstance {
     ) -> Option<TrieScanEnum<'a>> {
         let trie = match leaf {
             ExecutionTreeLeaf::LoadTable(load_id) => {
-                Some(self.reference_manager.trie(storage.loaded_tables[*load_id]))
+                self.reference_manager.trie(storage.loaded_tables[*load_id])
             }
-            ExecutionTreeLeaf::FetchComputedTable(computed_id) => {
-                storage.computed_tables[*computed_id].trie.as_ref()
-            }
+            ExecutionTreeLeaf::FetchComputedTable(computed_id) => storage.computed_tables
+                [*computed_id]
+                .as_ref()
+                .expect("Referenced trie shold have been computed."),
         };
 
-        trie.map(|trie| TrieScanEnum::Generic(trie.partial_iterator()))
+        if !trie.is_empty() {
+            Some(TrieScanEnum::Generic(trie.partial_iterator()))
+        } else {
+            None
+        }
     }
 
     /// Return a [TrieScanEnum] representing the given [ExecutionTreeOperation] node.
@@ -354,24 +352,30 @@ impl DatabaseInstance {
         }
     }
 
-    /// Evaluate the tree of operations represented by the [ExecutionTree].
+    /// Evaluate the tree of operations represented by the [ExecutionTree]
+    /// as well as all the dependant trees.
+    ///
+    /// Returns a pair containing a (possibly empty) [Trie]
     fn execute_tree<'a>(
         &'a mut self,
         storage: &'a TemporaryStorage,
         tree: &ExecutionTree,
-    ) -> Result<ComputationResult, Error> {
+        dependent: Vec<ProjectReordering>,
+    ) -> (Trie, Vec<Trie>) {
         let trie = match &tree.root {
             ExecutionTreeNode::Operation(operation) => {
                 let trie_scan = self.evaluate_operation(&self.dictionary, storage, operation);
-                trie_scan
-                    .map(|scan| Trie::from_partial_trie_scan(scan, tree.cut_layers))
-                    .filter(|trie| !trie.is_empty())
+                trie_scan.map(|scan| Trie::from_partial_trie_scan(scan, tree.cut_layers))
             }
             ExecutionTreeNode::ProjectReorder { generator, subnode } => {
+                debug_assert!(
+                    dependent.is_empty(),
+                    "Having dependant tables is not supported for projectreorder nodes."
+                );
+
                 if generator.is_noop() {
                     self.evaluate_tree_leaf(storage, subnode)
                         .map(|scan| Trie::from_partial_trie_scan(scan, tree.cut_layers))
-                        .filter(|trie| !trie.is_empty())
                 } else {
                     self.evaluate_tree_leaf(storage, subnode)
                         .map(|scan| generator.apply_operation(scan))
@@ -379,11 +383,30 @@ impl DatabaseInstance {
             }
         };
 
-        Ok(ComputationResult {
-            storage: tree.result.clone(),
-            execution_id: tree.id,
-            trie,
-        })
+        (trie.unwrap_or_else(|| Trie::empty(0)), vec![])
+    }
+
+    fn log_new_trie(tree: &ExecutionTree, trie: &Trie) {
+        if !trie.is_empty() {
+            match &tree.result {
+                ExecutionResult::Temporary => {
+                    log::info!(
+                        "Saved temporary table: {} entries ({})",
+                        trie.num_rows(),
+                        trie.size_bytes()
+                    );
+                }
+                ExecutionResult::Permanent(_, name) => {
+                    log::info!(
+                        "Saved permanent table {name} with {} entries ({})",
+                        trie.num_rows(),
+                        trie.size_bytes()
+                    );
+                }
+            }
+        } else {
+            log::info!("Trie does not contain any elements");
+        }
     }
 
     /// Evaluate the given [ExecutionPlan].
@@ -399,55 +422,55 @@ impl DatabaseInstance {
 
         let mut temporary_storage = TemporaryStorage {
             loaded_tables: self.collect_requiured_tries(&execution_series.loaded_tries)?,
-            computed_tables: Vec::<ComputationResult>::new(),
+            computed_tables: vec![None; execution_series.trees.len()],
         };
 
         TimedCode::instance()
             .sub("Reasoning/Execution/Load Table")
             .stop();
 
-        for tree in &execution_series.trees {
-            log::info!("Execution step: {}", tree.operation_name);
-            let timed_string = format!("Reasoning/Execution/{}", tree.operation_name);
-
-            TimedCode::instance().sub(&timed_string).start();
-            let result = self.execute_tree(&temporary_storage, tree)?;
-            TimedCode::instance().sub(&timed_string).stop();
-
-            if result.trie.is_some() && result.trie.as_ref().unwrap().num_rows() > 0 {
-                let new_trie = result.trie.as_ref().unwrap();
-
-                match &tree.result {
-                    ExecutionResult::Temporary => {
-                        log::info!(
-                            "Saved temporary table: {} entries ({})",
-                            new_trie.num_rows(),
-                            new_trie.size_bytes()
-                        );
-                    }
-                    ExecutionResult::Permanent(_, name) => {
-                        log::info!(
-                            "Saved permanent table {name} with {} entries ({})",
-                            new_trie.num_rows(),
-                            new_trie.size_bytes()
-                        );
-                    }
-                }
-            } else {
-                log::info!("Trie does not contain any elements");
+        for (tree_index, tree) in execution_series.trees.iter().enumerate() {
+            if temporary_storage.computed_tables[tree_index].is_some() {
+                continue;
             }
 
-            temporary_storage.computed_tables.push(result);
+            log::info!("Execution step: {}", tree.operation_name);
+
+            let dependant_reorderings = tree
+                .dependents
+                .iter()
+                .map(|(_, projectreordering)| projectreordering.clone())
+                .collect::<Vec<_>>();
+
+            let timed_string = format!("Reasoning/Execution/{}", tree.operation_name);
+            TimedCode::instance().sub(&timed_string).start();
+            let (result_tree, results_dependant) =
+                self.execute_tree(&temporary_storage, tree, dependant_reorderings);
+            TimedCode::instance().sub(&timed_string).stop();
+
+            Self::log_new_trie(tree, &result_tree);
+
+            temporary_storage.computed_tables[tree_index] = Some(result_tree);
+            for ((computed_id, _), result_dependant) in
+                tree.dependents.iter().zip(results_dependant)
+            {
+                temporary_storage.computed_tables[*computed_id] = Some(result_dependant);
+            }
         }
 
         let mut result = HashMap::new();
-        for computation in temporary_storage.computed_tables {
-            match computation.storage {
+        for (tree, trie) in execution_series
+            .trees
+            .into_iter()
+            .zip(temporary_storage.computed_tables)
+        {
+            match tree.result {
                 ExecutionResult::Temporary => {} // Temporary table will be dropped at the end of the function
                 ExecutionResult::Permanent(order, name) => {
-                    if let Some(trie) = computation.trie {
+                    let trie = trie.expect("Trie should have been computed.");
+                    if !trie.is_empty() {
                         let permanent_id = self.register_add_trie(&name, order, trie);
-                        let execution_id = computation.execution_id;
+                        let execution_id = tree.id;
 
                         result.insert(execution_id, permanent_id);
                     }
@@ -470,14 +493,15 @@ impl DatabaseInstance {
             loaded_tables: self
                 .collect_requiured_tries(&execution_series.loaded_tries)
                 .ok()?,
-            computed_tables: Vec::<ComputationResult>::new(),
+            computed_tables: vec![None; execution_series.trees.len()],
         };
 
-        for tree in execution_series.trees {
+        for (tree_index, tree) in execution_series.trees.into_iter().enumerate() {
             match &tree.result {
                 ExecutionResult::Temporary => {
-                    let result = self.execute_tree(&temporary_storage, &tree).ok()?;
-                    temporary_storage.computed_tables.push(result);
+                    let (result, _) = self.execute_tree(&temporary_storage, &tree, vec![]);
+
+                    temporary_storage.computed_tables[tree_index] = Some(result);
                 }
                 ExecutionResult::Permanent(_, _) => {
                     let row_storage = match &tree.root {
