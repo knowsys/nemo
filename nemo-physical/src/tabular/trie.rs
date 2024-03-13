@@ -19,13 +19,13 @@ use crate::{
         StorageTypeName, StorageValueT,
     },
     management::bytesized::{sum_bytes, ByteSized},
-    tabular::rowscan::RowScan,
+    tabular::{buffer::tuple_buffer::TupleBuffer, rowscan::RowScan},
     util::bitset::BitSet,
 };
 
 use super::{
     buffer::sorted_tuple_buffer::SortedTupleBuffer,
-    operations::trim::TrieScanTrim,
+    operations::{projectreorder::ProjectReordering, trim::TrieScanTrim},
     triescan::{PartialTrieScan, TrieScan, TrieScanEnum},
 };
 
@@ -337,8 +337,6 @@ impl Trie {
     /// This function assumes that every row has the same number of entries.
     #[cfg(test)]
     pub(crate) fn from_rows(rows: Vec<Vec<StorageValueT>>) -> Self {
-        use crate::tabular::buffer::tuple_buffer::TupleBuffer;
-
         let column_number = if let Some(first_row) = rows.first() {
             first_row.len()
         } else {
@@ -358,6 +356,98 @@ impl Trie {
         }
 
         Self::from_tuple_buffer(tuple_buffer.finalize())
+    }
+
+    /// Create a [Trie] based on a [PartialTrieScan]
+    /// and list of tries that result from it by applying the given [ProjectReordering]
+    ///
+    /// The first entry in the returned tuple is [Trie] resulting from the [PartialTrieScan]
+    /// while the sedond entry is the list of reordered [Trie]s.
+    /// If `keep_original` is set to `false`, then the first entry will be `None`.
+    /// If the reustling [Trie]s will be empty then each of the [Trie]s will be `None`.
+    pub(crate) fn from_partial_trie_scan_dependents(
+        trie_scan: TrieScanEnum<'_>,
+        reorderings: Vec<ProjectReordering>,
+        keep_original: bool,
+    ) -> (Option<Self>, Vec<Option<Self>>) {
+        let reorderings = reorderings
+            .iter()
+            .map(|reordering| reordering.as_vector())
+            .collect::<Vec<_>>();
+
+        let num_columns = trie_scan.arity();
+        let cut_layers = 0;
+
+        let mut rowscan = RowScan::new(trie_scan, cut_layers);
+
+        let mut intervalcolumn_builders =
+            Vec::<IntervalColumnTBuilderTriescan<IntervalLookupMethod>>::with_capacity(num_columns);
+        let mut tuple_buffers = reorderings
+            .iter()
+            .map(|reordering| TupleBuffer::new(reordering.len()))
+            .collect::<Vec<_>>();
+
+        if let Some(first_row) = StreamingIterator::next(&mut rowscan) {
+            if keep_original {
+                let mut last_type: Option<StorageTypeName> = None;
+                for &current_value in first_row {
+                    let mut new_builder =
+                        IntervalColumnTBuilderTriescan::<IntervalLookupMethod>::new(last_type);
+
+                    last_type = Some(current_value.get_type());
+                    new_builder.add_value(current_value);
+
+                    intervalcolumn_builders.push(new_builder);
+                }
+            }
+        } else {
+            return (None, vec![None; num_columns]);
+        }
+
+        while let Some(current_row) = StreamingIterator::next(&mut rowscan) {
+            let changed_layers = num_columns - current_row.len();
+            let mut last_type = StorageTypeName::Id32;
+
+            for ((layer, current_builder), current_value) in intervalcolumn_builders
+                .iter_mut()
+                .enumerate()
+                .skip(changed_layers)
+                .zip(current_row)
+            {
+                let current_type = current_value.get_type();
+
+                if layer != changed_layers {
+                    current_builder.finish_interval(last_type);
+                }
+
+                current_builder.add_value(*current_value);
+
+                last_type = current_type;
+            }
+
+            for (tuple_buffer, reordering) in tuple_buffers.iter_mut().zip(reorderings.iter()) {
+                for &column_index in reordering {
+                    tuple_buffer.add_tuple_value(current_row[column_index]);
+                }
+            }
+        }
+
+        let result_trie = if keep_original {
+            Some(Self {
+                columns: intervalcolumn_builders
+                    .into_iter()
+                    .map(|builder| builder.finalize())
+                    .collect(),
+            })
+        } else {
+            None
+        };
+        let result_reordered = tuple_buffers
+            .into_iter()
+            .map(|buffer| Some(Self::from_tuple_buffer(buffer.finalize())))
+            .collect::<Vec<_>>();
+
+        (result_trie, result_reordered)
     }
 }
 

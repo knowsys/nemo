@@ -57,8 +57,7 @@ impl SortedChoice {
     /// Return a vector representation of the function
     /// such that the ith entry in the vector contains that element which gets mapped to position i by this function.
     /// E.g. `{10 -> 0, 20 -> 1}` will result in `[10, 20]`
-    #[cfg(test)]
-    pub(crate) fn vector_minimal(&self) -> Vec<usize> {
+    pub(crate) fn as_vector(&self) -> Vec<usize> {
         let mut result = vec![0; self.map.len()];
 
         for (input, value) in self.iter() {
@@ -229,15 +228,15 @@ mod test {
     fn test_to_vector() {
         let vector = vec![0, 2, 1];
         let choice = SortedChoice::from_vector(vector.clone(), 3);
-        assert_eq!(vector, choice.vector_minimal());
+        assert_eq!(vector, choice.as_vector());
 
         let vector = vec![3, 1, 2];
         let choice = SortedChoice::from_vector(vector.clone(), 4);
-        assert_eq!(vector, choice.vector_minimal());
+        assert_eq!(vector, choice.as_vector());
 
         let vector = vec![0, 1, 2];
         let choice = SortedChoice::from_vector(vector.clone(), 4);
-        assert_eq!(vector, choice.vector_minimal());
+        assert_eq!(vector, choice.as_vector());
     }
 
     #[test]

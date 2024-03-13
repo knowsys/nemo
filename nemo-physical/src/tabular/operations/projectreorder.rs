@@ -82,37 +82,41 @@ impl GeneratorProjectReorder {
     }
 
     /// Apply the operation to a [PartialTrieScan].
+    /// TODO: Check if changes here are an imrpovement
     pub(crate) fn apply_operation<'a, Scan: PartialTrieScan<'a>>(&self, trie_scan: Scan) -> Trie {
         debug_assert!(self.last_used_layer < trie_scan.arity());
 
         let cut = trie_scan.arity() - self.last_used_layer - 1;
+        // let projectreordering = Self::reordering_vector(&self.projectreordering);
+        let projectreordering = self.projectreordering.as_vector();
 
         let mut rowscan = RowScan::new(trie_scan, cut);
-
-        let mut current_tuple = vec![StorageValueT::Id32(0); self.arity_output];
+        // let mut current_tuple = vec![StorageValueT::Id32(0); self.arity_output];
         let mut tuple_buffer = TupleBuffer::new(self.arity_output);
-
-        let projectreordering = Self::reordering_vector(&self.projectreordering);
 
         while let Some(current_row) = StreamingIterator::next(&mut rowscan) {
             debug_assert!(current_row.len() <= self.last_used_layer + 1);
 
-            let start_change = self.last_used_layer + 1 - current_row.len();
-
-            for (row_index, current_value) in current_row.iter().enumerate() {
-                let input_layer = start_change + row_index;
-                let output_layer = projectreordering[input_layer];
-
-                if output_layer == usize::MAX {
-                    continue;
-                }
-
-                current_tuple[output_layer] = *current_value;
+            for &row_index in &projectreordering {
+                tuple_buffer.add_tuple_value(current_row[row_index]);
             }
 
-            for value in &current_tuple {
-                tuple_buffer.add_tuple_value(*value);
-            }
+            // let start_change = self.last_used_layer + 1 - current_row.len();
+
+            // for (row_index, current_value) in current_row.iter().enumerate() {
+            //     let input_layer = start_change + row_index;
+            //     let output_layer = projectreordering[input_layer];
+
+            //     if output_layer == usize::MAX {
+            //         continue;
+            //     }
+
+            //     current_tuple[output_layer] = *current_value;
+            // }
+
+            // for value in &current_tuple {
+            //     tuple_buffer.add_tuple_value(*value);
+            // }
         }
 
         Trie::from_tuple_buffer(tuple_buffer.finalize())
