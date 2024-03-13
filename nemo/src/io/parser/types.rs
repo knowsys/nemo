@@ -425,9 +425,9 @@ impl FromExternalError<Span<'_>, DataValueCreationError> for LocatedParseError {
 
 use crate::io::lexer::Token;
 
-#[derive(Debug)]
-struct Tokens<'a> {
-    tok: &'a [Token<'a>],
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub(crate) struct Tokens<'a> {
+    pub(crate) tok: &'a [Token<'a>],
 }
 impl<'a> Tokens<'a> {
     fn new(vec: &'a [Token]) -> Tokens<'a> {
