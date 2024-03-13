@@ -422,3 +422,165 @@ impl FromExternalError<Span<'_>, DataValueCreationError> for LocatedParseError {
         ParseError::ExternalError(Box::new(e.into())).at(input)
     }
 }
+
+use crate::io::lexer::Token;
+
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub(crate) struct Tokens<'a> {
+    pub(crate) tok: &'a [Token<'a>],
+}
+impl<'a> Tokens<'a> {
+    fn new(vec: &'a [Token]) -> Tokens<'a> {
+        Tokens { tok: vec }
+    }
+}
+impl<'a> nom::AsBytes for Tokens<'a> {
+    fn as_bytes(&self) -> &[u8] {
+        todo!()
+    }
+}
+impl<'a, T> nom::Compare<T> for Tokens<'a> {
+    fn compare(&self, t: T) -> nom::CompareResult {
+        todo!()
+    }
+
+    fn compare_no_case(&self, t: T) -> nom::CompareResult {
+        todo!()
+    }
+}
+// impl<'a> nom::ExtendInto for Tokens<'a> {
+//     type Item;
+
+//     type Extender;
+
+//     fn new_builder(&self) -> Self::Extender {
+//         todo!()
+//     }
+
+//     fn extend_into(&self, acc: &mut Self::Extender) {
+//         todo!()
+//     }
+// }
+impl<'a, T> nom::FindSubstring<T> for Tokens<'a> {
+    fn find_substring(&self, substr: T) -> Option<usize> {
+        todo!()
+    }
+}
+impl<'a, T> nom::FindToken<T> for Tokens<'a> {
+    fn find_token(&self, token: T) -> bool {
+        todo!()
+    }
+}
+impl<'a> nom::InputIter for Tokens<'a> {
+    type Item = &'a Token<'a>;
+
+    type Iter = std::iter::Enumerate<::std::slice::Iter<'a, Token<'a>>>;
+
+    type IterElem = ::std::slice::Iter<'a, Token<'a>>;
+
+    fn iter_indices(&self) -> Self::Iter {
+        self.tok.iter().enumerate()
+    }
+
+    fn iter_elements(&self) -> Self::IterElem {
+        self.tok.iter()
+    }
+
+    fn position<P>(&self, predicate: P) -> Option<usize>
+    where
+        P: Fn(Self::Item) -> bool,
+    {
+        self.tok.iter().position(predicate)
+    }
+
+    fn slice_index(&self, count: usize) -> Result<usize, nom::Needed> {
+        if self.tok.len() >= count {
+            Ok(count)
+        } else {
+            Err(nom::Needed::Unknown)
+        }
+    }
+}
+impl<'a> nom::InputLength for Tokens<'a> {
+    fn input_len(&self) -> usize {
+        self.tok.len()
+    }
+}
+impl<'a> nom::InputTake for Tokens<'a> {
+    fn take(&self, count: usize) -> Self {
+        Tokens {
+            tok: &self.tok[0..count],
+        }
+    }
+
+    fn take_split(&self, count: usize) -> (Self, Self) {
+        (
+            Tokens {
+                tok: &self.tok[count..self.tok.len()],
+            },
+            Tokens {
+                tok: &self.tok[0..count],
+            },
+        )
+    }
+}
+impl<'a> nom::InputTakeAtPosition for Tokens<'a> {
+    type Item = &'a Token<'a>;
+
+    fn split_at_position<P, E: nom::error::ParseError<Self>>(
+        &self,
+        predicate: P,
+    ) -> IResult<Self, Self, E>
+    where
+        P: Fn(Self::Item) -> bool,
+    {
+        todo!()
+    }
+
+    fn split_at_position1<P, E: nom::error::ParseError<Self>>(
+        &self,
+        predicate: P,
+        e: ErrorKind,
+    ) -> IResult<Self, Self, E>
+    where
+        P: Fn(Self::Item) -> bool,
+    {
+        todo!()
+    }
+
+    fn split_at_position_complete<P, E: nom::error::ParseError<Self>>(
+        &self,
+        predicate: P,
+    ) -> IResult<Self, Self, E>
+    where
+        P: Fn(Self::Item) -> bool,
+    {
+        todo!()
+    }
+
+    fn split_at_position1_complete<P, E: nom::error::ParseError<Self>>(
+        &self,
+        predicate: P,
+        e: ErrorKind,
+    ) -> IResult<Self, Self, E>
+    where
+        P: Fn(Self::Item) -> bool,
+    {
+        todo!()
+    }
+}
+impl<'a> nom::Offset for Tokens<'a> {
+    fn offset(&self, second: &Self) -> usize {
+        todo!()
+    }
+}
+impl<'a, R> nom::ParseTo<R> for Tokens<'a> {
+    fn parse_to(&self) -> Option<R> {
+        todo!()
+    }
+}
+impl<'a, R> nom::Slice<R> for Tokens<'a> {
+    fn slice(&self, range: R) -> Self {
+        todo!()
+    }
+}
