@@ -22,6 +22,7 @@ use nom::{
 
 use macros::traced;
 
+mod ast;
 mod types;
 
 use types::{ConstraintOperator, IntermediateResult, Span};
@@ -2413,5 +2414,116 @@ mod test {
                 attributes: attributes.clone()
             })
         );
+    }
+}
+
+// NEW PARSER
+mod new {
+    use super::ast::{self, Term};
+    use super::types::Tokens;
+    use crate::io::lexer::{self, lex_ident, Span, TokenKind};
+    use nom::{
+        branch::alt,
+        bytes::complete::take,
+        combinator::verify,
+        multi::{many1, separated_list0},
+        sequence::tuple,
+        IResult,
+    };
+
+    macro_rules! tag_token (
+        ($func_name:ident, $tag: expr) => (
+            fn $func_name(tokens: Tokens) -> IResult<Tokens, Tokens> {
+                verify(take(1usize), |t: &Tokens| t.tok[0].kind == $tag)(tokens)
+            }
+        )
+    );
+
+    // tag_token!(ident, TokenKind::Ident);
+    // tag_token!(open_paren, TokenKind::OpenParen);
+    // tag_token!(close_paren, TokenKind::CloseParen);
+    // tag_token!(comma, TokenKind::Comma);
+    // tag_token!(dot, TokenKind::Dot);
+
+    fn parse_program<'a>(input: Span<'a>) -> ast::Program<'a> {
+        let (_, statements) =
+            // many1(alt((/*parse_rule, */parse_fact/*, parse_directive*/)))(input).unwrap();
+        many1(parse_fact)(input).unwrap();
+        dbg!(&statements);
+        let mut program = ast::Program::new();
+        for statement in statements {
+            program.push(statement)
+        }
+        program
+    }
+
+    // fn parse_rule<'a>(input: Tokens) -> IResult<Tokens, ast::Statement<'a>> {}
+
+    fn parse_fact<'a>(input: Span<'a>) -> IResult<Span, ast::Statement<'a>> {
+        tuple((
+            lex_ident,
+            lexer::open_paren,
+            separated_list0(lexer::comma, lex_ident),
+            lexer::close_paren,
+            lexer::dot,
+        ))(input)
+        .map(|(rest, result)| {
+            let mut terms = Vec::new();
+            for x in result.2 {
+                terms.push(Term::Primitive(x))
+            }
+            (
+                rest,
+                ast::Statement::Fact {
+                    atom: ast::Atom::Atom {
+                        predicate: result.0,
+                        terms,
+                    },
+                },
+            )
+        })
+    }
+
+    // fn parse_directive<'a>(input: Tokens) -> IResult<Tokens, ast::Statement<'a>> {}
+
+    #[cfg(test)]
+    mod test {
+        use super::*;
+        use crate::io::{lexer::*, parser::ast::*};
+
+        macro_rules! S {
+            ($offset:literal,$line:literal,$str:literal) => {
+                unsafe { Span::new_from_raw_offset($offset, $line, $str, ()) }
+            };
+        }
+
+        #[test]
+        fn fact() {
+            // let input = Tokens {
+            //     tok: &lex_tokens(Span::new("a(B,C).")).unwrap().1,
+            // };
+            let input = Span::new("a(B,C).");
+            assert_eq!(
+                parse_program(input),
+                vec![ast::Statement::Fact {
+                    atom: ast::Atom::Atom {
+                        predicate: Token {
+                            kind: TokenKind::Ident,
+                            span: S!(0, 1, "a"),
+                        },
+                        terms: vec![
+                            Term::Primitive(Token {
+                                kind: TokenKind::Ident,
+                                span: S!(2, 1, "B"),
+                            }),
+                            Term::Primitive(Token {
+                                kind: TokenKind::Ident,
+                                span: S!(4, 1, "C"),
+                            }),
+                        ],
+                    },
+                }]
+            )
+        }
     }
 }
