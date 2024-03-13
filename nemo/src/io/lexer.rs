@@ -1,264 +1,21 @@
 //! Lexical tokenization of rulewerk-style rules.
 
-use std::str::Chars;
+use nom::{
+    branch::alt,
+    bytes::complete::{is_not, tag, take},
+    character::complete::{alpha1, alphanumeric1, digit1, line_ending, multispace1},
+    combinator::{all_consuming, map, recognize},
+    multi::many0,
+    sequence::{delimited, pair, tuple},
+    IResult,
+};
+use nom_locate::LocatedSpan;
 
-const EOF_CHAR: char = '\0';
-
-#[derive(Debug, Copy, Clone, PartialEq)]
-struct Span<'a> {
-    offset: usize,
-    line: usize,
-    // size: usize,
-    fragment: &'a str,
-}
-// impl<'a> Span<'a> {
-impl<'a> Span<'a> {
-    fn new(offset: usize, line: usize, input: &'a str) -> Span<'a> {
-        // fn new(offset: usize, line: usize, size: usize) -> Span {
-        Span {
-            offset,
-            line,
-            fragment: input,
-            // size,
-        }
-    }
-}
-
-#[derive(Debug, Clone)]
-struct Lexer<'a> {
-    input: &'a str,
-    len_remaining: usize,
-    offset: usize,
-    lines: usize,
-    chars: Chars<'a>,
-}
-impl<'a> Lexer<'a> {
-    fn new(input: &'a str) -> Lexer<'a> {
-        Lexer {
-            input,
-            len_remaining: input.len(),
-            offset: 0,
-            lines: 1,
-            chars: input.chars(),
-        }
-    }
-    fn consumed_char_length(&self) -> usize {
-        self.len_remaining - self.chars.as_str().len()
-    }
-    fn update_remaining_len(&mut self) {
-        self.len_remaining = self.chars.as_str().len();
-    }
-    fn peek(&self, count: usize) -> char {
-        self.chars.clone().nth(count - 1).unwrap_or(EOF_CHAR)
-    }
-    fn bump(&mut self) -> Option<char> {
-        self.chars.next()
-    }
-    fn is_eof(&self) -> bool {
-        self.chars.as_str().is_empty()
-    }
-    fn bump_while(&mut self, mut predicate: impl FnMut(char) -> bool) {
-        while predicate(self.peek(1)) && !self.is_eof() {
-            self.bump();
-        }
-    }
-    fn get_tokens(&mut self) -> Vec<Token> {
-        use TokenKind::*;
-        let mut vec = Vec::new();
-        loop {
-            let old_line_num = self.lines;
-            let first_char = match self.bump() {
-                Some(c) => c,
-                None => {
-                    let eof_tok = Token::new(
-                        Eof,
-                        Span::new(
-                            self.offset,
-                            self.lines,
-                            &self.input[self.offset..self.offset],
-                        ),
-                    );
-                    vec.push(eof_tok);
-                    return vec;
-                }
-            };
-            let token_kind = match first_char {
-                '%' => match (self.peek(1), self.peek(2)) {
-                    (n1, n2) if n1.is_digit(16) && n2.is_digit(16) => self.pct_encoded(),
-                    _ => self.comment(),
-                },
-                '\n' => {
-                    self.lines += 1;
-                    Whitespace
-                }
-                c if is_whitespace(c) => self.whitespace(),
-                c if unicode_ident::is_xid_start(c) => self.ident(),
-                c @ '0'..='9' => self.number(),
-                '?' => QuestionMark,
-                '!' => ExclamationMark,
-                '(' => OpenParen,
-                ')' => CloseParen,
-                '[' => OpenBracket,
-                ']' => CloseBracket,
-                '{' => OpenBrace,
-                '}' => CloseBrace,
-                '.' => Dot,
-                ',' => Comma,
-                ':' => Colon,
-                ';' => Semicolon,
-                '>' => Greater,
-                '=' => Equal,
-                '<' => Less,
-                '~' => Tilde,
-                '^' => Caret,
-                '#' => Hash,
-                '_' => Underscore,
-                '@' => At,
-                '+' => Plus,
-                '-' => Minus,
-                '*' => Star,
-                '/' => Slash,
-                '$' => Dollar,
-                '&' => Ampersand,
-                '\'' => Apostrophe,
-                '\u{A0}'..='\u{D7FF}'
-                | '\u{F900}'..='\u{FDCF}'
-                | '\u{FDF0}'..='\u{FFEF}'
-                | '\u{10000}'..='\u{1FFFD}'
-                | '\u{20000}'..='\u{2FFFD}'
-                | '\u{30000}'..='\u{3FFFD}'
-                | '\u{40000}'..='\u{4FFFD}'
-                | '\u{50000}'..='\u{5FFFD}'
-                | '\u{60000}'..='\u{6FFFD}'
-                | '\u{70000}'..='\u{7FFFD}'
-                | '\u{80000}'..='\u{8FFFD}'
-                | '\u{90000}'..='\u{9FFFD}'
-                | '\u{A0000}'..='\u{AFFFD}'
-                | '\u{B0000}'..='\u{BFFFD}'
-                | '\u{C0000}'..='\u{CFFFD}'
-                | '\u{D0000}'..='\u{DFFFD}'
-                | '\u{E1000}'..='\u{EFFFD}' => self.ucschar(),
-                '\u{E000}'..='\u{F8FF}'
-                | '\u{F0000}'..='\u{FFFFD}'
-                | '\u{100000}'..='\u{10FFFD}' => self.iprivate(),
-                _ => todo!(),
-            };
-            let tok_len = self.consumed_char_length();
-
-            // let fragment = &*self.input;
-            let token = Token::new(
-                token_kind,
-                Span::new(
-                    self.offset,
-                    old_line_num,
-                    &self.input[self.offset..(self.offset + tok_len)],
-                ),
-                // Span::new(self.offset, self.lines, tok_len),
-            );
-            self.offset += tok_len;
-            self.update_remaining_len();
-            vec.push(token);
-        }
-    }
-
-    fn number(&mut self) -> TokenKind {
-        self.bump_while(is_hex_digit);
-        TokenKind::Number
-    }
-    fn pct_encoded(&mut self) -> TokenKind {
-        self.bump();
-        self.bump();
-        TokenKind::PctEncoded
-    }
-    fn comment(&mut self) -> TokenKind {
-        self.bump_while(|c| c != '\n');
-        self.bump();
-        self.lines += 1;
-        TokenKind::Comment
-    }
-    fn whitespace(&mut self) -> TokenKind {
-        self.bump_while(|c| is_whitespace(c) && c != '\n');
-        if '\n' == self.peek(1) {
-            self.bump();
-            self.lines += 1;
-            return TokenKind::Whitespace;
-        }
-        TokenKind::Whitespace
-    }
-    fn ident(&mut self) -> TokenKind {
-        self.bump_while(unicode_ident::is_xid_continue);
-        TokenKind::Ident
-    }
-
-    fn ucschar(&mut self) -> TokenKind {
-        self.bump_while(is_ucschar);
-        TokenKind::UcsChars
-    }
-
-    fn iprivate(&mut self) -> TokenKind {
-        self.bump_while(is_iprivate);
-        TokenKind::Iprivate
-    }
-}
-
-fn is_hex_digit(c: char) -> bool {
-    c.is_digit(16)
-}
-
-fn is_whitespace(c: char) -> bool {
-    // support also vertical tab, form feed, NEXT LINE (latin1),
-    // LEFT-TO-RIGHT MARK, RIGHT-TO-LEFT MARK, LINE SEPARATOR and PARAGRAPH SEPARATOR?
-    matches!(c, ' ' | '\n' | '\t' | '\r')
-}
-
-fn is_ident(s: &str) -> bool {
-    let mut chars = s.chars();
-    if let Some(char) = chars.next() {
-        unicode_ident::is_xid_start(char) && chars.all(unicode_ident::is_xid_continue)
-    } else {
-        false
-    }
-}
-
-fn is_ucschar(c: char) -> bool {
-    matches!(c, '\u{A0}'..='\u{D7FF}'
-            | '\u{F900}'..='\u{FDCF}'
-            | '\u{FDF0}'..='\u{FFEF}'
-            | '\u{10000}'..='\u{1FFFD}'
-            | '\u{20000}'..='\u{2FFFD}'
-            | '\u{30000}'..='\u{3FFFD}'
-            | '\u{40000}'..='\u{4FFFD}'
-            | '\u{50000}'..='\u{5FFFD}'
-            | '\u{60000}'..='\u{6FFFD}'
-            | '\u{70000}'..='\u{7FFFD}'
-            | '\u{80000}'..='\u{8FFFD}'
-            | '\u{90000}'..='\u{9FFFD}'
-            | '\u{A0000}'..='\u{AFFFD}'
-            | '\u{B0000}'..='\u{BFFFD}'
-            | '\u{C0000}'..='\u{CFFFD}'
-            | '\u{D0000}'..='\u{DFFFD}'
-            | '\u{E1000}'..='\u{EFFFD}')
-}
-
-fn is_iprivate(c: char) -> bool {
-    matches!(c, '\u{E000}'..='\u{F8FF}' | '\u{F0000}'..='\u{FFFFD}' | '\u{100000}'..='\u{10FFFD}')
-}
-
-#[derive(Debug, Copy, Clone, PartialEq)]
-pub(crate) struct Token<'a> {
-    kind: TokenKind,
-    span: Span<'a>,
-}
-// impl<'a> Token<'a> {
-impl<'a> Token<'a> {
-    fn new(kind: TokenKind, span: Span<'a>) -> Token<'a> {
-        Token { kind, span }
-    }
-}
+pub(crate) type Span<'a> = LocatedSpan<&'a str>;
 
 /// All the tokens the input gets parsed into.
 #[derive(Debug, PartialEq, Copy, Clone)]
-enum TokenKind {
+pub(crate) enum TokenKind {
     // Syntactic symbols:
     /// '?'
     QuestionMark,
@@ -282,14 +39,20 @@ enum TokenKind {
     Comma,
     /// ':'
     Colon,
-    /// ';'
-    Semicolon,
+    /// `:-`
+    Arrow,
     /// '>'
     Greater,
+    /// `>=`
+    GreaterEqual,
     /// '='
     Equal,
+    /// `<=`
+    LessEqual,
     /// '<'
     Less,
+    /// `!=`
+    Unequal,
     /// '~'
     Tilde,
     /// '^'
@@ -308,292 +71,474 @@ enum TokenKind {
     Star,
     /// '/'
     Slash,
-    /// '$'
-    Dollar,
-    /// '&'
-    Ampersand,
-    /// "'"
-    Apostrophe,
     // Multi-char tokens:
     /// Identifier for keywords and predicate names
     Ident,
-    /// All other Utf8 characters that can be used in an IRI
-    UcsChars,
-    /// Characters in private use areas
-    Iprivate,
-    /// Percent-encoded characters in IRIs
-    PctEncoded,
+    /// IRI, delimited with `<` and `>`
+    Iri,
     /// Base 10 digits
     Number,
-    /// A string literal
+    /// A string literal, delimited with `"`
     String,
     /// A comment, starting with `%`
     Comment,
     /// A comment, starting with `%%`
     DocComment,
-    /// bool: ends_with_newline
+    /// ` `, `\t`, `\r` or `\n`
     Whitespace,
+    /// base directive keyword
+    Base,
+    /// prefix directive keyword
+    Prefix,
+    /// import directive keyword
+    Import,
+    /// export directive keyword
+    Export,
+    /// output directive keyword
+    Output,
     /// catch all token
     Illegal,
     /// signals end of file
     Eof,
 }
 
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub(crate) struct Token<'a> {
+    pub(crate) kind: TokenKind,
+    pub(crate) span: Span<'a>,
+}
+impl<'a> Token<'a> {
+    fn new(kind: TokenKind, span: Span<'a>) -> Token<'a> {
+        Token { kind, span }
+    }
+}
+
+macro_rules! syntax {
+    ($func_name: ident, $tag_string: literal, $token: expr) => {
+        pub(crate) fn $func_name<'a>(input: Span) -> IResult<Span, Token> {
+            map(tag($tag_string), |span| Token::new($token, span))(input)
+        }
+    };
+}
+
+syntax!(open_paren, "(", TokenKind::OpenParen);
+syntax!(close_paren, ")", TokenKind::CloseParen);
+syntax!(open_bracket, "[", TokenKind::OpenBracket);
+syntax!(close_bracket, "]", TokenKind::CloseBracket);
+syntax!(open_brace, "{", TokenKind::OpenBrace);
+syntax!(close_brace, "}", TokenKind::CloseBrace);
+syntax!(dot, ".", TokenKind::Dot);
+syntax!(comma, ",", TokenKind::Comma);
+syntax!(colon, ":", TokenKind::Colon);
+syntax!(arrow, ":-", TokenKind::Arrow);
+syntax!(question_mark, "?", TokenKind::QuestionMark);
+syntax!(exclamation_mark, "!", TokenKind::ExclamationMark);
+syntax!(tilde, "~", TokenKind::Tilde);
+syntax!(caret, "^", TokenKind::Caret);
+syntax!(hash, "#", TokenKind::Hash);
+syntax!(underscore, "_", TokenKind::Underscore);
+syntax!(at, "@", TokenKind::At);
+
+pub(crate) fn lex_punctuations(input: Span) -> IResult<Span, Token> {
+    alt((
+        arrow,
+        open_paren,
+        close_paren,
+        open_bracket,
+        close_bracket,
+        open_brace,
+        close_brace,
+        dot,
+        comma,
+        colon,
+        question_mark,
+        exclamation_mark,
+        tilde,
+        caret,
+        hash,
+        underscore,
+        at,
+    ))(input)
+}
+
+syntax!(less, "<", TokenKind::Less);
+syntax!(less_equal, "<=", TokenKind::LessEqual);
+syntax!(equal, "=", TokenKind::Equal);
+syntax!(greater_equal, ">=", TokenKind::GreaterEqual);
+syntax!(greater, ">", TokenKind::Greater);
+syntax!(unequals, "!=", TokenKind::Unequal);
+syntax!(plus, "+", TokenKind::Plus);
+syntax!(minus, "-", TokenKind::Minus);
+syntax!(star, "*", TokenKind::Star);
+syntax!(slash, "/", TokenKind::Slash);
+
+pub(crate) fn lex_operators(input: Span) -> IResult<Span, Token> {
+    alt((
+        less_equal,
+        greater_equal,
+        unequals,
+        less,
+        equal,
+        greater,
+        plus,
+        minus,
+        star,
+        slash,
+    ))(input)
+}
+
+pub(crate) fn lex_ident(input: Span) -> IResult<Span, Token> {
+    let (rest, result) = recognize(pair(
+        alpha1,
+        many0(alt((alphanumeric1, tag("_"), tag("-")))),
+    ))(input)?;
+    let token = match *result.fragment() {
+        "base" => Token::new(TokenKind::Base, result),
+        "prefix" => Token::new(TokenKind::Prefix, result),
+        "import" => Token::new(TokenKind::Import, result),
+        "export" => Token::new(TokenKind::Export, result),
+        "output" => Token::new(TokenKind::Output, result),
+        _ => Token::new(TokenKind::Ident, result),
+    };
+    Ok((rest, token))
+}
+
+pub(crate) fn lex_iri(input: Span) -> IResult<Span, Token> {
+    recognize(delimited(tag("<"), is_not("> \n"), tag(">")))(input)
+        .map(|(rest, result)| (rest, Token::new(TokenKind::Iri, result)))
+}
+
+pub(crate) fn lex_number(input: Span) -> IResult<Span, Token> {
+    digit1(input).map(|(rest, result)| (rest, Token::new(TokenKind::Number, result)))
+}
+
+pub(crate) fn lex_string(input: Span) -> IResult<Span, Token> {
+    recognize(delimited(tag("\""), is_not("\""), tag("\"")))(input)
+        .map(|(rest, result)| (rest, Token::new(TokenKind::String, result)))
+}
+
+pub(crate) fn lex_comment(input: Span) -> IResult<Span, Token> {
+    recognize(tuple((tag("%"), many0(is_not("\r\n")), line_ending)))(input)
+        .map(|(rest, result)| (rest, Token::new(TokenKind::Comment, result)))
+}
+
+pub(crate) fn lex_doc_comment(input: Span) -> IResult<Span, Token> {
+    recognize(tuple((tag("%%"), many0(is_not("\r\n")), line_ending)))(input)
+        .map(|(rest, result)| (rest, Token::new(TokenKind::DocComment, result)))
+}
+
+pub(crate) fn lex_whitespace(input: Span) -> IResult<Span, Token> {
+    multispace1(input).map(|(rest, result)| (rest, Token::new(TokenKind::Whitespace, result)))
+}
+
+pub(crate) fn lex_illegal(input: Span) -> IResult<Span, Token> {
+    take(1usize)(input).map(|(rest, result)| (rest, Token::new(TokenKind::Illegal, result)))
+}
+
+pub(crate) fn lex_tokens(input: Span) -> IResult<Span, Vec<Token>> {
+    all_consuming(many0(alt((
+        lex_iri,
+        lex_operators,
+        lex_punctuations,
+        lex_ident,
+        lex_number,
+        lex_string,
+        lex_comment,
+        lex_whitespace,
+        lex_illegal,
+    ))))(input)
+    .map(|(span, mut vec)| {
+        vec.append(&mut vec![Token::new(TokenKind::Eof, span)]);
+        (span, vec)
+    })
+}
+
 #[cfg(test)]
 mod test {
     use super::TokenKind::*;
-    use crate::io::lexer::{Lexer, Span, Token};
+    use super::*;
+
+    macro_rules! T {
+        ($tok_kind: expr, $offset: literal, $line: literal, $str: literal) => {
+            Token::new($tok_kind, unsafe {
+                Span::new_from_raw_offset($offset, $line, $str, ())
+            })
+        };
+    }
 
     #[test]
     fn empty_input() {
-        let mut lexer = Lexer::new("");
-        assert_eq!(
-            lexer.get_tokens(),
-            vec![Token::new(Eof, Span::new(0, 1, ""))]
-        )
+        let input = Span::new("");
+        assert_eq!(lex_tokens(input).unwrap().1, vec![T!(Eof, 0, 1, "")])
     }
 
     #[test]
     fn base() {
-        let mut lexer = Lexer::new("@base");
+        let input = Span::new("@base");
         assert_eq!(
-            lexer.get_tokens(),
-            vec![
-                Token::new(At, Span::new(0, 1, "@")),
-                Token::new(Ident, Span::new(1, 1, "base")),
-                Token::new(Eof, Span::new(5, 1, "")),
-            ]
+            lex_tokens(input).unwrap().1,
+            vec![T!(At, 0, 1, "@"), T!(Base, 1, 1, "base"), T!(Eof, 5, 1, ""),]
         )
     }
 
     #[test]
     fn prefix() {
-        let mut lexer = Lexer::new("@prefix");
+        let input = Span::new("@prefix");
         assert_eq!(
-            lexer.get_tokens(),
+            lex_tokens(input).unwrap().1,
             vec![
-                Token::new(At, Span::new(0, 1, "@")),
-                Token::new(Ident, Span::new(1, 1, "prefix")),
-                Token::new(Eof, Span::new(7, 1, "")),
+                T!(At, 0, 1, "@"),
+                T!(Prefix, 1, 1, "prefix"),
+                T!(Eof, 7, 1, ""),
             ]
         )
     }
 
     #[test]
     fn output() {
-        let mut lexer = Lexer::new("@output");
+        let input = Span::new("@output");
         assert_eq!(
-            lexer.get_tokens(),
+            lex_tokens(input).unwrap().1,
             vec![
-                Token::new(At, Span::new(0, 1, "@")),
-                Token::new(Ident, Span::new(1, 1, "output")),
-                Token::new(Eof, Span::new(7, 1, "")),
+                T!(At, 0, 1, "@"),
+                T!(Output, 1, 1, "output"),
+                T!(Eof, 7, 1, ""),
             ]
         )
     }
 
     #[test]
     fn import() {
-        let mut lexer = Lexer::new("@import");
+        let input = Span::new("@import");
         assert_eq!(
-            lexer.get_tokens(),
+            lex_tokens(input).unwrap().1,
             vec![
-                Token::new(At, Span::new(0, 1, "@")),
-                Token::new(Ident, Span::new(1, 1, "import")),
-                Token::new(Eof, Span::new(7, 1, "")),
+                T!(At, 0, 1, "@"),
+                T!(Import, 1, 1, "import"),
+                T!(Eof, 7, 1, ""),
             ]
         )
     }
 
     #[test]
     fn export() {
-        let mut lexer = Lexer::new("@export");
+        let input = Span::new("@export");
         assert_eq!(
-            lexer.get_tokens(),
+            lex_tokens(input).unwrap().1,
             vec![
-                Token::new(At, Span::new(0, 1, "@")),
-                Token::new(Ident, Span::new(1, 1, "export")),
-                Token::new(Eof, Span::new(7, 1, "")),
+                T!(At, 0, 1, "@"),
+                T!(Export, 1, 1, "export"),
+                T!(Eof, 7, 1, ""),
+            ]
+        )
+    }
+
+    #[test]
+    fn idents_with_keyword_prefix() {
+        let input = Span::new("@baseA, @prefixB, @importC, @exportD, @outputE.");
+        assert_eq!(
+            lex_tokens(input).unwrap().1,
+            vec![
+                T!(At, 0, 1, "@"),
+                T!(Ident, 1, 1, "baseA"),
+                T!(Comma, 6, 1, ","),
+                T!(Whitespace, 7, 1, " "),
+                T!(At, 8, 1, "@"),
+                T!(Ident, 9, 1, "prefixB"),
+                T!(Comma, 16, 1, ","),
+                T!(Whitespace, 17, 1, " "),
+                T!(At, 18, 1, "@"),
+                T!(Ident, 19, 1, "importC"),
+                T!(Comma, 26, 1, ","),
+                T!(Whitespace, 27, 1, " "),
+                T!(At, 28, 1, "@"),
+                T!(Ident, 29, 1, "exportD"),
+                T!(Comma, 36, 1, ","),
+                T!(Whitespace, 37, 1, " "),
+                T!(At, 38, 1, "@"),
+                T!(Ident, 39, 1, "outputE"),
+                T!(Dot, 46, 1, "."),
+                T!(Eof, 47, 1, ""),
             ]
         )
     }
 
     #[test]
     fn tokenize() {
-        let mut lexer = Lexer::new("P(?X) :- A(?X).\t\n    A(Human).");
+        let input = Span::new("P(?X) :- A(?X).\t\n    A(Human).");
         assert_eq!(
-            lexer.get_tokens(),
+            lex_tokens(input).unwrap().1,
             vec![
-                Token::new(Ident, Span::new(0, 1, "P")),
-                Token::new(OpenParen, Span::new(1, 1, "(")),
-                Token::new(QuestionMark, Span::new(2, 1, "?")),
-                Token::new(Ident, Span::new(3, 1, "X")),
-                Token::new(CloseParen, Span::new(4, 1, ")")),
-                Token::new(Whitespace, Span::new(5, 1, " ")),
-                Token::new(Colon, Span::new(6, 1, ":")),
-                Token::new(Minus, Span::new(7, 1, "-")),
-                Token::new(Whitespace, Span::new(8, 1, " ")),
-                Token::new(Ident, Span::new(9, 1, "A")),
-                Token::new(OpenParen, Span::new(10, 1, "(")),
-                Token::new(QuestionMark, Span::new(11, 1, "?")),
-                Token::new(Ident, Span::new(12, 1, "X")),
-                Token::new(CloseParen, Span::new(13, 1, ")")),
-                Token::new(Dot, Span::new(14, 1, ".")),
-                Token::new(Whitespace, Span::new(15, 1, "\t\n")),
-                Token::new(Whitespace, Span::new(17, 2, "    ")),
-                Token::new(Ident, Span::new(21, 2, "A")),
-                Token::new(OpenParen, Span::new(22, 2, "(")),
-                Token::new(Ident, Span::new(23, 2, "Human")),
-                Token::new(CloseParen, Span::new(28, 2, ")")),
-                Token::new(Dot, Span::new(29, 2, ".")),
-                Token::new(Eof, Span::new(30, 2, "")),
+                T!(Ident, 0, 1, "P"),
+                T!(OpenParen, 1, 1, "("),
+                T!(QuestionMark, 2, 1, "?"),
+                T!(Ident, 3, 1, "X"),
+                T!(CloseParen, 4, 1, ")"),
+                T!(Whitespace, 5, 1, " "),
+                T!(Arrow, 6, 1, ":-"),
+                T!(Whitespace, 8, 1, " "),
+                T!(Ident, 9, 1, "A"),
+                T!(OpenParen, 10, 1, "("),
+                T!(QuestionMark, 11, 1, "?"),
+                T!(Ident, 12, 1, "X"),
+                T!(CloseParen, 13, 1, ")"),
+                T!(Dot, 14, 1, "."),
+                T!(Whitespace, 15, 1, "\t\n    "),
+                T!(Ident, 21, 2, "A"),
+                T!(OpenParen, 22, 2, "("),
+                T!(Ident, 23, 2, "Human"),
+                T!(CloseParen, 28, 2, ")"),
+                T!(Dot, 29, 2, "."),
+                T!(Eof, 30, 2, ""),
             ]
         )
     }
 
     #[test]
     fn comment() {
-        let mut lexer = Lexer::new("% Some Comment\n");
+        let input = Span::new("% Some Comment\n");
         assert_eq!(
-            lexer.get_tokens(),
+            lex_tokens(input).unwrap().1,
             vec![
-                Token::new(Comment, Span::new(0, 1, "% Some Comment\n")),
-                Token::new(Eof, Span::new(15, 2, ""))
-            ]
-        )
-    }
-
-    #[test]
-    fn pct_enc_with_comment() {
-        let mut lexer = Lexer::new("%38%a3% Some Comment\n");
-        assert_eq!(
-            lexer.get_tokens(),
-            vec![
-                Token::new(PctEncoded, Span::new(0, 1, "%38")),
-                Token::new(PctEncoded, Span::new(3, 1, "%a3")),
-                Token::new(Comment, Span::new(6, 1, "% Some Comment\n")),
-                Token::new(Eof, Span::new(21, 2, "")),
+                T!(Comment, 0, 1, "% Some Comment\n"),
+                T!(Eof, 15, 2, ""),
+                // T!(Comment, Span::new(0, 1, "% Some Comment\n")),
+                // T!(Eof, Span::new(15, 2, ""))
             ]
         )
     }
 
     #[test]
     fn ident() {
-        let mut lexer = Lexer::new("some_Ident(Alice). %comment at the end of a line\n");
+        let input = Span::new("some_Ident(Alice). %comment at the end of a line\n");
         assert_eq!(
-            lexer.get_tokens(),
+            lex_tokens(input).unwrap().1,
             vec![
-                Token::new(Ident, Span::new(0, 1, "some_Ident")),
-                Token::new(OpenParen, Span::new(10, 1, "(")),
-                Token::new(Ident, Span::new(11, 1, "Alice")),
-                Token::new(CloseParen, Span::new(16, 1, ")")),
-                Token::new(Dot, Span::new(17, 1, ".")),
-                Token::new(Whitespace, Span::new(18, 1, " ")),
-                Token::new(Comment, Span::new(19, 1, "%comment at the end of a line\n")),
-                Token::new(Eof, Span::new(49, 2, "")),
+                T!(Ident, 0, 1, "some_Ident"),
+                T!(OpenParen, 10, 1, "("),
+                T!(Ident, 11, 1, "Alice"),
+                T!(CloseParen, 16, 1, ")"),
+                T!(Dot, 17, 1, "."),
+                T!(Whitespace, 18, 1, " "),
+                T!(Comment, 19, 1, "%comment at the end of a line\n"),
+                T!(Eof, 49, 2, ""),
             ]
         )
     }
 
     #[test]
-    #[should_panic]
     fn forbidden_ident() {
-        let mut lexer = Lexer::new("_someIdent(Alice). %comment at the end of a line\n");
+        let input = Span::new("_someIdent(Alice). %comment at the end of a line\n");
         assert_eq!(
-            lexer.get_tokens(),
+            lex_tokens(input).unwrap().1,
             vec![
-                Token::new(Ident, Span::new(0, 1, "_someIdent")),
-                Token::new(OpenParen, Span::new(10, 1, "(")),
-                Token::new(Ident, Span::new(11, 1, "Alice")),
-                Token::new(CloseParen, Span::new(16, 1, ")")),
-                Token::new(Dot, Span::new(17, 1, ".")),
-                Token::new(Whitespace, Span::new(18, 1, " ")),
-                Token::new(Comment, Span::new(19, 1, "%comment at the end of a line\n")),
-                Token::new(Eof, Span::new(49, 2, "")),
+                T!(Underscore, 0, 1, "_"),
+                T!(Ident, 1, 1, "someIdent"),
+                T!(OpenParen, 10, 1, "("),
+                T!(Ident, 11, 1, "Alice"),
+                T!(CloseParen, 16, 1, ")"),
+                T!(Dot, 17, 1, "."),
+                T!(Whitespace, 18, 1, " "),
+                T!(Comment, 19, 1, "%comment at the end of a line\n"),
+                T!(Eof, 49, 2, ""),
             ]
         )
     }
 
     #[test]
     fn iri() {
-        let mut lexer = Lexer::new("<https://résumé.example.org/>");
+        let input = Span::new("<https://résumé.example.org/>");
         assert_eq!(
-            lexer.get_tokens(),
+            lex_tokens(input).unwrap().1,
             vec![
-                Token::new(Less, Span::new(0, 1, "<")),
-                Token::new(Ident, Span::new(1, 1, "https")),
-                Token::new(Colon, Span::new(6, 1, ":")),
-                Token::new(Slash, Span::new(7, 1, "/")),
-                Token::new(Slash, Span::new(8, 1, "/")),
-                Token::new(Ident, Span::new(9, 1, "résumé")),
-                Token::new(Dot, Span::new(17, 1, ".")),
-                Token::new(Ident, Span::new(18, 1, "example")),
-                Token::new(Dot, Span::new(25, 1, ".")),
-                Token::new(Ident, Span::new(26, 1, "org")),
-                Token::new(Slash, Span::new(29, 1, "/")),
-                Token::new(Greater, Span::new(30, 1, ">")),
-                Token::new(Eof, Span::new(31, 1, "")),
+                T!(Iri, 0, 1, "<https://résumé.example.org/>"),
+                T!(Eof, 31, 1, ""),
             ]
         )
     }
 
     #[test]
     fn iri_pct_enc() {
-        let mut lexer = Lexer::new("<http://r%C3%A9sum%C3%A9.example.org>\n");
+        let input = Span::new("<http://r%C3%A9sum%C3%A9.example.org>\n");
         assert_eq!(
-            lexer.get_tokens(),
+            lex_tokens(input).unwrap().1,
             vec![
-                Token::new(Less, Span::new(0, 1, "<")),
-                Token::new(Ident, Span::new(1, 1, "http")),
-                Token::new(Colon, Span::new(5, 1, ":")),
-                Token::new(Slash, Span::new(6, 1, "/")),
-                Token::new(Slash, Span::new(7, 1, "/")),
-                Token::new(Ident, Span::new(8, 1, "r")),
-                Token::new(PctEncoded, Span::new(9, 1, "%C3")),
-                Token::new(PctEncoded, Span::new(12, 1, "%A9")),
-                Token::new(Ident, Span::new(15, 1, "sum")),
-                Token::new(PctEncoded, Span::new(18, 1, "%C3")),
-                Token::new(PctEncoded, Span::new(21, 1, "%A9")),
-                Token::new(Dot, Span::new(24, 1, ".")),
-                Token::new(Ident, Span::new(25, 1, "example")),
-                Token::new(Dot, Span::new(32, 1, ".")),
-                Token::new(Ident, Span::new(33, 1, "org")),
-                Token::new(Greater, Span::new(36, 1, ">")),
-                Token::new(Whitespace, Span::new(37, 1, "\n")),
-                Token::new(Eof, Span::new(38, 2, "")),
+                T!(Iri, 0, 1, "<http://r%C3%A9sum%C3%A9.example.org>"),
+                T!(Whitespace, 37, 1, "\n"),
+                T!(Eof, 38, 2, ""),
+            ]
+        )
+    }
+
+    // FIXME: change the name of this test according to the correct name for `?X > 3`
+    // (Constraints are Rules with an empty Head)
+    #[test]
+    fn constraints() {
+        let input = Span::new("A(?X):-B(?X),?X<42,?X>3.");
+        assert_eq!(
+            lex_tokens(input).unwrap().1,
+            vec![
+                T!(Ident, 0, 1, "A"),
+                T!(OpenParen, 1, 1, "("),
+                T!(QuestionMark, 2, 1, "?"),
+                T!(Ident, 3, 1, "X"),
+                T!(CloseParen, 4, 1, ")"),
+                T!(Arrow, 5, 1, ":-"),
+                T!(Ident, 7, 1, "B"),
+                T!(OpenParen, 8, 1, "("),
+                T!(QuestionMark, 9, 1, "?"),
+                T!(Ident, 10, 1, "X"),
+                T!(CloseParen, 11, 1, ")"),
+                T!(Comma, 12, 1, ","),
+                T!(QuestionMark, 13, 1, "?"),
+                T!(Ident, 14, 1, "X"),
+                T!(Less, 15, 1, "<"),
+                T!(Number, 16, 1, "42"),
+                T!(Comma, 18, 1, ","),
+                T!(QuestionMark, 19, 1, "?"),
+                T!(Ident, 20, 1, "X"),
+                T!(Greater, 21, 1, ">"),
+                T!(Number, 22, 1, "3"),
+                T!(Dot, 23, 1, "."),
+                T!(Eof, 24, 1, ""),
             ]
         )
     }
 
     #[test]
     fn pct_enc_comment() {
-        let mut lexer = Lexer::new("%d4 this should be a comment,\n% but the lexer can't distinguish a percent encoded value\n% in an iri from a comment :(\n");
+        let input = Span::new("%d4 this should be a comment,\n% but the lexer can't distinguish a percent encoded value\n% in an iri from a comment :(\n");
         assert_eq!(
-            lexer.get_tokens(),
+            lex_tokens(input).unwrap().1,
             vec![
-                Token::new(PctEncoded, Span::new(0, 1, "%d4")),
-                Token::new(Whitespace, Span::new(3, 1, " ")),
-                Token::new(Ident, Span::new(4, 1, "this")),
-                Token::new(Whitespace, Span::new(8, 1, " ")),
-                Token::new(Ident, Span::new(9, 1, "should")),
-                Token::new(Whitespace, Span::new(15, 1, " ")),
-                Token::new(Ident, Span::new(16, 1, "be")),
-                Token::new(Whitespace, Span::new(18, 1, " ")),
-                Token::new(Ident, Span::new(19, 1, "a")),
-                Token::new(Whitespace, Span::new(20, 1, " ")),
-                Token::new(Ident, Span::new(21, 1, "comment")),
-                Token::new(Comma, Span::new(28, 1, ",")),
-                Token::new(Whitespace, Span::new(29, 1, "\n")),
-                Token::new(
+                T!(Comment, 0, 1, "%d4 this should be a comment,\n"),
+                T!(
                     Comment,
-                    Span::new(
-                        30,
-                        2,
-                        "% but the lexer can't distinguish a percent encoded value\n"
-                    )
+                    30,
+                    2,
+                    "% but the lexer can't distinguish a percent encoded value\n"
                 ),
-                Token::new(Comment, Span::new(88, 3, "% in an iri from a comment :(\n")),
-                Token::new(Eof, Span::new(118, 4, "")),
+                T!(Comment, 88, 3, "% in an iri from a comment :(\n"),
+                T!(Eof, 118, 4, ""),
+            ]
+        )
+    }
+
+    #[test]
+    fn fact() {
+        let input = Span::new("somePred(term1, term2).");
+        assert_eq!(
+            lex_tokens(input).unwrap().1,
+            vec![
+                T!(Ident, 0, 1, "somePred"),
+                T!(OpenParen, 8, 1, "("),
+                T!(Ident, 9, 1, "term1"),
+                T!(Comma, 14, 1, ","),
+                T!(Whitespace, 15, 1, " "),
+                T!(Ident, 16, 1, "term2"),
+                T!(CloseParen, 21, 1, ")"),
+                T!(Dot, 22, 1, "."),
+                T!(Eof, 23, 1, ""),
             ]
         )
     }
