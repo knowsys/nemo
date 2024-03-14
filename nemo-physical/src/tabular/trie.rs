@@ -376,7 +376,7 @@ impl Trie {
             .collect::<Vec<_>>();
 
         let num_columns = trie_scan.arity();
-        let cut_layers = 0;
+        let cut_layers = 0; // TODO: Compute last used layer across all reorderings
 
         let mut rowscan = RowScan::new(trie_scan, cut_layers);
 

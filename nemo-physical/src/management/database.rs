@@ -364,21 +364,25 @@ impl DatabaseInstance {
         tree: &ExecutionTree,
         dependent: Vec<ProjectReordering>,
     ) -> (Trie, Vec<Trie>) {
-        let (trie, tries_dependent) = match &tree.root {
+        let (trie, tries_dependent): (Option<Trie>, Vec<Option<Trie>>) = match &tree.root {
             ExecutionTreeNode::Operation(operation) => {
                 let trie_scan = self.evaluate_operation(&self.dictionary, storage, operation);
 
-                if dependent.is_empty() {
-                    let trie =
-                        trie_scan.map(|scan| Trie::from_partial_trie_scan(scan, tree.cut_layers));
-                    (trie, vec![])
-                } else {
-                    if let Some(scan) = trie_scan {
-                        Trie::from_partial_trie_scan_dependents(scan, dependent, tree.used > 0)
-                    } else {
-                        (None, vec![None; dependent.len()])
-                    }
-                }
+                let trie =
+                    trie_scan.map(|scan| Trie::from_partial_trie_scan(scan, tree.cut_layers));
+                (trie, vec![])
+
+                // if dependent.is_empty() {
+                //     let trie =
+                //         trie_scan.map(|scan| Trie::from_partial_trie_scan(scan, tree.cut_layers));
+                //     (trie, vec![])
+                // } else {
+                //     if let Some(scan) = trie_scan {
+                //         Trie::from_partial_trie_scan_dependents(scan, dependent, tree.used > 0)
+                //     } else {
+                //         (None, vec![None; dependent.len()])
+                //     }
+                // }
             }
             ExecutionTreeNode::ProjectReorder { generator, subnode } => {
                 debug_assert!(
