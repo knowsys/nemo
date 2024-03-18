@@ -8,7 +8,10 @@ use crate::{
     datatypes::StorageValueT,
     management::execution_plan::ColumnOrder,
     tabular::{
-        buffer::tuple_buffer::TupleBuffer, rowscan::RowScan, trie::Trie, triescan::PartialTrieScan,
+        buffer::tuple_buffer::TupleBuffer,
+        rowscan::{Row, RowScan},
+        trie::Trie,
+        triescan::PartialTrieScan,
     },
     util::mapping::{ordered_choice::SortedChoice, traits::NatMapping},
 };
@@ -82,41 +85,35 @@ impl GeneratorProjectReorder {
     }
 
     /// Apply the operation to a [PartialTrieScan].
-    /// TODO: Check if changes here are an imrpovement
     pub(crate) fn apply_operation<'a, Scan: PartialTrieScan<'a>>(&self, trie_scan: Scan) -> Trie {
         debug_assert!(self.last_used_layer < trie_scan.arity());
 
+        if trie_scan.arity() == 0 {
+            Trie::zero_arity(true);
+        }
+
         let cut = trie_scan.arity() - self.last_used_layer - 1;
-        // let projectreordering = Self::reordering_vector(&self.projectreordering);
         let projectreordering = self.projectreordering.as_vector();
 
         let mut rowscan = RowScan::new(trie_scan, cut);
-        // let mut current_tuple = vec![StorageValueT::Id32(0); self.arity_output];
+
+        if projectreordering.is_empty() {
+            let no_results = StreamingIterator::next(&mut rowscan).is_none();
+            return Trie::zero_arity(!no_results);
+        }
+
         let mut tuple_buffer = TupleBuffer::new(self.arity_output);
 
-        while let Some(current_row) = StreamingIterator::next(&mut rowscan) {
+        while let Some(Row {
+            row: current_row,
+            change: _,
+        }) = StreamingIterator::next(&mut rowscan)
+        {
             debug_assert!(current_row.len() <= self.last_used_layer + 1);
 
             for &row_index in &projectreordering {
                 tuple_buffer.add_tuple_value(current_row[row_index]);
             }
-
-            // let start_change = self.last_used_layer + 1 - current_row.len();
-
-            // for (row_index, current_value) in current_row.iter().enumerate() {
-            //     let input_layer = start_change + row_index;
-            //     let output_layer = projectreordering[input_layer];
-
-            //     if output_layer == usize::MAX {
-            //         continue;
-            //     }
-
-            //     current_tuple[output_layer] = *current_value;
-            // }
-
-            // for value in &current_tuple {
-            //     tuple_buffer.add_tuple_value(*value);
-            // }
         }
 
         Trie::from_tuple_buffer(tuple_buffer.finalize())
@@ -143,26 +140,6 @@ impl GeneratorProjectReorder {
     /// Return the [ProjectReordering] used by this generator.
     pub(crate) fn projectreordering(&self) -> ProjectReordering {
         self.projectreordering.clone()
-    }
-
-    /// Creates an optmized representation of a [ProjectReordering] as a [Vec],
-    /// such that the ith entry in the vector represents the output of the function
-    /// for the input i.
-    /// If the output is `None`, then the vector contains [usize::MAX].
-    pub(crate) fn reordering_vector(projectreordering: &ProjectReordering) -> Vec<usize> {
-        let mut result = vec![usize::MAX; projectreordering.domain_size()];
-
-        for (input, item) in result
-            .iter_mut()
-            .enumerate()
-            .take(projectreordering.domain_size())
-        {
-            if let Some(output) = projectreordering.get_partial(input) {
-                *item = output;
-            }
-        }
-
-        result
     }
 }
 

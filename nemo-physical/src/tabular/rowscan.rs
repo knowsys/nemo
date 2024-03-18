@@ -81,6 +81,18 @@ impl PossibleTypes {
     }
 }
 
+/// A row returned by [RowScan].
+/// Additionally also contains the first row index which differes from the last call to `next`.
+///
+/// TODO: It would be nice if the next operation could return `(usize, &[StorageValueT])` instead of &Row
+#[derive(Debug)]
+pub(crate) struct Row {
+    /// Row as a vector of [StorageValueT]
+    pub row: Vec<StorageValueT>,
+    /// First index of the row that differs from the last call to `next`
+    pub change: usize,
+}
+
 /// A [StreamingIterator] for a [PartialTrieScan]
 #[derive(Debug)]
 pub(crate) struct RowScan<'a, Scan: PartialTrieScan<'a>> {
@@ -95,11 +107,9 @@ pub(crate) struct RowScan<'a, Scan: PartialTrieScan<'a>> {
     /// For each layer, holds the possible [StorageTypeName]s of that column in `trie_scan`
     possible_types: PossibleTypes,
 
-    /// A buffer containing the current row
-    current_row: Vec<StorageValueT>,
-
-    /// The highest layer that has been changed by the most recent call to `next`
-    changed_layers: usize,
+    /// The current row
+    /// and the first row index that has been changed by the most recent call to `next`
+    current_row: Row,
 }
 
 impl<'a, Scan: PartialTrieScan<'a>> RowScan<'a, Scan> {
@@ -119,8 +129,10 @@ impl<'a, Scan: PartialTrieScan<'a>> RowScan<'a, Scan> {
             trie_scan,
             empty,
             possible_types: PossibleTypes::new(possible_types),
-            current_row: vec![StorageValueT::Id32(0); used_columns],
-            changed_layers: 0,
+            current_row: Row {
+                row: vec![StorageValueT::Id32(0); used_columns],
+                change: 0,
+            },
         }
     }
 
@@ -141,7 +153,7 @@ impl<'a, Scan: PartialTrieScan<'a>> RowScan<'a, Scan> {
 }
 
 impl<'a, Scan: PartialTrieScan<'a>> StreamingIterator for RowScan<'a, Scan> {
-    type Item = [StorageValueT];
+    type Item = Row;
 
     fn advance(&mut self) {
         if self.empty {
@@ -153,21 +165,21 @@ impl<'a, Scan: PartialTrieScan<'a>> StreamingIterator for RowScan<'a, Scan> {
             self.trie_scan.down(first_type);
         };
 
-        self.changed_layers = self.current_row.len() - 1;
+        self.current_row.change = self.current_row.row.len() - 1;
 
         while let Some(current_layer) = self.trie_scan.current_layer() {
             let is_last_layer = current_layer == self.trie_scan.arity() - 1;
-            let is_used_layer = current_layer < self.current_row.len();
+            let is_used_layer = current_layer < self.current_row.row.len();
 
             let current_type = self.possible_types.current_type(current_layer);
 
-            if current_layer < self.changed_layers {
-                self.changed_layers = current_layer;
+            if current_layer < self.current_row.change {
+                self.current_row.change = current_layer;
             }
 
             if let Some(next_value) = self.column_scan_next(current_type) {
                 if is_used_layer {
-                    self.current_row[current_layer] = next_value;
+                    self.current_row.row[current_layer] = next_value;
                 }
 
                 if is_last_layer {
@@ -190,7 +202,7 @@ impl<'a, Scan: PartialTrieScan<'a>> StreamingIterator for RowScan<'a, Scan> {
 
     fn get(&self) -> Option<&Self::Item> {
         if self.trie_scan.current_layer().is_some() {
-            Some(&self.current_row[self.changed_layers..])
+            Some(&self.current_row)
         } else {
             None
         }
@@ -204,7 +216,7 @@ impl<'a, Scan: PartialTrieScan<'a>> Iterator for RowScan<'a, Scan> {
         StreamingIterator::advance(self);
 
         if self.trie_scan.current_layer().is_some() {
-            Some(self.current_row.clone())
+            Some(self.current_row.row.clone())
         } else {
             None
         }

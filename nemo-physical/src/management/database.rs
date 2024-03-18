@@ -368,21 +368,21 @@ impl DatabaseInstance {
             ExecutionTreeNode::Operation(operation) => {
                 let trie_scan = self.evaluate_operation(&self.dictionary, storage, operation);
 
-                let trie =
-                    trie_scan.map(|scan| Trie::from_partial_trie_scan(scan, tree.cut_layers));
-                (trie, vec![])
+                // let trie =
+                //     trie_scan.map(|scan| Trie::from_partial_trie_scan(scan, tree.cut_layers));
+                // (trie, vec![])
 
-                // if dependent.is_empty() {
-                //     let trie =
-                //         trie_scan.map(|scan| Trie::from_partial_trie_scan(scan, tree.cut_layers));
-                //     (trie, vec![])
-                // } else {
-                //     if let Some(scan) = trie_scan {
-                //         Trie::from_partial_trie_scan_dependents(scan, dependent, tree.used > 0)
-                //     } else {
-                //         (None, vec![None; dependent.len()])
-                //     }
-                // }
+                if dependent.is_empty() {
+                    let trie =
+                        trie_scan.map(|scan| Trie::from_partial_trie_scan(scan, tree.cut_layers));
+                    (trie, vec![])
+                } else {
+                    if let Some(scan) = trie_scan {
+                        Trie::from_partial_trie_scan_dependents(scan, dependent, tree.used > 0)
+                    } else {
+                        (None, vec![None; dependent.len()])
+                    }
+                }
             }
             ExecutionTreeNode::ProjectReorder { generator, subnode } => {
                 debug_assert!(
@@ -413,6 +413,7 @@ impl DatabaseInstance {
 
     fn log_new_trie(tree: &ExecutionTree, trie: &Trie) {
         if !trie.is_empty() {
+            log::info!("New trie: {:?}", trie);
             match &tree.result {
                 ExecutionResult::Temporary => {
                     log::info!(

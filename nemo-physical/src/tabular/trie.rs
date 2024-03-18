@@ -26,6 +26,7 @@ use crate::{
 use super::{
     buffer::sorted_tuple_buffer::SortedTupleBuffer,
     operations::{projectreorder::ProjectReordering, trim::TrieScanTrim},
+    rowscan::Row,
     triescan::{PartialTrieScan, TrieScan, TrieScanEnum},
 };
 
@@ -41,6 +42,9 @@ pub struct Trie {
     /// Each [IntervalColumnT] represents one column in the table.
     /// We refer to each such column as a layer.
     columns: Vec<IntervalColumnT<IntervalLookupMethod>>,
+    /// Only relevant for nullary tables,
+    /// whether it contains an empty row
+    empty_row: bool,
 }
 
 impl Trie {
@@ -51,7 +55,15 @@ impl Trie {
 
     /// Return the number of rows contained in this trie.
     pub fn num_rows(&self) -> usize {
-        self.columns.last().map_or(0, |column| column.num_data())
+        if let Some(last_column) = self.columns.last() {
+            last_column.num_data()
+        } else {
+            if self.empty_row {
+                1
+            } else {
+                0
+            }
+        }
     }
 
     /// Return whether the trie is empty
@@ -123,6 +135,15 @@ impl Trie {
             columns: (0..num_columns)
                 .map(|_| IntervalColumnTBuilderMatrix::<IntervalLookupMethod>::default().finalize())
                 .collect(),
+            empty_row: false,
+        }
+    }
+
+    /// Create a table with arity zero
+    pub(crate) fn zero_arity(empty_row: bool) -> Self {
+        Self {
+            columns: Vec::default(),
+            empty_row,
         }
     }
 
@@ -186,6 +207,7 @@ impl Trie {
                 .into_iter()
                 .map(|builder| builder.finalize())
                 .collect(),
+            empty_row: false,
         }
     }
 
@@ -205,7 +227,7 @@ impl Trie {
         let num_columns = trie_scan.arity() - cut_layers;
 
         if num_columns == 0 {
-            return Self::empty(0);
+            return Self::zero_arity(true);
         }
 
         if let TrieScanEnum::AggregateWrapper(wrapper) = trie_scan {
@@ -219,7 +241,11 @@ impl Trie {
         let mut intervalcolumn_builders =
             Vec::<IntervalColumnTBuilderTriescan<IntervalLookupMethod>>::with_capacity(num_columns);
 
-        if let Some(first_row) = StreamingIterator::next(&mut rowscan) {
+        if let Some(Row {
+            row: first_row,
+            change: _,
+        }) = StreamingIterator::next(&mut rowscan)
+        {
             let mut last_type: Option<StorageTypeName> = None;
             for &current_value in first_row {
                 let mut new_builder =
@@ -234,19 +260,22 @@ impl Trie {
             return Self::empty(num_columns);
         }
 
-        while let Some(current_row) = StreamingIterator::next(&mut rowscan) {
-            let changed_layers = num_columns - current_row.len();
+        while let Some(Row {
+            row: current_row,
+            change: changed_layers,
+        }) = StreamingIterator::next(&mut rowscan)
+        {
             let mut last_type = StorageTypeName::Id32;
 
             for ((layer, current_builder), current_value) in intervalcolumn_builders
                 .iter_mut()
                 .enumerate()
-                .skip(changed_layers)
                 .zip(current_row)
+                .skip(*changed_layers)
             {
                 let current_type = current_value.get_type();
 
-                if layer != changed_layers {
+                if layer != *changed_layers {
                     current_builder.finish_interval(last_type);
                 }
 
@@ -261,6 +290,7 @@ impl Trie {
                 .into_iter()
                 .map(|builder| builder.finalize())
                 .collect(),
+            empty_row: false,
         }
     }
 
@@ -279,7 +309,7 @@ impl Trie {
         let num_columns = trie_scan.num_columns() - cut_layers;
 
         if num_columns == 0 {
-            return Self::empty(0);
+            return Self::zero_arity(true);
         }
 
         let mut intervalcolumn_builders =
@@ -329,6 +359,7 @@ impl Trie {
                 .into_iter()
                 .map(|builder| builder.finalize())
                 .collect(),
+            empty_row: false,
         }
     }
 
@@ -340,10 +371,12 @@ impl Trie {
         let column_number = if let Some(first_row) = rows.first() {
             first_row.len()
         } else {
-            return Self {
-                columns: Vec::new(),
-            };
+            return Self::zero_arity(false);
         };
+
+        if column_number == 0 {
+            return Self::zero_arity(true);
+        }
 
         let mut tuple_buffer = TupleBuffer::new(column_number);
 
@@ -378,6 +411,13 @@ impl Trie {
         let num_columns = trie_scan.arity();
         let cut_layers = 0; // TODO: Compute last used layer across all reorderings
 
+        if num_columns == 0 {
+            return (
+                Some(Self::zero_arity(true)),
+                vec![Some(Self::zero_arity(true)); reorderings.len()],
+            );
+        }
+
         let mut rowscan = RowScan::new(trie_scan, cut_layers);
 
         let mut intervalcolumn_builders =
@@ -387,7 +427,11 @@ impl Trie {
             .map(|reordering| TupleBuffer::new(reordering.len()))
             .collect::<Vec<_>>();
 
-        if let Some(first_row) = StreamingIterator::next(&mut rowscan) {
+        if let Some(Row {
+            row: first_row,
+            change: _,
+        }) = StreamingIterator::next(&mut rowscan)
+        {
             if keep_original {
                 let mut last_type: Option<StorageTypeName> = None;
                 for &current_value in first_row {
@@ -404,19 +448,22 @@ impl Trie {
             return (None, vec![None; num_columns]);
         }
 
-        while let Some(current_row) = StreamingIterator::next(&mut rowscan) {
-            let changed_layers = num_columns - current_row.len();
+        while let Some(Row {
+            row: current_row,
+            change: changed_layers,
+        }) = StreamingIterator::next(&mut rowscan)
+        {
             let mut last_type = StorageTypeName::Id32;
 
             for ((layer, current_builder), current_value) in intervalcolumn_builders
                 .iter_mut()
                 .enumerate()
-                .skip(changed_layers)
+                .skip(*changed_layers)
                 .zip(current_row)
             {
                 let current_type = current_value.get_type();
 
-                if layer != changed_layers {
+                if layer != *changed_layers {
                     current_builder.finish_interval(last_type);
                 }
 
@@ -438,6 +485,7 @@ impl Trie {
                     .into_iter()
                     .map(|builder| builder.finalize())
                     .collect(),
+                empty_row: false,
             })
         } else {
             None

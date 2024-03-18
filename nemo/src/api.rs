@@ -121,12 +121,15 @@ mod test {
 
     use super::*;
 
-    // #[ignore]
+    #[ignore]
     // #[cfg_attr(miri, ignore)]
     #[test]
     fn reason() {
-        std::env::set_current_dir("../resources/testcases/basic/").unwrap();
-        let mut engine = load("assignment.rls".into()).unwrap();
+        std::env::set_current_dir(
+            "../resources/testcases/regression/symmetric_transitive_closure/",
+        )
+        .unwrap();
+        let mut engine = load("run.rls".into()).unwrap();
 
         // std::env::set_current_dir("../resources/testcases/lcs-diff-computation/").unwrap();
         // let mut engine = load("run-lcs-10.rls".into()).unwrap();

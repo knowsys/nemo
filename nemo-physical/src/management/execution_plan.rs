@@ -464,8 +464,6 @@ impl ExecutionPlan {
             ExecutionResult::Temporary
         };
 
-        let computed_table_id = computed_trees.len();
-
         let new_tree = if let Some(tables) = computed_trees_map.get(&output_node.node.id()) {
             let (closest_index, closest_order) =
                 closest_order(tables.iter().map(|(order, _id)| order), &order)
@@ -509,6 +507,8 @@ impl ExecutionPlan {
                 loaded_tables,
             );
 
+            let computed_table_id = computed_trees.len();
+
             if let ExecutionTreeNode::ProjectReorder { generator, subnode } = &root {
                 if let ExecutionTreeLeaf::FetchComputedTable(computed) = subnode {
                     if !&computed_trees[*computed].result.is_permanent() {
@@ -530,6 +530,8 @@ impl ExecutionPlan {
                 dependents: Vec::new(),
             }
         };
+
+        let computed_table_id = computed_trees.len();
 
         computed_trees.push(new_tree);
         computed_trees_map.insert(output_node.node.id(), vec![(order, computed_table_id)]);
