@@ -10,7 +10,7 @@ struct Position {
 
 pub(crate) type Program<'a> = Vec<Statement<'a>>;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub(crate) enum Statement<'a> {
     Directive(Directive<'a>),
     Fact {
@@ -18,11 +18,11 @@ pub(crate) enum Statement<'a> {
     },
     Rule {
         head: Vec<Atom<'a>>,
-        body: Vec<Literal<'a>>,
+        body: Vec<Atom<'a>>,
     },
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub(crate) enum Directive<'a> {
     Base {
         kw: Token<'a>,
@@ -43,18 +43,17 @@ pub(crate) enum Directive<'a> {
         predicate: Token<'a>,
         map: Map<'a>,
     },
+    // maybe will be deprecated
     Output {
         kw: Token<'a>,
         predicates: Vec<Token<'a>>,
     },
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub(crate) enum Atom<'a> {
-    Atom {
-        predicate: Token<'a>,
-        terms: Vec<Term<'a>>,
-    },
+    Atom(NamedTuple<'a>),
+    NegativeAtom(NamedTuple<'a>),
     InfixAtom {
         operation: Token<'a>,
         lhs: Term<'a>,
@@ -63,47 +62,55 @@ pub(crate) enum Atom<'a> {
     Map(Map<'a>),
 }
 
-#[derive(Debug, PartialEq)]
-pub(crate) enum Literal<'a> {
-    Positive(Atom<'a>),
-    Negative(Atom<'a>),
-}
-
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub(crate) enum Term<'a> {
     Primitive(Token<'a>),
+    Unary {
+        operation: Token<'a>,
+        term: Box<Term<'a>>,
+    },
     Binary {
         operation: Token<'a>,
         lhs: Box<Term<'a>>,
         rhs: Box<Term<'a>>,
     },
-    Unary {
-        operation: Token<'a>,
-        term: Box<Term<'a>>,
-    },
     Aggregation {
         operation: Token<'a>,
         terms: Vec<Term<'a>>,
     },
-    Function {
-        identifier: Token<'a>,
-        terms: Vec<Term<'a>>,
-    },
+    Function(NamedTuple<'a>),
     Map(Map<'a>),
 }
 
-#[derive(Debug, PartialEq)]
-struct Map<'a> {
-    identifier: Option<Token<'a>>,
-    pairs: BTreeMap<Term<'a>, Term<'a>>,
+#[derive(Debug, PartialEq, Clone)]
+pub(crate) struct NamedTuple<'a> {
+    pub(crate) identifier: Token<'a>,
+    pub(crate) terms: Vec<Term<'a>>,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
+pub(crate) struct Map<'a> {
+    pub(crate) identifier: Option<Token<'a>>,
+    pub(crate) pairs: Vec<Pair<Term<'a>, Term<'a>>>,
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub(crate) struct Pair<K, V> {
+    key: K,
+    value: V,
+}
+impl<K, V> Pair<K, V> {
+    pub fn new(key: K, value: V) -> Pair<K, V> {
+        Pair { key, value }
+    }
+}
+
+#[derive(Debug, PartialEq, Clone)]
 pub(crate) enum Node<'a> {
     Statement(&'a Statement<'a>),
     Directive(&'a Directive<'a>),
     RuleHead(&'a Vec<Atom<'a>>),
-    RuleBody(&'a Vec<Literal<'a>>),
+    RuleBody(&'a Vec<Atom<'a>>),
     Atom(&'a Atom<'a>),
     Term(&'a Term<'a>),
     Terms(&'a Vec<Term<'a>>),
@@ -118,7 +125,7 @@ pub(crate) enum Node<'a> {
     Lhs(&'a Term<'a>),
     Rhs(&'a Term<'a>),
     Identifier(&'a Token<'a>),
-    Pairs(&'a BTreeMap<Term<'a>, Term<'a>>),
+    Pairs(&'a Vec<Pair<Term<'a>, Term<'a>>>),
     MapIdentifier(&'a Option<Token<'a>>),
     Primitive(&'a Token<'a>),
 }
@@ -226,8 +233,17 @@ impl<'a> AstNode for Directive<'a> {
 impl<'a> AstNode for Atom<'a> {
     fn children(&self) -> Vec<Node> {
         match self {
-            Atom::Atom { predicate, terms } => {
-                vec![Node::KeyWord(predicate), Node::Terms(terms)]
+            Atom::Atom(named_tuple) => {
+                vec![
+                    Node::Identifier(&named_tuple.identifier),
+                    Node::Terms(&named_tuple.terms),
+                ]
+            }
+            Atom::NegativeAtom(named_tuple) => {
+                vec![
+                    Node::Identifier(&named_tuple.identifier),
+                    Node::Terms(&named_tuple.terms),
+                ]
             }
             Atom::InfixAtom {
                 operation,
@@ -256,7 +272,7 @@ impl<'a> AstNode for Term<'a> {
             Term::Aggregation { operation, terms } => {
                 vec![Node::Operation(operation), Node::Terms(terms)]
             }
-            Term::Function { identifier, terms } => {
+            Term::Function(NamedTuple { identifier, terms }) => {
                 vec![Node::Identifier(identifier), Node::Terms(terms)]
             }
             Term::Map(map) => map.children(),
