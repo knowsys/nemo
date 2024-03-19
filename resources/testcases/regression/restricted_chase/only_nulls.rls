@@ -1,4 +1,8 @@
-@import data :- csv { resource = "sources/data.csv" }.
-@export result :- csv { }.
+@import data :- csv { resource = "sources/data.csv" } .
+@export result :- csv {} .
+@export no_result :- csv {} .
 
-result(!V) :- data(?X, ?Y) .
+
+no_result(!V, !V) :- data(C, C) .
+result(!V, !V) :- data(?X, ?Y) .
+result(!V, !V) :- data(?X, ?X) .
