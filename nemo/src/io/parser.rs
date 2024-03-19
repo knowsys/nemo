@@ -2428,11 +2428,23 @@ mod test {
     }
 }
 
-// NEW PARSER
+/// NEW PARSER
 mod new {
-    use super::ast::{self, Term};
+    use std::collections::{BTreeMap, HashMap};
+    use std::ffi::c_ushort;
+
+    use super::ast::{self, NamedTuple, Pair, Term};
     use super::types::Tokens;
-    use crate::io::lexer::{self, lex_ident, Span, TokenKind};
+    use crate::io::lexer::{
+        self, close_brace, comma, equal, greater, greater_equal, less, less_equal, lex_comment,
+        lex_doc_comment, lex_ident, lex_iri, lex_number, lex_string, lex_whitespace, open_brace,
+        unequal, Span, Token, TokenKind,
+    };
+    use nom::combinator::{all_consuming, opt};
+    use nom::error::ParseError;
+    use nom::multi::{many0, separated_list1};
+    use nom::sequence::{delimited, pair};
+    use nom::Parser;
     use nom::{
         branch::alt,
         bytes::complete::take,
@@ -2442,25 +2454,42 @@ mod new {
         IResult,
     };
 
-    macro_rules! tag_token (
-        ($func_name:ident, $tag: expr) => (
-            fn $func_name(tokens: Tokens) -> IResult<Tokens, Tokens> {
-                verify(take(1usize), |t: &Tokens| t.tok[0].kind == $tag)(tokens)
-            }
-        )
-    );
+    fn combine_spans<'a>(span1: Span<'a>, span2: Span<'a>) -> Result<Span<'a>, str_concat::Error> {
+        // SAFETY: The concatenation of strings is okay, because they originated from the same source string.
+        // The raw offset is okay, because the offset of another span is used.
+        unsafe {
+            let fragment = str_concat::concat(span1.fragment(), span2.fragment())?;
+            Ok(Span::new_from_raw_offset(
+                span1.location_offset(),
+                span1.location_line(),
+                fragment,
+                (),
+            ))
+        }
+    }
 
-    // tag_token!(ident, TokenKind::Ident);
-    // tag_token!(open_paren, TokenKind::OpenParen);
-    // tag_token!(close_paren, TokenKind::CloseParen);
-    // tag_token!(comma, TokenKind::Comma);
-    // tag_token!(dot, TokenKind::Dot);
+    fn ignore_ws_and_comments<'a, F, O>(
+        inner: F,
+    ) -> impl FnMut(Span<'a>) -> IResult<Span<'a>, O, nom::error::Error<Span<'a>>>
+    where
+        F: Parser<Span<'a>, O, nom::error::Error<Span<'a>>>
+            + std::ops::FnMut(Span<'a>) -> IResult<Span<'a>, O, nom::error::Error<Span<'a>>>,
+    {
+        delimited(
+            many0(alt((lex_whitespace, lex_comment, lex_doc_comment))),
+            inner,
+            many0(alt((lex_whitespace, lex_comment, lex_doc_comment))),
+        )
+    }
 
     fn parse_program<'a>(input: Span<'a>) -> ast::Program<'a> {
-        let (_, statements) =
-            // many1(alt((/*parse_rule, */parse_fact/*, parse_directive*/)))(input).unwrap();
-        many1(parse_fact)(input).unwrap();
-        dbg!(&statements);
+        let (_, statements) = all_consuming(many1(ignore_ws_and_comments(alt((
+            parse_fact,
+            parse_rule,
+            parse_directive,
+        )))))(input)
+        .unwrap();
+        // many0(parse_fact)(input).unwrap();
         let mut program = ast::Program::new();
         for statement in statements {
             program.push(statement)
@@ -2468,34 +2497,245 @@ mod new {
         program
     }
 
-    // fn parse_rule<'a>(input: Tokens) -> IResult<Tokens, ast::Statement<'a>> {}
-
     fn parse_fact<'a>(input: Span<'a>) -> IResult<Span, ast::Statement<'a>> {
         tuple((
-            lex_ident,
-            lexer::open_paren,
-            separated_list0(lexer::comma, lex_ident),
-            lexer::close_paren,
-            lexer::dot,
+            ignore_ws_and_comments(parse_named_tuple),
+            ignore_ws_and_comments(lexer::dot),
         ))(input)
-        .map(|(rest, result)| {
-            let mut terms = Vec::new();
-            for x in result.2 {
-                terms.push(Term::Primitive(x))
-            }
+        .map(|(rest, (atom, _))| {
             (
                 rest,
                 ast::Statement::Fact {
-                    atom: ast::Atom::Atom {
-                        predicate: result.0,
-                        terms,
-                    },
+                    atom: ast::Atom::Atom(atom),
                 },
             )
         })
     }
 
-    // fn parse_directive<'a>(input: Tokens) -> IResult<Tokens, ast::Statement<'a>> {}
+    fn parse_rule<'a>(input: Span<'a>) -> IResult<Span, ast::Statement<'a>> {
+        tuple((
+            ignore_ws_and_comments(separated_list1(
+                lexer::comma,
+                ignore_ws_and_comments(parse_named_tuple),
+            )),
+            ignore_ws_and_comments(lexer::arrow),
+            ignore_ws_and_comments(separated_list1(
+                lexer::comma,
+                ignore_ws_and_comments(pair(opt(lexer::tilde), parse_named_tuple)),
+            )),
+            ignore_ws_and_comments(lexer::dot),
+        ))(input)
+        .map(|(rest, (head, _, body, _))| {
+            (
+                rest,
+                ast::Statement::Rule {
+                    head: head.iter().map(|x| ast::Atom::Atom(x.clone())).collect(),
+                    body: body
+                        .iter()
+                        .map(|(tilde, atom)| {
+                            if let None = tilde {
+                                ast::Atom::Atom(atom.clone())
+                            } else {
+                                ast::Atom::NegativeAtom(atom.clone())
+                            }
+                        })
+                        .collect(),
+                },
+            )
+        })
+    }
+
+    fn parse_directive<'a>(input: Span<'a>) -> IResult<Span, ast::Statement<'a>> {
+        alt((
+            ignore_ws_and_comments(parse_base_directive),
+            ignore_ws_and_comments(parse_prefix_directive),
+            ignore_ws_and_comments(parse_import_directive),
+            ignore_ws_and_comments(parse_export_directive),
+            ignore_ws_and_comments(parse_output_directive),
+        ))(input)
+        .map(|(rest, directive)| (rest, ast::Statement::Directive(directive)))
+    }
+
+    fn parse_base_directive<'a>(input: Span<'a>) -> IResult<Span, ast::Directive<'a>> {
+        tuple((
+            lexer::at,
+            verify(lex_ident, |token| token.kind == TokenKind::Base),
+            ignore_ws_and_comments(lex_iri),
+            ignore_ws_and_comments(lexer::dot),
+        ))(input)
+        .map(|(rest, (_, kw, base_iri, _))| (rest, ast::Directive::Base { kw, base_iri }))
+    }
+
+    fn parse_prefix_directive<'a>(input: Span<'a>) -> IResult<Span, ast::Directive<'a>> {
+        tuple((
+            lexer::at,
+            verify(lex_ident, |token| token.kind == TokenKind::Prefix),
+            ignore_ws_and_comments(lex_ident),
+            ignore_ws_and_comments(lexer::colon),
+            ignore_ws_and_comments(lex_iri),
+            ignore_ws_and_comments(lexer::dot),
+        ))(input)
+        .map(|(rest, (_, kw, prefix, _, prefix_iri, _))| {
+            (
+                rest,
+                ast::Directive::Prefix {
+                    kw,
+                    prefix,
+                    prefix_iri,
+                },
+            )
+        })
+    }
+
+    fn parse_import_directive<'a>(input: Span<'a>) -> IResult<Span, ast::Directive<'a>> {
+        tuple((
+            lexer::at,
+            verify(lex_ident, |token| token.kind == TokenKind::Import),
+            ignore_ws_and_comments(lex_ident),
+            ignore_ws_and_comments(lexer::arrow),
+            ignore_ws_and_comments(parse_map),
+            ignore_ws_and_comments(lexer::dot),
+        ))(input)
+        .map(|(rest, (_, kw, predicate, _, map, _))| {
+            (rest, ast::Directive::Import { kw, predicate, map })
+        })
+    }
+
+    fn parse_export_directive<'a>(input: Span<'a>) -> IResult<Span, ast::Directive<'a>> {
+        tuple((
+            lexer::at,
+            verify(lex_ident, |token| token.kind == TokenKind::Export),
+            ignore_ws_and_comments(lex_ident),
+            ignore_ws_and_comments(lexer::arrow),
+            ignore_ws_and_comments(parse_map),
+            ignore_ws_and_comments(lexer::dot),
+        ))(input)
+        .map(|(rest, (_, kw, predicate, _, map, _))| {
+            (rest, ast::Directive::Export { kw, predicate, map })
+        })
+    }
+
+    fn parse_output_directive<'a>(input: Span<'a>) -> IResult<Span, ast::Directive<'a>> {
+        tuple((
+            lexer::at,
+            verify(lex_ident, |token| token.kind == TokenKind::Output),
+            ignore_ws_and_comments(separated_list0(
+                lexer::comma,
+                ignore_ws_and_comments(lex_ident),
+            )),
+            ignore_ws_and_comments(lexer::dot),
+        ))(input)
+        .map(|(rest, (_, kw, predicates, _))| (rest, ast::Directive::Output { kw, predicates }))
+    }
+
+    fn parse_atom<'a>(input: Span<'a>) -> IResult<Span, ast::Atom<'a>> {
+        todo!("`parse_atom`!")
+    }
+
+    fn parse_negative_atom<'a>(input: Span<'a>) -> IResult<Span, ast::Atom<'a>> {
+        todo!("`parse_negative_atom`!")
+    }
+
+    fn parse_infix_atom<'a>(input: Span<'a>) -> IResult<Span, ast::Atom<'a>> {
+        tuple((parse_term, parse_operation_token, parse_term))(input).map(
+            |(rest, (lhs, operation, rhs))| {
+                (
+                    rest,
+                    ast::Atom::InfixAtom {
+                        operation,
+                        lhs,
+                        rhs,
+                    },
+                )
+            },
+        )
+    }
+
+    fn parse_named_tuple<'a>(input: Span<'a>) -> IResult<Span, ast::NamedTuple<'a>> {
+        tuple((
+            lex_ident,
+            lexer::open_paren,
+            // ignore_ws_and_comments(separated_list0(lexer::comma, parse_term)),
+            ignore_ws_and_comments(separated_list0(comma, ignore_ws_and_comments(parse_term))),
+            ignore_ws_and_comments(lexer::close_paren),
+        ))(input)
+        .map(|(rest, (identifier, _, terms, _))| (rest, NamedTuple { identifier, terms }))
+    }
+
+    fn parse_map<'a>(input: Span<'a>) -> IResult<Span, ast::Map<'a>> {
+        tuple((
+            opt(lex_ident),
+            ignore_ws_and_comments(open_brace),
+            separated_list0(
+                ignore_ws_and_comments(comma),
+                ignore_ws_and_comments(tuple((parse_term, equal, parse_term))),
+            ),
+            ignore_ws_and_comments(close_brace),
+        ))(input)
+        .map(|(rest, (identifier, _, vec_of_pairs, _))| {
+            let mut pairs = Vec::new();
+            for (key, _, value) in vec_of_pairs {
+                pairs.push(Pair::new(key, value));
+            }
+            (rest, ast::Map { identifier, pairs })
+        })
+    }
+
+    fn parse_term<'a>(input: Span<'a>) -> IResult<Span, ast::Term<'a>> {
+        // alt((
+        //     parse_primitive_term,
+        //     parse_unary_term,
+        //     parse_binary_term,
+        //     parse_aggregation_term,
+        //     parse_function_term,
+        //     parse_map_term,
+        // ))(input)
+        ignore_ws_and_comments(alt((parse_primitive_term, parse_variable)))(input)
+    }
+
+    fn parse_primitive_term<'a>(input: Span<'a>) -> IResult<Span, ast::Term<'a>> {
+        alt((lex_ident, lex_iri, lex_number, lex_string))(input)
+            .map(|(rest, term)| (rest, ast::Term::Primitive(term)))
+    }
+
+    fn parse_unary_term<'a>(input: Span<'a>) -> IResult<Span, ast::Term<'a>> {
+        todo!("`parse_unary_term`!")
+    }
+
+    fn parse_binary_term<'a>(input: Span<'a>) -> IResult<Span, ast::Term<'a>> {
+        todo!("`parse_binary_term`!")
+    }
+
+    fn parse_aggregation_term<'a>(input: Span<'a>) -> IResult<Span, ast::Term<'a>> {
+        todo!("`parse_aggregation_term`!")
+    }
+
+    fn parse_function_term<'a>(input: Span<'a>) -> IResult<Span, ast::Term<'a>> {
+        todo!("`parse_function_term`!")
+    }
+
+    fn parse_map_term<'a>(input: Span<'a>) -> IResult<Span, ast::Term<'a>> {
+        todo!("`parse_map_term`!")
+    }
+
+    fn parse_variable<'a>(input: Span<'a>) -> IResult<Span, ast::Term<'a>> {
+        ignore_ws_and_comments(pair(lexer::question_mark, lex_ident))(input).map(
+            |(rest, (question_mark, ident))| {
+                (
+                    rest,
+                    ast::Term::Variable(Token {
+                        kind: TokenKind::Variable,
+                        span: combine_spans(question_mark.span, ident.span)
+                            .expect("Spans were not adjacent in memory"),
+                    }),
+                )
+            },
+        )
+    }
+
+    fn parse_operation_token<'a>(input: Span<'a>) -> IResult<Span, Token<'a>> {
+        alt((equal, unequal, less, less_equal, greater, greater_equal))(input)
+    }
 
     #[cfg(test)]
     mod test {
@@ -2517,8 +2757,8 @@ mod new {
             assert_eq!(
                 parse_program(input),
                 vec![ast::Statement::Fact {
-                    atom: ast::Atom::Atom {
-                        predicate: Token {
+                    atom: ast::Atom::Atom(NamedTuple {
+                        identifier: Token {
                             kind: TokenKind::Ident,
                             span: S!(0, 1, "a"),
                         },
@@ -2532,9 +2772,175 @@ mod new {
                                 span: S!(4, 1, "C"),
                             }),
                         ],
-                    },
+                    }),
                 }]
             )
+        }
+
+        #[test]
+        fn syntax() {
+            let input = Span::new(
+                r#"@base <http://example.org/foo/>.@prefix rdfs:<http://www.w3.org/2000/01/rdf-schema#>.@import sourceA:-csv{resource="sources/dataA.csv"}.@export a:-csv{}.@output a."#,
+            );
+            assert_eq!(
+                parse_program(input),
+                vec![
+                    ast::Statement::Directive(Directive::Base {
+                        kw: Token {
+                            kind: TokenKind::Base,
+                            span: S!(1, 1, "base"),
+                        },
+                        base_iri: Token {
+                            kind: TokenKind::Iri,
+                            span: S!(6, 1, "<http://example.org/foo/>")
+                        }
+                    }),
+                    ast::Statement::Directive(Directive::Prefix {
+                        kw: Token {
+                            kind: TokenKind::Prefix,
+                            span: S!(33, 1, "prefix"),
+                        },
+                        prefix: Token {
+                            kind: TokenKind::Ident,
+                            span: S!(40, 1, "rdfs"),
+                        },
+                        prefix_iri: Token {
+                            kind: TokenKind::Iri,
+                            span: S!(45, 1, "<http://www.w3.org/2000/01/rdf-schema#>"),
+                        },
+                    }),
+                    ast::Statement::Directive(Directive::Import {
+                        kw: Token {
+                            kind: TokenKind::Import,
+                            span: S!(86, 1, "import"),
+                        },
+                        predicate: Token {
+                            kind: TokenKind::Ident,
+                            span: S!(93, 1, "sourceA"),
+                        },
+                        map: Map {
+                            identifier: Some(Token {
+                                kind: TokenKind::Ident,
+                                span: S!(102, 1, "csv")
+                            }),
+                            pairs: vec![Pair {
+                                key: Term::Primitive(Token {
+                                    kind: TokenKind::Ident,
+                                    span: S!(106, 1, "resource"),
+                                }),
+                                value: Term::Primitive(Token {
+                                    kind: TokenKind::String,
+                                    span: S!(115, 1, "\"sources/dataA.csv\""),
+                                })
+                            }],
+                        },
+                    }),
+                    ast::Statement::Directive(Directive::Export {
+                        kw: Token {
+                            kind: TokenKind::Export,
+                            span: S!(137, 1, "export"),
+                        },
+                        predicate: Token {
+                            kind: TokenKind::Ident,
+                            span: S!(144, 1, "a"),
+                        },
+                        map: Map {
+                            identifier: Some(Token {
+                                kind: TokenKind::Ident,
+                                span: S!(147, 1, "csv"),
+                            }),
+                            pairs: vec![]
+                        }
+                    }),
+                    ast::Statement::Directive(Directive::Output {
+                        kw: Token {
+                            kind: TokenKind::Output,
+                            span: S!(154, 1, "output")
+                        },
+                        predicates: vec![Token {
+                            kind: TokenKind::Ident,
+                            span: S!(161, 1, "a")
+                        }]
+                    }),
+                ]
+            )
+        }
+
+        #[test]
+        fn ignore_ws_and_comments() {
+            let input = Span::new("   Hi   %cool comment\n");
+            assert_eq!(
+                super::ignore_ws_and_comments(lex_ident)(input),
+                Ok((
+                    S!(22, 2, ""),
+                    Token {
+                        kind: TokenKind::Ident,
+                        span: S!(3, 1, "Hi")
+                    }
+                ))
+            )
+        }
+
+        #[test]
+        fn fact_with_ws() {
+            let input = Span::new("some(Fact, with, whitespace) . % and a super useful comment\n");
+            assert_eq!(
+                parse_program(input),
+                vec![ast::Statement::Fact {
+                    atom: Atom::Atom(NamedTuple {
+                        identifier: Token {
+                            kind: TokenKind::Ident,
+                            span: S!(0, 1, "some"),
+                        },
+                        terms: vec![
+                            Term::Primitive(Token {
+                                kind: TokenKind::Ident,
+                                span: S!(5, 1, "Fact")
+                            }),
+                            Term::Primitive(Token {
+                                kind: TokenKind::Ident,
+                                span: S!(11, 1, "with")
+                            }),
+                            Term::Primitive(Token {
+                                kind: TokenKind::Ident,
+                                span: S!(17, 1, "whitespace")
+                            }),
+                        ]
+                    })
+                }]
+            )
+        }
+
+        #[test]
+        fn combine_spans() {
+            use nom::bytes::complete::tag;
+            let source = "Some Input ;)";
+            let input = Span::new(source);
+            let (input, first) = tag::<&str, Span, nom::error::Error<_>>("Some ")(input).unwrap();
+            let (input, second) = tag::<&str, Span, nom::error::Error<_>>("Input")(input).unwrap();
+            let span = super::combine_spans(first, second);
+            assert_eq!(span, Ok(Span::new("Some Input")))
+        }
+
+        #[test]
+        fn combine_spans_error() {
+            use nom::bytes::complete::tag;
+            let source = "Some Input ;)";
+            let input = Span::new(source);
+            let (input, first) = tag::<&str, Span, nom::error::Error<_>>("Some")(input).unwrap();
+            let (input, _) = tag::<&str, Span, nom::error::Error<_>>(" ")(input).unwrap();
+            let (input, second) = tag::<&str, Span, nom::error::Error<_>>("Input")(input).unwrap();
+            let span = super::combine_spans(first, second);
+            assert_eq!(span, Err(str_concat::Error::NotAdjacent))
+        }
+
+        #[test]
+        fn parser_test() {
+            let str =
+                std::fs::read_to_string("../testfile.rls").expect("`../testfile.rls` not found");
+            let input = Span::new(str.as_str());
+            dbg!(parse_program(input));
+            // assert!(false);
         }
     }
 }
