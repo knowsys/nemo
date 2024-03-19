@@ -166,7 +166,7 @@ syntax!(less_equal, "<=", TokenKind::LessEqual);
 syntax!(equal, "=", TokenKind::Equal);
 syntax!(greater_equal, ">=", TokenKind::GreaterEqual);
 syntax!(greater, ">", TokenKind::Greater);
-syntax!(unequals, "!=", TokenKind::Unequal);
+syntax!(unequal, "!=", TokenKind::Unequal);
 syntax!(plus, "+", TokenKind::Plus);
 syntax!(minus, "-", TokenKind::Minus);
 syntax!(star, "*", TokenKind::Star);
@@ -176,7 +176,7 @@ pub(crate) fn lex_operators(input: Span) -> IResult<Span, Token> {
     alt((
         less_equal,
         greater_equal,
-        unequals,
+        unequal,
         less,
         equal,
         greater,
