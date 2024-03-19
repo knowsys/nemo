@@ -72,8 +72,10 @@ pub(crate) enum TokenKind {
     /// '/'
     Slash,
     // Multi-char tokens:
-    /// Identifier for keywords and predicate names
+    /// Identifier for keywords and names
     Ident,
+    /// Variable,
+    Variable,
     /// IRI, delimited with `<` and `>`
     Iri,
     /// Base 10 digits
