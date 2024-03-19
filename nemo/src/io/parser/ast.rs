@@ -65,6 +65,7 @@ pub(crate) enum Atom<'a> {
 #[derive(Debug, PartialEq, Clone)]
 pub(crate) enum Term<'a> {
     Primitive(Token<'a>),
+    Variable(Token<'a>),
     Unary {
         operation: Token<'a>,
         term: Box<Term<'a>>,
@@ -96,8 +97,8 @@ pub(crate) struct Map<'a> {
 
 #[derive(Debug, PartialEq, Clone)]
 pub(crate) struct Pair<K, V> {
-    key: K,
-    value: V,
+    pub(crate) key: K,
+    pub(crate) value: V,
 }
 impl<K, V> Pair<K, V> {
     pub fn new(key: K, value: V) -> Pair<K, V> {
@@ -128,6 +129,7 @@ pub(crate) enum Node<'a> {
     Pairs(&'a Vec<Pair<Term<'a>, Term<'a>>>),
     MapIdentifier(&'a Option<Token<'a>>),
     Primitive(&'a Token<'a>),
+    Variable(&'a Token<'a>),
 }
 
 trait AstNode {
@@ -262,7 +264,8 @@ impl<'a> AstNode for Atom<'a> {
 impl<'a> AstNode for Term<'a> {
     fn children(&self) -> Vec<Node> {
         match self {
-            Term::Primitive(prim) => vec![Node::Primitive(prim)],
+            Term::Primitive(primitive) => vec![Node::Primitive(primitive)],
+            Term::Variable(var) => vec![Node::Variable(var)],
             Term::Binary {
                 operation,
                 lhs,
