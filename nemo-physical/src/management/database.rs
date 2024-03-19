@@ -466,7 +466,9 @@ impl DatabaseInstance {
                 self.execute_tree(&temporary_storage, tree, dependent_reorderings);
             TimedCode::instance().sub(&timed_string).stop();
 
-            Self::log_new_trie(tree, &result_tree);
+            if tree.used > 0 {
+                Self::log_new_trie(tree, &result_tree);
+            }
 
             temporary_storage.computed_tables[tree_index] = Some(result_tree);
             for ((computed_id, _), result_dependent) in

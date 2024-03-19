@@ -217,13 +217,6 @@ impl GeneratorFunction {
         }
     }
 
-    /// Returns whether the result of this operation does not depend on the input.
-    fn is_independent(&self) -> bool {
-        self.layer_information
-            .iter()
-            .all(|info| info.computed != ComputedMarker::Input)
-    }
-
     /// Returns whether this operation does not alter the input table.
     fn is_unchanging(&self) -> bool {
         // This operation behaves the same as the identity if

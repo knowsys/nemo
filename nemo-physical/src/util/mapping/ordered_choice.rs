@@ -49,11 +49,6 @@ impl SortedChoice {
         Self::from_map(map, source.len())
     }
 
-    /// Return the size of the domain.
-    pub(crate) fn domain_size(&self) -> usize {
-        self.domain_size
-    }
-
     /// Return a vector representation of the function
     /// such that the ith entry in the vector contains that element which gets mapped to position i by this function.
     /// E.g. `{10 -> 0, 20 -> 1}` will result in `[10, 20]`
