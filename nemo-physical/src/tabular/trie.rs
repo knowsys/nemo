@@ -402,7 +402,7 @@ impl Trie {
         trie_scan: TrieScanEnum<'_>,
         reorderings: Vec<ProjectReordering>,
         keep_original: bool,
-    ) -> (Option<Self>, Vec<Option<Self>>) {
+    ) -> (Self, Vec<Self>) {
         let reorderings = reorderings
             .iter()
             .map(|reordering| reordering.as_vector())
@@ -413,8 +413,8 @@ impl Trie {
 
         if num_columns == 0 {
             return (
-                Some(Self::zero_arity(true)),
-                vec![Some(Self::zero_arity(true)); reorderings.len()],
+                Self::zero_arity(true),
+                vec![Self::zero_arity(true); reorderings.len()],
             );
         }
 
@@ -444,8 +444,17 @@ impl Trie {
                     intervalcolumn_builders.push(new_builder);
                 }
             }
+
+            for (tuple_buffer, reordering) in tuple_buffers.iter_mut().zip(reorderings.iter()) {
+                for &column_index in reordering {
+                    tuple_buffer.add_tuple_value(first_row[column_index]);
+                }
+            }
         } else {
-            return (None, vec![None; num_columns]);
+            return (
+                Self::empty(num_columns),
+                vec![Self::empty(num_columns); num_columns],
+            );
         }
 
         while let Some(Row {
@@ -458,8 +467,8 @@ impl Trie {
             for ((layer, current_builder), current_value) in intervalcolumn_builders
                 .iter_mut()
                 .enumerate()
-                .skip(*changed_layers)
                 .zip(current_row)
+                .skip(*changed_layers)
             {
                 let current_type = current_value.get_type();
 
@@ -480,19 +489,25 @@ impl Trie {
         }
 
         let result_trie = if keep_original {
-            Some(Self {
+            Self {
                 columns: intervalcolumn_builders
                     .into_iter()
                     .map(|builder| builder.finalize())
                     .collect(),
                 empty_row: false,
-            })
+            }
         } else {
-            None
+            Self::empty(0)
         };
         let result_reordered = tuple_buffers
             .into_iter()
-            .map(|buffer| Some(Self::from_tuple_buffer(buffer.finalize())))
+            .map(|buffer| {
+                if buffer.column_number() == 0 {
+                    Self::zero_arity(true)
+                } else {
+                    Self::from_tuple_buffer(buffer.finalize())
+                }
+            })
             .collect::<Vec<_>>();
 
         (result_trie, result_reordered)

@@ -364,51 +364,43 @@ impl DatabaseInstance {
         tree: &ExecutionTree,
         dependent: Vec<ProjectReordering>,
     ) -> (Trie, Vec<Trie>) {
-        let (trie, tries_dependent): (Option<Trie>, Vec<Option<Trie>>) = match &tree.root {
+        match &tree.root {
             ExecutionTreeNode::Operation(operation) => {
-                let trie_scan = self.evaluate_operation(&self.dictionary, storage, operation);
-
-                // let trie =
-                //     trie_scan.map(|scan| Trie::from_partial_trie_scan(scan, tree.cut_layers));
-                // (trie, vec![])
-
-                if dependent.is_empty() {
-                    let trie =
-                        trie_scan.map(|scan| Trie::from_partial_trie_scan(scan, tree.cut_layers));
-                    (trie, vec![])
-                } else {
-                    if let Some(scan) = trie_scan {
-                        Trie::from_partial_trie_scan_dependents(scan, dependent, tree.used > 0)
+                if let Some(trie_scan) =
+                    self.evaluate_operation(&self.dictionary, storage, operation)
+                {
+                    if matches!(trie_scan, TrieScanEnum::AggregateWrapper(_)) {
+                        // Aggregates do not support dependenent tables yet
+                        (
+                            Trie::from_partial_trie_scan(trie_scan, tree.cut_layers),
+                            vec![],
+                        )
                     } else {
-                        (None, vec![None; dependent.len()])
+                        Trie::from_partial_trie_scan_dependents(trie_scan, dependent, tree.used > 0)
                     }
+                } else {
+                    (Trie::empty(0), vec![Trie::empty(0); dependent.len()])
                 }
             }
             ExecutionTreeNode::ProjectReorder { generator, subnode } => {
                 debug_assert!(
                     dependent.is_empty(),
-                    "Having dependant tables is not supported for projectreorder nodes."
+                    "Having dependent tables is not supported for projectreorder nodes."
                 );
 
                 let trie = if generator.is_noop() {
                     self.evaluate_tree_leaf(storage, subnode)
                         .map(|scan| Trie::from_partial_trie_scan(scan, tree.cut_layers))
+                        .unwrap_or(Trie::empty(0))
                 } else {
                     self.evaluate_tree_leaf(storage, subnode)
                         .map(|scan| generator.apply_operation(scan))
+                        .unwrap_or(Trie::empty(0))
                 };
 
                 (trie, vec![])
             }
-        };
-
-        let trie = trie.unwrap_or_else(|| Trie::empty(0));
-        let tries_dependent = tries_dependent
-            .into_iter()
-            .map(|trie| trie.unwrap_or_else(|| Trie::empty(0)))
-            .collect();
-
-        (trie, tries_dependent)
+        }
     }
 
     fn log_new_trie(tree: &ExecutionTree, trie: &Trie) {
@@ -462,7 +454,7 @@ impl DatabaseInstance {
 
             log::info!("Execution step: {}", tree.operation_name);
 
-            let dependant_reorderings = tree
+            let dependent_reorderings = tree
                 .dependents
                 .iter()
                 .map(|(_, projectreordering)| projectreordering.clone())
@@ -470,17 +462,18 @@ impl DatabaseInstance {
 
             let timed_string = format!("Reasoning/Execution/{}", tree.operation_name);
             TimedCode::instance().sub(&timed_string).start();
-            let (result_tree, results_dependant) =
-                self.execute_tree(&temporary_storage, tree, dependant_reorderings);
+            let (result_tree, results_dependent) =
+                self.execute_tree(&temporary_storage, tree, dependent_reorderings);
             TimedCode::instance().sub(&timed_string).stop();
 
             Self::log_new_trie(tree, &result_tree);
 
             temporary_storage.computed_tables[tree_index] = Some(result_tree);
-            for ((computed_id, _), result_dependant) in
-                tree.dependents.iter().zip(results_dependant)
+            for ((computed_id, _), result_dependent) in
+                tree.dependents.iter().zip(results_dependent)
             {
-                temporary_storage.computed_tables[*computed_id] = Some(result_dependant);
+                Self::log_new_trie(tree, &result_dependent);
+                temporary_storage.computed_tables[*computed_id] = Some(result_dependent);
             }
         }
 
