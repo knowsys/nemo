@@ -405,7 +405,6 @@ impl DatabaseInstance {
 
     fn log_new_trie(tree: &ExecutionTree, trie: &Trie) {
         if !trie.is_empty() {
-            log::info!("New trie: {:?}", trie);
             match &tree.result {
                 ExecutionResult::Temporary => {
                     log::info!(

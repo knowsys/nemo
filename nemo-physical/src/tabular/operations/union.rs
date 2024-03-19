@@ -116,7 +116,7 @@ pub(crate) struct TrieScanUnion<'a> {
     /// Current layer of this [PartialTrieScan]
     current_layer: Option<usize>,
 
-    /// For each layer in the resulting trie contains a [ColumnScanRainbow]
+    /// For each layer in the resulting trie contains a [ColumnScanT]
     /// evaluating the union of the underlying columns of the input trie.
     column_scans: Vec<UnsafeCell<ColumnScanT<'a>>>,
 }

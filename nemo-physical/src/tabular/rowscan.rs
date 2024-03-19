@@ -139,7 +139,8 @@ impl<'a, Scan: PartialTrieScan<'a>> RowScan<'a, Scan> {
     /// Advance the column scan of the current layer for the given [StorageTypeName]
     /// to the next value.
     ///
-    /// Assumes that `self.trie_scan` is at some layer.
+    /// # Panics
+    /// Panics if `self.trie_scan` is not at some layer.
     fn column_scan_next(&mut self, storage_type: StorageTypeName) -> Option<StorageValueT> {
         unsafe {
             &mut *self
@@ -149,6 +150,16 @@ impl<'a, Scan: PartialTrieScan<'a>> RowScan<'a, Scan> {
                 .get()
         }
         .next(storage_type)
+    }
+
+    /// Return the current value of the of the trie on a given layer for a given storage type.
+    ///
+    /// # Panics
+    /// Panics if there is no value at the given loaction
+    fn column_scan_current(&self, layer: usize, storage_type: StorageTypeName) -> StorageValueT {
+        unsafe { &mut *self.trie_scan.scan(layer).get() }
+            .current(storage_type)
+            .expect("Function assumes that columnscan points to some value")
     }
 }
 
@@ -169,20 +180,24 @@ impl<'a, Scan: PartialTrieScan<'a>> StreamingIterator for RowScan<'a, Scan> {
 
         while let Some(current_layer) = self.trie_scan.current_layer() {
             let is_last_layer = current_layer == self.trie_scan.arity() - 1;
-            let is_used_layer = current_layer < self.current_row.row.len();
-
             let current_type = self.possible_types.current_type(current_layer);
 
             if current_layer < self.current_row.change {
                 self.current_row.change = current_layer;
             }
 
-            if let Some(next_value) = self.column_scan_next(current_type) {
-                if is_used_layer {
-                    self.current_row.row[current_layer] = next_value;
-                }
-
+            if let Some(_next_value) = self.column_scan_next(current_type) {
                 if is_last_layer {
+                    for layer in 0..self.current_row.row.len() {
+                        let layer_type = self.possible_types.current_type(layer);
+                        let value = self.column_scan_current(layer, layer_type);
+                        self.current_row.row[layer] = value;
+                    }
+
+                    for _ in self.current_row.row.len()..=current_layer {
+                        self.trie_scan.up();
+                    }
+
                     return;
                 } else {
                     let next_layer = current_layer + 1;

@@ -407,11 +407,17 @@ impl Trie {
             .iter()
             .map(|reordering| reordering.as_vector())
             .collect::<Vec<_>>();
+        let last_used_layer = reorderings.iter().cloned().flatten().max().unwrap_or(0);
 
-        let num_columns = trie_scan.arity();
-        let cut_layers = 0; // TODO: Compute last used layer across all reorderings
+        let arity = trie_scan.arity();
 
-        if num_columns == 0 {
+        let cut_layers = if keep_original {
+            0
+        } else {
+            trie_scan.arity() - (last_used_layer + 1)
+        };
+
+        if trie_scan.arity() == 0 {
             return (
                 Self::zero_arity(true),
                 vec![Self::zero_arity(true); reorderings.len()],
@@ -421,7 +427,7 @@ impl Trie {
         let mut rowscan = RowScan::new(trie_scan, cut_layers);
 
         let mut intervalcolumn_builders =
-            Vec::<IntervalColumnTBuilderTriescan<IntervalLookupMethod>>::with_capacity(num_columns);
+            Vec::<IntervalColumnTBuilderTriescan<IntervalLookupMethod>>::with_capacity(arity);
         let mut tuple_buffers = reorderings
             .iter()
             .map(|reordering| TupleBuffer::new(reordering.len()))
@@ -452,8 +458,8 @@ impl Trie {
             }
         } else {
             return (
-                Self::empty(num_columns),
-                vec![Self::empty(num_columns); num_columns],
+                Self::empty(arity),
+                vec![Self::empty(arity); reorderings.len()],
             );
         }
 
