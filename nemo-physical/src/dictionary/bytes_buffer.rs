@@ -168,7 +168,7 @@ pub(crate) unsafe trait GlobalBytesBuffer: Debug + Sized {
     /// Returns a reference to a slice of a byte array for this data.
     /// This is a pointer to global mutable data, and cannot be used safely.
     unsafe fn get_bytes(address: usize, length: usize) -> &'static [u8] {
-        BytesBuffer::get_bytes(&mut *Self::get(), address, length)
+        BytesBuffer::get_bytes(&*Self::get(), address, length)
     }
 
     /// Frees the memory used by the pages of the dropped buffer.

@@ -80,8 +80,7 @@ impl GeneratorAggregate {
             .iter()
             .enumerate()
             .rev()
-            .filter(|(_index, marker)| assignment.distinct_columns.contains(marker))
-            .next()
+            .find(|(_index, marker)| assignment.distinct_columns.contains(marker))
             .map(|(index, _marker)| index)
             .unwrap_or(aggregated_column_index);
 

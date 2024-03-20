@@ -52,12 +52,3 @@ pub(crate) trait AggregateGroupProcessor {
     /// Returns the resulting aggregated value of all the processed input values.
     fn finish(&self) -> Option<StorageValueT>;
 }
-
-#[enum_dispatch(AggregateGroupProcessor)]
-#[derive(Debug)]
-pub(crate) enum AggregateGroupProcessorT {
-    Count(CountAggregateGroupProcessor),
-    Max(MaxAggregateGroupProcessor),
-    Min(MinAggregateGroupProcessor),
-    Sum(SumAggregateGroupProcessor),
-}
