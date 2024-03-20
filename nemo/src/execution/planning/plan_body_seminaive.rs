@@ -119,6 +119,10 @@ impl BodyStrategy for SeminaiveStrategy {
             &self.negatie_constraints,
         );
 
+        if self.constructors.len() > 0 && self.aggregates.len() > 0 {
+            todo!("aggregates and functions can not yet be used together, please split them up into seperate rules for now");
+        }
+
         // Perform aggregate operations
         // This updates the variable order with the aggregate placeholder variables replacing the aggregate input variables
         let node_aggregation = node_aggregate(

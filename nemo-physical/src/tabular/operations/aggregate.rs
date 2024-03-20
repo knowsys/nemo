@@ -18,16 +18,77 @@ use crate::{
     tabular::triescan::{PartialTrieScan, TrieScan, TrieScanEnum},
 };
 
-use super::{prune::TrieScanPrune, OperationGenerator};
+use super::{prune::TrieScanPrune, OperationColumnMarker, OperationGenerator, OperationTable};
+
+/// Holds information on how to perform an aggregation, e.g. column markers and the type of aggregation.
+#[derive(Debug, Clone)]
+pub struct AggregateAssignment {
+    /// Operation to perform
+    pub aggregate_operation: AggregateOperation,
+    /// Distinct column markers (not including aggregated column, see [`TrieScanAggregate`])
+    pub distinct_columns: Vec<OperationColumnMarker>,
+    /// Group-by column markers, see [`TrieScanAggregate`]
+    pub group_by_columns: Vec<OperationColumnMarker>,
+    /// Aggregated input column marker, see [`TrieScanAggregate`]
+    pub aggregated_column: OperationColumnMarker,
+}
 
 #[derive(Debug, Clone)]
 pub(crate) struct GeneratorAggregate {
-    pub instructions: AggregationInstructions,
+    instructions: AggregationInstructions,
 }
 
 impl GeneratorAggregate {
-    pub(crate) fn new(instructions: AggregationInstructions) -> Self {
-        Self { instructions }
+    pub(crate) fn new_with_reorder(
+        output: &OperationTable,
+        unordered_input: &OperationTable,
+        assignment: &AggregateAssignment,
+    ) -> (Self, OperationTable) {
+        let mut correctly_ordered_input = Vec::with_capacity(unordered_input.len());
+
+        for column in output.iter() {
+            if assignment.group_by_columns.contains(column) {
+                correctly_ordered_input.push(*column);
+            }
+        }
+
+        correctly_ordered_input.push(assignment.aggregated_column);
+        correctly_ordered_input.extend(assignment.distinct_columns.iter().copied());
+
+        // Add other columns such that the reorder operation will be a permutation
+        // The other columns are not required by the aggregation, but the execution plan code only supports valid permutations on the inputs
+        for column in unordered_input.iter() {
+            if !correctly_ordered_input.contains(column) {
+                correctly_ordered_input.push(*column);
+            }
+        }
+
+        let ideal_input_order = OperationTable(correctly_ordered_input);
+
+        let aggregated_column_index = ideal_input_order
+            .position(&assignment.aggregated_column)
+            .expect("aggregate variable has to be in input operation table");
+        let mut last_distinct_column_index = ideal_input_order
+            .iter()
+            .enumerate()
+            .rev()
+            .filter(|(_index, marker)| assignment.distinct_columns.contains(marker))
+            .next()
+            .map(|(index, _marker)| index)
+            .unwrap_or(aggregated_column_index);
+
+        if aggregated_column_index > last_distinct_column_index {
+            last_distinct_column_index = aggregated_column_index;
+        }
+
+        let instructions = AggregationInstructions {
+            aggregate_operation: assignment.aggregate_operation,
+            group_by_column_count: assignment.group_by_columns.len(),
+            aggregated_column_index,
+            last_distinct_column_index,
+        };
+
+        (Self { instructions }, ideal_input_order)
     }
 }
 
@@ -51,22 +112,22 @@ impl OperationGenerator for GeneratorAggregate {
 
 /// Describes which columns of the input trie scan will be group-by, distinct and aggregate columns and other information about the aggregation.
 #[derive(Debug, Clone, Copy)]
-pub struct AggregationInstructions {
+struct AggregationInstructions {
     /// Type of the aggregate operation, which determines the aggregate processor that will be used
-    pub aggregate_operation: AggregateOperation,
+    aggregate_operation: AggregateOperation,
     /// Number of group-by columns
     ///
     /// These are exactly the first columns of the input scan.
-    pub group_by_column_count: usize,
+    group_by_column_count: usize,
     /// Index of the aggregated column in the input scan
     ///
     /// The aggregated column has to come after the group-by columns.
-    pub aggregated_column_index: usize,
+    aggregated_column_index: usize,
     /// Index of the last column (thus highest column index) that should still be forwarded to the underlying aggregate implementation
     ///
     /// All remaining columns of the input scan will be ignored.
     /// All columns between `highest_distinct_column_index` and the group-by columns are seen as distinct, except for the `aggregated_column_index`.
-    pub last_distinct_column_index: usize,
+    last_distinct_column_index: usize,
 }
 
 impl AggregationInstructions {
@@ -103,7 +164,7 @@ impl AggregationInstructions {
 /// As soon as the group-by values input change, a new output row and a new [`AggregateGroupProcessor`] gets created.
 /// The [`crate::aggregates::operation`] module is also the place to add new aggregate operations to `nemo-phyiscal`.
 ///
-/// Input columns:
+/// Input columns (specific order is required):
 /// * Zero or more group-by columns, followed by
 /// * a single aggregated column possibly mixed with additional distinct columns, followed by
 /// * zero or more peripheral columns, that do not impact the result of the aggregate at all and are not used during aggregation.
@@ -136,7 +197,7 @@ struct PeekedRowInformation {
 
 impl<T: TrieScan> TrieScanAggregate<T> {
     /// Creates a new [`TrieScanAggregate`] for processing an input full [`TrieScan`]. The group-by layers will get copied, an aggregate column will be computed based on the input aggregate/distinct columns, and any other columns will get dismissed.
-    pub(crate) fn new(input_scan: T, instructions: AggregationInstructions) -> Self {
+    fn new(input_scan: T, instructions: AggregationInstructions) -> Self {
         if !instructions.is_valid() {
             panic!("cannot create TrieScanAggregate with invalid aggregation instructions")
         }

@@ -13,7 +13,7 @@ use crate::{
         ExecutionTreeLeaf, ExecutionTreeNode, ExecutionTreeOperation,
     },
     tabular::operations::{
-        aggregate::{AggregationInstructions, GeneratorAggregate},
+        aggregate::{AggregateAssignment, GeneratorAggregate},
         filter::{Filters, GeneratorFilter},
         function::{FunctionAssignment, GeneratorFunction},
         join::GeneratorJoin,
@@ -169,9 +169,8 @@ pub(crate) enum ExecutionOperation {
     Function(ExecutionNodeRef, FunctionAssignment),
     /// Append columns with fresh nulls to the table represented by the subnode
     Null(ExecutionNodeRef),
-    /// Aggregates
-    /// TODO: Implement aggregates again
-    Aggregate(ExecutionNodeRef, AggregationInstructions),
+    /// Perform aggregate operation
+    Aggregate(ExecutionNodeRef, AggregateAssignment),
 }
 
 /// Declares whether the resulting table form executing a plan should be kept temporarily or permamently
@@ -341,14 +340,14 @@ impl ExecutionPlan {
         self.push_and_return_reference(new_operation, marked_columns)
     }
 
-    /// Return an [ExecutionNodeRef] for restricting a column to values of certain other columns.
+    /// Return an [ExecutionNodeRef] for computing an aggregate.
     pub fn aggregate(
         &mut self,
         marked_columns: OperationTable,
         subnode: ExecutionNodeRef,
-        aggregation_instructions: AggregationInstructions,
+        aggregate_assignment: AggregateAssignment,
     ) -> ExecutionNodeRef {
-        let new_operation = ExecutionOperation::Aggregate(subnode, aggregation_instructions);
+        let new_operation = ExecutionOperation::Aggregate(subnode, aggregate_assignment);
         self.push_and_return_reference(new_operation, marked_columns)
     }
 
@@ -605,6 +604,34 @@ impl ExecutionPlan {
                     subnodes: subtrees,
                 })
             }
+            ExecutionOperation::Aggregate(subnode, aggregate_assignment) => {
+                // Add project/reorder operation if required by the aggregate
+                // This depends on the column ordering, see [`crate::tabular::operation::aggregate::TrieScanAggregate`]
+                let input = subnode.markers_cloned();
+                let output = node_markers.clone();
+
+                // Reorder input
+                let (generator_aggregate, reordered_input) =
+                    GeneratorAggregate::new_with_reorder(&output, &input, aggregate_assignment);
+
+                let subtree = Self::execution_node(
+                    root_node_id,
+                    subnode.clone(),
+                    subnode.markers_cloned().align(&reordered_input).1,
+                    output_nodes,
+                    computed_trees,
+                    computed_trees_map,
+                    loaded_tables,
+                )
+                .operation()
+                .expect("No sub node should be a project");
+
+                // Add aggregate operation
+                ExecutionTreeNode::Operation(ExecutionTreeOperation::Node {
+                    generator: OperationGeneratorEnum::Aggregate(generator_aggregate),
+                    subnodes: vec![subtree],
+                })
+            }
             ExecutionOperation::Union(subnodes) => {
                 let subtrees = subnodes
                     .iter()
@@ -709,44 +736,20 @@ impl ExecutionPlan {
                     subnodes: vec![subtree],
                 })
             }
-            ExecutionOperation::Aggregate(subnode, aggregation_instructions) => {
-                let subtree = Self::execution_node(
-                    root_node_id,
-                    subnode.clone(),
-                    order,
-                    output_nodes,
-                    computed_trees,
-                    computed_trees_map,
-                    loaded_tables,
-                )
-                .operation()
-                .expect("No sub node should be a project");
-
-                ExecutionTreeNode::Operation(ExecutionTreeOperation::Node {
-                    generator: OperationGeneratorEnum::Aggregate(GeneratorAggregate::new(
-                        *aggregation_instructions,
-                    )),
-                    subnodes: vec![subtree],
-                })
-
-                // ExecutionTreeNode::Aggregate {
-                //     aggregation_instructions: aggregation_instructions.clone(),
-                //     subnode: subtree,
-                // }
-            }
             ExecutionOperation::ProjectReorder(subnode) => {
                 let marker_subnode = subnode.markers_cloned();
-                let subtree = if let ExecutionTreeOperation::Leaf(leaf) = Self::execution_node(
-                    root_node_id,
-                    subnode.clone(),
-                    ColumnOrder::default(),
-                    output_nodes,
-                    computed_trees,
-                    computed_trees_map,
-                    loaded_tables,
-                )
-                .operation()
-                .expect("No sub node should be a project")
+                let subtree: ExecutionTreeLeaf = if let ExecutionTreeOperation::Leaf(leaf) =
+                    Self::execution_node(
+                        root_node_id,
+                        subnode.clone(),
+                        ColumnOrder::default(),
+                        output_nodes,
+                        computed_trees,
+                        computed_trees_map,
+                        loaded_tables,
+                    )
+                    .operation()
+                    .expect("No sub node should be a project")
                 {
                     leaf
                 } else {

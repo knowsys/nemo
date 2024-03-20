@@ -51,7 +51,7 @@ impl OperationColumnMarker {
 
 /// This object is used to reference columns of input/output tables
 /// of a data base operation.
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, PartialEq)]
 pub struct OperationTable(Vec<OperationColumnMarker>);
 
 impl OperationTable {
