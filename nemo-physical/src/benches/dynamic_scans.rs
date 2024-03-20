@@ -95,7 +95,7 @@ mod test {
         fn new(input_types: &[StorageTypeName]) -> Self {
             let mut storage_types = [None; NUM_STORAGETYPES];
 
-            for (index, storage_type) in input_types.into_iter().enumerate() {
+            for (index, storage_type) in input_types.iter().enumerate() {
                 storage_types[index] = Some(*storage_type);
             }
 

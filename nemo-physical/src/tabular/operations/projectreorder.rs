@@ -144,9 +144,13 @@ impl GeneratorProjectReorder {
     fn reordering_vector(projectreordering: &ProjectReordering) -> Vec<usize> {
         let mut result = vec![usize::MAX; projectreordering.domain_size()];
 
-        for input in 0..projectreordering.domain_size() {
+        for (input, item) in result
+            .iter_mut()
+            .enumerate()
+            .take(projectreordering.domain_size())
+        {
             if let Some(output) = projectreordering.get_partial(input) {
-                result[input] = output;
+                *item = output;
             }
         }
 
