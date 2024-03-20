@@ -1688,13 +1688,13 @@ mod test {
 
     #[test]
     fn create_unsigned_long() {
-        let adv = AnyDataValue::new_from_typed_literal(
+        let dv = AnyDataValue::new_from_typed_literal(
             "+13000000000000000000.0".to_string(),
             XSD_PREFIX.to_owned() + "decimal",
         );
 
         assert_eq!(
-            adv,
+            dv,
             Ok(AnyDataValue(AnyDataValueEnum::UnsignedLong(
                 UnsignedLongDataValue::new(13000000000000000000)
             )))
