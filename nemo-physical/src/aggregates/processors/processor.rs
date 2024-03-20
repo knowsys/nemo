@@ -3,10 +3,8 @@
 use crate::datatypes::StorageValueT;
 
 use super::{
-    count_aggregate::{CountAggregateGroupProcessor, CountAggregateProcessor},
-    max_aggregate::{MaxAggregateGroupProcessor, MaxAggregateProcessor},
-    min_aggregate::{MinAggregateGroupProcessor, MinAggregateProcessor},
-    sum_aggregate::{SumAggregateGroupProcessor, SumAggregateProcessor},
+    count_aggregate::CountAggregateProcessor, max_aggregate::MaxAggregateProcessor,
+    min_aggregate::MinAggregateProcessor, sum_aggregate::SumAggregateProcessor,
 };
 
 use enum_dispatch::enum_dispatch;

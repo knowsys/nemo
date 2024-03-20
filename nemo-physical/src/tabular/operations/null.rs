@@ -190,37 +190,35 @@ impl<'a> PartialTrieScan<'a> for TrieScanNull<'a> {
 
         if next_layer < self.trie_scan.arity() {
             self.trie_scan.down(next_type);
-        } else {
-            if next_type == StorageTypeName::Id32 {
-                // Generation of the new null always happens when entering the Id32 type.
-                // When the resulting null-id doesn't fit in 32bit, we write it in the Id64 column
+        } else if next_type == StorageTypeName::Id32 {
+            // Generation of the new null always happens when entering the Id32 type.
+            // When the resulting null-id doesn't fit in 32bit, we write it in the Id64 column
 
-                let instruction_index = next_layer - self.trie_scan.arity();
-                let next_null = match self.instructions[instruction_index] {
-                    NullInstruction::FreshNull => {
-                        let id = self.dictionary.borrow_mut().fresh_null_id() as u64;
-                        if let Ok(id_u32) = u32::try_from(id) {
-                            StorageValueT::Id32(id_u32)
-                        } else {
-                            StorageValueT::Id64(id)
-                        }
+            let instruction_index = next_layer - self.trie_scan.arity();
+            let next_null = match self.instructions[instruction_index] {
+                NullInstruction::FreshNull => {
+                    let id = self.dictionary.borrow_mut().fresh_null_id() as u64;
+                    if let Ok(id_u32) = u32::try_from(id) {
+                        StorageValueT::Id32(id_u32)
+                    } else {
+                        StorageValueT::Id64(id)
                     }
-                    NullInstruction::RepeatNull(null_index) => self.null_cache[null_index],
-                };
+                }
+                NullInstruction::RepeatNull(null_index) => self.null_cache[null_index],
+            };
 
-                self.null_cache.push(next_null);
+            self.null_cache.push(next_null);
 
-                self.column_scans[next_layer]
-                    .get_mut()
-                    .constant_set_none(StorageTypeName::Id32);
-                self.column_scans[next_layer]
-                    .get_mut()
-                    .constant_set_none(StorageTypeName::Id64);
+            self.column_scans[next_layer]
+                .get_mut()
+                .constant_set_none(StorageTypeName::Id32);
+            self.column_scans[next_layer]
+                .get_mut()
+                .constant_set_none(StorageTypeName::Id64);
 
-                self.column_scans[next_layer]
-                    .get_mut()
-                    .constant_set(next_null);
-            }
+            self.column_scans[next_layer]
+                .get_mut()
+                .constant_set(next_null);
         }
 
         self.column_scans[next_layer].get_mut().reset(next_type);

@@ -50,7 +50,7 @@ impl GeneratorAggregate {
             for column in &output[0..output.len() - 1] {
                 debug_assert!(assignment.group_by_columns.contains(column));
             }
-            debug_assert_eq!(*output.last().unwrap(), assignment.aggregated_column);
+            debug_assert!(!assignment.group_by_columns.contains(output.last().unwrap()));
         }
 
         // Create input order that produces inteded output order
