@@ -56,7 +56,7 @@ impl VariableOrder {
     pub fn restrict_to(&self, variables: &HashSet<Variable>) -> Self {
         let mut variable_vector = Vec::<Variable>::with_capacity(variables.len());
         for variable in variables {
-            if self.0.get(variable).is_some() {
+            if self.0.contains_key(variable) {
                 variable_vector.push(variable.clone());
             }
         }

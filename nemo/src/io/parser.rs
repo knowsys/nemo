@@ -1439,26 +1439,6 @@ impl<'a> RuleParser<'a> {
     fn base(&self) -> Option<&'a str> {
         *self.base.borrow()
     }
-
-    /// Try to expand an IRI into an absolute IRI.
-    #[must_use]
-    fn absolutize_iri(&self, iri: Span) -> String {
-        if iri::is_absolute(iri) {
-            iri.to_string()
-        } else {
-            format!("{}{iri}", self.base().unwrap_or_default())
-        }
-    }
-
-    /// Try to abbreviate an IRI given declared prefixes and base.
-    #[must_use]
-    fn unresolve_absolute_iri(iri: Span) -> String {
-        if iri::is_relative(iri) {
-            iri.to_string()
-        } else {
-            todo!()
-        }
-    }
 }
 
 #[cfg(test)]

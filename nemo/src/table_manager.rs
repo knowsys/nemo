@@ -459,7 +459,7 @@ impl TableManager {
     /// Check whether a predicate has been registered.
     #[allow(dead_code)]
     fn predicate_exists(&self, predicate: &Identifier) -> bool {
-        self.predicate_subtables.get(predicate).is_some()
+        self.predicate_subtables.contains_key(predicate)
     }
 
     fn add_subtable(&mut self, subtable: SubtableIdentifier, table_id: PermanentTableId) {

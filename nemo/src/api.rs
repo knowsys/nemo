@@ -35,7 +35,7 @@ use crate::{
         resource_providers::ResourceProviders,
         ImportManager,
     },
-    model::{ExportDirective, Identifier},
+    model::Identifier,
 };
 
 /// Reasoning Engine exposed by the API
@@ -59,13 +59,7 @@ pub fn load(file: PathBuf) -> Result<Engine, Error> {
 /// # Error
 /// Returns an appropriate [`Error`] variant on parsing and feature check issues.
 pub fn load_string(input: String) -> Result<Engine, Error> {
-    let mut program = all_input_consumed(RuleParser::new().parse_program())(&input)?;
-    let mut additional_exports = Vec::new();
-    for predicate in program.idb_predicates() {
-        additional_exports.push(ExportDirective::default(predicate));
-    }
-    program.add_exports(additional_exports);
-
+    let program = all_input_consumed(RuleParser::new().parse_program())(&input)?;
     ExecutionEngine::initialize(&program, ImportManager::new(ResourceProviders::default()))
 }
 
@@ -139,6 +133,7 @@ mod test {
             .into_iter()
             .filter(|pred| pred.to_string().contains('i'))
             .collect::<Vec<_>>();
+
         assert_eq!(results.len(), 5);
         let _temp_dir = TempDir::new().unwrap();
         // Disabled:
