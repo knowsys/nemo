@@ -75,7 +75,7 @@ where
         let mut subtracted_values = true;
 
         let equal_values = &mut *self.equal_values.borrow_mut();
-        *equal_values = self.active_scans.borrow().clone();
+        equal_values.clone_from(&self.active_scans.borrow());
 
         while subtracted_values {
             subtracted_values = false;
