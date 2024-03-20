@@ -348,7 +348,11 @@ impl ExecutionPlan {
         aggregate_assignment: AggregateAssignment,
     ) -> ExecutionNodeRef {
         let new_operation = ExecutionOperation::Aggregate(subnode, aggregate_assignment);
-        self.push_and_return_reference(new_operation, marked_columns)
+        let aggregate_node = self.push_and_return_reference(new_operation, marked_columns);
+
+        self.write_temporary(aggregate_node.clone(), "Aggregate output");
+
+        aggregate_node
     }
 
     /// Return an [ExecutionNodeRef] for appending columns with fresh null.
@@ -611,13 +615,13 @@ impl ExecutionPlan {
                 let output = node_markers.clone();
 
                 // Reorder input
-                let (generator_aggregate, reordered_input) =
+                let (generator_aggregate, correctly_ordered_input) =
                     GeneratorAggregate::new_with_reorder(&output, &input, aggregate_assignment);
 
                 let subtree = Self::execution_node(
                     root_node_id,
                     subnode.clone(),
-                    subnode.markers_cloned().align(&reordered_input).1,
+                    subnode.markers_cloned().align(&correctly_ordered_input).1,
                     output_nodes,
                     computed_trees,
                     computed_trees_map,
