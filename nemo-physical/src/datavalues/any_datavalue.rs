@@ -843,7 +843,10 @@ mod test {
     use hashbrown::HashSet;
 
     use super::{AnyDataValue, XSD_PREFIX};
-    use crate::datavalues::{DataValue, DataValueCreationError, ValueDomain};
+    use crate::datavalues::{
+        any_datavalue::AnyDataValueEnum, DataValue, DataValueCreationError, UnsignedLongDataValue,
+        ValueDomain,
+    };
     use std::{
         collections::hash_map::DefaultHasher,
         hash::{Hash, Hasher},
@@ -1681,5 +1684,20 @@ mod test {
             double_res2,
             Err(DataValueCreationError::FloatNotParsed { .. })
         ));
+    }
+
+    #[test]
+    fn create_unsigned_long() {
+        let adv = AnyDataValue::new_from_typed_literal(
+            "+13000000000000000000.0".to_string(),
+            XSD_PREFIX.to_owned() + "decimal",
+        );
+
+        assert_eq!(
+            adv,
+            Ok(AnyDataValue(AnyDataValueEnum::UnsignedLong(
+                UnsignedLongDataValue::new(13000000000000000000)
+            )))
+        );
     }
 }
