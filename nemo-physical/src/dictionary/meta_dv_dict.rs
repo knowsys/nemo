@@ -118,6 +118,7 @@ impl DictIterator {
                 ValueDomain::Other => return md.other_dict,
                 ValueDomain::Null => return md.null_dict,
                 ValueDomain::Boolean => return md.other_dict, // TODO: maybe not the best place, using a whole page for two values if there is not much "other"
+                ValueDomain::UnsignedLong => return md.other_dict, // TODO: maybe not the best place either
                 _ => {}
             }
         }
@@ -536,7 +537,7 @@ impl DvDict for MetaDvDictionary {
 #[cfg(test)]
 mod test {
     use crate::{
-        datavalues::{AnyDataValue, NullDataValue},
+        datavalues::{syntax::XSD_PREFIX, AnyDataValue, NullDataValue},
         dictionary::{AddResult, DvDict},
     };
 
@@ -631,5 +632,17 @@ mod test {
         let dv = AnyDataValue::new_integer_from_i64(42);
 
         assert_eq!(dict.add_datavalue(dv), AddResult::Rejected);
+    }
+
+    #[test]
+    fn add_unsigned_long() {
+        let mut dict = MetaDvDictionary::new();
+        let dv = AnyDataValue::new_from_typed_literal(
+            "+13000000000000000000.0".to_string(),
+            XSD_PREFIX.to_owned() + "decimal",
+        )
+        .expect("Failed to create unsigned long");
+
+        assert_eq!(dict.add_datavalue(dv), AddResult::Fresh(0));
     }
 }

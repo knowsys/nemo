@@ -127,7 +127,10 @@ impl DvConverter for OtherDvConverter {
     /// Function to use with StringBasedDvDictionary
     #[inline(always)]
     fn dict_string(dv: &AnyDataValue) -> Option<String> {
-        if dv.value_domain() == ValueDomain::Other || dv.value_domain() == ValueDomain::Boolean {
+        if dv.value_domain() == ValueDomain::Other
+            || dv.value_domain() == ValueDomain::Boolean
+            || dv.value_domain() == ValueDomain::UnsignedLong
+        {
             Some(two_strings_to_one(
                 dv.lexical_value().as_str(),
                 dv.datatype_iri().as_str(),
