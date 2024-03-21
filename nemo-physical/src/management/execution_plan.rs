@@ -509,14 +509,16 @@ impl ExecutionPlan {
 
             let computed_table_id = computed_trees.len();
 
-            if let ExecutionTreeNode::ProjectReorder { generator, subnode } = &root {
-                if let ExecutionTreeLeaf::FetchComputedTable(computed) = subnode {
-                    if !&computed_trees[*computed].result.is_permanent() {
-                        computed_trees[*computed]
-                            .dependents
-                            .push((computed_table_id, generator.projectreordering()));
-                        computed_trees[*computed].used -= 1;
-                    }
+            if let ExecutionTreeNode::ProjectReorder {
+                generator,
+                subnode: ExecutionTreeLeaf::FetchComputedTable(computed),
+            } = &root
+            {
+                if !&computed_trees[*computed].result.is_permanent() {
+                    computed_trees[*computed]
+                        .dependents
+                        .push((computed_table_id, generator.projectreordering()));
+                    computed_trees[*computed].used -= 1;
                 }
             }
 

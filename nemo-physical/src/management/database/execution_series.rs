@@ -17,6 +17,7 @@ use super::id::{ExecutionId, PermanentTableId};
 pub(crate) type LoadedTableId = usize;
 pub(crate) type ComputedTableId = usize;
 
+/// Leaf node of an [ExecutionTree]
 #[derive(Debug)]
 pub(crate) enum ExecutionTreeLeaf {
     /// Table was already in the data base
@@ -25,6 +26,7 @@ pub(crate) enum ExecutionTreeLeaf {
     FetchComputedTable(ComputedTableId),
 }
 
+/// Possible operation in an [ExecutionTree]
 #[derive(Debug)]
 pub(crate) enum ExecutionTreeOperation {
     Leaf(ExecutionTreeLeaf),
@@ -69,9 +71,10 @@ pub(crate) struct ExecutionTree {
     /// Name of the of tree, e.g. for debugging purposes
     pub operation_name: String,
 
-    ///
+    /// References to other [ExecutionTree]s that have the same content
+    /// as this but whose columns are reordered according to the given [ProjectReordering]
     pub dependents: Vec<(ComputedTableId, ProjectReordering)>,
-    ///
+    /// Whether the resulting table is used anywhere
     pub used: usize,
 
     /// Starting from the bottom most layer,
@@ -139,7 +142,7 @@ impl ExecutionTree {
     }
 }
 
-/// Represents a
+/// Step-by-steps instructions realizing a series of complex operations
 #[derive(Debug)]
 pub(crate) struct ExecutionSeries {
     /// Tables that need to be present in memory before executing this series

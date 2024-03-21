@@ -57,12 +57,10 @@ impl Trie {
     pub fn num_rows(&self) -> usize {
         if let Some(last_column) = self.columns.last() {
             last_column.num_data()
+        } else if self.empty_row {
+            1
         } else {
-            if self.empty_row {
-                1
-            } else {
-                0
-            }
+            0
         }
     }
 
@@ -407,7 +405,7 @@ impl Trie {
             .iter()
             .map(|reordering| reordering.as_vector())
             .collect::<Vec<_>>();
-        let last_used_layer = reorderings.iter().cloned().flatten().max().unwrap_or(0);
+        let last_used_layer = reorderings.iter().flatten().cloned().max().unwrap_or(0);
 
         let arity = trie_scan.arity();
 
