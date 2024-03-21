@@ -30,7 +30,7 @@ pub(crate) struct DatalogStrategy {
 }
 
 impl DatalogStrategy {
-    /// Create a new [`DatalogStrategy`] object.
+    /// Create a new [DatalogStrategy] object.
     pub(crate) fn initialize(rule: &ChaseRule, _analysis: &RuleAnalysis) -> Self {
         let mut predicate_to_atoms = HashMap::<Identifier, Vec<HeadInstruction>>::new();
 

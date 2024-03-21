@@ -12,7 +12,7 @@ use crate::{
 
 use delegate::delegate;
 
-/// The [`TupleWriter`] is used to send the tuples of [`AnyDataValue`]s to the database, so that they
+/// The [TupleWriter] is used to send the tuples of [AnyDataValue]s to the database, so that they
 /// can be turned into a table. The interface allows values to be added one by one, and also provides
 /// some roll-back functionality for dropping a previously started tuple in case of errors.
 #[derive(Debug)]
@@ -24,7 +24,7 @@ pub struct TupleWriter<'a> {
 }
 
 impl<'a> TupleWriter<'a> {
-    /// Construct a new [`TupleBuffer`]. This is public to allow
+    /// Construct a new [TupleWriter]. This is public to allow
     /// downstream implementations of [TableProvider][super::table_providers::TableProvider] to
     /// test their code. In normal operation, it will be provided by the database.
     pub fn new(dictionary: &'a RefCell<Dict>, column_count: usize) -> Self {
@@ -59,7 +59,7 @@ impl<'a> TupleWriter<'a> {
             /// Returns the number of columns on the table, i.e., the
             /// number of values that need to be written to make one tuple.
             pub fn column_number(&self) -> usize;
-            /// Returns the number of rows in the [`TupleWriter`].
+            /// Returns the number of rows in the [TupleWriter].
             pub fn size(&self) -> usize;
             /// Forget about any previously added values that have not formed a complete tuple yet,
             /// and start a new tuple from the beginning.

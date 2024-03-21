@@ -1,4 +1,4 @@
-//! This module defines [ColumnScanEqual].
+//! This module defines [ColumnScanFilterEqual].
 
 use crate::{
     columnar::columnscan::{ColumnScan, ColumnScanCell},

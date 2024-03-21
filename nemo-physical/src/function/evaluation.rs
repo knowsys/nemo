@@ -42,7 +42,7 @@ pub(crate) enum StackOperation {
     BinaryFunction(BinaryFunctionEnum),
 }
 
-/// Representation of a [FunctionTree][super::tree::FunctionTree] as a stack program
+/// Representation of a [FunctionTree] as a stack program
 #[derive(Debug, Clone)]
 pub(crate) struct StackProgram {
     /// Maximmum size of the stack
@@ -52,7 +52,7 @@ pub(crate) struct StackProgram {
 }
 
 impl StackProgram {
-    /// Constructs a new [`StackProgram`] from a list of [`StackOperation`].
+    /// Constructs a new [StackProgram] from a list of [StackOperation].
     /// Checks, that all stack operations have sufficient arguments, and the stack height
     /// at the end of the computation is exactly 1.
     /// Returns an error if these conditions are not met.

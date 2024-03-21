@@ -1,5 +1,5 @@
 //! This module implements [Trie]
-//! as well as its iterator [TrieScanGeneric].
+//! as well as its iterator.
 
 use std::cell::UnsafeCell;
 
@@ -533,7 +533,7 @@ pub(crate) struct TrieScanGeneric<'a> {
     /// Path of [StorageTypeName] indicating the the types of the current (partial) row
     path_types: Vec<StorageTypeName>,
 
-    /// [ColumnScan] for each layer in the [PartialTrieScan]
+    /// [ColumnScanT] for each layer in the [PartialTrieScan]
     column_scans: Vec<UnsafeCell<ColumnScanT<'a>>>,
 }
 

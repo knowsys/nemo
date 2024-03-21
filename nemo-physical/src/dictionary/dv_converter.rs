@@ -1,3 +1,7 @@
+//! This module defines the trait [DvConverter]
+//! for converting datavalues to string,
+//! and also provides serveral implementations.
+
 use crate::datavalues::{AnyDataValue, DataValue, ValueDomain};
 use std::fmt::Debug;
 
@@ -13,7 +17,7 @@ pub(crate) trait DvConverter: Debug {
     fn supported_value_domain() -> ValueDomain;
 }
 
-/// Implementation of [`DvConverter`] to handle [`AnyDataValue::String`] values.
+/// Implementation of [DvConverter] to handle [ValueDomain::PlainString] values.
 #[derive(Debug)]
 pub(crate) struct StringDvConverter;
 impl DvConverter for StringDvConverter {
@@ -32,7 +36,7 @@ impl DvConverter for StringDvConverter {
     }
 }
 
-/// Implementation of [`DvConverter`] to handle [`AnyDataValue::Iri`] values.
+/// Implementation of [DvConverter] to handle [ValueDomain::Iri] values.
 #[derive(Debug)]
 pub(crate) struct IriDvConverter;
 impl DvConverter for IriDvConverter {
@@ -116,7 +120,7 @@ fn one_string_to_two(string: &str) -> Option<(String, String)> {
     Some((string1, string2))
 }
 
-/// Implementation of [`DvConverter`] to handle [`AnyDataValue::Other`] values.
+/// Implementation of [DvConverter] to handle [ValueDomain::Other] values.
 ///
 /// FIXME: This currently also handles booleans, but our API is not designed for having several
 /// value domains in one dictionary, so the supported_value_domain() is just Other. Should not
@@ -157,7 +161,7 @@ impl DvConverter for OtherDvConverter {
     }
 }
 
-/// Implementation of [`DvConverter`] to handle [`AnyDataValue::LangStringDataValue`] values.
+/// Implementation of [DvConverter] to handle [ValueDomain::LanguageTaggedString] values.
 #[derive(Debug)]
 pub(crate) struct LangStringDvConverter;
 impl DvConverter for LangStringDvConverter {

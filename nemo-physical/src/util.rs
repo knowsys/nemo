@@ -26,7 +26,7 @@ pub(crate) mod bitset;
 /// }
 ///
 /// /// The following will map the return value of the forwarded
-/// /// `returns()` call to the appropriate variant of [`StorageValueT`]:
+/// /// `returns()` call to the appropriate variant of [StorageValueT]:
 /// fn returns(&mut self) -> StorageValueT {
 ///     forward_to_scan!(self, returns.map_to(StorageValueT))
 /// }
@@ -80,8 +80,8 @@ macro_rules! generate_forwarder {
     }
 }
 
-/// A specialised version of [`generate_forwarder`] for the possible
-/// variants of [`crate::datatypes::storage_value::StorageValueT`].
+/// A specialised version of [generate_forwarder] for
+/// all possible storage types.
 #[macro_export]
 macro_rules! generate_datatype_forwarder {
     ($name:ident) => {

@@ -35,7 +35,7 @@ pub struct Aggregate {
 }
 
 impl Aggregate {
-    /// Replaces [`super::Variable`]s with [`Term`]s according to the provided assignment.
+    /// Replaces [super::Variable]s with [Term]s according to the provided assignment.
     pub fn apply_assignment(&mut self, assignment: &VariableAssignment) {
         for term in &mut self.terms {
             if let PrimitiveTerm::Variable(variable) = term {

@@ -40,7 +40,7 @@ pub(crate) struct SeminaiveStrategy {
 }
 
 impl SeminaiveStrategy {
-    /// Create new [`SeminaiveStrategy`] object.
+    /// Create new [SeminaiveStrategy] object.
     pub(crate) fn initialize(rule: &ChaseRule, analysis: &RuleAnalysis) -> Self {
         let mut used_variables_before_arithmetic_operations = HashSet::<Variable>::new();
 

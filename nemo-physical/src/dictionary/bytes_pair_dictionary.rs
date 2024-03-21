@@ -1,3 +1,5 @@
+//! This module defines [BytesPairDictionary].
+
 use super::{
     bytes_buffer::{BytesRef, GlobalBytesBuffer},
     AddResult,

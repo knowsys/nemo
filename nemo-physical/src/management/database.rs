@@ -220,7 +220,7 @@ impl DatabaseInstance {
         id
     }
 
-    /// Add a table represented by a list of [TableSources].
+    /// Add a table represented by a list of [TableSource]s.
     pub fn add_sources(
         &mut self,
         id: PermanentTableId,

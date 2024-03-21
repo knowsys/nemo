@@ -38,7 +38,7 @@ pub(crate) struct RuleExecution {
 }
 
 impl RuleExecution {
-    /// Create new [`RuleExecution`].
+    /// Create new [RuleExecution].
     pub(crate) fn initialize(rule: &ChaseRule, analysis: &RuleAnalysis) -> Self {
         let mut variable_translation = VariableTranslation::new();
         for variable in rule.all_variables() {

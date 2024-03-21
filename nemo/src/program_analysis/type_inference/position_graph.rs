@@ -23,7 +23,7 @@ pub(super) struct PredicatePosition {
 }
 
 impl PredicatePosition {
-    /// Create new [`PredicatePosition`].
+    /// Create new [PredicatePosition].
     pub fn new(predicate: Identifier, position: usize) -> Self {
         Self {
             predicate,
@@ -36,10 +36,10 @@ impl PredicatePosition {
 pub(super) enum PositionGraphEdge {
     WithinBody,
     BodyToHeadSameVariable,
-    /// Describes data flow from an aggregate input variable to and aggregate output variable, where the output variable has a static type (see [`AggregateOperation::static_output_type`]).
+    /// Describes data flow from an aggregate input variable to and aggregate output variable, where the output variable has a static type (see [AggregateOperation::static_output_type]).
     /// This has no impact on type propagation from input to output, but is there for completeness sake, as it still describes some data flow.
     BodyToHeadAggregateStaticOutputType,
-    /// Describes data flow from an aggregate input variable to and aggregate output variable, where the aggregate output variable has the same type as the input variable (see [`AggregateOperation::static_output_type`]).
+    /// Describes data flow from an aggregate input variable to and aggregate output variable, where the aggregate output variable has the same type as the input variable (see [AggregateOperation::static_output_type]).
     BodyToHeadAggregateNonStaticOutputType,
 }
 

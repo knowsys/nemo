@@ -9,11 +9,11 @@ use petgraph::{EdgeType, Graph};
 
 /// Graph with labeled nodes.
 ///
-/// Internally, it uses the [`Graph`] implementation from petgraph.
-/// Additionally, it maintains a [`HashMap`] which associates
-/// each label with a [`NodeIndex`].
+/// Internally, it uses the [Graph] implementation from petgraph.
+/// Additionally, it maintains a [HashMap] which associates
+/// each label with a [NodeIndex].
 ///
-/// A [`NodeIndex`] is invalidated once a node is removed from the graph,
+/// A [NodeIndex] is invalidated once a node is removed from the graph,
 /// hence the interface only permits adding new nodes.
 #[derive(Debug)]
 pub struct LabeledGraph<NodeLabel, EdgeLabel, Type>
@@ -33,7 +33,7 @@ where
     Type: EdgeType,
 {
     /// Add a single node to the graph under a new label.
-    /// Returns the [`NodeIndex`] of the new node.
+    /// Returns the [NodeIndex] of the new node.
     pub fn add_node(&mut self, node: NodeLabel) -> NodeIndex {
         match self.label_map.entry(node) {
             Entry::Occupied(entry) => *entry.get(),
@@ -46,7 +46,7 @@ where
         }
     }
 
-    /// Return a [`NodeIndex`] for a given node label or `None`
+    /// Return a [NodeIndex] for a given node label or `None`
     /// if there is no node in the graph associated with that label.
     #[allow(dead_code)]
     pub fn get_node(&self, node: &NodeLabel) -> Option<NodeIndex> {
@@ -61,7 +61,7 @@ where
         self.graph.add_edge(node_from, node_to, edge_label);
     }
 
-    /// Return a reference to the underlying [`Graph`].
+    /// Return a reference to the underlying [Graph].
     #[allow(dead_code)]
     pub fn graph(&self) -> &Graph<NodeLabel, EdgeLabel, Type> {
         &self.graph

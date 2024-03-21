@@ -106,7 +106,7 @@ impl<SubStrategy: RuleSelectionStrategy> StrategyStratifiedNegation<SubStrategy>
 impl<SubStrategy: RuleSelectionStrategy> RuleSelectionStrategy
     for StrategyStratifiedNegation<SubStrategy>
 {
-    /// Create new [`StrategyStratifiedNegation`].
+    /// Create new [StrategyStratifiedNegation].
     fn new(
         rules: Vec<&ChaseRule>,
         rule_analyses: Vec<&RuleAnalysis>,

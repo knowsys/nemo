@@ -269,7 +269,7 @@ pub(crate) struct TrieScanFilter<'a> {
     /// Path of [StorageTypeName] indicating the the types of the current (partial) row
     path_types: Vec<StorageTypeName>,
 
-    /// For each layer in the resulting trie contains a [`ColumnScanRainbow`]
+    /// For each layer in the resulting trie contains a [ColumnScanT]
     /// evaluating the union of the underlying columns of the input trie.
     column_scans: Vec<UnsafeCell<ColumnScanT<'a>>>,
 }

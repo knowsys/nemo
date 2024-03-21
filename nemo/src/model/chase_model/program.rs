@@ -1,4 +1,4 @@
-//! Defines a variant of [`crate::model::Program`], suitable for computing the chase.
+//! Defines a variant of [crate::model::Program], suitable for computing the chase.
 
 use std::collections::{HashMap, HashSet};
 

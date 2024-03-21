@@ -1,3 +1,5 @@
+//! This module defines [DictionaryString].
+
 use std::cell::UnsafeCell;
 
 pub(crate) const LONG_STRING_THRESHOLD: usize = 1000;

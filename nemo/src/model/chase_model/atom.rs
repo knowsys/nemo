@@ -4,12 +4,12 @@ use nemo_physical::datavalues::AnyDataValue;
 
 use crate::model::{Atom, Identifier, PrimitiveTerm, Term, Variable};
 
-/// An atom used within a [`super::ChaseRule`]
+/// An atom used within a chase rule
 pub trait ChaseAtom {
     /// Type of the terms within the atom.
     type TypeTerm;
 
-    /// Return the predicate [`Identifier`].
+    /// Return the predicate [Identifier].
     fn predicate(&self) -> Identifier;
 
     /// Return the terms in the atom - immutable.
@@ -41,7 +41,7 @@ impl<T: Display> Display for dyn ChaseAtom<TypeTerm = T> {
     }
 }
 
-/// An atom which may only use [`PrimitiveTerm`]s
+/// An atom which may only use [PrimitiveTerm]s
 #[derive(Debug, Clone)]
 pub struct PrimitiveAtom {
     predicate: Identifier,
@@ -49,12 +49,12 @@ pub struct PrimitiveAtom {
 }
 
 impl PrimitiveAtom {
-    /// Construct a new [`PrimitiveAtom`].
+    /// Construct a new [PrimitiveAtom].
     pub fn new(predicate: Identifier, terms: Vec<PrimitiveTerm>) -> Self {
         Self { predicate, terms }
     }
 
-    /// Construct a [`PrimitiveAtom`] from an [`Atom`].
+    /// Construct a [PrimitiveAtom] from an [Atom].
     ///
     /// # Panics
     /// Panics if the provided atom contains complex terms.
@@ -87,7 +87,7 @@ impl PrimitiveAtom {
 impl ChaseAtom for PrimitiveAtom {
     type TypeTerm = PrimitiveTerm;
 
-    /// Return the predicate [`Identifier`].
+    /// Return the predicate [Identifier].
     fn predicate(&self) -> Identifier {
         self.predicate.clone()
     }
@@ -117,7 +117,7 @@ impl ChaseAtom for PrimitiveAtom {
     }
 }
 
-/// An atom which may only use [`Variable`]s.
+/// An atom which may only use [Variable]s.
 #[derive(Debug, Clone)]
 pub struct VariableAtom {
     predicate: Identifier,
@@ -133,7 +133,7 @@ impl VariableAtom {
         }
     }
 
-    /// Construct a [`VariableAtom`] from an [`Atom`].
+    /// Construct a [VariableAtom] from an [Atom].
     ///
     /// # Panics
     /// Panics if the provided atom contains terms that are not variables.
@@ -171,7 +171,7 @@ impl From<VariableAtom> for PrimitiveAtom {
 impl ChaseAtom for VariableAtom {
     type TypeTerm = Variable;
 
-    /// Return the predicate [`Identifier`].
+    /// Return the predicate [Identifier].
     fn predicate(&self) -> Identifier {
         self.predicate.clone()
     }
@@ -192,7 +192,7 @@ impl ChaseAtom for VariableAtom {
     }
 }
 
-/// An atom which may only contain [`Constant`]s.
+/// An atom which may only contain constants.
 #[derive(Debug, Clone)]
 pub struct ChaseFact {
     predicate: Identifier,
@@ -200,7 +200,7 @@ pub struct ChaseFact {
 }
 
 impl ChaseFact {
-    /// Create a new [`ChaseFact`].
+    /// Create a new [ChaseFact].
     pub fn new(predicate: Identifier, constants: Vec<AnyDataValue>) -> Self {
         Self {
             predicate,
@@ -208,7 +208,7 @@ impl ChaseFact {
         }
     }
 
-    /// Construct a [`ChaseFact`] from an [`Atom`].
+    /// Construct a [ChaseFact] from an [Atom].
     ///
     /// # Panics
     /// Panics if the provided atom contains complex terms.

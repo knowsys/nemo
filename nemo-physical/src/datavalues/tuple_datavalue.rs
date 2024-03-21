@@ -1,4 +1,4 @@
-//! This module provides implementations [`super::DataValue`]s that represent tuples of
+//! This module provides implementations [DataValue]s that represent tuples of
 //! data values. The tupes have a fixed length, which can also be zero.
 
 use std::sync::Arc;
@@ -8,7 +8,7 @@ use super::{
     AnyDataValue, DataValue, IriDataValue, ValueDomain,
 };
 
-/// Physical representation of a fixed-length tuple of [`DataValue`]s.
+/// Physical representation of a fixed-length tuple of [DataValue]s.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct TupleDataValue {
     label: Option<IriDataValue>,

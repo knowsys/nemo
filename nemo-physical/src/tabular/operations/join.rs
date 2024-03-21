@@ -191,7 +191,7 @@ impl OperationGenerator for GeneratorJoin {
     }
 }
 
-/// [`PartialTrieScan`] which represents the result from joining a list of [`PartialTrieScan`]s
+/// [PartialTrieScan] which represents the result from joining a list of [PartialTrieScan]s
 #[derive(Debug)]
 pub(crate) struct TrieScanJoin<'a> {
     /// Input trie scans over of which the join is computed
@@ -209,18 +209,18 @@ pub(crate) struct TrieScanJoin<'a> {
     /// For each output layer contains the possible [StorageTypeName]
     possible_types: Vec<StorageTypeBitSet>,
 
-    /// For each layer in the resulting trie, contains a [`ColumnScanRainbow`],
+    /// For each layer in the resulting trie, contains a [ColumnScanT],
     /// which computed the intersection of the relevant columns of the input tries.
     ///
-    /// Note: We're keeping an [`UnsafeCell`] here since the
-    /// [`ColumnScanRainbow`] are actually borrowed from within
+    /// Note: We're keeping an [UnsafeCell] here since the
+    /// [ColumnScanT] are actually borrowed from within
     /// `trie_scans`. We're not actually modifying through these
     /// references (since there's another layer of Cells hidden in
-    /// [`ColumnScanRainbow`], we're just using this satisfy the
+    /// [ColumnScanT], we're just using this satisfy the
     /// borrow checker).  
     ///
     /// TODO: find a nicer solution for this that
-    /// doesn't expose [`UnsafeCell`] as part of the API.
+    /// doesn't expose [UnsafeCell] as part of the API.
     column_scans: Vec<UnsafeCell<ColumnScanT<'a>>>,
 }
 

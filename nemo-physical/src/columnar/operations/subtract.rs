@@ -5,7 +5,7 @@ use std::{fmt::Debug, ops::Range};
 use crate::columnar::columnscan::{ColumnScan, ColumnScanCell};
 use crate::datatypes::ColumnDataType;
 
-/// [`ColumnScan`] that consists of two types of subscans:
+/// [ColumnScan] that consists of two types of subscans:
 ///  * a main column scan
 ///  * a list of follow column scans
 /// If the main scan moves to some value then the followers will point to value equal or greater than that of main.
@@ -42,7 +42,7 @@ impl<'a, T> ColumnScanSubtract<'a, T>
 where
     T: 'a + ColumnDataType,
 {
-    /// Constructs a new [`ColumnScanSubtract`].
+    /// Constructs a new [ColumnScanSubtract].
     pub(crate) fn new(
         scan_main: &'a ColumnScanCell<'a, T>,
         scans_follower: Vec<Option<&'a ColumnScanCell<'a, T>>>,

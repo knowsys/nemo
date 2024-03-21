@@ -160,7 +160,7 @@ pub(crate) struct TrieScanNull<'a> {
     /// Current layer of this [PartialTrieScan]
     current_layer: Option<usize>,
 
-    /// For each layer in the resulting trie contains a [ColumnScanRainbow]
+    /// For each layer in the resulting trie contains a [ColumnScanT]
     /// which either just pass the values from the input `trie_scan`
     /// or contain fresh nulls.
     column_scans: Vec<UnsafeCell<ColumnScanT<'a>>>,

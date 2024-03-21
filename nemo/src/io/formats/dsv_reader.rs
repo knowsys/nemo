@@ -30,7 +30,7 @@ pub(super) struct DsvReader {
 }
 
 impl DsvReader {
-    /// Instantiate a [`DsvReader`] for a given delimiter
+    /// Instantiate a [DsvReader] for a given delimiter
     pub(super) fn new(
         read: Box<dyn BufRead>,
         delimiter: u8,
@@ -57,7 +57,7 @@ impl DsvReader {
             .from_reader(self.read)
     }
 
-    /// Actually reads the data from the file, using the given parsers to convert strings to [`AnyDataValue`]s.
+    /// Actually reads the data from the file, using the given parsers to convert strings to [AnyDataValue]s.
     /// If a field cannot be read or parsed, the line will be ignored
     fn read(self, tuple_writer: &mut TupleWriter) -> Result<(), Box<dyn std::error::Error>> {
         log::info!("Starting data import");

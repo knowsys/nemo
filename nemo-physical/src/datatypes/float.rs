@@ -12,15 +12,15 @@ use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Rem, Sub, SubAssi
 #[cfg(test)]
 use quickcheck::{Arbitrary, Gen};
 
-/// Wrapper for [`f32`] that does not allow [`f32::NAN`] values.
+/// Wrapper for [f32`] that does not allow [`f32::NAN] values.
 #[derive(Copy, Clone, Debug, PartialEq, Default)]
 pub struct Float(f32);
 
 impl Float {
-    /// Wraps the given [`f32`]-`value` as a value over [`Float`].
+    /// Wraps the given [f32]-`value` as a value over [Float].
     ///
     /// # Errors
-    /// The given `value` is [`f32::NAN`].
+    /// The given `value` is [f32::NAN].
     pub fn new(value: f32) -> Result<Self, Error> {
         if value.is_nan() {
             return Err(Error::ReadingError(FloatIsNaN.into()));
@@ -29,10 +29,10 @@ impl Float {
         Ok(Float(value))
     }
 
-    /// Wraps the given [`f32`]-`value`, that is a number, as a value over [`Float`].
+    /// Wraps the given [f32]-`value`, that is a number, as a value over [Float].
     ///
     /// # Panics
-    /// The given `value` is [`f32::NAN`].
+    /// The given `value` is [f32::NAN].
     pub fn from_number(value: f32) -> Self {
         if value.is_nan() {
             panic!("The provided value is not a number (NaN)!")

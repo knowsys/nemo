@@ -1,3 +1,5 @@
+//! This module defines [BytesDictionary].
+
 use hashbrown::HashMap;
 
 use super::bytes_buffer::{BytesRef, GlobalBytesBuffer};
@@ -62,7 +64,7 @@ impl<B: GlobalBytesBuffer> BytesDictionary<B> {
     }
 
     /// Looks for a given `&[u8]` slice and returns `Some(id)` if it is in the dictionary,
-    /// and `None` otherwise. The special value [`super::KNOWN_ID_MARK`] will be returned
+    /// and `None` otherwise. The special value [super::KNOWN_ID_MARK] will be returned
     /// if the array was marked but not actually inserted.
     pub(crate) fn bytes_to_id(&self, bytes: &[u8]) -> Option<usize> {
         if let Some(id) = self.map_short.get(bytes).copied() {

@@ -1,3 +1,5 @@
+//! This module defines a string based dictionary.
+
 use super::{
     bytes_buffer::{BytesBuffer, GlobalBytesBuffer},
     bytes_dictionary::BytesDictionary,
@@ -23,7 +25,7 @@ impl<B: GlobalBytesBuffer> GenericStringDictionary<B> {
     }
 
     /// Looks for a given [&str] slice and returns `Some(id)` if it is in the dictionary,
-    /// and `None` otherwise. The special value [`super::KNOWN_ID_MARK`] will be returned
+    /// and `None` otherwise. The special value [super::KNOWN_ID_MARK] will be returned
     /// if the string was marked but not actually inserted.
     pub(crate) fn str_to_id(&self, string: &str) -> Option<usize> {
         self.bytes_dict.bytes_to_id(string.as_bytes())

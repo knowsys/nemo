@@ -12,15 +12,15 @@ use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Rem, Sub, SubAssi
 #[cfg(test)]
 use quickcheck::{Arbitrary, Gen};
 
-/// Wrapper for [`f64`] that does not allow [`f64::NAN`] values.
+/// Wrapper for [f64`] that does not allow [`f64::NAN] values.
 #[derive(Copy, Clone, Debug, PartialEq, Default)]
 pub struct Double(f64);
 
 impl Double {
-    /// Wraps the given [`f64`]-`value` as a value over [`Double`].
+    /// Wraps the given [f64]-`value` as a value over [Double].
     ///
     /// # Errors
-    /// The given `value` is [`f64::NAN`].
+    /// The given `value` is [f64::NAN].
     pub fn new(value: f64) -> Result<Self, ReadingError> {
         if value.is_nan() {
             return Err(FloatIsNaN.into());
@@ -29,10 +29,10 @@ impl Double {
         Ok(Self(value))
     }
 
-    /// Wraps the given [`f64`]-`value`, that is a number, as a value over [`Double`].
+    /// Wraps the given [f64]-`value`, that is a number, as a value over [Double].
     ///
     /// # Panics
-    /// The given `value` is [`f64::NAN`].
+    /// The given `value` is [f64::NAN].
     pub fn from_number(value: f64) -> Self {
         if value.is_nan() {
             panic!("The provided value is not a number (NaN)!")

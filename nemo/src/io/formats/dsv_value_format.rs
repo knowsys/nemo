@@ -82,7 +82,7 @@ impl DsvValueFormat {
         }
     }
 
-    /// Simple wrapper function that makes CSV strings into [`AnyDataValue`]. We wrap this
+    /// Simple wrapper function that makes CSV strings into [AnyDataValue]. We wrap this
     /// to match the error-producing signature of other parsing functions.
     pub(super) fn parse_string_from_string(
         input: String,

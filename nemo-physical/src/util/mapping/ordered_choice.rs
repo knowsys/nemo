@@ -11,7 +11,7 @@ use super::{permutation::Permutation, traits::NatMapping};
 /// In a mathematical sense, may be viewed as a partial function \[n\] -> \[n\] that is injective.
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub(crate) struct SortedChoice {
-    /// Function is represented by a [`HashMap`] mapping the input `i` to `map.get(i)`.
+    /// Function is represented by a [HashMap] mapping the input `i` to `map.get(i)`.
     /// Every input not present in this map is considered not part of this function's domain.
     map: HashMap<usize, usize>,
     /// Size of the domain. All inputs must be smaller than this.
@@ -27,7 +27,7 @@ impl SortedChoice {
         result
     }
 
-    /// Derive a [`SortedChoice`] that would transform a vector of elements into another.
+    /// Derive a [SortedChoice] that would transform a vector of elements into another.
     /// I.e. `this.permute(source) = target`
     /// For example `from_transformation([x, y, z, w], [z, w, x]) = {0->2, 2->0, 3->1}`.
     ///

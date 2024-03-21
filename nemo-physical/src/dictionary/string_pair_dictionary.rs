@@ -25,7 +25,7 @@ impl<B: GlobalBytesBuffer> GenericStringPairDictionary<B> {
 
     /// Looks for a given [&str] slice pairs and returns `Some(id)` if it is in
     /// the dictionary, and `None` otherwise. The special value
-    /// [`super::KNOWN_ID_MARK`] will be returned if the string pair was marked
+    /// [super::KNOWN_ID_MARK] will be returned if the string pair was marked
     /// but not actually inserted.
     pub(crate) fn str_pair_to_id(&self, first: &str, second: &str) -> Option<usize> {
         self.bytes_pair_dict

@@ -1,7 +1,7 @@
 //! The input and output formats supported by Nemo.
 
-pub mod import_export;
-pub mod types;
+pub(crate) mod import_export;
+pub(crate) mod types;
 
 pub mod dsv;
 pub mod dsv_reader;

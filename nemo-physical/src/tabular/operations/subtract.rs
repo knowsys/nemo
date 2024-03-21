@@ -20,7 +20,7 @@ use super::{OperationGenerator, OperationTable};
 /// Used to create a [TrieScanSubtract]
 #[derive(Debug, Clone)]
 pub(crate) struct GeneratorSubtract {
-    /// For each [`PartialTrieScan`] in `trie_subtract`,
+    /// For each [PartialTrieScan] in `trie_subtract`,
     /// specifies which of its layers correspond to which layers from the "main" trie
     layer_maps: Vec<SubtractedLayerMap>,
 }
@@ -158,17 +158,17 @@ impl OperationGenerator for GeneratorSubtract {
     }
 }
 
-/// [`PartialTrieScan`] that subtracts from a "main" [`PartialTrieScan`] a list of [`PartialTrieScan`]s referred to as "subtract".
+/// [PartialTrieScan] that subtracts from a "main" [PartialTrieScan] a list of [PartialTrieScan]s referred to as "subtract".
 /// The results contains all elements that are in main but not in one of the subtract scans.
 /// This can also handle subtracting tables of different arities.
 #[derive(Debug)]
 pub(crate) struct TrieScanSubtract<'a> {
-    /// [`PartialTrieScan`] from which elements are being subtracted
+    /// [PartialTrieScan] from which elements are being subtracted
     trie_main: Box<TrieScanEnum<'a>>,
     /// Elements that are subtracted
     tries_subtract: Vec<TrieScanEnum<'a>>,
 
-    /// For each [`PartialTrieScan`] in `trie_subtract`,
+    /// For each [PartialTrieScan] in `trie_subtract`,
     /// specifies which of its layers correspond to which layers from the "main" trie
     layer_maps: Vec<SubtractedLayerMap>,
     /// For each layer, contains a list of booleans

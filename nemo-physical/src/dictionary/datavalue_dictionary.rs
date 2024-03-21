@@ -42,9 +42,9 @@ impl AddResult {
     }
 }
 
-/// A [`DvDict`] represents a dictionary for datavalues, i.e., a bijective (invertible) mapping from
+/// A [DvDict] represents a dictionary for datavalues, i.e., a bijective (invertible) mapping from
 /// [crate::datavalues::DataValue]s to numeric ids (`usize`). In addition, to this bijection, dictionaries maintain
-/// a set of *marked* datavalues. For these, the dictionary will always return the virtual id [`KNOWN_ID_MARK`],
+/// a set of *marked* datavalues. For these, the dictionary will always return the virtual id [KNOWN_ID_MARK],
 /// which cannot be used to retrieve datavalues.
 ///
 /// The id values are provided when the dictionary is used, whereas the ids are newly
@@ -60,7 +60,7 @@ pub trait DvDict: Debug {
     ///
     /// When adding values that have previously been marked (see [DvDict::mark_dv]),
     /// the dictionary will *not* assign a fresh id, but simply return [AddResult::Known]
-    /// with [`KNOWN_ID_MARK`].
+    /// with [KNOWN_ID_MARK].
     fn add_datavalue(&mut self, dv: AnyDataValue) -> AddResult;
 
     /// Creates a fresh null [AnyDataValue] and assigns an id to it. Both the new null and
@@ -70,12 +70,12 @@ pub trait DvDict: Debug {
     /// Creates a fresh null [AnyDataValue] and returns its id.
     fn fresh_null_id(&mut self) -> usize;
 
-    /// Looks up the given [`AnyDataValue`] and returns `Some(id)` if it is in the dictionary, and `None` otherwise.
-    /// For marked datavalues, this returns [`KNOWN_ID_MARK`] as an id.
+    /// Looks up the given [AnyDataValue] and returns `Some(id)` if it is in the dictionary, and `None` otherwise.
+    /// For marked datavalues, this returns [KNOWN_ID_MARK] as an id.
     fn datavalue_to_id(&self, dv: &AnyDataValue) -> Option<usize>;
 
     /// Returns the [AnyDataValue] associated with the `id`, or None if the `id` is not associated with any datavalue.
-    /// In particular, this occurs if the datavalue was marked (and has virtual id [`KNOWN_ID_MARK`]).
+    /// In particular, this occurs if the datavalue was marked (and has virtual id [KNOWN_ID_MARK]).
     fn id_to_datavalue(&self, id: usize) -> Option<AnyDataValue>;
 
     /// Returns the number of values in the dictionary. Databalues that were merely marked are not counted,
@@ -105,7 +105,7 @@ pub trait DvDict: Debug {
 
     /// Marks the given datavalue as being known, without assigning an own id to it.
     /// If the entry exists already, the existing id will be kept and returned. Otherwise,
-    /// the virtual id [`KNOWN_ID_MARK`] is assigned.
+    /// the virtual id [KNOWN_ID_MARK] is assigned.
     ///
     /// Implementations may return [AddResult::Rejected] to indicate that the dictionary
     /// does not support marking of the given value.

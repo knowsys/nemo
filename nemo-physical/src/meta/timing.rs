@@ -17,7 +17,7 @@ use std::{
 #[cfg(all(feature = "js", feature = "timing"))]
 compile_error!("feature \"js\" and feature \"timing\" cannot be enabled at the same time, because the \"howlong\" crate does not support web assembly environments");
 
-/// Global instance of the [`TimedCode`]
+/// Global instance of the [TimedCode]
 static TIMECODE_INSTANCE: Lazy<Mutex<TimedCode>> = Lazy::new(|| {
     let instance = TimedCode::new();
     Mutex::new(instance)
@@ -49,7 +49,7 @@ pub struct TimedCodeInfo {
 }
 
 impl TimedCodeInfo {
-    /// Create new [`TimedCodeInfo`] object
+    /// Create new [TimedCodeInfo] object
     pub fn new() -> Self {
         Self::default()
     }
@@ -74,7 +74,7 @@ impl fmt::Debug for TimedCodeInfo {
     }
 }
 
-/// How to sort the elements of a [`TimedCode`] object
+/// How to sort the elements of a [TimedCode] object
 #[derive(Debug, Copy, Clone)]
 pub enum TimedSorting {
     /// The order the code got called in
@@ -91,7 +91,7 @@ impl Default for TimedSorting {
     }
 }
 
-/// How to display a layer of a [`TimedCode`] object
+/// How to display a layer of a [TimedCode] object
 #[derive(Debug, Default, Copy, Clone)]
 pub struct TimedDisplay {
     sorting: TimedSorting,
@@ -99,7 +99,7 @@ pub struct TimedDisplay {
 }
 
 impl TimedDisplay {
-    /// Create new [`TimedDisplay`]
+    /// Create new [TimedDisplay]
     pub fn new(sorting: TimedSorting, num_elements: usize) -> Self {
         Self {
             sorting,
@@ -116,7 +116,7 @@ pub struct TimedCode {
 }
 
 impl TimedCode {
-    /// Create new [`TimedCode`] object
+    /// Create new [TimedCode] object
     pub fn new() -> Self {
         Self {
             info: TimedCodeInfo::new(),

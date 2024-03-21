@@ -1,4 +1,4 @@
-//! A [`DvDict`] implementation based on converting data values to strings.
+//! A [DvDict] implementation based on converting data values to strings.
 //! The dictionary implementations in this module are typically restricted to certain
 //! types of datavalues (e.g., strings or IRIs), which allows them to use more direct
 //! string representations without any risk of confusion.
@@ -11,13 +11,13 @@ use crate::dictionary::pair_dv_converter::{
 use std::{fmt::Debug, marker::PhantomData};
 
 #[cfg(feature = "stringpairdictionary")]
-/// Implementation of [`DvDict`] that will only handle [`AnyDataValue::Other`] values.
+/// Implementation of [DvDict] that will only handle [ValueDomain::Other] values.
 pub(crate) type OtherDvDictionary = StringPairBasedDvDictionary<OtherDvConverter>;
 #[cfg(feature = "stringpairdictionary")]
-/// Implementation of [`DvDict`] that will only handle [`AnyDataValue::LanguageTaggedString`] values.
+/// Implementation of [DvDict] that will only handle [ValueDomain::LanguageTaggedString] values.
 pub(crate) type LangStringDvDictionary = StringPairBasedDvDictionary<LangStringDvConverter>;
 
-/// A generic [`DvDict`] dictionary based on converting datavalues to strings. The
+/// A generic [DvDict] dictionary based on converting datavalues to strings. The
 /// type parameter defines how the conversion is to be done, making sure that we have
 /// compile-time knowledge about this.
 #[derive(Debug)]

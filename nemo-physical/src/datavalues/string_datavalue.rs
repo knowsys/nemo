@@ -1,4 +1,4 @@
-//! This module provides implementations [`super::DataValue`]s that represent Unicode strings.
+//! This module provides implementations [DataValue]s that represent Unicode strings.
 
 use super::{DataValue, ValueDomain};
 

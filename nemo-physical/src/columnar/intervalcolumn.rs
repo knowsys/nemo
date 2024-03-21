@@ -149,7 +149,7 @@ where
         }
     }
 
-    /// Create a [ColumnScanRainbow] from iterators of the internal columns.
+    /// Create a [ColumnScanT] from iterators of the internal columns.
     pub(crate) fn iter(&self) -> ColumnScanT {
         ColumnScanT {
             scan_id32: ColumnScanCell::new(self.column_id32.iter()),
@@ -271,7 +271,7 @@ where
 /// Object for building an [IntervalColumnT]
 /// based on receiving the table in matrix form
 ///
-/// This is used for creating an [IntervalColumnT] from a [TupleBuffer][crate::datasources::TupleBuffer].
+/// This is used for creating an [IntervalColumnT] from a [TupleBuffer][crate::tabular::buffer::tuple_buffer::TupleBuffer].
 #[derive(Debug)]
 pub(crate) struct IntervalColumnTBuilderMatrix<LookupMethod>
 where

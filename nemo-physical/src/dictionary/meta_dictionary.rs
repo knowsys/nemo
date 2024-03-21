@@ -1,3 +1,5 @@
+//! This module defines [MetaDictionary].
+
 use super::AddResult;
 use super::Dictionary;
 use super::DictionaryString;

@@ -1,4 +1,4 @@
-//! This module provides implementations [`super::DataValue`]s that represent finite-valued floating
+//! This module provides implementations [DataValue]s that represent finite-valued floating
 //! point numbers. That means that NaN and positive or negative infinite are not accepted here.
 //! This ensures smooth arithmetic and comparison operations are possible.
 //!
@@ -13,7 +13,7 @@ use super::{DataValue, DataValueCreationError, ValueDomain};
 pub struct FloatDataValue(f32);
 
 impl FloatDataValue {
-    /// Use the given f32 as a [`FloatDataValue`].
+    /// Use the given f32 as a [FloatDataValue].
     ///
     /// # Errors
     /// The given `value` is NaN.
@@ -24,7 +24,7 @@ impl FloatDataValue {
         Ok(FloatDataValue(value))
     }
 
-    /// Use the given f32 as a [`FloatDataValue`].
+    /// Use the given f32 as a [FloatDataValue].
     ///
     /// # Panics
     /// The given `value` is NaN.
@@ -94,7 +94,7 @@ impl std::fmt::Display for FloatDataValue {
 pub struct DoubleDataValue(f64);
 
 impl DoubleDataValue {
-    /// Use the given f64 as a [`DoubleDataValue`].
+    /// Use the given f64 as a [DoubleDataValue].
     ///
     /// # Errors
     /// The given `value` is NaN or an infinity.
@@ -105,7 +105,7 @@ impl DoubleDataValue {
         Ok(DoubleDataValue(value))
     }
 
-    /// Use the given f64 as a [`DoubleDataValue`].
+    /// Use the given f64 as a [DoubleDataValue].
     ///
     /// # Panics
     /// The given `value` is NaN or an infinity.

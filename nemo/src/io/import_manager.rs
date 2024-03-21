@@ -21,7 +21,7 @@ pub struct ImportManager {
 }
 
 impl ImportManager {
-    /// Create a new [input manager][InputManager] from the given
+    /// Create a new [ImportManager] from the given
     /// [resource providers][ResourceProviders].
     pub fn new(resource_providers: ResourceProviders) -> Self {
         Self { resource_providers }
@@ -49,7 +49,7 @@ impl ImportManager {
         }
     }
 
-    /// Constructs a [`TableProvider`] from the given [ImportDirective].
+    /// Constructs a [TableProvider] from the given [ImportDirective].
     /// The arity, if given, defines the expected arity of the data: it is validated if
     /// the import directive is compatible with this assumption.
     pub fn table_provider(
@@ -73,7 +73,7 @@ impl ImportManager {
         self.table_provider_from_handler(&*handler, arity)
     }
 
-    /// Constructs a [`TableProvider`] from the given [ImportExportHandler].
+    /// Constructs a [TableProvider] from the given [ImportExportHandler].
     /// The expeced arity can reflect additional knowledge of the caller (or might be taken
     /// from the handler, if it has an arity). It is validated if the import directive is
     /// compatible with this assumption.

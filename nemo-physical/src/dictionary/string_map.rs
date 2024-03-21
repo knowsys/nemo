@@ -1,3 +1,5 @@
+//! This module implements a string based hash map.
+
 use hashbrown::HashMap;
 
 use super::bytes_buffer::{BytesBuffer, BytesRef, GlobalBytesBuffer};

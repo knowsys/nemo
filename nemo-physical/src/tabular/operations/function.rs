@@ -325,7 +325,7 @@ pub(crate) struct TrieScanFunction<'a> {
     /// Path of [StorageTypeName] indicating the the types of the current (partial) row
     path_types: Vec<StorageTypeName>,
 
-    /// For each layer in the resulting trie contains a [`ColumnScanRainbow`]
+    /// For each layer in the resulting trie contains a [ColumnScanT]
     /// evaluating the functions on columns of the input trie
     /// or simply passing the values from the input trie to the output.
     column_scans: Vec<UnsafeCell<ColumnScanT<'a>>>,

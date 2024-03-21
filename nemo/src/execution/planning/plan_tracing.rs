@@ -29,7 +29,7 @@ pub(crate) struct TracingStrategy {
 }
 
 impl TracingStrategy {
-    /// Create new [`SeminaiveStrategy`] object.
+    /// Create new [TracingStrategy] object.
     pub(crate) fn initialize(rule: &ChaseRule, grounding: HashMap<Variable, AnyDataValue>) -> Self {
         let mut variable_translation = VariableTranslation::new();
         for variable in rule.all_variables() {

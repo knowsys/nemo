@@ -1,3 +1,5 @@
+//! This module defines [MetaDvDictionary].
+
 use crate::datavalues::ValueDomain;
 use crate::datavalues::{AnyDataValue, DataValue};
 use crate::dictionary::NONEXISTING_ID_MARK;
@@ -92,7 +94,7 @@ impl DictIterator {
     }
 
     /// Advance iterator, and return the id of the next dictionary, or
-    /// [`NO_DICT`] if no further matching dictionaries exist.
+    /// [NO_DICT] if no further matching dictionaries exist.
     fn next(&mut self, dv: &AnyDataValue, md: &MetaDvDictionary) -> usize {
         // First look for infix dictionary:
         if self.position == 0 {

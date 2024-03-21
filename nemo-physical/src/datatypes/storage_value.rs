@@ -10,21 +10,21 @@ use super::{double::Double, float::Float, into_datavalue::IntoDataValue, Storage
 /// option to interface with unknown values.
 ///
 /// Ord and PartialOrd assume U32 < U64 < I64 < Float < Double.
-/// More information at https://doc.rust-lang.org/std/cmp/trait.PartialOrd.html#derivable
+/// More information at <https://doc.rust-lang.org/std/cmp/trait.PartialOrd.html#derivable>
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Ord, PartialOrd)]
 pub(crate) enum StorageValueT {
-    /// A value of type [`StorageTypeName::Id32`]. Such values always refer to an entry in a
+    /// A value of type [StorageTypeName::Id32]. Such values always refer to an entry in a
     /// dictionary, rather than to the literal numerical integer value.
     Id32(u32),
-    /// A value of type [`StorageTypeName::Id64`]. Such values always refer to an entry in a
+    /// A value of type [StorageTypeName::Id64]. Such values always refer to an entry in a
     /// dictionary, rather than to the literal numerical integer value.
     Id64(u64),
-    /// A value of type [`StorageTypeName::Int64`]. Such values always refer to a literal
+    /// A value of type [StorageTypeName::Int64]. Such values always refer to a literal
     /// numerical integer value rather than to an entry in a dictionary.
     Int64(i64),
-    /// A value of type [`StorageTypeName::Float`].
+    /// A value of type [StorageTypeName::Float].
     Float(Float),
-    /// A value of type [`StorageTypeName::Double`].
+    /// A value of type [StorageTypeName::Double].
     Double(Double),
 }
 

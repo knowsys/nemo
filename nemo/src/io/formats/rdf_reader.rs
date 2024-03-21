@@ -28,7 +28,7 @@ use super::rdf::{RdfFormatError, RdfValueFormat};
 /// If future SPARQL or RDF versions are adding this, we could align accordingly.
 const DEFAULT_GRAPH: &str = "tag:nemo:defaultgraph";
 
-/// A [`TableProvider`] for RDF 1.1 files containing triples.
+/// A [TableProvider] for RDF 1.1 files containing triples.
 pub(super) struct RdfReader {
     read: Box<dyn BufRead>,
     variant: RdfVariant,
@@ -45,7 +45,7 @@ pub(super) struct RdfReader {
 }
 
 impl RdfReader {
-    /// Create a new [`RDFReader`]
+    /// Create a new [RDFReader]
     pub(super) fn new(
         read: Box<dyn BufRead>,
         variant: RdfVariant,
@@ -81,7 +81,7 @@ impl RdfReader {
         }
     }
 
-    /// Create [`AnyDataValue`] from a [`Literal`].
+    /// Create [AnyDataValue] from a [Literal].
     fn datavalue_from_literal(value: Literal<'_>) -> Result<AnyDataValue, DataValueCreationError> {
         match value {
             Literal::Simple { value } => Ok(AnyDataValue::new_plain_string(value.to_string())),

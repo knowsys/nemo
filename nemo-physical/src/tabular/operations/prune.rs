@@ -13,14 +13,14 @@ use crate::{
     tabular::triescan::{PartialTrieScan, TrieScan, TrieScanEnum},
 };
 
-/// [`TrieScan`] which only returns values that would actually exists during materialization.
+/// [TrieScan] which only returns values that would actually exists during materialization.
 ///
-/// This trie scan given the following guarantees for the [`TrieScan`] API:
+/// This trie scan given the following guarantees for the [TrieScan] API:
 ///   * For every value returned by a column using `next` or `current`, there exists values for all the lower layers (they can be retrieved using `down()` and `next()`).
 ///   * The trie scan does not skip any tuples.
 ///
 /// To achieve this behavior, before returning a value from `next()`, the input trie is traversed downwards to check if the value would exists in a materialized version of the trie scan.
-/// Therefore, every column and the trie scan itself has shared access to the input trie and associated state, through [`SharedTrieScanPruneState`].
+/// Therefore, every column and the trie scan itself has shared access to the input trie and associated state, through [SharedTrieScanPruneState].
 #[derive(Debug)]
 pub(crate) struct TrieScanPrune<'a> {
     state: SharedTrieScanPruneState<'a>,
@@ -252,7 +252,7 @@ impl<'a> TrieScanPruneState<'a> {
     ///
     /// # Safety
     ///
-    /// The caller must ensure that there exists no mutable reference to the column scans between `input_trie_scan_current_layer` and `target_layer` and thus the [`UnsafeCell`] is safe to access when going downwards.
+    /// The caller must ensure that there exists no mutable reference to the column scans between `input_trie_scan_current_layer` and `target_layer` and thus the [UnsafeCell] is safe to access when going downwards.
     /// This is required to check if going downwards is allowed.
     unsafe fn try_to_go_to_layer(&mut self, target_layer: usize) -> bool {
         assert!(target_layer < self.input_trie_scan.arity());
@@ -275,7 +275,7 @@ impl<'a> TrieScanPruneState<'a> {
 
     /// Returns whether a column has been peeked already.
     ///
-    /// See [`TrieScanPruneState`] for more information.
+    /// See [TrieScanPruneState] for more information.
     #[inline]
     pub(crate) fn is_column_peeked(
         &self,
@@ -302,7 +302,7 @@ impl<'a> TrieScanPruneState<'a> {
 
     /// # Safety
     ///
-    /// The caller must ensure that there exists no mutable reference to the column scan at `index` and thus the [`UnsafeCell`] is safe to access.
+    /// The caller must ensure that there exists no mutable reference to the column scan at `index` and thus the [UnsafeCell] is safe to access.
     #[inline]
     pub(crate) unsafe fn current_input_trie_value(&self, index: usize) -> Option<StorageValueT> {
         let current_input_type =
@@ -314,7 +314,7 @@ impl<'a> TrieScanPruneState<'a> {
 
     /// # Safety
     ///
-    /// The caller must ensure that there exists no immutable/mutable references to the column scan at `index` and thus the value inside the [`UnsafeCell`] is safe to mutate.
+    /// The caller must ensure that there exists no immutable/mutable references to the column scan at `index` and thus the value inside the [UnsafeCell] is safe to mutate.
     #[inline]
     unsafe fn next_input_trie_value(&mut self) -> Option<StorageValueT> {
         let current_input_type = self.possible_types[self.input_trie_scan_current_layer]
@@ -330,7 +330,7 @@ impl<'a> TrieScanPruneState<'a> {
     ///
     /// # Safety
     ///
-    /// The caller must ensure that there exists no mutable reference to the column scan at `index` and thus the [`UnsafeCell`] is safe to access.
+    /// The caller must ensure that there exists no mutable reference to the column scan at `index` and thus the [UnsafeCell] is safe to access.
     ///
     /// TODO: Update to allow for direct access
     #[inline]
@@ -467,9 +467,9 @@ impl<'a> TrieScanPruneState<'a> {
         unimplemented!()
     }
 
-    /// Moves to the next value on a given layer while ensuring that only materialized tuples are returned (see guarantees provided by [`TrieScanPrune`]).
+    /// Moves to the next value on a given layer while ensuring that only materialized tuples are returned (see guarantees provided by [TrieScanPrune]).
     ///
-    /// See documentation of function `advance_on_layer()` of [`TrieScanPrune`].
+    /// See documentation of function `advance_on_layer()` of [TrieScanPrune].
     pub(crate) fn advance_on_layer(
         &mut self,
         target_layer: usize,
@@ -564,11 +564,11 @@ impl<'a> TrieScanPruneState<'a> {
 }
 
 impl<'a> TrieScanPrune<'a> {
-    /// Moves to the next value on a given layer while ensuring that only materialized tuples are returned (see guarantees provided by [`TrieScanPrune`]).
+    /// Moves to the next value on a given layer while ensuring that only materialized tuples are returned (see guarantees provided by [TrieScanPrune]).
     ///
     /// It is assumed that the trie scan has been initialized by calling `down()` at least once.
     ///
-    /// In the future and if needed, a similar function `advance_on_layer_with_seek()` might be exposed here, too (see `advance_on_layer_with_seek()` of [`crate::tabular::operations::triescan_prune::TrieScanPrune`]).
+    /// In the future and if needed, a similar function `advance_on_layer_with_seek()` might be exposed here, too (see `advance_on_layer_with_seek()` of [crate::tabular::operations::prune::TrieScanPrune]).
     ///
     ///   * `allow_advancements_above_target_layer` - Whether the underlying trie scan may be advanced on layers above the `target_layer`.
     ///     If this is set to `false`, the `advance_on_layer()` function has the same effect as calling `next()` on the column scan at the `target_layer`, meaning that layers above the `target_layer` are seen as read-only.
@@ -592,7 +592,7 @@ impl<'a> TrieScanPrune<'a> {
 
     /// Resets the highest peeked layer.
     ///
-    /// This is required when using the [`TrieScanPrune`] as a full [`TrieScan`], where there are no column peek semantics as in a [`PartialTrieScan`].
+    /// This is required when using the [TrieScanPrune] as a full [TrieScan], where there are no column peek semantics as in a [PartialTrieScan].
     pub(crate) fn clear_column_peeks(&mut self) {
         unsafe {
             assert!((*self.state.get()).initialized);
@@ -650,7 +650,7 @@ impl<'a> TrieScan for TrieScanPrune<'a> {
         }
 
         let uppermost_modified_column_index = self.advance_on_layer(layer, None);
-        // Reset column peeks because this behavior is not wanted by the [`TrieScan`] trait
+        // Reset column peeks because this behavior is not wanted by the [TrieScan] trait
         self.clear_column_peeks();
         uppermost_modified_column_index
     }

@@ -243,7 +243,7 @@ impl Rule {
         &mut self.constraints
     }
 
-    /// Replaces [`Variable`]s with [`super::Term`]s according to the provided assignment.
+    /// Replaces [Variable]s with [super::Term]s according to the provided assignment.
     pub fn apply_assignment(&mut self, assignment: &VariableAssignment) {
         self.body
             .iter_mut()

@@ -359,7 +359,7 @@ pub(crate) struct ColumnScanT<'a> {
 }
 
 impl<'a> ColumnScanT<'a> {
-    /// Create a new [ColumnScanRainbow].
+    /// Create a new [ColumnScanT].
     pub(crate) fn new(
         scan_id32: ColumnScanEnum<'a, u32>,
         scan_id64: ColumnScanEnum<'a, u64>,

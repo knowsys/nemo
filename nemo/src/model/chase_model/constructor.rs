@@ -2,7 +2,7 @@ use nemo_physical::datavalues::AnyDataValue;
 
 use crate::model::{Term, Variable};
 
-/// Indicates that a new value must be creater accodring to [`Term`].
+/// Indicates that a new value must be creater accodring to [Term].
 /// The result will be "stored" in the given variable
 #[derive(Debug, Clone)]
 pub struct Constructor {
@@ -11,7 +11,7 @@ pub struct Constructor {
 }
 
 impl Constructor {
-    /// Create a new [`Constructor`].
+    /// Create a new [Constructor].
     ///
     /// # Panics
     /// Pancis if the provided term is an aggregate (We handle those in a separate construct).

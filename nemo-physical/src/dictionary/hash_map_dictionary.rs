@@ -1,3 +1,5 @@
+//! This module defines [HashMapDictionary].
+
 use super::{AddResult, Dictionary, DictionaryString, StringDictionary};
 
 /// A read-only, hashmap-based [Dictionary] to implement a bijection between strings and integers.  

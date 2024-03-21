@@ -10,7 +10,7 @@ use super::tuple_writer::TupleWriter;
 /// This trait is implemented by code that can provide data in the form of a list of tuples,
 /// which are unordered and possibly contain duplicates.
 pub trait TableProvider: std::fmt::Debug + ByteSized {
-    /// Provide table data by adding values to a [`TupleWriter`].
+    /// Provide table data by adding values to a [TupleWriter].
     fn provide_table_data(
         self: Box<Self>,
         tuple_writer: &mut TupleWriter,

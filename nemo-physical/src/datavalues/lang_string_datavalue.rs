@@ -1,4 +1,4 @@
-//! This module provides implementations [`super::DataValue`]s that represent language-tagged strings.
+//! This module provides implementations [DataValue]s that represent language-tagged strings.
 //! Strings can be arbitrary Unicode strings. Language-tags should normally have a specific format, as
 //! defined in [RFC5646 Tags for Identifying Languages](https://datatracker.ietf.org/doc/html/rfc5646),
 //! but our implementation does not perform any checks and we consider any pair of Unicode strings to be

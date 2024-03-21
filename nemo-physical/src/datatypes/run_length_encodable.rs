@@ -8,7 +8,7 @@ use num::Zero;
 
 use crate::management::bytesized::ByteSized;
 
-/// Data, which can be run length compressed with increments of [`RunLengthEncodable::Step`]
+/// Data, which can be run length compressed with increments of [RunLengthEncodable::Step]
 pub(crate) trait RunLengthEncodable: Zero {
     /// Increment / Decrement values in run length encoded elements
     type Step: Debug + Copy + Eq + ByteSized;

@@ -55,7 +55,7 @@ pub(crate) struct RestrictedChaseStrategy {
 }
 
 impl RestrictedChaseStrategy {
-    /// Create a new [`RestrictedChaseStrategy`] object.
+    /// Create a new [RestrictedChaseStrategy] object.
     pub(crate) fn initialize(rule: &ChaseRule, analysis: &RuleAnalysis) -> Self {
         let mut predicate_to_instructions = HashMap::<Identifier, Vec<HeadInstruction>>::new();
         let mut predicate_to_full_existential = HashMap::<Identifier, bool>::new();

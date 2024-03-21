@@ -55,7 +55,9 @@ impl ExecutionNodeOwned {
     }
 }
 
-/// Wraps [ExecutionNode] into a `Weak<RefCell<_>>`
+/// Reference to a node in an [ExecutionPlan]
+///
+/// Internally, uses a `Weak<RefCell<T>>`.
 #[derive(Debug, Clone)]
 pub struct ExecutionNodeRef(Weak<RefCell<ExecutionNode>>);
 
@@ -72,7 +74,7 @@ impl ExecutionNodeRef {
     /// Return the [ExecutionId] which identifies the referenced node
     ///
     /// # Panics
-    /// Throws a panic if borrowing the current [ExecutionNode] is already mutably borrowed.
+    /// Panics if the underlying node does not exist or is alreary mutably borrowed.
     pub fn id(&self) -> ExecutionId {
         let node_rc = self.get_rc();
         let node_borrow = node_rc.borrow();
@@ -402,7 +404,7 @@ impl ExecutionPlan {
         id
     }
 
-    /// Designate a [ExecutionNode] as an "output" node that will produce a temporary table.
+    /// Designate a node in this [ExecutionPlan] as an "output" node that will produce a temporary table.
     ///
     /// Returns an [ExecutionId] which can be linked to the output table
     /// that was computed by evaluateing this node.
@@ -410,7 +412,7 @@ impl ExecutionPlan {
         self.push_out_node(node, ExecutionResult::Temporary, operation_name)
     }
 
-    /// Designate a [ExecutionNode] as an "output" node that will produce a permanent table (in its default order).
+    /// Designate a node in this [ExecutionPlan] as an "output" node that will produce a permanent table (in its default order).
     ///
     /// Returns an [ExecutionId] which can be linked to the output table
     /// that was computed by evaluateing this node.
@@ -423,7 +425,7 @@ impl ExecutionPlan {
         self.write_permanent_reordered(node, tree_name, table_name, ColumnOrder::default())
     }
 
-    /// Designate a [ExecutionNode] as an "output" node that will produce a permament table.
+    /// Designate  node in this [ExecutionPlan] as an "output" node that will produce a permament table.
     ///  
     /// Returns an [ExecutionId] which can be linked to the output table
     /// that was computed by evaluateing this node.
@@ -632,7 +634,7 @@ impl ExecutionPlan {
             }
             ExecutionOperation::Aggregate(subnode, aggregate_assignment) => {
                 // Add project/reorder operation if required by the aggregate
-                // This depends on the column ordering, see [`crate::tabular::operation::aggregate::TrieScanAggregate`]
+                // This depends on the column ordering, see [crate::tabular::operation::aggregate::TrieScanAggregate]
                 let input = subnode.markers_cloned();
                 let output = node_markers.clone();
 
@@ -812,7 +814,7 @@ impl ExecutionPlan {
     }
 
     /// Split the [ExecutionPlan] into an [ExecutionSeries]
-    /// by splitting it into several [ExecutionTree][super::database::execution_series::ExecutionTree]s
+    /// by splitting it into several [ExecutionTree]s
     /// that will be executed one after another
     /// by the [DatabaseInstance][super::database::DatabaseInstance].
     pub(crate) fn finalize(self) -> ExecutionSeries {

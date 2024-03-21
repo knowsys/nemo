@@ -22,7 +22,7 @@ pub struct Permutator {
 }
 
 impl Permutator {
-    /// Creates a [`Permutator`] based on one slice of sort-able data
+    /// Creates a [Permutator] based on one slice of sort-able data
     pub fn sort_from_vec<T>(data: &[T]) -> Permutator
     where
         T: PartialEq + PartialOrd + Ord + Eq,
@@ -30,7 +30,7 @@ impl Permutator {
         Self::sort_from_vec_with_offset(data, 0)
     }
 
-    /// Creates a [`Permutator`] based on a slice, with a given offset.
+    /// Creates a [Permutator] based on a slice, with a given offset.
     pub(crate) fn sort_from_vec_with_offset<T>(data: &[T], offset: usize) -> Permutator
     where
         T: PartialEq + PartialOrd + Ord + Eq,
@@ -62,7 +62,7 @@ impl Permutator {
         }
     }
 
-    /// Applies the permutator to a given column by using a provided [`ColumnBuilder`].
+    /// Applies the permutator to a given column by using a provided [ColumnBuilder].
     ///
     /// *Returns* either a ['Column'] or an [Error][Error::PermutationApplyWrongLen]
     pub(crate) fn _apply_column<'a, T, U>(

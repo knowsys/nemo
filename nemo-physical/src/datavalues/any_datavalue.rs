@@ -1,4 +1,4 @@
-//! This module provides implementations [`super::DataValue`]s that can represent any
+//! This module provides implementations [DataValue]s that can represent any
 //! datavalue that we support.
 
 use std::{num::IntErrorKind, str::FromStr};
@@ -44,40 +44,40 @@ impl DecimalType {
     }
 }
 
-/// Enum that can represent arbitrary [`DataValue`]s.
+/// Enum that can represent arbitrary [DataValue]s.
 #[derive(Debug, Clone)]
 enum AnyDataValueEnum {
-    /// Variant for representing [`DataValue`]s in [`ValueDomain::String`].
+    /// Variant for representing [DataValue]s in [ValueDomain::PlainString].
     PlainString(StringDataValue),
-    /// Variant for representing [`DataValue`]s in [`ValueDomain::LanguageTaggedString`].
+    /// Variant for representing [DataValue]s in [ValueDomain::LanguageTaggedString].
     LanguageTaggedString(LangStringDataValue),
-    /// Variant for representing [`DataValue`]s in [`ValueDomain::Iri`].
+    /// Variant for representing [DataValue]s in [ValueDomain::Iri].
     Iri(IriDataValue),
     /// Variant for representing [DataValue]s in [ValueDomain::Float].
     Float(FloatDataValue),
-    /// Variant for representing [`DataValue`]s in [`ValueDomain::Double`].
+    /// Variant for representing [DataValue]s in [ValueDomain::Double].
     Double(DoubleDataValue),
-    /// Variant for representing [`DataValue`]s that represent numbers in the u64 range.
-    /// Note that this has some overlap with values of [`AnyDataValue::Long`], which is accounted
-    /// for in the [`Eq`] implementation.
+    /// Variant for representing [DataValue]s that represent numbers in the u64 range.
+    /// Note that this has some overlap with values of [AnyDataValueEnum::Long], which is accounted
+    /// for in the [Eq] implementation.
     UnsignedLong(UnsignedLongDataValue),
-    /// Variant for representing [`DataValue`]s that represent numbers in the i64 range.
-    /// Note that this has some overlap with values of [`AnyDataValue::UnsignedLong`], which is accounted
-    /// for in the [`Eq`] implementation.
+    /// Variant for representing [DataValue]s that represent numbers in the i64 range.
+    /// Note that this has some overlap with values of [AnyDataValueEnum::UnsignedLong], which is accounted
+    /// for in the [Eq] implementation.
     Long(LongDataValue),
     /// Variant for representing [DataValue]s in [ValueDomain::Boolean].
     Boolean(BooleanDataValue),
     /// Variant for representing [DataValue]s in [ValueDomain::Null].
     Null(NullDataValue),
-    /// Variant for representing [`DataValue`]s in [`ValueDomain::Tuple`].
+    /// Variant for representing [DataValue]s in [ValueDomain::Tuple].
     Tuple(TupleDataValue),
-    /// Variant for representing [`DataValue`]s in [`ValueDomain::Map`].
+    /// Variant for representing [DataValue]s in [ValueDomain::Map].
     Map(MapDataValue),
-    /// Variant for representing [`DataValue`]s in [`ValueDomain::Other`].
+    /// Variant for representing [DataValue]s in [ValueDomain::Other].
     Other(OtherDataValue),
 }
 
-/// Type that can represent arbitrary [`DataValue`]s.
+/// Type that can represent arbitrary [DataValue]s.
 #[repr(transparent)]
 #[derive(Debug, Clone)]
 pub struct AnyDataValue(AnyDataValueEnum);
@@ -109,17 +109,17 @@ impl AnyDataValue {
         )))
     }
 
-    /// Construct a datavalue in [`ValueDomain::PlainString`] that represents the given string.
+    /// Construct a datavalue in [ValueDomain::PlainString] that represents the given string.
     pub fn new_plain_string(value: String) -> Self {
         AnyDataValue(AnyDataValueEnum::PlainString(StringDataValue::new(value)))
     }
 
-    /// Construct a datavalue in [`ValueDomain::Iri`] that represents the given IRI.
+    /// Construct a datavalue in [ValueDomain::Iri] that represents the given IRI.
     pub fn new_iri(value: String) -> Self {
         AnyDataValue(AnyDataValueEnum::Iri(IriDataValue::new(value)))
     }
 
-    /// Construct a datavalue in [`ValueDomain::LanguageTaggedString`] that represents a string with a language tag.
+    /// Construct a datavalue in [ValueDomain::LanguageTaggedString] that represents a string with a language tag.
     pub fn new_language_tagged_string(value: String, lang_tag: String) -> Self {
         AnyDataValue(AnyDataValueEnum::LanguageTaggedString(
             LangStringDataValue::new(value, lang_tag),
@@ -131,7 +131,7 @@ impl AnyDataValue {
         AnyDataValue(AnyDataValueEnum::Boolean(BooleanDataValue::new(value)))
     }
 
-    /// Construct a datavalue in [`ValueDomain::Other`] specified by the given lexical value and datatype IRI.
+    /// Construct a datavalue in [ValueDomain::Other] specified by the given lexical value and datatype IRI.
     pub fn new_other(lexical_value: String, datatype_iri: String) -> Self {
         AnyDataValue(AnyDataValueEnum::Other(OtherDataValue::new(
             lexical_value,
@@ -139,7 +139,7 @@ impl AnyDataValue {
         )))
     }
 
-    /// Construct a datavalue from its physical representation as a [`StorageValueT`], using
+    /// Construct a datavalue from its physical representation as a [StorageValueT], using
     /// the given dictionary to resolve IDs.
     pub(crate) fn new_from_storage_value(
         sv: StorageValueT,
@@ -176,7 +176,7 @@ impl AnyDataValue {
         }
     }
 
-    /// Construct a normalized datavalue in an appropriate [`ValueDomain`] from the given lexical value and datatype IRI.
+    /// Construct a normalized datavalue in an appropriate [ValueDomain] from the given lexical value and datatype IRI.
     /// Known RDF and XML Schema datatypes are taken into account.
     pub fn new_from_typed_literal(
         lexical_value: String,
@@ -253,7 +253,7 @@ impl AnyDataValue {
         }
     }
 
-    /// Construct a normalized datavalue in an appropriate [`ValueDomain`] from the given string representation
+    /// Construct a normalized datavalue in an appropriate [ValueDomain] from the given string representation
     /// of a (arbitrarily large) integer.
     pub fn new_from_integer_literal(
         lexical_value: String,
@@ -261,7 +261,7 @@ impl AnyDataValue {
         Self::new_from_decimal_type_literal(lexical_value, DecimalType::Integer)
     }
 
-    /// Construct a normalized datavalue in an appropriate [`ValueDomain`] from the given string representation
+    /// Construct a normalized datavalue in an appropriate [ValueDomain] from the given string representation
     /// of a double precision floating-point number.
     pub fn new_from_double_literal(
         lexical_value: String,
@@ -272,7 +272,7 @@ impl AnyDataValue {
         }
     }
 
-    /// Construct a normalized datavalue in an appropriate [`ValueDomain`] from the given string representation
+    /// Construct a normalized datavalue in an appropriate [ValueDomain] from the given string representation
     /// of a decimal number. The result can be an integer, if the decimal digits are omitted or zero.
     pub fn new_from_decimal_literal(
         lexical_value: String,
@@ -280,8 +280,8 @@ impl AnyDataValue {
         Self::new_from_decimal_type_literal(lexical_value, DecimalType::Decimal)
     }
 
-    /// Construct a normalized datavalue in an appropriate [`ValueDomain`] for a "big decimal"
-    /// or "big integer" [`DecimalType`].
+    /// Construct a normalized datavalue in an appropriate [ValueDomain] for a "big decimal"
+    /// or "big integer" [DecimalType].
     fn new_from_decimal_type_literal(
         lexical_value: String,
         decimal_type: DecimalType,
@@ -308,8 +308,8 @@ impl AnyDataValue {
         }
     }
 
-    /// Create [`AnyDataValue`] for the given i64 number after checking possible range
-    /// constraints of the given [`DecimalType`].
+    /// Create [AnyDataValue] for the given i64 number after checking possible range
+    /// constraints of the given [DecimalType].
     fn from_decimal_typed_long(
         value: i64,
         lexical_value: String,
@@ -332,8 +332,8 @@ impl AnyDataValue {
         }
     }
 
-    /// Construct a normalized datavalue in an appropriate [`ValueDomain`] for a "big decimal"
-    /// or "big integer" [`DecimalType`] by manually parsing the string.
+    /// Construct a normalized datavalue in an appropriate [ValueDomain] for a "big decimal"
+    /// or "big integer" [DecimalType] by manually parsing the string.
     fn parse_large_decimal_literal(
         lexical_value: String,
         decimal_type: DecimalType,
@@ -442,7 +442,7 @@ impl AnyDataValue {
         }
     }
 
-    /// Returns a [`Result`] to indicate a [`DataValueCreationError`] in processing
+    /// Returns a [Result] to indicate a [DataValueCreationError] in processing
     /// the given literal.
     fn decimal_parse_error(
         lexical_value: String,
@@ -669,7 +669,7 @@ impl std::fmt::Display for AnyDataValue {
     }
 }
 
-/// The intended implementation of equality for [`AnyDataValue`] is based on identity in the value space,
+/// The intended implementation of equality for [AnyDataValue] is based on identity in the value space,
 /// i.e., we ask whether two values syntactically represent the same elements. In most cases, this agrees with
 /// the identity of representations, especially since our values are self-normalizing in the sense that they
 /// cannot capture superficial syntactic variations in the writing one and the same element (e.g., `42` vs `+42`).
@@ -762,7 +762,7 @@ impl PartialOrd for AnyDataValue {
     }
 }
 
-/// A dynamically defined iterator over [`AnyDataValue`]s.
+/// A dynamically defined iterator over [AnyDataValue]s.
 #[allow(missing_debug_implementations)]
 pub struct AnyDataValueIterator<'a>(pub Box<dyn Iterator<Item = AnyDataValue> + 'a>);
 

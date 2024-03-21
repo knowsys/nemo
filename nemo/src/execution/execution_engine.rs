@@ -38,7 +38,7 @@ pub struct RuleInfo {
 }
 
 impl RuleInfo {
-    /// Create new [`RuleInfo`].
+    /// Create new [RuleInfo].
     pub fn new() -> Self {
         Self {
             step_last_applied: 0,
@@ -67,7 +67,7 @@ pub struct ExecutionEngine<RuleSelectionStrategy> {
 }
 
 impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
-    /// Initialize [`ExecutionEngine`].
+    /// Initialize [ExecutionEngine].
     pub fn initialize(program: &Program, input_manager: ImportManager) -> Result<Self, Error> {
         let chase_program: ChaseProgram = program.clone().try_into()?;
 
@@ -103,7 +103,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         })
     }
 
-    /// Register all predicates found in a rule program to the [`TableManager`].
+    /// Register all predicates found in a rule program to the [TableManager].
     fn register_all_predicates(table_manager: &mut TableManager, analysis: &ProgramAnalysis) {
         for (predicate, arity) in &analysis.all_predicates {
             table_manager.register_predicate(predicate.clone(), *arity);
@@ -117,7 +117,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         }
     }
 
-    /// Add edb tables to the [`TableManager`]
+    /// Add edb tables to the [TableManager]
     /// based on the import declaration of the given progam.
     fn add_imports(
         table_manager: &mut TableManager,
@@ -445,8 +445,8 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         trace_handle
     }
 
-    /// Build an [`ExecutionTrace`] for a list of facts.
-    /// Also returns a list containing a [`TraceFactHandle`] for each fact.
+    /// Build an [ExecutionTrace] for a list of facts.
+    /// Also returns a list containing a [TraceFactHandle] for each fact.
     pub fn trace(
         &mut self,
         program: Program,

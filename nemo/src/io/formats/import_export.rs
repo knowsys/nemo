@@ -60,15 +60,15 @@ impl ImportExportResource {
 /// is compatible with. The attributes are provided when creating the format, and should then
 /// be validated.
 ///
-/// An implementation of [`ImportExportHandler`] provides methods to validate and refine parameters
-/// that were used with this format, to create suitable [`TableProvider`] and [`TableWriter`] objects
+/// An implementation of [ImportExportHandler] provides methods to validate and refine parameters
+/// that were used with this format, to create suitable [TableProvider] and [TableWriter] objects
 /// to read and write data in the given format, and to report information about the type of
 /// data that this format can handle (such as predicate arity and type).
 pub(crate) trait ImportExportHandler: std::fmt::Debug + DynClone + Send {
     /// Return the associated [FileFormat].
     fn file_format(&self) -> FileFormat;
 
-    /// Obtain a [`TableProvider`] for this format and the given reader, if supported.
+    /// Obtain a [TableProvider] for this format and the given reader, if supported.
     /// If reading is not supported, an error will be returned.
     ///
     /// The arity is the arity of predicates that the caller expects to receive from this
@@ -79,7 +79,7 @@ pub(crate) trait ImportExportHandler: std::fmt::Debug + DynClone + Send {
     fn reader(&self, read: Box<dyn BufRead>, arity: usize)
         -> Result<Box<dyn TableProvider>, Error>;
 
-    /// Obtain a [`TableWriter`] for this format and the given writer, if supported.
+    /// Obtain a [TableWriter] for this format and the given writer, if supported.
     /// If writing is not supported, an error will be returned.
     ///
     /// The arity is the arity of predicates that the caller would like to write. If the handler

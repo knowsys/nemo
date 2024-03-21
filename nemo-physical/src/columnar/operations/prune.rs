@@ -54,7 +54,7 @@ where
 
     /// Gets the next output value for a column.
     ///
-    /// This is forwarded to `advance()` of [crate::tabular::operations::triescan_prune::TrieScanPruneState]`.
+    /// This is forwarded to `advance()` of [crate::tabular::operations::prune::TrieScanPruneState]`.
     fn next(&mut self) -> Option<Self::Item> {
         let current_layer = self.column_scan_index;
         let current_type = self.column_scan_type;

@@ -14,7 +14,7 @@ pub(crate) trait PairDvConverter: Debug {
     fn supported_value_domain() -> ValueDomain;
 }
 
-/// Implementation of [`PairDvConverter`] to handle [`AnyDataValue::Other`] values.
+/// Implementation of [PairDvConverter] to handle [AnyDataValue::Other] values.
 ///
 /// FIXME: This currently also handles booleans, but our API is not designed for having several
 /// value domains in one dictionary, so the supported_value_domain() is just Other. Should not
@@ -45,7 +45,7 @@ impl PairDvConverter for OtherDvConverter {
     }
 }
 
-/// Implementation of [`PairDvConverter`] to handle [`AnyDataValue::LangStringDataValue`] values.
+/// Implementation of [PairDvConverter] to handle [AnyDataValue::LangStringDataValue] values.
 #[derive(Debug)]
 pub(crate) struct LangStringDvConverter;
 impl PairDvConverter for LangStringDvConverter {

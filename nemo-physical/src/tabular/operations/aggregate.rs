@@ -1,6 +1,4 @@
 //! Implementation of the aggregate full trie scan
-//!
-//! See [`TrieScanAggregate`] for more information about the implementation and it's relation to other parts of the code
 
 use std::{
     cell::{RefCell, UnsafeCell},
@@ -25,11 +23,11 @@ use super::{prune::TrieScanPrune, OperationColumnMarker, OperationGenerator, Ope
 pub struct AggregateAssignment {
     /// Operation to perform
     pub aggregate_operation: AggregateOperation,
-    /// Distinct column markers (not including aggregated column, see [`TrieScanAggregate`])
+    /// Distinct column markers (not including aggregated column)
     pub distinct_columns: Vec<OperationColumnMarker>,
-    /// Group-by column markers, see [`TrieScanAggregate`]
+    /// Group-by column markers
     pub group_by_columns: Vec<OperationColumnMarker>,
-    /// Aggregated input column marker, see [`TrieScanAggregate`]
+    /// Aggregated input column marker
     pub aggregated_column: OperationColumnMarker,
 }
 
@@ -164,12 +162,12 @@ impl AggregationInstructions {
     }
 }
 
-/// [`TrieScan`] which performs an aggregate operation.
+/// [TrieScan] which performs an aggregate operation.
 ///
 /// It works by iterating though all the input rows.
-/// As long as the group-by columns do not change, all values are passed to an [`AggregateProcessor`] which performs the actual aggregation.
-/// As soon as the group-by values input change, a new output row and a new [`AggregateGroupProcessor`] gets created.
-/// The [`crate::aggregates::operation`] module is also the place to add new aggregate operations to `nemo-phyiscal`.
+/// As long as the group-by columns do not change, all values are passed to an [AggregateProcessor] which performs the actual aggregation.
+/// As soon as the group-by values input change, a new output row and a new [AggregateGroupProcessor] gets created.
+/// The [crate::aggregates::operation] module is also the place to add new aggregate operations to `nemo-phyiscal`.
 ///
 /// Input columns (specific order is required):
 /// * Zero or more group-by columns, followed by
@@ -189,21 +187,21 @@ pub(crate) struct TrieScanAggregate<T: TrieScan> {
 }
 
 /// Information on how a row for the next group-by values has been looked at already,
-/// even tough the [`TrieScanAggregate`] is still at the previous group.
+/// even tough the [TrieScanAggregate] is still at the previous group.
 ///
 /// Peeking into the next row can occur during the aggregation process.
-/// When trying to find out if the next row still belongs to the current group-by values, it could be that the [`TrieScanAggregate`] already looks into a row of the next group.
+/// When trying to find out if the next row still belongs to the current group-by values, it could be that the [TrieScanAggregate] already looks into a row of the next group.
 #[derive(Debug)]
 struct PeekedRowInformation {
     /// Return value of the `advance_on_layer` call
     uppermost_modified_column_index: Option<usize>,
     /// Group-by values before the advancement
-    /// This is required to service calls to `current` of the [`TrieScanAggregate`]
+    /// This is required to service calls to `current` of the [TrieScanAggregate]
     original_group_by_values: Vec<StorageValueT>,
 }
 
 impl<T: TrieScan> TrieScanAggregate<T> {
-    /// Creates a new [`TrieScanAggregate`] for processing an input full [`TrieScan`]. The group-by layers will get copied, an aggregate column will be computed based on the input aggregate/distinct columns, and any other columns will get dismissed.
+    /// Creates a new [TrieScanAggregate] for processing an input full [TrieScan]. The group-by layers will get copied, an aggregate column will be computed based on the input aggregate/distinct columns, and any other columns will get dismissed.
     fn new(input_scan: T, instructions: AggregationInstructions) -> Self {
         if !instructions.is_valid() {
             panic!("cannot create TrieScanAggregate with invalid aggregation instructions")
@@ -280,7 +278,7 @@ impl<T: TrieScan> TrieScan for TrieScanAggregate<T> {
                 AggregatedOutputValue::NotYetComputed => {
                     // We're trying to compute the current aggregate value.
                     // We know the underlying trie scan currently points to the first row of the current group (this is ensured by the last `advance_on_layer` call).
-                    // Furthermore we know that there is at least one row to aggregate in the current group, otherwise the [`AggregatedOutputValue`] would be [`AggregatedOutputValue::None`]
+                    // Furthermore we know that there is at least one row to aggregate in the current group, otherwise the [AggregatedOutputValue] would be [AggregatedOutputValue::None]
                     // We now need to loop through all the rows of the current group to determine the aggregate result.
 
                     let original_group_by_values: Vec<_> = {

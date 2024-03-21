@@ -33,7 +33,7 @@ use super::{
 use thiserror::Error;
 
 /// Errors that can occur when reading/writing RDF resources and converting them
-/// to/from [`AnyDataValue`]s.
+/// to/from [AnyDataValue]s.
 #[allow(variant_size_differences)]
 #[derive(Error, Debug)]
 pub enum RdfFormatError {
@@ -86,7 +86,7 @@ impl RdfValueFormat {
     }
 }
 
-/// An [ImportExportHandler] for RDF formats.
+/// A handler for RDF formats.
 #[derive(Debug, Clone)]
 pub struct RdfHandler {
     /// The resource to write to/read from.

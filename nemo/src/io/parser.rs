@@ -31,23 +31,23 @@ pub(crate) mod sparql;
 pub(crate) mod turtle;
 pub use types::{span_from_str, LocatedParseError, ParseError, ParseResult};
 
-/// Parse a program in the given `input`-String and return a [`Program`].
+/// Parse a program in the given `input`-String and return a [Program].
 ///
 /// The program will be parsed and checked for unsupported features.
 ///
 /// # Error
-/// Returns an appropriate [`Error`] variant on parsing and feature check issues.
+/// Returns an appropriate [Error] variant on parsing and feature check issues.
 pub fn parse_program(input: impl AsRef<str>) -> Result<Program, Error> {
     let program = all_input_consumed(RuleParser::new().parse_program())(input.as_ref())?;
     Ok(program)
 }
 
-/// Parse a single fact in the given `input`-String and return a [`Program`].
+/// Parse a single fact in the given `input`-String and return a [Program].
 ///
 /// The program will be parsed and checked for unsupported features.
 ///
 /// # Error
-/// Returns an appropriate [`Error`] variant on parsing and feature check issues.
+/// Returns an appropriate [Error] variant on parsing and feature check issues.
 pub fn parse_fact(mut input: String) -> Result<Fact, Error> {
     input += ".";
     let fact = all_input_consumed(RuleParser::new().parse_fact())(input.as_str())?;
@@ -177,7 +177,7 @@ fn resolve_prefixed_name(
     }
 }
 
-/// Resolve prefixes in a [`turtle::RdfLiteral`].
+/// Resolve prefixes in a [turtle::RdfLiteral].
 fn resolve_prefixed_rdf_literal(
     prefixes: &HashMap<&str, &str>,
     literal: turtle::RdfLiteral,
@@ -301,7 +301,7 @@ pub struct RuleParser<'a> {
 }
 
 impl<'a> RuleParser<'a> {
-    /// Construct a new [`RuleParser`].
+    /// Construct a new [RuleParser].
     pub fn new() -> Self {
         Default::default()
     }
@@ -700,8 +700,7 @@ impl<'a> RuleParser<'a> {
         })
     }
 
-    /// Parse an import/export specification for the given
-    /// [`Direction`].
+    /// Parse an import/export specification.
     fn parse_import_export_spec(
         &'a self,
     ) -> impl FnMut(Span<'a>) -> IntermediateResult<ImportExportDirective> {
@@ -938,7 +937,7 @@ impl<'a> RuleParser<'a> {
         )
     }
 
-    /// Parse a [`PrimitiveTerm`].
+    /// Parse a [PrimitiveTerm].
     fn parse_primitive_term(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<PrimitiveTerm> {
         traced(
             "parse_primitive_term",
@@ -1277,7 +1276,7 @@ impl<'a> RuleParser<'a> {
         )
     }
 
-    /// Fold a sequence of ([`ArithmeticOperator`], [`PrimitiveTerm`]) pairs into a single [`Term`].
+    /// Fold a sequence of ([ArithmeticOperator], [PrimitiveTerm]) pairs into a single [Term].
     fn fold_arithmetic_expressions(
         initial: Term,
         sequence: Vec<(ArithmeticOperator, Term)>,

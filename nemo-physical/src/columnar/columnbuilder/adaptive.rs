@@ -55,7 +55,7 @@ where
     }
 }
 
-/// Implementation of [`ColumnBuilder`] that may adaptively decide for the
+/// Implementation of [ColumnBuilder] that may adaptively decide for the
 /// best possible column implementation for the given data.
 #[derive(Debug, Default, PartialEq)]
 pub(crate) struct ColumnBuilderAdaptive<T>

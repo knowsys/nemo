@@ -10,7 +10,7 @@ use crate::{
     management::database::Dict,
 };
 
-/// [`ColumnScan`], which filters values of a "value" scan based on a [StackProgram]
+/// [ColumnScan], which filters values of a "value" scan based on a [StackProgram]
 #[derive(Debug)]
 pub(crate) struct ColumnScanFilter<'a, T>
 where

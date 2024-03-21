@@ -130,7 +130,7 @@ struct TypedTableLookup {
     /// A linearlized trie data structure to find the subtable id for a given list of [StorageTypeName]s
     ///
     /// Each type in [StorageTypeName] is assigned a number between 0 and [NUM_STORAGETYPES] by `Self::storage_type_number`.
-    /// This vector represents a tree with branching degree of [NUM_STORAGETYPES] but can be partial: a slice of length [`STORAGE_TYPE_COUNT`]
+    /// This vector represents a tree with branching degree of [NUM_STORAGETYPES] but can be partial: a slice of length [NUM_STORAGETYPES]
     /// can encode one inner node in the tree, where the usizes refer to the offset of the child node of the tree
     /// for each [StorageTypeName], or (on the last level) to the subtable id of a  [TypedTableRecord].
     /// In each case, a value of `Self::NO_SUCCESSOR` indicates that no child node/no table has been alocated yet

@@ -42,7 +42,7 @@ impl SortedTupleBuffer {
         }
     }
 
-    /// Sort the tuples in the tuple buffer by creating a [Vec::<usize>],
+    /// Sort the tuples in the tuple buffer by creating a [`Vec<usize>`],
     /// which specifies the new order.
     fn sort_buffer(subtable_ids: &[usize], tuple_buffer: &TupleBuffer) -> Vec<usize> {
         let mut order: Vec<usize> = (0..tuple_buffer.size()).collect();
@@ -76,7 +76,7 @@ impl SortedTupleBuffer {
 
     /// Compare two tuples by types and values corresponding to their tuple indexes, according to
     /// the internal order of tuples, i.e., tuple indexes in the first inner table are maintained,
-    /// and row indexes in the second table start from table_lengths[0], and so on.
+    /// and row indexes in the second table start from `table_lengths[0]`, and so on.
     fn compare_tuples(
         subtable_ids: &[usize],
         tuple_buffer: &TupleBuffer,
@@ -118,7 +118,7 @@ impl SortedTupleBuffer {
         Ordering::Equal
     }
 
-    /// Returns the number of columns in the [`SortedTupleBuffer`]
+    /// Returns the number of columns in the [SortedTupleBuffer]
     pub(crate) fn column_number(&self) -> usize {
         self.tuple_buffer.column_number()
     }

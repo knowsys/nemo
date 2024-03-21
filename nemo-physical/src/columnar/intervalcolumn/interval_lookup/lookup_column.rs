@@ -1,5 +1,5 @@
 //! This module implements [IntervalLookupColumn]
-//! and the associated builder [IntervalLookupColumnDualBuilder].
+//! and the associated builder [IntervalLookupColumnBuilder].
 
 use bytesize::ByteSize;
 
@@ -19,8 +19,7 @@ use super::{IntervalLookup, IntervalLookupBuilder};
 /// the successor nodes of the current layer
 #[derive(Debug, Clone)]
 pub(crate) struct IntervalLookupColumn {
-    /// [Column][crate::columnar::column::Column]
-    /// that associates each node of the previous layer
+    /// [Column] that associates each node of the previous layer
     /// with an interval index for `interval_starts`
     ///
     /// An entry in this column might be `Self::Empty`

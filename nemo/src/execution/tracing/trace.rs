@@ -11,7 +11,7 @@ use crate::model::{
     PrimitiveTerm, Program, Rule, Term, Variable,
 };
 
-/// Index of a rule within a [`Program`]
+/// Index of a rule within a [Program]
 type RuleIndex = usize;
 
 /// Represents the application of a rule to derive a specific fact
@@ -26,7 +26,7 @@ pub(crate) struct TraceRuleApplication {
 }
 
 impl TraceRuleApplication {
-    /// Create new [`TraceRuleApplication`].
+    /// Create new [TraceRuleApplication].
     pub fn new(
         rule_index: RuleIndex,
         assignment: HashMap<Variable, AnyDataValue>,
@@ -40,7 +40,7 @@ impl TraceRuleApplication {
     }
 }
 
-/// Handle to a traced fact within an [`ExecutionTrace`].
+/// Handle to a traced fact within an [ExecutionTrace].
 #[derive(Debug, Clone, Copy, Hash, Eq, PartialEq)]
 pub struct TraceFactHandle(usize);
 
@@ -58,7 +58,7 @@ pub(crate) enum TraceDerivation {
 pub(crate) enum TraceStatus {
     /// It is not yet known whether this fact derived during chase
     Unknown,
-    /// Fact was derived during the chase with the given [`Derivation`]
+    /// Fact was derived during the chase with the given [TraceDerivation]
     Success(TraceDerivation),
     /// Fact was not derived during the chase
     Fail,
@@ -78,7 +78,7 @@ impl TraceStatus {
     }
 }
 
-/// Fact which was considered during the construction of an [`ExecutionTrace`]
+/// Fact which was considered during the construction of an [ExecutionTrace]
 #[derive(Debug)]
 struct TracedFact {
     /// The considered fact
@@ -98,7 +98,7 @@ pub struct ExecutionTrace {
 }
 
 impl ExecutionTrace {
-    /// Create an empty [`ExecutionTrace`].
+    /// Create an empty [ExecutionTrace].
     pub(crate) fn new(program: Program) -> Self {
         Self {
             program,
@@ -114,7 +114,7 @@ impl ExecutionTrace {
         &mut self.facts[handle.0]
     }
 
-    /// Search a given [`ChaseFact`] in `self.facts`.
+    /// Search a given [ChaseFact] in `self.facts`.
     /// Also takes into account that the interpretation of a constant depends on its type.
 
     fn find_fact(&self, fact: &ChaseFact) -> Option<TraceFactHandle> {
@@ -141,7 +141,7 @@ impl ExecutionTrace {
         None
     }
 
-    /// Registers a new [`ChaseFact`].
+    /// Registers a new [ChaseFact].
     ///
     /// If the fact was not already known then it will return a fresh handle
     /// with the status `TraceStatus::Known`.
@@ -160,12 +160,12 @@ impl ExecutionTrace {
         }
     }
 
-    /// Return the [`TraceStatus`] of a given fact identified by its [`TraceFactHandle`].
+    /// Return the [TraceStatus] of a given fact identified by its [TraceFactHandle].
     pub(crate) fn status(&self, handle: TraceFactHandle) -> &TraceStatus {
         &self.get_fact(handle).status
     }
 
-    /// Update the [`TraceStatus`] of a given fact identified by its [`TraceFactHandle`].
+    /// Update the [TraceStatus] of a given fact identified by its [TraceFactHandle].
     pub(crate) fn update_status(&mut self, handle: TraceFactHandle, status: TraceStatus) {
         self.get_fact_mut(handle).status = status;
     }
@@ -182,7 +182,7 @@ pub struct TraceTreeRuleApplication {
     _position: usize,
 }
 
-/// Tree representation of an [`ExecutionTrace`] from a given start node
+/// Tree representation of an [ExecutionTrace] from a given start node
 #[derive(Debug, Clone)]
 pub enum ExecutionTraceTree {
     /// Node represent a fact in the initial data base
@@ -192,7 +192,7 @@ pub enum ExecutionTraceTree {
 }
 
 impl ExecutionTrace {
-    /// Return a [`ExecutionTraceTree`] representation of an [`ExecutionTrace`]
+    /// Return a [ExecutionTraceTree] representation of an [ExecutionTrace]
     /// starting from a given fact.
     pub fn tree(&self, fact_handle: TraceFactHandle) -> Option<ExecutionTraceTree> {
         let traced_fact = self.get_fact(fact_handle);
@@ -227,7 +227,7 @@ impl ExecutionTrace {
 
 impl ExecutionTrace {
     /// Converts a rule to a string representation
-    /// so it can appear as a node in the ascii representation of the [`ExecutionTrace`].
+    /// so it can appear as a node in the ascii representation of the [ExecutionTrace].
     fn ascii_format_rule(&self, application: &TraceRuleApplication) -> String {
         let mut rule_applied = self.program.rules()[application.rule_index].clone();
         rule_applied.apply_assignment(
@@ -289,7 +289,7 @@ impl ExecutionTrace {
     }
 }
 
-/// Represents an inference in an [`ExecutionTraceJson`]
+/// Represents an inference in an [ExecutionTraceJson]
 #[derive(Debug, Serialize)]
 struct ExecutionTraceJsonInference {
     #[serde(rename = "ruleName")]
@@ -300,7 +300,7 @@ struct ExecutionTraceJsonInference {
 }
 
 impl ExecutionTraceJsonInference {
-    /// Create a new [`ExecutionTraceJsonInference`]
+    /// Create a new [ExecutionTraceJsonInference]
     pub fn new(rule_name: String, conclusion: String, premises: Vec<String>) -> Self {
         Self {
             rule_name,
@@ -310,7 +310,7 @@ impl ExecutionTraceJsonInference {
     }
 }
 
-/// Object representing an [`ExecutionTrace`] that can be sertialized into a json format
+/// Object representing an [ExecutionTrace] that can be sertialized into a json format
 #[derive(Debug, Serialize, Default)]
 pub struct ExecutionTraceJson {
     #[serde(rename = "finalConclusion")]
@@ -320,7 +320,7 @@ pub struct ExecutionTraceJson {
 }
 
 impl ExecutionTrace {
-    /// Translate an [`TraceDerivation`] into an [`ExecutionTraceJsonInference`].
+    /// Translate an [TraceDerivation] into an [ExecutionTraceJsonInference].
     fn json_inference(
         &self,
         derivation: &TraceDerivation,

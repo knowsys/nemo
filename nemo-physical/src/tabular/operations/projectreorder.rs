@@ -21,10 +21,10 @@ use super::OperationTable;
 /// Type that represents a projection and reordering of an input table.
 pub type ProjectReordering = SortedChoice;
 
-/// Used to perform a project and reorder operation on a [TrieScan].
+/// Used to perform a project and reorder operation on a [PartialTrieScan].
 ///
 /// Note: This does not follow the usual pattern of implementing [OperationGenerator][super::OperationGenerator],
-/// since this operation is not done via a [PartialTrieScan][crate::tabular::triescan::PartialTrieScan].
+/// since this operation is not done via a [PartialTrieScan].
 #[derive(Debug, Clone)]
 pub(crate) struct GeneratorProjectReorder {
     /// Determines which columns of the input trie are used and in what position in the output trie

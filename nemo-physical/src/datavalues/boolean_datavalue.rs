@@ -1,4 +1,4 @@
-//! This module provides implementations [`super::DataValue`]s that represent boolean values.
+//! This module provides implementations [DataValue]s that represent boolean values.
 
 use super::{DataValue, ValueDomain};
 

@@ -1,3 +1,5 @@
+//! This module defines [GlobalBytesBuffer] and related code.
+
 use std::{
     fmt::{Debug, Display},
     hash::{Hash, Hasher},
@@ -17,16 +19,16 @@ const PAGE_SIZE: usize = 1 << PAGE_ADDR_BITS;
 /// Buffers might be dropped, upon which all of its pages will be freed. There is no other way
 /// of removing contents from a buffer.
 ///
-/// Individual pages have a size of at most [`PAGE_SIZE`] bytes, so that [`PAGE_ADDR_BITS`]
+/// Individual pages have a size of at most [PAGE_SIZE`] bytes, so that [`PAGE_ADDR_BITS]
 /// are needed to specify a position within a page. References to buffered strings are represented
-/// by [`BytesRef`], which stores a starting address and length of the slice. The `usize` starting
-/// address is global (uniform for all buffers), with the lower [`PAGE_ADDR_BITS`] bits encoding a position within a page,
+/// by [BytesRef], which stores a starting address and length of the slice. The `usize` starting
+/// address is global (uniform for all buffers), with the lower [PAGE_ADDR_BITS] bits encoding a position within a page,
 /// and the remaining higher bits encoding the numeric id of the page (whatever buffer it belongs to).
 /// Since this address must fit into usize, 32bit platforms can only support 2 to the power of
-/// (32-[`PAGE_ADDR_BITS`]) pages. Moreover, since [`BytesRef`] combines the address and the slice length
+/// (32-[PAGE_ADDR_BITS]) pages. Moreover, since [BytesRef] combines the address and the slice length
 /// into a single `u64` (on all platforms), even 64bit platforms cannot use all 64bits for byte array addresses.
-/// The number of bits reserved for length is [`BYTESREF_BYTES_LENGTH_BITS`], which should always be less
-/// than [`PAGE_ADDR_BITS`] since longer tuples would not fit any buffer page anyway.
+/// The number of bits reserved for length is [BYTESREF_BYTES_LENGTH_BITS], which should always be less
+/// than [PAGE_ADDR_BITS] since longer tuples would not fit any buffer page anyway.
 ///
 /// The implementaion can be used in multiple parallel threads.
 ///
@@ -180,23 +182,23 @@ pub(crate) unsafe trait GlobalBytesBuffer: Debug + Sized {
 }
 
 /// Number of bits reserved for encoding the length of referenced byte arrays.
-/// This should be at most [`PAGE_ADDR_BITS`], the maximal length in any page
-/// in the [`BytesBuffer`], but it could conceivably also be less.
+/// This should be at most [PAGE_ADDR_BITS], the maximal length in any page
+/// in the [BytesBuffer], but it could conceivably also be less.
 const BYTESREF_BYTES_LENGTH_BITS: u64 = 24;
 /// Bit mask that keeps only the (lower) BYTESREF_BYTES_LENGTH_BITS-1 bits, for extracting a string's length
 const LENGTH_BITS_MASK: u64 = (1 << BYTESREF_BYTES_LENGTH_BITS) - 1;
 /// Number of bits reserved for the starting address of a byte array.
 const BYTESREF_STARTING_ADDRESS_BITS: u64 = 64 - BYTESREF_BYTES_LENGTH_BITS;
-/// Largest number that can specify the length of a byte array in a [`BytesRef`].
+/// Largest number that can specify the length of a byte array in a [BytesRef].
 const MAX_BYTESREF_BYTES_LENGTH: u64 = (1 << BYTESREF_BYTES_LENGTH_BITS) - 1;
-/// Largest number that can specify the starting address of a byte array in a [`BytesRef`].
+/// Largest number that can specify the starting address of a byte array in a [BytesRef].
 const MAX_BYTESREF_STARTING_ADDRESS: u64 = (1 << BYTESREF_STARTING_ADDRESS_BITS) - 1;
 
 /// Memory-optimized reference to a byte array in the buffer.
 ///
 /// Internally, a single u64 number is used to combine the starting address of an
-/// array in a [`BytesBuffer`] and its length.
-/// See [`BytesBuffer`] for a discussion of the resulting constraints.
+/// array in a [BytesBuffer] and its length.
+/// See [BytesBuffer] for a discussion of the resulting constraints.
 ///
 /// The generic parameter is used to obtain the global buffer that is to be uesd
 /// here.

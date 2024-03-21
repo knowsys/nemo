@@ -247,7 +247,7 @@ pub struct ProgramAnalysis {
 }
 
 impl ChaseProgram {
-    /// Collect all predicates that appear in a head atom into a [`HashSet`]
+    /// Collect all predicates that appear in a head atom into a [HashSet]
     fn get_head_predicates(&self) -> HashSet<Identifier> {
         let mut result = HashSet::<Identifier>::new();
 

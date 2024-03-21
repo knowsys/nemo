@@ -1,4 +1,4 @@
-//! A [`DvDict`] implementation based on converting data values to strings.
+//! A [DvDict] implementation based on converting data values to strings.
 //! The dictionary implementations in this module are typically restricted to certain
 //! types of datavalues (e.g., strings or IRIs), which allows them to use more direct
 //! string representations without any risk of confusion.
@@ -11,19 +11,19 @@ use crate::dictionary::dv_converter::{DvConverter, IriDvConverter, StringDvConve
 #[cfg(not(feature = "stringpairdictionary"))]
 use crate::dictionary::dv_converter::{LangStringDvConverter, OtherDvConverter};
 
-/// Implementation of [`DvDict`] that will only handle [`AnyDataValue::String`] values.
+/// Implementation of [DvDict] that will only handle [ValueDomain::PlainString] values.
 pub(crate) type StringDvDictionary = StringBasedDvDictionary<StringDvConverter>;
-/// Implementation of [`DvDict`] that will only handle [`AnyDataValue::Iri`] values.
+/// Implementation of [DvDict] that will only handle [ValueDomain::Iri] values.
 pub(crate) type IriDvDictionary = StringBasedDvDictionary<IriDvConverter>;
 
-/// Implementation of [`DvDict`] that will only handle [`AnyDataValue::Other`] values.
+/// Implementation of [DvDict] that will only handle [ValueDomain::Other] values.
 #[cfg(not(feature = "stringpairdictionary"))]
 pub(crate) type OtherDvDictionary = StringBasedDvDictionary<OtherDvConverter>;
-/// Implementation of [`DvDict`] that will only handle [`AnyDataValue::LanguageTaggedString`] values.
+/// Implementation of [DvDict] that will only handle [ValueDomain::LanguageTaggedString] values.
 #[cfg(not(feature = "stringpairdictionary"))]
 pub(crate) type LangStringDvDictionary = StringBasedDvDictionary<LangStringDvConverter>;
 
-/// A generic [`DvDict`] dictionary based on converting datavalues to strings. The
+/// A generic [DvDict] dictionary based on converting datavalues to strings. The
 /// type parameter defines how the conversion is to be done, making sure that we have
 /// compile-time knowledge about this.
 #[derive(Debug)]

@@ -235,7 +235,7 @@ impl BinaryOperation {
     }
 }
 
-/// Unary operation applied to a [`Term`]
+/// Unary operation applied to a [Term]
 #[derive(Debug, Eq, PartialEq, Copy, Clone, PartialOrd, Ord)]
 pub enum UnaryOperation {
     /// Boolean negation
@@ -367,7 +367,7 @@ impl UnaryOperation {
     }
 }
 
-/// Possibly complex term that may occur within an [`super::Atom`]
+/// Possibly complex term that may occur within an [super::Atom]
 #[derive(Eq, PartialEq, Clone, PartialOrd, Ord)]
 pub enum Term {
     /// Primitive term.
@@ -390,7 +390,7 @@ pub enum Term {
 }
 
 impl Term {
-    /// If the term is a simple [`PrimitiveTerm`] then return it.
+    /// If the term is a simple [PrimitiveTerm] then return it.
     /// Otherwise return `None`.
     pub(crate) fn as_primitive(&self) -> Option<PrimitiveTerm> {
         match self {
@@ -405,7 +405,7 @@ impl Term {
         self.as_primitive().is_some()
     }
 
-    /// Return all [`PrimitiveTerm`]s that make up this term.
+    /// Return all [PrimitiveTerm]s that make up this term.
     pub(crate) fn primitive_terms(&self) -> Vec<&PrimitiveTerm> {
         match self {
             Term::Primitive(primitive) => {
@@ -457,7 +457,7 @@ impl Term {
             .filter(|var| matches!(var, Variable::Existential(_)))
     }
 
-    /// Replaces [`Variable`]s with [`Term`]s according to the provided assignment.
+    /// Replaces [Variable]s with [Term]s according to the provided assignment.
     pub(crate) fn apply_assignment(&mut self, assignment: &VariableAssignment) {
         match self {
             Term::Primitive(primitive) => {
@@ -543,7 +543,7 @@ impl Term {
     }
 
     /// Defines the precedence of the term operations.
-    /// This is only relevant for the [`Display`] implementation.
+    /// This is only relevant for the [Display] implementation.
     fn precedence(&self) -> usize {
         match self {
             Term::Primitive(_) => 0,

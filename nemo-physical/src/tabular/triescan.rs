@@ -21,7 +21,7 @@ use super::{
 /// Iterator for a [Trie][super::trie::Trie] data structure
 ///
 /// It allows for vertical traversal between layers via the `up` and `down` methods,
-/// and horizontal traversal via [`ColumnScanT`].
+/// and horizontal traversal via [ColumnScanT].
 pub(crate) trait PartialTrieScan<'a>: Debug {
     /// Return to the upper layer.
     ///
@@ -60,7 +60,7 @@ pub(crate) trait PartialTrieScan<'a>: Debug {
 /// Enum containing all implementations of [PartialTrieScan]
 #[derive(Debug)]
 pub(crate) enum TrieScanEnum<'a> {
-    /// Case [TrieScanAggregate]
+    /// Case [TrieScanAggregateWrapper]
     AggregateWrapper(TrieScanAggregateWrapper<'a>),
     /// Case [TrieScanFilter]
     Filter(TrieScanFilter<'a>),
