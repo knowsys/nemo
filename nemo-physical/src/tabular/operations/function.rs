@@ -236,6 +236,7 @@ impl OperationGenerator for GeneratorFunction {
         debug_assert!(input.len() == 1);
 
         let trie_scan = input.remove(0)?;
+
         if self.is_unchanging() {
             return Some(trie_scan);
         }
@@ -902,5 +903,121 @@ mod test {
         ];
 
         assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn function_only_constants() {
+        let mut dictionary = Dict::default();
+        dictionary.add_datavalue(AnyDataValue::new_plain_string(String::from("hello")));
+        dictionary.add_datavalue(AnyDataValue::new_plain_string(String::from("world")));
+        let dictionary = RefCell::new(dictionary);
+
+        let trie = Trie::zero_arity(true);
+
+        let trie_scan = TrieScanEnum::Generic(trie.partial_iterator());
+
+        let mut marker_generator = OperationTableGenerator::new();
+        marker_generator.add_marker("x");
+        marker_generator.add_marker("y");
+
+        let markers = marker_generator.operation_table(["x", "y"].iter());
+        let marker_x = *marker_generator.get(&"x").unwrap();
+        let marker_y = *marker_generator.get(&"y").unwrap();
+
+        let mut assigment = FunctionAssignment::new();
+        assigment.insert(
+            marker_x,
+            FunctionTree::constant(AnyDataValue::new_plain_string(String::from("hello"))),
+        );
+        assigment.insert(
+            marker_y,
+            FunctionTree::constant(AnyDataValue::new_plain_string(String::from("world"))),
+        );
+
+        // Input is passed in as an empty trie
+
+        let function_generator = GeneratorFunction::new(markers.clone(), &assigment);
+        let function_scan = function_generator
+            .generate(vec![Some(trie_scan)], &dictionary)
+            .unwrap();
+
+        let result = RowScan::new(function_scan, 0)
+            .map(|row| {
+                row.into_iter()
+                    .map(|value| value.into_datavalue(&dictionary.borrow()).unwrap())
+                    .collect::<Vec<_>>()
+            })
+            .collect::<Vec<_>>();
+
+        let expected = vec![vec![
+            AnyDataValue::new_plain_string(String::from("hello")),
+            AnyDataValue::new_plain_string(String::from("world")),
+        ]];
+
+        assert_eq!(result, expected);
+
+        // Input is passed in as `None`
+
+        let function_generator = GeneratorFunction::new(markers, &assigment);
+        let function_scan = function_generator.generate(vec![None], &dictionary);
+
+        assert!(function_scan.is_none());
+    }
+
+    #[test]
+    fn function_empty() {
+        let mut dictionary = Dict::default();
+        dictionary.add_datavalue(AnyDataValue::new_plain_string(String::from("hello")));
+        dictionary.add_datavalue(AnyDataValue::new_plain_string(String::from("world")));
+        let dictionary = RefCell::new(dictionary);
+
+        let trie = Trie::empty(1);
+
+        let trie_scan = TrieScanEnum::Generic(trie.partial_iterator());
+
+        let mut marker_generator = OperationTableGenerator::new();
+        marker_generator.add_marker("i");
+        marker_generator.add_marker("x");
+        marker_generator.add_marker("y");
+
+        let markers = marker_generator.operation_table(["i", "x", "y"].iter());
+        let marker_x = *marker_generator.get(&"x").unwrap();
+        let marker_y = *marker_generator.get(&"y").unwrap();
+
+        let mut assigment = FunctionAssignment::new();
+        assigment.insert(
+            marker_x,
+            FunctionTree::constant(AnyDataValue::new_plain_string(String::from("hello"))),
+        );
+        assigment.insert(
+            marker_y,
+            FunctionTree::constant(AnyDataValue::new_plain_string(String::from("world"))),
+        );
+
+        // Input is passed in as an empty trie
+
+        let function_generator = GeneratorFunction::new(markers.clone(), &assigment);
+        let function_scan = function_generator
+            .generate(vec![Some(trie_scan)], &dictionary)
+            .unwrap();
+
+        let result = RowScan::new(function_scan, 0)
+            .map(|row| {
+                row.into_iter()
+                    .map(|value| value.into_datavalue(&dictionary.borrow()).unwrap())
+                    .collect::<Vec<_>>()
+            })
+            .collect::<Vec<_>>();
+
+        let expected: Vec<Vec<AnyDataValue>> = vec![];
+
+        assert_eq!(result, expected);
+
+        // Input is passed in as `None`
+
+        let function_generator = GeneratorFunction::new(markers, &assigment);
+        let function_scan = function_generator.generate(vec![None], &dictionary);
+
+        assert!(function_scan.is_none());
     }
 }

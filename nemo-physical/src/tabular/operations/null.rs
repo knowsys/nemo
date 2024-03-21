@@ -84,9 +84,8 @@ impl OperationGenerator for GeneratorNull {
     ) -> Option<TrieScanEnum<'a>> {
         debug_assert!(trie_scans.len() == 1);
 
-        // We return `None` if we do not add anything
         if self.instructions.is_empty() {
-            return None;
+            return trie_scans.remove(0);
         }
 
         let trie_scan = trie_scans.remove(0)?;
@@ -334,5 +333,42 @@ mod test {
 
         assert_ne!(result[0][2], result[0][3]);
         assert_ne!(result[1][2], result[1][3]);
+    }
+
+    #[test]
+    fn null_empty() {
+        let dictionary = RefCell::new(Dict::default());
+
+        let trie_zero = Trie::zero_arity(true);
+        let trie_scan = TrieScanEnum::Generic(trie_zero.partial_iterator());
+
+        let mut marker_generator = OperationTableGenerator::new();
+        marker_generator.add_marker("v");
+        marker_generator.add_marker("w");
+
+        let markers_input = marker_generator.operation_table([].iter());
+        let markers_output = marker_generator.operation_table(["v", "w"].iter());
+
+        let generator_null = GeneratorNull::new(markers_output, markers_input);
+        let null_scan = generator_null
+            .generate(vec![Some(trie_scan)], &dictionary)
+            .unwrap();
+
+        let result = RowScan::new(null_scan, 0)
+            .map(|row| {
+                row.into_iter()
+                    .map(|value| value.into_datavalue(&dictionary.borrow()).unwrap())
+                    .collect::<Vec<_>>()
+            })
+            .collect::<Vec<_>>();
+
+        assert_eq!(result.len(), 1);
+
+        for value in &result[0] {
+            assert_eq!(value.value_domain(), ValueDomain::Null);
+        }
+
+        let null_scan = generator_null.generate(vec![None], &dictionary);
+        assert!(null_scan.is_none());
     }
 }

@@ -35,11 +35,16 @@ impl OperationGenerator for GeneratorUnion {
         _dictionary: &'a RefCell<Dict>,
     ) -> Option<TrieScanEnum<'a>> {
         // We ignore any empy tables
-        let trie_scans = trie_scans.into_iter().flatten().collect::<Vec<_>>();
+        let mut trie_scans = trie_scans.into_iter().flatten().collect::<Vec<_>>();
 
         // We return `None` if there are no input tables left
         if trie_scans.is_empty() {
             return None;
+        }
+
+        // The union of one table is just that table
+        if trie_scans.len() == 1 {
+            return Some(trie_scans.remove(0));
         }
 
         debug_assert!(trie_scans
@@ -116,7 +121,7 @@ pub(crate) struct TrieScanUnion<'a> {
     /// Current layer of this [PartialTrieScan]
     current_layer: Option<usize>,
 
-    /// For each layer in the resulting trie contains a [ColumnScanRainbow]
+    /// For each layer in the resulting trie contains a [ColumnScanT]
     /// evaluating the union of the underlying columns of the input trie.
     column_scans: Vec<UnsafeCell<ColumnScanT<'a>>>,
 }

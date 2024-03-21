@@ -80,6 +80,8 @@ impl RestrictedChaseStrategy {
         let head_join_atoms = analysis.existential_aux_rule.positive_body().clone();
         let head_join_constraints = analysis.existential_aux_rule.positive_constraints().clone();
 
+        println!("{:?}, {:?}", head_join_atoms, head_join_constraints);
+
         let aux_head = &analysis.existential_aux_rule.head()[0];
         let mut aux_head_order = VariableOrder::new();
         let mut used_join_head_variables = HashSet::<Variable>::new();

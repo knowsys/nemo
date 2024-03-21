@@ -138,11 +138,25 @@ fn construct_existential_aux_rule(
         for term in atom.terms() {
             match term {
                 PrimitiveTerm::Variable(variable) => {
-                    if variable.is_universal() && used_variables.insert(variable.clone()) {
-                        aux_predicate_terms.push(PrimitiveTerm::Variable(variable.clone()));
+                    if !used_variables.insert(variable.clone()) {
+                        let generated_variable = generate_variable();
+                        new_terms.push(generated_variable.clone());
+
+                        let new_constraint = Constraint::Equals(
+                            Term::Primitive(PrimitiveTerm::Variable(generated_variable)),
+                            Term::Primitive(term.clone()),
+                        );
+
+                        constraints.push(new_constraint);
+                    } else {
+                        if variable.is_universal() {
+                            aux_predicate_terms.push(PrimitiveTerm::Variable(variable.clone()));
+                        }
+
+                        new_terms.push(variable.clone());
                     }
 
-                    new_terms.push(variable.clone());
+                    if variable.is_universal() && used_variables.insert(variable.clone()) {}
                 }
                 PrimitiveTerm::GroundTerm(_) => {
                     let generated_variable = generate_variable();
