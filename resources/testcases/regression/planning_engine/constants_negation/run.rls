@@ -17,3 +17,5 @@ R(?x, ?y, ?z) :-
     S(?x, ?y, ?z),
     ~ T(a, ?y),
     ~ T(a, ?z).
+
+@export R :- csv {} .
