@@ -25,7 +25,13 @@ rec {
 
       channels.nixpkgs.overlaysBuilder = channels: [
         rust-overlay.overlays.default
-        (final: prev: {inherit (channels.nixpkgs-unstable) wasm-bindgen-cli;})
+        (final: prev: {
+          wasm-bindgen-cli = channels.nixpkgs-unstable.wasm-bindgen-cli.override {
+            version = "0.2.92";
+            hash = "sha256-1VwY8vQy7soKEgbki4LD+v259751kKxSxmo/gqE6yV0=";
+            cargoHash = "sha256-aACJ+lYNEU8FFBs158G1/JG8sc6Rq080PeKCMnwdpH0=";
+          };
+        })
       ];
 
       overlays.default = final: prev: let
