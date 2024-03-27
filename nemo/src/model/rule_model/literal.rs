@@ -55,7 +55,7 @@ impl Neg for Literal {
 generate_forwarder!(forward_to_atom; Positive, Negative);
 
 impl Literal {
-    /// Return the predicate [`Identifier`].
+    /// Return the predicate [Identifier].
     #[must_use]
     pub fn predicate(&self) -> Identifier {
         forward_to_atom!(self, predicate)
@@ -92,7 +92,7 @@ impl Literal {
         forward_to_atom!(self, aggregates)
     }
 
-    /// Replaces [`Variable`]s with [`Term`]s according to the provided assignment.
+    /// Replaces [Variable]s with [Term]s according to the provided assignment.
     pub fn apply_assignment(&mut self, assignment: &VariableAssignment) {
         match self {
             Literal::Positive(atom) => atom.apply_assignment(assignment),

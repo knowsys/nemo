@@ -1,5 +1,4 @@
 //! Parsers for productions from the RDF 1.1 Turtle grammar.
-use std::num::ParseIntError;
 
 use nom::{
     branch::alt,
@@ -11,8 +10,7 @@ use nom::{
 
 use macros::traced;
 
-use crate::model::NumericLiteral;
-use nemo_physical::datatypes::Double;
+use nemo_physical::datavalues::AnyDataValue;
 
 use super::{
     map_error,
@@ -117,23 +115,10 @@ pub fn sign(input: Span) -> IntermediateResult<Span> {
 }
 
 #[traced("parser::turtle")]
-pub fn integer(input: Span) -> IntermediateResult<NumericLiteral> {
+pub fn integer(input: Span) -> IntermediateResult<AnyDataValue> {
     map_res(recognize(preceded(opt(sign), digit1)), |value| {
-        value.parse().map(NumericLiteral::Integer)
+        value.parse().map(AnyDataValue::new_integer_from_i64)
     })(input)
-}
-
-#[traced("parser::turtle")]
-pub fn decimal(input: Span) -> IntermediateResult<NumericLiteral> {
-    map_res(
-        pair(
-            recognize(preceded(opt(sign), digit0)),
-            preceded(token("."), digit1),
-        ),
-        |(whole, fraction)| {
-            Ok::<_, ParseIntError>(NumericLiteral::Decimal(whole.parse()?, fraction.parse()?))
-        },
-    )(input)
 }
 
 #[traced("parser::turtle")]
@@ -142,26 +127,23 @@ pub fn exponent(input: Span) -> IntermediateResult<Span> {
 }
 
 #[traced("parser::turtle")]
-pub fn double(input: Span) -> IntermediateResult<NumericLiteral> {
+pub fn double(input: Span) -> IntermediateResult<AnyDataValue> {
     map_res(
-        map_res(
-            recognize(preceded(
-                opt(sign),
-                alt((
-                    recognize(tuple((digit1, token("."), digit0, exponent))),
-                    recognize(tuple((token("."), digit1, exponent))),
-                    recognize(pair(digit1, exponent)),
-                )),
+        recognize(preceded(
+            opt(sign),
+            alt((
+                recognize(tuple((digit0, token("."), digit1, exponent))),
+                recognize(tuple((digit0, token("."), digit1))),
+                recognize(pair(digit1, exponent)),
             )),
-            |value| value.parse().map(Double::new),
-        ),
-        |number| number.map(NumericLiteral::Double),
+        )),
+        |value| value.parse().map(AnyDataValue::new_double_from_f64)?,
     )(input)
 }
 
 #[traced("parser::turtle")]
-pub fn numeric_literal(input: Span) -> IntermediateResult<NumericLiteral> {
-    alt((double, decimal, integer))(input)
+pub fn numeric_literal(input: Span) -> IntermediateResult<AnyDataValue> {
+    alt((double, integer))(input)
 }
 
 #[derive(Debug)]

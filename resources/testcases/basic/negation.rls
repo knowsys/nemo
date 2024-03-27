@@ -1,8 +1,3 @@
-@declare main(integer, integer, integer) .
-@declare s1(integer) .
-@declare s2(integer, integer) .
-@declare s3(integer, integer, integer) .
-
 @source main[3]: load-csv("sources/main.csv").
 @source s1[1]: load-csv("sources/S1.csv").
 @source s2[2]: load-csv("sources/S2.csv").
@@ -26,3 +21,18 @@ projectedXZ(?X, ?Z) :- main(?X, ?Y, ?Z), ~s3(?X, ?Z, ?P) .
 projectedX(?X, ?Y, ?Z) :- main(?X, ?Y, ?Z), ~s3(?X, ?P, ?P) .
 projectedY(?X, ?Y, ?Z) :- main(?X, ?Y, ?Z), ~s3(?P, ?P, ?Y) .
 projectedZ(?X, ?Y, ?Z) :- main(?X, ?Y, ?Z), ~s3(?P, ?Z, ?P) .
+
+@export projectedZ :- csv {}.
+@export filteredX :- csv {}.
+@export projectedX :- csv {}.
+@export projectedY :- csv {}.
+@export projectedXZ :- csv {}.
+@export multiple :- csv {}.
+@export singlePositionY :- csv {}.
+@export filteredY :- csv {}.
+@export reordered :- csv {}.
+@export filteredZ :- csv {}.
+@export projectedXY :- csv {}.
+@export projectedYZ :- csv {}.
+@export singlePositionX :- csv {}.
+@export singlePositionZ :- csv {}.

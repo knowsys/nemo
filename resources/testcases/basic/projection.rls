@@ -5,3 +5,9 @@ B(?Y, ?X) :- A(?X, ?Y) .
 C(?Y) :- B(?VariableThatIsNotNeeded, ?Y) .
 D(?Y, ?Z) :- data(?X, ?Y, ?Z) .
 E(?F, ?E) :- D(?E, ?F) .
+
+@export A :- csv {}.
+@export D :- csv {}.
+@export C :- csv {}.
+@export E :- csv {}.
+@export B :- csv {}.

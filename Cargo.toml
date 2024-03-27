@@ -6,11 +6,10 @@ members = [
     "nemo-physical",
     "nemo-python",
     "nemo-wasm",
-    "nemo-benches",
 ]
 
 [workspace.package]
-description = "nemo, a datalog-based rule engine for fast and scalable analytic data processing in memory"
+description = "Nemo, a datalog-based rule engine for fast and scalable analytic data processing in memory"
 version = "0.4.1-dev"
 authors = [
 "Alex Ivliev <alex.ivliev@tu-dresden.de>",

@@ -1,3 +1,5 @@
+//! This module defines [InfixDictionary].
+
 use super::hash_map_dictionary::HashMapDictionary;
 use super::AddResult;
 use super::Dictionary;
@@ -6,8 +8,8 @@ use super::DictionaryString;
 /// A read-only [Dictionary] to implement a bijection between integer ids and strings that start and end
 /// with a certain fixed prefix and postfix, respectively. Strings that do not have this shape will be
 /// rejected.
-#[derive(Clone, Debug)]
-pub struct InfixDictionary {
+#[derive(Debug)]
+pub(crate) struct InfixDictionary {
     dict: HashMapDictionary,
     prefix: String,
     suffix: String,
@@ -15,7 +17,7 @@ pub struct InfixDictionary {
 
 impl InfixDictionary {
     /// Construct a new and empty dictionary for the given prefix and suffix.
-    pub fn new(prefix: String, suffix: String) -> Self {
+    pub(crate) fn new(prefix: String, suffix: String) -> Self {
         InfixDictionary {
             dict: HashMapDictionary::new(),
             prefix,

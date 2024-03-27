@@ -13,6 +13,7 @@ use super::traits::NatMapping;
 pub struct Permutation {
     // The function represented by this object will map `i` to `map.get(i)`.
     // All inputs that are not keys in this map are implicitly mapped to themselves.
+    // This allows us to have a canonical representation such that we can easily check for equality
     map: HashMap<usize, usize>,
 }
 
@@ -24,7 +25,6 @@ impl Permutation {
         for (value, input) in vec.into_iter().enumerate() {
             if input == value {
                 // Values that map to themselves will be represented implicitly
-                // This also allows us to have a canonical representation such that we can easily check for equality
                 continue;
             }
 
@@ -39,8 +39,7 @@ impl Permutation {
 
     /// Return an instance of the function from a hash map representation where the input `i` is mapped to `map.get(i)`.
     pub fn from_map(mut map: HashMap<usize, usize>) -> Self {
-        // Values that map to themselves will not be stored
-        // This also allows us to have a canonical representation such that we can easily check for equality
+        // Values that map to themselves will not be stored explicitly
         map.retain(|i, v| *i != *v);
 
         let result = Self { map };
@@ -49,7 +48,7 @@ impl Permutation {
         result
     }
 
-    /// Return a [`Permutation`] that when applied to the given slice of values would put them in ascending order.
+    /// Return a [Permutation] that when applied to the given slice of values would put them in ascending order.
     pub fn from_unsorted<T: Ord>(values: &[T]) -> Self {
         let mut result: Vec<usize> = (0..values.len()).collect();
         result.sort_by(|&a, &b| values[a].cmp(&values[b]));
@@ -58,7 +57,7 @@ impl Permutation {
     }
 
     /// Return the largest input value that is not mapped to itself.
-    pub fn last_mapped(&self) -> Option<usize> {
+    pub(crate) fn last_mapped(&self) -> Option<usize> {
         self.map.keys().max().copied()
     }
 
@@ -116,7 +115,7 @@ impl Permutation {
     }
 
     /// Return a vector represenation of the permutation.
-    fn to_vector(&self) -> Vec<usize> {
+    fn vector_minimal(&self) -> Vec<usize> {
         let mut result = Vec::<usize>::new();
 
         for (&input, &value) in &self.map {
@@ -130,10 +129,11 @@ impl Permutation {
         result
     }
 
-    /// Derive a [`Permutation`] that would transform a vector of elements into another.
+    /// Derive a [Permutation] that would transform a vector of elements into another.
     /// I.e. `this.permute(source) = target`
     /// For example `from_transformation([x, y, z, w], [z, w, y, x]) = {0->3, 1->2, 2->0, 3->1}`.
-    pub fn from_transformation<T: PartialEq>(source: &[T], target: &[T]) -> Self {
+    #[allow(dead_code)]
+    pub(crate) fn from_transformation<T: PartialEq>(source: &[T], target: &[T]) -> Self {
         debug_assert!(source.len() == target.len());
 
         let mut map = HashMap::<usize, usize>::new();
@@ -149,8 +149,28 @@ impl Permutation {
         Self::from_map(map)
     }
 
-    /// Return a new [`Permutation`] that is the inverse of this.
-    pub fn invert(&self) -> Self {
+    /// Compute a [Permutation] that when chained to this [Permutation]
+    /// would result in the given target [Permutation].
+    #[allow(dead_code)]
+    pub(crate) fn permute_into(&self, target: &Self) -> Self {
+        let max_key_source = self.map.keys().max().cloned().unwrap_or(0);
+        let max_key_target = target.map.keys().max().cloned().unwrap_or(0);
+        let max_key = max_key_source.max(max_key_target);
+
+        let mut result_map = HashMap::new();
+
+        for input in 0..max_key {
+            let source_output = self.get(input);
+            let target_output = target.get(input);
+
+            result_map.insert(source_output, target_output);
+        }
+
+        Self::from_map(result_map)
+    }
+
+    /// Return a new [Permutation] that is the inverse of this.
+    pub(crate) fn invert(&self) -> Self {
         let mut map = HashMap::<usize, usize>::new();
 
         for (input, value) in &self.map {
@@ -161,7 +181,7 @@ impl Permutation {
     }
 
     /// Apply this permutation to a slice of things.
-    pub fn permute<T: Clone>(&self, vec: &[T]) -> Vec<T> {
+    pub(crate) fn permute<T: Clone>(&self, vec: &[T]) -> Vec<T> {
         let mut result: Vec<T> = vec.to_vec();
         for (input, value) in self.map.iter() {
             result[*value] = vec[*input].clone();
@@ -171,7 +191,7 @@ impl Permutation {
     }
 
     /// Return the value of the function for a given input.
-    pub fn get(&self, input: usize) -> usize {
+    pub(crate) fn get(&self, input: usize) -> usize {
         self.get_partial(input)
             .expect("Permutations map each value")
     }
@@ -203,10 +223,6 @@ impl NatMapping for Permutation {
         }
 
         Self { map: result_map }
-    }
-
-    fn domain_contains(&self, _value: usize) -> bool {
-        true
     }
 
     fn is_identity(&self) -> bool {
@@ -249,13 +265,13 @@ impl Display for Permutation {
 
 impl Hash for Permutation {
     fn hash<H: Hasher>(&self, state: &mut H) {
-        self.to_vector().hash(state);
+        self.vector_minimal().hash(state);
     }
 }
 
 impl PartialEq for Permutation {
     fn eq(&self, other: &Self) -> bool {
-        self.to_vector() == other.to_vector()
+        self.vector_minimal() == other.vector_minimal()
     }
 }
 
@@ -389,19 +405,19 @@ mod test {
     fn test_to_vector() {
         let vector = vec![0, 2, 1];
         let perm = Permutation::from_vector(vector.clone());
-        assert_eq!(perm.to_vector(), vector);
+        assert_eq!(perm.vector_minimal(), vector);
 
         let vector = vec![4, 2, 0, 1, 3];
         let perm = Permutation::from_vector(vector.clone());
-        assert_eq!(perm.to_vector(), vector);
+        assert_eq!(perm.vector_minimal(), vector);
 
         let vector = vec![0, 3, 1, 2, 4, 5, 6];
         let perm = Permutation::from_vector(vector);
-        assert_eq!(perm.to_vector(), vec![0, 3, 1, 2]);
+        assert_eq!(perm.vector_minimal(), vec![0, 3, 1, 2]);
 
         let vector = vec![0, 1, 2, 4, 3, 5, 6, 9, 7, 8, 10, 11];
         let perm = Permutation::from_vector(vector);
-        assert_eq!(perm.to_vector(), vec![0, 1, 2, 4, 3, 5, 6, 9, 7, 8]);
+        assert_eq!(perm.vector_minimal(), vec![0, 1, 2, 4, 3, 5, 6, 9, 7, 8]);
     }
 
     #[test]

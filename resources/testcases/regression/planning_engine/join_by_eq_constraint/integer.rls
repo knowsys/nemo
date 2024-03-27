@@ -1,8 +1,3 @@
-@declare prime(integer).
-@declare odd(integer).
-
-@declare intInBody(integer,integer).
-
 odd(1).
 odd(3).
 odd(5).
@@ -18,3 +13,4 @@ intInBody(?a,?b):-
     odd(?a),
     prime(?b),
     ?a = ?b.
+@export intInBody :- csv {}.

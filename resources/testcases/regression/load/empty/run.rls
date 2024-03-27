@@ -1,3 +1,5 @@
-@source source[3]: load-csv("../sources/empty.csv").
+@import source :- csv { resource = "../sources/empty.csv" }.
 
 out(?X, ?Y, ?Z) :- source(?X, ?Y, ?Z) .
+
+@export out :- csv {}.

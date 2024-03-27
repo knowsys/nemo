@@ -15,7 +15,7 @@ pub enum SelectionStrategyError {
 /// Trait that defines a strategy for rule execution,
 /// namely the order in which the rules are applied in.
 pub trait RuleSelectionStrategy: std::fmt::Debug {
-    /// Create a new [`RuleSelectionStrategy`] object.
+    /// Create a new [RuleSelectionStrategy] object.
     fn new(
         rules: Vec<&ChaseRule>,
         rule_analyses: Vec<&RuleAnalysis>,

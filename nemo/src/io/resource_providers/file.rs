@@ -1,7 +1,13 @@
-use std::{fs::File, io::Read, path::PathBuf};
+use std::{
+    fs::File,
+    io::{BufRead, BufReader},
+    path::PathBuf,
+};
 
-use nemo_physical::{error::ReadingError, table_reader::Resource};
+use nemo_physical::{error::ReadingError, resource::Resource};
 use path_slash::PathBufExt;
+
+use crate::io::compression_format::CompressionFormat;
 
 use super::{is_iri, ResourceProvider};
 
@@ -49,14 +55,26 @@ impl FileResourceProvider {
 }
 
 impl ResourceProvider for FileResourceProvider {
-    fn open_resource(&self, resource: &Resource) -> Result<Option<Box<dyn Read>>, ReadingError> {
+    fn open_resource(
+        &self,
+        resource: &Resource,
+        compression: CompressionFormat,
+    ) -> Result<Option<Box<dyn BufRead>>, ReadingError> {
         // Try to parse as file IRI
         if let Some(path) = self.parse_resource(resource)? {
-            let file = File::open(&path).map_err(|e| ReadingError::IOReading {
+            let file = File::open(&path).map_err(|e| ReadingError::IoReading {
                 error: e,
                 filename: path.to_string_lossy().to_string(),
             })?;
-            Ok(Some(Box::new(file)))
+            // Opening succeeded. Apply decompression:
+            if let Some(reader) = compression.try_decompression(BufReader::new(file)) {
+                Ok(Some(reader))
+            } else {
+                Err(ReadingError::Decompression {
+                    resource: resource.to_owned(),
+                    decompression_format: compression.to_string(),
+                })
+            }
         } else {
             Ok(None)
         }

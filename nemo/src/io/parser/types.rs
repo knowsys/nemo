@@ -1,5 +1,6 @@
 use std::num::{ParseFloatError, ParseIntError};
 
+use nemo_physical::datavalues::DataValueCreationError;
 use nom::{
     error::{ErrorKind, FromExternalError},
     IResult,
@@ -8,17 +9,16 @@ use nom_locate::LocatedSpan;
 use thiserror::Error;
 
 use crate::{
-    io::formats::types::FileFormatError,
-    model::{
-        rule_model::{Aggregate, Constraint, Literal, Term},
-        PrimitiveType,
-    },
+    io::formats::import_export::ImportExportError,
+    model::rule_model::{Aggregate, Constraint, Literal, Term},
 };
 
-/// A [`LocatedSpan`] over the input.
+use super::Variable;
+
+/// A [LocatedSpan] over the input.
 pub(super) type Span<'a> = LocatedSpan<&'a str>;
 
-/// Create a [`Span`][nom_locate::LocatedSpan] over the input.
+/// Create a [Span][nom_locate::LocatedSpan] over the input.
 pub fn span_from_str(input: &str) -> Span<'_> {
     Span::new(input)
 }
@@ -29,7 +29,7 @@ pub(super) type IntermediateResult<'a, T> = IResult<Span<'a>, T, LocatedParseErr
 /// The result of a parse
 pub type ParseResult<'a, T> = Result<T, LocatedParseError>;
 
-/// A [`ParseError`] at a certain location
+/// A [ParseError] at a certain location
 #[derive(Debug, Error)]
 #[error("Parse error on line {}, column {}: {}\nat {}{}", .line, .column, .source, .fragment, format_parse_error_context(.context))]
 pub struct LocatedParseError {
@@ -42,7 +42,7 @@ pub struct LocatedParseError {
 }
 
 impl LocatedParseError {
-    /// Append another [`LocatedParseError`] as context to this error.
+    /// Append another [LocatedParseError] as context to this error.
     pub fn append(&mut self, other: LocatedParseError) {
         self.context.push(other)
     }
@@ -75,7 +75,7 @@ pub enum BodyExpression {
 }
 
 /// Different operators allows in a constraint.
-/// Has one entry for every variant in [`Constraint`].
+/// Has one entry for every variant in [Constraint].
 #[derive(Debug, Clone, Copy)]
 pub enum ConstraintOperator {
     /// Two terms are equal.
@@ -93,8 +93,8 @@ pub enum ConstraintOperator {
 }
 
 impl ConstraintOperator {
-    /// Turn operator into [`Constraint`].
-    pub fn into_constraint(self, left: Term, right: Term) -> Constraint {
+    /// Turn operator into [Constraint].
+    pub(crate) fn into_constraint(self, left: Term, right: Term) -> Constraint {
         match self {
             ConstraintOperator::Equals => Constraint::Equals(left, right),
             ConstraintOperator::Unequals => Constraint::Unequals(left, right),
@@ -122,49 +122,47 @@ pub enum ParseError {
     #[error(transparent)]
     ExternalError(#[from] Box<crate::error::Error>),
     /// An error related to a file format.
-    #[error(transparent)]
-    FileFormatError(#[from] FileFormatError),
+    #[error(r#"unknown file format "{0}""#)]
+    FileFormatError(String),
     /// A syntax error. Note that we cannot take [&'a str] here, as
     /// bounds on [std::error::Error] require ['static] lifetime.
-    #[error("Syntax error: {0}")]
+    #[error("syntax error: {0}")]
     SyntaxError(String),
     /// More input needed.
-    #[error("Expected further input: {0}")]
+    #[error("expected further input: {0}")]
     MissingInput(String),
     /// Use of an undeclared prefix.
-    #[error(r#"Undeclared prefix "{0}""#)]
+    #[error(r#"undeclared prefix "{0}""#)]
     UndeclaredPrefix(String),
     /// Re-declared prefix
-    #[error(r#"Prefix "{0}" re-declared"#)]
+    #[error(r#"prefix "{0}" re-declared"#)]
     RedeclaredPrefix(String),
     /// An existentially quantified variable occurs in the body of a rule.
-    #[error(r#"Variable "{0}" occurs existentially quantified in the rule body."#)]
-    BodyExistential(String),
+    #[error(r#"variable "{0}" occurs existentially quantified in the rule body"#)]
+    BodyExistential(Variable),
     /// A wildcard pattern was used inside of the rule head.
-    #[error(r#"The head of a rule must not contain any wildcard patterns."#)]
-    WildcardInHead,
+    #[error(r#"rule head must not contain unnamed variables "_""#)]
+    UnnamedInHead,
     /// The universal variable does not occur in a positive body literal.
-    #[error(r#"The universal variable "{0}" does not occur in a positive body literal."#)]
-    UnsafeHeadVariable(String),
+    #[error(r#"the universal variable "{0}" must occur in a positive body literal"#)]
+    UnsafeHeadVariable(Variable),
     /// The variable must only depend on variables that occur in a positive body literal.
-    #[error(r#"The variable "{0}" must only depend on variables that occur in a positive body literal."#)]
-    UnsafeDefinition(String),
+    #[error(r#"the variable "{0}" must only depend on variables that occur in a positive body literals"#)]
+    UnsafeDefinition(Variable),
     /// Complex term uses an undefined variable.
-    #[error(r#"Complex term "{0}" uses an undefined variable "{1}"."#)]
-    UnsafeComplexTerm(String, String),
+    #[error(r#"complex term "{0}" uses an undefined variable "{1}""#)]
+    UnsafeComplexTerm(String, Variable),
     /// Variable has been defined multiple times.
-    #[error(r#"The variable "{0}" has been defined multiple times."#)]
-    MultipleDefinitions(String),
+    #[error(r#"the variable "{0}" has been used in multiple equalities"#)]
+    MultipleDefinitions(Variable),
     /// The unsafe variable appears in multiple negative body literals.
-    #[error(r#"The unsafe variable "{0}" appears in multuple negative body literals."#)]
-    UnsafeVariableInMultipleNegativeLiterals(String),
+    #[error(r#"the unsafe variable "{0}" appears in multiple negative body literals"#)]
+    UnsafeVariableInMultipleNegativeLiterals(Variable),
     /// A variable used in a comparison does not occur in a positive body literal.
-    #[error(
-        r#"The variable "{0}" used in a comparison does not occur in a positive body literal."#
-    )]
-    UnsafeFilterVariable(String),
+    #[error(r#"the variable "{0}" used in a comparison; must occur in a positive body literal"#)]
+    UnsafeFilterVariable(Variable),
     /// A variable is both existentially and universally quantified
-    #[error(r#"Variable "{0}" occurs with existential and universal quantification"#)]
+    #[error(r#"variables named "{0}" occur with existential and universal quantification"#)]
     BothQuantifiers(String),
     /// An RDF data source declaration has arity != 3.
     #[error(
@@ -177,14 +175,8 @@ pub enum ParseError {
     )]
     SparqlSourceInvalidArity(String, usize, usize),
     /// SPARQL query data sources are currently not supported.
-    #[error(r#"SPARQL data source for predicate "{0}" is not yet implemented."#)]
+    #[error(r#"SPARQL data source for predicate "{0}" is not yet implemented"#)]
     UnsupportedSparqlSource(String),
-    /// Unknown logical type name in program.
-    #[error(
-        "A predicate declaration used an unknown type ({0}). The known types are: {}",
-        PrimitiveType::type_representations().join(", ")
-    )]
-    ParseUnknownType(String),
     /// Expected a dot.
     #[error(r#"Expected "{0}""#)]
     ExpectedToken(String),
@@ -419,8 +411,14 @@ impl FromExternalError<Span<'_>, crate::error::ReadingError> for LocatedParseErr
     }
 }
 
-impl FromExternalError<Span<'_>, FileFormatError> for LocatedParseError {
-    fn from_external_error(input: Span<'_>, _kind: ErrorKind, e: FileFormatError) -> Self {
+impl FromExternalError<Span<'_>, ImportExportError> for LocatedParseError {
+    fn from_external_error(input: Span<'_>, _kind: ErrorKind, e: ImportExportError) -> Self {
+        ParseError::ExternalError(Box::new(e.into())).at(input)
+    }
+}
+
+impl FromExternalError<Span<'_>, DataValueCreationError> for LocatedParseError {
+    fn from_external_error(input: Span<'_>, _kind: ErrorKind, e: DataValueCreationError) -> Self {
         ParseError::ExternalError(Box::new(e.into())).at(input)
     }
 }

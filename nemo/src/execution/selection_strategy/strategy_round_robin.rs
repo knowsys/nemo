@@ -18,7 +18,7 @@ pub struct StrategyRoundRobin {
 }
 
 impl RuleSelectionStrategy for StrategyRoundRobin {
-    /// Create new [`StrategyRoundRobin`].
+    /// Create new [StrategyRoundRobin].
     fn new(
         _rules: Vec<&ChaseRule>,
         rule_analyses: Vec<&RuleAnalysis>,

@@ -26,8 +26,6 @@ pub mod api;
 pub mod error;
 pub mod io;
 
-pub mod builder_proxy;
-
 pub mod execution;
 pub mod model;
 
@@ -35,7 +33,6 @@ mod program_analysis;
 mod table_manager;
 mod util;
 
+// we use datavalues and meta from nemo_physical in our API, so re-export it here.
+pub use nemo_physical::datavalues;
 pub use nemo_physical::meta;
-
-// TODO: this is a temporary reexport, as long as the datatype mapping is not fully implemented
-pub use nemo_physical::datatypes;

@@ -5,48 +5,58 @@ use std::collections::{HashMap, HashSet};
 
 use nemo_physical::{
     management::{
-        database::{ColumnOrder, TableId},
-        execution_plan::ExecutionNodeRef,
+        database::id::PermanentTableId,
+        execution_plan::{ColumnOrder, ExecutionNodeRef},
     },
-    tabular::operations::triescan_project::ProjectReordering,
+    tabular::operations::OperationTable,
 };
 
 use crate::{
-    execution::execution_engine::RuleInfo,
+    execution::{
+        execution_engine::RuleInfo,
+        planning::operations::{
+            append::node_head_instruction, filter::node_filter, join::node_join,
+            union::subplan_union,
+        },
+        rule_execution::VariableTranslation,
+    },
     model::{
-        chase_model::{ChaseAtom, ChaseRule},
-        Identifier, PrimitiveTerm, Variable,
+        chase_model::{ChaseAtom, ChaseRule, VariableAtom},
+        Constraint, Identifier, PrimitiveTerm, Variable,
     },
     program_analysis::{analysis::RuleAnalysis, variable_order::VariableOrder},
     table_manager::{SubtableExecutionPlan, SubtableIdentifier, TableManager},
 };
 
 use super::{
-    plan_util::{
-        atom_binding, cut_last_layers, head_instruction_from_atom, subplan_union, HeadInstruction,
-    },
-    HeadStrategy, SeminaiveJoinGenerator,
+    operations::append::{head_instruction_from_atom, HeadInstruction},
+    HeadStrategy,
 };
 
 /// Strategy for the restricted chase.
 #[derive(Debug)]
-pub struct RestrictedChaseStrategy {
-    join_generator: SeminaiveJoinGenerator,
+pub(crate) struct RestrictedChaseStrategy {
+    /// Atoms for computing the table "new satisfied matches"
+    head_join_atoms: Vec<VariableAtom>,
+    /// Constraints associated with computing the table "new satisfied matches"
+    head_join_constraints: Vec<Constraint>,
 
     predicate_to_instructions: HashMap<Identifier, Vec<HeadInstruction>>,
     predicate_to_full_existential: HashMap<Identifier, bool>,
 
+    /// The calculation of "new statified matches" is represented by an auxillary rule
+    /// "head -> aux_predicate(frontier_variables)".
+    /// This is the order of those variables
     aux_head_order: VariableOrder,
+    /// This is the predicate of the auxillary table containing the "satisfied matches"
     aux_predicate: Identifier,
 
     analysis: RuleAnalysis,
-
-    head_join_cut: usize,
 }
 
 impl RestrictedChaseStrategy {
-    /// Create a new [`RestrictedChaseStrategy`] object.
-    pub fn initialize(rule: &ChaseRule, analysis: &RuleAnalysis) -> Self {
+    /// Create a new [RestrictedChaseStrategy] object.
+    pub(crate) fn initialize(rule: &ChaseRule, analysis: &RuleAnalysis) -> Self {
         let mut predicate_to_instructions = HashMap::<Identifier, Vec<HeadInstruction>>::new();
         let mut predicate_to_full_existential = HashMap::<Identifier, bool>::new();
 
@@ -59,7 +69,7 @@ impl RestrictedChaseStrategy {
             let instructions = predicate_to_instructions
                 .entry(head_atom.predicate())
                 .or_default();
-            instructions.push(head_instruction_from_atom(head_atom, analysis));
+            instructions.push(head_instruction_from_atom(head_atom));
 
             let is_full_existential = predicate_to_full_existential
                 .entry(head_atom.predicate())
@@ -70,11 +80,7 @@ impl RestrictedChaseStrategy {
         let head_join_atoms = analysis.existential_aux_rule.positive_body().clone();
         let head_join_constraints = analysis.existential_aux_rule.positive_constraints().clone();
 
-        let join_generator = SeminaiveJoinGenerator {
-            atoms: head_join_atoms,
-            constraints: head_join_constraints,
-            variable_types: analysis.existential_aux_types.clone(),
-        };
+        println!("{:?}, {:?}", head_join_atoms, head_join_constraints);
 
         let aux_head = &analysis.existential_aux_rule.head()[0];
         let mut aux_head_order = VariableOrder::new();
@@ -88,18 +94,16 @@ impl RestrictedChaseStrategy {
             }
         }
 
-        let (_, head_join_cut) =
-            cut_last_layers(&analysis.existential_aux_order, &used_join_head_variables);
         let aux_predicate = aux_head.predicate();
 
         RestrictedChaseStrategy {
-            join_generator,
+            head_join_atoms,
+            head_join_constraints,
             predicate_to_instructions,
             predicate_to_full_existential,
             analysis: analysis.clone(),
             aux_predicate,
             aux_head_order,
-            head_join_cut,
         }
     }
 }
@@ -109,9 +113,9 @@ impl HeadStrategy for RestrictedChaseStrategy {
         &self,
         table_manager: &TableManager,
         current_plan: &mut SubtableExecutionPlan,
+        variable_translation: &VariableTranslation,
         node_matches: ExecutionNodeRef,
         rule_info: &RuleInfo,
-        body_join_order: &VariableOrder,
         step: usize,
     ) {
         // High-level description of the strategy:
@@ -164,36 +168,41 @@ impl HeadStrategy for RestrictedChaseStrategy {
             rule_info.step_last_applied + 1
         };
 
-        let node_new_satisfied_matches = self.join_generator.seminaive_join(
+        // We use the same precomputed variable order every time
+        let markers_new_satisfied_matches = variable_translation
+            .operation_table(self.analysis.existential_aux_order.as_ordered_list().iter());
+
+        let node_new_satisfied_matches = node_join(
             current_plan.plan_mut(),
             table_manager,
+            variable_translation,
             step_last_applied,
             step,
-            // We use the same precomputed variable order every time
-            &self.analysis.existential_aux_order,
+            &self.head_join_atoms,
+            markers_new_satisfied_matches,
         );
 
-        current_plan.add_temporary_table_cut(
+        let node_new_satisfied_matches = node_filter(
+            current_plan.plan_mut(),
+            variable_translation,
+            node_new_satisfied_matches,
+            &self.head_join_constraints,
+        );
+
+        current_plan.add_temporary_table(
             node_new_satisfied_matches.clone(),
             "Head (Restricted): Satisifed",
-            self.head_join_cut,
         );
 
         // 2. Compute the table "Satisfied Matches Frontier"
 
-        // The order of variables in the table "Satisfied Matches"
-        let variables_satisifed_matches = self.analysis.existential_aux_order.as_ordered_list();
-        // The above order but without non-fronier variables
-        let variables_satisifed_matches_frontier = self.aux_head_order.as_ordered_list();
-        // Below is the reordering that would project the non-fronier columns away
-        let satisfied_matches_frontier_reordering = ProjectReordering::from_transformation(
-            &variables_satisifed_matches,
-            &variables_satisifed_matches_frontier,
-        );
+        // Same as `markers_new_satisfied_matches` but without non-fronier variables
+        let markers_satisifed_matches_frontier =
+            variable_translation.operation_table(self.aux_head_order.as_ordered_list().iter());
 
-        let node_new_satisfied_matches_frontier = current_plan.plan_mut().project(
+        let node_new_satisfied_matches_frontier = current_plan.plan_mut().projectreorder(
+            markers_satisifed_matches_frontier.clone(),
             node_new_satisfied_matches,
-            satisfied_matches_frontier_reordering,
         );
 
         // The above node represents the new satisfied matches which might still contain duplicates
@@ -202,11 +211,12 @@ impl HeadStrategy for RestrictedChaseStrategy {
             current_plan.plan_mut(),
             table_manager,
             &self.aux_predicate,
-            &(0..step),
+            0..step,
+            markers_satisifed_matches_frontier.clone(),
         );
-        let node_new_satisfied_matches_frontier = current_plan.plan_mut().minus(
+        let node_new_satisfied_matches_frontier = current_plan.plan_mut().subtract(
             node_new_satisfied_matches_frontier,
-            node_old_satisfied_matches_frontier.clone(),
+            vec![node_old_satisfied_matches_frontier.clone()],
         );
 
         current_plan.add_temporary_table(
@@ -214,35 +224,34 @@ impl HeadStrategy for RestrictedChaseStrategy {
             "Head (Restricted): Sat. Frontier",
         );
 
-        let mut node_satisfied_matches_frontier = current_plan.plan_mut().union_empty();
+        let mut node_satisfied_matches_frontier = current_plan
+            .plan_mut()
+            .union_empty(markers_satisifed_matches_frontier.clone());
         node_satisfied_matches_frontier.add_subnode(node_old_satisfied_matches_frontier);
         node_satisfied_matches_frontier.add_subnode(node_new_satisfied_matches_frontier.clone());
 
         // 3. Compute "Matches Frontier"
 
-        let variables_matches = body_join_order.as_ordered_list();
-        let matches_frontier_reordering = ProjectReordering::from_transformation(
-            &variables_matches,
-            &variables_satisifed_matches_frontier,
-        );
-
         let node_matches_frontier = current_plan
             .plan_mut()
-            .project(node_matches, matches_frontier_reordering);
+            .projectreorder(markers_satisifed_matches_frontier.clone(), node_matches);
 
         // 4. Compute "Unsatisfied Matches Frontier"
 
         // Matches that are not satisfied are unsatisfied
         let node_unsatisfied_matches_frontier = current_plan
             .plan_mut()
-            .minus(node_matches_frontier, node_satisfied_matches_frontier);
+            .subtract(node_matches_frontier, vec![node_satisfied_matches_frontier]);
 
         // 5. Save the newly computed "Satisfied matches frontier"
 
-        let node_newer_satisfied_matches_frontier = current_plan.plan_mut().union(vec![
-            node_new_satisfied_matches_frontier,
-            node_unsatisfied_matches_frontier.clone(),
-        ]);
+        let node_newer_satisfied_matches_frontier = current_plan.plan_mut().union(
+            markers_satisifed_matches_frontier,
+            vec![
+                node_new_satisfied_matches_frontier,
+                node_unsatisfied_matches_frontier.clone(),
+            ],
+        );
 
         current_plan.add_permanent_table(
             node_newer_satisfied_matches_frontier,
@@ -251,11 +260,18 @@ impl HeadStrategy for RestrictedChaseStrategy {
             SubtableIdentifier::new(self.aux_predicate.clone(), step),
         );
 
-        // 5. Compute "Unsatisfied Matches Nulls"
+        // 6. Compute "Unsatisfied Matches Nulls"
 
-        let node_unsatisfied_matches_nulls = current_plan.plan_mut().append_nulls(
+        let variables_unsatisfied_matches_nulls = append_existential_at_the_end(
+            self.aux_head_order.clone(),
+            &self.analysis.head_variables,
+        );
+        let markers_unsatisfied_matches_nulls = variable_translation
+            .operation_table(variables_unsatisfied_matches_nulls.as_ordered_list().iter());
+
+        let node_unsatisfied_matches_nulls = current_plan.plan_mut().null(
+            markers_unsatisfied_matches_nulls.clone(),
             node_unsatisfied_matches_frontier,
-            self.analysis.num_existential,
         );
 
         current_plan.add_temporary_table(
@@ -263,43 +279,32 @@ impl HeadStrategy for RestrictedChaseStrategy {
             "Head (Restricted): Unsat. Matches",
         );
 
-        let variables_unsatisfied_matches_nulls = append_existential_at_the_end(
-            self.aux_head_order.clone(),
-            &self.analysis.head_variables,
-        );
-
-        // 6. For each head atom project from "Unsatisfied Matches Nulls"
+        // 7. For each head atom project from "Unsatisfied Matches Nulls"
         for (predicate, head_instructions) in self.predicate_to_instructions.iter() {
-            let mut final_head_nodes =
-                Vec::<ExecutionNodeRef>::with_capacity(head_instructions.len());
+            let arity = head_instructions
+                .first()
+                .map(|instruction| instruction.arity)
+                .unwrap_or(0);
+            let result_markers = OperationTable::new_unique(arity);
 
-            for head_instruction in head_instructions {
-                let head_binding = atom_binding(
-                    &head_instruction.reduced_atom,
-                    &variables_unsatisfied_matches_nulls,
-                );
-                let head_reordering = ProjectReordering::from_vector(
-                    head_binding.clone(),
-                    variables_unsatisfied_matches_nulls.len(),
-                );
+            let final_head_nodes = head_instructions
+                .iter()
+                .map(|head_instruction| {
+                    node_head_instruction(
+                        current_plan.plan_mut(),
+                        variable_translation,
+                        node_unsatisfied_matches_nulls.clone(),
+                        head_instruction,
+                    )
+                })
+                .collect();
 
-                let project_node = current_plan
-                    .plan_mut()
-                    .project(node_unsatisfied_matches_nulls.clone(), head_reordering);
-                let append_node = current_plan
-                    .plan_mut()
-                    .append_columns(project_node, head_instruction.append_instructions.clone());
+            let new_tables_union = current_plan
+                .plan_mut()
+                .union(result_markers.clone(), final_head_nodes);
 
-                final_head_nodes.push(append_node);
-            }
-
-            let new_tables_union = current_plan.plan_mut().union(final_head_nodes);
-
-            // We just pick the default order
-            // TODO: Is there a better pick?
-            let result_order = ColumnOrder::default();
             let result_table_name =
-                table_manager.generate_table_name(predicate, &result_order, step);
+                table_manager.generate_table_name(predicate, &ColumnOrder::default(), step);
             let result_subtable_id = SubtableIdentifier::new(predicate.clone(), step);
 
             if *self.predicate_to_full_existential.get(predicate).unwrap() {
@@ -313,16 +318,23 @@ impl HeadStrategy for RestrictedChaseStrategy {
             } else {
                 // Duplicate elimination for atoms thats do not contain existential variables
                 // Same as in plan_head_datalog
-                let old_tables: Vec<TableId> = table_manager.tables_in_range(predicate, &(0..step));
+                let old_tables: Vec<PermanentTableId> =
+                    table_manager.tables_in_range(predicate, &(0..step));
                 let old_table_nodes: Vec<ExecutionNodeRef> = old_tables
                     .into_iter()
-                    .map(|id| current_plan.plan_mut().fetch_existing(id))
+                    .map(|id| {
+                        current_plan
+                            .plan_mut()
+                            .fetch_table(OperationTable::default(), id)
+                    })
                     .collect();
-                let old_table_union = current_plan.plan_mut().union(old_table_nodes);
+                let old_table_union = current_plan
+                    .plan_mut()
+                    .union(result_markers, old_table_nodes);
 
                 let remove_duplicate_node = current_plan
                     .plan_mut()
-                    .minus(new_tables_union, old_table_union);
+                    .subtract(new_tables_union, vec![old_table_union]);
 
                 current_plan.add_permanent_table(
                     remove_duplicate_node,

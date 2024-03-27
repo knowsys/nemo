@@ -1,12 +1,12 @@
 //! This module defines a model for nested type constructs
 
-use std::{iter::from_fn, ops::Deref, sync::Arc};
+use std::{iter::from_fn, sync::Arc};
 
-use crate::model::PrimitiveType;
+use super::primitive_types::PrimitiveType;
 
 /// A nested type
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum NestedType {
+pub(crate) enum NestedType {
     /// A tuple of nested types
     Tuple(TupleType),
     /// A primitive type
@@ -15,7 +15,7 @@ pub enum NestedType {
 
 impl NestedType {
     /// Returns the [PrimitiveType] contained within, if any.
-    pub fn as_primitive(&self) -> Option<&PrimitiveType> {
+    pub(crate) fn as_primitive(&self) -> Option<&PrimitiveType> {
         match self {
             Self::Primitive(inner) => Some(inner),
             _ => None,
@@ -23,7 +23,7 @@ impl NestedType {
     }
 
     /// Returns the [TupleType] contained within, if any.
-    pub fn as_tuple(&self) -> Option<&TupleType> {
+    pub(crate) fn as_tuple(&self) -> Option<&TupleType> {
         match self {
             Self::Tuple(inner) => Some(inner),
             _ => None,
@@ -39,18 +39,18 @@ impl Default for NestedType {
 
 /// A tuple of nested types
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct TupleType {
+pub(crate) struct TupleType {
     field_types: Arc<[NestedType]>,
 }
 
 impl TupleType {
     /// Returns the arity (width) the tuple type.
-    pub fn arity(&self) -> usize {
+    pub(crate) fn arity(&self) -> usize {
         self.field_types.len()
     }
 
     /// Returns `true` if the tuple type does not contain nested tuples.
-    pub fn is_flat(&self) -> bool {
+    pub(crate) fn is_flat(&self) -> bool {
         self.field_types
             .iter()
             .all(|t| matches!(t, NestedType::Primitive(_)))
@@ -58,7 +58,7 @@ impl TupleType {
 
     /// Returns the underlying [primitive types][PrimitiveType],
     /// provided that this is a flat type.
-    pub fn into_flat(&self) -> Option<Vec<PrimitiveType>> {
+    pub(crate) fn into_flat(&self) -> Option<Vec<PrimitiveType>> {
         let mut result = Vec::new();
 
         for field_type in self.field_types.iter() {
@@ -74,13 +74,13 @@ impl TupleType {
     }
 }
 
-impl Deref for TupleType {
-    type Target = [NestedType];
+// impl Deref for TupleType {
+//     type Target = [NestedType];
 
-    fn deref(&self) -> &Self::Target {
-        &self.field_types
-    }
-}
+//     fn deref(&self) -> &Self::Target {
+//         &self.field_types
+//     }
+// }
 
 impl FromIterator<PrimitiveType> for TupleType {
     fn from_iter<T: IntoIterator<Item = PrimitiveType>>(iter: T) -> Self {
@@ -131,7 +131,7 @@ impl TryFrom<TypeConstraint> for TupleType {
 /// A constraint on the type of an item
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[allow(variant_size_differences)]
-pub enum TypeConstraint {
+pub(crate) enum TypeConstraint {
     /// No constraints
     None,
     /// An exact constraint
@@ -150,7 +150,7 @@ pub struct TupleConstraint {
 
 impl TupleConstraint {
     /// Returns the arity specified in the constraint.
-    pub fn arity(&self) -> usize {
+    pub(crate) fn arity(&self) -> usize {
         self.fields.len()
     }
 
@@ -161,7 +161,7 @@ impl TupleConstraint {
 
     /// Creates a [TupleConstraint] using the [primitive
     /// types][PrimitiveType] as lower bounds.
-    pub fn at_least<T>(types: T) -> Self
+    pub(crate) fn at_least<T>(types: T) -> Self
     where
         T: IntoIterator<Item = PrimitiveType>,
     {
@@ -170,7 +170,7 @@ impl TupleConstraint {
 
     /// Creates a [TupleConstraint] using the [primitive
     /// types][PrimitiveType] as exact bounds.
-    pub fn exact<T>(types: T) -> Self
+    pub(crate) fn exact<T>(types: T) -> Self
     where
         T: IntoIterator<Item = PrimitiveType>,
     {
@@ -180,7 +180,10 @@ impl TupleConstraint {
     /// Returns the underlying [primitive types][PrimitiveType],
     /// provided that this is a flat tuple of primitive types, with a
     /// default type for unspecified constraints.
-    pub fn into_flat_primitive_with_default(&self, default_type: PrimitiveType) -> Option<Self> {
+    pub(crate) fn into_flat_primitive_with_default(
+        &self,
+        default_type: PrimitiveType,
+    ) -> Option<Self> {
         let mut result = Vec::new();
 
         for type_constraint in self.fields.iter() {
@@ -212,13 +215,13 @@ impl TupleConstraint {
     }
 }
 
-impl Deref for TupleConstraint {
-    type Target = [TypeConstraint];
+// impl Deref for TupleConstraint {
+//     type Target = [TypeConstraint];
 
-    fn deref(&self) -> &Self::Target {
-        &self.fields
-    }
-}
+//     fn deref(&self) -> &Self::Target {
+//         &self.fields
+//     }
+// }
 
 impl FromIterator<TypeConstraint> for TupleConstraint {
     fn from_iter<T: IntoIterator<Item = TypeConstraint>>(iter: T) -> Self {

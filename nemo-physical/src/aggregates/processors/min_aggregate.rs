@@ -1,58 +1,43 @@
 //! Computes the minimum of all input values.
 
-use std::marker::PhantomData;
-
 use crate::datatypes::StorageValueT;
 
-use super::{
-    aggregate::Aggregate,
-    processor::{AggregateGroupProcessor, AggregateProcessor},
-};
+use super::processor::{AggregateGroupProcessor, AggregateProcessor};
 
 #[derive(Debug)]
-pub(crate) struct MinAggregateProcessor<A>
-where
-    A: Aggregate,
-{
-    phantom_data: PhantomData<A>,
-}
+pub(crate) struct MinAggregateProcessor {}
 
-impl<A: Aggregate> MinAggregateProcessor<A> {
-    pub fn new() -> Self {
-        Self {
-            phantom_data: PhantomData,
-        }
+impl MinAggregateProcessor {
+    pub(crate) fn new() -> Self {
+        Self {}
     }
 }
 
-impl<A: Aggregate> AggregateProcessor<A> for MinAggregateProcessor<A> {
+impl AggregateProcessor for MinAggregateProcessor {
     fn idempotent(&self) -> bool {
         true
     }
 
-    fn group(&self) -> Box<dyn AggregateGroupProcessor<A>> {
+    fn group(&self) -> Box<dyn AggregateGroupProcessor> {
         Box::new(MinAggregateGroupProcessor::new())
     }
 }
 
 #[derive(Debug)]
-pub(crate) struct MinAggregateGroupProcessor<A>
-where
-    A: Aggregate,
-{
-    current_min_value: Option<A>,
+pub(crate) struct MinAggregateGroupProcessor {
+    current_min_value: Option<StorageValueT>,
 }
 
-impl<A: Aggregate> MinAggregateGroupProcessor<A> {
-    pub fn new() -> Self {
+impl MinAggregateGroupProcessor {
+    pub(crate) fn new() -> Self {
         Self {
             current_min_value: None,
         }
     }
 }
 
-impl<A: Aggregate> AggregateGroupProcessor<A> for MinAggregateGroupProcessor<A> {
-    fn write_aggregate_input_value(&mut self, value: A) {
+impl AggregateGroupProcessor for MinAggregateGroupProcessor {
+    fn write_aggregate_input_value(&mut self, value: StorageValueT) {
         match &self.current_min_value {
             Some(current_min_value) => {
                 if value < *current_min_value {
@@ -64,8 +49,6 @@ impl<A: Aggregate> AggregateGroupProcessor<A> for MinAggregateGroupProcessor<A> 
     }
 
     fn finish(&self) -> Option<StorageValueT> {
-        self.current_min_value
-            .as_ref()
-            .map(|value| value.clone().into())
+        self.current_min_value.as_ref().copied()
     }
 }

@@ -8,15 +8,18 @@ use crate::model::{
     chase_model::{ChaseAtom, ChaseProgram, ChaseRule, VariableAtom},
     Identifier, Variable,
 };
-use nemo_physical::{management::database::ColumnOrder, permutator::Permutator};
+use nemo_physical::{
+    management::execution_plan::ColumnOrder, permutator::Permutator,
+    util::mapping::permutation::Permutation,
+};
 
-/// Represents an ordering of variables as [`HashMap`].
+/// Represents an ordering of variables as [HashMap].
 #[repr(transparent)]
-#[derive(Clone, Default, Debug, PartialEq, Eq)]
+#[derive(Clone, Default, PartialEq, Eq)]
 pub struct VariableOrder(HashMap<Variable, usize>);
 
 impl VariableOrder {
-    /// Create new [`VariableOrder`].
+    /// Create new [VariableOrder].
     pub fn new() -> Self {
         Self(HashMap::new())
     }
@@ -44,16 +47,16 @@ impl VariableOrder {
         self.0.get(variable)
     }
 
-    /// Check if variable is part of the [`VariableOrder`].
+    /// Check if variable is part of the [VariableOrder].
     pub fn contains(&self, variable: &Variable) -> bool {
         self.0.contains_key(variable)
     }
 
-    /// Returns a [`VariableOrder`] which is restricted to the given variables (but preserve their order)
+    /// Returns a [VariableOrder] which is restricted to the given variables (but preserve their order)
     pub fn restrict_to(&self, variables: &HashSet<Variable>) -> Self {
         let mut variable_vector = Vec::<Variable>::with_capacity(variables.len());
         for variable in variables {
-            if self.0.get(variable).is_some() {
+            if self.0.contains_key(variable) {
                 variable_vector.push(variable.clone());
             }
         }
@@ -103,11 +106,11 @@ impl VariableOrder {
         variables
     }
 
-    /// Return [`String`] with the contents of this object for debugging.
-    pub fn debug(&self) -> String {
+    /// Return [String] with the contents of this object for debugging.
+    pub(crate) fn debug(&self) -> String {
         let mut variable_vector = Vec::<Variable>::new();
         variable_vector.resize_with(self.0.len(), || {
-            Variable::Universal(Identifier("PLACEHOLDER".to_string()))
+            Variable::Universal("PLACEHOLDER".to_string())
         });
 
         for (variable, index) in &self.0 {
@@ -123,11 +126,12 @@ impl VariableOrder {
         result += "[";
         for (index, variable) in variable_vector.iter().enumerate() {
             let identifier = match variable {
-                Variable::Universal(id) => id,
-                Variable::Existential(id) => id,
+                Variable::Universal(id) => id.to_owned(),
+                Variable::Existential(id) => id.to_owned(),
+                Variable::UnnamedUniversal(id) => format!("_{}", id),
             };
 
-            result += &identifier.0;
+            result += &identifier;
 
             if index < variable_vector.len() - 1 {
                 result += ", ";
@@ -136,6 +140,24 @@ impl VariableOrder {
         result += "]";
 
         result
+    }
+}
+
+impl std::fmt::Debug for VariableOrder {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_tuple("VariableOrder")
+            .field(
+                &self
+                    .as_ordered_list()
+                    .iter()
+                    .map(|var| match var {
+                        Variable::Universal(v) => "?".to_string() + v.as_str(),
+                        Variable::Existential(v) => "!".to_string() + v.as_str(),
+                        Variable::UnnamedUniversal(v) => format!("_{}", v).to_string(),
+                    })
+                    .collect::<Vec<_>>(),
+            )
+            .finish()
     }
 }
 
@@ -297,9 +319,9 @@ struct VariableOrderBuilder<'a> {
 }
 
 struct BuilderResult {
-    /// A [`Vec`] where the ith entry contains a good variable order for rule i.
+    /// A [Vec] where the ith entry contains a good variable order for rule i.
     variable_orders: Vec<VariableOrder>,
-    /// A [`HashMap`] mapping each predicate to the set of [`ColumnOrder`]s that are supposed to be available.
+    /// A [HashMap] mapping each predicate to the set of [ColumnOrder]s that are supposed to be available.
     column_orders: HashMap<Identifier, HashSet<ColumnOrder>>,
 }
 
@@ -468,10 +490,10 @@ impl VariableOrderBuilder<'_> {
 
 /// Contains the result of the function `build_preferable_variable_orders`.
 pub(super) struct BuilderResultVariants {
-    /// [`Vec`] where the ith entry contains a [`Vec`] of with good variable orders for the ith rule
+    /// [Vec] where the ith entry contains a [Vec] of with good variable orders for the ith rule
     pub(super) all_variable_orders: Vec<Vec<VariableOrder>>,
     /// For each variant of the variable order computation
-    /// contains one [`HashSet`] mapping each predicate to its available [`ColumnOrder`]s.
+    /// contains one [HashSet] mapping each predicate to its available [ColumnOrder]s.
     pub(super) all_column_orders: Vec<HashMap<Identifier, HashSet<ColumnOrder>>>,
 }
 
@@ -486,30 +508,14 @@ pub(super) fn build_preferable_variable_orders(
     ];
 
     let initial_column_orders = initial_column_orders.unwrap_or_else(|| {
-        let fact_preds: HashSet<(Identifier, usize)> = program
-            .facts()
-            .iter()
-            .map(|f| (f.predicate(), f.terms().len()))
-            .collect();
-        let import_preds: HashSet<(Identifier, usize)> = program
-            .imports()
-            .map(|import_spec| {
-                (
-                    import_spec.predicate().clone(),
-                    import_spec.type_constraint().arity(),
-                )
-            })
-            .collect();
-
-        let preds = fact_preds.union(&import_preds);
-
-        preds
-            .map(|(p, _)| {
-                let mut set = HashSet::new();
-                set.insert(ColumnOrder::default());
-                (p.clone(), set)
-            })
-            .collect()
+        let mut result: HashMap<Identifier, HashSet<Permutation>> = Default::default();
+        for fact in program.facts().iter() {
+            result.insert(fact.predicate(), HashSet::from([ColumnOrder::default()]));
+        }
+        for (pred, _handler) in program.imports() {
+            result.insert(pred.clone(), HashSet::from([ColumnOrder::default()]));
+        }
+        result
     });
 
     let mut all_variable_orders = vec![Vec::<VariableOrder>::new(); program.rules().len()];
@@ -544,12 +550,13 @@ pub(super) fn build_preferable_variable_orders(
 mod test {
     use super::{IterationOrder, RuleVariableList, VariableOrder};
 
-    use crate::model::{Identifier, PrimitiveTerm, TupleConstraint, Variable};
-    use crate::{
-        io::formats::dsv::DSVFormat,
-        model::chase_model::{ChaseProgram, ChaseRule, PrimitiveAtom, VariableAtom},
+    use crate::model::chase_model::{ChaseProgram, ChaseRule, PrimitiveAtom, VariableAtom};
+    use crate::model::{
+        FileFormat, Identifier, ImportDirective, ImportExportDirective, PrimitiveTerm, Variable,
+        PARAMETER_NAME_FORMAT, PARAMETER_NAME_RESOURCE, VALUE_FORMAT_ANY,
     };
-    use nemo_physical::management::database::ColumnOrder;
+    use nemo_physical::datavalues::{AnyDataValue, MapDataValue, TupleDataValue};
+    use nemo_physical::management::execution_plan::ColumnOrder;
 
     use std::collections::{HashMap, HashSet};
 
@@ -612,9 +619,9 @@ mod test {
         let b = Identifier("b".to_string());
         let c = Identifier("c".to_string());
 
-        let x = Variable::Universal(Identifier("x".to_string()));
-        let y = Variable::Universal(Identifier("y".to_string()));
-        let z = Variable::Universal(Identifier("z".to_string()));
+        let x = Variable::Universal("x".to_string());
+        let y = Variable::Universal("y".to_string());
+        let z = Variable::Universal("z".to_string());
 
         let tx = PrimitiveTerm::Variable(x.clone());
         let _ty = PrimitiveTerm::Variable(y.clone());
@@ -640,9 +647,9 @@ mod test {
     fn get_test_rule_with_vars_where_predicates_are_the_same() -> (ChaseRule, Vec<Variable>) {
         let a = Identifier("a".to_string());
 
-        let x = Variable::Universal(Identifier("x".to_string()));
-        let y = Variable::Universal(Identifier("y".to_string()));
-        let z = Variable::Universal(Identifier("z".to_string()));
+        let x = Variable::Universal("x".to_string());
+        let y = Variable::Universal("y".to_string());
+        let z = Variable::Universal("z".to_string());
 
         let tx = PrimitiveTerm::Variable(x.clone());
         let _ty = PrimitiveTerm::Variable(y.clone());
@@ -872,12 +879,12 @@ mod test {
             (exists.clone(), 3),
         ];
 
-        let c = Variable::Universal(Identifier("c".to_string()));
-        let d1 = Variable::Universal(Identifier("d1".to_string()));
-        let d2 = Variable::Universal(Identifier("d2".to_string()));
-        let y = Variable::Universal(Identifier("y".to_string()));
-        let r = Variable::Universal(Identifier("r".to_string()));
-        let e = Variable::Universal(Identifier("e".to_string()));
+        let c = Variable::Universal("c".to_string());
+        let d1 = Variable::Universal("d1".to_string());
+        let d2 = Variable::Universal("d2".to_string());
+        let y = Variable::Universal("y".to_string());
+        let r = Variable::Universal("r".to_string());
+        let e = Variable::Universal("e".to_string());
 
         let tc = PrimitiveTerm::Variable(c.clone());
         let td1 = PrimitiveTerm::Variable(d1.clone());
@@ -977,6 +984,31 @@ mod test {
         (rules, variables, predicates)
     }
 
+    /// Helper function to create source-like imports
+    fn csv_import(predicate: Identifier, arity: usize) -> ImportDirective {
+        let attributes = MapDataValue::from_iter([
+            (
+                AnyDataValue::new_iri(PARAMETER_NAME_RESOURCE.to_string()),
+                AnyDataValue::new_plain_string("".to_string()),
+            ),
+            (
+                AnyDataValue::new_iri(PARAMETER_NAME_FORMAT.to_string()),
+                TupleDataValue::from_iter(
+                    vec![VALUE_FORMAT_ANY; arity]
+                        .iter()
+                        .map(|format| AnyDataValue::new_plain_string((*format).to_string()))
+                        .collect::<Vec<AnyDataValue>>(),
+                )
+                .into(),
+            ),
+        ]);
+        ImportDirective::from(ImportExportDirective {
+            predicate,
+            format: FileFormat::CSV,
+            attributes,
+        })
+    }
+
     #[test]
     #[cfg_attr(miri, ignore)]
     fn build_preferable_variable_orders_with_galen_el_part_ie_5_rules_without_constant() {
@@ -984,51 +1016,11 @@ mod test {
             get_part_of_galen_test_ruleset_ie_first_5_rules_without_constant();
 
         let program = ChaseProgram::builder()
-            .import(
-                DSVFormat::csv()
-                    .try_into_import(
-                        "".to_string(),
-                        predicates[1].0.clone(),
-                        TupleConstraint::from_arity(predicates[1].1),
-                    )
-                    .unwrap(),
+            .imports(
+                [1usize, 2, 3, 4, 6]
+                    .map(|idx| csv_import(predicates[idx].0.clone(), predicates[idx].1)),
             )
-            .import(
-                DSVFormat::csv()
-                    .try_into_import(
-                        "".to_string(),
-                        predicates[2].0.clone(),
-                        TupleConstraint::from_arity(predicates[2].1),
-                    )
-                    .unwrap(),
-            )
-            .import(
-                DSVFormat::csv()
-                    .try_into_import(
-                        "".to_string(),
-                        predicates[3].0.clone(),
-                        TupleConstraint::from_arity(predicates[3].1),
-                    )
-                    .unwrap(),
-            )
-            .import(
-                DSVFormat::csv()
-                    .try_into_import(
-                        "".to_string(),
-                        predicates[4].0.clone(),
-                        TupleConstraint::from_arity(predicates[4].1),
-                    )
-                    .unwrap(),
-            )
-            .import(
-                DSVFormat::csv()
-                    .try_into_import(
-                        "".to_string(),
-                        predicates[6].0.clone(),
-                        TupleConstraint::from_arity(predicates[6].1),
-                    )
-                    .unwrap(),
-            )
+            .expect("these imports should not lead to errors")
             .rules(rules)
             .build();
 
@@ -1110,20 +1102,20 @@ mod test {
             (main_sub_class_of.clone(), 2),
         ];
 
-        let c = Variable::Universal(Identifier("c".to_string()));
-        let d1 = Variable::Universal(Identifier("d1".to_string()));
-        let d2 = Variable::Universal(Identifier("d2".to_string()));
-        let y = Variable::Universal(Identifier("y".to_string()));
-        let r = Variable::Universal(Identifier("r".to_string()));
-        let e = Variable::Universal(Identifier("e".to_string()));
-        let s = Variable::Universal(Identifier("s".to_string()));
-        let r1 = Variable::Universal(Identifier("r1".to_string()));
-        let r2 = Variable::Universal(Identifier("r2".to_string()));
-        let s1 = Variable::Universal(Identifier("s1".to_string()));
-        let s2 = Variable::Universal(Identifier("s2".to_string()));
-        let d = Variable::Universal(Identifier("d".to_string()));
-        let a = Variable::Universal(Identifier("a".to_string()));
-        let b = Variable::Universal(Identifier("b".to_string()));
+        let c = Variable::Universal("c".to_string());
+        let d1 = Variable::Universal("d1".to_string());
+        let d2 = Variable::Universal("d2".to_string());
+        let y = Variable::Universal("y".to_string());
+        let r = Variable::Universal("r".to_string());
+        let e = Variable::Universal("e".to_string());
+        let s = Variable::Universal("s".to_string());
+        let r1 = Variable::Universal("r1".to_string());
+        let r2 = Variable::Universal("r2".to_string());
+        let s1 = Variable::Universal("s1".to_string());
+        let s2 = Variable::Universal("s2".to_string());
+        let d = Variable::Universal("d".to_string());
+        let a = Variable::Universal("a".to_string());
+        let b = Variable::Universal("b".to_string());
 
         let tc = PrimitiveTerm::Variable(c.clone());
         let td1 = PrimitiveTerm::Variable(d1.clone());
@@ -1362,69 +1354,11 @@ mod test {
         let (rules, var_lists, predicates) = get_el_test_ruleset_without_constants();
 
         let program = ChaseProgram::builder()
-            .import(
-                DSVFormat::csv()
-                    .try_into_import(
-                        "".to_string(),
-                        predicates[1].0.clone(),
-                        TupleConstraint::from_arity(predicates[1].1),
-                    )
-                    .unwrap(),
+            .imports(
+                [1usize, 2, 3, 4, 6, 8, 10]
+                    .map(|idx| csv_import(predicates[idx].0.clone(), predicates[idx].1)),
             )
-            .import(
-                DSVFormat::csv()
-                    .try_into_import(
-                        "".to_string(),
-                        predicates[2].0.clone(),
-                        TupleConstraint::from_arity(predicates[2].1),
-                    )
-                    .unwrap(),
-            )
-            .import(
-                DSVFormat::csv()
-                    .try_into_import(
-                        "".to_string(),
-                        predicates[3].0.clone(),
-                        TupleConstraint::from_arity(predicates[3].1),
-                    )
-                    .unwrap(),
-            )
-            .import(
-                DSVFormat::csv()
-                    .try_into_import(
-                        "".to_string(),
-                        predicates[4].0.clone(),
-                        TupleConstraint::from_arity(predicates[4].1),
-                    )
-                    .unwrap(),
-            )
-            .import(
-                DSVFormat::csv()
-                    .try_into_import(
-                        "".to_string(),
-                        predicates[6].0.clone(),
-                        TupleConstraint::from_arity(predicates[6].1),
-                    )
-                    .unwrap(),
-            )
-            .import(
-                DSVFormat::csv()
-                    .try_into_import(
-                        "".to_string(),
-                        predicates[8].0.clone(),
-                        TupleConstraint::from_arity(predicates[8].1),
-                    )
-                    .unwrap(),
-            )
-            .import(
-                DSVFormat::csv()
-                    .try_into_import(
-                        "".to_string(),
-                        predicates[10].0.clone(),
-                        TupleConstraint::from_arity(predicates[10].1),
-                    )
-                    .unwrap(),
-            )
+            .expect("these imports should not lead to errors")
             .rules(rules)
             .build();
 

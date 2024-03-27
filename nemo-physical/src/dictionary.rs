@@ -1,61 +1,60 @@
 //! This module provides functionalities for creating and maintaining dictionaries.
 //! A dictionary is a data structure that assigns numeric ids to complex objects (such as [String]s),
 //! and that provides an bijective (invertible) mapping between the two.
-
 use std::fmt::Debug;
 
-/// Module to define the [DictionaryString]
-pub mod dictionary_string;
-pub use dictionary_string::DictionaryString;
-/// Module to define the [PrefixedStringDictionary]
-pub mod prefixed_string_dictionary;
-pub use prefixed_string_dictionary::PrefixedStringDictionary;
-/// Module to define a simple [StringDictionary]
+pub mod datavalue_dictionary;
+pub use datavalue_dictionary::AddResult;
+pub use datavalue_dictionary::DvDict;
+pub use datavalue_dictionary::KNOWN_ID_MARK;
+pub use datavalue_dictionary::NONEXISTING_ID_MARK;
+
 pub mod string_dictionary;
-pub use string_dictionary::StringDictionary;
-/// Module to define [HashMapDictionary]
+pub(crate) use string_dictionary::StringDictionary;
+pub(crate) mod bytes_buffer;
+pub(crate) mod bytes_dictionary;
+pub(crate) mod dv_converter;
+pub(crate) mod string_dv_dict;
+
+pub mod string_map;
+pub(crate) use string_dv_dict::IriDvDictionary;
+#[cfg(not(feature = "stringpairdictionary"))]
+pub(crate) use string_dv_dict::LangStringDvDictionary;
+#[cfg(not(feature = "stringpairdictionary"))]
+pub(crate) use string_dv_dict::OtherDvDictionary;
+pub(crate) use string_dv_dict::StringDvDictionary;
+
+pub(crate) mod null_dv_dict;
+pub(crate) use null_dv_dict::NullDvDictionary;
+
+pub(crate) mod dictionary_string;
+
+pub mod meta_dv_dict;
+pub use dictionary_string::DictionaryString;
+
 pub mod hash_map_dictionary;
-pub use hash_map_dictionary::HashMapDictionary;
-/// Module to define [InfixDictionary]
-pub mod infix_dictionary;
-pub use infix_dictionary::InfixDictionary;
-/// Module to define [MetaDictionary]
+pub(crate) use hash_map_dictionary::HashMapDictionary;
+
+pub(crate) mod infix_dictionary;
+pub(crate) use infix_dictionary::InfixDictionary;
+#[cfg(feature = "stringpairdictionary")]
+pub(crate) mod bytes_pair_dictionary;
+
 pub mod meta_dictionary;
-pub use meta_dictionary::MetaDictionary;
-/// Module mapping physical types into logical types into Strings
-pub mod value_serializer;
-pub use value_serializer::ValueSerializer;
-
-/// Fake id that dictionaries use to indicate that an entry has no id.
-const NONEXISTING_ID_MARK: usize = usize::MAX;
-/// Fake id that dictionaries use to indicate that an entry is known
-/// in some other dictionary (indicating that a search across multiple dictionaries
-/// should be continued).
-const KNOWN_ID_MARK: usize = usize::MAX - 1;
-
-/// Result of adding new values to a dictionary.
-/// It indicates if the operation was successful, and whether the value was previously present or not.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum AddResult {
-    /// Element was new and has been freshly assinged the given id.
-    Fresh(usize),
-    /// Element was already known and has the given id.
-    Known(usize),
-    /// Element not supported by dictionary.
-    Rejected,
-}
-
-impl AddResult {
-    /// Returns the actual index.
-    /// In case of [AddResult::Rejected], a fake id is returned ([usize::MAX]).
-    pub fn value(&self) -> usize {
-        match self {
-            AddResult::Fresh(value) => *value,
-            AddResult::Known(value) => *value,
-            AddResult::Rejected => NONEXISTING_ID_MARK,
-        }
-    }
-}
+#[cfg(feature = "stringpairdictionary")]
+pub mod string_pair_dictionary;
+#[cfg(feature = "stringpairdictionary")]
+pub(crate) use string_pair_dictionary::StringPairDictionary;
+#[cfg(feature = "stringpairdictionary")]
+/// Module to define dv_converters
+pub(crate) mod pair_dv_converter;
+#[cfg(feature = "stringpairdictionary")]
+/// Module to define string-pair-based datavalue dictionaries.
+pub(crate) mod string_pair_dv_dict;
+#[cfg(feature = "stringpairdictionary")]
+pub(crate) use string_pair_dv_dict::LangStringDvDictionary;
+#[cfg(feature = "stringpairdictionary")]
+pub(crate) use string_pair_dv_dict::OtherDvDictionary;
 
 /// A Dictionary represents a bijective (invertible) mapping from objects to numeric ids.
 /// The "objects" are provided when the dictionary is used, whereas the ids are newly

@@ -1,20 +1,23 @@
-//! Defines a variant of [`crate::model::Rule`], suitable for computing the chase.
+//! Defines a variant of [crate::model::Rule], suitable for computing the chase.
 
 use std::collections::{HashMap, HashSet};
+
+use nemo_physical::datavalues::AnyDataValue;
 
 use crate::{
     error::Error,
     model::{
         chase_model::variable::{AGGREGATE_VARIABLE_PREFIX, CONSTRUCT_VARIABLE_PREFIX},
-        Constraint, Identifier, Literal, PrimitiveTerm, Rule, Term, Variable,
+        Constraint, Literal, PrimitiveTerm, Rule, Term, Variable,
     },
 };
 
 use super::{
-    variable::EQUALITY_VARIABLE_PREFIX, ChaseAggregate, Constructor, PrimitiveAtom, VariableAtom,
+    variable::EQUALITY_VARIABLE_PREFIX, ChaseAggregate, ChaseAtom, Constructor, PrimitiveAtom,
+    VariableAtom,
 };
 
-/// Representation of a rule in a [`super::ChaseProgram`].
+/// Representation of a rule in a [super::ChaseProgram].
 ///
 /// Chase rules may include placeholder variables, which start with `_`
 /// * Additional constraints: `_EQUALITY_{term_counter}`
@@ -41,7 +44,7 @@ pub struct ChaseRule {
 
 #[allow(dead_code)]
 impl ChaseRule {
-    /// Construct a new [`ChaseRule`].
+    /// Construct a new [ChaseRule].
     pub fn new(
         head: Vec<PrimitiveAtom>,
         constructors: Vec<Constructor>,
@@ -145,23 +148,58 @@ impl ChaseRule {
         &mut self.negative_constraints
     }
 
-    /// Return the [`Constructor`] associated with a given variable
+    /// Return the [Constructor] associated with a given variable
     pub fn get_constructor(&self, variable: &Variable) -> Option<&Constructor> {
         self.constructors
             .iter()
             .find(|&constructor| constructor.variable() == variable)
     }
+
+    /// Return all [Variable]s used in this rule.
+    pub fn all_variables(&self) -> Vec<Variable> {
+        let variables_body = self.all_body().flat_map(|atom| atom.get_variables());
+        let variables_head = self.head.iter().flat_map(|atom| atom.get_variables());
+        let variables_constructors = self
+            .constructors
+            .iter()
+            .map(|constructor| constructor.variable().clone());
+        let variables_aggregates = self
+            .aggregates
+            .iter()
+            .map(|aggregate| aggregate.output_variable.clone());
+
+        variables_body
+            .chain(variables_head)
+            .chain(variables_constructors)
+            .chain(variables_aggregates)
+            .collect()
+    }
+
+    /// Returns the [AnyDataValue]s used as constants in this rule.
+    pub fn all_datavalues(&self) -> impl Iterator<Item = &AnyDataValue> {
+        let datavalues_head = self.head.iter().flat_map(|atom| atom.datavalues());
+        let datavalues_constructors = self
+            .constructors
+            .iter()
+            .flat_map(|constructor| constructor.datavalues());
+        let datavalues_constraints = self
+            .positive_constraints
+            .iter()
+            .chain(self.negative_constraints.iter())
+            .flat_map(|constraint| constraint.datavalues());
+
+        datavalues_head
+            .chain(datavalues_constructors)
+            .chain(datavalues_constraints)
+    }
 }
 
 impl ChaseRule {
     /// Increments `next_variable_id`, but returns it's old value with a prefix.
-    fn generate_incrementing_variable_name(
-        prefix: &str,
-        next_variable_id: &mut usize,
-    ) -> Identifier {
-        let i = Identifier(format!("{}{}", prefix, next_variable_id));
+    fn generate_incrementing_variable_name(prefix: &str, next_variable_id: &mut usize) -> String {
+        let result = format!("{}{}", prefix, next_variable_id);
         *next_variable_id += 1;
-        i
+        result
     }
 
     // Remove constraints of the form ?X = ?Y from the rule

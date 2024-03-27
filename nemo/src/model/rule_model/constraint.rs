@@ -1,6 +1,8 @@
+use nemo_physical::datavalues::AnyDataValue;
+
 use crate::model::{Term, Variable, VariableAssignment};
 
-use super::PrimitiveTerm;
+use super::{BinaryOperation, PrimitiveTerm};
 
 /// Represents a constraint which is expressed as a binary operator applied to two terms
 #[derive(Debug, Eq, PartialEq, Clone, PartialOrd, Ord)]
@@ -20,6 +22,33 @@ pub enum Constraint {
 }
 
 impl Constraint {
+    /// Convert to [BinaryOperation].
+    pub fn as_binary_term(self) -> Term {
+        let operation = match self {
+            Constraint::Equals(_, _) => BinaryOperation::Equal,
+            Constraint::Unequals(_, _) => BinaryOperation::Unequals,
+            Constraint::LessThan(_, _) => BinaryOperation::NumericLessthan,
+            Constraint::GreaterThan(_, _) => BinaryOperation::NumericGreaterthan,
+            Constraint::LessThanEq(_, _) => BinaryOperation::NumericLessthaneq,
+            Constraint::GreaterThanEq(_, _) => BinaryOperation::NumericGreaterthaneq,
+        };
+
+        let (left, right) = match self {
+            Constraint::Equals(left, right)
+            | Constraint::Unequals(left, right)
+            | Constraint::LessThan(left, right)
+            | Constraint::GreaterThan(left, right)
+            | Constraint::LessThanEq(left, right)
+            | Constraint::GreaterThanEq(left, right) => (left, right),
+        };
+
+        Term::Binary {
+            operation,
+            lhs: Box::new(left),
+            rhs: Box::new(right),
+        }
+    }
+
     /// Return the left and right term used in the constraint.
     pub fn terms(&self) -> (&Term, &Term) {
         match &self {
@@ -59,12 +88,17 @@ impl Constraint {
         self.left().variables().chain(self.right().variables())
     }
 
+    /// Returns all [AnyDataValue]s used within this constraint.
+    pub fn datavalues(&self) -> impl Iterator<Item = &AnyDataValue> {
+        self.left().datavalues().chain(self.right().datavalues())
+    }
+
     /// Return whether this type of constraints only works on numeric values
     pub fn is_numeric(&self) -> bool {
         !(matches!(self, Constraint::Equals(_, _)) || matches!(self, Constraint::Unequals(_, _)))
     }
 
-    /// Replaces [`Variable`]s with [`Term`]s according to the provided assignment.
+    /// Replaces [Variable]s with [Term]s according to the provided assignment.
     pub fn apply_assignment(&mut self, assignment: &VariableAssignment) {
         let (left, right) = self.terms_mut();
 

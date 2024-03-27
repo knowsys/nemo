@@ -5,13 +5,15 @@ use std::{cell::RefCell, collections::HashMap, fmt::Debug};
 use crate::{
     error::Error,
     io::parser::types::{ArithmeticOperator, BodyExpression},
-    model::{rule_model::Constraint, *},
+    model::*,
 };
-use nemo_physical::error::ReadingError;
+use nemo_physical::datavalues::{
+    AnyDataValue, DataValueCreationError, MapDataValue, TupleDataValue,
+};
 use nom::{
     branch::alt,
     bytes::complete::{is_not, tag},
-    character::complete::{alpha1, digit1, multispace1, none_of, satisfy},
+    character::complete::{alpha1, digit1, multispace1, satisfy},
     combinator::{all_consuming, cut, map, map_res, opt, recognize, value},
     multi::{many0, many1, separated_list0, separated_list1},
     sequence::{delimited, pair, preceded, separated_pair, terminated, tuple},
@@ -29,29 +31,23 @@ pub(crate) mod sparql;
 pub(crate) mod turtle;
 pub use types::{span_from_str, LocatedParseError, ParseError, ParseResult};
 
-use super::formats::{
-    dsv::DSVFormat,
-    rdf::RDFFormat,
-    types::{Direction, ExportSpec, FileFormat, FileFormatError, ImportExportSpec, ImportSpec},
-};
-
-/// Parse a program in the given `input`-String and return a [`Program`].
+/// Parse a program in the given `input`-String and return a [Program].
 ///
 /// The program will be parsed and checked for unsupported features.
 ///
 /// # Error
-/// Returns an appropriate [`Error`] variant on parsing and feature check issues.
+/// Returns an appropriate [Error] variant on parsing and feature check issues.
 pub fn parse_program(input: impl AsRef<str>) -> Result<Program, Error> {
     let program = all_input_consumed(RuleParser::new().parse_program())(input.as_ref())?;
     Ok(program)
 }
 
-/// Parse a single fact in the given `input`-String and return a [`Program`].
+/// Parse a single fact in the given `input`-String and return a [Program].
 ///
 /// The program will be parsed and checked for unsupported features.
 ///
 /// # Error
-/// Returns an appropriate [`Error`] variant on parsing and feature check issues.
+/// Returns an appropriate [Error] variant on parsing and feature check issues.
 pub fn parse_fact(mut input: String) -> Result<Fact, Error> {
     input += ".";
     let fact = all_input_consumed(RuleParser::new().parse_fact())(input.as_str())?;
@@ -181,22 +177,22 @@ fn resolve_prefixed_name(
     }
 }
 
-/// Resolve prefixes in a [`turtle::RdfLiteral`].
-#[must_use]
+/// Resolve prefixes in a [turtle::RdfLiteral].
 fn resolve_prefixed_rdf_literal(
     prefixes: &HashMap<&str, &str>,
     literal: turtle::RdfLiteral,
-) -> RdfLiteral {
+) -> Result<AnyDataValue, DataValueCreationError> {
     match literal {
-        turtle::RdfLiteral::LanguageString { value, tag } => RdfLiteral::LanguageString {
-            value: value.to_string(),
-            tag: tag.to_string(),
-        },
-        turtle::RdfLiteral::DatatypeValue { value, datatype } => RdfLiteral::DatatypeValue {
-            value: value.to_string(),
-            datatype: resolve_prefixed_name(prefixes, datatype)
-                .expect("prefix should have been registered during parsing"),
-        },
+        turtle::RdfLiteral::LanguageString { value, tag } => Ok(
+            AnyDataValue::new_language_tagged_string(value.to_string(), tag.to_string()),
+        ),
+        turtle::RdfLiteral::DatatypeValue { value, datatype } => {
+            AnyDataValue::new_from_typed_literal(
+                value.to_string(),
+                resolve_prefixed_name(prefixes, datatype)
+                    .expect("prefix should have been registered during parsing"),
+            )
+        }
     }
 }
 
@@ -205,17 +201,11 @@ pub(crate) fn parse_bare_name(input: Span<'_>) -> IntermediateResult<Span<'_>> {
     map_error(
         recognize(pair(
             alpha1,
-            opt(preceded(
-                many0(tag(" ")),
-                separated_list1(
-                    many1(tag(" ")),
-                    many1(satisfy(|c| {
-                        ['0'..='9', 'a'..='z', 'A'..='Z', '-'..='-', '_'..='_']
-                            .iter()
-                            .any(|range| range.contains(&c))
-                    })),
-                ),
-            )),
+            opt(many1(satisfy(|c| {
+                ['0'..='9', 'a'..='z', 'A'..='Z', '-'..='-', '_'..='_']
+                    .iter()
+                    .any(|range| range.contains(&c))
+            }))),
         )),
         || ParseError::ExpectedBareName,
     )(input)
@@ -245,7 +235,7 @@ fn parse_simple_name(input: Span<'_>) -> IntermediateResult<Span<'_>> {
 /// Parse an IRI representing a constant.
 fn parse_iri_constant<'a>(
     prefixes: &'a RefCell<HashMap<&'a str, &'a str>>,
-) -> impl FnMut(Span<'a>) -> IntermediateResult<'a, Identifier> {
+) -> impl FnMut(Span<'a>) -> IntermediateResult<'a, AnyDataValue> {
     map_error(
         move |input| {
             let (remainder, name) = traced(
@@ -261,7 +251,7 @@ fn parse_iri_constant<'a>(
             let resolved = resolve_prefixed_name(&prefixes.borrow(), name)
                 .map_err(|e| Err::Failure(e.at(input)))?;
 
-            Ok((remainder, Identifier(resolved)))
+            Ok((remainder, AnyDataValue::new_iri(resolved)))
         },
         || ParseError::ExpectedIriConstant,
     )
@@ -269,18 +259,17 @@ fn parse_iri_constant<'a>(
 
 fn parse_constant_term<'a>(
     prefixes: &'a RefCell<HashMap<&'a str, &'a str>>,
-) -> impl FnMut(Span<'a>) -> IntermediateResult<'a, Constant> {
+) -> impl FnMut(Span<'a>) -> IntermediateResult<'a, AnyDataValue> {
     traced(
         "parse_constant_term",
         alt((
-            map(parse_iri_constant(prefixes), Constant::Abstract),
-            map(turtle::numeric_literal, Constant::NumericLiteral),
+            parse_iri_constant(prefixes),
+            turtle::numeric_literal,
             map_res(turtle::rdf_literal, move |literal| {
-                Constant::try_from(resolve_prefixed_rdf_literal(&prefixes.borrow(), literal))
-                    .map_err(ReadingError::from)
+                resolve_prefixed_rdf_literal(&prefixes.borrow(), literal)
             }),
             map(turtle::string, move |literal| {
-                Constant::StringLiteral(literal.to_string())
+                AnyDataValue::new_plain_string(literal.to_string())
             }),
         )),
     )
@@ -293,7 +282,7 @@ pub fn parse_ground_term<'a>(
     traced(
         "parse_ground_term",
         map_error(
-            map(parse_constant_term(prefixes), PrimitiveTerm::Constant),
+            map(parse_constant_term(prefixes), PrimitiveTerm::GroundTerm),
             || ParseError::ExpectedGroundTerm,
         ),
     )
@@ -307,27 +296,27 @@ pub struct RuleParser<'a> {
     base: RefCell<Option<&'a str>>,
     /// A map from Prefixes to IRIs.
     prefixes: RefCell<HashMap<&'a str, &'a str>>,
-    /// Declarations of predicates with their types.
-    predicate_declarations: RefCell<HashMap<Identifier, Vec<PrimitiveType>>>,
     /// Number counting up for generating distinct wildcards.
     wildcard_generator: RefCell<usize>,
 }
 
 impl<'a> RuleParser<'a> {
-    /// Construct a new [`RuleParser`].
+    /// Construct a new [RuleParser].
     pub fn new() -> Self {
         Default::default()
     }
 
     fn parse_complex_constant_term(
         &'a self,
-    ) -> impl FnMut(Span<'a>) -> IntermediateResult<'a, Constant> {
+    ) -> impl FnMut(Span<'a>) -> IntermediateResult<'a, AnyDataValue> {
         traced(
             "parse_complex_constant_term",
+            // Note: The explicit |s| in the cases below is important to enable proper type
+            // reasoning in rust. Without it, unresolved opaque types appear in the recursion.
             alt((
                 parse_constant_term(&self.prefixes),
-                map(|s| self.parse_tuple_literal()(s), Constant::TupleLiteral),
-                map(|s| self.parse_map_literal()(s), Constant::MapLiteral),
+                map(|s| self.parse_tuple_literal()(s), AnyDataValue::from),
+                map(|s| self.parse_map_literal()(s), AnyDataValue::from),
             )),
         )
     }
@@ -451,63 +440,20 @@ impl<'a> RuleParser<'a> {
         )
     }
 
-    fn parse_predicate_declaration(
-        &'a self,
-    ) -> impl FnMut(Span<'a>) -> IntermediateResult<(Identifier, Vec<PrimitiveType>)> {
-        traced(
-            "parse_predicate_declaration",
-            map_error(
-                move |input| {
-                    let (remainder, (predicate, types)) = delimited(
-                        terminated(token("@declare"), cut(multispace_or_comment1)),
-                        cut(pair(
-                            self.parse_iri_like_identifier(),
-                            delimited(
-                                cut(self.parse_open_parenthesis()),
-                                cut(separated_list1(self.parse_comma(), self.parse_type_name())),
-                                cut(self.parse_close_parenthesis()),
-                            ),
-                        )),
-                        cut(self.parse_dot()),
-                    )(input)?;
-
-                    self.predicate_declarations
-                        .borrow_mut()
-                        .entry(predicate.clone())
-                        .or_insert(types.clone());
-                    Ok((remainder, (predicate, types)))
-                },
-                || ParseError::ExpectedPredicateDeclaration,
-            ),
-        )
-    }
-
-    fn parse_type_name(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<PrimitiveType> {
-        traced("parse_type_name", move |input| {
-            let (remainder, type_name) = map_error(
-                map_res(
-                    recognize(pair(alpha1, many0(none_of(",)] ")))),
-                    |name: Span<'a>| name.parse(),
-                    // NOTE: type names may not contain commata but any
-                    // other character (they should start with [a-zA-Z]
-                    // though)
-                ),
-                || ParseError::ExpectedLogicalTypeName,
-            )(input)?;
-
-            Ok((remainder, type_name))
-        })
-    }
-
     /// Parse a data source declaration.
-    pub fn parse_source(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<ImportSpec> {
+    /// This is a backwards compatibility feature for Rulewerk syntax. Nemo normally uses
+    /// `@import` instead of `@source`. The difference in `@source` is that (1) a predicate
+    /// arity is given in brackets after the predicate name, (2) the import predicate names
+    /// are one of `load-csv`, `load-tsv`, `load-rdf`, and `sparql`, with the only parameter
+    /// being the file name or IRI to be loaded.
+    fn parse_source(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<ImportDirective> {
         traced(
             "parse_source",
             map_error(
                 move |input| {
-                    let (remainder, (predicate, tuple_constraint)) = preceded(
+                    let (remainder, (predicate, arity)) = preceded(
                         terminated(token("@source"), cut(multispace_or_comment1)),
-                        cut(self.parse_qualified_predicate_name(true)),
+                        cut(self.parse_qualified_predicate_name()),
                     )(input)?;
 
                     let (remainder, datasource): (_, Result<_, ParseError>) = cut(delimited(
@@ -520,11 +466,35 @@ impl<'a> RuleParser<'a> {
                                     self.parse_close_parenthesis(),
                                 ),
                                 |filename| {
-                                    Ok(DSVFormat::csv().try_into_import(
-                                        filename.to_string(),
-                                        predicate.clone(),
-                                        tuple_constraint.clone(),
-                                    )?)
+                                    let attributes = MapDataValue::from_iter([
+                                        (
+                                            AnyDataValue::new_iri(
+                                                PARAMETER_NAME_RESOURCE.to_string(),
+                                            ),
+                                            AnyDataValue::new_plain_string(filename.to_string()),
+                                        ),
+                                        (
+                                            AnyDataValue::new_iri(
+                                                PARAMETER_NAME_FORMAT.to_string(),
+                                            ),
+                                            TupleDataValue::from_iter(
+                                                vec![VALUE_FORMAT_ANY; arity]
+                                                    .iter()
+                                                    .map(|format| {
+                                                        AnyDataValue::new_plain_string(
+                                                            (*format).to_string(),
+                                                        )
+                                                    })
+                                                    .collect::<Vec<AnyDataValue>>(),
+                                            )
+                                            .into(),
+                                        ),
+                                    ]);
+                                    Ok(ImportDirective::from(ImportExportDirective {
+                                        predicate: predicate.clone(),
+                                        format: FileFormat::CSV,
+                                        attributes,
+                                    }))
                                 },
                             ),
                             map(
@@ -534,11 +504,35 @@ impl<'a> RuleParser<'a> {
                                     self.parse_close_parenthesis(),
                                 ),
                                 |filename| {
-                                    Ok(DSVFormat::tsv().try_into_import(
-                                        filename.to_string(),
-                                        predicate.clone(),
-                                        tuple_constraint.clone(),
-                                    )?)
+                                    let attributes = MapDataValue::from_iter([
+                                        (
+                                            AnyDataValue::new_iri(
+                                                PARAMETER_NAME_RESOURCE.to_string(),
+                                            ),
+                                            AnyDataValue::new_plain_string(filename.to_string()),
+                                        ),
+                                        (
+                                            AnyDataValue::new_iri(
+                                                PARAMETER_NAME_FORMAT.to_string(),
+                                            ),
+                                            TupleDataValue::from_iter(
+                                                vec![VALUE_FORMAT_ANY; arity]
+                                                    .iter()
+                                                    .map(|format| {
+                                                        AnyDataValue::new_plain_string(
+                                                            (*format).to_string(),
+                                                        )
+                                                    })
+                                                    .collect::<Vec<AnyDataValue>>(),
+                                            )
+                                            .into(),
+                                        ),
+                                    ]);
+                                    Ok(ImportDirective::from(ImportExportDirective {
+                                        predicate: predicate.clone(),
+                                        format: FileFormat::TSV,
+                                        attributes,
+                                    }))
                                 },
                             ),
                             map(
@@ -548,12 +542,44 @@ impl<'a> RuleParser<'a> {
                                     self.parse_close_parenthesis(),
                                 ),
                                 |filename| {
-                                    Ok(RDFFormat::new().try_into_import(
-                                        filename.to_string(),
-                                        predicate.clone(),
-                                        tuple_constraint.clone(),
-                                        self.base().map(String::from),
-                                    )?)
+                                    let mut attribute_pairs = vec![
+                                        (
+                                            AnyDataValue::new_iri(
+                                                PARAMETER_NAME_RESOURCE.to_string(),
+                                            ),
+                                            AnyDataValue::new_plain_string(filename.to_string()),
+                                        ),
+                                        (
+                                            AnyDataValue::new_iri(
+                                                PARAMETER_NAME_FORMAT.to_string(),
+                                            ),
+                                            TupleDataValue::from_iter(
+                                                vec![VALUE_FORMAT_ANY; arity]
+                                                    .iter()
+                                                    .map(|format| {
+                                                        AnyDataValue::new_plain_string(
+                                                            (*format).to_string(),
+                                                        )
+                                                    })
+                                                    .collect::<Vec<AnyDataValue>>(),
+                                            )
+                                            .into(),
+                                        ),
+                                    ];
+                                    if let Some(base) = self.base() {
+                                        attribute_pairs.push((
+                                            AnyDataValue::new_iri(PARAMETER_NAME_BASE.to_string()),
+                                            AnyDataValue::new_iri(base.to_string()),
+                                        ));
+                                    }
+
+                                    let attributes = MapDataValue::from_iter(attribute_pairs);
+
+                                    Ok(ImportDirective::from(ImportExportDirective {
+                                        predicate: predicate.clone(),
+                                        format: FileFormat::RDF(RdfVariant::Unspecified),
+                                        attributes,
+                                    }))
                                 },
                             ),
                             map(
@@ -590,29 +616,16 @@ impl<'a> RuleParser<'a> {
     }
 
     /// Parse an output directive.
-    pub fn parse_output(
-        &'a self,
-    ) -> impl FnMut(Span<'a>) -> IntermediateResult<QualifiedPredicateName> {
+    fn parse_output_directive(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Identifier> {
         traced(
             "parse_output",
             map_error(
                 delimited(
                     terminated(token("@output"), cut(multispace_or_comment1)),
-                    cut(alt((
-                        map_res::<_, _, _, _, Error, _, _>(
-                            self.parse_qualified_predicate_name(false),
-                            |(identifier, associated_type)| {
-                                Ok(QualifiedPredicateName::with_constraint(
-                                    identifier,
-                                    TypeConstraint::Tuple(associated_type),
-                                ))
-                            },
-                        ),
-                        map_res::<_, _, _, _, Error, _, _>(
-                            self.parse_iri_like_identifier(),
-                            |identifier| Ok(identifier.into()),
-                        ),
-                    ))),
+                    cut(map_res::<_, _, _, _, Error, _, _>(
+                        self.parse_iri_like_identifier(),
+                        Ok,
+                    )),
                     cut(self.parse_dot()),
                 ),
                 || ParseError::ExpectedOutputDeclaration,
@@ -620,55 +633,46 @@ impl<'a> RuleParser<'a> {
         )
     }
 
-    /// Parse the [Key] of a [Map], i.e., a predicate name or a string.
-    pub fn parse_map_key(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Key> {
-        traced(
-            "parse_map_key",
-            alt((
-                map(self.parse_iri_like_identifier(), Key::Identifier),
-                map(turtle::string, |s| Key::String(s.to_string())),
-            )),
-        )
-    }
-
-    /// Parse an entry in a [Map], i.e., a [Key]--[Term] pair.
-    pub fn parse_map_entry(
+    /// Parse an entry in a [MapDataValue], i.e., am [AnyDataValue]--[AnyDataValue] pair.
+    fn parse_map_entry(
         &'a self,
-    ) -> impl FnMut(Span<'a>) -> IntermediateResult<(Key, Constant)> {
+    ) -> impl FnMut(Span<'a>) -> IntermediateResult<(AnyDataValue, AnyDataValue)> {
         traced(
             "parse_map_entry",
             separated_pair(
-                self.parse_map_key(),
+                self.parse_complex_constant_term(),
                 self.parse_equals(),
                 map(self.parse_complex_constant_term(), |term| term),
             ),
         )
     }
 
-    /// Parse an object literal.
-    pub fn parse_map_literal(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Map> {
+    /// Parse a ground map literal.
+    fn parse_map_literal(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<MapDataValue> {
         traced(
             "parse_map_literal",
             delimited(
                 self.parse_open_brace(),
                 map(
                     separated_list0(self.parse_comma(), self.parse_map_entry()),
-                    Map::from_iter,
+                    MapDataValue::from_iter,
                 ),
                 self.parse_close_brace(),
             ),
         )
     }
 
-    /// Parse a tuple literal.
-    pub fn parse_tuple_literal(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Tuple> {
+    /// Parse a ground tuple literal.
+    pub fn parse_tuple_literal(
+        &'a self,
+    ) -> impl FnMut(Span<'a>) -> IntermediateResult<TupleDataValue> {
         traced(
             "parse_tuple_literal",
             delimited(
                 self.parse_open_parenthesis(),
                 map(
                     separated_list0(self.parse_comma(), self.parse_complex_constant_term()),
-                    Tuple::from_iter,
+                    TupleDataValue::from_iter,
                 ),
                 self.parse_close_parenthesis(),
             ),
@@ -676,44 +680,42 @@ impl<'a> RuleParser<'a> {
     }
 
     /// Parse a file format name.
-    pub fn parse_file_format(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<FileFormat> {
+    fn parse_file_format(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<FileFormat> {
         traced("parse_file_format", move |input| {
             let (remainder, format) =
-                map_res(alpha1, |format: Span<'a>| format.parse::<FileFormat>())(input)?;
+                map_res(alpha1, |format: Span<'a>| match *format.fragment() {
+                    FILE_FORMAT_CSV => Ok(FileFormat::CSV),
+                    FILE_FORMAT_DSV => Ok(FileFormat::DSV),
+                    FILE_FORMAT_TSV => Ok(FileFormat::TSV),
+                    FILE_FORMAT_RDF_UNSPECIFIED => Ok(FileFormat::RDF(RdfVariant::Unspecified)),
+                    FILE_FORMAT_RDF_NTRIPLES => Ok(FileFormat::RDF(RdfVariant::NTriples)),
+                    FILE_FORMAT_RDF_NQUADS => Ok(FileFormat::RDF(RdfVariant::NQuads)),
+                    FILE_FORMAT_RDF_TURTLE => Ok(FileFormat::RDF(RdfVariant::Turtle)),
+                    FILE_FORMAT_RDF_TRIG => Ok(FileFormat::RDF(RdfVariant::TriG)),
+                    FILE_FORMAT_RDF_XML => Ok(FileFormat::RDF(RdfVariant::RDFXML)),
+                    _ => Err(ParseError::FileFormatError(format.fragment().to_string())),
+                })(input)?;
 
             Ok((remainder, format))
         })
     }
 
-    /// Parse an import/export specification for the given
-    /// [`Direction`].
-    pub fn parse_import_export_spec(
+    /// Parse an import/export specification.
+    fn parse_import_export_spec(
         &'a self,
-        direction: Direction,
-    ) -> impl FnMut(Span<'a>) -> IntermediateResult<ImportExportSpec> {
+    ) -> impl FnMut(Span<'a>) -> IntermediateResult<ImportExportDirective> {
         traced("parse_import_export_spec", move |input| {
-            let (remainder, predicate) = self.parse_qualified_predicate_name(true)(input)?;
+            let (remainder, predicate) = self.parse_iri_like_identifier()(input)?;
             let (remainder, format) = delimited(
-                space_delimited_token(":"),
+                space_delimited_token(":-"),
                 self.parse_file_format(),
                 multispace_or_comment0,
             )(remainder)?;
-            let (remainder, (format, attributes, constraint)) =
-                map_res(self.parse_map_literal(), |attributes| {
-                    let mut meta = format.into_meta();
-                    let constraint = meta.validated_and_refined_type_declaration(
-                        direction,
-                        &attributes,
-                        predicate.1.clone(),
-                    )?;
-                    Ok::<_, FileFormatError>((meta, attributes, constraint))
-                })(remainder)?;
-
+            let (remainder, attributes) = self.parse_map_literal()(remainder)?;
             Ok((
                 remainder,
-                ImportExportSpec {
-                    predicate: predicate.0,
-                    constraint,
+                ImportExportDirective {
+                    predicate,
                     format,
                     attributes,
                 },
@@ -722,37 +724,31 @@ impl<'a> RuleParser<'a> {
     }
 
     /// Parse an import directive.
-    pub fn parse_import(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<ImportSpec> {
+    fn parse_import(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<ImportDirective> {
         traced(
             "parse_import",
             delimited(
                 terminated(token("@import"), multispace_or_comment1),
-                cut(map(
-                    self.parse_import_export_spec(Direction::Reading),
-                    ImportSpec::from,
-                )),
+                cut(map(self.parse_import_export_spec(), ImportDirective::from)),
                 cut(self.parse_dot()),
             ),
         )
     }
 
     /// Parse an export directive.
-    pub fn parse_export(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<ExportSpec> {
+    fn parse_export(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<ExportDirective> {
         traced(
             "parse_export",
             delimited(
                 terminated(token("@export"), multispace_or_comment1),
-                cut(map(
-                    self.parse_import_export_spec(Direction::Writing),
-                    ExportSpec::from,
-                )),
+                cut(map(self.parse_import_export_spec(), ExportDirective::from)),
                 cut(self.parse_dot()),
             ),
         )
     }
 
     /// Parse a statement.
-    pub fn parse_statement(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Statement> {
+    fn parse_statement(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Statement> {
         traced(
             "parse_statement",
             map_error(
@@ -766,7 +762,7 @@ impl<'a> RuleParser<'a> {
     }
 
     /// Parse a fact.
-    pub fn parse_fact(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Fact> {
+    fn parse_fact(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Fact> {
         traced(
             "parse_fact",
             map_error(
@@ -796,9 +792,7 @@ impl<'a> RuleParser<'a> {
     }
 
     /// Parse an IRI identifier, e.g. for predicate names.
-    pub fn parse_iri_identifier(
-        &'a self,
-    ) -> impl FnMut(Span<'a>) -> IntermediateResult<Identifier> {
+    fn parse_iri_identifier(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Identifier> {
         map_error(
             move |input| {
                 let (remainder, name) = traced(
@@ -827,7 +821,7 @@ impl<'a> RuleParser<'a> {
     /// This is being used for:
     /// * predicate names
     /// * built-in functions in term trees
-    pub fn parse_iri_like_identifier(
+    fn parse_iri_like_identifier(
         &'a self,
     ) -> impl FnMut(Span<'a>) -> IntermediateResult<Identifier> {
         traced(
@@ -844,10 +838,11 @@ impl<'a> RuleParser<'a> {
 
     /// Parse a qualified predicate name – currently, this is a
     /// predicate name together with its arity.
+    ///
+    /// FIXME: Obsolete. Can be removed in the future.
     fn parse_qualified_predicate_name(
         &'a self,
-        constraint_is_lower_bound: bool,
-    ) -> impl FnMut(Span<'a>) -> IntermediateResult<(Identifier, TupleConstraint)> {
+    ) -> impl FnMut(Span<'a>) -> IntermediateResult<(Identifier, usize)> {
         traced(
             "parse_qualified_predicate_name",
             pair(
@@ -856,21 +851,7 @@ impl<'a> RuleParser<'a> {
                     multispace_or_comment0,
                     delimited(
                         token("["),
-                        cut(alt((
-                            map_res(digit1, |number: Span<'a>| {
-                                number.parse::<usize>().map(TupleConstraint::from_arity)
-                            }),
-                            map(
-                                separated_list1(self.parse_comma(), self.parse_type_name()),
-                                move |type_names| {
-                                    if constraint_is_lower_bound {
-                                        TupleConstraint::at_least(type_names)
-                                    } else {
-                                        TupleConstraint::exact(type_names)
-                                    }
-                                },
-                            ),
-                        ))),
+                        cut(map_res(digit1, |number: Span<'a>| number.parse::<usize>())),
                         cut(token("]")),
                     ),
                 ),
@@ -879,7 +860,7 @@ impl<'a> RuleParser<'a> {
     }
 
     /// Parse an IRI-like identifier (e.g. a predicate name) that is not an IRI.
-    pub fn parse_bare_iri_like_identifier(
+    fn parse_bare_iri_like_identifier(
         &'a self,
     ) -> impl FnMut(Span<'a>) -> IntermediateResult<Identifier> {
         traced("parse_bare_iri_like_identifier", move |input| {
@@ -890,7 +871,7 @@ impl<'a> RuleParser<'a> {
     }
 
     /// Parse a rule.
-    pub fn parse_rule(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Rule> {
+    fn parse_rule(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Rule> {
         traced(
             "parse_rule",
             map_error(
@@ -934,7 +915,7 @@ impl<'a> RuleParser<'a> {
     }
 
     /// Parse an atom.
-    pub fn parse_atom(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Atom> {
+    fn parse_atom(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Atom> {
         traced(
             "parse_atom",
             map_error(
@@ -956,10 +937,8 @@ impl<'a> RuleParser<'a> {
         )
     }
 
-    /// Parse a [`PrimitiveTerm`].
-    pub fn parse_primitive_term(
-        &'a self,
-    ) -> impl FnMut(Span<'a>) -> IntermediateResult<PrimitiveTerm> {
+    /// Parse a [PrimitiveTerm].
+    fn parse_primitive_term(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<PrimitiveTerm> {
         traced(
             "parse_primitive_term",
             map_error(
@@ -970,7 +949,7 @@ impl<'a> RuleParser<'a> {
     }
 
     /// Parse an aggregate term.
-    pub fn parse_aggregate(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Term> {
+    fn parse_aggregate(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Term> {
         traced(
             "parse_aggregate",
             map_error(
@@ -1007,7 +986,7 @@ impl<'a> RuleParser<'a> {
     }
 
     /// Parse a variable.
-    pub fn parse_variable(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<PrimitiveTerm> {
+    fn parse_variable(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<PrimitiveTerm> {
         traced(
             "parse_variable",
             map_error(
@@ -1024,9 +1003,7 @@ impl<'a> RuleParser<'a> {
     }
 
     /// Parse a universally quantified variable.
-    pub fn parse_universal_variable(
-        &'a self,
-    ) -> impl FnMut(Span<'a>) -> IntermediateResult<Variable> {
+    fn parse_universal_variable(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Variable> {
         traced(
             "parse_universal_variable",
             map_error(
@@ -1040,7 +1017,7 @@ impl<'a> RuleParser<'a> {
     }
 
     /// Parse an existentially quantified variable.
-    pub fn parse_existential_variable(
+    fn parse_existential_variable(
         &'a self,
     ) -> impl FnMut(Span<'a>) -> IntermediateResult<Variable> {
         traced(
@@ -1056,14 +1033,14 @@ impl<'a> RuleParser<'a> {
     }
 
     /// Parse a variable name.
-    pub fn parse_variable_name(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Identifier> {
+    fn parse_variable_name(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<String> {
         traced(
             "parse_variable",
             map_error(
                 move |input| {
                     let (remainder, name) = parse_simple_name(input)?;
 
-                    Ok((remainder, Identifier(name.to_string())))
+                    Ok((remainder, name.to_string()))
                 },
                 || ParseError::ExpectedVariableName,
             ),
@@ -1071,7 +1048,7 @@ impl<'a> RuleParser<'a> {
     }
 
     /// Parse a literal (i.e., a possibly negated atom).
-    pub fn parse_literal(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Literal> {
+    fn parse_literal(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Literal> {
         traced(
             "parse_literal",
             map_error(
@@ -1082,7 +1059,7 @@ impl<'a> RuleParser<'a> {
     }
 
     /// Parse a non-negated literal.
-    pub fn parse_positive_literal(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Literal> {
+    fn parse_positive_literal(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Literal> {
         traced(
             "parse_positive_literal",
             map_error(map(self.parse_atom(), Literal::Positive), || {
@@ -1092,7 +1069,7 @@ impl<'a> RuleParser<'a> {
     }
 
     /// Parse a negated literal.
-    pub fn parse_negative_literal(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Literal> {
+    fn parse_negative_literal(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Literal> {
         traced(
             "parse_negative_literal",
             map_error(
@@ -1106,7 +1083,7 @@ impl<'a> RuleParser<'a> {
     }
 
     /// Parse operation that is filters a variable
-    pub fn parse_constraint_operator(
+    fn parse_constraint_operator(
         &'a self,
     ) -> impl FnMut(Span<'a>) -> IntermediateResult<ConstraintOperator> {
         traced(
@@ -1134,7 +1111,7 @@ impl<'a> RuleParser<'a> {
     /// This may consist of:
     /// * A function term
     /// * An arithmetic expression, which handles e.g. precedence of addition over multiplication
-    pub fn parse_term(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Term> {
+    fn parse_term(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Term> {
         traced(
             "parse_term",
             map_error(
@@ -1143,6 +1120,7 @@ impl<'a> RuleParser<'a> {
                         multispace_or_comment0,
                         alt((
                             self.parse_arithmetic_expression(),
+                            // map(self.parse_constraint(), |c| c.as_binary_term()),
                             self.parse_parenthesised_term(),
                             self.parse_function_term(),
                             self.parse_aggregate(),
@@ -1157,11 +1135,11 @@ impl<'a> RuleParser<'a> {
     }
 
     /// Parse a wildcard variable.
-    pub fn parse_wildcard(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Term> {
+    fn parse_wildcard(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Term> {
         traced(
             "parse_wildcard",
             map_res(space_delimited_token("_"), |_| {
-                let wildcard = Variable::create_wildcard(*self.wildcard_generator.borrow());
+                let wildcard = Variable::new_unamed(*self.wildcard_generator.borrow());
                 *self.wildcard_generator.borrow_mut() += 1;
                 Ok::<_, ParseError>(Term::Primitive(PrimitiveTerm::Variable(wildcard)))
             }),
@@ -1169,7 +1147,7 @@ impl<'a> RuleParser<'a> {
     }
 
     /// Parse a parenthesised term tree.
-    pub fn parse_parenthesised_term(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Term> {
+    fn parse_parenthesised_term(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Term> {
         traced(
             "parse_parenthesised_term",
             map_error(self.parenthesised(self.parse_term()), || {
@@ -1179,7 +1157,7 @@ impl<'a> RuleParser<'a> {
     }
 
     /// Parse a function term, possibly with nested term trees.
-    pub fn parse_function_term(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Term> {
+    fn parse_function_term(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Term> {
         traced(
             "parse_function_term",
             map_error(
@@ -1191,6 +1169,21 @@ impl<'a> RuleParser<'a> {
                             (self.parenthesised(self.parse_term()))(remainder)?;
 
                         Ok((remainder, Term::Unary(op, Box::new(subterm))))
+                    } else if let Ok(op) = BinaryOperation::construct_from_name(&name.0) {
+                        let (remainder, (left, _, right)) = (self.parenthesised(tuple((
+                            self.parse_term(),
+                            self.parse_comma(),
+                            self.parse_term(),
+                        ))))(remainder)?;
+
+                        Ok((
+                            remainder,
+                            Term::Binary {
+                                operation: op,
+                                lhs: Box::new(left),
+                                rhs: Box::new(right),
+                            },
+                        ))
                     } else {
                         let (remainder, subterms) = (self.parenthesised(separated_list0(
                             self.parse_comma(),
@@ -1206,9 +1199,7 @@ impl<'a> RuleParser<'a> {
     }
 
     /// Parse an arithmetic expression
-    pub fn parse_arithmetic_expression(
-        &'a self,
-    ) -> impl FnMut(Span<'a>) -> IntermediateResult<Term> {
+    fn parse_arithmetic_expression(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Term> {
         traced(
             "parse_arithmetic_expression",
             map_error(
@@ -1241,7 +1232,7 @@ impl<'a> RuleParser<'a> {
 
     /// Parse an arithmetic product, i.e., an expression involving
     /// only `*` and `/` over subexpressions.
-    pub fn parse_arithmetic_product(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Term> {
+    fn parse_arithmetic_product(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Term> {
         traced(
             "parse_arithmetic_product",
             map_error(
@@ -1270,7 +1261,7 @@ impl<'a> RuleParser<'a> {
     }
 
     /// Parse an arithmetic factor.
-    pub fn parse_arithmetic_factor(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Term> {
+    fn parse_arithmetic_factor(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Term> {
         traced(
             "parse_arithmetic_factor",
             map_error(
@@ -1285,7 +1276,7 @@ impl<'a> RuleParser<'a> {
         )
     }
 
-    /// Fold a sequence of ([`ArithmeticOperator`], [`PrimitiveTerm`]) pairs into a single [`Term`].
+    /// Fold a sequence of ([ArithmeticOperator], [PrimitiveTerm]) pairs into a single [Term].
     fn fold_arithmetic_expressions(
         initial: Term,
         sequence: Vec<(ArithmeticOperator, Term)>,
@@ -1296,10 +1287,10 @@ impl<'a> RuleParser<'a> {
             use ArithmeticOperator::*;
 
             let operation = match operation {
-                Addition => BinaryOperation::Addition,
-                Subtraction => BinaryOperation::Subtraction,
-                Multiplication => BinaryOperation::Multiplication,
-                Division => BinaryOperation::Division,
+                Addition => BinaryOperation::NumericAddition,
+                Subtraction => BinaryOperation::NumericSubtraction,
+                Multiplication => BinaryOperation::NumericMultiplication,
+                Division => BinaryOperation::NumericDivision,
             };
 
             Term::Binary {
@@ -1311,7 +1302,7 @@ impl<'a> RuleParser<'a> {
     }
 
     /// Parse expression of the form `<term> <operation> <term>` expressing a constraint.
-    pub fn parse_constraint(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Constraint> {
+    fn parse_constraint(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Constraint> {
         traced(
             "parse_constraint",
             map_error(
@@ -1329,7 +1320,7 @@ impl<'a> RuleParser<'a> {
     }
 
     /// Parse body expression
-    pub fn parse_body_expression(
+    fn parse_body_expression(
         &'a self,
     ) -> impl FnMut(Span<'a>) -> IntermediateResult<BodyExpression> {
         traced(
@@ -1387,14 +1378,13 @@ impl<'a> RuleParser<'a> {
             let mut exports = Vec::new();
 
             let (remainder, _) = many0(alt((
-                map(self.parse_predicate_declaration(), |_| ()),
                 map(self.parse_source(), |source| sources.push(source)),
                 map(self.parse_import(), |import| imports.push(import)),
                 map(self.parse_export(), |export| exports.push(export)),
                 map(self.parse_statement(), |statement| {
                     statements.push(statement)
                 }),
-                map(self.parse_output(), |output_predicate| {
+                map(self.parse_output_directive(), |output_predicate| {
                     output_predicates.push(output_predicate)
                 }),
             )))(remainder)?;
@@ -1429,8 +1419,7 @@ impl<'a> RuleParser<'a> {
                 .imports(imports)
                 .exports(exports)
                 .rules(rules)
-                .facts(facts)
-                .predicate_declarations(self.predicate_declarations.borrow().clone());
+                .facts(facts);
 
             if let Some(base) = base {
                 program_builder = program_builder.base(base);
@@ -1446,42 +1435,16 @@ impl<'a> RuleParser<'a> {
 
     /// Return the declared base, if set, or None.
     #[must_use]
-    pub fn base(&self) -> Option<&'a str> {
+    fn base(&self) -> Option<&'a str> {
         *self.base.borrow()
-    }
-
-    /// Try to expand an IRI into an absolute IRI.
-    #[must_use]
-    pub fn absolutize_iri(&self, iri: Span) -> String {
-        if iri::is_absolute(iri) {
-            iri.to_string()
-        } else {
-            format!("{}{iri}", self.base().unwrap_or_default())
-        }
-    }
-
-    /// Try to abbreviate an IRI given declared prefixes and base.
-    #[must_use]
-    pub fn unresolve_absolute_iri(iri: Span) -> String {
-        if iri::is_relative(iri) {
-            iri.to_string()
-        } else {
-            todo!()
-        }
     }
 }
 
 #[cfg(test)]
 mod test {
-    use std::assert_matches::assert_matches;
-
-    use test_log::test;
-
-    use nemo_physical::datatypes::Double;
-
-    use crate::{io::formats::dsv::DSVFormat, model::rule_model::Constraint};
-
     use super::*;
+    use std::assert_matches::assert_matches;
+    use test_log::test;
 
     macro_rules! assert_parse {
         ($parser:expr, $left:expr, $right:expr $(,) ?) => {
@@ -1543,40 +1506,39 @@ mod test {
     #[test]
     #[cfg_attr(miri, ignore)]
     fn source() {
+        /// Helper function to create source-like imports
+        fn csv_import(predicate: Identifier, filename: &str, arity: i64) -> ImportDirective {
+            let attributes = MapDataValue::from_iter([
+                (
+                    AnyDataValue::new_iri(PARAMETER_NAME_RESOURCE.to_string()),
+                    AnyDataValue::new_plain_string(filename.to_string()),
+                ),
+                (
+                    AnyDataValue::new_iri(PARAMETER_NAME_FORMAT.to_string()),
+                    TupleDataValue::from_iter(
+                        vec![
+                            VALUE_FORMAT_ANY;
+                            usize::try_from(arity).expect("required for these tests")
+                        ]
+                        .iter()
+                        .map(|format| AnyDataValue::new_plain_string((*format).to_string()))
+                        .collect::<Vec<AnyDataValue>>(),
+                    )
+                    .into(),
+                ),
+            ]);
+            ImportDirective::from(ImportExportDirective {
+                predicate,
+                format: FileFormat::CSV,
+                attributes,
+            })
+        }
+
         let parser = RuleParser::new();
         let file = "drinks.csv";
         let predicate_name = "drink";
         let predicate = Identifier(predicate_name.to_string());
-        let default_import = DSVFormat::csv()
-            .try_into_import(
-                file.to_string(),
-                predicate.clone(),
-                TupleConstraint::from_arity(1),
-            )
-            .unwrap();
-
-        let any_and_int_import = DSVFormat::csv()
-            .try_into_import(
-                file.to_string(),
-                predicate.clone(),
-                [
-                    TypeConstraint::AtLeast(PrimitiveType::Any),
-                    TypeConstraint::AtLeast(PrimitiveType::Integer),
-                ]
-                .into_iter()
-                .collect(),
-            )
-            .unwrap();
-
-        let single_string_import = DSVFormat::csv()
-            .try_into_import(
-                file.to_string(),
-                predicate,
-                [TypeConstraint::AtLeast(PrimitiveType::String)]
-                    .into_iter()
-                    .collect(),
-            )
-            .unwrap();
+        let default_import = csv_import(predicate.clone(), file, 1);
 
         // rulewerk accepts all of these variants
         let input = format!(r#"@source {predicate_name}[1]: load-csv("{file}") ."#);
@@ -1587,15 +1549,6 @@ mod test {
         assert_parse!(parser.parse_source(), &input, default_import);
         let input = format!(r#"@source {predicate_name} [1] : load-csv ( "{file}" ) ."#);
         assert_parse!(parser.parse_source(), &input, default_import);
-        let input = format!(r#"@source {predicate_name}[string]: load-csv ( "{file}" ) ."#);
-        assert_parse!(parser.parse_source(), &input, single_string_import);
-        let input = format!(r#"@source {predicate_name} [string] : load-csv ( "{file}" ) ."#);
-        assert_parse!(parser.parse_source(), &input, single_string_import);
-        let input = format!(r#"@source {predicate_name}[any, integer]: load-csv ( "{file}" ) ."#);
-        assert_parse!(parser.parse_source(), &input, any_and_int_import);
-        let input =
-            format!(r#"@source {predicate_name} [any  ,  integer] : load-csv ( "{file}" ) ."#);
-        assert_parse!(parser.parse_source(), &input, any_and_int_import);
     }
 
     #[test]
@@ -1611,11 +1564,8 @@ mod test {
 
         let expected_fact = Fact(Atom::new(
             p,
-            vec![Term::Primitive(PrimitiveTerm::Constant(
-                Constant::RdfLiteral(RdfLiteral::DatatypeValue {
-                    value: v,
-                    datatype: t,
-                }),
+            vec![Term::Primitive(PrimitiveTerm::GroundTerm(
+                AnyDataValue::new_from_typed_literal(v, t).expect("unknown types should work"),
             ))],
         ));
 
@@ -1632,15 +1582,15 @@ mod test {
         let prefix_declaration = format!("@prefix {prefix}: <{iri}> .");
         let p = Identifier(predicate.to_string());
         let pn = format!("{prefix}:{name}");
-        let v = Identifier(format!("{iri}{name}"));
+        let v = format!("{iri}{name}");
         let fact = format!(r#"{predicate}({pn}) ."#);
 
         assert_parse!(parser.parse_prefix(), &prefix_declaration, prefix);
 
         let expected_fact = Fact(Atom::new(
             p,
-            vec![Term::Primitive(PrimitiveTerm::Constant(
-                Constant::Abstract(v),
+            vec![Term::Primitive(PrimitiveTerm::GroundTerm(
+                AnyDataValue::new_iri(v),
             ))],
         ));
 
@@ -1655,12 +1605,11 @@ mod test {
         let p = Identifier(predicate.to_string());
         let pn = format!("_:{name}");
         let fact = format!(r#"{predicate}({pn}) ."#);
-        let v = Identifier(pn);
 
         let expected_fact = Fact(Atom::new(
             p,
-            vec![Term::Primitive(PrimitiveTerm::Constant(
-                Constant::Abstract(v),
+            vec![Term::Primitive(PrimitiveTerm::GroundTerm(
+                AnyDataValue::new_iri(pn),
             ))],
         ));
 
@@ -1673,22 +1622,22 @@ mod test {
         let predicate = "p";
         let p = Identifier(predicate.to_string());
         let int = 23_i64;
-        let dbl = Double::new(42.0).expect("is not NaN");
+        let dbl = 42.0;
         let dec = 13.37;
         let fact = format!(r#"{predicate}({int}, {dbl:.1}E0, {dec:.2}) ."#);
 
         let expected_fact = Fact(Atom::new(
             p,
             vec![
-                Term::Primitive(PrimitiveTerm::Constant(Constant::NumericLiteral(
-                    NumericLiteral::Integer(int),
-                ))),
-                Term::Primitive(PrimitiveTerm::Constant(Constant::NumericLiteral(
-                    NumericLiteral::Double(dbl),
-                ))),
-                Term::Primitive(PrimitiveTerm::Constant(Constant::NumericLiteral(
-                    NumericLiteral::Decimal(13, 37),
-                ))),
+                Term::Primitive(PrimitiveTerm::GroundTerm(
+                    AnyDataValue::new_integer_from_i64(int),
+                )),
+                Term::Primitive(PrimitiveTerm::GroundTerm(
+                    AnyDataValue::new_double_from_f64(dbl).expect("is not NaN"),
+                )),
+                Term::Primitive(PrimitiveTerm::GroundTerm(
+                    AnyDataValue::new_double_from_f64(dec).expect("is not NaN"),
+                )),
             ],
         ));
 
@@ -1715,8 +1664,8 @@ mod test {
 
         let expected_fact = Fact(Atom::new(
             p,
-            vec![Term::Primitive(PrimitiveTerm::Constant(
-                Constant::StringLiteral(v),
+            vec![Term::Primitive(PrimitiveTerm::GroundTerm(
+                AnyDataValue::new_plain_string(v),
             ))],
         ));
 
@@ -1734,8 +1683,8 @@ mod test {
 
         let expected_fact = Fact(Atom::new(
             p,
-            vec![Term::Primitive(PrimitiveTerm::Constant(
-                Constant::StringLiteral(v),
+            vec![Term::Primitive(PrimitiveTerm::GroundTerm(
+                AnyDataValue::new_plain_string(v),
             ))],
         ));
 
@@ -1755,8 +1704,8 @@ mod test {
 
         let expected_fact = Fact(Atom::new(
             p,
-            vec![Term::Primitive(PrimitiveTerm::Constant(
-                Constant::RdfLiteral(RdfLiteral::LanguageString { value, tag }),
+            vec![Term::Primitive(PrimitiveTerm::GroundTerm(
+                AnyDataValue::new_language_tagged_string(value, tag),
             ))],
         ));
 
@@ -1769,13 +1718,12 @@ mod test {
         let predicate = "p";
         let name = "a";
         let p = Identifier(predicate.to_string());
-        let a = Identifier(name.to_string());
         let fact = format!(r#"{predicate}({name}) ."#);
 
         let expected_fact = Fact(Atom::new(
             p,
-            vec![Term::Primitive(PrimitiveTerm::Constant(
-                Constant::Abstract(a),
+            vec![Term::Primitive(PrimitiveTerm::GroundTerm(
+                AnyDataValue::new_iri(name.to_string()),
             ))],
         ));
 
@@ -1801,11 +1749,9 @@ mod test {
 
         let expected_fact = Fact(Atom::new(
             p,
-            vec![Term::Primitive(PrimitiveTerm::Constant(
-                Constant::RdfLiteral(RdfLiteral::DatatypeValue {
-                    value: v,
-                    datatype: t,
-                }),
+            vec![Term::Primitive(PrimitiveTerm::GroundTerm(
+                AnyDataValue::new_from_typed_literal(v, t)
+                    .expect("unknown datatype should always work"),
             ))],
         ));
 
@@ -1823,11 +1769,11 @@ mod test {
         let pp = "P";
         let p = Identifier(pp.to_string());
         let xx = "X";
-        let x = Identifier(xx.to_string());
+        let x = xx.to_string();
         let yy = "Y";
-        let y = Identifier(yy.to_string());
+        let y = yy.to_string();
         let zz = "Z";
-        let z = Identifier(zz.to_string());
+        let z = zz.to_string();
 
         let rule = format!(
             "{pp}(?{xx}) :- {aa}(?{xx}, ?{yy}), ?{yy} > ?{xx}, {bb}(?{zz}), ?{xx} = 3, ?{zz} < 7, ?{xx} <= ?{zz}, ?{zz} >= ?{yy} ."
@@ -1862,15 +1808,15 @@ mod test {
                 ),
                 Constraint::Equals(
                     Term::Primitive(PrimitiveTerm::Variable(Variable::Universal(x.clone()))),
-                    Term::Primitive(PrimitiveTerm::Constant(Constant::NumericLiteral(
-                        NumericLiteral::Integer(3),
-                    ))),
+                    Term::Primitive(PrimitiveTerm::GroundTerm(
+                        AnyDataValue::new_integer_from_i64(3),
+                    )),
                 ),
                 Constraint::LessThan(
                     Term::Primitive(PrimitiveTerm::Variable(Variable::Universal(z.clone()))),
-                    Term::Primitive(PrimitiveTerm::Constant(Constant::NumericLiteral(
-                        NumericLiteral::Integer(7),
-                    ))),
+                    Term::Primitive(PrimitiveTerm::GroundTerm(
+                        AnyDataValue::new_integer_from_i64(7),
+                    )),
                 ),
                 Constraint::LessThanEq(
                     Term::Primitive(PrimitiveTerm::Variable(Variable::Universal(x))),
@@ -1893,18 +1839,11 @@ mod test {
 
         let j2 = Identifier("J2".to_string());
 
-        assert_parse!(
-            parser.parse_output(),
-            "@output J2 .",
-            QualifiedPredicateName::new(j2.clone())
-        );
-        assert_parse!(
-            parser.parse_output(),
+        assert_parse!(parser.parse_output_directive(), "@output J2 .", j2.clone());
+        assert_parse_error!(
+            parser.parse_output_directive(),
             "@output J2[3] .",
-            QualifiedPredicateName::with_constraint(
-                j2.clone(),
-                TypeConstraint::Tuple(TupleConstraint::from_arity(3))
-            )
+            ParseError::ExpectedOutputDeclaration
         );
     }
 
@@ -1931,24 +1870,8 @@ mod test {
             ParseError::ExpectedBaseDeclaration
         );
 
-        assert_parse_error!(
-            parser.parse_type_name(),
-            "https://example.org/non-existant-type-name",
-            ParseError::ExpectedLogicalTypeName
-        );
-
         assert_parse_error!(parser.parse_variable(), "!23", ParseError::ExpectedVariable);
         assert_parse_error!(parser.parse_variable(), "?23", ParseError::ExpectedVariable);
-        assert_parse_error!(
-            parser.parse_predicate_declaration(),
-            "@declare p(InvalidTypeName) .",
-            ParseError::ExpectedPredicateDeclaration
-        );
-        assert_parse_error!(
-            parser.parse_program(),
-            "@declare p(InvalidTypeName) .",
-            ParseError::ExpectedPredicateDeclaration
-        );
 
         assert_parse_error!(
             parser.parse_rule(),
@@ -1962,14 +1885,14 @@ mod test {
     fn parse_arithmetic_expressions() {
         let parser = RuleParser::new();
 
-        let twenty_three = Term::Primitive(PrimitiveTerm::Constant(Constant::NumericLiteral(
-            NumericLiteral::Integer(23),
-        )));
-        let fourty_two = Term::Primitive(PrimitiveTerm::Constant(Constant::NumericLiteral(
-            NumericLiteral::Integer(42),
-        )));
+        let twenty_three = Term::Primitive(PrimitiveTerm::GroundTerm(
+            AnyDataValue::new_integer_from_i64(23),
+        ));
+        let fourty_two = Term::Primitive(PrimitiveTerm::GroundTerm(
+            AnyDataValue::new_integer_from_i64(42),
+        ));
         let twenty_three_times_fourty_two = Term::Binary {
-            operation: BinaryOperation::Multiplication,
+            operation: BinaryOperation::NumericMultiplication,
             lhs: Box::new(twenty_three.clone()),
             rhs: Box::new(fourty_two),
         };
@@ -2011,35 +1934,35 @@ mod test {
             parser.parse_arithmetic_expression(),
             "23 + 23 * 42 + 42 - (23 * 42)",
             Term::Binary {
-                operation: BinaryOperation::Subtraction,
+                operation: BinaryOperation::NumericSubtraction,
                 lhs: Box::new(Term::Binary {
-                    operation: BinaryOperation::Addition,
+                    operation: BinaryOperation::NumericAddition,
                     lhs: Box::new(Term::Binary {
-                        operation: BinaryOperation::Addition,
-                        lhs: Box::new(Term::Primitive(PrimitiveTerm::Constant(
-                            Constant::NumericLiteral(NumericLiteral::Integer(23),)
+                        operation: BinaryOperation::NumericAddition,
+                        lhs: Box::new(Term::Primitive(PrimitiveTerm::GroundTerm(
+                            AnyDataValue::new_integer_from_i64(23)
                         ))),
                         rhs: Box::new(Term::Binary {
-                            operation: BinaryOperation::Multiplication,
-                            lhs: Box::new(Term::Primitive(PrimitiveTerm::Constant(
-                                Constant::NumericLiteral(NumericLiteral::Integer(23)),
+                            operation: BinaryOperation::NumericMultiplication,
+                            lhs: Box::new(Term::Primitive(PrimitiveTerm::GroundTerm(
+                                AnyDataValue::new_integer_from_i64(23),
                             ))),
-                            rhs: Box::new(Term::Primitive(PrimitiveTerm::Constant(
-                                Constant::NumericLiteral(NumericLiteral::Integer(42)),
+                            rhs: Box::new(Term::Primitive(PrimitiveTerm::GroundTerm(
+                                AnyDataValue::new_integer_from_i64(42),
                             ))),
                         })
                     }),
-                    rhs: Box::new(Term::Primitive(PrimitiveTerm::Constant(
-                        Constant::NumericLiteral(NumericLiteral::Integer(42),)
+                    rhs: Box::new(Term::Primitive(PrimitiveTerm::GroundTerm(
+                        AnyDataValue::new_integer_from_i64(42)
                     ))),
                 }),
                 rhs: Box::new(Term::Binary {
-                    operation: BinaryOperation::Multiplication,
-                    lhs: Box::new(Term::Primitive(PrimitiveTerm::Constant(
-                        Constant::NumericLiteral(NumericLiteral::Integer(23))
+                    operation: BinaryOperation::NumericMultiplication,
+                    lhs: Box::new(Term::Primitive(PrimitiveTerm::GroundTerm(
+                        AnyDataValue::new_integer_from_i64(23)
                     ))),
-                    rhs: Box::new(Term::Primitive(PrimitiveTerm::Constant(
-                        Constant::NumericLiteral(NumericLiteral::Integer(42))
+                    rhs: Box::new(Term::Primitive(PrimitiveTerm::GroundTerm(
+                        AnyDataValue::new_integer_from_i64(42)
                     )))
                 })
             }
@@ -2089,14 +2012,14 @@ mod test {
     fn parse_function_terms() {
         let parser = RuleParser::new();
 
-        let twenty_three = Term::Primitive(PrimitiveTerm::Constant(Constant::NumericLiteral(
-            NumericLiteral::Integer(23),
-        )));
-        let fourty_two = Term::Primitive(PrimitiveTerm::Constant(Constant::NumericLiteral(
-            NumericLiteral::Integer(42),
-        )));
+        let twenty_three = Term::Primitive(PrimitiveTerm::GroundTerm(
+            AnyDataValue::new_integer_from_i64(23),
+        ));
+        let fourty_two = Term::Primitive(PrimitiveTerm::GroundTerm(
+            AnyDataValue::new_integer_from_i64(42),
+        ));
         let twenty_three_times_fourty_two = Term::Binary {
-            operation: BinaryOperation::Multiplication,
+            operation: BinaryOperation::NumericMultiplication,
             lhs: Box::new(twenty_three.clone()),
             rhs: Box::new(fourty_two.clone()),
         };
@@ -2201,9 +2124,9 @@ mod test {
         assert_parse!(
             parser.parse_term(),
             "constant",
-            Term::Primitive(PrimitiveTerm::Constant(Constant::Abstract(Identifier(
+            Term::Primitive(PrimitiveTerm::GroundTerm(AnyDataValue::new_iri(
                 String::from("constant")
-            ))))
+            )))
         );
     }
 
@@ -2218,8 +2141,8 @@ mod test {
             "#min(?VARIABLE)",
             Term::Aggregation(Aggregate {
                 logical_aggregate_operation: LogicalAggregateOperation::MinNumber,
-                terms: vec![PrimitiveTerm::Variable(Variable::Universal(Identifier(
-                    String::from("VARIABLE")
+                terms: vec![PrimitiveTerm::Variable(Variable::Universal(String::from(
+                    "VARIABLE"
                 )))]
             })
         );
@@ -2235,11 +2158,11 @@ mod test {
     fn parse_unary_function() {
         let parser = RuleParser::new();
 
-        let expression = "Abs(4)";
+        let expression = "ABS(4)";
         let expected_term = Term::Unary(
-            UnaryOperation::Abs,
-            Box::new(Term::Primitive(PrimitiveTerm::Constant(
-                Constant::NumericLiteral(NumericLiteral::Integer(4)),
+            UnaryOperation::NumericAbsolute,
+            Box::new(Term::Primitive(PrimitiveTerm::GroundTerm(
+                AnyDataValue::new_integer_from_i64(4),
             ))),
         );
 
@@ -2250,25 +2173,25 @@ mod test {
     fn parse_arithmetic_and_functions() {
         let parser = RuleParser::new();
 
-        let expression = "5 * Abs(Sqrt(4) - 3)";
+        let expression = "5 * ABS(SQRT(4) - 3)";
 
         let expected_term = Term::Binary {
-            operation: BinaryOperation::Multiplication,
-            lhs: Box::new(Term::Primitive(PrimitiveTerm::Constant(
-                Constant::NumericLiteral(NumericLiteral::Integer(5)),
+            operation: BinaryOperation::NumericMultiplication,
+            lhs: Box::new(Term::Primitive(PrimitiveTerm::GroundTerm(
+                AnyDataValue::new_integer_from_i64(5),
             ))),
             rhs: Box::new(Term::Unary(
-                UnaryOperation::Abs,
+                UnaryOperation::NumericAbsolute,
                 Box::new(Term::Binary {
-                    operation: BinaryOperation::Subtraction,
+                    operation: BinaryOperation::NumericSubtraction,
                     lhs: Box::new(Term::Unary(
-                        UnaryOperation::SquareRoot,
-                        Box::new(Term::Primitive(PrimitiveTerm::Constant(
-                            Constant::NumericLiteral(NumericLiteral::Integer(4)),
+                        UnaryOperation::NumericSquareroot,
+                        Box::new(Term::Primitive(PrimitiveTerm::GroundTerm(
+                            AnyDataValue::new_integer_from_i64(4),
                         ))),
                     )),
-                    rhs: Box::new(Term::Primitive(PrimitiveTerm::Constant(
-                        Constant::NumericLiteral(NumericLiteral::Integer(3)),
+                    rhs: Box::new(Term::Primitive(PrimitiveTerm::GroundTerm(
+                        AnyDataValue::new_integer_from_i64(3),
                     ))),
                 }),
             )),
@@ -2281,33 +2204,33 @@ mod test {
     fn parse_assignment() {
         let parser = RuleParser::new();
 
-        let expression = "?X = Abs(?Y - 5) * (7 + ?Z)";
+        let expression = "?X = ABS(?Y - 5) * (7 + ?Z)";
 
-        let variable = Term::Primitive(PrimitiveTerm::Variable(Variable::Universal(Identifier(
+        let variable = Term::Primitive(PrimitiveTerm::Variable(Variable::Universal(
             "X".to_string(),
-        ))));
+        )));
 
         let term = Term::Binary {
-            operation: BinaryOperation::Multiplication,
+            operation: BinaryOperation::NumericMultiplication,
             lhs: Box::new(Term::Unary(
-                UnaryOperation::Abs,
+                UnaryOperation::NumericAbsolute,
                 Box::new(Term::Binary {
-                    operation: BinaryOperation::Subtraction,
+                    operation: BinaryOperation::NumericSubtraction,
                     lhs: Box::new(Term::Primitive(PrimitiveTerm::Variable(
-                        Variable::Universal(Identifier::new("Y".to_string())),
+                        Variable::Universal("Y".to_string()),
                     ))),
-                    rhs: Box::new(Term::Primitive(PrimitiveTerm::Constant(
-                        Constant::NumericLiteral(NumericLiteral::Integer(5)),
+                    rhs: Box::new(Term::Primitive(PrimitiveTerm::GroundTerm(
+                        AnyDataValue::new_integer_from_i64(5),
                     ))),
                 }),
             )),
             rhs: Box::new(Term::Binary {
-                operation: BinaryOperation::Addition,
-                lhs: Box::new(Term::Primitive(PrimitiveTerm::Constant(
-                    Constant::NumericLiteral(NumericLiteral::Integer(7)),
+                operation: BinaryOperation::NumericAddition,
+                lhs: Box::new(Term::Primitive(PrimitiveTerm::GroundTerm(
+                    AnyDataValue::new_integer_from_i64(7),
                 ))),
                 rhs: Box::new(Term::Primitive(PrimitiveTerm::Variable(
-                    Variable::Universal(Identifier::new("Z".to_string())),
+                    Variable::Universal("Z".to_string()),
                 ))),
             }),
         };
@@ -2321,30 +2244,30 @@ mod test {
     fn parse_complex_condition() {
         let parser = RuleParser::new();
 
-        let expression = "Abs(?X - ?Y) <= ?Z + Sqrt(?Y)";
+        let expression = "ABS(?X - ?Y) <= ?Z + SQRT(?Y)";
 
         let left_term = Term::Unary(
-            UnaryOperation::Abs,
+            UnaryOperation::NumericAbsolute,
             Box::new(Term::Binary {
-                operation: BinaryOperation::Subtraction,
+                operation: BinaryOperation::NumericSubtraction,
                 lhs: Box::new(Term::Primitive(PrimitiveTerm::Variable(
-                    Variable::Universal(Identifier(String::from("X"))),
+                    Variable::Universal(String::from("X")),
                 ))),
                 rhs: Box::new(Term::Primitive(PrimitiveTerm::Variable(
-                    Variable::Universal(Identifier(String::from("Y"))),
+                    Variable::Universal(String::from("Y")),
                 ))),
             }),
         );
 
         let right_term = Term::Binary {
-            operation: BinaryOperation::Addition,
+            operation: BinaryOperation::NumericAddition,
             lhs: Box::new(Term::Primitive(PrimitiveTerm::Variable(
-                Variable::Universal(Identifier(String::from("Z"))),
+                Variable::Universal(String::from("Z")),
             ))),
             rhs: Box::new(Term::Unary(
-                UnaryOperation::SquareRoot,
+                UnaryOperation::NumericSquareroot,
                 Box::new(Term::Primitive(PrimitiveTerm::Variable(
-                    Variable::Universal(Identifier(String::from("Y"))),
+                    Variable::Universal(String::from("Y")),
                 ))),
             )),
         };
@@ -2360,39 +2283,34 @@ mod test {
         assert_parse!(
             parser.parse_map_literal(),
             r#"{}"#,
-            <Map as Default>::default()
+            MapDataValue::from_iter([]),
         );
 
         let ident = "foo";
-        let key = Key::from_identifier(Identifier(ident.to_string()));
-
-        assert_parse!(parser.parse_map_key(), ident, key.clone());
+        let key = AnyDataValue::new_iri(ident.to_string());
 
         let entry = format!("{ident}=23");
         assert_parse!(
             parser.parse_map_entry(),
             &entry,
-            (
-                key.clone(),
-                Constant::NumericLiteral(NumericLiteral::Integer(23))
-            )
+            (key.clone(), AnyDataValue::new_integer_from_i64(23))
         );
 
         let pairs = vec![
             (
-                Key::from_string("23".to_string()),
-                Constant::NumericLiteral(NumericLiteral::Integer(42)),
+                AnyDataValue::new_plain_string("23".to_string()),
+                AnyDataValue::new_integer_from_i64(42),
             ),
             (
-                Key::from_identifier(Identifier("foo".to_string())),
-                Constant::NumericLiteral(NumericLiteral::Integer(23)),
+                AnyDataValue::new_iri("foo".to_string()),
+                AnyDataValue::new_integer_from_i64(23),
             ),
         ];
 
         assert_parse!(
             parser.parse_map_literal(),
             r#"{foo = 23, "23" = 42}"#,
-            pairs.clone().into_iter().collect::<Map>()
+            pairs.clone().into_iter().collect::<MapDataValue>()
         );
     }
 
@@ -2401,14 +2319,14 @@ mod test {
         let parser = RuleParser::new();
 
         let pairs = vec![(
-            Key::from_identifier(Identifier("inner".to_string())),
-            Constant::MapLiteral(Default::default()),
+            AnyDataValue::new_iri("inner".to_string()),
+            MapDataValue::from_iter([]).into(),
         )];
 
         assert_parse!(
             parser.parse_map_literal(),
             r#"{inner = {}}"#,
-            pairs.clone().into_iter().collect::<Map>()
+            pairs.clone().into_iter().collect::<MapDataValue>()
         );
     }
 
@@ -2416,10 +2334,10 @@ mod test {
     fn tuple_literal() {
         let parser = RuleParser::new();
 
-        let expected: Tuple = [
-            Constant::Abstract(Identifier("something".to_string())),
-            Constant::NumericLiteral(NumericLiteral::Integer(42)),
-            Constant::TupleLiteral([].into_iter().collect()),
+        let expected: TupleDataValue = [
+            AnyDataValue::new_iri("something".to_string()),
+            AnyDataValue::new_integer_from_i64(42),
+            TupleDataValue::from_iter([]).into(),
         ]
         .into_iter()
         .collect();
@@ -2432,74 +2350,24 @@ mod test {
     }
 
     #[test]
-    fn qualified_predicate_name() {
-        let parser = RuleParser::new();
-        let predicate = Identifier("p".to_string());
-
-        assert_parse!(
-            parser.parse_qualified_predicate_name(true),
-            "p[3]",
-            (predicate.clone(), TupleConstraint::from_arity(3))
-        );
-
-        assert_parse!(
-            parser.parse_qualified_predicate_name(true),
-            "p[integer, any]",
-            (
-                predicate.clone(),
-                TupleConstraint::at_least([PrimitiveType::Integer, PrimitiveType::Any])
-            )
-        );
-
-        assert_parse!(
-            parser.parse_qualified_predicate_name(false),
-            "p[float64, any]",
-            (
-                predicate.clone(),
-                TupleConstraint::exact([PrimitiveType::Float64, PrimitiveType::Any])
-            )
-        );
-
-        assert_parse!(
-            parser.parse_qualified_predicate_name(false),
-            "p[integer, float64]",
-            (
-                predicate.clone(),
-                TupleConstraint::exact([PrimitiveType::Integer, PrimitiveType::Float64])
-            )
-        );
-    }
-
-    #[test]
     fn import_export() {
         let parser = RuleParser::new();
 
-        let direction = Direction::Reading;
         let name = "p".to_string();
         let predicate = Identifier(name.clone());
-        let qualified = format!("{name}[integer, float64]");
+        let qualified = format!("{name} ");
         let arguments = r#"{delimiter = ";", resource = <http://example.org/test.nt>}"#;
-        let spec = format!("{qualified}: dsv{arguments}");
+        let spec = format!("{qualified} :- dsv{arguments}");
         let directive = format!("@import {spec} .");
         let directive_export = format!("@export {spec} .");
         let attributes = parser.parse_map_literal()(arguments.into()).unwrap().1;
 
-        let types = [PrimitiveType::Integer, PrimitiveType::Float64];
-        let constraints = TupleConstraint::at_least(types);
-
         assert_parse!(
-            parser.parse_qualified_predicate_name(false),
-            &qualified,
-            (predicate.clone(), TupleConstraint::exact(types))
-        );
-
-        assert_parse!(
-            parser.parse_import_export_spec(direction),
+            parser.parse_import_export_spec(),
             &spec,
-            ImportExportSpec {
+            ImportExportDirective {
                 predicate: predicate.clone(),
-                constraint: constraints.clone(),
-                format: Box::<DSVFormat>::default(),
+                format: FileFormat::DSV,
                 attributes: attributes.clone(),
             }
         );
@@ -2507,10 +2375,9 @@ mod test {
         assert_parse!(
             parser.parse_import(),
             &directive,
-            ImportSpec::from(ImportExportSpec {
+            ImportDirective::from(ImportExportDirective {
                 predicate: predicate.clone(),
-                constraint: constraints.clone(),
-                format: Box::<DSVFormat>::default(),
+                format: FileFormat::DSV,
                 attributes: attributes.clone()
             })
         );
@@ -2518,10 +2385,9 @@ mod test {
         assert_parse!(
             parser.parse_export(),
             &directive_export,
-            ExportSpec::from(ImportExportSpec {
+            ExportDirective::from(ImportExportDirective {
                 predicate: predicate.clone(),
-                constraint: constraints.clone(),
-                format: Box::<DSVFormat>::default(),
+                format: FileFormat::DSV,
                 attributes: attributes.clone()
             })
         );

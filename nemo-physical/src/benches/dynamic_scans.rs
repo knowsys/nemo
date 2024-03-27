@@ -1,0 +1,156 @@
+//! This module collects benchmarks for assessing the impact of using dynamic dispatch in columns.
+
+#[cfg(test)]
+mod test {
+    use rand::{thread_rng, Rng};
+
+    use crate::{
+        benches::test::{black_box, Bencher},
+        columnar::{
+            column::vector::{ColumnScanVector, ColumnVector},
+            columnscan::{ColumnScanEnum, ColumnScanT},
+            operations::constant::ColumnScanConstant,
+        },
+        datatypes::{storage_type_name::NUM_STORAGETYPES, StorageTypeName, StorageValueT},
+    };
+
+    fn vector() -> Vec<u64> {
+        let length: usize = 10_000_000;
+
+        let mut rng = thread_rng();
+        let mut numbers: Vec<u64> = (0..length).map(|_| rng.gen()).collect();
+
+        numbers.sort();
+        numbers.dedup();
+        numbers
+    }
+
+    #[cfg_attr(miri, ignore)]
+    #[ignore]
+    #[bench]
+    fn scan_next_regular(bencher: &mut Bencher) {
+        let column = ColumnVector::new(vector());
+
+        bencher.iter(|| {
+            let scan = black_box(ColumnScanVector::new(&column));
+            let mut sum: u64 = 0;
+
+            for value in scan {
+                sum = sum.wrapping_add(value);
+            }
+
+            println!("{sum}");
+        })
+    }
+
+    #[cfg_attr(miri, ignore)]
+    #[ignore]
+    #[bench]
+    fn scan_next_enum(bencher: &mut Bencher) {
+        let column = ColumnVector::new(vector());
+
+        bencher.iter(|| {
+            let scan = black_box(ColumnScanEnum::Vector(ColumnScanVector::new(&column)));
+            let mut sum: u64 = 0;
+
+            for value in scan {
+                sum = sum.wrapping_add(value);
+            }
+
+            println!("{sum}");
+        })
+    }
+
+    #[cfg_attr(miri, ignore)]
+    #[ignore]
+    #[bench]
+    fn scan_next_rainbow(bencher: &mut Bencher) {
+        let column = ColumnVector::new(vector());
+
+        bencher.iter(|| {
+            let mut scan = black_box(ColumnScanT::new(
+                ColumnScanEnum::Constant(ColumnScanConstant::new(None)),
+                ColumnScanEnum::Vector(ColumnScanVector::new(&column)),
+                ColumnScanEnum::Constant(ColumnScanConstant::new(None)),
+                ColumnScanEnum::Constant(ColumnScanConstant::new(None)),
+                ColumnScanEnum::Constant(ColumnScanConstant::new(None)),
+            ));
+
+            let mut sum: u64 = 0;
+            let storage_types = black_box(vec![StorageTypeName::Id64, StorageTypeName::Int64]);
+            let current_type = black_box(vec![0]);
+
+            while let Some(value) = scan.next(black_box(storage_types[current_type[0]])) {
+                sum = sum.wrapping_add(if let StorageValueT::Id64(value) = value {
+                    value
+                } else {
+                    unreachable!();
+                });
+            }
+
+            println!("{sum}");
+        })
+    }
+
+    struct PossibleTypes {
+        storage_types: [Option<StorageTypeName>; NUM_STORAGETYPES],
+        current_type: usize,
+    }
+
+    impl PossibleTypes {
+        fn new(input_types: &[StorageTypeName]) -> Self {
+            let mut storage_types = [None; NUM_STORAGETYPES];
+
+            for (index, storage_type) in input_types.iter().enumerate() {
+                storage_types[index] = Some(*storage_type);
+            }
+
+            Self {
+                storage_types,
+                current_type: 0,
+            }
+        }
+
+        fn current_type(&self) -> StorageTypeName {
+            self.storage_types[self.current_type].unwrap()
+        }
+
+        fn inc_type(&mut self) {
+            self.current_type += 1;
+        }
+    }
+
+    #[cfg_attr(miri, ignore)]
+    #[ignore]
+    #[bench]
+    fn scan_next_rainbow_comp(bencher: &mut Bencher) {
+        let column = ColumnVector::new(vector());
+
+        bencher.iter(|| {
+            let mut scan = black_box(ColumnScanT::new(
+                ColumnScanEnum::Constant(ColumnScanConstant::new(None)),
+                ColumnScanEnum::Vector(ColumnScanVector::new(&column)),
+                ColumnScanEnum::Constant(ColumnScanConstant::new(None)),
+                ColumnScanEnum::Constant(ColumnScanConstant::new(None)),
+                ColumnScanEnum::Constant(ColumnScanConstant::new(None)),
+            ));
+
+            let mut sum: u64 = 0;
+            let mut possible_types = black_box(vec![black_box(PossibleTypes::new(&[
+                StorageTypeName::Id32,
+                StorageTypeName::Id64,
+            ]))]);
+            possible_types[0].inc_type();
+
+            while let Some(value) = scan.next(possible_types[black_box(0)].current_type()) {
+                sum = sum.wrapping_add(if let StorageValueT::Id64(value) = value {
+                    value
+                } else {
+                    unreachable!();
+                });
+            }
+
+            println!("{sum}");
+        })
+    }
+}

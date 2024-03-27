@@ -35,36 +35,36 @@ class TestExample(unittest.TestCase):
         self.engine.reason()
 
         self.expected_api_result = [
-            [2, "__Null#9223372036854775809"],
-            [42, "__Null#9223372036854775810"],
-            ["world", "__Null#9223372036854775811"],
-            [Decimal("3.14"), "__Null#9223372036854775812"],
+            ["<world>", "_:0"],
+            ["<circle>", "_:1"],
             [
                 NemoLiteral("hello world", lang="en"),
-                "__Null#9223372036854775813",
+                "_:2",
             ],
-            ["circle", "__Null#9223372036854775814"],
+            [2, "_:3"],
+            [42, "_:4"],
+            [3.14, "_:5"],
         ]
 
         self.expected_serialized_result = [
-            [
-                '"2"^^<http://www.w3.org/2001/XMLSchema#integer>',
-                "<__Null#9223372036854775809>",
-            ],
-            [
-                '"42"^^<http://www.w3.org/2001/XMLSchema#integer>',
-                "<__Null#9223372036854775810>",
-            ],
-            ["world", "<__Null#9223372036854775811>"],
-            [
-                '"3.14"^^<http://www.w3.org/2001/XMLSchema#decimal>',
-                "<__Null#9223372036854775812>",
-            ],
+            ["world", "_:0"],
+            ["circle", "_:1"],
             [
                 '"hello world"@en',
-                "<__Null#9223372036854775813>",
+                "_:2",
             ],
-            ["circle", "<__Null#9223372036854775814>"],
+            [
+                "2",
+                "_:3",
+            ],
+            [
+                "42",
+                "_:4",
+            ],
+            [
+                '"3.14"^^<http://www.w3.org/2001/XMLSchema#double>',
+                "_:5",
+            ],
         ]
 
     def test_result(self):
@@ -87,14 +87,20 @@ class TestExample(unittest.TestCase):
         trace = self.engine.trace("interesting(circle)")
         expected_trace = {
             "rule": "interesting(?y) :- data(?x, ?y), interesting(?x) .",
-            "assignment": {"?x": Decimal('3.14'), "?y": "circle"},
+            "assignment": {"?x": 3.14, "?y": "<circle>"},
             "subtraces": [
-                {"fact": "data(3.14, circle)"},
+                {
+                    "fact":
+                    "data(\"3.14\"^^<http://www.w3.org/2001/XMLSchema#double>, circle)"
+                },
                 {
                     "rule": "interesting(?y) :- data(?x, ?y), interesting(?x) .",
-                    "assignment": {"?x": "py", "?y": Decimal('3.14')},
+                    "assignment": {"?x": "<py>", "?y": 3.14},
                     "subtraces": [
-                        {"fact": "data(py, 3.14)"},
+                        {
+                            "fact":
+                            'data(py, "3.14"^^<http://www.w3.org/2001/XMLSchema#double>)'
+                        },
                         {"fact": "interesting(py)"},
                     ],
                 },

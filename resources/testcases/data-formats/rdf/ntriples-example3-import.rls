@@ -1,7 +1,0 @@
-@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
-@prefix eg: <http://example.org/elements/> .
-
-@import triples[3]: ntriples{resource = "sources/example3.nt"} .
-
-labels(?X, ?Y) :- triples(?X, rdfs:label, ?Y) .
-atoms(?X, ?Y, ?Z) :- triples(?X, eg:atomicNumber, ?Y), triples(?X, eg:specificGravity, ?Z) .

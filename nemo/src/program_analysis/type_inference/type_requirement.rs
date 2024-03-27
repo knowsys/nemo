@@ -2,16 +2,13 @@ use std::collections::HashMap;
 
 use nemo_physical::aggregates::operation::AggregateOperation;
 
-use crate::{
-    io::formats::types::ImportSpec,
-    model::{
-        chase_model::{
-            variable::{is_aggregate_variable, is_construct_variable},
-            ChaseAtom, ChaseFact, ChaseRule, Constructor,
-        },
-        types::error::TypeError,
-        Identifier, PrimitiveTerm, PrimitiveType, Term, TypeConstraint, Variable,
+use crate::model::{
+    chase_model::{
+        variable::{is_aggregate_variable, is_construct_variable},
+        ChaseAtom, ChaseFact, ChaseRule, Constructor,
     },
+    types::error::TypeError,
+    Identifier, ImportDirective, PrimitiveTerm, PrimitiveType, Term, TypeConstraint, Variable,
 };
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -167,7 +164,7 @@ pub(super) fn requirements_from_pred_decls(
     Ok(type_requirements)
 }
 
-pub(super) fn requirements_from_imports<'a, T: Iterator<Item = &'a ImportSpec>>(
+pub(super) fn requirements_from_imports<'a, T: Iterator<Item = &'a ImportDirective>>(
     imports: T,
 ) -> Result<PredicateTypeRequirements, TypeError> {
     let mut type_requirements = HashMap::new();

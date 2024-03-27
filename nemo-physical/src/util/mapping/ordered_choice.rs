@@ -3,7 +3,6 @@
 use std::{
     collections::{HashMap, HashSet},
     fmt::{Debug, Display},
-    ptr,
 };
 
 use super::{permutation::Permutation, traits::NatMapping};
@@ -11,8 +10,8 @@ use super::{permutation::Permutation, traits::NatMapping};
 /// Function that representes an ordered choosing from a sorted collection.
 /// In a mathematical sense, may be viewed as a partial function \[n\] -> \[n\] that is injective.
 #[derive(Debug, Eq, PartialEq, Clone)]
-pub struct SortedChoice {
-    /// Function is represented by a [`HashMap`] mapping the input `i` to `map.get(i)`.
+pub(crate) struct SortedChoice {
+    /// Function is represented by a [HashMap] mapping the input `i` to `map.get(i)`.
     /// Every input not present in this map is considered not part of this function's domain.
     map: HashMap<usize, usize>,
     /// Size of the domain. All inputs must be smaller than this.
@@ -20,32 +19,21 @@ pub struct SortedChoice {
 }
 
 impl SortedChoice {
-    /// Return an instance of the function from a vector representation where the input `vec[i]` is mapped to `i`.
-    pub fn from_vector(vec: Vec<usize>, domain_size: usize) -> Self {
-        let mut map = HashMap::<usize, usize>::new();
-        for (value, input) in vec.into_iter().enumerate() {
-            map.insert(input, value);
-        }
-
-        let result = Self { map, domain_size };
-
-        debug_assert!(result.is_valid());
-
-        result
-    }
-
     /// Return an instance of the function from a hash map representation where the input `i` is mapped to `map.get(i)`.
-    pub fn from_map(map: HashMap<usize, usize>, domain_size: usize) -> Self {
+    pub(crate) fn from_map(map: HashMap<usize, usize>, domain_size: usize) -> Self {
         let result = Self { map, domain_size };
         debug_assert!(result.is_valid());
 
         result
     }
 
-    /// Derive a [`SortedChoice`] that would transform a vector of elements into another.
+    /// Derive a [SortedChoice] that would transform a vector of elements into another.
     /// I.e. `this.permute(source) = target`
     /// For example `from_transformation([x, y, z, w], [z, w, x]) = {0->2, 2->0, 3->1}`.
-    pub fn from_transformation<T: PartialEq>(source: &[T], target: &[T]) -> Self {
+    ///
+    /// # Panics
+    /// Panics if there is a source element that does not appear in the target.
+    pub(crate) fn from_transformation<T: PartialEq>(source: &[T], target: &[T]) -> Self {
         debug_assert!(source.len() >= target.len());
 
         let mut map = HashMap::<usize, usize>::new();
@@ -64,7 +52,7 @@ impl SortedChoice {
     /// Return a vector representation of the function
     /// such that the ith entry in the vector contains that element which gets mapped to position i by this function.
     /// E.g. `{10 -> 0, 20 -> 1}` will result in `[10, 20]`
-    pub fn to_vector(&self) -> Vec<usize> {
+    pub(crate) fn as_vector(&self) -> Vec<usize> {
         let mut result = vec![0; self.map.len()];
 
         for (input, value) in self.iter() {
@@ -75,44 +63,27 @@ impl SortedChoice {
     }
 
     /// Return an iterator over all input/value pairs that are mapped in this funciton.
-    pub fn iter(&self) -> impl Iterator<Item = (&usize, &usize)> {
+    pub(crate) fn iter(&self) -> impl Iterator<Item = (&usize, &usize)> {
         self.map.iter()
     }
 
     /// Check whether this partial function is a permutation.
     /// This is equivalent to checking whether every input is assigned to a value.
-    pub fn is_permutation(&self) -> bool {
+    pub(crate) fn is_permutation(&self) -> bool {
         self.map.len() == self.domain_size
     }
 
     /// Turn this function into a permutation.
     /// All inputs outside of this domain will be mapped to themselves.
-    pub fn into_permutation(&self) -> Permutation {
+    #[cfg(test)]
+    pub(crate) fn as_permutation(&self) -> Permutation {
         debug_assert!(self.is_permutation());
         Permutation::from_map(self.map.clone())
     }
 
-    /// Transform the given vector of elements according to this mapping.
-    /// This will avoid copying the underlying data.
-    pub fn transform_consumed<T: Default + Debug>(&self, mut vec: Vec<T>) -> Vec<T> {
-        let mut result = std::iter::repeat_with(|| T::default())
-            .take(self.map.len())
-            .collect::<Vec<_>>();
-
-        for (&input, &value) in self.iter() {
-            unsafe {
-                let input_element: *mut T = &mut vec[input];
-                let output_element: *mut T = &mut result[value];
-
-                ptr::swap(input_element, output_element);
-            }
-        }
-
-        result
-    }
-
     /// Transform the given slice according to this mapping.
-    pub fn transform<T: Clone + Debug>(&self, vec: &[T]) -> Vec<T> {
+    #[allow(dead_code)]
+    pub(crate) fn transform<T: Clone + Debug>(&self, vec: &[T]) -> Vec<T> {
         let mut result: Vec<T> = vec.iter().take(self.map.len()).cloned().collect();
         for (input, value) in self.map.iter() {
             result[*value] = vec[*input].clone();
@@ -158,10 +129,6 @@ impl NatMapping for SortedChoice {
         Self::from_map(result_map, self.domain_size)
     }
 
-    fn domain_contains(&self, input: usize) -> bool {
-        self.map.contains_key(&input)
-    }
-
     fn is_identity(&self) -> bool {
         if !self.is_permutation() {
             return false;
@@ -180,6 +147,24 @@ impl Display for SortedChoice {
         }
 
         write!(f, "]")
+    }
+}
+
+#[cfg(test)]
+impl SortedChoice {
+    /// Return an instance of the function from a vector representation where the input `vec[i]` is mapped to `i`.
+
+    pub(crate) fn from_vector(vec: Vec<usize>, domain_size: usize) -> Self {
+        let mut map = HashMap::<usize, usize>::new();
+        for (value, input) in vec.into_iter().enumerate() {
+            map.insert(input, value);
+        }
+
+        let result = Self { map, domain_size };
+
+        debug_assert!(result.is_valid());
+
+        result
     }
 }
 
@@ -238,15 +223,15 @@ mod test {
     fn test_to_vector() {
         let vector = vec![0, 2, 1];
         let choice = SortedChoice::from_vector(vector.clone(), 3);
-        assert_eq!(vector, choice.to_vector());
+        assert_eq!(vector, choice.as_vector());
 
         let vector = vec![3, 1, 2];
         let choice = SortedChoice::from_vector(vector.clone(), 4);
-        assert_eq!(vector, choice.to_vector());
+        assert_eq!(vector, choice.as_vector());
 
         let vector = vec![0, 1, 2];
         let choice = SortedChoice::from_vector(vector.clone(), 4);
-        assert_eq!(vector, choice.to_vector());
+        assert_eq!(vector, choice.as_vector());
     }
 
     #[test]
@@ -263,12 +248,12 @@ mod test {
         let vector = vec![2, 0, 1];
         let choice = SortedChoice::from_vector(vector.clone(), vector.len());
         let permutation = Permutation::from_vector(vector);
-        assert_eq!(permutation, choice.into_permutation());
+        assert_eq!(permutation, choice.as_permutation());
 
         let vector = vec![2, 0, 1, 4, 3];
         let choice = SortedChoice::from_vector(vector.clone(), vector.len());
         let permutation = Permutation::from_vector(vector);
-        assert_eq!(permutation, choice.into_permutation());
+        assert_eq!(permutation, choice.as_permutation());
     }
 
     #[test]
@@ -280,17 +265,6 @@ mod test {
         let vector = vec![5.0, 1.0, -3.0];
         let choice = SortedChoice::from_vector(vec![2, 1, 0], 4);
         assert_eq!(choice.transform(&vector), vec![-3.0, 1.0, 5.0]);
-    }
-
-    #[test]
-    fn test_transform_consumed() {
-        let vector = vec!['A', 'B', 'C', 'D'];
-        let choice = SortedChoice::from_vector(vec![2, 3, 0], 4);
-        assert_eq!(choice.transform_consumed(vector), vec!['C', 'D', 'A']);
-
-        let vector = vec![5.0, 1.0, -3.0];
-        let choice = SortedChoice::from_vector(vec![2, 1, 0], 4);
-        assert_eq!(choice.transform_consumed(vector), vec![-3.0, 1.0, 5.0]);
     }
 
     #[test]

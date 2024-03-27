@@ -1,8 +1,9 @@
-//! This module collects data structures and operations on individual columns.
+//! This module defines column data structures,
+//! methods to construct and iterate over them,
+//! as well as operations performed on single columns.
 
-/// Module for defining various column builders and adaptive variants.
-pub mod adaptive_column_builder;
-
-pub mod column_types;
-pub mod operations;
-pub mod traits;
+pub(crate) mod column;
+pub(crate) mod columnbuilder;
+pub(crate) mod columnscan;
+pub(crate) mod intervalcolumn;
+pub(crate) mod operations;

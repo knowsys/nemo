@@ -1,4 +1,4 @@
-use crate::model::{types::error::TypeError, PrimitiveType, VariableAssignment};
+use crate::model::VariableAssignment;
 
 use super::{Identifier, PrimitiveTerm, Term};
 
@@ -13,36 +13,6 @@ pub enum LogicalAggregateOperation {
     MaxNumber,
     /// Sum of numerical values
     SumOfNumbers,
-}
-
-impl LogicalAggregateOperation {
-    /// Validates whether the logical aggregate operation is allowed on a particular type of aggregated input column
-    pub fn check_input_type(
-        &self,
-        input_variable_name: &str,
-        input_type: PrimitiveType,
-    ) -> Result<(), TypeError> {
-        if self.requires_numerical_input()
-            && !(matches!(input_type, PrimitiveType::Float64 | PrimitiveType::Integer))
-        {
-            return Err(TypeError::NonNumericalAggregateInputType(
-                *self,
-                input_variable_name.to_owned(),
-                input_type,
-            ));
-        }
-
-        Ok(())
-    }
-
-    fn requires_numerical_input(&self) -> bool {
-        match self {
-            LogicalAggregateOperation::CountValues => false,
-            LogicalAggregateOperation::MinNumber => true,
-            LogicalAggregateOperation::MaxNumber => true,
-            LogicalAggregateOperation::SumOfNumbers => true,
-        }
-    }
 }
 
 impl From<&Identifier> for Option<LogicalAggregateOperation> {
@@ -65,17 +35,7 @@ pub struct Aggregate {
 }
 
 impl Aggregate {
-    /// Get primitive type that fits the terms within the aggregate
-    pub fn primitive_type(&self) -> Option<PrimitiveType> {
-        self.terms
-            .iter()
-            .map(|t| t.primitive_type())
-            .fold(None, |acc, opt| {
-                acc.and_then(|a| opt.map(|b| a.max_type(&b)))
-            })
-    }
-
-    /// Replaces [`super::Variable`]s with [`Term`]s according to the provided assignment.
+    /// Replaces [super::Variable]s with [Term]s according to the provided assignment.
     pub fn apply_assignment(&mut self, assignment: &VariableAssignment) {
         for term in &mut self.terms {
             if let PrimitiveTerm::Variable(variable) = term {

@@ -2,12 +2,12 @@
 
 use std::path::PathBuf;
 
+use nemo_physical::datavalues::DataValueCreationError;
 use thiserror::Error;
 
 use crate::{
     execution::selection_strategy::strategy::SelectionStrategyError,
-    io::{formats::types::FileFormatError, parser::LocatedParseError},
-    model::types::error::TypeError,
+    io::{formats::import_export::ImportExportError, parser::LocatedParseError},
     program_analysis::analysis::RuleAnalysisError,
 };
 
@@ -38,9 +38,6 @@ pub enum Error {
     /// Parse errors
     #[error(transparent)]
     ParseError(#[from] LocatedParseError),
-    /// Type errors
-    #[error(transparent)]
-    TypeError(#[from] TypeError),
     /// IO Error
     #[error(transparent)]
     IO(#[from] std::io::Error),
@@ -68,7 +65,7 @@ pub enum Error {
     PhysicalError(#[from] nemo_physical::error::Error),
     /// Error when trying to lookup unary operations
     #[error("The unary operation {operation} is unknown.")]
-    UnknonwUnaryOpertation {
+    UnknownUnaryOpertation {
         /// The operation causing the failure
         operation: String,
     },
@@ -80,7 +77,10 @@ pub enum Error {
     },
     /// Error related to handling of file formats
     #[error(transparent)]
-    FileFormatError(#[from] FileFormatError),
+    FileFormatError(#[from] ImportExportError),
+    /// Error related to the creation of data values
+    #[error(transparent)]
+    DataValueCreationError(#[from] DataValueCreationError),
 }
 
 impl From<ReadingError> for Error {

@@ -1,22 +1,57 @@
 //! Contains structures and functionality for the binary
 use std::path::PathBuf;
 
-use nemo::{error::Error, io::OutputManager};
+use nemo::{error::Error, io::ExportManager};
 
+/// Default export directory.
 const DEFAULT_OUTPUT_DIRECTORY: &str = "results";
+
+/// Possible settings for the export option.
+#[derive(clap::ValueEnum, Clone, Copy, Default, Debug, PartialEq, Eq)]
+pub(crate) enum Exporting {
+    /// Export data as specified in program
+    #[default]
+    Keep,
+    /// Disable all exports.
+    None,
+    /// Export all IDB predicates (those used in rule heads)
+    Idb,
+    /// Export all EDB predicates (those for which facts are given or imported)
+    Edb,
+    /// Export all predicates.
+    All,
+}
+
+/// Possible settings for the reporting option.
+#[derive(clap::ValueEnum, Clone, Copy, Default, Debug, PartialEq, Eq)]
+pub(crate) enum Reporting {
+    /// Disable reporting.
+    None,
+    /// Print short report if no other results are printed. Otherwise disable reporting.
+    #[default]
+    Auto,
+    /// Print short report.
+    Short,
+    /// Print short report and detailed memory timing.
+    Time,
+    /// Print short report and detailed memory usage.
+    Mem,
+    /// Print short report and all details on timing and memory usage.
+    All,
+}
 
 /// Cli Arguments related to logging
 #[derive(clap::Args, Debug)]
-pub struct LoggingArgs {
-    /// Sets the verbosity of logging if the flags -v and -q are not used
-    #[arg(long = "log", value_parser=clap::builder::PossibleValuesParser::new(["error", "warn", "info", "debug", "trace"]), group = "verbosity")]
-    log_level: Option<String>,
-    /// Sets log verbosity (multiple times means more verbose)
+pub(crate) struct LoggingArgs {
+    /// Increase log verbosity (multiple uses increase verbosity further)
     #[arg(short, long, action = clap::builder::ArgAction::Count, group = "verbosity")]
     verbose: u8,
-    /// Sets log verbosity to only log errors
+    /// Reduce log verbosity to show only errors (equivalent to --log error)
     #[arg(short, long, group = "verbosity")]
     quiet: bool,
+    /// Set log verbosity (default is "warn")
+    #[arg(long = "log", value_parser=clap::builder::PossibleValuesParser::new(["error", "warn", "info", "debug", "trace"]), group = "verbosity")]
+    log_level: Option<String>,
 }
 
 impl LoggingArgs {
@@ -27,7 +62,7 @@ impl LoggingArgs {
     ///  * `Error` when `-q` is used
     ///  * The `NMO_LOG` environment variable value
     ///  * `Warn` otherwise
-    pub fn initialize_logging(&self) {
+    pub(crate) fn initialize_logging(&self) {
         let mut builder = env_logger::Builder::new();
 
         // Default log level
@@ -52,108 +87,65 @@ impl LoggingArgs {
 
 /// Cli arguments related to file output
 #[derive(Debug, clap::Args)]
-pub struct OutputArgs {
-    /// Save results to files. (Also see --output-dir)
-    #[arg(short, long = "save-results")]
-    save_results: bool,
-    /// Specify directory for output files. (Only relevant if --save-results is set.)
-    #[arg(short='D', long = "output-dir", default_value = DEFAULT_OUTPUT_DIRECTORY, requires="save_results")]
-    output_directory: PathBuf,
-    /// Overwrite existing files in --output-dir. (Only relevant if --save-results is set.)
-    #[arg(
-        short,
-        long = "overwrite-results",
-        default_value = "false",
-        requires = "save_results"
-    )]
+pub(crate) struct OutputArgs {
+    /// Override export directives in the program
+    #[arg(short, long = "export", value_enum, default_value_t)]
+    pub(crate) export_setting: Exporting,
+    /// Base directory for exporting files
+    #[arg(short='D', long = "export-dir", default_value = DEFAULT_OUTPUT_DIRECTORY)]
+    export_directory: PathBuf,
+    /// Replace any existing files during export
+    #[arg(short, long = "overwrite-results", default_value = "false")]
     overwrite: bool,
-    /// Gzip output files
-    #[arg(
-        short,
-        long = "gzip",
-        default_value = "false",
-        requires = "save_results"
-    )]
+    /// Use gzip to compress exports by default;
+    /// does not affect export directives that already specify a compression
+    #[arg(short, long = "gzip", default_value = "false")]
     gz: bool,
 }
 
 impl OutputArgs {
     /// Creates an output file manager with the current options
-    pub fn initialize_output_manager(self) -> Result<Option<OutputManager>, Error> {
-        if !self.save_results {
-            if self.output_directory != PathBuf::from(DEFAULT_OUTPUT_DIRECTORY) {
-                log::warn!(
-                    "Ignoring output directory `{:?}` since `--save-results` is false",
-                    self.output_directory
-                );
-            }
-
-            if self.gz {
-                log::warn!(
-                    "Ignoring gz-compression of output files `{:?}` since `--save-results` is false",
-                    self.gz
-                );
-            }
-
-            return Ok(None);
-        }
-
-        let mut output_manager = OutputManager::builder(self.output_directory)?;
-
-        if self.overwrite {
-            output_manager = output_manager.overwrite();
-        }
-
-        if self.gz {
-            output_manager = output_manager.gzip();
-        }
-
-        Ok(Some(output_manager.build()))
+    pub(crate) fn export_manager(self) -> Result<ExportManager, Error> {
+        let export_manager = ExportManager::new()
+            .set_base_path(self.export_directory)
+            .overwrite(self.overwrite)
+            .compress(self.gz);
+        Ok(export_manager)
     }
 }
 
 /// Cli arguments related to tracing
 #[derive(Debug, clap::Args)]
-pub struct TracingArgs {
-    /// Specify a fact or multiple semicolon separated facts, the origin of which should be explained
+pub(crate) struct TracingArgs {
+    /// Facts for which a derivation trace should be computed;
+    /// multiple facts can be separated by a semicolon
     #[arg(long = "trace", value_delimiter = ';')]
-    pub traced_facts: Option<Vec<String>>,
-    /// Specify a file to save the trace.
-    /// (Only relevant if --trace is set.)
+    pub(crate) traced_facts: Option<Vec<String>>,
+    /// File to export the trace to
     #[arg(long = "trace-output", requires = "traced_facts")]
-    pub output_file: Option<PathBuf>,
+    pub(crate) output_file: Option<PathBuf>,
 }
 
 /// Nemo CLI
 #[derive(clap::Parser, Debug)]
 #[command(author, version, about)]
-pub struct CliApp {
-    /// Arguments related to logging
-    #[command(flatten)]
-    pub logging: LoggingArgs,
+pub(crate) struct CliApp {
     /// One or more rule program files
     #[arg(value_parser, required = true)]
-    pub rules: Vec<PathBuf>,
+    pub(crate) rules: Vec<PathBuf>,
     /// Arguments related to output
     #[command(flatten)]
-    pub output: OutputArgs,
-    /// Override @output directives and save every IDB predicate
-    #[arg(
-        long = "write-all-idb-predicates",
-        default_value = "false",
-        requires = "save_results"
-    )]
-    pub write_all_idb_predicates: bool,
-    /// Display detailed timing information
-    #[arg(long = "detailed-timing", default_value = "false")]
-    pub detailed_timing: bool,
-    /// Display detailed memory information
-    #[arg(long = "detailed-memory", default_value = "false")]
-    pub detailed_memory: bool,
-    /// Specify directory for input files.
-    #[arg(short = 'I', long = "input-dir")]
-    pub input_directory: Option<PathBuf>,
+    pub(crate) output: OutputArgs,
+    /// Base directory for importing files (default is working directory)
+    #[arg(short = 'I', long = "import-dir")]
+    pub(crate) import_directory: Option<PathBuf>,
     /// Arguments related to tracing
     #[command(flatten)]
-    pub tracing: TracingArgs,
+    pub(crate) tracing: TracingArgs,
+    /// Control amount of reporting printed by the program
+    #[arg(long = "report", value_enum, default_value_t)]
+    pub(crate) reporting: Reporting,
+    /// Arguments related to logging
+    #[command(flatten)]
+    pub(crate) logging: LoggingArgs,
 }

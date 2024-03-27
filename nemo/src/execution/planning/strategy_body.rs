@@ -4,7 +4,7 @@
 use nemo_physical::management::execution_plan::ExecutionNodeRef;
 
 use crate::{
-    execution::execution_engine::RuleInfo,
+    execution::{execution_engine::RuleInfo, rule_execution::VariableTranslation},
     program_analysis::variable_order::VariableOrder,
     table_manager::{SubtableExecutionPlan, TableManager},
 };
@@ -12,7 +12,7 @@ use crate::{
 use std::fmt::Debug;
 
 /// Strategies for calculating all matches for a rule application.
-pub trait BodyStrategy: Debug {
+pub(crate) trait BodyStrategy: Debug {
     /// Calculate the concrete plan given a variable order.
     /// Returns the root node of the tree that represents the calculation for the body.
     /// Updates the variable order according to changes by e.g. aggregates and arithmetic operations.
@@ -20,6 +20,7 @@ pub trait BodyStrategy: Debug {
         &self,
         table_manager: &TableManager,
         current_plan: &mut SubtableExecutionPlan,
+        variable_translation: &VariableTranslation,
         rule_info: &RuleInfo,
         variable_order: &mut VariableOrder,
         step_number: usize,

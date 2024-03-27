@@ -1,3 +1,5 @@
+//! This module defines [MetaDictionary].
+
 use super::AddResult;
 use super::Dictionary;
 use super::DictionaryString;
@@ -95,7 +97,7 @@ enum DictionaryType {
 }
 
 impl DictionaryType {
-    /// Returns true if the given string is supported by a dictinoary of this type.
+    /// Returns true if the given string is supported by a dictionary of this type.
     fn supports(&self, ds: &DictionaryString) -> bool {
         match self {
             DictionaryType::String => !ds.is_long(),
@@ -109,7 +111,7 @@ impl DictionaryType {
 
 /// Struct to hold relevant information about a sub-dictionary.
 #[derive(Debug)]
-pub struct DictRecord {
+pub(crate) struct DictRecord {
     /// Pointer to the actual dictionary object
     dict: Box<dyn Dictionary>,
     /// Type of the dictionary
@@ -203,7 +205,7 @@ impl Default for MetaDictionary {
 }
 
 impl MetaDictionary {
-    /// Construct a new and empty dictionary.
+    ///Default constructor
     pub fn new() -> Self {
         Self::default()
     }

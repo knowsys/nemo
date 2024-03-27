@@ -20,23 +20,23 @@
 )]
 #![feature(macro_metavar_expr)]
 #![feature(is_sorted)]
+#![feature(iter_intersperse)]
+#![feature(test)]
 
-pub mod columnar;
-pub mod tabular;
+mod benches;
+
+pub(crate) mod columnar;
 
 pub mod aggregates;
-pub mod builder_proxy;
+pub mod datasources;
 pub mod datatypes;
+pub mod datavalues;
 pub mod dictionary;
 pub mod error;
+pub mod function;
 pub mod management;
 pub mod meta;
 pub mod permutator;
-pub mod table_reader;
+pub mod resource;
+pub mod tabular;
 pub mod util;
-
-/// Module defining data structures for working with numeric expressions.
-pub mod arithmetic;
-
-/// Module defining data structures for working with conditions.
-pub mod condition;

@@ -227,7 +227,7 @@ mod test {
     use std::collections::HashMap;
 
     use crate::{
-        io::formats::dsv::DSVFormat,
+        io::formats::dsv::DsvHandler,
         model::{
             chase_model::{
                 ChaseFact, ChaseProgram, ChaseRule, Constructor, PrimitiveAtom, VariableAtom,
@@ -522,7 +522,7 @@ mod test {
 
         let b_source_decl = ChaseProgram::builder()
             .import(
-                DSVFormat::csv()
+                DsvHandler::csv()
                     .try_into_import(String::new(), b.clone(), TupleConstraint::from_arity(1))
                     .unwrap(),
             )
@@ -561,7 +561,7 @@ mod test {
 
         let c_explicit_decl_overrides_source_type = ChaseProgram::builder()
             .import(
-                DSVFormat::csv()
+                DsvHandler::csv()
                     .try_into_import(String::new(), c.clone(), TupleConstraint::from_arity(1))
                     .unwrap(),
             )
@@ -604,7 +604,7 @@ mod test {
 
         let a_and_c_conflict_with_implicit_source_decl = ChaseProgram::builder()
             .import(
-                DSVFormat::csv()
+                DsvHandler::csv()
                     .try_into_import(String::new(), c, TupleConstraint::from_arity(1))
                     .unwrap(),
             )
@@ -633,7 +633,7 @@ mod test {
         let a_and_c_conflict_with_explicit_source_decl_that_would_be_compatible_the_other_way_around =
             ChaseProgram::builder()
                 .import(
-                    DSVFormat::csv()
+                    DsvHandler::csv()
                         .try_into_import(
                             String::new(),
                             c,
@@ -665,7 +665,7 @@ mod test {
 
         let a_and_b_source_decl_resolvable_conflict = ChaseProgram::builder()
             .import(
-                DSVFormat::csv()
+                DsvHandler::csv()
                     .try_into_import(String::new(), b.clone(), TupleConstraint::from_arity(1))
                     .unwrap(),
             )
@@ -707,7 +707,7 @@ mod test {
 
         let r_source_decl_resolvable_conflict_with_exis = ChaseProgram::builder()
             .import(
-                DSVFormat::csv()
+                DsvHandler::csv()
                     .try_into_import(String::new(), r.clone(), TupleConstraint::from_arity(2))
                     .unwrap(),
             )
@@ -807,7 +807,7 @@ mod test {
 
         let a_unresolvable_conflict_with_source_decls_of_b_and_c = ChaseProgram::builder()
             .import(
-                DSVFormat::csv()
+                DsvHandler::csv()
                     .try_into_import(
                         String::new(),
                         b,
@@ -816,7 +816,7 @@ mod test {
                     .unwrap(),
             )
             .import(
-                DSVFormat::csv()
+                DsvHandler::csv()
                     .try_into_import(
                         String::new(),
                         c,

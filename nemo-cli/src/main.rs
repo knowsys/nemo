@@ -23,7 +23,7 @@ pub mod cli;
 use std::fs::{read_to_string, File};
 
 use clap::Parser;
-use cli::CliApp;
+use cli::{CliApp, Exporting, Reporting};
 use colored::Colorize;
 use nemo::{
     error::{Error, ReadingError},
@@ -31,11 +31,45 @@ use nemo::{
     io::{
         parser::{parse_fact, parse_program},
         resource_providers::ResourceProviders,
+        ImportManager,
     },
-    meta::{timing::TimedDisplay, TimedCode},
-    model::OutputPredicateSelection,
+    meta::timing::{TimedCode, TimedDisplay},
+    model::{ExportDirective, Program},
 };
 
+/// Set exports according to command-line parameter.
+/// This disables all existing exports.
+fn override_exports(program: &mut Program, value: Exporting) {
+    if value == Exporting::Keep {
+        return;
+    }
+
+    program.clear_exports();
+
+    let mut additional_exports = Vec::new();
+    match value {
+        Exporting::Idb => {
+            for predicate in program.idb_predicates() {
+                additional_exports.push(ExportDirective::default(predicate));
+            }
+        }
+        Exporting::Edb => {
+            for predicate in program.edb_predicates() {
+                additional_exports.push(ExportDirective::default(predicate));
+            }
+        }
+        Exporting::All => {
+            for predicate in program.predicates() {
+                additional_exports.push(ExportDirective::default(predicate));
+            }
+        }
+        Exporting::None => {}
+        Exporting::Keep => unreachable!("already checked above"),
+    }
+    program.add_exports(additional_exports);
+}
+
+/// Prints short summary message.
 fn print_finished_message(new_facts: usize, saving: bool) {
     let overall_time = TimedCode::instance().total_system_time().as_millis();
     let reading_time = TimedCode::instance()
@@ -51,7 +85,7 @@ fn print_finished_message(new_facts: usize, saving: bool) {
         .total_system_time()
         .as_millis();
 
-    // NOTE: for some reason the subtraction produced on overflow for me once when running the tests; so better safe than sorry now :)
+    // NOTE: for some reason the subtraction produced an overflow for me once when running the tests; so better safe than sorry now :)
     let loading_preprocessing = reading_time.saturating_add(loading_time);
     let reasoning_time = execution_time.saturating_sub(loading_time);
 
@@ -80,7 +114,7 @@ fn print_finished_message(new_facts: usize, saving: bool) {
 
     println!(
         "   {0: <14} {1:>max_string_len$}ms",
-        "Loading input:", loading_preprocessing
+        "Data import:", loading_preprocessing
     );
     println!(
         "   {0: <14} {1:>max_string_len$}ms",
@@ -90,9 +124,29 @@ fn print_finished_message(new_facts: usize, saving: bool) {
     if saving {
         println!(
             "   {0: <14} {1:>max_string_len$}ms",
-            "Saving output:", writing_time
+            "Data export:", writing_time
         );
     }
+}
+
+/// Prints detailed timing information.
+fn print_timing_details() {
+    println!(
+        "\nTiming report:\n\n{}",
+        TimedCode::instance().create_tree_string(
+            "nemo",
+            &[
+                TimedDisplay::default(),
+                TimedDisplay::default(),
+                TimedDisplay::new(nemo::meta::timing::TimedSorting::LongestThreadTime, 0)
+            ]
+        )
+    );
+}
+
+/// Prints detailed memory information.
+fn print_memory_details(engine: &DefaultExecutionEngine) {
+    println!("\nMemory report:\n\n{}", engine.memory_usage());
 }
 
 fn run(mut cli: CliApp) -> Result<(), Error> {
@@ -106,7 +160,7 @@ fn run(mut cli: CliApp) -> Result<(), Error> {
     }
 
     let rules = cli.rules.pop().ok_or(Error::NoInput)?;
-    let rules_content = read_to_string(rules.clone()).map_err(|err| ReadingError::IOReading {
+    let rules_content = read_to_string(rules.clone()).map_err(|err| ReadingError::IoReading {
         error: err,
         filename: rules.to_string_lossy().to_string(),
     })?;
@@ -116,54 +170,48 @@ fn run(mut cli: CliApp) -> Result<(), Error> {
     log::info!("Rules parsed");
     log::trace!("{:?}", program);
 
-    let parsed_facts = cli
+    let traced_facts = cli
         .tracing
         .traced_facts
         .map(|f| f.into_iter().map(parse_fact).collect::<Result<Vec<_>, _>>())
         .transpose()?;
 
-    if cli.write_all_idb_predicates {
-        program.force_output_predicate_selection(OutputPredicateSelection::AllIDBPredicates)
+    override_exports(&mut program, cli.output.export_setting);
+
+    let export_manager = cli.output.export_manager()?;
+    // Validate exports even if we do not intend to write data:
+    for export in program.exports() {
+        export_manager.validate(export)?;
     }
 
-    let output_manager = cli.output.initialize_output_manager()?;
+    let import_manager =
+        ImportManager::new(ResourceProviders::with_base_path(cli.import_directory));
 
-    let mut engine: DefaultExecutionEngine = ExecutionEngine::initialize(
-        program,
-        ResourceProviders::with_base_path(cli.input_directory),
-    )?;
-
-    if let Some(output_manager) = &output_manager {
-        output_manager.check_for_forgotten_overwrite_flag(engine.output_predicates())?;
-    }
+    let mut engine: DefaultExecutionEngine = ExecutionEngine::initialize(&program, import_manager)?;
 
     TimedCode::instance().sub("Reading & Preprocessing").stop();
+
     TimedCode::instance().sub("Reasoning").start();
-
     log::info!("Reasoning ... ");
-
     engine.execute()?;
-
     log::info!("Reasoning done");
-
     TimedCode::instance().sub("Reasoning").stop();
 
-    if let Some(output_manager) = &output_manager {
+    let mut stdout_used = false;
+    if !export_manager.write_disabled() {
         TimedCode::instance()
             .sub("Output & Final Materialization")
             .start();
         log::info!("writing output");
 
-        // we need to collect here, since this will borrow `engine`,
-        // and `output_serialization` requires a mutable borrow on
-        // `engine`.
-        let export_specs = engine.output_predicates().collect::<Vec<_>>();
-
-        for export_spec in export_specs {
-            output_manager.export_table(
-                &export_spec,
-                engine.output_serialization(export_spec.predicate())?,
-            )?;
+        for export_directive in program.exports() {
+            if let Some(arity) = engine.predicate_arity(export_directive.predicate()) {
+                stdout_used |= export_manager.export_table(
+                    export_directive,
+                    engine.predicate_rows(export_directive.predicate())?,
+                    arity,
+                )?;
+            }
         }
 
         TimedCode::instance()
@@ -173,31 +221,30 @@ fn run(mut cli: CliApp) -> Result<(), Error> {
 
     TimedCode::instance().stop();
 
-    print_finished_message(
-        engine.count_facts_of_derived_predicates(),
-        output_manager.is_some(),
-    );
+    let (print_summary, print_times, print_memory) = match cli.reporting {
+        Reporting::All => (true, true, true),
+        Reporting::Short => (true, false, false),
+        Reporting::Time => (true, true, false),
+        Reporting::Mem => (true, false, true),
+        Reporting::None => (false, false, false),
+        Reporting::Auto => (!stdout_used, false, false),
+    };
 
-    if cli.detailed_timing {
-        println!(
-            "\n{}",
-            TimedCode::instance().create_tree_string(
-                "nemo",
-                &[
-                    TimedDisplay::default(),
-                    TimedDisplay::default(),
-                    TimedDisplay::new(nemo::meta::timing::TimedSorting::LongestThreadTime, 0)
-                ]
-            )
+    if print_summary {
+        print_finished_message(
+            engine.count_facts_of_derived_predicates(),
+            !export_manager.write_disabled(),
         );
     }
-
-    if cli.detailed_memory {
-        println!("\n{}", engine.memory_usage());
+    if print_times {
+        print_timing_details();
+    }
+    if print_memory {
+        print_memory_details(&engine);
     }
 
-    if let Some(facts) = parsed_facts {
-        let (trace, handles) = engine.trace(facts.clone())?;
+    if let Some(facts) = traced_facts {
+        let (trace, handles) = engine.trace(program.clone(), facts.clone());
 
         match cli.tracing.output_file {
             Some(output_file) => {
@@ -225,7 +272,7 @@ fn run(mut cli: CliApp) -> Result<(), Error> {
 }
 
 fn main() {
-    let cli = cli::CliApp::parse();
+    let cli = CliApp::parse();
 
     cli.logging.initialize_logging();
     log::info!("Version: {}", clap::crate_version!());

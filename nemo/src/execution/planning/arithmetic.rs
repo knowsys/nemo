@@ -14,9 +14,9 @@ use crate::{
     program_analysis::variable_order::VariableOrder,
 };
 
-/// Builds a [`StackProgram`] with [`DataValueT`]
-/// from a given [`Term`].
-pub fn compile_termtree(
+/// Builds a [StackProgram] with [DataValueT]
+/// from a given [Term].
+pub(crate) fn compile_termtree(
     term: &Term,
     order: &VariableOrder,
     logical_type: &PrimitiveType,

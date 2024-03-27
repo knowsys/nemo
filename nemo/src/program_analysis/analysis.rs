@@ -1,19 +1,18 @@
 use std::collections::{HashMap, HashSet};
 
-use nemo_physical::management::database::ColumnOrder;
+use nemo_physical::management::execution_plan::ColumnOrder;
 
 use crate::{
     error::Error,
     model::chase_model::{ChaseProgram, ChaseRule},
     model::{
         chase_model::{ChaseAtom, PrimitiveAtom, VariableAtom},
-        Constraint, Identifier, PrimitiveTerm, PrimitiveType, Term, Variable,
+        Constraint, Identifier, PrimitiveTerm, Term, Variable,
     },
 };
 
-use super::{
-    type_inference::infer_types,
-    variable_order::{build_preferable_variable_orders, BuilderResultVariants, VariableOrder},
+use super::variable_order::{
+    build_preferable_variable_orders, BuilderResultVariants, VariableOrder,
 };
 
 use thiserror::Error;
@@ -50,25 +49,27 @@ pub struct RuleAnalysis {
     pub existential_aux_rule: ChaseRule,
     /// The associated variable order for the join of the head atoms
     pub existential_aux_order: VariableOrder,
-    /// The types associated with the auxillary rule
-    pub existential_aux_types: HashMap<Variable, PrimitiveType>,
 
     /// Variable orders that are worth considering.
     pub promising_variable_orders: Vec<VariableOrder>,
-
-    /// Logical Type of each Variable
-    pub variable_types: HashMap<Variable, PrimitiveType>,
-    /// Logical Type of predicates in Rule
-    pub predicate_types: HashMap<Identifier, Vec<PrimitiveType>>,
 }
 
 /// Errors than can occur during rule analysis
-#[derive(Error, Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Error, Debug, Clone, PartialEq, Eq)]
 #[allow(clippy::enum_variant_names)]
 pub enum RuleAnalysisError {
     /// Unsupported feature: Overloading of predicate names by arity/type
-    #[error("Overloading of predicate names by arity is currently not supported.")]
-    UnsupportedFeaturePredicateOverloading,
+    #[error(
+        "predicate \"{predicate}\" required to have conflicting arities {arity1} and {arity2}"
+    )]
+    UnsupportedFeaturePredicateOverloading {
+        predicate: Identifier,
+        arity1: usize,
+        arity2: usize,
+    },
+    /// There is a predicate whose arity could not be determined  
+    #[error("arity of predicate \"{predicate}\" could not be derived")]
+    UnspecifiedPredicateArity { predicate: Identifier },
 }
 
 /// Return true if there is a predicate in the positive part of the rule that also appears in the head of the rule.
@@ -117,9 +118,8 @@ pub(super) fn get_fresh_rule_predicate(rule_index: usize) -> Identifier {
 fn construct_existential_aux_rule(
     rule_index: usize,
     head_atoms: Vec<PrimitiveAtom>,
-    predicate_types: &HashMap<Identifier, Vec<PrimitiveType>>,
     column_orders: &HashMap<Identifier, HashSet<ColumnOrder>>,
-) -> (ChaseRule, VariableOrder, HashMap<Variable, PrimitiveType>) {
+) -> (ChaseRule, VariableOrder) {
     let mut new_body = Vec::new();
     let mut constraints = Vec::new();
 
@@ -127,7 +127,7 @@ fn construct_existential_aux_rule(
     let mut generate_variable = move || {
         variable_index += 1;
         let name = format!("__GENERATED_HEAD_AUX_VARIABLE_{}", variable_index);
-        Variable::Universal(Identifier(name))
+        Variable::Universal(name)
     };
 
     let mut used_variables = HashSet::new();
@@ -138,17 +138,34 @@ fn construct_existential_aux_rule(
         for term in atom.terms() {
             match term {
                 PrimitiveTerm::Variable(variable) => {
-                    if variable.is_universal() && used_variables.insert(variable.clone()) {
-                        aux_predicate_terms.push(PrimitiveTerm::Variable(variable.clone()));
+                    if !used_variables.insert(variable.clone()) {
+                        let generated_variable = generate_variable();
+                        new_terms.push(generated_variable.clone());
+
+                        let new_constraint = Constraint::Equals(
+                            Term::Primitive(PrimitiveTerm::Variable(generated_variable)),
+                            Term::Primitive(term.clone()),
+                        );
+
+                        constraints.push(new_constraint);
+                    } else {
+                        if variable.is_universal() {
+                            aux_predicate_terms.push(PrimitiveTerm::Variable(variable.clone()));
+                        }
+
+                        new_terms.push(variable.clone());
                     }
 
-                    new_terms.push(variable.clone());
+                    if variable.is_universal() && used_variables.insert(variable.clone()) {}
                 }
-                PrimitiveTerm::Constant(_) => {
-                    let generated_variable =
-                        Term::Primitive(PrimitiveTerm::Variable(generate_variable()));
-                    let new_constraint =
-                        Constraint::Equals(generated_variable, Term::Primitive(term.clone()));
+                PrimitiveTerm::GroundTerm(_) => {
+                    let generated_variable = generate_variable();
+                    new_terms.push(generated_variable.clone());
+
+                    let new_constraint = Constraint::Equals(
+                        Term::Primitive(PrimitiveTerm::Variable(generated_variable)),
+                        Term::Primitive(term.clone()),
+                    );
 
                     constraints.push(new_constraint);
                 }
@@ -156,19 +173,6 @@ fn construct_existential_aux_rule(
         }
 
         new_body.push(VariableAtom::new(atom.predicate(), new_terms));
-    }
-
-    let mut variable_types = HashMap::<Variable, PrimitiveType>::new();
-    for atom in &head_atoms {
-        let types = predicate_types
-            .get(&atom.predicate())
-            .expect("Every predicate should have type information at this point");
-
-        for (term_index, term) in atom.terms().iter().enumerate() {
-            if let PrimitiveTerm::Variable(variable) = term {
-                variable_types.insert(variable.clone(), types[term_index]);
-            }
-        }
     }
 
     let temp_rule = {
@@ -195,7 +199,7 @@ fn construct_existential_aux_rule(
     .and_then(|mut v| v.pop())
     .expect("This functions provides at least one variable order");
 
-    (temp_rule, variable_order, variable_types)
+    (temp_rule, variable_order)
 }
 
 fn analyze_rule(
@@ -203,31 +207,15 @@ fn analyze_rule(
     promising_variable_orders: Vec<VariableOrder>,
     promising_column_orders: &[HashMap<Identifier, HashSet<ColumnOrder>>],
     rule_index: usize,
-    variable_types: HashMap<Variable, PrimitiveType>,
-    type_declarations: &HashMap<Identifier, Vec<PrimitiveType>>,
 ) -> RuleAnalysis {
     let num_existential = count_distinct_existential_variables(rule);
 
-    let rule_all_predicates: Vec<_> = rule
-        .all_body()
-        .cloned()
-        .map(Into::into)
-        .chain(rule.head().iter().cloned())
-        .map(|a| a.predicate())
-        .collect();
-
-    let (existential_aux_rule, existential_aux_order, existential_aux_types) =
-        if num_existential > 0 {
-            // TODO: We only consider the first variable order
-            construct_existential_aux_rule(
-                rule_index,
-                rule.head().clone(),
-                type_declarations,
-                &promising_column_orders[0],
-            )
-        } else {
-            (ChaseRule::default(), VariableOrder::new(), HashMap::new())
-        };
+    let (existential_aux_rule, existential_aux_order) = if num_existential > 0 {
+        // TODO: We only consider the first variable order
+        construct_existential_aux_rule(rule_index, rule.head().clone(), &promising_column_orders[0])
+    } else {
+        (ChaseRule::default(), VariableOrder::new())
+    };
 
     RuleAnalysis {
         is_existential: num_existential > 0,
@@ -243,14 +231,7 @@ fn analyze_rule(
         num_existential,
         existential_aux_rule,
         existential_aux_order,
-        existential_aux_types,
         promising_variable_orders,
-        variable_types,
-        predicate_types: type_declarations
-            .iter()
-            .filter(|(k, _v)| rule_all_predicates.contains(k))
-            .map(|(k, v)| (k.clone(), v.clone()))
-            .collect(),
     }
 }
 
@@ -259,16 +240,14 @@ fn analyze_rule(
 pub struct ProgramAnalysis {
     /// Analysis result for each rule.
     pub rule_analysis: Vec<RuleAnalysis>,
-    /// Set of all the predicates that are derived in the chase along with their arity.
+    /// Set of all the predicates that are derived in the chase.
     pub derived_predicates: HashSet<Identifier>,
     /// Set of all predicates and their arity.
-    pub all_predicates: HashSet<(Identifier, usize)>,
-    /// Logical Type Declarations for Predicates
-    pub predicate_types: HashMap<Identifier, Vec<PrimitiveType>>,
+    pub all_predicates: HashMap<Identifier, usize>,
 }
 
 impl ChaseProgram {
-    /// Collect all predicates that appear in a head atom into a [`HashSet`]
+    /// Collect all predicates that appear in a head atom into a [HashSet]
     fn get_head_predicates(&self) -> HashSet<Identifier> {
         let mut result = HashSet::<Identifier>::new();
 
@@ -281,32 +260,90 @@ impl ChaseProgram {
         result
     }
 
-    /// Collect all predicates occurring in the program.
-    pub(super) fn get_all_predicates(&self) -> HashSet<(Identifier, usize)> {
-        let mut result = HashSet::<(Identifier, usize)>::new();
+    /// Collect all predicates in the program, and determine their arity.
+    /// An error is returned if arities required for a predicate are not unique.
+    pub(super) fn get_all_predicates(
+        &self,
+    ) -> Result<HashMap<Identifier, usize>, RuleAnalysisError> {
+        let mut result = HashMap::<Identifier, usize>::new();
+        let mut missing = HashSet::<Identifier>::new();
+
+        fn add_arity(
+            predicate: Identifier,
+            arity: usize,
+            arities: &mut HashMap<Identifier, usize>,
+            missing: &mut HashSet<Identifier>,
+        ) -> Result<(), RuleAnalysisError> {
+            if let Some(current) = arities.get(&predicate) {
+                if *current != arity {
+                    return Err(RuleAnalysisError::UnsupportedFeaturePredicateOverloading {
+                        predicate,
+                        arity1: *current,
+                        arity2: arity,
+                    });
+                }
+            } else {
+                missing.remove(&predicate);
+                arities.insert(predicate, arity);
+            }
+            Ok(())
+        }
+        fn add_missing(
+            predicate: Identifier,
+            arities: &HashMap<Identifier, usize>,
+            missing: &mut HashSet<Identifier>,
+        ) {
+            if arities.get(&predicate).is_none() {
+                missing.insert(predicate);
+            }
+        }
 
         // Predicates in import statements
-        for import_spec in self.imports() {
-            result.insert((
-                import_spec.predicate().clone(),
-                import_spec.type_constraint().arity(),
-            ));
+        for (pred, handler) in self.imports() {
+            if let Some(arity) = handler.predicate_arity() {
+                add_arity(pred.clone(), arity, &mut result, &mut missing)?;
+            } else {
+                add_missing(pred.clone(), &result, &mut missing);
+            }
+        }
+
+        // Predicates in export statements
+        for (pred, handler) in self.exports() {
+            if let Some(arity) = handler.predicate_arity() {
+                add_arity(pred.clone(), arity, &mut result, &mut missing)?;
+            } else {
+                add_missing(pred.clone(), &result, &mut missing);
+            }
         }
 
         // Predicates in rules
         for rule in self.rules() {
             for atom in rule.head() {
-                result.insert((atom.predicate(), atom.terms().len()));
+                add_arity(
+                    atom.predicate(),
+                    atom.terms().len(),
+                    &mut result,
+                    &mut missing,
+                )?;
             }
-
             for atom in rule.all_body() {
-                result.insert((atom.predicate(), atom.terms().len()));
+                add_arity(
+                    atom.predicate(),
+                    atom.terms().len(),
+                    &mut result,
+                    &mut missing,
+                )?;
             }
         }
 
         // Predicates in facts
         for fact in self.facts() {
-            result.insert((fact.predicate(), fact.terms().len()));
+            add_arity(
+                fact.predicate(),
+                fact.terms().len(),
+                &mut result,
+                &mut missing,
+            )?;
         }
 
         // Additional predicates for existential rules
@@ -322,88 +359,50 @@ impl ChaseProgram {
             let predicate = get_fresh_rule_predicate(rule_index);
             let arity = head_variables.difference(&body_variables).count();
 
-            result.insert((predicate, arity));
+            add_arity(predicate, arity, &mut result, &mut missing)?;
         }
 
-        result
+        if !missing.is_empty() {
+            return Err(RuleAnalysisError::UnspecifiedPredicateArity {
+                predicate: missing.iter().next().expect("not empty").clone(),
+            });
+        }
+
+        Ok(result)
     }
 
-    /// Check if the program contains rules with unsupported features
-    pub fn check_for_unsupported_features(&self) -> Result<(), RuleAnalysisError> {
-        let mut arities = self
-            .parsed_predicate_declarations()
-            .iter()
-            .map(|(predicate, types)| (predicate.clone(), types.len()))
-            .collect::<HashMap<_, _>>();
-
-        for import_spec in self.imports() {
-            match arities.entry(import_spec.predicate().clone()) {
-                std::collections::hash_map::Entry::Occupied(slot) => {
-                    let arity = slot.get();
-
-                    if *arity != import_spec.type_constraint().arity() {
-                        return Err(RuleAnalysisError::UnsupportedFeaturePredicateOverloading);
-                    }
-                }
-                std::collections::hash_map::Entry::Vacant(slot) => {
-                    slot.insert(import_spec.type_constraint().arity());
-                }
-            }
-        }
-
-        for rule in self.rules() {
-            for atom in rule.head() {
-                // check for consistent predicate arities
-                let arity = atom.terms().len();
-                if arity != *arities.entry(atom.predicate()).or_insert(arity) {
-                    return Err(RuleAnalysisError::UnsupportedFeaturePredicateOverloading);
-                }
-            }
-
-            for atom in rule.all_body() {
-                // check for consistent predicate arities
-                let arity = atom.terms().len();
-                if arity != *arities.entry(atom.predicate()).or_insert(arity) {
-                    return Err(RuleAnalysisError::UnsupportedFeaturePredicateOverloading);
-                }
-            }
-        }
-
-        for fact in self.facts() {
-            let arity = fact.terms().len();
-            if arity != *arities.entry(fact.predicate()).or_insert(arity) {
-                return Err(RuleAnalysisError::UnsupportedFeaturePredicateOverloading);
-            }
-        }
-
+    /// Check if the program contains rules with unsupported features.
+    /// This is always performed as part of [ChaseProgram::analyze].
+    fn check_for_unsupported_features(&self) -> Result<(), RuleAnalysisError> {
+        // Currently no interesting checks here. Uniqueness of arities is already checked in the analysis phase.
+        // In general, should we maybe just do all checks in the analysis?
         Ok(())
     }
 
-    /// Analyze itself and return a struct containing the results.
+    /// Analyze the program and return a struct containing the results.
+    /// This method also checks for structural problems that are not detected
+    /// in parsing.
     pub fn analyze(&self) -> Result<ProgramAnalysis, Error> {
         let BuilderResultVariants {
             all_variable_orders,
             all_column_orders,
         } = build_preferable_variable_orders(self, None);
 
-        let all_predicates = self.get_all_predicates();
+        let all_predicates = self.get_all_predicates()?;
         let derived_predicates = self.get_head_predicates();
 
-        let (predicate_types, rule_var_types) = infer_types(self)?;
+        self.check_for_unsupported_features()?;
 
         let rule_analysis: Vec<RuleAnalysis> = self
             .rules()
             .iter()
-            .zip(rule_var_types)
             .enumerate()
-            .map(|(idx, (rule, variable_types))| {
+            .map(|(idx, rule)| {
                 analyze_rule(
                     rule,
                     all_variable_orders[idx].clone(),
                     &all_column_orders,
                     idx,
-                    variable_types,
-                    &predicate_types,
                 )
             })
             .collect();
@@ -412,7 +411,6 @@ impl ChaseProgram {
             rule_analysis,
             derived_predicates,
             all_predicates,
-            predicate_types,
         })
     }
 }
@@ -420,17 +418,17 @@ impl ChaseProgram {
 #[cfg(test)]
 mod test {
     use crate::{
-        io::parser::parse_program, model::chase_model::ChaseProgram,
+        error::Error, io::parser::parse_program, model::chase_model::ChaseProgram,
         program_analysis::analysis::RuleAnalysisError,
     };
 
     #[test]
     #[cfg_attr(miri, ignore)]
-    fn overloading_is_unsupported() {
+    fn no_arity_overloading() {
         let program = ChaseProgram::try_from(
             parse_program(
                 r#"
-                           @source q[3]: load-rdf("dummy.nt") .
+                           @import q :- turtle{resource="dummy.nt"} .
                            p(?x, ?y) :- q(?x), q(?y) .
                          "#,
             )
@@ -438,35 +436,23 @@ mod test {
         )
         .unwrap();
 
-        assert_eq!(
-            program.check_for_unsupported_features(),
-            Err(RuleAnalysisError::UnsupportedFeaturePredicateOverloading)
-        );
-
-        let program = ChaseProgram::try_from(
-            parse_program(
-                r#"
-                           @source q[3]: load-rdf("dummy.nt") .
-                           @declare q(integer, integer) .
-                         "#,
-            )
-            .unwrap(),
-        )
-        .unwrap();
-
-        assert_eq!(
-            program.check_for_unsupported_features(),
-            Err(RuleAnalysisError::UnsupportedFeaturePredicateOverloading)
-        );
+        assert!(matches!(
+            program.analyze(),
+            Err(Error::RuleAnalysisError(
+                RuleAnalysisError::UnsupportedFeaturePredicateOverloading { .. }
+            ))
+        ));
 
         let program =
             ChaseProgram::try_from(parse_program(r#"q(?x, ?y) :- q(?x), q(?y) ."#).unwrap())
                 .unwrap();
 
-        assert_eq!(
-            program.check_for_unsupported_features(),
-            Err(RuleAnalysisError::UnsupportedFeaturePredicateOverloading)
-        );
+        assert!(matches!(
+            program.analyze(),
+            Err(Error::RuleAnalysisError(
+                RuleAnalysisError::UnsupportedFeaturePredicateOverloading { .. }
+            ))
+        ));
 
         let program = ChaseProgram::try_from(
             parse_program(
@@ -479,26 +465,11 @@ mod test {
         )
         .unwrap();
 
-        assert_eq!(
-            program.check_for_unsupported_features(),
-            Err(RuleAnalysisError::UnsupportedFeaturePredicateOverloading)
-        );
-
-        let program = ChaseProgram::try_from(
-            parse_program(
-                r#"
-                           @declare q(integer, integer) .
-                           p(?x, ?y) :- q(?x), q(?y) .
-                           q(23) .
-                         "#,
-            )
-            .unwrap(),
-        )
-        .unwrap();
-
-        assert_eq!(
-            program.check_for_unsupported_features(),
-            Err(RuleAnalysisError::UnsupportedFeaturePredicateOverloading)
-        );
+        assert!(matches!(
+            program.analyze(),
+            Err(Error::RuleAnalysisError(
+                RuleAnalysisError::UnsupportedFeaturePredicateOverloading { .. }
+            ))
+        ));
     }
 }

@@ -1,32 +1,36 @@
 //! Managing of tables
 
-use super::model::{Identifier, PrimitiveType};
+use crate::error::Error;
+
+use super::model::Identifier;
 
 use bytesize::ByteSize;
 use nemo_physical::{
-    datatypes::data_value::DataValueIteratorT,
+    datavalues::any_datavalue::AnyDataValue,
     management::{
-        database::{ColumnOrder, Dict, TableId, TableSource},
-        execution_plan::ExecutionNodeRef,
-        DatabaseInstance, ExecutionPlan,
-    },
-    tabular::{
-        table_types::trie::Trie,
-        traits::{
-            table::{Table, TableRow},
-            table_schema::TableSchema,
+        database::DatabaseInstance,
+        database::{
+            id::{ExecutionId, PermanentTableId},
+            sources::TableSource,
+            Dict,
         },
+        execution_plan::{ColumnOrder, ExecutionNodeRef, ExecutionPlan},
     },
+    tabular::{operations::OperationTable, trie::Trie},
     util::mapping::permutation::Permutation,
 };
 
-use crate::error::Error;
-
-use std::{cell::Ref, cmp::Ordering, collections::HashMap, hash::Hash, ops::Range};
+use std::{
+    cell::{Ref, RefMut},
+    cmp::Ordering,
+    collections::HashMap,
+    hash::Hash,
+    ops::Range,
+};
 
 /// Indicates that the table contains the union of successive tables.
 /// For example assume that for predicate p there were tables derived in steps 2, 4, 7, 10, 11.
-/// The range [4, 10] would be represented with `SubtableRange { start: 1, len: 3 }`.
+/// The range [4, 10] would be represented with SubtableRange { start: 1, len: 3 }.
 #[derive(Debug, PartialEq, Eq, Clone, Hash, Copy)]
 pub struct SubtableRange {
     start: usize,
@@ -59,8 +63,8 @@ impl PartialOrd for SubtableRange {
 
 #[derive(Debug, Default)]
 struct SubtableHandler {
-    single: Vec<(usize, TableId)>,
-    combined: Vec<(SubtableRange, TableId)>,
+    single: Vec<(usize, PermanentTableId)>,
+    combined: Vec<(SubtableRange, PermanentTableId)>,
 }
 
 impl SubtableHandler {
@@ -69,7 +73,7 @@ impl SubtableHandler {
     /// Say, we have a table whose contents have been computed at steps 2, 4, 7, 10, 11.
     /// On the outside, we might now refer to all tables between steps 3 and 11 (exclusive).
     /// Representing this as [3, 11) is ambigious as [4, 11) refers to the same three tables.
-    /// Hence, we translate both representations to `TableCover { start: 1, len: 3}`.
+    /// Hence, we translate both representations to TableCover { start: 1, len: 3}.
     ///
     /// This function performs the translation illustrated above.
     fn normalize_range(&self, range: &Range<usize>) -> SubtableRange {
@@ -106,7 +110,7 @@ impl SubtableHandler {
         self.single_steps().last().copied()
     }
 
-    pub fn subtable(&self, step: usize) -> Option<TableId> {
+    pub fn subtable(&self, step: usize) -> Option<PermanentTableId> {
         let postion = *self.single_steps().find(|&&s| s == step)?;
         Some(self.single[postion].1)
     }
@@ -116,18 +120,18 @@ impl SubtableHandler {
         let mut result = 0;
 
         for (_, subtable_id) in &self.single {
-            result += database.count_rows(subtable_id);
+            result += database.count_rows(*subtable_id);
         }
 
         result
     }
 
-    pub fn add_single_table(&mut self, step: usize, id: TableId) {
+    pub fn add_single_table(&mut self, step: usize, id: PermanentTableId) {
         debug_assert!(self.single.is_empty() || (self.single.last().unwrap().0 < step));
         self.single.push((step, id));
     }
 
-    pub fn add_combined_table(&mut self, range: &Range<usize>, id: TableId) {
+    pub fn add_combined_table(&mut self, range: &Range<usize>, id: PermanentTableId) {
         let cover = self.normalize_range(range);
         if cover.len <= 1 {
             return;
@@ -135,12 +139,12 @@ impl SubtableHandler {
 
         self.combined.push((cover, id));
 
-        // Sorting is done here because it is assumed by the function `self.cover_range`
+        // Sorting is done here because it is assumed by the function self.cover_range
         self.combined.sort_by(|x, y| x.0.cmp(&y.0));
     }
 
-    pub fn cover_range(&self, range: &Range<usize>) -> Vec<TableId> {
-        let mut result = Vec::<TableId>::new();
+    pub fn cover_range(&self, range: &Range<usize>) -> Vec<PermanentTableId> {
+        let mut result = Vec::<PermanentTableId>::new();
         if self.single.is_empty() {
             return result;
         }
@@ -202,7 +206,7 @@ impl SubtableHandler {
 
 #[derive(Debug)]
 struct PredicateInfo {
-    schema: TableSchema,
+    arity: usize,
 }
 
 /// Identifier of a subtable in a chase sequence.
@@ -213,7 +217,7 @@ pub struct SubtableIdentifier {
 }
 
 impl SubtableIdentifier {
-    /// Create a new [`SubtableIdentifier`].
+    /// Create a new [SubtableIdentifier].
     pub fn new(predicate: Identifier, step: usize) -> Self {
         Self { predicate, step }
     }
@@ -225,26 +229,14 @@ pub struct SubtableExecutionPlan {
     /// The execution plan.
     execution_plan: ExecutionPlan,
     /// Each tree in the plan that will result in a new permanent table
-    /// will have an associated [`SubtableIdentifier`].
-    map_subtrees: HashMap<usize, SubtableIdentifier>,
+    /// will have an associated [SubtableIdentifier].
+    map_subtrees: HashMap<ExecutionId, SubtableIdentifier>,
 }
 
 impl SubtableExecutionPlan {
     /// Add a temporary table to the plan.
-    pub fn add_temporary_table(&mut self, node: ExecutionNodeRef, tree_name: &str) -> usize {
+    pub fn add_temporary_table(&mut self, node: ExecutionNodeRef, tree_name: &str) -> ExecutionId {
         self.execution_plan.write_temporary(node, tree_name)
-    }
-
-    /// Add a temporary table to the plan.
-    /// The parameter `cut` indicates how many of the last layers will not be needed.
-    pub fn add_temporary_table_cut(
-        &mut self,
-        node: ExecutionNodeRef,
-        tree_name: &str,
-        cut: usize,
-    ) -> usize {
-        self.execution_plan
-            .write_temporary_cut(node, tree_name, cut)
     }
 
     /// Add a permanent table ot the plan-
@@ -254,7 +246,7 @@ impl SubtableExecutionPlan {
         tree_name: &str,
         table_name: &str,
         subtable_id: SubtableIdentifier,
-    ) -> usize {
+    ) -> ExecutionId {
         let node_id = self
             .execution_plan
             .write_permanent(node, tree_name, table_name);
@@ -263,12 +255,7 @@ impl SubtableExecutionPlan {
         node_id
     }
 
-    /// Return a reference to the underlying [`ExecutionPlan`].
-    pub fn plan(&self) -> &ExecutionPlan {
-        &self.execution_plan
-    }
-
-    /// Return a mutable reference to the underlying [`ExecutionPlan`].
+    /// Return a mutable reference to the underlying [ExecutionPlan].
     pub fn plan_mut(&mut self) -> &mut ExecutionPlan {
         &mut self.execution_plan
     }
@@ -284,7 +271,7 @@ pub struct MemoryUsage {
 }
 
 impl MemoryUsage {
-    /// Create a new [`MemoryUsage`].
+    /// Create a new [MemoryUsage].
     pub fn new(name: &str, memory: ByteSize) -> Self {
         Self {
             name: name.to_string(),
@@ -293,7 +280,7 @@ impl MemoryUsage {
         }
     }
 
-    /// Create a new [`MemoryUsage`] block.
+    /// Create a new [MemoryUsage] block.
     pub fn new_block(name: &str) -> Self {
         Self::new(name, ByteSize(0))
     }
@@ -325,7 +312,7 @@ impl MemoryUsage {
         }
     }
 
-    /// Return an [`ascii_tree::Tree`] representation.
+    /// Return an [ascii_tree::Tree] representation.
     pub fn ascii_tree(&self) -> ascii_tree::Tree {
         Self::ascii_tree_recursive(self)
     }
@@ -340,14 +327,14 @@ impl std::fmt::Display for MemoryUsage {
 /// Manager object for handling tables that are the result
 /// of a seminaive existential rules evaluation process.
 #[derive(Debug)]
-pub struct TableManager {
-    /// [`DatabaseInstance`] managing all existing tables.
+pub(crate) struct TableManager {
+    /// [DatabaseInstance] managing all existing tables.
     database: DatabaseInstance,
 
     /// Map containg all the ids of all the sub tables associated with a predicate.
     predicate_subtables: HashMap<Identifier, SubtableHandler>,
 
-    /// Mapping predicate identifiers to a [`PredicateInfo`] which contains relevant information.
+    /// Mapping predicate identifiers to a [PredicateInfo] which contains relevant information.
     predicate_to_info: HashMap<Identifier, PredicateInfo>,
 }
 
@@ -358,51 +345,52 @@ impl Default for TableManager {
 }
 
 impl TableManager {
-    /// Create new [`TableManager`].
-    pub fn new() -> Self {
+    /// Create new [TableManager].
+    pub(crate) fn new() -> Self {
         Self {
-            database: DatabaseInstance::new(),
+            database: DatabaseInstance::default(),
             predicate_subtables: HashMap::new(),
             predicate_to_info: HashMap::new(),
         }
     }
 
-    /// Return a reference to the underlying [`DatabaseInstance`].
-    pub fn database(&self) -> &DatabaseInstance {
-        &self.database
-    }
-
-    /// Return the [`TableId`] that is associated with a given subtable.
-    /// Returns `None` if the predicate does not exist.
-    fn table_id(&self, subtable: &SubtableIdentifier) -> Option<TableId> {
+    /// Return the [PermanentTableId] that is associated with a given subtable.
+    /// Returns None if the predicate does not exist.
+    fn table_id(&self, subtable: &SubtableIdentifier) -> Option<PermanentTableId> {
         self.predicate_subtables
             .get(&subtable.predicate)?
             .subtable(subtable.step)
     }
 
     /// Return the step number of the last subtable that was added under a predicate.
-    /// Returns `None` if the predicate has no subtables.
-    pub fn last_step(&self, predicate: &Identifier) -> Option<usize> {
+    /// Returns None if the predicate has no subtables.
+    pub(crate) fn last_step(&self, predicate: &Identifier) -> Option<usize> {
         self.predicate_subtables.get(predicate)?.last_step()
     }
 
     /// Count all the rows in the table manager that belong to a predicate.
     ///
     /// TODO: Currently only counting of in-memory facts is supported, see <https://github.com/knowsys/nemo/issues/335>
-    pub fn predicate_count_rows(&self, predicate: &Identifier) -> Option<usize> {
+    pub(crate) fn predicate_count_rows(&self, predicate: &Identifier) -> Option<usize> {
         self.predicate_subtables
             .get(predicate)
             .map(|s| s.count_rows(&self.database))
     }
 
     /// Get a list of column iterators for the full table (i.e. the expanded trie)
-    pub fn table_column_iters(&mut self, id: TableId) -> Result<Vec<DataValueIteratorT>, Error> {
-        Ok(self.database.get_table_column_iterators(id)?)
+    pub(crate) fn table_row_iterator(
+        &mut self,
+        id: PermanentTableId,
+    ) -> Result<impl Iterator<Item = Vec<AnyDataValue>> + '_, Error> {
+        Ok(self.database.table_row_iterator(id)?)
     }
 
     /// Combine all subtables of a predicate into one table
-    /// and return the [`TableId`] of that new table.
-    pub fn combine_predicate(&mut self, predicate: &Identifier) -> Result<Option<TableId>, Error> {
+    /// and return the [PermanentTableId] of that new table.
+    pub(crate) fn combine_predicate(
+        &mut self,
+        predicate: &Identifier,
+    ) -> Result<Option<PermanentTableId>, Error> {
         match self.last_step(predicate) {
             Some(last_step) => self.combine_tables(predicate, 0..(last_step + 1)),
             None => Ok(None),
@@ -410,7 +398,7 @@ impl TableManager {
     }
 
     /// Generates an appropriate table name for subtable.
-    pub fn generate_table_name(
+    pub(crate) fn generate_table_name(
         &self,
         predicate: &Identifier,
         order: &ColumnOrder,
@@ -443,7 +431,7 @@ impl TableManager {
         &self,
         predicate: &Identifier,
         step: usize,
-        referenced_table_id: TableId,
+        referenced_table_id: PermanentTableId,
         permutation: &Permutation,
     ) -> String {
         let predicate_name = predicate.name();
@@ -454,23 +442,27 @@ impl TableManager {
 
     /// Intitializes helper structures that are needed for handling the table associated with the predicate.
     /// Must be done before calling functions that add tables to that predicate.
-    pub fn register_predicate(&mut self, predicate: Identifier, types: Vec<PrimitiveType>) {
-        let predicate_info = PredicateInfo {
-            schema: TableSchema::from_vec(types.iter().copied().map(Into::into).collect()),
-        };
+    pub(crate) fn register_predicate(&mut self, predicate: Identifier, arity: usize) {
+        let predicate_info = PredicateInfo { arity };
 
-        self.predicate_to_info
-            .insert(predicate.clone(), predicate_info);
+        if self
+            .predicate_to_info
+            .insert(predicate.clone(), predicate_info)
+            .is_some()
+        {
+            panic!("predicates must uniquely identify one relation");
+        }
         self.predicate_subtables
             .insert(predicate, SubtableHandler::default());
     }
 
     /// Check whether a predicate has been registered.
-    pub fn predicate_exists(&self, predicate: &Identifier) -> bool {
-        self.predicate_subtables.get(predicate).is_some()
+    #[allow(dead_code)]
+    fn predicate_exists(&self, predicate: &Identifier) -> bool {
+        self.predicate_subtables.contains_key(predicate)
     }
 
-    fn add_subtable(&mut self, subtable: SubtableIdentifier, table_id: TableId) {
+    fn add_subtable(&mut self, subtable: SubtableIdentifier, table_id: PermanentTableId) {
         let subtable_handler = self
             .predicate_subtables
             .get_mut(&subtable.predicate)
@@ -481,48 +473,38 @@ impl TableManager {
 
     /// Add a table that represents the input facts for some predicate for the chase procedure.
     /// Predicate must be registered before calling this function.
-    pub fn add_edb(&mut self, predicate: Identifier, sources: Vec<TableSource>) {
+    pub(crate) fn add_edb(&mut self, predicate: Identifier, sources: Vec<TableSource>) {
+        let arity = if let Some(source) = sources.first() {
+            source.arity()
+        } else {
+            return;
+        };
+
         let edb_order = ColumnOrder::default();
         const EDB_STEP: usize = 0;
 
-        let schema = self
-            .predicate_to_info
-            .get(&predicate)
-            .expect("Predicate should be registered before calling this function")
-            .schema
-            .clone();
         let name = self.generate_table_name(&predicate, &edb_order, EDB_STEP);
 
-        let table_id = self.database.register_table(&name, schema);
+        let table_id = self.database.register_table(&name, arity);
         self.database.add_sources(table_id, edb_order, sources);
 
         self.add_subtable(SubtableIdentifier::new(predicate, EDB_STEP), table_id)
     }
 
-    /// Add a [`Trie`] as a subtable of a predicate.
+    /// Add a [Trie] as a subtable of a predicate.
     /// Predicate must be registered before calling this function.
-    pub fn add_table(
-        &mut self,
-        predicate: Identifier,
-        step: usize,
-        order: ColumnOrder,
-        trie: Trie,
-    ) {
-        let schema = self
-            .predicate_to_info
-            .get(&predicate)
-            .expect("Predicate should be registered before calling this function")
-            .schema
-            .clone();
+    #[allow(dead_code)]
+    fn add_table(&mut self, predicate: Identifier, step: usize, order: ColumnOrder, trie: Trie) {
         let name = self.generate_table_name(&predicate, &order, step);
 
-        let table_id = self.database.register_add_trie(&name, schema, order, trie);
+        let table_id = self.database.register_add_trie(&name, order, trie);
         self.add_subtable(SubtableIdentifier::new(predicate, step), table_id);
     }
 
     /// Add a reference to another table under a new name.
     /// Predicate must be registered before calling this function and referenced table must exist.
-    pub fn add_reference(
+    #[allow(dead_code)]
+    fn add_reference(
         &mut self,
         subtable: SubtableIdentifier,
         referenced_subtable: SubtableIdentifier,
@@ -532,12 +514,8 @@ impl TableManager {
             .table_id(&referenced_subtable)
             .expect("Referenced table does not exist.");
 
-        let schema = self
-            .predicate_to_info
-            .get(&subtable.predicate)
-            .expect("Predicate should be registered before calling this function")
-            .schema
-            .clone();
+        let arity = self.arity(&subtable.predicate);
+
         let name = self.generate_table_name_reference(
             &subtable.predicate,
             subtable.step,
@@ -545,15 +523,30 @@ impl TableManager {
             &permutation,
         );
 
-        let table_id = self.database.register_table(&name, schema);
+        let table_id = self.database.register_table(&name, arity);
         self.database
             .add_reference(table_id, referenced_id, permutation);
 
         self.add_subtable(subtable, table_id);
     }
 
+    /// Return the arity of a given predicate.
+    ///
+    /// # Panics
+    /// Panics if the predicate has not been registered yet.
+    pub(crate) fn arity(&self, predicate: &Identifier) -> usize {
+        self.predicate_to_info
+            .get(predicate)
+            .expect("Predicate should be registered before calling this function")
+            .arity
+    }
+
     /// Return the ids of all subtables of a predicate within a certain range of steps.
-    pub fn tables_in_range(&self, predicate: &Identifier, range: &Range<usize>) -> Vec<TableId> {
+    pub fn tables_in_range(
+        &self,
+        predicate: &Identifier,
+        range: &Range<usize>,
+    ) -> Vec<PermanentTableId> {
         self.predicate_subtables
             .get(predicate)
             .map(|handler| handler.cover_range(range))
@@ -565,7 +558,7 @@ impl TableManager {
         &mut self,
         predicate: &Identifier,
         range: Range<usize>,
-    ) -> Result<Option<TableId>, Error> {
+    ) -> Result<Option<PermanentTableId>, Error> {
         let combined_order: ColumnOrder = ColumnOrder::default();
 
         let name = self.generate_table_name_combined(predicate, &combined_order, &range);
@@ -582,9 +575,9 @@ impl TableManager {
         let mut union_plan = ExecutionPlan::default();
         let fetch_nodes = tables
             .iter()
-            .map(|id| union_plan.fetch_existing(*id))
+            .map(|id| union_plan.fetch_table(OperationTable::default(), *id))
             .collect();
-        let union_node = union_plan.union(fetch_nodes);
+        let union_node = union_plan.union(OperationTable::default(), fetch_nodes);
         let plan_id = union_plan.write_permanent(union_node, "Combining Tables", &name);
 
         let execution_result = self.database.execute_plan(union_plan)?;
@@ -616,11 +609,17 @@ impl TableManager {
     }
 
     /// Returns a reference to the constants dictionary
-    pub fn get_dict(&self) -> Ref<'_, Dict> {
-        self.database.get_dict_constants()
+    #[allow(dead_code)]
+    pub fn dictionary(&self) -> Ref<'_, Dict> {
+        self.database.dictionary()
     }
 
-    /// Return the current [`MemoryUsage`].
+    /// Returns a mutable reference to the dictionary used for associating abstract constants with strings.
+    pub fn dictionary_mut(&mut self) -> RefMut<'_, Dict> {
+        self.database.dictionary_mut()
+    }
+
+    /// Return the current [MemoryUsage].
     pub fn memory_usage(&self) -> MemoryUsage {
         let mut result = MemoryUsage::new_block("Chase");
 
@@ -646,15 +645,16 @@ impl TableManager {
     }
 
     /// Return the chase step of the sub table that contains the given row within the given predicate.
-    /// Returns `None` if the row does not exist.
-    pub fn find_table_row(&self, predicate: &Identifier, row: &TableRow) -> Option<usize> {
+    /// Returns None if the row does not exist.
+    pub fn find_table_row(
+        &mut self,
+        predicate: &Identifier,
+        row: &[AnyDataValue],
+    ) -> Option<usize> {
         let handler = self.predicate_subtables.get(predicate)?;
 
         for (step, id) in &handler.single {
-            let (trie, order) = self.database.get_trie(*id);
-            let row_reorderd = order.permute(row);
-
-            if trie.contains_row(row_reorderd) {
+            if self.database.table_contains_row(*id, row) {
                 return Some(*step);
             }
         }
@@ -662,43 +662,39 @@ impl TableManager {
         None
     }
 
-    /// Execute a given [`SubtableExecutionPlan`]
+    /// Execute a given [SubtableExecutionPlan]
     /// but evaluate it only until the first row of the result table
-    /// or return `None` if it is empty.
+    /// or return None if it is empty.
     /// The result table is considered to be the (unique) table marked as permanent output.
     ///
     /// Assumes that the given plan has only one output node.
     /// No tables will be saved in the database.
     pub fn execute_plan_first_match(
-        &self,
+        &mut self,
         subtable_plan: SubtableExecutionPlan,
-    ) -> Result<Option<TableRow>, Error> {
-        debug_assert!(subtable_plan.map_subtrees.len() == 1);
-
-        Ok(self
-            .database
-            .execute_plan_first_match(subtable_plan.execution_plan)?)
+    ) -> Option<Vec<AnyDataValue>> {
+        self.database
+            .execute_first_match(subtable_plan.execution_plan)
     }
 }
 
 #[cfg(test)]
 mod test {
-    use std::{collections::HashSet, ops::Range};
-
-    use nemo_physical::management::database::TableId;
+    use nemo_physical::management::database::id::{PermanentTableId, TableId};
 
     use super::SubtableHandler;
+    use std::{collections::HashSet, ops::Range};
 
     fn handler_from_table_steps(
         steps: &[usize],
         ranges: &[Range<usize>],
         expected_ranges: &[Range<usize>],
-    ) -> (SubtableHandler, HashSet<TableId>) {
+    ) -> (SubtableHandler, HashSet<PermanentTableId>) {
         let expected_set: HashSet<Range<usize>> = expected_ranges.iter().cloned().collect();
 
         let mut handler = SubtableHandler::default();
-        let mut expected_ids = HashSet::<TableId>::new();
-        let mut id = TableId::default();
+        let mut expected_ids = HashSet::<PermanentTableId>::new();
+        let mut id = PermanentTableId::default();
 
         let intervals = steps
             .iter()
@@ -729,7 +725,8 @@ mod test {
         target: &Range<usize>,
     ) {
         let (handler, expected_ids) = handler_from_table_steps(steps, ranges, expected_ranges);
-        let answer: HashSet<TableId> = handler.cover_range(target).iter().cloned().collect();
+        let answer: HashSet<PermanentTableId> =
+            handler.cover_range(target).iter().cloned().collect();
 
         assert_eq!(answer, expected_ids);
     }

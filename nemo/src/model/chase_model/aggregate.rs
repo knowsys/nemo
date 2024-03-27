@@ -8,18 +8,17 @@ use crate::model::{Aggregate, LogicalAggregateOperation, PrimitiveTerm, Variable
 /// * `input_variables` are the distinct variables and the aggregated input variable, not including the group-by variables
 /// * `output_variable` is the single aggregated output variable
 ///
-/// See [`nemo_physical::tabular::operations::TrieScanAggregate`]
+/// See [nemo_physical::tabular::operations::TrieScanAggregate]
 #[derive(Debug, Clone)]
 pub struct ChaseAggregate {
     pub(crate) aggregate_operation: AggregateOperation,
-    pub(crate) logical_aggregate_operation: LogicalAggregateOperation,
 
     pub(crate) input_variables: Vec<Variable>,
     pub(crate) output_variable: Variable,
 }
 
 impl ChaseAggregate {
-    /// Convert an [`Aggregate`] to a [`ChaseAggregate`], given a placeholder name for the output variable
+    /// Convert an [Aggregate] to a [ChaseAggregate], given a placeholder name for the output variable
     pub fn from_aggregate(aggregate: Aggregate, output_variable: Variable) -> ChaseAggregate {
         let logical_aggregate_operation = aggregate.logical_aggregate_operation;
 
@@ -44,7 +43,6 @@ impl ChaseAggregate {
 
         Self {
             aggregate_operation: physical_operation,
-            logical_aggregate_operation,
             input_variables: variables,
             output_variable,
         }

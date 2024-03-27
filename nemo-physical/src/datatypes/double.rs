@@ -1,54 +1,86 @@
 use super::run_length_encodable::FloatingStep;
 use super::{FloatIsNaN, FloorToUsize, RunLengthEncodable};
-use crate::arithmetic::traits::{CheckedPow, CheckedSquareRoot};
 use crate::error::{Error, ReadingError};
+use crate::function::definitions::numeric::traits::{CheckedPow, CheckedSquareRoot};
 use num::traits::CheckedNeg;
 use num::{Bounded, CheckedAdd, CheckedDiv, CheckedMul, CheckedSub, FromPrimitive, One, Zero};
 use std::cmp::Ordering;
-use std::convert::TryFrom;
 use std::fmt;
 use std::iter::{Product, Sum};
-use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Sub, SubAssign};
+use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Rem, Sub, SubAssign};
 
 #[cfg(test)]
 use quickcheck::{Arbitrary, Gen};
 
-/// Wrapper for [`f64`] that does not allow [`f64::NAN`] values.
+/// Wrapper for [f64`] that does not allow [`f64::NAN] values.
 #[derive(Copy, Clone, Debug, PartialEq, Default)]
 pub struct Double(f64);
 
 impl Double {
-    /// Wraps the given [`f64`]-`value` as a value over [`Double`].
+    /// Wraps the given [f64]-`value` as a value over [Double].
     ///
     /// # Errors
-    /// The given `value` is [`f64::NAN`].
-    pub fn new(value: f64) -> Result<Double, ReadingError> {
+    /// The given `value` is [f64::NAN].
+    pub fn new(value: f64) -> Result<Self, ReadingError> {
         if value.is_nan() {
             return Err(FloatIsNaN.into());
         }
 
-        Ok(Double(value))
+        Ok(Self(value))
     }
 
-    /// Wraps the given [`f64`]-`value`, that is a number, as a value over [`Double`].
+    /// Wraps the given [f64]-`value`, that is a number, as a value over [Double].
     ///
     /// # Panics
-    /// The given `value` is [`f64::NAN`].
-    pub fn from_number(value: f64) -> Double {
+    /// The given `value` is [f64::NAN].
+    pub fn from_number(value: f64) -> Self {
         if value.is_nan() {
             panic!("The provided value is not a number (NaN)!")
         }
 
-        Double(value)
+        Self(value)
     }
 
-    /// Returns a [`Double`] if `value` is finite and `None` otherwise.
-    fn finite(value: f64) -> Option<Double> {
-        if !value.is_finite() {
-            return None;
-        }
+    /// Computes the absolute value.
+    pub(crate) fn abs(self) -> Self {
+        Double::new(self.0.abs()).expect("Taking the absolute value cannot result in NaN")
+    }
 
-        Double::new(value).ok()
+    /// Returns the logarithm of the number with respect to an arbitrary base.
+    pub(crate) fn log(self, base: Self) -> Option<Self> {
+        Double::new(self.0.log(base.0)).ok()
+    }
+
+    /// Computes the sine of a number (in radians).
+    pub(crate) fn sin(self) -> Self {
+        Double::new(self.0.sin()).expect("Operation does not result in NaN")
+    }
+
+    /// Computes the cosine of a number (in radians).
+    pub(crate) fn cos(self) -> Self {
+        Double::new(self.0.cos()).expect("Operation does not result in NaN")
+    }
+
+    /// Computes the tangent of a number (in radians).
+    pub(crate) fn tan(self) -> Self {
+        Double::new(self.0.tan()).expect("Operation does not result in NaN")
+    }
+
+    /// Returns the nearest integer to `self`.
+    /// If a value is half-way between two integers, round away from 0.0.
+    pub(crate) fn round(self) -> Self {
+        Double::new(self.0.round()).expect("Operation does not result in NaN")
+    }
+
+    /// Returns the nearest integer to `self`.
+    /// If a value is half-way between two integers, round away from 0.0.
+    pub(crate) fn ceil(self) -> Self {
+        Double::new(self.0.ceil()).expect("Operation does not result in NaN")
+    }
+
+    /// Returns the largest integer less than or equal to `self`.
+    pub(crate) fn floor(self) -> Self {
+        Double::new(self.0.floor()).expect("Operation does not result in NaN")
     }
 }
 
@@ -124,6 +156,14 @@ impl DivAssign for Double {
     }
 }
 
+impl Rem for Double {
+    type Output = Double;
+
+    fn rem(self, rhs: Self) -> Self::Output {
+        Double(self.0.rem(rhs.0))
+    }
+}
+
 impl fmt::Display for Double {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.0)
@@ -194,43 +234,43 @@ impl Product for Double {
 
 impl CheckedAdd for Double {
     fn checked_add(&self, v: &Self) -> Option<Self> {
-        Double::finite(self.0 + v.0)
+        Double::new(self.0 + v.0).ok()
     }
 }
 
 impl CheckedSub for Double {
     fn checked_sub(&self, v: &Self) -> Option<Self> {
-        Double::finite(self.0 - v.0)
+        Double::new(self.0 - v.0).ok()
     }
 }
 
 impl CheckedDiv for Double {
     fn checked_div(&self, v: &Self) -> Option<Self> {
-        Double::finite(self.0 / v.0)
+        Double::new(self.0 / v.0).ok()
     }
 }
 
 impl CheckedMul for Double {
     fn checked_mul(&self, v: &Self) -> Option<Self> {
-        Double::finite(self.0 * v.0)
+        Double::new(self.0 * v.0).ok()
     }
 }
 
 impl CheckedSquareRoot for Double {
     fn checked_sqrt(self) -> Option<Self> {
-        Double::finite(self.0.checked_sqrt()?)
+        Double::new(self.0.checked_sqrt()?).ok()
     }
 }
 
 impl CheckedPow for Double {
     fn checked_pow(self, exponent: Self) -> Option<Self> {
-        Double::finite(self.0.checked_pow(exponent.0)?)
+        Double::new(self.0.checked_pow(exponent.0)?).ok()
     }
 }
 
 impl CheckedNeg for Double {
     fn checked_neg(&self) -> Option<Self> {
-        Double::finite(-1.0 * self.0)
+        Double::new(-1.0 * self.0).ok()
     }
 }
 
