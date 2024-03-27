@@ -37,7 +37,7 @@ class TestExample(unittest.TestCase):
         self.expected_api_result = [
             ["<world>", "_:0"],
             ["<circle>", "_:1"],
-             [
+            [
                 NemoLiteral("hello world", lang="en"),
                 "_:2",
             ],
@@ -89,12 +89,18 @@ class TestExample(unittest.TestCase):
             "rule": "interesting(?y) :- data(?x, ?y), interesting(?x) .",
             "assignment": {"?x": 3.14, "?y": "<circle>"},
             "subtraces": [
-                {"fact": "data(\"3.14\"^^<http://www.w3.org/2001/XMLSchema#double>, circle)"},
+                {
+                    "fact":
+                    "data(\"3.14\"^^<http://www.w3.org/2001/XMLSchema#double>, circle)"
+                },
                 {
                     "rule": "interesting(?y) :- data(?x, ?y), interesting(?x) .",
                     "assignment": {"?x": "<py>", "?y": 3.14},
                     "subtraces": [
-                        {"fact": "data(py, \"3.14\"^^<http://www.w3.org/2001/XMLSchema#double>)"},
+                        {
+                            "fact":
+                            'data(py, "3.14"^^<http://www.w3.org/2001/XMLSchema#double>)'
+                        },
                         {"fact": "interesting(py)"},
                     ],
                 },
