@@ -140,7 +140,7 @@ impl NemoLiteral {
 #[pyclass]
 struct NemoResults(Box<dyn Iterator<Item = Vec<AnyDataValue>> + Send>);
 
-fn datavalue_to_python(py: Python<'_>, v: AnyDataValue) -> PyResult<&PyAny> {
+fn datavalue_to_python(py: Python<'_>, v: AnyDataValue) -> PyResult<Bound<PyAny>> {
     match v.value_domain() {
         nemo::datavalues::ValueDomain::LanguageTaggedString => {
             let (value, tag) = v.to_language_tagged_string_unchecked();
@@ -149,26 +149,28 @@ fn datavalue_to_python(py: Python<'_>, v: AnyDataValue) -> PyResult<&PyAny> {
                 language: Some(tag),
                 datatype: RDF_LANG_STRING.to_string(),
             };
-            Ok(Py::new(py, lit)?.to_object(py).into_ref(py))
+            Ok(Py::new(py, lit)?.to_object(py).into_bound(py))
         }
         nemo::datavalues::ValueDomain::PlainString | nemo::datavalues::ValueDomain::Iri => {
-            Ok(v.canonical_string().into_py(py).into_ref(py))
+            Ok(v.canonical_string().into_py(py).into_bound(py))
         }
-        nemo::datavalues::ValueDomain::Double => Ok(v.to_f64_unchecked().into_py(py).into_ref(py)),
-        nemo::datavalues::ValueDomain::Float => Ok(v.to_f32_unchecked().into_py(py).into_ref(py)),
+        nemo::datavalues::ValueDomain::Double => {
+            Ok(v.to_f64_unchecked().into_py(py).into_bound(py))
+        }
+        nemo::datavalues::ValueDomain::Float => Ok(v.to_f32_unchecked().into_py(py).into_bound(py)),
         nemo::datavalues::ValueDomain::NonNegativeLong
         | nemo::datavalues::ValueDomain::UnsignedInt
         | nemo::datavalues::ValueDomain::NonNegativeInt
         | nemo::datavalues::ValueDomain::Long
-        | nemo::datavalues::ValueDomain::Int => Ok(v.to_i64_unchecked().into_py(py).into_ref(py)),
+        | nemo::datavalues::ValueDomain::Int => Ok(v.to_i64_unchecked().into_py(py).into_bound(py)),
         nemo::datavalues::ValueDomain::Boolean => {
-            Ok(v.to_boolean_unchecked().into_py(py).into_ref(py))
+            Ok(v.to_boolean_unchecked().into_py(py).into_bound(py))
         }
         nemo::datavalues::ValueDomain::Null => Ok(v
             .to_null_unchecked()
             .canonical_string()
             .into_py(py)
-            .into_ref(py)),
+            .into_bound(py)),
         nemo::datavalues::ValueDomain::Tuple => todo!("tuples are not supported yet"),
         nemo::datavalues::ValueDomain::Map => todo!("maps are not supported yet"),
         nemo::datavalues::ValueDomain::UnsignedLong | nemo::datavalues::ValueDomain::Other => {
@@ -177,7 +179,7 @@ fn datavalue_to_python(py: Python<'_>, v: AnyDataValue) -> PyResult<&PyAny> {
                 language: None,
                 datatype: v.datatype_iri(),
             };
-            Ok(Py::new(py, lit)?.to_object(py).into_ref(py))
+            Ok(Py::new(py, lit)?.to_object(py).into_bound(py))
         }
     }
 }
@@ -191,7 +193,7 @@ impl NemoFact {
         self.0.predicate().to_string()
     }
 
-    fn constants<'a>(&self, py: Python<'a>) -> PyResult<Vec<&'a PyAny>> {
+    fn constants<'a>(&self, py: Python<'a>) -> PyResult<Vec<Bound<'a, PyAny>>> {
         self.0
             .terms()
             .iter()
@@ -250,7 +252,7 @@ fn assignement_to_dict(
     assignment: &HashMap<Variable, AnyDataValue>,
     py: Python,
 ) -> PyResult<PyObject> {
-    let dict = PyDict::new(py);
+    let dict = PyDict::new_bound(py);
     for (variable, value) in assignment {
         dict.set_item(
             variable.to_string(),
@@ -262,7 +264,7 @@ fn assignement_to_dict(
 }
 
 fn trace_to_dict(trace: &ExecutionTraceTree, py: Python) -> PyResult<PyObject> {
-    let result = PyDict::new(py);
+    let result = PyDict::new_bound(py);
     match &trace {
         ExecutionTraceTree::Fact(fact) => result.set_item("fact", fact.to_string())?,
         ExecutionTraceTree::Rule(rule_application, subtraces) => {
@@ -287,7 +289,7 @@ impl NemoResults {
         slf
     }
 
-    fn __next__(mut slf: PyRefMut<'_, Self>) -> PyResult<Option<Vec<&PyAny>>> {
+    fn __next__(mut slf: PyRefMut<'_, Self>) -> PyResult<Option<Vec<Bound<PyAny>>>> {
         let Some(next) = slf.0.next() else {
             return Ok(None);
         };
@@ -333,7 +335,7 @@ impl NemoEngine {
     fn write_result(
         &mut self,
         predicate: String,
-        output_manager: &PyCell<NemoOutputManager>,
+        output_manager: &Bound<NemoOutputManager>,
     ) -> PyResult<()> {
         let identifier = Identifier::from(predicate);
 
@@ -369,7 +371,7 @@ impl NemoEngine {
 
 /// Python bindings for the nemo reasoner
 #[pymodule]
-fn nmo_python(_py: Python, m: &PyModule) -> PyResult<()> {
+fn nmo_python(_py: Python, m: &Bound<PyModule>) -> PyResult<()> {
     m.add_class::<NemoProgram>()?;
     m.add_class::<NemoEngine>()?;
     m.add_class::<NemoResults>()?;
