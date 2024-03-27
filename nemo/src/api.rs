@@ -117,11 +117,14 @@ mod test {
 
     use super::*;
 
-    #[cfg_attr(miri, ignore)]
+    // #[cfg_attr(miri, ignore)]
     #[test]
     fn reason() {
-        std::env::set_current_dir("../resources/testcases/lcs-diff-computation/").unwrap();
-        let mut engine = load("run-lcs-10.rls".into()).unwrap();
+        std::env::set_current_dir(
+            "../resources/testcases/regression/planning_engine/constants_negation",
+        )
+        .unwrap();
+        let mut engine = load("run.rls".into()).unwrap();
         super::reason(&mut engine).unwrap();
 
         // writing only the results where the predicates contain an "i"
