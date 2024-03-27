@@ -25,7 +25,6 @@ mod test {
         numbers
     }
 
-    #[cfg_attr(miri, ignore)]
     #[ignore]
     #[bench]
     fn scan_next_regular(bencher: &mut Bencher) {
@@ -43,7 +42,6 @@ mod test {
         })
     }
 
-    #[cfg_attr(miri, ignore)]
     #[ignore]
     #[bench]
     fn scan_next_enum(bencher: &mut Bencher) {
@@ -61,7 +59,6 @@ mod test {
         })
     }
 
-    #[cfg_attr(miri, ignore)]
     #[ignore]
     #[bench]
     fn scan_next_rainbow(bencher: &mut Bencher) {
@@ -120,7 +117,6 @@ mod test {
         }
     }
 
-    #[cfg_attr(miri, ignore)]
     #[ignore]
     #[bench]
     fn scan_next_rainbow_comp(bencher: &mut Bencher) {

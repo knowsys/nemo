@@ -29,7 +29,6 @@ mod test {
         (data, seek)
     }
 
-    #[cfg_attr(miri, ignore)]
     #[ignore]
     #[bench]
     fn seek_vector_random(bencher: &mut Bencher) {
@@ -43,7 +42,6 @@ mod test {
     }
 
     /// TODO: This performs quite a lot worse than the others
-    #[cfg_attr(miri, ignore)]
     #[ignore]
     #[bench]
     fn seek_rle_random(bencher: &mut Bencher) {
@@ -56,7 +54,6 @@ mod test {
         })
     }
 
-    #[cfg_attr(miri, ignore)]
     #[ignore]
     #[bench]
     fn seek_vector_crafted(bencher: &mut Bencher) {
@@ -74,7 +71,6 @@ mod test {
         })
     }
 
-    #[cfg_attr(miri, ignore)]
     #[ignore]
     #[bench]
     fn seek_rle_crafted(bencher: &mut Bencher) {
