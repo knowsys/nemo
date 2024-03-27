@@ -149,6 +149,13 @@ impl BytesBuffer {
 /// based on a generic parameter. It is still global, but this can further reduce the
 /// mutual influence across buffers used for different purposes (and in particular the
 /// implicit capacity limit of any single buffer).
+///
+/// # Safety
+/// Our standard implementations of this use raw pointers to mutable globals as memory
+/// pools. This construction only can work safely if the application as a whole ensures
+/// that the mutable globals are not moved while we are accessing them. In our code, it is
+/// ensured that the unsafe functions of this trait are only used in private functions of
+/// other structs, and refered to global memory is copied before further use.
 pub(crate) unsafe trait GlobalBytesBuffer: Debug + Sized {
     /// Returns a specific global buffer.
     unsafe fn get() -> *mut BytesBuffer;

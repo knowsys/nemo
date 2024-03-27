@@ -9,14 +9,10 @@
 //! # #[cfg(not(miri))]
 //! # fn main() {
 //! use nemo::api::{load, reason, output_predicates};
-//! # let path = String::from("../resources/testcases/lcs-diff-computation/run-lcs-10.rls");
-//! // assume path is a string with the path to a rules file
-//! let mut engine = load(path.into()).unwrap();
-//! # let cur_dir = std::env::current_dir().unwrap();
-//! # std::env::set_current_dir("../resources/testcases/lcs-diff-computation/").unwrap();
+//! std::env::set_current_dir("../resources/testcases/lcs-diff-computation/").unwrap();
+//! let mut engine = load("run-lcs-10.rls".into()).unwrap();
 //! // reasoning on the rule file
 //! reason(&mut engine).unwrap();
-//! # std::env::set_current_dir(cur_dir).unwrap();
 //! // write the results to a temporary directory
 //! let temp_dir = TempDir::new().unwrap();
 //! let predicates = output_predicates(&engine);
@@ -121,7 +117,7 @@ mod test {
 
     use super::*;
 
-    #[cfg_attr(miri, ignore)]
+    // #[cfg_attr(miri, ignore)]
     #[test]
     fn reason() {
         std::env::set_current_dir("../resources/testcases/lcs-diff-computation/").unwrap();
