@@ -117,7 +117,7 @@ mod test {
 
     use super::*;
 
-    // #[cfg_attr(miri, ignore)]
+    #[cfg_attr(miri, ignore)]
     #[test]
     fn reason() {
         std::env::set_current_dir("../resources/testcases/lcs-diff-computation/").unwrap();
