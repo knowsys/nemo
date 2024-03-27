@@ -26,6 +26,6 @@ nemo = { path = "../nemo" }
 [dev-dependencies]
 assert_cmd = "2.0"
 assert_fs = "1.0.13"
-dir-test = "0.1"
+dir-test = "0.2.1"
 predicates = "3.0"
 test-log = "0.2"
