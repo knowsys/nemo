@@ -42,7 +42,11 @@ pub(crate) fn node_negation(
                 .iter()
                 .filter(|filter| {
                     filter.variables().all(|variable| {
-                        subtract_markers.contains(variable_translation.get(variable).unwrap())
+                        subtract_markers.contains(
+                            variable_translation
+                                .get(variable)
+                                .expect("variable translation must know every variable"),
+                        )
                     })
                 })
                 .cloned()
