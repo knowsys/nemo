@@ -188,6 +188,7 @@ pub struct TraceTreeRuleApplication {
 }
 
 impl TraceTreeRuleApplication {
+    /// Instantiate the given rule with its assignment producing a [`Rule`] with only ground terms.
     fn to_instantiated_rule(&self) -> Rule {
         let mut rule = self.rule.clone();
         rule.apply_assignment(
@@ -205,12 +206,14 @@ impl TraceTreeRuleApplication {
         rule
     }
 
+    /// Get the [`ChaseFact`] that was produced by this rule application.
     fn to_derived_fact(&self) -> ChaseFact {
         let rule = self.to_instantiated_rule();
         let derived_atom = &rule.head()[self._position];
         ChaseFact::from_flat_atom(derived_atom)
     }
 
+    /// Get a string representation of the Instantiated rule.
     fn to_instantiated_string(&self) -> String {
         self.to_instantiated_rule().to_string()
     }

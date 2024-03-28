@@ -186,7 +186,7 @@ fn run(mut cli: CliApp) -> Result<(), Error> {
                             }) {
                                 Ok(inner) => Some(inner),
                                 Err(err) => {
-                                    log::warn!("!Warning: {err}");
+                                    log::error!("!Error: Could not read trace input file {}. We continue by skipping it. Detailed error message: {err}", filename.to_string_lossy().to_string());
                                     None
                                 }
                             }

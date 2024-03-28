@@ -118,10 +118,11 @@ impl OutputArgs {
 #[derive(Debug, clap::Args)]
 pub(crate) struct TracingArgs {
     /// Facts for which a derivation trace should be computed;
-    /// multiple facts can be separated by a semicolon
+    /// multiple facts can be separated by a semicolon, e.g. "P(a, b);Q(c)".
     #[arg(long = "trace", value_delimiter = ';', group = "trace-input")]
     pub(crate) facts_to_be_traced: Option<Vec<String>>,
-    /// Specify an input file for the facts that should be explained
+    /// Specify one or multiple input files for the facts that should be traced.
+    /// The file format is the same as for the "trace" CLI argument.
     #[arg(long = "trace-input-file", value_parser, group = "trace-input")]
     pub(crate) trace_input_file: Option<Vec<PathBuf>>,
     /// File to export the trace to
