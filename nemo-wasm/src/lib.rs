@@ -355,7 +355,7 @@ impl NemoEngine {
 
         let (trace, handles) = self.engine.trace(self.program.0.clone(), vec![parsed_fact]);
 
-        trace.ascii_tree_string(handles[0])
+        trace.tree(handles[0]).map(|tree| tree.to_graphml())
     }
 }
 
