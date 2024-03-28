@@ -170,11 +170,41 @@ fn run(mut cli: CliApp) -> Result<(), Error> {
     log::info!("Rules parsed");
     log::trace!("{:?}", program);
 
-    let traced_facts = cli
-        .tracing
-        .traced_facts
-        .map(|f| f.into_iter().map(parse_fact).collect::<Result<Vec<_>, _>>())
-        .transpose()?;
+    let facts_to_be_traced: Option<Vec<_>> = {
+        let raw_facts_to_be_traced: Option<Vec<String>> =
+            cli.tracing.facts_to_be_traced.or_else(|| {
+                Some(
+                    cli.tracing
+                        .trace_input_file?
+                        .into_iter()
+                        .filter_map(|filename| {
+                            match read_to_string(filename.clone()).map_err(|err| {
+                                ReadingError::IoReading {
+                                    error: err,
+                                    filename: filename.to_string_lossy().to_string(),
+                                }
+                            }) {
+                                Ok(inner) => Some(inner),
+                                Err(err) => {
+                                    log::error!("!Error: Could not read trace input file {}. We continue by skipping it. Detailed error message: {err}", filename.to_string_lossy().to_string());
+                                    None
+                                }
+                            }
+                        })
+                        .flat_map(|fact_string| {
+                            fact_string
+                                .split(';')
+                                .map(|s| s.trim().to_string())
+                                .collect::<Vec<String>>()
+                        })
+                        .collect(),
+                )
+            });
+
+        raw_facts_to_be_traced
+            .map(|f| f.into_iter().map(parse_fact).collect::<Result<Vec<_>, _>>())
+            .transpose()?
+    };
 
     override_exports(&mut program, cli.output.export_setting);
 
@@ -243,7 +273,7 @@ fn run(mut cli: CliApp) -> Result<(), Error> {
         print_memory_details(&engine);
     }
 
-    if let Some(facts) = traced_facts {
+    if let Some(facts) = facts_to_be_traced {
         let (trace, handles) = engine.trace(program.clone(), facts.clone());
 
         match cli.tracing.output_file {
@@ -258,8 +288,8 @@ fn run(mut cli: CliApp) -> Result<(), Error> {
             }
             None => {
                 for (fact, handle) in facts.into_iter().zip(handles) {
-                    if let Some(tree) = trace.ascii_tree_string(handle) {
-                        println!("\n{}", tree);
+                    if let Some(tree) = trace.tree(handle) {
+                        println!("\n{}", tree.to_ascii_art());
                     } else {
                         println!("\n{fact} was not derived");
                     }
