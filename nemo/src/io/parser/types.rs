@@ -149,8 +149,11 @@ pub enum ParseError {
     /// The variable must only depend on variables that occur in a positive body literal.
     #[error(r#"the variable "{0}" must only depend on variables that occur in a positive body literals"#)]
     UnsafeDefinition(Variable),
-    /// Complex term uses an undefined variable.
-    #[error(r#"complex term "{0}" uses an undefined variable "{1}""#)]
+    /// Complex term uses a derived variable.
+    #[error(r#"complex term "{0}" uses a derived variable "{1}""#)]
+    ComplexTermDerived(String, Variable),
+    /// Complex term uses an unsafe variable.
+    #[error(r#"complex term "{0}" uses an unsafe variable "{1}""#)]
     UnsafeComplexTerm(String, Variable),
     /// Variable has been defined multiple times.
     #[error(r#"the variable "{0}" has been used in multiple equalities"#)]

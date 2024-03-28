@@ -110,7 +110,7 @@ impl Rule {
             }
         }
 
-        // Every constraint that is not an assignment must only use derived or safe varaibles
+        // Every constraint that is not an assignment must only use safe varaibles
         for constraint in &constraints {
             if let Some((variable, _)) = constraint.has_form_assignment() {
                 if derived_variables.contains(variable) {
@@ -120,9 +120,16 @@ impl Rule {
 
             for term in [constraint.left(), constraint.right()] {
                 for variable in term.variables() {
-                    if !safe_variables.contains(variable) && !derived_variables.contains(variable) {
+                    if derived_variables.contains(variable) {
+                        return Err(ParseError::ComplexTermDerived(
+                            constraint.to_string(),
+                            variable.clone(),
+                        ));
+                    }
+
+                    if !safe_variables.contains(variable) {
                         return Err(ParseError::UnsafeComplexTerm(
-                            term.to_string(),
+                            constraint.to_string(),
                             variable.clone(),
                         ));
                     }
