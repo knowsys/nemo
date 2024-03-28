@@ -250,7 +250,7 @@ impl Rule {
     pub fn safe_variables(&self) -> HashSet<Variable> {
         Self::safe_variables_constraints(
             Self::safe_variables_literals(&self.body),
-            &self.constraints(),
+            self.constraints(),
         )
     }
 
