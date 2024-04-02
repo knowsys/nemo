@@ -28,6 +28,7 @@ pub(crate) fn node_negation(
         .iter()
         .map(|atom| {
             let subtract_markers = variable_translation.operation_table(atom.terms().iter());
+
             let node = subplan_union(
                 plan,
                 table_manager,
@@ -36,9 +37,22 @@ pub(crate) fn node_negation(
                 subtract_markers.clone(),
             );
 
-            // We simply apply all constraints to this node
-            // Constraints which do not reference this atom will be filtered in the physical layer
-            let node_filtered = node_filter(plan, variable_translation, node, subtracted_filters);
+            // We only keep those constraints that can be evaluated within the current atom
+            let filters = subtracted_filters
+                .iter()
+                .filter(|filter| {
+                    filter.variables().all(|variable| {
+                        subtract_markers.contains(
+                            variable_translation
+                                .get(variable)
+                                .expect("variable translation must know every variable"),
+                        )
+                    })
+                })
+                .cloned()
+                .collect::<Vec<Constraint>>();
+
+            let node_filtered = node_filter(plan, variable_translation, node, &filters);
 
             // The tables may contain columns that are not part of `node_main`.
             // These need to be projected away.

@@ -1,0 +1,21 @@
+%%% Test related to 
+%%% https://github.com/knowsys/nemo/issues/452
+%%%
+%%% Previously, an incorrect plan was produced, which lead to a crash. 
+
+S(a, b, c).
+S(r, r, r).
+T(a, b).
+T(a, c).
+
+R(?x, ?y, ?z) :- 
+    S(?x, ?y, ?z),
+    ~ T(?x, ?y),
+    ~ T(a, ?z).
+
+R(?x, ?y, ?z) :- 
+    S(?x, ?y, ?z),
+    ~ T(a, ?y),
+    ~ T(a, ?z).
+
+@export R :- csv {} .
