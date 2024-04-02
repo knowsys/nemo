@@ -1,0 +1,15 @@
+%%% Test related to 
+%%% https://github.com/knowsys/nemo/issues/428
+%%%
+%%% Previously, subtracting a zero arity table resulted in a crash 
+
+Input(-1).
+
+Assert(positive) :- Input(?i), ?i > 0.
+Assert(negative) :- Input(?i), ?i < 0.
+
+NonPositive(?r) :- Input(?r), ~Assert(positive).
+NonNegative(?r) :- Input(?r), ~Assert(negative). 
+
+@export NonPositive :- csv {} .
+@export NonNegative :- csv {} .

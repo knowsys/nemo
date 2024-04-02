@@ -76,6 +76,11 @@ impl OperationGenerator for GeneratorSubtract {
             return None;
         }
 
+        if tries_subtract.iter().any(|scan| scan.arity() == 0) {
+            // If we subtract a non empty zero column trie the result is defined as empty
+            return None;
+        }
+
         let mut active_scans = Vec::with_capacity(trie_main.arity() + 1);
         active_scans.push(Rc::new(RefCell::new(vec![true; tries_subtract.len()])));
 
