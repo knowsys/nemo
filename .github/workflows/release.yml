@@ -62,10 +62,10 @@ jobs:
           fi
           sha256sum "$asset" > "$asset.sha256sum"
       - name: Create (draft) release
-        uses: softprops/action/gh-release@v2
+        uses: softprops/action-gh-release@v2
         with:
-          name: "Nemo v.${{ github.ref }}"
-          fail_on_unmatched_files: true
+          name: "Nemo ${{ github.ref_name }}"
+          fail_on_unmatched_files: false
           generate_release_notes: true
           make_latest: true
           draft: true
