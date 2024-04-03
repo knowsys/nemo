@@ -161,19 +161,52 @@ impl Rule {
         for negative_literal in negative {
             let mut current_unsafe = HashSet::<Variable>::new();
 
-            for primitive_term in negative_literal.primitive_terms() {
-                if let PrimitiveTerm::Variable(variable) = primitive_term {
-                    if derived_variables.contains(&variable) || safe_variables.contains(variable) {
-                        continue;
-                    }
+            for negative_term in negative_literal.terms() {
+                if let Term::Primitive(primitive_term) = negative_term {
+                    if let PrimitiveTerm::Variable(variable) = primitive_term {
+                        if safe_variables.contains(variable) {
+                            continue;
+                        }
 
-                    if unsafe_negative_variables.contains(variable) {
-                        return Err(ParseError::UnsafeVariableInMultipleNegativeLiterals(
-                            variable.clone(),
-                        ));
-                    }
+                        if derived_variables.contains(variable) {
+                            return Err(ParseError::NegatedLiteralDerived(
+                                negative_literal.to_string(),
+                                variable.clone(),
+                            ));
+                        }
 
-                    current_unsafe.insert(variable.clone());
+                        if unsafe_negative_variables.contains(variable) {
+                            return Err(ParseError::UnsafeVariableInMultipleNegativeLiterals(
+                                variable.clone(),
+                            ));
+                        }
+                        if let PrimitiveTerm::Variable(variable) = primitive_term {
+                            if safe_variables.contains(variable) {
+                                continue;
+                            }
+
+                            if derived_variables.contains(variable) {
+                                return Err(ParseError::NegatedLiteralDerived(
+                                    negative_literal.to_string(),
+                                    variable.clone(),
+                                ));
+                            }
+
+                            if unsafe_negative_variables.contains(variable) {
+                                return Err(ParseError::UnsafeVariableInMultipleNegativeLiterals(
+                                    variable.clone(),
+                                ));
+                            }
+
+                            current_unsafe.insert(variable.clone());
+                        }
+                        current_unsafe.insert(variable.clone());
+                    }
+                } else {
+                    return Err(ParseError::NegatedLiteralComplex(
+                        negative_literal.to_string(),
+                        negative_term.to_string(),
+                    ));
                 }
             }
 
