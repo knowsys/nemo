@@ -149,6 +149,12 @@ pub enum ParseError {
     /// The variable must only depend on variables that occur in a positive body literal.
     #[error(r#"the variable "{0}" must only depend on variables that occur in a positive body literals"#)]
     UnsafeDefinition(Variable),
+    /// Negated literal uses a complex term.
+    #[error(r#"negated literal "{0}" uses the complex term "{1}""#)]
+    NegatedLiteralComplex(String, String),
+    /// Negated literal uses a derived variable.
+    #[error(r#"negated literal "{0}" uses a derived variable "{1}""#)]
+    NegatedLiteralDerived(String, Variable),
     /// Complex term uses a derived variable.
     #[error(r#"complex term "{0}" uses a derived variable "{1}""#)]
     ComplexTermDerived(String, Variable),
