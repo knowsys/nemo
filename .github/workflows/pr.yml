@@ -22,8 +22,8 @@ jobs:
         include:
           - { rust: nightly, os: ubuntu-latest }
     steps:
-      - uses: actions/checkout@v3
-      - uses: hecrj/setup-rust-action@v1
+      - uses: actions/checkout@v4
+      - uses: hecrj/setup-rust-action@v2
         with:
           rust-version: ${{ matrix.rust }}
       - run: cargo test --verbose
@@ -34,8 +34,8 @@ jobs:
     env:
       RUSTFLAGS: -Dwarnings
     steps:
-      - uses: actions/checkout@v3
-      - uses: hecrj/setup-rust-action@v1
+      - uses: actions/checkout@v4
+      - uses: hecrj/setup-rust-action@v2
         with:
           components: clippy
           rust-version: nightly
@@ -45,8 +45,8 @@ jobs:
     name: Verify code formatting
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-      - uses: hecrj/setup-rust-action@v1
+      - uses: actions/checkout@v4
+      - uses: hecrj/setup-rust-action@v2
         with:
           components: rustfmt
       - run: cargo fmt --all -- --check
@@ -58,8 +58,8 @@ jobs:
       RUSTFLAGS: -Dwarnings
       RUSTDOCFLAGS: -Dwarnings
     steps:
-      - uses: actions/checkout@v3
-      - uses: hecrj/setup-rust-action@v1
+      - uses: actions/checkout@v4
+      - uses: hecrj/setup-rust-action@v2
         with:
           rust-version: nightly
       - run: cargo doc --workspace
@@ -68,8 +68,8 @@ jobs:
     name: Check for undefined behaviour with miri
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-      - uses: hecrj/setup-rust-action@v1
+      - uses: actions/checkout@v4
+      - uses: hecrj/setup-rust-action@v2
         with:
           components: miri
           rust-version: nightly
@@ -80,37 +80,37 @@ jobs:
     name: Test python bindings
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v3
-    - uses: actions/setup-python@v4
-      with:
-        python-version: '3.10'
-    - name: build python bindings
-      uses: PyO3/maturin-action@v1
-      with:
-        working-directory: 'nemo-python'
-    - name: install python bindings
-      run: ls target/wheels/*.whl | xargs pip install
-    - name: run python tests
-      run: python -m unittest discover -s nemo-python/tests -v
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+      - name: build python bindings
+        uses: PyO3/maturin-action@v1
+        with:
+          working-directory: "nemo-python"
+      - name: install python bindings
+        run: ls target/wheels/*.whl | xargs pip install
+      - name: run python tests
+        run: python -m unittest discover -s nemo-python/tests -v
 
   pycodestyle:
     name: Check python code formatting
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v3
-    - uses: actions/setup-python@v4
-      with:
-        python-version: '3.10'
-    - name: install pycodestyle
-      run: pip install pycodestyle
-    - name: run pycodestyle
-      run: pycodestyle nemo-python --max-line-length 90
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+      - name: install pycodestyle
+        run: pip install pycodestyle
+      - name: run pycodestyle
+        run: pycodestyle nemo-python --max-line-length 90
 
   wasm-pack:
     name: Test wasm bindings
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - name: Install
         run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh

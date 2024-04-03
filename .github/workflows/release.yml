@@ -26,9 +26,9 @@ jobs:
           #   target: x86_64-apple-darwin
     steps:
       - name: Check out repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
       - name: Install rust toolchain
-        uses: hecrj/setup-rust-action@v1
+        uses: hecrj/setup-rust-action@v2
         with:
           rust-version: ${{ matrix.rust }}
           targets: ${{ matrix.target }}
@@ -59,7 +59,7 @@ jobs:
           fi
           sha256sum "$asset" > "$asset.sha256sum"
       - name: Upload release archive
-        uses: actions/upload-release-asset@v1.0.2
+        uses: actions/upload-release-asset@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
@@ -68,7 +68,7 @@ jobs:
           asset_name: ${{ env.ASSET }}
           asset_content_type: application/octet-stream
       - name: Upload release checksum
-        uses: actions/upload-release-asset@v1.0.2
+        uses: actions/upload-release-asset@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
