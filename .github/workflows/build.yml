@@ -18,8 +18,8 @@ jobs:
         include:
           - { rust: nightly, os: ubuntu-latest }
     steps:
-      - uses: actions/checkout@v3
-      - uses: hecrj/setup-rust-action@v1
+      - uses: actions/checkout@v4
+      - uses: hecrj/setup-rust-action@v2
         with:
           rust-version: ${{ matrix.rust }}
       - run: cargo test --verbose
@@ -30,10 +30,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        rust: [ nightly ]
-        os: [ ubuntu-latest ]
+        rust: [nightly]
+        os: [ubuntu-latest]
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v2
       - uses: hecrj/setup-rust-action@v1
         with:
           rust-version: ${{ matrix.rust }}
