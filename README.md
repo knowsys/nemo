@@ -9,7 +9,7 @@
 Goals of Nemo are performance, declarativity, versatility, and reliability. It is written in Rust. Nemo's data model aims at compatibility with [RDF](https://www.w3.org/TR/rdf11-concepts/)/[SPARQL](https://www.w3.org/TR/sparql11-overview/) while preserving established logic programming conventions and features. The following formats are currently supported:
 - Input: CSV, TSV, [DSV](https://en.wikipedia.org/wiki/Delimiter-separated_values), [N-Triples](https://www.w3.org/TR/n-triples/), [Turtle](https://www.w3.org/TR/turtle/), [RDF/XML](https://www.w3.org/TR/rdf-syntax-grammar/), [N-Quads](https://www.w3.org/TR/n-quads/), [TriG](https://www.w3.org/TR/trig/)
 - Rules: datalog dialect with support for existential rules (tuple-generating dependencies), stratified negation, and datatypes (including numeric comparison and arithmetic functions)
-- Output: CSV, TSV, [DSV](https://en.wikipedia.org/wiki/Delimiter-separated_values)
+- Output: CSV, TSV, [DSV](https://en.wikipedia.org/wiki/Delimiter-separated_values), [N-Triples](https://www.w3.org/TR/n-triples/), [Turtle](https://www.w3.org/TR/turtle/), [RDF/XML](https://www.w3.org/TR/rdf-syntax-grammar/), [N-Quads](https://www.w3.org/TR/n-quads/), [TriG](https://www.w3.org/TR/trig/)
 
 Nemo's datatypes allow the use of RDF-style data values but also "plain" names and constants in any of these formats.
 
