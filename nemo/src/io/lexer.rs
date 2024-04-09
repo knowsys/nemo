@@ -5,11 +5,13 @@ use nom::{
     bytes::complete::{is_not, tag, take},
     character::complete::{alpha1, alphanumeric1, digit1, line_ending, multispace1},
     combinator::{all_consuming, map, recognize},
-    multi::many0,
+    multi::{many0, many1},
     sequence::{delimited, pair, tuple},
     IResult,
 };
 use nom_locate::LocatedSpan;
+
+use super::parser::ast::Position;
 
 pub(crate) type Span<'a> = LocatedSpan<&'a str>;
 
@@ -86,6 +88,8 @@ pub(crate) enum TokenKind {
     Comment,
     /// A comment, starting with `%%`
     DocComment,
+    /// A comment, starting with `%!`
+    TlDocComment,
     /// ` `, `\t`, `\r` or `\n`
     Whitespace,
     /// base directive keyword
@@ -98,10 +102,62 @@ pub(crate) enum TokenKind {
     Export,
     /// output directive keyword
     Output,
+    /// Ident for prefixes
+    PrefixIdent,
     /// catch all token
     Illegal,
     /// signals end of file
     Eof,
+}
+impl std::fmt::Display for TokenKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            TokenKind::QuestionMark => write!(f, "QuestionMark"),
+            TokenKind::ExclamationMark => write!(f, "ExclamationMark"),
+            TokenKind::OpenParen => write!(f, "OpenParen"),
+            TokenKind::CloseParen => write!(f, "CloseParen"),
+            TokenKind::OpenBracket => write!(f, "OpenBracket"),
+            TokenKind::CloseBracket => write!(f, "CloseBracket"),
+            TokenKind::OpenBrace => write!(f, "OpenBrace"),
+            TokenKind::CloseBrace => write!(f, "CloseBrace"),
+            TokenKind::Dot => write!(f, "Dot"),
+            TokenKind::Comma => write!(f, "Comma"),
+            TokenKind::Colon => write!(f, "Colon"),
+            TokenKind::Arrow => write!(f, "Arrow"),
+            TokenKind::Greater => write!(f, "Greater"),
+            TokenKind::GreaterEqual => write!(f, "GreaterEqual"),
+            TokenKind::Equal => write!(f, "Equal"),
+            TokenKind::LessEqual => write!(f, "LessEqual"),
+            TokenKind::Less => write!(f, "Less"),
+            TokenKind::Unequal => write!(f, "Unequal"),
+            TokenKind::Tilde => write!(f, "Tilde"),
+            TokenKind::Caret => write!(f, "Caret"),
+            TokenKind::Hash => write!(f, "Hash"),
+            TokenKind::Underscore => write!(f, "Underscore"),
+            TokenKind::At => write!(f, "At"),
+            TokenKind::Plus => write!(f, "Plus"),
+            TokenKind::Minus => write!(f, "Minus"),
+            TokenKind::Star => write!(f, "Star"),
+            TokenKind::Slash => write!(f, "Slash"),
+            TokenKind::Ident => write!(f, "Ident"),
+            TokenKind::Variable => write!(f, "Variable"),
+            TokenKind::Iri => write!(f, "Iri"),
+            TokenKind::Number => write!(f, "Number"),
+            TokenKind::String => write!(f, "String"),
+            TokenKind::Comment => write!(f, "Comment"),
+            TokenKind::DocComment => write!(f, "DocComment"),
+            TokenKind::TlDocComment => write!(f, "TlDocComment"),
+            TokenKind::Whitespace => write!(f, "Whitespace"),
+            TokenKind::Base => write!(f, "Base"),
+            TokenKind::Prefix => write!(f, "Prefix"),
+            TokenKind::Import => write!(f, "Import"),
+            TokenKind::Export => write!(f, "Export"),
+            TokenKind::Output => write!(f, "Output"),
+            TokenKind::PrefixIdent => write!(f, "PrefixIdent"),
+            TokenKind::Illegal => write!(f, "Illegal"),
+            TokenKind::Eof => write!(f, "Eof"),
+        }
+    }
 }
 
 #[derive(Debug, Copy, Clone, PartialEq)]
@@ -110,9 +166,42 @@ pub(crate) struct Token<'a> {
     pub(crate) span: Span<'a>,
 }
 impl<'a> Token<'a> {
-    fn new(kind: TokenKind, span: Span<'a>) -> Token<'a> {
+    pub(crate) fn new(kind: TokenKind, span: Span<'a>) -> Token<'a> {
         Token { kind, span }
     }
+}
+impl std::fmt::Display for Token<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let offset = self.span.location_offset();
+        let line = self.span.location_line();
+        let fragment = self.span.fragment();
+        if self.span.extra == () {
+            write!(f, "T!{{{0}, S!({offset}, {line}, {fragment})}}", self.kind)
+        } else {
+            write!(
+                f,
+                "T!{{{0}, S!({offset}, {line}, {fragment}, {1:?})}}",
+                self.kind, self.span.extra
+            )
+        }
+    }
+}
+impl<'a> crate::io::parser::ast::AstNode for Token<'a> {
+    fn children(&self) -> Option<Vec<&dyn super::parser::ast::AstNode>> {
+        None::<Vec<_>>
+    }
+
+    fn span(&self) -> Span {
+        self.span
+    }
+
+    // fn position(&self) -> Position {
+    //     Position {
+    //         offset: self.span.location_offset(),
+    //         line: self.span.location_line(),
+    //         column: self.span.get_column() as u32,
+    //     }
+    // }
 }
 
 macro_rules! syntax {
@@ -220,13 +309,22 @@ pub(crate) fn lex_string(input: Span) -> IResult<Span, Token> {
 }
 
 pub(crate) fn lex_comment(input: Span) -> IResult<Span, Token> {
-    recognize(tuple((tag("%"), many0(is_not("\r\n")), line_ending)))(input)
+    recognize(tuple((tag("%"), many0(is_not("\n")), line_ending)))(input)
         .map(|(rest, result)| (rest, Token::new(TokenKind::Comment, result)))
 }
 
 pub(crate) fn lex_doc_comment(input: Span) -> IResult<Span, Token> {
-    recognize(tuple((tag("%%"), many0(is_not("\r\n")), line_ending)))(input)
+    recognize(many1(tuple((tag("%%"), many0(is_not("\n")), line_ending))))(input)
         .map(|(rest, result)| (rest, Token::new(TokenKind::DocComment, result)))
+}
+
+pub(crate) fn lex_toplevel_doc_comment(input: Span) -> IResult<Span, Token> {
+    recognize(many1(tuple((tag("%!"), many0(is_not("\n")), line_ending))))(input)
+        .map(|(rest, result)| (rest, Token::new(TokenKind::TlDocComment, result)))
+}
+
+pub(crate) fn lex_comments(input: Span) -> IResult<Span, Token> {
+    alt((lex_toplevel_doc_comment, lex_doc_comment, lex_comment))(input)
 }
 
 pub(crate) fn lex_whitespace(input: Span) -> IResult<Span, Token> {
@@ -245,7 +343,7 @@ pub(crate) fn lex_tokens(input: Span) -> IResult<Span, Vec<Token>> {
         lex_ident,
         lex_number,
         lex_string,
-        lex_comment,
+        lex_comments,
         lex_whitespace,
         lex_illegal,
     ))))(input)
@@ -398,12 +496,13 @@ mod test {
 
     #[test]
     fn comment() {
-        let input = Span::new("% Some Comment\n");
+        let input = Span::new("    % Some Comment\n");
         assert_eq!(
             lex_tokens(input).unwrap().1,
             vec![
-                T!(Comment, 0, 1, "% Some Comment\n"),
-                T!(Eof, 15, 2, ""),
+                T!(Whitespace, 0, 1, "    "),
+                T!(Comment, 4, 1, "% Some Comment\n"),
+                T!(Eof, 19, 2, ""),
                 // T!(Comment, Span::new(0, 1, "% Some Comment\n")),
                 // T!(Eof, Span::new(15, 2, ""))
             ]
@@ -541,6 +640,18 @@ mod test {
                 T!(CloseParen, 21, 1, ")"),
                 T!(Dot, 22, 1, "."),
                 T!(Eof, 23, 1, ""),
+            ]
+        )
+    }
+
+    #[test]
+    fn whitespace() {
+        let input = Span::new("   \t \n\n\t   \n");
+        assert_eq!(
+            lex_tokens(input).unwrap().1,
+            vec![
+                T!(Whitespace, 0, 1, "   \t \n\n\t   \n"),
+                T!(Eof, 12, 4, ""),
             ]
         )
     }

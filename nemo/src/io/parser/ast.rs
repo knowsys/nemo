@@ -1,301 +1,292 @@
-use std::collections::BTreeMap;
+use crate::io::lexer::{Span, Token};
+use std::fmt::Display;
 
-use crate::io::lexer::Token;
+pub(crate) mod atom;
+pub(crate) mod directive;
+pub(crate) mod map;
+pub(crate) mod named_tuple;
+pub(crate) mod program;
+pub(crate) mod statement;
+pub(crate) mod term;
 
-struct Position {
-    offset: usize,
-    line: u32,
-    column: u32,
-}
-
-pub(crate) type Program<'a> = Vec<Statement<'a>>;
-
-#[derive(Debug, PartialEq, Clone)]
-pub(crate) enum Statement<'a> {
-    Directive(Directive<'a>),
-    Fact {
-        atom: Atom<'a>,
-    },
-    Rule {
-        head: Vec<Atom<'a>>,
-        body: Vec<Atom<'a>>,
-    },
-}
-
-#[derive(Debug, PartialEq, Clone)]
-pub(crate) enum Directive<'a> {
-    Base {
-        kw: Token<'a>,
-        base_iri: Token<'a>,
-    },
-    Prefix {
-        kw: Token<'a>,
-        prefix: Token<'a>,
-        prefix_iri: Token<'a>,
-    },
-    Import {
-        kw: Token<'a>,
-        predicate: Token<'a>,
-        map: Map<'a>,
-    },
-    Export {
-        kw: Token<'a>,
-        predicate: Token<'a>,
-        map: Map<'a>,
-    },
-    // maybe will be deprecated
-    Output {
-        kw: Token<'a>,
-        predicates: Vec<Token<'a>>,
-    },
-}
-
-#[derive(Debug, PartialEq, Clone)]
-pub(crate) enum Atom<'a> {
-    Atom(NamedTuple<'a>),
-    NegativeAtom(NamedTuple<'a>),
-    InfixAtom {
-        operation: Token<'a>,
-        lhs: Term<'a>,
-        rhs: Term<'a>,
-    },
-    Map(Map<'a>),
-}
-
-#[derive(Debug, PartialEq, Clone)]
-pub(crate) enum Term<'a> {
-    Primitive(Token<'a>),
-    Variable(Token<'a>),
-    Unary {
-        operation: Token<'a>,
-        term: Box<Term<'a>>,
-    },
-    Binary {
-        operation: Token<'a>,
-        lhs: Box<Term<'a>>,
-        rhs: Box<Term<'a>>,
-    },
-    Aggregation {
-        operation: Token<'a>,
-        terms: Vec<Term<'a>>,
-    },
-    Function(NamedTuple<'a>),
-    Map(Map<'a>),
-}
-
-#[derive(Debug, PartialEq, Clone)]
-pub(crate) struct NamedTuple<'a> {
-    pub(crate) identifier: Token<'a>,
-    pub(crate) terms: Vec<Term<'a>>,
-}
-
-#[derive(Debug, PartialEq, Clone)]
-pub(crate) struct Map<'a> {
-    pub(crate) identifier: Option<Token<'a>>,
-    pub(crate) pairs: Vec<Pair<Term<'a>, Term<'a>>>,
-}
-
-#[derive(Debug, PartialEq, Clone)]
-pub(crate) struct Pair<K, V> {
-    pub(crate) key: K,
-    pub(crate) value: V,
-}
-impl<K, V> Pair<K, V> {
-    pub fn new(key: K, value: V) -> Pair<K, V> {
-        Pair { key, value }
-    }
-}
-
-#[derive(Debug, PartialEq, Clone)]
-pub(crate) enum Node<'a> {
-    Statement(&'a Statement<'a>),
-    Directive(&'a Directive<'a>),
-    RuleHead(&'a Vec<Atom<'a>>),
-    RuleBody(&'a Vec<Atom<'a>>),
-    Atom(&'a Atom<'a>),
-    Term(&'a Term<'a>),
-    Terms(&'a Vec<Term<'a>>),
-    Map(&'a Map<'a>),
-    KeyWord(&'a Token<'a>),
-    BaseIri(&'a Token<'a>),
-    Prefix(&'a Token<'a>),
-    PrefixIri(&'a Token<'a>),
-    Predicate(&'a Token<'a>),
-    Predicates(&'a Vec<Token<'a>>),
-    Operation(&'a Token<'a>),
-    Lhs(&'a Term<'a>),
-    Rhs(&'a Term<'a>),
-    Identifier(&'a Token<'a>),
-    Pairs(&'a Vec<Pair<Term<'a>, Term<'a>>>),
-    MapIdentifier(&'a Option<Token<'a>>),
-    Primitive(&'a Token<'a>),
-    Variable(&'a Token<'a>),
-}
-
-trait AstNode {
-    fn children(&self) -> Vec<Node>;
+pub(crate) trait AstNode: std::fmt::Debug {
+    fn children(&self) -> Option<Vec<&dyn AstNode>>;
+    fn span(&self) -> Span;
     // fn position(&self) -> Position;
 }
 
-impl<'a> AstNode for Program<'a> {
-    fn children(&self) -> Vec<Node> {
+pub(crate) struct Position {
+    pub(crate) offset: usize,
+    pub(crate) line: u32,
+    pub(crate) column: u32,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct List<'a, T> {
+    pub(crate) span: Span<'a>,
+    pub(crate) first: T,
+    // ([ws]?[,][ws]?[T])*
+    pub(crate) rest: Option<Vec<(Option<Token<'a>>, Token<'a>, Option<Token<'a>>, T)>>,
+}
+impl<T: AstNode + std::fmt::Debug> AstNode for List<'_, T> {
+    fn children(&self) -> Option<Vec<&dyn AstNode>> {
         let mut vec = Vec::new();
-        for statement in self {
-            vec.push(Node::Statement(statement))
-        }
-        vec
+        vec.push(&self.first as &dyn AstNode);
+        if let Some(rest) = &self.rest {
+            for (ws1, delim, ws2, item) in rest {
+                if let Some(ws) = ws1 {
+                    vec.push(ws);
+                };
+                vec.push(delim);
+                if let Some(ws) = ws2 {
+                    vec.push(ws);
+                };
+                vec.push(item);
+            }
+        };
+        Some(vec)
     }
 
-    // fn position(&self) -> Position {
-    //     let first = self.get(0);
-    //     match first {
-    //         Some(elem) => {
-    //             let span;
-    //             match elem {
-    //                 Statement::Directive(directive) => match directive {
-    //                     Directive::Base { kw, base_iri } => span = kw.span,
-    //                     Directive::Prefix {
-    //                         kw,
-    //                         prefix,
-    //                         prefix_iri,
-    //                     } => span = kw.span,
-    //                     Directive::Import { kw, predicate, map } => span = kw.span,
-    //                     Directive::Export { kw, predicate, map } => span = kw.span,
-    //                     Directive::Output { kw, predicates } => span = kw.span,
-    //                 },
-    //                 Statement::Fact { atom } => match atom {
-    //                     Atom::Atom { predicate, terms } => todo!(),
-    //                     Atom::InfixAtom { operation, lhs, rhs } => todo!(),
-    //                     Atom::Map(_) => todo!(),
-    //                 },
-    //                 Statement::Rule { head, body } => todo!(),
-    //             };
-    //         }
-    //         None => Position {
-    //             offset: 0,
-    //             line: 1,
-    //             column: 0,
-    //         },
-    //     }
-    // }
+    fn span(&self) -> Span {
+        self.span
+    }
 }
 
-impl<'a> AstNode for Statement<'a> {
-    fn children(&self) -> Vec<Node> {
-        match self {
-            Statement::Directive(directive) => directive.children(),
-            Statement::Fact { atom } => vec![Node::Atom(atom)],
-            Statement::Rule { head, body } => {
-                vec![Node::RuleHead(head), Node::RuleBody(body)]
-            }
+fn get_all_tokens(node: &dyn AstNode) -> Vec<&dyn AstNode> {
+    let mut vec = Vec::new();
+    if let Some(children) = node.children() {
+        for child in children {
+            vec.append(&mut get_all_tokens(child));
         }
+    } else {
+        vec.push(node);
+    };
+    vec
+}
+
+mod test {
+    use super::*;
+    use super::{atom::Atom, directive::Directive, named_tuple::NamedTuple, program::Program, statement::Statement, term::Term};
+    use crate::io::lexer::TokenKind;
+
+    macro_rules! s {
+        ($offset:literal,$line:literal,$str:literal) => {
+            unsafe { Span::new_from_raw_offset($offset, $line, $str, ()) }
+        };
     }
 
-    // fn position(&self) -> Position {
-    //     todo!()
-    // }
-}
-
-impl<'a> AstNode for Directive<'a> {
-    fn children(&self) -> Vec<Node> {
-        match self {
-            Directive::Base { kw, base_iri } => {
-                vec![Node::KeyWord(kw), Node::BaseIri(base_iri)]
-            }
-            Directive::Prefix {
-                kw,
-                prefix,
-                prefix_iri,
-            } => vec![
-                Node::KeyWord(kw),
-                Node::Prefix(prefix),
-                Node::PrefixIri(prefix_iri),
+    #[test]
+    fn ast_traversal() {
+        let input = "\
+            %! This is just a test file.\n\
+            %! So the documentation of the rules is not important.\n\
+            %% This is the prefix used for datatypes\n\
+            @prefix xsd: <http://www.w3.org/2001/XMLSchema#>.\n\
+            \n\
+            % Facts\n\
+            %% This is just an example predicate.\n\
+            somePredicate(ConstA, ConstB).\n\
+            \n\
+            % Rules\n\
+            %% This is just an example rule.\n\
+            someHead(?VarA) :- somePredicate(?VarA, ConstB).   % all constants that are in relation with ConstB\n";
+        let span = Span::new(input);
+        let ast = Program {
+            span,
+            tl_doc_comment: Some(Token { 
+                kind: TokenKind::TlDocComment,
+                span: s!(0, 1, "%! This is just a test file.\n%! So the documentation of the rules is not important.\n")
+            }),
+            statements: vec![
+                Statement::Directive(Directive::Prefix {
+                    span:s!(125,4,"@prefix xsd: <http://www.w3.org/2001/XMLSchema#>."),
+                    doc_comment:Some(Token {
+                        kind:TokenKind::DocComment,
+                        span:s!(84,3,"%% This is the prefix used for datatypes\n")
+                    }),
+                    kw: Token{
+                        kind:TokenKind::Prefix,
+                        span:s!(125,4,"@prefix")
+                    } ,
+                    ws1:Some(Token{
+                        kind:TokenKind::Whitespace,
+                        span:s!(132,4," ")
+                    }) ,
+                    prefix: Token {
+                        kind: TokenKind::PrefixIdent,
+                        span: s!(133, 4, "xsd:"),
+                    },
+                    ws2: Some(Token{
+                        kind:TokenKind::Whitespace,
+                        span:s!(137,4," ")
+                    }),
+                    prefix_iri: Token {
+                        kind: TokenKind::Iri,
+                        span: s!(138, 4, "<http://www.w3.org/2001/XMLSchema#>"),
+                    },
+                    ws3: None,
+                    dot: Token{
+                        kind:TokenKind::Dot,
+                        span:s!(173,4,".")
+                    }
+                }),
+                Statement::Whitespace(Token {
+                    kind: TokenKind::Whitespace,
+                    span: s!(174, 4, "\n\n"),
+                }),
+                Statement::Comment(Token {
+                    kind: TokenKind::Comment,
+                    span: s!(176, 6, "% Facts\n"),
+                }),
+                Statement::Fact {
+                    span:s!(222,8,"somePredicate(ConstA, ConstB)."),
+                    doc_comment: Some(Token {
+                        kind: TokenKind::DocComment,
+                        span:s!(184,7,"%% This is just an example predicate.\n")
+                    }),
+                    atom: Atom::Positive(NamedTuple {
+                        span: s!(222,8,"somePredicate(ConstA, ConstB)"),
+                        identifier: Token {
+                            kind: TokenKind::Ident,
+                            span: s!(222, 8, "somePredicate"),
+                        },
+                         ws1:None ,
+                        open_paren:Token{
+                            kind:TokenKind::OpenParen,
+                            span:s!(235,8,"(")
+                        } ,
+                         ws2:None ,
+                        terms: Some(List {
+                            span: s!(236, 8, "ConstA, ConstB"),
+                            first: Term::Primitive(Token {
+                                kind: TokenKind::Ident,
+                                span: s!(236, 8, "ConstA"),
+                            }),
+                            rest: Some(vec![(
+                                None,
+                                Token {
+                                    kind: TokenKind::Comma,
+                                    span: s!(242, 8, ","),
+                                },
+                                Some(Token {
+                                    kind: TokenKind::Whitespace,
+                                    span: s!(243, 8, " "),
+                                }),
+                                Term::Primitive(Token {
+                                    kind: TokenKind::Ident,
+                                    span: s!(244, 8, "ConstB"),
+                                }),
+                            )]),
+                        }),
+                        ws3: None ,
+                        close_paren:Token {
+                            kind: TokenKind::CloseParen,
+                            span:s!(250,8,")")
+                        }
+                    }),
+                    ws: None,
+                    dot: Token {
+                        kind: TokenKind::Dot,
+                        span: s!(251,8,".")
+                    }
+                },
+                Statement::Whitespace(Token {
+                    kind: TokenKind::Whitespace,
+                    span: s!(252, 8, "\n\n"),
+                }),
+                Statement::Comment(Token {
+                    kind: TokenKind::Comment,
+                    span: s!(254, 10, "% Rules\n"),
+                }),
+                Statement::Rule {
+                    span: s!(295,12,"someHead(?VarA) :- somePredicate(?VarA, ConstB)."),
+                    doc_comment: Some(Token { kind: TokenKind::DocComment, span: s!(262,11,"%% This is just an example rule.\n") }),
+                    head: List {
+                        span: s!(295, 12, "someHead(?VarA)"),
+                        first: Atom::Positive(NamedTuple {
+                            span: s!(295,12,"someHead(?VarA)"),
+                            identifier: Token {
+                                kind: TokenKind::Ident,
+                                span: s!(295, 12, "someHead"),
+                            },
+                            ws1: None,
+                            open_paren: Token { kind: TokenKind::OpenParen, span: s!(303,12,"(") },
+                            ws2: None,
+                            terms: Some(List {
+                                span: s!(304, 12, "?VarA"),
+                                first: Term::Variable(Token {
+                                    kind: TokenKind::Variable,
+                                    span: s!(304, 12, "?VarA"),
+                                }),
+                                rest: None,
+                            }),
+                            ws3: None,
+                            close_paren: Token { kind: TokenKind::CloseParen, span: s!(309,12,")") },
+                        }),
+                        rest: None,
+                    },
+                    ws1: Some(Token{kind:TokenKind::Whitespace,span:s!(310,12," ")}),
+                    arrow: Token{kind:TokenKind::Arrow, span:s!(311,12,":-")},
+                    ws2: Some(Token{kind:TokenKind::Whitespace,span:s!(313,12," ")}),
+                    body: List {
+                        span: s!(314, 12, "somePredicate(?VarA, ConstB)"),
+                        first: Atom::Positive(NamedTuple {
+                            span: s!(314, 12,"somePredicate(?VarA, ConstB)"),
+                            identifier: Token {
+                                kind: TokenKind::Ident,
+                                span: s!(314, 12, "somePredicate"),
+                            },
+                            ws1: None,
+                            open_paren: Token { kind: TokenKind::OpenParen, span: s!(327,12,"(") },
+                            ws2: None,
+                            terms: Some(List {
+                                span: s!(328, 12, "?Var, ConstB"),
+                                first: Term::Variable(Token {
+                                    kind: TokenKind::Variable,
+                                    span: s!(328, 12, "?VarA"),
+                                }),
+                                rest: Some(vec![(
+                                    None,
+                                    Token {
+                                        kind: TokenKind::Comma,
+                                        span: s!(333, 12, ","),
+                                    },
+                                    Some(Token {
+                                        kind: TokenKind::Whitespace,
+                                        span: s!(334, 12, " "),
+                                    }),
+                                    Term::Primitive(Token {
+                                        kind: TokenKind::Ident,
+                                        span: s!(335, 12, "ConstB"),
+                                    }),
+                                )]),
+                            }),
+                            ws3: None,
+                            close_paren: Token { kind: TokenKind::CloseParen, span: s!(341, 12,")") },
+                        }),
+                        rest: None,
+                    },
+                    ws3: None,
+                    dot: Token{kind:TokenKind::Dot,span:s!(342, 12,".")},
+                },
+                Statement::Whitespace(Token {
+                    kind: TokenKind::Whitespace,
+                    span: s!(343, 12, "   "),
+                }),
+                Statement::Comment(Token {
+                    kind: TokenKind::Comment,
+                    span: s!(346, 12, "% all constants that are in relation with ConstB\n"),
+                }),
             ],
-            Directive::Import { kw, predicate, map } => vec![
-                Node::KeyWord(kw),
-                Node::Predicate(predicate),
-                Node::Map(map),
-            ],
-            Directive::Export { kw, predicate, map } => vec![
-                Node::KeyWord(kw),
-                Node::Predicate(predicate),
-                Node::Map(map),
-            ],
-            Directive::Output { kw, predicates } => {
-                vec![Node::KeyWord(kw), Node::Predicates(predicates)]
+        };
+
+        let tokens1 = get_all_tokens(&ast);
+        assert_eq!(input, {
+            let mut result = String::new();
+            for token in tokens1 {
+                result.push_str(token.span().fragment());
             }
-        }
+            result
+        });
     }
-
-    // fn position(&self) -> Position {
-    //     todo!()
-    // }
-}
-
-impl<'a> AstNode for Atom<'a> {
-    fn children(&self) -> Vec<Node> {
-        match self {
-            Atom::Atom(named_tuple) => {
-                vec![
-                    Node::Identifier(&named_tuple.identifier),
-                    Node::Terms(&named_tuple.terms),
-                ]
-            }
-            Atom::NegativeAtom(named_tuple) => {
-                vec![
-                    Node::Identifier(&named_tuple.identifier),
-                    Node::Terms(&named_tuple.terms),
-                ]
-            }
-            Atom::InfixAtom {
-                operation,
-                lhs,
-                rhs,
-            } => vec![Node::Operation(operation), Node::Lhs(lhs), Node::Rhs(rhs)],
-            Atom::Map(map) => map.children(),
-        }
-    }
-
-    // fn position(&self) -> Position {
-    //     todo!()
-    // }
-}
-
-impl<'a> AstNode for Term<'a> {
-    fn children(&self) -> Vec<Node> {
-        match self {
-            Term::Primitive(primitive) => vec![Node::Primitive(primitive)],
-            Term::Variable(var) => vec![Node::Variable(var)],
-            Term::Binary {
-                operation,
-                lhs,
-                rhs,
-            } => vec![Node::Operation(operation), Node::Lhs(lhs), Node::Rhs(rhs)],
-            Term::Unary { operation, term } => vec![Node::Operation(operation), Node::Term(term)],
-            Term::Aggregation { operation, terms } => {
-                vec![Node::Operation(operation), Node::Terms(terms)]
-            }
-            Term::Function(NamedTuple { identifier, terms }) => {
-                vec![Node::Identifier(identifier), Node::Terms(terms)]
-            }
-            Term::Map(map) => map.children(),
-        }
-    }
-
-    // fn position(&self) -> Position {
-    //     todo!()
-    // }
-}
-
-impl<'a> AstNode for Map<'a> {
-    fn children(&self) -> Vec<Node> {
-        vec![
-            Node::MapIdentifier(&self.identifier),
-            Node::Pairs(&self.pairs),
-        ]
-    }
-
-    // fn position(&self) -> Position {
-    //     todo!()
-    // }
 }
