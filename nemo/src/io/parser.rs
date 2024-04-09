@@ -3413,8 +3413,7 @@ mod new {
 
         #[test]
         fn parser_test() {
-            let str =
-                std::fs::read_to_string("../testfile.rls").expect("`../testfile.rls` not found");
+            let str = std::fs::read_to_string("../testfile.rls").expect("testfile not found");
             let input = Span::new(str.as_str());
             dbg!(parse_program(input));
             // assert!(false);
