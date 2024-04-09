@@ -100,4 +100,13 @@ impl AstNode for Term<'_> {
             Term::Map(map) => map.span(),
         }
     }
+
+    fn position(&self) -> Position {
+        let span = self.span();
+        Position {
+            offset: span.location_offset(),
+            line: span.location_line(),
+            column: span.get_column() as u32,
+        }
+    }
 }
