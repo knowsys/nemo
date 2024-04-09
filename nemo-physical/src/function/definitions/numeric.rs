@@ -16,28 +16,34 @@ use self::{
         numeric_absolute_double, numeric_addition_double, numeric_ceil_double, numeric_cos_double,
         numeric_division_double, numeric_floor_double, numeric_greaterthan_double,
         numeric_greaterthaneq_double, numeric_lessthan_double, numeric_lessthaneq_double,
-        numeric_logarithm_double, numeric_multiplication_double, numeric_negation_double,
-        numeric_power_double, numeric_remainder_double, numeric_round_double, numeric_sin_double,
-        numeric_squareroot_double, numeric_subtraction_double, numeric_tan_double,
+        numeric_logarithm_double, numeric_maximum_double, numeric_minimum_double,
+        numeric_multiplication_double, numeric_negation_double, numeric_power_double,
+        numeric_product_double, numeric_remainder_double, numeric_round_double, numeric_sin_double,
+        numeric_squareroot_double, numeric_subtraction_double, numeric_sum_double,
+        numeric_tan_double, numeric_tnorm_lukasiewicz_double,
     },
     float::{
         numeric_absolute_float, numeric_addition_float, numeric_ceil_float, numeric_cos_float,
         numeric_division_float, numeric_floor_float, numeric_greaterthan_float,
         numeric_greaterthaneq_float, numeric_lessthan_float, numeric_lessthaneq_float,
-        numeric_logarithm_float, numeric_multiplication_float, numeric_negation_float,
-        numeric_power_float, numeric_remainder_float, numeric_round_float, numeric_sin_float,
-        numeric_squareroot_float, numeric_subtraction_float, numeric_tan_float,
+        numeric_logarithm_float, numeric_maximum_float, numeric_minimum_float,
+        numeric_multiplication_float, numeric_negation_float, numeric_power_float,
+        numeric_product_float, numeric_remainder_float, numeric_round_float, numeric_sin_float,
+        numeric_squareroot_float, numeric_subtraction_float, numeric_sum_float, numeric_tan_float,
+        numeric_tnorm_lukasiewicz_float,
     },
     integer64::{
-        numeric_absolute_integer64, numeric_addition_integer64, numeric_division_integer64,
+        numeric_absolute_integer64, numeric_addition_integer64, numeric_bitwise_and,
+        numeric_bitwise_or, numeric_bitwise_xor, numeric_division_integer64,
         numeric_greaterthan_integer64, numeric_greaterthaneq_integer64, numeric_lessthan_integer64,
-        numeric_lessthaneq_integer64, numeric_logarithm_integer64,
-        numeric_multiplication_integer64, numeric_negation_integer64, numeric_power_integer64,
-        numeric_remainder_integer64, numeric_squareroot_integer64, numeric_subtraction_integer64,
+        numeric_lessthaneq_integer64, numeric_logarithm_integer64, numeric_maximum_integer64,
+        numeric_minimum_integer64, numeric_multiplication_integer64, numeric_negation_integer64,
+        numeric_power_integer64, numeric_product_integer64, numeric_remainder_integer64,
+        numeric_squareroot_integer64, numeric_subtraction_integer64, numeric_sum_integer64,
     },
 };
 
-use super::{BinaryFunction, FunctionTypePropagation, UnaryFunction};
+use super::{BinaryFunction, FunctionTypePropagation, NaryFunction, UnaryFunction};
 
 /// Numeric value
 ///
@@ -115,6 +121,54 @@ impl NumericPair {
             | ValueDomain::Int => Some(NumericPair::Integer(
                 parameter_first.to_i64_unchecked(),
                 parameter_second.to_i64()?,
+            )),
+        }
+    }
+}
+
+/// Defines a list of values on which numeric functions are defined
+enum NumericList {
+    Integer(Vec<i64>),
+    Float(Vec<Float>),
+    Double(Vec<Double>),
+}
+
+impl NumericList {
+    /// Checks if all parameters are numeric and of the same type.
+    /// If this is the case, returns a list of values of that type.
+    /// Returs `None` otherwise.
+    pub fn from_any_list(parameters: &[AnyDataValue]) -> Option<NumericList> {
+        match parameters.first()?.value_domain() {
+            ValueDomain::PlainString
+            | ValueDomain::Null
+            | ValueDomain::LanguageTaggedString
+            | ValueDomain::Tuple
+            | ValueDomain::Map
+            | ValueDomain::Boolean
+            | ValueDomain::Other
+            | ValueDomain::Iri => None,
+            ValueDomain::Float => Some(NumericList::Float(
+                parameters
+                    .iter()
+                    .map(|p| p.to_f32().map(Float::from_number))
+                    .collect::<Option<Vec<_>>>()?,
+            )),
+            ValueDomain::Double => Some(NumericList::Double(
+                parameters
+                    .iter()
+                    .map(|p| p.to_f64().map(Double::from_number))
+                    .collect::<Option<_>>()?,
+            )),
+            ValueDomain::UnsignedLong => None, // numeric, but cannot be represented in StorageValues as used in NumericPair
+            ValueDomain::NonNegativeLong
+            | ValueDomain::UnsignedInt
+            | ValueDomain::NonNegativeInt
+            | ValueDomain::Long
+            | ValueDomain::Int => Some(NumericList::Integer(
+                parameters
+                    .iter()
+                    .map(|p| p.to_i64())
+                    .collect::<Option<_>>()?,
             )),
         }
     }
@@ -239,6 +293,83 @@ impl BinaryFunction for NumericDivision {
 
     fn type_propagation(&self) -> FunctionTypePropagation {
         FunctionTypePropagation::Preserve
+    }
+}
+
+/// Bitwise and
+///
+/// For a list of integers,
+/// returns the integer resulting from perfoming an "and" on their bit representation.
+///
+/// Returns `None` if the input parameters are not integers or no input parameters are given.
+#[derive(Debug, Copy, Clone)]
+pub struct BitAnd;
+impl NaryFunction for BitAnd {
+    fn evaluate(&self, parameters: &[AnyDataValue]) -> Option<AnyDataValue> {
+        if let Some(list) = NumericList::from_any_list(parameters) {
+            match list {
+                NumericList::Integer(integers) => numeric_bitwise_and(&integers),
+                _ => None,
+            }
+        } else {
+            None
+        }
+    }
+
+    fn type_propagation(&self) -> FunctionTypePropagation {
+        FunctionTypePropagation::KnownOutput(StorageTypeName::Int64.bitset())
+    }
+}
+
+/// Bitwise or
+///
+/// For a list of integers,
+/// returns the integer resulting from perfoming an "or" on their bit representation.
+///
+/// Returns the zero from the integer value space if no parameters are given.
+/// Returns `None` if the input parameters are not integers or no input parameters are given.
+#[derive(Debug, Copy, Clone)]
+pub struct BitOr;
+impl NaryFunction for BitOr {
+    fn evaluate(&self, parameters: &[AnyDataValue]) -> Option<AnyDataValue> {
+        if let Some(list) = NumericList::from_any_list(parameters) {
+            match list {
+                NumericList::Integer(integers) => numeric_bitwise_or(&integers),
+                _ => None,
+            }
+        } else {
+            None
+        }
+    }
+
+    fn type_propagation(&self) -> FunctionTypePropagation {
+        FunctionTypePropagation::KnownOutput(StorageTypeName::Int64.bitset())
+    }
+}
+
+/// Bitwise xor
+///
+/// For a list of integers,
+/// returns the integer resulting from perfoming an "xor" on their bit representation.
+///
+/// Returns zero from the integer value space if no parameters are given.
+/// Returns `None` if the input parameters are not integers or no input parameters are given.
+#[derive(Debug, Copy, Clone)]
+pub struct BitXor;
+impl NaryFunction for BitXor {
+    fn evaluate(&self, parameters: &[AnyDataValue]) -> Option<AnyDataValue> {
+        if let Some(list) = NumericList::from_any_list(parameters) {
+            match list {
+                NumericList::Integer(integers) => numeric_bitwise_xor(&integers),
+                _ => None,
+            }
+        } else {
+            None
+        }
+    }
+
+    fn type_propagation(&self) -> FunctionTypePropagation {
+        FunctionTypePropagation::KnownOutput(StorageTypeName::Int64.bitset())
     }
 }
 
@@ -704,5 +835,140 @@ impl BinaryFunction for NumericGreaterthaneq {
                 .bitset()
                 .union(StorageTypeName::Id64.bitset()),
         )
+    }
+}
+
+/// Numeric summation
+///
+/// Returns the sum of the given parameters.
+///
+/// Returns `None` if the input parameters are not of the same numeric type
+/// or no input parameters are given.
+/// Returns `None` if the result (or an intermediate result) cannot be represented
+/// within the range of the numeric value type.
+#[derive(Debug, Copy, Clone)]
+pub struct NumericSum;
+impl NaryFunction for NumericSum {
+    fn evaluate(&self, parameters: &[AnyDataValue]) -> Option<AnyDataValue> {
+        if let Some(list) = NumericList::from_any_list(parameters) {
+            match &list {
+                NumericList::Integer(values) => numeric_sum_integer64(values),
+                NumericList::Float(values) => numeric_sum_float(values),
+                NumericList::Double(values) => numeric_sum_double(values),
+            }
+        } else {
+            None
+        }
+    }
+
+    fn type_propagation(&self) -> FunctionTypePropagation {
+        FunctionTypePropagation::Preserve
+    }
+}
+
+/// Numeric product
+///
+/// Returns the product of the given parameters.
+///
+/// Returns `None` if the input parameters are not of the same numeric type
+/// or no input parameters are given.
+/// Returns `None` if the result (or an intermediate result) cannot be represented
+/// within the range of the numeric value type.
+#[derive(Debug, Copy, Clone)]
+pub struct NumericProduct;
+impl NaryFunction for NumericProduct {
+    fn evaluate(&self, parameters: &[AnyDataValue]) -> Option<AnyDataValue> {
+        if let Some(list) = NumericList::from_any_list(parameters) {
+            match &list {
+                NumericList::Integer(values) => numeric_product_integer64(values),
+                NumericList::Float(values) => numeric_product_float(values),
+                NumericList::Double(values) => numeric_product_double(values),
+            }
+        } else {
+            None
+        }
+    }
+
+    fn type_propagation(&self) -> FunctionTypePropagation {
+        FunctionTypePropagation::Preserve
+    }
+}
+
+/// Numeric minimum
+///
+/// Returns the minimum of the given parameters.
+///
+/// Returns `None` if the input parameters are not of the same numeric type
+/// or no input parameters are given.
+#[derive(Debug, Copy, Clone)]
+pub struct NumericMinimum;
+impl NaryFunction for NumericMinimum {
+    fn evaluate(&self, parameters: &[AnyDataValue]) -> Option<AnyDataValue> {
+        if let Some(list) = NumericList::from_any_list(parameters) {
+            match &list {
+                NumericList::Integer(values) => numeric_minimum_integer64(values),
+                NumericList::Float(values) => numeric_minimum_float(values),
+                NumericList::Double(values) => numeric_minimum_double(values),
+            }
+        } else {
+            None
+        }
+    }
+
+    fn type_propagation(&self) -> FunctionTypePropagation {
+        FunctionTypePropagation::Preserve
+    }
+}
+
+/// Numeric maximum
+///
+/// Returns the maximum of the given parameters.
+///
+/// Returns `None` if the input parameters are not of the same numeric type
+/// or no input parameters are given.
+#[derive(Debug, Copy, Clone)]
+pub struct NumericMaximum;
+impl NaryFunction for NumericMaximum {
+    fn evaluate(&self, parameters: &[AnyDataValue]) -> Option<AnyDataValue> {
+        if let Some(list) = NumericList::from_any_list(parameters) {
+            match &list {
+                NumericList::Integer(values) => numeric_maximum_integer64(values),
+                NumericList::Float(values) => numeric_maximum_float(values),
+                NumericList::Double(values) => numeric_maximum_double(values),
+            }
+        } else {
+            None
+        }
+    }
+
+    fn type_propagation(&self) -> FunctionTypePropagation {
+        FunctionTypePropagation::Preserve
+    }
+}
+
+/// Lukasiewicz t-norm
+///
+/// Returns the Lukasiewicz t-norm of the given parameters.
+///
+/// Returns `None` if the input parameters are not of the same numeric type
+/// or no input parameters are given.
+/// Returns `None` if the input parameters are not of a floating point type.
+#[derive(Debug, Copy, Clone)]
+pub struct NumericLukasiewicz;
+impl NaryFunction for NumericLukasiewicz {
+    fn evaluate(&self, parameters: &[AnyDataValue]) -> Option<AnyDataValue> {
+        if let Some(list) = NumericList::from_any_list(parameters) {
+            match &list {
+                NumericList::Integer(_) => None,
+                NumericList::Float(values) => numeric_tnorm_lukasiewicz_float(values),
+                NumericList::Double(values) => numeric_tnorm_lukasiewicz_double(values),
+            }
+        } else {
+            None
+        }
+    }
+
+    fn type_propagation(&self) -> FunctionTypePropagation {
+        FunctionTypePropagation::Preserve
     }
 }

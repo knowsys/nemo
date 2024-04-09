@@ -5,40 +5,36 @@ use crate::{
     datavalues::{AnyDataValue, DataValue},
 };
 
-use super::{BinaryFunction, FunctionTypePropagation, UnaryFunction};
+use super::{FunctionTypePropagation, NaryFunction, UnaryFunction};
 
-/// Given two [AnyDataValue]s,
-/// check if both are boolean and return a pair of [bool]
+/// Given a list of [AnyDataValue]s,
+/// check if all of them are boolean and return a list of [bool]
 /// if this is the case.
 /// Returns `None` otherwise.
-fn bool_pair_from_any(
-    parameter_first: AnyDataValue,
-    parameter_second: AnyDataValue,
-) -> Option<(bool, bool)> {
-    if let Some(first_string) = parameter_first.to_boolean() {
-        if let Some(second_string) = parameter_second.to_boolean() {
-            return Some((first_string, second_string));
-        }
-    }
-
-    None
+fn bool_list_from_any(parameters: &[AnyDataValue]) -> Option<Vec<bool>> {
+    let result = parameters
+        .iter()
+        .map(|parameter| parameter.to_boolean())
+        .collect::<Option<Vec<_>>>()?;
+    Some(result)
 }
 
 /// Boolean conjunction
 ///
-/// Returns `true` if both of its inputs are `true`.
+/// Return `true` if all of its inputs are `true`.
 ///
+/// Returns `true` if no parameters are given.
 /// Returns `None` if one of the inputs is not in the boolean value range.
 #[derive(Debug, Copy, Clone)]
 pub struct BooleanConjunction;
-impl BinaryFunction for BooleanConjunction {
-    fn evaluate(
-        &self,
-        parameter_first: AnyDataValue,
-        parameter_second: AnyDataValue,
-    ) -> Option<AnyDataValue> {
-        bool_pair_from_any(parameter_first, parameter_second)
-            .map(|(first_bool, second_bool)| AnyDataValue::new_boolean(first_bool && second_bool))
+impl NaryFunction for BooleanConjunction {
+    fn evaluate(&self, parameters: &[AnyDataValue]) -> Option<AnyDataValue> {
+        if let Some(bools) = bool_list_from_any(parameters) {
+            let result = bools.into_iter().all(|bool| bool);
+            Some(AnyDataValue::new_boolean(result))
+        } else {
+            None
+        }
     }
 
     fn type_propagation(&self) -> FunctionTypePropagation {
@@ -53,19 +49,20 @@ impl BinaryFunction for BooleanConjunction {
 
 /// Boolean disjunction
 ///
-/// Returns `true` if at least one of its inputs is `true`.
+/// Return `true` if one of its inputs is `true`.
 ///
+/// Returns `false` if no parameters are given.
 /// Returns `None` if one of the inputs is not in the boolean value range.
 #[derive(Debug, Copy, Clone)]
 pub struct BooleanDisjunction;
-impl BinaryFunction for BooleanDisjunction {
-    fn evaluate(
-        &self,
-        parameter_first: AnyDataValue,
-        parameter_second: AnyDataValue,
-    ) -> Option<AnyDataValue> {
-        bool_pair_from_any(parameter_first, parameter_second)
-            .map(|(first_bool, second_bool)| AnyDataValue::new_boolean(first_bool || second_bool))
+impl NaryFunction for BooleanDisjunction {
+    fn evaluate(&self, parameters: &[AnyDataValue]) -> Option<AnyDataValue> {
+        if let Some(bools) = bool_list_from_any(parameters) {
+            let result = bools.into_iter().any(|bool| bool);
+            Some(AnyDataValue::new_boolean(result))
+        } else {
+            None
+        }
     }
 
     fn type_propagation(&self) -> FunctionTypePropagation {

@@ -1169,7 +1169,7 @@ impl<'a> RuleParser<'a> {
                             (self.parenthesised(self.parse_term()))(remainder)?;
 
                         Ok((remainder, Term::Unary(op, Box::new(subterm))))
-                    } else if let Ok(op) = BinaryOperation::construct_from_name(&name.0) {
+                    } else if let Some(op) = BinaryOperation::construct_from_name(&name.0) {
                         let (remainder, (left, _, right)) = (self.parenthesised(tuple((
                             self.parse_term(),
                             self.parse_comma(),
@@ -1184,6 +1184,32 @@ impl<'a> RuleParser<'a> {
                                 rhs: Box::new(right),
                             },
                         ))
+                    } else if let Some(op) = TernaryOperation::construct_from_name(&name.0) {
+                        let (remainder, (first, _, second, _, third)) =
+                            (self.parenthesised(tuple((
+                                self.parse_term(),
+                                self.parse_comma(),
+                                self.parse_term(),
+                                self.parse_comma(),
+                                self.parse_term(),
+                            ))))(remainder)?;
+
+                        Ok((
+                            remainder,
+                            Term::Ternary {
+                                operation: op,
+                                first: Box::new(first),
+                                second: Box::new(second),
+                                third: Box::new(third),
+                            },
+                        ))
+                    } else if let Some(op) = NaryOperation::construct_from_name(&name.0) {
+                        let (remainder, subterms) = (self.parenthesised(separated_list0(
+                            self.parse_comma(),
+                            self.parse_term(),
+                        )))(remainder)?;
+
+                        Ok((remainder, Term::Nary {operation: op, parameters: subterms}))
                     } else {
                         let (remainder, subterms) = (self.parenthesised(separated_list0(
                             self.parse_comma(),

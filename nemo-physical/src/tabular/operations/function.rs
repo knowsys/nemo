@@ -851,10 +851,10 @@ mod test {
         let mut assigment = FunctionAssignment::new();
         assigment.insert(
             marker_con,
-            FunctionTree::string_concatenation(
+            FunctionTree::string_concatenation(vec![
                 FunctionTree::reference(marker_str),
                 FunctionTree::canonical_string(FunctionTree::reference(marker_int)),
-            ),
+            ]),
         );
 
         let function_generator = GeneratorFunction::new(markers, &assigment);

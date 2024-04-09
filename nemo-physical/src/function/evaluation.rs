@@ -9,7 +9,10 @@ use crate::{
 };
 
 use super::{
-    definitions::{BinaryFunction, BinaryFunctionEnum, UnaryFunction, UnaryFunctionEnum},
+    definitions::{
+        BinaryFunction, BinaryFunctionEnum, NaryFunction, NaryFunctionEnum, TernaryFunction,
+        TernaryFunctionEnum, UnaryFunction, UnaryFunctionEnum,
+    },
     tree::FunctionTree,
 };
 
@@ -40,6 +43,10 @@ pub(crate) enum StackOperation {
     UnaryFunction(UnaryFunctionEnum),
     /// Evaluate the given binary function on the top two elements in the stack.
     BinaryFunction(BinaryFunctionEnum),
+    /// Evaluate the given ternary function on the top three elements in the stack.
+    TernaryFunction(TernaryFunctionEnum),
+    /// Evaluate the given n-ary function on the top n elements in the stack.
+    NaryFunction(NaryFunctionEnum, usize),
 }
 
 /// Representation of a [FunctionTree] as a stack program
@@ -76,6 +83,20 @@ impl StackProgram {
                     }
 
                     current_height -= 1;
+                }
+                StackOperation::TernaryFunction(_) => {
+                    if current_height <= 2 {
+                        return Err(Error::MalformedStackProgram);
+                    }
+
+                    current_height -= 2;
+                }
+                StackOperation::NaryFunction(_, parameter_count) => {
+                    if current_height < *parameter_count {
+                        return Err(Error::MalformedStackProgram);
+                    }
+
+                    current_height -= parameter_count - 1;
                 }
             }
 
@@ -134,6 +155,28 @@ impl StackProgram {
 
                     operations.push(StackOperation::BinaryFunction(*function));
                 }
+                FunctionTree::Ternary {
+                    function,
+                    first,
+                    second,
+                    third,
+                } => {
+                    build_operations(first, this, reference_map, operations);
+                    build_operations(second, this, reference_map, operations);
+                    build_operations(third, this, reference_map, operations);
+
+                    operations.push(StackOperation::TernaryFunction(*function));
+                }
+                FunctionTree::Nary {
+                    function,
+                    parameters,
+                } => {
+                    for parameter in parameters {
+                        build_operations(parameter, this, reference_map, operations);
+                    }
+
+                    operations.push(StackOperation::NaryFunction(*function, parameters.len()))
+                }
             }
         }
 
@@ -176,6 +219,32 @@ impl StackProgram {
                         .expect("This program is valid, so the stack cannot be empty.");
 
                     stack.push(function.evaluate(first_input, second_input)?);
+                }
+                StackOperation::TernaryFunction(function) => {
+                    let third_input = stack
+                        .pop()
+                        .expect("This program is valid, so the stack cannot be empty.");
+                    let second_input = stack
+                        .pop()
+                        .expect("This program is valid, so the stack cannot be empty.");
+                    let first_input = stack
+                        .pop()
+                        .expect("This program is valid, so the stack cannot be empty.");
+
+                    stack.push(function.evaluate(first_input, second_input, third_input)?);
+                }
+                StackOperation::NaryFunction(function, parameter_count) => {
+                    let mut inputs = Vec::new();
+                    for _ in 0..*parameter_count {
+                        inputs.push(
+                            stack
+                                .pop()
+                                .expect("This program is valid, so the stack cannot be empty."),
+                        );
+                    }
+                    inputs.reverse();
+
+                    stack.push(function.evaluate(&inputs)?);
                 }
             }
         }
@@ -272,10 +341,10 @@ mod test {
         );
 
         let tree_concat_contains = Function::string_contains(
-            Function::string_concatenation(
+            Function::string_concatenation(vec![
                 Function::constant(any_string("algebra")),
                 Function::constant(any_string("instruction")),
-            ),
+            ]),
             Function::constant(any_string("brain")),
         );
         evaluate_expect(&tree_concat_contains, Some(AnyDataValue::new_boolean(true)));
@@ -743,20 +812,24 @@ mod test {
             Function::constant(any_int(5)),
         );
 
-        let tree_conj_true =
-            Function::boolean_conjunction(Function::constant(any_bool(true)), tree_true.clone());
+        let tree_conj_true = Function::boolean_conjunction(vec![
+            Function::constant(any_bool(true)),
+            tree_true.clone(),
+        ]);
         evaluate_bool_expect(&tree_conj_true, true);
 
-        let tree_conj_false =
-            Function::boolean_conjunction(tree_false.clone(), Function::constant(any_bool(true)));
+        let tree_conj_false = Function::boolean_conjunction(vec![
+            tree_false.clone(),
+            Function::constant(any_bool(true)),
+        ]);
         evaluate_bool_expect(&tree_conj_false, false);
 
         let tree_disj_true =
-            Function::boolean_disjunction(Function::constant(any_bool(false)), tree_true);
+            Function::boolean_disjunction(vec![Function::constant(any_bool(false)), tree_true]);
         evaluate_bool_expect(&tree_disj_true, true);
 
         let tree_disj_false =
-            Function::boolean_disjunction(tree_false, Function::constant(any_bool(false)));
+            Function::boolean_disjunction(vec![tree_false, Function::constant(any_bool(false))]);
         evaluate_bool_expect(&tree_disj_false, false);
 
         let tree_neg_true = Function::boolean_negation(Function::constant(any_bool(false)));

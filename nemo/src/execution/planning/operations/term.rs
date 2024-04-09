@@ -4,7 +4,9 @@ use nemo_physical::{function::tree::FunctionTree, tabular::operations::Operation
 
 use crate::{
     execution::rule_execution::VariableTranslation,
-    model::{BinaryOperation, PrimitiveTerm, Term, UnaryOperation},
+    model::{
+        BinaryOperation, NaryOperation, PrimitiveTerm, Term, TernaryOperation, UnaryOperation,
+    },
 };
 
 /// Helper function to translate a [Term] into a [FunctionTree]
@@ -42,17 +44,8 @@ pub(super) fn term_to_function_tree(
                 BinaryOperation::NumericRemainder => FunctionTree::numeric_remainder(left, right),
                 BinaryOperation::NumericLogarithm => FunctionTree::numeric_logarithm(left, right),
                 BinaryOperation::StringCompare => FunctionTree::string_compare(left, right),
-                BinaryOperation::StringConcatenation => {
-                    FunctionTree::string_concatenation(left, right)
-                }
                 BinaryOperation::StringContains => FunctionTree::string_contains(left, right),
                 BinaryOperation::StringSubstring => FunctionTree::string_subtstring(left, right),
-                BinaryOperation::BooleanConjunction => {
-                    FunctionTree::boolean_conjunction(left, right)
-                }
-                BinaryOperation::BooleanDisjunction => {
-                    FunctionTree::boolean_disjunction(left, right)
-                }
                 BinaryOperation::Equal => FunctionTree::equals(left, right),
                 BinaryOperation::Unequals => FunctionTree::unequals(left, right),
                 BinaryOperation::NumericGreaterthan => {
@@ -103,6 +96,50 @@ pub(super) fn term_to_function_tree(
             }
         }
         Term::Aggregation(_) => unimplemented!("Aggregates are not implement yet"),
-        Term::Function(_, _) => unimplemented!("Function symbols are not supported yet"),
+        Term::Function(name, _) => unimplemented!(
+            "Function symbols are not supported yet. {} is not recognized as a builtin function.",
+            name
+        ),
+        Term::Ternary {
+            operation,
+            first,
+            second,
+            third,
+        } => {
+            let first = term_to_function_tree(translation, first);
+            let second = term_to_function_tree(translation, second);
+            let third = term_to_function_tree(translation, third);
+
+            match operation {
+                TernaryOperation::StringSubstringLength => {
+                    FunctionTree::string_subtstring_length(first, second, third)
+                }
+            }
+        }
+        Term::Nary {
+            operation,
+            parameters,
+        } => {
+            let parameters = parameters
+                .iter()
+                .map(|term| term_to_function_tree(translation, term))
+                .collect::<Vec<_>>();
+
+            match operation {
+                NaryOperation::StringConcatenation => {
+                    FunctionTree::string_concatenation(parameters)
+                }
+                NaryOperation::BooleanConjunction => FunctionTree::boolean_conjunction(parameters),
+                NaryOperation::BooleanDisjunction => FunctionTree::boolean_disjunction(parameters),
+                NaryOperation::BitAnd => FunctionTree::bit_and(parameters),
+                NaryOperation::BitOr => FunctionTree::bit_or(parameters),
+                NaryOperation::BitXor => FunctionTree::bit_xor(parameters),
+                NaryOperation::NumericSum => FunctionTree::numeric_sum(parameters),
+                NaryOperation::NumericProduct => FunctionTree::numeric_product(parameters),
+                NaryOperation::NumericMinimum => FunctionTree::numeric_minimum(parameters),
+                NaryOperation::NumericMaximum => FunctionTree::numeric_maximum(parameters),
+                NaryOperation::NumericLukasiewicz => FunctionTree::numeric_lukasiewicz(parameters),
+            }
+        }
     }
 }
