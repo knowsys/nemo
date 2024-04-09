@@ -26,4 +26,12 @@ impl AstNode for Program<'_> {
     fn span(&self) -> Span {
         self.span
     }
+
+    fn position(&self) -> Position {
+        Position {
+            offset: self.span.location_offset(),
+            line: self.span.location_line(),
+            column: self.span.get_column() as u32,
+        }
+    }
 }

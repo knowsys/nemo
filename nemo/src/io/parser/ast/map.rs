@@ -69,4 +69,11 @@ impl<K: AstNode + Debug, V: AstNode + Debug> AstNode for Pair<'_, K, V> {
     fn span(&self) -> Span {
         self.span
     }
+    fn position(&self) -> Position {
+        Position {
+            offset: self.span.location_offset(),
+            line: self.span.location_line(),
+            column: self.span.get_column() as u32,
+        }
+    }
 }
