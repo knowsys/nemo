@@ -8,3 +8,7 @@ q2(?X) :- p2(?X).
 q(?X) :- q1(?X), ~q2(?X).
 
 r(?X) :- q(?X).
+@export q1 :- csv {}.
+@export r :- csv {}.
+@export q :- csv {}.
+@export q2 :- csv {}.

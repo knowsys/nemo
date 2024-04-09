@@ -48,7 +48,7 @@ impl CompressionFormat {
     ///
     /// The path is used as is. To make sure the path ends in the compression-format specific
     /// extension, use [CompressionFormat::path_with_extension].
-    pub(crate) fn writer(
+    pub(crate) fn file_writer(
         &self,
         path: PathBuf,
         options: OpenOptions,

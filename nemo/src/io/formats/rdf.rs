@@ -17,12 +17,15 @@ use crate::{
     },
     model::{
         FileFormat, RdfVariant, PARAMETER_NAME_BASE, PARAMETER_NAME_COMPRESSION,
-        PARAMETER_NAME_FORMAT, PARAMETER_NAME_RESOURCE, VALUE_FORMAT_ANY, VALUE_FORMAT_SKIP,
+        PARAMETER_NAME_FORMAT, PARAMETER_NAME_LIMIT, PARAMETER_NAME_RESOURCE, VALUE_FORMAT_ANY,
+        VALUE_FORMAT_SKIP,
     },
 };
 
 use super::{
-    import_export::{ImportExportError, ImportExportHandler, ImportExportHandlers},
+    import_export::{
+        ImportExportError, ImportExportHandler, ImportExportHandlers, ImportExportResource,
+    },
     rdf_reader::RdfReader,
     rdf_writer::RdfWriter,
 };
@@ -30,7 +33,7 @@ use super::{
 use thiserror::Error;
 
 /// Errors that can occur when reading/writing RDF resources and converting them
-/// to/from [`AnyDataValue`]s.
+/// to/from [AnyDataValue]s.
 #[allow(variant_size_differences)]
 #[derive(Error, Debug)]
 pub enum RdfFormatError {
@@ -63,18 +66,18 @@ pub enum RdfFormatError {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum RdfValueFormat {
     /// General format that accepts any RDF term.
-    ANYTHING,
+    Anything,
     /// Special format to indicate that the value should be skipped as if the whole
     /// column where not there.
-    SKIP,
+    Skip,
 }
 impl RdfValueFormat {
     /// Try to convert a string name for a value format to one of the supported
     /// RDF value formats, or return an error for unsupported formats.
     pub(super) fn from_string(name: &str) -> Result<Self, ImportExportError> {
         match name {
-            VALUE_FORMAT_ANY => Ok(RdfValueFormat::ANYTHING),
-            VALUE_FORMAT_SKIP => Ok(RdfValueFormat::SKIP),
+            VALUE_FORMAT_ANY => Ok(RdfValueFormat::Anything),
+            VALUE_FORMAT_SKIP => Ok(RdfValueFormat::Skip),
             _ => Err(ImportExportError::InvalidValueFormat {
                 value_format: name.to_string(),
                 format: FileFormat::RDF(RdfVariant::Unspecified),
@@ -83,14 +86,14 @@ impl RdfValueFormat {
     }
 }
 
-/// An [ImportExportHandler] for RDF formats.
+/// A handler for RDF formats.
 #[derive(Debug, Clone)]
 pub struct RdfHandler {
     /// The resource to write to/read from.
-    /// This can be `None` for writing, since one can generate a default file
+    /// This can be [ImportExportResource::Unspecified] for writing, since one can generate a default file
     /// name from the exported predicate in this case. This has little chance of
-    /// success for imports, so the predicate is setting there.
-    resource: Option<Resource>,
+    /// success for imports, so a concrete value is required there.
+    resource: ImportExportResource,
     /// Base IRI, if given.
     base: Option<Iri<String>>,
     /// The specific RDF format to be used.
@@ -98,6 +101,8 @@ pub struct RdfHandler {
     /// The list of value formats to be used for importing/exporting data.
     /// Since the arity is known for
     value_formats: Option<Vec<RdfValueFormat>>,
+    /// Maximum number of statements that should be imported/exported.
+    limit: Option<u64>,
     /// Compression format to be used, if specified. This can also be inferred
     /// from the resource, if given. So the only case where `None` is possible
     /// is when no resource is given (during output).
@@ -116,11 +121,12 @@ impl RdfHandler {
         // Basic checks for unsupported attributes:
         ImportExportHandlers::check_attributes(
             attributes,
-            &vec![
+            &[
                 PARAMETER_NAME_RESOURCE,
                 PARAMETER_NAME_BASE,
                 PARAMETER_NAME_COMPRESSION,
                 PARAMETER_NAME_FORMAT,
+                PARAMETER_NAME_LIMIT,
             ],
         )?;
 
@@ -161,14 +167,17 @@ impl RdfHandler {
         }
 
         let value_formats = Self::extract_value_formats(attributes, refined_variant, direction)?;
+        let limit =
+            ImportExportHandlers::extract_unsigned_integer(attributes, PARAMETER_NAME_LIMIT, true)?;
 
         Ok(Box::new(Self {
-            resource: resource,
-            base: base,
+            resource,
+            base,
             variant: refined_variant,
-            value_formats: value_formats,
-            compression_format: compression_format,
-            direction: direction,
+            value_formats,
+            limit,
+            compression_format,
+            direction,
         }))
     }
 
@@ -227,10 +236,7 @@ impl RdfHandler {
             match arity {
                 3 => Ok(RdfVariant::NTriples),
                 4 => Ok(RdfVariant::NQuads),
-                _ => Err(ImportExportError::InvalidArity {
-                    arity: arity,
-                    expected: 3,
-                }),
+                _ => Err(ImportExportError::InvalidArity { arity, expected: 3 }),
             }
         } else {
             Ok(self.variant)
@@ -262,6 +268,7 @@ impl ImportExportHandler for RdfHandler {
             self.rdf_variant_or_default(arity)?,
             self.base.clone(),
             self.value_formats_or_default(arity),
+            self.limit,
         )))
     }
 
@@ -270,11 +277,8 @@ impl ImportExportHandler for RdfHandler {
             writer,
             self.rdf_variant_or_default(arity)?,
             self.value_formats_or_default(arity),
+            self.limit,
         )))
-    }
-
-    fn resource(&self) -> Option<Resource> {
-        self.resource.clone()
     }
 
     fn predicate_arity(&self) -> Option<usize> {
@@ -283,7 +287,7 @@ impl ImportExportHandler for RdfHandler {
         match self.direction {
             Direction::Import => self.value_formats.as_ref().map(|vfs| {
                 vfs.iter().fold(0, |acc, fmt| {
-                    if *fmt == RdfValueFormat::SKIP {
+                    if *fmt == RdfValueFormat::Skip {
                         acc
                     } else {
                         acc + 1
@@ -291,23 +295,6 @@ impl ImportExportHandler for RdfHandler {
                 })
             }),
             Direction::Export => self.value_formats.as_ref().map(|vfs| vfs.len()),
-        }
-    }
-
-    fn file_arity(&self) -> Option<usize> {
-        // Our extraction ensures that there is always a suitable default
-        // list of value formats if we know the RDF variant.
-        match self.direction {
-            Direction::Export => self.value_formats.as_ref().map(|vfs| {
-                vfs.iter().fold(0, |acc, fmt| {
-                    if *fmt == RdfValueFormat::SKIP {
-                        acc
-                    } else {
-                        acc + 1
-                    }
-                })
-            }),
-            Direction::Import => self.value_formats.as_ref().map(|vfs| vfs.len()),
         }
     }
 
@@ -324,5 +311,9 @@ impl ImportExportHandler for RdfHandler {
 
     fn compression_format(&self) -> Option<CompressionFormat> {
         self.compression_format
+    }
+
+    fn import_export_resource(&self) -> &ImportExportResource {
+        &self.resource
     }
 }

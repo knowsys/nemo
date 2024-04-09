@@ -7,7 +7,7 @@ use crate::{
 use super::{Double, Float};
 
 /// Trait defined by types that can be converted into an [AnyDataValue]
-/// by potentially using a [MetaDictionary].
+/// by potentially using a dictionary lookup.
 ///
 /// TODO: Is this really a good design? We already have methods for creating AnyDatavalue from
 /// a variety of types, and from arbitrary StorageValueT. Why do we need additional conversions
@@ -37,7 +37,7 @@ impl IntoDataValue for u32 {
 
 impl IntoDataValue for u64 {
     fn into_datavalue(self, dictionary: &Dict) -> Option<AnyDataValue> {
-        dictionary.id_to_datavalue(self as usize)
+        dictionary.id_to_datavalue(usize::try_from(self).ok()?)
     }
 }
 

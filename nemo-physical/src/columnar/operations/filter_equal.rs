@@ -1,4 +1,4 @@
-//! This module defines [ColumnScanEqual].
+//! This module defines [ColumnScanFilterEqual].
 
 use crate::{
     columnar::columnscan::{ColumnScan, ColumnScanCell},
@@ -142,8 +142,8 @@ mod test {
         let ref_col = ColumnVector::new(vec![0u64, 4, 7]);
         let val_col = ColumnVector::new(vec![1u64, 4, 8]);
 
-        let ref_iter = ColumnScanCell::new(ColumnScanEnum::ColumnScanVector(ref_col.iter()));
-        let val_iter = ColumnScanCell::new(ColumnScanEnum::ColumnScanVector(val_col.iter()));
+        let ref_iter = ColumnScanCell::new(ColumnScanEnum::Vector(ref_col.iter()));
+        let val_iter = ColumnScanCell::new(ColumnScanEnum::Vector(val_col.iter()));
 
         ref_iter.seek(4);
 
@@ -156,8 +156,8 @@ mod test {
         assert_eq!(equal_scan.next(), None);
         assert_eq!(equal_scan.current(), None);
 
-        let ref_iter = ColumnScanCell::new(ColumnScanEnum::ColumnScanVector(ref_col.iter()));
-        let val_iter = ColumnScanCell::new(ColumnScanEnum::ColumnScanVector(val_col.iter()));
+        let ref_iter = ColumnScanCell::new(ColumnScanEnum::Vector(ref_col.iter()));
+        let val_iter = ColumnScanCell::new(ColumnScanEnum::Vector(val_col.iter()));
 
         ref_iter.seek(7);
 

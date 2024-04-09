@@ -15,10 +15,10 @@ use crate::{
 
 use super::Variable;
 
-/// A [`LocatedSpan`] over the input.
+/// A [LocatedSpan] over the input.
 pub(super) type Span<'a> = LocatedSpan<&'a str>;
 
-/// Create a [`Span`][nom_locate::LocatedSpan] over the input.
+/// Create a [Span][nom_locate::LocatedSpan] over the input.
 pub fn span_from_str(input: &str) -> Span<'_> {
     Span::new(input)
 }
@@ -29,7 +29,7 @@ pub(super) type IntermediateResult<'a, T> = IResult<Span<'a>, T, LocatedParseErr
 /// The result of a parse
 pub type ParseResult<'a, T> = Result<T, LocatedParseError>;
 
-/// A [`ParseError`] at a certain location
+/// A [ParseError] at a certain location
 #[derive(Debug, Error)]
 #[error("Parse error on line {}, column {}: {}\nat {}{}", .line, .column, .source, .fragment, format_parse_error_context(.context))]
 pub struct LocatedParseError {
@@ -42,7 +42,7 @@ pub struct LocatedParseError {
 }
 
 impl LocatedParseError {
-    /// Append another [`LocatedParseError`] as context to this error.
+    /// Append another [LocatedParseError] as context to this error.
     pub fn append(&mut self, other: LocatedParseError) {
         self.context.push(other)
     }
@@ -75,7 +75,7 @@ pub enum BodyExpression {
 }
 
 /// Different operators allows in a constraint.
-/// Has one entry for every variant in [`Constraint`].
+/// Has one entry for every variant in [Constraint].
 #[derive(Debug, Clone, Copy)]
 pub enum ConstraintOperator {
     /// Two terms are equal.
@@ -93,7 +93,7 @@ pub enum ConstraintOperator {
 }
 
 impl ConstraintOperator {
-    /// Turn operator into [`Constraint`].
+    /// Turn operator into [Constraint].
     pub(crate) fn into_constraint(self, left: Term, right: Term) -> Constraint {
         match self {
             ConstraintOperator::Equals => Constraint::Equals(left, right),
@@ -149,8 +149,17 @@ pub enum ParseError {
     /// The variable must only depend on variables that occur in a positive body literal.
     #[error(r#"the variable "{0}" must only depend on variables that occur in a positive body literals"#)]
     UnsafeDefinition(Variable),
-    /// Complex term uses an undefined variable.
-    #[error(r#"complex term "{0}" uses an undefined variable "{1}""#)]
+    /// Negated literal uses a complex term.
+    #[error(r#"negated literal "{0}" uses the complex term "{1}""#)]
+    NegatedLiteralComplex(String, String),
+    /// Negated literal uses a derived variable.
+    #[error(r#"negated literal "{0}" uses a derived variable "{1}""#)]
+    NegatedLiteralDerived(String, Variable),
+    /// Complex term uses a derived variable.
+    #[error(r#"complex term "{0}" uses a derived variable "{1}""#)]
+    ComplexTermDerived(String, Variable),
+    /// Complex term uses an unsafe variable.
+    #[error(r#"complex term "{0}" uses an unsafe variable "{1}""#)]
     UnsafeComplexTerm(String, Variable),
     /// Variable has been defined multiple times.
     #[error(r#"the variable "{0}" has been used in multiple equalities"#)]

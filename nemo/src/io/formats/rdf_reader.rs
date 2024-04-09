@@ -7,7 +7,7 @@ use nemo_physical::{
     dictionary::string_map::NullMap,
     management::bytesized::ByteSized,
 };
-use std::{io::BufRead, mem::size_of};
+use std::{cell::Cell, io::BufRead, mem::size_of};
 
 use oxiri::Iri;
 use rio_api::{
@@ -21,14 +21,20 @@ use crate::{io::formats::PROGRESS_NOTIFY_INCREMENT, model::RdfVariant};
 
 use super::rdf::{RdfFormatError, RdfValueFormat};
 
-const DEFAULT_GRAPH: &str = "__DEFAULT_GRAPH__";
+/// IRI to be used for the default graph used by Nemo when loading RDF data with
+/// named graphs (quads).
+///
+/// SPARQL 1.1 has failed to provide any standard identifier for this purpose.
+/// If future SPARQL or RDF versions are adding this, we could align accordingly.
+const DEFAULT_GRAPH: &str = "tag:nemo:defaultgraph";
 
-/// A [`TableProvider`] for RDF 1.1 files containing triples.
+/// A [TableProvider] for RDF 1.1 files containing triples.
 pub(super) struct RdfReader {
     read: Box<dyn BufRead>,
     variant: RdfVariant,
     base: Option<Iri<String>>,
     value_formats: Vec<RdfValueFormat>,
+    limit: Option<u64>,
     /// Map to store how nulls relate to blank nodes.
     ///
     /// TODO: An RdfReader is specific to one BufRead, which it consumes when reading.
@@ -39,18 +45,20 @@ pub(super) struct RdfReader {
 }
 
 impl RdfReader {
-    /// Create a new [`RDFReader`]
+    /// Create a new [RDFReader]
     pub(super) fn new(
         read: Box<dyn BufRead>,
         variant: RdfVariant,
         base: Option<Iri<String>>,
         value_formats: Vec<RdfValueFormat>,
+        limit: Option<u64>,
     ) -> Self {
         Self {
             read,
             variant,
             base,
             value_formats,
+            limit,
             bnode_map: Default::default(),
         }
     }
@@ -65,15 +73,15 @@ impl RdfReader {
         value: BlankNode,
     ) -> AnyDataValue {
         if let Some(null) = bnode_map.get(value.to_string().as_str()) {
-            AnyDataValue::from(null.clone())
+            AnyDataValue::from(*null)
         } else {
             let null = tuple_writer.fresh_null();
-            bnode_map.insert(value.to_string().as_str(), null.clone());
+            bnode_map.insert(value.to_string().as_str(), null);
             AnyDataValue::from(null)
         }
     }
 
-    /// Create [`AnyDataValue`] from a [`Literal`].
+    /// Create [AnyDataValue] from a [Literal].
     fn datavalue_from_literal(value: Literal<'_>) -> Result<AnyDataValue, DataValueCreationError> {
         match value {
             Literal::Simple { value } => Ok(AnyDataValue::new_plain_string(value.to_string())),
@@ -120,13 +128,7 @@ impl RdfReader {
         value: Option<GraphName<'_>>,
     ) -> Result<AnyDataValue, RdfFormatError> {
         match value {
-            None => {
-                assert_eq!(
-                    Iri::parse(DEFAULT_GRAPH.to_string()).unwrap().to_string(),
-                    DEFAULT_GRAPH.to_string()
-                );
-                Ok(AnyDataValue::new_iri(DEFAULT_GRAPH.to_string()))
-            }
+            None => Ok(AnyDataValue::new_iri(DEFAULT_GRAPH.to_string())),
             Some(GraphName::NamedNode(nn)) => Ok(Self::datavalue_from_named_node(nn)),
             Some(GraphName::BlankNode(bn)) => {
                 Ok(Self::datavalue_from_blank_node(bnode_map, tuple_writer, bn))
@@ -143,10 +145,12 @@ impl RdfReader {
     where
         Parser: TriplesParser,
     {
+        log::info!("Starting RDF import (format {})", self.variant);
+
         let skip: Vec<bool> = self
             .value_formats
             .iter()
-            .map(|vf| *vf == RdfValueFormat::SKIP)
+            .map(|vf| *vf == RdfValueFormat::Skip)
             .collect();
 
         assert_eq!(skip.len(), 3);
@@ -161,9 +165,16 @@ impl RdfReader {
             })
         );
 
-        let mut triple_count = 0;
+        let stop_limit = self.limit.unwrap_or(u64::MAX);
+        let triple_count = Cell::new(0);
 
         let mut on_triple = |triple: Triple| {
+            // This is needed since a parser might process several RDF statements
+            // before giving us a chance to stop in the outer loop.
+            if triple_count.get() == stop_limit {
+                return Ok::<_, Box<dyn std::error::Error>>(());
+            }
+
             if !skip[0] {
                 let subject = Self::datavalue_from_subject(
                     &mut self.bnode_map,
@@ -182,9 +193,9 @@ impl RdfReader {
                 tuple_writer.add_tuple_value(object);
             }
 
-            triple_count += 1;
-            if triple_count % PROGRESS_NOTIFY_INCREMENT == 0 {
-                log::info!("Loading: processed {triple_count} triples")
+            triple_count.set(triple_count.get() + 1);
+            if triple_count.get() % PROGRESS_NOTIFY_INCREMENT == 0 {
+                log::info!("... processed {} triples", triple_count.get())
             }
 
             Ok::<_, Box<dyn std::error::Error>>(())
@@ -194,11 +205,14 @@ impl RdfReader {
 
         while !parser.is_end() {
             if let Err(e) = parser.parse_step(&mut on_triple) {
-                log::info!("Ignoring malformed triple: {e}");
+                log::info!("Ignoring malformed RDF: {e}");
+            }
+            if triple_count.get() == stop_limit {
+                break;
             }
         }
 
-        log::info!("Finished loading: processed {triple_count} triples");
+        log::info!("Finished import: processed {} triples", triple_count.get());
 
         Ok(())
     }
@@ -212,10 +226,12 @@ impl RdfReader {
     where
         Parser: QuadsParser,
     {
+        log::info!("Starting RDF import (format {})", self.variant);
+
         let skip: Vec<bool> = self
             .value_formats
             .iter()
-            .map(|vf| *vf == RdfValueFormat::SKIP)
+            .map(|vf| *vf == RdfValueFormat::Skip)
             .collect();
 
         assert_eq!(skip.len(), 4);
@@ -230,9 +246,16 @@ impl RdfReader {
             })
         );
 
-        let mut quad_count = 0;
+        let stop_limit = self.limit.unwrap_or(u64::MAX);
+        let quad_count = Cell::new(0);
 
-        let mut on_triple = |quad: Quad| {
+        let mut on_quad = |quad: Quad| {
+            // This is needed since a parser might process several RDF statements
+            // before giving us a chance to stop in the outer loop.
+            if quad_count.get() == stop_limit {
+                return Ok::<_, Box<dyn std::error::Error>>(());
+            }
+
             if !skip[0] {
                 let graph_name = Self::datavalue_from_graph_name(
                     &mut self.bnode_map,
@@ -256,9 +279,9 @@ impl RdfReader {
                 tuple_writer.add_tuple_value(object);
             }
 
-            quad_count += 1;
-            if quad_count % PROGRESS_NOTIFY_INCREMENT == 0 {
-                log::info!("Loading: processed {quad_count} triples")
+            quad_count.set(quad_count.get() + 1);
+            if quad_count.get() % PROGRESS_NOTIFY_INCREMENT == 0 {
+                log::info!("... processed {} triples", quad_count.get())
             }
 
             Ok::<_, Box<dyn std::error::Error>>(())
@@ -267,12 +290,15 @@ impl RdfReader {
         let mut parser = make_parser(self.read);
 
         while !parser.is_end() {
-            if let Err(e) = parser.parse_step(&mut on_triple) {
-                log::info!("Ignoring malformed quad: {e}");
+            if let Err(e) = parser.parse_step(&mut on_quad) {
+                log::info!("Ignoring malformed RDF: {e}");
+            }
+            if quad_count.get() == stop_limit {
+                break;
             }
         }
 
-        log::info!("Finished loading: processed {quad_count} quad");
+        log::info!("Finished import: processed {} quads", quad_count.get());
 
         Ok(())
     }
@@ -287,11 +313,9 @@ impl TableProvider for RdfReader {
 
         match self.variant {
             RdfVariant::NTriples => {
-                self.read_triples_with_parser(tuple_writer, |read| NTriplesParser::new(read))
+                self.read_triples_with_parser(tuple_writer, NTriplesParser::new)
             }
-            RdfVariant::NQuads => {
-                self.read_quads_with_parser(tuple_writer, |read| NQuadsParser::new(read))
-            }
+            RdfVariant::NQuads => self.read_quads_with_parser(tuple_writer, NQuadsParser::new),
             RdfVariant::Turtle => self.read_triples_with_parser(tuple_writer, |read| {
                 TurtleParser::new(read, base_iri.clone())
             }),
@@ -326,10 +350,14 @@ impl ByteSized for RdfReader {
 
 #[cfg(test)]
 mod test {
-    use super::RdfReader;
+    use super::{RdfReader, DEFAULT_GRAPH};
     use std::cell::RefCell;
 
-    use nemo_physical::{datasources::tuple_writer::TupleWriter, management::database::Dict};
+    use nemo_physical::{
+        datasources::tuple_writer::TupleWriter, datavalues::AnyDataValue,
+        dictionary::string_map::NullMap, management::database::Dict,
+    };
+    use oxiri::Iri;
     use rio_turtle::{NTriplesParser, TurtleParser};
     use test_log::test;
 
@@ -349,15 +377,15 @@ mod test {
             RdfVariant::NTriples,
             None,
             vec![
-                RdfValueFormat::ANYTHING,
-                RdfValueFormat::ANYTHING,
-                RdfValueFormat::ANYTHING,
+                RdfValueFormat::Anything,
+                RdfValueFormat::Anything,
+                RdfValueFormat::Anything,
             ],
+            None,
         );
         let dict = RefCell::new(Dict::default());
         let mut tuple_writer = TupleWriter::new(&dict, 3);
-        let result =
-            reader.read_triples_with_parser(&mut tuple_writer, |read| NTriplesParser::new(read));
+        let result = reader.read_triples_with_parser(&mut tuple_writer, NTriplesParser::new);
         assert!(result.is_ok());
         assert_eq!(tuple_writer.size(), 4);
     }
@@ -374,10 +402,11 @@ mod test {
             RdfVariant::Turtle,
             None,
             vec![
-                RdfValueFormat::ANYTHING,
-                RdfValueFormat::ANYTHING,
-                RdfValueFormat::ANYTHING,
+                RdfValueFormat::Anything,
+                RdfValueFormat::Anything,
+                RdfValueFormat::Anything,
             ],
+            None,
         );
         let dict = RefCell::new(Dict::default());
         let mut tuple_writer = TupleWriter::new(&dict, 3);
@@ -400,17 +429,36 @@ mod test {
             RdfVariant::NTriples,
             None,
             vec![
-                RdfValueFormat::ANYTHING,
-                RdfValueFormat::ANYTHING,
-                RdfValueFormat::ANYTHING,
+                RdfValueFormat::Anything,
+                RdfValueFormat::Anything,
+                RdfValueFormat::Anything,
             ],
+            None,
         );
         let dict = RefCell::new(Dict::default());
         let mut tuple_writer = TupleWriter::new(&dict, 3);
-        let result =
-            reader.read_triples_with_parser(&mut tuple_writer, |read| NTriplesParser::new(read));
+        let result = reader.read_triples_with_parser(&mut tuple_writer, NTriplesParser::new);
         assert!(result.is_ok());
         assert_eq!(tuple_writer.size(), 1);
+    }
+
+    #[test]
+    fn default_graph_name() {
+        let dict = RefCell::new(Dict::default());
+        let mut tuple_writer = TupleWriter::new(&dict, 3);
+        let mut null_map = NullMap::default();
+        let graph_dv = AnyDataValue::new_iri(DEFAULT_GRAPH.to_string());
+
+        // check that we use our own default graph IRI
+        assert_eq!(
+            RdfReader::datavalue_from_graph_name(&mut null_map, &mut tuple_writer, None).expect(""),
+            graph_dv
+        );
+        // check that our default graph is a valid IRI in the first place
+        assert_eq!(
+            Iri::parse(DEFAULT_GRAPH.to_string()).unwrap().to_string(),
+            DEFAULT_GRAPH.to_string()
+        );
     }
 
     // #[test]

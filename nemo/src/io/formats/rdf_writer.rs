@@ -10,7 +10,7 @@ use rio_xml::RdfXmlFormatter;
 use std::io::Write;
 
 use super::{rdf::RdfValueFormat, types::TableWriter};
-use crate::{error::Error, model::RdfVariant};
+use crate::{error::Error, io::formats::PROGRESS_NOTIFY_INCREMENT, model::RdfVariant};
 
 /// Private struct to record the type of an RDF term that
 /// is to be created on demand.
@@ -42,41 +42,41 @@ impl<'a> QuadBuffer {
     fn subject(&'a self) -> Subject<'a> {
         if self.subject_is_blank {
             Subject::BlankNode(BlankNode {
-                id: &self.subject.as_str(),
+                id: self.subject.as_str(),
             })
         } else {
             Subject::NamedNode(NamedNode {
-                iri: &self.subject.as_str(),
+                iri: self.subject.as_str(),
             })
         }
     }
 
     fn predicate(&'a self) -> NamedNode<'a> {
         NamedNode {
-            iri: &&self.predicate.as_str(),
+            iri: self.predicate.as_str(),
         }
     }
 
     fn object(&'a self) -> Term<'a> {
         match self.object_type {
             RdfTermType::Iri => Term::NamedNode(NamedNode {
-                iri: &self.object_part1.as_str(),
+                iri: self.object_part1.as_str(),
             }),
             RdfTermType::BNode => Term::BlankNode(BlankNode {
-                id: &self.object_part1.as_str(),
+                id: self.object_part1.as_str(),
             }),
             RdfTermType::TypedLiteral => Term::Literal(Literal::Typed {
-                value: &self.object_part1.as_str(),
+                value: self.object_part1.as_str(),
                 datatype: NamedNode {
-                    iri: &self.object_part2.as_str(),
+                    iri: self.object_part2.as_str(),
                 },
             }),
             RdfTermType::LangString => Term::Literal(Literal::LanguageTaggedString {
-                value: &self.object_part1.as_str(),
-                language: &self.object_part2.as_str(),
+                value: self.object_part1.as_str(),
+                language: self.object_part2.as_str(),
             }),
             RdfTermType::SimpleStringLiteral => Term::Literal(Literal::Simple {
-                value: &self.object_part1.as_str(),
+                value: self.object_part1.as_str(),
             }),
         }
     }
@@ -84,11 +84,11 @@ impl<'a> QuadBuffer {
     fn graph_name(&'a self) -> GraphName<'a> {
         if self.graph_name_is_blank {
             GraphName::BlankNode(BlankNode {
-                id: &self.graph_name.as_str(),
+                id: self.graph_name.as_str(),
             })
         } else {
             GraphName::NamedNode(NamedNode {
-                iri: &self.graph_name.as_str(),
+                iri: self.graph_name.as_str(),
             })
         }
     }
@@ -98,12 +98,12 @@ impl<'a> QuadBuffer {
             ValueDomain::Iri => {
                 self.subject = datavalue.to_iri_unchecked();
                 self.subject_is_blank = false;
-                return true;
+                true
             }
             ValueDomain::Null => {
                 self.subject = datavalue.lexical_value();
                 self.subject_is_blank = true;
-                return true;
+                true
             }
             _ => false,
         }
@@ -113,7 +113,7 @@ impl<'a> QuadBuffer {
         match datavalue.value_domain() {
             ValueDomain::Iri => {
                 self.predicate = datavalue.to_iri_unchecked();
-                return true;
+                true
             }
             _ => false,
         }
@@ -168,12 +168,12 @@ impl<'a> QuadBuffer {
             ValueDomain::Iri => {
                 self.graph_name = datavalue.to_iri_unchecked();
                 self.graph_name_is_blank = false;
-                return true;
+                true
             }
             ValueDomain::Null => {
                 self.graph_name = datavalue.lexical_value();
                 self.graph_name_is_blank = true;
-                return true;
+                true
             }
             _ => false,
         }
@@ -185,6 +185,7 @@ pub(super) struct RdfWriter {
     writer: Box<dyn Write>,
     variant: RdfVariant,
     value_formats: Vec<RdfValueFormat>,
+    limit: Option<u64>,
 }
 
 impl RdfWriter {
@@ -192,11 +193,13 @@ impl RdfWriter {
         writer: Box<dyn Write>,
         variant: RdfVariant,
         value_formats: Vec<RdfValueFormat>,
+        limit: Option<u64>,
     ) -> Self {
         RdfWriter {
-            writer: writer,
-            variant: variant,
-            value_formats: value_formats,
+            writer,
+            variant,
+            value_formats,
+            limit,
         }
     }
 
@@ -204,15 +207,17 @@ impl RdfWriter {
         self,
         table: Box<dyn Iterator<Item = Vec<AnyDataValue>> + 'a>,
         make_formatter: impl Fn(Box<dyn Write>) -> std::io::Result<Formatter>,
-        finish_formatter: impl Fn(Formatter) -> (),
+        finish_formatter: impl Fn(Formatter),
     ) -> Result<(), Error>
     where
         Formatter: TriplesFormatter,
     {
+        log::info!("Starting RDF export (format {})", self.variant);
+
         let mut triple_pos = [0; 3];
         let mut cur = 0;
         for (idx, format) in self.value_formats.iter().enumerate() {
-            if *format != RdfValueFormat::SKIP {
+            if *format != RdfValueFormat::Skip {
                 assert!(cur <= 2); // max number of non-skip entries is 3
                 triple_pos[cur] = idx;
                 cur += 1;
@@ -223,6 +228,10 @@ impl RdfWriter {
 
         let mut formatter = make_formatter(self.writer)?;
         let mut buffer: QuadBuffer = Default::default();
+
+        let stop_limit = self.limit.unwrap_or(u64::MAX);
+        let mut triple_count: u64 = 0;
+        let mut drop_count: u64 = 0;
 
         for record in table {
             assert_eq!(record.len(), self.value_formats.len());
@@ -241,10 +250,21 @@ impl RdfWriter {
                 predicate: buffer.predicate(),
                 object: buffer.object(),
             }) {
-                log::info!("failed to write triple: {e}");
+                log::debug!("failed to write triple: {e}");
+                drop_count += 1;
+            } else {
+                triple_count += 1;
+                if (triple_count % PROGRESS_NOTIFY_INCREMENT) == 0 {
+                    log::info!("... processed {triple_count} triples");
+                }
+                if triple_count == stop_limit {
+                    break;
+                }
             }
         }
         finish_formatter(formatter);
+
+        log::info!("Finished export: processed {triple_count} triples (dropped {drop_count})");
 
         Ok(())
     }
@@ -253,15 +273,17 @@ impl RdfWriter {
         self,
         table: Box<dyn Iterator<Item = Vec<AnyDataValue>> + 'a>,
         make_formatter: impl Fn(Box<dyn Write>) -> std::io::Result<Formatter>,
-        finish_formatter: impl Fn(Formatter) -> (),
+        finish_formatter: impl Fn(Formatter),
     ) -> Result<(), Error>
     where
         Formatter: QuadsFormatter,
     {
+        log::info!("Starting RDF export (format {})", self.variant);
+
         let mut quad_pos = [0; 4];
         let mut cur = 0;
         for (idx, format) in self.value_formats.iter().enumerate() {
-            if *format != RdfValueFormat::SKIP {
+            if *format != RdfValueFormat::Skip {
                 assert!(cur <= 3); // max number of non-skip entries is 3
                 quad_pos[cur] = idx;
                 cur += 1;
@@ -272,6 +294,10 @@ impl RdfWriter {
 
         let mut formatter = make_formatter(self.writer)?;
         let mut buffer: QuadBuffer = Default::default();
+
+        let stop_limit = self.limit.unwrap_or(u64::MAX);
+        let mut quad_count: u64 = 0;
+        let mut drop_count: u64 = 0;
 
         for record in table {
             assert_eq!(record.len(), self.value_formats.len());
@@ -294,10 +320,21 @@ impl RdfWriter {
                 object: buffer.object(),
                 graph_name: Some(buffer.graph_name()),
             }) {
-                log::info!("failed to write quad: {e}");
+                log::debug!("failed to write quad: {e}");
+                drop_count += 1;
+            } else {
+                quad_count += 1;
+                if (quad_count % PROGRESS_NOTIFY_INCREMENT) == 0 {
+                    log::info!("... processed {quad_count} triples");
+                }
+                if quad_count == stop_limit {
+                    break;
+                }
             }
         }
         finish_formatter(formatter);
+
+        log::info!("Finished export: processed {quad_count} quads (dropped {drop_count})");
 
         Ok(())
     }
@@ -330,13 +367,9 @@ impl TableWriter for RdfWriter {
                     let _ = f.finish();
                 },
             ),
-            RdfVariant::RDFXML => self.export_triples(
-                table,
-                |write| RdfXmlFormatter::new(write),
-                |f| {
-                    let _ = f.finish();
-                },
-            ),
+            RdfVariant::RDFXML => self.export_triples(table, RdfXmlFormatter::new, |f| {
+                let _ = f.finish();
+            }),
             RdfVariant::TriG => self.export_quads(
                 table,
                 |write| Ok(TriGFormatter::new(write)),

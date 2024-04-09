@@ -6,14 +6,14 @@ use std::{cell::UnsafeCell, fmt::Debug};
 use delegate::delegate;
 
 use crate::{
-    columnar::columnscan::ColumnScanRainbow,
+    columnar::columnscan::ColumnScanT,
     datatypes::{storage_type_name::StorageTypeBitSet, StorageTypeName, StorageValueT},
 };
 
 use super::{
     operations::{
-        filter::TrieScanFilter, function::TrieScanFunction, join::TrieScanJoin, null::TrieScanNull,
-        prune::TrieScanPrune, subtract::TrieScanSubtract, union::TrieScanUnion,
+        aggregate::TrieScanAggregateWrapper, filter::TrieScanFilter, function::TrieScanFunction,
+        join::TrieScanJoin, null::TrieScanNull, subtract::TrieScanSubtract, union::TrieScanUnion,
     },
     trie::TrieScanGeneric,
 };
@@ -21,7 +21,7 @@ use super::{
 /// Iterator for a [Trie][super::trie::Trie] data structure
 ///
 /// It allows for vertical traversal between layers via the `up` and `down` methods,
-/// and horizontal traversal via [`ColumnScanT`].
+/// and horizontal traversal via [ColumnScanT].
 pub(crate) trait PartialTrieScan<'a>: Debug {
     /// Return to the upper layer.
     ///
@@ -36,9 +36,6 @@ pub(crate) trait PartialTrieScan<'a>: Debug {
     /// or if this method is called while the iterator of the current layer does not point to any element.
     fn down(&mut self, storage_type: StorageTypeName);
 
-    /// Return the storage type that is "active" on each layer.
-    fn path_types(&self) -> &[StorageTypeName];
-
     /// Return a list of possible types for a given layer.
     fn possible_types(&self, layer: usize) -> StorageTypeBitSet;
 
@@ -46,18 +43,16 @@ pub(crate) trait PartialTrieScan<'a>: Debug {
     fn arity(&self) -> usize;
 
     /// Return the index of the current layer for this scan.
-    fn current_layer(&self) -> Option<usize> {
-        self.path_types().len().checked_sub(1)
-    }
+    fn current_layer(&self) -> Option<usize>;
 
     /// Return the underlying [ColumnScanT] given an index.
     ///
     /// # Panics
     /// Panics if the requested layer is higher than the arity of this scan.
-    fn scan<'b>(&'b self, layer: usize) -> &'b UnsafeCell<ColumnScanRainbow<'a>>;
+    fn scan<'b>(&'b self, layer: usize) -> &'b UnsafeCell<ColumnScanT<'a>>;
 
     /// Return the [ColumnScanT] at the current layer.
-    fn current_scan<'b>(&'b self) -> Option<&UnsafeCell<ColumnScanRainbow<'a>>> {
+    fn current_scan<'b>(&'b self) -> Option<&UnsafeCell<ColumnScanT<'a>>> {
         Some(self.scan(self.current_layer()?))
     }
 }
@@ -65,44 +60,48 @@ pub(crate) trait PartialTrieScan<'a>: Debug {
 /// Enum containing all implementations of [PartialTrieScan]
 #[derive(Debug)]
 pub(crate) enum TrieScanEnum<'a> {
+    /// Case [TrieScanAggregateWrapper]
+    AggregateWrapper(TrieScanAggregateWrapper<'a>),
     /// Case [TrieScanFilter]
-    TrieScanFilter(TrieScanFilter<'a>),
+    Filter(TrieScanFilter<'a>),
     /// Case [TrieScanFunction]
-    TrieScanFunction(TrieScanFunction<'a>),
+    Function(TrieScanFunction<'a>),
     /// Case [TrieScanGeneric]
-    TrieScanGeneric(TrieScanGeneric<'a>),
+    Generic(TrieScanGeneric<'a>),
     /// Case [TrieScanJoin]
-    TrieScanJoin(TrieScanJoin<'a>),
+    Join(TrieScanJoin<'a>),
     /// Case [TrieScanNull]
-    TrieScanNull(TrieScanNull<'a>),
-    /// Case [TrieScanPrune]
-    TrieScanPrune(TrieScanPrune<'a>),
+    Null(TrieScanNull<'a>),
     /// Case [TrieScanSubtract]
-    TrieScanSubtract(TrieScanSubtract<'a>),
+    Subtract(TrieScanSubtract<'a>),
     /// Case [TrieScanUnion]
-    TrieScanUnion(TrieScanUnion<'a>),
+    Union(TrieScanUnion<'a>),
+    #[cfg(test)]
+    /// Case [super::operations::prune::TrieScanPrune]
+    Prune(super::operations::prune::TrieScanPrune<'a>),
 }
 
 impl<'a> PartialTrieScan<'a> for TrieScanEnum<'a> {
     delegate! {
         to match self {
-            Self::TrieScanFilter(scan) => scan,
-            Self::TrieScanFunction(scan) => scan,
-            Self::TrieScanGeneric(scan) => scan,
-            Self::TrieScanJoin(scan) => scan,
-            Self::TrieScanNull(scan) => scan,
-            Self::TrieScanPrune(scan) => scan,
-            Self::TrieScanSubtract(scan) => scan,
-            Self::TrieScanUnion(scan) => scan,
+            Self::AggregateWrapper(scan) => scan,
+            Self::Filter(scan) => scan,
+            Self::Function(scan) => scan,
+            Self::Generic(scan) => scan,
+            Self::Join(scan) => scan,
+            Self::Null(scan) => scan,
+            #[cfg(test)]
+            Self::Prune(scan) => scan,
+            Self::Subtract(scan) => scan,
+            Self::Union(scan) => scan,
         } {
             fn up(&mut self);
             fn down(&mut self, storage_type: StorageTypeName);
-            fn path_types(&self) -> &[StorageTypeName];
             fn possible_types(&self, layer: usize) -> StorageTypeBitSet;
             fn arity(&self) -> usize;
             fn current_layer(&self) -> Option<usize>;
-            fn scan<'b>(&'b self, layer: usize) -> &'b UnsafeCell<ColumnScanRainbow<'a>>;
-            fn current_scan<'b>(&'b self) -> Option<&UnsafeCell<ColumnScanRainbow<'a>>>;
+            fn scan<'b>(&'b self, layer: usize) -> &'b UnsafeCell<ColumnScanT<'a>>;
+            fn current_scan<'b>(&'b self) -> Option<&UnsafeCell<ColumnScanT<'a>>>;
         }
     }
 }

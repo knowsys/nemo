@@ -1,10 +1,10 @@
-//! A [`DvDict`] implementation for nulls (and nulls only).
+//! A [DvDict] implementation for nulls (and nulls only).
 
 use crate::datavalues::{AnyDataValue, DataValue, NullDataValue, ValueDomain};
 
 use super::{AddResult, DvDict};
 
-/// A [`DvDict`] dictionary for datavalues that are nulls.
+/// A [DvDict] dictionary for datavalues that are nulls.
 ///
 /// No datavalues (nulls or otherwise) can be directly added to the dictionary,
 /// but it can generate new nulls, and retrieve the id of such nulls later on.

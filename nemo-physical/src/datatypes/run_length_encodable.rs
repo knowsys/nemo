@@ -8,7 +8,7 @@ use num::Zero;
 
 use crate::management::bytesized::ByteSized;
 
-/// Data, which can be run length compressed with increments of [`RunLengthEncodable::Step`]
+/// Data, which can be run length compressed with increments of [RunLengthEncodable::Step]
 pub(crate) trait RunLengthEncodable: Zero {
     /// Increment / Decrement values in run length encoded elements
     type Step: Debug + Copy + Eq + ByteSized;
@@ -65,7 +65,7 @@ impl IntStep {
 
 impl ByteSized for IntStep {
     fn size_bytes(&self) -> ByteSize {
-        bytesize::ByteSize::b(std::mem::size_of::<IntStep>() as u64)
+        ByteSize::b(std::mem::size_of::<IntStep>() as u64)
     }
 }
 
@@ -167,7 +167,7 @@ pub(crate) struct SmallIntStep(i8);
 
 impl ByteSized for SmallIntStep {
     fn size_bytes(&self) -> ByteSize {
-        bytesize::ByteSize::b(std::mem::size_of::<SmallIntStep>() as u64)
+        ByteSize::b(std::mem::size_of::<SmallIntStep>() as u64)
     }
 }
 

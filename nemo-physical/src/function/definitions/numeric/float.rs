@@ -101,6 +101,23 @@ pub(super) fn numeric_power_float(base: Float, exponent: Float) -> Option<AnyDat
     some_datavalue_from_float(base.checked_pow(exponent)?)
 }
 
+/// Remainder operation
+///
+/// Returns the remainder of the (truncated) division `parameter_first / parameter.second`.
+/// The value of the result has always the same sign as `paramter_second`.
+///
+/// Returns `None` if `parameter_second` is zero.
+pub(super) fn numeric_remainder_float(
+    parameter_first: Float,
+    parameter_second: Float,
+) -> Option<AnyDataValue> {
+    if parameter_second == Float::new(0.0).expect("Zero is not NaN/inf") {
+        return None;
+    }
+
+    some_datavalue_from_float(parameter_first % parameter_second)
+}
+
 /// Less than comparison between 32-bit floating point numbers
 pub(super) fn numeric_lessthan_float(
     parameter_first: Float,
@@ -147,4 +164,20 @@ pub(super) fn numeric_greaterthaneq_float(
     } else {
         Some(AnyDataValue::new_boolean(false))
     }
+}
+
+/// Rounding to the nearest integer.
+/// If the result is half-way between two integers, round away from 0.0.
+pub(super) fn numeric_round_float(parameter: Float) -> Option<AnyDataValue> {
+    some_datavalue_from_float(parameter.round())
+}
+
+/// Rounding up to the smallest integer less than or equal to `parameter`.
+pub(super) fn numeric_ceil_float(parameter: Float) -> Option<AnyDataValue> {
+    some_datavalue_from_float(parameter.ceil())
+}
+
+/// Rounding down to the largest integer less than or equal to `parameter`.
+pub(super) fn numeric_floor_float(parameter: Float) -> Option<AnyDataValue> {
+    some_datavalue_from_float(parameter.floor())
 }

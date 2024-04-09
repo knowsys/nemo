@@ -1,3 +1,5 @@
+//! This module defines [GlobalBytesBuffer] and related code.
+
 use std::{
     fmt::{Debug, Display},
     hash::{Hash, Hasher},
@@ -17,16 +19,16 @@ const PAGE_SIZE: usize = 1 << PAGE_ADDR_BITS;
 /// Buffers might be dropped, upon which all of its pages will be freed. There is no other way
 /// of removing contents from a buffer.
 ///
-/// Individual pages have a size of at most [`PAGE_SIZE`] bytes, so that [`PAGE_ADDR_BITS`]
+/// Individual pages have a size of at most [PAGE_SIZE`] bytes, so that [`PAGE_ADDR_BITS]
 /// are needed to specify a position within a page. References to buffered strings are represented
-/// by [`BytesRef`], which stores a starting address and length of the slice. The `usize` starting
-/// address is global (uniform for all buffers), with the lower [`PAGE_ADDR_BITS`] bits encoding a position within a page,
+/// by [BytesRef], which stores a starting address and length of the slice. The `usize` starting
+/// address is global (uniform for all buffers), with the lower [PAGE_ADDR_BITS] bits encoding a position within a page,
 /// and the remaining higher bits encoding the numeric id of the page (whatever buffer it belongs to).
 /// Since this address must fit into usize, 32bit platforms can only support 2 to the power of
-/// (32-[`PAGE_ADDR_BITS`]) pages. Moreover, since [`BytesRef`] combines the address and the slice length
+/// (32-[PAGE_ADDR_BITS]) pages. Moreover, since [BytesRef] combines the address and the slice length
 /// into a single `u64` (on all platforms), even 64bit platforms cannot use all 64bits for byte array addresses.
-/// The number of bits reserved for length is [`BYTESREF_BYTES_LENGTH_BITS`], which should always be less
-/// than [`PAGE_ADDR_BITS`] since longer tuples would not fit any buffer page anyway.
+/// The number of bits reserved for length is [BYTESREF_BYTES_LENGTH_BITS], which should always be less
+/// than [PAGE_ADDR_BITS] since longer tuples would not fit any buffer page anyway.
 ///
 /// The implementaion can be used in multiple parallel threads.
 ///
@@ -147,20 +149,27 @@ impl BytesBuffer {
 /// based on a generic parameter. It is still global, but this can further reduce the
 /// mutual influence across buffers used for different purposes (and in particular the
 /// implicit capacity limit of any single buffer).
+///
+/// # Safety
+/// Our standard implementations of this use raw pointers to mutable globals as memory
+/// pools. This construction only can work safely if the application as a whole ensures
+/// that the mutable globals are not moved while we are accessing them. In our code, it is
+/// ensured that the unsafe functions of this trait are only used in private functions of
+/// other structs, and refered to global memory is copied before further use.
 pub(crate) unsafe trait GlobalBytesBuffer: Debug + Sized {
     /// Returns a specific global buffer.
-    unsafe fn get() -> &'static mut BytesBuffer;
+    unsafe fn get() -> *mut BytesBuffer;
 
     /// Initializes a new (sub)buffer of this buffer, and returns a handle that can henceforth be used to access it.
     #[must_use = "don't forget to take your buffer id"]
     fn init_buffer() -> usize {
-        unsafe { Self::get().init_buffer() }
+        unsafe { BytesBuffer::init_buffer(&mut *Self::get()) }
     }
 
     /// Inserts a byte array into the buffer and returns its address and length.
     fn push_bytes(buffer: usize, bytes: &[u8]) -> BytesRef<Self> {
         unsafe {
-            let (address, len) = Self::get().push_bytes(buffer, bytes);
+            let (address, len) = BytesBuffer::push_bytes(&mut *Self::get(), buffer, bytes);
             BytesRef::new(address, len)
         }
     }
@@ -168,35 +177,35 @@ pub(crate) unsafe trait GlobalBytesBuffer: Debug + Sized {
     /// Returns a reference to a slice of a byte array for this data.
     /// This is a pointer to global mutable data, and cannot be used safely.
     unsafe fn get_bytes(address: usize, length: usize) -> &'static [u8] {
-        Self::get().get_bytes(address, length)
+        BytesBuffer::get_bytes(&*Self::get(), address, length)
     }
 
     /// Frees the memory used by the pages of the dropped buffer.
     fn drop_buffer(buffer: usize) {
         unsafe {
-            Self::get().drop_buffer(buffer);
+            BytesBuffer::drop_buffer(&mut *Self::get(), buffer);
         }
     }
 }
 
 /// Number of bits reserved for encoding the length of referenced byte arrays.
-/// This should be at most [`PAGE_ADDR_BITS`], the maximal length in any page
-/// in the [`BytesBuffer`], but it could conceivably also be less.
+/// This should be at most [PAGE_ADDR_BITS], the maximal length in any page
+/// in the [BytesBuffer], but it could conceivably also be less.
 const BYTESREF_BYTES_LENGTH_BITS: u64 = 24;
 /// Bit mask that keeps only the (lower) BYTESREF_BYTES_LENGTH_BITS-1 bits, for extracting a string's length
 const LENGTH_BITS_MASK: u64 = (1 << BYTESREF_BYTES_LENGTH_BITS) - 1;
 /// Number of bits reserved for the starting address of a byte array.
 const BYTESREF_STARTING_ADDRESS_BITS: u64 = 64 - BYTESREF_BYTES_LENGTH_BITS;
-/// Largest number that can specify the length of a byte array in a [`BytesRef`].
+/// Largest number that can specify the length of a byte array in a [BytesRef].
 const MAX_BYTESREF_BYTES_LENGTH: u64 = (1 << BYTESREF_BYTES_LENGTH_BITS) - 1;
-/// Largest number that can specify the starting address of a byte array in a [`BytesRef`].
+/// Largest number that can specify the starting address of a byte array in a [BytesRef].
 const MAX_BYTESREF_STARTING_ADDRESS: u64 = (1 << BYTESREF_STARTING_ADDRESS_BITS) - 1;
 
 /// Memory-optimized reference to a byte array in the buffer.
 ///
 /// Internally, a single u64 number is used to combine the starting address of an
-/// array in a [`BytesBuffer`] and its length.
-/// See [`BytesBuffer`] for a discussion of the resulting constraints.
+/// array in a [BytesBuffer] and its length.
+/// See [BytesBuffer] for a discussion of the resulting constraints.
 ///
 /// The generic parameter is used to obtain the global buffer that is to be uesd
 /// here.
@@ -246,7 +255,7 @@ impl<B: GlobalBytesBuffer> BytesRef<B> {
     }
 
     /// Returns a copy of the data that this reference points to.
-    pub(crate) fn to_vec(&self) -> Vec<u8> {
+    pub(crate) fn as_vec(&self) -> Vec<u8> {
         unsafe {
             let bytes = self.as_bytes();
             // TODO: Presumably the following is faster than extend_from_slice(), but this needs benchmarking
@@ -286,7 +295,7 @@ impl<B: GlobalBytesBuffer> hashbrown::Equivalent<BytesRef<B>> for [u8] {
 
 impl<B: GlobalBytesBuffer> PartialEq for BytesRef<B> {
     fn eq(&self, other: &BytesRef<B>) -> bool {
-        unsafe { self.as_bytes().eq(other.as_bytes()) }
+        unsafe { self.as_bytes() == (other.as_bytes()) }
     }
 }
 
@@ -312,8 +321,8 @@ macro_rules! declare_bytes_buffer {
         #[derive(Debug)]
         pub(crate) struct $buf_name;
         unsafe impl GlobalBytesBuffer for $buf_name {
-            unsafe fn get() -> &'static mut BytesBuffer {
-                &mut $buf_name_upper
+            unsafe fn get() -> *mut BytesBuffer {
+                std::ptr::addr_of_mut!($buf_name_upper)
             }
         }
     };
@@ -342,10 +351,10 @@ mod test {
         let data4: [u8; 4] = [8, 9, 10, 11];
         let bytes_ref4 = TestGlobalBuffer2::push_bytes(bufid3, &data4);
 
-        assert_eq!(bytes_ref1.to_vec(), vec!(1, 2, 3, 4));
-        assert_eq!(bytes_ref2.to_vec(), vec!(5, 6));
-        assert_eq!(bytes_ref3.to_vec(), vec!(10, 20, 30, 40));
-        assert_eq!(bytes_ref4.to_vec(), vec!(8, 9, 10, 11));
+        assert_eq!(bytes_ref1.as_vec(), vec!(1, 2, 3, 4));
+        assert_eq!(bytes_ref2.as_vec(), vec!(5, 6));
+        assert_eq!(bytes_ref3.as_vec(), vec!(10, 20, 30, 40));
+        assert_eq!(bytes_ref4.as_vec(), vec!(8, 9, 10, 11));
         // The two global buffers should behave identical on this data of same length, yet have distinct memory:
         assert_eq!(bufid1, bufid3); // < Note that this check would be subject to a race if the TestGlobalBuffers would be used in any other test!
         assert_eq!(bytes_ref1.len(), bytes_ref4.len());

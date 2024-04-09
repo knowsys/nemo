@@ -1,6 +1,6 @@
-//! This module provides implementations [`super::DataValue`]s that represent IRIs.
+//! This module provides implementations [DataValue]s that represent IRIs.
 //! In essence, IRIs are represented by Unicode strings, but they are considered
-//! distinct from elements of ['super::ValueDomain::String']. Moreover, some IRI-specific
+//! distinct from elements of [ValueDomain::PlainString]. Moreover, some IRI-specific
 //! requirements and normalizations might apply.
 
 use super::{DataValue, ValueDomain};

@@ -14,7 +14,7 @@ use crate::{
     columnar::{
         column::{Column, ColumnEnum},
         columnbuilder::{adaptive::ColumnBuilderAdaptive, ColumnBuilder},
-        columnscan::{ColumnScanCell, ColumnScanEnum, ColumnScanRainbow},
+        columnscan::{ColumnScanCell, ColumnScanEnum, ColumnScanT},
     },
     datatypes::{ColumnDataType, Double, Float, StorageTypeName, StorageValueT},
     management::bytesized::ByteSized,
@@ -149,9 +149,9 @@ where
         }
     }
 
-    /// Create a [ColumnScanRainbow] from iterators of the internal columns.
-    pub(crate) fn iter(&self) -> ColumnScanRainbow {
-        ColumnScanRainbow {
+    /// Create a [ColumnScanT] from iterators of the internal columns.
+    pub(crate) fn iter(&self) -> ColumnScanT {
+        ColumnScanT {
             scan_id32: ColumnScanCell::new(self.column_id32.iter()),
             scan_id64: ColumnScanCell::new(self.column_id64.iter()),
             scan_i64: ColumnScanCell::new(self.column_int64.iter()),
@@ -271,7 +271,7 @@ where
 /// Object for building an [IntervalColumnT]
 /// based on receiving the table in matrix form
 ///
-/// This is used for creating an [IntervalColumnT] from a [TupleBuffer][crate::datasources::TupleBuffer].
+/// This is used for creating an [IntervalColumnT] from a [TupleBuffer][crate::tabular::buffer::tuple_buffer::TupleBuffer].
 #[derive(Debug)]
 pub(crate) struct IntervalColumnTBuilderMatrix<LookupMethod>
 where
@@ -470,30 +470,24 @@ mod test {
     fn test_builder_matrix<LookupMethod: IntervalLookup>() {
         let mut builder = IntervalColumnTBuilderMatrix::<LookupMethod>::default();
 
-        assert_eq!(builder.add_value(StorageValueT::Id32(12)), true);
-        assert_eq!(builder.add_value(StorageValueT::Id32(16)), true);
-        assert_eq!(builder.add_value(StorageValueT::Id32(16)), false);
-        assert_eq!(builder.add_value(StorageValueT::Int64(-10)), true);
-        assert_eq!(builder.add_value(StorageValueT::Int64(-4)), true);
+        assert!(builder.add_value(StorageValueT::Id32(12)));
+        assert!(builder.add_value(StorageValueT::Id32(16)));
+        assert!(!builder.add_value(StorageValueT::Id32(16)));
+        assert!(builder.add_value(StorageValueT::Int64(-10)));
+        assert!(builder.add_value(StorageValueT::Int64(-4)));
 
         builder.finish_interval(StorageTypeName::Id64);
 
-        assert_eq!(builder.add_value(StorageValueT::Int64(-4)), true);
-        assert_eq!(builder.add_value(StorageValueT::Int64(-4)), false);
-        assert_eq!(builder.add_value(StorageValueT::Int64(0)), true);
-        assert_eq!(
-            builder.add_value(StorageValueT::Float(Float::new(3.1).unwrap())),
-            true
-        );
-        assert_eq!(
-            builder.add_value(StorageValueT::Float(Float::new(3.1).unwrap())),
-            false
-        );
+        assert!(builder.add_value(StorageValueT::Int64(-4)));
+        assert!(!builder.add_value(StorageValueT::Int64(-4)));
+        assert!(builder.add_value(StorageValueT::Int64(0)));
+        assert!(builder.add_value(StorageValueT::Float(Float::new(3.1).unwrap())));
+        assert!(!builder.add_value(StorageValueT::Float(Float::new(3.1).unwrap())));
 
         builder.finish_interval(StorageTypeName::Double);
 
-        assert_eq!(builder.add_value(StorageValueT::Id32(6)), true);
-        assert_eq!(builder.add_value(StorageValueT::Id32(7)), true);
+        assert!(builder.add_value(StorageValueT::Id32(6)));
+        assert!(builder.add_value(StorageValueT::Id32(7)));
 
         builder.finish_interval(StorageTypeName::Double);
 

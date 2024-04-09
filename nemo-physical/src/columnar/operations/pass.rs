@@ -16,7 +16,7 @@ impl<'a, T> ColumnScanPass<'a, T>
 where
     T: 'a + ColumnDataType,
 {
-    /// Constructs a new [`ColumnScanPass`].
+    /// Constructs a new [ColumnScanPass].
     pub(crate) fn new(reference_scan: &'a ColumnScanCell<'a, T>) -> ColumnScanPass<'a, T> {
         ColumnScanPass { reference_scan }
     }
@@ -70,7 +70,7 @@ mod test {
     #[test]
     fn columnscan_pass_basic() {
         let ref_col = ColumnVector::new(vec![0u32, 4, 7]);
-        let ref_col_iter = ColumnScanCell::new(ColumnScanEnum::ColumnScanVector(ref_col.iter()));
+        let ref_col_iter = ColumnScanCell::new(ColumnScanEnum::Vector(ref_col.iter()));
 
         let mut pass_scan = ColumnScanPass::new(&ref_col_iter);
 

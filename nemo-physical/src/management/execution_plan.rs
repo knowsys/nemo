@@ -13,6 +13,7 @@ use crate::{
         ExecutionTreeLeaf, ExecutionTreeNode, ExecutionTreeOperation,
     },
     tabular::operations::{
+        aggregate::{AggregateAssignment, GeneratorAggregate},
         filter::{Filters, GeneratorFilter},
         function::{FunctionAssignment, GeneratorFunction},
         join::GeneratorJoin,
@@ -54,7 +55,9 @@ impl ExecutionNodeOwned {
     }
 }
 
-/// Wraps [ExecutionNode] into a `Weak<RefCell<_>>`
+/// Reference to a node in an [ExecutionPlan]
+///
+/// Internally, uses a `Weak<RefCell<T>>`.
 #[derive(Debug, Clone)]
 pub struct ExecutionNodeRef(Weak<RefCell<ExecutionNode>>);
 
@@ -71,7 +74,7 @@ impl ExecutionNodeRef {
     /// Return the [ExecutionId] which identifies the referenced node
     ///
     /// # Panics
-    /// Throws a panic if borrowing the current [ExecutionNode] is already mutably borrowed.
+    /// Panics if the underlying node does not exist or is alreary mutably borrowed.
     pub fn id(&self) -> ExecutionId {
         let node_rc = self.get_rc();
         let node_borrow = node_rc.borrow();
@@ -80,8 +83,8 @@ impl ExecutionNodeRef {
     }
 
     /// Return [OperationTable],
-    /// which marks the colums of the table represented by this node.
-    pub fn markers(&self) -> OperationTable {
+    /// which marks the columns of the table represented by this node.
+    pub fn markers_cloned(&self) -> OperationTable {
         let node_rc = self.get_rc();
         let node_borrow = node_rc.borrow();
 
@@ -98,8 +101,8 @@ impl ExecutionNodeRef {
         match node_operation {
             ExecutionOperation::Join(subnodes) => subnodes.push(subnode),
             ExecutionOperation::Union(subnodes) => {
-                debug_assert!(subnodes.iter().all(|node| node.markers().is_empty()
-                    || node.markers().len() == subnode.markers().len()));
+                debug_assert!(subnodes.iter().all(|node| node.markers_cloned().is_empty()
+                    || node.markers_cloned().len() == subnode.markers_cloned().len()));
 
                 subnodes.push(subnode)
             }
@@ -131,8 +134,8 @@ impl ExecutionNodeRef {
             ExecutionOperation::ProjectReorder(subnode)
             | ExecutionOperation::Filter(subnode, _)
             | ExecutionOperation::Function(subnode, _)
-            | ExecutionOperation::Null(subnode) => vec![subnode.clone()],
-            ExecutionOperation::Aggregate() => todo!(),
+            | ExecutionOperation::Null(subnode)
+            | ExecutionOperation::Aggregate(subnode, _) => vec![subnode.clone()],
         }
     }
 }
@@ -168,9 +171,8 @@ pub(crate) enum ExecutionOperation {
     Function(ExecutionNodeRef, FunctionAssignment),
     /// Append columns with fresh nulls to the table represented by the subnode
     Null(ExecutionNodeRef),
-    /// Aggreagte
-    /// TODO: Implement aggregates again
-    Aggregate(),
+    /// Perform aggregate operation
+    Aggregate(ExecutionNodeRef, AggregateAssignment),
 }
 
 /// Declares whether the resulting table form executing a plan should be kept temporarily or permamently
@@ -286,9 +288,8 @@ impl ExecutionPlan {
         marked_columns: OperationTable,
         subtables: Vec<ExecutionNodeRef>,
     ) -> ExecutionNodeRef {
-        debug_assert!(subtables
-            .iter()
-            .all(|node| node.markers().is_empty() || node.markers().len() == marked_columns.len()));
+        debug_assert!(subtables.iter().all(|node| node.markers_cloned().is_empty()
+            || node.markers_cloned().len() == marked_columns.len()));
 
         let new_operation = ExecutionOperation::Union(subtables);
         self.push_and_return_reference(new_operation, marked_columns)
@@ -300,7 +301,7 @@ impl ExecutionPlan {
         main: ExecutionNodeRef,
         subtracted: Vec<ExecutionNodeRef>,
     ) -> ExecutionNodeRef {
-        let marked_columns = main.markers();
+        let marked_columns = main.markers_cloned();
         let new_operation = ExecutionOperation::Subtract(main, subtracted);
         self.push_and_return_reference(new_operation, marked_columns)
     }
@@ -325,7 +326,7 @@ impl ExecutionPlan {
 
     /// Return an [ExecutionNodeRef] for restricing a column to a certain value.
     pub fn filter(&mut self, subnode: ExecutionNodeRef, filters: Filters) -> ExecutionNodeRef {
-        let marked_columns = subnode.markers();
+        let marked_columns = subnode.markers_cloned();
         let new_operation = ExecutionOperation::Filter(subnode, filters);
         self.push_and_return_reference(new_operation, marked_columns)
     }
@@ -339,6 +340,21 @@ impl ExecutionPlan {
     ) -> ExecutionNodeRef {
         let new_operation = ExecutionOperation::Function(subnode, functions);
         self.push_and_return_reference(new_operation, marked_columns)
+    }
+
+    /// Return an [ExecutionNodeRef] for computing an aggregate.
+    pub fn aggregate(
+        &mut self,
+        marked_columns: OperationTable,
+        subnode: ExecutionNodeRef,
+        aggregate_assignment: AggregateAssignment,
+    ) -> ExecutionNodeRef {
+        let new_operation = ExecutionOperation::Aggregate(subnode, aggregate_assignment);
+        let aggregate_node = self.push_and_return_reference(new_operation, marked_columns);
+
+        self.write_temporary(aggregate_node.clone(), "Aggregate output");
+
+        aggregate_node
     }
 
     /// Return an [ExecutionNodeRef] for appending columns with fresh null.
@@ -355,12 +371,12 @@ impl ExecutionPlan {
 impl ExecutionPlan {
     /// Designate a [ExecutionNode] as an "output" node that will result in a materialized table.
     ///
-    /// If table has been marked as an "ouput" node already,
+    /// If table has been marked as an "output" node already,
     /// this function will not overwrite the existing name
     /// but will upgrade the [ExecutionResult] to permanent if required.
     ///
     /// Returns an [ExecutionId] which can be linked to the output table
-    /// that was computed by evaluateing this node.
+    /// that was computed by evaluating this node.
     fn push_out_node(
         &mut self,
         node: ExecutionNodeRef,
@@ -388,7 +404,7 @@ impl ExecutionPlan {
         id
     }
 
-    /// Designate a [ExecutionNode] as an "output" node that will produce a temporary table.
+    /// Designate a node in this [ExecutionPlan] as an "output" node that will produce a temporary table.
     ///
     /// Returns an [ExecutionId] which can be linked to the output table
     /// that was computed by evaluateing this node.
@@ -396,7 +412,7 @@ impl ExecutionPlan {
         self.push_out_node(node, ExecutionResult::Temporary, operation_name)
     }
 
-    /// Designate a [ExecutionNode] as an "output" node that will produce a permanent table (in its default order).
+    /// Designate a node in this [ExecutionPlan] as an "output" node that will produce a permanent table (in its default order).
     ///
     /// Returns an [ExecutionId] which can be linked to the output table
     /// that was computed by evaluateing this node.
@@ -409,7 +425,7 @@ impl ExecutionPlan {
         self.write_permanent_reordered(node, tree_name, table_name, ColumnOrder::default())
     }
 
-    /// Designate a [ExecutionNode] as an "output" node that will produce a permament table.
+    /// Designate  node in this [ExecutionPlan] as an "output" node that will produce a permament table.
     ///  
     /// Returns an [ExecutionId] which can be linked to the output table
     /// that was computed by evaluateing this node.
@@ -453,15 +469,16 @@ impl ExecutionPlan {
         let new_tree = if let Some(tables) = computed_trees_map.get(&output_node.node.id()) {
             let (closest_index, closest_order) =
                 closest_order(tables.iter().map(|(order, _id)| order), &order)
-                    .expect("Trie should exist at least in one order.")
-                    .clone();
+                    .expect("Trie should exist at least in one order.");
             let closest_computed_id = tables[closest_index].1;
-            let arity = output_node.node.markers().arity();
+            let arity = output_node.node.markers_cloned().arity();
             let generator = GeneratorProjectReorder::from_reordering(
                 closest_order.clone(),
                 order.clone(),
                 arity,
             );
+
+            computed_trees[closest_computed_id].used += 1;
 
             if generator.is_noop() {
                 return closest_computed_id;
@@ -478,6 +495,8 @@ impl ExecutionPlan {
                 result: execution_result,
                 operation_name: String::from("Reordering intermediate table"),
                 cut_layers: 0, // TODO: Compute cut_layers
+                used: 1,
+                dependents: Vec::new(),
             }
         } else {
             let root = Self::execution_node(
@@ -490,16 +509,34 @@ impl ExecutionPlan {
                 loaded_tables,
             );
 
+            let computed_table_id = computed_trees.len();
+
+            if let ExecutionTreeNode::ProjectReorder {
+                generator,
+                subnode: ExecutionTreeLeaf::FetchComputedTable(computed),
+            } = &root
+            {
+                if !&computed_trees[*computed].result.is_permanent() {
+                    computed_trees[*computed]
+                        .dependents
+                        .push((computed_table_id, generator.projectreordering()));
+                    computed_trees[*computed].used -= 1;
+                }
+            }
+
             ExecutionTree {
                 root,
                 id: output_node.node.id(),
                 result: execution_result,
                 operation_name: output_node.operation_name.clone(),
                 cut_layers: 0, // TODO: Compute cut_layers
+                used: 1,
+                dependents: Vec::new(),
             }
         };
 
         let computed_table_id = computed_trees.len();
+
         computed_trees.push(new_tree);
         computed_trees_map.insert(output_node.node.id(), vec![(order, computed_table_id)]);
 
@@ -566,7 +603,7 @@ impl ExecutionPlan {
                     Vec<Permutation>,
                 ) = subnodes
                     .iter()
-                    .map(|node| node.markers().align(&node_markers))
+                    .map(|node| node.markers_cloned().align(&node_markers))
                     .unzip();
 
                 let subtrees = subnodes
@@ -593,6 +630,34 @@ impl ExecutionPlan {
                         subnode_markers,
                     )),
                     subnodes: subtrees,
+                })
+            }
+            ExecutionOperation::Aggregate(subnode, aggregate_assignment) => {
+                // Add project/reorder operation if required by the aggregate
+                // This depends on the column ordering, see [crate::tabular::operation::aggregate::TrieScanAggregate]
+                let input = subnode.markers_cloned();
+                let output = node_markers.clone();
+
+                // Reorder input
+                let (generator_aggregate, correctly_ordered_input) =
+                    GeneratorAggregate::new_with_reorder(&output, &input, aggregate_assignment);
+
+                let subtree = Self::execution_node(
+                    root_node_id,
+                    subnode.clone(),
+                    subnode.markers_cloned().align(&correctly_ordered_input).1,
+                    output_nodes,
+                    computed_trees,
+                    computed_trees_map,
+                    loaded_tables,
+                )
+                .operation()
+                .expect("No sub node should be a project");
+
+                // Add aggregate operation
+                ExecutionTreeNode::Operation(ExecutionTreeOperation::Node {
+                    generator: OperationGeneratorEnum::Aggregate(generator_aggregate),
+                    subnodes: vec![subtree],
                 })
             }
             ExecutionOperation::Union(subnodes) => {
@@ -625,7 +690,7 @@ impl ExecutionPlan {
                     Vec<Permutation>,
                 ) = subnodes_subtract
                     .iter()
-                    .map(|subnode| subnode.markers().align(&markers_main))
+                    .map(|subnode| subnode.markers_cloned().align(&markers_main))
                     .unzip();
 
                 let subtrees = vec![(subnode_main, order.clone())]
@@ -699,20 +764,20 @@ impl ExecutionPlan {
                     subnodes: vec![subtree],
                 })
             }
-            ExecutionOperation::Aggregate() => todo!(),
             ExecutionOperation::ProjectReorder(subnode) => {
-                let marker_subnode = subnode.markers();
-                let subtree = if let ExecutionTreeOperation::Leaf(leaf) = Self::execution_node(
-                    root_node_id,
-                    subnode.clone(),
-                    ColumnOrder::default(),
-                    output_nodes,
-                    computed_trees,
-                    computed_trees_map,
-                    loaded_tables,
-                )
-                .operation()
-                .expect("No sub node should be a project")
+                let marker_subnode = subnode.markers_cloned();
+                let subtree: ExecutionTreeLeaf = if let ExecutionTreeOperation::Leaf(leaf) =
+                    Self::execution_node(
+                        root_node_id,
+                        subnode.clone(),
+                        ColumnOrder::default(),
+                        output_nodes,
+                        computed_trees,
+                        computed_trees_map,
+                        loaded_tables,
+                    )
+                    .operation()
+                    .expect("No sub node should be a project")
                 {
                     leaf
                 } else {
@@ -740,7 +805,7 @@ impl ExecutionPlan {
                 ExecutionTreeNode::Operation(ExecutionTreeOperation::Node {
                     generator: OperationGeneratorEnum::Null(GeneratorNull::new(
                         node_markers,
-                        subnode.markers(),
+                        subnode.markers_cloned(),
                     )),
                     subnodes: vec![subtree],
                 })
@@ -749,7 +814,7 @@ impl ExecutionPlan {
     }
 
     /// Split the [ExecutionPlan] into an [ExecutionSeries]
-    /// by splitting it into several [ExecutionTree][super::database::execution_series::ExecutionTree]s
+    /// by splitting it into several [ExecutionTree]s
     /// that will be executed one after another
     /// by the [DatabaseInstance][super::database::DatabaseInstance].
     pub(crate) fn finalize(self) -> ExecutionSeries {
@@ -772,17 +837,12 @@ impl ExecutionPlan {
             );
         }
 
-        let mut loaded_tries = loaded_tables.keys().cloned().collect::<Vec<_>>();
-        loaded_tries.sort_by(|left, right| {
-            loaded_tables
-                .get(left)
-                .expect("Keys were generated from the map")
-                .cmp(
-                    loaded_tables
-                        .get(right)
-                        .expect("Keys were generated from the map"),
-                )
-        });
+        let mut loaded_tries =
+            vec![(PermanentTableId::default(), ColumnOrder::default()); loaded_tables.len()];
+
+        for (key, index) in loaded_tables.into_iter() {
+            loaded_tries[index] = key;
+        }
 
         ExecutionSeries {
             loaded_tries,

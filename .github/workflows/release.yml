@@ -1,7 +1,8 @@
-name: Build Releases
+name: Prepare Releases
 on:
-  release:
-    types: [created]
+  push:
+    tags:
+      - "v*.*.*"
 
 jobs:
   release:
@@ -26,14 +27,16 @@ jobs:
           #   target: x86_64-apple-darwin
     steps:
       - name: Check out repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
       - name: Install rust toolchain
-        uses: hecrj/setup-rust-action@v1
+        uses: hecrj/setup-rust-action@v2
         with:
           rust-version: ${{ matrix.rust }}
           targets: ${{ matrix.target }}
       - name: Install cross
-        run: cargo install cross
+        # cf. https://github.com/cross-rs/cross/issues/1453
+        #run: cargo install cross
+        run: cargo install cross --git https://github.com/cross-rs/cross
       - name: Build release binary
         run: cross build --release --bin=nmo --target=${{ matrix.target }}
       - name: Strip release binaries (linux and darwin)
@@ -58,21 +61,16 @@ jobs:
             echo ASSET=$asset >> $GITHUB_ENV
           fi
           sha256sum "$asset" > "$asset.sha256sum"
-      - name: Upload release archive
-        uses: actions/upload-release-asset@v1.0.2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Create (draft) release
+        uses: softprops/action-gh-release@v2
         with:
-          upload_url: ${{ github.event.release.upload_url }}
-          asset_path: ${{ env.ASSET }}
-          asset_name: ${{ env.ASSET }}
-          asset_content_type: application/octet-stream
-      - name: Upload release checksum
-        uses: actions/upload-release-asset@v1.0.2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ github.event.release.upload_url }}
-          asset_path: "${{ env.ASSET }}.sha256sum"
-          asset_name: "${{ env.ASSET }}.sha256sum"
-          asset_content_type: text/plain
+          name: "Nemo ${{ github.ref_name }}"
+          fail_on_unmatched_files: false
+          generate_release_notes: true
+          make_latest: true
+          draft: true
+          files: |
+            nemo_*.zip
+            nemo_*.tar.gz
+            nemo_*.zip.sha256sum
+            nemo_*.tar.gz.sha256sum

@@ -12,7 +12,7 @@ use crate::{columnar::columnscan::ColumnScan, management::bytesized::ByteSized};
 
 use super::Column;
 
-/// Simple implementation of [`Column`] that uses Vec to store data.
+/// Simple implementation of [Column] that uses Vec to store data.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct ColumnVector<T> {
     data: Vec<T>,
@@ -59,7 +59,7 @@ impl<T> ByteSized for ColumnVector<T> {
     }
 }
 
-/// Simple implementation of [`ColumnScan`] for a [`ColumnVector`].
+/// Simple implementation of [ColumnScan] for a [ColumnVector].
 #[derive(Debug)]
 pub(crate) struct ColumnScanVector<'a, T> {
     column: &'a ColumnVector<T>,
@@ -74,7 +74,7 @@ where
     /// Defines the lower limit of elements in the interval where a binary search is used instead of a vector-scan
     const SEEK_BINARY_SEARCH: usize = 10;
 
-    /// Constructs a new [`ColumnScanVector`] for a Column.
+    /// Constructs a new [ColumnScanVector] for a Column.
     pub(crate) fn new(column: &'a ColumnVector<T>) -> Self {
         Self {
             column,

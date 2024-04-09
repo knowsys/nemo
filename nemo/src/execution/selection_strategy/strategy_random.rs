@@ -18,7 +18,7 @@ pub struct StrategyRandom {
 }
 
 impl RuleSelectionStrategy for StrategyRandom {
-    /// Create new [`StrategyRandom`].
+    /// Create new [StrategyRandom].
     fn new(
         _rules: Vec<&ChaseRule>,
         rule_analyses: Vec<&RuleAnalysis>,

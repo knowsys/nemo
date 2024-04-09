@@ -35,36 +35,36 @@ class TestExample(unittest.TestCase):
         self.engine.reason()
 
         self.expected_api_result = [
-            [2, "_:0"],
-            [42, "_:1"],
-            ["world", "_:2"],
-            [Decimal("3.14"), "_:3"],
+            ["<world>", "_:0"],
+            ["<circle>", "_:1"],
             [
                 NemoLiteral("hello world", lang="en"),
-                "_:4",
+                "_:2",
             ],
-            ["circle", "_:5"],
+            [2, "_:3"],
+            [42, "_:4"],
+            [3.14, "_:5"],
         ]
 
         self.expected_serialized_result = [
+            ["world", "_:0"],
+            ["circle", "_:1"],
             [
-                '"2"^^<http://www.w3.org/2001/XMLSchema#integer>',
-                "_:0",
+                '"hello world"@en',
+                "_:2",
             ],
             [
-                '"42"^^<http://www.w3.org/2001/XMLSchema#integer>',
-                "_:1",
-            ],
-            ["world", "_:2"],
-            [
-                '"3.14"^^<http://www.w3.org/2001/XMLSchema#decimal>',
+                "2",
                 "_:3",
             ],
             [
-                '"hello world"@en',
+                "42",
                 "_:4",
             ],
-            ["circle", "_:5"],
+            [
+                '"3.14"^^<http://www.w3.org/2001/XMLSchema#double>',
+                "_:5",
+            ],
         ]
 
     def test_result(self):
@@ -87,14 +87,20 @@ class TestExample(unittest.TestCase):
         trace = self.engine.trace("interesting(circle)")
         expected_trace = {
             "rule": "interesting(?y) :- data(?x, ?y), interesting(?x) .",
-            "assignment": {"?x": Decimal('3.14'), "?y": "circle"},
+            "assignment": {"?x": 3.14, "?y": "<circle>"},
             "subtraces": [
-                {"fact": "data(3.14, circle)"},
+                {
+                    "fact":
+                    "data(\"3.14\"^^<http://www.w3.org/2001/XMLSchema#double>, circle)"
+                },
                 {
                     "rule": "interesting(?y) :- data(?x, ?y), interesting(?x) .",
-                    "assignment": {"?x": "py", "?y": Decimal('3.14')},
+                    "assignment": {"?x": "<py>", "?y": 3.14},
                     "subtraces": [
-                        {"fact": "data(py, 3.14)"},
+                        {
+                            "fact":
+                            'data(py, "3.14"^^<http://www.w3.org/2001/XMLSchema#double>)'
+                        },
                         {"fact": "interesting(py)"},
                     ],
                 },

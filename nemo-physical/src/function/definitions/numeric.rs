@@ -7,36 +7,37 @@ mod integer64;
 pub mod traits;
 
 use crate::{
-    datatypes::{Double, Float},
+    datatypes::{Double, Float, StorageTypeName},
     datavalues::{AnyDataValue, DataValue, ValueDomain},
 };
 
 use self::{
     double::{
-        numeric_absolute_double, numeric_addition_double, numeric_cos_double,
-        numeric_division_double, numeric_greaterthan_double, numeric_greaterthaneq_double,
-        numeric_lessthan_double, numeric_lessthaneq_double, numeric_logarithm_double,
-        numeric_multiplication_double, numeric_negation_double, numeric_power_double,
-        numeric_sin_double, numeric_squareroot_double, numeric_subtraction_double,
-        numeric_tan_double,
+        numeric_absolute_double, numeric_addition_double, numeric_ceil_double, numeric_cos_double,
+        numeric_division_double, numeric_floor_double, numeric_greaterthan_double,
+        numeric_greaterthaneq_double, numeric_lessthan_double, numeric_lessthaneq_double,
+        numeric_logarithm_double, numeric_multiplication_double, numeric_negation_double,
+        numeric_power_double, numeric_remainder_double, numeric_round_double, numeric_sin_double,
+        numeric_squareroot_double, numeric_subtraction_double, numeric_tan_double,
     },
     float::{
-        numeric_absolute_float, numeric_addition_float, numeric_cos_float, numeric_division_float,
-        numeric_greaterthan_float, numeric_greaterthaneq_float, numeric_lessthan_float,
-        numeric_lessthaneq_float, numeric_logarithm_float, numeric_multiplication_float,
-        numeric_negation_float, numeric_power_float, numeric_sin_float, numeric_squareroot_float,
-        numeric_subtraction_float, numeric_tan_float,
+        numeric_absolute_float, numeric_addition_float, numeric_ceil_float, numeric_cos_float,
+        numeric_division_float, numeric_floor_float, numeric_greaterthan_float,
+        numeric_greaterthaneq_float, numeric_lessthan_float, numeric_lessthaneq_float,
+        numeric_logarithm_float, numeric_multiplication_float, numeric_negation_float,
+        numeric_power_float, numeric_remainder_float, numeric_round_float, numeric_sin_float,
+        numeric_squareroot_float, numeric_subtraction_float, numeric_tan_float,
     },
     integer64::{
         numeric_absolute_integer64, numeric_addition_integer64, numeric_division_integer64,
         numeric_greaterthan_integer64, numeric_greaterthaneq_integer64, numeric_lessthan_integer64,
         numeric_lessthaneq_integer64, numeric_logarithm_integer64,
         numeric_multiplication_integer64, numeric_negation_integer64, numeric_power_integer64,
-        numeric_squareroot_integer64, numeric_subtraction_integer64,
+        numeric_remainder_integer64, numeric_squareroot_integer64, numeric_subtraction_integer64,
     },
 };
 
-use super::{BinaryFunction, UnaryFunction};
+use super::{BinaryFunction, FunctionTypePropagation, UnaryFunction};
 
 /// Numeric value
 ///
@@ -143,6 +144,10 @@ impl BinaryFunction for NumericAddition {
 
         None
     }
+
+    fn type_propagation(&self) -> FunctionTypePropagation {
+        FunctionTypePropagation::Preserve
+    }
 }
 
 /// Numeric subtraction
@@ -168,6 +173,10 @@ impl BinaryFunction for NumericSubtraction {
         }
 
         None
+    }
+
+    fn type_propagation(&self) -> FunctionTypePropagation {
+        FunctionTypePropagation::Preserve
     }
 }
 
@@ -197,6 +206,10 @@ impl BinaryFunction for NumericMultiplication {
 
         None
     }
+
+    fn type_propagation(&self) -> FunctionTypePropagation {
+        FunctionTypePropagation::Preserve
+    }
 }
 
 /// Numeric division
@@ -222,6 +235,10 @@ impl BinaryFunction for NumericDivision {
         }
 
         None
+    }
+
+    fn type_propagation(&self) -> FunctionTypePropagation {
+        FunctionTypePropagation::Preserve
     }
 }
 
@@ -250,6 +267,10 @@ impl BinaryFunction for NumericLogarithm {
 
         None
     }
+
+    fn type_propagation(&self) -> FunctionTypePropagation {
+        FunctionTypePropagation::Preserve
+    }
 }
 
 /// Raising a numeric value to some power
@@ -276,6 +297,40 @@ impl BinaryFunction for NumericPower {
 
         None
     }
+
+    fn type_propagation(&self) -> FunctionTypePropagation {
+        FunctionTypePropagation::Preserve
+    }
+}
+
+/// Remainder operation
+///
+/// Returns the remainder of the (truncated) division `parameter_first / parameter.second`.
+/// The value of the result has always the same sign as `paramter_second`.
+///
+/// Returns `None` if `parameter_second` is zero.
+#[derive(Debug, Copy, Clone)]
+pub struct NumericRemainder;
+impl BinaryFunction for NumericRemainder {
+    fn evaluate(
+        &self,
+        parameter_first: AnyDataValue,
+        parameter_second: AnyDataValue,
+    ) -> Option<AnyDataValue> {
+        if let Some(pair) = NumericPair::from_any_pair(parameter_first, parameter_second) {
+            return match pair {
+                NumericPair::Integer(first, second) => numeric_remainder_integer64(first, second),
+                NumericPair::Float(first, second) => numeric_remainder_float(first, second),
+                NumericPair::Double(first, second) => numeric_remainder_double(first, second),
+            };
+        }
+
+        None
+    }
+
+    fn type_propagation(&self) -> FunctionTypePropagation {
+        FunctionTypePropagation::Preserve
+    }
 }
 
 /// Absolute value of numeric values
@@ -287,8 +342,8 @@ impl BinaryFunction for NumericPower {
 pub struct NumericAbsolute;
 impl UnaryFunction for NumericAbsolute {
     fn evaluate(&self, parameter: AnyDataValue) -> Option<AnyDataValue> {
-        if let Some(pair) = NumericValue::from_any_datavalue(parameter) {
-            return match pair {
+        if let Some(numeric_value) = NumericValue::from_any_datavalue(parameter) {
+            return match numeric_value {
                 NumericValue::Integer(value) => numeric_absolute_integer64(value),
                 NumericValue::Float(value) => numeric_absolute_float(value),
                 NumericValue::Double(value) => numeric_absolute_double(value),
@@ -296,6 +351,10 @@ impl UnaryFunction for NumericAbsolute {
         }
 
         None
+    }
+
+    fn type_propagation(&self) -> FunctionTypePropagation {
+        FunctionTypePropagation::Preserve
     }
 }
 
@@ -308,8 +367,8 @@ impl UnaryFunction for NumericAbsolute {
 pub struct NumericNegation;
 impl UnaryFunction for NumericNegation {
     fn evaluate(&self, parameter: AnyDataValue) -> Option<AnyDataValue> {
-        if let Some(pair) = NumericValue::from_any_datavalue(parameter) {
-            return match pair {
+        if let Some(numeric_value) = NumericValue::from_any_datavalue(parameter) {
+            return match numeric_value {
                 NumericValue::Integer(value) => numeric_negation_integer64(value),
                 NumericValue::Float(value) => numeric_negation_float(value),
                 NumericValue::Double(value) => numeric_negation_double(value),
@@ -317,6 +376,10 @@ impl UnaryFunction for NumericNegation {
         }
 
         None
+    }
+
+    fn type_propagation(&self) -> FunctionTypePropagation {
+        FunctionTypePropagation::Preserve
     }
 }
 
@@ -330,8 +393,8 @@ impl UnaryFunction for NumericNegation {
 pub struct NumericSquareroot;
 impl UnaryFunction for NumericSquareroot {
     fn evaluate(&self, parameter: AnyDataValue) -> Option<AnyDataValue> {
-        if let Some(pair) = NumericValue::from_any_datavalue(parameter) {
-            return match pair {
+        if let Some(numeric_value) = NumericValue::from_any_datavalue(parameter) {
+            return match numeric_value {
                 NumericValue::Integer(value) => numeric_squareroot_integer64(value),
                 NumericValue::Float(value) => numeric_squareroot_float(value),
                 NumericValue::Double(value) => numeric_squareroot_double(value),
@@ -339,6 +402,10 @@ impl UnaryFunction for NumericSquareroot {
         }
 
         None
+    }
+
+    fn type_propagation(&self) -> FunctionTypePropagation {
+        FunctionTypePropagation::Preserve
     }
 }
 
@@ -351,8 +418,8 @@ impl UnaryFunction for NumericSquareroot {
 pub struct NumericSine;
 impl UnaryFunction for NumericSine {
     fn evaluate(&self, parameter: AnyDataValue) -> Option<AnyDataValue> {
-        if let Some(pair) = NumericValue::from_any_datavalue(parameter) {
-            return match pair {
+        if let Some(numeric_value) = NumericValue::from_any_datavalue(parameter) {
+            return match numeric_value {
                 NumericValue::Integer(_value) => None,
                 NumericValue::Float(value) => numeric_sin_float(value),
                 NumericValue::Double(value) => numeric_sin_double(value),
@@ -360,6 +427,10 @@ impl UnaryFunction for NumericSine {
         }
 
         None
+    }
+
+    fn type_propagation(&self) -> FunctionTypePropagation {
+        FunctionTypePropagation::Preserve
     }
 }
 
@@ -372,8 +443,8 @@ impl UnaryFunction for NumericSine {
 pub struct NumericCosine;
 impl UnaryFunction for NumericCosine {
     fn evaluate(&self, parameter: AnyDataValue) -> Option<AnyDataValue> {
-        if let Some(pair) = NumericValue::from_any_datavalue(parameter) {
-            return match pair {
+        if let Some(numeric_value) = NumericValue::from_any_datavalue(parameter) {
+            return match numeric_value {
                 NumericValue::Integer(_value) => None,
                 NumericValue::Float(value) => numeric_cos_float(value),
                 NumericValue::Double(value) => numeric_cos_double(value),
@@ -381,6 +452,10 @@ impl UnaryFunction for NumericCosine {
         }
 
         None
+    }
+
+    fn type_propagation(&self) -> FunctionTypePropagation {
+        FunctionTypePropagation::Preserve
     }
 }
 
@@ -393,8 +468,8 @@ impl UnaryFunction for NumericCosine {
 pub struct NumericTangent;
 impl UnaryFunction for NumericTangent {
     fn evaluate(&self, parameter: AnyDataValue) -> Option<AnyDataValue> {
-        if let Some(pair) = NumericValue::from_any_datavalue(parameter) {
-            return match pair {
+        if let Some(numeric_value) = NumericValue::from_any_datavalue(parameter) {
+            return match numeric_value {
                 NumericValue::Integer(_value) => None,
                 NumericValue::Float(value) => numeric_tan_float(value),
                 NumericValue::Double(value) => numeric_tan_double(value),
@@ -402,6 +477,87 @@ impl UnaryFunction for NumericTangent {
         }
 
         None
+    }
+
+    fn type_propagation(&self) -> FunctionTypePropagation {
+        FunctionTypePropagation::Preserve
+    }
+}
+
+/// Rounding of a numeric value
+///
+/// Returns the nearest integer of the input parameter.
+/// If the result is half-way between two integers, round away from 0.0.
+///
+/// Returns `None` if the input parameter is not from a numeric value space.
+#[derive(Debug, Copy, Clone)]
+pub struct NumericRound;
+impl UnaryFunction for NumericRound {
+    fn evaluate(&self, parameter: AnyDataValue) -> Option<AnyDataValue> {
+        if let Some(numeric_value) = NumericValue::from_any_datavalue(parameter) {
+            return match numeric_value {
+                NumericValue::Integer(value) => Some(AnyDataValue::new_integer_from_i64(value)),
+                NumericValue::Float(value) => numeric_round_float(value),
+                NumericValue::Double(value) => numeric_round_double(value),
+            };
+        }
+
+        None
+    }
+
+    fn type_propagation(&self) -> FunctionTypePropagation {
+        FunctionTypePropagation::Preserve
+    }
+}
+
+/// Rounding up to the smallest integer less than or equal than input parameter
+///
+/// Returns the smallest integer less than or equal than input parameter
+///
+/// Returns `None` if the input parameter is not from a numeric value space.
+#[derive(Debug, Copy, Clone)]
+pub struct NumericCeil;
+impl UnaryFunction for NumericCeil {
+    fn evaluate(&self, parameter: AnyDataValue) -> Option<AnyDataValue> {
+        if let Some(numeric_value) = NumericValue::from_any_datavalue(parameter) {
+            return match numeric_value {
+                NumericValue::Integer(value) => Some(AnyDataValue::new_integer_from_i64(value)),
+                NumericValue::Float(value) => numeric_ceil_float(value),
+                NumericValue::Double(value) => numeric_ceil_double(value),
+            };
+        }
+
+        None
+    }
+
+    fn type_propagation(&self) -> FunctionTypePropagation {
+        FunctionTypePropagation::Preserve
+    }
+}
+
+/// Rounding of a numeric value
+///
+/// Returns the nearest integer of the input parameter.
+/// If the result is half-way between two integers, round away from 0.0.
+///
+/// Returns `None` if the input parameter is not from a numeric value space.
+#[derive(Debug, Copy, Clone)]
+pub struct NumericFloor;
+impl UnaryFunction for NumericFloor {
+    fn evaluate(&self, parameter: AnyDataValue) -> Option<AnyDataValue> {
+        if let Some(numeric_value) = NumericValue::from_any_datavalue(parameter) {
+            return match numeric_value {
+                NumericValue::Integer(value) => Some(AnyDataValue::new_integer_from_i64(value)),
+                NumericValue::Float(value) => numeric_floor_float(value),
+                NumericValue::Double(value) => numeric_floor_double(value),
+            };
+        }
+
+        None
+    }
+
+    fn type_propagation(&self) -> FunctionTypePropagation {
+        FunctionTypePropagation::Preserve
     }
 }
 
@@ -430,6 +586,15 @@ impl BinaryFunction for NumericLessthan {
 
         None
     }
+
+    fn type_propagation(&self) -> FunctionTypePropagation {
+        // TODO: This is playing it save, one should probably give booleans a special status
+        FunctionTypePropagation::KnownOutput(
+            StorageTypeName::Id32
+                .bitset()
+                .union(StorageTypeName::Id64.bitset()),
+        )
+    }
 }
 
 /// Less than or equals comparison of two numbers
@@ -457,6 +622,15 @@ impl BinaryFunction for NumericLessthaneq {
 
         None
     }
+
+    fn type_propagation(&self) -> FunctionTypePropagation {
+        // TODO: This is playing it save, one should probably give booleans a special status
+        FunctionTypePropagation::KnownOutput(
+            StorageTypeName::Id32
+                .bitset()
+                .union(StorageTypeName::Id64.bitset()),
+        )
+    }
 }
 
 /// Greater than comparison of two numbers
@@ -483,6 +657,15 @@ impl BinaryFunction for NumericGreaterthan {
         }
 
         None
+    }
+
+    fn type_propagation(&self) -> FunctionTypePropagation {
+        // TODO: This is playing it save, one should probably give booleans a special status
+        FunctionTypePropagation::KnownOutput(
+            StorageTypeName::Id32
+                .bitset()
+                .union(StorageTypeName::Id64.bitset()),
+        )
     }
 }
 
@@ -512,5 +695,14 @@ impl BinaryFunction for NumericGreaterthaneq {
         }
 
         None
+    }
+
+    fn type_propagation(&self) -> FunctionTypePropagation {
+        // TODO: This is playing it save, one should probably give booleans a special status
+        FunctionTypePropagation::KnownOutput(
+            StorageTypeName::Id32
+                .bitset()
+                .union(StorageTypeName::Id64.bitset()),
+        )
     }
 }

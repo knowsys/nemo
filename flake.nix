@@ -25,7 +25,13 @@ rec {
 
       channels.nixpkgs.overlaysBuilder = channels: [
         rust-overlay.overlays.default
-        (final: prev: {inherit (channels.nixpkgs-unstable) wasm-bindgen-cli;})
+        (final: prev: {
+          wasm-bindgen-cli = channels.nixpkgs-unstable.wasm-bindgen-cli.override {
+            version = "0.2.92";
+            hash = "sha256-1VwY8vQy7soKEgbki4LD+v259751kKxSxmo/gqE6yV0=";
+            cargoHash = "sha256-aACJ+lYNEU8FFBs158G1/JG8sc6Rq080PeKCMnwdpH0=";
+          };
+        })
       ];
 
       overlays.default = final: prev: let
@@ -44,7 +50,12 @@ rec {
           cargo = toolchain;
           rustc = toolchain;
         };
-        defaultBuildInputs = [pkgs.openssl pkgs.openssl.dev] ++ pkgs.lib.optionals pkgs.stdenv.isDarwin [pkgs.darwin.apple_sdk.frameworks.Security];
+        defaultBuildInputs =
+          [pkgs.openssl pkgs.openssl.dev]
+          ++ pkgs.lib.optionals pkgs.stdenv.isDarwin [
+            pkgs.darwin.apple_sdk.frameworks.Security
+            pkgs.darwin.apple_sdk.frameworks.SystemConfiguration
+          ];
         defaultNativeBuildInputs = [toolchain pkgs.pkg-config];
       in rec {
         packages = let
@@ -90,7 +101,7 @@ rec {
                 export XDG_CACHE_HOME=$TMPDIR/.cache
 
                 cd $src
-                wasm-pack build --target ${target} --weak-refs --mode=no-install --out-dir=$out/lib/node_modules/${pname} nemo-wasm
+                HOME=$TMPDIR wasm-pack build --target ${target} --weak-refs --mode=no-install --out-dir=$out/lib/node_modules/${pname} nemo-wasm
 
                 runHook postBuild
               '';
@@ -174,8 +185,8 @@ rec {
             ];
 
             text = ''
-              export RUSTFLAGS"=-Dwarnings";
-              export RUSTDOCFLAGS="-Dwarnings";
+              export RUSTFLAGS"=-Dwarnings"
+              export RUSTDOCFLAGS="-Dwarnings"
 
               if [[ ! -f "flake.nix" || ! -f "Cargo.toml" || ! -f "rust-toolchain.toml" ]]; then
                 echo "This should be run from the top-level of the nemo source tree."
@@ -199,7 +210,7 @@ rec {
                 rm -rf "''${VENV}"
               popd
 
-              wasm-pack build --weak-refs --mode=no-install nemo-wasm
+              HOME=$TMPDIR wasm-pack build --weak-refs --mode=no-install nemo-wasm
 
               cargo miri test
             '';

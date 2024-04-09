@@ -1,10 +1,13 @@
 //! This module defines [TrieScanSubtract] and [GeneratorSubtract].
 
-use std::cell::{RefCell, UnsafeCell};
+use std::{
+    cell::{RefCell, UnsafeCell},
+    rc::Rc,
+};
 
 use crate::{
     columnar::{
-        columnscan::{ColumnScanCell, ColumnScanEnum, ColumnScanRainbow},
+        columnscan::{ColumnScanCell, ColumnScanEnum, ColumnScanT},
         operations::subtract::ColumnScanSubtract,
     },
     datatypes::{storage_type_name::StorageTypeBitSet, Double, Float, StorageTypeName},
@@ -17,7 +20,7 @@ use super::{OperationGenerator, OperationTable};
 /// Used to create a [TrieScanSubtract]
 #[derive(Debug, Clone)]
 pub(crate) struct GeneratorSubtract {
-    /// For each [`PartialTrieScan`] in `trie_subtract`,
+    /// For each [PartialTrieScan] in `trie_subtract`,
     /// specifies which of its layers correspond to which layers from the "main" trie
     layer_maps: Vec<SubtractedLayerMap>,
 }
@@ -51,14 +54,14 @@ impl OperationGenerator for GeneratorSubtract {
         _dictionary: &'a RefCell<Dict>,
     ) -> Option<TrieScanEnum<'a>> {
         debug_assert!(
-            trie_scans.len() >= 1,
+            !trie_scans.is_empty(),
             "Input needs to include the main trie"
         );
 
         let (tries_subtract, layer_maps): (Vec<TrieScanEnum>, Vec<Vec<usize>>) = trie_scans
             .split_off(1)
             .into_iter()
-            .zip(self.layer_maps.clone().into_iter())
+            .zip(self.layer_maps.clone())
             .flat_map(|(scan, map)| scan.map(|scan| (scan, map)))
             .unzip();
         let trie_main = trie_scans.remove(0)?;
@@ -68,10 +71,27 @@ impl OperationGenerator for GeneratorSubtract {
             return Some(trie_main);
         }
 
-        let mut column_scans: Vec<UnsafeCell<ColumnScanRainbow<'a>>> =
+        if trie_main.arity() == 0 {
+            // If we subtract anything from a zero column trie it will be empty
+            return None;
+        }
+
+        if tries_subtract.iter().any(|scan| scan.arity() == 0) {
+            // If we subtract a non empty zero column trie the result is defined as empty
+            return None;
+        }
+
+        let mut active_scans = Vec::with_capacity(trie_main.arity() + 1);
+        active_scans.push(Rc::new(RefCell::new(vec![true; tries_subtract.len()])));
+
+        let mut column_scans: Vec<UnsafeCell<ColumnScanT<'a>>> =
             Vec::with_capacity(trie_main.arity());
 
         for output_layer in 0..trie_main.arity() {
+            active_scans.push(Rc::new(RefCell::new(Vec::with_capacity(
+                tries_subtract.len(),
+            ))));
+
             macro_rules! subtract_scan {
                 ($type:ty, $scan:ident) => {{
                     let mut subtract_indices = Vec::<usize>::new();
@@ -103,11 +123,16 @@ impl OperationGenerator for GeneratorSubtract {
                         }
                     }
 
-                    ColumnScanEnum::ColumnScanSubtract(ColumnScanSubtract::new(
+                    let equal_values = active_scans[output_layer + 1].clone();
+                    let active_scans = active_scans[output_layer].clone();
+
+                    ColumnScanEnum::Subtract(ColumnScanSubtract::new(
                         input_main,
                         input_follower,
                         subtract_indices,
                         follow_indices,
+                        active_scans,
+                        equal_values,
                     ))
                 }};
             }
@@ -118,7 +143,7 @@ impl OperationGenerator for GeneratorSubtract {
             let subtract_scan_float = subtract_scan!(Float, scan_float);
             let subtract_scan_double = subtract_scan!(Double, scan_double);
 
-            let new_scan = ColumnScanRainbow::new(
+            let new_scan = ColumnScanT::new(
                 subtract_scan_id32,
                 subtract_scan_id64,
                 subtract_scan_i64,
@@ -128,35 +153,35 @@ impl OperationGenerator for GeneratorSubtract {
             column_scans.push(UnsafeCell::new(new_scan));
         }
 
-        Some(TrieScanEnum::TrieScanSubtract(TrieScanSubtract {
+        Some(TrieScanEnum::Subtract(TrieScanSubtract {
             trie_main: Box::new(trie_main),
             tries_subtract,
             layer_maps,
             column_scans,
-            path_types: Vec::new(),
+            active_scans,
         }))
     }
 }
 
-/// [`PartialTrieScan`] that subtracts from a "main" [`PartialTrieScan`] a list of [`PartialTrieScan`]s referred to as "subtract".
+/// [PartialTrieScan] that subtracts from a "main" [PartialTrieScan] a list of [PartialTrieScan]s referred to as "subtract".
 /// The results contains all elements that are in main but not in one of the subtract scans.
 /// This can also handle subtracting tables of different arities.
 #[derive(Debug)]
 pub(crate) struct TrieScanSubtract<'a> {
-    /// [`PartialTrieScan`] from which elements are being subtracted
+    /// [PartialTrieScan] from which elements are being subtracted
     trie_main: Box<TrieScanEnum<'a>>,
     /// Elements that are subtracted
     tries_subtract: Vec<TrieScanEnum<'a>>,
 
-    /// For each [`PartialTrieScan`] in `trie_subtract`,
+    /// For each [PartialTrieScan] in `trie_subtract`,
     /// specifies which of its layers correspond to which layers from the "main" trie
     layer_maps: Vec<SubtractedLayerMap>,
+    /// For each layer, contains a list of booleans
+    /// inidicating which input scans point to the same partial row of values
+    active_scans: Vec<Rc<RefCell<Vec<bool>>>>,
 
     /// List of `ColumnScanSubtract` where every entry represents one level of the resulting trie.
-    column_scans: Vec<UnsafeCell<ColumnScanRainbow<'a>>>,
-
-    /// Path of [StorageTypeName] indicating the the types of the current (partial) row
-    path_types: Vec<StorageTypeName>,
+    column_scans: Vec<UnsafeCell<ColumnScanT<'a>>>,
 }
 
 /// Associates each layer in a "subtract" trie with a layer in the "main" trie
@@ -164,44 +189,33 @@ type SubtractedLayerMap = Vec<usize>;
 
 impl<'a> PartialTrieScan<'a> for TrieScanSubtract<'a> {
     fn up(&mut self) {
-        let current_layer = self.current_layer().unwrap();
+        let previous_layer = self
+            .current_layer()
+            .expect("Cannot call PartialTrieScan::up when in starting position");
 
         for (trie_subtract, layer_map) in self.tries_subtract.iter_mut().zip(self.layer_maps.iter())
         {
             if let Some(current_layer_subtract) = trie_subtract.current_layer() {
                 let used_layer = layer_map[current_layer_subtract];
 
-                if current_layer == used_layer {
+                if previous_layer == used_layer {
                     trie_subtract.up();
                 }
             }
         }
 
         self.trie_main.up();
-        self.path_types.pop();
     }
 
     fn down(&mut self, next_type: StorageTypeName) {
-        let previous_layer = self.current_layer();
-        let previous_type = self.path_types.last();
-
-        let next_layer = self.path_types.len();
+        let next_layer = self.current_layer().map_or(0, |layer| layer + 1);
 
         debug_assert!(next_layer < self.arity());
-
-        let previous_equal = match previous_layer {
-            Some(previous_layer) => self.column_scans[previous_layer]
-                .get_mut()
-                .subtract_get_equal(
-                    *previous_type.expect("path_types is not empty previous_layer is not None"),
-                ),
-            None => vec![true; self.layer_maps.len()],
-        };
 
         for (subtract_index, (trie_subtract, layer_map)) in
             (self.tries_subtract.iter_mut().zip(self.layer_maps.iter())).enumerate()
         {
-            if !previous_equal[subtract_index] {
+            if !self.active_scans[next_layer].borrow()[subtract_index] {
                 continue;
             }
 
@@ -213,28 +227,23 @@ impl<'a> PartialTrieScan<'a> for TrieScanSubtract<'a> {
         }
 
         self.trie_main.down(next_type);
-        self.path_types.push(next_type);
-
-        self.column_scans[next_layer]
-            .get_mut()
-            .subtract_set_active(next_type, previous_equal);
         self.column_scans[next_layer].get_mut().reset(next_type);
-    }
-
-    fn path_types(&self) -> &[StorageTypeName] {
-        &self.path_types
     }
 
     fn arity(&self) -> usize {
         self.trie_main.arity()
     }
 
-    fn scan<'b>(&'b self, layer: usize) -> &'b UnsafeCell<ColumnScanRainbow<'a>> {
+    fn scan<'b>(&'b self, layer: usize) -> &'b UnsafeCell<ColumnScanT<'a>> {
         &self.column_scans[layer]
     }
 
     fn possible_types(&self, layer: usize) -> StorageTypeBitSet {
         self.trie_main.possible_types(layer)
+    }
+
+    fn current_layer(&self) -> Option<usize> {
+        self.trie_main.current_layer()
     }
 }
 
@@ -261,8 +270,8 @@ mod test {
         let trie_main = trie_id32(vec![&[1, 3], &[1, 6], &[1, 8], &[2, 2], &[2, 7], &[3, 5]]);
         let trie_subtract = trie_id32(vec![&[1, 2], &[1, 6], &[1, 9], &[3, 2], &[3, 5], &[4, 8]]);
 
-        let trie_main_scan = TrieScanEnum::TrieScanGeneric(trie_main.partial_iterator());
-        let trie_subtract_scan = TrieScanEnum::TrieScanGeneric(trie_subtract.partial_iterator());
+        let trie_main_scan = TrieScanEnum::Generic(trie_main.partial_iterator());
+        let trie_subtract_scan = TrieScanEnum::Generic(trie_subtract.partial_iterator());
 
         let mut marker_generator = OperationTableGenerator::new();
         marker_generator.add_marker("x");
@@ -321,8 +330,8 @@ mod test {
             &[10, 7],
         ]);
 
-        let trie_main_scan = TrieScanEnum::TrieScanGeneric(trie_main.partial_iterator());
-        let trie_subtract_scan = TrieScanEnum::TrieScanGeneric(trie_subtract.partial_iterator());
+        let trie_main_scan = TrieScanEnum::Generic(trie_main.partial_iterator());
+        let trie_subtract_scan = TrieScanEnum::Generic(trie_subtract.partial_iterator());
 
         let mut marker_generator = OperationTableGenerator::new();
         marker_generator.add_marker("x");
@@ -381,15 +390,11 @@ mod test {
         let trie_subtract_c = trie_id32(vec![&[0, 0], &[9, 2]]);
         let trie_subtract_d = trie_id32(vec![&[8, 2]]);
 
-        let trie_main_scan = TrieScanEnum::TrieScanGeneric(trie_main.partial_iterator());
-        let trie_subtract_a_scan =
-            TrieScanEnum::TrieScanGeneric(trie_subtract_a.partial_iterator());
-        let trie_subtract_b_scan =
-            TrieScanEnum::TrieScanGeneric(trie_subtract_b.partial_iterator());
-        let trie_subtract_c_scan =
-            TrieScanEnum::TrieScanGeneric(trie_subtract_c.partial_iterator());
-        let trie_subtract_d_scan =
-            TrieScanEnum::TrieScanGeneric(trie_subtract_d.partial_iterator());
+        let trie_main_scan = TrieScanEnum::Generic(trie_main.partial_iterator());
+        let trie_subtract_a_scan = TrieScanEnum::Generic(trie_subtract_a.partial_iterator());
+        let trie_subtract_b_scan = TrieScanEnum::Generic(trie_subtract_b.partial_iterator());
+        let trie_subtract_c_scan = TrieScanEnum::Generic(trie_subtract_c.partial_iterator());
+        let trie_subtract_d_scan = TrieScanEnum::Generic(trie_subtract_d.partial_iterator());
 
         let mut marker_generator = OperationTableGenerator::new();
         marker_generator.add_marker("x");
@@ -453,8 +458,8 @@ mod test {
         let trie_main = trie_id32(vec![&[4, 0, 0], &[4, 2, 1]]);
         let trie_subtract = trie_id32(vec![&[0]]);
 
-        let trie_main_scan = TrieScanEnum::TrieScanGeneric(trie_main.partial_iterator());
-        let trie_subtract_scan = TrieScanEnum::TrieScanGeneric(trie_subtract.partial_iterator());
+        let trie_main_scan = TrieScanEnum::Generic(trie_main.partial_iterator());
+        let trie_subtract_scan = TrieScanEnum::Generic(trie_subtract.partial_iterator());
 
         let mut marker_generator = OperationTableGenerator::new();
         marker_generator.add_marker("x");
@@ -490,8 +495,8 @@ mod test {
         let trie_main = trie_id32(vec![&[2, 0, 0], &[4, 0, 0], &[8, 5, 1]]);
         let trie_subtract = trie_id32(vec![&[2], &[8]]);
 
-        let trie_main_scan = TrieScanEnum::TrieScanGeneric(trie_main.partial_iterator());
-        let trie_subtract_scan = TrieScanEnum::TrieScanGeneric(trie_subtract.partial_iterator());
+        let trie_main_scan = TrieScanEnum::Generic(trie_main.partial_iterator());
+        let trie_subtract_scan = TrieScanEnum::Generic(trie_subtract.partial_iterator());
 
         let mut marker_generator = OperationTableGenerator::new();
         marker_generator.add_marker("x");

@@ -117,6 +117,8 @@ pub enum BinaryOperation {
     NumericLogarithm,
     /// Numeric value raised to another numeric value
     NumericPower,
+    /// Remainder of a division between two numeric values
+    NumericRemainder,
     /// Numeric greater than comparison
     NumericGreaterthan,
     /// Numeric greater than or equals comparison
@@ -131,8 +133,16 @@ pub enum BinaryOperation {
     StringConcatenation,
     /// Check whether string is contained in another, correspondng to SPARQL function CONTAINS.
     StringContains,
-    /// The first part (of specified length) of a string
+    /// String starting at some start position
     StringSubstring,
+    /// First part of a string split by some other string
+    StringBefore,
+    /// Second part of a string split by some other string
+    StringAfter,
+    /// Whether string starts with a certain string
+    StringStarts,
+    /// Whether string ends with a certain string
+    StringEnds,
     /// Conjunction of boolean values
     BooleanConjunction,
     /// Disjunction of boolean values
@@ -144,14 +154,19 @@ impl BinaryOperation {
     /// Returns `None` if the provided function name does not correspond to a known binary function.
     pub fn construct_from_name(name: &str) -> Result<BinaryOperation, Error> {
         match name.to_uppercase().as_str() {
-            "LOG" => Ok(BinaryOperation::NumericLogarithm),
-            "POW" => Ok(BinaryOperation::NumericPower),
-            "COMPARE" => Ok(BinaryOperation::StringCompare),
-            "CONCAT" => Ok(BinaryOperation::StringConcatenation),
-            "CONTAINS" => Ok(BinaryOperation::StringContains),
-            "SUBSTR" => Ok(BinaryOperation::StringSubstring),
-            "AND" => Ok(BinaryOperation::BooleanConjunction),
-            "OR" => Ok(BinaryOperation::BooleanDisjunction),
+            "LOG" => Ok(Self::NumericLogarithm),
+            "POW" => Ok(Self::NumericPower),
+            "COMPARE" => Ok(Self::StringCompare),
+            "CONCAT" => Ok(Self::StringConcatenation),
+            "CONTAINS" => Ok(Self::StringContains),
+            "SUBSTR" => Ok(Self::StringSubstring),
+            "AND" => Ok(Self::BooleanConjunction),
+            "OR" => Ok(Self::BooleanDisjunction),
+            "STRSTARTS" => Ok(Self::StringStarts),
+            "STRENDS" => Ok(Self::StringEnds),
+            "STRBEFORE" => Ok(Self::StringBefore),
+            "STRAFTER" => Ok(Self::StringAfter),
+            "REM" => Ok(Self::NumericRemainder),
             s => Err(Error::UnknownUnaryOpertation {
                 operation: s.into(),
             }),
@@ -161,24 +176,29 @@ impl BinaryOperation {
     /// Return the name of the operation.
     pub fn name(&self) -> String {
         let name = match self {
-            BinaryOperation::NumericAddition => "Addition",
-            BinaryOperation::NumericSubtraction => "Subtraction",
-            BinaryOperation::NumericMultiplication => "Multiplication",
-            BinaryOperation::NumericDivision => "Division",
-            BinaryOperation::NumericPower => "Power",
-            BinaryOperation::NumericLogarithm => "Logarithm",
-            BinaryOperation::StringCompare => "StringCompare",
-            BinaryOperation::StringConcatenation => "CONCAT",
-            BinaryOperation::StringContains => "CONTAINS",
-            BinaryOperation::StringSubstring => "Substring",
-            BinaryOperation::BooleanConjunction => "BooleanAnd",
-            BinaryOperation::BooleanDisjunction => "BooleanOr",
-            BinaryOperation::Equal => "Equals",
-            BinaryOperation::Unequals => "Unequals",
-            BinaryOperation::NumericGreaterthan => "GreaterThan",
-            BinaryOperation::NumericGreaterthaneq => "GreaterThanEq",
-            BinaryOperation::NumericLessthan => "LessThan",
-            BinaryOperation::NumericLessthaneq => "LessThanEq",
+            Self::NumericAddition => "Addition",
+            Self::NumericSubtraction => "Subtraction",
+            Self::NumericMultiplication => "Multiplication",
+            Self::NumericDivision => "Division",
+            Self::NumericPower => "Power",
+            Self::NumericRemainder => "Remainder",
+            Self::NumericLogarithm => "Logarithm",
+            Self::StringCompare => "StringCompare",
+            Self::StringConcatenation => "CONCAT",
+            Self::StringContains => "CONTAINS",
+            Self::StringSubstring => "Substring",
+            Self::BooleanConjunction => "BooleanAnd",
+            Self::BooleanDisjunction => "BooleanOr",
+            Self::Equal => "Equals",
+            Self::Unequals => "Unequals",
+            Self::NumericGreaterthan => "GreaterThan",
+            Self::NumericGreaterthaneq => "GreaterThanEq",
+            Self::NumericLessthan => "LessThan",
+            Self::NumericLessthaneq => "LessThanEq",
+            Self::StringBefore => "STRBEFORE",
+            Self::StringAfter => "STRAFTER",
+            Self::StringStarts => "STRSTARTS",
+            Self::StringEnds => "STRENDS",
         };
 
         String::from(name)
@@ -188,41 +208,78 @@ impl BinaryOperation {
     /// or `None` if this is not an infix operation
     pub fn infix(&self) -> Option<&'static str> {
         match self {
-            BinaryOperation::NumericAddition => Some("+"),
-            BinaryOperation::NumericSubtraction => Some("-"),
-            BinaryOperation::NumericMultiplication => Some("*"),
-            BinaryOperation::NumericDivision => Some("/"),
-            BinaryOperation::Equal => Some("="),
-            BinaryOperation::Unequals => Some("!="),
-            BinaryOperation::NumericGreaterthan => Some(">"),
-            BinaryOperation::NumericGreaterthaneq => Some(">="),
-            BinaryOperation::NumericLessthan => Some("<"),
-            BinaryOperation::NumericLessthaneq => Some("<="),
-            BinaryOperation::NumericLogarithm
-            | BinaryOperation::NumericPower
-            | BinaryOperation::StringCompare
-            | BinaryOperation::StringConcatenation
-            | BinaryOperation::StringContains
-            | BinaryOperation::StringSubstring
-            | BinaryOperation::BooleanConjunction
-            | BinaryOperation::BooleanDisjunction => None,
+            Self::NumericAddition => Some("+"),
+            Self::NumericSubtraction => Some("-"),
+            Self::NumericMultiplication => Some("*"),
+            Self::NumericDivision => Some("/"),
+            Self::Equal => Some("="),
+            Self::Unequals => Some("!="),
+            Self::NumericGreaterthan => Some(">"),
+            Self::NumericGreaterthaneq => Some(">="),
+            Self::NumericLessthan => Some("<"),
+            Self::NumericLessthaneq => Some("<="),
+            Self::NumericRemainder => Some("%"),
+            Self::NumericLogarithm
+            | Self::NumericPower
+            | Self::StringCompare
+            | Self::StringConcatenation
+            | Self::StringContains
+            | Self::StringSubstring
+            | Self::StringStarts
+            | Self::StringEnds
+            | Self::StringBefore
+            | Self::StringAfter
+            | Self::BooleanConjunction
+            | Self::BooleanDisjunction => None,
         }
     }
 }
 
-/// Unary operation applied to a [`Term`]
+/// Unary operation applied to a [Term]
 #[derive(Debug, Eq, PartialEq, Copy, Clone, PartialOrd, Ord)]
 pub enum UnaryOperation {
     /// Boolean negation
     BooleanNegation,
+    /// Cast to double
+    CastToDouble,
+    /// Cast to float
+    CastToFloat,
+    /// Cast to integer
+    CastToInteger,
     /// Canonical string representation of a value
     CanonicalString,
+    /// Check if value is an integer
+    CheckIsInteger,
+    /// Check if value is a float
+    CheckIsFloat,
+    /// Check if value is a double
+    CheckIsDouble,
+    /// Check if value is an iri
+    CheckIsIri,
+    /// Check if value is numeric
+    CheckIsNumeric,
+    /// Check if value is a null
+    CheckIsNull,
+    /// Check if value is a string
+    CheckIsString,
+    /// Get datatype of a value
+    Datatype,
+    /// Get language tag of a languaged tagged string
+    LanguageTag,
+    /// Lexical value
+    LexicalValue,
     /// Absolute value of a numeric value
     NumericAbsolute,
     /// Cosine of a numeric value
     NumericCosine,
+    /// Rounding up of a numeric value
+    NumericCeil,
+    /// Rounding down of a numeric value
+    NumericFloor,
     /// Additive inverse of a numeric value
     NumericNegation,
+    /// Rounding of a numeric value
+    NumericRound,
     /// Sine of a numeric value
     NumericSine,
     /// Square root of a numeric value
@@ -242,16 +299,32 @@ impl UnaryOperation {
     /// Returns `None` if the provided function name does not correspond to a know unary function.
     pub fn construct_from_name(name: &str) -> Result<UnaryOperation, Error> {
         match name {
-            "Abs" => Ok(UnaryOperation::NumericAbsolute),
-            "Sqrt" => Ok(UnaryOperation::NumericSquareroot),
-            "Neg" => Ok(UnaryOperation::BooleanNegation),
-            "String" => Ok(UnaryOperation::CanonicalString),
-            "Sin" => Ok(UnaryOperation::NumericSine),
-            "Cos" => Ok(UnaryOperation::NumericCosine),
-            "Tan" => Ok(UnaryOperation::NumericTangent),
-            "Length" => Ok(UnaryOperation::StringLength),
-            "Lower" => Ok(UnaryOperation::StringLowercase),
-            "Upper" => Ok(UnaryOperation::StringUppercase),
+            "isInteger" => Ok(UnaryOperation::CheckIsInteger),
+            "isFloat" => Ok(UnaryOperation::CheckIsFloat),
+            "isDouble" => Ok(UnaryOperation::CheckIsDouble),
+            "isIri" => Ok(UnaryOperation::CheckIsIri),
+            "isNumeric" => Ok(UnaryOperation::CheckIsNumeric),
+            "isNull" => Ok(UnaryOperation::CheckIsNull),
+            "isString" => Ok(UnaryOperation::CheckIsString),
+            "ABS" => Ok(UnaryOperation::NumericAbsolute),
+            "SQRT" => Ok(UnaryOperation::NumericSquareroot),
+            "NOT" => Ok(UnaryOperation::BooleanNegation),
+            "fullStr" => Ok(UnaryOperation::CanonicalString),
+            "STR" => Ok(UnaryOperation::LexicalValue),
+            "SIN" => Ok(UnaryOperation::NumericSine),
+            "COS" => Ok(UnaryOperation::NumericCosine),
+            "TAN" => Ok(UnaryOperation::NumericTangent),
+            "STRLEN" => Ok(UnaryOperation::StringLength),
+            "UCASE" => Ok(UnaryOperation::StringLowercase),
+            "LCASE" => Ok(UnaryOperation::StringUppercase),
+            "ROUND" => Ok(UnaryOperation::NumericRound),
+            "CEIL" => Ok(UnaryOperation::NumericCeil),
+            "FLOOR" => Ok(UnaryOperation::NumericFloor),
+            "DATATYPE" => Ok(UnaryOperation::Datatype),
+            "LANG" => Ok(UnaryOperation::LanguageTag),
+            "INT" => Ok(UnaryOperation::CastToInteger),
+            "DOUBLE" => Ok(UnaryOperation::CastToDouble),
+            "FLOAT" => Ok(UnaryOperation::CastToFloat),
             s => Err(Error::UnknownUnaryOpertation {
                 operation: s.into(),
             }),
@@ -261,24 +334,40 @@ impl UnaryOperation {
     /// Return the name of the operation.
     pub fn name(&self) -> String {
         let name = match self {
-            UnaryOperation::NumericSquareroot => "SquareRoot",
-            UnaryOperation::NumericNegation => "UnaryMinus",
-            UnaryOperation::NumericAbsolute => "Abs",
-            UnaryOperation::BooleanNegation => "BooleanNegation",
-            UnaryOperation::CanonicalString => "CanonicalString",
-            UnaryOperation::NumericCosine => "Cosine",
-            UnaryOperation::NumericSine => "Sine",
-            UnaryOperation::NumericTangent => "Tangent",
-            UnaryOperation::StringLength => "StringLength",
-            UnaryOperation::StringLowercase => "Lowercase",
-            UnaryOperation::StringUppercase => "Uppercase",
+            Self::NumericSquareroot => "SQRT",
+            Self::NumericNegation => "MINUS",
+            Self::NumericAbsolute => "ABS",
+            Self::BooleanNegation => "NOT",
+            Self::CanonicalString => "fullStr",
+            Self::NumericCosine => "COS",
+            Self::NumericSine => "SIN",
+            Self::NumericTangent => "TAN",
+            Self::StringLength => "STRLEN",
+            Self::StringLowercase => "LCASE",
+            Self::StringUppercase => "UCASE",
+            Self::NumericCeil => "CEIL",
+            Self::NumericFloor => "FLOOR",
+            Self::NumericRound => "ROUND",
+            Self::CastToInteger => "INT",
+            Self::CastToDouble => "DOUBLE",
+            Self::CastToFloat => "FLOAT",
+            Self::CheckIsInteger => "isInteger",
+            Self::CheckIsFloat => "isFloat",
+            Self::CheckIsDouble => "isDouble",
+            Self::CheckIsIri => "isIri",
+            Self::CheckIsNumeric => "IsNumeric",
+            Self::CheckIsNull => "isNull",
+            Self::CheckIsString => "isString",
+            Self::Datatype => "DATATYPE",
+            Self::LanguageTag => "LANG",
+            Self::LexicalValue => "STR",
         };
 
         String::from(name)
     }
 }
 
-/// Possibly complex term that may occur within an [`super::Atom`]
+/// Possibly complex term that may occur within an [super::Atom]
 #[derive(Eq, PartialEq, Clone, PartialOrd, Ord)]
 pub enum Term {
     /// Primitive term.
@@ -301,7 +390,7 @@ pub enum Term {
 }
 
 impl Term {
-    /// If the term is a simple [`PrimitiveTerm`] then return it.
+    /// If the term is a simple [PrimitiveTerm] then return it.
     /// Otherwise return `None`.
     pub(crate) fn as_primitive(&self) -> Option<PrimitiveTerm> {
         match self {
@@ -316,7 +405,7 @@ impl Term {
         self.as_primitive().is_some()
     }
 
-    /// Return all [`PrimitiveTerm`]s that make up this term.
+    /// Return all [PrimitiveTerm]s that make up this term.
     pub(crate) fn primitive_terms(&self) -> Vec<&PrimitiveTerm> {
         match self {
             Term::Primitive(primitive) => {
@@ -368,7 +457,7 @@ impl Term {
             .filter(|var| matches!(var, Variable::Existential(_)))
     }
 
-    /// Replaces [`Variable`]s with [`Term`]s according to the provided assignment.
+    /// Replaces [Variable]s with [Term]s according to the provided assignment.
     pub(crate) fn apply_assignment(&mut self, assignment: &VariableAssignment) {
         match self {
             Term::Primitive(primitive) => {
@@ -423,51 +512,6 @@ impl Term {
             }
         }
     }
-
-    // TODO: Was needed for tracing which will be reimplemented after the refactoring
-    // /// Evaluates a constant (numeric) term.
-    // pub fn evaluate_constant_numeric(
-    //     &self,
-    //     ty: &PrimitiveType,
-    //     dict: &Dict,
-    // ) -> Option<StorageValueT> {
-    //     let arithmetic_tree = compile_termtree(self, &VariableOrder::new(), ty);
-    //     let storage_type = ty.datatype_name().to_storage_type_name();
-
-    //     macro_rules! translate_data_type {
-    //         ($variant:ident, $type:ty) => {{
-    //             let translate_function = |l: &StackValue<DataValueT>| match l {
-    //                 StackValue::Constant(t) => {
-    //                     if let StorageValueT::$variant(value) = t
-    //                         .to_storage_value(dict)
-    //                         .expect("We expect all strings to be known at this point.")
-    //                     {
-    //                         StackValue::Constant(value)
-    //                     } else {
-    //                         panic!(
-    //                             "Expected a operation tree value of type {}",
-    //                             stringify!($src_name)
-    //                         );
-    //                     }
-    //                 }
-    //                 StackValue::Reference(index) => StackValue::Reference(*index),
-    //             };
-
-    //             let arithmetic_tree_typed = arithmetic_tree.map_values(&translate_function);
-    //             Some(StorageValueT::$variant(
-    //                 arithmetic_tree_typed.evaluate(&mut Vec::new(), &[])?,
-    //             ))
-    //         }};
-    //     }
-
-    //     match storage_type {
-    //         StorageTypeName::Id32 => translate_data_type!(Id32, u32),
-    //         StorageTypeName::Id64 => translate_data_type!(Id64, u64),
-    //         StorageTypeName::Int64 => translate_data_type!(Int64, i64),
-    //         StorageTypeName::Float => translate_data_type!(Float, f32),
-    //         StorageTypeName::Double => translate_data_type!(Double, f64),
-    //     }
-    // }
 }
 
 impl From<PrimitiveTerm> for Term {
@@ -499,7 +543,7 @@ impl Term {
     }
 
     /// Defines the precedence of the term operations.
-    /// This is only relevant for the [`Display`] implementation.
+    /// This is only relevant for the [Display] implementation.
     fn precedence(&self) -> usize {
         match self {
             Term::Primitive(_) => 0,

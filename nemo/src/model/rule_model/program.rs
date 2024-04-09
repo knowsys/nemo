@@ -232,7 +232,6 @@ impl Program {
     }
 
     /// Return all [ImportDirective]s of the program.
-    #[must_use]
     pub fn imports(&self) -> impl Iterator<Item = &ImportDirective> {
         self.imports.iter()
     }
@@ -246,7 +245,6 @@ impl Program {
     }
 
     /// Return all [ExportDirective]s of the program.
-    #[must_use]
     pub fn exports(&self) -> impl Iterator<Item = &ExportDirective> {
         self.exports.iter()
     }

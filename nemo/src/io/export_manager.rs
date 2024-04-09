@@ -82,7 +82,12 @@ impl ExportManager {
     /// This also checks whether the specified file could (likely) be written.
     pub fn validate(&self, export_directive: &ExportDirective) -> Result<(), Error> {
         let handler = ImportExportHandlers::export_handler(export_directive)?;
-        let path = self.output_file_path(&handler, &export_directive.predicate());
+
+        if handler.resource_is_stdout() {
+            return Ok(());
+        }
+
+        let path = self.output_file_path(&*handler, export_directive.predicate());
 
         let meta_info = path.metadata();
         if let Err(err) = meta_info {
@@ -112,16 +117,18 @@ impl ExportManager {
         export_directive: &ExportDirective,
         table: Option<impl Iterator<Item = Vec<AnyDataValue>> + 'a>,
         predicate_arity: usize,
-    ) -> Result<(), Error> {
+    ) -> Result<bool, Error> {
         if self.disable_write {
-            return Ok(());
+            return Ok(false);
         }
 
         let handler = ImportExportHandlers::export_handler(export_directive)?;
 
-        let writer = self.writer(&handler, &export_directive.predicate())?;
+        let writer = self.writer(&*handler, export_directive.predicate())?;
 
-        self.export_table_with_handler_writer(&handler, writer, table, predicate_arity)
+        self.export_table_with_handler_writer(&*handler, writer, table, predicate_arity)?;
+
+        Ok(handler.resource_is_stdout())
     }
 
     /// Export a (possibly empty) table according to the given [ExportDirective],
@@ -141,7 +148,7 @@ impl ExportManager {
         predicate_arity: usize,
     ) -> Result<(), Error> {
         let handler = ImportExportHandlers::export_handler(export_directive)?;
-        self.export_table_with_handler_writer(&handler, writer, table, predicate_arity)
+        self.export_table_with_handler_writer(&*handler, writer, table, predicate_arity)
     }
 
     /// Export a (possibly empty) table according to the given [ImportExportHandler],
@@ -155,7 +162,7 @@ impl ExportManager {
     /// This function ignores [ExportManager::disable_write].
     pub(crate) fn export_table_with_handler_writer<'a>(
         &self,
-        export_handler: &Box<dyn ImportExportHandler>,
+        export_handler: &dyn ImportExportHandler,
         writer: Box<dyn Write>,
         table: Option<impl Iterator<Item = Vec<AnyDataValue>> + 'a>,
         predicate_arity: usize,
@@ -183,31 +190,35 @@ impl ExportManager {
     /// [ExportManager::disable_write] is `true`.
     fn writer(
         &self,
-        export_handler: &Box<dyn ImportExportHandler>,
+        export_handler: &dyn ImportExportHandler,
         predicate: &Identifier,
     ) -> Result<Box<dyn Write>, Error> {
-        let output_path = self.output_file_path(export_handler, predicate);
+        if export_handler.resource_is_stdout() {
+            Ok(Box::new(std::io::stdout().lock()))
+        } else {
+            let output_path = self.output_file_path(export_handler, predicate);
 
-        log::info!(
-            "Exporting predicate \"{}\" to {output_path:?}",
-            predicate.name()
-        );
+            log::info!(
+                "Exporting predicate \"{}\" to {output_path:?}",
+                predicate.name()
+            );
 
-        if let Some(parent) = output_path.parent() {
-            create_dir_all(parent)?;
+            if let Some(parent) = output_path.parent() {
+                create_dir_all(parent)?;
+            }
+
+            export_handler
+                .compression_format()
+                .unwrap_or(self.compression_format)
+                .file_writer(output_path, Self::open_options(self.overwrite))
         }
-
-        export_handler
-            .compression_format()
-            .unwrap_or(self.compression_format)
-            .writer(output_path, Self::open_options(self.overwrite))
     }
 
     /// Get the output file name for the given [ExportDirective]. This is a complete path (based on our base path),
     /// which includes all extensions.
     fn output_file_path(
         &self,
-        export_handler: &Box<dyn ImportExportHandler>,
+        export_handler: &dyn ImportExportHandler,
         predicate: &Identifier,
     ) -> PathBuf {
         let mut pred_path = self.base_path.to_path_buf();

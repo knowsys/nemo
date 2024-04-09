@@ -39,6 +39,7 @@ pub(super) fn term_to_function_tree(
                 }
                 BinaryOperation::NumericDivision => FunctionTree::numeric_division(left, right),
                 BinaryOperation::NumericPower => FunctionTree::numeric_power(left, right),
+                BinaryOperation::NumericRemainder => FunctionTree::numeric_remainder(left, right),
                 BinaryOperation::NumericLogarithm => FunctionTree::numeric_logarithm(left, right),
                 BinaryOperation::StringCompare => FunctionTree::string_compare(left, right),
                 BinaryOperation::StringConcatenation => {
@@ -62,6 +63,10 @@ pub(super) fn term_to_function_tree(
                 }
                 BinaryOperation::NumericLessthan => FunctionTree::numeric_lessthan(left, right),
                 BinaryOperation::NumericLessthaneq => FunctionTree::numeric_lessthaneq(left, right),
+                BinaryOperation::StringBefore => FunctionTree::string_before(left, right),
+                BinaryOperation::StringAfter => FunctionTree::string_after(left, right),
+                BinaryOperation::StringStarts => FunctionTree::string_starts(left, right),
+                BinaryOperation::StringEnds => FunctionTree::string_ends(left, right),
             }
         }
         Term::Unary(operation, subterm) => {
@@ -79,6 +84,22 @@ pub(super) fn term_to_function_tree(
                 UnaryOperation::StringLength => FunctionTree::string_length(sub),
                 UnaryOperation::StringLowercase => FunctionTree::string_lowercase(sub),
                 UnaryOperation::StringUppercase => FunctionTree::string_uppercase(sub),
+                UnaryOperation::NumericCeil => FunctionTree::numeric_ceil(sub),
+                UnaryOperation::NumericFloor => FunctionTree::numeric_floor(sub),
+                UnaryOperation::NumericRound => FunctionTree::numeric_round(sub),
+                UnaryOperation::CheckIsInteger => FunctionTree::check_is_integer(sub),
+                UnaryOperation::CheckIsFloat => FunctionTree::check_is_float(sub),
+                UnaryOperation::CheckIsDouble => FunctionTree::check_is_double(sub),
+                UnaryOperation::CheckIsIri => FunctionTree::check_is_iri(sub),
+                UnaryOperation::CheckIsNumeric => FunctionTree::check_is_numeric(sub),
+                UnaryOperation::CheckIsNull => FunctionTree::check_is_null(sub),
+                UnaryOperation::CheckIsString => FunctionTree::check_is_string(sub),
+                UnaryOperation::Datatype => FunctionTree::datatype(sub),
+                UnaryOperation::LanguageTag => FunctionTree::languagetag(sub),
+                UnaryOperation::LexicalValue => FunctionTree::lexical_value(sub),
+                UnaryOperation::CastToInteger => FunctionTree::casting_to_integer64(sub),
+                UnaryOperation::CastToDouble => FunctionTree::casting_to_double(sub),
+                UnaryOperation::CastToFloat => FunctionTree::casting_to_float(sub),
             }
         }
         Term::Aggregation(_) => unimplemented!("Aggregates are not implement yet"),

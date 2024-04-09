@@ -32,23 +32,23 @@ pub(crate) mod sparql;
 pub(crate) mod turtle;
 pub use types::{span_from_str, LocatedParseError, ParseError, ParseResult};
 
-/// Parse a program in the given `input`-String and return a [`Program`].
+/// Parse a program in the given `input`-String and return a [Program].
 ///
 /// The program will be parsed and checked for unsupported features.
 ///
 /// # Error
-/// Returns an appropriate [`Error`] variant on parsing and feature check issues.
+/// Returns an appropriate [Error] variant on parsing and feature check issues.
 pub fn parse_program(input: impl AsRef<str>) -> Result<Program, Error> {
     let program = all_input_consumed(RuleParser::new().parse_program())(input.as_ref())?;
     Ok(program)
 }
 
-/// Parse a single fact in the given `input`-String and return a [`Program`].
+/// Parse a single fact in the given `input`-String and return a [Program].
 ///
 /// The program will be parsed and checked for unsupported features.
 ///
 /// # Error
-/// Returns an appropriate [`Error`] variant on parsing and feature check issues.
+/// Returns an appropriate [Error] variant on parsing and feature check issues.
 pub fn parse_fact(mut input: String) -> Result<Fact, Error> {
     input += ".";
     let fact = all_input_consumed(RuleParser::new().parse_fact())(input.as_str())?;
@@ -178,8 +178,7 @@ fn resolve_prefixed_name(
     }
 }
 
-/// Resolve prefixes in a [`turtle::RdfLiteral`].
-#[must_use]
+/// Resolve prefixes in a [turtle::RdfLiteral].
 fn resolve_prefixed_rdf_literal(
     prefixes: &HashMap<&str, &str>,
     literal: turtle::RdfLiteral,
@@ -303,7 +302,7 @@ pub struct RuleParser<'a> {
 }
 
 impl<'a> RuleParser<'a> {
-    /// Construct a new [`RuleParser`].
+    /// Construct a new [RuleParser].
     pub fn new() -> Self {
         Default::default()
     }
@@ -495,7 +494,7 @@ impl<'a> RuleParser<'a> {
                                     Ok(ImportDirective::from(ImportExportDirective {
                                         predicate: predicate.clone(),
                                         format: FileFormat::CSV,
-                                        attributes: attributes,
+                                        attributes,
                                     }))
                                 },
                             ),
@@ -533,7 +532,7 @@ impl<'a> RuleParser<'a> {
                                     Ok(ImportDirective::from(ImportExportDirective {
                                         predicate: predicate.clone(),
                                         format: FileFormat::TSV,
-                                        attributes: attributes,
+                                        attributes,
                                     }))
                                 },
                             ),
@@ -580,7 +579,7 @@ impl<'a> RuleParser<'a> {
                                     Ok(ImportDirective::from(ImportExportDirective {
                                         predicate: predicate.clone(),
                                         format: FileFormat::RDF(RdfVariant::Unspecified),
-                                        attributes: attributes,
+                                        attributes,
                                     }))
                                 },
                             ),
@@ -626,7 +625,7 @@ impl<'a> RuleParser<'a> {
                     terminated(token("@output"), cut(multispace_or_comment1)),
                     cut(map_res::<_, _, _, _, Error, _, _>(
                         self.parse_iri_like_identifier(),
-                        |identifier| Ok(identifier),
+                        Ok,
                     )),
                     cut(self.parse_dot()),
                 ),
@@ -702,8 +701,7 @@ impl<'a> RuleParser<'a> {
         })
     }
 
-    /// Parse an import/export specification for the given
-    /// [`Direction`].
+    /// Parse an import/export specification.
     fn parse_import_export_spec(
         &'a self,
     ) -> impl FnMut(Span<'a>) -> IntermediateResult<ImportExportDirective> {
@@ -718,7 +716,7 @@ impl<'a> RuleParser<'a> {
             Ok((
                 remainder,
                 ImportExportDirective {
-                    predicate: predicate,
+                    predicate,
                     format,
                     attributes,
                 },
@@ -940,7 +938,7 @@ impl<'a> RuleParser<'a> {
         )
     }
 
-    /// Parse a [`PrimitiveTerm`].
+    /// Parse a [PrimitiveTerm].
     fn parse_primitive_term(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<PrimitiveTerm> {
         traced(
             "parse_primitive_term",
@@ -1279,7 +1277,7 @@ impl<'a> RuleParser<'a> {
         )
     }
 
-    /// Fold a sequence of ([`ArithmeticOperator`], [`PrimitiveTerm`]) pairs into a single [`Term`].
+    /// Fold a sequence of ([ArithmeticOperator], [PrimitiveTerm]) pairs into a single [Term].
     fn fold_arithmetic_expressions(
         initial: Term,
         sequence: Vec<(ArithmeticOperator, Term)>,
@@ -1441,26 +1439,6 @@ impl<'a> RuleParser<'a> {
     fn base(&self) -> Option<&'a str> {
         *self.base.borrow()
     }
-
-    /// Try to expand an IRI into an absolute IRI.
-    #[must_use]
-    fn absolutize_iri(&self, iri: Span) -> String {
-        if iri::is_absolute(iri) {
-            iri.to_string()
-        } else {
-            format!("{}{iri}", self.base().unwrap_or_default())
-        }
-    }
-
-    /// Try to abbreviate an IRI given declared prefixes and base.
-    #[must_use]
-    fn unresolve_absolute_iri(iri: Span) -> String {
-        if iri::is_relative(iri) {
-            iri.to_string()
-        } else {
-            todo!()
-        }
-    }
 }
 
 #[cfg(test)]
@@ -1551,9 +1529,9 @@ mod test {
                 ),
             ]);
             ImportDirective::from(ImportExportDirective {
-                predicate: predicate,
+                predicate,
                 format: FileFormat::CSV,
-                attributes: attributes,
+                attributes,
             })
         }
 
@@ -2181,7 +2159,7 @@ mod test {
     fn parse_unary_function() {
         let parser = RuleParser::new();
 
-        let expression = "Abs(4)";
+        let expression = "ABS(4)";
         let expected_term = Term::Unary(
             UnaryOperation::NumericAbsolute,
             Box::new(Term::Primitive(PrimitiveTerm::GroundTerm(
@@ -2196,7 +2174,7 @@ mod test {
     fn parse_arithmetic_and_functions() {
         let parser = RuleParser::new();
 
-        let expression = "5 * Abs(Sqrt(4) - 3)";
+        let expression = "5 * ABS(SQRT(4) - 3)";
 
         let expected_term = Term::Binary {
             operation: BinaryOperation::NumericMultiplication,
@@ -2227,7 +2205,7 @@ mod test {
     fn parse_assignment() {
         let parser = RuleParser::new();
 
-        let expression = "?X = Abs(?Y - 5) * (7 + ?Z)";
+        let expression = "?X = ABS(?Y - 5) * (7 + ?Z)";
 
         let variable = Term::Primitive(PrimitiveTerm::Variable(Variable::Universal(
             "X".to_string(),
@@ -2267,7 +2245,7 @@ mod test {
     fn parse_complex_condition() {
         let parser = RuleParser::new();
 
-        let expression = "Abs(?X - ?Y) <= ?Z + Sqrt(?Y)";
+        let expression = "ABS(?X - ?Y) <= ?Z + SQRT(?Y)";
 
         let left_term = Term::Unary(
             UnaryOperation::NumericAbsolute,

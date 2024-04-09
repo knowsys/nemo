@@ -1,14 +1,22 @@
 //! This module contains basic data structures for tracing the origins of derived facts.
 
-use std::collections::{HashMap, HashSet};
+use std::{
+    borrow::Cow,
+    collections::{HashMap, HashSet},
+};
 
 use ascii_tree::write_tree;
 use nemo_physical::datavalues::AnyDataValue;
+use petgraph::graph::{DiGraph, NodeIndex};
+use petgraph_graphml::GraphMl;
 use serde::Serialize;
 
-use crate::model::{chase_model::ChaseFact, PrimitiveTerm, Program, Rule, Term, Variable};
+use crate::model::{
+    chase_model::{ChaseAtom, ChaseFact},
+    PrimitiveTerm, Program, Rule, Term, Variable,
+};
 
-/// Index of a rule within a [`Program`]
+/// Index of a rule within a [Program]
 type RuleIndex = usize;
 
 /// Represents the application of a rule to derive a specific fact
@@ -23,7 +31,7 @@ pub(crate) struct TraceRuleApplication {
 }
 
 impl TraceRuleApplication {
-    /// Create new [`TraceRuleApplication`].
+    /// Create new [TraceRuleApplication].
     pub fn new(
         rule_index: RuleIndex,
         assignment: HashMap<Variable, AnyDataValue>,
@@ -37,7 +45,7 @@ impl TraceRuleApplication {
     }
 }
 
-/// Handle to a traced fact within an [`ExecutionTrace`].
+/// Handle to a traced fact within an [ExecutionTrace].
 #[derive(Debug, Clone, Copy, Hash, Eq, PartialEq)]
 pub struct TraceFactHandle(usize);
 
@@ -55,7 +63,7 @@ pub(crate) enum TraceDerivation {
 pub(crate) enum TraceStatus {
     /// It is not yet known whether this fact derived during chase
     Unknown,
-    /// Fact was derived during the chase with the given [`Derivation`]
+    /// Fact was derived during the chase with the given [TraceDerivation]
     Success(TraceDerivation),
     /// Fact was not derived during the chase
     Fail,
@@ -75,7 +83,7 @@ impl TraceStatus {
     }
 }
 
-/// Fact which was considered during the construction of an [`ExecutionTrace`]
+/// Fact which was considered during the construction of an [ExecutionTrace]
 #[derive(Debug)]
 struct TracedFact {
     /// The considered fact
@@ -95,7 +103,7 @@ pub struct ExecutionTrace {
 }
 
 impl ExecutionTrace {
-    /// Create an empty [`ExecutionTrace`].
+    /// Create an empty [ExecutionTrace].
     pub(crate) fn new(program: Program) -> Self {
         Self {
             program,
@@ -111,35 +119,34 @@ impl ExecutionTrace {
         &mut self.facts[handle.0]
     }
 
-    /// Search a given [`ChaseFact`] in `self.facts`.
+    /// Search a given [ChaseFact] in `self.facts`.
     /// Also takes into account that the interpretation of a constant depends on its type.
-    ///
-    /// TODO: Reimplement tracing
-    fn find_fact(&self, _fact: &ChaseFact) -> Option<TraceFactHandle> {
-        // for (fact_index, traced_fact) in self.facts.iter().enumerate() {
-        //     if traced_fact.fact.predicate() != fact.predicate()
-        //         || traced_fact.fact.arity() != fact.arity()
-        //     {
-        //         continue;
-        //     }
 
-        // let mut identical = true;
-        // for (term_fact, term_traced_fact) in fact.terms().iter().zip(traced_fact.fact.terms()) {
-        //     if term_fact != term_traced_fact {
-        //         identical = false;
-        //         break;
-        //     }
-        // }
+    fn find_fact(&self, fact: &ChaseFact) -> Option<TraceFactHandle> {
+        for (fact_index, traced_fact) in self.facts.iter().enumerate() {
+            if traced_fact.fact.predicate() != fact.predicate()
+                || traced_fact.fact.arity() != fact.arity()
+            {
+                continue;
+            }
 
-        //     if identical {
-        //         return Some(TraceFactHandle(fact_index));
-        //     }
-        // }
+            let mut identical = true;
+            for (term_fact, term_traced_fact) in fact.terms().iter().zip(traced_fact.fact.terms()) {
+                if term_fact != term_traced_fact {
+                    identical = false;
+                    break;
+                }
+            }
+
+            if identical {
+                return Some(TraceFactHandle(fact_index));
+            }
+        }
 
         None
     }
 
-    /// Registers a new [`ChaseFact`].
+    /// Registers a new [ChaseFact].
     ///
     /// If the fact was not already known then it will return a fresh handle
     /// with the status `TraceStatus::Known`.
@@ -158,12 +165,12 @@ impl ExecutionTrace {
         }
     }
 
-    /// Return the [`TraceStatus`] of a given fact identified by its [`TraceFactHandle`].
+    /// Return the [TraceStatus] of a given fact identified by its [TraceFactHandle].
     pub(crate) fn status(&self, handle: TraceFactHandle) -> &TraceStatus {
         &self.get_fact(handle).status
     }
 
-    /// Update the [`TraceStatus`] of a given fact identified by its [`TraceFactHandle`].
+    /// Update the [TraceStatus] of a given fact identified by its [TraceFactHandle].
     pub(crate) fn update_status(&mut self, handle: TraceFactHandle, status: TraceStatus) {
         self.get_fact_mut(handle).status = status;
     }
@@ -180,6 +187,38 @@ pub struct TraceTreeRuleApplication {
     _position: usize,
 }
 
+impl TraceTreeRuleApplication {
+    /// Instantiate the given rule with its assignment producing a [`Rule`] with only ground terms.
+    fn to_instantiated_rule(&self) -> Rule {
+        let mut rule = self.rule.clone();
+        rule.apply_assignment(
+            &self
+                .assignment
+                .iter()
+                .map(|(variable, constant)| {
+                    (
+                        variable.clone(),
+                        Term::Primitive(PrimitiveTerm::GroundTerm(constant.clone())),
+                    )
+                })
+                .collect(),
+        );
+        rule
+    }
+
+    /// Get the [`ChaseFact`] that was produced by this rule application.
+    fn to_derived_fact(&self) -> ChaseFact {
+        let rule = self.to_instantiated_rule();
+        let derived_atom = &rule.head()[self._position];
+        ChaseFact::from_flat_atom(derived_atom)
+    }
+
+    /// Get a string representation of the Instantiated rule.
+    fn to_instantiated_string(&self) -> String {
+        self.to_instantiated_rule().to_string()
+    }
+}
+
 /// Tree representation of an [`ExecutionTrace`] from a given start node
 #[derive(Debug, Clone)]
 pub enum ExecutionTraceTree {
@@ -189,8 +228,98 @@ pub enum ExecutionTraceTree {
     Rule(TraceTreeRuleApplication, Vec<ExecutionTraceTree>),
 }
 
+#[derive(Debug)]
+enum TracePetGraphNodeLabel {
+    Fact(ChaseFact),
+    Rule(Rule),
+}
+
+impl ExecutionTraceTree {
+    fn to_ascii_tree(&self) -> ascii_tree::Tree {
+        match self {
+            Self::Fact(chase_fact) => ascii_tree::Tree::Leaf(vec![chase_fact.to_string()]),
+            Self::Rule(trace_tree_rule_application, subtrees) => ascii_tree::Tree::Node(
+                trace_tree_rule_application.to_instantiated_string(),
+                subtrees
+                    .iter()
+                    .map(ExecutionTraceTree::to_ascii_tree)
+                    .collect(),
+            ),
+        }
+    }
+
+    /// Create an ascii tree representation.
+    pub fn to_ascii_art(&self) -> String {
+        let mut result = String::new();
+        let _ = write_tree(&mut result, &self.to_ascii_tree());
+
+        result
+    }
+
+    fn to_petgraph(&self) -> DiGraph<TracePetGraphNodeLabel, ()> {
+        let mut graph = DiGraph::new();
+
+        let mut node_stack: Vec<(Option<NodeIndex>, Self)> = vec![(None, self.clone())];
+        while let Some((parent_node_index_opt, next_node)) = node_stack.pop() {
+            let next_node_index = match next_node {
+                Self::Fact(ref chase_fact) => {
+                    let next_node_index =
+                        graph.add_node(TracePetGraphNodeLabel::Fact(chase_fact.clone()));
+                    if let Some(parent_node_index) = parent_node_index_opt {
+                        graph.add_edge(next_node_index, parent_node_index, ());
+                    }
+                    next_node_index
+                }
+                Self::Rule(ref trace_tree_rule_application, _) => {
+                    let fact = trace_tree_rule_application.to_derived_fact();
+                    let rule = trace_tree_rule_application.rule.clone();
+
+                    let fact_node_index = graph.add_node(TracePetGraphNodeLabel::Fact(fact));
+                    let next_node_index = graph.add_node(TracePetGraphNodeLabel::Rule(rule));
+                    graph.add_edge(next_node_index, fact_node_index, ());
+
+                    if let Some(parent_node_index) = parent_node_index_opt {
+                        graph.add_edge(fact_node_index, parent_node_index, ());
+                    }
+
+                    next_node_index
+                }
+            };
+
+            if let Self::Rule(_, subtrees) = next_node {
+                let new_parent_node_index_opt = Some(next_node_index);
+                let mut entries_to_append: Vec<(Option<NodeIndex>, Self)> = subtrees
+                    .iter()
+                    .cloned()
+                    .map(|st| (new_parent_node_index_opt, st))
+                    .collect();
+                node_stack.append(&mut entries_to_append)
+            }
+        }
+
+        graph
+    }
+
+    /// Return [`ExecutionTraceTree`] in [GraphML](http://graphml.graphdrawing.org/) format (for [Evonne](https://github.com/imldresden/evonne) integration)
+    pub fn to_graphml(&self) -> String {
+        let petgraph = self.to_petgraph();
+        GraphMl::new(&petgraph)
+            .export_node_weights(Box::new(|node_label| match node_label {
+                TracePetGraphNodeLabel::Fact(chase_fact) => vec![
+                    (Cow::from("type"), Cow::from("axiom")),
+                    (Cow::from("element"), Cow::from(chase_fact.to_string())),
+                ],
+                TracePetGraphNodeLabel::Rule(rule) => vec![
+                    (Cow::from("type"), Cow::from("DLRule")),
+                    (Cow::from("element"), Cow::from(rule.to_string())),
+                ],
+            }))
+            .to_string()
+    }
+}
+
 impl ExecutionTrace {
-    /// Return a [`ExecutionTraceTree`] representation of an [`ExecutionTrace`]
+    /// Return a [ExecutionTraceTree] representation of an [ExecutionTrace]
     /// starting from a given fact.
     pub fn tree(&self, fact_handle: TraceFactHandle) -> Option<ExecutionTraceTree> {
         let traced_fact = self.get_fact(fact_handle);
@@ -223,70 +352,6 @@ impl ExecutionTrace {
     }
 }
 
-impl ExecutionTrace {
-    /// Converts a rule to a string representation
-    /// so it can appear as a node in the ascii representation of the [`ExecutionTrace`].
-    fn ascii_format_rule(&self, application: &TraceRuleApplication) -> String {
-        let mut rule_applied = self.program.rules()[application.rule_index].clone();
-        rule_applied.apply_assignment(
-            &application
-                .assignment
-                .iter()
-                .map(|(variable, constant)| {
-                    (
-                        variable.clone(),
-                        Term::Primitive(PrimitiveTerm::GroundTerm(constant.clone())),
-                    )
-                })
-                .collect(),
-        );
-
-        rule_applied.to_string()
-    }
-
-    /// Create an ascii tree representation starting form a particular node.
-    ///
-    /// Returns `None` if no successful derivation can be given.
-    pub fn ascii_tree(&self, handle: TraceFactHandle) -> Option<ascii_tree::Tree> {
-        let traced_fact = self.get_fact(handle);
-
-        if let TraceStatus::Success(derivation) = &traced_fact.status {
-            match derivation {
-                TraceDerivation::Input => {
-                    Some(ascii_tree::Tree::Leaf(vec![traced_fact.fact.to_string()]))
-                }
-                TraceDerivation::Derived(application, subderivations) => {
-                    let mut subtrees = Vec::new();
-                    for &derivation in subderivations {
-                        if let Some(tree) = self.ascii_tree(derivation) {
-                            subtrees.push(tree);
-                        } else {
-                            return None;
-                        }
-                    }
-
-                    Some(ascii_tree::Tree::Node(
-                        self.ascii_format_rule(application),
-                        subtrees,
-                    ))
-                }
-            }
-        } else {
-            None
-        }
-    }
-
-    /// Create an ascii tree representation starting form a particular node.
-    ///
-    /// Returns `None` if no successful derivation can be given.
-    pub fn ascii_tree_string(&self, handle: TraceFactHandle) -> Option<String> {
-        let mut result = String::new();
-        write_tree(&mut result, &self.ascii_tree(handle)?).ok()?;
-
-        Some(result)
-    }
-}
-
 /// Represents an inference in an [`ExecutionTraceJson`]
 #[derive(Debug, Serialize)]
 struct ExecutionTraceJsonInference {
@@ -298,7 +363,7 @@ struct ExecutionTraceJsonInference {
 }
 
 impl ExecutionTraceJsonInference {
-    /// Create a new [`ExecutionTraceJsonInference`]
+    /// Create a new [ExecutionTraceJsonInference]
     pub fn new(rule_name: String, conclusion: String, premises: Vec<String>) -> Self {
         Self {
             rule_name,
@@ -308,7 +373,7 @@ impl ExecutionTraceJsonInference {
     }
 }
 
-/// Object representing an [`ExecutionTrace`] that can be sertialized into a json format
+/// Object representing an [ExecutionTrace] that can be sertialized into a json format
 #[derive(Debug, Serialize, Default)]
 pub struct ExecutionTraceJson {
     #[serde(rename = "finalConclusion")]
@@ -318,7 +383,7 @@ pub struct ExecutionTraceJson {
 }
 
 impl ExecutionTrace {
-    /// Translate an [`TraceDerivation`] into an [`ExecutionTraceJsonInference`].
+    /// Translate an [TraceDerivation] into an [ExecutionTraceJsonInference].
     fn json_inference(
         &self,
         derivation: &TraceDerivation,
@@ -558,7 +623,7 @@ mod test {
 "#;
 
         assert_eq!(
-            trace.ascii_tree_string(trace_r_ba).unwrap(),
+            trace.tree(trace_r_ba).unwrap().to_ascii_art(),
             trace_string.to_string()
         )
     }

@@ -8,7 +8,10 @@ use crate::{
     datatypes::StorageValueT,
     management::execution_plan::ColumnOrder,
     tabular::{
-        buffer::tuple_buffer::TupleBuffer, rowscan::RowScan, trie::Trie, triescan::PartialTrieScan,
+        buffer::tuple_buffer::TupleBuffer,
+        rowscan::{Row, RowScan},
+        trie::Trie,
+        triescan::PartialTrieScan,
     },
     util::mapping::{ordered_choice::SortedChoice, traits::NatMapping},
 };
@@ -18,10 +21,10 @@ use super::OperationTable;
 /// Type that represents a projection and reordering of an input table.
 pub type ProjectReordering = SortedChoice;
 
-/// Used to perform a project and reorder operation on a [TrieScan].
+/// Used to perform a project and reorder operation on a [PartialTrieScan].
 ///
 /// Note: This does not follow the usual pattern of implementing [OperationGenerator][super::OperationGenerator],
-/// since this operation is not done via a [PartialTrieScan][crate::tabular::triescan::PartialTrieScan].
+/// since this operation is not done via a [PartialTrieScan].
 #[derive(Debug, Clone)]
 pub(crate) struct GeneratorProjectReorder {
     /// Determines which columns of the input trie are used and in what position in the output trie
@@ -72,51 +75,71 @@ impl GeneratorProjectReorder {
             result_map.insert(source_output, target_output);
         }
 
+        let projectreordering = ProjectReordering::from_map(result_map, arity);
+
         Self {
-            projectreordering: ProjectReordering::from_map(result_map, arity),
-            last_used_layer: arity.checked_sub(1).unwrap_or(0),
+            projectreordering,
+            last_used_layer: arity.saturating_sub(1),
             arity_output: arity,
         }
     }
 
     /// Apply the operation to a [PartialTrieScan].
-    pub(crate) fn apply_operation_partial<'a, Scan: PartialTrieScan<'a>>(
-        &self,
-        trie_scan: Scan,
-    ) -> Trie {
-        debug_assert!(trie_scan.arity() == self.projectreordering.domain_size());
+    pub(crate) fn apply_operation<'a, Scan: PartialTrieScan<'a>>(&self, trie_scan: Scan) -> Trie {
         debug_assert!(self.last_used_layer < trie_scan.arity());
 
+        if trie_scan.arity() == 0 {
+            Trie::zero_arity(true);
+        }
+
         let cut = trie_scan.arity() - self.last_used_layer - 1;
+        let projectreordering = self.projectreordering.as_vector();
 
         let mut rowscan = RowScan::new(trie_scan, cut);
 
-        let mut current_tuple = vec![StorageValueT::Id32(0); self.arity_output];
+        if projectreordering.is_empty() {
+            let no_results = StreamingIterator::next(&mut rowscan).is_none();
+            return Trie::zero_arity(!no_results);
+        }
+
         let mut tuple_buffer = TupleBuffer::new(self.arity_output);
 
-        while let Some(current_row) = StreamingIterator::next(&mut rowscan) {
+        while let Some(Row {
+            row: current_row,
+            change: _,
+        }) = StreamingIterator::next(&mut rowscan)
+        {
             debug_assert!(current_row.len() <= self.last_used_layer + 1);
 
-            let start_change = self.last_used_layer + 1 - current_row.len();
-
-            for (row_index, current_value) in current_row.into_iter().enumerate() {
-                let input_layer = start_change + row_index;
-                if let Some(output_layer) = self.projectreordering.get_partial(input_layer) {
-                    current_tuple[output_layer] = *current_value;
-                }
-            }
-
-            for value in &current_tuple {
-                tuple_buffer.add_tuple_value(*value);
+            for &row_index in &projectreordering {
+                tuple_buffer.add_tuple_value(current_row[row_index]);
             }
         }
 
         Trie::from_tuple_buffer(tuple_buffer.finalize())
     }
 
+    /// Apply the reordering operation returning only the first row, if available.
+    pub(crate) fn apply_operation_first<'a, Scan: PartialTrieScan<'a>>(
+        &self,
+        trie_scan: Scan,
+    ) -> Option<Vec<StorageValueT>> {
+        let cut = trie_scan.arity() - self.last_used_layer - 1;
+
+        let mut rowscan = RowScan::new(trie_scan, cut);
+
+        let first_row = Iterator::next(&mut rowscan)?;
+        Some(self.projectreordering.transform(&first_row))
+    }
+
     /// Return whether this operation would leave the input [Trie] unchanged.
     pub(crate) fn is_noop(&self) -> bool {
         self.projectreordering.is_identity()
+    }
+
+    /// Return the [ProjectReordering] used by this generator.
+    pub(crate) fn projectreordering(&self) -> ProjectReordering {
+        self.projectreordering.clone()
     }
 }
 
@@ -163,15 +186,15 @@ mod test {
         let generator_no_last = GeneratorProjectReorder::new(markers_no_last, markers_trie);
 
         let result_no_first = generator_no_first
-            .apply_operation_partial(trie_scan_no_first)
+            .apply_operation(trie_scan_no_first)
             .row_iterator()
             .collect::<Vec<_>>();
         let result_no_middle = generator_no_middle
-            .apply_operation_partial(trie_scan_no_middle)
+            .apply_operation(trie_scan_no_middle)
             .row_iterator()
             .collect::<Vec<_>>();
         let result_no_last = generator_no_last
-            .apply_operation_partial(trie_scan_no_last)
+            .apply_operation(trie_scan_no_last)
             .row_iterator()
             .collect::<Vec<_>>();
 
@@ -250,7 +273,7 @@ mod test {
         let project_generator = GeneratorProjectReorder::new(markers_projected, markers_trie);
 
         let result = project_generator
-            .apply_operation_partial(trie_scan)
+            .apply_operation(trie_scan)
             .row_iterator()
             .collect::<Vec<_>>();
 
@@ -386,7 +409,7 @@ mod test {
         let reorder_generator = GeneratorProjectReorder::new(markers_reorder, markers_trie);
 
         let result = reorder_generator
-            .apply_operation_partial(trie_scan)
+            .apply_operation(trie_scan)
             .row_iterator()
             .collect::<Vec<_>>();
 
@@ -462,7 +485,7 @@ mod test {
         let reorder_generator = GeneratorProjectReorder::new(markers_reorder, markers_trie);
 
         let result = reorder_generator
-            .apply_operation_partial(trie_scan)
+            .apply_operation(trie_scan)
             .row_iterator()
             .collect::<Vec<_>>();
 

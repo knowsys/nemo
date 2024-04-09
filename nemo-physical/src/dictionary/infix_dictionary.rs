@@ -1,3 +1,5 @@
+//! This module defines [InfixDictionary].
+
 use super::hash_map_dictionary::HashMapDictionary;
 use super::AddResult;
 use super::Dictionary;

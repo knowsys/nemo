@@ -1,12 +1,16 @@
 //! Module defining the strategy for calculating all body matches for a rule application.
 
+use std::collections::HashSet;
+
 use nemo_physical::management::execution_plan::ExecutionNodeRef;
 
 use crate::{
     execution::{execution_engine::RuleInfo, rule_execution::VariableTranslation},
     model::{
-        chase_model::{ChaseAggregate, ChaseRule, Constructor, VariableAtom},
-        Constraint,
+        chase_model::{
+            variable::is_aggregate_variable, ChaseAggregate, ChaseRule, Constructor, VariableAtom,
+        },
+        Constraint, Variable,
     },
     program_analysis::{analysis::RuleAnalysis, variable_order::VariableOrder},
     table_manager::{SubtableExecutionPlan, TableManager},
@@ -14,7 +18,8 @@ use crate::{
 
 use super::{
     operations::{
-        filter::node_filter, functions::node_functions, join::node_join, negation::node_negation,
+        aggregate::node_aggregate, filter::node_filter, functions::node_functions, join::node_join,
+        negation::node_negation,
     },
     BodyStrategy,
 };
@@ -30,21 +35,48 @@ pub(crate) struct SeminaiveStrategy {
 
     constructors: Vec<Constructor>,
 
-    _aggregates: Vec<ChaseAggregate>,
-    // TODO: Reimplement aggregation
-    // aggregate_group_by_variables: Option<HashSet<Variable>>,
+    aggregates: Vec<ChaseAggregate>,
+    aggregate_group_by_variables: Option<HashSet<Variable>>,
 }
 
 impl SeminaiveStrategy {
-    /// Create new [`SeminaiveStrategy`] object.
-    pub(crate) fn initialize(rule: &ChaseRule, _analysis: &RuleAnalysis) -> Self {
+    /// Create new [SeminaiveStrategy] object.
+    pub(crate) fn initialize(rule: &ChaseRule, analysis: &RuleAnalysis) -> Self {
+        let mut used_variables_before_arithmetic_operations = HashSet::<Variable>::new();
+
+        for variable in &analysis.head_variables {
+            if let Some(constructor) = rule
+                .constructors()
+                .iter()
+                .find(|c| *c.variable() == *variable)
+            {
+                used_variables_before_arithmetic_operations
+                    .extend(constructor.term().variables().cloned());
+            } else {
+                used_variables_before_arithmetic_operations.insert(variable.clone());
+            }
+        }
+
+        let aggregate_group_by_variables: Option<HashSet<_>> = if rule.aggregates().is_empty() {
+            None
+        } else {
+            // Compute group-by variables for all aggregates in the rule
+            // This is the set of all universal variables in the head (before any arithmetic operations) except for the aggregated variables
+            Some(used_variables_before_arithmetic_operations.iter().filter(|variable| match variable {
+                Variable::Universal(_) => !is_aggregate_variable(variable),
+                Variable::Existential(_) => panic!("existential head variables are currently not supported together with aggregates"),
+                Variable::UnnamedUniversal(_) => !is_aggregate_variable(variable),
+            }).cloned().collect())
+        };
+
         Self {
             positive_atoms: rule.positive_body().clone(),
             positive_constraints: rule.positive_constraints().clone(),
             negative_atoms: rule.negative_body().clone(),
             negatie_constraints: rule.negative_constraints().clone(),
             constructors: rule.constructors().clone(),
-            _aggregates: rule.aggregates().clone(),
+            aggregates: rule.aggregates().clone(),
+            aggregate_group_by_variables,
         }
     }
 }
@@ -87,23 +119,20 @@ impl BodyStrategy for SeminaiveStrategy {
             &self.negatie_constraints,
         );
 
-        // TODO: Reimplement aggregation
-        // if let Some(aggregate_group_by_variables) = &self.aggregate_group_by_variables {
-        //     // Perform aggregate operations
-        //     // This updates the variable order with the aggregate placeholder variables replacing the aggregate input variables
-        //     (node_seminaive, *variable_order) = generate_node_aggregate(
-        //         current_plan,
-        //         variable_order.clone(),
-        //         node_seminaive,
-        //         &self.aggregates,
-        //         aggregate_group_by_variables,
-        //     );
-        // }
+        // Perform aggregate operations
+        // This updates the variable order with the aggregate placeholder variables replacing the aggregate input variables
+        let node_aggregation = node_aggregate(
+            current_plan.plan_mut(),
+            variable_translation,
+            node_negation,
+            &self.aggregates,
+            &self.aggregate_group_by_variables,
+        );
 
         let node_functions = node_functions(
             current_plan.plan_mut(),
             variable_translation,
-            node_negation,
+            node_aggregation,
             &self.constructors,
         );
 

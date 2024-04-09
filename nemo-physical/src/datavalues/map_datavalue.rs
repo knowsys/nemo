@@ -1,4 +1,4 @@
-//! This module provides implementations [`super::DataValue`]s that represent unordered maps of
+//! This module provides implementations [DataValue]s that represent unordered maps of
 //! data values to data values. The maps can be empty.
 
 use std::collections::BTreeMap;
@@ -8,7 +8,7 @@ use super::{
     AnyDataValue, DataValue, IriDataValue, ValueDomain,
 };
 
-/// Physical representation of a finite map on [`DataValue`]s.
+/// Physical representation of a finite map on [DataValue]s.
 ///
 /// Maps in Nemo are unordered, and maps with the same key-value pairs
 /// provided (upn creation) in different order will be equal and behave
@@ -25,12 +25,13 @@ pub struct MapDataValue {
 
 impl MapDataValue {
     /// Constructor.
+    #[allow(dead_code)]
     pub(crate) fn new<T: IntoIterator<Item = (AnyDataValue, AnyDataValue)>>(
         label: Option<IriDataValue>,
         pairs_iter: T,
     ) -> Self {
         Self {
-            label: label,
+            label,
             pairs: pairs_iter.into_iter().collect(),
         }
     }
@@ -161,7 +162,7 @@ mod test {
 
         assert_eq!(map.label(), Some(&label));
 
-        assert_eq!(map.len(), Some(2));
+        assert_eq!(map.length(), Some(2));
         assert_eq!(map.len_unchecked(), 2);
 
         let keys: HashSet<&AnyDataValue> = map.map_keys().expect("maps should have keys").collect();

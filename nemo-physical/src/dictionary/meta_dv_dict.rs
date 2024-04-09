@@ -1,3 +1,5 @@
+//! This module defines [MetaDvDictionary].
+
 use crate::datavalues::ValueDomain;
 use crate::datavalues::{AnyDataValue, DataValue};
 use crate::dictionary::NONEXISTING_ID_MARK;
@@ -9,12 +11,6 @@ use super::OtherDvDictionary;
 use super::StringDvDictionary;
 use super::{AddResult, NullDvDictionary};
 
-// use lru::LruCache;
-// use std::borrow::Borrow;
-// use std::collections::HashMap;
-// use std::hash::{Hash, Hasher};
-// use std::num::NonZeroUsize;
-
 // /// Number of recent occurrences of a string pattern required for creating a bespoke dictionary
 // const DICT_THRESHOLD: u32 = 500;
 
@@ -24,79 +20,19 @@ use super::{AddResult, NullDvDictionary};
 /// 2^40 in 64bits).
 const BLOCKSIZE: u32 = 24;
 
-// The code for [StringPair] and [StringPairKey] is inspired by
-// https://stackoverflow.com/a/50478038 ("How to avoid temporary allocations when using a complex key for a HashMap?").
-// The goal is just that, since we have very frequent hashmap lookups here.
-// #[derive(Debug, Eq, Hash, PartialEq)]
-// struct StringPair {
-//     first: String,
-//     second: String,
-// }
-
-// impl StringPair {
-//     fn new(first: impl Into<String>, second: impl Into<String>) -> Self {
-//         StringPair {
-//             first: first.into(),
-//             second: second.into(),
-//         }
-//     }
-// }
-
-// trait StringPairKey {
-//     fn to_key(&self) -> (&str, &str);
-// }
-
-// impl Hash for dyn StringPairKey + '_ {
-//     fn hash<H: Hasher>(&self, state: &mut H) {
-//         self.to_key().hash(state)
-//     }
-// }
-
-// impl PartialEq for dyn StringPairKey + '_ {
-//     fn eq(&self, other: &Self) -> bool {
-//         self.to_key() == other.to_key()
-//     }
-// }
-
-// impl Eq for dyn StringPairKey + '_ {}
-
-// impl StringPairKey for StringPair {
-//     fn to_key(&self) -> (&str, &str) {
-//         (&self.first, &self.second)
-//     }
-// }
-
-// impl<'a> StringPairKey for (&'a str, &'a str) {
-//     fn to_key(&self) -> (&str, &str) {
-//         (self.0, self.1)
-//     }
-// }
-
-// impl<'a> Borrow<dyn StringPairKey + 'a> for StringPair {
-//     fn borrow(&self) -> &(dyn StringPairKey + 'a) {
-//         self
-//     }
-// }
-// impl<'a> Borrow<dyn StringPairKey + 'a> for (&'a str, &'a str) {
-//     fn borrow(&self) -> &(dyn StringPairKey + 'a) {
-//         self
-//     }
-// }
-// End of code for [StringPair].
-
 /// Enum to specify what kind of data a dictionary supports.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 enum DictionaryType {
     /// Dictionary for string datavalues
-    StringDv,
+    String,
     /// Dictionary for language-tagged string datavalues
-    LangStringDv,
+    LangString,
     /// Dictionary for IRI datavalues
-    IriDv,
+    Iri,
     /// Dictionary for other datavalues
-    OtherDv,
+    Other,
     /// Dictionary for null datavalues
-    NullDv,
+    Null,
     // /// Dictionary for long strings (blobs)
     // Blob,
     // /// Dictionary for strings with a fixed prefix and suffix
@@ -110,14 +46,17 @@ enum DictionaryType {
 impl DictionaryType {
     /// Returns true if the given value is supported by a dictionary of this type.
     fn supports(&self, dv: &AnyDataValue) -> bool {
-        match (self, dv.value_domain()) {
-            (DictionaryType::IriDv, ValueDomain::Iri) => true,
-            (DictionaryType::StringDv, ValueDomain::PlainString) => true,
-            (DictionaryType::LangStringDv, ValueDomain::LanguageTaggedString) => true,
-            (DictionaryType::OtherDv, ValueDomain::Other) => true,
-            (DictionaryType::NullDv, ValueDomain::Null) => true,
-            _ => false,
-        }
+        matches!(
+            (self, dv.value_domain()),
+            (DictionaryType::Iri, ValueDomain::Iri)
+                | (DictionaryType::String, ValueDomain::PlainString)
+                | (
+                    DictionaryType::LangString,
+                    ValueDomain::LanguageTaggedString
+                )
+                | (DictionaryType::Other, ValueDomain::Other)
+                | (DictionaryType::Null, ValueDomain::Null)
+        )
     }
 }
 
@@ -155,7 +94,7 @@ impl DictIterator {
     }
 
     /// Advance iterator, and return the id of the next dictionary, or
-    /// [`NO_DICT`] if no further matching dictionaries exist.
+    /// [NO_DICT] if no further matching dictionaries exist.
     fn next(&mut self, dv: &AnyDataValue, md: &MetaDvDictionary) -> usize {
         // First look for infix dictionary:
         if self.position == 0 {
@@ -180,6 +119,8 @@ impl DictIterator {
                 ValueDomain::Iri => return md.iri_dict,
                 ValueDomain::Other => return md.other_dict,
                 ValueDomain::Null => return md.null_dict,
+                ValueDomain::Boolean => return md.other_dict, // TODO: maybe not the best place, using a whole page for two values if there is not much "other"
+                ValueDomain::UnsignedLong => return md.other_dict, // TODO: maybe not the best place either
                 _ => {}
             }
         }
@@ -255,11 +196,11 @@ impl Default for MetaDvDictionary {
             size: 0,
         };
 
-        result.add_dictionary(DictionaryType::IriDv);
-        result.add_dictionary(DictionaryType::StringDv);
-        result.add_dictionary(DictionaryType::LangStringDv);
-        result.add_dictionary(DictionaryType::OtherDv);
-        result.add_dictionary(DictionaryType::NullDv);
+        result.add_dictionary(DictionaryType::Iri);
+        result.add_dictionary(DictionaryType::String);
+        result.add_dictionary(DictionaryType::LangString);
+        result.add_dictionary(DictionaryType::Other);
+        result.add_dictionary(DictionaryType::Null);
 
         result
     }
@@ -303,7 +244,7 @@ impl MetaDvDictionary {
             return (NO_DICT, 0);
         }
         let (dict_id, lblock) = self.dictblocks[gblock];
-        (dict_id, (lblock >> BLOCKSIZE) + offset)
+        (dict_id, (lblock << BLOCKSIZE) + offset)
     }
 
     /// Find a global block that is allocated for the given dictionary and local block. If not
@@ -350,35 +291,35 @@ impl MetaDvDictionary {
     fn add_dictionary(&mut self, dt: DictionaryType) {
         let dict: Box<dyn DvDict>;
         match dt {
-            DictionaryType::StringDv => {
+            DictionaryType::String => {
                 if self.string_dict != NO_DICT {
                     return;
                 }
                 dict = Box::new(StringDvDictionary::new());
                 self.string_dict = self.dicts.len();
             }
-            DictionaryType::LangStringDv => {
+            DictionaryType::LangString => {
                 if self.langstring_dict != NO_DICT {
                     return;
                 }
                 dict = Box::new(LangStringDvDictionary::new());
                 self.langstring_dict = self.dicts.len();
             }
-            DictionaryType::IriDv => {
+            DictionaryType::Iri => {
                 if self.iri_dict != NO_DICT {
                     return;
                 }
                 dict = Box::new(IriDvDictionary::new());
                 self.iri_dict = self.dicts.len();
             }
-            DictionaryType::OtherDv => {
+            DictionaryType::Other => {
                 if self.other_dict != NO_DICT {
                     return;
                 }
                 dict = Box::new(OtherDvDictionary::new());
                 self.other_dict = self.dicts.len();
             }
-            DictionaryType::NullDv => {
+            DictionaryType::Null => {
                 if self.null_dict != NO_DICT {
                     return;
                 }
@@ -519,7 +460,7 @@ impl DvDict for MetaDvDictionary {
         let mut d_it = DictIterator::new();
         let mut dict_idx: usize;
         while {
-            dict_idx = d_it.next(&dv, self);
+            dict_idx = d_it.next(dv, self);
             dict_idx
         } != usize::MAX
         {
@@ -598,7 +539,7 @@ impl DvDict for MetaDvDictionary {
 #[cfg(test)]
 mod test {
     use crate::{
-        datavalues::{AnyDataValue, NullDataValue},
+        datavalues::{syntax::XSD_PREFIX, AnyDataValue, NullDataValue},
         dictionary::{AddResult, DvDict},
     };
 
@@ -608,20 +549,16 @@ mod test {
     fn add_and_get() {
         let mut dict = MetaDvDictionary::new();
 
-        let mut dvs = Vec::new();
-        dvs.push(AnyDataValue::new_plain_string(
-            "http://example.org".to_string(),
-        ));
-        dvs.push(AnyDataValue::new_plain_string("another string".to_string()));
-        dvs.push(AnyDataValue::new_iri("http://example.org".to_string()));
-        dvs.push(AnyDataValue::new_language_tagged_string(
-            "Hallo".to_string(),
-            "de".to_string(),
-        ));
-        dvs.push(AnyDataValue::new_other(
-            "abc".to_string(),
-            "http://example.org/mydatatype".to_string(),
-        ));
+        let dvs = vec![
+            AnyDataValue::new_plain_string("http://example.org".to_string()),
+            AnyDataValue::new_plain_string("another string".to_string()),
+            AnyDataValue::new_iri("http://example.org".to_string()),
+            AnyDataValue::new_language_tagged_string("Hallo".to_string(), "de".to_string()),
+            AnyDataValue::new_other(
+                "abc".to_string(),
+                "http://example.org/mydatatype".to_string(),
+            ),
+        ];
 
         let mut ids = Vec::new();
         for dv in &dvs {
@@ -637,33 +574,33 @@ mod test {
             assert_eq!(dict.id_to_datavalue(ids[i]), Some(dvs[i].clone()));
         }
 
-        assert_eq!(dict.is_iri(ids[0]), false);
-        assert_eq!(dict.is_iri(ids[1]), false);
-        assert_eq!(dict.is_iri(ids[2]), true);
-        assert_eq!(dict.is_iri(ids[3]), false);
-        assert_eq!(dict.is_iri(ids[3]), false);
-        assert_eq!(dict.is_iri(ids[4] * 500), false);
+        assert!(!dict.is_iri(ids[0]));
+        assert!(!dict.is_iri(ids[1]));
+        assert!(dict.is_iri(ids[2]));
+        assert!(!dict.is_iri(ids[3]));
+        assert!(!dict.is_iri(ids[3]));
+        assert!(!dict.is_iri(ids[4] * 500));
 
-        assert_eq!(dict.is_plain_string(ids[0]), true);
-        assert_eq!(dict.is_plain_string(ids[1]), true);
-        assert_eq!(dict.is_plain_string(ids[2]), false);
-        assert_eq!(dict.is_plain_string(ids[3]), false);
-        assert_eq!(dict.is_plain_string(ids[4]), false);
-        assert_eq!(dict.is_plain_string(ids[4] * 500), false);
+        assert!(dict.is_plain_string(ids[0]));
+        assert!(dict.is_plain_string(ids[1]));
+        assert!(!dict.is_plain_string(ids[2]));
+        assert!(!dict.is_plain_string(ids[3]));
+        assert!(!dict.is_plain_string(ids[4]));
+        assert!(!dict.is_plain_string(ids[4] * 500));
 
-        assert_eq!(dict.is_lang_string(ids[0]), false);
-        assert_eq!(dict.is_lang_string(ids[1]), false);
-        assert_eq!(dict.is_lang_string(ids[2]), false);
-        assert_eq!(dict.is_lang_string(ids[3]), true);
-        assert_eq!(dict.is_lang_string(ids[4]), false);
-        assert_eq!(dict.is_lang_string(ids[4] * 500), false);
+        assert!(!dict.is_lang_string(ids[0]));
+        assert!(!dict.is_lang_string(ids[1]));
+        assert!(!dict.is_lang_string(ids[2]));
+        assert!(dict.is_lang_string(ids[3]));
+        assert!(!dict.is_lang_string(ids[4]));
+        assert!(!dict.is_lang_string(ids[4] * 500));
 
-        assert_eq!(dict.is_null(ids[0]), false);
-        assert_eq!(dict.is_null(ids[1]), false);
-        assert_eq!(dict.is_null(ids[2]), false);
-        assert_eq!(dict.is_null(ids[3]), false);
-        assert_eq!(dict.is_null(ids[4]), false);
-        assert_eq!(dict.is_null(ids[4] * 500), false);
+        assert!(!dict.is_null(ids[0]));
+        assert!(!dict.is_null(ids[1]));
+        assert!(!dict.is_null(ids[2]));
+        assert!(!dict.is_null(ids[3]));
+        assert!(!dict.is_null(ids[4]));
+        assert!(!dict.is_null(ids[4] * 500));
 
         assert_eq!(dict.len(), dvs.len());
     }
@@ -684,9 +621,9 @@ mod test {
 
         assert_eq!(dict.add_datavalue(nv3.clone()), AddResult::Rejected);
 
-        assert_eq!(dict.is_null(n1_id), true);
-        assert_eq!(dict.is_null(n2_id), true);
-        assert_eq!(dict.is_null(n2_id + 10), false);
+        assert!(dict.is_null(n1_id));
+        assert!(dict.is_null(n2_id));
+        assert!(!dict.is_null(n2_id + 10));
 
         assert_eq!(dict.len(), 2);
     }
@@ -697,5 +634,17 @@ mod test {
         let dv = AnyDataValue::new_integer_from_i64(42);
 
         assert_eq!(dict.add_datavalue(dv), AddResult::Rejected);
+    }
+
+    #[test]
+    fn add_unsigned_long() {
+        let mut dict = MetaDvDictionary::new();
+        let dv = AnyDataValue::new_from_typed_literal(
+            "+13000000000000000000.0".to_string(),
+            XSD_PREFIX.to_owned() + "decimal",
+        )
+        .expect("Failed to create unsigned long");
+
+        assert_eq!(dict.add_datavalue(dv), AddResult::Fresh(0));
     }
 }

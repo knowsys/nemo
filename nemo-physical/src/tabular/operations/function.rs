@@ -7,14 +7,16 @@ use std::{
 
 use crate::{
     columnar::{
-        columnscan::{ColumnScanEnum, ColumnScanRainbow},
+        columnscan::{ColumnScanEnum, ColumnScanT},
         operations::{constant::ColumnScanConstant, pass::ColumnScanPass},
     },
-    datatypes::{
-        into_datavalue::IntoDataValue, storage_type_name::StorageTypeBitSet, StorageTypeName,
+    datatypes::{storage_type_name::StorageTypeBitSet, StorageTypeName},
+    datavalues::{AnyDataValue, DataValue},
+    function::{
+        definitions::FunctionTypePropagation,
+        evaluation::StackProgram,
+        tree::{FunctionTree, SpecialCaseFunction},
     },
-    datavalues::AnyDataValue,
-    function::{evaluation::StackProgram, tree::FunctionTree},
     management::database::Dict,
     tabular::triescan::{PartialTrieScan, TrieScanEnum},
 };
@@ -24,69 +26,194 @@ use super::{OperationColumnMarker, OperationGenerator, OperationTable};
 /// Assigns an output column to a function which determines how to compute the values of that column
 pub type FunctionAssignment = HashMap<OperationColumnMarker, FunctionTree<OperationColumnMarker>>;
 
-/// Marks whether an output column results from an input column or is computed via a [StackProgram]
+/// Marks an output column as either being the same as an input column
+/// or computing a new value
+#[derive(Debug, PartialEq, Eq, Clone)]
+enum ComputedMarker {
+    /// Layer copies value from input trie
+    Input,
+    /// Layer compies value from output trie
+    Copy(usize),
+    /// Layer computes new value from input layers
+    Computed,
+}
+
+/// Marks an output column as either being unused
 #[derive(Debug, Clone)]
-enum OutputColumn {
-    /// Index of the input column
+enum InputMarker {
+    /// Output of this layer is not used as input for any computation
+    Unused,
+    /// Output of this layer is used as input for some computation
+    ///
+    /// If the value of this layer is the last value needed for the computation,
+    /// then each pair `(program, layer)` in the list
+    /// determines the [StackProgram] to evaluate the output of the given `layer`.
+    Used(Vec<(StackProgram, usize)>),
+}
+
+impl InputMarker {
+    /// Set the [InputMarker] to used.
+    pub(self) fn set_used(&mut self) {
+        if let Self::Unused = self {
+            *self = Self::Used(Vec::new())
+        }
+    }
+
+    /// Append an `(StackProgram, usize)` pair to the [InputMarker].
+    pub(self) fn append_used(&mut self, computation: (StackProgram, usize)) {
+        match self {
+            InputMarker::Unused => *self = Self::Used(vec![computation]),
+            InputMarker::Used(computations) => computations.push(computation),
+        }
+    }
+}
+
+/// Contains information about a layer in [TrieScanFunction]
+#[derive(Debug, Clone)]
+struct LayerInformation {
+    /// Whether output of this layer is the same as input or contains a computed value
+    pub(self) computed: ComputedMarker,
+    /// Whether output of this layer is used as input for some function
+    pub(self) input: InputMarker,
+}
+
+/// Encodes a priori knowlegde about the the possible types of a particular layer
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum PossibleTypeInformation {
+    /// Layer could be of all types
+    Unkown,
+    /// Layer can only have the type specified by the [StorageTypeBitSet]
+    Known(StorageTypeBitSet),
+    /// Layer has the same possible types as another
+    Inferred(usize),
+    /// Layer has the same possible types as the input trie of the given layer
     Input(usize),
-    /// [StackProgram] for computing the output
-    Computed(StackProgram),
 }
 
 /// Used to create [TrieScanFunction]
-#[derive(Debug, Clone)]
-pub(crate) struct GeneratorFunction {
-    /// For each output column
-    /// either contains the index to the input columns it is derived from
-    /// or the [StackProgram] used to compute it
-    output_columns: Vec<OutputColumn>,
-    /// Marks for each output index,
-    /// whether the value of the corresponding layer is used as input to some function.
-    input_indices: Vec<bool>,
+#[derive(Debug)]
+pub struct GeneratorFunction {
+    /// Encodes for each layer information about what to do via [LayerInformation].
+    layer_information: Vec<LayerInformation>,
+    /// Result of applying constant functions
+    constant_functions: Vec<(Option<AnyDataValue>, usize)>,
+    /// Encodes for each layer information about its possible types via [PossibleTypeInformation].
+    type_information: Vec<PossibleTypeInformation>,
 }
 
 impl GeneratorFunction {
     /// Create a new [GeneratorFunction]
-    pub(crate) fn new(output: OperationTable, functions: &FunctionAssignment) -> Self {
-        let mut output_columns = Vec::<OutputColumn>::new();
-        let mut input_indices = Vec::<bool>::new();
-
+    pub fn new(output: OperationTable, functions: &FunctionAssignment) -> Self {
         let referenced_columns: HashSet<OperationColumnMarker> = functions
             .iter()
             .flat_map(|(_, function)| function.references())
             .collect();
-        let mut input_index: usize = 0;
+
+        let mut type_information = vec![PossibleTypeInformation::Unkown; output.len()];
         let mut reference_map = HashMap::<OperationColumnMarker, usize>::new();
 
-        for output_marker in output.into_iter() {
-            let is_function_input = referenced_columns.contains(&output_marker);
-            input_indices.push(is_function_input);
+        let mut layer_input: usize = 0;
 
-            if is_function_input {
+        for (layer_output, marker_output) in output.iter().enumerate() {
+            if referenced_columns.contains(marker_output) {
+                // Column is input to some function
                 let num_function_input = reference_map.len();
-                if let Entry::Vacant(entry) = reference_map.entry(output_marker) {
+                if let Entry::Vacant(entry) = reference_map.entry(*marker_output) {
                     entry.insert(num_function_input);
                 }
             }
 
-            match functions.get(&output_marker) {
-                Some(function) => {
-                    output_columns.push(OutputColumn::Computed(StackProgram::from_function_tree(
-                        function,
-                        &reference_map,
-                        None,
-                    )));
+            if functions.get(marker_output).is_none() {
+                // Column is part of the input trie
+                type_information[layer_output] = PossibleTypeInformation::Input(layer_input);
+                layer_input += 1;
+            }
+        }
+
+        let mut input_information = vec![InputMarker::Unused; output.len()];
+        let mut computed_information = vec![ComputedMarker::Input; output.len()];
+        let mut constant_functions = Vec::new();
+
+        for (marker_result, function) in functions {
+            let layer_output = output
+                .position(marker_result)
+                .expect("Output table must contain every output variable of a function");
+
+            computed_information[layer_output] = ComputedMarker::Computed;
+
+            match function.special_function() {
+                SpecialCaseFunction::Normal => {
+                    let mut layer_last_reference: Option<usize> = None;
+                    for reference in function.references() {
+                        let layer_reference = output
+                            .position(&reference)
+                            .expect("Output table must include every referenced column");
+
+                        if let Some(layer) = layer_last_reference {
+                            if layer_reference > layer {
+                                layer_last_reference = Some(layer_reference)
+                            }
+                        } else {
+                            layer_last_reference = Some(layer_reference);
+                        }
+
+                        input_information[layer_reference].set_used();
+                    }
+
+                    if let Some(layer_last_reference) = layer_last_reference {
+                        let stack_program =
+                            StackProgram::from_function_tree(function, &reference_map, None);
+
+                        input_information[layer_last_reference]
+                            .append_used((stack_program, layer_output));
+
+                        let possible_types = match function.type_propagation() {
+                            FunctionTypePropagation::KnownOutput(output_type) => {
+                                PossibleTypeInformation::Known(output_type)
+                            }
+                            FunctionTypePropagation::Preserve => {
+                                PossibleTypeInformation::Inferred(layer_last_reference)
+                            }
+                            FunctionTypePropagation::_Unknown => PossibleTypeInformation::Unkown,
+                        };
+
+                        type_information[layer_output] = possible_types;
+                    } else {
+                        unreachable!("If the function has no references it is constant");
+                    }
                 }
-                None => {
-                    output_columns.push(OutputColumn::Input(input_index));
-                    input_index += 1;
+                SpecialCaseFunction::Constant(constant) => {
+                    type_information[layer_output] = PossibleTypeInformation::Known(
+                        constant
+                            .as_ref()
+                            .map_or(StorageTypeBitSet::empty(), |constant| {
+                                constant.value_domain().storage_type()
+                            }),
+                    );
+                    constant_functions.push((constant, layer_output));
+                }
+                SpecialCaseFunction::Reference(reference) => {
+                    let layer_reference = output
+                        .position(reference)
+                        .expect("Output table must include every referenced column");
+
+                    computed_information[layer_output] = ComputedMarker::Copy(layer_reference);
+                    type_information[layer_output] =
+                        PossibleTypeInformation::Inferred(layer_reference);
                 }
             }
         }
 
+        let layer_information = input_information
+            .into_iter()
+            .zip(computed_information)
+            .map(|(input, computed)| LayerInformation { computed, input })
+            .collect::<Vec<_>>();
+
         Self {
-            output_columns,
-            input_indices,
+            layer_information,
+            constant_functions,
+            type_information,
         }
     }
 
@@ -94,9 +221,9 @@ impl GeneratorFunction {
     fn is_unchanging(&self) -> bool {
         // This operation behaves the same as the identity if
         // no new columns are computed
-        self.output_columns
+        self.layer_information
             .iter()
-            .all(|c| matches!(c, OutputColumn::Input(_)))
+            .all(|info| info.computed == ComputedMarker::Input)
     }
 }
 
@@ -109,23 +236,27 @@ impl OperationGenerator for GeneratorFunction {
         debug_assert!(input.len() == 1);
 
         let trie_scan = input.remove(0)?;
+
         if self.is_unchanging() {
             return Some(trie_scan);
         }
 
-        let mut column_scans: Vec<UnsafeCell<ColumnScanRainbow<'a>>> =
-            Vec::with_capacity(self.output_columns.len());
+        let mut column_scans: Vec<UnsafeCell<ColumnScanT<'a>>> =
+            Vec::with_capacity(self.layer_information.len());
 
-        for output_column in &self.output_columns {
+        let mut input_index: usize = 0;
+
+        for information in &self.layer_information {
             macro_rules! output_scan {
                 ($type:ty, $scan:ident) => {{
-                    match output_column {
-                        OutputColumn::Computed(_) => {
-                            ColumnScanEnum::ColumnScanConstant(ColumnScanConstant::new(None))
+                    match information.computed {
+                        ComputedMarker::Computed | ComputedMarker::Copy(_) => {
+                            ColumnScanEnum::Constant(ColumnScanConstant::new(None))
                         }
-                        OutputColumn::Input(input_index) => {
-                            let input_scan = &unsafe { &*trie_scan.scan(*input_index).get() }.$scan;
-                            ColumnScanEnum::ColumnScanPass(ColumnScanPass::new(input_scan))
+                        ComputedMarker::Input => {
+                            let input_scan = &unsafe { &*trie_scan.scan(input_index).get() }.$scan;
+
+                            ColumnScanEnum::Pass(ColumnScanPass::new(input_scan))
                         }
                     }
                 }};
@@ -137,7 +268,7 @@ impl OperationGenerator for GeneratorFunction {
             let output_scan_float = output_scan!(Float, scan_float);
             let output_scan_double = output_scan!(Double, scan_double);
 
-            let new_scan = ColumnScanRainbow::new(
+            let new_scan = ColumnScanT::new(
                 output_scan_id32,
                 output_scan_id64,
                 output_scan_i64,
@@ -145,26 +276,32 @@ impl OperationGenerator for GeneratorFunction {
                 output_scan_double,
             );
             column_scans.push(UnsafeCell::new(new_scan));
+
+            if let ComputedMarker::Input = information.computed {
+                input_index += 1;
+            }
         }
 
-        let output_functions = self
-            .output_columns
-            .iter()
-            .cloned()
-            .map(|output| match output {
-                OutputColumn::Input(_) => None,
-                OutputColumn::Computed(program) => Some(program),
-            })
-            .collect();
+        for (any_value, output_layer) in &self.constant_functions {
+            let storage_value = any_value
+                .as_ref()
+                .map(|value| value.to_storage_value_t_dict(&mut dictionary.borrow_mut()));
 
-        Some(TrieScanEnum::TrieScanFunction(TrieScanFunction {
+            if let Some(storage_value) = storage_value {
+                column_scans[*output_layer]
+                    .get_mut()
+                    .constant_set(storage_value);
+            }
+        }
+
+        Some(TrieScanEnum::Function(TrieScanFunction {
             trie_scan: Box::new(trie_scan),
             dictionary,
-            input_indices: self.input_indices.clone(),
-            output_functions,
             input_values: Vec::new(),
             column_scans,
             path_types: Vec::new(),
+            layer_information: self.layer_information.clone(),
+            type_information: self.type_information.clone(),
         }))
     }
 }
@@ -178,22 +315,20 @@ pub(crate) struct TrieScanFunction<'a> {
     /// Dictionary used to translate column values in [AnyDataValue] for evaluation
     dictionary: &'a RefCell<Dict>,
 
-    /// Marks for each output index,
-    /// whether the value of the corresponding layer is used as input to some function.
-    input_indices: Vec<bool>,
-    /// For each output layer contains the stack program used to evaluate its content,
-    /// or alternatively contains `None` if the input colums should passed instead
-    output_functions: Vec<Option<StackProgram>>,
-    /// Values that will be used as input for evaluating
+    /// For each output layer, holds information about what to do via [LayerInformation].
+    layer_information: Vec<LayerInformation>,
+    /// Values that will be used as input when evaluating a [StackProgram]
     input_values: Vec<AnyDataValue>,
-
-    /// For each layer in the resulting trie contains a [`ColumnScanRainbow`]
-    /// evaluating the functions on columns of the input trie
-    /// or simply passing the values from the input trie to the output.
-    column_scans: Vec<UnsafeCell<ColumnScanRainbow<'a>>>,
+    /// For each output layer, holds information about the possible output types via [PossibleTypeInformation]
+    type_information: Vec<PossibleTypeInformation>,
 
     /// Path of [StorageTypeName] indicating the the types of the current (partial) row
     path_types: Vec<StorageTypeName>,
+
+    /// For each layer in the resulting trie contains a [ColumnScanT]
+    /// evaluating the functions on columns of the input trie
+    /// or simply passing the values from the input trie to the output.
+    column_scans: Vec<UnsafeCell<ColumnScanT<'a>>>,
 }
 
 impl<'a> PartialTrieScan<'a> for TrieScanFunction<'a> {
@@ -201,14 +336,14 @@ impl<'a> PartialTrieScan<'a> for TrieScanFunction<'a> {
         let current_layer = self.path_types.len() - 1;
         let previous_layer = current_layer.checked_sub(1);
 
-        if self.output_functions[current_layer].is_none() {
+        if self.layer_information[current_layer].computed == ComputedMarker::Input {
             // If the current output layer corresponds to a layer in the input trie,
             // we need to call up on that
             self.trie_scan.up();
         }
 
         if let Some(previous_layer) = previous_layer {
-            if self.input_indices[previous_layer] {
+            if let InputMarker::Used(_) = &self.layer_information[previous_layer].input {
                 // The input value is no longer valid
                 self.input_values.pop();
             }
@@ -218,76 +353,86 @@ impl<'a> PartialTrieScan<'a> for TrieScanFunction<'a> {
     }
 
     fn down(&mut self, next_type: StorageTypeName) {
-        let previous_layer = self.current_layer();
-        let previous_type = self.path_types.last();
-
         let next_layer = self.path_types.len();
 
-        if let Some(previous_layer) = previous_layer {
-            let previous_type =
-                *previous_type.expect("If previous_layer is not None so is previuos_type.");
+        if let Some((current_layer, current_type)) =
+            self.current_layer().zip(self.path_types.last())
+        {
+            let layer_information = &self.layer_information[current_layer];
 
-            if self.input_indices[previous_layer] {
-                // This value will be used in some future layer as an input to a function,
-                // so we translate it to an AnyDataValue and store it in `self.input_values`.
+            if let InputMarker::Used(defined_programs) = &layer_information.input {
+                let current_value = self.column_scans[current_layer]
+                    .get_mut()
+                    .current(*current_type)
+                    .expect("Down may only be called on existing values.");
 
-                let column_value = self.column_scans[previous_layer].get_mut().current(previous_type).expect("It is only allowed to call down while the previous scan points to some value.").into_datavalue(&self.dictionary.borrow()).expect("All ids occuring in a column must be known to the dictionary");
-                self.input_values.push(column_value);
+                self.input_values.push(
+                    AnyDataValue::new_from_storage_value(current_value, &self.dictionary.borrow())
+                        .expect("Value should be known to the dictionary"),
+                );
+
+                for (program, output_layer) in defined_programs {
+                    let dictionary = &mut self.dictionary.borrow_mut();
+                    let program_result = program
+                        .evaluate_data(&self.input_values)
+                        .map(|result| result.to_storage_value_t_dict(dictionary));
+
+                    self.column_scans[*output_layer]
+                        .get_mut()
+                        .constant_set_none_all();
+
+                    if let Some(storage_value) = program_result {
+                        self.column_scans[*output_layer]
+                            .get_mut()
+                            .constant_set(storage_value);
+                    }
+                }
             }
         }
 
-        // There are two cases.
-        // Either we enter a layer which simply corresponds to an input layer.
-        // In this case we need to call down in the input trie.
-        // Otherwise we need to compute the new value and pass it into the column scan of this layer.
-        if let Some(program) = &self.output_functions[next_layer] {
-            let function_result = program.evaluate_data(&self.input_values);
-            match function_result
-                .map(|result| result.to_storage_value_t_mut(&mut self.dictionary.borrow_mut()))
-                .filter(|result| result.get_type() == next_type)
-            {
-                Some(result) => {
-                    self.column_scans[next_layer].get_mut().constant_set(result);
-                }
-                None => {
+        match &self.layer_information[next_layer].computed {
+            ComputedMarker::Input => {
+                self.trie_scan.down(next_type);
+            }
+            ComputedMarker::Copy(layer) => {
+                let layer_type = self.path_types[*layer];
+
+                if layer_type == next_type {
+                    if let Some(value) = self.column_scans[*layer].get_mut().current(layer_type) {
+                        self.column_scans[next_layer].get_mut().constant_set(value);
+                    }
+                } else {
                     self.column_scans[next_layer]
                         .get_mut()
                         .constant_set_none(next_type);
                 }
             }
-        } else {
-            self.trie_scan.down(next_type);
+            ComputedMarker::Computed => {}
         }
 
         self.column_scans[next_layer].get_mut().reset(next_type);
         self.path_types.push(next_type);
     }
 
-    fn path_types(&self) -> &[StorageTypeName] {
-        &self.path_types
-    }
-
     fn arity(&self) -> usize {
         self.column_scans.len()
     }
 
-    fn scan<'b>(&'b self, layer: usize) -> &'b UnsafeCell<ColumnScanRainbow<'a>> {
+    fn scan<'b>(&'b self, layer: usize) -> &'b UnsafeCell<ColumnScanT<'a>> {
         &self.column_scans[layer]
     }
 
     fn possible_types(&self, layer: usize) -> StorageTypeBitSet {
-        if self.output_functions[layer].is_some() {
-            StorageTypeBitSet::full()
-        } else {
-            let input_layer = self
-                .output_functions
-                .iter()
-                .take(layer)
-                .filter(|out| out.is_none())
-                .count();
-
-            self.trie_scan.possible_types(input_layer)
+        match self.type_information[layer] {
+            PossibleTypeInformation::Unkown => StorageTypeBitSet::full(),
+            PossibleTypeInformation::Known(value) => value,
+            PossibleTypeInformation::Inferred(index) => self.possible_types(index),
+            PossibleTypeInformation::Input(layer) => self.trie_scan.possible_types(layer),
         }
+    }
+
+    fn current_layer(&self) -> Option<usize> {
+        self.path_types.len().checked_sub(1)
     }
 }
 
@@ -305,7 +450,7 @@ mod test {
             operations::{OperationGenerator, OperationTableGenerator},
             rowscan::RowScan,
             trie::Trie,
-            triescan::TrieScanEnum,
+            triescan::{PartialTrieScan, TrieScanEnum},
         },
         util::test_util::test::{trie_dfs, trie_int64},
     };
@@ -327,7 +472,7 @@ mod test {
             &[3, 9, 8],
         ]);
 
-        let trie_scan = TrieScanEnum::TrieScanGeneric(trie.partial_iterator());
+        let trie_scan = TrieScanEnum::Generic(trie.partial_iterator());
 
         let mut marker_generator = OperationTableGenerator::new();
         marker_generator.add_marker("x");
@@ -362,6 +507,13 @@ mod test {
         let mut function_scan = function_generator
             .generate(vec![Some(trie_scan)], &dictionary)
             .unwrap();
+
+        for layer in 0..function_scan.arity() {
+            assert_eq!(
+                function_scan.possible_types(layer),
+                StorageTypeName::Int64.bitset()
+            );
+        }
 
         trie_dfs(
             &mut function_scan,
@@ -421,7 +573,7 @@ mod test {
             &[2, 5, 6, 10, 11],
         ]);
 
-        let trie_scan = TrieScanEnum::TrieScanGeneric(trie.partial_iterator());
+        let trie_scan = TrieScanEnum::Generic(trie.partial_iterator());
 
         let mut marker_generator = OperationTableGenerator::new();
         marker_generator.add_marker("x");
@@ -448,6 +600,13 @@ mod test {
         let mut function_scan = function_generator
             .generate(vec![Some(trie_scan)], &dictionary)
             .unwrap();
+
+        for layer in 0..function_scan.arity() {
+            assert_eq!(
+                function_scan.possible_types(layer),
+                StorageTypeName::Int64.bitset()
+            );
+        }
 
         trie_dfs(
             &mut function_scan,
@@ -494,7 +653,7 @@ mod test {
 
         let trie = trie_int64(vec![&[1, 3], &[1, 4], &[2, 5]]);
 
-        let trie_scan = TrieScanEnum::TrieScanGeneric(trie.partial_iterator());
+        let trie_scan = TrieScanEnum::Generic(trie.partial_iterator());
 
         let mut marker_generator = OperationTableGenerator::new();
         marker_generator.add_marker("x");
@@ -524,6 +683,13 @@ mod test {
             .generate(vec![Some(trie_scan)], &dictionary)
             .unwrap();
 
+        for layer in 0..function_scan.arity() {
+            assert_eq!(
+                function_scan.possible_types(layer),
+                StorageTypeName::Int64.bitset()
+            );
+        }
+
         trie_dfs(
             &mut function_scan,
             &[StorageTypeName::Int64],
@@ -543,21 +709,36 @@ mod test {
     #[test]
     fn function_repeat_multiple_types() {
         let mut dictionary = Dict::default();
-        let a = dictionary
-            .add_datavalue(AnyDataValue::new_plain_string(String::from("a")))
-            .value() as u32;
-        let b = dictionary
-            .add_datavalue(AnyDataValue::new_plain_string(String::from("b")))
-            .value() as u32;
-        let foo1 = dictionary
-            .add_datavalue(AnyDataValue::new_plain_string(String::from("foo1")))
-            .value() as u32;
-        let foo2 = dictionary
-            .add_datavalue(AnyDataValue::new_plain_string(String::from("foo2")))
-            .value() as u32;
-        let bar = dictionary
-            .add_datavalue(AnyDataValue::new_plain_string(String::from("bar")))
-            .value() as u32;
+        let a = u32::try_from(
+            dictionary
+                .add_datavalue(AnyDataValue::new_plain_string(String::from("a")))
+                .value(),
+        )
+        .expect("The dictionary should not immediately return large ids");
+        let b = u32::try_from(
+            dictionary
+                .add_datavalue(AnyDataValue::new_plain_string(String::from("b")))
+                .value(),
+        )
+        .expect("The dictionary should not immediately return large ids");
+        let foo1 = u32::try_from(
+            dictionary
+                .add_datavalue(AnyDataValue::new_plain_string(String::from("foo1")))
+                .value(),
+        )
+        .expect("The dictionary should not immediately return large ids");
+        let foo2 = u32::try_from(
+            dictionary
+                .add_datavalue(AnyDataValue::new_plain_string(String::from("foo2")))
+                .value(),
+        )
+        .expect("The dictionary should not immediately return large ids");
+        let bar = u32::try_from(
+            dictionary
+                .add_datavalue(AnyDataValue::new_plain_string(String::from("bar")))
+                .value(),
+        )
+        .expect("The dictionary should not immediately return large ids");
         let dictionary = RefCell::new(dictionary);
 
         let trie = Trie::from_rows(vec![
@@ -567,7 +748,7 @@ mod test {
             vec![StorageValueT::Id32(b), StorageValueT::Id32(bar)],
         ]);
 
-        let trie_scan = TrieScanEnum::TrieScanGeneric(trie.partial_iterator());
+        let trie_scan = TrieScanEnum::Generic(trie.partial_iterator());
 
         let mut marker_generator = OperationTableGenerator::new();
         marker_generator.add_marker("x");
@@ -589,6 +770,27 @@ mod test {
         let mut function_scan = function_generator
             .generate(vec![Some(trie_scan)], &dictionary)
             .unwrap();
+
+        assert_eq!(
+            function_scan.possible_types(0),
+            StorageTypeName::Id32.bitset(),
+        );
+        assert_eq!(
+            function_scan.possible_types(1),
+            StorageTypeName::Id32
+                .bitset()
+                .union(StorageTypeName::Int64.bitset()),
+        );
+        assert_eq!(
+            function_scan.possible_types(2),
+            StorageTypeName::Id32.bitset(),
+        );
+        assert_eq!(
+            function_scan.possible_types(3),
+            StorageTypeName::Id32
+                .bitset()
+                .union(StorageTypeName::Int64.bitset()),
+        );
 
         trie_dfs(
             &mut function_scan,
@@ -615,12 +817,18 @@ mod test {
     #[test]
     fn function_new_value() {
         let mut dictionary = Dict::default();
-        let hello = dictionary
-            .add_datavalue(AnyDataValue::new_plain_string(String::from("hello: ")))
-            .value() as u32;
-        let world = dictionary
-            .add_datavalue(AnyDataValue::new_plain_string(String::from("world: ")))
-            .value() as u32;
+        let hello = u32::try_from(
+            dictionary
+                .add_datavalue(AnyDataValue::new_plain_string(String::from("hello: ")))
+                .value(),
+        )
+        .expect("The dictionary should not immediately return large ids");
+        let world = u32::try_from(
+            dictionary
+                .add_datavalue(AnyDataValue::new_plain_string(String::from("world: ")))
+                .value(),
+        )
+        .expect("The dictionary should not immediately return large ids");
         let dictionary = RefCell::new(dictionary);
 
         let trie = Trie::from_rows(vec![
@@ -628,7 +836,7 @@ mod test {
             vec![StorageValueT::Int64(20), StorageValueT::Id32(world)],
         ]);
 
-        let trie_scan = TrieScanEnum::TrieScanGeneric(trie.partial_iterator());
+        let trie_scan = TrieScanEnum::Generic(trie.partial_iterator());
 
         let mut marker_generator = OperationTableGenerator::new();
         marker_generator.add_marker("int");
@@ -653,6 +861,21 @@ mod test {
         let function_scan = function_generator
             .generate(vec![Some(trie_scan)], &dictionary)
             .unwrap();
+
+        assert_eq!(
+            function_scan.possible_types(0),
+            StorageTypeName::Int64.bitset(),
+        );
+        assert_eq!(
+            function_scan.possible_types(1),
+            StorageTypeName::Id32.bitset(),
+        );
+        assert_eq!(
+            function_scan.possible_types(2),
+            StorageTypeName::Id32
+                .bitset()
+                .union(StorageTypeName::Id64.bitset()),
+        );
 
         let result = RowScan::new(function_scan, 0)
             .map(|row| {
@@ -680,5 +903,121 @@ mod test {
         ];
 
         assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn function_only_constants() {
+        let mut dictionary = Dict::default();
+        dictionary.add_datavalue(AnyDataValue::new_plain_string(String::from("hello")));
+        dictionary.add_datavalue(AnyDataValue::new_plain_string(String::from("world")));
+        let dictionary = RefCell::new(dictionary);
+
+        let trie = Trie::zero_arity(true);
+
+        let trie_scan = TrieScanEnum::Generic(trie.partial_iterator());
+
+        let mut marker_generator = OperationTableGenerator::new();
+        marker_generator.add_marker("x");
+        marker_generator.add_marker("y");
+
+        let markers = marker_generator.operation_table(["x", "y"].iter());
+        let marker_x = *marker_generator.get(&"x").unwrap();
+        let marker_y = *marker_generator.get(&"y").unwrap();
+
+        let mut assigment = FunctionAssignment::new();
+        assigment.insert(
+            marker_x,
+            FunctionTree::constant(AnyDataValue::new_plain_string(String::from("hello"))),
+        );
+        assigment.insert(
+            marker_y,
+            FunctionTree::constant(AnyDataValue::new_plain_string(String::from("world"))),
+        );
+
+        // Input is passed in as an empty trie
+
+        let function_generator = GeneratorFunction::new(markers.clone(), &assigment);
+        let function_scan = function_generator
+            .generate(vec![Some(trie_scan)], &dictionary)
+            .unwrap();
+
+        let result = RowScan::new(function_scan, 0)
+            .map(|row| {
+                row.into_iter()
+                    .map(|value| value.into_datavalue(&dictionary.borrow()).unwrap())
+                    .collect::<Vec<_>>()
+            })
+            .collect::<Vec<_>>();
+
+        let expected = vec![vec![
+            AnyDataValue::new_plain_string(String::from("hello")),
+            AnyDataValue::new_plain_string(String::from("world")),
+        ]];
+
+        assert_eq!(result, expected);
+
+        // Input is passed in as `None`
+
+        let function_generator = GeneratorFunction::new(markers, &assigment);
+        let function_scan = function_generator.generate(vec![None], &dictionary);
+
+        assert!(function_scan.is_none());
+    }
+
+    #[test]
+    fn function_empty() {
+        let mut dictionary = Dict::default();
+        dictionary.add_datavalue(AnyDataValue::new_plain_string(String::from("hello")));
+        dictionary.add_datavalue(AnyDataValue::new_plain_string(String::from("world")));
+        let dictionary = RefCell::new(dictionary);
+
+        let trie = Trie::empty(1);
+
+        let trie_scan = TrieScanEnum::Generic(trie.partial_iterator());
+
+        let mut marker_generator = OperationTableGenerator::new();
+        marker_generator.add_marker("i");
+        marker_generator.add_marker("x");
+        marker_generator.add_marker("y");
+
+        let markers = marker_generator.operation_table(["i", "x", "y"].iter());
+        let marker_x = *marker_generator.get(&"x").unwrap();
+        let marker_y = *marker_generator.get(&"y").unwrap();
+
+        let mut assigment = FunctionAssignment::new();
+        assigment.insert(
+            marker_x,
+            FunctionTree::constant(AnyDataValue::new_plain_string(String::from("hello"))),
+        );
+        assigment.insert(
+            marker_y,
+            FunctionTree::constant(AnyDataValue::new_plain_string(String::from("world"))),
+        );
+
+        // Input is passed in as an empty trie
+
+        let function_generator = GeneratorFunction::new(markers.clone(), &assigment);
+        let function_scan = function_generator
+            .generate(vec![Some(trie_scan)], &dictionary)
+            .unwrap();
+
+        let result = RowScan::new(function_scan, 0)
+            .map(|row| {
+                row.into_iter()
+                    .map(|value| value.into_datavalue(&dictionary.borrow()).unwrap())
+                    .collect::<Vec<_>>()
+            })
+            .collect::<Vec<_>>();
+
+        let expected: Vec<Vec<AnyDataValue>> = vec![];
+
+        assert_eq!(result, expected);
+
+        // Input is passed in as `None`
+
+        let function_generator = GeneratorFunction::new(markers, &assigment);
+        let function_scan = function_generator.generate(vec![None], &dictionary);
+
+        assert!(function_scan.is_none());
     }
 }

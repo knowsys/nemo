@@ -1,4 +1,4 @@
-//! Defines a variant of [`crate::model::Rule`], suitable for computing the chase.
+//! Defines a variant of [crate::model::Rule], suitable for computing the chase.
 
 use std::collections::{HashMap, HashSet};
 
@@ -17,7 +17,7 @@ use super::{
     VariableAtom,
 };
 
-/// Representation of a rule in a [`super::ChaseProgram`].
+/// Representation of a rule in a [super::ChaseProgram].
 ///
 /// Chase rules may include placeholder variables, which start with `_`
 /// * Additional constraints: `_EQUALITY_{term_counter}`
@@ -44,7 +44,7 @@ pub struct ChaseRule {
 
 #[allow(dead_code)]
 impl ChaseRule {
-    /// Construct a new [`ChaseRule`].
+    /// Construct a new [ChaseRule].
     pub fn new(
         head: Vec<PrimitiveAtom>,
         constructors: Vec<Constructor>,
@@ -148,7 +148,7 @@ impl ChaseRule {
         &mut self.negative_constraints
     }
 
-    /// Return the [`Constructor`] associated with a given variable
+    /// Return the [Constructor] associated with a given variable
     pub fn get_constructor(&self, variable: &Variable) -> Option<&Constructor> {
         self.constructors
             .iter()

@@ -17,7 +17,7 @@ impl Atom {
         Self { predicate, terms }
     }
 
-    /// Return the predicate [`Identifier`].
+    /// Return the predicate [Identifier].
     #[must_use]
     pub fn predicate(&self) -> Identifier {
         self.predicate.clone()
@@ -63,7 +63,7 @@ impl Atom {
         })
     }
 
-    /// Replaces [`super::Variable`]s with [`Term`]s according to the provided assignment.
+    /// Replaces [super::Variable]s with [Term]s according to the provided assignment.
     pub fn apply_assignment(&mut self, assignment: &VariableAssignment) {
         for tree in &mut self.terms {
             tree.apply_assignment(assignment);

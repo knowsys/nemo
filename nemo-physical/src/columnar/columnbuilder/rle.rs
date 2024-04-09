@@ -21,7 +21,7 @@ pub(crate) struct RleElement<T: RunLengthEncodable> {
     pub increment: T::Step,
 }
 
-/// Implementation of [`ColumnBuilder`] that allows the use of incremental run length encoding.
+/// Implementation of [ColumnBuilder] that allows the use of incremental run length encoding.
 #[derive(Debug, Default, PartialEq)]
 pub(crate) struct ColumnBuilderRle<T: RunLengthEncodable> {
     elements: Vec<RleElement<T>>,

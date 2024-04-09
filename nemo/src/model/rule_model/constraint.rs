@@ -98,7 +98,7 @@ impl Constraint {
         !(matches!(self, Constraint::Equals(_, _)) || matches!(self, Constraint::Unequals(_, _)))
     }
 
-    /// Replaces [`Variable`]s with [`Term`]s according to the provided assignment.
+    /// Replaces [Variable]s with [Term]s according to the provided assignment.
     pub fn apply_assignment(&mut self, assignment: &VariableAssignment) {
         let (left, right) = self.terms_mut();
 

@@ -5,23 +5,22 @@ use crate::function::definitions::numeric::traits::{CheckedPow, CheckedSquareRoo
 use num::traits::CheckedNeg;
 use num::{Bounded, CheckedAdd, CheckedDiv, CheckedMul, CheckedSub, FromPrimitive, One, Zero};
 use std::cmp::Ordering;
-use std::convert::TryFrom;
 use std::fmt;
 use std::iter::{Product, Sum};
-use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Sub, SubAssign};
+use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Rem, Sub, SubAssign};
 
 #[cfg(test)]
 use quickcheck::{Arbitrary, Gen};
 
-/// Wrapper for [`f64`] that does not allow [`f64::NAN`] values.
+/// Wrapper for [f64`] that does not allow [`f64::NAN] values.
 #[derive(Copy, Clone, Debug, PartialEq, Default)]
 pub struct Double(f64);
 
 impl Double {
-    /// Wraps the given [`f64`]-`value` as a value over [`Double`].
+    /// Wraps the given [f64]-`value` as a value over [Double].
     ///
     /// # Errors
-    /// The given `value` is [`f64::NAN`].
+    /// The given `value` is [f64::NAN].
     pub fn new(value: f64) -> Result<Self, ReadingError> {
         if value.is_nan() {
             return Err(FloatIsNaN.into());
@@ -30,10 +29,10 @@ impl Double {
         Ok(Self(value))
     }
 
-    /// Wraps the given [`f64`]-`value`, that is a number, as a value over [`Double`].
+    /// Wraps the given [f64]-`value`, that is a number, as a value over [Double].
     ///
     /// # Panics
-    /// The given `value` is [`f64::NAN`].
+    /// The given `value` is [f64::NAN].
     pub fn from_number(value: f64) -> Self {
         if value.is_nan() {
             panic!("The provided value is not a number (NaN)!")
@@ -65,6 +64,23 @@ impl Double {
     /// Computes the tangent of a number (in radians).
     pub(crate) fn tan(self) -> Self {
         Double::new(self.0.tan()).expect("Operation does not result in NaN")
+    }
+
+    /// Returns the nearest integer to `self`.
+    /// If a value is half-way between two integers, round away from 0.0.
+    pub(crate) fn round(self) -> Self {
+        Double::new(self.0.round()).expect("Operation does not result in NaN")
+    }
+
+    /// Returns the nearest integer to `self`.
+    /// If a value is half-way between two integers, round away from 0.0.
+    pub(crate) fn ceil(self) -> Self {
+        Double::new(self.0.ceil()).expect("Operation does not result in NaN")
+    }
+
+    /// Returns the largest integer less than or equal to `self`.
+    pub(crate) fn floor(self) -> Self {
+        Double::new(self.0.floor()).expect("Operation does not result in NaN")
     }
 }
 
@@ -137,6 +153,14 @@ impl Div for Double {
 impl DivAssign for Double {
     fn div_assign(&mut self, rhs: Self) {
         self.0.div_assign(rhs.0)
+    }
+}
+
+impl Rem for Double {
+    type Output = Double;
+
+    fn rem(self, rhs: Self) -> Self::Output {
+        Double(self.0.rem(rhs.0))
     }
 }
 

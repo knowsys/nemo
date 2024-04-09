@@ -3,7 +3,7 @@
 pub struct Identifier(pub(crate) String);
 
 impl Identifier {
-    /// Create a new [`Identifier`].
+    /// Create a new [Identifier].
     pub fn new(name: String) -> Self {
         Identifier(name)
     }

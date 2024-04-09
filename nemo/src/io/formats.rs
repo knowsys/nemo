@@ -1,7 +1,7 @@
 //! The input and output formats supported by Nemo.
 
-pub mod import_export;
-pub mod types;
+pub(crate) mod import_export;
+pub(crate) mod types;
 
 pub mod dsv;
 pub mod dsv_reader;
@@ -15,4 +15,4 @@ pub mod rdf_writer;
 pub(crate) use dsv::DsvHandler;
 pub(crate) use rdf::RdfHandler;
 
-const PROGRESS_NOTIFY_INCREMENT: u64 = 1_000_000;
+const PROGRESS_NOTIFY_INCREMENT: u64 = 10_000_000;

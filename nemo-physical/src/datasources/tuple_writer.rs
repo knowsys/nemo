@@ -12,7 +12,7 @@ use crate::{
 
 use delegate::delegate;
 
-/// The [`TupleWriter`] is used to send the tuples of [`AnyDataValue`]s to the database, so that they
+/// The [TupleWriter] is used to send the tuples of [AnyDataValue]s to the database, so that they
 /// can be turned into a table. The interface allows values to be added one by one, and also provides
 /// some roll-back functionality for dropping a previously started tuple in case of errors.
 #[derive(Debug)]
@@ -24,7 +24,7 @@ pub struct TupleWriter<'a> {
 }
 
 impl<'a> TupleWriter<'a> {
-    /// Construct a new [`TupleBuffer`]. This is public to allow
+    /// Construct a new [TupleWriter]. This is public to allow
     /// downstream implementations of [TableProvider][super::table_providers::TableProvider] to
     /// test their code. In normal operation, it will be provided by the database.
     pub fn new(dictionary: &'a RefCell<Dict>, column_count: usize) -> Self {
@@ -39,7 +39,7 @@ impl<'a> TupleWriter<'a> {
     /// Alternatively, a partially built tuple can be abandonded by calling `drop_current_tuple`.
     pub fn add_tuple_value(&mut self, value: AnyDataValue) {
         self.tuple_buffer
-            .add_tuple_value(value.to_storage_value_t_mut(&mut self.dictionary.borrow_mut()));
+            .add_tuple_value(value.to_storage_value_t_dict(&mut self.dictionary.borrow_mut()));
     }
 
     /// Create a fresh null value. This is the correct (and only) way to create nulls that
@@ -59,7 +59,7 @@ impl<'a> TupleWriter<'a> {
             /// Returns the number of columns on the table, i.e., the
             /// number of values that need to be written to make one tuple.
             pub fn column_number(&self) -> usize;
-            /// Returns the number of rows in the [`TupleWriter`].
+            /// Returns the number of rows in the [TupleWriter].
             pub fn size(&self) -> usize;
             /// Forget about any previously added values that have not formed a complete tuple yet,
             /// and start a new tuple from the beginning.
@@ -72,109 +72,106 @@ impl<'a> TupleWriter<'a> {
 }
 
 #[cfg(test)]
-mod test {
-    #[cfg(test)]
-    pub mod test {
-        use std::cell::RefCell;
+pub mod test {
+    use std::cell::RefCell;
 
-        use crate::{
-            datasources::tuple_writer::TupleWriter,
-            datatypes::{Float, StorageValueT},
-            datavalues::AnyDataValue,
-            dictionary::{meta_dv_dict::MetaDvDictionary, DvDict},
-            management::database::Dict,
-        };
+    use crate::{
+        datasources::tuple_writer::TupleWriter,
+        datatypes::{Float, StorageValueT},
+        datavalues::AnyDataValue,
+        dictionary::{meta_dv_dict::MetaDvDictionary, DvDict},
+        management::database::Dict,
+    };
 
-        #[test]
-        fn tuple_writer() {
-            let dictionary = RefCell::new(Dict::new());
-            let mut writer = TupleWriter::new(&dictionary, 2);
+    #[test]
+    fn tuple_writer() {
+        let dictionary = RefCell::new(Dict::new());
+        let mut writer = TupleWriter::new(&dictionary, 2);
 
-            let null = writer.fresh_null();
+        let null = writer.fresh_null();
 
-            writer.add_tuple_value(AnyDataValue::new_integer_from_i64(1));
-            writer.add_tuple_value(AnyDataValue::new_plain_string(String::from("a")));
+        writer.add_tuple_value(AnyDataValue::new_integer_from_i64(1));
+        writer.add_tuple_value(AnyDataValue::new_plain_string(String::from("a")));
 
-            writer.add_tuple_value(AnyDataValue::new_integer_from_i64(5));
-            writer.add_tuple_value(AnyDataValue::new_plain_string(String::from("b")));
+        writer.add_tuple_value(AnyDataValue::new_integer_from_i64(5));
+        writer.add_tuple_value(AnyDataValue::new_plain_string(String::from("b")));
 
-            writer.add_tuple_value(AnyDataValue::new_integer_from_i64(2));
-            writer.add_tuple_value(AnyDataValue::new_plain_string(String::from("b")));
+        writer.add_tuple_value(AnyDataValue::new_integer_from_i64(2));
+        writer.add_tuple_value(AnyDataValue::new_plain_string(String::from("b")));
 
-            writer.add_tuple_value(AnyDataValue::new_integer_from_i64(5));
-            writer.add_tuple_value(AnyDataValue::new_plain_string(String::from("a")));
+        writer.add_tuple_value(AnyDataValue::new_integer_from_i64(5));
+        writer.add_tuple_value(AnyDataValue::new_plain_string(String::from("a")));
 
-            writer.add_tuple_value(AnyDataValue::new_integer_from_i64(3));
-            writer.add_tuple_value(AnyDataValue::new_float_from_f32(1.2).unwrap());
+        writer.add_tuple_value(AnyDataValue::new_integer_from_i64(3));
+        writer.add_tuple_value(AnyDataValue::new_float_from_f32(1.2).unwrap());
 
-            writer.add_tuple_value(AnyDataValue::new_integer_from_i64(5));
-            writer.add_tuple_value(AnyDataValue::new_float_from_f32(0.6).unwrap());
+        writer.add_tuple_value(AnyDataValue::new_integer_from_i64(5));
+        writer.add_tuple_value(AnyDataValue::new_float_from_f32(0.6).unwrap());
 
-            writer.add_tuple_value(AnyDataValue::new_integer_from_i64(0));
-            writer.add_tuple_value(AnyDataValue::new_float_from_f32(1.8).unwrap());
+        writer.add_tuple_value(AnyDataValue::new_integer_from_i64(0));
+        writer.add_tuple_value(AnyDataValue::new_float_from_f32(1.8).unwrap());
 
-            writer.add_tuple_value(AnyDataValue::new_plain_string(String::from("a")));
-            writer.add_tuple_value(AnyDataValue::new_plain_string(String::from("b")));
+        writer.add_tuple_value(AnyDataValue::new_plain_string(String::from("a")));
+        writer.add_tuple_value(AnyDataValue::new_plain_string(String::from("b")));
 
-            writer.add_tuple_value(AnyDataValue::new_plain_string(String::from("a")));
-            writer.add_tuple_value(null.clone().into());
+        writer.add_tuple_value(AnyDataValue::new_plain_string(String::from("a")));
+        writer.add_tuple_value(null.into());
 
-            fn retrieve_dict_id(dictionary: &MetaDvDictionary, dv: &AnyDataValue) -> u32 {
-                u32::try_from(
-                    dictionary
-                        .datavalue_to_id(&dv)
-                        .expect("should have been added"),
-                )
-                .expect("expecting small value here")
-            }
-
-            // Note: the test below is rather fragile, since it supposes a relative order of the ids that might not
-            // be guaranteed. It is certainly not part of the contract. By fetching the ids, we at least allow for
-            // some variability in the implementation without failing the test.
-            let id_null = retrieve_dict_id(&dictionary.borrow(), &null.into());
-            let id_a = retrieve_dict_id(
-                &dictionary.borrow(),
-                &AnyDataValue::new_plain_string(String::from("a")),
-            );
-            let id_b = retrieve_dict_id(
-                &dictionary.borrow(),
-                &AnyDataValue::new_plain_string(String::from("b")),
-            );
-
-            let sorted_buffer = writer.finalize();
-
-            let mut first_column = sorted_buffer.get_column(0);
-            assert_eq!(first_column.next(), Some(StorageValueT::Id32(id_a)));
-            assert_eq!(first_column.next(), Some(StorageValueT::Id32(id_a)));
-            assert_eq!(first_column.next(), Some(StorageValueT::Int64(0)));
-            assert_eq!(first_column.next(), Some(StorageValueT::Int64(1)));
-            assert_eq!(first_column.next(), Some(StorageValueT::Int64(2)));
-            assert_eq!(first_column.next(), Some(StorageValueT::Int64(3)));
-            assert_eq!(first_column.next(), Some(StorageValueT::Int64(5)));
-            assert_eq!(first_column.next(), Some(StorageValueT::Int64(5)));
-            assert_eq!(first_column.next(), Some(StorageValueT::Int64(5)));
-            assert_eq!(first_column.next(), None);
-
-            let mut second_column = sorted_buffer.get_column(1);
-            assert_eq!(second_column.next(), Some(StorageValueT::Id32(id_null)));
-            assert_eq!(second_column.next(), Some(StorageValueT::Id32(id_b)));
-            assert_eq!(
-                second_column.next(),
-                Some(StorageValueT::Float(Float::new(1.8).unwrap()))
-            );
-            assert_eq!(second_column.next(), Some(StorageValueT::Id32(id_a)));
-            assert_eq!(second_column.next(), Some(StorageValueT::Id32(id_b)));
-            assert_eq!(
-                second_column.next(),
-                Some(StorageValueT::Float(Float::new(1.2).unwrap()))
-            );
-            assert_eq!(second_column.next(), Some(StorageValueT::Id32(id_a)));
-            assert_eq!(second_column.next(), Some(StorageValueT::Id32(id_b)));
-            assert_eq!(
-                second_column.next(),
-                Some(StorageValueT::Float(Float::new(0.6).unwrap()))
-            );
-            assert_eq!(second_column.next(), None);
+        fn retrieve_dict_id(dictionary: &MetaDvDictionary, dv: &AnyDataValue) -> u32 {
+            u32::try_from(
+                dictionary
+                    .datavalue_to_id(dv)
+                    .expect("should have been added"),
+            )
+            .expect("expecting small value here")
         }
+
+        // Note: the test below is rather fragile, since it supposes a relative order of the ids that might not
+        // be guaranteed. It is certainly not part of the contract. By fetching the ids, we at least allow for
+        // some variability in the implementation without failing the test.
+        let id_null = retrieve_dict_id(&dictionary.borrow(), &null.into());
+        let id_a = retrieve_dict_id(
+            &dictionary.borrow(),
+            &AnyDataValue::new_plain_string(String::from("a")),
+        );
+        let id_b = retrieve_dict_id(
+            &dictionary.borrow(),
+            &AnyDataValue::new_plain_string(String::from("b")),
+        );
+
+        let sorted_buffer = writer.finalize();
+
+        let mut first_column = sorted_buffer.get_column(0);
+        assert_eq!(first_column.next(), Some(StorageValueT::Id32(id_a)));
+        assert_eq!(first_column.next(), Some(StorageValueT::Id32(id_a)));
+        assert_eq!(first_column.next(), Some(StorageValueT::Int64(0)));
+        assert_eq!(first_column.next(), Some(StorageValueT::Int64(1)));
+        assert_eq!(first_column.next(), Some(StorageValueT::Int64(2)));
+        assert_eq!(first_column.next(), Some(StorageValueT::Int64(3)));
+        assert_eq!(first_column.next(), Some(StorageValueT::Int64(5)));
+        assert_eq!(first_column.next(), Some(StorageValueT::Int64(5)));
+        assert_eq!(first_column.next(), Some(StorageValueT::Int64(5)));
+        assert_eq!(first_column.next(), None);
+
+        let mut second_column = sorted_buffer.get_column(1);
+        assert_eq!(second_column.next(), Some(StorageValueT::Id32(id_null)));
+        assert_eq!(second_column.next(), Some(StorageValueT::Id32(id_b)));
+        assert_eq!(
+            second_column.next(),
+            Some(StorageValueT::Float(Float::new(1.8).unwrap()))
+        );
+        assert_eq!(second_column.next(), Some(StorageValueT::Id32(id_a)));
+        assert_eq!(second_column.next(), Some(StorageValueT::Id32(id_b)));
+        assert_eq!(
+            second_column.next(),
+            Some(StorageValueT::Float(Float::new(1.2).unwrap()))
+        );
+        assert_eq!(second_column.next(), Some(StorageValueT::Id32(id_a)));
+        assert_eq!(second_column.next(), Some(StorageValueT::Id32(id_b)));
+        assert_eq!(
+            second_column.next(),
+            Some(StorageValueT::Float(Float::new(0.6).unwrap()))
+        );
+        assert_eq!(second_column.next(), None);
     }
 }

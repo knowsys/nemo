@@ -9,6 +9,7 @@ use crate::{error::Error, io::formats::types::TableWriter};
 
 use super::dsv_value_format::DataValueSerializerFunction;
 use super::dsv_value_format::DsvValueFormat;
+use super::PROGRESS_NOTIFY_INCREMENT;
 
 /// A writer object for writing [DSV](https://en.wikipedia.org/wiki/Delimiter-separated_values) (delimiter separated values) files.
 ///
@@ -19,6 +20,7 @@ use super::dsv_value_format::DsvValueFormat;
 pub(super) struct DsvWriter {
     writer: Writer<Box<dyn Write>>,
     value_formats: Vec<DsvValueFormat>,
+    limit: Option<u64>,
 }
 
 impl DsvWriter {
@@ -26,13 +28,15 @@ impl DsvWriter {
         delimiter: u8,
         writer: Box<dyn Write>,
         value_formats: Vec<DsvValueFormat>,
+        limit: Option<u64>,
     ) -> Self {
         DsvWriter {
             writer: WriterBuilder::new()
                 .delimiter(delimiter)
                 .double_quote(true)
                 .from_writer(writer),
-            value_formats: value_formats,
+            value_formats,
+            limit,
         }
     }
 
@@ -40,6 +44,8 @@ impl DsvWriter {
         mut self,
         table: Box<dyn Iterator<Item = Vec<AnyDataValue>> + 'a>,
     ) -> Result<(), Error> {
+        log::info!("Starting data export");
+
         let serializers: Vec<DataValueSerializerFunction> = self
             .value_formats
             .iter()
@@ -48,9 +54,13 @@ impl DsvWriter {
         let skip: Vec<bool> = self
             .value_formats
             .iter()
-            .map(|vf| *vf == DsvValueFormat::SKIP)
+            .map(|vf| *vf == DsvValueFormat::Skip)
             .collect();
 
+        let stop_limit = self.limit.unwrap_or(0);
+
+        let mut line_count: u64 = 0;
+        let mut drop_count: u64 = 0;
         for record in table {
             let mut string_record = Vec::with_capacity(record.len());
             let mut complete = true;
@@ -69,8 +79,21 @@ impl DsvWriter {
 
             if complete {
                 self.writer.write_record(string_record)?;
+                line_count += 1;
+                if (line_count % PROGRESS_NOTIFY_INCREMENT) == 0 {
+                    log::info!("... processed {line_count} tuples");
+                }
+                if line_count == stop_limit {
+                    break;
+                }
+            } else {
+                drop_count += 1;
             }
         }
+
+        self.writer.flush()?;
+
+        log::info!("Finished export: processed {line_count} tuples (dropped {drop_count})");
 
         Ok(())
     }

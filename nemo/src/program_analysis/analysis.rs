@@ -138,11 +138,25 @@ fn construct_existential_aux_rule(
         for term in atom.terms() {
             match term {
                 PrimitiveTerm::Variable(variable) => {
-                    if variable.is_universal() && used_variables.insert(variable.clone()) {
-                        aux_predicate_terms.push(PrimitiveTerm::Variable(variable.clone()));
+                    if !used_variables.insert(variable.clone()) {
+                        let generated_variable = generate_variable();
+                        new_terms.push(generated_variable.clone());
+
+                        let new_constraint = Constraint::Equals(
+                            Term::Primitive(PrimitiveTerm::Variable(generated_variable)),
+                            Term::Primitive(term.clone()),
+                        );
+
+                        constraints.push(new_constraint);
+                    } else {
+                        if variable.is_universal() {
+                            aux_predicate_terms.push(PrimitiveTerm::Variable(variable.clone()));
+                        }
+
+                        new_terms.push(variable.clone());
                     }
 
-                    new_terms.push(variable.clone());
+                    if variable.is_universal() && used_variables.insert(variable.clone()) {}
                 }
                 PrimitiveTerm::GroundTerm(_) => {
                     let generated_variable = generate_variable();
@@ -233,7 +247,7 @@ pub struct ProgramAnalysis {
 }
 
 impl ChaseProgram {
-    /// Collect all predicates that appear in a head atom into a [`HashSet`]
+    /// Collect all predicates that appear in a head atom into a [HashSet]
     fn get_head_predicates(&self) -> HashSet<Identifier> {
         let mut result = HashSet::<Identifier>::new();
 
@@ -263,7 +277,7 @@ impl ChaseProgram {
             if let Some(current) = arities.get(&predicate) {
                 if *current != arity {
                     return Err(RuleAnalysisError::UnsupportedFeaturePredicateOverloading {
-                        predicate: predicate,
+                        predicate,
                         arity1: *current,
                         arity2: arity,
                     });
@@ -279,7 +293,7 @@ impl ChaseProgram {
             arities: &HashMap<Identifier, usize>,
             missing: &mut HashSet<Identifier>,
         ) {
-            if let None = arities.get(&predicate) {
+            if arities.get(&predicate).is_none() {
                 missing.insert(predicate);
             }
         }

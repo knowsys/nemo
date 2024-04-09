@@ -1,8 +1,11 @@
 //! This module defines functions on string.
 
-use crate::datavalues::{AnyDataValue, DataValue};
+use crate::{
+    datatypes::StorageTypeName,
+    datavalues::{AnyDataValue, DataValue},
+};
 
-use super::UnaryFunction;
+use super::{FunctionTypePropagation, UnaryFunction};
 
 /// Casting of values into 64-bit integers
 ///
@@ -14,8 +17,11 @@ use super::UnaryFunction;
 ///   * unsigned integers that can be represented in 63 bits
 ///   * floating point numbers that don't contain a fractional part
 ///   * booleans
+///   * strings
+///   * other
 ///
-/// Returns `None` when called on values outside the range described above.
+/// Returns `None` when called on values outside the range described above
+/// or if the value cannot be converted to an integer.
 #[derive(Debug, Copy, Clone)]
 pub struct CastingIntoInteger64;
 impl UnaryFunction for CastingIntoInteger64 {
@@ -23,11 +29,14 @@ impl UnaryFunction for CastingIntoInteger64 {
         match parameter.value_domain() {
             crate::datavalues::ValueDomain::Tuple
             | crate::datavalues::ValueDomain::Map
-            | crate::datavalues::ValueDomain::Other
             | crate::datavalues::ValueDomain::Null
-            | crate::datavalues::ValueDomain::PlainString
-            | crate::datavalues::ValueDomain::LanguageTaggedString
-            | crate::datavalues::ValueDomain::Iri => None,
+            | crate::datavalues::ValueDomain::Iri
+            | crate::datavalues::ValueDomain::LanguageTaggedString => None,
+            crate::datavalues::ValueDomain::PlainString | crate::datavalues::ValueDomain::Other => {
+                let result = parameter.lexical_value().parse::<i64>().ok()?;
+
+                Some(AnyDataValue::new_integer_from_i64(result))
+            }
             // FIXME: This seems suspicious. Can't f32 also represent integer numbers *without any fraction) that are still too large for i64?
             crate::datavalues::ValueDomain::Float => {
                 let value = parameter.to_f32_unchecked();
@@ -63,6 +72,10 @@ impl UnaryFunction for CastingIntoInteger64 {
             | crate::datavalues::ValueDomain::Int => Some(parameter),
         }
     }
+
+    fn type_propagation(&self) -> FunctionTypePropagation {
+        FunctionTypePropagation::KnownOutput(StorageTypeName::Int64.bitset())
+    }
 }
 
 /// Casting of a value into a 32bit floating point number
@@ -74,8 +87,11 @@ impl UnaryFunction for CastingIntoInteger64 {
 ///   * 32bit floating point numbers
 ///   * all integers
 ///   * 64bit floating point numbers
+///   * strings
+///   * other
 ///
-/// Returns `None` when called on values outside the range described above.
+/// Returns `None` when called on values outside the range described above
+/// or if value cannot be converted into a 32-bit float.
 #[derive(Debug, Copy, Clone)]
 pub struct CastingIntoFloat;
 impl UnaryFunction for CastingIntoFloat {
@@ -84,11 +100,15 @@ impl UnaryFunction for CastingIntoFloat {
             crate::datavalues::ValueDomain::Tuple
             | crate::datavalues::ValueDomain::Map
             | crate::datavalues::ValueDomain::Null
-            | crate::datavalues::ValueDomain::Other
-            | crate::datavalues::ValueDomain::PlainString
             | crate::datavalues::ValueDomain::LanguageTaggedString
-            | crate::datavalues::ValueDomain::Boolean
-            | crate::datavalues::ValueDomain::Iri => None,
+            | crate::datavalues::ValueDomain::Iri
+            | crate::datavalues::ValueDomain::Boolean => None,
+            crate::datavalues::ValueDomain::PlainString | crate::datavalues::ValueDomain::Other => {
+                // TODO: This is uses rusts string to float implementation and not ours
+                let result = parameter.lexical_value().parse::<f32>().ok()?;
+
+                Some(AnyDataValue::new_float_from_f32(result).ok()?)
+            }
             crate::datavalues::ValueDomain::Float => Some(parameter),
             crate::datavalues::ValueDomain::Double =>
             {
@@ -112,6 +132,10 @@ impl UnaryFunction for CastingIntoFloat {
             ),
         }
     }
+
+    fn type_propagation(&self) -> FunctionTypePropagation {
+        FunctionTypePropagation::KnownOutput(StorageTypeName::Float.bitset())
+    }
 }
 
 /// Casting of a value into a 64-bit floating point number
@@ -120,11 +144,14 @@ impl UnaryFunction for CastingIntoFloat {
 /// as close as possible.
 ///
 /// This operation is defined for:
+///   * 64bit floating point numbers
 ///   * all integers
 ///   * 32-bit floating point numbers
-///   * 64-bit floating point numbers
+///   * strings
+///   * other
 ///
-/// Returns `None` when called on values outside the range described above.
+/// Returns `None` when called on values outside the range described above
+/// or if value cannot be converted into a 64-bit float.
 #[derive(Debug, Copy, Clone)]
 pub struct CastingIntoDouble;
 impl UnaryFunction for CastingIntoDouble {
@@ -132,12 +159,16 @@ impl UnaryFunction for CastingIntoDouble {
         match parameter.value_domain() {
             crate::datavalues::ValueDomain::Tuple
             | crate::datavalues::ValueDomain::Map
-            | crate::datavalues::ValueDomain::Other
             | crate::datavalues::ValueDomain::Null
-            | crate::datavalues::ValueDomain::PlainString
             | crate::datavalues::ValueDomain::LanguageTaggedString
-            | crate::datavalues::ValueDomain::Boolean
-            | crate::datavalues::ValueDomain::Iri => None,
+            | crate::datavalues::ValueDomain::Iri
+            | crate::datavalues::ValueDomain::Boolean => None,
+            crate::datavalues::ValueDomain::PlainString | crate::datavalues::ValueDomain::Other => {
+                // TODO: This is uses rusts string to float implementation and not ours
+                let result = parameter.lexical_value().parse::<f64>().ok()?;
+
+                Some(AnyDataValue::new_double_from_f64(result).ok()?)
+            }
             crate::datavalues::ValueDomain::Double => Some(parameter),
             crate::datavalues::ValueDomain::Float =>
             {
@@ -160,5 +191,9 @@ impl UnaryFunction for CastingIntoDouble {
                     .expect("resulting float must be finite"),
             ),
         }
+    }
+
+    fn type_propagation(&self) -> FunctionTypePropagation {
+        FunctionTypePropagation::KnownOutput(StorageTypeName::Double.bitset())
     }
 }

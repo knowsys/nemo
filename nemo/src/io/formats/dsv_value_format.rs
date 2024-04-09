@@ -29,30 +29,30 @@ pub(super) enum DsvValueFormat {
     /// Format that tries various heuristics to interpret and represent values
     /// in the most natural way. The format can interpret any content (the final
     /// fallback is to use it as a string).
-    ANYTHING,
+    Anything,
     /// Format that interprets the DSV values as literal string values.
     /// All data will be interpreted in this way.
-    STRING,
+    String,
     /// Format that interprets numeric DSV values as integers, and rejects
     /// all values that are not in this form.
-    INTEGER,
+    Integer,
     /// Format that interprets numeric DSV values as double-precision floating
     /// point numbers, and rejects all values that are not in this form.
-    DOUBLE,
+    Double,
     /// Special format to indicate that the value should be skipped as if the whole
     /// column where not there.
-    SKIP,
+    Skip,
 }
 impl DsvValueFormat {
     /// Try to convert a string name for a value format to one of the supported
     /// DSV value formats, or return an error for unsupported formats.
     pub(super) fn from_string(name: &str) -> Result<Self, ImportExportError> {
         match name {
-            VALUE_FORMAT_ANY => Ok(DsvValueFormat::ANYTHING),
-            VALUE_FORMAT_STRING => Ok(DsvValueFormat::STRING),
-            VALUE_FORMAT_INT => Ok(DsvValueFormat::INTEGER),
-            VALUE_FORMAT_DOUBLE => Ok(DsvValueFormat::DOUBLE),
-            VALUE_FORMAT_SKIP => Ok(DsvValueFormat::SKIP),
+            VALUE_FORMAT_ANY => Ok(DsvValueFormat::Anything),
+            VALUE_FORMAT_STRING => Ok(DsvValueFormat::String),
+            VALUE_FORMAT_INT => Ok(DsvValueFormat::Integer),
+            VALUE_FORMAT_DOUBLE => Ok(DsvValueFormat::Double),
+            VALUE_FORMAT_SKIP => Ok(DsvValueFormat::Skip),
             _ => Err(ImportExportError::InvalidValueFormat {
                 value_format: name.to_string(),
                 format: FileFormat::DSV,
@@ -63,26 +63,26 @@ impl DsvValueFormat {
     /// Return a function for parsing value strings for this format.
     pub(super) fn data_value_parser_function(&self) -> DataValueParserFunction {
         match self {
-            DsvValueFormat::ANYTHING => Self::parse_any_value_from_string,
-            DsvValueFormat::STRING => Self::parse_string_from_string,
-            DsvValueFormat::INTEGER => AnyDataValue::new_from_integer_literal,
-            DsvValueFormat::DOUBLE => AnyDataValue::new_from_double_literal,
-            DsvValueFormat::SKIP => Self::parse_string_from_string, // irrelevant
+            DsvValueFormat::Anything => Self::parse_any_value_from_string,
+            DsvValueFormat::String => Self::parse_string_from_string,
+            DsvValueFormat::Integer => AnyDataValue::new_from_integer_literal,
+            DsvValueFormat::Double => AnyDataValue::new_from_double_literal,
+            DsvValueFormat::Skip => Self::parse_string_from_string, // irrelevant
         }
     }
 
     /// Return a function for parsing value strings for this format.
     pub(super) fn data_value_serializer_function(&self) -> DataValueSerializerFunction {
         match self {
-            DsvValueFormat::ANYTHING => Self::serialize_any_value_to_string,
-            DsvValueFormat::STRING => AnyDataValue::to_plain_string,
-            DsvValueFormat::INTEGER => Self::serialize_integer_to_string,
-            DsvValueFormat::DOUBLE => Self::serialize_double_to_string,
-            DsvValueFormat::SKIP => Self::serialize_any_value_to_string, // irrelevant
+            DsvValueFormat::Anything => Self::serialize_any_value_to_string,
+            DsvValueFormat::String => AnyDataValue::to_plain_string,
+            DsvValueFormat::Integer => Self::serialize_integer_to_string,
+            DsvValueFormat::Double => Self::serialize_double_to_string,
+            DsvValueFormat::Skip => Self::serialize_any_value_to_string, // irrelevant
         }
     }
 
-    /// Simple wrapper function that makes CSV strings into [`AnyDataValue`]. We wrap this
+    /// Simple wrapper function that makes CSV strings into [AnyDataValue]. We wrap this
     /// to match the error-producing signature of other parsing functions.
     pub(super) fn parse_string_from_string(
         input: String,
@@ -105,7 +105,7 @@ impl DsvValueFormat {
         if input.is_empty() {
             return Ok(AnyDataValue::new_plain_string("".to_string()));
         }
-        assert!(input.len() > 0);
+        assert!(!input.is_empty());
 
         match input.as_bytes()[0] {
             b'<' => {
@@ -119,7 +119,7 @@ impl DsvValueFormat {
                 }
             }
             b'"' => {
-                if let Some(pos) = input.rfind("\"") {
+                if let Some(pos) = input.rfind('\"') {
                     if pos == input.len() - 1 {
                         return Ok(AnyDataValue::new_plain_string(
                             input[1..input.len() - 1].to_string(),

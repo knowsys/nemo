@@ -11,7 +11,7 @@ use super::{permutation::Permutation, traits::NatMapping};
 /// In a mathematical sense, may be viewed as a partial function \[n\] -> \[n\] that is injective.
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub(crate) struct SortedChoice {
-    /// Function is represented by a [`HashMap`] mapping the input `i` to `map.get(i)`.
+    /// Function is represented by a [HashMap] mapping the input `i` to `map.get(i)`.
     /// Every input not present in this map is considered not part of this function's domain.
     map: HashMap<usize, usize>,
     /// Size of the domain. All inputs must be smaller than this.
@@ -27,7 +27,7 @@ impl SortedChoice {
         result
     }
 
-    /// Derive a [`SortedChoice`] that would transform a vector of elements into another.
+    /// Derive a [SortedChoice] that would transform a vector of elements into another.
     /// I.e. `this.permute(source) = target`
     /// For example `from_transformation([x, y, z, w], [z, w, x]) = {0->2, 2->0, 3->1}`.
     ///
@@ -49,16 +49,10 @@ impl SortedChoice {
         Self::from_map(map, source.len())
     }
 
-    /// Return the size of the domain.
-    pub(crate) fn domain_size(&self) -> usize {
-        self.domain_size
-    }
-
     /// Return a vector representation of the function
     /// such that the ith entry in the vector contains that element which gets mapped to position i by this function.
     /// E.g. `{10 -> 0, 20 -> 1}` will result in `[10, 20]`
-    #[cfg(test)]
-    pub(crate) fn to_vector(&self) -> Vec<usize> {
+    pub(crate) fn as_vector(&self) -> Vec<usize> {
         let mut result = vec![0; self.map.len()];
 
         for (input, value) in self.iter() {
@@ -82,7 +76,7 @@ impl SortedChoice {
     /// Turn this function into a permutation.
     /// All inputs outside of this domain will be mapped to themselves.
     #[cfg(test)]
-    pub(crate) fn into_permutation(&self) -> Permutation {
+    pub(crate) fn as_permutation(&self) -> Permutation {
         debug_assert!(self.is_permutation());
         Permutation::from_map(self.map.clone())
     }
@@ -229,15 +223,15 @@ mod test {
     fn test_to_vector() {
         let vector = vec![0, 2, 1];
         let choice = SortedChoice::from_vector(vector.clone(), 3);
-        assert_eq!(vector, choice.to_vector());
+        assert_eq!(vector, choice.as_vector());
 
         let vector = vec![3, 1, 2];
         let choice = SortedChoice::from_vector(vector.clone(), 4);
-        assert_eq!(vector, choice.to_vector());
+        assert_eq!(vector, choice.as_vector());
 
         let vector = vec![0, 1, 2];
         let choice = SortedChoice::from_vector(vector.clone(), 4);
-        assert_eq!(vector, choice.to_vector());
+        assert_eq!(vector, choice.as_vector());
     }
 
     #[test]
@@ -254,12 +248,12 @@ mod test {
         let vector = vec![2, 0, 1];
         let choice = SortedChoice::from_vector(vector.clone(), vector.len());
         let permutation = Permutation::from_vector(vector);
-        assert_eq!(permutation, choice.into_permutation());
+        assert_eq!(permutation, choice.as_permutation());
 
         let vector = vec![2, 0, 1, 4, 3];
         let choice = SortedChoice::from_vector(vector.clone(), vector.len());
         let permutation = Permutation::from_vector(vector);
-        assert_eq!(permutation, choice.into_permutation());
+        assert_eq!(permutation, choice.as_permutation());
     }
 
     #[test]

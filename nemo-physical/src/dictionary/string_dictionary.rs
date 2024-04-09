@@ -1,3 +1,5 @@
+//! This module defines a string based dictionary.
+
 use super::{
     bytes_buffer::{BytesBuffer, GlobalBytesBuffer},
     bytes_dictionary::BytesDictionary,
@@ -23,7 +25,7 @@ impl<B: GlobalBytesBuffer> GenericStringDictionary<B> {
     }
 
     /// Looks for a given [&str] slice and returns `Some(id)` if it is in the dictionary,
-    /// and `None` otherwise. The special value [`super::KNOWN_ID_MARK`] will be returned
+    /// and `None` otherwise. The special value [super::KNOWN_ID_MARK] will be returned
     /// if the string was marked but not actually inserted.
     pub(crate) fn str_to_id(&self, string: &str) -> Option<usize> {
         self.bytes_dict.bytes_to_id(string.as_bytes())
@@ -46,6 +48,11 @@ impl<B: GlobalBytesBuffer> GenericStringDictionary<B> {
     /// marked are not counted here.
     pub(crate) fn len(&self) -> usize {
         self.bytes_dict.len()
+    }
+
+    /// True when the dictionary is empty. False otherwise.
+    pub(crate) fn is_empty(&self) -> bool {
+        self.bytes_dict.is_empty()
     }
 
     /// Marks the given string as being known without storing it under an own id.
@@ -94,13 +101,17 @@ impl BenchmarkStringDictionary {
     pub fn len(&self) -> usize {
         self.0.len()
     }
+
+    /// True when the dictionary is empty. False otherwise.
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
 }
 
 #[cfg(test)]
 mod test {
     use super::StringDictionary;
     use crate::dictionary::{AddResult, KNOWN_ID_MARK};
-    use std::borrow::Borrow;
 
     fn create_dict() -> StringDictionary {
         let mut dict = StringDictionary::default();
@@ -150,14 +161,14 @@ mod test {
     #[test]
     fn fetch_id() {
         let dict = create_dict();
-        assert_eq!(dict.str_to_id("a".to_string().borrow()), Some(0));
-        assert_eq!(dict.str_to_id("b".to_string().borrow()), Some(1));
-        assert_eq!(dict.str_to_id("c".to_string().borrow()), Some(2));
-        assert_eq!(dict.str_to_id("Position 3".to_string().borrow()), Some(3));
-        assert_eq!(dict.str_to_id("Position 4".to_string().borrow()), Some(4));
-        assert_eq!(dict.str_to_id("Position 5".to_string().borrow()), Some(5));
-        assert_eq!(dict.str_to_id("d".to_string().borrow()), None);
-        assert_eq!(dict.str_to_id("Pos".to_string().borrow()), None);
+        assert_eq!(dict.str_to_id("a"), Some(0));
+        assert_eq!(dict.str_to_id("b"), Some(1));
+        assert_eq!(dict.str_to_id("c"), Some(2));
+        assert_eq!(dict.str_to_id("Position 3"), Some(3));
+        assert_eq!(dict.str_to_id("Position 4"), Some(4));
+        assert_eq!(dict.str_to_id("Position 5"), Some(5));
+        assert_eq!(dict.str_to_id("d"), None);
+        assert_eq!(dict.str_to_id("Pos"), None);
         assert_eq!(dict.str_to_id("Pos"), None);
         assert_eq!(dict.str_to_id("b"), Some(1));
     }
@@ -176,7 +187,7 @@ mod test {
         assert_eq!(dict.id_to_string(0), Some("".to_string()));
         assert_eq!(dict.str_to_id(""), Some(0));
         assert_eq!(dict.len(), 1);
-        assert_eq!(dict.has_marked(), false);
+        assert!(!dict.has_marked());
     }
 
     #[test]
@@ -191,7 +202,7 @@ mod test {
         assert_eq!(dict.add_str("entry3"), AddResult::Known(KNOWN_ID_MARK));
 
         assert_eq!(dict.len(), 2);
-        assert_eq!(dict.has_marked(), true);
+        assert!(dict.has_marked());
 
         assert_eq!(dict.id_to_string(0), Some("entry1".to_string()));
         assert_eq!(dict.str_to_id("entry1"), Some(0));

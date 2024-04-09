@@ -10,7 +10,7 @@ use crate::{
     management::database::Dict,
 };
 
-/// [`ColumnScan`], which filters values of a "value" scan based on a [StackProgram]
+/// [ColumnScan], which filters values of a "value" scan based on a [StackProgram]
 #[derive(Debug)]
 pub(crate) struct ColumnScanFilter<'a, T>
 where
@@ -18,15 +18,14 @@ where
 {
     /// Current scan whose values are being filtered
     value_scan: &'a ColumnScanCell<'a, T>,
+    /// Dictionary used for translating values of `value_scan` into [AnyDataValue]
+    dictionary: &'a RefCell<Dict>,
 
     /// [StackProgram] based on which the values will be filtered
     program: StackProgram,
 
     /// Values referenced by the program
     referenced_values: Rc<RefCell<Vec<AnyDataValue>>>,
-
-    /// Dictionary used for translating values of `value_scan` into [AnyDataValue]
-    dictionary: &'a RefCell<Dict>,
 
     /// Current value
     current_value: Option<T>,
@@ -149,7 +148,7 @@ mod test {
         let dictionary = RefCell::new(Dict::default());
 
         let value_column = ColumnVector::new(vec![0i64, 7, 14, 21]);
-        let value_scan = ColumnScanCell::new(ColumnScanEnum::ColumnScanVector(value_column.iter()));
+        let value_scan = ColumnScanCell::new(ColumnScanEnum::Vector(value_column.iter()));
 
         let reference_values = vec![
             AnyDataValue::new_integer_from_i64(10),
@@ -171,7 +170,7 @@ mod test {
 
         let program = StackProgram::from_function_tree(
             &function,
-            &vec![(marker_int, 0), (marker_str, 1)].into_iter().collect(),
+            &[(marker_int, 0), (marker_str, 1)].into_iter().collect(),
             Some(marker_value),
         );
 

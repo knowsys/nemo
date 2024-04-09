@@ -8,3 +8,5 @@ literalInBody(?a):-
     foo1(?a),
     foo2(?b),
     ?a = ?b.
+
+@export literalInBody :- csv {}.

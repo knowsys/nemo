@@ -4,7 +4,7 @@ use std::num::{ParseFloatError, ParseIntError};
 
 use thiserror::Error;
 
-/// Potential errors encountered when trying to construct [`DataValue`]s.
+/// Potential errors encountered when trying to construct [super::DataValue]s.
 #[allow(variant_size_differences)]
 #[derive(Error, Debug)]
 pub enum DataValueCreationError {

@@ -17,32 +17,32 @@ use crate::{
 pub(crate) struct TableSchema(Vec<DataTypeName>);
 
 impl TableSchema {
-    /// Constructs new (empty) [`TableSchema`].
+    /// Constructs new (empty) [TableSchema].
     pub(crate) fn new() -> Self {
         Self(Vec::new())
     }
 
-    /// Turns Vector into [`TableSchema`].
+    /// Turns Vector into [TableSchema].
     pub(crate) fn from_vec(vec: Vec<DataTypeName>) -> Self {
         Self(vec)
     }
 
-    /// Construct a new [`TableSchema`]  which is a reordered version of this schema
+    /// Construct a new [TableSchema]  which is a reordered version of this schema
     pub(crate) fn reordered(&self, reordering: &ProjectReordering) -> Self {
         Self(reordering.transform(&self.0))
     }
 
-    /// Contruct a new [`TableSchema`] which is a permuted version of this schema.
+    /// Contruct a new [TableSchema] which is a permuted version of this schema.
     pub(crate) fn permuted(&self, permutation: &Permutation) -> Self {
         Self(permutation.permute(&self.0))
     }
 
-    /// Constructs new (empty) [`TableSchema`] with reserved space.
+    /// Constructs new (empty) [TableSchema] with reserved space.
     pub(crate) fn with_capacity(arity: usize) -> Self {
         Self(Vec::with_capacity(arity))
     }
 
-    /// Constructs new (empty) [`TableSchema`] with reserved space.
+    /// Constructs new (empty) [TableSchema] with reserved space.
     pub(crate) fn reserve(arity: usize) -> Self {
         Self::with_capacity(arity)
     }
@@ -77,12 +77,12 @@ impl TableSchema {
         self.0.is_empty()
     }
 
-    /// Returns the [`DataTypeName`] associated with the column of the given index.
+    /// Returns the [DataTypeName] associated with the column of the given index.
     pub(crate) fn get_entry(&self, index: usize) -> &DataTypeName {
         &self[index]
     }
 
-    /// Returns the [`DataTypeName`] associated with the column of the given index.
+    /// Returns the [DataTypeName] associated with the column of the given index.
     pub(crate) fn get_entry_mut(&mut self, index: usize) -> &mut DataTypeName {
         &mut self[index]
     }

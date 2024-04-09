@@ -1,4 +1,4 @@
-//! This module provides implementations [`super::DataValue`]s that represent tuples of
+//! This module provides implementations [DataValue]s that represent tuples of
 //! data values. The tupes have a fixed length, which can also be zero.
 
 use std::sync::Arc;
@@ -8,7 +8,7 @@ use super::{
     AnyDataValue, DataValue, IriDataValue, ValueDomain,
 };
 
-/// Physical representation of a fixed-length tuple of [`DataValue`]s.
+/// Physical representation of a fixed-length tuple of [DataValue]s.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct TupleDataValue {
     label: Option<IriDataValue>,
@@ -17,12 +17,13 @@ pub struct TupleDataValue {
 
 impl TupleDataValue {
     /// Constructor.
+    #[allow(dead_code)]
     pub(crate) fn new<T: IntoIterator<Item = AnyDataValue>>(
         label: Option<IriDataValue>,
         values: T,
     ) -> Self {
         Self {
-            label: label,
+            label,
             values: values.into_iter().collect(),
         }
     }
@@ -46,7 +47,7 @@ impl DataValue for TupleDataValue {
         let values = self
             .values
             .iter()
-            .map(|v| DataValue::canonical_string(v))
+            .map(DataValue::canonical_string)
             //.by_ref()
             .intersperse(TUPLE_SEPARATOR.to_string())
             .collect::<String>();
@@ -130,7 +131,7 @@ mod test {
         );
 
         assert_eq!(dv_tuple.label(), Some(&label));
-        assert_eq!(dv_tuple.len(), Some(3));
+        assert_eq!(dv_tuple.length(), Some(3));
         assert_eq!(dv_tuple.len_unchecked(), 3);
         assert_eq!(dv_tuple.tuple_element(0), Some(&dv1));
         assert_eq!(dv_tuple.tuple_element_unchecked(0), &dv1);
@@ -187,7 +188,7 @@ mod test {
     fn test_empty_tuple() {
         let dv_tuple = TupleDataValue::new(None, vec![]);
 
-        assert_eq!(dv_tuple.len(), Some(0));
+        assert_eq!(dv_tuple.length(), Some(0));
         assert_eq!(dv_tuple.len_unchecked(), 0);
         assert_eq!(dv_tuple.tuple_element(0), None);
         assert_eq!(dv_tuple.lexical_value(), "()".to_string());

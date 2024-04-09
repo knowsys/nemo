@@ -21,6 +21,9 @@
 #![feature(macro_metavar_expr)]
 #![feature(is_sorted)]
 #![feature(iter_intersperse)]
+#![feature(test)]
+
+mod benches;
 
 pub(crate) mod columnar;
 

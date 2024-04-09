@@ -9,14 +9,10 @@
 //! # #[cfg(not(miri))]
 //! # fn main() {
 //! use nemo::api::{load, reason, output_predicates};
-//! # let path = String::from("../resources/testcases/lcs-diff-computation/run-lcs-10.rls");
-//! // assume path is a string with the path to a rules file
-//! let mut engine = load(path.into()).unwrap();
-//! # let cur_dir = std::env::current_dir().unwrap();
-//! # std::env::set_current_dir("../resources/testcases/lcs-diff-computation/").unwrap();
+//! std::env::set_current_dir("../resources/testcases/lcs-diff-computation/").unwrap();
+//! let mut engine = load("run-lcs-10.rls".into()).unwrap();
 //! // reasoning on the rule file
 //! reason(&mut engine).unwrap();
-//! # std::env::set_current_dir(cur_dir).unwrap();
 //! // write the results to a temporary directory
 //! let temp_dir = TempDir::new().unwrap();
 //! let predicates = output_predicates(&engine);
@@ -35,7 +31,7 @@ use crate::{
         resource_providers::ResourceProviders,
         ImportManager,
     },
-    model::{ExportDirective, Identifier},
+    model::Identifier,
 };
 
 /// Reasoning Engine exposed by the API
@@ -43,7 +39,7 @@ pub type Engine = DefaultExecutionEngine;
 
 /// Load the given `file` and load the program from the file.
 ///
-/// For details see [`load_string`]
+/// For details see [load_string]
 pub fn load(file: PathBuf) -> Result<Engine, Error> {
     let input = read_to_string(file.clone()).map_err(|err| ReadingError::IoReading {
         error: err,
@@ -52,24 +48,18 @@ pub fn load(file: PathBuf) -> Result<Engine, Error> {
     load_string(input)
 }
 
-/// Parse a program in the given `input`-String and return an [`Engine`].
+/// Parse a program in the given `input`-String and return an [Engine].
 ///
 /// The program will be parsed and checked for unsupported features.
 ///
 /// # Error
-/// Returns an appropriate [`Error`] variant on parsing and feature check issues.
+/// Returns an appropriate [Error] variant on parsing and feature check issues.
 pub fn load_string(input: String) -> Result<Engine, Error> {
-    let mut program = all_input_consumed(RuleParser::new().parse_program())(&input)?;
-    let mut additional_exports = Vec::new();
-    for predicate in program.idb_predicates() {
-        additional_exports.push(ExportDirective::default(predicate));
-    }
-    program.add_exports(additional_exports);
-
+    let program = all_input_consumed(RuleParser::new().parse_program())(&input)?;
     ExecutionEngine::initialize(&program, ImportManager::new(ResourceProviders::default()))
 }
 
-/// Executes the reasoning process of the [`Engine`].
+/// Executes the reasoning process of the [Engine].
 ///
 /// # Note
 /// If there are `@source` or `@import` directives in the
@@ -79,7 +69,7 @@ pub fn reason(engine: &mut Engine) -> Result<(), Error> {
     engine.execute()
 }
 
-/// Get a [`Vec`] of all output predicates that are computed by the engine.
+/// Get a [Vec] of all output predicates that are computed by the engine.
 pub fn output_predicates(engine: &Engine) -> Vec<Identifier> {
     engine
         .program()
@@ -93,7 +83,7 @@ pub fn output_predicates(engine: &Engine) -> Vec<Identifier> {
 // One could take a list of export directives instead of a list of predicate names, and one could also
 // have a method that works with the directives from the program.
 //
-// /// Writes all result [`predicates`][Identifier] in the vector `predicates` into the directory specified in `path`.
+// /// Writes all result [predicates][Identifier] in the vector `predicates` into the directory specified in `path`.
 // pub fn write(path: String, engine: &mut Engine, predicates: Vec<Identifier>) -> Result<(), Error> {
 //     let output_dir = PathBuf::from(path);
 //     let export_manager = ExportManager::new()
@@ -139,6 +129,7 @@ mod test {
             .into_iter()
             .filter(|pred| pred.to_string().contains('i'))
             .collect::<Vec<_>>();
+
         assert_eq!(results.len(), 5);
         let _temp_dir = TempDir::new().unwrap();
         // Disabled:

@@ -115,7 +115,7 @@ impl Permutation {
     }
 
     /// Return a vector represenation of the permutation.
-    fn to_vector(&self) -> Vec<usize> {
+    fn vector_minimal(&self) -> Vec<usize> {
         let mut result = Vec::<usize>::new();
 
         for (&input, &value) in &self.map {
@@ -265,13 +265,13 @@ impl Display for Permutation {
 
 impl Hash for Permutation {
     fn hash<H: Hasher>(&self, state: &mut H) {
-        self.to_vector().hash(state);
+        self.vector_minimal().hash(state);
     }
 }
 
 impl PartialEq for Permutation {
     fn eq(&self, other: &Self) -> bool {
-        self.to_vector() == other.to_vector()
+        self.vector_minimal() == other.vector_minimal()
     }
 }
 
@@ -405,19 +405,19 @@ mod test {
     fn test_to_vector() {
         let vector = vec![0, 2, 1];
         let perm = Permutation::from_vector(vector.clone());
-        assert_eq!(perm.to_vector(), vector);
+        assert_eq!(perm.vector_minimal(), vector);
 
         let vector = vec![4, 2, 0, 1, 3];
         let perm = Permutation::from_vector(vector.clone());
-        assert_eq!(perm.to_vector(), vector);
+        assert_eq!(perm.vector_minimal(), vector);
 
         let vector = vec![0, 3, 1, 2, 4, 5, 6];
         let perm = Permutation::from_vector(vector);
-        assert_eq!(perm.to_vector(), vec![0, 3, 1, 2]);
+        assert_eq!(perm.vector_minimal(), vec![0, 3, 1, 2]);
 
         let vector = vec![0, 1, 2, 4, 3, 5, 6, 9, 7, 8, 10, 11];
         let perm = Permutation::from_vector(vector);
-        assert_eq!(perm.to_vector(), vec![0, 1, 2, 4, 3, 5, 6, 9, 7, 8]);
+        assert_eq!(perm.vector_minimal(), vec![0, 1, 2, 4, 3, 5, 6, 9, 7, 8]);
     }
 
     #[test]

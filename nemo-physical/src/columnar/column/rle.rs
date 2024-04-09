@@ -12,7 +12,7 @@ use crate::{
 
 use super::Column;
 
-/// Implementation of [`Column`] that allows the use of incremental run length encoding.
+/// Implementation of [Column] that allows the use of incremental run length encoding.
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub(crate) struct ColumnRle<T: RunLengthEncodable> {
     values: Vec<T>,
@@ -52,7 +52,7 @@ where
         }
     }
 
-    /// Constructs a new [`ColumnRle`] from a vector of the suitable type.
+    /// Constructs a new [ColumnRle] from a vector of the suitable type.
     #[cfg(test)]
     pub(crate) fn new(data: Vec<T>) -> ColumnRle<T> {
         use crate::columnar::columnbuilder::{rle::ColumnBuilderRle, ColumnBuilder};
@@ -405,8 +405,6 @@ where
     }
 
     fn narrow(&mut self, interval: Range<usize>) {
-        debug_assert!(interval.end > interval.start);
-
         self.reset();
 
         self.lower_bound_inclusive = self

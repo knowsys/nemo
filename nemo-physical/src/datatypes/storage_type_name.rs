@@ -8,17 +8,17 @@ pub(crate) const NUM_STORAGETYPES: usize = 5;
 /// Descriptors to refer to the possible data types at runtime.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, PartialOrd, Ord, Hash)]
 pub(crate) enum StorageTypeName {
-    /// Data type [`u32`], used to store dictionary ids that fit into 32bits. This type always refers to an entry in a
+    /// Data type [u32], used to store dictionary ids that fit into 32bits. This type always refers to an entry in a
     /// dictionary, rather than to the literal numerical integer value.
     Id32,
-    /// Data type [`u64`], used to store dictionary ids. This type always refers to an entry in a
+    /// Data type [u64], used to store dictionary ids. This type always refers to an entry in a
     /// dictionary, rather than to the literal numerical integer value.
     Id64,
-    /// Data type [`i64`]. This type always refers to a literal integer value, not to an id in some dictionary.
+    /// Data type [i64]. This type always refers to a literal integer value, not to an id in some dictionary.
     Int64,
-    /// Data type [`super::float::Float`]
+    /// Data type [super::float::Float]
     Float,
-    /// Data type [`super::double::Double`]
+    /// Data type [super::double::Double]
     Double,
 }
 
@@ -78,7 +78,7 @@ impl Display for StorageTypeName {
 }
 
 /// [BitSet] where each bit represents a [StorageTypeName].
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct StorageTypeBitSet(BitSet<usize>);
 
 impl StorageTypeBitSet {

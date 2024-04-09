@@ -37,7 +37,7 @@ pub(crate) struct HeadInstruction {
     pub arity: usize,
 }
 
-/// Given an atom, bring compute the corresponding [`HeadInstruction`].
+/// Given an atom, bring compute the corresponding [HeadInstruction].
 /// TODO: This needs to be revised once the Type System on the logical layer has been implemented.
 pub(crate) fn head_instruction_from_atom(atom: &PrimitiveAtom) -> HeadInstruction {
     let arity = atom.terms().len();

@@ -1,0 +1,6 @@
+@import data :- csv { resource = "sources/data.csv" } .
+@export main :- csv {} .
+@export side :- csv {} .
+
+main(?X, !V, !V, ?X), side(!V) :- data(?X, ?X) .
+main(?X, !V, ?Y, ?Y) :- data(?X, ?Y) .

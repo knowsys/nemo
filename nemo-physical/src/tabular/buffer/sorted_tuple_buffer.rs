@@ -42,7 +42,7 @@ impl SortedTupleBuffer {
         }
     }
 
-    /// Sort the tuples in the tuple buffer by creating a [Vec::<usize>],
+    /// Sort the tuples in the tuple buffer by creating a [`Vec<usize>`],
     /// which specifies the new order.
     fn sort_buffer(subtable_ids: &[usize], tuple_buffer: &TupleBuffer) -> Vec<usize> {
         let mut order: Vec<usize> = (0..tuple_buffer.size()).collect();
@@ -76,7 +76,7 @@ impl SortedTupleBuffer {
 
     /// Compare two tuples by types and values corresponding to their tuple indexes, according to
     /// the internal order of tuples, i.e., tuple indexes in the first inner table are maintained,
-    /// and row indexes in the second table start from table_lengths[0], and so on.
+    /// and row indexes in the second table start from `table_lengths[0]`, and so on.
     fn compare_tuples(
         subtable_ids: &[usize],
         tuple_buffer: &TupleBuffer,
@@ -118,7 +118,7 @@ impl SortedTupleBuffer {
         Ordering::Equal
     }
 
-    /// Returns the number of columns in the [`SortedTupleBuffer`]
+    /// Returns the number of columns in the [SortedTupleBuffer]
     pub(crate) fn column_number(&self) -> usize {
         self.tuple_buffer.column_number()
     }
@@ -154,10 +154,10 @@ mod test {
         let value_third = StorageValueT::Id32(2);
         let value_fourth = StorageValueT::Id32(3);
 
-        tuple_buffer.add_tuple_value(value_fourth.clone());
-        tuple_buffer.add_tuple_value(value_second.clone());
-        tuple_buffer.add_tuple_value(value_first.clone());
-        tuple_buffer.add_tuple_value(value_third.clone());
+        tuple_buffer.add_tuple_value(value_fourth);
+        tuple_buffer.add_tuple_value(value_second);
+        tuple_buffer.add_tuple_value(value_first);
+        tuple_buffer.add_tuple_value(value_third);
 
         let sorted_buffer = tuple_buffer.finalize();
 
@@ -189,20 +189,20 @@ mod test {
         let value_fifth_left = StorageValueT::Float(Float::new(-5.0).unwrap());
         let value_fifth_right = StorageValueT::Id32(1);
 
-        tuple_buffer.add_tuple_value(value_third_left.clone());
-        tuple_buffer.add_tuple_value(value_third_right.clone());
+        tuple_buffer.add_tuple_value(value_third_left);
+        tuple_buffer.add_tuple_value(value_third_right);
 
-        tuple_buffer.add_tuple_value(value_second_left.clone());
-        tuple_buffer.add_tuple_value(value_second_right.clone());
+        tuple_buffer.add_tuple_value(value_second_left);
+        tuple_buffer.add_tuple_value(value_second_right);
 
-        tuple_buffer.add_tuple_value(value_fifth_left.clone());
-        tuple_buffer.add_tuple_value(value_fifth_right.clone());
+        tuple_buffer.add_tuple_value(value_fifth_left);
+        tuple_buffer.add_tuple_value(value_fifth_right);
 
-        tuple_buffer.add_tuple_value(value_first_left.clone());
-        tuple_buffer.add_tuple_value(value_first_right.clone());
+        tuple_buffer.add_tuple_value(value_first_left);
+        tuple_buffer.add_tuple_value(value_first_right);
 
-        tuple_buffer.add_tuple_value(value_fourth_left.clone());
-        tuple_buffer.add_tuple_value(value_fourth_right.clone());
+        tuple_buffer.add_tuple_value(value_fourth_left);
+        tuple_buffer.add_tuple_value(value_fourth_right);
 
         let sorter_buffer = tuple_buffer.finalize();
 

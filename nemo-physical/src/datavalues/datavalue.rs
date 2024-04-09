@@ -1,10 +1,12 @@
-//! This module provides the general trait for representing a [`DataValue`], its relevant
-//! [`ValueDomain`]s, and possible errors that occur when dealing with them.
+//! This module provides the general trait for representing a [DataValue], its relevant
+//! [ValueDomain]s, and possible errors that occur when dealing with them.
 
 use std::{
     fmt::{Debug, Display},
     hash::Hash,
 };
+
+use crate::datatypes::{storage_type_name::StorageTypeBitSet, StorageTypeName};
 
 use super::{AnyDataValue, IriDataValue, NullDataValue};
 
@@ -12,17 +14,17 @@ use super::{AnyDataValue, IriDataValue, NullDataValue};
 /// tabs `\t`, and backslashes `\\`.
 pub(crate) fn quote_string(s: &str) -> String {
     "\"".to_owned()
-        + &s.replace("\\", "\\\\")
-            .replace("\"", "\\\"")
-            .replace("\r", "\\r")
-            .replace("\n", "\\n")
+        + &s.replace('\\', "\\\\")
+            .replace('\"', "\\\"")
+            .replace('\r', "\\r")
+            .replace('\n', "\\n")
         + "\""
 }
 
 /// Encloses a string in pointy brackets. No other escaping is done, since we assume that the IRI has already
 /// been processed to be in a suitable form without inner `<` or `>`.
 pub(crate) fn quote_iri(s: &str) -> String {
-    "<".to_owned() + &s + ">"
+    "<".to_owned() + s + ">"
 }
 
 /// Enum of different value domains that are distinguished in this code,
@@ -53,24 +55,24 @@ pub enum ValueDomain {
     /// This set of values is disjoint from all other numerical domains (including [ValueDomain::Float]).
     Double,
     /// Domain of all unsigned 64bit integer numbers: 0…+18446744073709551615, or 0 … +2^64-1.
-    /// This is a superset of [`ValueDomain::NonNegativeLong`] and its respective subtypes.
+    /// This is a superset of [ValueDomain::NonNegativeLong] and its respective subtypes.
     UnsignedLong,
     /// Domain of all signed 64bit integer numbers that are not negative: 0…+9223372036854775807, or 0 … +2^63-1.
-    /// This is a superset of [`ValueDomain::Int`].
+    /// This is a superset of [ValueDomain::Int].
     NonNegativeLong,
     /// Domain of all unsigned 32bit integer numbers: 0…+4294967295, or 0 … +2^32-1.
-    /// This is a superset of [`ValueDomain::NonNegativeInt`].
+    /// This is a superset of [ValueDomain::NonNegativeInt].
     UnsignedInt,
     /// Domain of all signed 32bit integer numbers that are not negative: 0…+2147483647, or 0 … +2^31-1.
     /// This is the smallest integer domain we consider, contained in all others.
     NonNegativeInt,
     /// Domain of all signed 64bit integer numbers: -9223372036854775808…+9223372036854775807, or
     /// -2^63 … +2^63-1.
-    /// It is a superset of [`ValueDomain::NonNegativeLong`] and [`ValueDomain::Int`], and their
+    /// It is a superset of [ValueDomain::NonNegativeLong`] and [`ValueDomain::Int], and their
     /// respective subdomains.
     Long,
     /// Domain of all signed 32bit integer numbers: -2147483648…+2147483647, or -2^31 … +2^31-1.
-    /// It is a superset of [`ValueDomain::NonNegativeInt`] and a subset of [`ValueDomain::Long`].
+    /// It is a superset of [ValueDomain::NonNegativeInt`] and a subset of [`ValueDomain::Long].
     Int,
     /// Domain of all tuples.
     Tuple,
@@ -89,7 +91,7 @@ impl ValueDomain {
     /// of a certain domain. In many cases, we use existing identifiers, especially
     /// the XML Schema datatypes that are also used in RDF.
     ///
-    /// The method panics on undefined cases, especially when called for [`ValueDomain::Other`],
+    /// The method panics on undefined cases, especially when called for [ValueDomain::Other],
     /// which does not have a canonical type that is determined by the domain.
     pub(crate) fn type_iri(&self) -> String {
         match self {
@@ -113,6 +115,31 @@ impl ValueDomain {
             ValueDomain::Other => panic!("There is no canonical datatype for {:?}. Use the type of the value directly.", self),
             ValueDomain::Boolean => "http://www.w3.org/2001/XMLSchema#boolean".to_string(),
             ValueDomain::Null => panic!("There is no canonical datatype for {:?} defined in Nemo yet. Nulls can be serialized as blank nodes.", self),
+        }
+    }
+
+    /// This function specifies under which storage types
+    /// values of a particular [ValueDomain] can be stored.
+    pub(crate) fn storage_type(&self) -> StorageTypeBitSet {
+        match self {
+            ValueDomain::Long
+            | ValueDomain::Int
+            | ValueDomain::UnsignedLong
+            | ValueDomain::NonNegativeLong
+            | ValueDomain::UnsignedInt
+            | ValueDomain::NonNegativeInt => StorageTypeName::Int64.bitset(),
+            ValueDomain::Float => StorageTypeName::Float.bitset(),
+            ValueDomain::Double => StorageTypeName::Double.bitset(),
+            ValueDomain::PlainString
+            | ValueDomain::LanguageTaggedString
+            | ValueDomain::Iri
+            | ValueDomain::Tuple
+            | ValueDomain::Null
+            | ValueDomain::Map
+            | ValueDomain::Boolean
+            | ValueDomain::Other => StorageTypeName::Id32
+                .bitset()
+                .union(StorageTypeName::Id64.bitset()),
         }
     }
 
@@ -185,7 +212,7 @@ impl Ord for ValueDomain {
 
 impl PartialOrd for ValueDomain {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        Some(self.cmp(&other))
+        Some(self.cmp(other))
     }
 }
 
@@ -209,7 +236,7 @@ pub trait DataValue: Debug + Display + Into<AnyDataValue> + PartialEq + Eq + Has
     #[must_use]
     fn lexical_value(&self) -> String;
 
-    /// Return the most specific [`ValueDomain`] of this value.
+    /// Return the most specific [ValueDomain] of this value.
     #[must_use]
     fn value_domain(&self) -> ValueDomain;
 
@@ -221,7 +248,7 @@ pub trait DataValue: Debug + Display + Into<AnyDataValue> + PartialEq + Eq + Has
     fn canonical_string(&self) -> String;
 
     /// Return the string that this value represents, if it is a value in
-    /// the domain [`ValueDomain::String`].
+    /// the domain [ValueDomain::PlainString].
     ///
     /// Note: `to_string` is already used as a standard method in the Display trait,
     /// which is defined for all datavalues (not just for strings). Hence we use a
@@ -235,14 +262,14 @@ pub trait DataValue: Debug + Display + Into<AnyDataValue> + PartialEq + Eq + Has
     }
 
     /// Return the string that this value represents, if it is a value in
-    /// the domain [`ValueDomain::String`]. Otherwise it panics.
+    /// the domain [ValueDomain::PlainString]. Otherwise it panics.
     #[must_use]
     fn to_plain_string_unchecked(&self) -> String {
         panic!("Value is not a string.");
     }
 
     /// Return the pair of string and language tag that this value represents, if it is a value in
-    /// the domain [`ValueDomain::LanguageTaggedString`].
+    /// the domain [ValueDomain::LanguageTaggedString].
     #[must_use]
     fn to_language_tagged_string(&self) -> Option<(String, String)> {
         match self.value_domain() {
@@ -252,14 +279,14 @@ pub trait DataValue: Debug + Display + Into<AnyDataValue> + PartialEq + Eq + Has
     }
 
     /// Return the pair of string and language tag that this value represents, if it is a value in
-    /// the domain [`ValueDomain::LanguageTaggedString`]. Otherwise it panics.
+    /// the domain [ValueDomain::LanguageTaggedString]. Otherwise it panics.
     #[must_use]
     fn to_language_tagged_string_unchecked(&self) -> (String, String) {
         panic!("Value is not a language tagged string.");
     }
 
     /// Return the string that this value represents, if it is a value in
-    /// the domain [`ValueDomain::Iri`].
+    /// the domain [ValueDomain::Iri].
     #[must_use]
     fn to_iri(&self) -> Option<String> {
         match self.value_domain() {
@@ -269,14 +296,14 @@ pub trait DataValue: Debug + Display + Into<AnyDataValue> + PartialEq + Eq + Has
     }
 
     /// Return the string that this value represents, if it is a value in
-    /// the domain [`ValueDomain::Iri`]. Otherwise it panics.
+    /// the domain [ValueDomain::Iri]. Otherwise it panics.
     #[must_use]
     fn to_iri_unchecked(&self) -> String {
         panic!("Value is not an IRI.");
     }
 
     /// Return the f32 that this value represents, if it is a value in
-    /// the domain [`ValueDomain::Float`].
+    /// the domain [ValueDomain::Float].
     #[must_use]
     fn to_f32(&self) -> Option<f32> {
         match self.value_domain() {
@@ -286,14 +313,14 @@ pub trait DataValue: Debug + Display + Into<AnyDataValue> + PartialEq + Eq + Has
     }
 
     /// Return the f32 that this value represents, if it is a value in
-    /// the domain [`ValueDomain::Float`]. Otherwise it panics.
+    /// the domain [ValueDomain::Float]. Otherwise it panics.
     #[must_use]
     fn to_f32_unchecked(&self) -> f32 {
         panic!("Value is not a float (32bit floating point number).");
     }
 
     /// Return the f64 that this value represents, if it is a value in
-    /// the domain [`ValueDomain::Double`].
+    /// the domain [ValueDomain::Double].
     #[must_use]
     fn to_f64(&self) -> Option<f64> {
         match self.value_domain() {
@@ -303,7 +330,7 @@ pub trait DataValue: Debug + Display + Into<AnyDataValue> + PartialEq + Eq + Has
     }
 
     /// Return the f64 that this value represents, if it is a value in
-    /// the domain [`ValueDomain::Double`]. Otherwise it panics.
+    /// the domain [ValueDomain::Double]. Otherwise it panics.
     #[must_use]
     fn to_f64_unchecked(&self) -> f64 {
         panic!("Value is not a double (64bit floating point number).");
@@ -337,7 +364,7 @@ pub trait DataValue: Debug + Display + Into<AnyDataValue> + PartialEq + Eq + Has
     }
 
     /// Return the i64 that this value represents, if it is a value in
-    /// the domain [`ValueDomain::Long`] or a subdoman thereof.
+    /// the domain [ValueDomain::Long] or a subdoman thereof.
     #[must_use]
     fn to_i64(&self) -> Option<i64> {
         if self.fits_into_i64() {
@@ -348,8 +375,8 @@ pub trait DataValue: Debug + Display + Into<AnyDataValue> + PartialEq + Eq + Has
     }
 
     /// Return the i64 that this value represents, if it is a value in
-    /// the domain [`ValueDomain::Long`] or a subdoman thereof. This can also
-    /// be checked by calling [`Self::fits_into_i64()`].
+    /// the domain [ValueDomain::Long] or a subdoman thereof. This can also
+    /// be checked by calling [Self::fits_into_i64()].
     /// Otherwise it panics.
     #[must_use]
     fn to_i64_unchecked(&self) -> i64 {
@@ -357,7 +384,7 @@ pub trait DataValue: Debug + Display + Into<AnyDataValue> + PartialEq + Eq + Has
     }
 
     /// Return the i32 that this value represents, if it is a value in
-    /// the domain [`ValueDomain::Int`] or a subdoman thereof.
+    /// the domain [ValueDomain::Int] or a subdoman thereof.
     #[must_use]
     fn to_i32(&self) -> Option<i32> {
         if self.fits_into_i32() {
@@ -368,14 +395,14 @@ pub trait DataValue: Debug + Display + Into<AnyDataValue> + PartialEq + Eq + Has
     }
 
     /// Return the i32 that this value represents, if it is a value in
-    /// the domain [`ValueDomain::Int`] or a subdoman thereof. Otherwise it panics.
+    /// the domain [ValueDomain::Int] or a subdoman thereof. Otherwise it panics.
     #[must_use]
     fn to_i32_unchecked(&self) -> i32 {
         panic!("Value is not an int (32bit signed integer number).");
     }
 
     /// Return the u64 that this value represents, if it is a value in
-    /// the domain [`ValueDomain::UnsignedLong`] or a subdoman thereof.
+    /// the domain [ValueDomain::UnsignedLong] or a subdoman thereof.
     #[must_use]
     fn to_u64(&self) -> Option<u64> {
         if self.fits_into_u64() {
@@ -386,8 +413,8 @@ pub trait DataValue: Debug + Display + Into<AnyDataValue> + PartialEq + Eq + Has
     }
 
     /// Return the i64 that this value represents, if it is a value in
-    /// the domain [`ValueDomain::UnsignedLong`] or a subdoman thereof. This can also
-    /// be checked by calling [`Self::fits_into_i64()`].
+    /// the domain [ValueDomain::UnsignedLong] or a subdoman thereof. This can also
+    /// be checked by calling [Self::fits_into_i64()].
     /// Otherwise it panics.
     #[must_use]
     fn to_u64_unchecked(&self) -> u64 {
@@ -395,7 +422,7 @@ pub trait DataValue: Debug + Display + Into<AnyDataValue> + PartialEq + Eq + Has
     }
 
     /// Return the u32 that this value represents, if it is a value in
-    /// the domain [`ValueDomain::UnsignedInt`] or a subdoman thereof.
+    /// the domain [ValueDomain::UnsignedInt] or a subdoman thereof.
     #[must_use]
     fn to_u32(&self) -> Option<u32> {
         if self.fits_into_u32() {
@@ -406,7 +433,7 @@ pub trait DataValue: Debug + Display + Into<AnyDataValue> + PartialEq + Eq + Has
     }
 
     /// Return the u32 that this value represents, if it is a value in
-    /// the domain [`ValueDomain::UnsignedInt`] or a subdoman thereof. Otherwise it panics.
+    /// the domain [ValueDomain::UnsignedInt] or a subdoman thereof. Otherwise it panics.
     #[must_use]
     fn to_u32_unchecked(&self) -> u32 {
         panic!("Value is not an int (32bit signed integer number).");
@@ -449,18 +476,18 @@ pub trait DataValue: Debug + Display + Into<AnyDataValue> + PartialEq + Eq + Has
     }
 
     /// Return the IRI-valued label of this complex value if it has a label,
-    /// and None otherwise. Only values in the domain [`ValueDomain::Tuple`] or
-    /// [`ValueDomain::Map`] can have labels.
+    /// and None otherwise. Only values in the domain [ValueDomain::Tuple] or
+    /// [ValueDomain::Map] can have labels.
     #[must_use]
     fn label(&self) -> Option<&IriDataValue> {
         None
     }
 
     /// Return the length of this complex value if it is a
-    /// value in the domain [`ValueDomain::Tuple`] or
-    /// [`ValueDomain::Map`].
+    /// value in the domain [ValueDomain::Tuple] or
+    /// [ValueDomain::Map].
     #[must_use]
-    fn len(&self) -> Option<usize> {
+    fn length(&self) -> Option<usize> {
         match self.value_domain() {
             ValueDomain::Tuple | ValueDomain::Map => Some(self.len_unchecked()),
             _ => None,
@@ -468,8 +495,8 @@ pub trait DataValue: Debug + Display + Into<AnyDataValue> + PartialEq + Eq + Has
     }
 
     /// Return the length of this complex value if it is a
-    /// value in the domain [`ValueDomain::Tuple`] or
-    /// [`ValueDomain::Map`].
+    /// value in the domain [ValueDomain::Tuple] or
+    /// [ValueDomain::Map].
     ///
     /// # Panics
     /// Panics if the value is not a collection.

@@ -1,4 +1,4 @@
-//! This module provides implementations [`super::DataValue`]s that represent boolean values.
+//! This module provides implementations [DataValue]s that represent boolean values.
 
 use super::{DataValue, ValueDomain};
 
@@ -65,7 +65,7 @@ impl Ord for BooleanDataValue {
 
 impl PartialOrd for BooleanDataValue {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        Some(self.cmp(&other))
+        Some(self.cmp(other))
     }
 }
 

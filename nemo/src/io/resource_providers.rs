@@ -37,17 +37,17 @@ pub trait ResourceProvider: std::fmt::Debug {
     ) -> Result<Option<Box<dyn BufRead>>, ReadingError>;
 }
 
-/// A list of [`ResourceProvider`] sorted by decreasing priority.
+/// A list of [ResourceProvider] sorted by decreasing priority.
 ///
 /// This allows resolving a given resource, which may occur in a Nemo program,
 /// to a reader (which return the actual by of e.g. a referenced file).
 ///
-/// The list of [`ResourceProviders`] can be customized by users of the Rust nemo crate.
+/// The list of [ResourceProviders] can be customized by users of the Rust nemo crate.
 #[derive(Debug, Clone)]
 pub struct ResourceProviders(Rc<Vec<Box<dyn ResourceProvider>>>);
 
 impl ResourceProviders {
-    /// Construct using a list of [`ResourceProvider`]s
+    /// Construct using a list of [ResourceProvider]s
     pub fn from(r: Vec<Box<dyn ResourceProvider>>) -> Self {
         Self(Rc::new(r))
     }

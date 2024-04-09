@@ -17,7 +17,7 @@ pub(crate) fn sum_bytes<ByteIterator: Iterator<Item = ByteSize>>(
     let mut result = ByteSize::b(0);
 
     for byte_size in iterator {
-        result = result + byte_size;
+        result += byte_size;
     }
 
     result

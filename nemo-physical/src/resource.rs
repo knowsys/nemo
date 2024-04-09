@@ -1,4 +1,4 @@
-//! This modules defines the [`Resource`] type, which is part of the public interface of this crate.
+//! This modules defines the [Resource] type, which is part of the public interface of this crate.
 //!
 
 /// Resource that can be referenced in source declarations in Nemo programs

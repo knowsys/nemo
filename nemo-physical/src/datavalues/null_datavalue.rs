@@ -1,14 +1,14 @@
-//! This module provides an implementation for [`super::DataValue`]s that represent null values.
+//! This module provides an implementation for [DataValue]s that represent null values.
 
 use super::{DataValue, ValueDomain};
 
-/// Implementation of a null [`DataValue`].
+/// Implementation of a null [DataValue].
 ///
 /// Nulls of this type are not created explicitly but are provided by a dictionary.
 /// Moreover, the public API of nulls offers no identifiable features: nulls can only
 /// be compared to other nulls to see if they are equal or not.
 ///
-/// The implementation still provides the common string representations of all [`DataValue`]s,
+/// The implementation still provides the common string representations of all [DataValue]s,
 /// with the guarantee that the lexical value and the canonical string representation are unique
 /// among all nulls that were created from a single dictionary. The canonical string representation
 /// uses the blank node syntax of RDF Turtle (and N3). When re-creating nulls from a serialization,
@@ -50,7 +50,7 @@ impl DataValue for NullDataValue {
     }
 
     fn to_null_unchecked(&self) -> NullDataValue {
-        return self.clone();
+        *self
     }
 }
 

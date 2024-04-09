@@ -1,5 +1,5 @@
 //! This module implements [IntervalLookupColumn]
-//! and the associated builder [IntervalLookupColumnDualBuilder].
+//! and the associated builder [IntervalLookupColumnBuilder].
 
 use bytesize::ByteSize;
 
@@ -19,8 +19,7 @@ use super::{IntervalLookup, IntervalLookupBuilder};
 /// the successor nodes of the current layer
 #[derive(Debug, Clone)]
 pub(crate) struct IntervalLookupColumn {
-    /// [Column][crate::columnar::column::Column]
-    /// that associates each node of the previous layer
+    /// [Column] that associates each node of the previous layer
     /// with an interval index for `interval_starts`
     ///
     /// An entry in this column might be `Self::Empty`
@@ -50,7 +49,7 @@ impl IntervalLookup for IntervalLookupColumn {
         let interval_index = self.lookup.get(index);
 
         if interval_index == Self::EMPTY {
-            return None;
+            None
         } else {
             Some(interval_index)
         }
@@ -63,7 +62,7 @@ impl ByteSized for IntervalLookupColumn {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub(crate) struct IntervalLookupColumnBuilder {
     /// [ColumnBuilderAdaptive] for building `predecessors`
     builder_lookup: ColumnBuilderAdaptive<usize>,
@@ -71,15 +70,6 @@ pub(crate) struct IntervalLookupColumnBuilder {
     /// Whether `builder_lookup` contains no [IntervalLookupColumn::EMPTY]
     /// and can therefore be ignored
     simple: bool,
-}
-
-impl Default for IntervalLookupColumnBuilder {
-    fn default() -> Self {
-        Self {
-            builder_lookup: Default::default(),
-            simple: false,
-        }
-    }
 }
 
 impl IntervalLookupBuilder for IntervalLookupColumnBuilder {

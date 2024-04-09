@@ -1,24 +1,34 @@
 //! This module defines a tree representation [FunctionTree].
 
-use std::fmt::Debug;
+use std::{collections::HashMap, fmt::Debug, hash::Hash};
 
-use crate::datavalues::AnyDataValue;
+use crate::{datavalues::AnyDataValue, function::definitions::BinaryFunction};
 
-use super::definitions::{
-    boolean::{BooleanConjunction, BooleanDisjunction, BooleanNegation},
-    casting::{CastingIntoDouble, CastingIntoFloat, CastingIntoInteger64},
-    generic::{CanonicalString, Equals, Unequals},
-    numeric::{
-        NumericAbsolute, NumericAddition, NumericCosine, NumericDivision, NumericGreaterthan,
-        NumericGreaterthaneq, NumericLessthan, NumericLessthaneq, NumericLogarithm,
-        NumericMultiplication, NumericNegation, NumericPower, NumericSine, NumericSquareroot,
-        NumericSubtraction, NumericTangent,
+use super::{
+    definitions::{
+        boolean::{BooleanConjunction, BooleanDisjunction, BooleanNegation},
+        casting::{CastingIntoDouble, CastingIntoFloat, CastingIntoInteger64},
+        checktype::{
+            CheckIsDouble, CheckIsFloat, CheckIsInteger, CheckIsIri, CheckIsNull, CheckIsNumeric,
+            CheckIsString,
+        },
+        generic::{CanonicalString, Datatype, Equals, LexicalValue, Unequals},
+        language::LanguageTag,
+        numeric::{
+            NumericAbsolute, NumericAddition, NumericCeil, NumericCosine, NumericDivision,
+            NumericFloor, NumericGreaterthan, NumericGreaterthaneq, NumericLessthan,
+            NumericLessthaneq, NumericLogarithm, NumericMultiplication, NumericNegation,
+            NumericPower, NumericRemainder, NumericRound, NumericSine, NumericSquareroot,
+            NumericSubtraction, NumericTangent,
+        },
+        string::{
+            StringAfter, StringBefore, StringCompare, StringConcatenation, StringContains,
+            StringEnds, StringLength, StringLowercase, StringStarts, StringSubstring,
+            StringUppercase,
+        },
+        BinaryFunctionEnum, FunctionTypePropagation, UnaryFunction, UnaryFunctionEnum,
     },
-    string::{
-        StringCompare, StringConcatenation, StringContains, StringLength, StringLowercase,
-        StringSubstring, StringUppercase,
-    },
-    BinaryFunctionEnum, UnaryFunctionEnum,
+    evaluation::StackProgram,
 };
 
 /// Leaf node of a [FunctionTree]
@@ -69,7 +79,7 @@ where
     /// Regular function with no special handling
     Normal,
     /// Function evaluates to a constant
-    Constant(&'a AnyDataValue),
+    Constant(Option<AnyDataValue>),
     /// Function evaluates to a referenced value
     Reference(&'a ReferenceType),
 }
@@ -92,16 +102,19 @@ where
 
 impl<ReferenceType> FunctionTree<ReferenceType>
 where
-    ReferenceType: Debug + Clone,
+    ReferenceType: Debug + Clone + Hash + Eq,
 {
     /// Check if this function correspond to some special case defined in [SpecialCaseFunction].
     /// Returns `None` if this is not the case.
-    #[allow(dead_code)]
     pub(crate) fn special_function(&self) -> SpecialCaseFunction<'_, ReferenceType> {
+        if self.references().is_empty() {
+            let constant_program =
+                StackProgram::from_function_tree(self, &HashMap::default(), None);
+
+            return SpecialCaseFunction::Constant(constant_program.evaluate_data(&[]));
+        }
+
         match self {
-            FunctionTree::Leaf(FunctionLeaf::Constant(constant)) => {
-                SpecialCaseFunction::Constant(constant)
-            }
             FunctionTree::Leaf(FunctionLeaf::Reference(reference)) => {
                 SpecialCaseFunction::Reference(reference)
             }
@@ -155,6 +168,54 @@ where
             None
         }
     }
+
+    /// Computes how storage types of the input to the (overall) function defined by this tree,
+    /// relate to its output type.
+    pub(crate) fn type_propagation(&self) -> FunctionTypePropagation {
+        match self {
+            FunctionTree::Leaf(_) => FunctionTypePropagation::Preserve,
+            FunctionTree::Unary(function, sub) => match function.type_propagation() {
+                FunctionTypePropagation::KnownOutput(output) => {
+                    FunctionTypePropagation::KnownOutput(output)
+                }
+                FunctionTypePropagation::_Unknown => FunctionTypePropagation::_Unknown,
+                FunctionTypePropagation::Preserve => sub.type_propagation(),
+            },
+            FunctionTree::Binary {
+                function,
+                left,
+                right,
+            } => match function.type_propagation() {
+                FunctionTypePropagation::KnownOutput(output) => {
+                    FunctionTypePropagation::KnownOutput(output)
+                }
+                FunctionTypePropagation::_Unknown => FunctionTypePropagation::_Unknown,
+                FunctionTypePropagation::Preserve => {
+                    match (left.type_propagation(), right.type_propagation()) {
+                        (
+                            FunctionTypePropagation::KnownOutput(output_left),
+                            FunctionTypePropagation::KnownOutput(output_right),
+                        ) => FunctionTypePropagation::KnownOutput(
+                            output_left.intersection(output_right),
+                        ),
+                        (
+                            FunctionTypePropagation::KnownOutput(output),
+                            FunctionTypePropagation::Preserve,
+                        )
+                        | (
+                            FunctionTypePropagation::Preserve,
+                            FunctionTypePropagation::KnownOutput(output),
+                        ) => FunctionTypePropagation::KnownOutput(output),
+                        (FunctionTypePropagation::Preserve, FunctionTypePropagation::Preserve) => {
+                            FunctionTypePropagation::Preserve
+                        }
+                        (_, FunctionTypePropagation::_Unknown) => todo!(),
+                        (FunctionTypePropagation::_Unknown, _) => todo!(),
+                    }
+                }
+            },
+        }
+    }
 }
 
 // Contains constructors for each type of operation
@@ -202,6 +263,68 @@ where
     pub fn canonical_string(sub: Self) -> Self {
         Self::Unary(
             UnaryFunctionEnum::CanonicalString(CanonicalString),
+            Box::new(sub),
+        )
+    }
+
+    /// Create a tree node that evaluates to the lexical value of the sub node.
+    pub fn lexical_value(sub: Self) -> Self {
+        Self::Unary(UnaryFunctionEnum::LexicalValue(LexicalValue), Box::new(sub))
+    }
+
+    /// Create a tree node that evaluates to the data type string of the sub node.
+    pub fn datatype(sub: Self) -> Self {
+        Self::Unary(UnaryFunctionEnum::Datatype(Datatype), Box::new(sub))
+    }
+
+    /// Create a tree node that evaluates to the language tag of the sub node.
+    pub fn languagetag(sub: Self) -> Self {
+        Self::Unary(UnaryFunctionEnum::LanguageTag(LanguageTag), Box::new(sub))
+    }
+
+    /// Create a tree node the checks whether the sub node is an integer.
+    pub fn check_is_integer(sub: Self) -> Self {
+        Self::Unary(
+            UnaryFunctionEnum::CheckIsInteger(CheckIsInteger),
+            Box::new(sub),
+        )
+    }
+
+    /// Create a tree node the checks whether the sub node is a float.
+    pub fn check_is_float(sub: Self) -> Self {
+        Self::Unary(UnaryFunctionEnum::CheckIsFloat(CheckIsFloat), Box::new(sub))
+    }
+
+    /// Create a tree node the checks whether the sub node is a double.
+    pub fn check_is_double(sub: Self) -> Self {
+        Self::Unary(
+            UnaryFunctionEnum::CheckIsDouble(CheckIsDouble),
+            Box::new(sub),
+        )
+    }
+
+    /// Create a tree node the checks whether the sub node is numeric.
+    pub fn check_is_numeric(sub: Self) -> Self {
+        Self::Unary(
+            UnaryFunctionEnum::CheckIsNumeric(CheckIsNumeric),
+            Box::new(sub),
+        )
+    }
+
+    /// Create a tree node the checks whether the sub node is a null.
+    pub fn check_is_null(sub: Self) -> Self {
+        Self::Unary(UnaryFunctionEnum::CheckIsNull(CheckIsNull), Box::new(sub))
+    }
+
+    /// Create a tree node the checks whether the sub node is an iri.
+    pub fn check_is_iri(sub: Self) -> Self {
+        Self::Unary(UnaryFunctionEnum::CheckIsIri(CheckIsIri), Box::new(sub))
+    }
+
+    /// Create a tree node the checks whether the sub node is a string.
+    pub fn check_is_string(sub: Self) -> Self {
+        Self::Unary(
+            UnaryFunctionEnum::CheckIsString(CheckIsString),
             Box::new(sub),
         )
     }
@@ -343,6 +466,18 @@ where
         }
     }
 
+    /// Create a tree node representing the numeric remainder opreation.
+    ///
+    /// This evaluates to the remainder of the (truncated) division
+    /// between the value of the left and the value of the right subnode.
+    pub fn numeric_remainder(left: Self, right: Self) -> Self {
+        Self::Binary {
+            function: BinaryFunctionEnum::NumericRemainder(NumericRemainder),
+            left: Box::new(left),
+            right: Box::new(right),
+        }
+    }
+
     /// Create a tree node representing a greater than comparison between two numbers.
     ///
     /// This evaluates to `true` from the boolean value space
@@ -442,6 +577,27 @@ where
         )
     }
 
+    /// Create a tree node representing the rounding of a number.
+    ///
+    /// This evaluates to the rounded value of `sub`.
+    pub fn numeric_round(sub: Self) -> Self {
+        Self::Unary(UnaryFunctionEnum::NumericRound(NumericRound), Box::new(sub))
+    }
+
+    /// Create a tree node representing rounding up of a number.
+    ///
+    /// This evaluates to the rounded value of `sub`.
+    pub fn numeric_ceil(sub: Self) -> Self {
+        Self::Unary(UnaryFunctionEnum::NumericCeil(NumericCeil), Box::new(sub))
+    }
+
+    /// Create a tree node representing rounding down of a number.
+    ///
+    /// This evaluates to the rounded value of `sub`.
+    pub fn numeric_floor(sub: Self) -> Self {
+        Self::Unary(UnaryFunctionEnum::NumericFloor(NumericFloor), Box::new(sub))
+    }
+
     /// Create a tree node representing the tangent of a number.
     ///
     /// This evaluates to the tangent of `sub`.
@@ -473,6 +629,56 @@ where
     pub fn string_concatenation(left: Self, right: Self) -> Self {
         Self::Binary {
             function: BinaryFunctionEnum::StringConcatenation(StringConcatenation),
+            left: Box::new(left),
+            right: Box::new(right),
+        }
+    }
+
+    /// Create a tree node representing the comparison of the beginning of a string.
+    ///
+    /// This evaluates to a boolean indicating whether
+    /// the string resulting from evaluating `left` starts with
+    /// the string resulting from evaluating `right`.
+    pub fn string_starts(left: Self, right: Self) -> Self {
+        Self::Binary {
+            function: BinaryFunctionEnum::StringStarts(StringStarts),
+            left: Box::new(left),
+            right: Box::new(right),
+        }
+    }
+
+    /// Create a tree node representing the comparison of the beginning of a string.
+    ///
+    /// This evaluates to a boolean indicating whether
+    /// the string resulting from evaluating `left` ends with
+    /// the string resulting from evaluating `right`.
+    pub fn string_ends(left: Self, right: Self) -> Self {
+        Self::Binary {
+            function: BinaryFunctionEnum::StringEnds(StringEnds),
+            left: Box::new(left),
+            right: Box::new(right),
+        }
+    }
+
+    /// Create a tree node representing the first part of a string
+    ///
+    /// This evaluates to a string resulting from taking the first half
+    /// of evaluating `left` when split at the string resulting from evaluating `right`.
+    pub fn string_before(left: Self, right: Self) -> Self {
+        Self::Binary {
+            function: BinaryFunctionEnum::StringBefore(StringBefore),
+            left: Box::new(left),
+            right: Box::new(right),
+        }
+    }
+
+    /// Create a tree node representing the first part of a string
+    ///
+    /// This evaluates to a string resulting from taking the second half
+    /// of evaluating `left` when split at the string resulting from evaluating `right`.
+    pub fn string_after(left: Self, right: Self) -> Self {
+        Self::Binary {
+            function: BinaryFunctionEnum::StringAfter(StringAfter),
             left: Box::new(left),
             right: Box::new(right),
         }
@@ -524,14 +730,14 @@ where
 
     /// Create a tree node representing a substring operation.
     ///
-    /// This evaluates to a string containing the first $n$
+    /// This evaluates to a string containing the
     /// characters from the string that results from evaluating `string`,
-    /// where $n$ is the integer that results from evaluating `length`.
-    pub fn string_subtstring(string: Self, length: Self) -> Self {
+    /// starting from the position that results from evaluating `start`.
+    pub fn string_subtstring(string: Self, start: Self) -> Self {
         Self::Binary {
             function: BinaryFunctionEnum::StringSubstring(StringSubstring),
             left: Box::new(string),
-            right: Box::new(length),
+            right: Box::new(start),
         }
     }
 }

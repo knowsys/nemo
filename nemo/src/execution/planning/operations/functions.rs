@@ -18,7 +18,7 @@ pub(crate) fn node_functions(
     subnode: ExecutionNodeRef,
     constructors: &[Constructor],
 ) -> ExecutionNodeRef {
-    let mut output_markers = subnode.markers();
+    let mut output_markers = subnode.markers_cloned();
     let mut assignments = FunctionAssignment::new();
 
     for constructor in constructors {

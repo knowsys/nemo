@@ -1,4 +1,4 @@
-//! This module provides implementations [`super::DataValue`]s that represent Unicode strings.
+//! This module provides implementations [DataValue]s that represent Unicode strings.
 
 use super::{DataValue, ValueDomain};
 
@@ -49,7 +49,7 @@ impl std::hash::Hash for StringDataValue {
 
 impl std::fmt::Display for StringDataValue {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&super::datavalue::quote_string(self.0.as_str()).as_str())
+        f.write_str(super::datavalue::quote_string(self.0.as_str()).as_str())
     }
 }
 

@@ -1,4 +1,4 @@
-//! This module provides implementations [`super::DataValue`]s that can represent any
+//! This module provides implementations [DataValue]s that can represent any
 //! datavalue that we support.
 
 use std::{num::IntErrorKind, str::FromStr};
@@ -44,40 +44,40 @@ impl DecimalType {
     }
 }
 
-/// Enum that can represent arbitrary [`DataValue`]s.
+/// Enum that can represent arbitrary [DataValue]s.
 #[derive(Debug, Clone)]
 enum AnyDataValueEnum {
-    /// Variant for representing [`DataValue`]s in [`ValueDomain::String`].
+    /// Variant for representing [DataValue]s in [ValueDomain::PlainString].
     PlainString(StringDataValue),
-    /// Variant for representing [`DataValue`]s in [`ValueDomain::LanguageTaggedString`].
+    /// Variant for representing [DataValue]s in [ValueDomain::LanguageTaggedString].
     LanguageTaggedString(LangStringDataValue),
-    /// Variant for representing [`DataValue`]s in [`ValueDomain::Iri`].
+    /// Variant for representing [DataValue]s in [ValueDomain::Iri].
     Iri(IriDataValue),
     /// Variant for representing [DataValue]s in [ValueDomain::Float].
     Float(FloatDataValue),
-    /// Variant for representing [`DataValue`]s in [`ValueDomain::Double`].
+    /// Variant for representing [DataValue]s in [ValueDomain::Double].
     Double(DoubleDataValue),
-    /// Variant for representing [`DataValue`]s that represent numbers in the u64 range.
-    /// Note that this has some overlap with values of [`AnyDataValue::Long`], which is accounted
-    /// for in the [`Eq`] implementation.
+    /// Variant for representing [DataValue]s that represent numbers in the u64 range.
+    /// Note that this has some overlap with values of [AnyDataValueEnum::Long], which is accounted
+    /// for in the [Eq] implementation.
     UnsignedLong(UnsignedLongDataValue),
-    /// Variant for representing [`DataValue`]s that represent numbers in the i64 range.
-    /// Note that this has some overlap with values of [`AnyDataValue::UnsignedLong`], which is accounted
-    /// for in the [`Eq`] implementation.
+    /// Variant for representing [DataValue]s that represent numbers in the i64 range.
+    /// Note that this has some overlap with values of [AnyDataValueEnum::UnsignedLong], which is accounted
+    /// for in the [Eq] implementation.
     Long(LongDataValue),
     /// Variant for representing [DataValue]s in [ValueDomain::Boolean].
     Boolean(BooleanDataValue),
     /// Variant for representing [DataValue]s in [ValueDomain::Null].
     Null(NullDataValue),
-    /// Variant for representing [`DataValue`]s in [`ValueDomain::Tuple`].
+    /// Variant for representing [DataValue]s in [ValueDomain::Tuple].
     Tuple(TupleDataValue),
-    /// Variant for representing [`DataValue`]s in [`ValueDomain::Map`].
+    /// Variant for representing [DataValue]s in [ValueDomain::Map].
     Map(MapDataValue),
-    /// Variant for representing [`DataValue`]s in [`ValueDomain::Other`].
+    /// Variant for representing [DataValue]s in [ValueDomain::Other].
     Other(OtherDataValue),
 }
 
-/// Type that can represent arbitrary [`DataValue`]s.
+/// Type that can represent arbitrary [DataValue]s.
 #[repr(transparent)]
 #[derive(Debug, Clone)]
 pub struct AnyDataValue(AnyDataValueEnum);
@@ -109,17 +109,17 @@ impl AnyDataValue {
         )))
     }
 
-    /// Construct a datavalue in [`ValueDomain::PlainString`] that represents the given string.
+    /// Construct a datavalue in [ValueDomain::PlainString] that represents the given string.
     pub fn new_plain_string(value: String) -> Self {
         AnyDataValue(AnyDataValueEnum::PlainString(StringDataValue::new(value)))
     }
 
-    /// Construct a datavalue in [`ValueDomain::Iri`] that represents the given IRI.
+    /// Construct a datavalue in [ValueDomain::Iri] that represents the given IRI.
     pub fn new_iri(value: String) -> Self {
         AnyDataValue(AnyDataValueEnum::Iri(IriDataValue::new(value)))
     }
 
-    /// Construct a datavalue in [`ValueDomain::LanguageTaggedString`] that represents a string with a language tag.
+    /// Construct a datavalue in [ValueDomain::LanguageTaggedString] that represents a string with a language tag.
     pub fn new_language_tagged_string(value: String, lang_tag: String) -> Self {
         AnyDataValue(AnyDataValueEnum::LanguageTaggedString(
             LangStringDataValue::new(value, lang_tag),
@@ -131,7 +131,7 @@ impl AnyDataValue {
         AnyDataValue(AnyDataValueEnum::Boolean(BooleanDataValue::new(value)))
     }
 
-    /// Construct a datavalue in [`ValueDomain::Other`] specified by the given lexical value and datatype IRI.
+    /// Construct a datavalue in [ValueDomain::Other] specified by the given lexical value and datatype IRI.
     pub fn new_other(lexical_value: String, datatype_iri: String) -> Self {
         AnyDataValue(AnyDataValueEnum::Other(OtherDataValue::new(
             lexical_value,
@@ -139,7 +139,7 @@ impl AnyDataValue {
         )))
     }
 
-    /// Construct a datavalue from its physical representation as a [`StorageValueT`], using
+    /// Construct a datavalue from its physical representation as a [StorageValueT], using
     /// the given dictionary to resolve IDs.
     pub(crate) fn new_from_storage_value(
         sv: StorageValueT,
@@ -176,7 +176,7 @@ impl AnyDataValue {
         }
     }
 
-    /// Construct a normalized datavalue in an appropriate [`ValueDomain`] from the given lexical value and datatype IRI.
+    /// Construct a normalized datavalue in an appropriate [ValueDomain] from the given lexical value and datatype IRI.
     /// Known RDF and XML Schema datatypes are taken into account.
     pub fn new_from_typed_literal(
         lexical_value: String,
@@ -187,7 +187,7 @@ impl AnyDataValue {
             ($lexical_value:expr$(;$min:expr;$max:expr;$typename:expr)?) => {
                 match i64::from_str(&$lexical_value) {
                     Ok(value) => {
-                        $(if value < $min || value > $max {
+                        $(if !($min..=$max).contains(&value) {
                             return Err(DataValueCreationError::IntegerRange{min: $min, max: $max, value, datatype_name: $typename.to_string()})
                         })?
                         Ok(Self::new_integer_from_i64(value))
@@ -244,9 +244,7 @@ impl AnyDataValue {
                 "boolean" => match lexical_value.as_str() {
                     "true" | "1" => Ok(Self::new_boolean(true)),
                     "false" | "0" => Ok(Self::new_boolean(false)),
-                    _ => Err(DataValueCreationError::BooleanNotParsed {
-                        lexical_value: lexical_value,
-                    }),
+                    _ => Err(DataValueCreationError::BooleanNotParsed { lexical_value }),
                 },
                 _ => Ok(Self::new_other(lexical_value, datatype_iri)),
             }
@@ -255,7 +253,7 @@ impl AnyDataValue {
         }
     }
 
-    /// Construct a normalized datavalue in an appropriate [`ValueDomain`] from the given string representation
+    /// Construct a normalized datavalue in an appropriate [ValueDomain] from the given string representation
     /// of a (arbitrarily large) integer.
     pub fn new_from_integer_literal(
         lexical_value: String,
@@ -263,7 +261,7 @@ impl AnyDataValue {
         Self::new_from_decimal_type_literal(lexical_value, DecimalType::Integer)
     }
 
-    /// Construct a normalized datavalue in an appropriate [`ValueDomain`] from the given string representation
+    /// Construct a normalized datavalue in an appropriate [ValueDomain] from the given string representation
     /// of a double precision floating-point number.
     pub fn new_from_double_literal(
         lexical_value: String,
@@ -274,7 +272,7 @@ impl AnyDataValue {
         }
     }
 
-    /// Construct a normalized datavalue in an appropriate [`ValueDomain`] from the given string representation
+    /// Construct a normalized datavalue in an appropriate [ValueDomain] from the given string representation
     /// of a decimal number. The result can be an integer, if the decimal digits are omitted or zero.
     pub fn new_from_decimal_literal(
         lexical_value: String,
@@ -282,8 +280,8 @@ impl AnyDataValue {
         Self::new_from_decimal_type_literal(lexical_value, DecimalType::Decimal)
     }
 
-    /// Construct a normalized datavalue in an appropriate [`ValueDomain`] for a "big decimal"
-    /// or "big integer" [`DecimalType`].
+    /// Construct a normalized datavalue in an appropriate [ValueDomain] for a "big decimal"
+    /// or "big integer" [DecimalType].
     fn new_from_decimal_type_literal(
         lexical_value: String,
         decimal_type: DecimalType,
@@ -310,8 +308,8 @@ impl AnyDataValue {
         }
     }
 
-    /// Create [`AnyDataValue`] for the given i64 number after checking possible range
-    /// constraints of the given [`DecimalType`].
+    /// Create [AnyDataValue] for the given i64 number after checking possible range
+    /// constraints of the given [DecimalType].
     fn from_decimal_typed_long(
         value: i64,
         lexical_value: String,
@@ -322,20 +320,20 @@ impl AnyDataValue {
                 Self::decimal_parse_error(lexical_value, decimal_type)
             }
             (DecimalType::NonNegativeInteger, v) if v < 0 => {
-                return Self::decimal_parse_error(lexical_value, decimal_type)
+                Self::decimal_parse_error(lexical_value, decimal_type)
             }
             (DecimalType::NegativeInteger, v) if v >= 0 => {
-                return Self::decimal_parse_error(lexical_value, decimal_type)
+                Self::decimal_parse_error(lexical_value, decimal_type)
             }
             (DecimalType::NonPositiveInteger, v) if v > 0 => {
-                return Self::decimal_parse_error(lexical_value, decimal_type)
+                Self::decimal_parse_error(lexical_value, decimal_type)
             }
-            _ => return Ok(Self::new_integer_from_i64(value)),
+            _ => Ok(Self::new_integer_from_i64(value)),
         }
     }
 
-    /// Construct a normalized datavalue in an appropriate [`ValueDomain`] for a "big decimal"
-    /// or "big integer" [`DecimalType`] by manually parsing the string.
+    /// Construct a normalized datavalue in an appropriate [ValueDomain] for a "big decimal"
+    /// or "big integer" [DecimalType] by manually parsing the string.
     fn parse_large_decimal_literal(
         lexical_value: String,
         decimal_type: DecimalType,
@@ -413,17 +411,15 @@ impl AnyDataValue {
 
             match (decimal_type, sign_plus) {
                 (DecimalType::PositiveInteger, p) | (DecimalType::NonNegativeInteger, p) if !p => {
-                    return Self::decimal_parse_error(lexical_value, decimal_type);
+                    Self::decimal_parse_error(lexical_value, decimal_type)
                 }
                 (DecimalType::NegativeInteger, p) | (DecimalType::NonPositiveInteger, p) if p => {
-                    return Self::decimal_parse_error(lexical_value, decimal_type);
+                    Self::decimal_parse_error(lexical_value, decimal_type)
                 }
-                _ => {
-                    return Ok(AnyDataValue::new_other(
-                        trimmed_value,
-                        XSD_PREFIX.to_owned() + "integer",
-                    ));
-                }
+                _ => Ok(AnyDataValue::new_other(
+                    trimmed_value,
+                    XSD_PREFIX.to_owned() + "integer",
+                )),
             }
         } else if let DecimalType::Decimal = decimal_type {
             if has_nonzero_fraction {
@@ -446,7 +442,7 @@ impl AnyDataValue {
         }
     }
 
-    /// Returns a [`Result`] to indicate a [`DataValueCreationError`] in processing
+    /// Returns a [Result] to indicate a [DataValueCreationError] in processing
     /// the given literal.
     fn decimal_parse_error(
         lexical_value: String,
@@ -458,13 +454,13 @@ impl AnyDataValue {
         })
     }
 
-    /// Return the corresponding [StorageValueT] for this value, under the assumption that
-    /// the value is known in the dictionary.
+    /// Return the corresponding [StorageValueT] for this value.
+    /// Returns `None` if this value is unknown to the dictionary.
     ///
     /// # Panics
     /// Panics if the data value is of a type that is managed in the dictionary but cannot be found there.
-    pub(crate) fn to_storage_value_t(&self, dictionary: &Dict) -> StorageValueT {
-        match self.value_domain() {
+    pub(crate) fn try_to_storage_value_t(&self, dictionary: &Dict) -> Option<StorageValueT> {
+        Some(match self.value_domain() {
             ValueDomain::Tuple
             | ValueDomain::Map
             | ValueDomain::UnsignedLong
@@ -474,9 +470,7 @@ impl AnyDataValue {
             | ValueDomain::LanguageTaggedString
             | ValueDomain::Iri
             | ValueDomain::Null => {
-                let dictionary_id = dictionary
-                    .datavalue_to_id(self)
-                    .expect("value should be known to the dictionary");
+                let dictionary_id = dictionary.datavalue_to_id(self)?;
                 Self::usize_to_storage_value_t(dictionary_id)
             }
             ValueDomain::Float => StorageValueT::Float(Float::from_number(self.to_f32_unchecked())),
@@ -488,7 +482,17 @@ impl AnyDataValue {
             | ValueDomain::NonNegativeInt
             | ValueDomain::Long
             | ValueDomain::Int => StorageValueT::Int64(self.to_i64_unchecked()),
-        }
+        })
+    }
+
+    /// Return the corresponding [StorageValueT] for this value, under the assumption that
+    /// the value is known in the dictionary.
+    ///
+    /// # Panics
+    /// Panics if the data value is of a type that is managed in the dictionary but cannot be found there.
+    pub(crate) fn to_storage_value_t(&self, dictionary: &Dict) -> StorageValueT {
+        self.try_to_storage_value_t(dictionary)
+            .expect("Function assumes that value is known by the dictionary")
     }
 
     /// Return a [StorageValueT] that corresponds to this value, adding it to the dictionary if needed.
@@ -499,7 +503,7 @@ impl AnyDataValue {
     /// The correct process in this case is to use the dictionary to create any null value on which this
     /// method will later be called. It is not possible to newly create a dictionary id for an arbitrary
     /// null value (in such a way that the same ID will be returned if an equal null value is converted).
-    pub(crate) fn to_storage_value_t_mut(&self, dictionary: &mut Dict) -> StorageValueT {
+    pub(crate) fn to_storage_value_t_dict(&self, dictionary: &mut Dict) -> StorageValueT {
         match self.value_domain() {
             ValueDomain::Tuple
             | ValueDomain::Map
@@ -513,7 +517,7 @@ impl AnyDataValue {
                 let add_result = dictionary.add_datavalue(self.clone());
 
                 if add_result == AddResult::Rejected {
-                    panic!("Dictionary rejected the data value");
+                    panic!("Dictionary rejected the data value: {:?}", self);
                 }
 
                 let dictionary_id = add_result.value();
@@ -608,7 +612,7 @@ impl DataValue for AnyDataValue {
             fn to_null(&self) -> Option<NullDataValue>;
             fn to_null_unchecked(&self) -> NullDataValue;
             fn tuple_element(&self, index: usize) -> Option<&AnyDataValue>;
-            fn len(&self) -> Option<usize>;
+            fn length(&self) -> Option<usize>;
             fn len_unchecked(&self) -> usize;
             fn tuple_element_unchecked(&self, _index: usize) -> &AnyDataValue;
         }
@@ -665,7 +669,7 @@ impl std::fmt::Display for AnyDataValue {
     }
 }
 
-/// The intended implementation of equality for [`AnyDataValue`] is based on identity in the value space,
+/// The intended implementation of equality for [AnyDataValue] is based on identity in the value space,
 /// i.e., we ask whether two values syntactically represent the same elements. In most cases, this agrees with
 /// the identity of representations, especially since our values are self-normalizing in the sense that they
 /// cannot capture superficial syntactic variations in the writing one and the same element (e.g., `42` vs `+42`).
@@ -714,18 +718,18 @@ impl Ord for AnyDataValue {
         if let std::cmp::Ordering::Equal = dom_order {
             match (&self.0, &other.0) {
                 (AnyDataValueEnum::PlainString(dv), AnyDataValueEnum::PlainString(dv_other)) => {
-                    dv.cmp(&dv_other)
+                    dv.cmp(dv_other)
                 }
-                (AnyDataValueEnum::Iri(dv), AnyDataValueEnum::Iri(dv_other)) => dv.cmp(&dv_other),
+                (AnyDataValueEnum::Iri(dv), AnyDataValueEnum::Iri(dv_other)) => dv.cmp(dv_other),
                 (
                     AnyDataValueEnum::LanguageTaggedString(dv),
                     AnyDataValueEnum::LanguageTaggedString(dv_other),
-                ) => dv.cmp(&dv_other),
+                ) => dv.cmp(dv_other),
                 (AnyDataValueEnum::Float(dv), AnyDataValueEnum::Float(dv_other)) => {
-                    dv.cmp(&dv_other)
+                    dv.cmp(dv_other)
                 }
                 (AnyDataValueEnum::Double(dv), AnyDataValueEnum::Double(dv_other)) => {
-                    dv.cmp(&dv_other)
+                    dv.cmp(dv_other)
                 }
                 (AnyDataValueEnum::Long(_), _) => {
                     self.to_i64_unchecked().cmp(&other.to_i64_unchecked())
@@ -734,15 +738,15 @@ impl Ord for AnyDataValue {
                     self.to_u64_unchecked().cmp(&other.to_u64_unchecked())
                 }
                 (AnyDataValueEnum::Boolean(dv), AnyDataValueEnum::Boolean(dv_other)) => {
-                    dv.cmp(&dv_other)
+                    dv.cmp(dv_other)
                 }
-                (AnyDataValueEnum::Null(dv), AnyDataValueEnum::Null(dv_other)) => dv.cmp(&dv_other),
+                (AnyDataValueEnum::Null(dv), AnyDataValueEnum::Null(dv_other)) => dv.cmp(dv_other),
                 (AnyDataValueEnum::Tuple(dv), AnyDataValueEnum::Tuple(dv_other)) => {
-                    dv.cmp(&dv_other)
+                    dv.cmp(dv_other)
                 }
-                (AnyDataValueEnum::Map(dv), AnyDataValueEnum::Map(dv_other)) => dv.cmp(&dv_other),
+                (AnyDataValueEnum::Map(dv), AnyDataValueEnum::Map(dv_other)) => dv.cmp(dv_other),
                 (AnyDataValueEnum::Other(dv), AnyDataValueEnum::Other(dv_other)) => {
-                    dv.cmp(&dv_other)
+                    dv.cmp(dv_other)
                 }
                 _ => unreachable!("no other combination of values can have equal domains"),
             }
@@ -754,11 +758,11 @@ impl Ord for AnyDataValue {
 
 impl PartialOrd for AnyDataValue {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        Some(self.cmp(&other))
+        Some(self.cmp(other))
     }
 }
 
-/// A dynamically defined iterator over [`AnyDataValue`]s.
+/// A dynamically defined iterator over [AnyDataValue]s.
 #[allow(missing_debug_implementations)]
 pub struct AnyDataValueIterator<'a>(pub Box<dyn Iterator<Item = AnyDataValue> + 'a>);
 
@@ -839,7 +843,10 @@ mod test {
     use hashbrown::HashSet;
 
     use super::{AnyDataValue, XSD_PREFIX};
-    use crate::datavalues::{DataValue, DataValueCreationError, ValueDomain};
+    use crate::datavalues::{
+        any_datavalue::AnyDataValueEnum, DataValue, DataValueCreationError, UnsignedLongDataValue,
+        ValueDomain,
+    };
     use std::{
         collections::hash_map::DefaultHasher,
         hash::{Hash, Hasher},
@@ -893,7 +900,7 @@ mod test {
         assert_eq!(dv.to_f64(), None);
         assert_eq!(dv.to_f32_unchecked(), value);
         assert_eq!(dv, AnyDataValue::new_float_from_f32(value).unwrap());
-        assert_ne!(dv, AnyDataValue::new_float_from_f32(3.14).unwrap());
+        assert_ne!(dv, AnyDataValue::new_float_from_f32(3.41).unwrap());
         assert_ne!(dv, AnyDataValue::new_double_from_f64(2.3456e3).unwrap());
     }
 
@@ -913,7 +920,7 @@ mod test {
         assert_eq!(dv.to_f32(), None);
         assert_eq!(dv.to_f64_unchecked(), value);
         assert_eq!(dv, AnyDataValue::new_double_from_f64(value).unwrap());
-        assert_ne!(dv, AnyDataValue::new_double_from_f64(3.14).unwrap());
+        assert_ne!(dv, AnyDataValue::new_double_from_f64(3.41).unwrap());
         assert_ne!(dv, AnyDataValue::new_float_from_f32(2.3456e3).unwrap());
     }
 
@@ -928,10 +935,10 @@ mod test {
         );
         assert_eq!(dv.value_domain(), ValueDomain::NonNegativeInt);
 
-        assert_eq!(dv.fits_into_i32(), true);
-        assert_eq!(dv.fits_into_u32(), true);
-        assert_eq!(dv.fits_into_i64(), true);
-        assert_eq!(dv.fits_into_u64(), true);
+        assert!(dv.fits_into_i32());
+        assert!(dv.fits_into_u32());
+        assert!(dv.fits_into_i64());
+        assert!(dv.fits_into_u64());
 
         assert_eq!(dv.to_i32(), Some(42));
         assert_eq!(dv.to_i32_unchecked(), 42);
@@ -958,10 +965,10 @@ mod test {
         );
         assert_eq!(dv.value_domain(), ValueDomain::UnsignedLong);
 
-        assert_eq!(dv.fits_into_i32(), false);
-        assert_eq!(dv.fits_into_u32(), false);
-        assert_eq!(dv.fits_into_i64(), false);
-        assert_eq!(dv.fits_into_u64(), true);
+        assert!(!dv.fits_into_i32());
+        assert!(!dv.fits_into_u32());
+        assert!(!dv.fits_into_i64());
+        assert!(dv.fits_into_u64());
 
         assert_eq!(dv.to_i32(), None);
         assert_eq!(dv.to_u32(), None);
@@ -976,7 +983,7 @@ mod test {
         let lang = "en-GB";
         let dv = AnyDataValue::new_language_tagged_string(value.to_string(), lang.to_string());
 
-        assert_eq!(dv.lexical_value(), "Hello world@en-GB");
+        assert_eq!(dv.lexical_value(), "Hello world@en-gb");
         assert_eq!(
             dv.datatype_iri(),
             "http://www.w3.org/1999/02/22-rdf-syntax-ns#langString".to_string()
@@ -985,11 +992,11 @@ mod test {
 
         assert_eq!(
             dv.to_language_tagged_string(),
-            Some((value.to_string(), lang.to_string()))
+            Some((value.to_string(), lang.to_ascii_lowercase()))
         );
         assert_eq!(
             dv.to_language_tagged_string_unchecked(),
-            (value.to_string(), lang.to_string())
+            (value.to_string(), lang.to_ascii_lowercase())
         );
     }
 
@@ -1105,7 +1112,7 @@ mod test {
         let dv_other_hash = hash(dv_other);
 
         assert_eq!(dv_i64_hash, dv_u64_hash);
-        let vec = vec![
+        let vec = [
             dv_f64_hash,
             dv_i64_hash,
             dv_u64_2_hash,
@@ -1677,5 +1684,20 @@ mod test {
             double_res2,
             Err(DataValueCreationError::FloatNotParsed { .. })
         ));
+    }
+
+    #[test]
+    fn create_unsigned_long() {
+        let dv = AnyDataValue::new_from_typed_literal(
+            "+13000000000000000000.0".to_string(),
+            XSD_PREFIX.to_owned() + "decimal",
+        );
+
+        assert_eq!(
+            dv,
+            Ok(AnyDataValue(AnyDataValueEnum::UnsignedLong(
+                UnsignedLongDataValue::new(13000000000000000000)
+            )))
+        );
     }
 }

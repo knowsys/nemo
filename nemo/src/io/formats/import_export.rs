@@ -32,21 +32,43 @@ use super::{
     DsvHandler, RdfHandler,
 };
 
+/// Representation of a resource (file, URL, etc.) for import or export.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) enum ImportExportResource {
+    /// Value to indicate that the resource was not given.
+    Unspecified,
+    /// A concrete resource string.
+    Resource(Resource),
+    /// Use stdout (only for export)
+    Stdout,
+}
+
+impl ImportExportResource {
+    /// Retrieve the contained resource, if any.
+    pub(crate) fn resource(&self) -> Option<Resource> {
+        if let ImportExportResource::Resource(resource) = &self {
+            Some(resource.clone())
+        } else {
+            None
+        }
+    }
+}
+
 /// An [ImportExportHandler] represents a data format for input and/or output, and provides
 /// specific methods for handling data of that format. Each handler is configured by format-specific
 /// attributes, which define the behavior in detail, including the kind of data that this format
 /// is compatible with. The attributes are provided when creating the format, and should then
 /// be validated.
 ///
-/// An implementation of [`ImportExportHandler`] provides methods to validate and refine parameters
-/// that were used with this format, to create suitable [`TableProvider`] and [`TableWriter`] objects
+/// An implementation of [ImportExportHandler] provides methods to validate and refine parameters
+/// that were used with this format, to create suitable [TableProvider] and [TableWriter] objects
 /// to read and write data in the given format, and to report information about the type of
 /// data that this format can handle (such as predicate arity and type).
 pub(crate) trait ImportExportHandler: std::fmt::Debug + DynClone + Send {
     /// Return the associated [FileFormat].
     fn file_format(&self) -> FileFormat;
 
-    /// Obtain a [`TableProvider`] for this format and the given reader, if supported.
+    /// Obtain a [TableProvider] for this format and the given reader, if supported.
     /// If reading is not supported, an error will be returned.
     ///
     /// The arity is the arity of predicates that the caller expects to receive from this
@@ -57,7 +79,7 @@ pub(crate) trait ImportExportHandler: std::fmt::Debug + DynClone + Send {
     fn reader(&self, read: Box<dyn BufRead>, arity: usize)
         -> Result<Box<dyn TableProvider>, Error>;
 
-    /// Obtain a [`TableWriter`] for this format and the given writer, if supported.
+    /// Obtain a [TableWriter] for this format and the given writer, if supported.
     /// If writing is not supported, an error will be returned.
     ///
     /// The arity is the arity of predicates that the caller would like to write. If the handler
@@ -69,17 +91,21 @@ pub(crate) trait ImportExportHandler: std::fmt::Debug + DynClone + Send {
 
     /// Obtain the resource used for this data exchange.
     /// In typical cases, this is the name of a file to read from or write to.
-    fn resource(&self) -> Option<Resource>;
+    /// If no resource was specified, or if the resource is not identified by a
+    /// name (such as stdout), then `None` is returned.
+    fn resource(&self) -> Option<Resource> {
+        self.import_export_resource().resource()
+    }
+
+    /// Returns true if the selected resource is stdout.
+    fn resource_is_stdout(&self) -> bool {
+        self.import_export_resource() == &ImportExportResource::Stdout
+    }
 
     /// Returns the expected arity of the predicate related to this directive, if specified.
     /// For import, this is the arity of the data that is created, for export it is the
     /// arity of the data that is consumed.
     fn predicate_arity(&self) -> Option<usize>;
-
-    /// Returns the expected arity of the file (or other resource) related to this directive, if specified.
-    /// For import, this is the arity of the data that is read from the source, for export it is the
-    /// arity of the data that is written to the target.
-    fn file_arity(&self) -> Option<usize>;
 
     /// Returns the default file extension for data of this format, if any.
     /// This will be used when making default file names.
@@ -87,6 +113,9 @@ pub(crate) trait ImportExportHandler: std::fmt::Debug + DynClone + Send {
 
     /// Returns the chosen compression format for imported/exported data.
     fn compression_format(&self) -> Option<CompressionFormat>;
+
+    /// Returns the [ImportExportResource] used for this data exchange.
+    fn import_export_resource(&self) -> &ImportExportResource;
 }
 
 dyn_clone::clone_trait_object!(ImportExportHandler);
@@ -132,7 +161,7 @@ impl ImportExportHandlers {
     /// and return an error otherwise.
     pub(super) fn check_attributes(
         attributes: &MapDataValue,
-        valid_attributes: &Vec<&str>,
+        valid_attributes: &[&str],
     ) -> Result<(), ImportExportError> {
         let given: HashSet<AnyDataValue> = attributes
             .map_keys()
@@ -140,7 +169,7 @@ impl ImportExportHandlers {
             .cloned()
             .collect();
         let valid: HashSet<AnyDataValue> = valid_attributes
-            .into_iter()
+            .iter()
             .map(|att| AnyDataValue::new_iri(att.to_string()))
             .collect();
 
@@ -150,21 +179,30 @@ impl ImportExportHandlers {
         Ok(())
     }
 
-    /// Extract the resource from the given attributes. This can be `None` for export (where
-    /// we can use default names). If the value is invalid or missing for import, an error
-    /// is returned.
+    /// Extract the resource from the given attributes. This can be [ImportExportResource::Unspecified]
+    /// for export (where we can use default names). If the value is invalid or missing for import, an
+    /// error is returned.
     pub(super) fn extract_resource(
         attributes: &MapDataValue,
         direction: Direction,
-    ) -> Result<Option<Resource>, ImportExportError> {
+    ) -> Result<ImportExportResource, ImportExportError> {
         let resource: Option<Resource> =
             Self::extract_string_or_iri(attributes, PARAMETER_NAME_RESOURCE, true)?;
-        if resource.is_none() && direction == Direction::Import {
-            return Err(ImportExportError::MissingAttribute(
-                PARAMETER_NAME_RESOURCE.to_string(),
-            ));
+
+        if let Some(string) = resource {
+            if string.is_empty() {
+                Ok(ImportExportResource::Stdout)
+            } else {
+                Ok(ImportExportResource::Resource(string))
+            }
+        } else {
+            if direction == Direction::Import {
+                return Err(ImportExportError::MissingAttribute(
+                    PARAMETER_NAME_RESOURCE.to_string(),
+                ));
+            }
+            Ok(ImportExportResource::Unspecified)
         }
-        Ok(resource)
     }
 
     /// Extract the compression format from the given attributes, and possibly resource.
@@ -176,7 +214,7 @@ impl ImportExportHandlers {
     /// stated one.
     pub(super) fn extract_compression_format(
         attributes: &MapDataValue,
-        resource: &Option<Resource>,
+        resource: &ImportExportResource,
     ) -> Result<(Option<CompressionFormat>, Option<Resource>), ImportExportError> {
         let cf_name = Self::extract_string_or_iri(attributes, PARAMETER_NAME_COMPRESSION, true)
             .expect("no errors with allow missing");
@@ -204,7 +242,7 @@ impl ImportExportHandlers {
 
         let resource_compression_format: Option<CompressionFormat>;
         let inner_resource: Option<Resource>;
-        if let Some(res) = resource {
+        if let ImportExportResource::Resource(res) = resource {
             let (rcf, inner_res) = CompressionFormat::from_resource(res);
             resource_compression_format = Some(rcf);
             inner_resource = Some(inner_res);
@@ -225,7 +263,9 @@ impl ImportExportHandlers {
                         AnyDataValue::new_plain_string(
                             cf_name.expect("given if stated compression is known"),
                         ),
-                        format!("compression method should match resource extension").as_str(),
+                        "compression method should match resource extension"
+                            .to_string()
+                            .as_str(),
                     ))
                 }
             }
@@ -244,19 +284,15 @@ impl ImportExportHandlers {
     ) -> Result<Option<String>, ImportExportError> {
         if let Some(c) = Self::extract_att_value(attributes, attribute_name, allow_missing)? {
             match c.value_domain() {
-                ValueDomain::PlainString => {
-                    return Ok(Some(c.to_plain_string_unchecked()));
-                }
-                _ => {
-                    return Err(ImportExportError::invalid_att_value_error(
-                        attribute_name,
-                        c.clone(),
-                        "expecting string value",
-                    ))
-                }
+                ValueDomain::PlainString => Ok(Some(c.to_plain_string_unchecked())),
+                _ => Err(ImportExportError::invalid_att_value_error(
+                    attribute_name,
+                    c.clone(),
+                    "expecting string value",
+                )),
             }
         } else {
-            return Ok(None);
+            Ok(None)
         }
     }
 
@@ -273,40 +309,40 @@ impl ImportExportHandlers {
     ) -> Result<Option<String>, ImportExportError> {
         if let Some(c) = Self::extract_att_value(attributes, attribute_name, allow_missing)? {
             if let Some(s) = Self::string_from_datavalue(&c) {
-                return Ok(Some(s));
+                Ok(Some(s))
             } else {
-                return Err(ImportExportError::invalid_att_value_error(
+                Err(ImportExportError::invalid_att_value_error(
                     attribute_name,
                     c.clone(),
                     "expecting string or IRI value",
-                ));
+                ))
             }
         } else {
-            return Ok(None);
+            Ok(None)
         }
     }
 
-    /// Extract an integer value for the given attribute name. Returns an error if the
+    /// Extract an unsigned integer value for the given attribute name. Returns an error if the
     /// value is mistyped ([ImportExportError::InvalidAttributeValue]) or missing ([ImportExportError::MissingAttribute]).
-    /// It can be specified whether it should be allowed that the atttribute is not set at all (and
+    /// It can be specified whether it should be allowed that the attribute is not set at all (and
     /// `None` would then be returned). If given, the value must always be an integer, however.
-    pub(super) fn extract_integer(
+    pub(super) fn extract_unsigned_integer(
         attributes: &MapDataValue,
         attribute_name: &str,
         allow_missing: bool,
-    ) -> Result<Option<i64>, ImportExportError> {
+    ) -> Result<Option<u64>, ImportExportError> {
         if let Some(c) = Self::extract_att_value(attributes, attribute_name, allow_missing)? {
-            if c.fits_into_i64() {
-                return Ok(Some(c.to_i64_unchecked()));
+            if c.fits_into_u64() {
+                Ok(Some(c.to_u64_unchecked()))
             } else {
-                return Err(ImportExportError::invalid_att_value_error(
+                Err(ImportExportError::invalid_att_value_error(
                     attribute_name,
                     c.clone(),
-                    "expecting integer value",
-                ));
+                    "expecting unsigned integer value that fits into 64bits",
+                ))
             }
         } else {
-            return Ok(None);
+            Ok(None)
         }
     }
 
@@ -321,19 +357,15 @@ impl ImportExportHandlers {
     ) -> Result<Option<String>, ImportExportError> {
         if let Some(c) = Self::extract_att_value(attributes, attribute_name, allow_missing)? {
             match c.value_domain() {
-                ValueDomain::Iri => {
-                    return Ok(Some(c.to_iri_unchecked()));
-                }
-                _ => {
-                    return Err(ImportExportError::invalid_att_value_error(
-                        attribute_name,
-                        c.clone(),
-                        "expecting IRI value",
-                    ))
-                }
+                ValueDomain::Iri => Ok(Some(c.to_iri_unchecked())),
+                _ => Err(ImportExportError::invalid_att_value_error(
+                    attribute_name,
+                    c.clone(),
+                    "expecting IRI value",
+                )),
             }
         } else {
-            return Ok(None);
+            Ok(None)
         }
     }
 
@@ -347,7 +379,7 @@ impl ImportExportHandlers {
     ) -> Result<Option<AnyDataValue>, ImportExportError> {
         if let Some(c) = attributes.map_element(&AnyDataValue::new_iri(attribute_name.to_string()))
         {
-            return Ok(Some(c.clone()));
+            Ok(Some(c.clone()))
         } else if allow_missing {
             return Ok(None);
         } else {
@@ -395,10 +427,10 @@ impl ImportExportHandlers {
         }
 
         // Check if any non-skipped value is contained
-        if let Some(true) = value_format_strings.as_ref().map(|v| {
-            v.iter()
-                .fold(true, |acc: bool, fmt| acc && *fmt == VALUE_FORMAT_SKIP)
-        }) {
+        if let Some(true) = value_format_strings
+            .as_ref()
+            .map(|v| v.iter().all(|fmt| *fmt == VALUE_FORMAT_SKIP))
+        {
             return Err(ImportExportError::invalid_att_value_error(
                 PARAMETER_NAME_FORMAT,
                 Self::datavalue_from_format_strings(&value_format_strings.expect("checked above")),
@@ -477,7 +509,7 @@ impl ImportExportHandlers {
     }
 
     /// Turn a list of formats into a data value for error reporting.
-    fn datavalue_from_format_strings(format_strings: &Vec<String>) -> AnyDataValue {
+    fn datavalue_from_format_strings(format_strings: &[String]) -> AnyDataValue {
         TupleDataValue::from_iter(
             format_strings
                 .iter()

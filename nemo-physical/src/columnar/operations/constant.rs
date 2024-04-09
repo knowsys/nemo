@@ -16,7 +16,7 @@ enum ColumnScanState {
     End,
 }
 
-/// [`ColumnScan`] which represents a column which holds one value.
+/// [ColumnScan] which represents a column which holds one value.
 #[derive(Debug)]
 pub(crate) struct ColumnScanConstant<T>
 where
@@ -32,7 +32,7 @@ impl<T> ColumnScanConstant<T>
 where
     T: ColumnDataType,
 {
-    /// Constructs a new [`ColumnScanConstant`].
+    /// Constructs a new [ColumnScanConstant].
     pub(crate) fn new(constant: Option<T>) -> Self {
         Self {
             constant,

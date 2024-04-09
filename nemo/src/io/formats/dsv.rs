@@ -2,13 +2,13 @@
 
 use std::io::{BufRead, Write};
 
+use nemo_physical::datasources::table_providers::TableProvider;
 use nemo_physical::datavalues::{AnyDataValue, MapDataValue};
-use nemo_physical::{datasources::table_providers::TableProvider, resource::Resource};
 
 use crate::io::compression_format::CompressionFormat;
 use crate::model::{
     PARAMETER_NAME_COMPRESSION, PARAMETER_NAME_DSV_DELIMITER, PARAMETER_NAME_FORMAT,
-    PARAMETER_NAME_RESOURCE,
+    PARAMETER_NAME_LIMIT, PARAMETER_NAME_RESOURCE,
 };
 use crate::{
     error::Error,
@@ -19,9 +19,12 @@ use crate::{
 use super::dsv_reader::DsvReader;
 use super::dsv_value_format::DsvValueFormat;
 use super::dsv_writer::DsvWriter;
-use super::import_export::{ImportExportError, ImportExportHandler, ImportExportHandlers};
+use super::import_export::{
+    ImportExportError, ImportExportHandler, ImportExportHandlers, ImportExportResource,
+};
 
 /// Internal enum to distnguish variants of the DSV format.
+#[allow(clippy::upper_case_acronyms)]
 enum DsvVariant {
     /// Delimiter-separated values
     DSV,
@@ -37,16 +40,18 @@ pub(crate) struct DsvHandler {
     /// The specific delimiter for this format.
     delimiter: u8,
     /// The resource to write to/read from.
-    /// This can be `None` for writing, since one can generate a default file
+    /// This can be [ImportExportResource::Unspecified] for writing, since one can generate a default file
     /// name from the exported predicate in this case. This has little chance of
-    /// success for imports, so the predicate is setting there.
-    resource: Option<Resource>,
+    /// success for imports, so a concrete value is required there.
+    resource: ImportExportResource,
     /// The list of value formats to be used for importing/exporting data.
     /// If only the arity is given, this will use the most general export format
     /// for each value (and the list will still be set). The list can be `None`
     /// if neither formats nor arity were given for writing: in this case, a default
     /// arity-based formats can be used if the arity is clear from another source.
     value_formats: Option<Vec<DsvValueFormat>>,
+    /// Maximum number of statements that should be imported/exported.
+    limit: Option<u64>,
     /// Compression format to be used, if specified. This can also be inferred
     /// from the resource, if given. So the only case where `None` is possible
     /// is when no resource is given (during output).
@@ -89,11 +94,12 @@ impl DsvHandler {
         // Basic checks for unsupported attributes:
         ImportExportHandlers::check_attributes(
             attributes,
-            &vec![
+            &[
                 PARAMETER_NAME_FORMAT,
                 PARAMETER_NAME_RESOURCE,
                 PARAMETER_NAME_DSV_DELIMITER,
                 PARAMETER_NAME_COMPRESSION,
+                PARAMETER_NAME_LIMIT,
             ],
         )?;
 
@@ -102,13 +108,16 @@ impl DsvHandler {
         let value_formats = Self::extract_value_formats(attributes)?;
         let (compression_format, _) =
             ImportExportHandlers::extract_compression_format(attributes, &resource)?;
+        let limit =
+            ImportExportHandlers::extract_unsigned_integer(attributes, PARAMETER_NAME_LIMIT, true)?;
 
         Ok(Box::new(Self {
-            delimiter: delimiter,
-            resource: resource,
-            value_formats: value_formats,
-            compression_format: compression_format,
-            direction: direction,
+            delimiter,
+            resource,
+            value_formats,
+            limit,
+            compression_format,
+            direction,
         }))
     }
 
@@ -155,29 +164,23 @@ impl DsvHandler {
             delim_opt = None;
         }
 
-        let delimiter: u8;
-        match (variant, delim_opt) {
-            (DsvVariant::DSV, Some(delim)) => {
-                delimiter = delim;
-            }
+        let delimiter: u8 = match (variant, delim_opt) {
+            (DsvVariant::DSV, Some(delim)) => delim,
             (DsvVariant::DSV, None) => {
                 return Err(ImportExportError::MissingAttribute(
                     PARAMETER_NAME_DSV_DELIMITER.to_string(),
                 ));
             }
-            (DsvVariant::CSV, None) => {
-                delimiter = b',';
-            }
-            (DsvVariant::TSV, None) => {
-                delimiter = b',';
-            }
+            (DsvVariant::CSV, None) => b',',
+            (DsvVariant::TSV, None) => b'\t',
             (DsvVariant::CSV, Some(_)) | (DsvVariant::TSV, Some(_)) => {
                 return Err(ImportExportError::UnknownAttribute(
                     PARAMETER_NAME_DSV_DELIMITER.to_string(),
                 ));
             }
-        }
-        return Ok(delimiter);
+        };
+
+        Ok(delimiter)
     }
 
     /// Returns the set value formats, or finds a default value based on the
@@ -208,6 +211,7 @@ impl ImportExportHandler for DsvHandler {
             read,
             self.delimiter,
             self.value_formats_or_default(arity),
+            self.limit,
         )))
     }
 
@@ -216,18 +220,15 @@ impl ImportExportHandler for DsvHandler {
             self.delimiter,
             writer,
             self.value_formats_or_default(arity),
+            self.limit,
         )))
-    }
-
-    fn resource(&self) -> Option<Resource> {
-        self.resource.clone()
     }
 
     fn predicate_arity(&self) -> Option<usize> {
         match self.direction {
             Direction::Import => self.value_formats.as_ref().map(|vfs| {
                 vfs.iter().fold(0, |acc, fmt| {
-                    if *fmt == DsvValueFormat::SKIP {
+                    if *fmt == DsvValueFormat::Skip {
                         acc
                     } else {
                         acc + 1
@@ -235,21 +236,6 @@ impl ImportExportHandler for DsvHandler {
                 })
             }),
             Direction::Export => self.value_formats.as_ref().map(|vfs| vfs.len()),
-        }
-    }
-
-    fn file_arity(&self) -> Option<usize> {
-        match self.direction {
-            Direction::Export => self.value_formats.as_ref().map(|vfs| {
-                vfs.iter().fold(0, |acc, fmt| {
-                    if *fmt == DsvValueFormat::SKIP {
-                        acc
-                    } else {
-                        acc + 1
-                    }
-                })
-            }),
-            Direction::Import => self.value_formats.as_ref().map(|vfs| vfs.len()),
         }
     }
 
@@ -264,5 +250,9 @@ impl ImportExportHandler for DsvHandler {
 
     fn compression_format(&self) -> Option<CompressionFormat> {
         self.compression_format
+    }
+
+    fn import_export_resource(&self) -> &ImportExportResource {
+        &self.resource
     }
 }

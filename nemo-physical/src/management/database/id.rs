@@ -42,7 +42,7 @@ impl TableId for PermanentTableId {
     }
 }
 
-/// Id of a table computed during the execution of an [ExecutionPlan][super::super::ExecutionPlan]
+/// Id of a table computed during the execution of an [ExecutionPlan][crate::management::execution_plan::ExecutionPlan]
 #[derive(Debug, Default, Copy, Clone, Eq, PartialEq, Hash)]
 pub struct ExecutionId(usize);
 

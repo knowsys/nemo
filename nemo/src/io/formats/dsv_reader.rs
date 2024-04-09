@@ -26,21 +26,24 @@ pub(super) struct DsvReader {
     delimiter: u8,
     escape: Option<u8>,
     value_formats: Vec<DsvValueFormat>,
+    limit: Option<u64>,
 }
 
 impl DsvReader {
-    /// Instantiate a [`DsvReader`] for a given delimiter
+    /// Instantiate a [DsvReader] for a given delimiter
     pub(super) fn new(
         read: Box<dyn BufRead>,
         delimiter: u8,
         value_formats: Vec<DsvValueFormat>,
+        limit: Option<u64>,
     ) -> Self {
         Self {
             read,
             delimiter,
             //escape: b'\\',
             escape: None,
-            value_formats: value_formats,
+            value_formats,
+            limit,
         }
     }
 
@@ -54,9 +57,11 @@ impl DsvReader {
             .from_reader(self.read)
     }
 
-    /// Actually reads the data from the file, using the given parsers to convert strings to [`AnyDataValue`]s.
+    /// Actually reads the data from the file, using the given parsers to convert strings to [AnyDataValue]s.
     /// If a field cannot be read or parsed, the line will be ignored
     fn read(self, tuple_writer: &mut TupleWriter) -> Result<(), Box<dyn std::error::Error>> {
+        log::info!("Starting data import");
+
         let parsers: Vec<DataValueParserFunction> = self
             .value_formats
             .iter()
@@ -65,7 +70,7 @@ impl DsvReader {
         let skip: Vec<bool> = self
             .value_formats
             .iter()
-            .map(|vf| *vf == DsvValueFormat::SKIP)
+            .map(|vf| *vf == DsvValueFormat::Skip)
             .collect();
         let expected_file_arity = parsers.len();
         assert_eq!(
@@ -79,11 +84,12 @@ impl DsvReader {
             })
         );
 
+        let stop_limit = self.limit.unwrap_or(0);
+
         let mut dsv_reader = self.reader();
 
         let mut line_count: u64 = 0;
         let mut drop_count: u64 = 0;
-
         for row in dsv_reader.records().flatten() {
             for (idx, value) in row.iter().enumerate() {
                 if idx >= expected_file_arity || skip[idx] {
@@ -100,10 +106,13 @@ impl DsvReader {
 
             line_count += 1;
             if (line_count % PROGRESS_NOTIFY_INCREMENT) == 0 {
-                log::info!("loading: processed {line_count} lines");
+                log::info!("... processed {line_count} lines");
+            }
+            if line_count == stop_limit {
+                break;
             }
         }
-        log::info!("Finished loading: processed {line_count} lines (dropped {drop_count})");
+        log::info!("Finished import: processed {line_count} lines (dropped {drop_count})");
 
         Ok(())
     }
@@ -161,11 +170,12 @@ mod test {
             Box::new(data.as_bytes()),
             b';',
             vec![
-                DsvValueFormat::ANYTHING,
-                DsvValueFormat::STRING,
-                DsvValueFormat::INTEGER,
-                DsvValueFormat::DOUBLE,
+                DsvValueFormat::Anything,
+                DsvValueFormat::String,
+                DsvValueFormat::Integer,
+                DsvValueFormat::Double,
             ],
+            None,
         );
         let dict = RefCell::new(Dict::default());
         let mut tuple_writer = TupleWriter::new(&dict, 4);

@@ -1,7 +1,10 @@
 @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
 @prefix eg: <http://example.org/elements/> .
 
-@source triples[3]: load-rdf("sources/example3.nt") .
+@import triples :- rdf{resource="sources/example3.nt"} .
 
 labels(?X, ?Y) :- triples(?X, rdfs:label, ?Y) .
 atoms(?X, ?Y, ?Z) :- triples(?X, eg:atomicNumber, ?Y), triples(?X, eg:specificGravity, ?Z) .
+
+@export atoms :- csv {}.
+@export labels :- csv {}.

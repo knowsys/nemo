@@ -1,3 +1,5 @@
+//! This module implements a string based hash map.
+
 use hashbrown::HashMap;
 
 use super::bytes_buffer::{BytesBuffer, BytesRef, GlobalBytesBuffer};
@@ -45,6 +47,11 @@ impl<B: GlobalBytesBuffer, I> StringMap<B, I> {
     pub(crate) fn len(&self) -> usize {
         self.mapping.len()
     }
+
+    /// Return whether the dictionary is empty.
+    pub(crate) fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
 }
 
 impl<B: GlobalBytesBuffer, I> Default for StringMap<B, I> {
@@ -81,6 +88,8 @@ impl NullMap {
             pub fn get_mut(&mut self, k: &str) -> Option<&mut NullDataValue>;
             /// Returns the number of entries in the map.
             pub fn len(&self) -> usize;
+            /// Return whether the dictionary is empty.
+            pub fn is_empty(&self) -> bool;
         }
     }
 }

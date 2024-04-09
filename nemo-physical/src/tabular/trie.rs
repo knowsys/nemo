@@ -1,5 +1,5 @@
 //! This module implements [Trie]
-//! as well as its iterator [TrieScanGeneric].
+//! as well as its iterator.
 
 use std::cell::UnsafeCell;
 
@@ -7,7 +7,7 @@ use streaming_iterator::StreamingIterator;
 
 use crate::{
     columnar::{
-        columnscan::ColumnScanRainbow,
+        columnscan::ColumnScanT,
         intervalcolumn::{
             interval_lookup::lookup_column::IntervalLookupColumn, IntervalColumnT,
             IntervalColumnTBuilderMatrix, IntervalColumnTBuilderTriescan,
@@ -19,13 +19,14 @@ use crate::{
         StorageTypeName, StorageValueT,
     },
     management::bytesized::{sum_bytes, ByteSized},
-    tabular::rowscan::RowScan,
+    tabular::{buffer::tuple_buffer::TupleBuffer, rowscan::RowScan},
     util::bitset::BitSet,
 };
 
 use super::{
     buffer::sorted_tuple_buffer::SortedTupleBuffer,
-    operations::trim::TrieScanTrim,
+    operations::{projectreorder::ProjectReordering, trim::TrieScanTrim},
+    rowscan::Row,
     triescan::{PartialTrieScan, TrieScan, TrieScanEnum},
 };
 
@@ -41,6 +42,9 @@ pub struct Trie {
     /// Each [IntervalColumnT] represents one column in the table.
     /// We refer to each such column as a layer.
     columns: Vec<IntervalColumnT<IntervalLookupMethod>>,
+    /// Only relevant for nullary tables,
+    /// whether it contains an empty row
+    empty_row: bool,
 }
 
 impl Trie {
@@ -51,7 +55,13 @@ impl Trie {
 
     /// Return the number of rows contained in this trie.
     pub fn num_rows(&self) -> usize {
-        self.columns.last().map_or(0, |column| column.num_data())
+        if let Some(last_column) = self.columns.last() {
+            last_column.num_data()
+        } else if self.empty_row {
+            1
+        } else {
+            0
+        }
     }
 
     /// Return whether the trie is empty
@@ -78,12 +88,41 @@ impl Trie {
     /// Return a [TrieScan] over this trie.
     #[allow(dead_code)]
     pub(crate) fn full_iterator(&self) -> TrieScanTrim {
-        TrieScanTrim::new(TrieScanEnum::TrieScanGeneric(self.partial_iterator()))
+        TrieScanTrim::new(TrieScanEnum::Generic(self.partial_iterator()))
     }
 
     /// Return a row based iterator over this trie.
     pub(crate) fn row_iterator(&self) -> impl Iterator<Item = Vec<StorageValueT>> + '_ {
         RowScan::new(self.partial_iterator(), 0)
+    }
+
+    /// Return whether this [Trie] contains a given row of values.
+    pub(crate) fn contains_row(&self, row: &[StorageValueT]) -> bool {
+        if self.arity() != row.len() {
+            return false;
+        }
+
+        let mut trie_scan = self.partial_iterator();
+
+        for value in row.iter() {
+            trie_scan.down(value.get_type());
+            let column_scan = unsafe {
+                &mut *trie_scan
+                    .current_scan()
+                    .expect("We called down above")
+                    .get()
+            };
+
+            if let Some(found) = column_scan.seek(*value) {
+                if found == *value {
+                    continue;
+                }
+            }
+
+            return false;
+        }
+
+        true
     }
 }
 
@@ -94,6 +133,15 @@ impl Trie {
             columns: (0..num_columns)
                 .map(|_| IntervalColumnTBuilderMatrix::<IntervalLookupMethod>::default().finalize())
                 .collect(),
+            empty_row: false,
+        }
+    }
+
+    /// Create a table with arity zero
+    pub(crate) fn zero_arity(empty_row: bool) -> Self {
+        Self {
+            columns: Vec::default(),
+            empty_row,
         }
     }
 
@@ -157,6 +205,7 @@ impl Trie {
                 .into_iter()
                 .map(|builder| builder.finalize())
                 .collect(),
+            empty_row: false,
         }
     }
 
@@ -172,14 +221,17 @@ impl Trie {
     /// To keep all the values, set `cut_layers` to 0.
     ///
     /// Assumes that the given `trie_scan` is not initialized
-    pub(crate) fn from_partial_trie_scan<'a>(
-        trie_scan: TrieScanEnum<'a>,
-        cut_layers: usize,
-    ) -> Self {
+    pub(crate) fn from_partial_trie_scan(trie_scan: TrieScanEnum<'_>, cut_layers: usize) -> Self {
         let num_columns = trie_scan.arity() - cut_layers;
 
         if num_columns == 0 {
-            return Self::empty(0);
+            return Self::zero_arity(true);
+        }
+
+        if let TrieScanEnum::AggregateWrapper(wrapper) = trie_scan {
+            // `wrapper` can not be iterated as a partial trie scan, only as a full trie scan
+            let trie = Trie::from_full_trie_scan(wrapper.trie_scan, cut_layers);
+            return trie;
         }
 
         let mut rowscan = RowScan::new(trie_scan, cut_layers);
@@ -187,7 +239,11 @@ impl Trie {
         let mut intervalcolumn_builders =
             Vec::<IntervalColumnTBuilderTriescan<IntervalLookupMethod>>::with_capacity(num_columns);
 
-        if let Some(first_row) = StreamingIterator::next(&mut rowscan) {
+        if let Some(Row {
+            row: first_row,
+            change: _,
+        }) = StreamingIterator::next(&mut rowscan)
+        {
             let mut last_type: Option<StorageTypeName> = None;
             for &current_value in first_row {
                 let mut new_builder =
@@ -202,19 +258,22 @@ impl Trie {
             return Self::empty(num_columns);
         }
 
-        while let Some(current_row) = StreamingIterator::next(&mut rowscan) {
-            let changed_layers = num_columns - current_row.len();
+        while let Some(Row {
+            row: current_row,
+            change: changed_layers,
+        }) = StreamingIterator::next(&mut rowscan)
+        {
             let mut last_type = StorageTypeName::Id32;
 
             for ((layer, current_builder), current_value) in intervalcolumn_builders
                 .iter_mut()
                 .enumerate()
-                .skip(changed_layers)
                 .zip(current_row)
+                .skip(*changed_layers)
             {
                 let current_type = current_value.get_type();
 
-                if layer != changed_layers {
+                if layer != *changed_layers {
                     current_builder.finish_interval(last_type);
                 }
 
@@ -229,6 +288,7 @@ impl Trie {
                 .into_iter()
                 .map(|builder| builder.finalize())
                 .collect(),
+            empty_row: false,
         }
     }
 
@@ -247,7 +307,7 @@ impl Trie {
         let num_columns = trie_scan.num_columns() - cut_layers;
 
         if num_columns == 0 {
-            return Self::empty(0);
+            return Self::zero_arity(true);
         }
 
         let mut intervalcolumn_builders =
@@ -297,6 +357,7 @@ impl Trie {
                 .into_iter()
                 .map(|builder| builder.finalize())
                 .collect(),
+            empty_row: false,
         }
     }
 
@@ -305,15 +366,15 @@ impl Trie {
     /// This function assumes that every row has the same number of entries.
     #[cfg(test)]
     pub(crate) fn from_rows(rows: Vec<Vec<StorageValueT>>) -> Self {
-        use crate::tabular::buffer::tuple_buffer::TupleBuffer;
-
         let column_number = if let Some(first_row) = rows.first() {
             first_row.len()
         } else {
-            return Self {
-                columns: Vec::new(),
-            };
+            return Self::zero_arity(false);
         };
+
+        if column_number == 0 {
+            return Self::zero_arity(true);
+        }
 
         let mut tuple_buffer = TupleBuffer::new(column_number);
 
@@ -326,6 +387,134 @@ impl Trie {
         }
 
         Self::from_tuple_buffer(tuple_buffer.finalize())
+    }
+
+    /// Create a [Trie] based on a [PartialTrieScan]
+    /// and list of tries that result from it by applying the given [ProjectReordering]
+    ///
+    /// The first entry in the returned tuple is [Trie] resulting from the [PartialTrieScan]
+    /// while the sedond entry is the list of reordered [Trie]s.
+    /// If `keep_original` is set to `false`, then the first entry will be `None`.
+    /// If the reustling [Trie]s will be empty then each of the [Trie]s will be `None`.
+    pub(crate) fn from_partial_trie_scan_dependents(
+        trie_scan: TrieScanEnum<'_>,
+        reorderings: Vec<ProjectReordering>,
+        keep_original: bool,
+    ) -> (Self, Vec<Self>) {
+        let reorderings = reorderings
+            .iter()
+            .map(|reordering| reordering.as_vector())
+            .collect::<Vec<_>>();
+        let last_used_layer = reorderings.iter().flatten().cloned().max().unwrap_or(0);
+
+        let arity = trie_scan.arity();
+
+        let cut_layers = if keep_original {
+            0
+        } else {
+            trie_scan.arity() - (last_used_layer + 1)
+        };
+
+        if trie_scan.arity() == 0 {
+            return (
+                Self::zero_arity(true),
+                vec![Self::zero_arity(true); reorderings.len()],
+            );
+        }
+
+        let mut rowscan = RowScan::new(trie_scan, cut_layers);
+
+        let mut intervalcolumn_builders =
+            Vec::<IntervalColumnTBuilderTriescan<IntervalLookupMethod>>::with_capacity(arity);
+        let mut tuple_buffers = reorderings
+            .iter()
+            .map(|reordering| TupleBuffer::new(reordering.len()))
+            .collect::<Vec<_>>();
+
+        if let Some(Row {
+            row: first_row,
+            change: _,
+        }) = StreamingIterator::next(&mut rowscan)
+        {
+            if keep_original {
+                let mut last_type: Option<StorageTypeName> = None;
+                for &current_value in first_row {
+                    let mut new_builder =
+                        IntervalColumnTBuilderTriescan::<IntervalLookupMethod>::new(last_type);
+
+                    last_type = Some(current_value.get_type());
+                    new_builder.add_value(current_value);
+
+                    intervalcolumn_builders.push(new_builder);
+                }
+            }
+
+            for (tuple_buffer, reordering) in tuple_buffers.iter_mut().zip(reorderings.iter()) {
+                for &column_index in reordering {
+                    tuple_buffer.add_tuple_value(first_row[column_index]);
+                }
+            }
+        } else {
+            return (
+                Self::empty(arity),
+                vec![Self::empty(arity); reorderings.len()],
+            );
+        }
+
+        while let Some(Row {
+            row: current_row,
+            change: changed_layers,
+        }) = StreamingIterator::next(&mut rowscan)
+        {
+            let mut last_type = StorageTypeName::Id32;
+
+            for ((layer, current_builder), current_value) in intervalcolumn_builders
+                .iter_mut()
+                .enumerate()
+                .zip(current_row)
+                .skip(*changed_layers)
+            {
+                let current_type = current_value.get_type();
+
+                if layer != *changed_layers {
+                    current_builder.finish_interval(last_type);
+                }
+
+                current_builder.add_value(*current_value);
+
+                last_type = current_type;
+            }
+
+            for (tuple_buffer, reordering) in tuple_buffers.iter_mut().zip(reorderings.iter()) {
+                for &column_index in reordering {
+                    tuple_buffer.add_tuple_value(current_row[column_index]);
+                }
+            }
+        }
+
+        let result_trie = if keep_original {
+            Self {
+                columns: intervalcolumn_builders
+                    .into_iter()
+                    .map(|builder| builder.finalize())
+                    .collect(),
+                empty_row: false,
+            }
+        } else {
+            Self::empty(0)
+        };
+        let result_reordered = tuple_buffers
+            .into_iter()
+            .map(|buffer| {
+                if buffer.column_number() == 0 {
+                    Self::zero_arity(true)
+                } else {
+                    Self::from_tuple_buffer(buffer.finalize())
+                }
+            })
+            .collect::<Vec<_>>();
+
+        (result_trie, result_reordered)
     }
 }
 
@@ -344,16 +533,13 @@ pub(crate) struct TrieScanGeneric<'a> {
     /// Path of [StorageTypeName] indicating the the types of the current (partial) row
     path_types: Vec<StorageTypeName>,
 
-    /// [ColumnScan] for each layer in the [PartialTrieScan]
-    column_scans: Vec<UnsafeCell<ColumnScanRainbow<'a>>>,
+    /// [ColumnScanT] for each layer in the [PartialTrieScan]
+    column_scans: Vec<UnsafeCell<ColumnScanT<'a>>>,
 }
 
 impl<'a> TrieScanGeneric<'a> {
     /// Construct a new [TrieScanGeneric].
-    pub(crate) fn new(
-        trie: &'a Trie,
-        column_scans: Vec<UnsafeCell<ColumnScanRainbow<'a>>>,
-    ) -> Self {
+    pub(crate) fn new(trie: &'a Trie, column_scans: Vec<UnsafeCell<ColumnScanT<'a>>>) -> Self {
         Self {
             trie,
             path_types: Vec::with_capacity(column_scans.len()),
@@ -377,19 +563,19 @@ impl<'a> PartialTrieScan<'a> for TrieScanGeneric<'a> {
             None => {
                 self.column_scans[0].get_mut().reset(next_type);
             }
-            Some(&current_type) => {
+            Some(&previous_type) => {
                 let next_layer = self.path_types.len();
-                let current_layer = next_layer - 1;
+                let previous_layer = next_layer - 1;
 
-                let current_index = self.column_scans[current_layer]
+                let current_index = self.column_scans[previous_layer]
                     .get_mut()
-                    .pos(current_type)
+                    .pos(previous_type)
                     .expect(
-                        "Calling down on a trie is only allowed when currently pointing at an element.",
+                        "Calling TrieScanGeneric::down is only allowed when currently pointing at an element.",
                     );
 
                 let next_interval = self.trie.columns[next_layer]
-                    .interval_bounds(current_type, current_index, next_type)
+                    .interval_bounds(previous_type, current_index, next_type)
                     .unwrap_or(0..0);
 
                 self.column_scans[next_layer]
@@ -405,12 +591,8 @@ impl<'a> PartialTrieScan<'a> for TrieScanGeneric<'a> {
         self.trie.arity()
     }
 
-    fn scan<'b>(&'b self, layer: usize) -> &'b UnsafeCell<ColumnScanRainbow<'a>> {
+    fn scan<'b>(&'b self, layer: usize) -> &'b UnsafeCell<ColumnScanT<'a>> {
         &self.column_scans[layer]
-    }
-
-    fn path_types(&self) -> &[StorageTypeName] {
-        &self.path_types
     }
 
     fn possible_types(&self, layer: usize) -> StorageTypeBitSet {
@@ -423,6 +605,10 @@ impl<'a> PartialTrieScan<'a> for TrieScanGeneric<'a> {
         }
 
         StorageTypeBitSet::from(result)
+    }
+
+    fn current_layer(&self) -> Option<usize> {
+        self.path_types.len().checked_sub(1)
     }
 }
 
@@ -628,10 +814,48 @@ mod test {
 
         assert_eq!(rows, trie_rows);
 
-        let scan = TrieScanEnum::TrieScanGeneric(trie.partial_iterator());
+        let scan = TrieScanEnum::Generic(trie.partial_iterator());
         let trie_roundtrip = Trie::from_partial_trie_scan(scan, 0);
         let trie_rows = trie_roundtrip.row_iterator().collect::<Vec<_>>();
 
         assert_eq!(rows, trie_rows);
+    }
+
+    #[test]
+    fn trie_contains_row() {
+        let rows = vec![
+            vec![
+                StorageValueT::Id32(1),
+                StorageValueT::Id32(5),
+                StorageValueT::Id32(0),
+            ],
+            vec![
+                StorageValueT::Id32(1),
+                StorageValueT::Id32(5),
+                StorageValueT::Int64(-3),
+            ],
+            vec![
+                StorageValueT::Id32(1),
+                StorageValueT::Id32(5),
+                StorageValueT::Int64(-2),
+            ],
+            vec![
+                StorageValueT::Id32(1),
+                StorageValueT::Int64(-10),
+                StorageValueT::Id32(2),
+            ],
+        ];
+        let trie = Trie::from_rows(rows.clone());
+
+        for row in rows.iter() {
+            assert!(trie.contains_row(row));
+        }
+
+        assert!(!trie.contains_row(&[
+            StorageValueT::Id32(1),
+            StorageValueT::Int64(-12),
+            StorageValueT::Id32(2),
+        ]));
+        assert!(!trie.contains_row(&[StorageValueT::Id32(1)]));
     }
 }

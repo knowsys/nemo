@@ -13,13 +13,13 @@ use nemo_physical::{
     util::mapping::permutation::Permutation,
 };
 
-/// Represents an ordering of variables as [`HashMap`].
+/// Represents an ordering of variables as [HashMap].
 #[repr(transparent)]
 #[derive(Clone, Default, PartialEq, Eq)]
 pub struct VariableOrder(HashMap<Variable, usize>);
 
 impl VariableOrder {
-    /// Create new [`VariableOrder`].
+    /// Create new [VariableOrder].
     pub fn new() -> Self {
         Self(HashMap::new())
     }
@@ -47,16 +47,16 @@ impl VariableOrder {
         self.0.get(variable)
     }
 
-    /// Check if variable is part of the [`VariableOrder`].
+    /// Check if variable is part of the [VariableOrder].
     pub fn contains(&self, variable: &Variable) -> bool {
         self.0.contains_key(variable)
     }
 
-    /// Returns a [`VariableOrder`] which is restricted to the given variables (but preserve their order)
+    /// Returns a [VariableOrder] which is restricted to the given variables (but preserve their order)
     pub fn restrict_to(&self, variables: &HashSet<Variable>) -> Self {
         let mut variable_vector = Vec::<Variable>::with_capacity(variables.len());
         for variable in variables {
-            if self.0.get(variable).is_some() {
+            if self.0.contains_key(variable) {
                 variable_vector.push(variable.clone());
             }
         }
@@ -106,7 +106,7 @@ impl VariableOrder {
         variables
     }
 
-    /// Return [`String`] with the contents of this object for debugging.
+    /// Return [String] with the contents of this object for debugging.
     pub(crate) fn debug(&self) -> String {
         let mut variable_vector = Vec::<Variable>::new();
         variable_vector.resize_with(self.0.len(), || {
@@ -319,9 +319,9 @@ struct VariableOrderBuilder<'a> {
 }
 
 struct BuilderResult {
-    /// A [`Vec`] where the ith entry contains a good variable order for rule i.
+    /// A [Vec] where the ith entry contains a good variable order for rule i.
     variable_orders: Vec<VariableOrder>,
-    /// A [`HashMap`] mapping each predicate to the set of [`ColumnOrder`]s that are supposed to be available.
+    /// A [HashMap] mapping each predicate to the set of [ColumnOrder]s that are supposed to be available.
     column_orders: HashMap<Identifier, HashSet<ColumnOrder>>,
 }
 
@@ -490,10 +490,10 @@ impl VariableOrderBuilder<'_> {
 
 /// Contains the result of the function `build_preferable_variable_orders`.
 pub(super) struct BuilderResultVariants {
-    /// [`Vec`] where the ith entry contains a [`Vec`] of with good variable orders for the ith rule
+    /// [Vec] where the ith entry contains a [Vec] of with good variable orders for the ith rule
     pub(super) all_variable_orders: Vec<Vec<VariableOrder>>,
     /// For each variant of the variable order computation
-    /// contains one [`HashSet`] mapping each predicate to its available [`ColumnOrder`]s.
+    /// contains one [HashSet] mapping each predicate to its available [ColumnOrder]s.
     pub(super) all_column_orders: Vec<HashMap<Identifier, HashSet<ColumnOrder>>>,
 }
 
@@ -1003,9 +1003,9 @@ mod test {
             ),
         ]);
         ImportDirective::from(ImportExportDirective {
-            predicate: predicate,
+            predicate,
             format: FileFormat::CSV,
-            attributes: attributes,
+            attributes,
         })
     }
 

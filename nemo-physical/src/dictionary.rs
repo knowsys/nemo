@@ -1,50 +1,60 @@
 //! This module provides functionalities for creating and maintaining dictionaries.
 //! A dictionary is a data structure that assigns numeric ids to complex objects (such as [String]s),
 //! and that provides an bijective (invertible) mapping between the two.
-
 use std::fmt::Debug;
 
-/// Module to define the [DvDict] trait.
 pub mod datavalue_dictionary;
 pub use datavalue_dictionary::AddResult;
 pub use datavalue_dictionary::DvDict;
 pub use datavalue_dictionary::KNOWN_ID_MARK;
 pub use datavalue_dictionary::NONEXISTING_ID_MARK;
-/// Module to define the [StringDictionary] and basic string management
-/// code.
+
 pub mod string_dictionary;
 pub(crate) use string_dictionary::StringDictionary;
-/// Module to define [GlobalBytesBuffer] and related code
 pub(crate) mod bytes_buffer;
-/// Module to define the [BytesDictionary]
 pub(crate) mod bytes_dictionary;
-/// Module to define the [BytesPairDictionary]
-pub(crate) mod bytes_pair_dictionary;
-/// Module to define string-based datavalue dictionaries.
+pub(crate) mod dv_converter;
 pub(crate) mod string_dv_dict;
-/// Module to define the [StringMap]
+
 pub mod string_map;
 pub(crate) use string_dv_dict::IriDvDictionary;
+#[cfg(not(feature = "stringpairdictionary"))]
 pub(crate) use string_dv_dict::LangStringDvDictionary;
+#[cfg(not(feature = "stringpairdictionary"))]
 pub(crate) use string_dv_dict::OtherDvDictionary;
 pub(crate) use string_dv_dict::StringDvDictionary;
-/// Module to define a datavalue dictionary for nulls.
+
 pub(crate) mod null_dv_dict;
 pub(crate) use null_dv_dict::NullDvDictionary;
-/// Module to define a general-purpose datavalue dictionary.
-pub mod meta_dv_dict;
 
-/// Module to define the [DictionaryString]
 pub(crate) mod dictionary_string;
+
+pub mod meta_dv_dict;
 pub use dictionary_string::DictionaryString;
-/// Module to define [HashMapDictionary]
+
 pub mod hash_map_dictionary;
 pub(crate) use hash_map_dictionary::HashMapDictionary;
-/// Module to define [InfixDictionary]
+
 pub(crate) mod infix_dictionary;
 pub(crate) use infix_dictionary::InfixDictionary;
-/// Module to define [MetaDictionary]
+#[cfg(feature = "stringpairdictionary")]
+pub(crate) mod bytes_pair_dictionary;
+
 pub mod meta_dictionary;
+#[cfg(feature = "stringpairdictionary")]
+pub mod string_pair_dictionary;
+#[cfg(feature = "stringpairdictionary")]
+pub(crate) use string_pair_dictionary::StringPairDictionary;
+#[cfg(feature = "stringpairdictionary")]
+/// Module to define dv_converters
+pub(crate) mod pair_dv_converter;
+#[cfg(feature = "stringpairdictionary")]
+/// Module to define string-pair-based datavalue dictionaries.
+pub(crate) mod string_pair_dv_dict;
+#[cfg(feature = "stringpairdictionary")]
+pub(crate) use string_pair_dv_dict::LangStringDvDictionary;
+#[cfg(feature = "stringpairdictionary")]
+pub(crate) use string_pair_dv_dict::OtherDvDictionary;
 
 /// A Dictionary represents a bijective (invertible) mapping from objects to numeric ids.
 /// The "objects" are provided when the dictionary is used, whereas the ids are newly
