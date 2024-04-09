@@ -5,7 +5,7 @@
 use super::{DataValue, ValueDomain};
 
 /// Maximal value of an u64, i.e. 2^64-1.
-const U64MAX_AS_U64: u64 = std::u64::MAX;
+const U64MAX_AS_U64: u64 = u64::MAX;
 /// Maximal value of an i64, i.e. 2^63-1.
 const I64MAX_AS_U64: u64 = U64MAX_AS_U64 >> 1;
 /// Maximal value of an u32, i.e. 2^32-1.
@@ -20,7 +20,7 @@ const I32MAX_AS_I64: i64 = U32MAX_AS_I64 >> 1;
 /// Minimal value of an i32, i.e. -2^31.
 const I32MIN_AS_I64: i64 = -I32MAX_AS_I64 - 1;
 /// Minimal value of an i64, i.e. -2^63.
-//const I64MIN_AS_I64: i64 = std::i64::MIN;
+//const I64MIN_AS_I64: i64 = i64::MIN;
 
 /// Physical representation of an integer as an u64.
 #[repr(transparent)]
