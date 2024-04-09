@@ -1,5 +1,5 @@
 use super::term::Term;
-use super::{AstNode, List};
+use super::{AstNode, List, Position};
 use crate::io::lexer::{Span, Token};
 
 #[derive(Debug, Clone, PartialEq)]
@@ -42,7 +42,7 @@ impl AstNode for NamedTuple<'_> {
         Position {
             offset: self.span.location_offset(),
             line: self.span.location_line(),
-            column: self.span.get_column() as u32,
+            column: self.span.get_utf8_column() as u32,
         }
     }
 }

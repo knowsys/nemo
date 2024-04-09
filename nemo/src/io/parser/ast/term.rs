@@ -2,6 +2,7 @@ use super::map::Map;
 use super::named_tuple::NamedTuple;
 use super::AstNode;
 use super::List;
+use super::Position;
 use crate::io::lexer::{Span, Token};
 
 #[derive(Debug, Clone, PartialEq)]
@@ -106,7 +107,7 @@ impl AstNode for Term<'_> {
         Position {
             offset: span.location_offset(),
             line: span.location_line(),
-            column: span.get_column() as u32,
+            column: span.get_utf8_column() as u32,
         }
     }
 }

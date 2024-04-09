@@ -1,7 +1,7 @@
-use super::map::Map;
 use super::named_tuple::NamedTuple;
 use super::term::Term;
 use super::AstNode;
+use super::{map::Map, Position};
 use crate::io::lexer::{Span, Token};
 
 #[derive(Debug, Clone, PartialEq)]
@@ -60,12 +60,12 @@ impl AstNode for Atom<'_> {
         }
     }
 
-    fn position(&self) -> super::Position {
+    fn position(&self) -> Position {
         let span = self.span();
-        super::Position {
+        Position {
             offset: span.location_offset(),
             line: span.location_line(),
-            column: span.get_column() as u32,
+            column: span.get_utf8_column() as u32,
         }
     }
 }
