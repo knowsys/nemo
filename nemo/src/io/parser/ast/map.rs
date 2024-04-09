@@ -48,6 +48,10 @@ impl AstNode for Map<'_> {
             column: self.span.get_utf8_column() as u32,
         }
     }
+
+    fn is_token(&self) -> bool {
+        false
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -84,5 +88,9 @@ impl<K: AstNode + Debug, V: AstNode + Debug> AstNode for Pair<'_, K, V> {
             line: self.span.location_line(),
             column: self.span.get_utf8_column() as u32,
         }
+    }
+
+    fn is_token(&self) -> bool {
+        false
     }
 }

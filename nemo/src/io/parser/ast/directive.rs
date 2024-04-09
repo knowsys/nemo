@@ -209,4 +209,8 @@ impl AstNode for Directive<'_> {
             column: span.get_utf8_column() as u32,
         }
     }
+
+    fn is_token(&self) -> bool {
+        false
+    }
 }
