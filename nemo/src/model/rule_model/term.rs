@@ -129,8 +129,6 @@ pub enum BinaryOperation {
     NumericLessthaneq,
     /// Lexicographic comparison between strings
     StringCompare,
-    /// Concatentation of two string values, correspondng to SPARQL function CONCAT.
-    StringConcatenation,
     /// Check whether string is contained in another, correspondng to SPARQL function CONTAINS.
     StringContains,
     /// String starting at some start position
@@ -143,34 +141,25 @@ pub enum BinaryOperation {
     StringStarts,
     /// Whether string ends with a certain string
     StringEnds,
-    /// Conjunction of boolean values
-    BooleanConjunction,
-    /// Disjunction of boolean values
-    BooleanDisjunction,
 }
 
 impl BinaryOperation {
     /// Return a function which is able to construct the respective term based on the function name.
     /// Returns `None` if the provided function name does not correspond to a known binary function.
-    pub fn construct_from_name(name: &str) -> Result<BinaryOperation, Error> {
-        match name.to_uppercase().as_str() {
-            "LOG" => Ok(Self::NumericLogarithm),
-            "POW" => Ok(Self::NumericPower),
-            "COMPARE" => Ok(Self::StringCompare),
-            "CONCAT" => Ok(Self::StringConcatenation),
-            "CONTAINS" => Ok(Self::StringContains),
-            "SUBSTR" => Ok(Self::StringSubstring),
-            "AND" => Ok(Self::BooleanConjunction),
-            "OR" => Ok(Self::BooleanDisjunction),
-            "STRSTARTS" => Ok(Self::StringStarts),
-            "STRENDS" => Ok(Self::StringEnds),
-            "STRBEFORE" => Ok(Self::StringBefore),
-            "STRAFTER" => Ok(Self::StringAfter),
-            "REM" => Ok(Self::NumericRemainder),
-            s => Err(Error::UnknownUnaryOpertation {
-                operation: s.into(),
-            }),
-        }
+    pub fn construct_from_name(name: &str) -> Option<BinaryOperation> {
+        Some(match name.to_uppercase().as_str() {
+            "LOG" => Self::NumericLogarithm,
+            "POW" => Self::NumericPower,
+            "COMPARE" => Self::StringCompare,
+            "CONTAINS" => Self::StringContains,
+            "SUBSTR" => Self::StringSubstring,
+            "STRSTARTS" => Self::StringStarts,
+            "STRENDS" => Self::StringEnds,
+            "STRBEFORE" => Self::StringBefore,
+            "STRAFTER" => Self::StringAfter,
+            "REM" => Self::NumericRemainder,
+            _ => return None,
+        })
     }
 
     /// Return the name of the operation.
@@ -184,11 +173,8 @@ impl BinaryOperation {
             Self::NumericRemainder => "Remainder",
             Self::NumericLogarithm => "Logarithm",
             Self::StringCompare => "StringCompare",
-            Self::StringConcatenation => "CONCAT",
             Self::StringContains => "CONTAINS",
             Self::StringSubstring => "Substring",
-            Self::BooleanConjunction => "BooleanAnd",
-            Self::BooleanDisjunction => "BooleanOr",
             Self::Equal => "Equals",
             Self::Unequals => "Unequals",
             Self::NumericGreaterthan => "GreaterThan",
@@ -222,16 +208,107 @@ impl BinaryOperation {
             Self::NumericLogarithm
             | Self::NumericPower
             | Self::StringCompare
-            | Self::StringConcatenation
             | Self::StringContains
             | Self::StringSubstring
             | Self::StringStarts
             | Self::StringEnds
             | Self::StringBefore
-            | Self::StringAfter
-            | Self::BooleanConjunction
-            | Self::BooleanDisjunction => None,
+            | Self::StringAfter => None,
         }
+    }
+}
+
+/// Ternary operation applied to a [Term]
+#[derive(Debug, Eq, PartialEq, Copy, Clone, PartialOrd, Ord)]
+pub enum TernaryOperation {
+    /// String starting at some start position with a given length
+    StringSubstringLength,
+}
+
+impl TernaryOperation {
+    /// Return a function which is able to construct the respective term based on the function name.
+    /// Returns `None` if the provided function name does not correspond to a known binary function.
+    pub fn construct_from_name(name: &str) -> Option<TernaryOperation> {
+        Some(match name.to_uppercase().as_str() {
+            "SUBSTRING" => Self::StringSubstringLength,
+            _ => return None,
+        })
+    }
+
+    /// Return the name of the operation.
+    pub fn name(&self) -> String {
+        let name = match self {
+            TernaryOperation::StringSubstringLength => "SUBSTRING",
+        };
+
+        String::from(name)
+    }
+}
+
+/// N-ary operation applied to a [Term]
+#[derive(Debug, Eq, PartialEq, Copy, Clone, PartialOrd, Ord)]
+pub enum NaryOperation {
+    /// Bitwise and operation
+    BitAnd,
+    /// Bitwise or operation
+    BitOr,
+    /// Bitwise xor operation
+    BitXor,
+    /// Conjunction of boolean values
+    BooleanConjunction,
+    /// Disjunction of boolean values
+    BooleanDisjunction,
+    /// Sum of numeric values
+    NumericSum,
+    /// Product of numeric values
+    NumericProduct,
+    /// Minimum of numeric values
+    NumericMinimum,
+    /// Maximum of numeric values
+    NumericMaximum,
+    /// Lukasiewicz norm of numeric values
+    NumericLukasiewicz,
+    /// Concatentation of two string values, correspondng to SPARQL function CONCAT.
+    StringConcatenation,
+}
+
+impl NaryOperation {
+    /// Return a function which is able to construct the respective term based on the function name.
+    /// Returns `None` if the provided function name does not correspond to a known binary function.
+    pub fn construct_from_name(name: &str) -> Option<NaryOperation> {
+        Some(match name.to_uppercase().as_str() {
+            "BITAND" => Self::BitAnd,
+            "BITOR" => Self::BitOr,
+            "BITXOR" => Self::BitXor,
+            "MAX" => Self::NumericMaximum,
+            "MIN" => Self::NumericMinimum,
+            "LUKA" => Self::NumericLukasiewicz,
+            "SUM" => Self::NumericSum,
+            "PROD" => Self::NumericProduct,
+            "AND" => Self::BooleanConjunction,
+            "OR" => Self::BooleanDisjunction,
+            "CONCAT" => Self::StringConcatenation,
+            _ => return None,
+        })
+    }
+
+    /// Return the name of the operation.
+    pub fn name(&self) -> String {
+        let name = match self {
+            Self::StringConcatenation => "CONCAT",
+            Self::BooleanConjunction => "AND",
+            Self::BooleanDisjunction => "OR",
+            Self::BitAnd => "BITAND",
+            Self::BitOr => "BITOR",
+            Self::BitXor => "BITXOR",
+            Self::NumericSum => "SUM",
+            Self::NumericProduct => "PROD",
+            Self::NumericMinimum => "MIN",
+            Self::NumericMaximum => "MAX",
+            Self::NumericLukasiewicz => "LUKA",
+        };
+
+        String::from(name)
     }
 }
 
@@ -372,6 +449,8 @@ impl UnaryOperation {
 pub enum Term {
     /// Primitive term.
     Primitive(PrimitiveTerm),
+    /// Unary operation.
+    Unary(UnaryOperation, Box<Term>),
     /// Binary operation.
     Binary {
         /// The operation to be executed.
@@ -381,8 +460,24 @@ pub enum Term {
         /// The right hand side operand.
         rhs: Box<Term>,
     },
-    /// Unary operation.
-    Unary(UnaryOperation, Box<Term>),
+    /// Ternary operation.
+    Ternary {
+        /// The operation to be executed.
+        operation: TernaryOperation,
+        /// The first operand.
+        first: Box<Term>,
+        /// The second operand.
+        second: Box<Term>,
+        /// The third operand.
+        third: Box<Term>,
+    },
+    /// An n-ary operation.
+    Nary {
+        /// The operation to be executed.
+        operation: NaryOperation,
+        /// Its parameters
+        parameters: Vec<Term>,
+    },
     /// Aggregation.
     Aggregation(Aggregate),
     /// Abstract Function.
@@ -417,6 +512,22 @@ impl Term {
 
                 terms
             }
+            Term::Ternary {
+                first,
+                second,
+                third,
+                ..
+            } => {
+                let mut terms = first.primitive_terms();
+                terms.extend(second.primitive_terms());
+                terms.extend(third.primitive_terms());
+
+                terms
+            }
+            Term::Nary { parameters, .. } => parameters
+                .iter()
+                .flat_map(|p| p.primitive_terms())
+                .collect(),
             Term::Unary(_, inner) => inner.primitive_terms(),
             Term::Function(_, subterms) => {
                 subterms.iter().flat_map(|t| t.primitive_terms()).collect()
@@ -476,12 +587,28 @@ impl Term {
             Term::Function(_, subterms) => subterms
                 .iter_mut()
                 .for_each(|t| t.apply_assignment(assignment)),
+            Term::Ternary {
+                first,
+                second,
+                third,
+                ..
+            } => {
+                first.apply_assignment(assignment);
+                second.apply_assignment(assignment);
+                third.apply_assignment(assignment);
+            }
+            Term::Nary { parameters, .. } => {
+                parameters
+                    .iter_mut()
+                    .for_each(|t| t.apply_assignment(assignment));
+            }
         }
     }
 
     fn subterms_mut(&mut self) -> Vec<&mut Term> {
         match self {
             Term::Primitive(_primitive) => Vec::new(),
+            Term::Unary(_, ref mut inner) => vec![inner],
             Term::Binary {
                 ref mut lhs,
                 ref mut rhs,
@@ -489,7 +616,16 @@ impl Term {
             } => {
                 vec![lhs, rhs]
             }
-            Term::Unary(_, ref mut inner) => vec![inner],
+            Term::Ternary {
+                ref mut first,
+                ref mut second,
+                ref mut third,
+                ..
+            } => vec![first, second, third],
+            Term::Nary {
+                operation: _,
+                parameters,
+            } => parameters.iter_mut().collect(),
             Term::Aggregation(_aggregate) => Vec::new(),
             Term::Function(_, subterms) => subterms.iter_mut().collect(),
         }
@@ -539,6 +675,22 @@ impl Term {
                 function.to_string(),
                 subterms.iter().map(|s| s.ascii_tree()).collect(),
             ),
+            Term::Ternary {
+                operation,
+                first,
+                second,
+                third,
+            } => ascii_tree::Tree::Node(
+                operation.name(),
+                vec![first.ascii_tree(), second.ascii_tree(), third.ascii_tree()],
+            ),
+            Term::Nary {
+                operation,
+                parameters,
+            } => ascii_tree::Tree::Node(
+                operation.name(),
+                parameters.iter().map(|p| p.ascii_tree()).collect(),
+            ),
         }
     }
 
@@ -564,6 +716,8 @@ impl Term {
                 ..
             } => 2,
             Term::Binary { .. } => 3,
+            Term::Ternary { .. } => 3,
+            Term::Nary { .. } => 5,
             Term::Unary(_, _) => 5,
             Term::Aggregation(_) => 5,
             Term::Function(_, _) => 5,
@@ -590,7 +744,7 @@ impl Term {
         f.write_str(")")
     }
 
-    fn format_multinary_operation(
+    fn format_nary_operation(
         &self,
         f: &mut std::fmt::Formatter<'_>,
         terms: &[Term],
@@ -624,6 +778,17 @@ impl Term {
             write!(f, "{}({}, {})", operation.name(), left, right)
         }
     }
+
+    fn format_ternary_operation(
+        &self,
+        f: &mut std::fmt::Formatter<'_>,
+        first: &Term,
+        second: &Term,
+        third: &Term,
+        operation: TernaryOperation,
+    ) -> std::fmt::Result {
+        write!(f, "{}({}, {}, {})", operation.name(), first, second, third)
+    }
 }
 
 impl Debug for Term {
@@ -651,12 +816,26 @@ impl Display for Term {
             Term::Unary(operation, inner) => {
                 write!(f, "{}({})", operation.name(), inner)
             }
-
             Term::Aggregation(aggregate) => write!(f, "{}", aggregate),
             Term::Function(function, subterms) => {
                 f.write_str(&function.to_string())?;
                 f.write_str("(")?;
-                self.format_multinary_operation(f, subterms, ", ")?;
+                self.format_nary_operation(f, subterms, ", ")?;
+                f.write_str(")")
+            }
+            Term::Ternary {
+                operation,
+                first,
+                second,
+                third,
+            } => self.format_ternary_operation(f, first, second, third, *operation),
+            Term::Nary {
+                operation,
+                parameters,
+            } => {
+                f.write_str(&operation.name())?;
+                f.write_str("(")?;
+                self.format_nary_operation(f, parameters, ", ")?;
                 f.write_str(")")
             }
         }

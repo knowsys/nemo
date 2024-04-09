@@ -181,3 +181,70 @@ pub(super) fn numeric_ceil_double(parameter: Double) -> Option<AnyDataValue> {
 pub(super) fn numeric_floor_double(parameter: Double) -> Option<AnyDataValue> {
     some_datavalue_from_double(parameter.floor())
 }
+
+/// Return the sum of the given 64-bit floating point numbers.
+///
+/// Returns `None` if the result (or a intermediate result) is not representable as a 64-bit float.
+/// Returns the floating point number zero if no parameters are given.
+pub(super) fn numeric_sum_double(parameters: &[Double]) -> Option<AnyDataValue> {
+    let mut sum = Double::from_number(0.0);
+
+    for parameter in parameters {
+        sum = sum.checked_add(parameter)?;
+    }
+
+    some_datavalue_from_double(sum)
+}
+
+/// Return the product of the given 64-bit floating point numbers.
+///
+/// Returns `None` if the result (or a intermediate result) is not representable as a 64-bit float.
+/// Returns the floating point number one if no parameters are given.
+pub(super) fn numeric_product_double(parameters: &[Double]) -> Option<AnyDataValue> {
+    let mut product = Double::from_number(1.0);
+
+    for parameter in parameters {
+        product = product.checked_mul(parameter)?;
+    }
+
+    some_datavalue_from_double(product)
+}
+
+/// Return the minimum of the given 64-bit floating point numbers.
+///
+/// Returns `None` if no parameters are given.
+pub(super) fn numeric_minimum_double(parameters: &[Double]) -> Option<AnyDataValue> {
+    let min = *parameters.iter().min()?;
+
+    some_datavalue_from_double(min)
+}
+
+/// Return the maximum of the given 64-bit floating point numbers.
+///
+/// Returns `None` if no parameters are given.
+pub(super) fn numeric_maximum_double(parameters: &[Double]) -> Option<AnyDataValue> {
+    let max = *parameters.iter().max()?;
+
+    some_datavalue_from_double(max)
+}
+
+/// Return the Lukasiewicz t-norm of the given 64-bit floating point numbers.
+///
+/// Returns `None` if no parameters are given
+/// or the result (or an intermediate value) is not representable as a 64-bit float.
+pub(super) fn numeric_tnorm_lukasiewicz_double(parameters: &[Double]) -> Option<AnyDataValue> {
+    if parameters.is_empty() {
+        return None;
+    }
+
+    let mut sum = Double::from_number(0.0);
+
+    for parameter in parameters {
+        sum = sum.checked_add(parameter)?;
+    }
+
+    let result = Double::from_number(0.0)
+        .max(sum.checked_sub(&Double::try_from(parameters.len() - 1).ok()?)?);
+
+    some_datavalue_from_double(result)
+}

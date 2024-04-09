@@ -2,7 +2,10 @@
 
 use std::{collections::HashMap, fmt::Debug, hash::Hash};
 
-use crate::{datavalues::AnyDataValue, function::definitions::BinaryFunction};
+use crate::{
+    datatypes::storage_type_name::StorageTypeBitSet, datavalues::AnyDataValue,
+    function::definitions::BinaryFunction,
+};
 
 use super::{
     definitions::{
@@ -15,18 +18,20 @@ use super::{
         generic::{CanonicalString, Datatype, Equals, LexicalValue, Unequals},
         language::LanguageTag,
         numeric::{
-            NumericAbsolute, NumericAddition, NumericCeil, NumericCosine, NumericDivision,
-            NumericFloor, NumericGreaterthan, NumericGreaterthaneq, NumericLessthan,
-            NumericLessthaneq, NumericLogarithm, NumericMultiplication, NumericNegation,
-            NumericPower, NumericRemainder, NumericRound, NumericSine, NumericSquareroot,
-            NumericSubtraction, NumericTangent,
+            BitAnd, BitOr, BitXor, NumericAbsolute, NumericAddition, NumericCeil, NumericCosine,
+            NumericDivision, NumericFloor, NumericGreaterthan, NumericGreaterthaneq,
+            NumericLessthan, NumericLessthaneq, NumericLogarithm, NumericLukasiewicz,
+            NumericMaximum, NumericMinimum, NumericMultiplication, NumericNegation, NumericPower,
+            NumericProduct, NumericRemainder, NumericRound, NumericSine, NumericSquareroot,
+            NumericSubtraction, NumericSum, NumericTangent,
         },
         string::{
             StringAfter, StringBefore, StringCompare, StringConcatenation, StringContains,
             StringEnds, StringLength, StringLowercase, StringStarts, StringSubstring,
-            StringUppercase,
+            StringSubstringLength, StringUppercase,
         },
-        BinaryFunctionEnum, FunctionTypePropagation, UnaryFunction, UnaryFunctionEnum,
+        BinaryFunctionEnum, FunctionTypePropagation, NaryFunction, NaryFunctionEnum,
+        TernaryFunction, TernaryFunctionEnum, UnaryFunction, UnaryFunctionEnum,
     },
     evaluation::StackProgram,
 };
@@ -61,6 +66,24 @@ where
         left: Box<FunctionTree<ReferenceType>>,
         /// Second parameter to the function
         right: Box<FunctionTree<ReferenceType>>,
+    },
+    /// Application of a ternary function
+    Ternary {
+        /// Ternary operation
+        function: TernaryFunctionEnum,
+        /// First parameter to the function
+        first: Box<FunctionTree<ReferenceType>>,
+        /// Second parameter to the function
+        second: Box<FunctionTree<ReferenceType>>,
+        /// Third parameter to the function
+        third: Box<FunctionTree<ReferenceType>>,
+    },
+    /// Application of an n-ary function
+    Nary {
+        /// N-ary function
+        function: NaryFunctionEnum,
+        /// Parameters of the function
+        parameters: Vec<FunctionTree<ReferenceType>>,
     },
 }
 
@@ -169,51 +192,106 @@ where
         }
     }
 
+    /// Helper function to aggregate [FunctionTypePropagation].
+    ///
+    /// This enables the case where a function just "preservers" its input types.
+    /// For example, the output type of numeric addition is just the type of its inputs.
+    ///
+    /// Hence, the aggregated type is defined as follows:
+    ///     * If an input is unknown, so is the aggregation
+    ///     * If all inputs are preserve then so is the aggregation
+    ///     * Otherwise, compute the intersection of known types
+    fn type_propagation_preserve(
+        parameters: &[FunctionTypePropagation],
+    ) -> FunctionTypePropagation {
+        let mut known = StorageTypeBitSet::full();
+        let mut known_exists = false;
+
+        for parameter in parameters {
+            match parameter {
+                FunctionTypePropagation::KnownOutput(types) => {
+                    known_exists = true;
+                    known = known.intersection(*types);
+                }
+                FunctionTypePropagation::Preserve => {}
+                FunctionTypePropagation::_Unknown => {
+                    return FunctionTypePropagation::_Unknown;
+                }
+            }
+        }
+
+        if known_exists {
+            FunctionTypePropagation::KnownOutput(known)
+        } else {
+            FunctionTypePropagation::Preserve
+        }
+    }
+
     /// Computes how storage types of the input to the (overall) function defined by this tree,
     /// relate to its output type.
     pub(crate) fn type_propagation(&self) -> FunctionTypePropagation {
         match self {
             FunctionTree::Leaf(_) => FunctionTypePropagation::Preserve,
-            FunctionTree::Unary(function, sub) => match function.type_propagation() {
-                FunctionTypePropagation::KnownOutput(output) => {
-                    FunctionTypePropagation::KnownOutput(output)
+            FunctionTree::Unary(function, sub) => {
+                let output_type = function.type_propagation();
+
+                if matches!(output_type, FunctionTypePropagation::Preserve) {
+                    return Self::type_propagation_preserve(&[sub.type_propagation()]);
                 }
-                FunctionTypePropagation::_Unknown => FunctionTypePropagation::_Unknown,
-                FunctionTypePropagation::Preserve => sub.type_propagation(),
-            },
+
+                output_type
+            }
             FunctionTree::Binary {
                 function,
                 left,
                 right,
-            } => match function.type_propagation() {
-                FunctionTypePropagation::KnownOutput(output) => {
-                    FunctionTypePropagation::KnownOutput(output)
+            } => {
+                let output_type = function.type_propagation();
+
+                if matches!(output_type, FunctionTypePropagation::Preserve) {
+                    return Self::type_propagation_preserve(&[
+                        left.type_propagation(),
+                        right.type_propagation(),
+                    ]);
                 }
-                FunctionTypePropagation::_Unknown => FunctionTypePropagation::_Unknown,
-                FunctionTypePropagation::Preserve => {
-                    match (left.type_propagation(), right.type_propagation()) {
-                        (
-                            FunctionTypePropagation::KnownOutput(output_left),
-                            FunctionTypePropagation::KnownOutput(output_right),
-                        ) => FunctionTypePropagation::KnownOutput(
-                            output_left.intersection(output_right),
-                        ),
-                        (
-                            FunctionTypePropagation::KnownOutput(output),
-                            FunctionTypePropagation::Preserve,
-                        )
-                        | (
-                            FunctionTypePropagation::Preserve,
-                            FunctionTypePropagation::KnownOutput(output),
-                        ) => FunctionTypePropagation::KnownOutput(output),
-                        (FunctionTypePropagation::Preserve, FunctionTypePropagation::Preserve) => {
-                            FunctionTypePropagation::Preserve
-                        }
-                        (_, FunctionTypePropagation::_Unknown) => todo!(),
-                        (FunctionTypePropagation::_Unknown, _) => todo!(),
-                    }
+
+                output_type
+            }
+            FunctionTree::Ternary {
+                function,
+                first,
+                second,
+                third,
+            } => {
+                let output_type = function.type_propagation();
+
+                if matches!(output_type, FunctionTypePropagation::Preserve) {
+                    return Self::type_propagation_preserve(&[
+                        first.type_propagation(),
+                        second.type_propagation(),
+                        third.type_propagation(),
+                    ]);
                 }
-            },
+
+                output_type
+            }
+            FunctionTree::Nary {
+                function,
+                parameters,
+            } => {
+                let output_type = function.type_propagation();
+
+                if matches!(output_type, FunctionTypePropagation::Preserve) {
+                    return Self::type_propagation_preserve(
+                        &parameters
+                            .iter()
+                            .map(|parameter| parameter.type_propagation())
+                            .collect::<Vec<_>>(),
+                    );
+                }
+
+                output_type
+            }
         }
     }
 }
@@ -329,27 +407,27 @@ where
         )
     }
 
-    /// Create a tree node representing the conjunction of two boolean values.
+    /// Create a tree node representing the conjunction of boolean values.
     ///
-    /// This evaluates to `true` if `left` and `right` evaluate to `true`,
+    /// This evaluates to `true` if all its subnodes evaluate to `true`
     /// and returns `false` otherwise.
-    pub fn boolean_conjunction(left: Self, right: Self) -> Self {
-        Self::Binary {
-            function: BinaryFunctionEnum::BooleanConjunction(BooleanConjunction),
-            left: Box::new(left),
-            right: Box::new(right),
+    /// Returns `true` if there are no subnodes.
+    pub fn boolean_conjunction(parameters: Vec<Self>) -> Self {
+        Self::Nary {
+            function: NaryFunctionEnum::BooleanConjunction(BooleanConjunction),
+            parameters,
         }
     }
 
     /// Create a tree node representing the disjunction of two boolean values.
     ///
-    /// This evaluates to `true` if `left` or `right` (or both) evaluate to `true`,
+    /// This evaluates to `true` if one of its subnodes evaluates to `true`
     /// and returns `false` otherwise.
-    pub fn boolean_disjunction(left: Self, right: Self) -> Self {
-        Self::Binary {
-            function: BinaryFunctionEnum::BooleanDisjunction(BooleanDisjunction),
-            left: Box::new(left),
-            right: Box::new(right),
+    /// Returns `false` if there are no subnodes.
+    pub fn boolean_disjunction(parameters: Vec<Self>) -> Self {
+        Self::Nary {
+            function: NaryFunctionEnum::BooleanDisjunction(BooleanDisjunction),
+            parameters,
         }
     }
 
@@ -623,14 +701,12 @@ where
 
     /// Create a tree node representing the concatenation of strings.
     ///
-    /// This evaluates to a new string by appending the string
-    /// resulting from evaluating the `right` subtree to the end
-    /// of the string resulting when evaluating the `left` subtree.
-    pub fn string_concatenation(left: Self, right: Self) -> Self {
-        Self::Binary {
-            function: BinaryFunctionEnum::StringConcatenation(StringConcatenation),
-            left: Box::new(left),
-            right: Box::new(right),
+    /// This evaluates to a new string by concatenating the strings
+    /// resulting from each of the subnodes.
+    pub fn string_concatenation(parameters: Vec<Self>) -> Self {
+        Self::Nary {
+            function: NaryFunctionEnum::StringConcatenation(StringConcatenation),
+            parameters,
         }
     }
 
@@ -740,6 +816,111 @@ where
             right: Box::new(start),
         }
     }
+
+    /// Create a tree node representing a substring operation with a length parameter.
+    ///
+    /// This evaluates to a string containing the
+    /// characters from the string that results from evaluating `string`,
+    /// starting from the position that results from evaluating `start`
+    /// with the length given by evaluating `length`.
+    pub fn string_subtstring_length(string: Self, start: Self, length: Self) -> Self {
+        Self::Ternary {
+            function: TernaryFunctionEnum::StringSubstringLength(StringSubstringLength),
+            first: Box::new(string),
+            second: Box::new(start),
+            third: Box::new(length),
+        }
+    }
+
+    // NaryOperation::BitAnd => todo!(),
+    //             NaryOperation::BitOr => todo!(),
+    //             NaryOperation::BitXor => todo!(),
+    //             NaryOperation::NumericSum => todo!(),
+    //             NaryOperation::NumericProduct => todo!(),
+    //             NaryOperation::NumericMinimum => todo!(),
+    //             NaryOperation::NumericMaximum => todo!(),
+    //             NaryOperation::NumericLukasiewicz => todo!(),
+
+    /// Create a tree node representing the bitwise and operation.
+    ///
+    /// Evaluates to an integer resulting from performing the bitwise and operation
+    /// on the binary representation of its integer subnodes.
+    pub fn bit_and(parameters: Vec<Self>) -> Self {
+        Self::Nary {
+            function: NaryFunctionEnum::BitAnd(BitAnd),
+            parameters,
+        }
+    }
+
+    /// Create a tree node representing the bitwise or operation.
+    ///
+    /// Evaluates to an integer resulting from performing the bitwise or operation
+    /// on the binary representation of its integer subnodes.
+    pub fn bit_or(parameters: Vec<Self>) -> Self {
+        Self::Nary {
+            function: NaryFunctionEnum::BitOr(BitOr),
+            parameters,
+        }
+    }
+
+    /// Create a tree node representing the bitwise xor operation.
+    ///
+    /// Evaluates to an integer resulting from performing the bitwise xor operation
+    /// on the binary representation of its integer subnodes.
+    pub fn bit_xor(parameters: Vec<Self>) -> Self {
+        Self::Nary {
+            function: NaryFunctionEnum::BitXor(BitXor),
+            parameters,
+        }
+    }
+
+    /// Create a tree node representing the sum operation.
+    ///
+    /// Evaluates to a number resulting from adding its subnodes.
+    pub fn numeric_sum(parameters: Vec<Self>) -> Self {
+        Self::Nary {
+            function: NaryFunctionEnum::NumericSum(NumericSum),
+            parameters,
+        }
+    }
+
+    /// Create a tree node representing the product operation.
+    ///
+    /// Evaluates to a number resulting from multiplying its subnodes.
+    pub fn numeric_product(parameters: Vec<Self>) -> Self {
+        Self::Nary {
+            function: NaryFunctionEnum::NumericProduct(NumericProduct),
+            parameters,
+        }
+    }
+
+    /// Create a tree node representing the maximum operation.
+    ///
+    /// Evaluates to a number that is the maximum of its subnodes.
+    pub fn numeric_maximum(parameters: Vec<Self>) -> Self {
+        Self::Nary {
+            function: NaryFunctionEnum::NumericMaximum(NumericMaximum),
+            parameters,
+        }
+    }
+
+    /// Create a tree node representing the minimum operation.
+    ///
+    /// Evaluates to a number that is the minimum of its subnodes.
+    pub fn numeric_minimum(parameters: Vec<Self>) -> Self {
+        Self::Nary {
+            function: NaryFunctionEnum::NumericMinimum(NumericMinimum),
+            parameters,
+        }
+    }
+
+    /// Create a tree node representing the Lukasiewicz t-norm.
+    pub fn numeric_lukasiewicz(parameters: Vec<Self>) -> Self {
+        Self::Nary {
+            function: NaryFunctionEnum::NumericLukasiewicz(NumericLukasiewicz),
+            parameters,
+        }
+    }
 }
 
 impl<ReferenceType> FunctionTree<ReferenceType>
@@ -761,6 +942,30 @@ where
             } => {
                 let mut result = left.references();
                 result.extend(right.references());
+
+                result
+            }
+            FunctionTree::Ternary {
+                function: _,
+                first,
+                second,
+                third,
+            } => {
+                let mut result = first.references();
+                result.extend(second.references());
+                result.extend(third.references());
+
+                result
+            }
+            FunctionTree::Nary {
+                function: _,
+                parameters,
+            } => {
+                let mut result = Vec::new();
+
+                for parameter in parameters {
+                    result.extend(parameter.references());
+                }
 
                 result
             }
