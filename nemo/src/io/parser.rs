@@ -22,7 +22,7 @@ use nom::{
 
 use macros::traced;
 
-mod ast;
+pub(crate) mod ast;
 mod types;
 
 use types::{ConstraintOperator, IntermediateResult, Span};
@@ -2419,41 +2419,36 @@ mod test {
 
 /// NEW PARSER
 mod new {
-    use std::collections::{BTreeMap, HashMap};
-    use std::ffi::c_ushort;
-
-    use super::ast::{self, NamedTuple, Pair, Term};
-    use super::types::Tokens;
-    use crate::io::lexer::{
-        self, close_brace, comma, equal, greater, greater_equal, less, less_equal, lex_comment,
-        lex_doc_comment, lex_ident, lex_iri, lex_number, lex_string, lex_whitespace, open_brace,
-        unequal, Span, Token, TokenKind,
+    use super::ast::{
+        atom::*, directive::*, map::*, named_tuple::*, program::*, statement::*, term::*, List,
     };
-    use nom::combinator::{all_consuming, opt};
-    use nom::error::ParseError;
-    use nom::multi::{many0, separated_list1};
+    use crate::io::lexer::{
+        arrow, at, close_brace, close_paren, colon, comma, dot, equal, greater, greater_equal,
+        less, less_equal, lex_comment, lex_doc_comment, lex_ident, lex_iri, lex_number,
+        lex_operators, lex_string, lex_toplevel_doc_comment, lex_whitespace, open_brace,
+        open_paren, question_mark, tilde, unequal, Span, Token, TokenKind,
+    };
+    use nom::combinator::{all_consuming, opt, recognize};
     use nom::sequence::{delimited, pair};
     use nom::Parser;
     use nom::{
         branch::alt,
-        bytes::complete::take,
         combinator::verify,
-        multi::{many1, separated_list0},
+        multi::{many0, many1, separated_list0},
         sequence::tuple,
         IResult,
     };
 
-    fn combine_spans<'a>(span1: Span<'a>, span2: Span<'a>) -> Result<Span<'a>, str_concat::Error> {
-        // SAFETY: The concatenation of strings is okay, because they originated from the same source string.
-        // The raw offset is okay, because the offset of another span is used.
+    fn outer_span<'a>(input: Span<'a>, rest_input: Span<'a>) -> Span<'a> {
         unsafe {
-            let fragment = str_concat::concat(span1.fragment(), span2.fragment())?;
-            Ok(Span::new_from_raw_offset(
-                span1.location_offset(),
-                span1.location_line(),
-                fragment,
+            let span = Span::new_from_raw_offset(
+                input.location_offset(),
+                input.location_line(),
+                &input[..(rest_input.location_offset() - input.location_offset())],
                 (),
-            ))
+            );
+            // dbg!(&input, &span, &rest_input);
+            span
         }
     }
 
@@ -2462,264 +2457,575 @@ mod new {
     ) -> impl FnMut(Span<'a>) -> IResult<Span<'a>, O, nom::error::Error<Span<'a>>>
     where
         F: Parser<Span<'a>, O, nom::error::Error<Span<'a>>>
-            + std::ops::FnMut(Span<'a>) -> IResult<Span<'a>, O, nom::error::Error<Span<'a>>>,
+            + FnMut(Span<'a>) -> IResult<Span<'a>, O, nom::error::Error<Span<'a>>>,
     {
         delimited(
-            many0(alt((lex_whitespace, lex_comment, lex_doc_comment))),
+            many0(alt((lex_whitespace, lex_comment))),
             inner,
-            many0(alt((lex_whitespace, lex_comment, lex_doc_comment))),
+            many0(alt((lex_whitespace, lex_comment))),
         )
     }
 
-    fn parse_program<'a>(input: Span<'a>) -> ast::Program<'a> {
-        let (_, statements) = all_consuming(many1(ignore_ws_and_comments(alt((
-            parse_fact,
-            parse_rule,
-            parse_directive,
-        )))))(input)
-        .unwrap();
-        // many0(parse_fact)(input).unwrap();
-        let mut program = ast::Program::new();
-        for statement in statements {
-            program.push(statement)
+    fn parse_program<'a>(input: Span<'a>) -> Program<'a> {
+        let span = input.clone();
+        let (_, (tl_doc_comment, statements)) = all_consuming(pair(
+            opt(lex_toplevel_doc_comment),
+            many1(alt((
+                parse_fact,
+                parse_rule,
+                parse_whitespace,
+                parse_directive,
+                parse_comment,
+            ))),
+        ))(input)
+        .expect("Expect EOF");
+        Program {
+            span,
+            tl_doc_comment,
+            statements,
         }
-        program
     }
 
-    fn parse_fact<'a>(input: Span<'a>) -> IResult<Span, ast::Statement<'a>> {
+    fn parse_whitespace<'a>(input: Span<'a>) -> IResult<Span, Statement<'a>> {
+        lex_whitespace(input).map(|(rest, ws)| (rest, Statement::Whitespace(ws)))
+    }
+
+    fn parse_comment<'a>(input: Span<'a>) -> IResult<Span, Statement<'a>> {
+        lex_comment(input).map(|(rest, comment)| (rest, Statement::Comment(comment)))
+    }
+
+    fn parse_fact<'a>(input: Span<'a>) -> IResult<Span, Statement<'a>> {
+        let input_span = input;
         tuple((
-            ignore_ws_and_comments(parse_named_tuple),
-            ignore_ws_and_comments(lexer::dot),
+            opt(lex_doc_comment),
+            parse_normal_atom,
+            opt(lex_whitespace),
+            dot,
         ))(input)
-        .map(|(rest, (atom, _))| {
+        .map(|(rest_input, (doc_comment, atom, ws, dot))| {
             (
-                rest,
-                ast::Statement::Fact {
-                    atom: ast::Atom::Atom(atom),
+                rest_input,
+                Statement::Fact {
+                    span: outer_span(input_span, rest_input),
+                    doc_comment,
+                    atom,
+                    ws,
+                    dot,
                 },
             )
         })
     }
 
-    fn parse_rule<'a>(input: Span<'a>) -> IResult<Span, ast::Statement<'a>> {
+    fn parse_rule<'a>(input: Span<'a>) -> IResult<Span, Statement<'a>> {
+        let input_span = input;
         tuple((
-            ignore_ws_and_comments(separated_list1(
-                lexer::comma,
-                ignore_ws_and_comments(parse_named_tuple),
-            )),
-            ignore_ws_and_comments(lexer::arrow),
-            ignore_ws_and_comments(separated_list1(
-                lexer::comma,
-                ignore_ws_and_comments(pair(opt(lexer::tilde), parse_named_tuple)),
-            )),
-            ignore_ws_and_comments(lexer::dot),
+            opt(lex_doc_comment),
+            parse_head,
+            opt(lex_whitespace),
+            arrow,
+            opt(lex_whitespace),
+            parse_body,
+            opt(lex_whitespace),
+            dot,
         ))(input)
-        .map(|(rest, (head, _, body, _))| {
-            (
-                rest,
-                ast::Statement::Rule {
-                    head: head.iter().map(|x| ast::Atom::Atom(x.clone())).collect(),
-                    body: body
-                        .iter()
-                        .map(|(tilde, atom)| {
-                            if let None = tilde {
-                                ast::Atom::Atom(atom.clone())
-                            } else {
-                                ast::Atom::NegativeAtom(atom.clone())
-                            }
-                        })
-                        .collect(),
-                },
-            )
-        })
-    }
-
-    fn parse_directive<'a>(input: Span<'a>) -> IResult<Span, ast::Statement<'a>> {
-        alt((
-            ignore_ws_and_comments(parse_base_directive),
-            ignore_ws_and_comments(parse_prefix_directive),
-            ignore_ws_and_comments(parse_import_directive),
-            ignore_ws_and_comments(parse_export_directive),
-            ignore_ws_and_comments(parse_output_directive),
-        ))(input)
-        .map(|(rest, directive)| (rest, ast::Statement::Directive(directive)))
-    }
-
-    fn parse_base_directive<'a>(input: Span<'a>) -> IResult<Span, ast::Directive<'a>> {
-        tuple((
-            lexer::at,
-            verify(lex_ident, |token| token.kind == TokenKind::Base),
-            ignore_ws_and_comments(lex_iri),
-            ignore_ws_and_comments(lexer::dot),
-        ))(input)
-        .map(|(rest, (_, kw, base_iri, _))| (rest, ast::Directive::Base { kw, base_iri }))
-    }
-
-    fn parse_prefix_directive<'a>(input: Span<'a>) -> IResult<Span, ast::Directive<'a>> {
-        tuple((
-            lexer::at,
-            verify(lex_ident, |token| token.kind == TokenKind::Prefix),
-            ignore_ws_and_comments(lex_ident),
-            ignore_ws_and_comments(lexer::colon),
-            ignore_ws_and_comments(lex_iri),
-            ignore_ws_and_comments(lexer::dot),
-        ))(input)
-        .map(|(rest, (_, kw, prefix, _, prefix_iri, _))| {
-            (
-                rest,
-                ast::Directive::Prefix {
-                    kw,
-                    prefix,
-                    prefix_iri,
-                },
-            )
-        })
-    }
-
-    fn parse_import_directive<'a>(input: Span<'a>) -> IResult<Span, ast::Directive<'a>> {
-        tuple((
-            lexer::at,
-            verify(lex_ident, |token| token.kind == TokenKind::Import),
-            ignore_ws_and_comments(lex_ident),
-            ignore_ws_and_comments(lexer::arrow),
-            ignore_ws_and_comments(parse_map),
-            ignore_ws_and_comments(lexer::dot),
-        ))(input)
-        .map(|(rest, (_, kw, predicate, _, map, _))| {
-            (rest, ast::Directive::Import { kw, predicate, map })
-        })
-    }
-
-    fn parse_export_directive<'a>(input: Span<'a>) -> IResult<Span, ast::Directive<'a>> {
-        tuple((
-            lexer::at,
-            verify(lex_ident, |token| token.kind == TokenKind::Export),
-            ignore_ws_and_comments(lex_ident),
-            ignore_ws_and_comments(lexer::arrow),
-            ignore_ws_and_comments(parse_map),
-            ignore_ws_and_comments(lexer::dot),
-        ))(input)
-        .map(|(rest, (_, kw, predicate, _, map, _))| {
-            (rest, ast::Directive::Export { kw, predicate, map })
-        })
-    }
-
-    fn parse_output_directive<'a>(input: Span<'a>) -> IResult<Span, ast::Directive<'a>> {
-        tuple((
-            lexer::at,
-            verify(lex_ident, |token| token.kind == TokenKind::Output),
-            ignore_ws_and_comments(separated_list0(
-                lexer::comma,
-                ignore_ws_and_comments(lex_ident),
-            )),
-            ignore_ws_and_comments(lexer::dot),
-        ))(input)
-        .map(|(rest, (_, kw, predicates, _))| (rest, ast::Directive::Output { kw, predicates }))
-    }
-
-    fn parse_atom<'a>(input: Span<'a>) -> IResult<Span, ast::Atom<'a>> {
-        todo!("`parse_atom`!")
-    }
-
-    fn parse_negative_atom<'a>(input: Span<'a>) -> IResult<Span, ast::Atom<'a>> {
-        todo!("`parse_negative_atom`!")
-    }
-
-    fn parse_infix_atom<'a>(input: Span<'a>) -> IResult<Span, ast::Atom<'a>> {
-        tuple((parse_term, parse_operation_token, parse_term))(input).map(
-            |(rest, (lhs, operation, rhs))| {
+        .map(
+            |(rest_input, (doc_comment, head, ws1, arrow, ws2, body, ws3, dot))| {
                 (
-                    rest,
-                    ast::Atom::InfixAtom {
-                        operation,
-                        lhs,
-                        rhs,
+                    rest_input,
+                    Statement::Rule {
+                        span: outer_span(input_span, rest_input),
+                        doc_comment,
+                        head,
+                        ws1,
+                        arrow,
+                        ws2,
+                        body,
+                        ws3,
+                        dot,
                     },
                 )
             },
         )
     }
 
-    fn parse_named_tuple<'a>(input: Span<'a>) -> IResult<Span, ast::NamedTuple<'a>> {
-        tuple((
-            lex_ident,
-            lexer::open_paren,
-            // ignore_ws_and_comments(separated_list0(lexer::comma, parse_term)),
-            ignore_ws_and_comments(separated_list0(comma, ignore_ws_and_comments(parse_term))),
-            ignore_ws_and_comments(lexer::close_paren),
-        ))(input)
-        .map(|(rest, (identifier, _, terms, _))| (rest, NamedTuple { identifier, terms }))
+    fn parse_head<'a>(input: Span<'a>) -> IResult<Span, List<'a, Atom<'a>>> {
+        parse_atom_list(input, parse_head_atoms)
     }
 
-    fn parse_map<'a>(input: Span<'a>) -> IResult<Span, ast::Map<'a>> {
-        tuple((
-            opt(lex_ident),
-            ignore_ws_and_comments(open_brace),
-            separated_list0(
-                ignore_ws_and_comments(comma),
-                ignore_ws_and_comments(tuple((parse_term, equal, parse_term))),
-            ),
-            ignore_ws_and_comments(close_brace),
+    fn parse_body<'a>(input: Span<'a>) -> IResult<Span, List<'a, Atom<'a>>> {
+        parse_atom_list(input, parse_body_atoms)
+    }
+
+    fn parse_directive<'a>(input: Span<'a>) -> IResult<Span, Statement<'a>> {
+        alt((
+            parse_base_directive,
+            parse_prefix_directive,
+            parse_import_directive,
+            parse_export_directive,
+            parse_output_directive,
         ))(input)
-        .map(|(rest, (identifier, _, vec_of_pairs, _))| {
-            let mut pairs = Vec::new();
-            for (key, _, value) in vec_of_pairs {
-                pairs.push(Pair::new(key, value));
-            }
-            (rest, ast::Map { identifier, pairs })
+        .map(|(rest, directive)| (rest, Statement::Directive(directive)))
+    }
+
+    fn parse_base_directive<'a>(input: Span<'a>) -> IResult<Span, Directive<'a>> {
+        let input_span = input.clone();
+        tuple((
+            opt(lex_doc_comment),
+            recognize(pair(
+                at,
+                verify(lex_ident, |token| token.kind == TokenKind::Base),
+            )),
+            opt(lex_whitespace),
+            lex_iri,
+            opt(lex_whitespace),
+            dot,
+        ))(input)
+        .map(|(rest_input, (doc_comment, kw, ws1, base_iri, ws2, dot))| {
+            (
+                rest_input,
+                Directive::Base {
+                    span: outer_span(input_span, rest_input),
+                    doc_comment,
+                    kw: Token {
+                        kind: TokenKind::Base,
+                        span: kw,
+                    },
+                    ws1,
+                    base_iri,
+                    ws2,
+                    dot,
+                },
+            )
         })
     }
 
-    fn parse_term<'a>(input: Span<'a>) -> IResult<Span, ast::Term<'a>> {
-        // alt((
-        //     parse_primitive_term,
-        //     parse_unary_term,
-        //     parse_binary_term,
-        //     parse_aggregation_term,
-        //     parse_function_term,
-        //     parse_map_term,
-        // ))(input)
-        ignore_ws_and_comments(alt((parse_primitive_term, parse_variable)))(input)
-    }
-
-    fn parse_primitive_term<'a>(input: Span<'a>) -> IResult<Span, ast::Term<'a>> {
-        alt((lex_ident, lex_iri, lex_number, lex_string))(input)
-            .map(|(rest, term)| (rest, ast::Term::Primitive(term)))
-    }
-
-    fn parse_unary_term<'a>(input: Span<'a>) -> IResult<Span, ast::Term<'a>> {
-        todo!("`parse_unary_term`!")
-    }
-
-    fn parse_binary_term<'a>(input: Span<'a>) -> IResult<Span, ast::Term<'a>> {
-        todo!("`parse_binary_term`!")
-    }
-
-    fn parse_aggregation_term<'a>(input: Span<'a>) -> IResult<Span, ast::Term<'a>> {
-        todo!("`parse_aggregation_term`!")
-    }
-
-    fn parse_function_term<'a>(input: Span<'a>) -> IResult<Span, ast::Term<'a>> {
-        todo!("`parse_function_term`!")
-    }
-
-    fn parse_map_term<'a>(input: Span<'a>) -> IResult<Span, ast::Term<'a>> {
-        todo!("`parse_map_term`!")
-    }
-
-    fn parse_variable<'a>(input: Span<'a>) -> IResult<Span, ast::Term<'a>> {
-        ignore_ws_and_comments(pair(lexer::question_mark, lex_ident))(input).map(
-            |(rest, (question_mark, ident))| {
+    fn parse_prefix_directive<'a>(input: Span<'a>) -> IResult<Span, Directive<'a>> {
+        let input_span = input.clone();
+        tuple((
+            opt(lex_doc_comment),
+            recognize(pair(
+                at,
+                verify(lex_ident, |token| token.kind == TokenKind::Prefix),
+            )),
+            opt(lex_whitespace),
+            recognize(pair(lex_ident, colon)),
+            opt(lex_whitespace),
+            lex_iri,
+            opt(lex_whitespace),
+            dot,
+        ))(input)
+        .map(
+            |(rest_input, (doc_comment, kw, ws1, prefix, ws2, prefix_iri, ws3, dot))| {
                 (
-                    rest,
-                    ast::Term::Variable(Token {
-                        kind: TokenKind::Variable,
-                        span: combine_spans(question_mark.span, ident.span)
-                            .expect("Spans were not adjacent in memory"),
-                    }),
+                    rest_input,
+                    Directive::Prefix {
+                        span: outer_span(input_span, rest_input),
+                        doc_comment,
+                        kw: Token {
+                            kind: TokenKind::Prefix,
+                            span: kw,
+                        },
+                        ws1,
+                        prefix: Token {
+                            kind: TokenKind::Ident,
+                            span: prefix,
+                        },
+                        ws2,
+                        prefix_iri,
+                        ws3,
+                        dot,
+                    },
                 )
             },
         )
+    }
+
+    fn parse_import_directive<'a>(input: Span<'a>) -> IResult<Span, Directive<'a>> {
+        let input_span = input.clone();
+        tuple((
+            opt(lex_doc_comment),
+            recognize(pair(
+                at,
+                verify(lex_ident, |token| token.kind == TokenKind::Import),
+            )),
+            lex_whitespace,
+            lex_ident,
+            opt(lex_whitespace),
+            arrow,
+            opt(lex_whitespace),
+            parse_map,
+            opt(lex_whitespace),
+            dot,
+        ))(input)
+        .map(
+            |(rest_input, (doc_comment, kw, ws1, predicate, ws2, arrow, ws3, map, ws4, dot))| {
+                (
+                    rest_input,
+                    Directive::Import {
+                        span: outer_span(input_span, rest_input),
+                        doc_comment,
+                        kw: Token {
+                            kind: TokenKind::Import,
+                            span: kw,
+                        },
+                        ws1,
+                        predicate,
+                        ws2,
+                        arrow,
+                        ws3,
+                        map,
+                        ws4,
+                        dot,
+                    },
+                )
+            },
+        )
+    }
+
+    fn parse_export_directive<'a>(input: Span<'a>) -> IResult<Span, Directive<'a>> {
+        let input_span = input.clone();
+        tuple((
+            opt(lex_doc_comment),
+            recognize(pair(
+                at,
+                verify(lex_ident, |token| token.kind == TokenKind::Export),
+            )),
+            lex_whitespace,
+            lex_ident,
+            opt(lex_whitespace),
+            arrow,
+            opt(lex_whitespace),
+            parse_map,
+            opt(lex_whitespace),
+            dot,
+        ))(input)
+        .map(
+            |(rest_input, (doc_comment, kw, ws1, predicate, ws2, arrow, ws3, map, ws4, dot))| {
+                (
+                    rest_input,
+                    Directive::Export {
+                        span: outer_span(input_span, rest_input),
+                        doc_comment,
+                        kw: Token {
+                            kind: TokenKind::Export,
+                            span: kw,
+                        },
+                        ws1,
+                        predicate,
+                        ws2,
+                        arrow,
+                        ws3,
+                        map,
+                        ws4,
+                        dot,
+                    },
+                )
+            },
+        )
+    }
+
+    fn parse_output_directive<'a>(input: Span<'a>) -> IResult<Span, Directive<'a>> {
+        let input_span = input.clone();
+        tuple((
+            opt(lex_doc_comment),
+            at,
+            verify(lex_ident, |token| token.kind == TokenKind::Output),
+            ignore_ws_and_comments(separated_list0(comma, ignore_ws_and_comments(lex_ident))),
+            ignore_ws_and_comments(dot),
+        ))(input)
+        .map(|(rest_input, (doc_comment, _, kw, predicates, _))| {
+            (
+                rest_input,
+                Directive::Output {
+                    span: outer_span(input_span, rest_input),
+                    doc_comment,
+                    kw,
+                    predicates,
+                },
+            )
+        })
+    }
+
+    fn parse_atom_list<'a>(
+        input: Span<'a>,
+        parse_atom: fn(Span<'a>) -> IResult<Span, Atom<'a>>,
+    ) -> IResult<Span, List<'a, Atom<'a>>> {
+        let input_span = input.clone();
+        pair(
+            parse_atom,
+            many0(tuple((
+                opt(lex_whitespace),
+                comma,
+                opt(lex_whitespace),
+                parse_atom,
+            ))),
+        )(input)
+        .map(|(rest_input, (first, rest))| {
+            (
+                rest_input,
+                List {
+                    span: outer_span(input_span, rest_input),
+                    first,
+                    rest: if rest.is_empty() { None } else { Some(rest) },
+                },
+            )
+        })
+    }
+
+    fn parse_head_atoms<'a>(input: Span<'a>) -> IResult<Span, Atom<'a>> {
+        alt((parse_normal_atom, parse_infix_atom, parse_map_atom))(input)
+    }
+
+    fn parse_body_atoms<'a>(input: Span<'a>) -> IResult<Span, Atom<'a>> {
+        alt((
+            parse_normal_atom,
+            parse_negative_atom,
+            parse_infix_atom,
+            parse_map_atom,
+        ))(input)
+    }
+
+    fn parse_normal_atom<'a>(input: Span<'a>) -> IResult<Span, Atom<'a>> {
+        parse_named_tuple(input)
+            .map(|(rest_input, named_tuple)| (rest_input, Atom::Positive(named_tuple)))
+    }
+
+    fn parse_negative_atom<'a>(input: Span<'a>) -> IResult<Span, Atom<'a>> {
+        let input_span = input.clone();
+        pair(tilde, parse_named_tuple)(input).map(|(rest_input, (tilde, named_tuple))| {
+            (
+                rest_input,
+                Atom::Negative {
+                    span: outer_span(input_span, rest_input),
+                    neg: tilde,
+                    atom: named_tuple,
+                },
+            )
+        })
+    }
+
+    fn parse_infix_atom<'a>(input: Span<'a>) -> IResult<Span, Atom<'a>> {
+        let input_span = input.clone();
+        tuple((
+            parse_term,
+            opt(lex_whitespace),
+            parse_operation_token,
+            opt(lex_whitespace),
+            parse_term,
+        ))(input)
+        .map(|(rest_input, (lhs, ws1, operation, ws2, rhs))| {
+            (
+                rest_input,
+                Atom::InfixAtom {
+                    span: outer_span(input_span, rest_input),
+                    lhs,
+                    ws1,
+                    operation,
+                    ws2,
+                    rhs,
+                },
+            )
+        })
+    }
+
+    fn parse_named_tuple<'a>(input: Span<'a>) -> IResult<Span, NamedTuple<'a>> {
+        let input_span = input.clone();
+        tuple((
+            lex_ident,
+            opt(lex_whitespace),
+            open_paren,
+            opt(lex_whitespace),
+            opt(parse_term_list),
+            opt(lex_whitespace),
+            close_paren,
+        ))(input)
+        .map(
+            |(rest_input, (identifier, ws1, open_paren, ws2, terms, ws3, close_paren))| {
+                (
+                    rest_input,
+                    NamedTuple {
+                        span: outer_span(input_span, rest_input),
+                        identifier,
+                        ws1,
+                        open_paren,
+                        ws2,
+                        terms,
+                        ws3,
+                        close_paren,
+                    },
+                )
+            },
+        )
+    }
+
+    fn parse_map<'a>(input: Span<'a>) -> IResult<Span, Map<'a>> {
+        let input_span = input.clone();
+        tuple((
+            opt(lex_ident),
+            opt(lex_whitespace),
+            open_brace,
+            opt(lex_whitespace),
+            parse_pair_list,
+            opt(lex_whitespace),
+            close_brace,
+        ))(input)
+        .map(
+            |(rest_input, (identifier, ws1, open_brace, ws2, pairs, ws3, close_brace))| {
+                (
+                    rest_input,
+                    Map {
+                        span: outer_span(input_span, rest_input),
+                        identifier,
+                        ws1,
+                        open_brace,
+                        ws2,
+                        pairs,
+                        ws3,
+                        close_brace,
+                    },
+                )
+            },
+        )
+    }
+
+    fn parse_map_atom<'a>(input: Span<'a>) -> IResult<Span, Atom<'a>> {
+        parse_map(input).map(|(rest_input, map)| (rest_input, Atom::Map(map)))
+    }
+
+    fn parse_pair_list<'a>(
+        input: Span<'a>,
+    ) -> IResult<Span, Option<List<'a, Pair<Term<'a>, Term<'a>>>>> {
+        let input_span = input.clone();
+        opt(pair(
+            parse_pair,
+            many0(tuple((
+                opt(lex_whitespace),
+                comma,
+                opt(lex_whitespace),
+                parse_pair,
+            ))),
+        ))(input)
+        .map(|(rest_input, pair_list)| {
+            if let Some((first, rest)) = pair_list {
+                (
+                    rest_input,
+                    Some(List {
+                        span: outer_span(input_span, rest_input),
+                        first,
+                        rest: if rest.is_empty() { None } else { Some(rest) },
+                    }),
+                )
+            } else {
+                (rest_input, None)
+            }
+        })
+    }
+
+    fn parse_pair<'a>(input: Span<'a>) -> IResult<Span, Pair<Term<'a>, Term<'a>>> {
+        let input_span = input.clone();
+        tuple((
+            parse_term,
+            opt(lex_whitespace),
+            equal,
+            opt(lex_whitespace),
+            parse_term,
+        ))(input)
+        .map(|(rest_input, (key, ws1, equal, ws2, value))| {
+            (
+                rest_input,
+                Pair {
+                    span: outer_span(input_span, rest_input),
+                    key,
+                    ws1,
+                    equal,
+                    ws2,
+                    value,
+                },
+            )
+        })
+    }
+
+    fn parse_term_list<'a>(input: Span<'a>) -> IResult<Span, List<'a, Term<'a>>> {
+        let input_span = input.clone();
+        pair(
+            parse_term,
+            many0(tuple((
+                opt(lex_whitespace),
+                comma,
+                opt(lex_whitespace),
+                parse_term,
+            ))),
+        )(input)
+        .map(|(rest_input, (first, rest))| {
+            (
+                rest_input,
+                List {
+                    span: outer_span(input_span, rest_input),
+                    first,
+                    rest: if rest.is_empty() { None } else { Some(rest) },
+                },
+            )
+        })
+    }
+
+    fn parse_term<'a>(input: Span<'a>) -> IResult<Span, Term<'a>> {
+        alt((
+            parse_primitive_term,
+            parse_variable,
+            parse_unary_term,
+            // parse_binary_term,
+            // parse_aggregation_term,
+            parse_function_term,
+            parse_map_term,
+        ))(input)
+    }
+
+    fn parse_primitive_term<'a>(input: Span<'a>) -> IResult<Span, Term<'a>> {
+        alt((lex_ident, lex_iri, lex_number, lex_string))(input)
+            .map(|(rest_input, term)| (rest_input, Term::Primitive(term)))
+    }
+
+    fn parse_unary_term<'a>(input: Span<'a>) -> IResult<Span, Term<'a>> {
+        let input_span = input.clone();
+        pair(lex_operators, parse_term)(input).map(|(rest_input, (operation, term))| {
+            (
+                rest_input,
+                Term::Unary {
+                    span: outer_span(input_span, rest_input),
+                    operation,
+                    term: Box::new(term),
+                },
+            )
+        })
+    }
+
+    fn parse_binary_term<'a>(input: Span<'a>) -> IResult<Span, Term<'a>> {
+        todo!("`parse_binary_term`!")
+    }
+
+    fn parse_aggregation_term<'a>(input: Span<'a>) -> IResult<Span, Term<'a>> {
+        todo!("`parse_aggregation_term`!")
+    }
+
+    fn parse_function_term<'a>(input: Span<'a>) -> IResult<Span, Term<'a>> {
+        parse_named_tuple(input)
+            .map(|(rest_input, named_tuple)| (rest_input, Term::Function(Box::new(named_tuple))))
+    }
+
+    fn parse_map_term<'a>(input: Span<'a>) -> IResult<Span, Term<'a>> {
+        parse_map(input).map(|(rest_input, map)| (rest_input, Term::Map(Box::new(map))))
+    }
+
+    fn parse_variable<'a>(input: Span<'a>) -> IResult<Span, Term<'a>> {
+        recognize(pair(question_mark, lex_ident))(input).map(|(rest, var)| {
+            (
+                rest,
+                Term::Variable(Token {
+                    kind: TokenKind::Variable,
+                    span: var,
+                }),
+            )
+        })
     }
 
     fn parse_operation_token<'a>(input: Span<'a>) -> IResult<Span, Token<'a>> {
@@ -2729,7 +3035,13 @@ mod new {
     #[cfg(test)]
     mod test {
         use super::*;
-        use crate::io::{lexer::*, parser::ast::*};
+        use crate::io::{
+            lexer::*,
+            parser::ast::*,
+            // parser::ast::{
+            //     atom::*, directive::*, map::*, named_tuple::*, program::*, statement::*, term::*,
+            // },
+        };
 
         macro_rules! S {
             ($offset:literal,$line:literal,$str:literal) => {
@@ -2745,24 +3057,56 @@ mod new {
             let input = Span::new("a(B,C).");
             assert_eq!(
                 parse_program(input),
-                vec![ast::Statement::Fact {
-                    atom: ast::Atom::Atom(NamedTuple {
-                        identifier: Token {
-                            kind: TokenKind::Ident,
-                            span: S!(0, 1, "a"),
-                        },
-                        terms: vec![
-                            Term::Primitive(Token {
+                Program {
+                    span: input,
+                    tl_doc_comment: None,
+                    statements: vec![Statement::Fact {
+                        span: S!(0, 1, "a(B,C)."),
+                        doc_comment: None,
+                        atom: Atom::Positive(NamedTuple {
+                            span: S!(0, 1, "a(B,C)"),
+                            identifier: Token {
                                 kind: TokenKind::Ident,
-                                span: S!(2, 1, "B"),
+                                span: S!(0, 1, "a"),
+                            },
+                            ws1: None,
+                            open_paren: Token {
+                                kind: TokenKind::OpenParen,
+                                span: S!(1, 1, "("),
+                            },
+                            ws2: None,
+                            terms: Some(List {
+                                span: S!(2, 1, "B,C"),
+                                first: Term::Primitive(Token {
+                                    kind: TokenKind::Ident,
+                                    span: S!(2, 1, "B"),
+                                }),
+                                rest: Some(vec![(
+                                    None,
+                                    Token {
+                                        kind: TokenKind::Comma,
+                                        span: S!(3, 1, ",")
+                                    },
+                                    None,
+                                    Term::Primitive(Token {
+                                        kind: TokenKind::Ident,
+                                        span: S!(4, 1, "C"),
+                                    }),
+                                )]),
                             }),
-                            Term::Primitive(Token {
-                                kind: TokenKind::Ident,
-                                span: S!(4, 1, "C"),
-                            }),
-                        ],
-                    }),
-                }]
+                            ws3: None,
+                            close_paren: Token {
+                                kind: TokenKind::CloseParen,
+                                span: S!(5, 1, ")"),
+                            },
+                        }),
+                        ws: None,
+                        dot: Token {
+                            kind: TokenKind::Dot,
+                            span: S!(6, 1, ".")
+                        }
+                    }],
+                }
             )
         }
 
@@ -2773,85 +3117,191 @@ mod new {
             );
             assert_eq!(
                 parse_program(input),
-                vec![
-                    ast::Statement::Directive(Directive::Base {
-                        kw: Token {
-                            kind: TokenKind::Base,
-                            span: S!(1, 1, "base"),
-                        },
-                        base_iri: Token {
-                            kind: TokenKind::Iri,
-                            span: S!(6, 1, "<http://example.org/foo/>")
-                        }
-                    }),
-                    ast::Statement::Directive(Directive::Prefix {
-                        kw: Token {
-                            kind: TokenKind::Prefix,
-                            span: S!(33, 1, "prefix"),
-                        },
-                        prefix: Token {
-                            kind: TokenKind::Ident,
-                            span: S!(40, 1, "rdfs"),
-                        },
-                        prefix_iri: Token {
-                            kind: TokenKind::Iri,
-                            span: S!(45, 1, "<http://www.w3.org/2000/01/rdf-schema#>"),
-                        },
-                    }),
-                    ast::Statement::Directive(Directive::Import {
-                        kw: Token {
-                            kind: TokenKind::Import,
-                            span: S!(86, 1, "import"),
-                        },
-                        predicate: Token {
-                            kind: TokenKind::Ident,
-                            span: S!(93, 1, "sourceA"),
-                        },
-                        map: Map {
-                            identifier: Some(Token {
-                                kind: TokenKind::Ident,
-                                span: S!(102, 1, "csv")
+                Program {
+                    tl_doc_comment: None,
+                    span: input,
+                    statements: vec![
+                        Statement::Directive(Directive::Base {
+                            span: S!(0, 1, "@base <http://example.org/foo/>."),
+                            doc_comment: None,
+                            kw: Token {
+                                kind: TokenKind::Base,
+                                span: S!(0, 1, "@base"),
+                            },
+                            ws1: Some(Token {
+                                kind: TokenKind::Whitespace,
+                                span: S!(5, 1, " ")
                             }),
-                            pairs: vec![Pair {
-                                key: Term::Primitive(Token {
+                            base_iri: Token {
+                                kind: TokenKind::Iri,
+                                span: S!(6, 1, "<http://example.org/foo/>")
+                            },
+                            ws2: None,
+                            dot: Token {
+                                kind: TokenKind::Dot,
+                                span: S!(31, 1, ".")
+                            },
+                        }),
+                        Statement::Directive(Directive::Prefix {
+                            span: S!(
+                                32,
+                                1,
+                                "@prefix rdfs:<http://www.w3.org/2000/01/rdf-schema#>."
+                            ),
+                            doc_comment: None,
+                            kw: Token {
+                                kind: TokenKind::Prefix,
+                                span: S!(32, 1, "@prefix"),
+                            },
+                            ws1: Some(Token {
+                                kind: TokenKind::Whitespace,
+                                span: S!(39, 1, " ")
+                            }),
+                            prefix: Token {
+                                kind: TokenKind::Ident,
+                                span: S!(40, 1, "rdfs:"),
+                            },
+                            ws2: None,
+                            prefix_iri: Token {
+                                kind: TokenKind::Iri,
+                                span: S!(45, 1, "<http://www.w3.org/2000/01/rdf-schema#>"),
+                            },
+                            ws3: None,
+                            dot: Token {
+                                kind: TokenKind::Dot,
+                                span: S!(84, 1, ".")
+                            }
+                        }),
+                        Statement::Directive(Directive::Import {
+                            span: S!(
+                                85,
+                                1,
+                                r#"@import sourceA:-csv{resource="sources/dataA.csv"}."#
+                            ),
+                            doc_comment: None,
+                            kw: Token {
+                                kind: TokenKind::Import,
+                                span: S!(85, 1, "@import"),
+                            },
+                            ws1: Token {
+                                kind: TokenKind::Whitespace,
+                                span: S!(92, 1, " "),
+                            },
+                            predicate: Token {
+                                kind: TokenKind::Ident,
+                                span: S!(93, 1, "sourceA"),
+                            },
+                            ws2: None,
+                            arrow: Token {
+                                kind: TokenKind::Arrow,
+                                span: S!(100, 1, ":-"),
+                            },
+                            ws3: None,
+                            map: Map {
+                                span: S!(102, 1, r#"csv{resource="sources/dataA.csv"}"#),
+                                identifier: Some(Token {
                                     kind: TokenKind::Ident,
-                                    span: S!(106, 1, "resource"),
+                                    span: S!(102, 1, "csv")
                                 }),
-                                value: Term::Primitive(Token {
-                                    kind: TokenKind::String,
-                                    span: S!(115, 1, "\"sources/dataA.csv\""),
-                                })
-                            }],
-                        },
-                    }),
-                    ast::Statement::Directive(Directive::Export {
-                        kw: Token {
-                            kind: TokenKind::Export,
-                            span: S!(137, 1, "export"),
-                        },
-                        predicate: Token {
-                            kind: TokenKind::Ident,
-                            span: S!(144, 1, "a"),
-                        },
-                        map: Map {
-                            identifier: Some(Token {
+                                ws1: None,
+                                open_brace: Token {
+                                    kind: TokenKind::OpenBrace,
+                                    span: S!(105, 1, "{")
+                                },
+                                ws2: None,
+                                pairs: Some(List {
+                                    span: S!(106, 1, "resource=\"sources/dataA.csv\""),
+                                    first: Pair {
+                                        span: S!(106, 1, "resource=\"sources/dataA.csv\""),
+                                        key: Term::Primitive(Token {
+                                            kind: TokenKind::Ident,
+                                            span: S!(106, 1, "resource"),
+                                        }),
+                                        ws1: None,
+                                        equal: Token {
+                                            kind: TokenKind::Equal,
+                                            span: S!(114, 1, "="),
+                                        },
+                                        ws2: None,
+                                        value: Term::Primitive(Token {
+                                            kind: TokenKind::String,
+                                            span: S!(115, 1, "\"sources/dataA.csv\""),
+                                        })
+                                    },
+                                    rest: None,
+                                }),
+                                ws3: None,
+                                close_brace: Token {
+                                    kind: TokenKind::CloseBrace,
+                                    span: S!(134, 1, "}")
+                                },
+                            },
+                            ws4: None,
+                            dot: Token {
+                                kind: TokenKind::Dot,
+                                span: S!(135, 1, ".")
+                            }
+                        }),
+                        Statement::Directive(Directive::Export {
+                            span: S!(136, 1, "@export a:-csv{}."),
+                            doc_comment: None,
+                            kw: Token {
+                                kind: TokenKind::Export,
+                                span: S!(136, 1, "@export"),
+                            },
+                            ws1: Token {
+                                kind: TokenKind::Whitespace,
+                                span: S!(143, 1, " "),
+                            },
+                            predicate: Token {
                                 kind: TokenKind::Ident,
-                                span: S!(147, 1, "csv"),
-                            }),
-                            pairs: vec![]
-                        }
-                    }),
-                    ast::Statement::Directive(Directive::Output {
-                        kw: Token {
-                            kind: TokenKind::Output,
-                            span: S!(154, 1, "output")
-                        },
-                        predicates: vec![Token {
-                            kind: TokenKind::Ident,
-                            span: S!(161, 1, "a")
-                        }]
-                    }),
-                ]
+                                span: S!(144, 1, "a"),
+                            },
+                            ws2: None,
+                            arrow: Token {
+                                kind: TokenKind::Arrow,
+                                span: S!(145, 1, ":-"),
+                            },
+                            ws3: None,
+                            map: Map {
+                                span: S!(147, 1, "csv{}"),
+                                identifier: Some(Token {
+                                    kind: TokenKind::Ident,
+                                    span: S!(147, 1, "csv"),
+                                }),
+                                ws1: None,
+                                open_brace: Token {
+                                    kind: TokenKind::OpenBrace,
+                                    span: S!(150, 1, "{"),
+                                },
+                                ws2: None,
+                                pairs: None,
+                                ws3: None,
+                                close_brace: Token {
+                                    kind: TokenKind::CloseBrace,
+                                    span: S!(151, 1, "}"),
+                                },
+                            },
+                            ws4: None,
+                            dot: Token {
+                                kind: TokenKind::Dot,
+                                span: S!(152, 1, "."),
+                            },
+                        }),
+                        Statement::Directive(Directive::Output {
+                            span: S!(153, 1, "@output a."),
+                            doc_comment: None,
+                            kw: Token {
+                                kind: TokenKind::Output,
+                                span: S!(154, 1, "output")
+                            },
+                            predicates: vec![Token {
+                                kind: TokenKind::Ident,
+                                span: S!(161, 1, "a")
+                            }],
+                        }),
+                    ],
+                }
             )
         }
 
@@ -2875,52 +3325,90 @@ mod new {
             let input = Span::new("some(Fact, with, whitespace) . % and a super useful comment\n");
             assert_eq!(
                 parse_program(input),
-                vec![ast::Statement::Fact {
-                    atom: Atom::Atom(NamedTuple {
-                        identifier: Token {
-                            kind: TokenKind::Ident,
-                            span: S!(0, 1, "some"),
+                Program {
+                    span: input,
+                    tl_doc_comment: None,
+                    statements: vec![
+                        Statement::Fact {
+                            span: S!(0, 1, "some(Fact, with, whitespace) ."),
+                            doc_comment: None,
+                            atom: Atom::Positive(NamedTuple {
+                                span: S!(0, 1, "some(Fact, with, whitespace)"),
+                                identifier: Token {
+                                    kind: TokenKind::Ident,
+                                    span: S!(0, 1, "some"),
+                                },
+                                ws1: None,
+                                open_paren: Token {
+                                    kind: TokenKind::OpenParen,
+                                    span: S!(4, 1, "(")
+                                },
+                                ws2: None,
+                                terms: Some(List {
+                                    span: S!(5, 1, "Fact, with, whitespace"),
+                                    first: Term::Primitive(Token {
+                                        kind: TokenKind::Ident,
+                                        span: S!(5, 1, "Fact"),
+                                    }),
+                                    rest: Some(vec![
+                                        (
+                                            None,
+                                            Token {
+                                                kind: TokenKind::Comma,
+                                                span: S!(9, 1, ","),
+                                            },
+                                            Some(Token {
+                                                kind: TokenKind::Whitespace,
+                                                span: S!(10, 1, " "),
+                                            }),
+                                            Term::Primitive(Token {
+                                                kind: TokenKind::Ident,
+                                                span: S!(11, 1, "with")
+                                            }),
+                                        ),
+                                        (
+                                            None,
+                                            Token {
+                                                kind: TokenKind::Comma,
+                                                span: S!(15, 1, ","),
+                                            },
+                                            Some(Token {
+                                                kind: TokenKind::Whitespace,
+                                                span: S!(16, 1, " "),
+                                            }),
+                                            Term::Primitive(Token {
+                                                kind: TokenKind::Ident,
+                                                span: S!(17, 1, "whitespace")
+                                            }),
+                                        ),
+                                    ]),
+                                }),
+                                ws3: None,
+                                close_paren: Token {
+                                    kind: TokenKind::CloseParen,
+                                    span: S!(27, 1, ")")
+                                },
+                            }),
+                            ws: Some(Token {
+                                kind: TokenKind::Whitespace,
+                                span: S!(28, 1, " "),
+                            }),
+                            dot: Token {
+                                kind: TokenKind::Dot,
+                                span: S!(29, 1, "."),
+                            },
                         },
-                        terms: vec![
-                            Term::Primitive(Token {
-                                kind: TokenKind::Ident,
-                                span: S!(5, 1, "Fact")
-                            }),
-                            Term::Primitive(Token {
-                                kind: TokenKind::Ident,
-                                span: S!(11, 1, "with")
-                            }),
-                            Term::Primitive(Token {
-                                kind: TokenKind::Ident,
-                                span: S!(17, 1, "whitespace")
-                            }),
-                        ]
-                    })
-                }]
+                        Statement::Whitespace(Token {
+                            kind: TokenKind::Whitespace,
+                            span: S!(30, 1, " ")
+                        }),
+                        Statement::Comment(Token {
+                            kind: TokenKind::Comment,
+                            span: S!(31, 1, "% and a super useful comment\n")
+                        })
+                    ],
+                }
             )
-        }
-
-        #[test]
-        fn combine_spans() {
-            use nom::bytes::complete::tag;
-            let source = "Some Input ;)";
-            let input = Span::new(source);
-            let (input, first) = tag::<&str, Span, nom::error::Error<_>>("Some ")(input).unwrap();
-            let (input, second) = tag::<&str, Span, nom::error::Error<_>>("Input")(input).unwrap();
-            let span = super::combine_spans(first, second);
-            assert_eq!(span, Ok(Span::new("Some Input")))
-        }
-
-        #[test]
-        fn combine_spans_error() {
-            use nom::bytes::complete::tag;
-            let source = "Some Input ;)";
-            let input = Span::new(source);
-            let (input, first) = tag::<&str, Span, nom::error::Error<_>>("Some")(input).unwrap();
-            let (input, _) = tag::<&str, Span, nom::error::Error<_>>(" ")(input).unwrap();
-            let (input, second) = tag::<&str, Span, nom::error::Error<_>>("Input")(input).unwrap();
-            let span = super::combine_spans(first, second);
-            assert_eq!(span, Err(str_concat::Error::NotAdjacent))
         }
 
         #[test]
