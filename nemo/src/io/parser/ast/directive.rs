@@ -201,12 +201,12 @@ impl AstNode for Directive<'_> {
         }
     }
 
-    // fn position(&self) -> Position {
-    //     let span = self.span();
-    //     Position {
-    //         offset: span.location_offset(),
-    //         line: span.location_line(),
-    //         column: span.get_column() as u32,
-    //     }
-    // }
+    fn position(&self) -> Position {
+        let span = self.span();
+        Position {
+            offset: span.location_offset(),
+            line: span.location_line(),
+            column: span.get_column() as u32,
+        }
+    }
 }

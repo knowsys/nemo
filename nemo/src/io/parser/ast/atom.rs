@@ -59,4 +59,13 @@ impl AstNode for Atom<'_> {
             Atom::Map(map) => map.span(),
         }
     }
+
+    fn position(&self) -> super::Position {
+        let span = self.span();
+        super::Position {
+            offset: span.location_offset(),
+            line: span.location_line(),
+            column: span.get_column() as u32,
+        }
+    }
 }
