@@ -195,13 +195,13 @@ impl<'a> crate::io::parser::ast::AstNode for Token<'a> {
         self.span
     }
 
-    // fn position(&self) -> Position {
-    //     Position {
-    //         offset: self.span.location_offset(),
-    //         line: self.span.location_line(),
-    //         column: self.span.get_column() as u32,
-    //     }
-    // }
+    fn position(&self) -> Position {
+        Position {
+            offset: self.span.location_offset(),
+            line: self.span.location_line(),
+            column: self.span.get_utf8_column() as u32,
+        }
+    }
 }
 
 macro_rules! syntax {
