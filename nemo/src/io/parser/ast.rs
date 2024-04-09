@@ -1,3 +1,5 @@
+use nom::Offset;
+
 use crate::io::lexer::{Span, Token};
 use std::fmt::Display;
 
@@ -12,7 +14,7 @@ pub(crate) mod term;
 pub(crate) trait AstNode: std::fmt::Debug {
     fn children(&self) -> Option<Vec<&dyn AstNode>>;
     fn span(&self) -> Span;
-    // fn position(&self) -> Position;
+    fn position(&self) -> Position;
 }
 
 pub(crate) struct Position {
@@ -49,6 +51,14 @@ impl<T: AstNode + std::fmt::Debug> AstNode for List<'_, T> {
 
     fn span(&self) -> Span {
         self.span
+    }
+
+    fn position(&self) -> Position {
+        Position {
+            offset: self.span.location_offset(),
+            line: self.span.location_line(),
+            column: self.span.get_column() as u32,
+        }
     }
 }
 
