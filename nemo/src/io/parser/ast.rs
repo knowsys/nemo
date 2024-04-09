@@ -15,6 +15,7 @@ pub(crate) trait AstNode: std::fmt::Debug {
     fn children(&self) -> Option<Vec<&dyn AstNode>>;
     fn span(&self) -> Span;
     fn position(&self) -> Position;
+    // fn is_token(&self) -> bool;
 }
 
 pub(crate) struct Position {
@@ -57,9 +58,13 @@ impl<T: AstNode + std::fmt::Debug> AstNode for List<'_, T> {
         Position {
             offset: self.span.location_offset(),
             line: self.span.location_line(),
-            column: self.span.get_column() as u32,
+            column: self.span.get_utf8_column() as u32,
         }
     }
+
+    // fn is_token(&self) -> bool {
+    //     false
+    // }
 }
 
 fn get_all_tokens(node: &dyn AstNode) -> Vec<&dyn AstNode> {

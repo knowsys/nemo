@@ -1,6 +1,6 @@
 use super::atom::Atom;
 use super::directive::Directive;
-use super::{AstNode, List};
+use super::{AstNode, List, Position};
 use crate::io::lexer::{Span, Token};
 
 #[derive(Debug, Clone, PartialEq)]
@@ -99,7 +99,7 @@ impl AstNode for Statement<'_> {
         Position {
             offset: span.location_offset(),
             line: span.location_line(),
-            column: span.get_column() as u32,
+            column: span.get_utf8_column() as u32,
         }
     }
 }

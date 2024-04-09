@@ -1,5 +1,5 @@
-use super::statement::Statement;
 use super::AstNode;
+use super::{statement::Statement, Position};
 use crate::io::lexer::{Span, Token};
 
 #[derive(Debug, Clone, PartialEq)]
@@ -31,7 +31,7 @@ impl AstNode for Program<'_> {
         Position {
             offset: self.span.location_offset(),
             line: self.span.location_line(),
-            column: self.span.get_column() as u32,
+            column: self.span.get_utf8_column() as u32,
         }
     }
 }
