@@ -1183,7 +1183,6 @@ dependencies = [
  "sanitise-file-name",
  "serde",
  "serde_json",
- "str-concat",
  "test-log",
  "thiserror",
  "tokio",
@@ -2071,12 +2070,6 @@ dependencies = [
  "libc",
  "windows-sys 0.52.0",
 ]
-
-[[package]]
-name = "str-concat"
-version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3468939e48401c4fe3cdf5e5cef50951c2808ed549d1467fde249f1fcb602634"
 
 [[package]]
 name = "streaming-iterator"
