@@ -34,4 +34,8 @@ impl AstNode for Program<'_> {
             column: self.span.get_utf8_column() as u32,
         }
     }
+
+    fn is_token(&self) -> bool {
+        false
+    }
 }
