@@ -17,9 +17,9 @@ use super::{
         numeric::{
             NumericAbsolute, NumericAddition, NumericCeil, NumericCosine, NumericDivision,
             NumericFloor, NumericGreaterthan, NumericGreaterthaneq, NumericLessthan,
-            NumericLessthaneq, NumericLogarithm, NumericMultiplication, NumericNegation,
-            NumericPower, NumericRemainder, NumericRound, NumericSine, NumericSquareroot,
-            NumericSubtraction, NumericTangent,
+            NumericLessthaneq, NumericLogarithm, NumericMax, NumericMin, NumericMultiplication,
+            NumericNegation, NumericPower, NumericRemainder, NumericRound, NumericSine,
+            NumericSquareroot, NumericSubtraction, NumericTangent,
         },
         string::{
             StringAfter, StringBefore, StringCompare, StringConcatenation, StringContains,
@@ -525,6 +525,28 @@ where
     pub fn numeric_lessthaneq(left: Self, right: Self) -> Self {
         Self::Binary {
             function: BinaryFunctionEnum::NumericLessthaneq(NumericLessthaneq),
+            left: Box::new(left),
+            right: Box::new(right),
+        }
+    }
+
+    /// Create a tree node representing taking the maximum of two numbers.
+    ///
+    /// This evaluates to the larger of the two values (the maximum).
+    pub fn numeric_max(left: Self, right: Self) -> Self {
+        Self::Binary {
+            function: BinaryFunctionEnum::NumericMax(NumericMax),
+            left: Box::new(left),
+            right: Box::new(right),
+        }
+    }
+
+    /// Create a tree node representing taking the minimum of two numbers.
+    ///
+    /// This evaluates to the smaller of the two values (the minimum).
+    pub fn numeric_min(left: Self, right: Self) -> Self {
+        Self::Binary {
+            function: BinaryFunctionEnum::NumericMin(NumericMin),
             left: Box::new(left),
             right: Box::new(right),
         }

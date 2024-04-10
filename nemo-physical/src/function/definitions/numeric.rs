@@ -16,24 +16,27 @@ use self::{
         numeric_absolute_double, numeric_addition_double, numeric_ceil_double, numeric_cos_double,
         numeric_division_double, numeric_floor_double, numeric_greaterthan_double,
         numeric_greaterthaneq_double, numeric_lessthan_double, numeric_lessthaneq_double,
-        numeric_logarithm_double, numeric_multiplication_double, numeric_negation_double,
-        numeric_power_double, numeric_remainder_double, numeric_round_double, numeric_sin_double,
+        numeric_logarithm_double, numeric_max_double, numeric_min_double,
+        numeric_multiplication_double, numeric_negation_double, numeric_power_double,
+        numeric_remainder_double, numeric_round_double, numeric_sin_double,
         numeric_squareroot_double, numeric_subtraction_double, numeric_tan_double,
     },
     float::{
         numeric_absolute_float, numeric_addition_float, numeric_ceil_float, numeric_cos_float,
         numeric_division_float, numeric_floor_float, numeric_greaterthan_float,
         numeric_greaterthaneq_float, numeric_lessthan_float, numeric_lessthaneq_float,
-        numeric_logarithm_float, numeric_multiplication_float, numeric_negation_float,
-        numeric_power_float, numeric_remainder_float, numeric_round_float, numeric_sin_float,
-        numeric_squareroot_float, numeric_subtraction_float, numeric_tan_float,
+        numeric_logarithm_float, numeric_max_float, numeric_min_float,
+        numeric_multiplication_float, numeric_negation_float, numeric_power_float,
+        numeric_remainder_float, numeric_round_float, numeric_sin_float, numeric_squareroot_float,
+        numeric_subtraction_float, numeric_tan_float,
     },
     integer64::{
         numeric_absolute_integer64, numeric_addition_integer64, numeric_division_integer64,
         numeric_greaterthan_integer64, numeric_greaterthaneq_integer64, numeric_lessthan_integer64,
-        numeric_lessthaneq_integer64, numeric_logarithm_integer64,
-        numeric_multiplication_integer64, numeric_negation_integer64, numeric_power_integer64,
-        numeric_remainder_integer64, numeric_squareroot_integer64, numeric_subtraction_integer64,
+        numeric_lessthaneq_integer64, numeric_logarithm_integer64, numeric_max_integer64,
+        numeric_min_integer64, numeric_multiplication_integer64, numeric_negation_integer64,
+        numeric_power_integer64, numeric_remainder_integer64, numeric_squareroot_integer64,
+        numeric_subtraction_integer64,
     },
 };
 
@@ -704,5 +707,51 @@ impl BinaryFunction for NumericGreaterthaneq {
                 .bitset()
                 .union(StorageTypeName::Id64.bitset()),
         )
+    }
+}
+
+/// Maximum of two numbers
+///
+/// Returns `None` if the input parameters are not the same numeric type
+#[derive(Debug, Copy, Clone)]
+pub struct NumericMax;
+impl BinaryFunction for NumericMax {
+    fn evaluate(
+        &self,
+        parameter_first: AnyDataValue,
+        parameter_second: AnyDataValue,
+    ) -> Option<AnyDataValue> {
+        NumericPair::from_any_pair(parameter_first, parameter_second).and_then(|pair| match pair {
+            NumericPair::Integer(first, second) => numeric_max_integer64(first, second),
+            NumericPair::Float(first, second) => numeric_max_float(first, second),
+            NumericPair::Double(first, second) => numeric_max_double(first, second),
+        })
+    }
+
+    fn type_propagation(&self) -> FunctionTypePropagation {
+        FunctionTypePropagation::Preserve
+    }
+}
+
+/// Minimum of two numbers
+///
+/// Returns `None` if the input parameters are not the same numeric type
+#[derive(Debug, Copy, Clone)]
+pub struct NumericMin;
+impl BinaryFunction for NumericMin {
+    fn evaluate(
+        &self,
+        parameter_first: AnyDataValue,
+        parameter_second: AnyDataValue,
+    ) -> Option<AnyDataValue> {
+        NumericPair::from_any_pair(parameter_first, parameter_second).and_then(|pair| match pair {
+            NumericPair::Integer(first, second) => numeric_min_integer64(first, second),
+            NumericPair::Float(first, second) => numeric_min_float(first, second),
+            NumericPair::Double(first, second) => numeric_min_double(first, second),
+        })
+    }
+
+    fn type_propagation(&self) -> FunctionTypePropagation {
+        FunctionTypePropagation::Preserve
     }
 }

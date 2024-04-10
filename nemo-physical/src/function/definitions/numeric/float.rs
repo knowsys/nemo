@@ -181,3 +181,19 @@ pub(super) fn numeric_ceil_float(parameter: Float) -> Option<AnyDataValue> {
 pub(super) fn numeric_floor_float(parameter: Float) -> Option<AnyDataValue> {
     some_datavalue_from_float(parameter.floor())
 }
+
+/// Max value of two floats
+pub(super) fn numeric_max_float(
+    parameter_first: Float,
+    parameter_second: Float,
+) -> Option<AnyDataValue> {
+    some_datavalue_from_float(std::cmp::max(parameter_first, parameter_second))
+}
+
+/// Min value of two floats
+pub(super) fn numeric_min_float(
+    parameter_first: Float,
+    parameter_second: Float,
+) -> Option<AnyDataValue> {
+    some_datavalue_from_float(std::cmp::min(parameter_first, parameter_second))
+}

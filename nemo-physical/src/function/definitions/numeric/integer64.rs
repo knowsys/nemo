@@ -168,3 +168,25 @@ pub(super) fn numeric_greaterthaneq_integer64(
         Some(AnyDataValue::new_boolean(false))
     }
 }
+
+/// Max value of two 64-bit integers
+pub(super) fn numeric_max_integer64(
+    parameter_first: i64,
+    parameter_second: i64,
+) -> Option<AnyDataValue> {
+    Some(AnyDataValue::new_integer_from_i64(std::cmp::max(
+        parameter_first,
+        parameter_second,
+    )))
+}
+
+/// Min value of two 64-bit integers
+pub(super) fn numeric_min_integer64(
+    parameter_first: i64,
+    parameter_second: i64,
+) -> Option<AnyDataValue> {
+    Some(AnyDataValue::new_integer_from_i64(std::cmp::min(
+        parameter_first,
+        parameter_second,
+    )))
+}

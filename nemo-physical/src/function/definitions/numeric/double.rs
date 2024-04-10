@@ -181,3 +181,19 @@ pub(super) fn numeric_ceil_double(parameter: Double) -> Option<AnyDataValue> {
 pub(super) fn numeric_floor_double(parameter: Double) -> Option<AnyDataValue> {
     some_datavalue_from_double(parameter.floor())
 }
+
+/// Max value of two doubles
+pub(super) fn numeric_max_double(
+    parameter_first: Double,
+    parameter_second: Double,
+) -> Option<AnyDataValue> {
+    some_datavalue_from_double(std::cmp::max(parameter_first, parameter_second))
+}
+
+/// Min value of two doubles
+pub(super) fn numeric_min_double(
+    parameter_first: Double,
+    parameter_second: Double,
+) -> Option<AnyDataValue> {
+    some_datavalue_from_double(std::cmp::min(parameter_first, parameter_second))
+}

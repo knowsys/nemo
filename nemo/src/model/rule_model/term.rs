@@ -127,6 +127,10 @@ pub enum BinaryOperation {
     NumericLessthan,
     /// Numeric less than or equals comparison
     NumericLessthaneq,
+    /// Maximum of two numbers
+    NumericMax,
+    /// Minimum of two numbers
+    NumericMin,
     /// Lexicographic comparison between strings
     StringCompare,
     /// Concatentation of two string values, correspondng to SPARQL function CONCAT.
@@ -167,6 +171,8 @@ impl BinaryOperation {
             "STRBEFORE" => Ok(Self::StringBefore),
             "STRAFTER" => Ok(Self::StringAfter),
             "REM" => Ok(Self::NumericRemainder),
+            "MAX" => Ok(Self::NumericMax),
+            "MIN" => Ok(Self::NumericMin),
             s => Err(Error::UnknownUnaryOpertation {
                 operation: s.into(),
             }),
@@ -195,6 +201,8 @@ impl BinaryOperation {
             Self::NumericGreaterthaneq => "GreaterThanEq",
             Self::NumericLessthan => "LessThan",
             Self::NumericLessthaneq => "LessThanEq",
+            Self::NumericMax => "Maximum",
+            Self::NumericMin => "Minimum",
             Self::StringBefore => "STRBEFORE",
             Self::StringAfter => "STRAFTER",
             Self::StringStarts => "STRSTARTS",
@@ -221,6 +229,8 @@ impl BinaryOperation {
             Self::NumericRemainder => Some("%"),
             Self::NumericLogarithm
             | Self::NumericPower
+            | Self::NumericMax
+            | Self::NumericMin
             | Self::StringCompare
             | Self::StringConcatenation
             | Self::StringContains

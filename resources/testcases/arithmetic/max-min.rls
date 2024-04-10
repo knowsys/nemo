@@ -1,0 +1,11 @@
+a(1, 2).
+b(1, 3).
+c(1, 4).
+d(1, 5).
+
+max(?U, MAX(?V, MAX(?W, MAX(?X, ?Y)))) :- a(?U, ?V), b(?U, ?W), c(?U, ?X), d(?U, ?Y).
+min(?U, MIN(?V, MIN(?W, MIN(?X, ?Y)))) :- a(?U, ?V), b(?U, ?W), c(?U, ?X), d(?U, ?Y).
+
+@export max :- csv {}.
+@export min :- csv {}.
+

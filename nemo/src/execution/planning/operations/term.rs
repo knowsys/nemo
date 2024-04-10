@@ -63,6 +63,8 @@ pub(super) fn term_to_function_tree(
                 }
                 BinaryOperation::NumericLessthan => FunctionTree::numeric_lessthan(left, right),
                 BinaryOperation::NumericLessthaneq => FunctionTree::numeric_lessthaneq(left, right),
+                BinaryOperation::NumericMax => FunctionTree::numeric_max(left, right),
+                BinaryOperation::NumericMin => FunctionTree::numeric_min(left, right),
                 BinaryOperation::StringBefore => FunctionTree::string_before(left, right),
                 BinaryOperation::StringAfter => FunctionTree::string_after(left, right),
                 BinaryOperation::StringStarts => FunctionTree::string_starts(left, right),
