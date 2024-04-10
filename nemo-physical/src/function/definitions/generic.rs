@@ -119,7 +119,7 @@ impl UnaryFunction for LexicalValue {
 pub struct Datatype;
 impl UnaryFunction for Datatype {
     fn evaluate(&self, parameter: AnyDataValue) -> Option<AnyDataValue> {
-        Some(AnyDataValue::new_plain_string(parameter.datatype_iri()))
+        Some(AnyDataValue::new_iri(parameter.datatype_iri()))
     }
 
     fn type_propagation(&self) -> FunctionTypePropagation {
