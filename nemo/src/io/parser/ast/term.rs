@@ -52,6 +52,7 @@ impl AstNode for Term<'_> {
                 ..
             } => {
                 let mut vec = Vec::new();
+                #[allow(trivial_casts)]
                 vec.push(&**lhs as &dyn AstNode);
                 if let Some(ws) = ws1 {
                     vec.push(ws);
@@ -73,6 +74,7 @@ impl AstNode for Term<'_> {
                 ..
             } => {
                 let mut vec = Vec::new();
+                #[allow(trivial_casts)]
                 vec.push(operation as &dyn AstNode);
                 vec.push(open_paren);
                 if let Some(ws) = ws1 {

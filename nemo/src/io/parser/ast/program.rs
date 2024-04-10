@@ -12,6 +12,7 @@ impl AstNode for Program<'_> {
     fn children(&self) -> Option<Vec<&dyn AstNode>> {
         let mut vec = Vec::new();
         if let Some(dc) = &self.tl_doc_comment {
+            #[allow(trivial_casts)]
             vec.push(dc as &dyn AstNode);
         };
         // NOTE: The current implementation puts the doc comment and all the

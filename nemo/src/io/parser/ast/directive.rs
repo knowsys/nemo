@@ -76,6 +76,7 @@ impl AstNode for Directive<'_> {
             } => {
                 let mut vec = Vec::new();
                 if let Some(dc) = doc_comment {
+                    #[allow(trivial_casts)]
                     vec.push(dc as &dyn AstNode);
                 };
                 vec.push(kw);
@@ -102,6 +103,7 @@ impl AstNode for Directive<'_> {
             } => {
                 let mut vec = Vec::new();
                 if let Some(dc) = doc_comment {
+                    #[allow(trivial_casts)]
                     vec.push(dc as &dyn AstNode);
                 };
                 vec.push(kw);
@@ -134,6 +136,7 @@ impl AstNode for Directive<'_> {
             } => {
                 let mut vec = Vec::new();
                 if let Some(dc) = doc_comment {
+                    #[allow(trivial_casts)]
                     vec.push(dc as &dyn AstNode);
                 };
                 vec.push(kw);
@@ -168,6 +171,7 @@ impl AstNode for Directive<'_> {
             } => {
                 let mut vec = Vec::new();
                 if let Some(dc) = doc_comment {
+                    #[allow(trivial_casts)]
                     vec.push(dc as &dyn AstNode);
                 };
                 vec.push(kw);
