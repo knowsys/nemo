@@ -3,10 +3,10 @@
 #![deny(
     missing_debug_implementations,
     missing_copy_implementations,
+    trivial_casts,
     trivial_numeric_casts
 )]
 #![warn(
-    trivial_casts,
     missing_docs,
     unused_import_braces,
     unused_qualifications,
