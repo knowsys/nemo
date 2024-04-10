@@ -1209,7 +1209,13 @@ impl<'a> RuleParser<'a> {
                             self.parse_term(),
                         )))(remainder)?;
 
-                        Ok((remainder, Term::Nary {operation: op, parameters: subterms}))
+                        Ok((
+                            remainder,
+                            Term::Nary {
+                                operation: op,
+                                parameters: subterms,
+                            },
+                        ))
                     } else {
                         let (remainder, subterms) = (self.parenthesised(separated_list0(
                             self.parse_comma(),
