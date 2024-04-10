@@ -9,6 +9,7 @@ use js_sys::Array;
 use js_sys::Reflect;
 use js_sys::Set;
 use js_sys::Uint8Array;
+use nemo::execution::tracing::trace::ExecutionTraceTree;
 use nemo::execution::ExecutionEngine;
 
 use nemo::io::compression_format::CompressionFormat;
@@ -346,8 +347,7 @@ impl NemoEngine {
             .map_err(NemoError)
     }
 
-    #[wasm_bindgen(js_name = "parseAndTraceFact")]
-    pub fn parse_and_trace_fact(&mut self, fact: &str) -> Option<String> {
+    fn parse_and_trace_fact(&mut self, fact: &str) -> Option<ExecutionTraceTree> {
         let parsed_fact = parse_fact(fact.to_owned())
             .map_err(WasmOrInternalNemoError::NemoError)
             .map_err(NemoError)
@@ -355,7 +355,21 @@ impl NemoEngine {
 
         let (trace, handles) = self.engine.trace(self.program.0.clone(), vec![parsed_fact]);
 
-        trace.tree(handles[0]).map(|tree| tree.to_graphml())
+        trace.tree(handles[0])
+    }
+
+    #[wasm_bindgen(js_name = "parseAndTraceFactAscii")]
+    pub fn parse_and_trace_fact_ascii(&mut self, fact: &str) -> Option<String> {
+        self.parse_and_trace_fact(fact)
+            .as_ref()
+            .map(ExecutionTraceTree::to_ascii_art)
+    }
+
+    #[wasm_bindgen(js_name = "parseAndTraceFactGraphML")]
+    pub fn parse_and_trace_fact_graphml(&mut self, fact: &str) -> Option<String> {
+        self.parse_and_trace_fact(fact)
+            .as_ref()
+            .map(ExecutionTraceTree::to_graphml)
     }
 }
 
