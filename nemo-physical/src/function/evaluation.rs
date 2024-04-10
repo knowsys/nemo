@@ -292,6 +292,10 @@ mod test {
         AnyDataValue::new_plain_string(String::from(string))
     }
 
+    fn any_iri(string: &str) -> AnyDataValue {
+        AnyDataValue::new_iri(String::from(string))
+    }
+
     fn any_int(integer: i64) -> AnyDataValue {
         AnyDataValue::new_integer_from_i64(integer)
     }
@@ -857,7 +861,7 @@ mod test {
         let tree_datatype = Function::datatype(tree_integer);
         evaluate_expect(
             &tree_datatype,
-            Some(any_string("http://www.w3.org/2001/XMLSchema#int")),
+            Some(any_iri("http://www.w3.org/2001/XMLSchema#int")),
         );
     }
 
