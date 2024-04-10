@@ -34,6 +34,7 @@ pub(crate) struct List<'a, T> {
 impl<T: AstNode + std::fmt::Debug> AstNode for List<'_, T> {
     fn children(&self) -> Option<Vec<&dyn AstNode>> {
         let mut vec = Vec::new();
+        #[allow(trivial_casts)]
         vec.push(&self.first as &dyn AstNode);
         if let Some(rest) = &self.rest {
             for (ws1, delim, ws2, item) in rest {
