@@ -29,11 +29,11 @@ double,"""2023""^^<http://www.w3.org/2001/XMLSchema#double>"
 round,5
 round,"""3""^^<http://www.w3.org/2001/XMLSchema#double>"
 round,"""4""^^<http://www.w3.org/2001/XMLSchema#double>"
-datatype,"""http://www.w3.org/2001/XMLSchema#anyURI"""
-datatype,"""http://www.w3.org/2001/XMLSchema#string"""
-datatype,"""http://www.w3.org/2001/XMLSchema#gYear"""
-datatype,"""http://www.w3.org/2001/XMLSchema#int"""
-datatype,"""http://www.w3.org/2001/XMLSchema#double"""
+datatype,http://www.w3.org/2001/XMLSchema#anyURI
+datatype,http://www.w3.org/2001/XMLSchema#string
+datatype,http://www.w3.org/2001/XMLSchema#gYear
+datatype,http://www.w3.org/2001/XMLSchema#int
+datatype,http://www.w3.org/2001/XMLSchema#double
 concat,"""Hello World"""
 compare,-10
 contains,"""true""^^<http://www.w3.org/2001/XMLSchema#boolean>"
