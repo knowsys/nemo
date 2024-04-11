@@ -1,5 +1,5 @@
 use super::map::Map;
-use super::{ast_to_ascii_tree, AstNode, Position};
+use super::{ast_to_ascii_tree, AstNode, List, Position};
 use crate::io::lexer::{Span, Token};
 use ascii_tree::write_tree;
 
@@ -55,12 +55,15 @@ pub(crate) enum Directive<'a> {
         ws4: Option<Token<'a>>,
         dot: Token<'a>,
     },
-    // maybe will get deprecated
+    // "@output A, B, C."
     Output {
         span: Span<'a>,
         doc_comment: Option<Token<'a>>,
         kw: Token<'a>,
-        predicates: Vec<Token<'a>>,
+        ws1: Token<'a>,
+        predicates: Option<List<'a, Token<'a>>>,
+        ws2: Option<Token<'a>>,
+        dot: Token<'a>,
     },
 }
 impl AstNode for Directive<'_> {
