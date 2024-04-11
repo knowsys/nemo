@@ -1,5 +1,7 @@
-use super::AstNode;
-use super::{statement::Statement, Position};
+use ascii_tree::write_tree;
+
+use super::statement::Statement;
+use super::{ast_to_ascii_tree, AstNode, Position};
 use crate::io::lexer::{Span, Token};
 
 #[derive(Debug, Clone, PartialEq)]
@@ -38,5 +40,16 @@ impl AstNode for Program<'_> {
 
     fn is_token(&self) -> bool {
         false
+    }
+
+    fn name(&self) -> String {
+        String::from("Program")
+    }
+}
+impl std::fmt::Display for Program<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut output = String::new();
+        write_tree(&mut output, &ast_to_ascii_tree(self))?;
+        write!(f, "{output}")
     }
 }

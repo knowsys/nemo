@@ -1,9 +1,8 @@
 use super::map::Map;
 use super::named_tuple::NamedTuple;
-use super::AstNode;
-use super::List;
-use super::Position;
+use super::{ast_to_ascii_tree, AstNode, List, Position};
 use crate::io::lexer::{Span, Token};
+use ascii_tree::write_tree;
 
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum Term<'a> {
@@ -115,5 +114,24 @@ impl AstNode for Term<'_> {
 
     fn is_token(&self) -> bool {
         false
+    }
+
+    fn name(&self) -> String {
+        match self {
+            Term::Primitive(_) => "Primitive".into(),
+            Term::Variable(_) => "Variable".into(),
+            Term::Unary { .. } => "Unary Term".into(),
+            Term::Binary { .. } => "Binary Term".into(),
+            Term::Aggregation { .. } => "Aggregation".into(),
+            Term::Function(_) => "Function Symbol".into(),
+            Term::Map(_) => "Map".into(),
+        }
+    }
+}
+impl std::fmt::Display for Term<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut output = String::new();
+        write_tree(&mut output, &ast_to_ascii_tree(self))?;
+        write!(f, "{output}")
     }
 }
