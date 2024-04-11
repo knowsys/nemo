@@ -1,7 +1,8 @@
 use super::atom::Atom;
 use super::directive::Directive;
-use super::{AstNode, List, Position};
+use super::{ast_to_ascii_tree, AstNode, List, Position};
 use crate::io::lexer::{Span, Token};
+use ascii_tree::write_tree;
 
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum Statement<'a> {
@@ -30,7 +31,7 @@ pub(crate) enum Statement<'a> {
 impl AstNode for Statement<'_> {
     fn children(&self) -> Option<Vec<&dyn AstNode>> {
         match self {
-            Statement::Directive(directive) => directive.children(),
+            Statement::Directive(directive) => Some(vec![directive]),
             Statement::Fact {
                 doc_comment,
                 atom,
@@ -107,5 +108,22 @@ impl AstNode for Statement<'_> {
 
     fn is_token(&self) -> bool {
         false
+    }
+
+    fn name(&self) -> String {
+        match self {
+            Statement::Directive(_) => "Directive".into(),
+            Statement::Fact { .. } => "Fact".into(),
+            Statement::Rule { .. } => "Rule".into(),
+            Statement::Whitespace(_) => "Whitespace".into(),
+            Statement::Comment(_) => "Comment".into(),
+        }
+    }
+}
+impl std::fmt::Display for Statement<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut output = String::new();
+        write_tree(&mut output, &ast_to_ascii_tree(self))?;
+        write!(f, "{output}")
     }
 }

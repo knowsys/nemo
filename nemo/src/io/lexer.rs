@@ -176,11 +176,15 @@ impl std::fmt::Display for Token<'_> {
         let line = self.span.location_line();
         let fragment = self.span.fragment();
         if self.span.extra == () {
-            write!(f, "T!{{{0}, S!({offset}, {line}, {fragment})}}", self.kind)
+            write!(
+                f,
+                "T!{{{0}, S!({offset}, {line}, {fragment:?})}}",
+                self.kind
+            )
         } else {
             write!(
                 f,
-                "T!{{{0}, S!({offset}, {line}, {fragment}, {1:?})}}",
+                "T!{{{0}, S!({offset}, {line}, {fragment:?}, {1:?})}}",
                 self.kind, self.span.extra
             )
         }
@@ -205,6 +209,10 @@ impl<'a> crate::io::parser::ast::AstNode for Token<'a> {
 
     fn is_token(&self) -> bool {
         true
+    }
+
+    fn name(&self) -> String {
+        String::from("Token")
     }
 }
 
