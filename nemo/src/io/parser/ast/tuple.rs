@@ -4,9 +4,9 @@ use crate::io::lexer::{Span, Token};
 use ascii_tree::write_tree;
 
 #[derive(Debug, Clone, PartialEq)]
-pub(crate) struct NamedTuple<'a> {
+pub(crate) struct Tuple<'a> {
     pub(crate) span: Span<'a>,
-    pub(crate) identifier: Token<'a>,
+    pub(crate) identifier: Option<Token<'a>>,
     pub(crate) ws1: Option<Token<'a>>,
     pub(crate) open_paren: Token<'a>,
     pub(crate) ws2: Option<Token<'a>>,
@@ -14,11 +14,13 @@ pub(crate) struct NamedTuple<'a> {
     pub(crate) ws3: Option<Token<'a>>,
     pub(crate) close_paren: Token<'a>,
 }
-impl AstNode for NamedTuple<'_> {
+impl AstNode for Tuple<'_> {
     fn children(&self) -> Option<Vec<&dyn AstNode>> {
         let mut vec = Vec::new();
         #[allow(trivial_casts)]
-        vec.push(&self.identifier as &dyn AstNode);
+        if let Some(identifier) = &self.identifier {
+            vec.push(identifier as &dyn AstNode);
+        }
         if let Some(ws) = &self.ws1 {
             vec.push(ws);
         }
@@ -56,7 +58,7 @@ impl AstNode for NamedTuple<'_> {
         String::from("Named Tuple")
     }
 }
-impl std::fmt::Display for NamedTuple<'_> {
+impl std::fmt::Display for Tuple<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut output = String::new();
         write_tree(&mut output, &ast_to_ascii_tree(self))?;
