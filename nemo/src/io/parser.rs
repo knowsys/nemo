@@ -2739,19 +2739,54 @@ mod new {
         let input_span = input.clone();
         tuple((
             opt(lex_doc_comment),
-            at,
-            verify(lex_ident, |token| token.kind == TokenKind::Output),
-            ignore_ws_and_comments(separated_list0(comma, ignore_ws_and_comments(lex_ident))),
-            ignore_ws_and_comments(dot),
+            recognize(pair(
+                at,
+                verify(lex_ident, |token| token.kind == TokenKind::Output),
+            )),
+            lex_whitespace,
+            opt(parse_identifier_list),
+            opt(lex_whitespace),
+            dot,
         ))(input)
-        .map(|(rest_input, (doc_comment, _, kw, predicates, _))| {
+        .map(
+            |(rest_input, (doc_comment, kw, ws1, predicates, ws2, dot))| {
+                (
+                    rest_input,
+                    Directive::Output {
+                        span: outer_span(input_span, rest_input),
+                        doc_comment,
+                        kw: Token {
+                            kind: TokenKind::Output,
+                            span: kw,
+                        },
+                        ws1,
+                        predicates,
+                        ws2,
+                        dot,
+                    },
+                )
+            },
+        )
+    }
+
+    fn parse_identifier_list<'a>(input: Span<'a>) -> IResult<Span, List<'a, Token<'a>>> {
+        let input_span = input.clone();
+        pair(
+            lex_ident,
+            many0(tuple((
+                opt(lex_whitespace),
+                comma,
+                opt(lex_whitespace),
+                lex_ident,
+            ))),
+        )(input)
+        .map(|(rest_input, (first, rest))| {
             (
                 rest_input,
-                Directive::Output {
+                List {
                     span: outer_span(input_span, rest_input),
-                    doc_comment,
-                    kw,
-                    predicates,
+                    first,
+                    rest: if rest.is_empty() { None } else { Some(rest) },
                 },
             )
         })
@@ -3124,7 +3159,7 @@ mod new {
         #[test]
         fn syntax() {
             let input = Span::new(
-                r#"@base <http://example.org/foo/>.@prefix rdfs:<http://www.w3.org/2000/01/rdf-schema#>.@import sourceA:-csv{resource="sources/dataA.csv"}.@export a:-csv{}.@output a."#,
+                r#"@base <http://example.org/foo/>.@prefix rdfs:<http://www.w3.org/2000/01/rdf-schema#>.@import sourceA:-csv{resource="sources/dataA.csv"}.@export a:-csv{}.@output a, b, c."#,
             );
             assert_eq!(
                 parse_program(input),
@@ -3300,16 +3335,60 @@ mod new {
                             },
                         }),
                         Statement::Directive(Directive::Output {
-                            span: S!(153, 1, "@output a."),
+                            span: S!(153, 1, "@output a, b, c."),
                             doc_comment: None,
                             kw: Token {
                                 kind: TokenKind::Output,
-                                span: S!(154, 1, "output")
+                                span: S!(153, 1, "@output")
                             },
-                            predicates: vec![Token {
-                                kind: TokenKind::Ident,
-                                span: S!(161, 1, "a")
-                            }],
+                            ws1: Token {
+                                kind: TokenKind::Whitespace,
+                                span: S!(160, 1, " "),
+                            },
+                            predicates: Some(List {
+                                span: S!(161, 1, "a, b, c"),
+                                first: Token {
+                                    kind: TokenKind::Ident,
+                                    span: S!(161, 1, "a"),
+                                },
+                                rest: Some(vec![
+                                    (
+                                        None,
+                                        Token {
+                                            kind: TokenKind::Comma,
+                                            span: S!(162, 1, ","),
+                                        },
+                                        Some(Token {
+                                            kind: TokenKind::Whitespace,
+                                            span: S!(163, 1, " "),
+                                        }),
+                                        Token {
+                                            kind: TokenKind::Ident,
+                                            span: S!(164, 1, "b"),
+                                        },
+                                    ),
+                                    (
+                                        None,
+                                        Token {
+                                            kind: TokenKind::Comma,
+                                            span: S!(165, 1, ","),
+                                        },
+                                        Some(Token {
+                                            kind: TokenKind::Whitespace,
+                                            span: S!(166, 1, " "),
+                                        }),
+                                        Token {
+                                            kind: TokenKind::Ident,
+                                            span: S!(167, 1, "c"),
+                                        },
+                                    ),
+                                ]),
+                            }),
+                            ws2: None,
+                            dot: Token {
+                                kind: TokenKind::Dot,
+                                span: S!(168, 1, "."),
+                            }
                         }),
                     ],
                 }
