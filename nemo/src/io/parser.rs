@@ -2948,13 +2948,13 @@ mod new {
 
     fn parse_term<'a>(input: Span<'a>) -> IResult<Span, Term<'a>> {
         alt((
+            parse_map_term,
+            parse_function_term,
             parse_primitive_term,
             parse_variable,
             parse_unary_term,
             // parse_binary_term,
             // parse_aggregation_term,
-            parse_function_term,
-            parse_map_term,
         ))(input)
     }
 
@@ -3011,7 +3011,7 @@ mod new {
     }
 
     #[cfg(test)]
-    mod test {
+    mod tests {
         use super::*;
         use crate::io::{
             lexer::*,
