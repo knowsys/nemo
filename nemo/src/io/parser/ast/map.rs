@@ -1,6 +1,7 @@
 use super::term::Term;
-use super::{AstNode, List, Position};
+use super::{ast_to_ascii_tree, AstNode, List, Position};
 use crate::io::lexer::{Span, Token};
+use ascii_tree::write_tree;
 use std::fmt::Debug;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -53,6 +54,17 @@ impl AstNode for Map<'_> {
     fn is_token(&self) -> bool {
         false
     }
+
+    fn name(&self) -> String {
+        String::from("Map")
+    }
+}
+impl std::fmt::Display for Map<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut output = String::new();
+        write_tree(&mut output, &ast_to_ascii_tree(self))?;
+        write!(f, "{output}")
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -94,5 +106,16 @@ impl<K: AstNode + Debug, V: AstNode + Debug> AstNode for Pair<'_, K, V> {
 
     fn is_token(&self) -> bool {
         false
+    }
+
+    fn name(&self) -> String {
+        String::from("Pair")
+    }
+}
+impl<K: AstNode + Debug, V: AstNode + Debug> std::fmt::Display for Pair<'_, K, V> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut output = String::new();
+        write_tree(&mut output, &ast_to_ascii_tree(self))?;
+        write!(f, "{output}")
     }
 }
