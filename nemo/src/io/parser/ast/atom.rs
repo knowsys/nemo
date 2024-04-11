@@ -1,5 +1,5 @@
-use super::named_tuple::NamedTuple;
 use super::term::Term;
+use super::tuple::Tuple;
 use super::{ast_to_ascii_tree, AstNode};
 use super::{map::Map, Position};
 use crate::io::lexer::{Span, Token};
@@ -7,11 +7,11 @@ use ascii_tree::write_tree;
 
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum Atom<'a> {
-    Positive(NamedTuple<'a>),
+    Positive(Tuple<'a>),
     Negative {
         span: Span<'a>,
         neg: Token<'a>,
-        atom: NamedTuple<'a>,
+        atom: Tuple<'a>,
     },
     InfixAtom {
         span: Span<'a>,
