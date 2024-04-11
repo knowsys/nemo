@@ -832,15 +832,6 @@ where
         }
     }
 
-    // NaryOperation::BitAnd => todo!(),
-    //             NaryOperation::BitOr => todo!(),
-    //             NaryOperation::BitXor => todo!(),
-    //             NaryOperation::NumericSum => todo!(),
-    //             NaryOperation::NumericProduct => todo!(),
-    //             NaryOperation::NumericMinimum => todo!(),
-    //             NaryOperation::NumericMaximum => todo!(),
-    //             NaryOperation::NumericLukasiewicz => todo!(),
-
     /// Create a tree node representing the bitwise and operation.
     ///
     /// Evaluates to an integer resulting from performing the bitwise and operation
