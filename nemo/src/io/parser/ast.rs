@@ -2,6 +2,7 @@ use nom::Offset;
 
 use crate::io::lexer::{Span, Token};
 use std::fmt::Display;
+use ascii_tree::{Tree, write_tree};
 
 pub(crate) mod atom;
 pub(crate) mod directive;
@@ -11,11 +12,12 @@ pub(crate) mod program;
 pub(crate) mod statement;
 pub(crate) mod term;
 
-pub(crate) trait AstNode: std::fmt::Debug {
+pub(crate) trait AstNode: std::fmt::Debug + Display {
     fn children(&self) -> Option<Vec<&dyn AstNode>>;
     fn span(&self) -> Span;
     fn position(&self) -> Position;
     fn is_token(&self) -> bool;
+    fn name(&self) -> String;
 }
 
 pub(crate) struct Position {
@@ -66,9 +68,20 @@ impl<T: AstNode + std::fmt::Debug> AstNode for List<'_, T> {
     fn is_token(&self) -> bool {
         false
     }
+
+    fn name(&self) -> String {
+        String::from("List")
+    }
+}
+impl<T: AstNode + std::fmt::Debug> Display for List<'_, T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut output = String::new();
+        write_tree(&mut output, &ast_to_ascii_tree(self))?;
+        write!(f, "{output}")
+    }
 }
 
-fn get_all_tokens(node: &dyn AstNode) -> Vec<&dyn AstNode> {
+pub(crate) fn get_all_tokens(node: &dyn AstNode) -> Vec<&dyn AstNode> {
     let mut vec = Vec::new();
     if let Some(children) = node.children() {
         for child in children {
@@ -78,6 +91,20 @@ fn get_all_tokens(node: &dyn AstNode) -> Vec<&dyn AstNode> {
         vec.push(node);
     };
     vec
+}
+
+pub(crate) fn ast_to_ascii_tree(node: &dyn AstNode) -> Tree {
+    let mut vec = Vec::new();
+    if let Some(children) = node.children() {
+        for child in children {
+            if child.is_token() {
+                vec.push(Tree::Leaf(vec![format!("{}", child)]));
+            } else {
+                vec.push(ast_to_ascii_tree(child));
+            }
+        }
+    }
+    Tree::Node(node.name(), vec)
 }
 
 mod test {
@@ -295,11 +322,15 @@ mod test {
                 }),
             ],
         };
-
+        println!("{}", ast);
         let tokens1 = get_all_tokens(&ast);
+        for token in &tokens1 {
+            println!("{}", token);
+        }
+
         assert_eq!(input, {
             let mut result = String::new();
-            for token in tokens1 {
+            for token in &tokens1 {
                 result.push_str(token.span().fragment());
             }
             result

@@ -1,8 +1,9 @@
 use super::named_tuple::NamedTuple;
 use super::term::Term;
-use super::AstNode;
+use super::{ast_to_ascii_tree, AstNode};
 use super::{map::Map, Position};
 use crate::io::lexer::{Span, Token};
+use ascii_tree::write_tree;
 
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum Atom<'a> {
@@ -25,7 +26,7 @@ pub(crate) enum Atom<'a> {
 impl AstNode for Atom<'_> {
     fn children(&self) -> Option<Vec<&dyn AstNode>> {
         match self {
-            Atom::Positive(named_tuple) => named_tuple.children(),
+            Atom::Positive(named_tuple) => Some(vec![named_tuple]),
             Atom::Negative { neg, atom, .. } => Some(vec![neg, atom]),
             Atom::InfixAtom {
                 lhs,
@@ -48,7 +49,7 @@ impl AstNode for Atom<'_> {
                 vec.push(rhs);
                 Some(vec)
             }
-            Atom::Map(map) => map.children(),
+            Atom::Map(map) => Some(vec![map]),
         }
     }
 
@@ -72,5 +73,21 @@ impl AstNode for Atom<'_> {
 
     fn is_token(&self) -> bool {
         false
+    }
+
+    fn name(&self) -> String {
+        match self {
+            Atom::Positive(_) => "Positive Atom".into(),
+            Atom::Negative { .. } => "Negative Atom".into(),
+            Atom::InfixAtom { .. } => "Infix Atom".into(),
+            Atom::Map(_) => "Map Atom".into(),
+        }
+    }
+}
+impl std::fmt::Display for Atom<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut output = String::new();
+        write_tree(&mut output, &ast_to_ascii_tree(self))?;
+        write!(f, "{output}")
     }
 }
