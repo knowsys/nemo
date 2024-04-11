@@ -2398,7 +2398,7 @@ mod test {
 /// NEW PARSER
 mod new {
     use super::ast::{
-        atom::*, directive::*, map::*, named_tuple::*, program::*, statement::*, term::*, List,
+        atom::*, directive::*, map::*, program::*, statement::*, term::*, tuple::*, List,
     };
     use crate::io::lexer::{
         arrow, at, close_brace, close_paren, colon, comma, dot, equal, greater, greater_equal,
@@ -2806,10 +2806,10 @@ mod new {
         })
     }
 
-    fn parse_named_tuple<'a>(input: Span<'a>) -> IResult<Span, NamedTuple<'a>> {
+    fn parse_named_tuple<'a>(input: Span<'a>) -> IResult<Span, Tuple<'a>> {
         let input_span = input.clone();
         tuple((
-            lex_ident,
+            opt(lex_ident),
             opt(lex_whitespace),
             open_paren,
             opt(lex_whitespace),
@@ -2821,7 +2821,7 @@ mod new {
             |(rest_input, (identifier, ws1, open_paren, ws2, terms, ws3, close_paren))| {
                 (
                     rest_input,
-                    NamedTuple {
+                    Tuple {
                         span: outer_span(input_span, rest_input),
                         identifier,
                         ws1,
@@ -3041,12 +3041,12 @@ mod new {
                     statements: vec![Statement::Fact {
                         span: S!(0, 1, "a(B,C)."),
                         doc_comment: None,
-                        atom: Atom::Positive(NamedTuple {
+                        atom: Atom::Positive(Tuple {
                             span: S!(0, 1, "a(B,C)"),
-                            identifier: Token {
+                            identifier: Some(Token {
                                 kind: TokenKind::Ident,
                                 span: S!(0, 1, "a"),
-                            },
+                            }),
                             ws1: None,
                             open_paren: Token {
                                 kind: TokenKind::OpenParen,
@@ -3310,12 +3310,12 @@ mod new {
                         Statement::Fact {
                             span: S!(0, 1, "some(Fact, with, whitespace) ."),
                             doc_comment: None,
-                            atom: Atom::Positive(NamedTuple {
+                            atom: Atom::Positive(Tuple {
                                 span: S!(0, 1, "some(Fact, with, whitespace)"),
-                                identifier: Token {
+                                identifier: Some(Token {
                                     kind: TokenKind::Ident,
                                     span: S!(0, 1, "some"),
-                                },
+                                }),
                                 ws1: None,
                                 open_paren: Token {
                                     kind: TokenKind::OpenParen,
@@ -3387,6 +3387,29 @@ mod new {
                     ],
                 }
             )
+        }
+
+        #[test]
+        fn display_program() {
+            let input = Span::new(
+                r#"% This example finds trees of (some species of lime/linden tree) in Dresden,
+% which are more than 200 years old.
+% 
+% It shows how to load (typed) data from (compressed) CSV files, how to
+% perform a recursive reachability query, and how to use datatype built-in to
+% find old trees. It can be modified to use a different species or genus of
+% plant, and by changing the required age.
+
+@import tree :- csv{format=(string, string, int, int), resource="https://raw.githubusercontent.com/knowsys/nemo-examples/main/examples/lime-trees/dresden-trees-ages-heights.csv"} . % location URL, species, age, height in m
+@import taxon :- csv{format=(string, string, string), resource="https://raw.githubusercontent.com/knowsys/nemo-examples/main/examples/lime-trees/wikidata-taxon-name-parent.csv.gz"} . % location URL, species, age, height in m
+
+limeSpecies(?X, "Tilia") :- taxon(?X, "Tilia", ?P).
+limeSpecies(?X, ?Name) :- taxon(?X, ?Name, ?Y), limeSpecies(?Y, ?N).
+
+oldLime(?location,?species,?age) :- tree(?location,?species,?age,?heightInMeters), ?age > 200, limeSpecies(?id,?species) ."#,
+            );
+            println!("{}", parse_program(input));
+            // assert!(false);
         }
 
         #[test]
