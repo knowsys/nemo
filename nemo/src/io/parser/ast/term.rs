@@ -1,5 +1,5 @@
 use super::map::Map;
-use super::named_tuple::NamedTuple;
+use super::tuple::Tuple;
 use super::{ast_to_ascii_tree, AstNode, List, Position};
 use crate::io::lexer::{Span, Token};
 use ascii_tree::write_tree;
@@ -31,7 +31,7 @@ pub(crate) enum Term<'a> {
         ws2: Option<Token<'a>>,
         close_paren: Token<'a>,
     },
-    Function(Box<NamedTuple<'a>>),
+    Function(Box<Tuple<'a>>),
     Map(Box<Map<'a>>),
 }
 impl AstNode for Term<'_> {

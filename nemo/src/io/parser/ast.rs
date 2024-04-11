@@ -7,7 +7,7 @@ use ascii_tree::{Tree, write_tree};
 pub(crate) mod atom;
 pub(crate) mod directive;
 pub(crate) mod map;
-pub(crate) mod named_tuple;
+pub(crate) mod tuple;
 pub(crate) mod program;
 pub(crate) mod statement;
 pub(crate) mod term;
@@ -109,7 +109,7 @@ pub(crate) fn ast_to_ascii_tree(node: &dyn AstNode) -> Tree {
 
 mod test {
     use super::*;
-    use super::{atom::Atom, directive::Directive, named_tuple::NamedTuple, program::Program, statement::Statement, term::Term};
+    use super::{atom::Atom, directive::Directive, tuple::Tuple, program::Program, statement::Statement, term::Term};
     use crate::io::lexer::TokenKind;
 
     macro_rules! s {
@@ -187,12 +187,12 @@ mod test {
                         kind: TokenKind::DocComment,
                         span:s!(184,7,"%% This is just an example predicate.\n")
                     }),
-                    atom: Atom::Positive(NamedTuple {
+                    atom: Atom::Positive(Tuple {
                         span: s!(222,8,"somePredicate(ConstA, ConstB)"),
-                        identifier: Token {
+                        identifier: Some(Token {
                             kind: TokenKind::Ident,
                             span: s!(222, 8, "somePredicate"),
-                        },
+                        }),
                          ws1:None ,
                         open_paren:Token{
                             kind:TokenKind::OpenParen,
@@ -246,12 +246,12 @@ mod test {
                     doc_comment: Some(Token { kind: TokenKind::DocComment, span: s!(262,11,"%% This is just an example rule.\n") }),
                     head: List {
                         span: s!(295, 12, "someHead(?VarA)"),
-                        first: Atom::Positive(NamedTuple {
+                        first: Atom::Positive(Tuple {
                             span: s!(295,12,"someHead(?VarA)"),
-                            identifier: Token {
+                            identifier: Some(Token {
                                 kind: TokenKind::Ident,
                                 span: s!(295, 12, "someHead"),
-                            },
+                            }),
                             ws1: None,
                             open_paren: Token { kind: TokenKind::OpenParen, span: s!(303,12,"(") },
                             ws2: None,
@@ -273,12 +273,12 @@ mod test {
                     ws2: Some(Token{kind:TokenKind::Whitespace,span:s!(313,12," ")}),
                     body: List {
                         span: s!(314, 12, "somePredicate(?VarA, ConstB)"),
-                        first: Atom::Positive(NamedTuple {
+                        first: Atom::Positive(Tuple {
                             span: s!(314, 12,"somePredicate(?VarA, ConstB)"),
-                            identifier: Token {
+                            identifier: Some(Token {
                                 kind: TokenKind::Ident,
                                 span: s!(314, 12, "somePredicate"),
-                            },
+                            }),
                             ws1: None,
                             open_paren: Token { kind: TokenKind::OpenParen, span: s!(327,12,"(") },
                             ws2: None,
