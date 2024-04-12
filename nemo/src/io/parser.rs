@@ -3074,8 +3074,9 @@ mod new {
         })
     }
 
+    // Order of functions is important, because of ordered choice and no backtracking
     fn parse_operation_token<'a>(input: Span<'a>) -> IResult<Span, Token<'a>> {
-        alt((equal, unequal, less, less_equal, greater, greater_equal))(input)
+        alt((less_equal, greater_equal, equal, unequal, less, greater))(input)
     }
 
     #[cfg(test)]
