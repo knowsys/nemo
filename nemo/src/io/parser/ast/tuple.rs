@@ -55,7 +55,7 @@ impl AstNode for Tuple<'_> {
     }
 
     fn name(&self) -> String {
-        String::from("Named Tuple")
+        String::from("Tuple")
     }
 }
 impl std::fmt::Display for Tuple<'_> {
