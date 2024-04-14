@@ -318,7 +318,7 @@ pub enum ParseError {
     #[error("Expected an parenthesised term tree")]
     ExpectedParenthesisedTerm,
     /// An aggregate term occurs in the body of a rule.
-    #[error(r#"An aggregate term ("{0}") occurs in the body of a rule"#)]
+    #[error(r#"An  term ("{0}") occurs in the body of a rule"#)]
     AggregateInBody(Aggregate),
     /// Unknown aggregate operation
     #[error(r#"Aggregate operation "{0}" is not known"#)]
