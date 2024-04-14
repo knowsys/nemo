@@ -26,42 +26,52 @@ use super::{
 #[allow(dead_code)]
 #[derive(Debug, Clone, Default)]
 pub struct ChaseRule {
+    /// Positive part of the body
+    positive_body: Vec<VariableAtom>,
+    /// Derived bindings from the positive body
+    /// These should appear in order,
+    /// i.e. such that the computation of a value
+    /// does not depend on values constructed later
+    positive_constructors: Vec<Constructor>,
+    /// Restriction on the positive part of the body
+    positive_constraints: Vec<Constraint>,
+
+    /// Negative part of the body
+    negative_body: Vec<VariableAtom>,
+    /// For each [VariableAtom] in `negative_body`,
+    /// the associated filter statements
+    negative_constraints: Vec<Vec<Constraint>>,
+
+    /// Aggregate
+    aggregate: Option<ChaseAggregate>,
+
+    /// Constructors from aggregate results
+    aggregate_constructors: Vec<Constructor>,
+    /// Restraints on values constructed from aggregate results
+    aggregate_constraints: Vec<Constraint>,
+
     /// Head atoms of the rule
     head: Vec<PrimitiveAtom>,
-    /// Head constructions
-    constructors: Vec<Constructor>,
-    /// Aggregates
-    aggregates: Vec<ChaseAggregate>,
-    /// Positive Body literals of the rule
-    positive_body: Vec<VariableAtom>,
-    /// constraints applied to the body
-    positive_constraints: Vec<Constraint>,
-    /// Negative Body literals of the rule
-    negative_body: Vec<VariableAtom>,
-    /// constraints applied to the body
-    negative_constraints: Vec<Constraint>,
 }
 
 #[allow(dead_code)]
 impl ChaseRule {
     /// Construct a new [ChaseRule].
-    pub fn new(
+    pub fn positive_rule(
         head: Vec<PrimitiveAtom>,
-        constructors: Vec<Constructor>,
-        aggregates: Vec<ChaseAggregate>,
         positive_body: Vec<VariableAtom>,
         positive_constraints: Vec<Constraint>,
-        negative_body: Vec<VariableAtom>,
-        negative_constraints: Vec<Constraint>,
     ) -> Self {
         Self {
-            head,
-            constructors,
-            aggregates,
             positive_body,
+            positive_constructors: vec![],
             positive_constraints,
-            negative_body,
-            negative_constraints,
+            negative_body: vec![],
+            negative_constraints: vec![],
+            aggregate: None,
+            aggregate_constructors: vec![],
+            aggregate_constraints: vec![],
+            head,
         }
     }
 
@@ -77,14 +87,14 @@ impl ChaseRule {
         &mut self.head
     }
 
-    /// Return the constructors of the rule.
-    pub fn constructors(&self) -> &Vec<Constructor> {
-        &self.constructors
+    /// Return the positive constructors of the rule.
+    pub fn positive_constructors(&self) -> &Vec<Constructor> {
+        &self.positive_constructors
     }
 
-    /// Return the aggregates of the rule.
-    pub fn aggregates(&self) -> &Vec<ChaseAggregate> {
-        &self.aggregates
+    /// Return the aggregate of the rule.
+    pub fn aggregate(&self) -> &Option<ChaseAggregate> {
+        &self.aggregate
     }
 
     /// Return the all the atoms of the rules.
@@ -109,7 +119,8 @@ impl ChaseRule {
     pub fn all_constraints(&self) -> impl Iterator<Item = &Constraint> {
         self.positive_constraints
             .iter()
-            .chain(self.negative_constraints.iter())
+            .chain(self.negative_constraints.iter().flatten())
+            .chain(self.aggregate_constraints.iter())
     }
 
     /// Return the positive constraints of the rule - immutable.
@@ -138,21 +149,26 @@ impl ChaseRule {
 
     /// Return the negative constraints of the rule - immutable.
     #[must_use]
-    pub fn negative_constraints(&self) -> &Vec<Constraint> {
+    pub fn negative_constraints(&self) -> &Vec<Vec<Constraint>> {
         &self.negative_constraints
     }
 
     /// Return the negative constraints of the rule - mutable.
     #[must_use]
-    pub fn negative_constraints_mut(&mut self) -> &mut Vec<Constraint> {
+    pub fn negative_constraints_mut(&mut self) -> &mut Vec<Vec<Constraint>> {
         &mut self.negative_constraints
     }
 
-    /// Return the [Constructor] associated with a given variable
-    pub fn get_constructor(&self, variable: &Variable) -> Option<&Constructor> {
-        self.constructors
-            .iter()
-            .find(|&constructor| constructor.variable() == variable)
+    /// Return the aggregate constraints of the rule.
+    #[must_use]
+    pub fn aggregate_constraints(&self) -> &Vec<Constraint> {
+        &self.aggregate_constraints
+    }
+
+    /// Return the aggregate constraints of the rule.
+    #[must_use]
+    pub fn aggregate_constructors(&self) -> &Vec<Constructor> {
+        &self.aggregate_constructors
     }
 
     /// Return all [Variable]s used in this rule.
@@ -160,11 +176,12 @@ impl ChaseRule {
         let variables_body = self.all_body().flat_map(|atom| atom.get_variables());
         let variables_head = self.head.iter().flat_map(|atom| atom.get_variables());
         let variables_constructors = self
-            .constructors
+            .positive_constructors
             .iter()
+            .chain(self.aggregate_constructors.iter())
             .map(|constructor| constructor.variable().clone());
         let variables_aggregates = self
-            .aggregates
+            .aggregate
             .iter()
             .map(|aggregate| aggregate.output_variable.clone());
 
@@ -179,13 +196,15 @@ impl ChaseRule {
     pub fn all_datavalues(&self) -> impl Iterator<Item = &AnyDataValue> {
         let datavalues_head = self.head.iter().flat_map(|atom| atom.datavalues());
         let datavalues_constructors = self
-            .constructors
+            .positive_constructors
             .iter()
+            .chain(self.aggregate_constructors.iter())
             .flat_map(|constructor| constructor.datavalues());
         let datavalues_constraints = self
             .positive_constraints
             .iter()
-            .chain(self.negative_constraints.iter())
+            .chain(self.negative_constraints.iter().flatten())
+            .chain(self.aggregate_constraints.iter())
             .flat_map(|constraint| constraint.datavalues());
 
         datavalues_head
