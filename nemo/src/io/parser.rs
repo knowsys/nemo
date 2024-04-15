@@ -2799,13 +2799,13 @@ mod new {
     }
 
     fn parse_normal_atom<'a>(input: Span<'a>) -> IResult<Span, Atom<'a>> {
-        parse_named_tuple(input)
+        parse_tuple(input)
             .map(|(rest_input, named_tuple)| (rest_input, Atom::Positive(named_tuple)))
     }
 
     fn parse_negative_atom<'a>(input: Span<'a>) -> IResult<Span, Atom<'a>> {
         let input_span = input.clone();
-        pair(tilde, parse_named_tuple)(input).map(|(rest_input, (tilde, named_tuple))| {
+        pair(tilde, parse_tuple)(input).map(|(rest_input, (tilde, named_tuple))| {
             (
                 rest_input,
                 Atom::Negative {
@@ -2841,7 +2841,7 @@ mod new {
         })
     }
 
-    fn parse_named_tuple<'a>(input: Span<'a>) -> IResult<Span, Tuple<'a>> {
+    fn parse_tuple<'a>(input: Span<'a>) -> IResult<Span, Tuple<'a>> {
         let input_span = input.clone();
         tuple((
             opt(lex_ident),
@@ -3021,7 +3021,7 @@ mod new {
     }
 
     fn parse_function_term<'a>(input: Span<'a>) -> IResult<Span, Term<'a>> {
-        parse_named_tuple(input)
+        parse_tuple(input)
             .map(|(rest_input, named_tuple)| (rest_input, Term::Function(Box::new(named_tuple))))
     }
 
