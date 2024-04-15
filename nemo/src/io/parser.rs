@@ -2402,9 +2402,9 @@ mod new {
     };
     use crate::io::lexer::{
         arrow, at, close_brace, close_paren, colon, comma, dot, equal, greater, greater_equal,
-        less, less_equal, lex_comment, lex_doc_comment, lex_ident, lex_iri, lex_number,
-        lex_operators, lex_string, lex_toplevel_doc_comment, lex_whitespace, open_brace,
-        open_paren, question_mark, tilde, unequal, Span, Token, TokenKind,
+        hash, less, less_equal, lex_comment, lex_doc_comment, lex_ident, lex_iri, lex_number,
+        lex_operators, lex_string, lex_toplevel_doc_comment, lex_unary_operators, lex_whitespace,
+        open_brace, open_paren, question_mark, tilde, unequal, Span, Token, TokenKind,
     };
     use nom::combinator::{all_consuming, opt, recognize};
     use nom::sequence::{delimited, pair};
@@ -2473,7 +2473,7 @@ mod new {
     }
 
     fn parse_fact<'a>(input: Span<'a>) -> IResult<Span, Statement<'a>> {
-        let input_span = input;
+        // let input_span = input;
         tuple((
             opt(lex_doc_comment),
             parse_normal_atom,
@@ -2484,7 +2484,7 @@ mod new {
             (
                 rest_input,
                 Statement::Fact {
-                    span: outer_span(input_span, rest_input),
+                    span: outer_span(input, rest_input),
                     doc_comment,
                     atom,
                     ws,
@@ -2989,7 +2989,7 @@ mod new {
             parse_variable,
             parse_unary_term,
             // parse_binary_term,
-            // parse_aggregation_term,
+            parse_aggregation_term,
         ))(input)
     }
 
@@ -3000,7 +3000,7 @@ mod new {
 
     fn parse_unary_term<'a>(input: Span<'a>) -> IResult<Span, Term<'a>> {
         let input_span = input.clone();
-        pair(lex_operators, parse_term)(input).map(|(rest_input, (operation, term))| {
+        pair(lex_unary_operators, parse_term)(input).map(|(rest_input, (operation, term))| {
             (
                 rest_input,
                 Term::Unary {
@@ -3017,7 +3017,33 @@ mod new {
     }
 
     fn parse_aggregation_term<'a>(input: Span<'a>) -> IResult<Span, Term<'a>> {
-        todo!("`parse_aggregation_term`!")
+        tuple((
+            recognize(pair(hash, lex_ident)),
+            open_paren,
+            opt(lex_whitespace),
+            parse_term_list,
+            opt(lex_whitespace),
+            close_paren,
+        ))(input)
+        .map(
+            |(rest_input, (operation, open_paren, ws1, terms, ws2, close_paren))| {
+                (
+                    rest_input,
+                    Term::Aggregation {
+                        span: outer_span(input, rest_input),
+                        operation: Token {
+                            kind: TokenKind::Aggregate,
+                            span: operation,
+                        },
+                        open_paren,
+                        ws1,
+                        terms: Box::new(terms),
+                        ws2,
+                        close_paren,
+                    },
+                )
+            },
+        )
     }
 
     fn parse_function_term<'a>(input: Span<'a>) -> IResult<Span, Term<'a>> {
