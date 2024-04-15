@@ -78,6 +78,8 @@ pub(crate) enum TokenKind {
     Ident,
     /// Variable,
     Variable,
+    /// Aggregate identifier like `#sum`
+    Aggregate,
     /// IRI, delimited with `<` and `>`
     Iri,
     /// Base 10 digits
@@ -141,6 +143,7 @@ impl std::fmt::Display for TokenKind {
             TokenKind::Slash => write!(f, "Slash"),
             TokenKind::Ident => write!(f, "Ident"),
             TokenKind::Variable => write!(f, "Variable"),
+            TokenKind::Aggregate => write!(f, "Aggregate"),
             TokenKind::Iri => write!(f, "Iri"),
             TokenKind::Number => write!(f, "Number"),
             TokenKind::String => write!(f, "String"),
@@ -288,6 +291,10 @@ pub(crate) fn lex_operators(input: Span) -> IResult<Span, Token> {
         star,
         slash,
     ))(input)
+}
+
+pub(crate) fn lex_unary_operators(input: Span) -> IResult<Span, Token> {
+    alt((plus, minus))(input)
 }
 
 pub(crate) fn lex_ident(input: Span) -> IResult<Span, Token> {
