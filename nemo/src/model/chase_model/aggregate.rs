@@ -2,7 +2,7 @@ use std::collections::HashSet;
 
 use nemo_physical::aggregates::operation::AggregateOperation;
 
-use crate::model::{Aggregate, LogicalAggregateOperation, PrimitiveTerm, Variable};
+use crate::model::{Aggregate, LogicalAggregateOperation, PrimitiveTerm, Term, Variable};
 
 /// Specifies how the values for a placeholder aggregate variable will get computed.
 ///
@@ -43,10 +43,10 @@ impl ChaseAggregate {
             .terms
             .into_iter()
             .map(|t| {
-                if let PrimitiveTerm::Variable(variable) = t {
+                if let Term::Primitive(PrimitiveTerm::Variable(variable)) = t {
                     variable
                 } else {
-                    unreachable!("Non-variable terms are not allowed in aggregates.");
+                    unreachable!("Non-variable terms are not allowed in chase aggregates.");
                 }
             })
             .collect::<Vec<Variable>>();

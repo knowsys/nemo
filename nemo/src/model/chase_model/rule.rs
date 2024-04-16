@@ -231,6 +231,18 @@ struct ConstraintCategories {
     aggregate_constraints: Vec<Constraint>,
 }
 
+impl ConstraintCategories {
+    pub fn new(num_negative_body: usize) -> Self {
+        Self {
+            positive_constructors: Vec::<Constructor>::new(),
+            positive_constraints: Vec::<Constraint>::new(),
+            negative_constraints: vec![Vec::<Constraint>::new(); num_negative_body],
+            aggregate_constructors: Vec::<Constructor>::new(),
+            aggregate_constraints: Vec::<Constraint>::new(),
+        }
+    }
+}
+
 impl ChaseRule {
     /// Increments `next_variable_id`, but returns it's old value with a prefix.
     fn generate_incrementing_variable_name(prefix: &str, next_variable_id: &mut usize) -> String {
@@ -279,9 +291,11 @@ impl ChaseRule {
         rule: &mut Rule,
         aggregate: &mut Option<ChaseAggregate>,
         aggregate_head_index: &mut Option<usize>,
-    ) {
+    ) -> ConstraintCategories {
+        let num_negative_body = rule.num_negative_body();
+        let mut new_constraints = ConstraintCategories::new(num_negative_body);
+
         let mut rule_next_variable_id: usize = 0;
-        let mut new_constraints = Vec::<Constraint>::new();
 
         // Head atoms may only contain primitive terms
         // Aggregates need to be separated
@@ -304,14 +318,32 @@ impl ChaseRule {
                                 &mut rule_next_variable_id,
                             ));
 
+                        for aggregate_subterm in &mut aggregate.terms {
+                            if !aggregate_subterm.is_variable() {
+                                let new_variable =
+                                    Variable::Universal(Self::generate_incrementing_variable_name(
+                                        CONSTRUCT_VARIABLE_PREFIX,
+                                        &mut rule_next_variable_id,
+                                    ));
+                                let new_term =
+                                    Term::Primitive(PrimitiveTerm::Variable(new_variable.clone()));
+
+                                new_constraints.positive_constructors.push(Constructor::new(
+                                    new_variable,
+                                    aggregate_subterm.clone(),
+                                ));
+                                *aggregate_subterm = new_term;
+                            }
+                        }
+
                         aggregate_information = Some(AggregateInformation {
                             term_index,
                             aggregate: aggregate.clone(),
                             output_variable: output_variable.clone(),
                             surrounding_term: None,
                         });
+
                         *subterm = Term::Primitive(PrimitiveTerm::Variable(output_variable));
-                        // TODO: Flatten subterm
 
                         false
                     }
@@ -329,13 +361,27 @@ impl ChaseRule {
                             CONSTRUCT_VARIABLE_PREFIX,
                             &mut rule_next_variable_id,
                         ));
-                    let new_term = Term::Primitive(PrimitiveTerm::Variable(new_variable));
+                    let new_term = Term::Primitive(PrimitiveTerm::Variable(new_variable.clone()));
 
-                    if let Some(aggregate_information) = &mut aggregate_information {
-                        aggregate_information.surrounding_term = Some(term.clone());
+                    let is_aggregate =
+                        if let Some(aggregate_information) = &mut aggregate_information {
+                            aggregate_information.surrounding_term = Some(term.clone());
+
+                            aggregate_information.term_index == term_index
+                        } else {
+                            false
+                        };
+
+                    if is_aggregate {
+                        new_constraints
+                            .aggregate_constructors
+                            .push(Constructor::new(new_variable, term.clone()));
+                    } else {
+                        new_constraints
+                            .positive_constructors
+                            .push(Constructor::new(new_variable, term.clone()));
                     }
 
-                    new_constraints.push(Constraint::Equals(new_term.clone(), term.clone()));
                     *term = new_term;
                 }
             }
@@ -368,18 +414,17 @@ impl ChaseRule {
 
         // Body literals must only contain variables
         // and may not repeat variables within one atom
+        let mut negative_index = 0;
         for literal in rule.body_mut() {
+            let is_positive = literal.is_positive();
+            if !is_positive {
+                negative_index += 1;
+            }
+
             let atom = literal.atom_mut();
             let mut current_variables = HashSet::<Variable>::new();
 
             for term in atom.terms_mut() {
-                let new_variable = Term::Primitive(PrimitiveTerm::Variable(Variable::Universal(
-                    Self::generate_incrementing_variable_name(
-                        EQUALITY_VARIABLE_PREFIX,
-                        &mut rule_next_variable_id,
-                    ),
-                )));
-
                 if let Term::Primitive(PrimitiveTerm::Variable(variable)) = term.clone() {
                     if !current_variables.contains(&variable) {
                         current_variables.insert(variable);
@@ -388,12 +433,26 @@ impl ChaseRule {
                     }
                 }
 
-                new_constraints.push(Constraint::Equals(term.clone(), new_variable.clone()));
-                *term = new_variable;
+                let new_variable = Variable::Universal(Self::generate_incrementing_variable_name(
+                    EQUALITY_VARIABLE_PREFIX,
+                    &mut rule_next_variable_id,
+                ));
+                let new_term = Term::Primitive(PrimitiveTerm::Variable(new_variable.clone()));
+
+                if is_positive {
+                    new_constraints
+                        .positive_constraints
+                        .push(Constraint::Equals(new_term.clone(), term.clone()));
+                } else {
+                    new_constraints.negative_constraints[negative_index - 1]
+                        .push(Constraint::Equals(new_term.clone(), term.clone()))
+                }
+
+                *term = new_term;
             }
         }
 
-        rule.constraints_mut().extend(new_constraints);
+        new_constraints
     }
 
     /// Seperate different [Constraint]s of the given [Rule] into several categories.
@@ -401,13 +460,8 @@ impl ChaseRule {
         rule: &Rule,
         aggregate: &Option<ChaseAggregate>,
         negative_body: &[VariableAtom],
-    ) -> ConstraintCategories {
-        let mut positive_constructors = Vec::<Constructor>::new();
-        let mut positive_constraints = Vec::<Constraint>::new();
-        let mut negative_constraints = vec![Vec::<Constraint>::new(); negative_body.len()];
-        let mut aggregate_constructors = Vec::<Constructor>::new();
-        let mut aggregate_constraints = Vec::<Constraint>::new();
-
+        constraints: &mut ConstraintCategories,
+    ) {
         let safe_variables = rule.safe_variables();
         let mut known_variables = safe_variables.clone();
 
@@ -465,7 +519,8 @@ impl ChaseRule {
                                 continue;
                             }
                             TermStatus::Positive => {
-                                positive_constructors
+                                constraints
+                                    .positive_constructors
                                     .push(Constructor::new(variable.clone(), term.clone()));
                                 positive_variables.insert(variable.clone());
                                 known_variables.insert(variable.clone());
@@ -474,7 +529,8 @@ impl ChaseRule {
                                 continue;
                             }
                             TermStatus::Aggregate => {
-                                aggregate_constructors
+                                constraints
+                                    .aggregate_constructors
                                     .push(Constructor::new(variable.clone(), term.clone()));
                                 aggregate_variables.insert(variable.clone());
                                 known_variables.insert(variable.clone());
@@ -513,11 +569,15 @@ impl ChaseRule {
 
                 match layer {
                     TermLayer::Positive => {
-                        positive_constraints.push(current_constraint.clone());
+                        constraints
+                            .positive_constraints
+                            .push(current_constraint.clone());
                         assigned_constraints.insert(current_constraint_index);
                     }
                     TermLayer::Aggregate => {
-                        aggregate_constraints.push(current_constraint.clone());
+                        constraints
+                            .aggregate_constraints
+                            .push(current_constraint.clone());
                         assigned_constraints.insert(current_constraint_index);
                     }
                     TermLayer::Undefined => {}
@@ -527,7 +587,8 @@ impl ChaseRule {
                     match negation {
                         TermNegation::None => {}
                         TermNegation::Negated(index) => {
-                            negative_constraints[index].push(current_constraint.clone());
+                            constraints.negative_constraints[index]
+                                .push(current_constraint.clone());
                         }
                     }
                 }
@@ -536,14 +597,6 @@ impl ChaseRule {
             if assigned_constraints.len() == num_assigned {
                 unreachable!("A well-formed rule should have no cyclic dependencies");
             }
-        }
-
-        ConstraintCategories {
-            positive_constructors,
-            positive_constraints,
-            negative_constraints,
-            aggregate_constructors,
-            aggregate_constraints,
         }
     }
 }
@@ -557,7 +610,8 @@ impl TryFrom<Rule> for ChaseRule {
         let mut aggregate_head_index: Option<usize> = None;
 
         Self::apply_equality(&mut rule);
-        Self::flatten_atoms(&mut rule, &mut aggregate, &mut aggregate_head_index);
+        let mut constraints =
+            Self::flatten_atoms(&mut rule, &mut aggregate, &mut aggregate_head_index);
 
         // Build chase rule elements from flattend atoms
         let head = rule
@@ -576,13 +630,15 @@ impl TryFrom<Rule> for ChaseRule {
         }
 
         // Seperate constraints into different categories
+        Self::seperate_constraints(&rule, &aggregate, &negative_body, &mut constraints);
+
         let ConstraintCategories {
             positive_constructors,
             positive_constraints,
             negative_constraints,
             aggregate_constructors,
             aggregate_constraints,
-        } = Self::seperate_constraints(&rule, &aggregate, &negative_body);
+        } = constraints;
 
         Ok(Self {
             positive_body,

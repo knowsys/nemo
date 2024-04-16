@@ -500,6 +500,11 @@ impl Term {
         self.as_primitive().is_some()
     }
 
+    /// Return whether this term is a variable.
+    pub(crate) fn is_variable(&self) -> bool {
+        matches!(self, Term::Primitive(PrimitiveTerm::Variable(_)))
+    }
+
     /// Return all [PrimitiveTerm]s that make up this term.
     pub(crate) fn primitive_terms(&self) -> Vec<&PrimitiveTerm> {
         match self {
@@ -532,7 +537,11 @@ impl Term {
             Term::Function(_, subterms) => {
                 subterms.iter().flat_map(|t| t.primitive_terms()).collect()
             }
-            Term::Aggregation(aggregate) => aggregate.terms.iter().collect(),
+            Term::Aggregation(aggregate) => aggregate
+                .terms
+                .iter()
+                .flat_map(|term| term.primitive_terms())
+                .collect(),
         }
     }
 
