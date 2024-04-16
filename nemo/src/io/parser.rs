@@ -957,17 +957,17 @@ impl<'a> RuleParser<'a> {
                     let (remainder, _) = nom::character::complete::char('#')(input)?;
                     let (remainder, aggregate_operation_identifier) =
                         self.parse_bare_iri_like_identifier()(remainder)?;
-                    let (remainder, variables) = self.parenthesised(separated_list1(
-                        self.parse_comma(),
-                        self.parse_universal_variable(),
-                    ))(remainder)?;
+                    let (remainder, terms) = self
+                        .parenthesised(separated_list1(self.parse_comma(), self.parse_term()))(
+                        remainder,
+                    )?;
 
                     if let Some(logical_aggregate_operation) =
                         (&aggregate_operation_identifier).into()
                     {
                         let aggregate = Aggregate {
                             logical_aggregate_operation,
-                            terms: variables.into_iter().map(PrimitiveTerm::Variable).collect(),
+                            terms,
                         };
 
                         Ok((remainder, Term::Aggregation(aggregate)))
@@ -2173,9 +2173,9 @@ mod test {
             "#min(?VARIABLE)",
             Term::Aggregation(Aggregate {
                 logical_aggregate_operation: LogicalAggregateOperation::MinNumber,
-                terms: vec![PrimitiveTerm::Variable(Variable::Universal(String::from(
-                    "VARIABLE"
-                )))]
+                terms: vec![Term::Primitive(PrimitiveTerm::Variable(
+                    Variable::Universal(String::from("VARIABLE"))
+                ))]
             })
         );
 

@@ -62,7 +62,7 @@ impl Rule {
             }
 
             if satisfied_constraints.len() == num_satisified_constraints {
-                // return Err(ParseError::(...))
+                // return Err(ParseError::ExpectedAtom);
             }
         }
 
@@ -273,6 +273,14 @@ impl Rule {
         self.constraints
             .iter_mut()
             .for_each(|f| f.apply_assignment(assignment));
+    }
+
+    /// Return the number of negative body atoms contained in the rule.
+    pub fn num_negative_body(&self) -> usize {
+        self.body
+            .iter()
+            .filter(|literal| literal.is_negative())
+            .count()
     }
 }
 
