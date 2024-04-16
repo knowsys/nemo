@@ -2434,10 +2434,11 @@ mod new {
         atom::*, directive::*, map::*, program::*, statement::*, term::*, tuple::*, List,
     };
     use crate::io::lexer::{
-        arrow, at, close_brace, close_paren, colon, comma, dot, equal, greater, greater_equal,
-        hash, less, less_equal, lex_comment, lex_doc_comment, lex_ident, lex_iri, lex_number,
-        lex_operators, lex_string, lex_toplevel_doc_comment, lex_unary_operators, lex_whitespace,
-        open_brace, open_paren, question_mark, tilde, unequal, Span, Token, TokenKind,
+        arrow, at, close_brace, close_paren, colon, comma, dot, equal, exclamation_mark, greater,
+        greater_equal, hash, less, less_equal, lex_comment, lex_doc_comment, lex_ident, lex_iri,
+        lex_number, lex_operators, lex_string, lex_toplevel_doc_comment, lex_unary_operators,
+        lex_whitespace, open_brace, open_paren, question_mark, tilde, unequal, Span, Token,
+        TokenKind,
     };
     use nom::combinator::{all_consuming, opt, recognize};
     use nom::sequence::{delimited, pair};
@@ -3020,6 +3021,7 @@ mod new {
             parse_function_term,
             parse_primitive_term,
             parse_variable,
+            parse_existential,
             parse_unary_term,
             // parse_binary_term,
             parse_aggregation_term,
@@ -3089,12 +3091,24 @@ mod new {
     }
 
     fn parse_variable<'a>(input: Span<'a>) -> IResult<Span, Term<'a>> {
-        recognize(pair(question_mark, lex_ident))(input).map(|(rest, var)| {
+        recognize(pair(question_mark, lex_ident))(input).map(|(rest_input, var)| {
             (
-                rest,
+                rest_input,
                 Term::Variable(Token {
                     kind: TokenKind::Variable,
                     span: var,
+                }),
+            )
+        })
+    }
+
+    fn parse_existential<'a>(input: Span<'a>) -> IResult<Span, Term<'a>> {
+        recognize(pair(exclamation_mark, lex_ident))(input).map(|(rest_input, existential)| {
+            (
+                rest_input,
+                Term::Existential(Token {
+                    kind: TokenKind::Existential,
+                    span: existential,
                 }),
             )
         })

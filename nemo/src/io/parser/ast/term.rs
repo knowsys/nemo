@@ -8,6 +8,7 @@ use ascii_tree::write_tree;
 pub(crate) enum Term<'a> {
     Primitive(Token<'a>),
     Variable(Token<'a>),
+    Existential(Token<'a>),
     // TODO: Is whitespace needed? Figure out how unary terms look
     Unary {
         span: Span<'a>,
@@ -39,6 +40,7 @@ impl AstNode for Term<'_> {
         match self {
             Term::Primitive(token) => Some(vec![token]),
             Term::Variable(token) => Some(vec![token]),
+            Term::Existential(token) => Some(vec![token]),
             Term::Unary {
                 operation, term, ..
             } => Some(vec![operation, &**term]),
@@ -95,6 +97,7 @@ impl AstNode for Term<'_> {
         match self {
             Term::Primitive(t) => t.span(),
             Term::Variable(t) => t.span(),
+            Term::Existential(t) => t.span(),
             Term::Unary { span, .. } => *span,
             Term::Binary { span, .. } => *span,
             Term::Aggregation { span, .. } => *span,
@@ -120,6 +123,7 @@ impl AstNode for Term<'_> {
         match self {
             Term::Primitive(_) => "Primitive".into(),
             Term::Variable(_) => "Variable".into(),
+            Term::Existential(_) => "Existential Variable".into(),
             Term::Unary { .. } => "Unary Term".into(),
             Term::Binary { .. } => "Binary Term".into(),
             Term::Aggregation { .. } => "Aggregation".into(),

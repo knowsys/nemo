@@ -76,8 +76,10 @@ pub(crate) enum TokenKind {
     // Multi-char tokens:
     /// Identifier for keywords and names
     Ident,
-    /// Variable,
+    /// Variable like `?var`
     Variable,
+    /// Existential Variable like `!var`
+    Existential,
     /// Aggregate identifier like `#sum`
     Aggregate,
     /// IRI, delimited with `<` and `>`
