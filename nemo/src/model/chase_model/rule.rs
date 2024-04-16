@@ -440,7 +440,9 @@ impl ChaseRule {
                 let current_constraint = &rule.constraints()[current_constraint_index];
 
                 if let Some((variable, term)) = current_constraint.has_form_assignment() {
-                    if !known_variables.contains(variable) {
+                    if !positive_variables.contains(variable)
+                        && !aggregate_variables.contains(variable)
+                    {
                         enum TermStatus {
                             Undefined,
                             Positive,
@@ -484,42 +486,50 @@ impl ChaseRule {
                     }
                 }
 
-                enum TermStatus {
+                enum TermLayer {
                     Positive,
-                    Negative(usize),
                     Aggregate,
                     Undefined,
                 }
 
-                let mut status = TermStatus::Positive;
+                enum TermNegation {
+                    None,
+                    Negated(usize),
+                }
+
+                let mut layer = TermLayer::Positive;
+                let mut negation = TermNegation::None;
 
                 for subvariable in current_constraint.variables() {
                     if aggregate_variables.contains(subvariable) {
-                        status = TermStatus::Aggregate;
-                        break;
+                        layer = TermLayer::Aggregate;
                     } else if let Some(atom_index) = negative_variables.get(subvariable) {
-                        status = TermStatus::Negative(*atom_index);
-                        break;
+                        negation = TermNegation::Negated(*atom_index);
                     } else if !known_variables.contains(subvariable) {
-                        status = TermStatus::Undefined;
+                        layer = TermLayer::Undefined;
                         break;
                     }
                 }
 
-                match status {
-                    TermStatus::Positive => {
+                match layer {
+                    TermLayer::Positive => {
                         positive_constraints.push(current_constraint.clone());
                         assigned_constraints.insert(current_constraint_index);
                     }
-                    TermStatus::Negative(index) => {
-                        negative_constraints[index].push(current_constraint.clone());
-                        assigned_constraints.insert(current_constraint_index);
-                    }
-                    TermStatus::Aggregate => {
+                    TermLayer::Aggregate => {
                         aggregate_constraints.push(current_constraint.clone());
                         assigned_constraints.insert(current_constraint_index);
                     }
-                    TermStatus::Undefined => {}
+                    TermLayer::Undefined => {}
+                }
+
+                if !matches!(layer, TermLayer::Undefined) {
+                    match negation {
+                        TermNegation::None => {}
+                        TermNegation::Negated(index) => {
+                            negative_constraints[index].push(current_constraint.clone());
+                        }
+                    }
                 }
             }
 

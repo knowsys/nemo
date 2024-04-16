@@ -1,5 +1,11 @@
+%%% Test related to 
+%%% https://github.com/knowsys/nemo/issues/434
+%%% 
+%%% TODO: Handle missing rule
+
 b(1).
 
 a(1) :- ~b(1).
+% a(2) :- ~b(2). 
 
 @export a :- csv {}.
