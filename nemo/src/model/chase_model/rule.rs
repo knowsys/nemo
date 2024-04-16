@@ -8,7 +8,7 @@ use crate::{
     error::Error,
     model::{
         chase_model::variable::{AGGREGATE_VARIABLE_PREFIX, CONSTRUCT_VARIABLE_PREFIX},
-        Constraint, Literal, PrimitiveTerm, Rule, Term, Variable,
+        Aggregate, Constraint, Literal, PrimitiveTerm, Rule, Term, Variable,
     },
 };
 
@@ -52,6 +52,8 @@ pub struct ChaseRule {
 
     /// Head atoms of the rule
     head: Vec<PrimitiveAtom>,
+    /// Index of the head atom which contains the aggregate
+    aggregate_head_index: Option<usize>,
 }
 
 #[allow(dead_code)]
@@ -72,6 +74,7 @@ impl ChaseRule {
             aggregate_constructors: vec![],
             aggregate_constraints: vec![],
             head,
+            aggregate_head_index: None,
         }
     }
 
@@ -95,6 +98,11 @@ impl ChaseRule {
     /// Return the aggregate of the rule.
     pub fn aggregate(&self) -> &Option<ChaseAggregate> {
         &self.aggregate
+    }
+
+    /// Return the index of the aggregate head atom.
+    pub fn aggregate_head_index(&self) -> Option<usize> {
+        self.aggregate_head_index
     }
 
     /// Return the all the atoms of the rules.
@@ -213,6 +221,16 @@ impl ChaseRule {
     }
 }
 
+/// Helper structure defining several categories of constraints
+#[derive(Debug)]
+struct ConstraintCategories {
+    positive_constructors: Vec<Constructor>,
+    positive_constraints: Vec<Constraint>,
+    negative_constraints: Vec<Vec<Constraint>>,
+    aggregate_constructors: Vec<Constructor>,
+    aggregate_constraints: Vec<Constraint>,
+}
+
 impl ChaseRule {
     /// Increments `next_variable_id`, but returns it's old value with a prefix.
     fn generate_incrementing_variable_name(prefix: &str, next_variable_id: &mut usize) -> String {
@@ -252,37 +270,48 @@ impl ChaseRule {
         rule.apply_assignment(&assignment);
     }
 
-    /// Modify the rule in such a way that it only contains variables within atoms.
-    /// Returns a vector of constraints that have been added for negative literals.
+    /// Modify the rule in such a way
+    /// that it only contains primitive terms in the head
+    /// and variables in the body.
+    ///
+    /// This transformation may introduce new [Constraint]s.
     fn flatten_atoms(
         rule: &mut Rule,
-        constructors: &mut Vec<Constructor>,
-        aggregates: &mut Vec<ChaseAggregate>,
-        negative_constraints: &mut Vec<Constraint>,
+        aggregate: &mut Option<ChaseAggregate>,
+        aggregate_head_index: &mut Option<usize>,
     ) {
-        // New constraints that will be introduced due to the flattening of the atom
-        let mut positive_constraints = Vec::<Constraint>::new();
-
         let mut rule_next_variable_id: usize = 0;
+        let mut new_constraints = Vec::<Constraint>::new();
 
         // Head atoms may only contain primitive terms
-        for atom in rule.head_mut() {
-            for term in atom.terms_mut() {
+        // Aggregates need to be separated
+        for (atom_index, atom) in rule.head_mut().iter_mut().enumerate() {
+            struct AggregateInformation {
+                term_index: usize,
+                aggregate: Aggregate,
+                output_variable: Variable,
+                surrounding_term: Option<Term>,
+            }
+            let mut aggregate_information: Option<AggregateInformation> = None;
+
+            for (term_index, term) in atom.terms_mut().iter_mut().enumerate() {
                 // Replace aggregate terms or aggregates inside of arithmetic expressions with placeholder variables
                 term.update_subterms_recursively(&mut |subterm| match subterm {
                     Term::Aggregation(aggregate) => {
-                        let new_variable =
+                        let output_variable =
                             Variable::Universal(Self::generate_incrementing_variable_name(
                                 AGGREGATE_VARIABLE_PREFIX,
                                 &mut rule_next_variable_id,
                             ));
 
-                        aggregates.push(ChaseAggregate::from_aggregate(
-                            aggregate.clone(),
-                            new_variable.clone(),
-                        ));
-
-                        *subterm = Term::Primitive(PrimitiveTerm::Variable(new_variable));
+                        aggregate_information = Some(AggregateInformation {
+                            term_index,
+                            aggregate: aggregate.clone(),
+                            output_variable: output_variable.clone(),
+                            surrounding_term: None,
+                        });
+                        *subterm = Term::Primitive(PrimitiveTerm::Variable(output_variable));
+                        // TODO: Flatten subterm
 
                         false
                     }
@@ -300,18 +329,46 @@ impl ChaseRule {
                             CONSTRUCT_VARIABLE_PREFIX,
                             &mut rule_next_variable_id,
                         ));
+                    let new_term = Term::Primitive(PrimitiveTerm::Variable(new_variable));
 
-                    constructors.push(Constructor::new(new_variable.clone(), term.clone()));
+                    if let Some(aggregate_information) = &mut aggregate_information {
+                        aggregate_information.surrounding_term = Some(term.clone());
+                    }
 
-                    *term = Term::Primitive(PrimitiveTerm::Variable(new_variable));
+                    new_constraints.push(Constraint::Equals(new_term.clone(), term.clone()));
+                    *term = new_term;
                 }
+            }
+
+            if let Some(information) = aggregate_information {
+                let mut group_by_variables = HashSet::<Variable>::new();
+                for (term_index, term) in atom.terms().iter().enumerate() {
+                    if term_index == information.term_index {
+                        continue;
+                    }
+
+                    if let Term::Primitive(PrimitiveTerm::Variable(variable)) = term {
+                        group_by_variables.insert(variable.clone());
+                    }
+                }
+
+                if let Some(surrounding_term) = information.surrounding_term {
+                    group_by_variables.extend(surrounding_term.variables().cloned());
+                    group_by_variables.remove(&information.output_variable);
+                }
+
+                *aggregate = Some(ChaseAggregate::from_aggregate(
+                    information.aggregate,
+                    information.output_variable,
+                    group_by_variables,
+                ));
+                *aggregate_head_index = Some(atom_index);
             }
         }
 
         // Body literals must only contain variables
         // and may not repeat variables within one atom
         for literal in rule.body_mut() {
-            let is_positive = literal.is_positive();
             let atom = literal.atom_mut();
             let mut current_variables = HashSet::<Variable>::new();
 
@@ -331,48 +388,153 @@ impl ChaseRule {
                     }
                 }
 
-                let new_constraint = Constraint::Equals(term.clone(), new_variable.clone());
-                if is_positive {
-                    positive_constraints.push(new_constraint);
-                } else {
-                    negative_constraints.push(new_constraint);
-                }
-
+                new_constraints.push(Constraint::Equals(term.clone(), new_variable.clone()));
                 *term = new_variable;
             }
         }
 
-        rule.constraints_mut().extend(positive_constraints);
+        rule.constraints_mut().extend(new_constraints);
     }
 
-    /// Seperate normal equality constraints from definitions of new variables
-    fn separate_equality(
-        rule: &mut Rule,
-        constructors: &mut Vec<Constructor>,
-        aggregates: &mut Vec<ChaseAggregate>,
-    ) {
+    /// Seperate different [Constraint]s of the given [Rule] into several categories.
+    fn seperate_constraints(
+        rule: &Rule,
+        aggregate: &Option<ChaseAggregate>,
+        negative_body: &[VariableAtom],
+    ) -> ConstraintCategories {
+        let mut positive_constructors = Vec::<Constructor>::new();
+        let mut positive_constraints = Vec::<Constraint>::new();
+        let mut negative_constraints = vec![Vec::<Constraint>::new(); negative_body.len()];
+        let mut aggregate_constructors = Vec::<Constructor>::new();
+        let mut aggregate_constraints = Vec::<Constraint>::new();
+
         let safe_variables = rule.safe_variables();
+        let mut known_variables = safe_variables.clone();
 
-        rule.constraints_mut().retain(|constraint| {
-            if let Some((variable, term)) = constraint.has_form_assignment() {
-                if safe_variables.contains(variable) {
-                    return true;
+        let mut negative_variables = HashMap::<Variable, usize>::new();
+        for (body_index, negative_atom) in negative_body.iter().enumerate() {
+            for variable in negative_atom.terms() {
+                if !safe_variables.contains(variable) {
+                    negative_variables.insert(variable.clone(), body_index);
+                    known_variables.insert(variable.clone());
+                }
+            }
+        }
+
+        let mut aggregate_variables = HashSet::<Variable>::new();
+        if let Some(aggregate) = aggregate {
+            aggregate_variables.insert(aggregate.output_variable.clone());
+            known_variables.insert(aggregate.output_variable.clone());
+        }
+
+        let mut positive_variables = safe_variables.clone();
+
+        let mut assigned_constraints = HashSet::<usize>::new();
+        while assigned_constraints.len() < rule.constraints().len() {
+            let num_assigned = assigned_constraints.len();
+
+            for current_constraint_index in 0..rule.constraints().len() {
+                if assigned_constraints.contains(&current_constraint_index) {
+                    continue;
+                }
+                let current_constraint = &rule.constraints()[current_constraint_index];
+
+                if let Some((variable, term)) = current_constraint.has_form_assignment() {
+                    if !known_variables.contains(variable) {
+                        enum TermStatus {
+                            Undefined,
+                            Positive,
+                            Aggregate,
+                        }
+                        let mut status = TermStatus::Positive;
+
+                        for subvariable in term.variables() {
+                            if aggregate_variables.contains(subvariable) {
+                                status = TermStatus::Aggregate;
+                                break;
+                            } else if !known_variables.contains(subvariable) {
+                                status = TermStatus::Undefined;
+                                break;
+                            }
+                        }
+
+                        match status {
+                            TermStatus::Undefined => {
+                                continue;
+                            }
+                            TermStatus::Positive => {
+                                positive_constructors
+                                    .push(Constructor::new(variable.clone(), term.clone()));
+                                positive_variables.insert(variable.clone());
+                                known_variables.insert(variable.clone());
+
+                                assigned_constraints.insert(current_constraint_index);
+                                continue;
+                            }
+                            TermStatus::Aggregate => {
+                                aggregate_constructors
+                                    .push(Constructor::new(variable.clone(), term.clone()));
+                                aggregate_variables.insert(variable.clone());
+                                known_variables.insert(variable.clone());
+
+                                assigned_constraints.insert(current_constraint_index);
+                                continue;
+                            }
+                        }
+                    }
                 }
 
-                if let Term::Aggregation(aggregate) = term {
-                    aggregates.push(ChaseAggregate::from_aggregate(
-                        aggregate.clone(),
-                        variable.clone(),
-                    ))
-                } else {
-                    constructors.push(Constructor::new(variable.clone(), term.clone()));
+                enum TermStatus {
+                    Positive,
+                    Negative(usize),
+                    Aggregate,
+                    Undefined,
                 }
 
-                return false;
+                let mut status = TermStatus::Positive;
+
+                for subvariable in current_constraint.variables() {
+                    if aggregate_variables.contains(subvariable) {
+                        status = TermStatus::Aggregate;
+                        break;
+                    } else if let Some(atom_index) = negative_variables.get(subvariable) {
+                        status = TermStatus::Negative(*atom_index);
+                        break;
+                    } else if !known_variables.contains(subvariable) {
+                        status = TermStatus::Undefined;
+                        break;
+                    }
+                }
+
+                match status {
+                    TermStatus::Positive => {
+                        positive_constraints.push(current_constraint.clone());
+                        assigned_constraints.insert(current_constraint_index);
+                    }
+                    TermStatus::Negative(index) => {
+                        negative_constraints[index].push(current_constraint.clone());
+                        assigned_constraints.insert(current_constraint_index);
+                    }
+                    TermStatus::Aggregate => {
+                        aggregate_constraints.push(current_constraint.clone());
+                        assigned_constraints.insert(current_constraint_index);
+                    }
+                    TermStatus::Undefined => {}
+                }
             }
 
-            true
-        });
+            if assigned_constraints.len() == num_assigned {
+                unreachable!("A well-formed rule should have no cyclic dependencies");
+            }
+        }
+
+        ConstraintCategories {
+            positive_constructors,
+            positive_constraints,
+            negative_constraints,
+            aggregate_constructors,
+            aggregate_constraints,
+        }
     }
 }
 
@@ -380,27 +542,19 @@ impl TryFrom<Rule> for ChaseRule {
     type Error = Error;
 
     fn try_from(mut rule: Rule) -> Result<ChaseRule, Error> {
-        let mut constructors = Vec::<Constructor>::new();
-        let mut aggregates = Vec::<ChaseAggregate>::new();
-        let mut negative_constraints = Vec::<Constraint>::new();
-
         // Preprocess rule in order to make the translation simpler
+        let mut aggregate: Option<ChaseAggregate> = None;
+        let mut aggregate_head_index: Option<usize> = None;
+
         Self::apply_equality(&mut rule);
-        Self::separate_equality(&mut rule, &mut constructors, &mut aggregates);
-        Self::flatten_atoms(
-            &mut rule,
-            &mut constructors,
-            &mut aggregates,
-            &mut negative_constraints,
-        );
+        Self::flatten_atoms(&mut rule, &mut aggregate, &mut aggregate_head_index);
 
-        let positive_constraints = rule.constraints().clone();
-
+        // Build chase rule elements from flattend atoms
         let head = rule
             .head()
             .iter()
             .map(PrimitiveAtom::from_flat_atom)
-            .collect();
+            .collect::<Vec<PrimitiveAtom>>();
 
         let mut positive_body = Vec::new();
         let mut negative_body = Vec::new();
@@ -411,14 +565,26 @@ impl TryFrom<Rule> for ChaseRule {
             }
         }
 
+        // Seperate constraints into different categories
+        let ConstraintCategories {
+            positive_constructors,
+            positive_constraints,
+            negative_constraints,
+            aggregate_constructors,
+            aggregate_constraints,
+        } = Self::seperate_constraints(&rule, &aggregate, &negative_body);
+
         Ok(Self {
-            head,
-            constructors,
-            aggregates,
             positive_body,
+            positive_constructors,
             positive_constraints,
             negative_body,
             negative_constraints,
+            aggregate,
+            aggregate_constructors,
+            aggregate_constraints,
+            head,
+            aggregate_head_index,
         })
     }
 }

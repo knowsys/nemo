@@ -633,19 +633,13 @@ impl ExecutionPlan {
                 })
             }
             ExecutionOperation::Aggregate(subnode, aggregate_assignment) => {
-                // Add project/reorder operation if required by the aggregate
-                // This depends on the column ordering, see [crate::tabular::operation::aggregate::TrieScanAggregate]
                 let input = subnode.markers_cloned();
-                let output = node_markers.clone();
-
-                // Reorder input
-                let (generator_aggregate, correctly_ordered_input) =
-                    GeneratorAggregate::new_with_reorder(&output, &input, aggregate_assignment);
+                let generator_aggregate = GeneratorAggregate::new(&input, aggregate_assignment);
 
                 let subtree = Self::execution_node(
                     root_node_id,
                     subnode.clone(),
-                    subnode.markers_cloned().align(&correctly_ordered_input).1,
+                    order.clone(),
                     output_nodes,
                     computed_trees,
                     computed_trees_map,

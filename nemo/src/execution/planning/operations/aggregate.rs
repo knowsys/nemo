@@ -4,10 +4,40 @@
 
 use nemo_physical::{
     management::execution_plan::{ExecutionNodeRef, ExecutionPlan},
-    tabular::operations::{aggregate::AggregateAssignment, OperationTable},
+    tabular::operations::{aggregate::AggregateAssignment, OperationColumnMarker, OperationTable},
 };
 
 use crate::{execution::rule_execution::VariableTranslation, model::chase_model::ChaseAggregate};
+
+fn operations_tables(
+    input: &OperationTable,
+    aggregate_input_column: &OperationColumnMarker,
+    aggregate_output_column: &OperationColumnMarker,
+    distinct_columns: &[OperationColumnMarker],
+    group_by_columns: &[OperationColumnMarker],
+) -> (OperationTable, OperationTable) {
+    // Create input order that produces inteded output order
+
+    let mut ordered_input = OperationTable::default();
+    let mut ordered_output = OperationTable::default();
+    for column in input.iter() {
+        if group_by_columns.contains(column) {
+            ordered_input.push(*column);
+            ordered_output.push(*column);
+        }
+    }
+
+    ordered_input.push(*aggregate_input_column);
+    ordered_output.push(*aggregate_output_column);
+
+    for column in input.iter() {
+        if distinct_columns.contains(column) {
+            ordered_input.push(*column);
+        }
+    }
+
+    (ordered_input, ordered_output)
+}
 
 /// Calculate helper structures that define the filters that need to be applied.
 pub(crate) fn node_aggregate(
@@ -16,9 +46,12 @@ pub(crate) fn node_aggregate(
     subnode: ExecutionNodeRef,
     aggregate: &ChaseAggregate,
 ) -> ExecutionNodeRef {
-    let aggregated_column = *variable_translation
+    let aggregate_input_column = *variable_translation
         .get(&aggregate.input_variable)
         .expect("aggregated variable has to be known");
+    let aggregate_output_column = *variable_translation
+        .get(&aggregate.output_variable)
+        .expect("aggregate output has to be known");
 
     let distinct_columns: Vec<_> = aggregate
         .distinct_variables
@@ -40,27 +73,25 @@ pub(crate) fn node_aggregate(
         })
         .collect();
 
-    // Update variables available after aggregation
-    // Remove distinct and unused variables of the aggregate
-    let mut output_markers = OperationTable::new_unique(0);
-    for group_by_marker in group_by_columns.iter() {
-        output_markers.push(*group_by_marker);
-    }
-    // Add aggregate output variable
-    output_markers.push(
-        *variable_translation
-            .get(&aggregate.output_variable)
-            .expect("aggregate output variable has to be known"),
+    let unordered_input_markers = subnode.markers_cloned();
+    let (ordered_input_markers, output_markers) = operations_tables(
+        &unordered_input_markers,
+        &aggregate_input_column,
+        &aggregate_output_column,
+        &distinct_columns,
+        &group_by_columns,
     );
+
+    let input_node = plan.projectreorder(ordered_input_markers, subnode);
 
     plan.aggregate(
         output_markers,
-        subnode,
+        input_node,
         AggregateAssignment {
             aggregate_operation: aggregate.aggregate_operation,
             distinct_columns,
             group_by_columns,
-            aggregated_column,
+            aggregated_column: aggregate_input_column,
         },
     )
 }

@@ -648,6 +648,47 @@ impl Term {
             }
         }
     }
+
+    /// Return all aggreagtes constained in this term.
+    pub(crate) fn aggregates(&self) -> Vec<Aggregate> {
+        match self {
+            Term::Primitive(_) => vec![],
+            Term::Unary(_, subterm) => subterm.aggregates(),
+            Term::Binary {
+                operation: _,
+                lhs,
+                rhs,
+            } => {
+                let mut result = lhs.aggregates();
+                result.extend(rhs.aggregates());
+                result
+            }
+            Term::Ternary {
+                operation: _,
+                first,
+                second,
+                third,
+            } => {
+                let mut result = first.aggregates();
+                result.extend(second.aggregates());
+                result.extend(third.aggregates());
+
+                result
+            }
+            Term::Nary {
+                operation: _,
+                parameters,
+            } => {
+                let mut result = Vec::<Aggregate>::new();
+                for subterm in parameters {
+                    result.extend(subterm.aggregates());
+                }
+                result
+            }
+            Term::Aggregation(aggregate) => vec![aggregate.clone()],
+            Term::Function(_, _) => panic!("Function symbols not supported"),
+        }
+    }
 }
 
 impl From<PrimitiveTerm> for Term {
