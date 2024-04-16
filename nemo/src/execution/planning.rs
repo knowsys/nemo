@@ -2,6 +2,7 @@
 
 pub(crate) mod operations;
 
+pub(crate) mod plan_aggregate;
 pub(crate) mod plan_body_seminaive;
 pub(crate) mod plan_head_datalog;
 pub(crate) mod plan_head_restricted;

@@ -5,7 +5,7 @@ use nemo_physical::management::execution_plan::ExecutionNodeRef;
 use crate::{
     execution::{execution_engine::RuleInfo, rule_execution::VariableTranslation},
     model::{
-        chase_model::{ChaseAggregate, ChaseRule, Constructor, VariableAtom},
+        chase_model::{ChaseRule, Constructor, VariableAtom},
         Constraint,
     },
     program_analysis::{analysis::RuleAnalysis, variable_order::VariableOrder},
@@ -14,8 +14,7 @@ use crate::{
 
 use super::{
     operations::{
-        aggregate::node_aggregate, filter::node_filter, functions::node_functions, join::node_join,
-        negation::node_negation,
+        filter::node_filter, functions::node_functions, join::node_join, negation::node_negation,
     },
     BodyStrategy,
 };
@@ -29,10 +28,6 @@ pub(crate) struct SeminaiveStrategy {
 
     negative_atoms: Vec<VariableAtom>,
     negative_constraints: Vec<Vec<Constraint>>,
-
-    aggregate: Option<ChaseAggregate>,
-    aggregate_constructors: Vec<Constructor>,
-    aggregate_constraints: Vec<Constraint>,
 }
 
 impl SeminaiveStrategy {
@@ -44,9 +39,6 @@ impl SeminaiveStrategy {
             negative_atoms: rule.negative_body().clone(),
             negative_constraints: rule.negative_constraints().clone(),
             positive_constructors: rule.positive_constructors().clone(),
-            aggregate: rule.aggregate().clone(),
-            aggregate_constructors: rule.aggregate_constructors().clone(),
-            aggregate_constraints: rule.aggregate_constraints().clone(),
         }
     }
 }
@@ -96,30 +88,7 @@ impl BodyStrategy for SeminaiveStrategy {
             &self.negative_constraints,
         );
 
-        let node_result = if let Some(aggregate) = &self.aggregate {
-            let node_aggregation = node_aggregate(
-                current_plan.plan_mut(),
-                variable_translation,
-                node_negation,
-                aggregate,
-            );
-
-            let node_aggregate_functions = node_functions(
-                current_plan.plan_mut(),
-                variable_translation,
-                node_aggregation,
-                &self.aggregate_constructors,
-            );
-
-            node_filter(
-                current_plan.plan_mut(),
-                variable_translation,
-                node_aggregate_functions,
-                &self.aggregate_constraints,
-            )
-        } else {
-            node_negation
-        };
+        let node_result = node_negation;
 
         current_plan.add_temporary_table(node_result.clone(), "Body");
         node_result

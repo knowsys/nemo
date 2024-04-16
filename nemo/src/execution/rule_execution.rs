@@ -12,8 +12,9 @@ use crate::{
 use super::{
     execution_engine::RuleInfo,
     planning::{
-        plan_body_seminaive::SeminaiveStrategy, plan_head_datalog::DatalogStrategy,
-        plan_head_restricted::RestrictedChaseStrategy, BodyStrategy, HeadStrategy,
+        plan_aggregate::AggregateStategy, plan_body_seminaive::SeminaiveStrategy,
+        plan_head_datalog::DatalogStrategy, plan_head_restricted::RestrictedChaseStrategy,
+        BodyStrategy, HeadStrategy,
     },
 };
 
@@ -32,6 +33,9 @@ pub(crate) struct RuleExecution {
     /// Object for generating an execution plan,
     /// which evaluates the body expression of the rule
     body_strategy: Box<dyn BodyStrategy>,
+    /// Object for generating an execution plan,
+    /// which evaluates the aggregate expression of the rule
+    aggregate_strategy: Option<AggregateStategy>,
     /// Object for generating an execution plan,
     /// which evaluates the head expression of the rule
     head_strategy: Box<dyn HeadStrategy>,
@@ -54,11 +58,17 @@ impl RuleExecution {
         } else {
             Box::new(DatalogStrategy::initialize(rule, analysis))
         };
+        let aggregate_strategy = rule
+            .aggregate()
+            .as_ref()
+            .map(|_| AggregateStategy::initialize(rule, analysis));
+
         let promising_variable_orders = analysis.promising_variable_orders.clone();
         Self {
             promising_variable_orders,
             variable_translation,
             body_strategy,
+            aggregate_strategy,
             head_strategy,
         }
     }
@@ -84,7 +94,7 @@ impl RuleExecution {
         let mut best_variable_order = self.promising_variable_orders[0].clone();
 
         let mut subtable_execution_plan = SubtableExecutionPlan::default();
-        let body_tree = self.body_strategy.add_plan_body(
+        let body_node = self.body_strategy.add_plan_body(
             table_manager,
             &mut subtable_execution_plan,
             &self.variable_translation,
@@ -93,11 +103,20 @@ impl RuleExecution {
             step_number,
         );
 
+        let aggregate_node = self.aggregate_strategy.as_ref().map(|strategy| {
+            strategy.add_plan_aggregate(
+                &mut subtable_execution_plan,
+                &self.variable_translation,
+                body_node.clone(),
+            )
+        });
+
         self.head_strategy.add_plan_head(
             table_manager,
             &mut subtable_execution_plan,
             &self.variable_translation,
-            body_tree,
+            body_node,
+            aggregate_node,
             rule_info,
             step_number,
         );

@@ -25,6 +25,81 @@ impl Rule {
         }
     }
 
+    fn calculate_derived_variables(
+        safe_variables: &HashSet<Variable>,
+        negative_variables: &HashSet<Variable>,
+        constraints: &[Constraint],
+    ) -> Result<HashSet<Variable>, ParseError> {
+        let mut derived_variables = safe_variables.clone();
+
+        let mut satisfied_constraints = HashSet::<usize>::new();
+        while satisfied_constraints.len() < constraints.len() {
+            let num_satisified_constraints = satisfied_constraints.len();
+
+            for (constraint_index, constraint) in constraints.iter().enumerate() {
+                if satisfied_constraints.contains(&constraint_index) {
+                    continue;
+                }
+
+                if let Some((variable, term)) = constraint.has_form_assignment() {
+                    if !negative_variables.contains(variable)
+                        && !derived_variables.contains(variable)
+                        && term
+                            .variables()
+                            .all(|term_variable| derived_variables.contains(term_variable))
+                    {
+                        derived_variables.insert(variable.clone());
+                        satisfied_constraints.insert(constraint_index);
+                        continue;
+                    }
+                }
+
+                if constraint.variables().all(|constraint_variable| {
+                    derived_variables.contains(constraint_variable)
+                        || negative_variables.contains(constraint_variable)
+                }) {
+                    satisfied_constraints.insert(constraint_index);
+                }
+            }
+
+            if satisfied_constraints.len() == num_satisified_constraints {
+                // return Err(ParseError::(...))
+            }
+        }
+
+        Ok(derived_variables)
+    }
+
+    fn calculate_negative_variables(
+        negative: &[Literal],
+        safe_variables: &HashSet<Variable>,
+    ) -> Result<HashSet<Variable>, ParseError> {
+        let mut negative_variables = HashSet::<Variable>::new();
+        for negative_literal in negative {
+            let mut current_unsafe = HashSet::<Variable>::new();
+
+            for negative_term in negative_literal.terms() {
+                if let Term::Primitive(PrimitiveTerm::Variable(variable)) = negative_term {
+                    if safe_variables.contains(variable) {
+                        continue;
+                    }
+
+                    if negative_variables.contains(variable) {
+                        return Err(ParseError::UnsafeVariableInMultipleNegativeLiterals(
+                            variable.clone(),
+                        ));
+                    }
+
+                    current_unsafe.insert(variable.clone());
+                }
+            }
+
+            negative_variables.extend(current_unsafe)
+        }
+
+        Ok(negative_variables)
+    }
+
     /// Construct a new rule, validating constraints on variable usage.
     pub(crate) fn new_validated(
         head: Vec<Atom>,
@@ -64,38 +139,18 @@ impl Rule {
         // Safe variables are considered to be
         // all variables occuring as primitive terms in a positive body literal
         // or every value that is equal to such a variable
-        let safe_variables = Self::safe_variables_constraints(
-            Self::safe_variables_literals(&positive),
-            &constraints,
-        );
+        let safe_variables = Self::safe_variables_literals(&positive);
+        // Negative variables are variables that occur as primitive terms in negative literals
+        // bot not in positive literals
+        let negative_variables = Self::calculate_negative_variables(&negative, &safe_variables)?;
 
-        // A derived variable is a variable which is defined in terms of bound variables
-        // using a simple equality operation
-        let mut derived_variables = HashSet::<&Variable>::new();
-        for constraint in &constraints {
-            if let Some((variable, term)) = constraint.has_form_assignment() {
-                if safe_variables.contains(variable) {
-                    continue;
-                }
+        // Derived variables are variables that result from functional expressions
+        // expressed as ?Variable = Term constraints,
+        // where the term only contains safe or derived variables.
+        let derived_variables =
+            Self::calculate_derived_variables(&safe_variables, &negative_variables, &constraints)?;
 
-                for term_variable in term.variables() {
-                    if !safe_variables.contains(term_variable) {
-                        return Err(ParseError::UnsafeDefinition(variable.clone()));
-                    }
-                }
-
-                if !derived_variables.contains(variable) {
-                    derived_variables.insert(variable);
-                } else {
-                    return Err(ParseError::MultipleDefinitions(variable.clone()));
-                }
-            }
-        }
-
-        // Each complex term in the body and head must only use safe variables
-        // TODO: Allow the use of derived variables.
-        //       To implement this, the planner has to apply the filters
-        //       after the appends and not right after the join
+        // Each complex term in the body and head must only use safe or derived variables
         for term in body
             .iter()
             .flat_map(|l| l.terms())
@@ -106,7 +161,7 @@ impl Rule {
             }
 
             for variable in term.variables() {
-                if !safe_variables.contains(variable) {
+                if !derived_variables.contains(variable) {
                     return Err(ParseError::UnsafeComplexTerm(
                         term.to_string(),
                         variable.clone(),
@@ -115,108 +170,27 @@ impl Rule {
             }
         }
 
-        // Every constraint that is not an assignment must only use safe varaibles
-        for constraint in &constraints {
-            if let Some((variable, _)) = constraint.has_form_assignment() {
-                if derived_variables.contains(variable) {
-                    continue;
-                }
-            }
-
-            for term in [constraint.left(), constraint.right()] {
-                for variable in term.variables() {
-                    if derived_variables.contains(variable) {
-                        return Err(ParseError::ComplexTermDerived(
-                            constraint.to_string(),
-                            variable.clone(),
-                        ));
-                    }
-
-                    if !safe_variables.contains(variable) {
-                        return Err(ParseError::UnsafeComplexTerm(
-                            constraint.to_string(),
-                            variable.clone(),
-                        ));
-                    }
-                }
-            }
-        }
-
-        // Head atoms may only use variables that are either bound or derived
+        // Head atoms may only use variables that are safe or derived
         for variable in head.iter().flat_map(|a| a.variables()) {
             if variable.is_unnamed() {
                 return Err(ParseError::UnnamedInHead);
             }
 
-            if variable.is_universal()
-                && !safe_variables.contains(variable)
-                && !derived_variables.contains(variable)
-            {
+            if variable.is_universal() && !derived_variables.contains(variable) {
                 return Err(ParseError::UnsafeHeadVariable(variable.clone()));
             }
-        }
-
-        // Unsafe variables in negative literals may only be used within one atom
-        let mut unsafe_negative_variables = HashSet::<Variable>::new();
-        for negative_literal in negative {
-            let mut current_unsafe = HashSet::<Variable>::new();
-
-            for negative_term in negative_literal.terms() {
-                if let Term::Primitive(primitive_term) = negative_term {
-                    if let PrimitiveTerm::Variable(variable) = primitive_term {
-                        if safe_variables.contains(variable) {
-                            continue;
-                        }
-
-                        if derived_variables.contains(variable) {
-                            return Err(ParseError::NegatedLiteralDerived(
-                                negative_literal.to_string(),
-                                variable.clone(),
-                            ));
-                        }
-
-                        if unsafe_negative_variables.contains(variable) {
-                            return Err(ParseError::UnsafeVariableInMultipleNegativeLiterals(
-                                variable.clone(),
-                            ));
-                        }
-                        if let PrimitiveTerm::Variable(variable) = primitive_term {
-                            if safe_variables.contains(variable) {
-                                continue;
-                            }
-
-                            if derived_variables.contains(variable) {
-                                return Err(ParseError::NegatedLiteralDerived(
-                                    negative_literal.to_string(),
-                                    variable.clone(),
-                                ));
-                            }
-
-                            if unsafe_negative_variables.contains(variable) {
-                                return Err(ParseError::UnsafeVariableInMultipleNegativeLiterals(
-                                    variable.clone(),
-                                ));
-                            }
-
-                            current_unsafe.insert(variable.clone());
-                        }
-                        current_unsafe.insert(variable.clone());
-                    }
-                } else {
-                    return Err(ParseError::NegatedLiteralComplex(
-                        negative_literal.to_string(),
-                        negative_term.to_string(),
-                    ));
-                }
-            }
-
-            unsafe_negative_variables.extend(current_unsafe)
         }
 
         // Check for aggregates in the body of a rule
         for literal in &body {
             #[allow(clippy::never_loop)]
             for aggregate in literal.aggregates() {
+                return Err(ParseError::AggregateInBody(aggregate.clone()));
+            }
+        }
+        for constraint in &constraints {
+            #[allow(clippy::never_loop)]
+            for aggregate in constraint.aggregates() {
                 return Err(ParseError::AggregateInBody(aggregate.clone()));
             }
         }
@@ -246,45 +220,11 @@ impl Rule {
         result
     }
 
-    /// Propagates the safety property to variables that are equal to other safe variables.
-    fn safe_variables_constraints(
-        mut safe_variables: HashSet<Variable>,
-        constraints: &[Constraint],
-    ) -> HashSet<Variable> {
-        let mut changed = true;
-
-        while changed {
-            changed = false;
-
-            for constraint in constraints {
-                if let (
-                    Term::Primitive(PrimitiveTerm::Variable(variable_left)),
-                    Term::Primitive(PrimitiveTerm::Variable(variable_right)),
-                ) = constraint.terms()
-                {
-                    if safe_variables.contains(variable_left)
-                        ^ safe_variables.contains(variable_right)
-                    {
-                        safe_variables.insert(variable_left.clone());
-                        safe_variables.insert(variable_right.clone());
-
-                        changed = true;
-                    }
-                }
-            }
-        }
-
-        safe_variables
-    }
-
     /// Return all variables that are "safe".
     /// A variable is safe if it occurs in a positive body literal,
     /// or is equal to such a value.
     pub fn safe_variables(&self) -> HashSet<Variable> {
-        Self::safe_variables_constraints(
-            Self::safe_variables_literals(&self.body),
-            self.constraints(),
-        )
+        Self::safe_variables_literals(&self.body)
     }
 
     /// Return the head atoms of the rule - immutable.

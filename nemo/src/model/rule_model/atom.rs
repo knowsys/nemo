@@ -56,11 +56,13 @@ impl Atom {
     }
 
     /// Return all aggregates in the atom.
-    pub fn aggregates(&self) -> impl Iterator<Item = &Aggregate> + '_ {
-        self.terms().iter().filter_map(|term| match term {
-            Term::Aggregation(aggregate) => Some(aggregate),
-            _ => None,
-        })
+    pub fn aggregates(&self) -> Vec<Aggregate> {
+        let mut result = Vec::new();
+        for term in self.terms() {
+            result.extend(term.aggregates());
+        }
+
+        result
     }
 
     /// Replaces [super::Variable]s with [Term]s according to the provided assignment.

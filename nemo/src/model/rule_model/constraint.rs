@@ -2,7 +2,7 @@ use nemo_physical::datavalues::AnyDataValue;
 
 use crate::model::{Term, Variable, VariableAssignment};
 
-use super::{BinaryOperation, PrimitiveTerm};
+use super::{Aggregate, BinaryOperation, PrimitiveTerm};
 
 /// Represents a constraint which is expressed as a binary operator applied to two terms
 #[derive(Debug, Eq, PartialEq, Clone, PartialOrd, Ord)]
@@ -104,6 +104,15 @@ impl Constraint {
 
         left.apply_assignment(assignment);
         right.apply_assignment(assignment);
+    }
+
+    /// Return all aggregates in this constraint.
+    pub fn aggregates(&self) -> Vec<Aggregate> {
+        let (left, right) = self.terms();
+        let mut result = left.aggregates();
+        result.extend(right.aggregates());
+
+        result
     }
 
     /// Return whether the constraint could be interpreted as an assignment,
