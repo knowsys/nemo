@@ -8,6 +8,10 @@ r0(?a, ?b) :- a(?a, ?b), ?a / ?b < 2.
 r1(?x) :- a(?x, ?y), 2 / ?y = 1.
 
 r2(?x) :- a(?x, ?y), 2 / ?y != 1.
+
+r3(?x) :- a(?x, ?y), ?z = ?x + ?y, ?z = 4.
+
 @export r0 :- csv {}.
 @export r1 :- csv {}.
 @export r2 :- csv {}.
+@export r3 :- csv {}.

@@ -1,0 +1,23 @@
+%%% Test related to 
+%%% https://github.com/knowsys/nemo/issues/448 
+%%% https://github.com/knowsys/nemo/issues/443
+%%% 
+%%% Previously, filters were computed prior to introducing new values,
+%%% which made them unavailable (and also causing crashes).
+
+A(1).
+B(?b):-
+    A(?a),
+    ?b = ?a + 1,
+    ?b >= 2.
+
+@export B :- csv {}.
+
+I(1, 5).
+I(2, 3).
+J(1, 7).
+J(2, 5).
+
+R(?x, ?y) :- I(?x, ?z), J(?x, ?v), ?y = ?z + ?v, ?y > 10 .
+
+@export R :- csv {}.

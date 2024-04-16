@@ -42,8 +42,7 @@ impl Rule {
                 }
 
                 if let Some((variable, term)) = constraint.has_form_assignment() {
-                    if !negative_variables.contains(variable)
-                        && !derived_variables.contains(variable)
+                    if !derived_variables.contains(variable)
                         && term
                             .variables()
                             .all(|term_variable| derived_variables.contains(term_variable))
