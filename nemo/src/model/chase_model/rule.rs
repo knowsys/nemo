@@ -455,6 +455,69 @@ impl ChaseRule {
         new_constraints
     }
 
+    fn compute_derived_variables(
+        rule: &Rule,
+        aggregate: &Option<ChaseAggregate>,
+        constraints: &mut ConstraintCategories,
+        assigned_constraints: &mut HashSet<usize>,
+    ) -> HashSet<Variable> {
+        let mut derived_variables = rule.safe_variables();
+        let mut aggregate_variables = HashSet::<Variable>::new();
+        if let Some(aggregate) = aggregate {
+            aggregate_variables.insert(aggregate.output_variable.clone());
+        }
+
+        let mut update = true;
+        while update {
+            let num_assigned_constraints = assigned_constraints.len();
+
+            for (constraint_index, constraint) in rule.constraints().iter().enumerate() {
+                if assigned_constraints.contains(&constraint_index) {
+                    continue;
+                }
+
+                if let Some((variable, term)) = constraint.has_form_assignment() {
+                    if derived_variables.contains(variable)
+                        || aggregate_variables.contains(variable)
+                    {
+                        continue;
+                    }
+
+                    if !derived_variables.contains(variable)
+                        && term
+                            .variables()
+                            .all(|variable| derived_variables.contains(variable))
+                    {
+                        derived_variables.insert(variable.clone());
+                        constraints
+                            .positive_constructors
+                            .push(Constructor::new(variable.clone(), term.clone()));
+                        assigned_constraints.insert(constraint_index);
+                        continue;
+                    }
+
+                    if !aggregate_variables.contains(variable)
+                        && term.variables().all(|variable| {
+                            derived_variables.contains(variable)
+                                || aggregate_variables.contains(variable)
+                        })
+                    {
+                        aggregate_variables.insert(variable.clone());
+                        constraints
+                            .aggregate_constructors
+                            .push(Constructor::new(variable.clone(), term.clone()));
+                        assigned_constraints.insert(constraint_index);
+                        continue;
+                    }
+                }
+            }
+
+            update = num_assigned_constraints != assigned_constraints.len();
+        }
+
+        derived_variables
+    }
+
     /// Seperate different [Constraint]s of the given [Rule] into several categories.
     fn seperate_constraints(
         rule: &Rule,
@@ -462,142 +525,51 @@ impl ChaseRule {
         negative_body: &[VariableAtom],
         constraints: &mut ConstraintCategories,
     ) {
-        let safe_variables = rule.safe_variables();
-        let mut known_variables = safe_variables.clone();
+        let mut assigned_constraints = HashSet::<usize>::new();
+        let derived_variables = Self::compute_derived_variables(
+            rule,
+            aggregate,
+            constraints,
+            &mut assigned_constraints,
+        );
 
         let mut negative_variables = HashMap::<Variable, usize>::new();
         for (body_index, negative_atom) in negative_body.iter().enumerate() {
             for variable in negative_atom.terms() {
-                if !safe_variables.contains(variable) {
+                if !derived_variables.contains(variable) {
                     negative_variables.insert(variable.clone(), body_index);
-                    known_variables.insert(variable.clone());
                 }
             }
         }
 
-        let mut aggregate_variables = HashSet::<Variable>::new();
-        if let Some(aggregate) = aggregate {
-            aggregate_variables.insert(aggregate.output_variable.clone());
-            known_variables.insert(aggregate.output_variable.clone());
-        }
+        for (constraint_index, constraint) in rule.constraints().iter().enumerate() {
+            if assigned_constraints.contains(&constraint_index) {
+                continue;
+            }
 
-        let mut positive_variables = safe_variables.clone();
+            // Constraint on derived variables
+            if constraint
+                .variables()
+                .all(|variable| derived_variables.contains(variable))
+            {
+                constraints.positive_constraints.push(constraint.clone());
+                assigned_constraints.insert(constraint_index);
+                continue;
+            }
 
-        let mut assigned_constraints = HashSet::<usize>::new();
-        while assigned_constraints.len() < rule.constraints().len() {
-            let num_assigned = assigned_constraints.len();
-
-            for current_constraint_index in 0..rule.constraints().len() {
-                if assigned_constraints.contains(&current_constraint_index) {
+            // Constraint on negative variables
+            for variable in constraint.variables() {
+                if let Some(negative_index) = negative_variables.get(variable) {
+                    constraints.negative_constraints[*negative_index].push(constraint.clone());
+                    assigned_constraints.insert(constraint_index);
                     continue;
                 }
-                let current_constraint = &rule.constraints()[current_constraint_index];
-
-                if let Some((variable, term)) = current_constraint.has_form_assignment() {
-                    if !positive_variables.contains(variable)
-                        && !aggregate_variables.contains(variable)
-                    {
-                        enum TermStatus {
-                            Undefined,
-                            Positive,
-                            Aggregate,
-                        }
-                        let mut status = TermStatus::Positive;
-
-                        for subvariable in term.variables() {
-                            if aggregate_variables.contains(subvariable) {
-                                status = TermStatus::Aggregate;
-                                break;
-                            } else if !known_variables.contains(subvariable) {
-                                status = TermStatus::Undefined;
-                                break;
-                            }
-                        }
-
-                        match status {
-                            TermStatus::Undefined => {
-                                continue;
-                            }
-                            TermStatus::Positive => {
-                                constraints
-                                    .positive_constructors
-                                    .push(Constructor::new(variable.clone(), term.clone()));
-                                positive_variables.insert(variable.clone());
-                                known_variables.insert(variable.clone());
-
-                                assigned_constraints.insert(current_constraint_index);
-                                continue;
-                            }
-                            TermStatus::Aggregate => {
-                                constraints
-                                    .aggregate_constructors
-                                    .push(Constructor::new(variable.clone(), term.clone()));
-                                aggregate_variables.insert(variable.clone());
-                                known_variables.insert(variable.clone());
-
-                                assigned_constraints.insert(current_constraint_index);
-                                continue;
-                            }
-                        }
-                    }
-                }
-
-                enum TermLayer {
-                    Positive,
-                    Aggregate,
-                    Undefined,
-                }
-
-                enum TermNegation {
-                    None,
-                    Negated(usize),
-                }
-
-                let mut layer = TermLayer::Positive;
-                let mut negation = TermNegation::None;
-
-                for subvariable in current_constraint.variables() {
-                    if aggregate_variables.contains(subvariable) {
-                        layer = TermLayer::Aggregate;
-                    } else if let Some(atom_index) = negative_variables.get(subvariable) {
-                        negation = TermNegation::Negated(*atom_index);
-                    } else if !known_variables.contains(subvariable) {
-                        layer = TermLayer::Undefined;
-                        break;
-                    }
-                }
-
-                match layer {
-                    TermLayer::Positive => {
-                        constraints
-                            .positive_constraints
-                            .push(current_constraint.clone());
-                        assigned_constraints.insert(current_constraint_index);
-                    }
-                    TermLayer::Aggregate => {
-                        constraints
-                            .aggregate_constraints
-                            .push(current_constraint.clone());
-                        assigned_constraints.insert(current_constraint_index);
-                    }
-                    TermLayer::Undefined => {}
-                }
-
-                if !matches!(layer, TermLayer::Undefined) {
-                    match negation {
-                        TermNegation::None => {}
-                        TermNegation::Negated(index) => {
-                            constraints.negative_constraints[index]
-                                .push(current_constraint.clone());
-                        }
-                    }
-                }
             }
 
-            if assigned_constraints.len() == num_assigned {
-                unreachable!("A well-formed rule should have no cyclic dependencies");
-            }
+            // Constraints on aggregates are currently not expressible
         }
+
+        debug_assert!(assigned_constraints.len() == rule.constraints().len());
     }
 }
 

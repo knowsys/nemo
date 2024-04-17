@@ -143,33 +143,27 @@ pub enum ParseError {
     /// A wildcard pattern was used inside of the rule head.
     #[error(r#"rule head must not contain unnamed variables "_""#)]
     UnnamedInHead,
-    /// The universal variable does not occur in a positive body literal.
-    #[error(r#"the universal variable "{0}" must occur in a positive body literal"#)]
+    /// The universal variable is not safe or derived.
+    #[error(r#"variable "{0}" appears in the head but cannot be derived from the body"#)]
     UnsafeHeadVariable(Variable),
-    /// The variable must only depend on variables that occur in a positive body literal.
-    #[error(r#"the variable "{0}" must only depend on variables that occur in a positive body literals"#)]
-    UnsafeDefinition(Variable),
-    /// Negated literal uses a complex term.
-    #[error(r#"negated literal "{0}" uses the complex term "{1}""#)]
-    NegatedLiteralComplex(String, String),
-    /// Negated literal uses a derived variable.
-    #[error(r#"negated literal "{0}" uses a derived variable "{1}""#)]
-    NegatedLiteralDerived(String, Variable),
-    /// Complex term uses a derived variable.
-    #[error(r#"complex term "{0}" uses a derived variable "{1}""#)]
-    ComplexTermDerived(String, Variable),
     /// Complex term uses an unsafe variable.
-    #[error(r#"complex term "{0}" uses an unsafe variable "{1}""#)]
+    #[error(r#"the value of variable "{1}" contained in term "{0}" cannot be derived"#)]
     UnsafeComplexTerm(String, Variable),
-    /// Variable has been defined multiple times.
-    #[error(r#"the variable "{0}" has been used in multiple equalities"#)]
-    MultipleDefinitions(Variable),
     /// The unsafe variable appears in multiple negative body literals.
     #[error(r#"the unsafe variable "{0}" appears in multiple negative body literals"#)]
     UnsafeVariableInMultipleNegativeLiterals(Variable),
-    /// A variable used in a comparison does not occur in a positive body literal.
-    #[error(r#"the variable "{0}" used in a comparison; must occur in a positive body literal"#)]
-    UnsafeFilterVariable(Variable),
+    /// Constraint on unsafe unsafe variable may only use variables from that negated literal
+    #[error(r#"Term "{0}" uses variable {1} from negated literal {2} but also the variable {3}, which does not appear in it."#)]
+    ConstraintOutsideVariable(String, Variable, String, Variable),
+    /// An aggregate term occurs in the body of a rule.
+    #[error(r#"An aggregate term ("{0}") occurs in the body of a rule"#)]
+    AggregateInBody(Aggregate),
+    /// Multiple aggregates in one rule
+    #[error("Currently, only one aggregate per rule is supported.")]
+    MultipleAggregates,
+    /// Aggregates cannot be used within existential rules
+    #[error("Aggregates may not appear in existential rules.")]
+    AggregatesPlusExistentials,
     /// A variable is both existentially and universally quantified
     #[error(r#"variables named "{0}" occur with existential and universal quantification"#)]
     BothQuantifiers(String),
@@ -317,9 +311,6 @@ pub enum ParseError {
     /// Expected an parenthesised term tree.
     #[error("Expected an parenthesised term tree")]
     ExpectedParenthesisedTerm,
-    /// An aggregate term occurs in the body of a rule.
-    #[error(r#"An  term ("{0}") occurs in the body of a rule"#)]
-    AggregateInBody(Aggregate),
     /// Unknown aggregate operation
     #[error(r#"Aggregate operation "{0}" is not known"#)]
     UnknownAggregateOperation(String),
