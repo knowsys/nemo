@@ -694,7 +694,15 @@ impl Term {
                 }
                 result
             }
-            Term::Aggregation(aggregate) => vec![aggregate.clone()],
+            Term::Aggregation(aggregate) => {
+                let mut result = vec![aggregate.clone()];
+
+                for subterm in &aggregate.terms {
+                    result.extend(subterm.aggregates());
+                }
+
+                result
+            }
             Term::Function(_, _) => panic!("Function symbols not supported"),
         }
     }

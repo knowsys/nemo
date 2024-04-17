@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use crate::{io::parser::ParseError, model::VariableAssignment};
 
@@ -27,9 +27,8 @@ impl Rule {
 
     fn calculate_derived_variables(
         safe_variables: &HashSet<Variable>,
-        negative_variables: &HashSet<Variable>,
         constraints: &[Constraint],
-    ) -> Result<HashSet<Variable>, ParseError> {
+    ) -> HashSet<Variable> {
         let mut derived_variables = safe_variables.clone();
 
         let mut satisfied_constraints = HashSet::<usize>::new();
@@ -52,30 +51,30 @@ impl Rule {
                         continue;
                     }
                 }
-
-                if constraint.variables().all(|constraint_variable| {
-                    derived_variables.contains(constraint_variable)
-                        || negative_variables.contains(constraint_variable)
-                }) {
-                    satisfied_constraints.insert(constraint_index);
-                }
             }
 
             if satisfied_constraints.len() == num_satisified_constraints {
-                // return Err(ParseError::ExpectedAtom);
+                return derived_variables;
             }
         }
 
-        Ok(derived_variables)
+        derived_variables
     }
 
+    /// Return all variables that appear in negative literals
+    /// but cannot be derived from positive literals.
+    ///
+    /// For each variable also returns the associated index of the literal.
+    ///
+    /// Returns an error if one negative variable is associated with multiple literals.
     fn calculate_negative_variables(
         negative: &[Literal],
         safe_variables: &HashSet<Variable>,
-    ) -> Result<HashSet<Variable>, ParseError> {
-        let mut negative_variables = HashSet::<Variable>::new();
-        for negative_literal in negative {
-            let mut current_unsafe = HashSet::<Variable>::new();
+    ) -> Result<HashMap<Variable, usize>, ParseError> {
+        let mut negative_variables = HashMap::<Variable, usize>::new();
+
+        for (literal_index, negative_literal) in negative.iter().enumerate() {
+            let mut current_unsafe = HashMap::<Variable, usize>::new();
 
             for negative_term in negative_literal.terms() {
                 if let Term::Primitive(PrimitiveTerm::Variable(variable)) = negative_term {
@@ -83,13 +82,13 @@ impl Rule {
                         continue;
                     }
 
-                    if negative_variables.contains(variable) {
+                    current_unsafe.insert(variable.clone(), literal_index);
+
+                    if negative_variables.contains_key(variable) {
                         return Err(ParseError::UnsafeVariableInMultipleNegativeLiterals(
                             variable.clone(),
                         ));
                     }
-
-                    current_unsafe.insert(variable.clone());
                 }
             }
 
@@ -139,15 +138,56 @@ impl Rule {
         // all variables occuring as primitive terms in a positive body literal
         // or every value that is equal to such a variable
         let safe_variables = Self::safe_variables_literals(&positive);
-        // Negative variables are variables that occur as primitive terms in negative literals
-        // bot not in positive literals
-        let negative_variables = Self::calculate_negative_variables(&negative, &safe_variables)?;
 
         // Derived variables are variables that result from functional expressions
         // expressed as ?Variable = Term constraints,
         // where the term only contains safe or derived variables.
-        let derived_variables =
-            Self::calculate_derived_variables(&safe_variables, &negative_variables, &constraints)?;
+        let derived_variables = Self::calculate_derived_variables(&safe_variables, &constraints);
+
+        // Negative variables are variables that occur as primitive terms in negative literals
+        // bot cannot be derived
+        let negative_variables = Self::calculate_negative_variables(&negative, &derived_variables)?;
+
+        // Each constraint must only use derived variables
+        // or if it contains negative variables, then all variables in the constraint
+        // must be from the same atom
+        for constraint in &constraints {
+            let unknown = constraint.variables().find(|variable| {
+                !derived_variables.contains(variable) && !negative_variables.contains_key(variable)
+            });
+
+            if let Some(variable) = unknown {
+                return Err(ParseError::UnsafeComplexTerm(
+                    constraint.to_string(),
+                    variable.clone(),
+                ));
+            }
+
+            if let Some(negative_variable) = constraint
+                .variables()
+                .find(|variable| negative_variables.contains_key(variable))
+            {
+                let negative_literal = &negative[*negative_variables
+                    .get(negative_variable)
+                    .expect("Map must contain key")];
+                let allowed_variables = negative_literal
+                    .variables()
+                    .cloned()
+                    .collect::<HashSet<Variable>>();
+
+                if let Some(not_allowed) = constraint
+                    .variables()
+                    .find(|variable| !allowed_variables.contains(variable))
+                {
+                    return Err(ParseError::ConstraintOutsideVariable(
+                        constraint.to_string(),
+                        negative_variable.clone(),
+                        negative_literal.to_string(),
+                        not_allowed.clone(),
+                    ));
+                }
+            }
+        }
 
         // Each complex term in the body and head must only use safe or derived variables
         for term in body
@@ -169,8 +209,14 @@ impl Rule {
             }
         }
 
+        let mut is_existential = false;
+
         // Head atoms may only use variables that are safe or derived
         for variable in head.iter().flat_map(|a| a.variables()) {
+            if variable.is_existential() {
+                is_existential = true;
+            }
+
             if variable.is_unnamed() {
                 return Err(ParseError::UnnamedInHead);
             }
@@ -192,6 +238,24 @@ impl Rule {
             for aggregate in constraint.aggregates() {
                 return Err(ParseError::AggregateInBody(aggregate.clone()));
             }
+        }
+
+        // We only allow one aggregate per rule,
+        // and do not allow them to appear together with existential variables
+        let mut aggregate_count = 0;
+        for head_atom in &head {
+            for term in head_atom.terms() {
+                println!("{:?}", term.aggregates());
+                aggregate_count += term.aggregates().len();
+
+                if aggregate_count > 1 {
+                    return Err(ParseError::MultipleAggregates);
+                }
+            }
+        }
+
+        if aggregate_count > 0 && is_existential {
+            return Err(ParseError::AggregatesPlusExistentials);
         }
 
         Ok(Rule {
