@@ -26,6 +26,7 @@ double,"""4.2""^^<http://www.w3.org/2001/XMLSchema#double>"
 double,"""5""^^<http://www.w3.org/2001/XMLSchema#double>"
 double,"""40""^^<http://www.w3.org/2001/XMLSchema#double>"
 double,"""2023""^^<http://www.w3.org/2001/XMLSchema#double>"
+mixedsum,"""6.5""^^<http://www.w3.org/2001/XMLSchema#double>"
 round,5
 round,"""3""^^<http://www.w3.org/2001/XMLSchema#double>"
 round,"""4""^^<http://www.w3.org/2001/XMLSchema#double>"

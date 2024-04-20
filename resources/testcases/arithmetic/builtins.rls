@@ -42,6 +42,12 @@ result(int, ?R) :- cast(?A), ?R = INT(?A).
 result(float, ?R) :- cast(?A), ?R = FLOAT(?A).
 result(double, ?R) :- cast(?A), ?R = DOUBLE(?A).
 
+% Cast within numeric operations
+
+result(mixedsum, ?R) :- 
+    integers(?I1, ?I2, ?I3), doubles(?D1, ?D2, ?D3),
+    ?R = ?I1 * ?D1 + ?I2 * ?D2 + ?I3 * ?D3. 
+
 % Numeric rounding
 result(round, ?R) :- cast(?A), ?R = ROUND(?A).
 
