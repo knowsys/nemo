@@ -70,7 +70,7 @@ impl<T: AstNode + std::fmt::Debug> AstNode for List<'_, T> {
     }
 
     fn name(&self) -> String {
-        String::from("List")
+        format!("List \x1b[34m@{}:{} \x1b[92m{:?}\x1b[0m", self.span.location_line(), self.span.get_utf8_column(), self.span.fragment())
     }
 }
 impl<T: AstNode + std::fmt::Debug> Display for List<'_, T> {
