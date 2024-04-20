@@ -2,10 +2,7 @@
 
 use std::{collections::HashMap, fmt::Debug, hash::Hash};
 
-use crate::{
-    datatypes::storage_type_name::StorageTypeBitSet, datavalues::AnyDataValue,
-    function::definitions::BinaryFunction,
-};
+use crate::datavalues::AnyDataValue;
 
 use super::{
     definitions::{
@@ -30,8 +27,7 @@ use super::{
             StringEnds, StringLength, StringLowercase, StringStarts, StringSubstring,
             StringSubstringLength, StringUppercase,
         },
-        BinaryFunctionEnum, FunctionTypePropagation, NaryFunction, NaryFunctionEnum,
-        TernaryFunction, TernaryFunctionEnum, UnaryFunction, UnaryFunctionEnum,
+        BinaryFunctionEnum, NaryFunctionEnum, TernaryFunctionEnum, UnaryFunctionEnum,
     },
     evaluation::StackProgram,
 };
@@ -189,109 +185,6 @@ where
             Some(reference)
         } else {
             None
-        }
-    }
-
-    /// Helper function to aggregate [FunctionTypePropagation].
-    ///
-    /// This enables the case where a function just "preservers" its input types.
-    /// For example, the output type of numeric addition is just the type of its inputs.
-    ///
-    /// Hence, the aggregated type is defined as follows:
-    ///     * If an input is unknown, so is the aggregation
-    ///     * If all inputs are preserve then so is the aggregation
-    ///     * Otherwise, compute the intersection of known types
-    fn type_propagation_preserve(
-        parameters: &[FunctionTypePropagation],
-    ) -> FunctionTypePropagation {
-        let mut known = StorageTypeBitSet::full();
-        let mut known_exists = false;
-
-        for parameter in parameters {
-            match parameter {
-                FunctionTypePropagation::KnownOutput(types) => {
-                    known_exists = true;
-                    known = known.intersection(*types);
-                }
-                FunctionTypePropagation::Preserve => {}
-                FunctionTypePropagation::_Unknown => {
-                    return FunctionTypePropagation::_Unknown;
-                }
-            }
-        }
-
-        if known_exists {
-            FunctionTypePropagation::KnownOutput(known)
-        } else {
-            FunctionTypePropagation::Preserve
-        }
-    }
-
-    /// Computes how storage types of the input to the (overall) function defined by this tree,
-    /// relate to its output type.
-    pub(crate) fn type_propagation(&self) -> FunctionTypePropagation {
-        match self {
-            FunctionTree::Leaf(_) => FunctionTypePropagation::Preserve,
-            FunctionTree::Unary(function, sub) => {
-                let output_type = function.type_propagation();
-
-                if matches!(output_type, FunctionTypePropagation::Preserve) {
-                    return Self::type_propagation_preserve(&[sub.type_propagation()]);
-                }
-
-                output_type
-            }
-            FunctionTree::Binary {
-                function,
-                left,
-                right,
-            } => {
-                let output_type = function.type_propagation();
-
-                if matches!(output_type, FunctionTypePropagation::Preserve) {
-                    return Self::type_propagation_preserve(&[
-                        left.type_propagation(),
-                        right.type_propagation(),
-                    ]);
-                }
-
-                output_type
-            }
-            FunctionTree::Ternary {
-                function,
-                first,
-                second,
-                third,
-            } => {
-                let output_type = function.type_propagation();
-
-                if matches!(output_type, FunctionTypePropagation::Preserve) {
-                    return Self::type_propagation_preserve(&[
-                        first.type_propagation(),
-                        second.type_propagation(),
-                        third.type_propagation(),
-                    ]);
-                }
-
-                output_type
-            }
-            FunctionTree::Nary {
-                function,
-                parameters,
-            } => {
-                let output_type = function.type_propagation();
-
-                if matches!(output_type, FunctionTypePropagation::Preserve) {
-                    return Self::type_propagation_preserve(
-                        &parameters
-                            .iter()
-                            .map(|parameter| parameter.type_propagation())
-                            .collect::<Vec<_>>(),
-                    );
-                }
-
-                output_type
-            }
         }
     }
 }

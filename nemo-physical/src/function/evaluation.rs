@@ -3,6 +3,7 @@
 use std::{collections::HashMap, fmt::Debug, hash::Hash};
 
 use crate::{
+    datatypes::storage_type_name::StorageTypeBitSet,
     datavalues::{AnyDataValue, DataValue},
     error::Error,
     function::tree::FunctionLeaf,
@@ -10,8 +11,8 @@ use crate::{
 
 use super::{
     definitions::{
-        BinaryFunction, BinaryFunctionEnum, NaryFunction, NaryFunctionEnum, TernaryFunction,
-        TernaryFunctionEnum, UnaryFunction, UnaryFunctionEnum,
+        BinaryFunction, BinaryFunctionEnum, FunctionTypePropagation, NaryFunction,
+        NaryFunctionEnum, TernaryFunction, TernaryFunctionEnum, UnaryFunction, UnaryFunctionEnum,
     },
     tree::FunctionTree,
 };
@@ -257,14 +258,22 @@ impl StackProgram {
     }
 
     /// Evaluate the stack program and return the result.
+    ///
     /// Returns `None` if some function could not be evaluated.
+    ///
+    /// # Panics
+    /// Panics if the [StackProgram] is not valid.
     pub(crate) fn evaluate_data(&self, referenced_values: &[AnyDataValue]) -> Option<AnyDataValue> {
         self.evaluate(referenced_values, None)
     }
 
     /// Evaluate the stack program and return the result.
     /// This function assumes that the result will be a boolean.
+    ///
     /// Returns `None` if some function could not be evaluated.
+    ///
+    /// # Panics
+    /// Panics if the [StackProgram] is not valid.
     pub(crate) fn evaluate_bool(
         &self,
         referenced_values: &[AnyDataValue],
@@ -272,6 +281,50 @@ impl StackProgram {
     ) -> Option<bool> {
         let result = self.evaluate(referenced_values, this)?;
         result.to_boolean()
+    }
+
+    /// Computes the possible output type for a given set of possible input types.
+    ///
+    /// # Panics
+    /// Panics if the [StackProgram] is not valid.
+    pub(crate) fn type_propagation(
+        &self,
+        reference_types: &[StorageTypeBitSet],
+        this: Option<StorageTypeBitSet>,
+    ) -> StorageTypeBitSet {
+        let mut stack = Vec::<StorageTypeBitSet>::with_capacity(self.size);
+
+        for instruction in &self.instructions {
+            let mut input_types = Vec::<StorageTypeBitSet>::new();
+
+            let (pop, instruction_type_propagation) = match instruction {
+                StackOperation::Push(stack_value) => (0, match stack_value {
+                    StackValue::Constant(constant) => FunctionTypePropagation::KnownOutput(constant.value_domain().storage_type()),
+                    StackValue::Reference(id) => FunctionTypePropagation::KnownOutput(reference_types[*id]),
+                    StackValue::This => FunctionTypePropagation::KnownOutput(this.expect("If stackoperation references `this` it should be given as an argument to this function")),
+                }),
+                StackOperation::UnaryFunction(function) => {
+                    (1, function.type_propagation())
+                },
+                StackOperation::BinaryFunction(function) => (2, function.type_propagation()),
+                StackOperation::TernaryFunction(function) => (3, function.type_propagation()),
+                StackOperation::NaryFunction(function, num_arguments) => (*num_arguments, function.type_propagation()),
+            };
+
+            for _ in 0..pop {
+                input_types.push(
+                    stack
+                        .pop()
+                        .expect("Well formed stack program should not pop from empty stack"),
+                );
+            }
+
+            stack.push(instruction_type_propagation.propagate(&input_types));
+        }
+
+        stack
+            .pop()
+            .expect("The final value is on the stack, since this program is valid.")
     }
 }
 

@@ -13,7 +13,6 @@ use crate::{
     datatypes::{storage_type_name::StorageTypeBitSet, StorageTypeName},
     datavalues::{AnyDataValue, DataValue},
     function::{
-        definitions::FunctionTypePropagation,
         evaluation::StackProgram,
         tree::{FunctionTree, SpecialCaseFunction},
     },
@@ -77,19 +76,6 @@ struct LayerInformation {
     pub(self) input: InputMarker,
 }
 
-/// Encodes a priori knowlegde about the the possible types of a particular layer
-#[derive(Debug, Clone, PartialEq, Eq)]
-enum PossibleTypeInformation {
-    /// Layer could be of all types
-    Unkown,
-    /// Layer can only have the type specified by the [StorageTypeBitSet]
-    Known(StorageTypeBitSet),
-    /// Layer has the same possible types as another
-    Inferred(usize),
-    /// Layer has the same possible types as the input trie of the given layer
-    Input(usize),
-}
-
 /// Used to create [TrieScanFunction]
 #[derive(Debug)]
 pub struct GeneratorFunction {
@@ -97,36 +83,25 @@ pub struct GeneratorFunction {
     layer_information: Vec<LayerInformation>,
     /// Result of applying constant functions
     constant_functions: Vec<(Option<AnyDataValue>, usize)>,
-    /// Encodes for each layer information about its possible types via [PossibleTypeInformation].
-    type_information: Vec<PossibleTypeInformation>,
 }
 
 impl GeneratorFunction {
-    /// Create a new [GeneratorFunction]
+    /// Create a new [GeneratorFunction].
     pub fn new(output: OperationTable, functions: &FunctionAssignment) -> Self {
         let referenced_columns: HashSet<OperationColumnMarker> = functions
             .iter()
             .flat_map(|(_, function)| function.references())
             .collect();
 
-        let mut type_information = vec![PossibleTypeInformation::Unkown; output.len()];
         let mut reference_map = HashMap::<OperationColumnMarker, usize>::new();
 
-        let mut layer_input: usize = 0;
-
-        for (layer_output, marker_output) in output.iter().enumerate() {
+        for marker_output in output.iter() {
             if referenced_columns.contains(marker_output) {
                 // Column is input to some function
                 let num_function_input = reference_map.len();
                 if let Entry::Vacant(entry) = reference_map.entry(*marker_output) {
                     entry.insert(num_function_input);
                 }
-            }
-
-            if functions.get(marker_output).is_none() {
-                // Column is part of the input trie
-                type_information[layer_output] = PossibleTypeInformation::Input(layer_input);
-                layer_input += 1;
             }
         }
 
@@ -166,30 +141,11 @@ impl GeneratorFunction {
 
                         input_information[layer_last_reference]
                             .append_used((stack_program, layer_output));
-
-                        let possible_types = match function.type_propagation() {
-                            FunctionTypePropagation::KnownOutput(output_type) => {
-                                PossibleTypeInformation::Known(output_type)
-                            }
-                            FunctionTypePropagation::Preserve => {
-                                PossibleTypeInformation::Inferred(layer_last_reference)
-                            }
-                            FunctionTypePropagation::_Unknown => PossibleTypeInformation::Unkown,
-                        };
-
-                        type_information[layer_output] = possible_types;
                     } else {
                         unreachable!("If the function has no references it is constant");
                     }
                 }
                 SpecialCaseFunction::Constant(constant) => {
-                    type_information[layer_output] = PossibleTypeInformation::Known(
-                        constant
-                            .as_ref()
-                            .map_or(StorageTypeBitSet::empty(), |constant| {
-                                constant.value_domain().storage_type()
-                            }),
-                    );
                     constant_functions.push((constant, layer_output));
                 }
                 SpecialCaseFunction::Reference(reference) => {
@@ -198,8 +154,6 @@ impl GeneratorFunction {
                         .expect("Output table must include every referenced column");
 
                     computed_information[layer_output] = ComputedMarker::Copy(layer_reference);
-                    type_information[layer_output] =
-                        PossibleTypeInformation::Inferred(layer_reference);
                 }
             }
         }
@@ -213,7 +167,6 @@ impl GeneratorFunction {
         Self {
             layer_information,
             constant_functions,
-            type_information,
         }
     }
 
@@ -243,10 +196,18 @@ impl OperationGenerator for GeneratorFunction {
 
         let mut column_scans: Vec<UnsafeCell<ColumnScanT<'a>>> =
             Vec::with_capacity(self.layer_information.len());
+        let mut possible_types = vec![StorageTypeBitSet::full(); self.layer_information.len()];
+        let mut used_types = Vec::<StorageTypeBitSet>::with_capacity(self.layer_information.len());
+
+        for (any_value, output_layer) in &self.constant_functions {
+            if let Some(any) = any_value {
+                possible_types[*output_layer] = any.value_domain().storage_type();
+            }
+        }
 
         let mut input_index: usize = 0;
 
-        for information in &self.layer_information {
+        for (output_index, information) in self.layer_information.iter().enumerate() {
             macro_rules! output_scan {
                 ($type:ty, $scan:ident) => {{
                     match information.computed {
@@ -278,7 +239,17 @@ impl OperationGenerator for GeneratorFunction {
             column_scans.push(UnsafeCell::new(new_scan));
 
             if let ComputedMarker::Input = information.computed {
+                possible_types[output_index] = trie_scan.possible_types(input_index);
                 input_index += 1;
+            }
+
+            if let InputMarker::Used(programs) = &information.input {
+                used_types.push(possible_types[output_index]);
+
+                for (program, program_output_index) in programs {
+                    possible_types[*program_output_index] =
+                        program.type_propagation(&used_types, None);
+                }
             }
         }
 
@@ -301,7 +272,7 @@ impl OperationGenerator for GeneratorFunction {
             column_scans,
             path_types: Vec::new(),
             layer_information: self.layer_information.clone(),
-            type_information: self.type_information.clone(),
+            possible_types,
         }))
     }
 }
@@ -319,8 +290,8 @@ pub(crate) struct TrieScanFunction<'a> {
     layer_information: Vec<LayerInformation>,
     /// Values that will be used as input when evaluating a [StackProgram]
     input_values: Vec<AnyDataValue>,
-    /// For each output layer, holds information about the possible output types via [PossibleTypeInformation]
-    type_information: Vec<PossibleTypeInformation>,
+    /// For each output layer, stores which are the possible types.
+    possible_types: Vec<StorageTypeBitSet>,
 
     /// Path of [StorageTypeName] indicating the the types of the current (partial) row
     path_types: Vec<StorageTypeName>,
@@ -423,12 +394,7 @@ impl<'a> PartialTrieScan<'a> for TrieScanFunction<'a> {
     }
 
     fn possible_types(&self, layer: usize) -> StorageTypeBitSet {
-        match self.type_information[layer] {
-            PossibleTypeInformation::Unkown => StorageTypeBitSet::full(),
-            PossibleTypeInformation::Known(value) => value,
-            PossibleTypeInformation::Inferred(index) => self.possible_types(index),
-            PossibleTypeInformation::Input(layer) => self.trie_scan.possible_types(layer),
-        }
+        self.possible_types[layer]
     }
 
     fn current_layer(&self) -> Option<usize> {

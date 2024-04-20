@@ -2,7 +2,7 @@
 
 use std::ops::{BitAnd, BitOr, BitXor, Not, Shl, Shr, Sub};
 
-use num::One;
+use num::{One, Zero};
 
 /// Trait that defines an object on which boolean operations can be performed
 pub(crate) trait BooleanOperations:
@@ -18,6 +18,7 @@ pub(crate) trait BooleanOperations:
     + Shr<usize, Output = Self>
     + Sub<Output = Self>
     + One
+    + Zero
     + PartialEq
     + Eq
 {
@@ -77,6 +78,16 @@ where
     /// Compute the union of two [BitSet]s.
     pub(crate) fn union(&self, other: Self) -> Self {
         Self(self.0 | other.0)
+    }
+
+    /// Returns `true` if it contains exactly one element
+    pub(crate) fn is_single(&self) -> bool {
+        (self.0 != T::zero()) && (self.0 & (self.0 - T::one()) == T::zero())
+    }
+
+    /// Returns `true` if the given set is a subset.
+    pub(crate) fn subset(&self, other: Self) -> bool {
+        self.intersection(other) == other
     }
 }
 

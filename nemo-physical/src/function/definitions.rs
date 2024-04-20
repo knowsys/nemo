@@ -10,7 +10,10 @@ pub(crate) mod string;
 
 use delegate::delegate;
 
-use crate::{datatypes::storage_type_name::StorageTypeBitSet, datavalues::AnyDataValue};
+use crate::{
+    datatypes::{storage_type_name::StorageTypeBitSet, StorageTypeName},
+    datavalues::AnyDataValue,
+};
 
 use self::{
     boolean::{BooleanConjunction, BooleanDisjunction, BooleanNegation},
@@ -43,8 +46,70 @@ pub(crate) enum FunctionTypePropagation {
     /// Types are preserved, i.e. the output has the same types as the inputs
     /// (the function returns `None` if input values differ in type)
     Preserve,
+    /// If input types are numeric, cast them to the maximum type
+    NumericUpcast,
     /// Nothing is known about the the type propagation
     _Unknown,
+}
+
+impl FunctionTypePropagation {
+    pub(crate) fn propagate(&self, input: &[StorageTypeBitSet]) -> StorageTypeBitSet {
+        match self {
+            FunctionTypePropagation::KnownOutput(storage_type) => *storage_type,
+            FunctionTypePropagation::Preserve => {
+                let mut result_type = StorageTypeBitSet::full();
+                for input_type in input {
+                    result_type = result_type.intersection(*input_type);
+                }
+
+                result_type
+            }
+            FunctionTypePropagation::_Unknown => StorageTypeBitSet::full(),
+            FunctionTypePropagation::NumericUpcast => {
+                if input.is_empty() {
+                    return StorageTypeBitSet::empty();
+                }
+
+                let mut contains_int = true;
+                let mut contains_float = true;
+                let mut contains_double = true;
+
+                let mut mixing = false;
+                let first_type = &input[0];
+
+                for input_type in input {
+                    if !input_type.contains(&StorageTypeName::Int64) {
+                        contains_int = false;
+                    }
+
+                    if !input_type.contains(&StorageTypeName::Float) {
+                        contains_float = false;
+                    }
+
+                    if !input_type.contains(&StorageTypeName::Double) {
+                        contains_double = false;
+                    }
+
+                    if input_type != first_type || (!input_type.is_unique() && input.len() > 1) {
+                        mixing = true;
+                    }
+                }
+
+                let mut result_type = StorageTypeBitSet::empty();
+                if contains_int {
+                    result_type = result_type.union(StorageTypeName::Int64.bitset());
+                }
+                if contains_float {
+                    result_type = result_type.union(StorageTypeName::Float.bitset());
+                }
+                if mixing || contains_double {
+                    result_type = result_type.union(StorageTypeName::Double.bitset());
+                }
+
+                result_type
+            }
+        }
+    }
 }
 
 /// Defines a unary function on [AnyDataValue].
