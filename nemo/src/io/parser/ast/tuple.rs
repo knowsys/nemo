@@ -55,7 +55,12 @@ impl AstNode for Tuple<'_> {
     }
 
     fn name(&self) -> String {
-        String::from("Tuple")
+        format!(
+            "Tuple \x1b[34m@{}:{} \x1b[92m{:?}\x1b[0m",
+            self.span.location_line(),
+            self.span.get_utf8_column(),
+            self.span.fragment()
+        )
     }
 }
 impl std::fmt::Display for Tuple<'_> {

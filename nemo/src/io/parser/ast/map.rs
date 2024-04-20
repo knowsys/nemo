@@ -109,7 +109,12 @@ impl<K: AstNode + Debug, V: AstNode + Debug> AstNode for Pair<'_, K, V> {
     }
 
     fn name(&self) -> String {
-        String::from("Pair")
+        format!(
+            "Pair \x1b[34m@{}:{} \x1b[92m{:?}\x1b[0m",
+            self.span.location_line(),
+            self.span.get_utf8_column(),
+            self.span.fragment()
+        )
     }
 }
 impl<K: AstNode + Debug, V: AstNode + Debug> std::fmt::Display for Pair<'_, K, V> {

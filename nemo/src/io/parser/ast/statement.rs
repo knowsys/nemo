@@ -111,12 +111,23 @@ impl AstNode for Statement<'_> {
     }
 
     fn name(&self) -> String {
+        macro_rules! name {
+            ($name:literal) => {
+                format!(
+                    "{} \x1b[34m@{}:{} \x1b[92m{:?}\x1b[0m",
+                    $name,
+                    self.span().location_line(),
+                    self.span().get_utf8_column(),
+                    self.span().fragment()
+                )
+            };
+        }
         match self {
-            Statement::Directive(_) => "Directive".into(),
-            Statement::Fact { .. } => "Fact".into(),
-            Statement::Rule { .. } => "Rule".into(),
-            Statement::Whitespace(_) => "Whitespace".into(),
-            Statement::Comment(_) => "Comment".into(),
+            Statement::Directive(_) => name!("Directive"),
+            Statement::Fact { .. } => name!("Fact"),
+            Statement::Rule { .. } => name!("Rule"),
+            Statement::Whitespace(_) => name!("Whitespace"),
+            Statement::Comment(_) => name!("Comment"),
         }
     }
 }
