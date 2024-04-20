@@ -76,11 +76,22 @@ impl AstNode for Atom<'_> {
     }
 
     fn name(&self) -> String {
+        macro_rules! name {
+            ($name:literal) => {
+                format!(
+                    "{} \x1b[34m@{}:{} \x1b[92m{:?}\x1b[0m",
+                    $name,
+                    self.span().location_line(),
+                    self.span().get_utf8_column(),
+                    self.span().fragment()
+                )
+            };
+        }
         match self {
-            Atom::Positive(_) => "Positive Atom".into(),
-            Atom::Negative { .. } => "Negative Atom".into(),
-            Atom::InfixAtom { .. } => "Infix Atom".into(),
-            Atom::Map(_) => "Map Atom".into(),
+            Atom::Positive(_) => name!("Positive Atom"),
+            Atom::Negative { .. } => name!("Negative Atom"),
+            Atom::InfixAtom { .. } => name!("Infix Atom"),
+            Atom::Map(_) => name!("Map Atom"),
         }
     }
 }

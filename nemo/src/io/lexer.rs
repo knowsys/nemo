@@ -145,6 +145,7 @@ impl std::fmt::Display for TokenKind {
             TokenKind::Slash => write!(f, "Slash"),
             TokenKind::Ident => write!(f, "Ident"),
             TokenKind::Variable => write!(f, "Variable"),
+            TokenKind::Existential => write!(f, "Existential"),
             TokenKind::Aggregate => write!(f, "Aggregate"),
             TokenKind::Iri => write!(f, "Iri"),
             TokenKind::Number => write!(f, "Number"),
@@ -179,17 +180,20 @@ impl std::fmt::Display for Token<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let offset = self.span.location_offset();
         let line = self.span.location_line();
+        let column = self.span.get_utf8_column();
         let fragment = self.span.fragment();
         if self.span.extra == () {
             write!(
                 f,
-                "T!{{{0}, S!({offset}, {line}, {fragment:?})}}",
+                // "T!{{{0}, S!({offset}, {line}, {fragment:?})}}",
+                "\x1b[93mTOKEN {0} \x1b[34m@{line}:{column} ({offset}) \x1b[93m{fragment:?}\x1b[0m",
                 self.kind
             )
         } else {
             write!(
                 f,
-                "T!{{{0}, S!({offset}, {line}, {fragment:?}, {1:?})}}",
+                // "T!{{{0}, S!({offset}, {line}, {fragment:?}, {1:?})}}",
+                "\x1b[93mTOKEN {0} \x1b[34m@{line}:{column} ({offset}) \x1b[93m{fragment:?}\x1b[0m, {1:?}\x1b[0m",
                 self.kind, self.span.extra
             )
         }
@@ -295,7 +299,7 @@ pub(crate) fn lex_operators(input: Span) -> IResult<Span, Token> {
     ))(input)
 }
 
-pub(crate) fn lex_unary_operators(input: Span) -> IResult<Span, Token> {
+pub(crate) fn lex_unary_prefix_operators(input: Span) -> IResult<Span, Token> {
     alt((plus, minus))(input)
 }
 

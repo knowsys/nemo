@@ -10,7 +10,7 @@ pub(crate) enum Term<'a> {
     Variable(Token<'a>),
     Existential(Token<'a>),
     // TODO: Is whitespace needed? Figure out how unary terms look
-    Unary {
+    UnaryPrefix {
         span: Span<'a>,
         operation: Token<'a>,
         term: Box<Term<'a>>,
@@ -32,7 +32,7 @@ pub(crate) enum Term<'a> {
         ws2: Option<Token<'a>>,
         close_paren: Token<'a>,
     },
-    Function(Box<Tuple<'a>>),
+    Tuple(Box<Tuple<'a>>),
     Map(Box<Map<'a>>),
 }
 impl AstNode for Term<'_> {
@@ -41,7 +41,7 @@ impl AstNode for Term<'_> {
             Term::Primitive(token) => Some(vec![token]),
             Term::Variable(token) => Some(vec![token]),
             Term::Existential(token) => Some(vec![token]),
-            Term::Unary {
+            Term::UnaryPrefix {
                 operation, term, ..
             } => Some(vec![operation, &**term]),
             Term::Binary {
@@ -88,7 +88,7 @@ impl AstNode for Term<'_> {
                 vec.push(close_paren);
                 Some(vec)
             }
-            Term::Function(named_tuple) => named_tuple.children(),
+            Term::Tuple(named_tuple) => named_tuple.children(),
             Term::Map(map) => map.children(),
         }
     }
@@ -98,10 +98,10 @@ impl AstNode for Term<'_> {
             Term::Primitive(t) => t.span(),
             Term::Variable(t) => t.span(),
             Term::Existential(t) => t.span(),
-            Term::Unary { span, .. } => *span,
+            Term::UnaryPrefix { span, .. } => *span,
             Term::Binary { span, .. } => *span,
             Term::Aggregation { span, .. } => *span,
-            Term::Function(named_tuple) => named_tuple.span(),
+            Term::Tuple(named_tuple) => named_tuple.span(),
             Term::Map(map) => map.span(),
         }
     }
@@ -120,15 +120,32 @@ impl AstNode for Term<'_> {
     }
 
     fn name(&self) -> String {
+        macro_rules! name {
+            ($name:literal) => {
+                format!(
+                    "{} \x1b[34m@{}:{} \x1b[92m{:?}\x1b[0m",
+                    $name,
+                    self.span().location_line(),
+                    self.span().get_utf8_column(),
+                    self.span().fragment()
+                )
+            };
+        }
         match self {
-            Term::Primitive(_) => "Primitive".into(),
-            Term::Variable(_) => "Variable".into(),
-            Term::Existential(_) => "Existential Variable".into(),
-            Term::Unary { .. } => "Unary Term".into(),
-            Term::Binary { .. } => "Binary Term".into(),
-            Term::Aggregation { .. } => "Aggregation".into(),
-            Term::Function(_) => "Function Symbol".into(),
-            Term::Map(_) => "Map".into(),
+            Term::Primitive(_) => name!("Primitive"),
+            Term::Variable(_) => name!("Variable"),
+            Term::Existential(_) => name!("Existential Variable"),
+            Term::UnaryPrefix { .. } => name!("Unary Term"),
+            Term::Binary { .. } => name!("Binary Term"),
+            Term::Aggregation { .. } => name!("Aggregation"),
+            Term::Tuple(f) => {
+                if let Some(_) = f.identifier {
+                    name!("Function Symbol")
+                } else {
+                    name!("Tuple")
+                }
+            }
+            Term::Map(_) => name!("Map"),
         }
     }
 }

@@ -2403,10 +2403,11 @@ mod new {
     use crate::io::lexer::{
         arrow, at, close_brace, close_paren, colon, comma, dot, equal, exclamation_mark, greater,
         greater_equal, hash, less, less_equal, lex_comment, lex_doc_comment, lex_ident, lex_iri,
-        lex_number, lex_operators, lex_string, lex_toplevel_doc_comment, lex_unary_operators,
-        lex_whitespace, open_brace, open_paren, question_mark, tilde, unequal, Span, Token,
-        TokenKind,
+        lex_number, lex_operators, lex_string, lex_toplevel_doc_comment,
+        lex_unary_prefix_operators, lex_whitespace, minus, open_brace, open_paren, plus,
+        question_mark, slash, star, tilde, unequal, Span, Token, TokenKind,
     };
+    use crate::io::parser::ast::AstNode;
     use nom::combinator::{all_consuming, opt, recognize};
     use nom::sequence::{delimited, pair};
     use nom::Parser;
@@ -2445,8 +2446,9 @@ mod new {
         )
     }
 
+    /// Parse a full program consisting of directives, facts, rules and comments.
     fn parse_program<'a>(input: Span<'a>) -> Program<'a> {
-        let span = input.clone();
+        // let span = input.clone();
         let (_, (tl_doc_comment, statements)) = all_consuming(pair(
             opt(lex_toplevel_doc_comment),
             many1(alt((
@@ -2459,20 +2461,23 @@ mod new {
         ))(input)
         .expect("Expect EOF");
         Program {
-            span,
+            span: input,
             tl_doc_comment,
             statements,
         }
     }
 
+    /// Parse whitespace that is between directives, facts, rules and comments.
     fn parse_whitespace<'a>(input: Span<'a>) -> IResult<Span, Statement<'a>> {
         lex_whitespace(input).map(|(rest, ws)| (rest, Statement::Whitespace(ws)))
     }
 
+    /// Parse normal comments that start with a `%` and ends at the line ending.
     fn parse_comment<'a>(input: Span<'a>) -> IResult<Span, Statement<'a>> {
         lex_comment(input).map(|(rest, comment)| (rest, Statement::Comment(comment)))
     }
 
+    /// Parse a fact of the form `predicateName(term1, term2, …).`
     fn parse_fact<'a>(input: Span<'a>) -> IResult<Span, Statement<'a>> {
         // let input_span = input;
         tuple((
@@ -2495,8 +2500,9 @@ mod new {
         })
     }
 
+    /// Parse a rule of the form `headPredicate1(term1, term2, …), headPredicate2(term1, term2, …) :- bodyPredicate(term1, …), term1 >= (term2 + term3) * function(term1, …) .`
     fn parse_rule<'a>(input: Span<'a>) -> IResult<Span, Statement<'a>> {
-        let input_span = input;
+        // let input_span = input;
         tuple((
             opt(lex_doc_comment),
             parse_head,
@@ -2512,7 +2518,7 @@ mod new {
                 (
                     rest_input,
                     Statement::Rule {
-                        span: outer_span(input_span, rest_input),
+                        span: outer_span(input, rest_input),
                         doc_comment,
                         head,
                         ws1,
@@ -2527,14 +2533,17 @@ mod new {
         )
     }
 
+    /// Parse the head atoms of a rule.
     fn parse_head<'a>(input: Span<'a>) -> IResult<Span, List<'a, Atom<'a>>> {
         parse_atom_list(input, parse_head_atoms)
     }
 
+    /// Parse the body atoms of a rule.
     fn parse_body<'a>(input: Span<'a>) -> IResult<Span, List<'a, Atom<'a>>> {
         parse_atom_list(input, parse_body_atoms)
     }
 
+    /// Parse the directives (@base, @prefix, @import, @export, @output).
     fn parse_directive<'a>(input: Span<'a>) -> IResult<Span, Statement<'a>> {
         alt((
             parse_base_directive,
@@ -2546,6 +2555,7 @@ mod new {
         .map(|(rest, directive)| (rest, Statement::Directive(directive)))
     }
 
+    /// Parse the base directive.
     fn parse_base_directive<'a>(input: Span<'a>) -> IResult<Span, Directive<'a>> {
         let input_span = input.clone();
         tuple((
@@ -2578,6 +2588,7 @@ mod new {
         })
     }
 
+    /// Parse the prefix directive.
     fn parse_prefix_directive<'a>(input: Span<'a>) -> IResult<Span, Directive<'a>> {
         let input_span = input.clone();
         tuple((
@@ -2619,6 +2630,7 @@ mod new {
         )
     }
 
+    /// Parse the import directive.
     fn parse_import_directive<'a>(input: Span<'a>) -> IResult<Span, Directive<'a>> {
         let input_span = input.clone();
         tuple((
@@ -2661,6 +2673,7 @@ mod new {
         )
     }
 
+    /// Parse the export directive.
     fn parse_export_directive<'a>(input: Span<'a>) -> IResult<Span, Directive<'a>> {
         let input_span = input.clone();
         tuple((
@@ -2703,6 +2716,7 @@ mod new {
         )
     }
 
+    /// Parse the output directive.
     fn parse_output_directive<'a>(input: Span<'a>) -> IResult<Span, Directive<'a>> {
         let input_span = input.clone();
         tuple((
@@ -2737,6 +2751,7 @@ mod new {
         )
     }
 
+    /// Parse a list of `ident1, ident2, …`
     fn parse_identifier_list<'a>(input: Span<'a>) -> IResult<Span, List<'a, Token<'a>>> {
         let input_span = input.clone();
         pair(
@@ -2760,6 +2775,7 @@ mod new {
         })
     }
 
+    /// Parse a list of atoms, like `atom1(…), atom2(…), infix = atom, …`
     fn parse_atom_list<'a>(
         input: Span<'a>,
         parse_atom: fn(Span<'a>) -> IResult<Span, Atom<'a>>,
@@ -2786,10 +2802,12 @@ mod new {
         })
     }
 
+    /// Parse the head atoms. The same as the body atoms except for disallowing negated atoms.
     fn parse_head_atoms<'a>(input: Span<'a>) -> IResult<Span, Atom<'a>> {
         alt((parse_normal_atom, parse_infix_atom, parse_map_atom))(input)
     }
 
+    /// Parse the body atoms. The same as the head atoms except for allowing negated atoms.
     fn parse_body_atoms<'a>(input: Span<'a>) -> IResult<Span, Atom<'a>> {
         alt((
             parse_normal_atom,
@@ -2799,14 +2817,16 @@ mod new {
         ))(input)
     }
 
+    /// Parse an atom of the form `predicateName(term1, term2, …)`.
     fn parse_normal_atom<'a>(input: Span<'a>) -> IResult<Span, Atom<'a>> {
-        parse_tuple(input)
+        parse_named_tuple(input)
             .map(|(rest_input, named_tuple)| (rest_input, Atom::Positive(named_tuple)))
     }
 
+    /// Parse an atom of the form `~predicateName(term1, term2, …)`.
     fn parse_negative_atom<'a>(input: Span<'a>) -> IResult<Span, Atom<'a>> {
         let input_span = input.clone();
-        pair(tilde, parse_tuple)(input).map(|(rest_input, (tilde, named_tuple))| {
+        pair(tilde, parse_named_tuple)(input).map(|(rest_input, (tilde, named_tuple))| {
             (
                 rest_input,
                 Atom::Negative {
@@ -2818,6 +2838,8 @@ mod new {
         })
     }
 
+    /// Parse an "infix atom" of the form `term1 <infixop> term2`.
+    /// The supported infix operations are `<`, `<=`, `=`, `>=`, `>` and `!=`.
     fn parse_infix_atom<'a>(input: Span<'a>) -> IResult<Span, Atom<'a>> {
         let input_span = input.clone();
         tuple((
@@ -2842,6 +2864,8 @@ mod new {
         })
     }
 
+    /// Parse a tuple with an optional name, like `ident(term1, term2)`
+    /// or just `(int, int, skip)`.
     fn parse_tuple<'a>(input: Span<'a>) -> IResult<Span, Tuple<'a>> {
         let input_span = input.clone();
         tuple((
@@ -2872,6 +2896,40 @@ mod new {
         )
     }
 
+    /// Parse a named tuple. This function is like `parse_tuple` with the difference,
+    /// that is enforces the existence of an identifier for the tuple.
+    fn parse_named_tuple<'a>(input: Span<'a>) -> IResult<Span, Tuple<'a>> {
+        let input_span = input.clone();
+        tuple((
+            lex_ident,
+            opt(lex_whitespace),
+            open_paren,
+            opt(lex_whitespace),
+            opt(parse_term_list),
+            opt(lex_whitespace),
+            close_paren,
+        ))(input)
+        .map(
+            |(rest_input, (identifier, ws1, open_paren, ws2, terms, ws3, close_paren))| {
+                (
+                    rest_input,
+                    Tuple {
+                        span: outer_span(input_span, rest_input),
+                        identifier: Some(identifier),
+                        ws1,
+                        open_paren,
+                        ws2,
+                        terms,
+                        ws3,
+                        close_paren,
+                    },
+                )
+            },
+        )
+    }
+
+    /// Parse a map. Maps are denoted with `{…}` and can haven an optional name, e.g. `csv {…}`.
+    /// Inside the curly braces ist a list of pairs.
     fn parse_map<'a>(input: Span<'a>) -> IResult<Span, Map<'a>> {
         let input_span = input.clone();
         tuple((
@@ -2902,10 +2960,12 @@ mod new {
         )
     }
 
+    /// Parse a map in an atom position.
     fn parse_map_atom<'a>(input: Span<'a>) -> IResult<Span, Atom<'a>> {
         parse_map(input).map(|(rest_input, map)| (rest_input, Atom::Map(map)))
     }
 
+    /// Parse a pair list of the form `key1 = value1, key2 = value2, …`.
     fn parse_pair_list<'a>(
         input: Span<'a>,
     ) -> IResult<Span, Option<List<'a, Pair<Term<'a>, Term<'a>>>>> {
@@ -2935,6 +2995,7 @@ mod new {
         })
     }
 
+    /// Parse a pair of the form `key = value`.
     fn parse_pair<'a>(input: Span<'a>) -> IResult<Span, Pair<Term<'a>, Term<'a>>> {
         let input_span = input.clone();
         tuple((
@@ -2959,6 +3020,7 @@ mod new {
         })
     }
 
+    /// Parse a list of terms of the form `term1, term2, …`.
     fn parse_term_list<'a>(input: Span<'a>) -> IResult<Span, List<'a, Term<'a>>> {
         let input_span = input.clone();
         pair(
@@ -2982,42 +3044,138 @@ mod new {
         })
     }
 
+    /// Parse a term. A term can be a primitive value (constant, number, string, …),
+    /// a variable (universal or existential), a map, a function (-symbol), an arithmetic
+    /// operation, an aggregation or an tuple of terms, e.g. `(term1, term2, …)`.
     fn parse_term<'a>(input: Span<'a>) -> IResult<Span, Term<'a>> {
         alt((
+            parse_binary_term,
+            parse_tuple_term,
+            parse_unary_prefix_term,
             parse_map_term,
-            parse_function_term,
             parse_primitive_term,
             parse_variable,
             parse_existential,
-            parse_unary_term,
-            // parse_binary_term,
             parse_aggregation_term,
         ))(input)
     }
 
+    /// Parse a primitive term (simple constant, iri constant, number, string).
     fn parse_primitive_term<'a>(input: Span<'a>) -> IResult<Span, Term<'a>> {
         alt((lex_ident, lex_iri, lex_number, lex_string))(input)
             .map(|(rest_input, term)| (rest_input, Term::Primitive(term)))
     }
 
-    fn parse_unary_term<'a>(input: Span<'a>) -> IResult<Span, Term<'a>> {
+    /// Parse an unary term.
+    fn parse_unary_prefix_term<'a>(input: Span<'a>) -> IResult<Span, Term<'a>> {
         let input_span = input.clone();
-        pair(lex_unary_operators, parse_term)(input).map(|(rest_input, (operation, term))| {
+        pair(lex_unary_prefix_operators, parse_term)(input).map(
+            |(rest_input, (operation, term))| {
+                (
+                    rest_input,
+                    Term::UnaryPrefix {
+                        span: outer_span(input_span, rest_input),
+                        operation,
+                        term: Box::new(term),
+                    },
+                )
+            },
+        )
+    }
+
+    /// Parse a binary infix operation of the form `term1 <op> term2`.
+    fn parse_binary_term<'a>(input: Span<'a>) -> IResult<Span, Term<'a>> {
+        pair(
+            parse_arithmetic_product,
+            opt(tuple((
+                opt(lex_whitespace),
+                alt((plus, minus)),
+                opt(lex_whitespace),
+                parse_binary_term,
+            ))),
+        )(input)
+        .map(|(rest_input, (lhs, opt))| {
             (
                 rest_input,
-                Term::Unary {
-                    span: outer_span(input_span, rest_input),
-                    operation,
-                    term: Box::new(term),
+                if let Some((ws1, operation, ws2, rhs)) = opt {
+                    Term::Binary {
+                        span: outer_span(input, rest_input),
+                        lhs: Box::new(lhs),
+                        ws1,
+                        operation,
+                        ws2,
+                        rhs: Box::new(rhs),
+                    }
+                } else {
+                    lhs
                 },
             )
         })
     }
 
-    fn parse_binary_term<'a>(input: Span<'a>) -> IResult<Span, Term<'a>> {
-        todo!("`parse_binary_term`!")
+    /// Parse an arithmetic product, i.e. an expression involving
+    /// only `*` and `/` over subexpressions.
+    fn parse_arithmetic_product<'a>(input: Span<'a>) -> IResult<Span, Term<'a>> {
+        pair(
+            parse_arithmetic_factor,
+            opt(tuple((
+                opt(lex_whitespace),
+                alt((star, slash)),
+                opt(lex_whitespace),
+                parse_arithmetic_product,
+            ))),
+        )(input)
+        .map(|(rest_input, (lhs, opt))| {
+            (
+                rest_input,
+                if let Some((ws1, operation, ws2, rhs)) = opt {
+                    Term::Binary {
+                        span: outer_span(input, rest_input),
+                        lhs: Box::new(lhs),
+                        ws1,
+                        operation,
+                        ws2,
+                        rhs: Box::new(rhs),
+                    }
+                } else {
+                    lhs
+                },
+            )
+        })
     }
 
+    fn parse_arithmetic_factor<'a>(input: Span<'a>) -> IResult<Span, Term<'a>> {
+        alt((
+            parse_tuple_term,
+            parse_aggregation_term,
+            parse_primitive_term,
+            parse_variable,
+            parse_existential,
+        ))(input)
+    }
+
+    fn fold_arithmetic_expression<'a>(
+        initial: Term<'a>,
+        sequence: Vec<(Option<Token<'a>>, Token<'a>, Option<Token<'a>>, Term<'a>)>,
+        span_vec: Vec<Span<'a>>,
+    ) -> Term<'a> {
+        sequence
+            .into_iter()
+            .enumerate()
+            .fold(initial, |acc, (i, pair)| {
+                let (ws1, operation, ws2, expression) = pair;
+                Term::Binary {
+                    span: span_vec[i],
+                    lhs: Box::new(acc),
+                    ws1,
+                    operation,
+                    ws2,
+                    rhs: Box::new(expression),
+                }
+            })
+    }
+
+    /// Parse an aggregation term of the form `#sum(…)`.
     fn parse_aggregation_term<'a>(input: Span<'a>) -> IResult<Span, Term<'a>> {
         tuple((
             recognize(pair(hash, lex_ident)),
@@ -3048,15 +3206,19 @@ mod new {
         )
     }
 
-    fn parse_function_term<'a>(input: Span<'a>) -> IResult<Span, Term<'a>> {
+    /// Parse a tuple term, either with a name (function symbol) or as a term (-list) with
+    /// parenthesis.
+    fn parse_tuple_term<'a>(input: Span<'a>) -> IResult<Span, Term<'a>> {
         parse_tuple(input)
-            .map(|(rest_input, named_tuple)| (rest_input, Term::Function(Box::new(named_tuple))))
+            .map(|(rest_input, named_tuple)| (rest_input, Term::Tuple(Box::new(named_tuple))))
     }
 
+    /// Parse a map as a term.
     fn parse_map_term<'a>(input: Span<'a>) -> IResult<Span, Term<'a>> {
         parse_map(input).map(|(rest_input, map)| (rest_input, Term::Map(Box::new(map))))
     }
 
+    /// Parse a variable.
     fn parse_variable<'a>(input: Span<'a>) -> IResult<Span, Term<'a>> {
         recognize(pair(question_mark, lex_ident))(input).map(|(rest_input, var)| {
             (
@@ -3069,6 +3231,7 @@ mod new {
         })
     }
 
+    /// Parse an existential variable.
     fn parse_existential<'a>(input: Span<'a>) -> IResult<Span, Term<'a>> {
         recognize(pair(exclamation_mark, lex_ident))(input).map(|(rest_input, existential)| {
             (
@@ -3082,6 +3245,7 @@ mod new {
     }
 
     // Order of functions is important, because of ordered choice and no backtracking
+    /// Parse the operator for an infix atom.
     fn parse_operation_token<'a>(input: Span<'a>) -> IResult<Span, Token<'a>> {
         alt((less_equal, greater_equal, equal, unequal, less, greater))(input)
     }
@@ -3528,16 +3692,334 @@ limeSpecies(?X, ?Name) :- taxon(?X, ?Name, ?Y), limeSpecies(?Y, ?N).
 
 oldLime(?location,?species,?age) :- tree(?location,?species,?age,?heightInMeters), ?age > 200, limeSpecies(?id,?species) ."#,
             );
-            println!("{}", parse_program(input));
-            // assert!(false);
+            let ast = parse_program(input);
+            println!("{}", ast);
+            assert_eq!(
+                {
+                    let mut result = String::new();
+                    for token in get_all_tokens(&ast) {
+                        result.push_str(token.span().fragment());
+                    }
+                    println!("{}", result);
+                    result
+                },
+                *input.fragment(),
+            );
         }
 
         #[test]
         fn parser_test() {
             let str = std::fs::read_to_string("../testfile.rls").expect("testfile not found");
             let input = Span::new(str.as_str());
-            dbg!(parse_program(input));
+            println!("{}", parse_program(input));
             // assert!(false);
+        }
+
+        #[test]
+        fn arithmetic_expressions() {
+            use TokenKind::*;
+            macro_rules! T {
+                ($tok_kind: expr, $offset: literal, $line: literal, $str: literal) => {
+                    Token::new($tok_kind, unsafe {
+                        Span::new_from_raw_offset($offset, $line, $str, ())
+                    })
+                };
+            }
+            macro_rules! s {
+                ($offset:literal,$line:literal,$str:literal) => {
+                    unsafe { Span::new_from_raw_offset($offset, $line, $str, ()) }
+                };
+            }
+
+            assert_eq!(
+                {
+                    let result = parse_term(Span::new("42"));
+                    result.unwrap().1
+                },
+                Term::Primitive(T! {Number, 0, 1, "42"}),
+            );
+
+            assert_eq!(
+                {
+                    let result = parse_term(Span::new("35+7"));
+                    result.unwrap().1
+                },
+                Term::Binary {
+                    span: s!(0, 1, "35+7"),
+                    lhs: Box::new(Term::Primitive(T! {Number, 0, 1, "35"})),
+                    ws1: None,
+                    operation: T! {Plus, 2, 1, "+"},
+                    ws2: None,
+                    rhs: Box::new(Term::Primitive(T! {Number, 3, 1, "7"}))
+                }
+            );
+
+            assert_eq!(
+                {
+                    let result = parse_term(Span::new("6*7"));
+                    result.unwrap().1
+                },
+                Term::Binary {
+                    span: s!(0, 1, "6*7"),
+                    lhs: Box::new(Term::Primitive(T! {Number, 0,1,"6"})),
+                    ws1: None,
+                    operation: T! {Star, 1,1,"*"},
+                    ws2: None,
+                    rhs: Box::new(Term::Primitive(T! {Number, 2,1,"7"})),
+                }
+            );
+
+            assert_eq!(
+                {
+                    let result = parse_term(Span::new("49-7"));
+                    result.unwrap().1
+                },
+                Term::Binary {
+                    span: s!(0, 1, "49-7"),
+                    lhs: Box::new(Term::Primitive(T! {Number, 0, 1, "49"})),
+                    ws1: None,
+                    operation: T! {Minus, 2, 1, "-"},
+                    ws2: None,
+                    rhs: Box::new(Term::Primitive(T! {Number, 3, 1, "7"}))
+                }
+            );
+
+            assert_eq!(
+                {
+                    let result = parse_term(Span::new("84/2"));
+                    result.unwrap().1
+                },
+                Term::Binary {
+                    span: s!(0, 1, "84/2"),
+                    lhs: Box::new(Term::Primitive(T! {Number, 0, 1, "84"})),
+                    ws1: None,
+                    operation: T! {Slash, 2, 1, "/"},
+                    ws2: None,
+                    rhs: Box::new(Term::Primitive(T! {Number, 3, 1, "2"}))
+                }
+            );
+
+            assert_eq!(
+                {
+                    let result = parse_term(Span::new("5*7+7"));
+                    result.unwrap().1
+                },
+                Term::Binary {
+                    span: s!(0, 1, "5*7+7"),
+                    lhs: Box::new(Term::Binary {
+                        span: s!(0, 1, "5*7"),
+                        lhs: Box::new(Term::Primitive(T! {Number, 0,1,"5"})),
+                        ws1: None,
+                        operation: T! {Star, 1,1,"*"},
+                        ws2: None,
+                        rhs: Box::new(Term::Primitive(T! {Number, 2,1,"7"}))
+                    }),
+                    ws1: None,
+                    operation: T! {Plus, 3,1,"+"},
+                    ws2: None,
+                    rhs: Box::new(Term::Primitive(T! {Number, 4,1,"7"})),
+                }
+            );
+
+            assert_eq!(
+                {
+                    let result = parse_term(Span::new("7+5*7"));
+                    result.unwrap().1
+                },
+                Term::Binary {
+                    span: s!(0, 1, "7+5*7"),
+                    lhs: Box::new(Term::Primitive(T! {Number, 0,1,"7"})),
+                    ws1: None,
+                    operation: T! {Plus, 1,1,"+"},
+                    ws2: None,
+                    rhs: Box::new(Term::Binary {
+                        span: s!(2, 1, "5*7"),
+                        lhs: Box::new(Term::Primitive(T! {Number, 2,1,"5"})),
+                        ws1: None,
+                        operation: T! {Star, 3,1,"*"},
+                        ws2: None,
+                        rhs: Box::new(Term::Primitive(T! {Number, 4,1,"7"}))
+                    }),
+                }
+            );
+
+            assert_eq!(
+                {
+                    let result = parse_term(Span::new("(15+3*2-(7+35)*8)/3"));
+                    result.unwrap().1
+                },
+                Term::Binary {
+                    span: s!(0, 1, "(15+3*2-(7+35)*8)/3"),
+                    lhs: Box::new(Term::Tuple(Box::new(Tuple {
+                        span: s!(0, 1, "(15+3*2-(7+35)*8)"),
+                        identifier: None,
+                        ws1: None,
+                        open_paren: T!(OpenParen, 0, 1, "("),
+                        ws2: None,
+                        terms: Some(List {
+                            span: s!(1, 1, "15+3*2-(7+35)*8"),
+                            first: Term::Binary {
+                                span: s!(1, 1, "15+3*2-(7+35)*8"),
+                                lhs: Box::new(Term::Primitive(T! {Number, 1,1,"15"})),
+                                ws1: None,
+                                operation: T! {Plus, 3,1,"+"},
+                                ws2: None,
+                                rhs: Box::new(Term::Binary {
+                                    span: s!(4, 1, "3*2-(7+35)*8"),
+                                    lhs: Box::new(Term::Binary {
+                                        span: s!(4, 1, "3*2"),
+                                        lhs: Box::new(Term::Primitive(T! {Number, 4,1,"3"})),
+                                        ws1: None,
+                                        operation: T! {Star, 5,1,"*"},
+                                        ws2: None,
+                                        rhs: Box::new(Term::Primitive(T! {Number, 6,1,"2"})),
+                                    }),
+                                    ws1: None,
+                                    operation: T! {Minus, 7,1,"-"},
+                                    ws2: None,
+                                    rhs: Box::new(Term::Binary {
+                                        span: s!(8, 1, "(7+35)*8"),
+                                        lhs: Box::new(Term::Tuple(Box::new(Tuple {
+                                            span: s!(8, 1, "(7+35)"),
+                                            identifier: None,
+                                            ws1: None,
+                                            open_paren: T! {OpenParen, 8, 1, "("},
+                                            ws2: None,
+                                            terms: Some(List {
+                                                span: s!(9, 1, "7+35"),
+                                                first: Term::Binary {
+                                                    span: s!(9, 1, "7+35"),
+                                                    lhs: Box::new(Term::Primitive(
+                                                        T! {Number, 9,1,"7"}
+                                                    )),
+                                                    ws1: None,
+                                                    operation: T! {Plus, 10,1,"+"},
+                                                    ws2: None,
+                                                    rhs: Box::new(Term::Primitive(
+                                                        T! {Number, 11,1,"35"}
+                                                    )),
+                                                },
+                                                rest: None
+                                            }),
+                                            ws3: None,
+                                            close_paren: T! {CloseParen, 13,1,")"},
+                                        }))),
+                                        ws1: None,
+                                        operation: T! {Star, 14,1,"*"},
+                                        ws2: None,
+                                        rhs: Box::new(Term::Primitive(T! {Number, 15,1,"8"})),
+                                    }),
+                                }),
+                            },
+                            rest: None
+                        }),
+                        ws3: None,
+                        close_paren: T!(CloseParen, 16, 1, ")")
+                    }))),
+                    ws1: None,
+                    operation: T! {Slash, 17,1,"/"},
+                    ws2: None,
+                    rhs: Box::new(Term::Primitive(T! {Number, 18,1,"3"})),
+                }
+            );
+            // Term::Binary {
+            //     span: s!(),
+            //     lhs: Box::new(),
+            //     ws1: None,
+            //     operation: ,
+            //     ws2: None,
+            //     rhs: Box::new(),
+            // }
+
+            assert_eq!(
+                {
+                    let result = parse_term(Span::new("15+3*2-(7+35)*8/3"));
+                    result.unwrap().1
+                },
+                Term::Binary {
+                    span: s!(0, 1, "15+3*2-(7+35)*8/3"),
+                    lhs: Box::new(Term::Primitive(T! {Number, 0,1,"15"})),
+                    ws1: None,
+                    operation: T! {Plus, 2,1,"+"},
+                    ws2: None,
+                    rhs: Box::new(Term::Binary {
+                        span: s!(3, 1, "3*2-(7+35)*8/3"),
+                        lhs: Box::new(Term::Binary {
+                            span: s!(3, 1, "3*2"),
+                            lhs: Box::new(Term::Primitive(T! {Number, 3,1,"3"})),
+                            ws1: None,
+                            operation: T! {Star, 4,1,"*"},
+                            ws2: None,
+                            rhs: Box::new(Term::Primitive(T! {Number, 5,1,"2"})),
+                        }),
+                        ws1: None,
+                        operation: T! {Minus, 6,1,"-"},
+                        ws2: None,
+                        rhs: Box::new(Term::Binary {
+                            span: s!(7, 1, "(7+35)*8/3"),
+                            lhs: Box::new(Term::Tuple(Box::new(Tuple {
+                                span: s!(7, 1, "(7+35)"),
+                                identifier: None,
+                                ws1: None,
+                                open_paren: T! {OpenParen, 7,1,"("},
+                                ws2: None,
+                                terms: Some(List {
+                                    span: s!(8, 1, "7+35"),
+                                    first: Term::Binary {
+                                        span: s!(8, 1, "7+35"),
+                                        lhs: Box::new(Term::Primitive(T! {Number, 8,1,"7"})),
+                                        ws1: None,
+                                        operation: T! {Plus, 9,1,"+"},
+                                        ws2: None,
+                                        rhs: Box::new(Term::Primitive(T! {Number, 10,1,"35"})),
+                                    },
+                                    rest: None,
+                                }),
+                                ws3: None,
+                                close_paren: T! {CloseParen, 12,1,")"},
+                            }))),
+                            ws1: None,
+                            operation: T! {Star, 13,1,"*"},
+                            ws2: None,
+                            rhs: Box::new(Term::Binary {
+                                span: s!(14, 1, "8/3"),
+                                lhs: Box::new(Term::Primitive(T! {Number, 14,1,"8"})),
+                                ws1: None,
+                                operation: T! {Slash, 15, 1, "/"},
+                                ws2: None,
+                                rhs: Box::new(Term::Primitive(T! {Number, 16,1,"3"})),
+                            }),
+                        }),
+                    }),
+                }
+            );
+
+            // assert_eq!({
+            //     let result = parse_term(Span::new("1*2*3*4*5"));
+            //     result.unwrap().1
+            // },);
+
+            // assert_eq!({
+            //     let result = parse_term(Span::new("(5+3)"));
+            //     result.unwrap().1
+            // },);
+
+            // assert_eq!({
+            //     let result = parse_term(Span::new("( int , int , string , skip )"));
+            //     result.unwrap().1
+            // },);
+
+            // assert_eq!({
+            //     let result = parse_term(Span::new("(14+4)+3"));
+            //     result.unwrap().1
+            // },);
+
+            // assert_eq!({
+            //     let result = parse_term(Span::new(
+            //         "(3 + #sum(?X, ?Y)) * (LENGTH(\"Hello, World!\") + 3)",
+            //     ));
+            //     result.unwrap().1
+            // },);
         }
     }
 }

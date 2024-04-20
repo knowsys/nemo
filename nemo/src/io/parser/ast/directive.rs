@@ -70,13 +70,13 @@ impl AstNode for Directive<'_> {
     fn children(&self) -> Option<Vec<&dyn AstNode>> {
         match self {
             Directive::Base {
-                span,
                 doc_comment,
                 kw,
                 ws1,
                 base_iri,
                 ws2,
                 dot,
+                ..
             } => {
                 let mut vec = Vec::new();
                 if let Some(dc) = doc_comment {
@@ -95,7 +95,6 @@ impl AstNode for Directive<'_> {
                 Some(vec)
             }
             Directive::Prefix {
-                span,
                 doc_comment,
                 kw,
                 ws1,
@@ -104,6 +103,7 @@ impl AstNode for Directive<'_> {
                 prefix_iri,
                 ws3,
                 dot,
+                ..
             } => {
                 let mut vec = Vec::new();
                 if let Some(dc) = doc_comment {
@@ -126,7 +126,6 @@ impl AstNode for Directive<'_> {
                 Some(vec)
             }
             Directive::Import {
-                span,
                 doc_comment,
                 kw,
                 ws1,
@@ -137,6 +136,7 @@ impl AstNode for Directive<'_> {
                 map,
                 ws4,
                 dot,
+                ..
             } => {
                 let mut vec = Vec::new();
                 if let Some(dc) = doc_comment {
@@ -161,7 +161,6 @@ impl AstNode for Directive<'_> {
                 Some(vec)
             }
             Directive::Export {
-                span,
                 doc_comment,
                 kw,
                 ws1,
@@ -172,6 +171,7 @@ impl AstNode for Directive<'_> {
                 map,
                 ws4,
                 dot,
+                ..
             } => {
                 let mut vec = Vec::new();
                 if let Some(dc) = doc_comment {
@@ -195,7 +195,31 @@ impl AstNode for Directive<'_> {
                 vec.push(dot);
                 Some(vec)
             }
-            Directive::Output { .. } => todo!(),
+            Directive::Output {
+                span,
+                doc_comment,
+                kw,
+                ws1,
+                predicates,
+                ws2,
+                dot,
+            } => {
+                let mut vec = Vec::new();
+                if let Some(dc) = doc_comment {
+                    #[allow(trivial_casts)]
+                    vec.push(dc as &dyn AstNode);
+                };
+                vec.push(kw);
+                vec.push(ws1);
+                if let Some(p) = predicates {
+                    vec.push(p);
+                };
+                if let Some(ws) = ws2 {
+                    vec.push(ws);
+                };
+                vec.push(dot);
+                Some(vec)
+            }
         }
     }
 
@@ -223,12 +247,23 @@ impl AstNode for Directive<'_> {
     }
 
     fn name(&self) -> String {
+        macro_rules! name {
+            ($name:literal) => {
+                format!(
+                    "{} \x1b[34m@{}:{} \x1b[92m{:?}\x1b[0m",
+                    $name,
+                    self.span().location_line(),
+                    self.span().get_utf8_column(),
+                    self.span().fragment()
+                )
+            };
+        }
         match self {
-            Directive::Base { .. } => "Base Directive".into(),
-            Directive::Prefix { .. } => "Prefix Directive".into(),
-            Directive::Import { .. } => "Import Directive".into(),
-            Directive::Export { .. } => "Export Directive".into(),
-            Directive::Output { .. } => "Output Directive".into(),
+            Directive::Base { .. } => name!("Base Directive"),
+            Directive::Prefix { .. } => name!("Prefix Directive"),
+            Directive::Import { .. } => name!("Import Directive"),
+            Directive::Export { .. } => name!("Export Directive"),
+            Directive::Output { .. } => name!("Output Directive"),
         }
     }
 }
