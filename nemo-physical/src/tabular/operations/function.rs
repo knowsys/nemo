@@ -241,6 +241,8 @@ impl OperationGenerator for GeneratorFunction {
             if let ComputedMarker::Input = information.computed {
                 possible_types[output_index] = trie_scan.possible_types(input_index);
                 input_index += 1;
+            } else if let ComputedMarker::Copy(source) = information.computed {
+                possible_types[output_index] = possible_types[source];
             }
 
             if let InputMarker::Used(programs) = &information.input {
