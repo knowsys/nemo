@@ -6,7 +6,7 @@ use ascii_tree::write_tree;
 
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum Term<'a> {
-    Primitive(Token<'a>),
+    Primitive(Primitive<'a>),
     Variable(Token<'a>),
     Existential(Token<'a>),
     // TODO: Is whitespace needed? Figure out how unary terms look
@@ -150,6 +150,87 @@ impl AstNode for Term<'_> {
     }
 }
 impl std::fmt::Display for Term<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut output = String::new();
+        write_tree(&mut output, &ast_to_ascii_tree(self))?;
+        write!(f, "{output}")
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) enum Primitive<'a> {
+    Constant(Token<'a>),
+    Number(Token<'a>),
+    String(Token<'a>),
+    Iri(Token<'a>),
+    RdfLiteral {
+        span: Span<'a>,
+        string: Token<'a>,
+        carets: Token<'a>,
+        iri: Token<'a>,
+    },
+}
+impl AstNode for Primitive<'_> {
+    fn children(&self) -> Option<Vec<&dyn AstNode>> {
+        match self {
+            Primitive::Constant(token) => Some(vec![token]),
+            Primitive::Number(token) => Some(vec![token]),
+            Primitive::String(token) => Some(vec![token]),
+            Primitive::Iri(token) => Some(vec![token]),
+            Primitive::RdfLiteral {
+                string,
+                carets,
+                iri,
+                ..
+            } => Some(vec![string, carets, iri]),
+        }
+    }
+
+    fn span(&self) -> Span {
+        match self {
+            Primitive::Constant(token) => token.span,
+            Primitive::Number(token) => token.span,
+            Primitive::String(token) => token.span,
+            Primitive::Iri(token) => token.span,
+            Primitive::RdfLiteral { span, .. } => *span,
+        }
+    }
+
+    fn position(&self) -> Position {
+        let span = self.span();
+        Position {
+            offset: span.location_offset(),
+            line: span.location_line(),
+            column: span.get_utf8_column() as u32,
+        }
+    }
+
+    fn is_token(&self) -> bool {
+        false
+    }
+
+    fn name(&self) -> String {
+        macro_rules! name {
+            ($name:literal) => {
+                format!(
+                    "{} \x1b[34m@{}:{} \x1b[92m{:?}\x1b[0m",
+                    $name,
+                    self.span().location_line(),
+                    self.span().get_utf8_column(),
+                    self.span().fragment()
+                )
+            };
+        }
+        match self {
+            Primitive::Constant(_) => name!("Constant"),
+            Primitive::Number(_) => name!("Number"),
+            Primitive::String(_) => name!("String"),
+            Primitive::Iri(_) => name!("Iri"),
+            Primitive::RdfLiteral { .. } => name!("RDF Literal"),
+        }
+    }
+}
+impl std::fmt::Display for Primitive<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut output = String::new();
         write_tree(&mut output, &ast_to_ascii_tree(self))?;
