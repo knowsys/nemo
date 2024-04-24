@@ -109,7 +109,7 @@ pub(crate) fn ast_to_ascii_tree(node: &dyn AstNode) -> Tree {
 
 mod test {
     use super::*;
-    use super::{atom::Atom, directive::Directive, tuple::Tuple, program::Program, statement::Statement, term::Term};
+    use super::{atom::Atom, directive::Directive, tuple::Tuple, program::Program, statement::Statement, term::Term, term::Primitive};
     use crate::io::lexer::TokenKind;
 
     macro_rules! s {
@@ -201,10 +201,10 @@ mod test {
                          ws2:None ,
                         terms: Some(List {
                             span: s!(236, 8, "ConstA, ConstB"),
-                            first: Term::Primitive(Token {
+                            first: Term::Primitive(Primitive::Constant(Token {
                                 kind: TokenKind::Ident,
                                 span: s!(236, 8, "ConstA"),
-                            }),
+                            })),
                             rest: Some(vec![(
                                 None,
                                 Token {
@@ -215,10 +215,10 @@ mod test {
                                     kind: TokenKind::Whitespace,
                                     span: s!(243, 8, " "),
                                 }),
-                                Term::Primitive(Token {
+                                Term::Primitive(Primitive::Constant(Token {
                                     kind: TokenKind::Ident,
                                     span: s!(244, 8, "ConstB"),
-                                }),
+                                })),
                             )]),
                         }),
                         ws3: None ,
@@ -298,10 +298,10 @@ mod test {
                                         kind: TokenKind::Whitespace,
                                         span: s!(334, 12, " "),
                                     }),
-                                    Term::Primitive(Token {
+                                    Term::Primitive(Primitive::Constant(Token {
                                         kind: TokenKind::Ident,
                                         span: s!(335, 12, "ConstB"),
-                                    }),
+                                    })),
                                 )]),
                             }),
                             ws3: None,
