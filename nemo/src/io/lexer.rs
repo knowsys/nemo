@@ -4,7 +4,8 @@ use nom::{
     branch::alt,
     bytes::complete::{is_not, tag, take},
     character::complete::{alpha1, alphanumeric1, digit1, line_ending, multispace1},
-    combinator::{all_consuming, map, recognize},
+    combinator::{all_consuming, cut, map, recognize},
+    error::{ContextError, ParseError},
     multi::{many0, many1},
     sequence::{delimited, pair, tuple},
     IResult,
@@ -227,7 +228,9 @@ impl<'a> crate::io::parser::ast::AstNode for Token<'a> {
 
 macro_rules! syntax {
     ($func_name: ident, $tag_string: literal, $token: expr) => {
-        pub(crate) fn $func_name<'a>(input: Span) -> IResult<Span, Token> {
+        pub(crate) fn $func_name<'a, E: ParseError<Span<'a>>>(
+            input: Span<'a>,
+        ) -> IResult<Span<'a>, Token, E> {
             map(tag($tag_string), |span| Token::new($token, span))(input)
         }
     };
@@ -251,7 +254,9 @@ syntax!(hash, "#", TokenKind::Hash);
 syntax!(underscore, "_", TokenKind::Underscore);
 syntax!(at, "@", TokenKind::At);
 
-pub(crate) fn lex_punctuations(input: Span) -> IResult<Span, Token> {
+pub(crate) fn lex_punctuations<'a, E: ParseError<Span<'a>>>(
+    input: Span<'a>,
+) -> IResult<Span<'a>, Token, E> {
     alt((
         arrow,
         open_paren,
@@ -284,7 +289,9 @@ syntax!(minus, "-", TokenKind::Minus);
 syntax!(star, "*", TokenKind::Star);
 syntax!(slash, "/", TokenKind::Slash);
 
-pub(crate) fn lex_operators(input: Span) -> IResult<Span, Token> {
+pub(crate) fn lex_operators<'a, E: ParseError<Span<'a>>>(
+    input: Span<'a>,
+) -> IResult<Span<'a>, Token, E> {
     alt((
         less_equal,
         greater_equal,
@@ -299,11 +306,15 @@ pub(crate) fn lex_operators(input: Span) -> IResult<Span, Token> {
     ))(input)
 }
 
-pub(crate) fn lex_unary_prefix_operators(input: Span) -> IResult<Span, Token> {
+pub(crate) fn lex_unary_prefix_operators<'a, E: ParseError<Span<'a>>>(
+    input: Span<'a>,
+) -> IResult<Span<'a>, Token<'a>, E> {
     alt((plus, minus))(input)
 }
 
-pub(crate) fn lex_ident(input: Span) -> IResult<Span, Token> {
+pub(crate) fn lex_ident<'a, E: ParseError<Span<'a>>>(
+    input: Span<'a>,
+) -> IResult<Span<'a>, Token, E> {
     let (rest, result) = recognize(pair(
         alpha1,
         many0(alt((alphanumeric1, tag("_"), tag("-")))),
@@ -319,48 +330,66 @@ pub(crate) fn lex_ident(input: Span) -> IResult<Span, Token> {
     Ok((rest, token))
 }
 
-pub(crate) fn lex_iri(input: Span) -> IResult<Span, Token> {
-    recognize(delimited(tag("<"), is_not("> \n"), tag(">")))(input)
+pub(crate) fn lex_iri<'a, E: ParseError<Span<'a>>>(input: Span<'a>) -> IResult<Span<'a>, Token, E> {
+    recognize(delimited(tag("<"), is_not("> \n"), cut(tag(">"))))(input)
         .map(|(rest, result)| (rest, Token::new(TokenKind::Iri, result)))
 }
 
-pub(crate) fn lex_number(input: Span) -> IResult<Span, Token> {
+pub(crate) fn lex_number<'a, E: ParseError<Span<'a>>>(
+    input: Span<'a>,
+) -> IResult<Span<'a>, Token, E> {
     digit1(input).map(|(rest, result)| (rest, Token::new(TokenKind::Number, result)))
 }
 
-pub(crate) fn lex_string(input: Span) -> IResult<Span, Token> {
-    recognize(delimited(tag("\""), is_not("\""), tag("\"")))(input)
+pub(crate) fn lex_string<'a, E: ParseError<Span<'a>>>(
+    input: Span<'a>,
+) -> IResult<Span<'a>, Token, E> {
+    recognize(delimited(tag("\""), is_not("\""), cut(tag("\""))))(input)
         .map(|(rest, result)| (rest, Token::new(TokenKind::String, result)))
 }
 
-pub(crate) fn lex_comment(input: Span) -> IResult<Span, Token> {
+pub(crate) fn lex_comment<'a, E: ParseError<Span<'a>> + ContextError<Span<'a>>>(
+    input: Span<'a>,
+) -> IResult<Span<'a>, Token, E> {
     recognize(tuple((tag("%"), many0(is_not("\n")), line_ending)))(input)
         .map(|(rest, result)| (rest, Token::new(TokenKind::Comment, result)))
 }
 
-pub(crate) fn lex_doc_comment(input: Span) -> IResult<Span, Token> {
+pub(crate) fn lex_doc_comment<'a, E: ParseError<Span<'a>> + ContextError<Span<'a>>>(
+    input: Span<'a>,
+) -> IResult<Span<'a>, Token, E> {
     recognize(many1(tuple((tag("%%"), many0(is_not("\n")), line_ending))))(input)
         .map(|(rest, result)| (rest, Token::new(TokenKind::DocComment, result)))
 }
 
-pub(crate) fn lex_toplevel_doc_comment(input: Span) -> IResult<Span, Token> {
+pub(crate) fn lex_toplevel_doc_comment<'a, E: ParseError<Span<'a>> + ContextError<Span<'a>>>(
+    input: Span<'a>,
+) -> IResult<Span<'a>, Token, E> {
     recognize(many1(tuple((tag("%!"), many0(is_not("\n")), line_ending))))(input)
         .map(|(rest, result)| (rest, Token::new(TokenKind::TlDocComment, result)))
 }
 
-pub(crate) fn lex_comments(input: Span) -> IResult<Span, Token> {
+pub(crate) fn lex_comments<'a, E: ParseError<Span<'a>> + ContextError<Span<'a>>>(
+    input: Span<'a>,
+) -> IResult<Span<'a>, Token, E> {
     alt((lex_toplevel_doc_comment, lex_doc_comment, lex_comment))(input)
 }
 
-pub(crate) fn lex_whitespace(input: Span) -> IResult<Span, Token> {
+pub(crate) fn lex_whitespace<'a, E: ParseError<Span<'a>>>(
+    input: Span<'a>,
+) -> IResult<Span<'a>, Token, E> {
     multispace1(input).map(|(rest, result)| (rest, Token::new(TokenKind::Whitespace, result)))
 }
 
-pub(crate) fn lex_illegal(input: Span) -> IResult<Span, Token> {
+pub(crate) fn lex_illegal<'a, E: ParseError<Span<'a>>>(
+    input: Span<'a>,
+) -> IResult<Span<'a>, Token, E> {
     take(1usize)(input).map(|(rest, result)| (rest, Token::new(TokenKind::Illegal, result)))
 }
 
-pub(crate) fn lex_tokens(input: Span) -> IResult<Span, Vec<Token>> {
+pub(crate) fn lex_tokens<'a, E: ParseError<Span<'a>> + ContextError<Span<'a>>>(
+    input: Span<'a>,
+) -> IResult<Span<'a>, Vec<Token>, E> {
     all_consuming(many0(alt((
         lex_iri,
         lex_operators,
@@ -394,14 +423,17 @@ mod test {
     #[test]
     fn empty_input() {
         let input = Span::new("");
-        assert_eq!(lex_tokens(input).unwrap().1, vec![T!(Eof, 0, 1, "")])
+        assert_eq!(
+            lex_tokens::<nom::error::Error<_>>(input).unwrap().1,
+            vec![T!(Eof, 0, 1, "")]
+        )
     }
 
     #[test]
     fn base() {
         let input = Span::new("@base");
         assert_eq!(
-            lex_tokens(input).unwrap().1,
+            lex_tokens::<nom::error::Error<_>>(input).unwrap().1,
             vec![T!(At, 0, 1, "@"), T!(Base, 1, 1, "base"), T!(Eof, 5, 1, ""),]
         )
     }
@@ -410,7 +442,7 @@ mod test {
     fn prefix() {
         let input = Span::new("@prefix");
         assert_eq!(
-            lex_tokens(input).unwrap().1,
+            lex_tokens::<nom::error::Error<_>>(input).unwrap().1,
             vec![
                 T!(At, 0, 1, "@"),
                 T!(Prefix, 1, 1, "prefix"),
@@ -423,7 +455,7 @@ mod test {
     fn output() {
         let input = Span::new("@output");
         assert_eq!(
-            lex_tokens(input).unwrap().1,
+            lex_tokens::<nom::error::Error<_>>(input).unwrap().1,
             vec![
                 T!(At, 0, 1, "@"),
                 T!(Output, 1, 1, "output"),
@@ -436,7 +468,7 @@ mod test {
     fn import() {
         let input = Span::new("@import");
         assert_eq!(
-            lex_tokens(input).unwrap().1,
+            lex_tokens::<nom::error::Error<_>>(input).unwrap().1,
             vec![
                 T!(At, 0, 1, "@"),
                 T!(Import, 1, 1, "import"),
@@ -449,7 +481,7 @@ mod test {
     fn export() {
         let input = Span::new("@export");
         assert_eq!(
-            lex_tokens(input).unwrap().1,
+            lex_tokens::<nom::error::Error<_>>(input).unwrap().1,
             vec![
                 T!(At, 0, 1, "@"),
                 T!(Export, 1, 1, "export"),
@@ -462,7 +494,7 @@ mod test {
     fn idents_with_keyword_prefix() {
         let input = Span::new("@baseA, @prefixB, @importC, @exportD, @outputE.");
         assert_eq!(
-            lex_tokens(input).unwrap().1,
+            lex_tokens::<nom::error::Error<_>>(input).unwrap().1,
             vec![
                 T!(At, 0, 1, "@"),
                 T!(Ident, 1, 1, "baseA"),
@@ -492,7 +524,7 @@ mod test {
     fn tokenize() {
         let input = Span::new("P(?X) :- A(?X).\t\n    A(Human).");
         assert_eq!(
-            lex_tokens(input).unwrap().1,
+            lex_tokens::<nom::error::Error<_>>(input).unwrap().1,
             vec![
                 T!(Ident, 0, 1, "P"),
                 T!(OpenParen, 1, 1, "("),
@@ -523,7 +555,7 @@ mod test {
     fn comment() {
         let input = Span::new("    % Some Comment\n");
         assert_eq!(
-            lex_tokens(input).unwrap().1,
+            lex_tokens::<nom::error::Error<_>>(input).unwrap().1,
             vec![
                 T!(Whitespace, 0, 1, "    "),
                 T!(Comment, 4, 1, "% Some Comment\n"),
@@ -538,7 +570,7 @@ mod test {
     fn ident() {
         let input = Span::new("some_Ident(Alice). %comment at the end of a line\n");
         assert_eq!(
-            lex_tokens(input).unwrap().1,
+            lex_tokens::<nom::error::Error<_>>(input).unwrap().1,
             vec![
                 T!(Ident, 0, 1, "some_Ident"),
                 T!(OpenParen, 10, 1, "("),
@@ -556,7 +588,7 @@ mod test {
     fn forbidden_ident() {
         let input = Span::new("_someIdent(Alice). %comment at the end of a line\n");
         assert_eq!(
-            lex_tokens(input).unwrap().1,
+            lex_tokens::<nom::error::Error<_>>(input).unwrap().1,
             vec![
                 T!(Underscore, 0, 1, "_"),
                 T!(Ident, 1, 1, "someIdent"),
@@ -575,7 +607,7 @@ mod test {
     fn iri() {
         let input = Span::new("<https://résumé.example.org/>");
         assert_eq!(
-            lex_tokens(input).unwrap().1,
+            lex_tokens::<nom::error::Error<_>>(input).unwrap().1,
             vec![
                 T!(Iri, 0, 1, "<https://résumé.example.org/>"),
                 T!(Eof, 31, 1, ""),
@@ -587,7 +619,7 @@ mod test {
     fn iri_pct_enc() {
         let input = Span::new("<http://r%C3%A9sum%C3%A9.example.org>\n");
         assert_eq!(
-            lex_tokens(input).unwrap().1,
+            lex_tokens::<nom::error::Error<_>>(input).unwrap().1,
             vec![
                 T!(Iri, 0, 1, "<http://r%C3%A9sum%C3%A9.example.org>"),
                 T!(Whitespace, 37, 1, "\n"),
@@ -602,7 +634,7 @@ mod test {
     fn constraints() {
         let input = Span::new("A(?X):-B(?X),?X<42,?X>3.");
         assert_eq!(
-            lex_tokens(input).unwrap().1,
+            lex_tokens::<nom::error::Error<_>>(input).unwrap().1,
             vec![
                 T!(Ident, 0, 1, "A"),
                 T!(OpenParen, 1, 1, "("),
@@ -635,7 +667,7 @@ mod test {
     fn pct_enc_comment() {
         let input = Span::new("%d4 this should be a comment,\n% but the lexer can't distinguish a percent encoded value\n% in an iri from a comment :(\n");
         assert_eq!(
-            lex_tokens(input).unwrap().1,
+            lex_tokens::<nom::error::Error<_>>(input).unwrap().1,
             vec![
                 T!(Comment, 0, 1, "%d4 this should be a comment,\n"),
                 T!(
@@ -654,7 +686,7 @@ mod test {
     fn fact() {
         let input = Span::new("somePred(term1, term2).");
         assert_eq!(
-            lex_tokens(input).unwrap().1,
+            lex_tokens::<nom::error::Error<_>>(input).unwrap().1,
             vec![
                 T!(Ident, 0, 1, "somePred"),
                 T!(OpenParen, 8, 1, "("),
@@ -673,7 +705,7 @@ mod test {
     fn whitespace() {
         let input = Span::new("   \t \n\n\t   \n");
         assert_eq!(
-            lex_tokens(input).unwrap().1,
+            lex_tokens::<nom::error::Error<_>>(input).unwrap().1,
             vec![
                 T!(Whitespace, 0, 1, "   \t \n\n\t   \n"),
                 T!(Eof, 12, 4, ""),
