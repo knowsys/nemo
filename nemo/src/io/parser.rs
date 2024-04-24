@@ -2434,14 +2434,15 @@ mod new {
         atom::*, directive::*, map::*, program::*, statement::*, term::*, tuple::*, List,
     };
     use crate::io::lexer::{
-        arrow, at, close_brace, close_paren, colon, comma, dot, equal, exclamation_mark, greater,
-        greater_equal, hash, less, less_equal, lex_comment, lex_doc_comment, lex_ident, lex_iri,
-        lex_number, lex_operators, lex_string, lex_toplevel_doc_comment,
+        arrow, at, caret, close_brace, close_paren, colon, comma, dot, equal, exclamation_mark,
+        greater, greater_equal, hash, less, less_equal, lex_comment, lex_doc_comment, lex_ident,
+        lex_iri, lex_number, lex_operators, lex_string, lex_toplevel_doc_comment,
         lex_unary_prefix_operators, lex_whitespace, minus, open_brace, open_paren, plus,
         question_mark, slash, star, tilde, unequal, Span, Token, TokenKind,
     };
     use crate::io::parser::ast::AstNode;
-    use nom::combinator::{all_consuming, opt, recognize};
+    use nom::combinator::{all_consuming, cut, map, opt, recognize};
+    use nom::error::{context, ContextError, ParseError};
     use nom::sequence::{delimited, pair};
     use nom::Parser;
     use nom::{
@@ -2465,12 +2466,11 @@ mod new {
         }
     }
 
-    fn ignore_ws_and_comments<'a, F, O>(
+    fn ignore_ws_and_comments<'a, F, O, E: ParseError<Span<'a>> + ContextError<Span<'a>>>(
         inner: F,
-    ) -> impl FnMut(Span<'a>) -> IResult<Span<'a>, O, nom::error::Error<Span<'a>>>
+    ) -> impl FnMut(Span<'a>) -> IResult<Span<'a>, O, E>
     where
-        F: Parser<Span<'a>, O, nom::error::Error<Span<'a>>>
-            + FnMut(Span<'a>) -> IResult<Span<'a>, O, nom::error::Error<Span<'a>>>,
+        F: Parser<Span<'a>, O, E> + FnMut(Span<'a>) -> IResult<Span<'a>, O, E>,
     {
         delimited(
             many0(alt((lex_whitespace, lex_comment))),
@@ -2480,45 +2480,63 @@ mod new {
     }
 
     /// Parse a full program consisting of directives, facts, rules and comments.
-    fn parse_program<'a>(input: Span<'a>) -> Program<'a> {
-        // let span = input.clone();
-        let (_, (tl_doc_comment, statements)) = all_consuming(pair(
-            opt(lex_toplevel_doc_comment),
-            many1(alt((
-                parse_fact,
-                parse_rule,
-                parse_whitespace,
-                parse_directive,
-                parse_comment,
-            ))),
-        ))(input)
-        .expect("Expect EOF");
-        Program {
-            span: input,
-            tl_doc_comment,
-            statements,
-        }
+    fn parse_program<'a, E: ParseError<Span<'a>> + ContextError<Span<'a>>>(
+        input: Span<'a>,
+    ) -> IResult<Span<'a>, Program<'a>, E> {
+        context(
+            "parse program",
+            all_consuming(pair(
+                opt(lex_toplevel_doc_comment),
+                many1(alt((
+                    parse_rule,
+                    parse_fact,
+                    parse_whitespace,
+                    parse_directive,
+                    parse_comment,
+                ))),
+            )),
+        )(input)
+        .map(|(rest_input, (tl_doc_comment, statements))| {
+            (
+                rest_input,
+                Program {
+                    span: input,
+                    tl_doc_comment,
+                    statements,
+                },
+            )
+        })
     }
 
     /// Parse whitespace that is between directives, facts, rules and comments.
-    fn parse_whitespace<'a>(input: Span<'a>) -> IResult<Span, Statement<'a>> {
-        lex_whitespace(input).map(|(rest, ws)| (rest, Statement::Whitespace(ws)))
+    fn parse_whitespace<'a, E: ParseError<Span<'a>> + ContextError<Span<'a>>>(
+        input: Span<'a>,
+    ) -> IResult<Span, Statement<'a>, E> {
+        context("parse whitespace", lex_whitespace)(input)
+            .map(|(rest, ws)| (rest, Statement::Whitespace(ws)))
     }
 
     /// Parse normal comments that start with a `%` and ends at the line ending.
-    fn parse_comment<'a>(input: Span<'a>) -> IResult<Span, Statement<'a>> {
-        lex_comment(input).map(|(rest, comment)| (rest, Statement::Comment(comment)))
+    fn parse_comment<'a, E: ParseError<Span<'a>> + ContextError<Span<'a>>>(
+        input: Span<'a>,
+    ) -> IResult<Span, Statement<'a>, E> {
+        context("parse comment", lex_comment)(input)
+            .map(|(rest, comment)| (rest, Statement::Comment(comment)))
     }
 
     /// Parse a fact of the form `predicateName(term1, term2, …).`
-    fn parse_fact<'a>(input: Span<'a>) -> IResult<Span, Statement<'a>> {
-        // let input_span = input;
-        tuple((
-            opt(lex_doc_comment),
-            parse_normal_atom,
-            opt(lex_whitespace),
-            dot,
-        ))(input)
+    fn parse_fact<'a, E: ParseError<Span<'a>> + ContextError<Span<'a>>>(
+        input: Span<'a>,
+    ) -> IResult<Span, Statement<'a>, E> {
+        context(
+            "parse fact",
+            tuple((
+                opt(lex_doc_comment),
+                parse_normal_atom,
+                opt(lex_whitespace),
+                cut(dot),
+            )),
+        )(input)
         .map(|(rest_input, (doc_comment, atom, ws, dot))| {
             (
                 rest_input,
@@ -2534,18 +2552,22 @@ mod new {
     }
 
     /// Parse a rule of the form `headPredicate1(term1, term2, …), headPredicate2(term1, term2, …) :- bodyPredicate(term1, …), term1 >= (term2 + term3) * function(term1, …) .`
-    fn parse_rule<'a>(input: Span<'a>) -> IResult<Span, Statement<'a>> {
-        // let input_span = input;
-        tuple((
-            opt(lex_doc_comment),
-            parse_head,
-            opt(lex_whitespace),
-            arrow,
-            opt(lex_whitespace),
-            parse_body,
-            opt(lex_whitespace),
-            dot,
-        ))(input)
+    fn parse_rule<'a, E: ParseError<Span<'a>> + ContextError<Span<'a>>>(
+        input: Span<'a>,
+    ) -> IResult<Span, Statement<'a>, E> {
+        context(
+            "parse rule",
+            tuple((
+                opt(lex_doc_comment),
+                parse_head,
+                opt(lex_whitespace),
+                arrow,
+                opt(lex_whitespace),
+                parse_body,
+                opt(lex_whitespace),
+                cut(dot),
+            )),
+        )(input)
         .map(
             |(rest_input, (doc_comment, head, ws1, arrow, ws2, body, ws3, dot))| {
                 (
@@ -2567,46 +2589,59 @@ mod new {
     }
 
     /// Parse the head atoms of a rule.
-    fn parse_head<'a>(input: Span<'a>) -> IResult<Span, List<'a, Atom<'a>>> {
-        parse_atom_list(input, parse_head_atoms)
+    fn parse_head<'a, E: ParseError<Span<'a>> + ContextError<Span<'a>>>(
+        input: Span<'a>,
+    ) -> IResult<Span, List<'a, Atom<'a>>, E> {
+        context("parse head", parse_atom_list(parse_head_atoms))(input)
     }
 
     /// Parse the body atoms of a rule.
-    fn parse_body<'a>(input: Span<'a>) -> IResult<Span, List<'a, Atom<'a>>> {
-        parse_atom_list(input, parse_body_atoms)
+    fn parse_body<'a, E: ParseError<Span<'a>> + ContextError<Span<'a>>>(
+        input: Span<'a>,
+    ) -> IResult<Span, List<'a, Atom<'a>>, E> {
+        context("parse body", parse_atom_list(parse_body_atoms))(input)
     }
 
     /// Parse the directives (@base, @prefix, @import, @export, @output).
-    fn parse_directive<'a>(input: Span<'a>) -> IResult<Span, Statement<'a>> {
-        alt((
-            parse_base_directive,
-            parse_prefix_directive,
-            parse_import_directive,
-            parse_export_directive,
-            parse_output_directive,
-        ))(input)
+    fn parse_directive<'a, E: ParseError<Span<'a>> + ContextError<Span<'a>>>(
+        input: Span<'a>,
+    ) -> IResult<Span, Statement<'a>, E> {
+        context(
+            "parse directive",
+            alt((
+                parse_base_directive,
+                parse_prefix_directive,
+                parse_import_directive,
+                parse_export_directive,
+                parse_output_directive,
+            )),
+        )(input)
         .map(|(rest, directive)| (rest, Statement::Directive(directive)))
     }
 
     /// Parse the base directive.
-    fn parse_base_directive<'a>(input: Span<'a>) -> IResult<Span, Directive<'a>> {
-        let input_span = input.clone();
-        tuple((
-            opt(lex_doc_comment),
-            recognize(pair(
-                at,
-                verify(lex_ident, |token| token.kind == TokenKind::Base),
+    fn parse_base_directive<'a, E: ParseError<Span<'a>> + ContextError<Span<'a>>>(
+        input: Span<'a>,
+    ) -> IResult<Span, Directive<'a>, E> {
+        context(
+            "parse base directive",
+            tuple((
+                opt(lex_doc_comment),
+                recognize(pair(
+                    at,
+                    verify(lex_ident, |token| token.kind == TokenKind::Base),
+                )),
+                opt(lex_whitespace),
+                lex_iri,
+                opt(lex_whitespace),
+                cut(dot),
             )),
-            opt(lex_whitespace),
-            lex_iri,
-            opt(lex_whitespace),
-            dot,
-        ))(input)
+        )(input)
         .map(|(rest_input, (doc_comment, kw, ws1, base_iri, ws2, dot))| {
             (
                 rest_input,
                 Directive::Base {
-                    span: outer_span(input_span, rest_input),
+                    span: outer_span(input, rest_input),
                     doc_comment,
                     kw: Token {
                         kind: TokenKind::Base,
@@ -2622,27 +2657,31 @@ mod new {
     }
 
     /// Parse the prefix directive.
-    fn parse_prefix_directive<'a>(input: Span<'a>) -> IResult<Span, Directive<'a>> {
-        let input_span = input.clone();
-        tuple((
-            opt(lex_doc_comment),
-            recognize(pair(
-                at,
-                verify(lex_ident, |token| token.kind == TokenKind::Prefix),
+    fn parse_prefix_directive<'a, E: ParseError<Span<'a>> + ContextError<Span<'a>>>(
+        input: Span<'a>,
+    ) -> IResult<Span, Directive<'a>, E> {
+        context(
+            "parse prefix directive",
+            tuple((
+                opt(lex_doc_comment),
+                recognize(pair(
+                    at,
+                    verify(lex_ident, |token| token.kind == TokenKind::Prefix),
+                )),
+                opt(lex_whitespace),
+                recognize(pair(lex_ident, colon)),
+                opt(lex_whitespace),
+                lex_iri,
+                opt(lex_whitespace),
+                cut(dot),
             )),
-            opt(lex_whitespace),
-            recognize(pair(lex_ident, colon)),
-            opt(lex_whitespace),
-            lex_iri,
-            opt(lex_whitespace),
-            dot,
-        ))(input)
+        )(input)
         .map(
             |(rest_input, (doc_comment, kw, ws1, prefix, ws2, prefix_iri, ws3, dot))| {
                 (
                     rest_input,
                     Directive::Prefix {
-                        span: outer_span(input_span, rest_input),
+                        span: outer_span(input, rest_input),
                         doc_comment,
                         kw: Token {
                             kind: TokenKind::Prefix,
@@ -2664,29 +2703,33 @@ mod new {
     }
 
     /// Parse the import directive.
-    fn parse_import_directive<'a>(input: Span<'a>) -> IResult<Span, Directive<'a>> {
-        let input_span = input.clone();
-        tuple((
-            opt(lex_doc_comment),
-            recognize(pair(
-                at,
-                verify(lex_ident, |token| token.kind == TokenKind::Import),
+    fn parse_import_directive<'a, E: ParseError<Span<'a>> + ContextError<Span<'a>>>(
+        input: Span<'a>,
+    ) -> IResult<Span, Directive<'a>, E> {
+        context(
+            "parse import directive",
+            tuple((
+                opt(lex_doc_comment),
+                recognize(pair(
+                    at,
+                    verify(lex_ident, |token| token.kind == TokenKind::Import),
+                )),
+                lex_whitespace,
+                lex_ident,
+                opt(lex_whitespace),
+                arrow,
+                opt(lex_whitespace),
+                parse_map,
+                opt(lex_whitespace),
+                cut(dot),
             )),
-            lex_whitespace,
-            lex_ident,
-            opt(lex_whitespace),
-            arrow,
-            opt(lex_whitespace),
-            parse_map,
-            opt(lex_whitespace),
-            dot,
-        ))(input)
+        )(input)
         .map(
             |(rest_input, (doc_comment, kw, ws1, predicate, ws2, arrow, ws3, map, ws4, dot))| {
                 (
                     rest_input,
                     Directive::Import {
-                        span: outer_span(input_span, rest_input),
+                        span: outer_span(input, rest_input),
                         doc_comment,
                         kw: Token {
                             kind: TokenKind::Import,
@@ -2707,29 +2750,33 @@ mod new {
     }
 
     /// Parse the export directive.
-    fn parse_export_directive<'a>(input: Span<'a>) -> IResult<Span, Directive<'a>> {
-        let input_span = input.clone();
-        tuple((
-            opt(lex_doc_comment),
-            recognize(pair(
-                at,
-                verify(lex_ident, |token| token.kind == TokenKind::Export),
+    fn parse_export_directive<'a, E: ParseError<Span<'a>> + ContextError<Span<'a>>>(
+        input: Span<'a>,
+    ) -> IResult<Span, Directive<'a>, E> {
+        context(
+            "parse export directive",
+            tuple((
+                opt(lex_doc_comment),
+                recognize(pair(
+                    at,
+                    verify(lex_ident, |token| token.kind == TokenKind::Export),
+                )),
+                lex_whitespace,
+                lex_ident,
+                opt(lex_whitespace),
+                arrow,
+                opt(lex_whitespace),
+                parse_map,
+                opt(lex_whitespace),
+                cut(dot),
             )),
-            lex_whitespace,
-            lex_ident,
-            opt(lex_whitespace),
-            arrow,
-            opt(lex_whitespace),
-            parse_map,
-            opt(lex_whitespace),
-            dot,
-        ))(input)
+        )(input)
         .map(
             |(rest_input, (doc_comment, kw, ws1, predicate, ws2, arrow, ws3, map, ws4, dot))| {
                 (
                     rest_input,
                     Directive::Export {
-                        span: outer_span(input_span, rest_input),
+                        span: outer_span(input, rest_input),
                         doc_comment,
                         kw: Token {
                             kind: TokenKind::Export,
@@ -2750,25 +2797,29 @@ mod new {
     }
 
     /// Parse the output directive.
-    fn parse_output_directive<'a>(input: Span<'a>) -> IResult<Span, Directive<'a>> {
-        let input_span = input.clone();
-        tuple((
-            opt(lex_doc_comment),
-            recognize(pair(
-                at,
-                verify(lex_ident, |token| token.kind == TokenKind::Output),
+    fn parse_output_directive<'a, E: ParseError<Span<'a>> + ContextError<Span<'a>>>(
+        input: Span<'a>,
+    ) -> IResult<Span, Directive<'a>, E> {
+        context(
+            "parse output directive",
+            tuple((
+                opt(lex_doc_comment),
+                recognize(pair(
+                    at,
+                    verify(lex_ident, |token| token.kind == TokenKind::Output),
+                )),
+                lex_whitespace,
+                opt(parse_identifier_list),
+                opt(lex_whitespace),
+                cut(dot),
             )),
-            lex_whitespace,
-            opt(parse_identifier_list),
-            opt(lex_whitespace),
-            dot,
-        ))(input)
+        )(input)
         .map(
             |(rest_input, (doc_comment, kw, ws1, predicates, ws2, dot))| {
                 (
                     rest_input,
                     Directive::Output {
-                        span: outer_span(input_span, rest_input),
+                        span: outer_span(input, rest_input),
                         doc_comment,
                         kw: Token {
                             kind: TokenKind::Output,
@@ -2785,22 +2836,26 @@ mod new {
     }
 
     /// Parse a list of `ident1, ident2, …`
-    fn parse_identifier_list<'a>(input: Span<'a>) -> IResult<Span, List<'a, Token<'a>>> {
-        let input_span = input.clone();
-        pair(
-            lex_ident,
-            many0(tuple((
-                opt(lex_whitespace),
-                comma,
-                opt(lex_whitespace),
+    fn parse_identifier_list<'a, E: ParseError<Span<'a>> + ContextError<Span<'a>>>(
+        input: Span<'a>,
+    ) -> IResult<Span, List<'a, Token<'a>>, E> {
+        context(
+            "parse identifier list",
+            pair(
                 lex_ident,
-            ))),
+                many0(tuple((
+                    opt(lex_whitespace),
+                    comma,
+                    opt(lex_whitespace),
+                    lex_ident,
+                ))),
+            ),
         )(input)
         .map(|(rest_input, (first, rest))| {
             (
                 rest_input,
                 List {
-                    span: outer_span(input_span, rest_input),
+                    span: outer_span(input, rest_input),
                     first,
                     rest: if rest.is_empty() { None } else { Some(rest) },
                 },
@@ -2808,85 +2863,106 @@ mod new {
         })
     }
 
-    /// Parse a list of atoms, like `atom1(…), atom2(…), infix = atom, …`
-    fn parse_atom_list<'a>(
-        input: Span<'a>,
-        parse_atom: fn(Span<'a>) -> IResult<Span, Atom<'a>>,
-    ) -> IResult<Span, List<'a, Atom<'a>>> {
-        let input_span = input.clone();
-        pair(
-            parse_atom,
-            many0(tuple((
-                opt(lex_whitespace),
-                comma,
-                opt(lex_whitespace),
-                parse_atom,
-            ))),
-        )(input)
-        .map(|(rest_input, (first, rest))| {
-            (
-                rest_input,
-                List {
-                    span: outer_span(input_span, rest_input),
-                    first,
-                    rest: if rest.is_empty() { None } else { Some(rest) },
-                },
-            )
-        })
+    fn parse_atom_list<'a, E: ParseError<Span<'a>> + ContextError<Span<'a>>>(
+        parse_atom: fn(Span<'a>) -> IResult<Span, Atom<'a>, E>,
+    ) -> impl Fn(Span<'a>) -> IResult<Span<'a>, List<'a, Atom<'a>>, E> {
+        move |input| {
+            context(
+                "parse atom list",
+                pair(
+                    parse_atom,
+                    many0(tuple((
+                        opt(lex_whitespace),
+                        comma,
+                        opt(lex_whitespace),
+                        parse_atom,
+                    ))),
+                ),
+            )(input)
+            .map(|(rest_input, (first, rest))| {
+                (
+                    rest_input,
+                    List {
+                        span: outer_span(input, rest_input),
+                        first,
+                        rest: if rest.is_empty() { None } else { Some(rest) },
+                    },
+                )
+            })
+        }
     }
 
     /// Parse the head atoms. The same as the body atoms except for disallowing negated atoms.
-    fn parse_head_atoms<'a>(input: Span<'a>) -> IResult<Span, Atom<'a>> {
-        alt((parse_normal_atom, parse_infix_atom, parse_map_atom))(input)
+    fn parse_head_atoms<'a, E: ParseError<Span<'a>> + ContextError<Span<'a>>>(
+        input: Span<'a>,
+    ) -> IResult<Span, Atom<'a>, E> {
+        context(
+            "harse head atoms",
+            alt((parse_normal_atom, parse_infix_atom, parse_map_atom)),
+        )(input)
     }
 
     /// Parse the body atoms. The same as the head atoms except for allowing negated atoms.
-    fn parse_body_atoms<'a>(input: Span<'a>) -> IResult<Span, Atom<'a>> {
-        alt((
-            parse_normal_atom,
-            parse_negative_atom,
-            parse_infix_atom,
-            parse_map_atom,
-        ))(input)
+    fn parse_body_atoms<'a, E: ParseError<Span<'a>> + ContextError<Span<'a>>>(
+        input: Span<'a>,
+    ) -> IResult<Span, Atom<'a>, E> {
+        context(
+            "parse body atoms",
+            alt((
+                parse_normal_atom,
+                parse_negative_atom,
+                parse_infix_atom,
+                parse_map_atom,
+            )),
+        )(input)
     }
 
     /// Parse an atom of the form `predicateName(term1, term2, …)`.
-    fn parse_normal_atom<'a>(input: Span<'a>) -> IResult<Span, Atom<'a>> {
-        parse_named_tuple(input)
+    fn parse_normal_atom<'a, E: ParseError<Span<'a>> + ContextError<Span<'a>>>(
+        input: Span<'a>,
+    ) -> IResult<Span, Atom<'a>, E> {
+        context("parse normal atom", parse_named_tuple)(input)
             .map(|(rest_input, named_tuple)| (rest_input, Atom::Positive(named_tuple)))
     }
 
     /// Parse an atom of the form `~predicateName(term1, term2, …)`.
-    fn parse_negative_atom<'a>(input: Span<'a>) -> IResult<Span, Atom<'a>> {
-        let input_span = input.clone();
-        pair(tilde, parse_named_tuple)(input).map(|(rest_input, (tilde, named_tuple))| {
-            (
-                rest_input,
-                Atom::Negative {
-                    span: outer_span(input_span, rest_input),
-                    neg: tilde,
-                    atom: named_tuple,
-                },
-            )
-        })
+    fn parse_negative_atom<'a, E: ParseError<Span<'a>> + ContextError<Span<'a>>>(
+        input: Span<'a>,
+    ) -> IResult<Span, Atom<'a>, E> {
+        context("parse negative atom", pair(tilde, parse_named_tuple))(input).map(
+            |(rest_input, (tilde, named_tuple))| {
+                (
+                    rest_input,
+                    Atom::Negative {
+                        span: outer_span(input, rest_input),
+                        neg: tilde,
+                        atom: named_tuple,
+                    },
+                )
+            },
+        )
     }
 
     /// Parse an "infix atom" of the form `term1 <infixop> term2`.
     /// The supported infix operations are `<`, `<=`, `=`, `>=`, `>` and `!=`.
-    fn parse_infix_atom<'a>(input: Span<'a>) -> IResult<Span, Atom<'a>> {
-        let input_span = input.clone();
-        tuple((
-            parse_term,
-            opt(lex_whitespace),
-            parse_operation_token,
-            opt(lex_whitespace),
-            parse_term,
-        ))(input)
+    fn parse_infix_atom<'a, E: ParseError<Span<'a>> + ContextError<Span<'a>>>(
+        input: Span<'a>,
+    ) -> IResult<Span, Atom<'a>, E> {
+        context(
+            "parse infix atom",
+            tuple((
+                parse_term,
+                opt(lex_whitespace),
+                parse_operation_token,
+                opt(lex_whitespace),
+                parse_term,
+            )),
+        )(input)
         .map(|(rest_input, (lhs, ws1, operation, ws2, rhs))| {
             (
                 rest_input,
                 Atom::InfixAtom {
-                    span: outer_span(input_span, rest_input),
+                    span: outer_span(input, rest_input),
                     lhs,
                     ws1,
                     operation,
@@ -2899,23 +2975,27 @@ mod new {
 
     /// Parse a tuple with an optional name, like `ident(term1, term2)`
     /// or just `(int, int, skip)`.
-    fn parse_tuple<'a>(input: Span<'a>) -> IResult<Span, Tuple<'a>> {
-        let input_span = input.clone();
-        tuple((
-            opt(lex_ident),
-            opt(lex_whitespace),
-            open_paren,
-            opt(lex_whitespace),
-            opt(parse_term_list),
-            opt(lex_whitespace),
-            close_paren,
-        ))(input)
+    fn parse_tuple<'a, E: ParseError<Span<'a>> + ContextError<Span<'a>>>(
+        input: Span<'a>,
+    ) -> IResult<Span, Tuple<'a>, E> {
+        context(
+            "parse tuple",
+            tuple((
+                opt(lex_ident),
+                opt(lex_whitespace),
+                open_paren,
+                opt(lex_whitespace),
+                opt(parse_term_list),
+                opt(lex_whitespace),
+                cut(close_paren),
+            )),
+        )(input)
         .map(
             |(rest_input, (identifier, ws1, open_paren, ws2, terms, ws3, close_paren))| {
                 (
                     rest_input,
                     Tuple {
-                        span: outer_span(input_span, rest_input),
+                        span: outer_span(input, rest_input),
                         identifier,
                         ws1,
                         open_paren,
@@ -2931,23 +3011,27 @@ mod new {
 
     /// Parse a named tuple. This function is like `parse_tuple` with the difference,
     /// that is enforces the existence of an identifier for the tuple.
-    fn parse_named_tuple<'a>(input: Span<'a>) -> IResult<Span, Tuple<'a>> {
-        let input_span = input.clone();
-        tuple((
-            lex_ident,
-            opt(lex_whitespace),
-            open_paren,
-            opt(lex_whitespace),
-            opt(parse_term_list),
-            opt(lex_whitespace),
-            close_paren,
-        ))(input)
+    fn parse_named_tuple<'a, E: ParseError<Span<'a>> + ContextError<Span<'a>>>(
+        input: Span<'a>,
+    ) -> IResult<Span, Tuple<'a>, E> {
+        context(
+            "parse named tuple",
+            tuple((
+                lex_ident,
+                opt(lex_whitespace),
+                open_paren,
+                opt(lex_whitespace),
+                opt(parse_term_list),
+                opt(lex_whitespace),
+                cut(close_paren),
+            )),
+        )(input)
         .map(
             |(rest_input, (identifier, ws1, open_paren, ws2, terms, ws3, close_paren))| {
                 (
                     rest_input,
                     Tuple {
-                        span: outer_span(input_span, rest_input),
+                        span: outer_span(input, rest_input),
                         identifier: Some(identifier),
                         ws1,
                         open_paren,
@@ -2963,23 +3047,27 @@ mod new {
 
     /// Parse a map. Maps are denoted with `{…}` and can haven an optional name, e.g. `csv {…}`.
     /// Inside the curly braces ist a list of pairs.
-    fn parse_map<'a>(input: Span<'a>) -> IResult<Span, Map<'a>> {
-        let input_span = input.clone();
-        tuple((
-            opt(lex_ident),
-            opt(lex_whitespace),
-            open_brace,
-            opt(lex_whitespace),
-            parse_pair_list,
-            opt(lex_whitespace),
-            close_brace,
-        ))(input)
+    fn parse_map<'a, E: ParseError<Span<'a>> + ContextError<Span<'a>>>(
+        input: Span<'a>,
+    ) -> IResult<Span, Map<'a>, E> {
+        context(
+            "parse map",
+            tuple((
+                opt(lex_ident),
+                opt(lex_whitespace),
+                open_brace,
+                opt(lex_whitespace),
+                parse_pair_list,
+                opt(lex_whitespace),
+                cut(close_brace),
+            )),
+        )(input)
         .map(
             |(rest_input, (identifier, ws1, open_brace, ws2, pairs, ws3, close_brace))| {
                 (
                     rest_input,
                     Map {
-                        span: outer_span(input_span, rest_input),
+                        span: outer_span(input, rest_input),
                         identifier,
                         ws1,
                         open_brace,
@@ -2994,30 +3082,35 @@ mod new {
     }
 
     /// Parse a map in an atom position.
-    fn parse_map_atom<'a>(input: Span<'a>) -> IResult<Span, Atom<'a>> {
-        parse_map(input).map(|(rest_input, map)| (rest_input, Atom::Map(map)))
+    fn parse_map_atom<'a, E: ParseError<Span<'a>> + ContextError<Span<'a>>>(
+        input: Span<'a>,
+    ) -> IResult<Span, Atom<'a>, E> {
+        context("parse map atom", parse_map)(input)
+            .map(|(rest_input, map)| (rest_input, Atom::Map(map)))
     }
 
     /// Parse a pair list of the form `key1 = value1, key2 = value2, …`.
-    fn parse_pair_list<'a>(
+    fn parse_pair_list<'a, E: ParseError<Span<'a>> + ContextError<Span<'a>>>(
         input: Span<'a>,
-    ) -> IResult<Span, Option<List<'a, Pair<Term<'a>, Term<'a>>>>> {
-        let input_span = input.clone();
-        opt(pair(
-            parse_pair,
-            many0(tuple((
-                opt(lex_whitespace),
-                comma,
-                opt(lex_whitespace),
+    ) -> IResult<Span, Option<List<'a, Pair<Term<'a>, Term<'a>>>>, E> {
+        context(
+            "parse pair list",
+            opt(pair(
                 parse_pair,
-            ))),
-        ))(input)
+                many0(tuple((
+                    opt(lex_whitespace),
+                    comma,
+                    opt(lex_whitespace),
+                    parse_pair,
+                ))),
+            )),
+        )(input)
         .map(|(rest_input, pair_list)| {
             if let Some((first, rest)) = pair_list {
                 (
                     rest_input,
                     Some(List {
-                        span: outer_span(input_span, rest_input),
+                        span: outer_span(input, rest_input),
                         first,
                         rest: if rest.is_empty() { None } else { Some(rest) },
                     }),
@@ -3029,20 +3122,24 @@ mod new {
     }
 
     /// Parse a pair of the form `key = value`.
-    fn parse_pair<'a>(input: Span<'a>) -> IResult<Span, Pair<Term<'a>, Term<'a>>> {
-        let input_span = input.clone();
-        tuple((
-            parse_term,
-            opt(lex_whitespace),
-            equal,
-            opt(lex_whitespace),
-            parse_term,
-        ))(input)
+    fn parse_pair<'a, E: ParseError<Span<'a>> + ContextError<Span<'a>>>(
+        input: Span<'a>,
+    ) -> IResult<Span, Pair<Term<'a>, Term<'a>>, E> {
+        context(
+            "parse pair",
+            tuple((
+                parse_term,
+                opt(lex_whitespace),
+                equal,
+                opt(lex_whitespace),
+                parse_term,
+            )),
+        )(input)
         .map(|(rest_input, (key, ws1, equal, ws2, value))| {
             (
                 rest_input,
                 Pair {
-                    span: outer_span(input_span, rest_input),
+                    span: outer_span(input, rest_input),
                     key,
                     ws1,
                     equal,
@@ -3054,22 +3151,26 @@ mod new {
     }
 
     /// Parse a list of terms of the form `term1, term2, …`.
-    fn parse_term_list<'a>(input: Span<'a>) -> IResult<Span, List<'a, Term<'a>>> {
-        let input_span = input.clone();
-        pair(
-            parse_term,
-            many0(tuple((
-                opt(lex_whitespace),
-                comma,
-                opt(lex_whitespace),
+    fn parse_term_list<'a, E: ParseError<Span<'a>> + ContextError<Span<'a>>>(
+        input: Span<'a>,
+    ) -> IResult<Span, List<'a, Term<'a>>, E> {
+        context(
+            "parse term list",
+            pair(
                 parse_term,
-            ))),
+                many0(tuple((
+                    opt(lex_whitespace),
+                    comma,
+                    opt(lex_whitespace),
+                    parse_term,
+                ))),
+            ),
         )(input)
         .map(|(rest_input, (first, rest))| {
             (
                 rest_input,
                 List {
-                    span: outer_span(input_span, rest_input),
+                    span: outer_span(input, rest_input),
                     first,
                     rest: if rest.is_empty() { None } else { Some(rest) },
                 },
@@ -3080,52 +3181,128 @@ mod new {
     /// Parse a term. A term can be a primitive value (constant, number, string, …),
     /// a variable (universal or existential), a map, a function (-symbol), an arithmetic
     /// operation, an aggregation or an tuple of terms, e.g. `(term1, term2, …)`.
-    fn parse_term<'a>(input: Span<'a>) -> IResult<Span, Term<'a>> {
-        alt((
-            parse_binary_term,
-            parse_tuple_term,
-            parse_unary_prefix_term,
-            parse_map_term,
-            parse_primitive_term,
-            parse_variable,
-            parse_existential,
-            parse_aggregation_term,
-        ))(input)
+    fn parse_term<'a, E: ParseError<Span<'a>> + ContextError<Span<'a>>>(
+        input: Span<'a>,
+    ) -> IResult<Span, Term<'a>, E> {
+        context(
+            "parse term",
+            alt((
+                parse_binary_term,
+                parse_tuple_term,
+                parse_unary_prefix_term,
+                parse_map_term,
+                parse_primitive_term,
+                parse_variable,
+                parse_existential,
+                parse_aggregation_term,
+            )),
+        )(input)
     }
 
     /// Parse a primitive term (simple constant, iri constant, number, string).
-    fn parse_primitive_term<'a>(input: Span<'a>) -> IResult<Span, Term<'a>> {
-        alt((lex_ident, lex_iri, lex_number, lex_string))(input)
-            .map(|(rest_input, term)| (rest_input, Term::Primitive(term)))
+    fn parse_primitive_term<'a, E: ParseError<Span<'a>> + ContextError<Span<'a>>>(
+        input: Span<'a>,
+    ) -> IResult<Span, Term<'a>, E> {
+        context(
+            "parse primitive term",
+            alt((
+                parse_rdf_literal,
+                parse_ident,
+                parse_iri,
+                parse_number,
+                parse_string,
+            )),
+        )(input)
+        .map(|(rest_input, term)| (rest_input, Term::Primitive(term)))
+    }
+
+    /// Parse a rdf literal e.g. "2023-06-19"^^<http://www.w3.org/2001/XMLSchema#date>
+    fn parse_rdf_literal<'a, E: ParseError<Span<'a>> + ContextError<Span<'a>>>(
+        input: Span<'a>,
+    ) -> IResult<Span<'a>, Primitive<'a>, E> {
+        context(
+            "parse rdf literal",
+            tuple((lex_string, recognize(pair(caret, caret)), lex_iri)),
+        )(input)
+        .map(|(rest_input, (string, carets, iri))| {
+            (
+                rest_input,
+                Primitive::RdfLiteral {
+                    span: outer_span(input, rest_input),
+                    string,
+                    carets: Token {
+                        kind: TokenKind::Caret,
+                        span: carets,
+                    },
+                    iri,
+                },
+            )
+        })
+    }
+
+    fn parse_ident<'a, E: ParseError<Span<'a>> + ContextError<Span<'a>>>(
+        input: Span<'a>,
+    ) -> IResult<Span<'a>, Primitive<'a>, E> {
+        context("parse identifier", lex_ident)(input)
+            .map(|(rest_input, ident)| (rest_input, Primitive::Constant(ident)))
+    }
+
+    fn parse_iri<'a, E: ParseError<Span<'a>> + ContextError<Span<'a>>>(
+        input: Span<'a>,
+    ) -> IResult<Span<'a>, Primitive<'a>, E> {
+        context("parse iri", lex_iri)(input)
+            .map(|(rest_input, iri)| (rest_input, Primitive::Iri(iri)))
+    }
+
+    fn parse_number<'a, E: ParseError<Span<'a>> + ContextError<Span<'a>>>(
+        input: Span<'a>,
+    ) -> IResult<Span<'a>, Primitive<'a>, E> {
+        context("parse number", lex_number)(input)
+            .map(|(rest_input, number)| (rest_input, Primitive::Number(number)))
+    }
+
+    fn parse_string<'a, E: ParseError<Span<'a>> + ContextError<Span<'a>>>(
+        input: Span<'a>,
+    ) -> IResult<Span<'a>, Primitive<'a>, E> {
+        context("parse string", lex_string)(input)
+            .map(|(rest_input, string)| (rest_input, Primitive::String(string)))
     }
 
     /// Parse an unary term.
-    fn parse_unary_prefix_term<'a>(input: Span<'a>) -> IResult<Span, Term<'a>> {
-        let input_span = input.clone();
-        pair(lex_unary_prefix_operators, parse_term)(input).map(
-            |(rest_input, (operation, term))| {
-                (
-                    rest_input,
-                    Term::UnaryPrefix {
-                        span: outer_span(input_span, rest_input),
-                        operation,
-                        term: Box::new(term),
-                    },
-                )
-            },
-        )
+    fn parse_unary_prefix_term<'a, E: ParseError<Span<'a>> + ContextError<Span<'a>>>(
+        input: Span<'a>,
+    ) -> IResult<Span, Term<'a>, E> {
+        context(
+            "parse unary prefix term",
+            pair(lex_unary_prefix_operators, parse_term),
+        )(input)
+        .map(|(rest_input, (operation, term))| {
+            (
+                rest_input,
+                Term::UnaryPrefix {
+                    span: outer_span(input, rest_input),
+                    operation,
+                    term: Box::new(term),
+                },
+            )
+        })
     }
 
     /// Parse a binary infix operation of the form `term1 <op> term2`.
-    fn parse_binary_term<'a>(input: Span<'a>) -> IResult<Span, Term<'a>> {
-        pair(
-            parse_arithmetic_product,
-            opt(tuple((
-                opt(lex_whitespace),
-                alt((plus, minus)),
-                opt(lex_whitespace),
-                parse_binary_term,
-            ))),
+    fn parse_binary_term<'a, E: ParseError<Span<'a>> + ContextError<Span<'a>>>(
+        input: Span<'a>,
+    ) -> IResult<Span, Term<'a>, E> {
+        context(
+            "parse binary term",
+            pair(
+                parse_arithmetic_product,
+                opt(tuple((
+                    opt(lex_whitespace),
+                    alt((plus, minus)),
+                    opt(lex_whitespace),
+                    parse_binary_term,
+                ))),
+            ),
         )(input)
         .map(|(rest_input, (lhs, opt))| {
             (
@@ -3148,15 +3325,20 @@ mod new {
 
     /// Parse an arithmetic product, i.e. an expression involving
     /// only `*` and `/` over subexpressions.
-    fn parse_arithmetic_product<'a>(input: Span<'a>) -> IResult<Span, Term<'a>> {
-        pair(
-            parse_arithmetic_factor,
-            opt(tuple((
-                opt(lex_whitespace),
-                alt((star, slash)),
-                opt(lex_whitespace),
-                parse_arithmetic_product,
-            ))),
+    fn parse_arithmetic_product<'a, E: ParseError<Span<'a>> + ContextError<Span<'a>>>(
+        input: Span<'a>,
+    ) -> IResult<Span, Term<'a>, E> {
+        context(
+            "parse arithmetic product",
+            pair(
+                parse_arithmetic_factor,
+                opt(tuple((
+                    opt(lex_whitespace),
+                    alt((star, slash)),
+                    opt(lex_whitespace),
+                    parse_arithmetic_product,
+                ))),
+            ),
         )(input)
         .map(|(rest_input, (lhs, opt))| {
             (
@@ -3177,47 +3359,57 @@ mod new {
         })
     }
 
-    fn parse_arithmetic_factor<'a>(input: Span<'a>) -> IResult<Span, Term<'a>> {
-        alt((
-            parse_tuple_term,
-            parse_aggregation_term,
-            parse_primitive_term,
-            parse_variable,
-            parse_existential,
-        ))(input)
+    fn parse_arithmetic_factor<'a, E: ParseError<Span<'a>> + ContextError<Span<'a>>>(
+        input: Span<'a>,
+    ) -> IResult<Span, Term<'a>, E> {
+        context(
+            "parse arithmetic factor",
+            alt((
+                parse_tuple_term,
+                parse_aggregation_term,
+                parse_primitive_term,
+                parse_variable,
+                parse_existential,
+            )),
+        )(input)
     }
 
-    fn fold_arithmetic_expression<'a>(
-        initial: Term<'a>,
-        sequence: Vec<(Option<Token<'a>>, Token<'a>, Option<Token<'a>>, Term<'a>)>,
-        span_vec: Vec<Span<'a>>,
-    ) -> Term<'a> {
-        sequence
-            .into_iter()
-            .enumerate()
-            .fold(initial, |acc, (i, pair)| {
-                let (ws1, operation, ws2, expression) = pair;
-                Term::Binary {
-                    span: span_vec[i],
-                    lhs: Box::new(acc),
-                    ws1,
-                    operation,
-                    ws2,
-                    rhs: Box::new(expression),
-                }
-            })
-    }
+    // fn fold_arithmetic_expression<'a>(
+    //     initial: Term<'a>,
+    //     sequence: Vec<(Option<Token<'a>>, Token<'a>, Option<Token<'a>>, Term<'a>)>,
+    //     span_vec: Vec<Span<'a>>,
+    // ) -> Term<'a> {
+    //     sequence
+    //         .into_iter()
+    //         .enumerate()
+    //         .fold(initial, |acc, (i, pair)| {
+    //             let (ws1, operation, ws2, expression) = pair;
+    //             Term::Binary {
+    //                 span: span_vec[i],
+    //                 lhs: Box::new(acc),
+    //                 ws1,
+    //                 operation,
+    //                 ws2,
+    //                 rhs: Box::new(expression),
+    //             }
+    //         })
+    // }
 
     /// Parse an aggregation term of the form `#sum(…)`.
-    fn parse_aggregation_term<'a>(input: Span<'a>) -> IResult<Span, Term<'a>> {
-        tuple((
-            recognize(pair(hash, lex_ident)),
-            open_paren,
-            opt(lex_whitespace),
-            parse_term_list,
-            opt(lex_whitespace),
-            close_paren,
-        ))(input)
+    fn parse_aggregation_term<'a, E: ParseError<Span<'a>> + ContextError<Span<'a>>>(
+        input: Span<'a>,
+    ) -> IResult<Span, Term<'a>, E> {
+        context(
+            "parse aggregation term",
+            tuple((
+                recognize(pair(hash, lex_ident)),
+                open_paren,
+                opt(lex_whitespace),
+                parse_term_list,
+                opt(lex_whitespace),
+                close_paren,
+            )),
+        )(input)
         .map(
             |(rest_input, (operation, open_paren, ws1, terms, ws2, close_paren))| {
                 (
@@ -3241,32 +3433,47 @@ mod new {
 
     /// Parse a tuple term, either with a name (function symbol) or as a term (-list) with
     /// parenthesis.
-    fn parse_tuple_term<'a>(input: Span<'a>) -> IResult<Span, Term<'a>> {
-        parse_tuple(input)
+    fn parse_tuple_term<'a, E: ParseError<Span<'a>> + ContextError<Span<'a>>>(
+        input: Span<'a>,
+    ) -> IResult<Span, Term<'a>, E> {
+        context("parse tuple term", parse_tuple)(input)
             .map(|(rest_input, named_tuple)| (rest_input, Term::Tuple(Box::new(named_tuple))))
     }
 
     /// Parse a map as a term.
-    fn parse_map_term<'a>(input: Span<'a>) -> IResult<Span, Term<'a>> {
-        parse_map(input).map(|(rest_input, map)| (rest_input, Term::Map(Box::new(map))))
+    fn parse_map_term<'a, E: ParseError<Span<'a>> + ContextError<Span<'a>>>(
+        input: Span<'a>,
+    ) -> IResult<Span, Term<'a>, E> {
+        context("parse map term", parse_map)(input)
+            .map(|(rest_input, map)| (rest_input, Term::Map(Box::new(map))))
     }
 
     /// Parse a variable.
-    fn parse_variable<'a>(input: Span<'a>) -> IResult<Span, Term<'a>> {
-        recognize(pair(question_mark, lex_ident))(input).map(|(rest_input, var)| {
-            (
-                rest_input,
-                Term::Variable(Token {
-                    kind: TokenKind::Variable,
-                    span: var,
-                }),
-            )
-        })
+    fn parse_variable<'a, E: ParseError<Span<'a>> + ContextError<Span<'a>>>(
+        input: Span<'a>,
+    ) -> IResult<Span, Term<'a>, E> {
+        context("parse variable", recognize(pair(question_mark, lex_ident)))(input).map(
+            |(rest_input, var)| {
+                (
+                    rest_input,
+                    Term::Variable(Token {
+                        kind: TokenKind::Variable,
+                        span: var,
+                    }),
+                )
+            },
+        )
     }
 
     /// Parse an existential variable.
-    fn parse_existential<'a>(input: Span<'a>) -> IResult<Span, Term<'a>> {
-        recognize(pair(exclamation_mark, lex_ident))(input).map(|(rest_input, existential)| {
+    fn parse_existential<'a, E: ParseError<Span<'a>> + ContextError<Span<'a>>>(
+        input: Span<'a>,
+    ) -> IResult<Span, Term<'a>, E> {
+        context(
+            "parse existential",
+            recognize(pair(exclamation_mark, lex_ident)),
+        )(input)
+        .map(|(rest_input, existential)| {
             (
                 rest_input,
                 Term::Existential(Token {
@@ -3279,12 +3486,19 @@ mod new {
 
     // Order of functions is important, because of ordered choice and no backtracking
     /// Parse the operator for an infix atom.
-    fn parse_operation_token<'a>(input: Span<'a>) -> IResult<Span, Token<'a>> {
-        alt((less_equal, greater_equal, equal, unequal, less, greater))(input)
+    fn parse_operation_token<'a, E: ParseError<Span<'a>> + ContextError<Span<'a>>>(
+        input: Span<'a>,
+    ) -> IResult<Span, Token<'a>, E> {
+        context(
+            "parse operation token",
+            alt((less_equal, greater_equal, equal, unequal, less, greater)),
+        )(input)
     }
 
     #[cfg(test)]
     mod tests {
+        use nom::error::{convert_error, VerboseError};
+
         use super::*;
         use crate::io::{
             lexer::*,
@@ -3300,6 +3514,19 @@ mod new {
             };
         }
 
+        fn convert_located_span_error<'a>(input: Span<'a>, err: VerboseError<Span<'a>>) -> String {
+            convert_error(
+                *(input.fragment()),
+                VerboseError {
+                    errors: err
+                        .errors
+                        .into_iter()
+                        .map(|(span, tag)| (*(span.fragment()), tag))
+                        .collect(),
+                },
+            )
+        }
+
         #[test]
         fn fact() {
             // let input = Tokens {
@@ -3307,7 +3534,7 @@ mod new {
             // };
             let input = Span::new("a(B,C).");
             assert_eq!(
-                parse_program(input),
+                parse_program::<VerboseError<_>>(input).unwrap().1,
                 Program {
                     span: input,
                     tl_doc_comment: None,
@@ -3328,10 +3555,10 @@ mod new {
                             ws2: None,
                             terms: Some(List {
                                 span: S!(2, 1, "B,C"),
-                                first: Term::Primitive(Token {
+                                first: Term::Primitive(Primitive::Constant(Token {
                                     kind: TokenKind::Ident,
                                     span: S!(2, 1, "B"),
-                                }),
+                                })),
                                 rest: Some(vec![(
                                     None,
                                     Token {
@@ -3339,10 +3566,10 @@ mod new {
                                         span: S!(3, 1, ",")
                                     },
                                     None,
-                                    Term::Primitive(Token {
+                                    Term::Primitive(Primitive::Constant(Token {
                                         kind: TokenKind::Ident,
                                         span: S!(4, 1, "C"),
-                                    }),
+                                    })),
                                 )]),
                             }),
                             ws3: None,
@@ -3367,7 +3594,7 @@ mod new {
                 r#"@base <http://example.org/foo/>.@prefix rdfs:<http://www.w3.org/2000/01/rdf-schema#>.@import sourceA:-csv{resource="sources/dataA.csv"}.@export a:-csv{}.@output a, b, c."#,
             );
             assert_eq!(
-                parse_program(input),
+                parse_program::<VerboseError<_>>(input).unwrap().1,
                 Program {
                     tl_doc_comment: None,
                     span: input,
@@ -3464,20 +3691,20 @@ mod new {
                                     span: S!(106, 1, "resource=\"sources/dataA.csv\""),
                                     first: Pair {
                                         span: S!(106, 1, "resource=\"sources/dataA.csv\""),
-                                        key: Term::Primitive(Token {
+                                        key: Term::Primitive(Primitive::Constant(Token {
                                             kind: TokenKind::Ident,
                                             span: S!(106, 1, "resource"),
-                                        }),
+                                        })),
                                         ws1: None,
                                         equal: Token {
                                             kind: TokenKind::Equal,
                                             span: S!(114, 1, "="),
                                         },
                                         ws2: None,
-                                        value: Term::Primitive(Token {
+                                        value: Term::Primitive(Primitive::String(Token {
                                             kind: TokenKind::String,
                                             span: S!(115, 1, "\"sources/dataA.csv\""),
-                                        })
+                                        })),
                                     },
                                     rest: None,
                                 }),
@@ -3604,7 +3831,7 @@ mod new {
         fn ignore_ws_and_comments() {
             let input = Span::new("   Hi   %cool comment\n");
             assert_eq!(
-                super::ignore_ws_and_comments(lex_ident)(input),
+                super::ignore_ws_and_comments(lex_ident::<nom::error::Error<_>>)(input),
                 Ok((
                     S!(22, 2, ""),
                     Token {
@@ -3619,7 +3846,7 @@ mod new {
         fn fact_with_ws() {
             let input = Span::new("some(Fact, with, whitespace) . % and a super useful comment\n");
             assert_eq!(
-                parse_program(input),
+                parse_program::<VerboseError<_>>(input).unwrap().1,
                 Program {
                     span: input,
                     tl_doc_comment: None,
@@ -3641,10 +3868,10 @@ mod new {
                                 ws2: None,
                                 terms: Some(List {
                                     span: S!(5, 1, "Fact, with, whitespace"),
-                                    first: Term::Primitive(Token {
+                                    first: Term::Primitive(Primitive::Constant(Token {
                                         kind: TokenKind::Ident,
                                         span: S!(5, 1, "Fact"),
-                                    }),
+                                    })),
                                     rest: Some(vec![
                                         (
                                             None,
@@ -3656,10 +3883,10 @@ mod new {
                                                 kind: TokenKind::Whitespace,
                                                 span: S!(10, 1, " "),
                                             }),
-                                            Term::Primitive(Token {
+                                            Term::Primitive(Primitive::Constant(Token {
                                                 kind: TokenKind::Ident,
                                                 span: S!(11, 1, "with")
-                                            }),
+                                            })),
                                         ),
                                         (
                                             None,
@@ -3671,10 +3898,10 @@ mod new {
                                                 kind: TokenKind::Whitespace,
                                                 span: S!(16, 1, " "),
                                             }),
-                                            Term::Primitive(Token {
+                                            Term::Primitive(Primitive::Constant(Token {
                                                 kind: TokenKind::Ident,
                                                 span: S!(17, 1, "whitespace")
-                                            }),
+                                            })),
                                         ),
                                     ]),
                                 }),
@@ -3717,7 +3944,7 @@ mod new {
 % find old trees. It can be modified to use a different species or genus of
 % plant, and by changing the required age.
 
-@import tree :- csv{format=(string, string, int, int), resource="https://raw.githubusercontent.com/knowsys/nemo-examples/main/examples/lime-trees/dresden-trees-ages-heights.csv"} . % location URL, species, age, height in m
+@import tree :- csv{format=(string, string, string, int, int), resource="https://raw.githubusercontent.com/knowsys/nemo-examples/main/examples/lime-trees/dresden-trees-ages-heights.csv"} . % location URL, species, age, height in m
 @import taxon :- csv{format=(string, string, string), resource="https://raw.githubusercontent.com/knowsys/nemo-examples/main/examples/lime-trees/wikidata-taxon-name-parent.csv.gz"} . % location URL, species, age, height in m
 
 limeSpecies(?X, "Tilia") :- taxon(?X, "Tilia", ?P).
@@ -3725,27 +3952,47 @@ limeSpecies(?X, ?Name) :- taxon(?X, ?Name, ?Y), limeSpecies(?Y, ?N).
 
 oldLime(?location,?species,?age) :- tree(?location,?species,?age,?heightInMeters), ?age > 200, limeSpecies(?id,?species) ."#,
             );
-            let ast = parse_program(input);
-            println!("{}", ast);
-            assert_eq!(
-                {
-                    let mut result = String::new();
-                    for token in get_all_tokens(&ast) {
-                        result.push_str(token.span().fragment());
-                    }
-                    println!("{}", result);
-                    result
-                },
-                *input.fragment(),
-            );
+            let ast = parse_program::<VerboseError<_>>(input);
+            match &ast {
+                Ok((rest_input, ast)) => {
+                    println!("Rest Input:\n{:#?}\n\n{}", rest_input, ast);
+                    assert_eq!(
+                        {
+                            let mut string_from_tokens = String::new();
+                            for token in get_all_tokens(ast) {
+                                string_from_tokens.push_str(token.span().fragment());
+                            }
+                            println!("String from Tokens:\n");
+                            println!("{}\n", string_from_tokens);
+                            string_from_tokens
+                        },
+                        *input.fragment(),
+                    );
+                }
+                Err(nom::Err::Error(err)) | Err(nom::Err::Failure(err)) => {
+                    println!(
+                        "PRINT ERROR:\n\n{}",
+                        convert_located_span_error(input, err.clone())
+                    );
+                }
+                Err(err) => panic!("{}", err),
+            }
+            assert!(ast.is_ok());
         }
 
         #[test]
         fn parser_test() {
             let str = std::fs::read_to_string("../testfile.rls").expect("testfile not found");
             let input = Span::new(str.as_str());
-            println!("{}", parse_program(input));
-            // assert!(false);
+            let result = parse_program::<VerboseError<_>>(input);
+            match result {
+                Ok(ast) => println!("{}", ast.1),
+                Err(nom::Err::Error(err)) | Err(nom::Err::Failure(err)) => {
+                    println!("{}", convert_located_span_error(input, err))
+                }
+                Err(_) => (),
+            }
+            assert!(false);
         }
 
         #[test]
@@ -3766,120 +4013,143 @@ oldLime(?location,?species,?age) :- tree(?location,?species,?age,?heightInMeters
 
             assert_eq!(
                 {
-                    let result = parse_term(Span::new("42"));
+                    let result = parse_term::<VerboseError<_>>(Span::new("42"));
                     result.unwrap().1
                 },
-                Term::Primitive(T! {Number, 0, 1, "42"}),
+                Term::Primitive(Primitive::Number(T! {Number, 0, 1, "42"})),
             );
 
             assert_eq!(
                 {
-                    let result = parse_term(Span::new("35+7"));
+                    let result = parse_term::<VerboseError<_>>(Span::new("35+7"));
                     result.unwrap().1
                 },
                 Term::Binary {
                     span: s!(0, 1, "35+7"),
-                    lhs: Box::new(Term::Primitive(T! {Number, 0, 1, "35"})),
+                    lhs: Box::new(Term::Primitive(Primitive::Number(T! {Number, 0, 1, "35"}))),
                     ws1: None,
                     operation: T! {Plus, 2, 1, "+"},
                     ws2: None,
-                    rhs: Box::new(Term::Primitive(T! {Number, 3, 1, "7"}))
+                    rhs: Box::new(Term::Primitive(Primitive::Number(T! {Number, 3, 1, "7"}))),
                 }
             );
 
             assert_eq!(
                 {
-                    let result = parse_term(Span::new("6*7"));
+                    let result = parse_term::<VerboseError<_>>(Span::new("6*7"));
                     result.unwrap().1
                 },
                 Term::Binary {
                     span: s!(0, 1, "6*7"),
-                    lhs: Box::new(Term::Primitive(T! {Number, 0,1,"6"})),
+                    lhs: Box::new(Term::Primitive(Primitive::Number(T! {Number, 0,1,"6"}))),
                     ws1: None,
                     operation: T! {Star, 1,1,"*"},
                     ws2: None,
-                    rhs: Box::new(Term::Primitive(T! {Number, 2,1,"7"})),
+                    rhs: Box::new(Term::Primitive(Primitive::Number(T! {Number, 2,1,"7"}))),
                 }
             );
 
             assert_eq!(
                 {
-                    let result = parse_term(Span::new("49-7"));
+                    let result = parse_term::<VerboseError<_>>(Span::new("49-7"));
                     result.unwrap().1
                 },
                 Term::Binary {
                     span: s!(0, 1, "49-7"),
-                    lhs: Box::new(Term::Primitive(T! {Number, 0, 1, "49"})),
+                    lhs: Box::new(Term::Primitive(Primitive::Number(T! {Number, 0, 1, "49"}))),
                     ws1: None,
                     operation: T! {Minus, 2, 1, "-"},
                     ws2: None,
-                    rhs: Box::new(Term::Primitive(T! {Number, 3, 1, "7"}))
+                    rhs: Box::new(Term::Primitive(Primitive::Number(T! {Number, 3, 1, "7"}))),
                 }
             );
 
             assert_eq!(
                 {
-                    let result = parse_term(Span::new("84/2"));
+                    let result = parse_term::<VerboseError<_>>(Span::new("84/2"));
                     result.unwrap().1
                 },
                 Term::Binary {
                     span: s!(0, 1, "84/2"),
-                    lhs: Box::new(Term::Primitive(T! {Number, 0, 1, "84"})),
+                    lhs: Box::new(Term::Primitive(Primitive::Number(T! {Number, 0, 1, "84"}))),
                     ws1: None,
                     operation: T! {Slash, 2, 1, "/"},
                     ws2: None,
-                    rhs: Box::new(Term::Primitive(T! {Number, 3, 1, "2"}))
+                    rhs: Box::new(Term::Primitive(Primitive::Number(T! {Number, 3, 1, "2"}))),
                 }
             );
 
             assert_eq!(
                 {
-                    let result = parse_term(Span::new("5*7+7"));
+                    let result = parse_term::<VerboseError<_>>(Span::new("5*7+7"));
                     result.unwrap().1
                 },
                 Term::Binary {
                     span: s!(0, 1, "5*7+7"),
                     lhs: Box::new(Term::Binary {
                         span: s!(0, 1, "5*7"),
-                        lhs: Box::new(Term::Primitive(T! {Number, 0,1,"5"})),
+                        lhs: Box::new(Term::Primitive(Primitive::Number(T! {Number, 0,1,"5"}))),
                         ws1: None,
                         operation: T! {Star, 1,1,"*"},
                         ws2: None,
-                        rhs: Box::new(Term::Primitive(T! {Number, 2,1,"7"}))
+                        rhs: Box::new(Term::Primitive(Primitive::Number(T! {Number, 2,1,"7"}))),
                     }),
                     ws1: None,
                     operation: T! {Plus, 3,1,"+"},
                     ws2: None,
-                    rhs: Box::new(Term::Primitive(T! {Number, 4,1,"7"})),
+                    rhs: Box::new(Term::Primitive(Primitive::Number(T! {Number, 4,1,"7"}))),
                 }
             );
 
             assert_eq!(
                 {
-                    let result = parse_term(Span::new("7+5*7"));
+                    let result = parse_term::<VerboseError<_>>(Span::new("7+5*7"));
                     result.unwrap().1
                 },
                 Term::Binary {
                     span: s!(0, 1, "7+5*7"),
-                    lhs: Box::new(Term::Primitive(T! {Number, 0,1,"7"})),
+                    lhs: Box::new(Term::Primitive(Primitive::Number(T! {Number, 0,1,"7"}))),
                     ws1: None,
                     operation: T! {Plus, 1,1,"+"},
                     ws2: None,
                     rhs: Box::new(Term::Binary {
                         span: s!(2, 1, "5*7"),
-                        lhs: Box::new(Term::Primitive(T! {Number, 2,1,"5"})),
+                        lhs: Box::new(Term::Primitive(Primitive::Number(T! {Number, 2,1,"5"}))),
                         ws1: None,
                         operation: T! {Star, 3,1,"*"},
                         ws2: None,
-                        rhs: Box::new(Term::Primitive(T! {Number, 4,1,"7"}))
+                        rhs: Box::new(Term::Primitive(Primitive::Number(T! {Number, 4,1,"7"}))),
                     }),
                 }
             );
 
             assert_eq!(
                 {
-                    let result = parse_term(Span::new("(15+3*2-(7+35)*8)/3"));
-                    result.unwrap().1
+                    let input = Span::new("(15+3*2-(7+35)*8)/3");
+                    let result = parse_term::<VerboseError<_>>(input);
+                    // let result = parse_term::<VerboseError<_>>(Span::new("(15+3*2-(7+35)*8)/3"));
+                    match result {
+                        Ok(ast) => {
+                            println!("{}", ast.1);
+                            ast.1
+                        }
+                        Err(nom::Err::Error(err)) | Err(nom::Err::Failure(err)) => {
+                            panic!(
+                                "{}",
+                                convert_error(
+                                    *(input.fragment()),
+                                    VerboseError {
+                                        errors: err
+                                            .errors
+                                            .into_iter()
+                                            .map(|(span, tag)| { (*(span.fragment()), tag) })
+                                            .collect()
+                                    }
+                                )
+                            )
+                        }
+                        Err(nom::Err::Incomplete(err)) => panic!("{:#?}", err),
+                    }
                 },
                 Term::Binary {
                     span: s!(0, 1, "(15+3*2-(7+35)*8)/3"),
@@ -3893,7 +4163,9 @@ oldLime(?location,?species,?age) :- tree(?location,?species,?age,?heightInMeters
                             span: s!(1, 1, "15+3*2-(7+35)*8"),
                             first: Term::Binary {
                                 span: s!(1, 1, "15+3*2-(7+35)*8"),
-                                lhs: Box::new(Term::Primitive(T! {Number, 1,1,"15"})),
+                                lhs: Box::new(Term::Primitive(Primitive::Number(
+                                    T! {Number, 1,1,"15"}
+                                ))),
                                 ws1: None,
                                 operation: T! {Plus, 3,1,"+"},
                                 ws2: None,
@@ -3901,11 +4173,15 @@ oldLime(?location,?species,?age) :- tree(?location,?species,?age,?heightInMeters
                                     span: s!(4, 1, "3*2-(7+35)*8"),
                                     lhs: Box::new(Term::Binary {
                                         span: s!(4, 1, "3*2"),
-                                        lhs: Box::new(Term::Primitive(T! {Number, 4,1,"3"})),
+                                        lhs: Box::new(Term::Primitive(Primitive::Number(
+                                            T! {Number, 4,1,"3"}
+                                        ))),
                                         ws1: None,
                                         operation: T! {Star, 5,1,"*"},
                                         ws2: None,
-                                        rhs: Box::new(Term::Primitive(T! {Number, 6,1,"2"})),
+                                        rhs: Box::new(Term::Primitive(Primitive::Number(
+                                            T! {Number, 6,1,"2"}
+                                        ))),
                                     }),
                                     ws1: None,
                                     operation: T! {Minus, 7,1,"-"},
@@ -3923,13 +4199,13 @@ oldLime(?location,?species,?age) :- tree(?location,?species,?age,?heightInMeters
                                                 first: Term::Binary {
                                                     span: s!(9, 1, "7+35"),
                                                     lhs: Box::new(Term::Primitive(
-                                                        T! {Number, 9,1,"7"}
+                                                        Primitive::Number(T! {Number, 9,1,"7"})
                                                     )),
                                                     ws1: None,
                                                     operation: T! {Plus, 10,1,"+"},
                                                     ws2: None,
                                                     rhs: Box::new(Term::Primitive(
-                                                        T! {Number, 11,1,"35"}
+                                                        Primitive::Number(T! {Number, 11,1,"35"})
                                                     )),
                                                 },
                                                 rest: None
@@ -3940,7 +4216,9 @@ oldLime(?location,?species,?age) :- tree(?location,?species,?age,?heightInMeters
                                         ws1: None,
                                         operation: T! {Star, 14,1,"*"},
                                         ws2: None,
-                                        rhs: Box::new(Term::Primitive(T! {Number, 15,1,"8"})),
+                                        rhs: Box::new(Term::Primitive(Primitive::Number(
+                                            T! {Number, 15,1,"8"}
+                                        ))),
                                     }),
                                 }),
                             },
@@ -3952,7 +4230,7 @@ oldLime(?location,?species,?age) :- tree(?location,?species,?age,?heightInMeters
                     ws1: None,
                     operation: T! {Slash, 17,1,"/"},
                     ws2: None,
-                    rhs: Box::new(Term::Primitive(T! {Number, 18,1,"3"})),
+                    rhs: Box::new(Term::Primitive(Primitive::Number(T! {Number, 18,1,"3"}))),
                 }
             );
             // Term::Binary {
@@ -3966,12 +4244,12 @@ oldLime(?location,?species,?age) :- tree(?location,?species,?age,?heightInMeters
 
             assert_eq!(
                 {
-                    let result = parse_term(Span::new("15+3*2-(7+35)*8/3"));
+                    let result = parse_term::<VerboseError<_>>(Span::new("15+3*2-(7+35)*8/3"));
                     result.unwrap().1
                 },
                 Term::Binary {
                     span: s!(0, 1, "15+3*2-(7+35)*8/3"),
-                    lhs: Box::new(Term::Primitive(T! {Number, 0,1,"15"})),
+                    lhs: Box::new(Term::Primitive(Primitive::Number(T! {Number, 0,1,"15"}))),
                     ws1: None,
                     operation: T! {Plus, 2,1,"+"},
                     ws2: None,
@@ -3979,11 +4257,11 @@ oldLime(?location,?species,?age) :- tree(?location,?species,?age,?heightInMeters
                         span: s!(3, 1, "3*2-(7+35)*8/3"),
                         lhs: Box::new(Term::Binary {
                             span: s!(3, 1, "3*2"),
-                            lhs: Box::new(Term::Primitive(T! {Number, 3,1,"3"})),
+                            lhs: Box::new(Term::Primitive(Primitive::Number(T! {Number, 3,1,"3"}))),
                             ws1: None,
                             operation: T! {Star, 4,1,"*"},
                             ws2: None,
-                            rhs: Box::new(Term::Primitive(T! {Number, 5,1,"2"})),
+                            rhs: Box::new(Term::Primitive(Primitive::Number(T! {Number, 5,1,"2"}))),
                         }),
                         ws1: None,
                         operation: T! {Minus, 6,1,"-"},
@@ -4000,11 +4278,15 @@ oldLime(?location,?species,?age) :- tree(?location,?species,?age,?heightInMeters
                                     span: s!(8, 1, "7+35"),
                                     first: Term::Binary {
                                         span: s!(8, 1, "7+35"),
-                                        lhs: Box::new(Term::Primitive(T! {Number, 8,1,"7"})),
+                                        lhs: Box::new(Term::Primitive(Primitive::Number(
+                                            T! {Number, 8,1,"7"}
+                                        ))),
                                         ws1: None,
                                         operation: T! {Plus, 9,1,"+"},
                                         ws2: None,
-                                        rhs: Box::new(Term::Primitive(T! {Number, 10,1,"35"})),
+                                        rhs: Box::new(Term::Primitive(Primitive::Number(
+                                            T! {Number, 10,1,"35"}
+                                        ))),
                                     },
                                     rest: None,
                                 }),
@@ -4016,11 +4298,15 @@ oldLime(?location,?species,?age) :- tree(?location,?species,?age,?heightInMeters
                             ws2: None,
                             rhs: Box::new(Term::Binary {
                                 span: s!(14, 1, "8/3"),
-                                lhs: Box::new(Term::Primitive(T! {Number, 14,1,"8"})),
+                                lhs: Box::new(Term::Primitive(Primitive::Number(
+                                    T! {Number, 14,1,"8"}
+                                ))),
                                 ws1: None,
                                 operation: T! {Slash, 15, 1, "/"},
                                 ws2: None,
-                                rhs: Box::new(Term::Primitive(T! {Number, 16,1,"3"})),
+                                rhs: Box::new(Term::Primitive(Primitive::Number(
+                                    T! {Number, 16,1,"3"}
+                                ))),
                             }),
                         }),
                     }),
@@ -4028,27 +4314,27 @@ oldLime(?location,?species,?age) :- tree(?location,?species,?age,?heightInMeters
             );
 
             // assert_eq!({
-            //     let result = parse_term(Span::new("1*2*3*4*5"));
+            //     let result = parse_term::<VerboseError<_>>(Span::new("1*2*3*4*5"));
             //     result.unwrap().1
             // },);
 
             // assert_eq!({
-            //     let result = parse_term(Span::new("(5+3)"));
+            //     let result = parse_term::<VerboseError<_>>(Span::new("(5+3)"));
             //     result.unwrap().1
             // },);
 
             // assert_eq!({
-            //     let result = parse_term(Span::new("( int , int , string , skip )"));
+            //     let result = parse_term::<VerboseError<_>>(Span::new("( int , int , string , skip )"));
             //     result.unwrap().1
             // },);
 
             // assert_eq!({
-            //     let result = parse_term(Span::new("(14+4)+3"));
+            //     let result = parse_term::<VerboseError<_>>(Span::new("(14+4)+3"));
             //     result.unwrap().1
             // },);
 
             // assert_eq!({
-            //     let result = parse_term(Span::new(
+            //     let result = parse_term::<VerboseError<_>>(Span::new(
             //         "(3 + #sum(?X, ?Y)) * (LENGTH(\"Hello, World!\") + 3)",
             //     ));
             //     result.unwrap().1
