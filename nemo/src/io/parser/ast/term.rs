@@ -34,6 +34,7 @@ pub(crate) enum Term<'a> {
     },
     Tuple(Box<Tuple<'a>>),
     Map(Box<Map<'a>>),
+    Blank(Token<'a>),
 }
 impl AstNode for Term<'_> {
     fn children(&self) -> Option<Vec<&dyn AstNode>> {
@@ -88,8 +89,10 @@ impl AstNode for Term<'_> {
                 vec.push(close_paren);
                 Some(vec)
             }
+            // TODO: check whether directly the children or Some(vec![named_tuple]) should get returned (for fidelity in ast)
             Term::Tuple(named_tuple) => named_tuple.children(),
             Term::Map(map) => map.children(),
+            Term::Blank(token) => Some(vec![token]),
         }
     }
 
@@ -103,6 +106,7 @@ impl AstNode for Term<'_> {
             Term::Aggregation { span, .. } => *span,
             Term::Tuple(named_tuple) => named_tuple.span(),
             Term::Map(map) => map.span(),
+            Term::Blank(t) => t.span(),
         }
     }
 
@@ -146,6 +150,7 @@ impl AstNode for Term<'_> {
                 }
             }
             Term::Map(_) => name!("Map"),
+            Term::Blank(_) => name!("Blank"),
         }
     }
 }

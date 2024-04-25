@@ -2405,7 +2405,7 @@ mod new {
         exp, greater, greater_equal, hash, less, less_equal, lex_comment, lex_doc_comment,
         lex_ident, lex_iri, lex_number, lex_operators, lex_string, lex_toplevel_doc_comment,
         lex_unary_prefix_operators, lex_whitespace, minus, open_brace, open_paren, plus,
-        question_mark, slash, star, tilde, unequal, Span, Token, TokenKind,
+        question_mark, slash, star, tilde, underscore, unequal, Span, Token, TokenKind,
     };
     use crate::io::parser::ast::AstNode;
     use nom::combinator::{all_consuming, cut, map, opt, recognize};
@@ -3162,6 +3162,7 @@ mod new {
                 parse_variable,
                 parse_existential,
                 parse_aggregation_term,
+                parse_blank,
             )),
         )(input)
     }
@@ -3451,6 +3452,14 @@ mod new {
                 )
             },
         )
+    }
+
+    /// Parse a `_`
+    fn parse_blank<'a, E: ParseError<Span<'a>> + ContextError<Span<'a>>>(
+        input: Span<'a>,
+    ) -> IResult<Span, Term<'a>, E> {
+        context("parse blank", underscore)(input)
+            .map(|(rest_input, underscore)| (rest_input, Term::Blank(underscore)))
     }
 
     /// Parse a tuple term, either with a name (function symbol) or as a term (-list) with
