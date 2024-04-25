@@ -12,6 +12,9 @@ pub mod rdf;
 pub mod rdf_reader;
 pub mod rdf_writer;
 
+pub mod json;
+pub mod json_reader;
+
 pub(crate) use dsv::DsvHandler;
 pub(crate) use rdf::RdfHandler;
 
