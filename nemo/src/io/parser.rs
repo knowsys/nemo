@@ -2402,8 +2402,8 @@ mod new {
     };
     use crate::io::lexer::{
         arrow, at, caret, close_brace, close_paren, colon, comma, dot, equal, exclamation_mark,
-        greater, greater_equal, hash, less, less_equal, lex_comment, lex_doc_comment, lex_ident,
-        lex_iri, lex_number, lex_operators, lex_string, lex_toplevel_doc_comment,
+        exp, greater, greater_equal, hash, less, less_equal, lex_comment, lex_doc_comment,
+        lex_ident, lex_iri, lex_number, lex_operators, lex_string, lex_toplevel_doc_comment,
         lex_unary_prefix_operators, lex_whitespace, minus, open_brace, open_paren, plus,
         question_mark, slash, star, tilde, unequal, Span, Token, TokenKind,
     };
@@ -3224,8 +3224,63 @@ mod new {
     fn parse_number<'a, E: ParseError<Span<'a>> + ContextError<Span<'a>>>(
         input: Span<'a>,
     ) -> IResult<Span<'a>, Primitive<'a>, E> {
-        context("parse number", lex_number)(input)
-            .map(|(rest_input, number)| (rest_input, Primitive::Number(number)))
+        context("parse number", alt((parse_decimal, parse_integer)))(input)
+    }
+
+    fn parse_decimal<'a, E: ParseError<Span<'a>> + ContextError<Span<'a>>>(
+        input: Span<'a>,
+    ) -> IResult<Span<'a>, Primitive<'a>, E> {
+        context(
+            "parse decimal",
+            tuple((
+                opt(alt((plus, minus))),
+                opt(lex_number),
+                dot,
+                lex_number,
+                opt(parse_exponent),
+            )),
+        )(input)
+        .map(|(rest_input, (sign, before, dot, after, exponent))| {
+            dbg!(&sign, &before, &dot, &after, &exponent);
+            (
+                rest_input,
+                Primitive::Number {
+                    span: outer_span(input, rest_input),
+                    sign,
+                    before,
+                    dot: Some(dot),
+                    after,
+                    exponent,
+                },
+            )
+        })
+    }
+
+    fn parse_integer<'a, E: ParseError<Span<'a>> + ContextError<Span<'a>>>(
+        input: Span<'a>,
+    ) -> IResult<Span<'a>, Primitive<'a>, E> {
+        context("parse integer", pair(opt(alt((plus, minus))), lex_number))(input).map(
+            |(rest_input, (sign, number))| {
+                (
+                    rest_input,
+                    Primitive::Number {
+                        span: outer_span(input, rest_input),
+                        sign,
+                        before: None,
+                        dot: None,
+                        after: number,
+                        exponent: None,
+                    },
+                )
+            },
+        )
+    }
+
+    fn parse_exponent<'a, E: ParseError<Span<'a>> + ContextError<Span<'a>>>(
+        input: Span<'a>,
+    ) -> IResult<Span<'a>, Exponent<'a>, E> {
+        tuple((exp, opt(alt((plus, minus))), lex_number))(input)
+            .map(|(rest_input, (e, sign, number))| (rest_input, Exponent { e, sign, number }))
     }
 
     fn parse_string<'a, E: ParseError<Span<'a>> + ContextError<Span<'a>>>(
@@ -3475,7 +3530,14 @@ mod new {
             // },
         };
 
-        macro_rules! S {
+        macro_rules! T {
+            ($tok_kind: expr, $offset: literal, $line: literal, $str: literal) => {
+                Token::new($tok_kind, unsafe {
+                    Span::new_from_raw_offset($offset, $line, $str, ())
+                })
+            };
+        }
+        macro_rules! s {
             ($offset:literal,$line:literal,$str:literal) => {
                 unsafe { Span::new_from_raw_offset($offset, $line, $str, ()) }
             };
@@ -3506,49 +3568,49 @@ mod new {
                     span: input,
                     tl_doc_comment: None,
                     statements: vec![Statement::Fact {
-                        span: S!(0, 1, "a(B,C)."),
+                        span: s!(0, 1, "a(B,C)."),
                         doc_comment: None,
                         atom: Atom::Positive(Tuple {
-                            span: S!(0, 1, "a(B,C)"),
+                            span: s!(0, 1, "a(B,C)"),
                             identifier: Some(Token {
                                 kind: TokenKind::Ident,
-                                span: S!(0, 1, "a"),
+                                span: s!(0, 1, "a"),
                             }),
                             ws1: None,
                             open_paren: Token {
                                 kind: TokenKind::OpenParen,
-                                span: S!(1, 1, "("),
+                                span: s!(1, 1, "("),
                             },
                             ws2: None,
                             terms: Some(List {
-                                span: S!(2, 1, "B,C"),
+                                span: s!(2, 1, "B,C"),
                                 first: Term::Primitive(Primitive::Constant(Token {
                                     kind: TokenKind::Ident,
-                                    span: S!(2, 1, "B"),
+                                    span: s!(2, 1, "B"),
                                 })),
                                 rest: Some(vec![(
                                     None,
                                     Token {
                                         kind: TokenKind::Comma,
-                                        span: S!(3, 1, ",")
+                                        span: s!(3, 1, ",")
                                     },
                                     None,
                                     Term::Primitive(Primitive::Constant(Token {
                                         kind: TokenKind::Ident,
-                                        span: S!(4, 1, "C"),
+                                        span: s!(4, 1, "C"),
                                     })),
                                 )]),
                             }),
                             ws3: None,
                             close_paren: Token {
                                 kind: TokenKind::CloseParen,
-                                span: S!(5, 1, ")"),
+                                span: s!(5, 1, ")"),
                             },
                         }),
                         ws: None,
                         dot: Token {
                             kind: TokenKind::Dot,
-                            span: S!(6, 1, ".")
+                            span: s!(6, 1, ".")
                         }
                     }],
                 }
@@ -3567,28 +3629,28 @@ mod new {
                     span: input,
                     statements: vec![
                         Statement::Directive(Directive::Base {
-                            span: S!(0, 1, "@base <http://example.org/foo/>."),
+                            span: s!(0, 1, "@base <http://example.org/foo/>."),
                             doc_comment: None,
                             kw: Token {
                                 kind: TokenKind::Base,
-                                span: S!(0, 1, "@base"),
+                                span: s!(0, 1, "@base"),
                             },
                             ws1: Some(Token {
                                 kind: TokenKind::Whitespace,
-                                span: S!(5, 1, " ")
+                                span: s!(5, 1, " ")
                             }),
                             base_iri: Token {
                                 kind: TokenKind::Iri,
-                                span: S!(6, 1, "<http://example.org/foo/>")
+                                span: s!(6, 1, "<http://example.org/foo/>")
                             },
                             ws2: None,
                             dot: Token {
                                 kind: TokenKind::Dot,
-                                span: S!(31, 1, ".")
+                                span: s!(31, 1, ".")
                             },
                         }),
                         Statement::Directive(Directive::Prefix {
-                            span: S!(
+                            span: s!(
                                 32,
                                 1,
                                 "@prefix rdfs:<http://www.w3.org/2000/01/rdf-schema#>."
@@ -3596,29 +3658,29 @@ mod new {
                             doc_comment: None,
                             kw: Token {
                                 kind: TokenKind::Prefix,
-                                span: S!(32, 1, "@prefix"),
+                                span: s!(32, 1, "@prefix"),
                             },
                             ws1: Some(Token {
                                 kind: TokenKind::Whitespace,
-                                span: S!(39, 1, " ")
+                                span: s!(39, 1, " ")
                             }),
                             prefix: Token {
                                 kind: TokenKind::Ident,
-                                span: S!(40, 1, "rdfs:"),
+                                span: s!(40, 1, "rdfs:"),
                             },
                             ws2: None,
                             prefix_iri: Token {
                                 kind: TokenKind::Iri,
-                                span: S!(45, 1, "<http://www.w3.org/2000/01/rdf-schema#>"),
+                                span: s!(45, 1, "<http://www.w3.org/2000/01/rdf-schema#>"),
                             },
                             ws3: None,
                             dot: Token {
                                 kind: TokenKind::Dot,
-                                span: S!(84, 1, ".")
+                                span: s!(84, 1, ".")
                             }
                         }),
                         Statement::Directive(Directive::Import {
-                            span: S!(
+                            span: s!(
                                 85,
                                 1,
                                 r#"@import sourceA:-csv{resource="sources/dataA.csv"}."#
@@ -3626,51 +3688,51 @@ mod new {
                             doc_comment: None,
                             kw: Token {
                                 kind: TokenKind::Import,
-                                span: S!(85, 1, "@import"),
+                                span: s!(85, 1, "@import"),
                             },
                             ws1: Token {
                                 kind: TokenKind::Whitespace,
-                                span: S!(92, 1, " "),
+                                span: s!(92, 1, " "),
                             },
                             predicate: Token {
                                 kind: TokenKind::Ident,
-                                span: S!(93, 1, "sourceA"),
+                                span: s!(93, 1, "sourceA"),
                             },
                             ws2: None,
                             arrow: Token {
                                 kind: TokenKind::Arrow,
-                                span: S!(100, 1, ":-"),
+                                span: s!(100, 1, ":-"),
                             },
                             ws3: None,
                             map: Map {
-                                span: S!(102, 1, r#"csv{resource="sources/dataA.csv"}"#),
+                                span: s!(102, 1, r#"csv{resource="sources/dataA.csv"}"#),
                                 identifier: Some(Token {
                                     kind: TokenKind::Ident,
-                                    span: S!(102, 1, "csv")
+                                    span: s!(102, 1, "csv")
                                 }),
                                 ws1: None,
                                 open_brace: Token {
                                     kind: TokenKind::OpenBrace,
-                                    span: S!(105, 1, "{")
+                                    span: s!(105, 1, "{")
                                 },
                                 ws2: None,
                                 pairs: Some(List {
-                                    span: S!(106, 1, "resource=\"sources/dataA.csv\""),
+                                    span: s!(106, 1, "resource=\"sources/dataA.csv\""),
                                     first: Pair {
-                                        span: S!(106, 1, "resource=\"sources/dataA.csv\""),
+                                        span: s!(106, 1, "resource=\"sources/dataA.csv\""),
                                         key: Term::Primitive(Primitive::Constant(Token {
                                             kind: TokenKind::Ident,
-                                            span: S!(106, 1, "resource"),
+                                            span: s!(106, 1, "resource"),
                                         })),
                                         ws1: None,
                                         equal: Token {
                                             kind: TokenKind::Equal,
-                                            span: S!(114, 1, "="),
+                                            span: s!(114, 1, "="),
                                         },
                                         ws2: None,
                                         value: Term::Primitive(Primitive::String(Token {
                                             kind: TokenKind::String,
-                                            span: S!(115, 1, "\"sources/dataA.csv\""),
+                                            span: s!(115, 1, "\"sources/dataA.csv\""),
                                         })),
                                     },
                                     rest: None,
@@ -3678,107 +3740,107 @@ mod new {
                                 ws3: None,
                                 close_brace: Token {
                                     kind: TokenKind::CloseBrace,
-                                    span: S!(134, 1, "}")
+                                    span: s!(134, 1, "}")
                                 },
                             },
                             ws4: None,
                             dot: Token {
                                 kind: TokenKind::Dot,
-                                span: S!(135, 1, ".")
+                                span: s!(135, 1, ".")
                             }
                         }),
                         Statement::Directive(Directive::Export {
-                            span: S!(136, 1, "@export a:-csv{}."),
+                            span: s!(136, 1, "@export a:-csv{}."),
                             doc_comment: None,
                             kw: Token {
                                 kind: TokenKind::Export,
-                                span: S!(136, 1, "@export"),
+                                span: s!(136, 1, "@export"),
                             },
                             ws1: Token {
                                 kind: TokenKind::Whitespace,
-                                span: S!(143, 1, " "),
+                                span: s!(143, 1, " "),
                             },
                             predicate: Token {
                                 kind: TokenKind::Ident,
-                                span: S!(144, 1, "a"),
+                                span: s!(144, 1, "a"),
                             },
                             ws2: None,
                             arrow: Token {
                                 kind: TokenKind::Arrow,
-                                span: S!(145, 1, ":-"),
+                                span: s!(145, 1, ":-"),
                             },
                             ws3: None,
                             map: Map {
-                                span: S!(147, 1, "csv{}"),
+                                span: s!(147, 1, "csv{}"),
                                 identifier: Some(Token {
                                     kind: TokenKind::Ident,
-                                    span: S!(147, 1, "csv"),
+                                    span: s!(147, 1, "csv"),
                                 }),
                                 ws1: None,
                                 open_brace: Token {
                                     kind: TokenKind::OpenBrace,
-                                    span: S!(150, 1, "{"),
+                                    span: s!(150, 1, "{"),
                                 },
                                 ws2: None,
                                 pairs: None,
                                 ws3: None,
                                 close_brace: Token {
                                     kind: TokenKind::CloseBrace,
-                                    span: S!(151, 1, "}"),
+                                    span: s!(151, 1, "}"),
                                 },
                             },
                             ws4: None,
                             dot: Token {
                                 kind: TokenKind::Dot,
-                                span: S!(152, 1, "."),
+                                span: s!(152, 1, "."),
                             },
                         }),
                         Statement::Directive(Directive::Output {
-                            span: S!(153, 1, "@output a, b, c."),
+                            span: s!(153, 1, "@output a, b, c."),
                             doc_comment: None,
                             kw: Token {
                                 kind: TokenKind::Output,
-                                span: S!(153, 1, "@output")
+                                span: s!(153, 1, "@output")
                             },
                             ws1: Token {
                                 kind: TokenKind::Whitespace,
-                                span: S!(160, 1, " "),
+                                span: s!(160, 1, " "),
                             },
                             predicates: Some(List {
-                                span: S!(161, 1, "a, b, c"),
+                                span: s!(161, 1, "a, b, c"),
                                 first: Token {
                                     kind: TokenKind::Ident,
-                                    span: S!(161, 1, "a"),
+                                    span: s!(161, 1, "a"),
                                 },
                                 rest: Some(vec![
                                     (
                                         None,
                                         Token {
                                             kind: TokenKind::Comma,
-                                            span: S!(162, 1, ","),
+                                            span: s!(162, 1, ","),
                                         },
                                         Some(Token {
                                             kind: TokenKind::Whitespace,
-                                            span: S!(163, 1, " "),
+                                            span: s!(163, 1, " "),
                                         }),
                                         Token {
                                             kind: TokenKind::Ident,
-                                            span: S!(164, 1, "b"),
+                                            span: s!(164, 1, "b"),
                                         },
                                     ),
                                     (
                                         None,
                                         Token {
                                             kind: TokenKind::Comma,
-                                            span: S!(165, 1, ","),
+                                            span: s!(165, 1, ","),
                                         },
                                         Some(Token {
                                             kind: TokenKind::Whitespace,
-                                            span: S!(166, 1, " "),
+                                            span: s!(166, 1, " "),
                                         }),
                                         Token {
                                             kind: TokenKind::Ident,
-                                            span: S!(167, 1, "c"),
+                                            span: s!(167, 1, "c"),
                                         },
                                     ),
                                 ]),
@@ -3786,7 +3848,7 @@ mod new {
                             ws2: None,
                             dot: Token {
                                 kind: TokenKind::Dot,
-                                span: S!(168, 1, "."),
+                                span: s!(168, 1, "."),
                             }
                         }),
                     ],
@@ -3800,10 +3862,10 @@ mod new {
             assert_eq!(
                 super::ignore_ws_and_comments(lex_ident::<nom::error::Error<_>>)(input),
                 Ok((
-                    S!(22, 2, ""),
+                    s!(22, 2, ""),
                     Token {
                         kind: TokenKind::Ident,
-                        span: S!(3, 1, "Hi")
+                        span: s!(3, 1, "Hi")
                     }
                 ))
             )
@@ -3819,55 +3881,55 @@ mod new {
                     tl_doc_comment: None,
                     statements: vec![
                         Statement::Fact {
-                            span: S!(0, 1, "some(Fact, with, whitespace) ."),
+                            span: s!(0, 1, "some(Fact, with, whitespace) ."),
                             doc_comment: None,
                             atom: Atom::Positive(Tuple {
-                                span: S!(0, 1, "some(Fact, with, whitespace)"),
+                                span: s!(0, 1, "some(Fact, with, whitespace)"),
                                 identifier: Some(Token {
                                     kind: TokenKind::Ident,
-                                    span: S!(0, 1, "some"),
+                                    span: s!(0, 1, "some"),
                                 }),
                                 ws1: None,
                                 open_paren: Token {
                                     kind: TokenKind::OpenParen,
-                                    span: S!(4, 1, "(")
+                                    span: s!(4, 1, "(")
                                 },
                                 ws2: None,
                                 terms: Some(List {
-                                    span: S!(5, 1, "Fact, with, whitespace"),
+                                    span: s!(5, 1, "Fact, with, whitespace"),
                                     first: Term::Primitive(Primitive::Constant(Token {
                                         kind: TokenKind::Ident,
-                                        span: S!(5, 1, "Fact"),
+                                        span: s!(5, 1, "Fact"),
                                     })),
                                     rest: Some(vec![
                                         (
                                             None,
                                             Token {
                                                 kind: TokenKind::Comma,
-                                                span: S!(9, 1, ","),
+                                                span: s!(9, 1, ","),
                                             },
                                             Some(Token {
                                                 kind: TokenKind::Whitespace,
-                                                span: S!(10, 1, " "),
+                                                span: s!(10, 1, " "),
                                             }),
                                             Term::Primitive(Primitive::Constant(Token {
                                                 kind: TokenKind::Ident,
-                                                span: S!(11, 1, "with")
+                                                span: s!(11, 1, "with")
                                             })),
                                         ),
                                         (
                                             None,
                                             Token {
                                                 kind: TokenKind::Comma,
-                                                span: S!(15, 1, ","),
+                                                span: s!(15, 1, ","),
                                             },
                                             Some(Token {
                                                 kind: TokenKind::Whitespace,
-                                                span: S!(16, 1, " "),
+                                                span: s!(16, 1, " "),
                                             }),
                                             Term::Primitive(Primitive::Constant(Token {
                                                 kind: TokenKind::Ident,
-                                                span: S!(17, 1, "whitespace")
+                                                span: s!(17, 1, "whitespace")
                                             })),
                                         ),
                                     ]),
@@ -3875,25 +3937,25 @@ mod new {
                                 ws3: None,
                                 close_paren: Token {
                                     kind: TokenKind::CloseParen,
-                                    span: S!(27, 1, ")")
+                                    span: s!(27, 1, ")")
                                 },
                             }),
                             ws: Some(Token {
                                 kind: TokenKind::Whitespace,
-                                span: S!(28, 1, " "),
+                                span: s!(28, 1, " "),
                             }),
                             dot: Token {
                                 kind: TokenKind::Dot,
-                                span: S!(29, 1, "."),
+                                span: s!(29, 1, "."),
                             },
                         },
                         Statement::Whitespace(Token {
                             kind: TokenKind::Whitespace,
-                            span: S!(30, 1, " ")
+                            span: s!(30, 1, " ")
                         }),
                         Statement::Comment(Token {
                             kind: TokenKind::Comment,
-                            span: S!(31, 1, "% and a super useful comment\n")
+                            span: s!(31, 1, "% and a super useful comment\n")
                         })
                     ],
                 }
@@ -3965,25 +4027,20 @@ oldLime(?location,?species,?age) :- tree(?location,?species,?age,?heightInMeters
         #[test]
         fn arithmetic_expressions() {
             use TokenKind::*;
-            macro_rules! T {
-                ($tok_kind: expr, $offset: literal, $line: literal, $str: literal) => {
-                    Token::new($tok_kind, unsafe {
-                        Span::new_from_raw_offset($offset, $line, $str, ())
-                    })
-                };
-            }
-            macro_rules! s {
-                ($offset:literal,$line:literal,$str:literal) => {
-                    unsafe { Span::new_from_raw_offset($offset, $line, $str, ()) }
-                };
-            }
 
             assert_eq!(
                 {
                     let result = parse_term::<VerboseError<_>>(Span::new("42"));
                     result.unwrap().1
                 },
-                Term::Primitive(Primitive::Number(T! {Number, 0, 1, "42"})),
+                Term::Primitive(Primitive::Number {
+                    span: s!(0, 1, "42"),
+                    sign: None,
+                    before: None,
+                    dot: None,
+                    after: T! {Number, 0, 1, "42"},
+                    exponent: None,
+                }),
             );
 
             assert_eq!(
@@ -3993,11 +4050,25 @@ oldLime(?location,?species,?age) :- tree(?location,?species,?age,?heightInMeters
                 },
                 Term::Binary {
                     span: s!(0, 1, "35+7"),
-                    lhs: Box::new(Term::Primitive(Primitive::Number(T! {Number, 0, 1, "35"}))),
+                    lhs: Box::new(Term::Primitive(Primitive::Number {
+                        span: s!(0, 1, "35"),
+                        sign: None,
+                        before: None,
+                        dot: None,
+                        after: T! {Number, 0, 1, "35"},
+                        exponent: None,
+                    })),
                     ws1: None,
                     operation: T! {Plus, 2, 1, "+"},
                     ws2: None,
-                    rhs: Box::new(Term::Primitive(Primitive::Number(T! {Number, 3, 1, "7"}))),
+                    rhs: Box::new(Term::Primitive(Primitive::Number {
+                        span: s!(3, 1, "7"),
+                        sign: None,
+                        before: None,
+                        dot: None,
+                        after: T! {Number, 3, 1, "7"},
+                        exponent: None,
+                    })),
                 }
             );
 
@@ -4008,11 +4079,25 @@ oldLime(?location,?species,?age) :- tree(?location,?species,?age,?heightInMeters
                 },
                 Term::Binary {
                     span: s!(0, 1, "6*7"),
-                    lhs: Box::new(Term::Primitive(Primitive::Number(T! {Number, 0,1,"6"}))),
+                    lhs: Box::new(Term::Primitive(Primitive::Number {
+                        span: s!(0, 1, "6"),
+                        sign: None,
+                        before: None,
+                        dot: None,
+                        after: T! {Number, 0,1,"6"},
+                        exponent: None,
+                    })),
                     ws1: None,
                     operation: T! {Star, 1,1,"*"},
                     ws2: None,
-                    rhs: Box::new(Term::Primitive(Primitive::Number(T! {Number, 2,1,"7"}))),
+                    rhs: Box::new(Term::Primitive(Primitive::Number {
+                        span: s!(2, 1, "7"),
+                        sign: None,
+                        before: None,
+                        dot: None,
+                        after: T! {Number, 2,1,"7"},
+                        exponent: None,
+                    })),
                 }
             );
 
@@ -4023,11 +4108,25 @@ oldLime(?location,?species,?age) :- tree(?location,?species,?age,?heightInMeters
                 },
                 Term::Binary {
                     span: s!(0, 1, "49-7"),
-                    lhs: Box::new(Term::Primitive(Primitive::Number(T! {Number, 0, 1, "49"}))),
+                    lhs: Box::new(Term::Primitive(Primitive::Number {
+                        span: s!(0, 1, "49"),
+                        sign: None,
+                        before: None,
+                        dot: None,
+                        after: T! {Number, 0, 1, "49"},
+                        exponent: None,
+                    })),
                     ws1: None,
                     operation: T! {Minus, 2, 1, "-"},
                     ws2: None,
-                    rhs: Box::new(Term::Primitive(Primitive::Number(T! {Number, 3, 1, "7"}))),
+                    rhs: Box::new(Term::Primitive(Primitive::Number {
+                        span: s!(3, 1, "7"),
+                        sign: None,
+                        before: None,
+                        dot: None,
+                        after: T! {Number, 3, 1, "7"},
+                        exponent: None,
+                    })),
                 }
             );
 
@@ -4038,11 +4137,25 @@ oldLime(?location,?species,?age) :- tree(?location,?species,?age,?heightInMeters
                 },
                 Term::Binary {
                     span: s!(0, 1, "84/2"),
-                    lhs: Box::new(Term::Primitive(Primitive::Number(T! {Number, 0, 1, "84"}))),
+                    lhs: Box::new(Term::Primitive(Primitive::Number {
+                        span: s!(0, 1, "84"),
+                        sign: None,
+                        before: None,
+                        dot: None,
+                        after: T! {Number, 0, 1, "84"},
+                        exponent: None,
+                    })),
                     ws1: None,
                     operation: T! {Slash, 2, 1, "/"},
                     ws2: None,
-                    rhs: Box::new(Term::Primitive(Primitive::Number(T! {Number, 3, 1, "2"}))),
+                    rhs: Box::new(Term::Primitive(Primitive::Number {
+                        span: s!(3, 1, "2"),
+                        sign: None,
+                        before: None,
+                        dot: None,
+                        after: T! {Number, 3, 1, "2"},
+                        exponent: None,
+                    })),
                 }
             );
 
@@ -4055,16 +4168,37 @@ oldLime(?location,?species,?age) :- tree(?location,?species,?age,?heightInMeters
                     span: s!(0, 1, "5*7+7"),
                     lhs: Box::new(Term::Binary {
                         span: s!(0, 1, "5*7"),
-                        lhs: Box::new(Term::Primitive(Primitive::Number(T! {Number, 0,1,"5"}))),
+                        lhs: Box::new(Term::Primitive(Primitive::Number {
+                            span: s!(0, 1, "5"),
+                            sign: None,
+                            before: None,
+                            dot: None,
+                            after: T! {Number, 0,1,"5"},
+                            exponent: None,
+                        })),
                         ws1: None,
                         operation: T! {Star, 1,1,"*"},
                         ws2: None,
-                        rhs: Box::new(Term::Primitive(Primitive::Number(T! {Number, 2,1,"7"}))),
+                        rhs: Box::new(Term::Primitive(Primitive::Number {
+                            span: s!(2, 1, "7"),
+                            sign: None,
+                            before: None,
+                            dot: None,
+                            after: T! {Number, 2,1,"7"},
+                            exponent: None,
+                        })),
                     }),
                     ws1: None,
                     operation: T! {Plus, 3,1,"+"},
                     ws2: None,
-                    rhs: Box::new(Term::Primitive(Primitive::Number(T! {Number, 4,1,"7"}))),
+                    rhs: Box::new(Term::Primitive(Primitive::Number {
+                        span: s!(4, 1, "7"),
+                        sign: None,
+                        before: None,
+                        dot: None,
+                        after: T! {Number, 4,1,"7"},
+                        exponent: None,
+                    })),
                 }
             );
 
@@ -4075,17 +4209,38 @@ oldLime(?location,?species,?age) :- tree(?location,?species,?age,?heightInMeters
                 },
                 Term::Binary {
                     span: s!(0, 1, "7+5*7"),
-                    lhs: Box::new(Term::Primitive(Primitive::Number(T! {Number, 0,1,"7"}))),
+                    lhs: Box::new(Term::Primitive(Primitive::Number {
+                        span: s!(0, 1, "7"),
+                        sign: None,
+                        before: None,
+                        dot: None,
+                        after: T! {Number, 0,1,"7"},
+                        exponent: None
+                    })),
                     ws1: None,
                     operation: T! {Plus, 1,1,"+"},
                     ws2: None,
                     rhs: Box::new(Term::Binary {
                         span: s!(2, 1, "5*7"),
-                        lhs: Box::new(Term::Primitive(Primitive::Number(T! {Number, 2,1,"5"}))),
+                        lhs: Box::new(Term::Primitive(Primitive::Number {
+                            span: s!(2, 1, "5"),
+                            sign: None,
+                            before: None,
+                            dot: None,
+                            after: T! {Number, 2,1,"5"},
+                            exponent: None
+                        })),
                         ws1: None,
                         operation: T! {Star, 3,1,"*"},
                         ws2: None,
-                        rhs: Box::new(Term::Primitive(Primitive::Number(T! {Number, 4,1,"7"}))),
+                        rhs: Box::new(Term::Primitive(Primitive::Number {
+                            span: s!(4, 1, "7"),
+                            sign: None,
+                            before: None,
+                            dot: None,
+                            after: T! {Number, 4,1,"7"},
+                            exponent: None
+                        })),
                     }),
                 }
             );
@@ -4130,9 +4285,14 @@ oldLime(?location,?species,?age) :- tree(?location,?species,?age,?heightInMeters
                             span: s!(1, 1, "15+3*2-(7+35)*8"),
                             first: Term::Binary {
                                 span: s!(1, 1, "15+3*2-(7+35)*8"),
-                                lhs: Box::new(Term::Primitive(Primitive::Number(
-                                    T! {Number, 1,1,"15"}
-                                ))),
+                                lhs: Box::new(Term::Primitive(Primitive::Number {
+                                    span: s!(1, 1, "15"),
+                                    sign: None,
+                                    before: None,
+                                    dot: None,
+                                    after: T! {Number, 1,1,"15"},
+                                    exponent: None,
+                                })),
                                 ws1: None,
                                 operation: T! {Plus, 3,1,"+"},
                                 ws2: None,
@@ -4140,15 +4300,25 @@ oldLime(?location,?species,?age) :- tree(?location,?species,?age,?heightInMeters
                                     span: s!(4, 1, "3*2-(7+35)*8"),
                                     lhs: Box::new(Term::Binary {
                                         span: s!(4, 1, "3*2"),
-                                        lhs: Box::new(Term::Primitive(Primitive::Number(
-                                            T! {Number, 4,1,"3"}
-                                        ))),
+                                        lhs: Box::new(Term::Primitive(Primitive::Number {
+                                            span: s!(4, 1, "3"),
+                                            sign: None,
+                                            before: None,
+                                            dot: None,
+                                            after: T! {Number, 4,1,"3"},
+                                            exponent: None,
+                                        })),
                                         ws1: None,
                                         operation: T! {Star, 5,1,"*"},
                                         ws2: None,
-                                        rhs: Box::new(Term::Primitive(Primitive::Number(
-                                            T! {Number, 6,1,"2"}
-                                        ))),
+                                        rhs: Box::new(Term::Primitive(Primitive::Number {
+                                            span: s!(6, 1, "2"),
+                                            sign: None,
+                                            before: None,
+                                            dot: None,
+                                            after: T! {Number, 6,1,"2"},
+                                            exponent: None,
+                                        })),
                                     }),
                                     ws1: None,
                                     operation: T! {Minus, 7,1,"-"},
@@ -4166,13 +4336,27 @@ oldLime(?location,?species,?age) :- tree(?location,?species,?age,?heightInMeters
                                                 first: Term::Binary {
                                                     span: s!(9, 1, "7+35"),
                                                     lhs: Box::new(Term::Primitive(
-                                                        Primitive::Number(T! {Number, 9,1,"7"})
+                                                        Primitive::Number {
+                                                            span: s!(9, 1, "7"),
+                                                            sign: None,
+                                                            before: None,
+                                                            dot: None,
+                                                            after: T! {Number, 9,1,"7"},
+                                                            exponent: None,
+                                                        }
                                                     )),
                                                     ws1: None,
                                                     operation: T! {Plus, 10,1,"+"},
                                                     ws2: None,
                                                     rhs: Box::new(Term::Primitive(
-                                                        Primitive::Number(T! {Number, 11,1,"35"})
+                                                        Primitive::Number {
+                                                            span: s!(11, 1, "35"),
+                                                            sign: None,
+                                                            before: None,
+                                                            dot: None,
+                                                            after: T! {Number, 11,1,"35"},
+                                                            exponent: None,
+                                                        }
                                                     )),
                                                 },
                                                 rest: None
@@ -4183,9 +4367,14 @@ oldLime(?location,?species,?age) :- tree(?location,?species,?age,?heightInMeters
                                         ws1: None,
                                         operation: T! {Star, 14,1,"*"},
                                         ws2: None,
-                                        rhs: Box::new(Term::Primitive(Primitive::Number(
-                                            T! {Number, 15,1,"8"}
-                                        ))),
+                                        rhs: Box::new(Term::Primitive(Primitive::Number {
+                                            span: s!(15, 1, "8"),
+                                            sign: None,
+                                            before: None,
+                                            dot: None,
+                                            after: T! {Number, 15,1,"8"},
+                                            exponent: None,
+                                        })),
                                     }),
                                 }),
                             },
@@ -4197,7 +4386,14 @@ oldLime(?location,?species,?age) :- tree(?location,?species,?age,?heightInMeters
                     ws1: None,
                     operation: T! {Slash, 17,1,"/"},
                     ws2: None,
-                    rhs: Box::new(Term::Primitive(Primitive::Number(T! {Number, 18,1,"3"}))),
+                    rhs: Box::new(Term::Primitive(Primitive::Number {
+                        span: s!(18, 1, "3"),
+                        sign: None,
+                        before: None,
+                        dot: None,
+                        after: T! {Number, 18,1,"3"},
+                        exponent: None,
+                    })),
                 }
             );
             // Term::Binary {
@@ -4216,7 +4412,14 @@ oldLime(?location,?species,?age) :- tree(?location,?species,?age,?heightInMeters
                 },
                 Term::Binary {
                     span: s!(0, 1, "15+3*2-(7+35)*8/3"),
-                    lhs: Box::new(Term::Primitive(Primitive::Number(T! {Number, 0,1,"15"}))),
+                    lhs: Box::new(Term::Primitive(Primitive::Number {
+                        span: s!(0, 1, "15"),
+                        sign: None,
+                        before: None,
+                        dot: None,
+                        after: T! {Number, 0,1,"15"},
+                        exponent: None,
+                    })),
                     ws1: None,
                     operation: T! {Plus, 2,1,"+"},
                     ws2: None,
@@ -4224,11 +4427,25 @@ oldLime(?location,?species,?age) :- tree(?location,?species,?age,?heightInMeters
                         span: s!(3, 1, "3*2-(7+35)*8/3"),
                         lhs: Box::new(Term::Binary {
                             span: s!(3, 1, "3*2"),
-                            lhs: Box::new(Term::Primitive(Primitive::Number(T! {Number, 3,1,"3"}))),
+                            lhs: Box::new(Term::Primitive(Primitive::Number {
+                                span: s!(3, 1, "3"),
+                                sign: None,
+                                before: None,
+                                dot: None,
+                                after: T! {Number, 3,1,"3"},
+                                exponent: None,
+                            })),
                             ws1: None,
                             operation: T! {Star, 4,1,"*"},
                             ws2: None,
-                            rhs: Box::new(Term::Primitive(Primitive::Number(T! {Number, 5,1,"2"}))),
+                            rhs: Box::new(Term::Primitive(Primitive::Number {
+                                span: s!(5, 1, "2"),
+                                sign: None,
+                                before: None,
+                                dot: None,
+                                after: T! {Number, 5,1,"2"},
+                                exponent: None,
+                            })),
                         }),
                         ws1: None,
                         operation: T! {Minus, 6,1,"-"},
@@ -4245,15 +4462,25 @@ oldLime(?location,?species,?age) :- tree(?location,?species,?age,?heightInMeters
                                     span: s!(8, 1, "7+35"),
                                     first: Term::Binary {
                                         span: s!(8, 1, "7+35"),
-                                        lhs: Box::new(Term::Primitive(Primitive::Number(
-                                            T! {Number, 8,1,"7"}
-                                        ))),
+                                        lhs: Box::new(Term::Primitive(Primitive::Number {
+                                            span: s!(8, 1, "7"),
+                                            sign: None,
+                                            before: None,
+                                            dot: None,
+                                            after: T! {Number, 8,1,"7"},
+                                            exponent: None,
+                                        })),
                                         ws1: None,
                                         operation: T! {Plus, 9,1,"+"},
                                         ws2: None,
-                                        rhs: Box::new(Term::Primitive(Primitive::Number(
-                                            T! {Number, 10,1,"35"}
-                                        ))),
+                                        rhs: Box::new(Term::Primitive(Primitive::Number {
+                                            span: s!(10, 1, "35"),
+                                            sign: None,
+                                            before: None,
+                                            dot: None,
+                                            after: T! {Number, 10,1,"35"},
+                                            exponent: None,
+                                        })),
                                     },
                                     rest: None,
                                 }),
@@ -4265,15 +4492,25 @@ oldLime(?location,?species,?age) :- tree(?location,?species,?age,?heightInMeters
                             ws2: None,
                             rhs: Box::new(Term::Binary {
                                 span: s!(14, 1, "8/3"),
-                                lhs: Box::new(Term::Primitive(Primitive::Number(
-                                    T! {Number, 14,1,"8"}
-                                ))),
+                                lhs: Box::new(Term::Primitive(Primitive::Number {
+                                    span: s!(14, 1, "8"),
+                                    sign: None,
+                                    before: None,
+                                    dot: None,
+                                    after: T! {Number, 14,1,"8"},
+                                    exponent: None,
+                                })),
                                 ws1: None,
                                 operation: T! {Slash, 15, 1, "/"},
                                 ws2: None,
-                                rhs: Box::new(Term::Primitive(Primitive::Number(
-                                    T! {Number, 16,1,"3"}
-                                ))),
+                                rhs: Box::new(Term::Primitive(Primitive::Number {
+                                    span: s!(16, 1, "3"),
+                                    sign: None,
+                                    before: None,
+                                    dot: None,
+                                    after: T! {Number, 16,1,"3"},
+                                    exponent: None,
+                                })),
                             }),
                         }),
                     }),
@@ -4306,6 +4543,24 @@ oldLime(?location,?species,?age) :- tree(?location,?species,?age,?heightInMeters
             //     ));
             //     result.unwrap().1
             // },);
+        }
+
+        #[test]
+        fn number_exp() {
+            assert_eq!(
+                {
+                    let input = Span::new("e42");
+                    parse_exponent::<VerboseError<_>>(input)
+                },
+                Ok((
+                    s!(3, 1, ""),
+                    Exponent {
+                        e: T! {TokenKind::Exponent, 0,1,"e"},
+                        sign: None,
+                        number: T! {TokenKind::Number, 1,1,"42"}
+                    }
+                ))
+            )
         }
     }
 }
