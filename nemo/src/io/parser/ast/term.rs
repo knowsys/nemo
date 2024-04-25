@@ -160,7 +160,14 @@ impl std::fmt::Display for Term<'_> {
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum Primitive<'a> {
     Constant(Token<'a>),
-    Number(Token<'a>),
+    Number {
+        span: Span<'a>,
+        sign: Option<Token<'a>>,
+        before: Option<Token<'a>>,
+        dot: Option<Token<'a>>,
+        after: Token<'a>,
+        exponent: Option<Exponent<'a>>,
+    },
     String(Token<'a>),
     Iri(Token<'a>),
     RdfLiteral {
@@ -174,7 +181,33 @@ impl AstNode for Primitive<'_> {
     fn children(&self) -> Option<Vec<&dyn AstNode>> {
         match self {
             Primitive::Constant(token) => Some(vec![token]),
-            Primitive::Number(token) => Some(vec![token]),
+            Primitive::Number {
+                sign,
+                before,
+                dot,
+                after,
+                exponent,
+                ..
+            } => {
+                let mut vec = Vec::new();
+                #[allow(trivial_casts)]
+                if let Some(s) = sign {
+                    vec.push(s as &dyn AstNode);
+                }
+                if let Some(b) = before {
+                    vec.push(b);
+                }
+                if let Some(d) = dot {
+                    vec.push(d);
+                }
+                vec.push(after);
+                if let Some(exp) = exponent {
+                    if let Some(mut children) = exp.children() {
+                        vec.append(&mut children);
+                    }
+                }
+                Some(vec)
+            }
             Primitive::String(token) => Some(vec![token]),
             Primitive::Iri(token) => Some(vec![token]),
             Primitive::RdfLiteral {
@@ -189,7 +222,7 @@ impl AstNode for Primitive<'_> {
     fn span(&self) -> Span {
         match self {
             Primitive::Constant(token) => token.span,
-            Primitive::Number(token) => token.span,
+            Primitive::Number { span, .. } => *span,
             Primitive::String(token) => token.span,
             Primitive::Iri(token) => token.span,
             Primitive::RdfLiteral { span, .. } => *span,
@@ -223,7 +256,7 @@ impl AstNode for Primitive<'_> {
         }
         match self {
             Primitive::Constant(_) => name!("Constant"),
-            Primitive::Number(_) => name!("Number"),
+            Primitive::Number { .. } => name!("Number"),
             Primitive::String(_) => name!("String"),
             Primitive::Iri(_) => name!("Iri"),
             Primitive::RdfLiteral { .. } => name!("RDF Literal"),
@@ -235,5 +268,45 @@ impl std::fmt::Display for Primitive<'_> {
         let mut output = String::new();
         write_tree(&mut output, &ast_to_ascii_tree(self))?;
         write!(f, "{output}")
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct Exponent<'a> {
+    pub(crate) e: Token<'a>,
+    pub(crate) sign: Option<Token<'a>>,
+    pub(crate) number: Token<'a>,
+}
+impl AstNode for Exponent<'_> {
+    fn children(&self) -> Option<Vec<&dyn AstNode>> {
+        let mut vec = Vec::new();
+        #[allow(trivial_casts)]
+        vec.push(&self.e as &dyn AstNode);
+        if let Some(s) = &self.sign {
+            vec.push(s);
+        };
+        vec.push(&self.number);
+        Some(vec)
+    }
+
+    fn span(&self) -> Span {
+        todo!()
+    }
+
+    fn position(&self) -> Position {
+        todo!()
+    }
+
+    fn is_token(&self) -> bool {
+        todo!()
+    }
+
+    fn name(&self) -> String {
+        todo!()
+    }
+}
+impl std::fmt::Display for Exponent<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        todo!()
     }
 }

@@ -74,6 +74,8 @@ pub(crate) enum TokenKind {
     Star,
     /// '/'
     Slash,
+    /// 'e' or 'E'
+    Exponent,
     // Multi-char tokens:
     /// Identifier for keywords and names
     Ident,
@@ -144,6 +146,7 @@ impl std::fmt::Display for TokenKind {
             TokenKind::Minus => write!(f, "Minus"),
             TokenKind::Star => write!(f, "Star"),
             TokenKind::Slash => write!(f, "Slash"),
+            TokenKind::Exponent => write!(f, "Exponent"),
             TokenKind::Ident => write!(f, "Ident"),
             TokenKind::Variable => write!(f, "Variable"),
             TokenKind::Existential => write!(f, "Existential"),
@@ -253,6 +256,12 @@ syntax!(caret, "^", TokenKind::Caret);
 syntax!(hash, "#", TokenKind::Hash);
 syntax!(underscore, "_", TokenKind::Underscore);
 syntax!(at, "@", TokenKind::At);
+syntax!(exp_lower, "e", TokenKind::Exponent);
+syntax!(exp_upper, "E", TokenKind::Exponent);
+
+pub(crate) fn exp<'a, E: ParseError<Span<'a>>>(input: Span<'a>) -> IResult<Span<'a>, Token, E> {
+    alt((exp_lower, exp_upper))(input)
+}
 
 pub(crate) fn lex_punctuations<'a, E: ParseError<Span<'a>>>(
     input: Span<'a>,
