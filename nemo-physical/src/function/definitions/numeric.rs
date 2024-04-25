@@ -266,7 +266,7 @@ impl NumericList {
 
         let values = parameters
             .iter()
-            .map(|parameter| NumericValue::from_any_datavalue(parameter))
+            .map(NumericValue::from_any_datavalue)
             .collect::<Option<Vec<_>>>()?;
 
         Self::collect_list_same_type(values)
@@ -282,7 +282,7 @@ impl NumericList {
 
         let values = parameters
             .iter()
-            .map(|parameter| NumericValue::from_any_datavalue(parameter))
+            .map(NumericValue::from_any_datavalue)
             .collect::<Option<Vec<_>>>()?;
 
         let first_value = &values[0];
@@ -1033,7 +1033,7 @@ impl NaryFunction for NumericProduct {
 pub struct NumericMinimum;
 impl NaryFunction for NumericMinimum {
     fn evaluate(&self, parameters: &[AnyDataValue]) -> Option<AnyDataValue> {
-        if let Some(list) = NumericList::from_any_list_cast(&parameters) {
+        if let Some(list) = NumericList::from_any_list_cast(parameters) {
             match &list {
                 NumericList::Integer(values) => numeric_minimum_integer64(values),
                 NumericList::Float(values) => numeric_minimum_float(values),
