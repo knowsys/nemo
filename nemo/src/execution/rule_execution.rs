@@ -76,7 +76,7 @@ impl RuleExecution {
             self.promising_variable_orders.iter().enumerate().fold(
                 "".to_string(),
                 |acc, (index, promising_order)| {
-                    format!("{}\n   ({}) {})", acc, index, promising_order.debug())
+                    format!("{}\n   ({}) {}", acc, index, promising_order.debug())
                 }
             )
         );
