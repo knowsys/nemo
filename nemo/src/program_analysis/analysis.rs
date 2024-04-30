@@ -130,9 +130,9 @@ fn construct_existential_aux_rule(
         Variable::Universal(name)
     };
 
-    let mut used_variables = HashSet::new();
     let mut aux_predicate_terms = Vec::new();
     for atom in &head_atoms {
+        let mut used_variables = HashSet::new();
         let mut new_terms = Vec::new();
 
         for term in atom.terms() {
