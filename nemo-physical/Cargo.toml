@@ -16,7 +16,6 @@ default = ["timing"]
 timing = ["dep:howlong"]
 stringpairdictionary = []
 check_column_sorting = []
-js = []
 
 [[bin]]
 name = "dict-bench"
