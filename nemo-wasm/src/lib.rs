@@ -17,7 +17,6 @@ use nemo::io::parser::parse_fact;
 use nemo::io::parser::parse_program;
 use nemo::io::resource_providers::{ResourceProvider, ResourceProviders};
 use nemo::io::ImportManager;
-use nemo::model::ExportDirective;
 use nemo::model::Identifier;
 use nemo_physical::datavalues::AnyDataValue;
 use nemo_physical::datavalues::DataValue;
@@ -88,15 +87,15 @@ impl NemoProgram {
         Ok(js_set)
     }
 
-    // If there are no exports, marks all idb predicates as exports.
-    #[wasm_bindgen(js_name = "markDefaultExports")]
+    // If there are no outputs, marks all predicates as outputs.
+    #[wasm_bindgen(js_name = "markDefaultOutputs")]
     pub fn mark_default_output_predicates(&mut self) {
-        if self.0.exports().next().is_none() {
-            let mut additional_exports = Vec::new();
-            for predicate in self.0.idb_predicates() {
-                additional_exports.push(ExportDirective::default(predicate));
+        if self.0.output_predicates().next().is_none() {
+            let mut additional_outputs = Vec::new();
+            for predicate in self.0.predicates() {
+                additional_outputs.push(predicate);
             }
-            self.0.add_exports(additional_exports);
+            self.0.add_output_predicates(additional_outputs);
         }
     }
 
@@ -395,11 +394,13 @@ impl NemoResults {
                 .into_iter()
                 .map(|v| match v.value_domain() {
                     nemo_physical::datavalues::ValueDomain::PlainString
-                    | nemo::datavalues::ValueDomain::Null
+                    | nemo_physical::datavalues::ValueDomain::Null
                     | nemo_physical::datavalues::ValueDomain::LanguageTaggedString
-                    | nemo_physical::datavalues::ValueDomain::Iri
                     | nemo_physical::datavalues::ValueDomain::Other => {
                         JsValue::from(v.canonical_string())
+                    }
+                    nemo_physical::datavalues::ValueDomain::Iri => {
+                        JsValue::from(v.to_iri_unchecked())
                     }
                     nemo_physical::datavalues::ValueDomain::Double => {
                         JsValue::from(v.to_f64_unchecked())
