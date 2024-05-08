@@ -13,10 +13,6 @@ use std::{
     sync::{Mutex, MutexGuard},
 };
 
-// See https://doc.rust-lang.org/cargo/reference/features.html#mutually-exclusive-features
-#[cfg(all(feature = "js", feature = "timing"))]
-compile_error!("feature \"js\" and feature \"timing\" cannot be enabled at the same time, because the \"howlong\" crate does not support web assembly environments");
-
 /// Global instance of the [TimedCode]
 static TIMECODE_INSTANCE: Lazy<Mutex<TimedCode>> = Lazy::new(|| {
     let instance = TimedCode::new();
