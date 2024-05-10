@@ -245,7 +245,6 @@ impl Rule {
         let mut aggregate_count = 0;
         for head_atom in &head {
             for term in head_atom.terms() {
-                println!("{:?}", term.aggregates());
                 aggregate_count += term.aggregates().len();
 
                 if aggregate_count > 1 {
