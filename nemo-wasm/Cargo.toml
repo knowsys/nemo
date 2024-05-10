@@ -24,3 +24,6 @@ web-sys = { version = "0.3.64", features = [ "Blob", "FileReaderSync", "FileSyst
 
 [dev-dependencies]
 wasm-bindgen-test = "0.3"
+
+[features]
+web_sys_unstable_apis = []

@@ -188,7 +188,7 @@ pub struct NemoEngine {
     engine: nemo::execution::DefaultExecutionEngine,
 }
 
-#[cfg(web_sys_unstable_apis)]
+#[cfg(feature = "web_sys_unstable_apis")]
 fn std_io_error_from_js_value(js_value: JsValue, prefix: &str) -> std::io::Error {
     std::io::Error::new(
         std::io::ErrorKind::Other,
@@ -196,10 +196,10 @@ fn std_io_error_from_js_value(js_value: JsValue, prefix: &str) -> std::io::Error
     )
 }
 
-#[cfg(web_sys_unstable_apis)]
+#[cfg(feature = "web_sys_unstable_apis")]
 struct SyncAccessHandleWriter(web_sys::FileSystemSyncAccessHandle);
 
-#[cfg(web_sys_unstable_apis)]
+#[cfg(feature = "web_sys_unstable_apis")]
 impl std::io::Write for SyncAccessHandleWriter {
     fn write(&mut self, buf: &[u8]) -> Result<usize, std::io::Error> {
         let buf: Vec<_> = buf.into();
@@ -309,7 +309,7 @@ impl NemoEngine {
         Ok(results)
     }
 
-    #[cfg(web_sys_unstable_apis)]
+    #[cfg(feature = "web_sys_unstable_apis")]
     #[wasm_bindgen(js_name = "savePredicate")]
     pub fn write_result_to_sync_access_handle(
         &mut self,
