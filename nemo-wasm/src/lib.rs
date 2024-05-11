@@ -17,7 +17,11 @@ use nemo::io::parser::parse_fact;
 use nemo::io::parser::parse_program;
 use nemo::io::resource_providers::{ResourceProvider, ResourceProviders};
 use nemo::io::ImportManager;
+use nemo::model::Atom;
+use nemo::model::Fact;
 use nemo::model::Identifier;
+use nemo::model::PrimitiveTerm;
+use nemo::model::Term;
 use nemo_physical::datavalues::AnyDataValue;
 use nemo_physical::datavalues::DataValue;
 use nemo_physical::error::ExternalReadingError;
@@ -344,6 +348,54 @@ impl NemoEngine {
             .export_table_with_writer(&export_spec, Box::new(writer), Some(record_iter), arity)
             .map_err(WasmOrInternalNemoError::NemoError)
             .map_err(NemoError)
+    }
+
+    fn trace_fact_at_index(
+        &mut self,
+        predicate: String,
+        row_index: usize,
+    ) -> Option<ExecutionTraceTree> {
+        let iter = self
+            .engine
+            .predicate_rows(&Identifier::from(predicate.clone()))
+            .ok()?;
+
+        let terms_to_trace: Vec<AnyDataValue> = iter.into_iter().flatten().nth(row_index)?;
+        let fact_to_trace: Fact = Fact(Atom::new(
+            Identifier::from(predicate),
+            terms_to_trace
+                .into_iter()
+                .map(|term| Term::Primitive(PrimitiveTerm::from(term)))
+                .collect(),
+        ));
+
+        let (trace, handles) = self
+            .engine
+            .trace(self.program.0.clone(), vec![fact_to_trace]);
+
+        trace.tree(handles[0])
+    }
+
+    #[wasm_bindgen(js_name = "traceFactAtIndexAscii")]
+    pub fn trace_fact_at_index_ascii(
+        &mut self,
+        predicate: String,
+        row_index: usize,
+    ) -> Option<String> {
+        self.trace_fact_at_index(predicate, row_index)
+            .as_ref()
+            .map(ExecutionTraceTree::to_ascii_art)
+    }
+
+    #[wasm_bindgen(js_name = "traceFactAtIndexGraphML")]
+    pub fn trace_fact_at_index_graphml(
+        &mut self,
+        predicate: String,
+        row_index: usize,
+    ) -> Option<String> {
+        self.trace_fact_at_index(predicate, row_index)
+            .as_ref()
+            .map(ExecutionTraceTree::to_graphml)
     }
 
     fn parse_and_trace_fact(&mut self, fact: &str) -> Option<ExecutionTraceTree> {
