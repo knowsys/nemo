@@ -15,6 +15,10 @@ use crate::{
     io::import_manager::ImportManager,
     model::{
         chase_model::{ChaseAtom, ChaseFact, ChaseProgram},
+        translation::{
+            gringo::GringoTranslation, souffle::SouffleTranslation, vlog::VLogTranslation,
+            RuleTranslation, TranslationFormat, TranslationResult,
+        },
         Fact, Identifier, PrimitiveTerm, Program, Variable,
     },
     program_analysis::analysis::ProgramAnalysis,
@@ -465,5 +469,18 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         }
 
         (trace, handles)
+    }
+
+    pub fn translate_rules(&self, format: TranslationFormat) -> Option<Vec<TranslationResult>> {
+        match format {
+            TranslationFormat::Souffle => {
+                SouffleTranslation::translate(&self.program, &self.analysis)
+            }
+            TranslationFormat::VLog => VLogTranslation::translate(&self.program, &self.analysis),
+            TranslationFormat::Rulewerk => todo!(),
+            TranslationFormat::Gringo => {
+                GringoTranslation::translate(&self.program, &self.analysis)
+            }
+        }
     }
 }

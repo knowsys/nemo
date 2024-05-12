@@ -20,10 +20,10 @@
 
 pub mod cli;
 
-use std::fs::{read_to_string, File};
+use std::fs::{self, read_to_string, File};
 
 use clap::Parser;
-use cli::{CliApp, Exporting, Reporting};
+use cli::{CliApp, Exporting, Reporting, TranslationArgs, TranslationFormat};
 use colored::Colorize;
 use nemo::{
     error::{Error, ReadingError},
@@ -149,6 +149,21 @@ fn print_memory_details(engine: &DefaultExecutionEngine) {
     println!("\nMemory report:\n\n{}", engine.memory_usage());
 }
 
+fn rule_translation(engine: &DefaultExecutionEngine, translation: TranslationFormat) {
+    let format = match translation {
+        TranslationFormat::Souffle => nemo::model::translation::TranslationFormat::Souffle,
+        TranslationFormat::VLog => nemo::model::translation::TranslationFormat::VLog,
+        TranslationFormat::Rulewerk => nemo::model::translation::TranslationFormat::Rulewerk,
+        TranslationFormat::Gringo => nemo::model::translation::TranslationFormat::Gringo,
+    };
+
+    if let Some(results) = engine.translate_rules(format) {
+        for result in results {
+            fs::write(result.filename(), result.result()).expect("Unable to write file");
+        }
+    }
+}
+
 fn run(mut cli: CliApp) -> Result<(), Error> {
     TimedCode::instance().start();
     TimedCode::instance().sub("Reading & Preprocessing").start();
@@ -218,6 +233,11 @@ fn run(mut cli: CliApp) -> Result<(), Error> {
         ImportManager::new(ResourceProviders::with_base_path(cli.import_directory));
 
     let mut engine: DefaultExecutionEngine = ExecutionEngine::initialize(&program, import_manager)?;
+
+    if let Some(translation) = cli.translation.format {
+        rule_translation(&engine, translation);
+        return Ok(());
+    }
 
     TimedCode::instance().sub("Reading & Preprocessing").stop();
 

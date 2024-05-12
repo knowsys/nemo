@@ -130,6 +130,22 @@ pub(crate) struct TracingArgs {
     pub(crate) output_file: Option<PathBuf>,
 }
 
+/// Possible settings for the translation arguments
+#[derive(clap::ValueEnum, Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum TranslationFormat {
+    Souffle,
+    VLog,
+    Rulewerk,
+    Gringo,
+}
+
+/// Arguments relating to rule file translation
+#[derive(Debug, clap::Args)]
+pub(crate) struct TranslationArgs {
+    #[arg(long = "translation")]
+    pub(crate) format: Option<TranslationFormat>,
+}
+
 /// Nemo CLI
 #[derive(clap::Parser, Debug)]
 #[command(author, version, about)]
@@ -152,4 +168,7 @@ pub(crate) struct CliApp {
     /// Arguments related to logging
     #[command(flatten)]
     pub(crate) logging: LoggingArgs,
+    /// Arguments related to rule translation
+    #[command(flatten)]
+    pub(crate) translation: TranslationArgs,
 }
