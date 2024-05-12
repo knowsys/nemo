@@ -354,26 +354,33 @@ impl NemoEngine {
         &mut self,
         predicate: String,
         row_index: usize,
-    ) -> Option<ExecutionTraceTree> {
+    ) -> Result<Option<ExecutionTraceTree>, NemoError> {
         let iter = self
             .engine
             .predicate_rows(&Identifier::from(predicate.clone()))
-            .ok()?;
+            .map_err(WasmOrInternalNemoError::NemoError)
+            .map_err(NemoError)?;
 
-        let terms_to_trace: Vec<AnyDataValue> = iter.into_iter().flatten().nth(row_index)?;
-        let fact_to_trace: Fact = Fact(Atom::new(
-            Identifier::from(predicate),
-            terms_to_trace
-                .into_iter()
-                .map(|term| Term::Primitive(PrimitiveTerm::from(term)))
-                .collect(),
-        ));
+        let terms_to_trace_opt: Option<Vec<AnyDataValue>> =
+            iter.into_iter().flatten().nth(row_index);
 
-        let (trace, handles) = self
-            .engine
-            .trace(self.program.0.clone(), vec![fact_to_trace]);
+        if let Some(terms_to_trace) = terms_to_trace_opt {
+            let fact_to_trace: Fact = Fact(Atom::new(
+                Identifier::from(predicate),
+                terms_to_trace
+                    .into_iter()
+                    .map(|term| Term::Primitive(PrimitiveTerm::from(term)))
+                    .collect(),
+            ));
 
-        trace.tree(handles[0])
+            let (trace, handles) = self
+                .engine
+                .trace(self.program.0.clone(), vec![fact_to_trace]);
+
+            Ok(trace.tree(handles[0]))
+        } else {
+            Ok(None)
+        }
     }
 
     #[wasm_bindgen(js_name = "traceFactAtIndexAscii")]
@@ -381,10 +388,9 @@ impl NemoEngine {
         &mut self,
         predicate: String,
         row_index: usize,
-    ) -> Option<String> {
+    ) -> Result<Option<String>, NemoError> {
         self.trace_fact_at_index(predicate, row_index)
-            .as_ref()
-            .map(ExecutionTraceTree::to_ascii_art)
+            .map(|opt| opt.as_ref().map(ExecutionTraceTree::to_ascii_art))
     }
 
     #[wasm_bindgen(js_name = "traceFactAtIndexGraphML")]
@@ -392,35 +398,37 @@ impl NemoEngine {
         &mut self,
         predicate: String,
         row_index: usize,
-    ) -> Option<String> {
+    ) -> Result<Option<String>, NemoError> {
         self.trace_fact_at_index(predicate, row_index)
-            .as_ref()
-            .map(ExecutionTraceTree::to_graphml)
+            .map(|opt| opt.as_ref().map(ExecutionTraceTree::to_graphml))
     }
 
-    fn parse_and_trace_fact(&mut self, fact: &str) -> Option<ExecutionTraceTree> {
+    fn parse_and_trace_fact(
+        &mut self,
+        fact: &str,
+    ) -> Result<Option<ExecutionTraceTree>, NemoError> {
         let parsed_fact = parse_fact(fact.to_owned())
             .map_err(WasmOrInternalNemoError::NemoError)
-            .map_err(NemoError)
-            .ok()?;
+            .map_err(NemoError)?;
 
         let (trace, handles) = self.engine.trace(self.program.0.clone(), vec![parsed_fact]);
 
-        trace.tree(handles[0])
+        Ok(trace.tree(handles[0]))
     }
 
     #[wasm_bindgen(js_name = "parseAndTraceFactAscii")]
-    pub fn parse_and_trace_fact_ascii(&mut self, fact: &str) -> Option<String> {
+    pub fn parse_and_trace_fact_ascii(&mut self, fact: &str) -> Result<Option<String>, NemoError> {
         self.parse_and_trace_fact(fact)
-            .as_ref()
-            .map(ExecutionTraceTree::to_ascii_art)
+            .map(|opt| opt.as_ref().map(ExecutionTraceTree::to_ascii_art))
     }
 
     #[wasm_bindgen(js_name = "parseAndTraceFactGraphML")]
-    pub fn parse_and_trace_fact_graphml(&mut self, fact: &str) -> Option<String> {
+    pub fn parse_and_trace_fact_graphml(
+        &mut self,
+        fact: &str,
+    ) -> Result<Option<String>, NemoError> {
         self.parse_and_trace_fact(fact)
-            .as_ref()
-            .map(ExecutionTraceTree::to_graphml)
+            .map(|opt| opt.as_ref().map(ExecutionTraceTree::to_graphml))
     }
 }
 
