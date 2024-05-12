@@ -57,7 +57,7 @@ impl NemoError {
     #[allow(clippy::inherent_to_string)]
     #[wasm_bindgen(js_name = "toString")]
     pub fn to_string(&self) -> String {
-        format!("NemoError: {:#?}", self.0)
+        format!("NemoError: {}", self.0)
     }
 }
 
