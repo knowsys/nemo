@@ -9,6 +9,10 @@ father(alice, bob).
 mother(bob, carla).
 father(bob, darius).
 mother(alice, carla).
+father(<alice>, <bob>).
+mother(<bob>, <carla>).
+father(<bob>, <darius>).
+mother(<alice>, <carla>).
 
 % Rules:
 parent(?X, ?Y) :- mother(?X, ?Y).
@@ -16,3 +20,16 @@ parent(?X, ?Y) :- father(?X, ?Y).
 parent( ?X , ?Y ) :- ~sibling( ?X , ?Y ) .
 a(?x) :- b(?x, B) .
 s(4) :- s(3).
+
+ancestor(?X,?Y) :- parent(?X, ?Y) .
+ancestor(?X,?Z) :- ancestor(?X, ?Y), parent(?Y, ?Z) .
+ancestorOfAlice(?X) :- ancestor(alice,?X).
+
+mydata(a,b) .
+mydata("hello", 42) .
+mydata(3.14, "2023-06-19"^^<http://www.w3.org/2001/XMLSchema#date>) .
+
+resulta(?N + 10) :- mydata(_, ?N) .
+resultB(?R) :- mydata(?X, ?Y), ?R = SQRT(?X) .
+result(?D) :- mydata(?X, _), ?D = DATATYPE(?X) .
+

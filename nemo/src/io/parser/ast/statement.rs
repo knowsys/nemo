@@ -27,6 +27,7 @@ pub(crate) enum Statement<'a> {
     },
     Whitespace(Token<'a>),
     Comment(Token<'a>),
+    Error(Token<'a>),
 }
 impl AstNode for Statement<'_> {
     fn children(&self) -> Option<Vec<&dyn AstNode>> {
@@ -84,6 +85,7 @@ impl AstNode for Statement<'_> {
             }
             Statement::Whitespace(ws) => Some(vec![ws]),
             Statement::Comment(c) => Some(vec![c]),
+            Statement::Error(t) => Some(vec![t]),
         }
     }
 
@@ -94,6 +96,7 @@ impl AstNode for Statement<'_> {
             Statement::Rule { span, .. } => *span,
             Statement::Whitespace(ws) => ws.span(),
             Statement::Comment(c) => c.span(),
+            Statement::Error(t) => t.span,
         }
     }
 
@@ -128,6 +131,7 @@ impl AstNode for Statement<'_> {
             Statement::Rule { .. } => name!("Rule"),
             Statement::Whitespace(_) => name!("Whitespace"),
             Statement::Comment(_) => name!("Comment"),
+            Statement::Error(_) => name!("ERROR"),
         }
     }
 }

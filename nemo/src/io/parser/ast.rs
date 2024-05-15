@@ -20,6 +20,7 @@ pub(crate) trait AstNode: std::fmt::Debug + Display {
     fn name(&self) -> String;
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) struct Position {
     pub(crate) offset: usize,
     pub(crate) line: u32,
@@ -32,6 +33,34 @@ pub(crate) struct List<'a, T> {
     pub(crate) first: T,
     // ([ws]?[,][ws]?[T])*
     pub(crate) rest: Option<Vec<(Option<Token<'a>>, Token<'a>, Option<Token<'a>>, T)>>,
+}
+impl<T: Clone> List<'_, T> {
+    pub fn to_vec(&self) -> Vec<T> {
+        let mut vec = Vec::new();
+        vec.push(self.first.clone());
+        if let Some(rest) = &self.rest {
+            for (_, _, _, item) in rest {
+                vec.push(item.clone());
+            }
+        }
+        vec
+    }
+}
+impl<T> std::iter::IntoIterator for List<'_, T> {
+    type Item = T;
+
+    type IntoIter = std::vec::IntoIter<T>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        let mut vec = Vec::new();
+        vec.push(self.first);
+        if let Some(rest) = self.rest {
+            for (_, _, _, item) in rest {
+                vec.push(item);
+            }
+        }
+        vec.into_iter()
+    }
 }
 impl<T: AstNode + std::fmt::Debug> AstNode for List<'_, T> {
     fn children(&self) -> Option<Vec<&dyn AstNode>> {
