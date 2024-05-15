@@ -23,7 +23,7 @@ use nom::{
 use macros::traced;
 
 pub(crate) mod ast;
-mod types;
+pub(crate) mod types;
 
 use types::{ConstraintOperator, IntermediateResult, Span};
 pub(crate) mod iri;
@@ -2430,15 +2430,19 @@ mod test {
 
 /// NEW PARSER
 mod new {
+    use std::cell::RefCell;
+
     use super::ast::{
-        atom::*, directive::*, map::*, program::*, statement::*, term::*, tuple::*, List,
+        atom::*, directive::*, map::*, program::*, statement::*, term::*, tuple::*, List, Position,
     };
+    use super::types::{Input, Label, ParserLabel, ToRange};
     use crate::io::lexer::{
         arrow, at, caret, close_brace, close_paren, colon, comma, dot, equal, exclamation_mark,
         exp, greater, greater_equal, hash, less, less_equal, lex_comment, lex_doc_comment,
         lex_ident, lex_iri, lex_number, lex_operators, lex_string, lex_toplevel_doc_comment,
-        lex_unary_prefix_operators, lex_whitespace, minus, open_brace, open_paren, plus,
-        question_mark, slash, star, tilde, underscore, unequal, Span, Token, TokenKind,
+        lex_whitespace, map_err, minus, open_brace, open_paren, plus, question_mark, skip_to_dot,
+        slash, star, tilde, underscore, unequal, Error, NewParseError, ParserState, Span, Token,
+        TokenKind,
     };
     use crate::io::parser::ast::AstNode;
     use nom::combinator::{all_consuming, cut, map, opt, recognize};
@@ -2466,82 +2470,244 @@ mod new {
         }
     }
 
-    fn ignore_ws_and_comments<'a, F, O, E: ParseError<Span<'a>> + ContextError<Span<'a>>>(
-        inner: F,
-    ) -> impl FnMut(Span<'a>) -> IResult<Span<'a>, O, E>
-    where
-        F: Parser<Span<'a>, O, E> + FnMut(Span<'a>) -> IResult<Span<'a>, O, E>,
-    {
-        delimited(
-            many0(alt((lex_whitespace, lex_comment))),
-            inner,
-            many0(alt((lex_whitespace, lex_comment))),
-        )
+    // fn ignore_ws_and_comments<'a, F, O, E: ParseError<Span<'a>> + ContextError<Span<'a>>>(
+    //     inner: F,
+    // ) -> impl FnMut(Span<'a>) -> IResult<Span<'a>, O, E>
+    // where
+    //     F: Parser<Span<'a>, O, E> + FnMut(Span<'a>) -> IResult<Span<'a>, O, E>,
+    // {
+    //     delimited(
+    //         many0(alt((lex_whitespace, lex_comment))),
+    //         inner,
+    //         many0(alt((lex_whitespace, lex_comment))),
+    //     )
+    // }
+
+    // fn expect<'a, F, E, T>(
+    //     parser: F,
+    //     error_msg: E,
+    //     state: Errors,
+    // ) -> impl Fn(Span<'a>) -> IResult<Span<'a>, T>
+    // where
+    //     F: Fn(Span<'a>) -> IResult<Span<'a>, T>,
+    //     E: ToString,
+    // {
+    //     move |input| match parser(input) {
+    //         Ok((rest_input, output)) => Ok((rest_input, output)),
+    //         Err(nom::Err::Error(nom::error::Error { input, .. }))
+    //         | Err(nom::Err::Failure(nom::error::Error { input, .. })) => {
+    //             let err = crate::io::lexer::Error(to_range(input), error_msg.to_string());
+    //             state.report_error(err);
+    //             Ok((
+    //                 input,
+    //                 Token {
+    //                     kind: TokenKind::Error,
+    //                     span: outer_span(input, rest_input),
+    //                 },
+    //             ))
+    //         }
+    //         Err(err) => Err(err),
+    //     }
+    // }
+
+    fn expect<
+        'a,
+        'e,
+        O: Copy,
+        E: ParseError<Input<'a, 'e>>,
+        F: nom::Parser<Input<'a, 'e>, O, E>,
+    >(
+        mut parser: F,
+        error_msg: impl ToString,
+        error_output: O,
+        errors: ParserState<'e>,
+    ) -> impl FnMut(Input<'a, 'e>) -> IResult<Input<'a, 'e>, O, E> {
+        move |input| match parser.parse(input.clone()) {
+            Ok(result) => Ok(result),
+            Err(nom::Err::Error(_)) | Err(nom::Err::Failure(_)) => {
+                let err = Error(
+                    Position {
+                        offset: input.input.location_offset(),
+                        line: input.input.location_line(),
+                        column: input.input.get_utf8_column() as u32,
+                    },
+                    error_msg.to_string(),
+                );
+                errors.report_error(err);
+                Ok((input, error_output))
+            }
+            Err(err) => Err(err),
+        }
+    }
+
+    fn recover<'a, 'e, E>(
+        mut parser: impl nom::Parser<Input<'a, 'e>, Statement<'a>, E>,
+        error_msg: impl ToString,
+        errors: ParserState<'e>,
+    ) -> impl FnMut(Input<'a, 'e>) -> IResult<Input<'a, 'e>, Statement<'a>, E> {
+        move |input: Input<'a, 'e>| match parser.parse(input) {
+            Ok(result) => Ok(result),
+            Err(err) if input.input.is_empty() => Err(err),
+            Err(nom::Err::Error(e)) | Err(nom::Err::Failure(e)) => {
+                let err = Error(
+                    Position {
+                        offset: input.input.location_offset(),
+                        line: input.input.location_line(),
+                        column: input.input.get_utf8_column() as u32,
+                    },
+                    error_msg.to_string(),
+                );
+                errors.report_error(err);
+                let (rest_input, token) = skip_to_dot(input);
+                Ok((rest_input, Statement::Error(token)))
+            }
+            Err(err) => Err(err),
+        }
+    }
+
+    fn report_label<'a, 's, O, E>(
+        mut parser: impl nom::Parser<Input<'a, 's>, O, E>,
+        label: ParserLabel,
+    ) -> impl FnMut(Input<'a, 's>) -> IResult<Input<'a, 's>, O, E> {
+        move |input| match parser.parse(input) {
+            Ok(result) => Ok(result),
+            Err(err) => {
+                match err {
+                    nom::Err::Incomplete(_) => (),
+                    nom::Err::Error(_) | nom::Err::Failure(_) => {
+                        if !input.input.is_empty() {
+                            input.parser_state.labels.borrow_mut().push(Label {
+                                label,
+                                pos: Position {
+                                    offset: input.input.location_offset(),
+                                    line: input.input.location_line(),
+                                    column: input.input.get_utf8_column() as u32,
+                                },
+                            })
+                        };
+                    }
+                };
+                Err(err)
+            }
+        }
+    }
+
+    fn report_error<'a, 's, O, E>(
+        mut parser: impl nom::Parser<Input<'a, 's>, O, E>,
+    ) -> impl FnMut(Input<'a, 's>) -> IResult<Input<'a, 's>, O, E> {
+        move |input| match parser.parse(input) {
+            Ok(result) => {
+                input.parser_state.labels.borrow_mut().clear();
+                Ok(result)
+            }
+            Err(err) => {
+                match err {
+                    nom::Err::Incomplete(_) => (),
+                    nom::Err::Error(_) | nom::Err::Failure(_) => {
+                        // println!("LABELS BEFORE REPORT!!!!: {:#?}", input.parser_state.labels);
+                        let mut furthest_errors: Vec<Error> = Vec::new();
+                        let labels =
+                            <Vec<Label> as Clone>::clone(&input.parser_state.labels.borrow())
+                                .into_iter();
+                        for label in labels {
+                            if let Some(last) = furthest_errors.last() {
+                                if label.pos.offset >= (*last).0.offset {
+                                    let err =
+                                        Error(label.pos, format!("expected {:?}", label.label));
+                                    furthest_errors.push(err);
+                                }
+                            } else {
+                                let err = Error(label.pos, format!("expected {:?}", label.label));
+                                furthest_errors.push(err);
+                            };
+                        }
+                        for err in furthest_errors {
+                            input.parser_state.report_error(err)
+                        }
+                        // for label in furthest_errors {
+                        //     println!(
+                        //         "Syntax error: Parser got stuck at line {} column {}, expected {:?}",
+                        //         label.position.line, label.position.column, label.label
+                        //     );
+                        //     println!(
+                        //         "\n{}",
+                        //         input
+                        //             .parser_state
+                        //             .source
+                        //             .fragment()
+                        //             .lines()
+                        //             .collect::<Vec<_>>()
+                        //             .get((label.position.line - 1) as usize)
+                        //             .unwrap()
+                        //     );
+                        //     println!("{1:>0$}", label.position.column, "^");
+                        // }
+                    }
+                };
+                Err(err)
+            }
+        }
     }
 
     /// Parse a full program consisting of directives, facts, rules and comments.
-    fn parse_program<'a, E: ParseError<Span<'a>> + ContextError<Span<'a>>>(
-        input: Span<'a>,
-    ) -> IResult<Span<'a>, Program<'a>, E> {
-        context(
-            "parse program",
-            all_consuming(pair(
-                opt(lex_toplevel_doc_comment),
-                many1(alt((
-                    parse_rule,
-                    parse_fact,
+    fn parse_program<'a, 'e>(input: Input<'a, 'e>) -> (Program<'a>, Vec<Error>) {
+        let (rest_input, (tl_doc_comment, statements)) = all_consuming(pair(
+            opt(lex_toplevel_doc_comment),
+            many1(recover(
+                report_error(alt((
+                    // TODO: Discuss wether directives should only get parsed at the beginning of the source file
+                    report_label(parse_rule, ParserLabel::Rule),
+                    report_label(parse_fact, ParserLabel::Fact),
                     parse_whitespace,
-                    parse_directive,
+                    report_label(parse_directive, ParserLabel::Directive),
                     parse_comment,
                 ))),
+                "failed to parse a statement",
+                input.parser_state,
             )),
-        )(input)
-        .map(|(rest_input, (tl_doc_comment, statements))| {
-            (
-                rest_input,
-                Program {
-                    span: input,
-                    tl_doc_comment,
-                    statements,
-                },
-            )
-        })
+        ))(input)
+        .expect("Parser can't fail. If it fails it's a bug! Pleas report it. Got");
+        (
+            Program {
+                span: input.input,
+                tl_doc_comment,
+                statements,
+            },
+            rest_input.parser_state.errors.take(),
+        )
     }
 
     /// Parse whitespace that is between directives, facts, rules and comments.
-    fn parse_whitespace<'a, E: ParseError<Span<'a>> + ContextError<Span<'a>>>(
-        input: Span<'a>,
-    ) -> IResult<Span, Statement<'a>, E> {
-        context("parse whitespace", lex_whitespace)(input)
-            .map(|(rest, ws)| (rest, Statement::Whitespace(ws)))
+    fn parse_whitespace<'a, 'e>(input: Input<'a, 'e>) -> IResult<Input<'a, 'e>, Statement<'a>> {
+        lex_whitespace(input).map(|(rest_input, ws)| (rest_input, Statement::Whitespace(ws)))
     }
 
     /// Parse normal comments that start with a `%` and ends at the line ending.
-    fn parse_comment<'a, E: ParseError<Span<'a>> + ContextError<Span<'a>>>(
-        input: Span<'a>,
-    ) -> IResult<Span, Statement<'a>, E> {
-        context("parse comment", lex_comment)(input)
-            .map(|(rest, comment)| (rest, Statement::Comment(comment)))
+    fn parse_comment<'a, 'e>(input: Input<'a, 'e>) -> IResult<Input<'a, 'e>, Statement<'a>> {
+        lex_comment(input).map(|(rest_input, comment)| (rest_input, Statement::Comment(comment)))
     }
 
     /// Parse a fact of the form `predicateName(term1, term2, …).`
-    fn parse_fact<'a, E: ParseError<Span<'a>> + ContextError<Span<'a>>>(
-        input: Span<'a>,
-    ) -> IResult<Span, Statement<'a>, E> {
-        context(
-            "parse fact",
-            tuple((
-                opt(lex_doc_comment),
-                parse_normal_atom,
-                opt(lex_whitespace),
-                cut(dot),
-            )),
-        )(input)
+    fn parse_fact<'a, 'e>(input: Input<'a, 'e>) -> IResult<Input<'a, 'e>, Statement<'a>> {
+        tuple((
+            opt(lex_doc_comment),
+            parse_normal_atom,
+            opt(lex_whitespace),
+            expect(
+                report_label(dot, ParserLabel::Dot),
+                "missing `.`",
+                Token {
+                    kind: TokenKind::Error,
+                    span: Span::new("ERROR! missing `.`"),
+                },
+                input.parser_state,
+            ),
+        ))(input)
         .map(|(rest_input, (doc_comment, atom, ws, dot))| {
             (
                 rest_input,
                 Statement::Fact {
-                    span: outer_span(input, rest_input),
+                    span: outer_span(input.input, rest_input.input),
                     doc_comment,
                     atom,
                     ws,
@@ -2552,28 +2718,31 @@ mod new {
     }
 
     /// Parse a rule of the form `headPredicate1(term1, term2, …), headPredicate2(term1, term2, …) :- bodyPredicate(term1, …), term1 >= (term2 + term3) * function(term1, …) .`
-    fn parse_rule<'a, E: ParseError<Span<'a>> + ContextError<Span<'a>>>(
-        input: Span<'a>,
-    ) -> IResult<Span, Statement<'a>, E> {
-        context(
-            "parse rule",
-            tuple((
-                opt(lex_doc_comment),
-                parse_head,
-                opt(lex_whitespace),
-                arrow,
-                opt(lex_whitespace),
-                parse_body,
-                opt(lex_whitespace),
-                cut(dot),
-            )),
-        )(input)
+    fn parse_rule<'a, 'e>(input: Input<'a, 'e>) -> IResult<Input<'a, 'e>, Statement<'a>> {
+        tuple((
+            opt(lex_doc_comment),
+            parse_head,
+            opt(lex_whitespace),
+            report_label(arrow, ParserLabel::Arrow),
+            opt(lex_whitespace),
+            parse_body,
+            opt(lex_whitespace),
+            expect(
+                report_label(dot, ParserLabel::Dot),
+                "missing `.`",
+                Token {
+                    kind: TokenKind::Error,
+                    span: Span::new("ERROR! missing `.`"),
+                },
+                input.parser_state,
+            ),
+        ))(input)
         .map(
             |(rest_input, (doc_comment, head, ws1, arrow, ws2, body, ws3, dot))| {
                 (
                     rest_input,
                     Statement::Rule {
-                        span: outer_span(input, rest_input),
+                        span: outer_span(input.input, rest_input.input),
                         doc_comment,
                         head,
                         ws1,
@@ -2589,63 +2758,57 @@ mod new {
     }
 
     /// Parse the head atoms of a rule.
-    fn parse_head<'a, E: ParseError<Span<'a>> + ContextError<Span<'a>>>(
-        input: Span<'a>,
-    ) -> IResult<Span, List<'a, Atom<'a>>, E> {
-        context("parse head", parse_atom_list(parse_head_atoms))(input)
+    fn parse_head<'a, 'e>(input: Input<'a, 'e>) -> IResult<Input<'a, 'e>, List<'a, Atom<'a>>> {
+        parse_list(parse_head_atoms)(input)
     }
 
     /// Parse the body atoms of a rule.
-    fn parse_body<'a, E: ParseError<Span<'a>> + ContextError<Span<'a>>>(
-        input: Span<'a>,
-    ) -> IResult<Span, List<'a, Atom<'a>>, E> {
-        context("parse body", parse_atom_list(parse_body_atoms))(input)
+    fn parse_body<'a, 'e>(input: Input<'a, 'e>) -> IResult<Input<'a, 'e>, List<'a, Atom<'a>>> {
+        parse_list(parse_body_atoms)(input)
     }
 
     /// Parse the directives (@base, @prefix, @import, @export, @output).
-    fn parse_directive<'a, E: ParseError<Span<'a>> + ContextError<Span<'a>>>(
-        input: Span<'a>,
-    ) -> IResult<Span, Statement<'a>, E> {
-        context(
-            "parse directive",
-            alt((
-                parse_base_directive,
-                parse_prefix_directive,
-                parse_import_directive,
-                parse_export_directive,
-                parse_output_directive,
-            )),
-        )(input)
+    fn parse_directive<'a, 'e>(input: Input<'a, 'e>) -> IResult<Input<'a, 'e>, Statement<'a>> {
+        alt((
+            parse_base_directive,
+            parse_prefix_directive,
+            parse_import_directive,
+            parse_export_directive,
+            parse_output_directive,
+        ))(input)
         .map(|(rest, directive)| (rest, Statement::Directive(directive)))
     }
 
     /// Parse the base directive.
-    fn parse_base_directive<'a, E: ParseError<Span<'a>> + ContextError<Span<'a>>>(
-        input: Span<'a>,
-    ) -> IResult<Span, Directive<'a>, E> {
-        context(
-            "parse base directive",
-            tuple((
-                opt(lex_doc_comment),
-                recognize(pair(
-                    at,
-                    verify(lex_ident, |token| token.kind == TokenKind::Base),
-                )),
-                opt(lex_whitespace),
-                lex_iri,
-                opt(lex_whitespace),
-                cut(dot),
+    fn parse_base_directive<'a, 'e>(input: Input<'a, 'e>) -> IResult<Input<'a, 'e>, Directive<'a>> {
+        tuple((
+            opt(lex_doc_comment),
+            recognize(pair(
+                at,
+                verify(lex_ident, |token| token.kind == TokenKind::Base),
             )),
-        )(input)
+            opt(lex_whitespace),
+            report_label(lex_iri, ParserLabel::Iri),
+            opt(lex_whitespace),
+            expect(
+                report_label(dot, ParserLabel::Dot),
+                "missing `.`",
+                Token {
+                    kind: TokenKind::Error,
+                    span: Span::new("ERROR! missing `.`"),
+                },
+                input.parser_state,
+            ),
+        ))(input)
         .map(|(rest_input, (doc_comment, kw, ws1, base_iri, ws2, dot))| {
             (
                 rest_input,
                 Directive::Base {
-                    span: outer_span(input, rest_input),
+                    span: outer_span(input.input, rest_input.input),
                     doc_comment,
                     kw: Token {
                         kind: TokenKind::Base,
-                        span: kw,
+                        span: kw.input,
                     },
                     ws1,
                     base_iri,
@@ -2657,40 +2820,45 @@ mod new {
     }
 
     /// Parse the prefix directive.
-    fn parse_prefix_directive<'a, E: ParseError<Span<'a>> + ContextError<Span<'a>>>(
-        input: Span<'a>,
-    ) -> IResult<Span, Directive<'a>, E> {
-        context(
-            "parse prefix directive",
-            tuple((
-                opt(lex_doc_comment),
-                recognize(pair(
-                    at,
-                    verify(lex_ident, |token| token.kind == TokenKind::Prefix),
-                )),
-                opt(lex_whitespace),
-                recognize(pair(lex_ident, colon)),
-                opt(lex_whitespace),
-                lex_iri,
-                opt(lex_whitespace),
-                cut(dot),
+    fn parse_prefix_directive<'a, 'e>(
+        input: Input<'a, 'e>,
+    ) -> IResult<Input<'a, 'e>, Directive<'a>> {
+        tuple((
+            opt(lex_doc_comment),
+            recognize(pair(
+                at,
+                verify(lex_ident, |token| token.kind == TokenKind::Prefix),
             )),
-        )(input)
+            opt(lex_whitespace),
+            report_label(recognize(pair(lex_ident, colon)), ParserLabel::Prefix),
+            opt(lex_whitespace),
+            report_label(lex_iri, ParserLabel::Iri),
+            opt(lex_whitespace),
+            expect(
+                report_label(dot, ParserLabel::Dot),
+                "missing `.`",
+                Token {
+                    kind: TokenKind::Error,
+                    span: Span::new("ERROR! missing `.`"),
+                },
+                input.parser_state,
+            ),
+        ))(input)
         .map(
             |(rest_input, (doc_comment, kw, ws1, prefix, ws2, prefix_iri, ws3, dot))| {
                 (
                     rest_input,
                     Directive::Prefix {
-                        span: outer_span(input, rest_input),
+                        span: outer_span(input.input, rest_input.input),
                         doc_comment,
                         kw: Token {
                             kind: TokenKind::Prefix,
-                            span: kw,
+                            span: kw.input,
                         },
                         ws1,
                         prefix: Token {
                             kind: TokenKind::Ident,
-                            span: prefix,
+                            span: prefix.input,
                         },
                         ws2,
                         prefix_iri,
@@ -2703,37 +2871,42 @@ mod new {
     }
 
     /// Parse the import directive.
-    fn parse_import_directive<'a, E: ParseError<Span<'a>> + ContextError<Span<'a>>>(
-        input: Span<'a>,
-    ) -> IResult<Span, Directive<'a>, E> {
-        context(
-            "parse import directive",
-            tuple((
-                opt(lex_doc_comment),
-                recognize(pair(
-                    at,
-                    verify(lex_ident, |token| token.kind == TokenKind::Import),
-                )),
-                lex_whitespace,
-                lex_ident,
-                opt(lex_whitespace),
-                arrow,
-                opt(lex_whitespace),
-                parse_map,
-                opt(lex_whitespace),
-                cut(dot),
+    fn parse_import_directive<'a, 'e>(
+        input: Input<'a, 'e>,
+    ) -> IResult<Input<'a, 'e>, Directive<'a>> {
+        tuple((
+            opt(lex_doc_comment),
+            recognize(pair(
+                at,
+                verify(lex_ident, |token| token.kind == TokenKind::Import),
             )),
-        )(input)
+            lex_whitespace,
+            report_label(lex_ident, ParserLabel::Identifier),
+            opt(lex_whitespace),
+            report_label(arrow, ParserLabel::Arrow),
+            opt(lex_whitespace),
+            parse_map,
+            opt(lex_whitespace),
+            expect(
+                report_label(dot, ParserLabel::Dot),
+                "missing `.`",
+                Token {
+                    kind: TokenKind::Error,
+                    span: Span::new("ERROR! missing `.`"),
+                },
+                input.parser_state,
+            ),
+        ))(input)
         .map(
             |(rest_input, (doc_comment, kw, ws1, predicate, ws2, arrow, ws3, map, ws4, dot))| {
                 (
                     rest_input,
                     Directive::Import {
-                        span: outer_span(input, rest_input),
+                        span: outer_span(input.input, rest_input.input),
                         doc_comment,
                         kw: Token {
                             kind: TokenKind::Import,
-                            span: kw,
+                            span: kw.input,
                         },
                         ws1,
                         predicate,
@@ -2750,37 +2923,42 @@ mod new {
     }
 
     /// Parse the export directive.
-    fn parse_export_directive<'a, E: ParseError<Span<'a>> + ContextError<Span<'a>>>(
-        input: Span<'a>,
-    ) -> IResult<Span, Directive<'a>, E> {
-        context(
-            "parse export directive",
-            tuple((
-                opt(lex_doc_comment),
-                recognize(pair(
-                    at,
-                    verify(lex_ident, |token| token.kind == TokenKind::Export),
-                )),
-                lex_whitespace,
-                lex_ident,
-                opt(lex_whitespace),
-                arrow,
-                opt(lex_whitespace),
-                parse_map,
-                opt(lex_whitespace),
-                cut(dot),
+    fn parse_export_directive<'a, 'e>(
+        input: Input<'a, 'e>,
+    ) -> IResult<Input<'a, 'e>, Directive<'a>> {
+        tuple((
+            opt(lex_doc_comment),
+            recognize(pair(
+                at,
+                verify(lex_ident, |token| token.kind == TokenKind::Export),
             )),
-        )(input)
+            lex_whitespace,
+            report_label(lex_ident, ParserLabel::Identifier),
+            opt(lex_whitespace),
+            report_label(arrow, ParserLabel::Arrow),
+            opt(lex_whitespace),
+            parse_map,
+            opt(lex_whitespace),
+            expect(
+                report_label(dot, ParserLabel::Dot),
+                "missing `.`",
+                Token {
+                    kind: TokenKind::Error,
+                    span: Span::new("ERROR! missing `.`"),
+                },
+                input.parser_state,
+            ),
+        ))(input)
         .map(
             |(rest_input, (doc_comment, kw, ws1, predicate, ws2, arrow, ws3, map, ws4, dot))| {
                 (
                     rest_input,
                     Directive::Export {
-                        span: outer_span(input, rest_input),
+                        span: outer_span(input.input, rest_input.input),
                         doc_comment,
                         kw: Token {
                             kind: TokenKind::Export,
-                            span: kw,
+                            span: kw.input,
                         },
                         ws1,
                         predicate,
@@ -2797,33 +2975,38 @@ mod new {
     }
 
     /// Parse the output directive.
-    fn parse_output_directive<'a, E: ParseError<Span<'a>> + ContextError<Span<'a>>>(
-        input: Span<'a>,
-    ) -> IResult<Span, Directive<'a>, E> {
-        context(
-            "parse output directive",
-            tuple((
-                opt(lex_doc_comment),
-                recognize(pair(
-                    at,
-                    verify(lex_ident, |token| token.kind == TokenKind::Output),
-                )),
-                lex_whitespace,
-                opt(parse_identifier_list),
-                opt(lex_whitespace),
-                cut(dot),
+    fn parse_output_directive<'a, 'e>(
+        input: Input<'a, 'e>,
+    ) -> IResult<Input<'a, 'e>, Directive<'a>> {
+        tuple((
+            opt(lex_doc_comment),
+            recognize(pair(
+                at,
+                verify(lex_ident, |token| token.kind == TokenKind::Output),
             )),
-        )(input)
+            lex_whitespace,
+            opt(parse_list(lex_ident)),
+            opt(lex_whitespace),
+            expect(
+                report_label(dot, ParserLabel::Dot),
+                "missing `.`",
+                Token {
+                    kind: TokenKind::Error,
+                    span: Span::new("ERROR! missing `.`"),
+                },
+                input.parser_state,
+            ),
+        ))(input)
         .map(
             |(rest_input, (doc_comment, kw, ws1, predicates, ws2, dot))| {
                 (
                     rest_input,
                     Directive::Output {
-                        span: outer_span(input, rest_input),
+                        span: outer_span(input.input, rest_input.input),
                         doc_comment,
                         kw: Token {
                             kind: TokenKind::Output,
-                            span: kw,
+                            span: kw.input,
                         },
                         ws1,
                         predicates,
@@ -2835,55 +3018,49 @@ mod new {
         )
     }
 
-    /// Parse a list of `ident1, ident2, …`
-    fn parse_identifier_list<'a, E: ParseError<Span<'a>> + ContextError<Span<'a>>>(
-        input: Span<'a>,
-    ) -> IResult<Span, List<'a, Token<'a>>, E> {
-        context(
-            "parse identifier list",
+    // /// Parse a list of `ident1, ident2, …`
+    // fn parse_identifier_list<'a, 'e>(
+    //     input: Input<'a, 'e>,
+    // ) -> IResult<Input<'a, 'e>, List<'a, Token<'a>>> {
+    //     pair(
+    //         lex_ident,
+    //         many0(tuple((
+    //             opt(lex_whitespace),
+    //             comma,
+    //             opt(lex_whitespace),
+    //             lex_ident,
+    //         ))),
+    //     )(input)
+    //     .map(|(rest_input, (first, rest))| {
+    //         (
+    //             rest_input,
+    //             List {
+    //                 span: outer_span(input.input, rest_input.input),
+    //                 first,
+    //                 rest: if rest.is_empty() { None } else { Some(rest) },
+    //             },
+    //         )
+    //     })
+    // }
+
+    fn parse_list<'a, 'e, T>(
+        parse_t: fn(Input<'a, 'e>) -> IResult<Input<'a, 'e>, T>,
+    ) -> impl Fn(Input<'a, 'e>) -> IResult<Input<'a, 'e>, List<'a, T>> {
+        move |input: Input<'a, 'e>| {
             pair(
-                lex_ident,
+                parse_t,
                 many0(tuple((
                     opt(lex_whitespace),
                     comma,
                     opt(lex_whitespace),
-                    lex_ident,
+                    parse_t,
                 ))),
-            ),
-        )(input)
-        .map(|(rest_input, (first, rest))| {
-            (
-                rest_input,
-                List {
-                    span: outer_span(input, rest_input),
-                    first,
-                    rest: if rest.is_empty() { None } else { Some(rest) },
-                },
-            )
-        })
-    }
-
-    fn parse_atom_list<'a, E: ParseError<Span<'a>> + ContextError<Span<'a>>>(
-        parse_atom: fn(Span<'a>) -> IResult<Span, Atom<'a>, E>,
-    ) -> impl Fn(Span<'a>) -> IResult<Span<'a>, List<'a, Atom<'a>>, E> {
-        move |input| {
-            context(
-                "parse atom list",
-                pair(
-                    parse_atom,
-                    many0(tuple((
-                        opt(lex_whitespace),
-                        comma,
-                        opt(lex_whitespace),
-                        parse_atom,
-                    ))),
-                ),
             )(input)
             .map(|(rest_input, (first, rest))| {
                 (
                     rest_input,
                     List {
-                        span: outer_span(input, rest_input),
+                        span: outer_span(input.input, rest_input.input),
                         first,
                         rest: if rest.is_empty() { None } else { Some(rest) },
                     },
@@ -2893,76 +3070,55 @@ mod new {
     }
 
     /// Parse the head atoms. The same as the body atoms except for disallowing negated atoms.
-    fn parse_head_atoms<'a, E: ParseError<Span<'a>> + ContextError<Span<'a>>>(
-        input: Span<'a>,
-    ) -> IResult<Span, Atom<'a>, E> {
-        context(
-            "harse head atoms",
-            alt((parse_normal_atom, parse_infix_atom, parse_map_atom)),
-        )(input)
+    fn parse_head_atoms<'a, 'e>(input: Input<'a, 'e>) -> IResult<Input<'a, 'e>, Atom<'a>> {
+        alt((parse_normal_atom, parse_infix_atom, parse_map_atom))(input)
     }
 
     /// Parse the body atoms. The same as the head atoms except for allowing negated atoms.
-    fn parse_body_atoms<'a, E: ParseError<Span<'a>> + ContextError<Span<'a>>>(
-        input: Span<'a>,
-    ) -> IResult<Span, Atom<'a>, E> {
-        context(
-            "parse body atoms",
-            alt((
-                parse_normal_atom,
-                parse_negative_atom,
-                parse_infix_atom,
-                parse_map_atom,
-            )),
-        )(input)
+    fn parse_body_atoms<'a, 'e>(input: Input<'a, 'e>) -> IResult<Input<'a, 'e>, Atom<'a>> {
+        alt((
+            parse_normal_atom,
+            parse_negative_atom,
+            parse_infix_atom,
+            parse_map_atom,
+        ))(input)
     }
 
     /// Parse an atom of the form `predicateName(term1, term2, …)`.
-    fn parse_normal_atom<'a, E: ParseError<Span<'a>> + ContextError<Span<'a>>>(
-        input: Span<'a>,
-    ) -> IResult<Span, Atom<'a>, E> {
-        context("parse normal atom", parse_named_tuple)(input)
+    fn parse_normal_atom<'a, 'e>(input: Input<'a, 'e>) -> IResult<Input<'a, 'e>, Atom<'a>> {
+        parse_named_tuple(input)
             .map(|(rest_input, named_tuple)| (rest_input, Atom::Positive(named_tuple)))
     }
 
     /// Parse an atom of the form `~predicateName(term1, term2, …)`.
-    fn parse_negative_atom<'a, E: ParseError<Span<'a>> + ContextError<Span<'a>>>(
-        input: Span<'a>,
-    ) -> IResult<Span, Atom<'a>, E> {
-        context("parse negative atom", pair(tilde, parse_named_tuple))(input).map(
-            |(rest_input, (tilde, named_tuple))| {
-                (
-                    rest_input,
-                    Atom::Negative {
-                        span: outer_span(input, rest_input),
-                        neg: tilde,
-                        atom: named_tuple,
-                    },
-                )
-            },
-        )
+    fn parse_negative_atom<'a, 'e>(input: Input<'a, 'e>) -> IResult<Input<'a, 'e>, Atom<'a>> {
+        pair(tilde, parse_named_tuple)(input).map(|(rest_input, (tilde, named_tuple))| {
+            (
+                rest_input,
+                Atom::Negative {
+                    span: outer_span(input.input, rest_input.input),
+                    neg: tilde,
+                    atom: named_tuple,
+                },
+            )
+        })
     }
 
     /// Parse an "infix atom" of the form `term1 <infixop> term2`.
     /// The supported infix operations are `<`, `<=`, `=`, `>=`, `>` and `!=`.
-    fn parse_infix_atom<'a, E: ParseError<Span<'a>> + ContextError<Span<'a>>>(
-        input: Span<'a>,
-    ) -> IResult<Span, Atom<'a>, E> {
-        context(
-            "parse infix atom",
-            tuple((
-                parse_term,
-                opt(lex_whitespace),
-                parse_operation_token,
-                opt(lex_whitespace),
-                parse_term,
-            )),
-        )(input)
+    fn parse_infix_atom<'a, 'e>(input: Input<'a, 'e>) -> IResult<Input<'a, 'e>, Atom<'a>> {
+        tuple((
+            parse_term,
+            opt(lex_whitespace),
+            parse_operation_token,
+            opt(lex_whitespace),
+            parse_term,
+        ))(input)
         .map(|(rest_input, (lhs, ws1, operation, ws2, rhs))| {
             (
                 rest_input,
                 Atom::InfixAtom {
-                    span: outer_span(input, rest_input),
+                    span: outer_span(input.input, rest_input.input),
                     lhs,
                     ws1,
                     operation,
@@ -2975,27 +3131,22 @@ mod new {
 
     /// Parse a tuple with an optional name, like `ident(term1, term2)`
     /// or just `(int, int, skip)`.
-    fn parse_tuple<'a, E: ParseError<Span<'a>> + ContextError<Span<'a>>>(
-        input: Span<'a>,
-    ) -> IResult<Span, Tuple<'a>, E> {
-        context(
-            "parse tuple",
-            tuple((
-                opt(lex_ident),
-                opt(lex_whitespace),
-                open_paren,
-                opt(lex_whitespace),
-                opt(parse_term_list),
-                opt(lex_whitespace),
-                cut(close_paren),
-            )),
-        )(input)
+    fn parse_tuple<'a, 'e>(input: Input<'a, 'e>) -> IResult<Input<'a, 'e>, Tuple<'a>> {
+        tuple((
+            opt(lex_ident),
+            opt(lex_whitespace),
+            open_paren,
+            opt(lex_whitespace),
+            opt(parse_list(parse_term)),
+            opt(lex_whitespace),
+            report_label(close_paren, ParserLabel::CloseParen),
+        ))(input)
         .map(
             |(rest_input, (identifier, ws1, open_paren, ws2, terms, ws3, close_paren))| {
                 (
                     rest_input,
                     Tuple {
-                        span: outer_span(input, rest_input),
+                        span: outer_span(input.input, rest_input.input),
                         identifier,
                         ws1,
                         open_paren,
@@ -3011,27 +3162,22 @@ mod new {
 
     /// Parse a named tuple. This function is like `parse_tuple` with the difference,
     /// that is enforces the existence of an identifier for the tuple.
-    fn parse_named_tuple<'a, E: ParseError<Span<'a>> + ContextError<Span<'a>>>(
-        input: Span<'a>,
-    ) -> IResult<Span, Tuple<'a>, E> {
-        context(
-            "parse named tuple",
-            tuple((
-                lex_ident,
-                opt(lex_whitespace),
-                open_paren,
-                opt(lex_whitespace),
-                opt(parse_term_list),
-                opt(lex_whitespace),
-                cut(close_paren),
-            )),
-        )(input)
+    fn parse_named_tuple<'a, 'e>(input: Input<'a, 'e>) -> IResult<Input<'a, 'e>, Tuple<'a>> {
+        tuple((
+            lex_ident,
+            opt(lex_whitespace),
+            report_label(open_paren, ParserLabel::OpenParen),
+            opt(lex_whitespace),
+            opt(parse_list(parse_term)),
+            opt(lex_whitespace),
+            report_label(close_paren, ParserLabel::CloseParen),
+        ))(input)
         .map(
             |(rest_input, (identifier, ws1, open_paren, ws2, terms, ws3, close_paren))| {
                 (
                     rest_input,
                     Tuple {
-                        span: outer_span(input, rest_input),
+                        span: outer_span(input.input, rest_input.input),
                         identifier: Some(identifier),
                         ws1,
                         open_paren,
@@ -3047,27 +3193,22 @@ mod new {
 
     /// Parse a map. Maps are denoted with `{…}` and can haven an optional name, e.g. `csv {…}`.
     /// Inside the curly braces ist a list of pairs.
-    fn parse_map<'a, E: ParseError<Span<'a>> + ContextError<Span<'a>>>(
-        input: Span<'a>,
-    ) -> IResult<Span, Map<'a>, E> {
-        context(
-            "parse map",
-            tuple((
-                opt(lex_ident),
-                opt(lex_whitespace),
-                open_brace,
-                opt(lex_whitespace),
-                parse_pair_list,
-                opt(lex_whitespace),
-                cut(close_brace),
-            )),
-        )(input)
+    fn parse_map<'a, 'e>(input: Input<'a, 'e>) -> IResult<Input<'a, 'e>, Map<'a>> {
+        tuple((
+            opt(lex_ident),
+            opt(lex_whitespace),
+            open_brace,
+            opt(lex_whitespace),
+            opt(parse_list(parse_pair)),
+            opt(lex_whitespace),
+            report_label(close_brace, ParserLabel::CloseBrace),
+        ))(input)
         .map(
             |(rest_input, (identifier, ws1, open_brace, ws2, pairs, ws3, close_brace))| {
                 (
                     rest_input,
                     Map {
-                        span: outer_span(input, rest_input),
+                        span: outer_span(input.input, rest_input.input),
                         identifier,
                         ws1,
                         open_brace,
@@ -3082,64 +3223,59 @@ mod new {
     }
 
     /// Parse a map in an atom position.
-    fn parse_map_atom<'a, E: ParseError<Span<'a>> + ContextError<Span<'a>>>(
-        input: Span<'a>,
-    ) -> IResult<Span, Atom<'a>, E> {
-        context("parse map atom", parse_map)(input)
-            .map(|(rest_input, map)| (rest_input, Atom::Map(map)))
+    fn parse_map_atom<'a, 'e>(input: Input<'a, 'e>) -> IResult<Input<'a, 'e>, Atom<'a>> {
+        parse_map(input).map(|(rest_input, map)| (rest_input, Atom::Map(map)))
     }
 
-    /// Parse a pair list of the form `key1 = value1, key2 = value2, …`.
-    fn parse_pair_list<'a, E: ParseError<Span<'a>> + ContextError<Span<'a>>>(
-        input: Span<'a>,
-    ) -> IResult<Span, Option<List<'a, Pair<Term<'a>, Term<'a>>>>, E> {
-        context(
-            "parse pair list",
-            opt(pair(
-                parse_pair,
-                many0(tuple((
-                    opt(lex_whitespace),
-                    comma,
-                    opt(lex_whitespace),
-                    parse_pair,
-                ))),
-            )),
-        )(input)
-        .map(|(rest_input, pair_list)| {
-            if let Some((first, rest)) = pair_list {
-                (
-                    rest_input,
-                    Some(List {
-                        span: outer_span(input, rest_input),
-                        first,
-                        rest: if rest.is_empty() { None } else { Some(rest) },
-                    }),
-                )
-            } else {
-                (rest_input, None)
-            }
-        })
-    }
+    // /// Parse a pair list of the form `key1 = value1, key2 = value2, …`.
+    // fn parse_pair_list<'a, 'e, E: ParseError<Input<'a, 'e>> + ContextError<Input<'a, 'e>>>(
+    //     input: Input<'a, 'e>,
+    //     state: Errors,
+    // ) -> IResult<Input<'a, 'e>, Option<List<'a, Pair<Term<'a>, Term<'a>>>>, E> {
+    //     context(
+    //         "parse pair list",
+    //         opt(pair(
+    //             parse_pair,
+    //             many0(tuple((
+    //                 opt(lex_whitespace),
+    //                 comma,
+    //                 opt(lex_whitespace),
+    //                 parse_pair,
+    //             ))),
+    //         )),
+    //     )(input)
+    //     .map(|(rest_input, pair_list)| {
+    //         if let Some((first, rest)) = pair_list {
+    //             (
+    //                 rest_input,
+    //                 Some(List {
+    //                     span: outer_span(input, rest_input),
+    //                     first,
+    //                     rest: if rest.is_empty() { None } else { Some(rest) },
+    //                 }),
+    //             )
+    //         } else {
+    //             (rest_input, None)
+    //         }
+    //     })
+    // }
 
     /// Parse a pair of the form `key = value`.
-    fn parse_pair<'a, E: ParseError<Span<'a>> + ContextError<Span<'a>>>(
-        input: Span<'a>,
-    ) -> IResult<Span, Pair<Term<'a>, Term<'a>>, E> {
-        context(
-            "parse pair",
-            tuple((
-                parse_term,
-                opt(lex_whitespace),
-                equal,
-                opt(lex_whitespace),
-                parse_term,
-            )),
-        )(input)
+    fn parse_pair<'a, 'e>(
+        input: Input<'a, 'e>,
+    ) -> IResult<Input<'a, 'e>, Pair<'a, Term<'a>, Term<'a>>> {
+        tuple((
+            parse_term,
+            opt(lex_whitespace),
+            report_label(equal, ParserLabel::Equal),
+            opt(lex_whitespace),
+            parse_term,
+        ))(input)
         .map(|(rest_input, (key, ws1, equal, ws2, value))| {
             (
                 rest_input,
                 Pair {
-                    span: outer_span(input, rest_input),
+                    span: outer_span(input.input, rest_input.input),
                     key,
                     ws1,
                     equal,
@@ -3150,90 +3286,80 @@ mod new {
         })
     }
 
-    /// Parse a list of terms of the form `term1, term2, …`.
-    fn parse_term_list<'a, E: ParseError<Span<'a>> + ContextError<Span<'a>>>(
-        input: Span<'a>,
-    ) -> IResult<Span, List<'a, Term<'a>>, E> {
-        context(
-            "parse term list",
-            pair(
-                parse_term,
-                many0(tuple((
-                    opt(lex_whitespace),
-                    comma,
-                    opt(lex_whitespace),
-                    parse_term,
-                ))),
-            ),
-        )(input)
-        .map(|(rest_input, (first, rest))| {
-            (
-                rest_input,
-                List {
-                    span: outer_span(input, rest_input),
-                    first,
-                    rest: if rest.is_empty() { None } else { Some(rest) },
-                },
-            )
-        })
-    }
+    // /// Parse a list of terms of the form `term1, term2, …`.
+    // fn parse_term_list<'a, 'e, E: ParseError<Input<'a, 'e>> + ContextError<Input<'a, 'e>>>(
+    //     input: Input<'a, 'e>,
+    //     state: Errors,
+    // ) -> IResult<Input<'a, 'e>, List<'a, Term<'a>>, E> {
+    //     context(
+    //         "parse term list",
+    //         pair(
+    //             parse_term,
+    //             many0(tuple((
+    //                 opt(lex_whitespace),
+    //                 comma,
+    //                 opt(lex_whitespace),
+    //                 parse_term,
+    //             ))),
+    //         ),
+    //     )(input)
+    //     .map(|(rest_input, (first, rest))| {
+    //         (
+    //             rest_input,
+    //             List {
+    //                 span: outer_span(input, rest_input),
+    //                 first,
+    //                 rest: if rest.is_empty() { None } else { Some(rest) },
+    //             },
+    //         )
+    //     })
+    // }
 
     /// Parse a term. A term can be a primitive value (constant, number, string, …),
     /// a variable (universal or existential), a map, a function (-symbol), an arithmetic
     /// operation, an aggregation or an tuple of terms, e.g. `(term1, term2, …)`.
-    fn parse_term<'a, E: ParseError<Span<'a>> + ContextError<Span<'a>>>(
-        input: Span<'a>,
-    ) -> IResult<Span, Term<'a>, E> {
-        context(
-            "parse term",
-            alt((
-                parse_binary_term,
-                parse_tuple_term,
-                parse_unary_prefix_term,
-                parse_map_term,
-                parse_primitive_term,
-                parse_variable,
-                parse_existential,
-                parse_aggregation_term,
-                parse_blank,
-            )),
-        )(input)
+    fn parse_term<'a, 'e>(input: Input<'a, 'e>) -> IResult<Input<'a, 'e>, Term<'a>> {
+        report_error(alt((
+            parse_binary_term,
+            parse_tuple_term,
+            // parse_unary_prefix_term,
+            parse_map_term,
+            parse_primitive_term,
+            parse_variable,
+            parse_existential,
+            parse_aggregation_term,
+            parse_blank,
+        )))(input)
     }
 
     /// Parse a primitive term (simple constant, iri constant, number, string).
-    fn parse_primitive_term<'a, E: ParseError<Span<'a>> + ContextError<Span<'a>>>(
-        input: Span<'a>,
-    ) -> IResult<Span, Term<'a>, E> {
-        context(
-            "parse primitive term",
-            alt((
-                parse_rdf_literal,
-                parse_ident,
-                parse_iri,
-                parse_number,
-                parse_string,
-            )),
-        )(input)
+    fn parse_primitive_term<'a, 'e>(input: Input<'a, 'e>) -> IResult<Input<'a, 'e>, Term<'a>> {
+        report_error(alt((
+            parse_rdf_literal,
+            parse_ident,
+            parse_iri,
+            parse_number,
+            parse_string,
+        )))(input)
         .map(|(rest_input, term)| (rest_input, Term::Primitive(term)))
     }
 
     /// Parse a rdf literal e.g. "2023-06-19"^^<http://www.w3.org/2001/XMLSchema#date>
-    fn parse_rdf_literal<'a, E: ParseError<Span<'a>> + ContextError<Span<'a>>>(
-        input: Span<'a>,
-    ) -> IResult<Span<'a>, Primitive<'a>, E> {
-        context(
-            "parse rdf literal",
-            tuple((lex_string, recognize(pair(caret, caret)), lex_iri)),
-        )(input)
+    fn parse_rdf_literal<'a, 'e>(input: Input<'a, 'e>) -> IResult<Input<'a, 'e>, Primitive<'a>> {
+        tuple((
+            lex_string,
+            recognize(pair(caret, caret)),
+            report_label(lex_iri, ParserLabel::Iri),
+        ))(input)
         .map(|(rest_input, (string, carets, iri))| {
             (
                 rest_input,
                 Primitive::RdfLiteral {
-                    span: outer_span(input, rest_input),
+                    span: outer_span(input.input, rest_input.input),
                     string,
                     carets: Token {
                         kind: TokenKind::Caret,
-                        span: carets,
+                        span: carets.input,
                     },
                     iri,
                 },
@@ -3241,45 +3367,31 @@ mod new {
         })
     }
 
-    fn parse_ident<'a, E: ParseError<Span<'a>> + ContextError<Span<'a>>>(
-        input: Span<'a>,
-    ) -> IResult<Span<'a>, Primitive<'a>, E> {
-        context("parse identifier", lex_ident)(input)
-            .map(|(rest_input, ident)| (rest_input, Primitive::Constant(ident)))
+    fn parse_ident<'a, 'e>(input: Input<'a, 'e>) -> IResult<Input<'a, 'e>, Primitive<'a>> {
+        lex_ident(input).map(|(rest_input, ident)| (rest_input, Primitive::Constant(ident)))
     }
 
-    fn parse_iri<'a, E: ParseError<Span<'a>> + ContextError<Span<'a>>>(
-        input: Span<'a>,
-    ) -> IResult<Span<'a>, Primitive<'a>, E> {
-        context("parse iri", lex_iri)(input)
-            .map(|(rest_input, iri)| (rest_input, Primitive::Iri(iri)))
+    fn parse_iri<'a, 'e>(input: Input<'a, 'e>) -> IResult<Input<'a, 'e>, Primitive<'a>> {
+        lex_iri(input).map(|(rest_input, iri)| (rest_input, Primitive::Iri(iri)))
     }
 
-    fn parse_number<'a, E: ParseError<Span<'a>> + ContextError<Span<'a>>>(
-        input: Span<'a>,
-    ) -> IResult<Span<'a>, Primitive<'a>, E> {
-        context("parse number", alt((parse_decimal, parse_integer)))(input)
+    fn parse_number<'a, 'e>(input: Input<'a, 'e>) -> IResult<Input<'a, 'e>, Primitive<'a>> {
+        report_error(alt((parse_decimal, parse_integer)))(input)
     }
 
-    fn parse_decimal<'a, E: ParseError<Span<'a>> + ContextError<Span<'a>>>(
-        input: Span<'a>,
-    ) -> IResult<Span<'a>, Primitive<'a>, E> {
-        context(
-            "parse decimal",
-            tuple((
-                opt(alt((plus, minus))),
-                opt(lex_number),
-                dot,
-                lex_number,
-                opt(parse_exponent),
-            )),
-        )(input)
+    fn parse_decimal<'a, 'e>(input: Input<'a, 'e>) -> IResult<Input<'a, 'e>, Primitive<'a>> {
+        tuple((
+            opt(alt((plus, minus))),
+            opt(lex_number),
+            dot,
+            lex_number,
+            opt(parse_exponent),
+        ))(input)
         .map(|(rest_input, (sign, before, dot, after, exponent))| {
-            dbg!(&sign, &before, &dot, &after, &exponent);
             (
                 rest_input,
                 Primitive::Number {
-                    span: outer_span(input, rest_input),
+                    span: outer_span(input.input, rest_input.input),
                     sign,
                     before,
                     dot: Some(dot),
@@ -3290,82 +3402,68 @@ mod new {
         })
     }
 
-    fn parse_integer<'a, E: ParseError<Span<'a>> + ContextError<Span<'a>>>(
-        input: Span<'a>,
-    ) -> IResult<Span<'a>, Primitive<'a>, E> {
-        context("parse integer", pair(opt(alt((plus, minus))), lex_number))(input).map(
-            |(rest_input, (sign, number))| {
-                (
-                    rest_input,
-                    Primitive::Number {
-                        span: outer_span(input, rest_input),
-                        sign,
-                        before: None,
-                        dot: None,
-                        after: number,
-                        exponent: None,
-                    },
-                )
-            },
-        )
-    }
-
-    fn parse_exponent<'a, E: ParseError<Span<'a>> + ContextError<Span<'a>>>(
-        input: Span<'a>,
-    ) -> IResult<Span<'a>, Exponent<'a>, E> {
-        tuple((exp, opt(alt((plus, minus))), lex_number))(input)
-            .map(|(rest_input, (e, sign, number))| (rest_input, Exponent { e, sign, number }))
-    }
-
-    fn parse_string<'a, E: ParseError<Span<'a>> + ContextError<Span<'a>>>(
-        input: Span<'a>,
-    ) -> IResult<Span<'a>, Primitive<'a>, E> {
-        context("parse string", lex_string)(input)
-            .map(|(rest_input, string)| (rest_input, Primitive::String(string)))
-    }
-
-    /// Parse an unary term.
-    fn parse_unary_prefix_term<'a, E: ParseError<Span<'a>> + ContextError<Span<'a>>>(
-        input: Span<'a>,
-    ) -> IResult<Span, Term<'a>, E> {
-        context(
-            "parse unary prefix term",
-            pair(lex_unary_prefix_operators, parse_term),
-        )(input)
-        .map(|(rest_input, (operation, term))| {
+    fn parse_integer<'a, 'e>(input: Input<'a, 'e>) -> IResult<Input<'a, 'e>, Primitive<'a>> {
+        pair(opt(alt((plus, minus))), lex_number)(input).map(|(rest_input, (sign, number))| {
             (
                 rest_input,
-                Term::UnaryPrefix {
-                    span: outer_span(input, rest_input),
-                    operation,
-                    term: Box::new(term),
+                Primitive::Number {
+                    span: outer_span(input.input, rest_input.input),
+                    sign,
+                    before: None,
+                    dot: None,
+                    after: number,
+                    exponent: None,
                 },
             )
         })
     }
 
+    fn parse_exponent<'a, 'e>(input: Input<'a, 'e>) -> IResult<Input<'a, 'e>, Exponent<'a>> {
+        tuple((
+            exp,
+            opt(alt((plus, minus))),
+            report_label(lex_number, ParserLabel::Number),
+        ))(input)
+        .map(|(rest_input, (e, sign, number))| (rest_input, Exponent { e, sign, number }))
+    }
+
+    fn parse_string<'a, 'e>(input: Input<'a, 'e>) -> IResult<Input<'a, 'e>, Primitive<'a>> {
+        lex_string(input).map(|(rest_input, string)| (rest_input, Primitive::String(string)))
+    }
+
+    // /// Parse an unary term.
+    // fn parse_unary_prefix_term<'a, 'e>(input: Input<'a, 'e>) -> IResult<Input<'a, 'e>, Term<'a>> {
+    //     pair(lex_unary_prefix_operators, parse_term)(input).map(
+    //         |(rest_input, (operation, term))| {
+    //             (
+    //                 rest_input,
+    //                 Term::UnaryPrefix {
+    //                     span: outer_span(input.input, rest_input.input),
+    //                     operation,
+    //                     term: Box::new(term),
+    //                 },
+    //             )
+    //         },
+    //     )
+    // }
+
     /// Parse a binary infix operation of the form `term1 <op> term2`.
-    fn parse_binary_term<'a, E: ParseError<Span<'a>> + ContextError<Span<'a>>>(
-        input: Span<'a>,
-    ) -> IResult<Span, Term<'a>, E> {
-        context(
-            "parse binary term",
-            pair(
-                parse_arithmetic_product,
-                opt(tuple((
-                    opt(lex_whitespace),
-                    alt((plus, minus)),
-                    opt(lex_whitespace),
-                    parse_binary_term,
-                ))),
-            ),
+    fn parse_binary_term<'a, 'e>(input: Input<'a, 'e>) -> IResult<Input<'a, 'e>, Term<'a>> {
+        pair(
+            parse_arithmetic_product,
+            opt(tuple((
+                opt(lex_whitespace),
+                alt((plus, minus)),
+                opt(lex_whitespace),
+                parse_binary_term,
+            ))),
         )(input)
         .map(|(rest_input, (lhs, opt))| {
             (
                 rest_input,
                 if let Some((ws1, operation, ws2, rhs)) = opt {
                     Term::Binary {
-                        span: outer_span(input, rest_input),
+                        span: outer_span(input.input, rest_input.input),
                         lhs: Box::new(lhs),
                         ws1,
                         operation,
@@ -3381,27 +3479,22 @@ mod new {
 
     /// Parse an arithmetic product, i.e. an expression involving
     /// only `*` and `/` over subexpressions.
-    fn parse_arithmetic_product<'a, E: ParseError<Span<'a>> + ContextError<Span<'a>>>(
-        input: Span<'a>,
-    ) -> IResult<Span, Term<'a>, E> {
-        context(
-            "parse arithmetic product",
-            pair(
-                parse_arithmetic_factor,
-                opt(tuple((
-                    opt(lex_whitespace),
-                    alt((star, slash)),
-                    opt(lex_whitespace),
-                    parse_arithmetic_product,
-                ))),
-            ),
+    fn parse_arithmetic_product<'a, 'e>(input: Input<'a, 'e>) -> IResult<Input<'a, 'e>, Term<'a>> {
+        pair(
+            parse_arithmetic_factor,
+            opt(tuple((
+                opt(lex_whitespace),
+                alt((star, slash)),
+                opt(lex_whitespace),
+                parse_arithmetic_product,
+            ))),
         )(input)
         .map(|(rest_input, (lhs, opt))| {
             (
                 rest_input,
                 if let Some((ws1, operation, ws2, rhs)) = opt {
                     Term::Binary {
-                        span: outer_span(input, rest_input),
+                        span: outer_span(input.input, rest_input.input),
                         lhs: Box::new(lhs),
                         ws1,
                         operation,
@@ -3415,19 +3508,14 @@ mod new {
         })
     }
 
-    fn parse_arithmetic_factor<'a, E: ParseError<Span<'a>> + ContextError<Span<'a>>>(
-        input: Span<'a>,
-    ) -> IResult<Span, Term<'a>, E> {
-        context(
-            "parse arithmetic factor",
-            alt((
-                parse_tuple_term,
-                parse_aggregation_term,
-                parse_primitive_term,
-                parse_variable,
-                parse_existential,
-            )),
-        )(input)
+    fn parse_arithmetic_factor<'a, 'e>(input: Input<'a, 'e>) -> IResult<Input<'a, 'e>, Term<'a>> {
+        report_error(alt((
+            parse_tuple_term,
+            parse_aggregation_term,
+            parse_primitive_term,
+            parse_variable,
+            parse_existential,
+        )))(input)
     }
 
     // fn fold_arithmetic_expression<'a>(
@@ -3452,29 +3540,24 @@ mod new {
     // }
 
     /// Parse an aggregation term of the form `#sum(…)`.
-    fn parse_aggregation_term<'a, E: ParseError<Span<'a>> + ContextError<Span<'a>>>(
-        input: Span<'a>,
-    ) -> IResult<Span, Term<'a>, E> {
-        context(
-            "parse aggregation term",
-            tuple((
-                recognize(pair(hash, lex_ident)),
-                open_paren,
-                opt(lex_whitespace),
-                parse_term_list,
-                opt(lex_whitespace),
-                close_paren,
-            )),
-        )(input)
+    fn parse_aggregation_term<'a, 'e>(input: Input<'a, 'e>) -> IResult<Input<'a, 'e>, Term<'a>> {
+        tuple((
+            recognize(pair(hash, lex_ident)),
+            report_label(open_paren, ParserLabel::OpenParen),
+            opt(lex_whitespace),
+            parse_list(parse_term),
+            opt(lex_whitespace),
+            report_label(close_paren, ParserLabel::CloseParen),
+        ))(input)
         .map(
             |(rest_input, (operation, open_paren, ws1, terms, ws2, close_paren))| {
                 (
                     rest_input,
                     Term::Aggregation {
-                        span: outer_span(input, rest_input),
+                        span: outer_span(input.input, rest_input.input),
                         operation: Token {
                             kind: TokenKind::Aggregate,
-                            span: operation,
+                            span: operation.input,
                         },
                         open_paren,
                         ws1,
@@ -3488,61 +3571,51 @@ mod new {
     }
 
     /// Parse a `_`
-    fn parse_blank<'a, E: ParseError<Span<'a>> + ContextError<Span<'a>>>(
-        input: Span<'a>,
-    ) -> IResult<Span, Term<'a>, E> {
-        context("parse blank", underscore)(input)
-            .map(|(rest_input, underscore)| (rest_input, Term::Blank(underscore)))
+    fn parse_blank<'a, 'e>(input: Input<'a, 'e>) -> IResult<Input<'a, 'e>, Term<'a>> {
+        underscore(input).map(|(rest_input, underscore)| (rest_input, Term::Blank(underscore)))
     }
 
     /// Parse a tuple term, either with a name (function symbol) or as a term (-list) with
     /// parenthesis.
-    fn parse_tuple_term<'a, E: ParseError<Span<'a>> + ContextError<Span<'a>>>(
-        input: Span<'a>,
-    ) -> IResult<Span, Term<'a>, E> {
-        context("parse tuple term", parse_tuple)(input)
+    fn parse_tuple_term<'a, 'e>(input: Input<'a, 'e>) -> IResult<Input<'a, 'e>, Term<'a>> {
+        parse_tuple(input)
             .map(|(rest_input, named_tuple)| (rest_input, Term::Tuple(Box::new(named_tuple))))
     }
 
     /// Parse a map as a term.
-    fn parse_map_term<'a, E: ParseError<Span<'a>> + ContextError<Span<'a>>>(
-        input: Span<'a>,
-    ) -> IResult<Span, Term<'a>, E> {
-        context("parse map term", parse_map)(input)
-            .map(|(rest_input, map)| (rest_input, Term::Map(Box::new(map))))
+    fn parse_map_term<'a, 'e>(input: Input<'a, 'e>) -> IResult<Input<'a, 'e>, Term<'a>> {
+        parse_map(input).map(|(rest_input, map)| (rest_input, Term::Map(Box::new(map))))
     }
 
     /// Parse a variable.
-    fn parse_variable<'a, E: ParseError<Span<'a>> + ContextError<Span<'a>>>(
-        input: Span<'a>,
-    ) -> IResult<Span, Term<'a>, E> {
-        context("parse variable", recognize(pair(question_mark, lex_ident)))(input).map(
-            |(rest_input, var)| {
-                (
-                    rest_input,
-                    Term::Variable(Token {
-                        kind: TokenKind::Variable,
-                        span: var,
-                    }),
-                )
-            },
-        )
+    fn parse_variable<'a, 'e>(input: Input<'a, 'e>) -> IResult<Input<'a, 'e>, Term<'a>> {
+        recognize(pair(
+            question_mark,
+            report_label(lex_ident, ParserLabel::Identifier),
+        ))(input)
+        .map(|(rest_input, var)| {
+            (
+                rest_input,
+                Term::Variable(Token {
+                    kind: TokenKind::Variable,
+                    span: var.input,
+                }),
+            )
+        })
     }
 
     /// Parse an existential variable.
-    fn parse_existential<'a, E: ParseError<Span<'a>> + ContextError<Span<'a>>>(
-        input: Span<'a>,
-    ) -> IResult<Span, Term<'a>, E> {
-        context(
-            "parse existential",
-            recognize(pair(exclamation_mark, lex_ident)),
-        )(input)
+    fn parse_existential<'a, 'e>(input: Input<'a, 'e>) -> IResult<Input<'a, 'e>, Term<'a>> {
+        recognize(pair(
+            exclamation_mark,
+            report_label(lex_ident, ParserLabel::Identifier),
+        ))(input)
         .map(|(rest_input, existential)| {
             (
                 rest_input,
                 Term::Existential(Token {
                     kind: TokenKind::Existential,
-                    span: existential,
+                    span: existential.input,
                 }),
             )
         })
@@ -3550,17 +3623,24 @@ mod new {
 
     // Order of functions is important, because of ordered choice and no backtracking
     /// Parse the operator for an infix atom.
-    fn parse_operation_token<'a, E: ParseError<Span<'a>> + ContextError<Span<'a>>>(
-        input: Span<'a>,
-    ) -> IResult<Span, Token<'a>, E> {
-        context(
-            "parse operation token",
-            alt((less_equal, greater_equal, equal, unequal, less, greater)),
-        )(input)
+    fn parse_operation_token<'a, 'e>(input: Input<'a, 'e>) -> IResult<Input<'a, 'e>, Token<'a>> {
+        report_error(alt((
+            less_equal,
+            greater_equal,
+            equal,
+            unequal,
+            less,
+            greater,
+        )))(input)
     }
 
     #[cfg(test)]
     mod tests {
+        use std::{
+            cell::RefCell,
+            collections::{HashMap, HashSet},
+        };
+
         use nom::error::{convert_error, VerboseError};
 
         use super::*;
@@ -3585,14 +3665,17 @@ mod new {
             };
         }
 
-        fn convert_located_span_error<'a>(input: Span<'a>, err: VerboseError<Span<'a>>) -> String {
+        fn convert_located_span_error<'a, 'e>(
+            input: Span<'a>,
+            err: VerboseError<Input<'a, 'e>>,
+        ) -> String {
             convert_error(
                 *(input.fragment()),
                 VerboseError {
                     errors: err
                         .errors
                         .into_iter()
-                        .map(|(span, tag)| (*(span.fragment()), tag))
+                        .map(|(span, tag)| (*(span.input.fragment()), tag))
                         .collect(),
                 },
             )
@@ -3604,10 +3687,21 @@ mod new {
             //     tok: &lex_tokens(Span::new("a(B,C).")).unwrap().1,
             // };
             let input = Span::new("a(B,C).");
+            let refcell = RefCell::new(Vec::new());
+            let labels = RefCell::new(Vec::new());
+            let errors = ParserState {
+                errors: &refcell,
+                labels: &labels,
+            };
+            let input = Input {
+                input,
+                parser_state: errors,
+            };
             assert_eq!(
-                parse_program::<VerboseError<_>>(input).unwrap().1,
+                // parse_program::<VerboseError<_>>(input).unwrap().1,
+                parse_program(input).0,
                 Program {
-                    span: input,
+                    span: input.input,
                     tl_doc_comment: None,
                     statements: vec![Statement::Fact {
                         span: s!(0, 1, "a(B,C)."),
@@ -3664,11 +3758,22 @@ mod new {
             let input = Span::new(
                 r#"@base <http://example.org/foo/>.@prefix rdfs:<http://www.w3.org/2000/01/rdf-schema#>.@import sourceA:-csv{resource="sources/dataA.csv"}.@export a:-csv{}.@output a, b, c."#,
             );
+            let refcell = RefCell::new(Vec::new());
+            let labels = RefCell::new(Vec::new());
+            let errors = ParserState {
+                errors: &refcell,
+                labels: &labels,
+            };
+            let input = Input {
+                input,
+                parser_state: errors,
+            };
             assert_eq!(
-                parse_program::<VerboseError<_>>(input).unwrap().1,
+                // parse_program::<VerboseError<_>>(input).unwrap().1,
+                parse_program(input).0,
                 Program {
                     tl_doc_comment: None,
-                    span: input,
+                    span: input.input,
                     statements: vec![
                         Statement::Directive(Directive::Base {
                             span: s!(0, 1, "@base <http://example.org/foo/>."),
@@ -3898,28 +4003,39 @@ mod new {
             )
         }
 
-        #[test]
-        fn ignore_ws_and_comments() {
-            let input = Span::new("   Hi   %cool comment\n");
-            assert_eq!(
-                super::ignore_ws_and_comments(lex_ident::<nom::error::Error<_>>)(input),
-                Ok((
-                    s!(22, 2, ""),
-                    Token {
-                        kind: TokenKind::Ident,
-                        span: s!(3, 1, "Hi")
-                    }
-                ))
-            )
-        }
+        // #[test]
+        // fn ignore_ws_and_comments() {
+        //     let input = Span::new("   Hi   %cool comment\n");
+        //     assert_eq!(
+        //         super::ignore_ws_and_comments(lex_ident::<nom::error::Error<_>>)(input),
+        //         Ok((
+        //             s!(22, 2, ""),
+        //             Token {
+        //                 kind: TokenKind::Ident,
+        //                 span: s!(3, 1, "Hi")
+        //             }
+        //         ))
+        //     )
+        // }
 
         #[test]
         fn fact_with_ws() {
             let input = Span::new("some(Fact, with, whitespace) . % and a super useful comment\n");
+            let refcell = RefCell::new(Vec::new());
+            let labels = RefCell::new(Vec::new());
+            let errors = ParserState {
+                errors: &refcell,
+                labels: &labels,
+            };
+            let input = Input {
+                input,
+                parser_state: errors,
+            };
             assert_eq!(
-                parse_program::<VerboseError<_>>(input).unwrap().1,
+                // parse_program::<VerboseError<_>>(input).unwrap().1,
+                parse_program(input).0,
                 Program {
-                    span: input,
+                    span: input.input,
                     tl_doc_comment: None,
                     statements: vec![
                         Statement::Fact {
@@ -4023,47 +4139,71 @@ limeSpecies(?X, ?Name) :- taxon(?X, ?Name, ?Y), limeSpecies(?Y, ?N).
 
 oldLime(?location,?species,?age) :- tree(?location,?species,?age,?heightInMeters), ?age > 200, limeSpecies(?id,?species) ."#,
             );
-            let ast = parse_program::<VerboseError<_>>(input);
-            match &ast {
-                Ok((rest_input, ast)) => {
-                    println!("Rest Input:\n{:#?}\n\n{}", rest_input, ast);
-                    assert_eq!(
-                        {
-                            let mut string_from_tokens = String::new();
-                            for token in get_all_tokens(ast) {
-                                string_from_tokens.push_str(token.span().fragment());
-                            }
-                            println!("String from Tokens:\n");
-                            println!("{}\n", string_from_tokens);
-                            string_from_tokens
-                        },
-                        *input.fragment(),
-                    );
-                }
-                Err(nom::Err::Error(err)) | Err(nom::Err::Failure(err)) => {
-                    println!(
-                        "PRINT ERROR:\n\n{}",
-                        convert_located_span_error(input, err.clone())
-                    );
-                }
-                Err(err) => panic!("{}", err),
-            }
-            assert!(ast.is_ok());
+            let refcell = RefCell::new(Vec::new());
+            let labels = RefCell::new(Vec::new());
+            let errors = ParserState {
+                errors: &refcell,
+                labels: &labels,
+            };
+            let input = Input {
+                input,
+                parser_state: errors,
+            };
+            // let ast = parse_program::<VerboseError<_>>(input);
+            let (ast, _) = parse_program(input);
+            println!("{}", ast);
+            assert_eq!(
+                {
+                    let mut string_from_tokens = String::new();
+                    for token in get_all_tokens(&ast) {
+                        string_from_tokens.push_str(token.span().fragment());
+                    }
+                    println!("String from Tokens:\n");
+                    println!("{}\n", string_from_tokens);
+                    string_from_tokens
+                },
+                *input.input.fragment(),
+            );
         }
 
         #[test]
         fn parser_test() {
-            let str = std::fs::read_to_string("../testfile.rls").expect("testfile not found");
+            let file = "../testfile2.rls";
+            let str = std::fs::read_to_string(file).expect("testfile not found");
             let input = Span::new(str.as_str());
-            let result = parse_program::<VerboseError<_>>(input);
-            match result {
-                Ok(ast) => println!("{}", ast.1),
-                Err(nom::Err::Error(err)) | Err(nom::Err::Failure(err)) => {
-                    println!("{}", convert_located_span_error(input, err))
-                }
-                Err(_) => (),
+            let refcell = RefCell::new(Vec::new());
+            let labels = RefCell::new(Vec::new());
+            let parser_state = ParserState {
+                errors: &refcell,
+                labels: &labels,
+            };
+            let input = Input {
+                input,
+                parser_state,
+            };
+            // let result = parse_program::<VerboseError<_>>(input);
+            let (ast, errors) = parse_program(input);
+            println!("{}\n\n{:#?}", ast, errors);
+            let mut error_map: HashMap<Position, HashSet<String>> = HashMap::new();
+            for error in errors {
+                if let Some(set) = error_map.get_mut(&error.0) {
+                    set.insert(error.1);
+                } else {
+                    let mut set = HashSet::new();
+                    set.insert(error.1);
+                    error_map.insert(error.0, set);
+                };
             }
-            assert!(false);
+            dbg!(&error_map);
+            // assert!(false);
+            let lines: Vec<_> = str.lines().collect();
+            for (pos, str) in error_map {
+                // println!("{pos:?}, {str:?}");
+                println!("error: {str:?}");
+                println!("--> {}:{}:{}", file, pos.line, pos.column);
+                println!("{}", lines.get((pos.line - 1) as usize).unwrap());
+                println!("{0:>1$}\n", "^", pos.column as usize)
+            }
         }
 
         #[test]
@@ -4072,7 +4212,19 @@ oldLime(?location,?species,?age) :- tree(?location,?species,?age,?heightInMeters
 
             assert_eq!(
                 {
-                    let result = parse_term::<VerboseError<_>>(Span::new("42"));
+                    let input = Span::new("42");
+                    let refcell = RefCell::new(Vec::new());
+                    let labels = RefCell::new(Vec::new());
+                    let parser_state = ParserState {
+                        errors: &refcell,
+                        labels: &labels,
+                    };
+                    let input = Input {
+                        input,
+                        parser_state,
+                    };
+                    // let result = parse_term::<VerboseError<_>>(input);
+                    let result = parse_term(input);
                     result.unwrap().1
                 },
                 Term::Primitive(Primitive::Number {
@@ -4087,7 +4239,19 @@ oldLime(?location,?species,?age) :- tree(?location,?species,?age,?heightInMeters
 
             assert_eq!(
                 {
-                    let result = parse_term::<VerboseError<_>>(Span::new("35+7"));
+                    let input = Span::new("35+7");
+                    let refcell = RefCell::new(Vec::new());
+                    let labels = RefCell::new(Vec::new());
+                    let parser_state = ParserState {
+                        errors: &refcell,
+                        labels: &labels,
+                    };
+                    let input = Input {
+                        input,
+                        parser_state,
+                    };
+                    // let result = parse_term::<VerboseError<_>>(input);
+                    let result = parse_term(input);
                     result.unwrap().1
                 },
                 Term::Binary {
@@ -4116,7 +4280,19 @@ oldLime(?location,?species,?age) :- tree(?location,?species,?age,?heightInMeters
 
             assert_eq!(
                 {
-                    let result = parse_term::<VerboseError<_>>(Span::new("6*7"));
+                    let input = Span::new("6*7");
+                    let refcell = RefCell::new(Vec::new());
+                    let labels = RefCell::new(Vec::new());
+                    let parser_state = ParserState {
+                        errors: &refcell,
+                        labels: &labels,
+                    };
+                    let input = Input {
+                        input,
+                        parser_state,
+                    };
+                    // let result = parse_term::<VerboseError<_>>(input);
+                    let result = parse_term(input);
                     result.unwrap().1
                 },
                 Term::Binary {
@@ -4145,7 +4321,19 @@ oldLime(?location,?species,?age) :- tree(?location,?species,?age,?heightInMeters
 
             assert_eq!(
                 {
-                    let result = parse_term::<VerboseError<_>>(Span::new("49-7"));
+                    let input = Span::new("49-7");
+                    let refcell = RefCell::new(Vec::new());
+                    let labels = RefCell::new(Vec::new());
+                    let parser_state = ParserState {
+                        errors: &refcell,
+                        labels: &labels,
+                    };
+                    let input = Input {
+                        input,
+                        parser_state,
+                    };
+                    // let result = parse_term::<VerboseError<_>>(input);
+                    let result = parse_term(input);
                     result.unwrap().1
                 },
                 Term::Binary {
@@ -4174,7 +4362,19 @@ oldLime(?location,?species,?age) :- tree(?location,?species,?age,?heightInMeters
 
             assert_eq!(
                 {
-                    let result = parse_term::<VerboseError<_>>(Span::new("84/2"));
+                    let input = Span::new("84/2");
+                    let refcell = RefCell::new(Vec::new());
+                    let labels = RefCell::new(Vec::new());
+                    let parser_state = ParserState {
+                        errors: &refcell,
+                        labels: &labels,
+                    };
+                    let input = Input {
+                        input,
+                        parser_state,
+                    };
+                    // let result = parse_term::<VerboseError<_>>(input);
+                    let result = parse_term(input);
                     result.unwrap().1
                 },
                 Term::Binary {
@@ -4203,7 +4403,19 @@ oldLime(?location,?species,?age) :- tree(?location,?species,?age,?heightInMeters
 
             assert_eq!(
                 {
-                    let result = parse_term::<VerboseError<_>>(Span::new("5*7+7"));
+                    let input = Span::new("5*7+7");
+                    let refcell = RefCell::new(Vec::new());
+                    let labels = RefCell::new(Vec::new());
+                    let parser_state = ParserState {
+                        errors: &refcell,
+                        labels: &labels,
+                    };
+                    let input = Input {
+                        input,
+                        parser_state,
+                    };
+                    // let result = parse_term::<VerboseError<_>>(input);
+                    let result = parse_term(input);
                     result.unwrap().1
                 },
                 Term::Binary {
@@ -4246,7 +4458,19 @@ oldLime(?location,?species,?age) :- tree(?location,?species,?age,?heightInMeters
 
             assert_eq!(
                 {
-                    let result = parse_term::<VerboseError<_>>(Span::new("7+5*7"));
+                    let input = Span::new("7+5*7");
+                    let refcell = RefCell::new(Vec::new());
+                    let labels = RefCell::new(Vec::new());
+                    let parser_state = ParserState {
+                        errors: &refcell,
+                        labels: &labels,
+                    };
+                    let input = Input {
+                        input,
+                        parser_state,
+                    };
+                    // let result = parse_term::<VerboseError<_>>(input);
+                    let result = parse_term(input);
                     result.unwrap().1
                 },
                 Term::Binary {
@@ -4290,30 +4514,42 @@ oldLime(?location,?species,?age) :- tree(?location,?species,?age,?heightInMeters
             assert_eq!(
                 {
                     let input = Span::new("(15+3*2-(7+35)*8)/3");
-                    let result = parse_term::<VerboseError<_>>(input);
+                    let refcell = RefCell::new(Vec::new());
+                    let labels = RefCell::new(Vec::new());
+                    let parser_state = ParserState {
+                        errors: &refcell,
+                        labels: &labels,
+                    };
+                    let input = Input {
+                        input,
+                        parser_state,
+                    };
+                    // let result = parse_term::<VerboseError<_>>(input);
+                    let result = parse_term(input);
                     // let result = parse_term::<VerboseError<_>>(Span::new("(15+3*2-(7+35)*8)/3"));
-                    match result {
-                        Ok(ast) => {
-                            println!("{}", ast.1);
-                            ast.1
-                        }
-                        Err(nom::Err::Error(err)) | Err(nom::Err::Failure(err)) => {
-                            panic!(
-                                "{}",
-                                convert_error(
-                                    *(input.fragment()),
-                                    VerboseError {
-                                        errors: err
-                                            .errors
-                                            .into_iter()
-                                            .map(|(span, tag)| { (*(span.fragment()), tag) })
-                                            .collect()
-                                    }
-                                )
-                            )
-                        }
-                        Err(nom::Err::Incomplete(err)) => panic!("{:#?}", err),
-                    }
+                    // match result {
+                    //     Ok(ast) => {
+                    //         println!("{}", ast.1);
+                    //         ast.1
+                    //     }
+                    //     Err(nom::Err::Error(err)) | Err(nom::Err::Failure(err)) => {
+                    //         panic!(
+                    //             "{}",
+                    //             convert_error(
+                    //                 *(input.input.fragment()),
+                    //                 VerboseError {
+                    //                     errors: err
+                    //                         .errors
+                    //                         .into_iter()
+                    //                         .map(|(span, tag)| { (*(span.fragment()), tag) })
+                    //                         .collect()
+                    //                 }
+                    //             )
+                    //         )
+                    //     }
+                    //     Err(nom::Err::Incomplete(err)) => panic!("{:#?}", err),
+                    // }
+                    result.unwrap().1
                 },
                 Term::Binary {
                     span: s!(0, 1, "(15+3*2-(7+35)*8)/3"),
@@ -4449,7 +4685,19 @@ oldLime(?location,?species,?age) :- tree(?location,?species,?age,?heightInMeters
 
             assert_eq!(
                 {
-                    let result = parse_term::<VerboseError<_>>(Span::new("15+3*2-(7+35)*8/3"));
+                    let input = Span::new("15+3*2-(7+35)*8/3");
+                    let refcell = RefCell::new(Vec::new());
+                    let labels = RefCell::new(Vec::new());
+                    let parser_state = ParserState {
+                        errors: &refcell,
+                        labels: &labels,
+                    };
+                    let input = Input {
+                        input,
+                        parser_state,
+                    };
+                    // let result = parse_term::<VerboseError<_>>(input);
+                    let result = parse_term(input);
                     result.unwrap().1
                 },
                 Term::Binary {
@@ -4592,17 +4840,43 @@ oldLime(?location,?species,?age) :- tree(?location,?species,?age,?heightInMeters
             assert_eq!(
                 {
                     let input = Span::new("e42");
-                    parse_exponent::<VerboseError<_>>(input)
+                    let refcell = RefCell::new(Vec::new());
+                    let labels = RefCell::new(Vec::new());
+                    let parser_state = ParserState {
+                        errors: &refcell,
+                        labels: &labels,
+                    };
+                    let input = Input {
+                        input,
+                        parser_state,
+                    };
+                    // parse_exponent::<VerboseError<_>>(input)
+                    parse_exponent(input).unwrap().1
                 },
-                Ok((
-                    s!(3, 1, ""),
-                    Exponent {
-                        e: T! {TokenKind::Exponent, 0,1,"e"},
-                        sign: None,
-                        number: T! {TokenKind::Number, 1,1,"42"}
-                    }
-                ))
+                Exponent {
+                    e: T! {TokenKind::Exponent, 0,1,"e"},
+                    sign: None,
+                    number: T! {TokenKind::Number, 1,1,"42"}
+                }
             )
+        }
+
+        #[test]
+        fn missing_dot() {
+            let input = Span::new("some(Fact\nSome other, Fact.\nthird(fact).");
+            let refcell = RefCell::new(Vec::new());
+            let labels = RefCell::new(Vec::new());
+            let parser_state = ParserState {
+                errors: &refcell,
+                labels: &labels,
+            };
+            let input = Input {
+                input,
+                parser_state,
+            };
+            let result = parse_program(input);
+            println!("{}\n\n{:#?}", result.0, result.1);
+            // assert!(false);
         }
     }
 }
