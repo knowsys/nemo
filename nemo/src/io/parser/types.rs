@@ -1,19 +1,24 @@
-use std::num::{ParseFloatError, ParseIntError};
+use std::{
+    num::{ParseFloatError, ParseIntError},
+    ops::Range,
+    str::{CharIndices, Chars},
+};
 
 use nemo_physical::datavalues::DataValueCreationError;
 use nom::{
     error::{ErrorKind, FromExternalError},
-    IResult,
+    AsBytes, IResult, InputIter, InputLength, InputTake, InputTakeAtPosition,
 };
 use nom_locate::LocatedSpan;
 use thiserror::Error;
 
 use crate::{
     io::formats::import_export::ImportExportError,
+    io::lexer::ParserState,
     model::rule_model::{Aggregate, Constraint, Literal, Term},
 };
 
-use super::Variable;
+use super::{ast::Position, Variable};
 
 /// A [LocatedSpan] over the input.
 pub(super) type Span<'a> = LocatedSpan<&'a str>;
@@ -443,7 +448,7 @@ impl<'a> Tokens<'a> {
         Tokens { tok: vec }
     }
 }
-impl<'a> nom::AsBytes for Tokens<'a> {
+impl<'a> AsBytes for Tokens<'a> {
     fn as_bytes(&self) -> &[u8] {
         todo!()
     }
@@ -480,7 +485,7 @@ impl<'a, T> nom::FindToken<T> for Tokens<'a> {
         todo!()
     }
 }
-impl<'a> nom::InputIter for Tokens<'a> {
+impl<'a> InputIter for Tokens<'a> {
     type Item = &'a Token<'a>;
 
     type Iter = std::iter::Enumerate<::std::slice::Iter<'a, Token<'a>>>;
@@ -515,7 +520,7 @@ impl<'a> nom::InputLength for Tokens<'a> {
         self.tok.len()
     }
 }
-impl<'a> nom::InputTake for Tokens<'a> {
+impl<'a> InputTake for Tokens<'a> {
     fn take(&self, count: usize) -> Self {
         Tokens {
             tok: &self.tok[0..count],
@@ -592,4 +597,252 @@ impl<'a, R> nom::Slice<R> for Tokens<'a> {
     fn slice(&self, range: R) -> Self {
         todo!()
     }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct Input<'a, 's> {
+    pub(crate) input: crate::io::lexer::Span<'a>,
+    pub(crate) parser_state: ParserState<'s>,
+}
+impl<'a, 's> Input<'a, 's> {
+    fn new(input: &'a str, errors: ParserState<'s>) -> Input<'a, 's> {
+        Input {
+            input: Span::new(input),
+            parser_state: errors,
+        }
+    }
+}
+impl ToRange for Input<'_, '_> {
+    fn to_range(&self) -> Range<usize> {
+        self.input.to_range()
+    }
+}
+
+impl AsBytes for Input<'_, '_> {
+    fn as_bytes(&self) -> &[u8] {
+        self.input.fragment().as_bytes()
+    }
+}
+
+impl<'a, 's> nom::Compare<Input<'a, 's>> for Input<'a, 's> {
+    fn compare(&self, t: Input) -> nom::CompareResult {
+        self.input.compare(t.as_bytes())
+    }
+
+    fn compare_no_case(&self, t: Input) -> nom::CompareResult {
+        self.input.compare_no_case(t.as_bytes())
+    }
+}
+impl nom::Compare<&str> for Input<'_, '_> {
+    fn compare(&self, t: &str) -> nom::CompareResult {
+        self.input.compare(t)
+    }
+
+    fn compare_no_case(&self, t: &str) -> nom::CompareResult {
+        self.input.compare_no_case(t)
+    }
+}
+
+impl nom::ExtendInto for Input<'_, '_> {
+    type Item = char;
+
+    type Extender = String;
+
+    fn new_builder(&self) -> Self::Extender {
+        self.input.new_builder()
+    }
+
+    fn extend_into(&self, acc: &mut Self::Extender) {
+        self.input.extend_into(acc)
+    }
+}
+
+impl nom::FindSubstring<&str> for Input<'_, '_> {
+    fn find_substring(&self, substr: &str) -> Option<usize> {
+        self.input.find_substring(substr)
+    }
+}
+
+impl<'a, 'e, T> nom::FindToken<T> for Input<'a, 'e>
+where
+    &'a str: nom::FindToken<T>,
+{
+    fn find_token(&self, token: T) -> bool {
+        self.input.find_token(token)
+    }
+}
+
+impl<'a, 's> InputIter for Input<'a, 's> {
+    type Item = char;
+
+    type Iter = CharIndices<'a>;
+
+    type IterElem = Chars<'a>;
+
+    fn iter_indices(&self) -> Self::Iter {
+        todo!()
+    }
+
+    fn iter_elements(&self) -> Self::IterElem {
+        todo!()
+    }
+
+    fn position<P>(&self, predicate: P) -> Option<usize>
+    where
+        P: Fn(Self::Item) -> bool,
+    {
+        todo!()
+    }
+
+    fn slice_index(&self, count: usize) -> Result<usize, nom::Needed> {
+        self.input.slice_index(count)
+    }
+}
+
+impl nom::InputLength for Input<'_, '_> {
+    fn input_len(&self) -> usize {
+        self.input.input_len()
+    }
+}
+
+impl InputTake for Input<'_, '_> {
+    fn take(&self, count: usize) -> Self {
+        Input {
+            input: self.input.take(count),
+            parser_state: self.parser_state,
+        }
+    }
+
+    fn take_split(&self, count: usize) -> (Self, Self) {
+        let (first, second) = self.input.take_split(count);
+        (
+            Input {
+                input: first,
+                parser_state: self.parser_state,
+            },
+            Input {
+                input: second,
+                parser_state: self.parser_state,
+            },
+        )
+    }
+}
+
+impl nom::InputTakeAtPosition for Input<'_, '_> {
+    type Item = char;
+
+    fn split_at_position<P, E: nom::error::ParseError<Self>>(
+        &self,
+        predicate: P,
+    ) -> nom::IResult<Self, Self, E>
+    where
+        P: Fn(Self::Item) -> bool,
+    {
+        match self.input.position(predicate) {
+            Some(n) => Ok(self.take_split(n)),
+            None => Err(nom::Err::Incomplete(nom::Needed::new(1))),
+        }
+    }
+
+    fn split_at_position1<P, E: nom::error::ParseError<Self>>(
+        &self,
+        predicate: P,
+        e: nom::error::ErrorKind,
+    ) -> nom::IResult<Self, Self, E>
+    where
+        P: Fn(Self::Item) -> bool,
+    {
+        todo!()
+    }
+
+    fn split_at_position_complete<P, E: nom::error::ParseError<Self>>(
+        &self,
+        predicate: P,
+    ) -> nom::IResult<Self, Self, E>
+    where
+        P: Fn(Self::Item) -> bool,
+    {
+        match self.split_at_position(predicate) {
+            Err(nom::Err::Incomplete(_)) => Ok(self.take_split(self.input_len())),
+            res => res,
+        }
+    }
+
+    fn split_at_position1_complete<P, E: nom::error::ParseError<Self>>(
+        &self,
+        predicate: P,
+        e: nom::error::ErrorKind,
+    ) -> nom::IResult<Self, Self, E>
+    where
+        P: Fn(Self::Item) -> bool,
+    {
+        match self.input.fragment().position(predicate) {
+            Some(0) => Err(nom::Err::Error(E::from_error_kind(*self, e))),
+            Some(n) => Ok(self.take_split(n)),
+            None => {
+                if self.input.fragment().input_len() == 0 {
+                    Err(nom::Err::Error(E::from_error_kind(*self, e)))
+                } else {
+                    Ok(self.take_split(self.input_len()))
+                }
+            }
+        }
+    }
+}
+
+impl nom::Offset for Input<'_, '_> {
+    fn offset(&self, second: &Self) -> usize {
+        self.input.offset(&second.input)
+    }
+}
+
+impl<R> nom::ParseTo<R> for Input<'_, '_> {
+    fn parse_to(&self) -> Option<R> {
+        todo!()
+    }
+}
+
+impl<'a, 'e, R> nom::Slice<R> for Input<'a, 'e>
+where
+    &'a str: nom::Slice<R>,
+{
+    fn slice(&self, range: R) -> Self {
+        Input {
+            input: self.input.slice(range),
+            parser_state: self.parser_state,
+        }
+    }
+}
+
+pub(crate) trait ToRange {
+    fn to_range(&self) -> Range<usize>;
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) enum ParserLabel {
+    Rule,
+    Fact,
+    Directive,
+    Dot,
+    Arrow,
+    // Head,
+    // Body,
+    Comma,
+    Iri,
+    Prefix,
+    Identifier,
+    OpenParen,
+    CloseParen,
+    OpenBrace,
+    CloseBrace,
+    OpenBracket,
+    ClosePracket,
+    Equal,
+    Number,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) struct Label {
+    pub(crate) label: ParserLabel,
+    pub(crate) pos: Position,
 }

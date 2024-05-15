@@ -43,12 +43,21 @@ impl AstNode for Program<'_> {
     }
 
     fn name(&self) -> String {
-        format!(
-            "Program \x1b[34m@{}:{} \x1b[92m\"{}…\"\x1b[0m",
-            self.span.location_line(),
-            self.span.get_utf8_column(),
-            &self.span.fragment()[..60],
-        )
+        if self.span.fragment().len() < 60 {
+            format!(
+                "Program \x1b[34m@{}:{} \x1b[92m{:?}\x1b[0m",
+                self.span.location_line(),
+                self.span.get_utf8_column(),
+                &self.span.fragment(),
+            )
+        } else {
+            format!(
+                "Program \x1b[34m@{}:{} \x1b[92m{:?}[…]\x1b[0m",
+                self.span.location_line(),
+                self.span.get_utf8_column(),
+                &self.span.fragment()[..60],
+            )
+        }
     }
 }
 impl std::fmt::Display for Program<'_> {
