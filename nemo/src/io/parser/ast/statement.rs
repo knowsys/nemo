@@ -40,10 +40,9 @@ impl AstNode for Statement<'_> {
                 dot,
                 ..
             } => {
-                let mut vec = Vec::new();
+                let mut vec: Vec<&dyn AstNode> = Vec::new();
                 if let Some(dc) = doc_comment {
-                    #[allow(trivial_casts)]
-                    vec.push(dc as &dyn AstNode);
+                    vec.push(dc);
                 };
                 vec.push(atom);
                 if let Some(ws) = ws {
@@ -63,10 +62,9 @@ impl AstNode for Statement<'_> {
                 dot,
                 ..
             } => {
-                let mut vec = Vec::new();
+                let mut vec: Vec<&dyn AstNode> = Vec::new();
                 if let Some(dc) = doc_comment {
-                    #[allow(trivial_casts)]
-                    vec.push(dc as &dyn AstNode);
+                    vec.push(dc);
                 };
                 vec.push(head);
                 if let Some(ws) = ws1 {

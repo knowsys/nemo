@@ -64,9 +64,8 @@ impl<T> std::iter::IntoIterator for List<'_, T> {
 }
 impl<T: AstNode + std::fmt::Debug> AstNode for List<'_, T> {
     fn children(&self) -> Option<Vec<&dyn AstNode>> {
-        let mut vec = Vec::new();
-        #[allow(trivial_casts)]
-        vec.push(&self.first as &dyn AstNode);
+        let mut vec: Vec<&dyn AstNode> = Vec::new();
+        vec.push(&self.first);
         if let Some(rest) = &self.rest {
             for (ws1, delim, ws2, item) in rest {
                 if let Some(ws) = ws1 {

@@ -53,9 +53,8 @@ impl AstNode for Term<'_> {
                 rhs,
                 ..
             } => {
-                let mut vec = Vec::new();
-                #[allow(trivial_casts)]
-                vec.push(&**lhs as &dyn AstNode);
+                let mut vec: Vec<&dyn AstNode> = Vec::new();
+                vec.push(&**lhs);
                 if let Some(ws) = ws1 {
                     vec.push(ws);
                 };
@@ -75,9 +74,8 @@ impl AstNode for Term<'_> {
                 close_paren,
                 ..
             } => {
-                let mut vec = Vec::new();
-                #[allow(trivial_casts)]
-                vec.push(operation as &dyn AstNode);
+                let mut vec: Vec<&dyn AstNode> = Vec::new();
+                vec.push(operation);
                 vec.push(open_paren);
                 if let Some(ws) = ws1 {
                     vec.push(ws);
@@ -194,10 +192,9 @@ impl AstNode for Primitive<'_> {
                 exponent,
                 ..
             } => {
-                let mut vec = Vec::new();
-                #[allow(trivial_casts)]
+                let mut vec: Vec<&dyn AstNode> = Vec::new();
                 if let Some(s) = sign {
-                    vec.push(s as &dyn AstNode);
+                    vec.push(s);
                 }
                 if let Some(b) = before {
                     vec.push(b);
@@ -284,9 +281,8 @@ pub(crate) struct Exponent<'a> {
 }
 impl AstNode for Exponent<'_> {
     fn children(&self) -> Option<Vec<&dyn AstNode>> {
-        let mut vec = Vec::new();
-        #[allow(trivial_casts)]
-        vec.push(&self.e as &dyn AstNode);
+        let mut vec: Vec<&dyn AstNode> = Vec::new();
+        vec.push(&self.e);
         if let Some(s) = &self.sign {
             vec.push(s);
         };

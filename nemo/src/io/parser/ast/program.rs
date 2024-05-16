@@ -12,10 +12,9 @@ pub(crate) struct Program<'a> {
 }
 impl AstNode for Program<'_> {
     fn children(&self) -> Option<Vec<&dyn AstNode>> {
-        let mut vec = Vec::new();
+        let mut vec: Vec<&dyn AstNode> = Vec::new();
         if let Some(dc) = &self.tl_doc_comment {
-            #[allow(trivial_casts)]
-            vec.push(dc as &dyn AstNode);
+            vec.push(dc);
         };
         // NOTE: The current implementation puts the doc comment and all the
         // statements in the same vec, so there is no need to implement AstNode

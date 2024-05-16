@@ -78,10 +78,9 @@ impl AstNode for Directive<'_> {
                 dot,
                 ..
             } => {
-                let mut vec = Vec::new();
+                let mut vec: Vec<&dyn AstNode> = Vec::new();
                 if let Some(dc) = doc_comment {
-                    #[allow(trivial_casts)]
-                    vec.push(dc as &dyn AstNode);
+                    vec.push(dc);
                 };
                 vec.push(kw);
                 if let Some(ws) = ws1 {
@@ -105,10 +104,9 @@ impl AstNode for Directive<'_> {
                 dot,
                 ..
             } => {
-                let mut vec = Vec::new();
+                let mut vec: Vec<&dyn AstNode> = Vec::new();
                 if let Some(dc) = doc_comment {
-                    #[allow(trivial_casts)]
-                    vec.push(dc as &dyn AstNode);
+                    vec.push(dc);
                 };
                 vec.push(kw);
                 if let Some(ws) = ws1 {
@@ -138,10 +136,9 @@ impl AstNode for Directive<'_> {
                 dot,
                 ..
             } => {
-                let mut vec = Vec::new();
+                let mut vec: Vec<&dyn AstNode> = Vec::new();
                 if let Some(dc) = doc_comment {
-                    #[allow(trivial_casts)]
-                    vec.push(dc as &dyn AstNode);
+                    vec.push(dc);
                 };
                 vec.push(kw);
                 vec.push(ws1);
@@ -173,10 +170,9 @@ impl AstNode for Directive<'_> {
                 dot,
                 ..
             } => {
-                let mut vec = Vec::new();
+                let mut vec: Vec<&dyn AstNode> = Vec::new();
                 if let Some(dc) = doc_comment {
-                    #[allow(trivial_casts)]
-                    vec.push(dc as &dyn AstNode);
+                    vec.push(dc);
                 };
                 vec.push(kw);
                 vec.push(ws1);
@@ -204,10 +200,9 @@ impl AstNode for Directive<'_> {
                 ws2,
                 dot,
             } => {
-                let mut vec = Vec::new();
+                let mut vec: Vec<&dyn AstNode> = Vec::new();
                 if let Some(dc) = doc_comment {
-                    #[allow(trivial_casts)]
-                    vec.push(dc as &dyn AstNode);
+                    vec.push(dc);
                 };
                 vec.push(kw);
                 vec.push(ws1);
