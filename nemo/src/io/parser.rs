@@ -2434,6 +2434,7 @@ mod new {
 
     use super::ast::{
         atom::*, directive::*, map::*, program::*, statement::*, term::*, tuple::*, List, Position,
+        Wsoc,
     };
     use super::types::{Input, Label, ParserLabel, ToRange};
     use crate::io::lexer::{
@@ -2649,6 +2650,34 @@ mod new {
         }
     }
 
+    fn wsoc0<'a, 's>(input: Input<'a, 's>) -> IResult<Input<'a, 's>, Option<Wsoc<'a>>> {
+        many0(alt((lex_whitespace, lex_comment)))(input).map(|(rest_input, vec)| {
+            if vec.is_empty() {
+                (rest_input, None)
+            } else {
+                (
+                    rest_input,
+                    Some(Wsoc {
+                        span: outer_span(input.input, rest_input.input),
+                        token: vec,
+                    }),
+                )
+            }
+        })
+    }
+
+    fn wsoc1<'a, 's>(input: Input<'a, 's>) -> IResult<Input<'a, 's>, Wsoc<'a>> {
+        many1(alt((lex_whitespace, lex_comment)))(input).map(|(rest_input, vec)| {
+            (
+                rest_input,
+                Wsoc {
+                    span: outer_span(input.input, rest_input.input),
+                    token: vec,
+                },
+            )
+        })
+    }
+
     /// Parse a full program consisting of directives, facts, rules and comments.
     fn parse_program<'a, 'e>(input: Input<'a, 'e>) -> (Program<'a>, Vec<Error>) {
         let (rest_input, (tl_doc_comment, statements)) = all_consuming(pair(
@@ -2689,10 +2718,11 @@ mod new {
 
     /// Parse a fact of the form `predicateName(term1, term2, …).`
     fn parse_fact<'a, 'e>(input: Input<'a, 'e>) -> IResult<Input<'a, 'e>, Statement<'a>> {
+        dbg!(&input.parser_state.labels);
         tuple((
             opt(lex_doc_comment),
             parse_normal_atom,
-            opt(lex_whitespace),
+            wsoc0,
             expect(
                 report_label(dot, ParserLabel::Dot),
                 "missing `.`",
@@ -2722,11 +2752,11 @@ mod new {
         tuple((
             opt(lex_doc_comment),
             parse_head,
-            opt(lex_whitespace),
+            wsoc0,
             report_label(arrow, ParserLabel::Arrow),
-            opt(lex_whitespace),
+            wsoc0,
             parse_body,
-            opt(lex_whitespace),
+            wsoc0,
             expect(
                 report_label(dot, ParserLabel::Dot),
                 "missing `.`",
@@ -2787,9 +2817,9 @@ mod new {
                 at,
                 verify(lex_ident, |token| token.kind == TokenKind::Base),
             )),
-            opt(lex_whitespace),
+            wsoc0,
             report_label(lex_iri, ParserLabel::Iri),
-            opt(lex_whitespace),
+            wsoc0,
             expect(
                 report_label(dot, ParserLabel::Dot),
                 "missing `.`",
@@ -2829,11 +2859,11 @@ mod new {
                 at,
                 verify(lex_ident, |token| token.kind == TokenKind::Prefix),
             )),
-            opt(lex_whitespace),
+            wsoc0,
             report_label(recognize(pair(lex_ident, colon)), ParserLabel::Prefix),
-            opt(lex_whitespace),
+            wsoc0,
             report_label(lex_iri, ParserLabel::Iri),
-            opt(lex_whitespace),
+            wsoc0,
             expect(
                 report_label(dot, ParserLabel::Dot),
                 "missing `.`",
@@ -2880,13 +2910,13 @@ mod new {
                 at,
                 verify(lex_ident, |token| token.kind == TokenKind::Import),
             )),
-            lex_whitespace,
+            wsoc1,
             report_label(lex_ident, ParserLabel::Identifier),
-            opt(lex_whitespace),
+            wsoc0,
             report_label(arrow, ParserLabel::Arrow),
-            opt(lex_whitespace),
+            wsoc0,
             parse_map,
-            opt(lex_whitespace),
+            wsoc0,
             expect(
                 report_label(dot, ParserLabel::Dot),
                 "missing `.`",
@@ -2932,13 +2962,13 @@ mod new {
                 at,
                 verify(lex_ident, |token| token.kind == TokenKind::Export),
             )),
-            lex_whitespace,
+            wsoc1,
             report_label(lex_ident, ParserLabel::Identifier),
-            opt(lex_whitespace),
+            wsoc0,
             report_label(arrow, ParserLabel::Arrow),
-            opt(lex_whitespace),
+            wsoc0,
             parse_map,
-            opt(lex_whitespace),
+            wsoc0,
             expect(
                 report_label(dot, ParserLabel::Dot),
                 "missing `.`",
@@ -2984,9 +3014,9 @@ mod new {
                 at,
                 verify(lex_ident, |token| token.kind == TokenKind::Output),
             )),
-            lex_whitespace,
+            wsoc1,
             opt(parse_list(lex_ident)),
-            opt(lex_whitespace),
+            wsoc0,
             expect(
                 report_label(dot, ParserLabel::Dot),
                 "missing `.`",
@@ -3047,25 +3077,18 @@ mod new {
         parse_t: fn(Input<'a, 'e>) -> IResult<Input<'a, 'e>, T>,
     ) -> impl Fn(Input<'a, 'e>) -> IResult<Input<'a, 'e>, List<'a, T>> {
         move |input: Input<'a, 'e>| {
-            pair(
-                parse_t,
-                many0(tuple((
-                    opt(lex_whitespace),
-                    comma,
-                    opt(lex_whitespace),
-                    parse_t,
-                ))),
-            )(input)
-            .map(|(rest_input, (first, rest))| {
-                (
-                    rest_input,
-                    List {
-                        span: outer_span(input.input, rest_input.input),
-                        first,
-                        rest: if rest.is_empty() { None } else { Some(rest) },
-                    },
-                )
-            })
+            pair(parse_t, many0(tuple((wsoc0, comma, wsoc0, parse_t))))(input).map(
+                |(rest_input, (first, rest))| {
+                    (
+                        rest_input,
+                        List {
+                            span: outer_span(input.input, rest_input.input),
+                            first,
+                            rest: if rest.is_empty() { None } else { Some(rest) },
+                        },
+                    )
+                },
+            )
         }
     }
 
@@ -3107,26 +3130,21 @@ mod new {
     /// Parse an "infix atom" of the form `term1 <infixop> term2`.
     /// The supported infix operations are `<`, `<=`, `=`, `>=`, `>` and `!=`.
     fn parse_infix_atom<'a, 'e>(input: Input<'a, 'e>) -> IResult<Input<'a, 'e>, Atom<'a>> {
-        tuple((
-            parse_term,
-            opt(lex_whitespace),
-            parse_operation_token,
-            opt(lex_whitespace),
-            parse_term,
-        ))(input)
-        .map(|(rest_input, (lhs, ws1, operation, ws2, rhs))| {
-            (
-                rest_input,
-                Atom::InfixAtom {
-                    span: outer_span(input.input, rest_input.input),
-                    lhs,
-                    ws1,
-                    operation,
-                    ws2,
-                    rhs,
-                },
-            )
-        })
+        tuple((parse_term, wsoc0, parse_operation_token, wsoc0, parse_term))(input).map(
+            |(rest_input, (lhs, ws1, operation, ws2, rhs))| {
+                (
+                    rest_input,
+                    Atom::InfixAtom {
+                        span: outer_span(input.input, rest_input.input),
+                        lhs,
+                        ws1,
+                        operation,
+                        ws2,
+                        rhs,
+                    },
+                )
+            },
+        )
     }
 
     /// Parse a tuple with an optional name, like `ident(term1, term2)`
@@ -3134,11 +3152,11 @@ mod new {
     fn parse_tuple<'a, 'e>(input: Input<'a, 'e>) -> IResult<Input<'a, 'e>, Tuple<'a>> {
         tuple((
             opt(lex_ident),
-            opt(lex_whitespace),
+            wsoc0,
             open_paren,
-            opt(lex_whitespace),
+            wsoc0,
             opt(parse_list(parse_term)),
-            opt(lex_whitespace),
+            wsoc0,
             report_label(close_paren, ParserLabel::CloseParen),
         ))(input)
         .map(
@@ -3165,11 +3183,11 @@ mod new {
     fn parse_named_tuple<'a, 'e>(input: Input<'a, 'e>) -> IResult<Input<'a, 'e>, Tuple<'a>> {
         tuple((
             lex_ident,
-            opt(lex_whitespace),
+            wsoc0,
             report_label(open_paren, ParserLabel::OpenParen),
-            opt(lex_whitespace),
+            wsoc0,
             opt(parse_list(parse_term)),
-            opt(lex_whitespace),
+            wsoc0,
             report_label(close_paren, ParserLabel::CloseParen),
         ))(input)
         .map(
@@ -3196,11 +3214,11 @@ mod new {
     fn parse_map<'a, 'e>(input: Input<'a, 'e>) -> IResult<Input<'a, 'e>, Map<'a>> {
         tuple((
             opt(lex_ident),
-            opt(lex_whitespace),
+            wsoc0,
             open_brace,
-            opt(lex_whitespace),
+            wsoc0,
             opt(parse_list(parse_pair)),
-            opt(lex_whitespace),
+            wsoc0,
             report_label(close_brace, ParserLabel::CloseBrace),
         ))(input)
         .map(
@@ -3266,9 +3284,9 @@ mod new {
     ) -> IResult<Input<'a, 'e>, Pair<'a, Term<'a>, Term<'a>>> {
         tuple((
             parse_term,
-            opt(lex_whitespace),
+            wsoc0,
             report_label(equal, ParserLabel::Equal),
-            opt(lex_whitespace),
+            wsoc0,
             parse_term,
         ))(input)
         .map(|(rest_input, (key, ws1, equal, ws2, value))| {
@@ -3451,12 +3469,7 @@ mod new {
     fn parse_binary_term<'a, 'e>(input: Input<'a, 'e>) -> IResult<Input<'a, 'e>, Term<'a>> {
         pair(
             parse_arithmetic_product,
-            opt(tuple((
-                opt(lex_whitespace),
-                alt((plus, minus)),
-                opt(lex_whitespace),
-                parse_binary_term,
-            ))),
+            opt(tuple((wsoc0, alt((plus, minus)), wsoc0, parse_binary_term))),
         )(input)
         .map(|(rest_input, (lhs, opt))| {
             (
@@ -3483,9 +3496,9 @@ mod new {
         pair(
             parse_arithmetic_factor,
             opt(tuple((
-                opt(lex_whitespace),
+                wsoc0,
                 alt((star, slash)),
-                opt(lex_whitespace),
+                wsoc0,
                 parse_arithmetic_product,
             ))),
         )(input)
@@ -3544,9 +3557,9 @@ mod new {
         tuple((
             recognize(pair(hash, lex_ident)),
             report_label(open_paren, ParserLabel::OpenParen),
-            opt(lex_whitespace),
+            wsoc0,
             parse_list(parse_term),
-            opt(lex_whitespace),
+            wsoc0,
             report_label(close_paren, ParserLabel::CloseParen),
         ))(input)
         .map(
@@ -3782,9 +3795,12 @@ mod new {
                                 kind: TokenKind::Base,
                                 span: s!(0, 1, "@base"),
                             },
-                            ws1: Some(Token {
-                                kind: TokenKind::Whitespace,
-                                span: s!(5, 1, " ")
+                            ws1: Some(Wsoc {
+                                span: s!(5, 1, " "),
+                                token: vec![Token {
+                                    kind: TokenKind::Whitespace,
+                                    span: s!(5, 1, " ")
+                                }]
                             }),
                             base_iri: Token {
                                 kind: TokenKind::Iri,
@@ -3807,9 +3823,12 @@ mod new {
                                 kind: TokenKind::Prefix,
                                 span: s!(32, 1, "@prefix"),
                             },
-                            ws1: Some(Token {
-                                kind: TokenKind::Whitespace,
-                                span: s!(39, 1, " ")
+                            ws1: Some(Wsoc {
+                                span: s!(39, 1, " "),
+                                token: vec![Token {
+                                    kind: TokenKind::Whitespace,
+                                    span: s!(39, 1, " ")
+                                }]
                             }),
                             prefix: Token {
                                 kind: TokenKind::Ident,
@@ -3837,9 +3856,12 @@ mod new {
                                 kind: TokenKind::Import,
                                 span: s!(85, 1, "@import"),
                             },
-                            ws1: Token {
-                                kind: TokenKind::Whitespace,
-                                span: s!(92, 1, " "),
+                            ws1: Wsoc {
+                                span: s!(91, 1, " "),
+                                token: vec![Token {
+                                    kind: TokenKind::Whitespace,
+                                    span: s!(92, 1, " "),
+                                }]
                             },
                             predicate: Token {
                                 kind: TokenKind::Ident,
@@ -3903,9 +3925,12 @@ mod new {
                                 kind: TokenKind::Export,
                                 span: s!(136, 1, "@export"),
                             },
-                            ws1: Token {
-                                kind: TokenKind::Whitespace,
+                            ws1: Wsoc {
                                 span: s!(143, 1, " "),
+                                token: vec![Token {
+                                    kind: TokenKind::Whitespace,
+                                    span: s!(143, 1, " "),
+                                }]
                             },
                             predicate: Token {
                                 kind: TokenKind::Ident,
@@ -3949,9 +3974,12 @@ mod new {
                                 kind: TokenKind::Output,
                                 span: s!(153, 1, "@output")
                             },
-                            ws1: Token {
-                                kind: TokenKind::Whitespace,
+                            ws1: Wsoc {
                                 span: s!(160, 1, " "),
+                                token: vec![Token {
+                                    kind: TokenKind::Whitespace,
+                                    span: s!(160, 1, " "),
+                                }]
                             },
                             predicates: Some(List {
                                 span: s!(161, 1, "a, b, c"),
@@ -3966,9 +3994,12 @@ mod new {
                                             kind: TokenKind::Comma,
                                             span: s!(162, 1, ","),
                                         },
-                                        Some(Token {
-                                            kind: TokenKind::Whitespace,
+                                        Some(Wsoc {
                                             span: s!(163, 1, " "),
+                                            token: vec![Token {
+                                                kind: TokenKind::Whitespace,
+                                                span: s!(163, 1, " "),
+                                            }]
                                         }),
                                         Token {
                                             kind: TokenKind::Ident,
@@ -3981,9 +4012,12 @@ mod new {
                                             kind: TokenKind::Comma,
                                             span: s!(165, 1, ","),
                                         },
-                                        Some(Token {
-                                            kind: TokenKind::Whitespace,
+                                        Some(Wsoc {
                                             span: s!(166, 1, " "),
+                                            token: vec![Token {
+                                                kind: TokenKind::Whitespace,
+                                                span: s!(166, 1, " "),
+                                            }]
                                         }),
                                         Token {
                                             kind: TokenKind::Ident,
@@ -4066,9 +4100,12 @@ mod new {
                                                 kind: TokenKind::Comma,
                                                 span: s!(9, 1, ","),
                                             },
-                                            Some(Token {
-                                                kind: TokenKind::Whitespace,
+                                            Some(Wsoc {
                                                 span: s!(10, 1, " "),
+                                                token: vec![Token {
+                                                    kind: TokenKind::Whitespace,
+                                                    span: s!(10, 1, " "),
+                                                }]
                                             }),
                                             Term::Primitive(Primitive::Constant(Token {
                                                 kind: TokenKind::Ident,
@@ -4081,9 +4118,12 @@ mod new {
                                                 kind: TokenKind::Comma,
                                                 span: s!(15, 1, ","),
                                             },
-                                            Some(Token {
-                                                kind: TokenKind::Whitespace,
+                                            Some(Wsoc {
                                                 span: s!(16, 1, " "),
+                                                token: vec![Token {
+                                                    kind: TokenKind::Whitespace,
+                                                    span: s!(16, 1, " "),
+                                                }]
                                             }),
                                             Term::Primitive(Primitive::Constant(Token {
                                                 kind: TokenKind::Ident,
@@ -4098,9 +4138,12 @@ mod new {
                                     span: s!(27, 1, ")")
                                 },
                             }),
-                            ws: Some(Token {
-                                kind: TokenKind::Whitespace,
+                            ws: Some(Wsoc {
                                 span: s!(28, 1, " "),
+                                token: vec![Token {
+                                    kind: TokenKind::Whitespace,
+                                    span: s!(28, 1, " "),
+                                }]
                             }),
                             dot: Token {
                                 kind: TokenKind::Dot,
@@ -4877,6 +4920,23 @@ oldLime(?location,?species,?age) :- tree(?location,?species,?age,?heightInMeters
             let result = parse_program(input);
             println!("{}\n\n{:#?}", result.0, result.1);
             // assert!(false);
+        }
+
+        #[test]
+        fn wsoc() {
+            let input = Span::new("  \t\n % first comment\n   % second comment\n");
+            let refcell = RefCell::new(Vec::new());
+            let labels = RefCell::new(Vec::new());
+            let parser_state = ParserState {
+                errors: &refcell,
+                labels: &labels,
+            };
+            let input = Input {
+                input,
+                parser_state,
+            };
+            dbg!(wsoc0(input));
+            dbg!(wsoc1(input));
         }
     }
 }

@@ -1,6 +1,6 @@
 use super::term::Term;
 use super::tuple::Tuple;
-use super::{ast_to_ascii_tree, AstNode};
+use super::{ast_to_ascii_tree, AstNode, Wsoc};
 use super::{map::Map, Position};
 use crate::io::lexer::{Span, Token};
 use ascii_tree::write_tree;
@@ -16,9 +16,9 @@ pub(crate) enum Atom<'a> {
     InfixAtom {
         span: Span<'a>,
         lhs: Term<'a>,
-        ws1: Option<Token<'a>>,
+        ws1: Option<Wsoc<'a>>,
         operation: Token<'a>,
-        ws2: Option<Token<'a>>,
+        ws2: Option<Wsoc<'a>>,
         rhs: Term<'a>,
     },
     Map(Map<'a>),

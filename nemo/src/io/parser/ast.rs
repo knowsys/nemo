@@ -27,12 +27,51 @@ pub(crate) struct Position {
     pub(crate) column: u32,
 }
 
+/// Whitespace or Comment token
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct Wsoc<'a> {
+    pub(crate) span: Span<'a>,
+    pub(crate) token: Vec<Token<'a>>
+}
+impl AstNode for Wsoc<'_> {
+    fn children(&self) -> Option<Vec<&dyn AstNode>> {
+        if self.token.is_empty() {
+            None
+        } else {
+            #[allow(trivial_casts)]
+            Some(self.token.iter().map(|t| t as &dyn AstNode).collect())
+        }
+    }
+
+    fn span(&self) -> Span {
+        self.span
+    }
+
+    fn position(&self) -> Position {
+        Position { offset: self.span.location_offset(), line: self.span.location_line(), column: self.span.get_utf8_column() as u32 }
+    }
+
+    fn is_token(&self) -> bool {
+        false
+    }
+
+    fn name(&self) -> String {
+        format!("Wsoc \x1b[34m@{}:{} \x1b[92m{:?}\x1b[0m", self.span.location_line(), self.span.get_utf8_column(), self.span.fragment())
+    }
+}
+impl Display for Wsoc<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        todo!()
+    }
+}
+
+
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct List<'a, T> {
     pub(crate) span: Span<'a>,
     pub(crate) first: T,
     // ([ws]?[,][ws]?[T])*
-    pub(crate) rest: Option<Vec<(Option<Token<'a>>, Token<'a>, Option<Token<'a>>, T)>>,
+    pub(crate) rest: Option<Vec<(Option<Wsoc<'a>>, Token<'a>, Option<Wsoc<'a>>, T)>>,
 }
 impl<T: Clone> List<'_, T> {
     pub fn to_vec(&self) -> Vec<T> {
@@ -178,19 +217,13 @@ mod test {
                     kw: Token{
                         kind:TokenKind::Prefix,
                         span:s!(125,4,"@prefix")
-                    } ,
-                    ws1:Some(Token{
-                        kind:TokenKind::Whitespace,
-                        span:s!(132,4," ")
-                    }) ,
+                    },
+                    ws1:Some(Wsoc {span: s!(132, 4, " "), token: vec![Token{kind:TokenKind::Whitespace,span:s!(132,4," ")}] }),
                     prefix: Token {
                         kind: TokenKind::PrefixIdent,
                         span: s!(133, 4, "xsd:"),
                     },
-                    ws2: Some(Token{
-                        kind:TokenKind::Whitespace,
-                        span:s!(137,4," ")
-                    }),
+                    ws2: Some(Wsoc {span: s!(137, 4, " "), token: vec![Token{kind:TokenKind::Whitespace,span:s!(137,4," ")}] }),
                     prefix_iri: Token {
                         kind: TokenKind::Iri,
                         span: s!(138, 4, "<http://www.w3.org/2001/XMLSchema#>"),
@@ -239,10 +272,7 @@ mod test {
                                     kind: TokenKind::Comma,
                                     span: s!(242, 8, ","),
                                 },
-                                Some(Token {
-                                    kind: TokenKind::Whitespace,
-                                    span: s!(243, 8, " "),
-                                }),
+                                Some(Wsoc {span: s!(243, 8, " "), token: vec![Token{kind:TokenKind::Whitespace,span:s!(243,8," "),}] }),
                                 Term::Primitive(Primitive::Constant(Token {
                                     kind: TokenKind::Ident,
                                     span: s!(244, 8, "ConstB"),
@@ -296,9 +326,9 @@ mod test {
                         }),
                         rest: None,
                     },
-                    ws1: Some(Token{kind:TokenKind::Whitespace,span:s!(310,12," ")}),
+                    ws1: Some(Wsoc {span: s!(310, 12, " "), token: vec![Token{kind:TokenKind::Whitespace,span:s!(310,12," ")}] }),
                     arrow: Token{kind:TokenKind::Arrow, span:s!(311,12,":-")},
-                    ws2: Some(Token{kind:TokenKind::Whitespace,span:s!(313,12," ")}),
+                    ws2: Some(Wsoc {span: s!(313, 12, " "), token: vec![Token{kind:TokenKind::Whitespace,span:s!(313,12," ")}] }),
                     body: List {
                         span: s!(314, 12, "somePredicate(?VarA, ConstB)"),
                         first: Atom::Positive(Tuple {
@@ -322,10 +352,7 @@ mod test {
                                         kind: TokenKind::Comma,
                                         span: s!(333, 12, ","),
                                     },
-                                    Some(Token {
-                                        kind: TokenKind::Whitespace,
-                                        span: s!(334, 12, " "),
-                                    }),
+                                    Some(Wsoc {span: s!(334, 12, " "), token: vec![Token{kind:TokenKind::Whitespace,span:s!(334,12," "),}] }),
                                     Term::Primitive(Primitive::Constant(Token {
                                         kind: TokenKind::Ident,
                                         span: s!(335, 12, "ConstB"),

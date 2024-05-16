@@ -1,5 +1,5 @@
 use super::term::Term;
-use super::{ast_to_ascii_tree, AstNode, List, Position};
+use super::{ast_to_ascii_tree, AstNode, List, Position, Wsoc};
 use crate::io::lexer::{Span, Token};
 use ascii_tree::write_tree;
 use std::fmt::Debug;
@@ -8,11 +8,11 @@ use std::fmt::Debug;
 pub(crate) struct Map<'a> {
     pub(crate) span: Span<'a>,
     pub(crate) identifier: Option<Token<'a>>,
-    pub(crate) ws1: Option<Token<'a>>,
+    pub(crate) ws1: Option<Wsoc<'a>>,
     pub(crate) open_brace: Token<'a>,
-    pub(crate) ws2: Option<Token<'a>>,
+    pub(crate) ws2: Option<Wsoc<'a>>,
     pub(crate) pairs: Option<List<'a, Pair<'a, Term<'a>, Term<'a>>>>,
-    pub(crate) ws3: Option<Token<'a>>,
+    pub(crate) ws3: Option<Wsoc<'a>>,
     pub(crate) close_brace: Token<'a>,
 }
 impl AstNode for Map<'_> {
@@ -70,9 +70,9 @@ impl std::fmt::Display for Map<'_> {
 pub(crate) struct Pair<'a, K, V> {
     pub(crate) span: Span<'a>,
     pub(crate) key: K,
-    pub(crate) ws1: Option<Token<'a>>,
+    pub(crate) ws1: Option<Wsoc<'a>>,
     pub(crate) equal: Token<'a>,
-    pub(crate) ws2: Option<Token<'a>>,
+    pub(crate) ws2: Option<Wsoc<'a>>,
     pub(crate) value: V,
 }
 impl<K: AstNode + Debug, V: AstNode + Debug> AstNode for Pair<'_, K, V> {
