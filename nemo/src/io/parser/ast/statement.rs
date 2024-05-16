@@ -1,6 +1,6 @@
 use super::atom::Atom;
 use super::directive::Directive;
-use super::{ast_to_ascii_tree, AstNode, List, Position};
+use super::{ast_to_ascii_tree, AstNode, List, Position, Wsoc};
 use crate::io::lexer::{Span, Token};
 use ascii_tree::write_tree;
 
@@ -11,18 +11,18 @@ pub(crate) enum Statement<'a> {
         span: Span<'a>,
         doc_comment: Option<Token<'a>>,
         atom: Atom<'a>,
-        ws: Option<Token<'a>>,
+        ws: Option<Wsoc<'a>>,
         dot: Token<'a>,
     },
     Rule {
         span: Span<'a>,
         doc_comment: Option<Token<'a>>,
         head: List<'a, Atom<'a>>,
-        ws1: Option<Token<'a>>,
+        ws1: Option<Wsoc<'a>>,
         arrow: Token<'a>,
-        ws2: Option<Token<'a>>,
+        ws2: Option<Wsoc<'a>>,
         body: List<'a, Atom<'a>>,
-        ws3: Option<Token<'a>>,
+        ws3: Option<Wsoc<'a>>,
         dot: Token<'a>,
     },
     Whitespace(Token<'a>),

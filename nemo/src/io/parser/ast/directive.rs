@@ -1,5 +1,5 @@
 use super::map::Map;
-use super::{ast_to_ascii_tree, AstNode, List, Position};
+use super::{ast_to_ascii_tree, AstNode, List, Position, Wsoc};
 use crate::io::lexer::{Span, Token};
 use ascii_tree::write_tree;
 
@@ -10,9 +10,9 @@ pub(crate) enum Directive<'a> {
         span: Span<'a>,
         doc_comment: Option<Token<'a>>,
         kw: Token<'a>,
-        ws1: Option<Token<'a>>,
+        ws1: Option<Wsoc<'a>>,
         base_iri: Token<'a>,
-        ws2: Option<Token<'a>>,
+        ws2: Option<Wsoc<'a>>,
         dot: Token<'a>,
     },
     // "@prefix wikidata: <http://www.wikidata.org/entity/> ."
@@ -20,11 +20,11 @@ pub(crate) enum Directive<'a> {
         span: Span<'a>,
         doc_comment: Option<Token<'a>>,
         kw: Token<'a>,
-        ws1: Option<Token<'a>>,
+        ws1: Option<Wsoc<'a>>,
         prefix: Token<'a>,
-        ws2: Option<Token<'a>>,
+        ws2: Option<Wsoc<'a>>,
         prefix_iri: Token<'a>,
-        ws3: Option<Token<'a>>,
+        ws3: Option<Wsoc<'a>>,
         dot: Token<'a>,
     },
     // "@import table :- csv{resource="path/to/file.csv"} ."
@@ -32,13 +32,13 @@ pub(crate) enum Directive<'a> {
         span: Span<'a>,
         doc_comment: Option<Token<'a>>,
         kw: Token<'a>,
-        ws1: Token<'a>,
+        ws1: Wsoc<'a>,
         predicate: Token<'a>,
-        ws2: Option<Token<'a>>,
+        ws2: Option<Wsoc<'a>>,
         arrow: Token<'a>,
-        ws3: Option<Token<'a>>,
+        ws3: Option<Wsoc<'a>>,
         map: Map<'a>,
-        ws4: Option<Token<'a>>,
+        ws4: Option<Wsoc<'a>>,
         dot: Token<'a>,
     },
     // "@export result :- turtle{resource="out.ttl"} ."
@@ -46,13 +46,13 @@ pub(crate) enum Directive<'a> {
         span: Span<'a>,
         doc_comment: Option<Token<'a>>,
         kw: Token<'a>,
-        ws1: Token<'a>,
+        ws1: Wsoc<'a>,
         predicate: Token<'a>,
-        ws2: Option<Token<'a>>,
+        ws2: Option<Wsoc<'a>>,
         arrow: Token<'a>,
-        ws3: Option<Token<'a>>,
+        ws3: Option<Wsoc<'a>>,
         map: Map<'a>,
-        ws4: Option<Token<'a>>,
+        ws4: Option<Wsoc<'a>>,
         dot: Token<'a>,
     },
     // "@output A, B, C."
@@ -60,9 +60,9 @@ pub(crate) enum Directive<'a> {
         span: Span<'a>,
         doc_comment: Option<Token<'a>>,
         kw: Token<'a>,
-        ws1: Token<'a>,
+        ws1: Wsoc<'a>,
         predicates: Option<List<'a, Token<'a>>>,
-        ws2: Option<Token<'a>>,
+        ws2: Option<Wsoc<'a>>,
         dot: Token<'a>,
     },
 }
