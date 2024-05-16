@@ -17,10 +17,9 @@ pub(crate) struct Map<'a> {
 }
 impl AstNode for Map<'_> {
     fn children(&self) -> Option<Vec<&dyn AstNode>> {
-        let mut vec = Vec::new();
+        let mut vec: Vec<&dyn AstNode> = Vec::new();
         if let Some(identifier) = &self.identifier {
-            #[allow(trivial_casts)]
-            vec.push(identifier as &dyn AstNode);
+            vec.push(identifier);
         };
         if let Some(ws) = &self.ws1 {
             vec.push(ws);
@@ -78,9 +77,8 @@ pub(crate) struct Pair<'a, K, V> {
 }
 impl<K: AstNode + Debug, V: AstNode + Debug> AstNode for Pair<'_, K, V> {
     fn children(&self) -> Option<Vec<&dyn AstNode>> {
-        let mut vec = Vec::new();
-        #[allow(trivial_casts)]
-        vec.push(&self.key as &dyn AstNode);
+        let mut vec: Vec<&dyn AstNode> = Vec::new();
+        vec.push(&self.key);
         if let Some(ws) = &self.ws1 {
             vec.push(ws);
         }
