@@ -1,5 +1,5 @@
 use super::term::Term;
-use super::{ast_to_ascii_tree, AstNode, List, Position};
+use super::{ast_to_ascii_tree, AstNode, List, Position, Wsoc};
 use crate::io::lexer::{Span, Token};
 use ascii_tree::write_tree;
 
@@ -7,11 +7,11 @@ use ascii_tree::write_tree;
 pub(crate) struct Tuple<'a> {
     pub(crate) span: Span<'a>,
     pub(crate) identifier: Option<Token<'a>>,
-    pub(crate) ws1: Option<Token<'a>>,
+    pub(crate) ws1: Option<Wsoc<'a>>,
     pub(crate) open_paren: Token<'a>,
-    pub(crate) ws2: Option<Token<'a>>,
+    pub(crate) ws2: Option<Wsoc<'a>>,
     pub(crate) terms: Option<List<'a, Term<'a>>>,
-    pub(crate) ws3: Option<Token<'a>>,
+    pub(crate) ws3: Option<Wsoc<'a>>,
     pub(crate) close_paren: Token<'a>,
 }
 impl AstNode for Tuple<'_> {

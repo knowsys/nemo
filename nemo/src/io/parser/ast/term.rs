@@ -1,6 +1,6 @@
 use super::map::Map;
 use super::tuple::Tuple;
-use super::{ast_to_ascii_tree, AstNode, List, Position};
+use super::{ast_to_ascii_tree, AstNode, List, Position, Wsoc};
 use crate::io::lexer::{Span, Token};
 use ascii_tree::write_tree;
 
@@ -18,18 +18,18 @@ pub(crate) enum Term<'a> {
     Binary {
         span: Span<'a>,
         lhs: Box<Term<'a>>,
-        ws1: Option<Token<'a>>,
+        ws1: Option<Wsoc<'a>>,
         operation: Token<'a>,
-        ws2: Option<Token<'a>>,
+        ws2: Option<Wsoc<'a>>,
         rhs: Box<Term<'a>>,
     },
     Aggregation {
         span: Span<'a>,
         operation: Token<'a>,
         open_paren: Token<'a>,
-        ws1: Option<Token<'a>>,
+        ws1: Option<Wsoc<'a>>,
         terms: Box<List<'a, Term<'a>>>,
-        ws2: Option<Token<'a>>,
+        ws2: Option<Wsoc<'a>>,
         close_paren: Token<'a>,
     },
     Tuple(Box<Tuple<'a>>),
