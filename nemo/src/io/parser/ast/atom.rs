@@ -36,9 +36,8 @@ impl AstNode for Atom<'_> {
                 rhs,
                 ..
             } => {
-                let mut vec = Vec::new();
-                #[allow(trivial_casts)]
-                vec.push(lhs as &dyn AstNode);
+                let mut vec: Vec<&dyn AstNode> = Vec::new();
+                vec.push(lhs);
                 if let Some(ws) = ws1 {
                     vec.push(ws);
                 };

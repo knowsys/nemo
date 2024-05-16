@@ -16,10 +16,9 @@ pub(crate) struct Tuple<'a> {
 }
 impl AstNode for Tuple<'_> {
     fn children(&self) -> Option<Vec<&dyn AstNode>> {
-        let mut vec = Vec::new();
-        #[allow(trivial_casts)]
+        let mut vec: Vec<&dyn AstNode> = Vec::new();
         if let Some(identifier) = &self.identifier {
-            vec.push(identifier as &dyn AstNode);
+            vec.push(identifier);
         }
         if let Some(ws) = &self.ws1 {
             vec.push(ws);
