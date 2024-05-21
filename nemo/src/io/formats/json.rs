@@ -1,10 +1,8 @@
+//! Handler for resources of type JSON (java script object notation).
+
 use std::io::BufRead;
 
-use nemo_physical::{
-    datasources::table_providers::TableProvider,
-    datavalues::{AnyDataValue, DataValue, MapDataValue},
-    resource::Resource,
-};
+use nemo_physical::{datasources::table_providers::TableProvider, datavalues::MapDataValue};
 
 use super::{
     import_export::{
@@ -49,10 +47,10 @@ impl ImportExportHandler for JsonHandler {
 
     fn writer(
         &self,
-        writer: Box<dyn std::io::prelude::Write>,
-        arity: usize,
+        _writer: Box<dyn std::io::prelude::Write>,
+        _arity: usize,
     ) -> Result<Box<dyn super::types::TableWriter>, crate::error::Error> {
-        unimplemented!()
+        unimplemented!("writing json is currently not supported")
     }
 
     fn predicate_arity(&self) -> Option<usize> {

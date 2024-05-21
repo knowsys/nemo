@@ -1,4 +1,7 @@
-use std::{any::Any, fmt::Debug, io::BufRead, mem::size_of};
+//! Implements a reader for json files.
+//! Deserialisation is handled by [serde_json].
+
+use std::{fmt::Debug, io::BufRead, mem::size_of};
 
 use bytesize::ByteSize;
 use nemo_physical::{
@@ -6,7 +9,6 @@ use nemo_physical::{
     datavalues::AnyDataValue,
     management::bytesized::ByteSized,
 };
-use nom::sequence::tuple;
 use serde_json::Value;
 
 pub(crate) struct JsonReader {
