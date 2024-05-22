@@ -693,6 +693,7 @@ impl<'a> RuleParser<'a> {
                     FILE_FORMAT_RDF_TURTLE => Ok(FileFormat::RDF(RdfVariant::Turtle)),
                     FILE_FORMAT_RDF_TRIG => Ok(FileFormat::RDF(RdfVariant::TriG)),
                     FILE_FORMAT_RDF_XML => Ok(FileFormat::RDF(RdfVariant::RDFXML)),
+                    FILE_FORMAT_JSON => Ok(FileFormat::JSON),
                     _ => Err(ParseError::FileFormatError(format.fragment().to_string())),
                 })(input)?;
 

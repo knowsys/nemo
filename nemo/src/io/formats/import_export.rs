@@ -28,6 +28,7 @@ use crate::{
 use thiserror::Error;
 
 use super::{
+    json::JsonHandler,
     types::{Direction, TableWriter},
     DsvHandler, RdfHandler,
 };
@@ -151,6 +152,13 @@ impl ImportExportHandlers {
             FileFormat::CSV => DsvHandler::try_new_csv(&directive.attributes, direction),
             FileFormat::DSV => DsvHandler::try_new_dsv(&directive.attributes, direction),
             FileFormat::TSV => DsvHandler::try_new_tsv(&directive.attributes, direction),
+            FileFormat::JSON => {
+                if direction == Direction::Export {
+                    Err(ImportExportError::UnsupportedWrite(FileFormat::JSON))
+                } else {
+                    JsonHandler::try_new_import(&directive.attributes)
+                }
+            }
             FileFormat::RDF(variant) => {
                 RdfHandler::try_new(variant, &directive.attributes, direction)
             }
