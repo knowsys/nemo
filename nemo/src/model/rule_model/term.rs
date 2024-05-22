@@ -900,5 +900,11 @@ impl Display for Term {
     }
 }
 
+impl From<AnyDataValue> for Term {
+    fn from(adv: AnyDataValue) -> Self {
+        Term::Primitive(PrimitiveTerm::from(adv))
+    }
+}
+
 #[cfg(test)]
 mod test {}

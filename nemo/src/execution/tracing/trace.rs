@@ -13,7 +13,7 @@ use serde::Serialize;
 
 use crate::model::{
     chase_model::{ChaseAtom, ChaseFact},
-    PrimitiveTerm, Program, Rule, Term, Variable,
+    Atom, PrimitiveTerm, Program, Rule, Term, Variable,
 };
 
 /// Index of a rule within a [Program]
@@ -206,11 +206,11 @@ impl TraceTreeRuleApplication {
         rule
     }
 
-    /// Get the [`ChaseFact`] that was produced by this rule application.
-    fn to_derived_fact(&self) -> ChaseFact {
+    /// Get the [`Atom`] that was produced by this rule application.
+    fn to_derived_atom(&self) -> Atom {
         let rule = self.to_instantiated_rule();
-        let derived_atom = &rule.head()[self._position];
-        ChaseFact::from_flat_atom(derived_atom)
+        let derived_atom = rule.head()[self._position].clone();
+        derived_atom
     }
 
     /// Get a string representation of the Instantiated rule.
@@ -230,7 +230,7 @@ pub enum ExecutionTraceTree {
 
 #[derive(Debug)]
 enum TracePetGraphNodeLabel {
-    Fact(ChaseFact),
+    Fact(Atom),
     Rule(Rule),
 }
 
@@ -263,15 +263,15 @@ impl ExecutionTraceTree {
         while let Some((parent_node_index_opt, next_node)) = node_stack.pop() {
             let next_node_index = match next_node {
                 Self::Fact(ref chase_fact) => {
-                    let next_node_index =
-                        graph.add_node(TracePetGraphNodeLabel::Fact(chase_fact.clone()));
+                    let next_node_index = graph
+                        .add_node(TracePetGraphNodeLabel::Fact(Atom::from(chase_fact.clone())));
                     if let Some(parent_node_index) = parent_node_index_opt {
                         graph.add_edge(next_node_index, parent_node_index, ());
                     }
                     next_node_index
                 }
                 Self::Rule(ref trace_tree_rule_application, _) => {
-                    let fact = trace_tree_rule_application.to_derived_fact();
+                    let fact = trace_tree_rule_application.to_derived_atom();
                     let rule = trace_tree_rule_application.rule.clone();
 
                     let fact_node_index = graph.add_node(TracePetGraphNodeLabel::Fact(fact));
