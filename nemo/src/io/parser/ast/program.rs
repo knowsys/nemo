@@ -1,14 +1,14 @@
+use tower_lsp::lsp_types::SymbolKind;
+
+use super::{ast_to_ascii_tree, statement::Statement, AstNode, Position};
+use crate::io::lexer::{Span, Token};
 use ascii_tree::write_tree;
 
-use super::statement::Statement;
-use super::{ast_to_ascii_tree, AstNode, Position};
-use crate::io::lexer::{Span, Token};
-
 #[derive(Debug, Clone, PartialEq)]
-pub(crate) struct Program<'a> {
-    pub(crate) span: Span<'a>,
-    pub(crate) tl_doc_comment: Option<Token<'a>>,
-    pub(crate) statements: Vec<Statement<'a>>,
+pub struct Program<'a> {
+    pub span: Span<'a>,
+    pub tl_doc_comment: Option<Token<'a>>,
+    pub statements: Vec<Statement<'a>>,
 }
 impl AstNode for Program<'_> {
     fn children(&self) -> Option<Vec<&dyn AstNode>> {
@@ -58,7 +58,20 @@ impl AstNode for Program<'_> {
             )
         }
     }
+
+    fn lsp_identifier(&self) -> Option<(String, String)> {
+        None
+    }
+
+    fn lsp_sub_node_to_rename(&self) -> Option<&dyn AstNode> {
+        None
+    }
+
+    fn lsp_symbol_info(&self) -> Option<(String, SymbolKind)> {
+        Some(("File".to_string(), SymbolKind::FILE))
+    }
 }
+
 impl std::fmt::Display for Program<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut output = String::new();

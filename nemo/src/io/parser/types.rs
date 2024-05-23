@@ -39,11 +39,11 @@ pub type ParseResult<'a, T> = Result<T, LocatedParseError>;
 #[error("Parse error on line {}, column {}: {}\nat {}{}", .line, .column, .source, .fragment, format_parse_error_context(.context))]
 pub struct LocatedParseError {
     #[source]
-    pub(super) source: ParseError,
-    pub(super) line: u32,
-    pub(super) column: usize,
-    pub(super) fragment: String,
-    pub(super) context: Vec<LocatedParseError>,
+    pub source: ParseError,
+    pub line: u32,
+    pub column: usize,
+    pub fragment: String,
+    pub context: Vec<LocatedParseError>,
 }
 
 impl LocatedParseError {
@@ -479,9 +479,9 @@ impl<'a, T> nom::FindToken<T> for Tokens<'a> {
 impl<'a> InputIter for Tokens<'a> {
     type Item = &'a Token<'a>;
 
-    type Iter = std::iter::Enumerate<::std::slice::Iter<'a, Token<'a>>>;
+    type Iter = std::iter::Enumerate<std::slice::Iter<'a, Token<'a>>>;
 
-    type IterElem = ::std::slice::Iter<'a, Token<'a>>;
+    type IterElem = std::slice::Iter<'a, Token<'a>>;
 
     fn iter_indices(&self) -> Self::Iter {
         self.tok.iter().enumerate()
@@ -506,7 +506,7 @@ impl<'a> InputIter for Tokens<'a> {
         }
     }
 }
-impl<'a> nom::InputLength for Tokens<'a> {
+impl<'a> InputLength for Tokens<'a> {
     fn input_len(&self) -> usize {
         self.tok.len()
     }
@@ -529,7 +529,7 @@ impl<'a> InputTake for Tokens<'a> {
         )
     }
 }
-impl<'a> nom::InputTakeAtPosition for Tokens<'a> {
+impl<'a> InputTakeAtPosition for Tokens<'a> {
     type Item = &'a Token<'a>;
 
     fn split_at_position<P, E: nom::error::ParseError<Self>>(
@@ -690,7 +690,7 @@ impl<'a, 's> InputIter for Input<'a, 's> {
     }
 }
 
-impl nom::InputLength for Input<'_, '_> {
+impl InputLength for Input<'_, '_> {
     fn input_len(&self) -> usize {
         self.input.input_len()
     }
@@ -719,13 +719,13 @@ impl InputTake for Input<'_, '_> {
     }
 }
 
-impl nom::InputTakeAtPosition for Input<'_, '_> {
+impl InputTakeAtPosition for Input<'_, '_> {
     type Item = char;
 
     fn split_at_position<P, E: nom::error::ParseError<Self>>(
         &self,
         predicate: P,
-    ) -> nom::IResult<Self, Self, E>
+    ) -> IResult<Self, Self, E>
     where
         P: Fn(Self::Item) -> bool,
     {
@@ -738,8 +738,8 @@ impl nom::InputTakeAtPosition for Input<'_, '_> {
     fn split_at_position1<P, E: nom::error::ParseError<Self>>(
         &self,
         predicate: P,
-        e: nom::error::ErrorKind,
-    ) -> nom::IResult<Self, Self, E>
+        e: ErrorKind,
+    ) -> IResult<Self, Self, E>
     where
         P: Fn(Self::Item) -> bool,
     {
@@ -749,7 +749,7 @@ impl nom::InputTakeAtPosition for Input<'_, '_> {
     fn split_at_position_complete<P, E: nom::error::ParseError<Self>>(
         &self,
         predicate: P,
-    ) -> nom::IResult<Self, Self, E>
+    ) -> IResult<Self, Self, E>
     where
         P: Fn(Self::Item) -> bool,
     {
@@ -762,8 +762,8 @@ impl nom::InputTakeAtPosition for Input<'_, '_> {
     fn split_at_position1_complete<P, E: nom::error::ParseError<Self>>(
         &self,
         predicate: P,
-        e: nom::error::ErrorKind,
-    ) -> nom::IResult<Self, Self, E>
+        e: ErrorKind,
+    ) -> IResult<Self, Self, E>
     where
         P: Fn(Self::Item) -> bool,
     {
