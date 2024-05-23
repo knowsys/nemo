@@ -694,6 +694,7 @@ impl<'a> RuleParser<'a> {
                     FILE_FORMAT_RDF_TURTLE => Ok(FileFormat::RDF(RdfVariant::Turtle)),
                     FILE_FORMAT_RDF_TRIG => Ok(FileFormat::RDF(RdfVariant::TriG)),
                     FILE_FORMAT_RDF_XML => Ok(FileFormat::RDF(RdfVariant::RDFXML)),
+                    FILE_FORMAT_JSON => Ok(FileFormat::JSON),
                     _ => Err(ParseError::FileFormatError(format.fragment().to_string())),
                 })(input)?;
 
@@ -958,17 +959,17 @@ impl<'a> RuleParser<'a> {
                     let (remainder, _) = nom::character::complete::char('#')(input)?;
                     let (remainder, aggregate_operation_identifier) =
                         self.parse_bare_iri_like_identifier()(remainder)?;
-                    let (remainder, variables) = self.parenthesised(separated_list1(
-                        self.parse_comma(),
-                        self.parse_universal_variable(),
-                    ))(remainder)?;
+                    let (remainder, terms) = self
+                        .parenthesised(separated_list1(self.parse_comma(), self.parse_term()))(
+                        remainder,
+                    )?;
 
                     if let Some(logical_aggregate_operation) =
                         (&aggregate_operation_identifier).into()
                     {
                         let aggregate = Aggregate {
                             logical_aggregate_operation,
-                            terms: variables.into_iter().map(PrimitiveTerm::Variable).collect(),
+                            terms,
                         };
 
                         Ok((remainder, Term::Aggregation(aggregate)))
@@ -1170,7 +1171,7 @@ impl<'a> RuleParser<'a> {
                             (self.parenthesised(self.parse_term()))(remainder)?;
 
                         Ok((remainder, Term::Unary(op, Box::new(subterm))))
-                    } else if let Ok(op) = BinaryOperation::construct_from_name(&name.0) {
+                    } else if let Some(op) = BinaryOperation::construct_from_name(&name.0) {
                         let (remainder, (left, _, right)) = (self.parenthesised(tuple((
                             self.parse_term(),
                             self.parse_comma(),
@@ -1183,6 +1184,38 @@ impl<'a> RuleParser<'a> {
                                 operation: op,
                                 lhs: Box::new(left),
                                 rhs: Box::new(right),
+                            },
+                        ))
+                    } else if let Some(op) = TernaryOperation::construct_from_name(&name.0) {
+                        let (remainder, (first, _, second, _, third)) =
+                            (self.parenthesised(tuple((
+                                self.parse_term(),
+                                self.parse_comma(),
+                                self.parse_term(),
+                                self.parse_comma(),
+                                self.parse_term(),
+                            ))))(remainder)?;
+
+                        Ok((
+                            remainder,
+                            Term::Ternary {
+                                operation: op,
+                                first: Box::new(first),
+                                second: Box::new(second),
+                                third: Box::new(third),
+                            },
+                        ))
+                    } else if let Some(op) = NaryOperation::construct_from_name(&name.0) {
+                        let (remainder, subterms) = (self.parenthesised(separated_list0(
+                            self.parse_comma(),
+                            self.parse_term(),
+                        )))(remainder)?;
+
+                        Ok((
+                            remainder,
+                            Term::Nary {
+                                operation: op,
+                                parameters: subterms,
                             },
                         ))
                     } else {
@@ -2142,9 +2175,9 @@ mod test {
             "#min(?VARIABLE)",
             Term::Aggregation(Aggregate {
                 logical_aggregate_operation: LogicalAggregateOperation::MinNumber,
-                terms: vec![PrimitiveTerm::Variable(Variable::Universal(String::from(
-                    "VARIABLE"
-                )))]
+                terms: vec![Term::Primitive(PrimitiveTerm::Variable(
+                    Variable::Universal(String::from("VARIABLE"))
+                ))]
             })
         );
 

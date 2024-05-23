@@ -113,6 +113,7 @@ impl HeadStrategy for RestrictedChaseStrategy {
         current_plan: &mut SubtableExecutionPlan,
         variable_translation: &VariableTranslation,
         node_matches: ExecutionNodeRef,
+        _node_aggregates: Option<ExecutionNodeRef>,
         rule_info: &RuleInfo,
         step: usize,
     ) {

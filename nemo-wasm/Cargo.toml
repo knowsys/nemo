@@ -12,6 +12,10 @@ repository.workspace = true
 [lib]
 crate-type = ["cdylib", "rlib"]
 
+[features]
+default = ["web_sys_unstable_apis"]
+web_sys_unstable_apis = []
+
 [dependencies]
 console_error_panic_hook = "0.1.7"
 js-sys = "0.3.63"
@@ -24,3 +28,4 @@ web-sys = { version = "0.3.64", features = [ "Blob", "FileReaderSync", "FileSyst
 
 [dev-dependencies]
 wasm-bindgen-test = "0.3"
+

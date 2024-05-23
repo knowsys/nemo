@@ -1,6 +1,6 @@
 use crate::model::VariableAssignment;
 
-use super::{Identifier, PrimitiveTerm, Term};
+use super::{Identifier, Term};
 
 /// Aggregate operation on logical values
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
@@ -31,20 +31,14 @@ impl From<&Identifier> for Option<LogicalAggregateOperation> {
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub struct Aggregate {
     pub(crate) logical_aggregate_operation: LogicalAggregateOperation,
-    pub(crate) terms: Vec<PrimitiveTerm>,
+    pub(crate) terms: Vec<Term>,
 }
 
 impl Aggregate {
     /// Replaces [super::Variable]s with [Term]s according to the provided assignment.
     pub fn apply_assignment(&mut self, assignment: &VariableAssignment) {
         for term in &mut self.terms {
-            if let PrimitiveTerm::Variable(variable) = term {
-                if let Some(Term::Primitive(PrimitiveTerm::Variable(replacing_variable))) =
-                    assignment.get(variable)
-                {
-                    *variable = replacing_variable.clone();
-                }
-            }
+            term.apply_assignment(assignment);
         }
     }
 }

@@ -28,10 +28,10 @@ pub mod io;
 
 pub mod execution;
 pub mod model;
+pub mod util;
 
 mod program_analysis;
 mod table_manager;
-mod util;
 
 // we use datavalues and meta from nemo_physical in our API, so re-export it here.
 pub use nemo_physical::datavalues;

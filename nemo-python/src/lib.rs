@@ -1,3 +1,6 @@
+// FIXME: remove this once the pyo3 macros don't trigger this
+#![allow(non_local_definitions)]
+
 use std::{
     collections::{HashMap, HashSet},
     fs::read_to_string,

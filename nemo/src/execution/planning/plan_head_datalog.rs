@@ -26,17 +26,23 @@ use super::{
 /// Strategy for computing the results for a datalog (non-existential) rule.
 #[derive(Debug)]
 pub(crate) struct DatalogStrategy {
-    predicate_to_atoms: HashMap<Identifier, Vec<HeadInstruction>>,
+    predicate_to_atoms: HashMap<Identifier, Vec<(HeadInstruction, bool)>>,
 }
 
 impl DatalogStrategy {
     /// Create a new [DatalogStrategy] object.
     pub(crate) fn initialize(rule: &ChaseRule, _analysis: &RuleAnalysis) -> Self {
-        let mut predicate_to_atoms = HashMap::<Identifier, Vec<HeadInstruction>>::new();
+        let mut predicate_to_atoms = HashMap::<Identifier, Vec<(HeadInstruction, bool)>>::new();
 
-        for head_atom in rule.head() {
+        for (head_index, head_atom) in rule.head().iter().enumerate() {
+            let is_aggregate_atom = if let Some(aggregate_index) = rule.aggregate_head_index() {
+                aggregate_index == head_index
+            } else {
+                false
+            };
+
             let atoms = predicate_to_atoms.entry(head_atom.predicate()).or_default();
-            atoms.push(head_instruction_from_atom(head_atom));
+            atoms.push((head_instruction_from_atom(head_atom), is_aggregate_atom));
         }
 
         Self { predicate_to_atoms }
@@ -50,6 +56,7 @@ impl HeadStrategy for DatalogStrategy {
         current_plan: &mut SubtableExecutionPlan,
         variable_translation: &VariableTranslation,
         body: ExecutionNodeRef,
+        aggregates: Option<ExecutionNodeRef>,
         _rule_info: &RuleInfo,
         step: usize,
     ) {
@@ -58,16 +65,24 @@ impl HeadStrategy for DatalogStrategy {
                 table_manager.generate_table_name(predicate, &ColumnOrder::default(), step);
             let arity = head_instructions
                 .first()
-                .map(|instruction| instruction.arity)
+                .map(|(instruction, _)| instruction.arity)
                 .unwrap_or(0);
 
             let project_append_nodes = head_instructions
                 .iter()
-                .map(|head_instruction| {
+                .map(|(head_instruction, is_aggregate_atom)| {
+                    let base_node = if *is_aggregate_atom {
+                        aggregates
+                            .clone()
+                            .expect("There must be an aggregate node in this case")
+                    } else {
+                        body.clone()
+                    };
+
                     node_head_instruction(
                         current_plan.plan_mut(),
                         variable_translation,
-                        body.clone(),
+                        base_node,
                         head_instruction,
                     )
                 })

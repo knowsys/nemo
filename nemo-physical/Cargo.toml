@@ -15,6 +15,7 @@ default = ["timing"]
 # If this feature is not enabled, all time measurements will display zero instead
 timing = ["dep:howlong"]
 stringpairdictionary = []
+check_column_sorting = []
 
 [[bin]]
 name = "dict-bench"

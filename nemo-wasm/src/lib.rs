@@ -9,6 +9,7 @@ use js_sys::Array;
 use js_sys::Reflect;
 use js_sys::Set;
 use js_sys::Uint8Array;
+use nemo::execution::tracing::trace::ExecutionTraceTree;
 use nemo::execution::ExecutionEngine;
 
 use nemo::io::compression_format::CompressionFormat;
@@ -16,8 +17,11 @@ use nemo::io::parser::parse_fact;
 use nemo::io::parser::parse_program;
 use nemo::io::resource_providers::{ResourceProvider, ResourceProviders};
 use nemo::io::ImportManager;
-use nemo::model::ExportDirective;
+use nemo::model::Atom;
+use nemo::model::Fact;
 use nemo::model::Identifier;
+use nemo::model::PrimitiveTerm;
+use nemo::model::Term;
 use nemo_physical::datavalues::AnyDataValue;
 use nemo_physical::datavalues::DataValue;
 use nemo_physical::error::ExternalReadingError;
@@ -53,7 +57,7 @@ impl NemoError {
     #[allow(clippy::inherent_to_string)]
     #[wasm_bindgen(js_name = "toString")]
     pub fn to_string(&self) -> String {
-        format!("NemoError: {:#?}", self.0)
+        format!("NemoError: {}", self.0)
     }
 }
 
@@ -87,15 +91,15 @@ impl NemoProgram {
         Ok(js_set)
     }
 
-    // If there are no exports, marks all idb predicates as exports.
-    #[wasm_bindgen(js_name = "markDefaultExports")]
+    // If there are no outputs, marks all predicates as outputs.
+    #[wasm_bindgen(js_name = "markDefaultOutputs")]
     pub fn mark_default_output_predicates(&mut self) {
-        if self.0.exports().next().is_none() {
-            let mut additional_exports = Vec::new();
-            for predicate in self.0.idb_predicates() {
-                additional_exports.push(ExportDirective::default(predicate));
+        if self.0.output_predicates().next().is_none() {
+            let mut additional_outputs = Vec::new();
+            for predicate in self.0.predicates() {
+                additional_outputs.push(predicate);
             }
-            self.0.add_exports(additional_exports);
+            self.0.add_output_predicates(additional_outputs);
         }
     }
 
@@ -187,7 +191,7 @@ pub struct NemoEngine {
     engine: nemo::execution::DefaultExecutionEngine,
 }
 
-#[cfg(web_sys_unstable_apis)]
+#[cfg(feature = "web_sys_unstable_apis")]
 fn std_io_error_from_js_value(js_value: JsValue, prefix: &str) -> std::io::Error {
     std::io::Error::new(
         std::io::ErrorKind::Other,
@@ -195,10 +199,10 @@ fn std_io_error_from_js_value(js_value: JsValue, prefix: &str) -> std::io::Error
     )
 }
 
-#[cfg(web_sys_unstable_apis)]
+#[cfg(feature = "web_sys_unstable_apis")]
 struct SyncAccessHandleWriter(web_sys::FileSystemSyncAccessHandle);
 
-#[cfg(web_sys_unstable_apis)]
+#[cfg(feature = "web_sys_unstable_apis")]
 impl std::io::Write for SyncAccessHandleWriter {
     fn write(&mut self, buf: &[u8]) -> Result<usize, std::io::Error> {
         let buf: Vec<_> = buf.into();
@@ -308,7 +312,7 @@ impl NemoEngine {
         Ok(results)
     }
 
-    #[cfg(web_sys_unstable_apis)]
+    #[cfg(feature = "web_sys_unstable_apis")]
     #[wasm_bindgen(js_name = "savePredicate")]
     pub fn write_result_to_sync_access_handle(
         &mut self,
@@ -346,16 +350,85 @@ impl NemoEngine {
             .map_err(NemoError)
     }
 
-    #[wasm_bindgen(js_name = "parseAndTraceFact")]
-    pub fn parse_and_trace_fact(&mut self, fact: &str) -> Option<String> {
+    fn trace_fact_at_index(
+        &mut self,
+        predicate: String,
+        row_index: usize,
+    ) -> Result<Option<ExecutionTraceTree>, NemoError> {
+        let iter = self
+            .engine
+            .predicate_rows(&Identifier::from(predicate.clone()))
+            .map_err(WasmOrInternalNemoError::NemoError)
+            .map_err(NemoError)?;
+
+        let terms_to_trace_opt: Option<Vec<AnyDataValue>> =
+            iter.into_iter().flatten().nth(row_index);
+
+        if let Some(terms_to_trace) = terms_to_trace_opt {
+            let fact_to_trace: Fact = Fact(Atom::new(
+                Identifier::from(predicate),
+                terms_to_trace
+                    .into_iter()
+                    .map(|term| Term::Primitive(PrimitiveTerm::from(term)))
+                    .collect(),
+            ));
+
+            let (trace, handles) = self
+                .engine
+                .trace(self.program.0.clone(), vec![fact_to_trace]);
+
+            Ok(trace.tree(handles[0]))
+        } else {
+            Ok(None)
+        }
+    }
+
+    #[wasm_bindgen(js_name = "traceFactAtIndexAscii")]
+    pub fn trace_fact_at_index_ascii(
+        &mut self,
+        predicate: String,
+        row_index: usize,
+    ) -> Result<Option<String>, NemoError> {
+        self.trace_fact_at_index(predicate, row_index)
+            .map(|opt| opt.as_ref().map(ExecutionTraceTree::to_ascii_art))
+    }
+
+    #[wasm_bindgen(js_name = "traceFactAtIndexGraphML")]
+    pub fn trace_fact_at_index_graphml(
+        &mut self,
+        predicate: String,
+        row_index: usize,
+    ) -> Result<Option<String>, NemoError> {
+        self.trace_fact_at_index(predicate, row_index)
+            .map(|opt| opt.as_ref().map(ExecutionTraceTree::to_graphml))
+    }
+
+    fn parse_and_trace_fact(
+        &mut self,
+        fact: &str,
+    ) -> Result<Option<ExecutionTraceTree>, NemoError> {
         let parsed_fact = parse_fact(fact.to_owned())
             .map_err(WasmOrInternalNemoError::NemoError)
-            .map_err(NemoError)
-            .ok()?;
+            .map_err(NemoError)?;
 
         let (trace, handles) = self.engine.trace(self.program.0.clone(), vec![parsed_fact]);
 
-        trace.tree(handles[0]).map(|tree| tree.to_graphml())
+        Ok(trace.tree(handles[0]))
+    }
+
+    #[wasm_bindgen(js_name = "parseAndTraceFactAscii")]
+    pub fn parse_and_trace_fact_ascii(&mut self, fact: &str) -> Result<Option<String>, NemoError> {
+        self.parse_and_trace_fact(fact)
+            .map(|opt| opt.as_ref().map(ExecutionTraceTree::to_ascii_art))
+    }
+
+    #[wasm_bindgen(js_name = "parseAndTraceFactGraphML")]
+    pub fn parse_and_trace_fact_graphml(
+        &mut self,
+        fact: &str,
+    ) -> Result<Option<String>, NemoError> {
+        self.parse_and_trace_fact(fact)
+            .map(|opt| opt.as_ref().map(ExecutionTraceTree::to_graphml))
     }
 }
 
@@ -381,11 +454,13 @@ impl NemoResults {
                 .into_iter()
                 .map(|v| match v.value_domain() {
                     nemo_physical::datavalues::ValueDomain::PlainString
-                    | nemo::datavalues::ValueDomain::Null
+                    | nemo_physical::datavalues::ValueDomain::Null
                     | nemo_physical::datavalues::ValueDomain::LanguageTaggedString
-                    | nemo_physical::datavalues::ValueDomain::Iri
                     | nemo_physical::datavalues::ValueDomain::Other => {
                         JsValue::from(v.canonical_string())
+                    }
+                    nemo_physical::datavalues::ValueDomain::Iri => {
+                        JsValue::from(v.to_iri_unchecked())
                     }
                     nemo_physical::datavalues::ValueDomain::Double => {
                         JsValue::from(v.to_f64_unchecked())

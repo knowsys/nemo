@@ -130,20 +130,8 @@ impl GeneratorFilter {
 
     /// Helper function that takes a list of boolean [Filter]s
     /// and constructs a [Filter] that represent its conjuction.
-    ///
-    /// # Panics
-    /// Panics if zero filters are given as argument.
     fn fold_filters(filters: Vec<&Filter>) -> Filter {
-        let mut result_filter = (*filters
-            .first()
-            .expect("Function assumes that at least one filter will be provided."))
-        .clone();
-
-        for filter in filters.into_iter().skip(1) {
-            result_filter = Filter::boolean_conjunction(result_filter, filter.clone());
-        }
-
-        result_filter
+        Filter::boolean_conjunction(filters.into_iter().cloned().collect::<Vec<_>>())
     }
 
     /// Compute the [FilterAssignment] from a list of [Filters].

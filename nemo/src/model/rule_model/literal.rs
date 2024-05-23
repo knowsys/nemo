@@ -88,7 +88,7 @@ impl Literal {
     }
 
     /// Return all aggregates in the literal.
-    pub fn aggregates(&self) -> impl Iterator<Item = &Aggregate> + '_ {
+    pub fn aggregates(&self) -> Vec<Aggregate> {
         forward_to_atom!(self, aggregates)
     }
 

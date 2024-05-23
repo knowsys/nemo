@@ -7,7 +7,21 @@ r2(?X, ?Y, #count(?Z) * ?Y) :- sourceA(?X, ?Y, ?Z).
 
 r3(?X + 2, ?Y, #count(?Z) * 2) :- sourceA(?X, ?Y, ?Z).
 
-@export r3 :- csv {}.
+r4(MAX(0, ?Y - ?X), #sum(?Y, ?Z)) :- sourceA(?X, ?Y, ?Z).
+
+r5(MAX(0, ?Y - ?X), ?Z * #sum(?Y)) :- sourceA(?X, ?Y, ?Z).
+
+d(?Z), r6(?X, #sum(?Y)) :- sourceA(?X, ?Y, ?Z).
+
+r7(?X, ?X + #sum(?Y * ?Z)) :- sourceA(?X, ?Y, ?Z).
+
+@export d :- csv {}.
+
 @export r0 :- csv {}.
 @export r1 :- csv {}.
 @export r2 :- csv {}.
+@export r3 :- csv {}.
+@export r4 :- csv {}.
+@export r5 :- csv {}.
+@export r6 :- csv {}.
+@export r7 :- csv {}.

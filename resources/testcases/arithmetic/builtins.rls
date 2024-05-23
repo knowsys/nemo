@@ -1,0 +1,93 @@
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+% Input values
+strings("Hello", "World").
+doubles(2.0E0, 1.5E0, 0.5E0).
+integers(1, 2, 3).
+tagged("test"@en).
+iri(constant).
+null(!V) :- iri(?X).
+
+% Datatype check
+result(isString, ?R) :- strings(?A, _), ?R = isString(?A).
+result(isint, ?R) :- integers(?A, _, _), ?R = isInteger(?A).
+result(isfloat, ?R) :- doubles(?A, _, _), ?R = isFloat(?A).
+result(isdouble, ?R) :- doubles(?A, _, _), ?R = isDouble(?A).
+result(isnumeric, ?R) :- integers(?A, _, _), ?R = isNumeric(?A).
+result(isiri, ?R) :- iri(?A), ?R = isIri(?A).
+result(isnull, ?R) :- null(?A), ?R = isNull(?A).
+
+% String representation
+result(string, ?R) :- strings(?A, _), ?R = STR(?A).
+result(string, ?R) :- doubles(?A, _, _), ?R = STR(?A).
+result(string, ?R) :- tagged(?A), ?R = STR(?A).
+
+% Full string representation
+result(fullstring, ?R) :- strings(?A, _), ?R = fullStr(?A).
+result(fullstring, ?R) :- doubles(?A, _, _), ?R = fullStr(?A).
+result(fullstring, ?R) :- tagged(?A), ?R = fullStr(?A).
+
+% Get language tag
+result(tag, ?R) :- tagged(?L), ?R = LANG(?L).
+
+% Numeric casts
+cast(3.0).
+cast(4.2).
+cast(5).
+cast(test).
+cast("2023"^^xsd:gYear).
+cast("40").
+
+result(int, ?R) :- cast(?A), ?R = INT(?A).
+result(float, ?R) :- cast(?A), ?R = FLOAT(?A).
+result(double, ?R) :- cast(?A), ?R = DOUBLE(?A).
+
+% Cast within numeric operations
+
+result(mixedsum, ?R) :- 
+    integers(?I1, ?I2, ?I3), doubles(?D1, ?D2, ?D3),
+    ?R = ?I1 * ?D1 + ?I2 * ?D2 + ?I3 * ?D3. 
+
+% Numeric rounding
+result(round, ?R) :- cast(?A), ?R = ROUND(?A).
+
+% Get datatype
+result(datatype, ?R) :- cast(?A), ?R = DATATYPE(?A).
+
+% String operations
+
+result(concat, ?R) :- strings(?A, ?B), ?R = CONCAT(?A, " ", ?B).
+result(compare, ?R) :- strings(?A, ?B), ?R = 10 * COMPARE(?A, ?B).  
+result(contains, ?R) :- strings(?A, _), ?R = CONTAINS(?A, "lo").
+result(subString, ?R) :- strings(?A, ?B), ?R = SUBSTR(?A, STRLEN(?B) / 2).  
+result(subStringLength, ?R) :- strings(?A, _), ?R = SUBSTRING(?A, 1, 3).
+result(ucase, ?R) :- strings(?A, _), ?R = UCASE(?A).
+result(lcase, ?R) :- strings(_, ?B), ?R = LCASE(?B).
+result(stringbefore, ?R) :- strings(?A, _), ?R = STRBEFORE(?A, "ll").
+result(stringafter, ?R) :- strings(?A, _), ?R = STRAFTER(?A, "ll").
+result(stringstarts_true, ?R) :- strings(?A, _), ?R = STRSTARTS(?A, "Hell").
+result(stringstarts_false, ?R) :- strings(_, ?B), ?R = STRSTARTS(?B, "Hell").
+result(stringends_true, ?R) :- strings(?A, _), ?R = STRENDS(?A, "ello").
+result(stringends_false, ?R) :- strings(_, ?B), ?R = STRENDS(?B, "ello").
+
+% Numeric arithmetic
+result(calculation, ?R) :- doubles(?A, ?B, ?C), ?R = POW((?A + ?B + ?C) / 2E0, 3E0) * LOG(16E0, 4E0) + SIN(?C + 0.023599E0) * SQRT(16E0). 
+result(remainder, ?R) :- integers(_, ?A, ?B), ?R = REM(?B, ?A).
+
+% Boolean arithmetic
+boolean("true"^^<http://www.w3.org/2001/XMLSchema#boolean>, "false"^^<http://www.w3.org/2001/XMLSchema#boolean>).
+result(Boolean, ?R) :- boolean(?True, ?False), ?R = STR(OR(AND(?True, ?False, ?True), AND(?True, NOT(?False), NOT(NOT(?True))))).
+
+% Nary functions
+result(sum, ?R) :- doubles(?A, ?B, ?C), ?R = SUM(?A, ?B, ?C).
+result(prod, ?R) :- doubles(?A, ?B, ?C), ?R = PROD(?A, ?B, ?C).
+result(min, ?R) :- doubles(?A, ?B, ?C), ?R = MIN(?A, ?B, ?C).
+result(max, ?R) :- doubles(?A, ?B, ?C), ?R = MAX(?A, ?B, ?C).
+result(luka, ?R) :- numbers(?A, ?B, ?C), ?R = LUKA(?A, ?B, ?C) .
+result(bitand, ?R) :- integers(?A, ?B, ?C), ?R = BITAND(?A, ?B, ?C).
+result(bitor, ?R) :- integers(?A, ?B, ?C), ?R = BITOR(?A, ?B, ?C).
+result(bitxor, ?R) :- integers(?A, ?B, ?C), ?R = BITXOR(?A, ?B, ?C).
+
+% Export 
+@export result :- csv{}.
+

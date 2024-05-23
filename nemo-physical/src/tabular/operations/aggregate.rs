@@ -38,43 +38,11 @@ pub(crate) struct GeneratorAggregate {
 
 impl GeneratorAggregate {
     /// Creates an aggregate generator and computes the required input order
-    pub(crate) fn new_with_reorder(
-        output: &OperationTable,
-        unordered_input: &OperationTable,
-        assignment: &AggregateAssignment,
-    ) -> (Self, OperationTable) {
-        {
-            // Check that output column order is even achievable by an aggregate operation
-            for column in &output[0..output.len() - 1] {
-                debug_assert!(assignment.group_by_columns.contains(column));
-            }
-            debug_assert!(!assignment.group_by_columns.contains(output.last().unwrap()));
-        }
-
-        // Create input order that produces inteded output order
-        let correctly_ordered_input = {
-            let mut correctly_ordered_input = Vec::with_capacity(unordered_input.len());
-            for column in output.iter() {
-                if assignment.group_by_columns.contains(column) {
-                    correctly_ordered_input.push(*column);
-                }
-            }
-            correctly_ordered_input.push(assignment.aggregated_column);
-            correctly_ordered_input.extend(assignment.distinct_columns.iter().copied());
-            // Add other columns such that the reorder operation will be a permutation
-            // The other columns are not required by the aggregation, but the execution plan code only supports valid permutations on the inputs
-            for column in unordered_input.iter() {
-                if !correctly_ordered_input.contains(column) {
-                    correctly_ordered_input.push(*column);
-                }
-            }
-            OperationTable(correctly_ordered_input)
-        };
-
-        let aggregated_column_index = correctly_ordered_input
+    pub(crate) fn new(input: &OperationTable, assignment: &AggregateAssignment) -> Self {
+        let aggregated_column_index = input
             .position(&assignment.aggregated_column)
             .expect("aggregate variable has to be in input operation table");
-        let mut last_distinct_column_index = correctly_ordered_input
+        let mut last_distinct_column_index = input
             .iter()
             .enumerate()
             .rev()
@@ -93,7 +61,7 @@ impl GeneratorAggregate {
             last_distinct_column_index,
         };
 
-        (Self { instructions }, correctly_ordered_input)
+        Self { instructions }
     }
 }
 
