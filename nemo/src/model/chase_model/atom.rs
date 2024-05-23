@@ -41,6 +41,19 @@ impl<T: Display> Display for dyn ChaseAtom<TypeTerm = T> {
     }
 }
 
+impl<S: Clone, T> From<T> for Atom
+where
+    Term: From<S>,
+    T: ChaseAtom<TypeTerm = S>,
+{
+    fn from(chase_atom: T) -> Self {
+        Atom::new(
+            chase_atom.predicate(),
+            chase_atom.terms().iter().cloned().map(Term::from).collect(),
+        )
+    }
+}
+
 /// An atom which may only use [PrimitiveTerm]s
 #[derive(Debug, Clone)]
 pub struct PrimitiveAtom {
