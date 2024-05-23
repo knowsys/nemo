@@ -5,6 +5,9 @@ members = [
     "nemo-cli",
     "nemo-physical",
     "nemo-python",
+]
+exclude = [
+    "nemo-language-server",
     "nemo-wasm",
 ]
 

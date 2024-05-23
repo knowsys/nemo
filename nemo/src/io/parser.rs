@@ -22,7 +22,7 @@ use nom::{
 
 use macros::traced;
 
-pub(crate) mod ast;
+pub mod ast;
 pub(crate) mod types;
 
 use types::{ConstraintOperator, IntermediateResult, Span};
@@ -2429,45 +2429,45 @@ mod test {
 }
 
 /// NEW PARSER
-mod new {
+pub mod new {
     use std::cell::RefCell;
 
     use super::ast::{
         atom::*, directive::*, map::*, program::*, statement::*, term::*, tuple::*, List, Position,
         Wsoc,
     };
-    use super::types::{Input, Label, ParserLabel, ToRange};
+    use super::types::{Input, Label, ParserLabel};
     use crate::io::lexer::{
         arrow, at, caret, close_brace, close_paren, colon, comma, dot, equal, exclamation_mark,
         exp, greater, greater_equal, hash, less, less_equal, lex_comment, lex_doc_comment,
-        lex_ident, lex_iri, lex_number, lex_operators, lex_string, lex_toplevel_doc_comment,
-        lex_whitespace, map_err, minus, open_brace, open_paren, plus, question_mark, skip_to_dot,
-        slash, star, tilde, underscore, unequal, Error, NewParseError, ParserState, Span, Token,
+        lex_ident, lex_iri, lex_number, lex_string, lex_toplevel_doc_comment,
+        lex_whitespace, minus, open_brace, open_paren, plus, question_mark, skip_to_dot,
+        slash, star, tilde, underscore, unequal, Error, ParserState, Span, Token,
         TokenKind,
     };
-    use crate::io::parser::ast::AstNode;
-    use nom::combinator::{all_consuming, cut, map, opt, recognize};
-    use nom::error::{context, ContextError, ParseError};
-    use nom::sequence::{delimited, pair};
+    
+    use nom::combinator::{all_consuming, opt, recognize};
+    use nom::error::{ParseError};
+    use nom::sequence::{pair};
     use nom::Parser;
     use nom::{
         branch::alt,
         combinator::verify,
-        multi::{many0, many1, separated_list0},
+        multi::{many0, many1},
         sequence::tuple,
         IResult,
     };
 
     fn outer_span<'a>(input: Span<'a>, rest_input: Span<'a>) -> Span<'a> {
         unsafe {
-            let span = Span::new_from_raw_offset(
+            
+            // dbg!(&input, &span, &rest_input);
+            Span::new_from_raw_offset(
                 input.location_offset(),
                 input.location_line(),
                 &input[..(rest_input.location_offset() - input.location_offset())],
                 (),
-            );
-            // dbg!(&input, &span, &rest_input);
-            span
+            )
         }
     }
 
@@ -2516,14 +2516,14 @@ mod new {
         'e,
         O: Copy,
         E: ParseError<Input<'a, 'e>>,
-        F: nom::Parser<Input<'a, 'e>, O, E>,
+        F: Parser<Input<'a, 'e>, O, E>,
     >(
         mut parser: F,
         error_msg: impl ToString,
         error_output: O,
         errors: ParserState<'e>,
     ) -> impl FnMut(Input<'a, 'e>) -> IResult<Input<'a, 'e>, O, E> {
-        move |input| match parser.parse(input.clone()) {
+        move |input| match parser.parse(input) {
             Ok(result) => Ok(result),
             Err(nom::Err::Error(_)) | Err(nom::Err::Failure(_)) => {
                 let err = Error(
@@ -2542,7 +2542,7 @@ mod new {
     }
 
     fn recover<'a, 'e, E>(
-        mut parser: impl nom::Parser<Input<'a, 'e>, Statement<'a>, E>,
+        mut parser: impl Parser<Input<'a, 'e>, Statement<'a>, E>,
         error_msg: impl ToString,
         errors: ParserState<'e>,
     ) -> impl FnMut(Input<'a, 'e>) -> IResult<Input<'a, 'e>, Statement<'a>, E> {
@@ -2567,7 +2567,7 @@ mod new {
     }
 
     fn report_label<'a, 's, O, E>(
-        mut parser: impl nom::Parser<Input<'a, 's>, O, E>,
+        mut parser: impl Parser<Input<'a, 's>, O, E>,
         label: ParserLabel,
     ) -> impl FnMut(Input<'a, 's>) -> IResult<Input<'a, 's>, O, E> {
         move |input| match parser.parse(input) {
@@ -2594,7 +2594,7 @@ mod new {
     }
 
     fn report_error<'a, 's, O, E>(
-        mut parser: impl nom::Parser<Input<'a, 's>, O, E>,
+        mut parser: impl Parser<Input<'a, 's>, O, E>,
     ) -> impl FnMut(Input<'a, 's>) -> IResult<Input<'a, 's>, O, E> {
         move |input| match parser.parse(input) {
             Ok(result) => {
@@ -2612,7 +2612,7 @@ mod new {
                                 .into_iter();
                         for label in labels {
                             if let Some(last) = furthest_errors.last() {
-                                if label.pos.offset >= (*last).0.offset {
+                                if label.pos.offset >= last.0.offset {
                                     let err =
                                         Error(label.pos, format!("expected {:?}", label.label));
                                     furthest_errors.push(err);
@@ -2679,7 +2679,7 @@ mod new {
     }
 
     /// Parse a full program consisting of directives, facts, rules and comments.
-    fn parse_program<'a, 'e>(input: Input<'a, 'e>) -> (Program<'a>, Vec<Error>) {
+    fn parse_program<'a>(input: Input<'a, '_>) -> (Program<'a>, Vec<Error>) {
         let (rest_input, (tl_doc_comment, statements)) = all_consuming(pair(
             opt(lex_toplevel_doc_comment),
             many1(recover(
@@ -2704,6 +2704,20 @@ mod new {
             },
             rest_input.parser_state.errors.take(),
         )
+    }
+
+    pub fn parse_program_str(input: &str) -> (Program<'_>, Vec<Error>) {
+        let refcell = RefCell::new(Vec::new());
+        let labels = RefCell::new(Vec::new());
+        let parser_state = ParserState {
+            errors: &refcell,
+            labels: &labels,
+        };
+        let input = Input {
+            input: Span::new(input),
+            parser_state,
+        };
+        parse_program(input)
     }
 
     /// Parse whitespace that is between directives, facts, rules and comments.
@@ -3763,7 +3777,7 @@ mod new {
                         }
                     }],
                 }
-            )
+            );
         }
 
         #[test]
@@ -4034,7 +4048,7 @@ mod new {
                         }),
                     ],
                 }
-            )
+            );
         }
 
         // #[test]
@@ -4160,7 +4174,7 @@ mod new {
                         })
                     ],
                 }
-            )
+            );
         }
 
         #[test]

@@ -1,3 +1,5 @@
+use tower_lsp::lsp_types::SymbolKind;
+
 use super::map::Map;
 use super::tuple::Tuple;
 use super::{ast_to_ascii_tree, AstNode, List, Position, Wsoc};
@@ -5,7 +7,7 @@ use crate::io::lexer::{Span, Token};
 use ascii_tree::write_tree;
 
 #[derive(Debug, Clone, PartialEq)]
-pub(crate) enum Term<'a> {
+pub enum Term<'a> {
     Primitive(Primitive<'a>),
     Variable(Token<'a>),
     Existential(Token<'a>),
@@ -36,6 +38,7 @@ pub(crate) enum Term<'a> {
     Map(Box<Map<'a>>),
     Blank(Token<'a>),
 }
+
 impl AstNode for Term<'_> {
     fn children(&self) -> Option<Vec<&dyn AstNode>> {
         match self {
@@ -141,7 +144,7 @@ impl AstNode for Term<'_> {
             Term::Binary { .. } => name!("Binary Term"),
             Term::Aggregation { .. } => name!("Aggregation"),
             Term::Tuple(f) => {
-                if let Some(_) = f.identifier {
+                if f.identifier.is_some() {
                     name!("Function Symbol")
                 } else {
                     name!("Tuple")
@@ -149,6 +152,70 @@ impl AstNode for Term<'_> {
             }
             Term::Map(_) => name!("Map"),
             Term::Blank(_) => name!("Blank"),
+        }
+    }
+
+    fn lsp_identifier(&self) -> Option<(String, String)> {
+        match self {
+            Term::Variable(t) => Some((
+                format!("variable/{}", t.span().fragment()),
+                "statement".to_string(),
+            )),
+            Term::Aggregation { operation, .. } => Some((
+                format!("aggregation/{}", operation.span().fragment()),
+                "file".to_string(),
+            )),
+            Term::Tuple(tuple) => {
+                tuple.identifier.map(|identifier| (
+                        format!("function/{}", identifier.span().fragment()),
+                        "file".to_string(),
+                    ))
+            }
+            _ => None,
+        }
+    }
+
+    fn lsp_sub_node_to_rename(&self) -> Option<&dyn AstNode> {
+        None
+        // TODO:
+        // match self {
+        //     Term::Variable(t) => Some(t),
+        //     Term::Aggregation { operation, .. } => Some(operation),
+        //     Term::Tuple(tuple) => {
+        //         if let Some(identifier) = tuple.identifier {
+        //             Some(identifier)
+        //         } else {
+        //             None
+        //         }
+        //     }
+        //     // Term::Function(named_tuple) => Some(&named_tuple.identifier),
+        //     _ => None,
+        // }
+    }
+
+    fn lsp_symbol_info(&self) -> Option<(String, SymbolKind)> {
+        match self {
+            Term::Primitive(_) => Some((String::from("Primitive term"), SymbolKind::CONSTANT)),
+            Term::Variable(t) => Some((format!("Variable: {}", t.span()), SymbolKind::VARIABLE)),
+            Term::UnaryPrefix { .. } => Some((String::from("Unary prefix"), SymbolKind::OPERATOR)),
+            Term::Blank { .. } => Some((String::from("Unary prefix"), SymbolKind::VARIABLE)),
+            Term::Existential { .. } => Some((String::from("Unary prefix"), SymbolKind::VARIABLE)),
+            Term::Binary { .. } => Some((String::from("Binary term"), SymbolKind::OPERATOR)),
+            Term::Aggregation { operation, .. } => Some((
+                format!("Aggregation: {}", operation.span.fragment()),
+                SymbolKind::OPERATOR,
+            )),
+            Term::Tuple(tuple) => {
+                if let Some(identifier) = tuple.identifier {
+                    Some((
+                        format!("Function: {}", identifier.span.fragment()),
+                        SymbolKind::OPERATOR,
+                    ))
+                } else {
+                    Some((String::from("Tuple"), SymbolKind::ARRAY))
+                }
+            }
+            Term::Map(map) => Some((String::from("Map"), SymbolKind::ARRAY)),
         }
     }
 }
@@ -180,6 +247,7 @@ pub(crate) enum Primitive<'a> {
         iri: Token<'a>,
     },
 }
+
 impl AstNode for Primitive<'_> {
     fn children(&self) -> Option<Vec<&dyn AstNode>> {
         match self {
@@ -264,6 +332,18 @@ impl AstNode for Primitive<'_> {
             Primitive::RdfLiteral { .. } => name!("RDF Literal"),
         }
     }
+
+    fn lsp_identifier(&self) -> Option<(String, String)> {
+        None
+    }
+
+    fn lsp_sub_node_to_rename(&self) -> Option<&dyn AstNode> {
+        None
+    }
+
+    fn lsp_symbol_info(&self) -> Option<(String, SymbolKind)> {
+        None
+    }
 }
 impl std::fmt::Display for Primitive<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -279,6 +359,7 @@ pub(crate) struct Exponent<'a> {
     pub(crate) sign: Option<Token<'a>>,
     pub(crate) number: Token<'a>,
 }
+
 impl AstNode for Exponent<'_> {
     fn children(&self) -> Option<Vec<&dyn AstNode>> {
         let mut vec: Vec<&dyn AstNode> = Vec::new();
@@ -305,7 +386,20 @@ impl AstNode for Exponent<'_> {
     fn name(&self) -> String {
         todo!()
     }
+
+    fn lsp_identifier(&self) -> Option<(String, String)> {
+        None
+    }
+
+    fn lsp_sub_node_to_rename(&self) -> Option<&dyn AstNode> {
+        None
+    }
+
+    fn lsp_symbol_info(&self) -> Option<(String, SymbolKind)> {
+        None
+    }
 }
+
 impl std::fmt::Display for Exponent<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         todo!()
