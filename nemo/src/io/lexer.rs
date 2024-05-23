@@ -4,14 +4,15 @@ use std::{cell::RefCell, ops::Range};
 
 use nom::{
     branch::alt,
-    bytes::complete::{is_not, tag, take, take_till, take_while},
+    bytes::complete::{is_not, tag, take, take_till},
     character::complete::{alpha1, alphanumeric1, digit1, line_ending, multispace1},
     combinator::{all_consuming, cut, map, recognize},
-    error::{ContextError, ParseError},
+    error::{ParseError},
     multi::{many0, many1},
     sequence::{delimited, pair, tuple},
 };
 use nom_locate::LocatedSpan;
+use tower_lsp::lsp_types::SymbolKind;
 
 #[derive(Debug)]
 pub(crate) enum NewParseError {
@@ -23,7 +24,7 @@ pub(crate) enum NewParseError {
     SyntaxError(String),
     MissingTlDocComment,
 }
-impl nom::error::ParseError<Input<'_, '_>> for NewParseError {
+impl ParseError<Input<'_, '_>> for NewParseError {
     fn from_error_kind(input: Input, kind: nom::error::ErrorKind) -> Self {
         NewParseError::SyntaxError(kind.description().to_string())
     }
@@ -36,12 +37,12 @@ impl nom::error::ParseError<Input<'_, '_>> for NewParseError {
 pub(crate) type IResult<I, O> = nom::IResult<I, O, NewParseError>;
 
 use super::parser::{
-    ast::Position,
+    ast::{AstNode, Position},
     types::{Input, Label, ToRange},
 };
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub(crate) struct Error(pub(crate) Position, pub(crate) String);
+pub struct Error(pub Position, pub String);
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub(crate) struct ParserState<'a> {
@@ -64,7 +65,7 @@ impl ToRange for Span<'_> {
     }
 }
 
-pub(crate) fn to_range<'a>(span: Span<'a>) -> Range<usize> {
+pub(crate) fn to_range(span: Span<'_>) -> Range<usize> {
     let start = span.location_offset();
     let end = start + span.fragment().len();
     start..end
@@ -228,7 +229,7 @@ impl std::fmt::Display for TokenKind {
 }
 
 #[derive(Debug, Copy, Clone, PartialEq)]
-pub(crate) struct Token<'a> {
+pub struct Token<'a> {
     pub(crate) kind: TokenKind,
     pub(crate) span: Span<'a>,
 }
@@ -260,8 +261,8 @@ impl std::fmt::Display for Token<'_> {
         }
     }
 }
-impl<'a> crate::io::parser::ast::AstNode for Token<'a> {
-    fn children(&self) -> Option<Vec<&dyn super::parser::ast::AstNode>> {
+impl<'a> AstNode for Token<'a> {
+    fn children(&self) -> Option<Vec<&dyn AstNode>> {
         None::<Vec<_>>
     }
 
@@ -279,6 +280,18 @@ impl<'a> crate::io::parser::ast::AstNode for Token<'a> {
 
     fn is_token(&self) -> bool {
         true
+    }
+
+    fn lsp_identifier(&self) -> Option<(String, String)> {
+        None
+    }
+
+    fn lsp_sub_node_to_rename(&self) -> Option<&dyn AstNode> {
+        None
+    }
+
+    fn lsp_symbol_info(&self) -> Option<(String, SymbolKind)> {
+        None
     }
 
     fn name(&self) -> String {

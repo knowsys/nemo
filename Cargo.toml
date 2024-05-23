@@ -3,6 +3,7 @@ resolver = "2"
 members = [
     "nemo",
     "nemo-cli",
+    "nemo-language-server",
     "nemo-physical",
     "nemo-python",
     "nemo-wasm",
