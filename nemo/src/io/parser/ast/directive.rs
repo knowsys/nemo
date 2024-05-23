@@ -1,10 +1,12 @@
+use tower_lsp::lsp_types::SymbolKind;
+
 use super::map::Map;
 use super::{ast_to_ascii_tree, AstNode, List, Position, Wsoc};
 use crate::io::lexer::{Span, Token};
 use ascii_tree::write_tree;
 
 #[derive(Debug, Clone, PartialEq)]
-pub(crate) enum Directive<'a> {
+pub enum Directive<'a> {
     // "@base <some://iri.de/> ."
     Base {
         span: Span<'a>,
@@ -261,7 +263,20 @@ impl AstNode for Directive<'_> {
             Directive::Output { .. } => name!("Output Directive"),
         }
     }
+
+    fn lsp_identifier(&self) -> Option<(String, String)> {
+        None
+    }
+
+    fn lsp_sub_node_to_rename(&self) -> Option<&dyn AstNode> {
+        None
+    }
+
+    fn lsp_symbol_info(&self) -> Option<(String, SymbolKind)> {
+        Some((String::from("Directive"), SymbolKind::FUNCTION))
+    }
 }
+
 impl std::fmt::Display for Directive<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut output = String::new();

@@ -34,6 +34,8 @@ use wasm_bindgen::JsValue;
 use web_sys::Blob;
 use web_sys::FileReaderSync;
 
+mod language_server;
+
 #[wasm_bindgen]
 #[derive(Clone)]
 pub struct NemoProgram(nemo::model::Program);

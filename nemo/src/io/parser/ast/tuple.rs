@@ -1,19 +1,22 @@
+use tower_lsp::lsp_types::SymbolKind;
+
 use super::term::Term;
 use super::{ast_to_ascii_tree, AstNode, List, Position, Wsoc};
 use crate::io::lexer::{Span, Token};
 use ascii_tree::write_tree;
 
 #[derive(Debug, Clone, PartialEq)]
-pub(crate) struct Tuple<'a> {
-    pub(crate) span: Span<'a>,
-    pub(crate) identifier: Option<Token<'a>>,
-    pub(crate) ws1: Option<Wsoc<'a>>,
-    pub(crate) open_paren: Token<'a>,
-    pub(crate) ws2: Option<Wsoc<'a>>,
-    pub(crate) terms: Option<List<'a, Term<'a>>>,
-    pub(crate) ws3: Option<Wsoc<'a>>,
-    pub(crate) close_paren: Token<'a>,
+pub struct Tuple<'a> {
+    pub span: Span<'a>,
+    pub identifier: Option<Token<'a>>,
+    pub ws1: Option<Wsoc<'a>>,
+    pub open_paren: Token<'a>,
+    pub ws2: Option<Wsoc<'a>>,
+    pub terms: Option<List<'a, Term<'a>>>,
+    pub ws3: Option<Wsoc<'a>>,
+    pub close_paren: Token<'a>,
 }
+
 impl AstNode for Tuple<'_> {
     fn children(&self) -> Option<Vec<&dyn AstNode>> {
         let mut vec: Vec<&dyn AstNode> = Vec::new();
@@ -60,6 +63,18 @@ impl AstNode for Tuple<'_> {
             self.span.get_utf8_column(),
             self.span.fragment()
         )
+    }
+
+    fn lsp_identifier(&self) -> Option<(String, String)> {
+        None
+    }
+
+    fn lsp_sub_node_to_rename(&self) -> Option<&dyn AstNode> {
+        None
+    }
+
+    fn lsp_symbol_info(&self) -> Option<(String, SymbolKind)> {
+        None
     }
 }
 impl std::fmt::Display for Tuple<'_> {

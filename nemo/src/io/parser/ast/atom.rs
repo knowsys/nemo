@@ -1,3 +1,5 @@
+use tower_lsp::lsp_types::SymbolKind;
+
 use super::term::Term;
 use super::tuple::Tuple;
 use super::{ast_to_ascii_tree, AstNode, Wsoc};
@@ -6,7 +8,7 @@ use crate::io::lexer::{Span, Token};
 use ascii_tree::write_tree;
 
 #[derive(Debug, Clone, PartialEq)]
-pub(crate) enum Atom<'a> {
+pub enum Atom<'a> {
     Positive(Tuple<'a>),
     Negative {
         span: Span<'a>,
@@ -23,6 +25,17 @@ pub(crate) enum Atom<'a> {
     },
     Map(Map<'a>),
 }
+
+impl Atom<'_> {
+    fn tuple(&self) -> Option<&Tuple<'_>> {
+        match &self {
+            Atom::Positive(tuple) => Some(tuple),
+            Atom::Negative { atom, .. } => Some(atom),
+            _ => None,
+        }
+    }
+}
+
 impl AstNode for Atom<'_> {
     fn children(&self) -> Option<Vec<&dyn AstNode>> {
         match self {
@@ -91,6 +104,32 @@ impl AstNode for Atom<'_> {
             Atom::Negative { .. } => name!("Negative Atom"),
             Atom::InfixAtom { .. } => name!("Infix Atom"),
             Atom::Map(_) => name!("Map Atom"),
+        }
+    }
+
+    fn lsp_identifier(&self) -> Option<(String, String)> {
+        self.tuple().map(|tuple| (
+                format!("atom/{}", tuple.identifier.unwrap().span().fragment()),
+                "file".to_string(),
+            ))
+    }
+
+    fn lsp_sub_node_to_rename(&self) -> Option<&dyn AstNode> {
+        None
+        // TODO:
+        // match self.tuple() {
+        //     Some(tuple) => Some(&tuple.identifier.unwrap()),
+        //     None => None,
+        // }
+    }
+
+    fn lsp_symbol_info(&self) -> Option<(String, SymbolKind)> {
+        match self.tuple() {
+            Some(tuple) => Some((
+                format!("Atom: {}", tuple.identifier.unwrap().span.fragment()),
+                SymbolKind::FUNCTION,
+            )),
+            None => Some((String::from("Atom"), SymbolKind::FUNCTION)),
         }
     }
 }
