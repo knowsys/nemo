@@ -47,6 +47,8 @@ serde = {version = "1.0.138", features = ["derive"] }
 tower-lsp = "0.20.0"
 dyn-clone = "1.0.16"
 unicode-ident = "1.0.12"
+nom-greedyerror = "0.5.0"
+nom-supreme = "0.8.0"
 
 [dev-dependencies]
 env_logger = "*"
