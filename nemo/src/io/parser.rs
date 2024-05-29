@@ -3857,7 +3857,7 @@ mod new {
                                 span: s!(85, 1, "@import"),
                             },
                             ws1: Wsoc {
-                                span: s!(91, 1, " "),
+                                span: s!(92, 1, " "),
                                 token: vec![Token {
                                     kind: TokenKind::Whitespace,
                                     span: s!(92, 1, " "),
