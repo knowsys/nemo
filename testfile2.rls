@@ -1,11 +1,14 @@
 % Facts:
-father(alice, bob).
-mother(bob, carla).
-father(bob, darius).
-mother(alice, carla).
+father( % father predicate means, that 'alice has father bob'
+    alice,
+	bob).
+mother bob, carla).
+father(bob darius).
+mother(alice, carla .
 
 % Rules:
-parent(?X, ?Y) :- mother(?X, ?Y).
+parent(?X, ?Y) :- mother(?X, ?Y)
 parent(?X, ?Y) :- father(?X, ?Y).
-parent( ?X , ?Y ) :- ~sibling( ?X , ?Y ) .
+parent( ?X , ?Y  :- ~sibling( ?X , ?Y ) .
+
 
