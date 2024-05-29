@@ -805,35 +805,23 @@ where
     }
 }
 
+impl nom_greedyerror::Position for Input<'_, '_> {
+    fn position(&self) -> usize {
+        nom_greedyerror::Position::position(&self.input)
+    }
+}
+
+impl std::fmt::Display for Input<'_, '_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "line {}, column {}",
+            self.input.location_line(),
+            self.input.get_utf8_column()
+        )
+    }
+}
+
 pub(crate) trait ToRange {
     fn to_range(&self) -> Range<usize>;
-}
-
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub(crate) enum ParserLabel {
-    Rule,
-    Fact,
-    Directive,
-    Dot,
-    Arrow,
-    // Head,
-    // Body,
-    Comma,
-    Iri,
-    Prefix,
-    Identifier,
-    OpenParen,
-    CloseParen,
-    OpenBrace,
-    CloseBrace,
-    OpenBracket,
-    ClosePracket,
-    Equal,
-    Number,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub(crate) struct Label {
-    pub(crate) label: ParserLabel,
-    pub(crate) pos: Position,
 }
