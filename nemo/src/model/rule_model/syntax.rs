@@ -21,6 +21,8 @@ pub(crate) const FILE_FORMAT_RDF_TURTLE: &str = "turtle";
 pub(crate) const FILE_FORMAT_RDF_TRIG: &str = "trig";
 /// The "predicate name" used for the RDF/XML format in import/export directives.
 pub(crate) const FILE_FORMAT_RDF_XML: &str = "rdfxml";
+/// The "predicate name" used for the json format in import/export directives.
+pub(crate) const FILE_FORMAT_JSON: &str = "json";
 
 /// Name of the parameter for specifying the resource in import/export directives.
 pub(crate) const PARAMETER_NAME_RESOURCE: &str = "resource";

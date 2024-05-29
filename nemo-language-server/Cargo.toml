@@ -1,0 +1,30 @@
+[package]
+name = "nemo-language-server"
+description.workspace = true
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+homepage.workspace = true
+license.workspace = true
+readme = "README.md"
+repository.workspace = true
+default-run = "nemo-language-server"
+
+[[bin]]
+name = "nemo-language-server"
+path = "src/main.rs"
+required-features = ["tokio"]
+
+[features]
+default = ["tokio"]
+# Allows building for web assembly environments
+js = []
+tokio = ["dep:tokio"]
+
+[dependencies]
+line-index = "0.1.1"
+nemo = { path = "../nemo", default-features = false }
+futures = "0.3.21"
+tokio = { version = "1.27.0", features = ["full"], optional = true }
+tower-lsp = { version = "0.20.0", default-features = false }
+tower-service = "0.3.2"

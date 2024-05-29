@@ -13,12 +13,14 @@ use std::fmt::Debug;
 /// Strategies for calculating the newly derived tables.
 pub(crate) trait HeadStrategy: Debug {
     /// Calculate the concrete plan given a variable order.
+    #[allow(clippy::too_many_arguments)]
     fn add_plan_head(
         &self,
         table_manager: &TableManager,
         current_plan: &mut SubtableExecutionPlan,
         variable_translation: &VariableTranslation,
         body: ExecutionNodeRef,
+        aggregate: Option<ExecutionNodeRef>,
         rule_info: &RuleInfo,
         step_number: usize,
     );

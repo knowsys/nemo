@@ -7,23 +7,38 @@ use crate::{
     datavalues::{AnyDataValue, DataValue},
 };
 
-use super::{BinaryFunction, FunctionTypePropagation, UnaryFunction};
+use super::{
+    BinaryFunction, FunctionTypePropagation, NaryFunction, TernaryFunction, UnaryFunction,
+};
 
 /// Given two [AnyDataValue]s,
 /// check if both are strings and return a pair of [String]
 /// if this is the case.
+///
 /// Returns `None` otherwise.
 fn string_pair_from_any(
     parameter_first: AnyDataValue,
     parameter_second: AnyDataValue,
 ) -> Option<(String, String)> {
-    if let Some(first_string) = parameter_first.to_plain_string() {
-        if let Some(second_string) = parameter_second.to_plain_string() {
-            return Some((first_string, second_string));
-        }
+    Some((
+        parameter_first.to_plain_string()?,
+        parameter_second.to_plain_string()?,
+    ))
+}
+
+/// Given a list of [AnyDataValue]s,
+/// check if all of them are strings and return a list of [String]
+/// if this is the case.
+///
+/// Returns `None` otherwise.
+fn string_vec_from_any(parameters: &[AnyDataValue]) -> Option<Vec<String>> {
+    let mut result = Vec::new();
+
+    for parameter in parameters {
+        result.push(parameter.to_plain_string()?);
     }
 
-    None
+    Some(result)
 }
 
 /// Comparison of strings
@@ -55,23 +70,18 @@ impl BinaryFunction for StringCompare {
 
 /// Concatenation of strings
 ///
-/// Returns a string, that results from appending the second parameter
-/// to the first.
+/// Returns a string, that results from merging together
+/// all input strings.
+///
+/// Returns an empty string if no parameters are given.
 ///
 /// Returns `None` if either parameter is not a string.
 #[derive(Debug, Copy, Clone)]
 pub struct StringConcatenation;
-impl BinaryFunction for StringConcatenation {
-    fn evaluate(
-        &self,
-        parameter_first: AnyDataValue,
-        parameter_second: AnyDataValue,
-    ) -> Option<AnyDataValue> {
-        string_pair_from_any(parameter_first, parameter_second).map(
-            |(first_string, second_string)| {
-                AnyDataValue::new_plain_string([first_string, second_string].concat())
-            },
-        )
+impl NaryFunction for StringConcatenation {
+    fn evaluate(&self, parameters: &[AnyDataValue]) -> Option<AnyDataValue> {
+        string_vec_from_any(parameters)
+            .map(|strings| AnyDataValue::new_plain_string(strings.concat()))
     }
 
     fn type_propagation(&self) -> FunctionTypePropagation {
@@ -349,6 +359,47 @@ impl UnaryFunction for StringLowercase {
         parameter
             .to_plain_string()
             .map(|string| AnyDataValue::new_plain_string(string.to_ascii_lowercase()))
+    }
+
+    fn type_propagation(&self) -> FunctionTypePropagation {
+        FunctionTypePropagation::KnownOutput(
+            StorageTypeName::Id32
+                .bitset()
+                .union(StorageTypeName::Id64.bitset()),
+        )
+    }
+}
+
+/// Substring with Length
+///
+/// Expects a string value as the first parameter
+/// and an integer value as the second and third parameter.
+///
+/// Return a string containing the characters from the first parameter,
+/// starting from the position given by the second paramter
+/// with the length given by the third parameter.
+///
+/// Returns `None` if the type requirements from above are not met.
+#[derive(Debug, Copy, Clone)]
+pub struct StringSubstringLength;
+impl TernaryFunction for StringSubstringLength {
+    fn evaluate(
+        &self,
+        parameter_first: AnyDataValue,
+        parameter_second: AnyDataValue,
+        parameter_third: AnyDataValue,
+    ) -> Option<AnyDataValue> {
+        let string = parameter_first.to_plain_string()?;
+        let start = usize::try_from(parameter_second.to_u64()?).ok()?;
+        let length = usize::try_from(parameter_third.to_u64()?).ok()?;
+
+        if start + length >= string.len() {
+            return None;
+        }
+
+        Some(AnyDataValue::new_plain_string(
+            string[start..(start + length)].to_string(),
+        ))
     }
 
     fn type_propagation(&self) -> FunctionTypePropagation {

@@ -1,6 +1,8 @@
+use std::collections::HashSet;
+
 use nemo_physical::aggregates::operation::AggregateOperation;
 
-use crate::model::{Aggregate, LogicalAggregateOperation, PrimitiveTerm, Variable};
+use crate::model::{Aggregate, LogicalAggregateOperation, PrimitiveTerm, Term, Variable};
 
 /// Specifies how the values for a placeholder aggregate variable will get computed.
 ///
@@ -13,13 +15,21 @@ use crate::model::{Aggregate, LogicalAggregateOperation, PrimitiveTerm, Variable
 pub struct ChaseAggregate {
     pub(crate) aggregate_operation: AggregateOperation,
 
-    pub(crate) input_variables: Vec<Variable>,
+    pub(crate) input_variable: Variable,
+    pub(crate) distinct_variables: Vec<Variable>,
+
+    pub(crate) group_by_variables: HashSet<Variable>,
+
     pub(crate) output_variable: Variable,
 }
 
 impl ChaseAggregate {
     /// Convert an [Aggregate] to a [ChaseAggregate], given a placeholder name for the output variable
-    pub fn from_aggregate(aggregate: Aggregate, output_variable: Variable) -> ChaseAggregate {
+    pub fn from_aggregate(
+        aggregate: Aggregate,
+        output_variable: Variable,
+        group_by_variables: HashSet<Variable>,
+    ) -> ChaseAggregate {
         let logical_aggregate_operation = aggregate.logical_aggregate_operation;
 
         let physical_operation = match logical_aggregate_operation {
@@ -29,29 +39,32 @@ impl ChaseAggregate {
             LogicalAggregateOperation::SumOfNumbers => AggregateOperation::Sum,
         };
 
-        let variables = aggregate
+        let mut variables = aggregate
             .terms
             .into_iter()
             .map(|t| {
-                if let PrimitiveTerm::Variable(variable) = t {
+                if let Term::Primitive(PrimitiveTerm::Variable(variable)) = t {
                     variable
                 } else {
-                    unreachable!("Non-variable terms are not allowed in aggregates.");
+                    unreachable!("Non-variable terms are not allowed in chase aggregates.");
                 }
             })
-            .collect();
+            .collect::<Vec<Variable>>();
+
+        let input_variable = variables.remove(0);
+        let distinct_variables = variables;
 
         Self {
             aggregate_operation: physical_operation,
-            input_variables: variables,
             output_variable,
+            input_variable,
+            distinct_variables,
+            group_by_variables,
         }
     }
 
     /// Return the aggregated input variable, which is the first of the input variables
     pub fn aggregated_input_variable(&self) -> &Variable {
-        self.input_variables
-            .first()
-            .expect("aggregates require exactly at least one input variable")
+        &self.input_variable
     }
 }

@@ -1,0 +1,22 @@
+@prefix dev: <file:///dev/>.
+
+@import works :- json {resource="works.json"}.
+
+const_items("items").
+const_title("title").
+const_author("author").
+const_family("family").
+const_value(value).
+const_zero(0).
+
+items(?i, ?author_name) :-
+    works(_, ?ci, ?a), const_items(?ci), works(?a, ?i, ?x),
+    works(?x, ?ct, ?title_array), const_title(?ct),
+    works(?title_array, ?cz, ?title_id), const_zero(?cz),
+    works(?title_id, ?cv, ?title), const_value(?cv),
+    works(?x, ?ca, ?author_array), const_author(?ca),
+    works(?author_array, ?cz, ?author_id),
+    works(?author_id, ?cf, ?author), const_family(?cf),
+    works(?author, ?cv, ?author_name), const_family(?cf).
+
+@export items :- csv {}.

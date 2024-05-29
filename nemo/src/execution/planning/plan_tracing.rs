@@ -23,7 +23,7 @@ pub(crate) struct TracingStrategy {
     positive_constraints: Vec<Constraint>,
 
     negative_atoms: Vec<VariableAtom>,
-    negatie_constraints: Vec<Constraint>,
+    negatie_constraints: Vec<Vec<Constraint>>,
 
     variable_translation: VariableTranslation,
 }
@@ -39,7 +39,7 @@ impl TracingStrategy {
         let mut positive_constraints = rule.positive_constraints().clone();
 
         let constructors = rule
-            .constructors()
+            .positive_constructors()
             .iter()
             .map(|constructor| (constructor.variable().clone(), constructor.term().clone()))
             .collect::<HashMap<Variable, Term>>();
