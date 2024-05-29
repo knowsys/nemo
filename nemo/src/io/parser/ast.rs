@@ -32,12 +32,36 @@ pub trait AstNode: std::fmt::Debug + Display + Sync {
     fn lsp_sub_node_to_rename(&self) -> Option<&dyn AstNode>;
 }
 
-// TODO: tidy up PartialOrd and Ord implementation
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, Copy, Hash)]
 pub struct Position {
     pub offset: usize,
     pub line: u32,
     pub column: u32,
+}
+impl PartialEq for Position {
+    fn eq(&self, other: &Self) -> bool {
+        self.offset.eq(&other.offset)
+    }
+}
+impl Eq for Position {}
+impl PartialOrd for Position {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        self.offset.partial_cmp(&other.offset)
+    }
+}
+impl Ord for Position {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.offset.cmp(&other.offset)
+    }
+}
+impl Default for Position {
+    fn default() -> Self {
+        Position {
+            offset: 0,
+            line: 1,
+            column: 1,
+        }
+    }
 }
 
 /// Whitespace or Comment token
@@ -227,9 +251,16 @@ pub(crate) fn ast_to_ascii_tree(node: &dyn AstNode) -> Tree {
 }
 
 mod test {
-    
-    
-    
+    use super::*;
+    use super::{
+        atom::Atom,
+        directive::Directive,
+        program::Program,
+        statement::Statement,
+        term::{Primitive, Term},
+        tuple::Tuple,
+    };
+    use crate::io::lexer::{Span, TokenKind};
 
     macro_rules! s {
         ($offset:literal,$line:literal,$str:literal) => {
