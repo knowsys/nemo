@@ -82,21 +82,21 @@ impl Backend {
         let diagnostics = errors
             .into_iter()
             .map(|error| Diagnostic {
-                message: error.1,
+                message: error.msg,
                 range: Range::new(
                     line_col_to_position(
                         &line_index,
                         LineCol {
-                            line: error.0.line - 1,
-                            col: error.0.column - 1,
+                            line: error.pos.line - 1,
+                            col: error.pos.column - 1,
                         },
                     )
                     .unwrap(),
                     line_col_to_position(
                         &line_index,
                         LineCol {
-                            line: error.0.line - 1,
-                            col: error.0.column - 1 + 1,
+                            line: error.pos.line - 1,
+                            col: error.pos.column - 1 + 1,
                         },
                     )
                     .unwrap(),
