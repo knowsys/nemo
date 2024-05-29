@@ -1,5 +1,7 @@
 //! This module defines operations on 64-bit integers.
 
+use std::ops::{BitAnd, BitOr, BitXor};
+
 use num::integer::Roots;
 
 use crate::datavalues::AnyDataValue;
@@ -167,4 +169,91 @@ pub(super) fn numeric_greaterthaneq_integer64(
     } else {
         Some(AnyDataValue::new_boolean(false))
     }
+}
+
+/// Bitwise and operation for 64-bit integers
+///
+/// Returns the maximum 64-bit integer value if no parameters are given.
+pub(super) fn numeric_bitwise_and(parameters: &[i64]) -> Option<AnyDataValue> {
+    let mut result = i64::MAX;
+
+    for parameter in parameters {
+        result = result.bitand(parameter);
+    }
+
+    Some(AnyDataValue::new_integer_from_i64(result))
+}
+
+/// Bitwise or operation for 64-bit integers
+///
+/// Returns zero from the integer value space if no parameters are given.
+pub(super) fn numeric_bitwise_or(parameters: &[i64]) -> Option<AnyDataValue> {
+    let mut result: i64 = 0;
+
+    for parameter in parameters {
+        result = result.bitor(parameter);
+    }
+
+    Some(AnyDataValue::new_integer_from_i64(result))
+}
+
+/// Bitwise xor operation for 64-bit integers
+///
+/// Returns zero from the integer value space if no parameters are given.
+pub(super) fn numeric_bitwise_xor(parameters: &[i64]) -> Option<AnyDataValue> {
+    let mut result: i64 = 0;
+
+    for parameter in parameters {
+        result = result.bitxor(parameter);
+    }
+
+    Some(AnyDataValue::new_integer_from_i64(result))
+}
+
+/// Return the sum of the given 64-bit integers.
+///
+/// Returns `None` if the result (or a intermediate result) does not fit into a 64-bit integer.
+/// Returns zero from the integer value space if no parameters are given.
+pub(super) fn numeric_sum_integer64(parameters: &[i64]) -> Option<AnyDataValue> {
+    let mut sum: i64 = 0;
+
+    for &parameter in parameters {
+        sum = sum.checked_add(parameter)?;
+    }
+
+    Some(AnyDataValue::new_integer_from_i64(sum))
+}
+
+/// Return the product of the given 64-bit integers.
+///
+/// Returns `None` if the result (or a intermediate result) does not fit into a 64-bit integer.
+/// Returns one from the integer value space if no parameters are given.
+pub(super) fn numeric_product_integer64(parameters: &[i64]) -> Option<AnyDataValue> {
+    let mut product: i64 = 1;
+
+    for &parameter in parameters {
+        product = product.checked_mul(parameter)?;
+    }
+
+    Some(AnyDataValue::new_integer_from_i64(product))
+}
+
+/// Return the minimum of the given 64-bit integers.
+///
+/// Returns `None` if no parameters are given.
+pub(super) fn numeric_minimum_integer64(parameters: &[i64]) -> Option<AnyDataValue> {
+    parameters
+        .iter()
+        .min()
+        .map(|&min| AnyDataValue::new_integer_from_i64(min))
+}
+
+/// Return the maximum of the given 64-bit integers.
+///
+/// Returns `None` if no parameters are given.
+pub(super) fn numeric_maximum_integer64(parameters: &[i64]) -> Option<AnyDataValue> {
+    parameters
+        .iter()
+        .max()
+        .map(|&max| AnyDataValue::new_integer_from_i64(max))
 }

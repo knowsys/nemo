@@ -77,6 +77,13 @@ impl OperationTable {
         self.0.push(marker);
     }
 
+    /// Extend the operation table by appending a series of [OperationColumnMarker]s.
+    pub fn extend<Iter: Iterator<Item = OperationColumnMarker>>(&mut self, iter: Iter) {
+        for marker in iter {
+            self.push(marker);
+        }
+    }
+
     /// Return an [OperationColumnMarker] that is not part of this table
     fn first_new_marker(&self) -> OperationColumnMarker {
         self.0

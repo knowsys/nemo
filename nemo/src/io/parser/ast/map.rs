@@ -1,3 +1,5 @@
+use tower_lsp::lsp_types::SymbolKind;
+
 use super::term::Term;
 use super::{ast_to_ascii_tree, AstNode, List, Position, Wsoc};
 use crate::io::lexer::{Span, Token};
@@ -5,15 +7,15 @@ use ascii_tree::write_tree;
 use std::fmt::Debug;
 
 #[derive(Debug, Clone, PartialEq)]
-pub(crate) struct Map<'a> {
-    pub(crate) span: Span<'a>,
-    pub(crate) identifier: Option<Token<'a>>,
-    pub(crate) ws1: Option<Wsoc<'a>>,
-    pub(crate) open_brace: Token<'a>,
-    pub(crate) ws2: Option<Wsoc<'a>>,
-    pub(crate) pairs: Option<List<'a, Pair<'a, Term<'a>, Term<'a>>>>,
-    pub(crate) ws3: Option<Wsoc<'a>>,
-    pub(crate) close_brace: Token<'a>,
+pub struct Map<'a> {
+    pub span: Span<'a>,
+    pub identifier: Option<Token<'a>>,
+    pub ws1: Option<Wsoc<'a>>,
+    pub open_brace: Token<'a>,
+    pub ws2: Option<Wsoc<'a>>,
+    pub pairs: Option<List<'a, Pair<'a, Term<'a>, Term<'a>>>>,
+    pub ws3: Option<Wsoc<'a>>,
+    pub close_brace: Token<'a>,
 }
 impl AstNode for Map<'_> {
     fn children(&self) -> Option<Vec<&dyn AstNode>> {
@@ -57,7 +59,20 @@ impl AstNode for Map<'_> {
     fn name(&self) -> String {
         String::from("Map")
     }
+
+    fn lsp_identifier(&self) -> Option<(String, String)> {
+        None
+    }
+
+    fn lsp_sub_node_to_rename(&self) -> Option<&dyn AstNode> {
+        None
+    }
+
+    fn lsp_symbol_info(&self) -> Option<(String, SymbolKind)> {
+        Some((String::from("Map"), SymbolKind::STRUCT))
+    }
 }
+
 impl std::fmt::Display for Map<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut output = String::new();
@@ -67,13 +82,13 @@ impl std::fmt::Display for Map<'_> {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub(crate) struct Pair<'a, K, V> {
-    pub(crate) span: Span<'a>,
-    pub(crate) key: K,
-    pub(crate) ws1: Option<Wsoc<'a>>,
-    pub(crate) equal: Token<'a>,
-    pub(crate) ws2: Option<Wsoc<'a>>,
-    pub(crate) value: V,
+pub struct Pair<'a, K, V> {
+    pub span: Span<'a>,
+    pub key: K,
+    pub ws1: Option<Wsoc<'a>>,
+    pub equal: Token<'a>,
+    pub ws2: Option<Wsoc<'a>>,
+    pub value: V,
 }
 impl<K: AstNode + Debug, V: AstNode + Debug> AstNode for Pair<'_, K, V> {
     fn children(&self) -> Option<Vec<&dyn AstNode>> {
@@ -113,6 +128,18 @@ impl<K: AstNode + Debug, V: AstNode + Debug> AstNode for Pair<'_, K, V> {
             self.span.get_utf8_column(),
             self.span.fragment()
         )
+    }
+
+    fn lsp_identifier(&self) -> Option<(String, String)> {
+        None
+    }
+
+    fn lsp_sub_node_to_rename(&self) -> Option<&dyn AstNode> {
+        None
+    }
+
+    fn lsp_symbol_info(&self) -> Option<(String, SymbolKind)> {
+        Some((String::from("Pair"), SymbolKind::ARRAY))
     }
 }
 impl<K: AstNode + Debug, V: AstNode + Debug> std::fmt::Display for Pair<'_, K, V> {

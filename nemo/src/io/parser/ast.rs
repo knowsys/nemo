@@ -1,37 +1,50 @@
 use nom::Offset;
+use tower_lsp::lsp_types::SymbolKind;
 
 use crate::io::lexer::{Span, Token};
+use ascii_tree::{write_tree, Tree};
 use std::fmt::Display;
-use ascii_tree::{Tree, write_tree};
 
 pub(crate) mod atom;
 pub(crate) mod directive;
 pub(crate) mod map;
-pub(crate) mod tuple;
-pub(crate) mod program;
+pub mod program;
 pub(crate) mod statement;
 pub(crate) mod term;
+pub(crate) mod tuple;
 
-pub(crate) trait AstNode: std::fmt::Debug + Display {
+pub trait AstNode: std::fmt::Debug + Display + Sync {
     fn children(&self) -> Option<Vec<&dyn AstNode>>;
     fn span(&self) -> Span;
     fn position(&self) -> Position;
     fn is_token(&self) -> bool;
+
     fn name(&self) -> String;
+
+    /// Returns an optional pair of the identfier and identifier scope.
+    ///
+    /// The identifier scope will scope this identifier up to any [`AstNode`]
+    /// that has an identifier that has this node's identifier scope as a prefix.
+    ///
+    /// This can be used to restict rename operations to be local, e.g. for variable idenfiers inside of rules.
+    fn lsp_identifier(&self) -> Option<(String, String)>;
+    fn lsp_symbol_info(&self) -> Option<(String, SymbolKind)>;
+    fn lsp_sub_node_to_rename(&self) -> Option<&dyn AstNode>;
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub(crate) struct Position {
-    pub(crate) offset: usize,
-    pub(crate) line: u32,
-    pub(crate) column: u32,
+// TODO: tidy up PartialOrd and Ord implementation
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct Position {
+    pub offset: usize,
+    pub line: u32,
+    pub column: u32,
 }
 
 /// Whitespace or Comment token
 #[derive(Debug, Clone, PartialEq)]
-pub(crate) struct Wsoc<'a> {
-    pub(crate) span: Span<'a>,
-    pub(crate) token: Vec<Token<'a>>
+pub struct Wsoc<'a> {
+    pub span: Span<'a>,
+    pub token: Vec<Token<'a>>,
 }
 impl AstNode for Wsoc<'_> {
     fn children(&self) -> Option<Vec<&dyn AstNode>> {
@@ -48,7 +61,11 @@ impl AstNode for Wsoc<'_> {
     }
 
     fn position(&self) -> Position {
-        Position { offset: self.span.location_offset(), line: self.span.location_line(), column: self.span.get_utf8_column() as u32 }
+        Position {
+            offset: self.span.location_offset(),
+            line: self.span.location_line(),
+            column: self.span.get_utf8_column() as u32,
+        }
     }
 
     fn is_token(&self) -> bool {
@@ -56,22 +73,39 @@ impl AstNode for Wsoc<'_> {
     }
 
     fn name(&self) -> String {
-        format!("Wsoc \x1b[34m@{}:{} \x1b[92m{:?}\x1b[0m", self.span.location_line(), self.span.get_utf8_column(), self.span.fragment())
+        format!(
+            "Wsoc \x1b[34m@{}:{} \x1b[92m{:?}\x1b[0m",
+            self.span.location_line(),
+            self.span.get_utf8_column(),
+            self.span.fragment()
+        )
+    }
+
+    fn lsp_identifier(&self) -> Option<(String, String)> {
+        None
+    }
+
+    fn lsp_sub_node_to_rename(&self) -> Option<&dyn AstNode> {
+        None
+    }
+
+    fn lsp_symbol_info(&self) -> Option<(String, SymbolKind)> {
+        None
     }
 }
+
 impl Display for Wsoc<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         todo!()
     }
 }
 
-
 #[derive(Debug, Clone, PartialEq)]
-pub(crate) struct List<'a, T> {
-    pub(crate) span: Span<'a>,
-    pub(crate) first: T,
+pub struct List<'a, T> {
+    pub span: Span<'a>,
+    pub first: T,
     // ([ws]?[,][ws]?[T])*
-    pub(crate) rest: Option<Vec<(Option<Wsoc<'a>>, Token<'a>, Option<Wsoc<'a>>, T)>>,
+    pub rest: Option<Vec<(Option<Wsoc<'a>>, Token<'a>, Option<Wsoc<'a>>, T)>>,
 }
 impl<T: Clone> List<'_, T> {
     pub fn to_vec(&self) -> Vec<T> {
@@ -85,7 +119,7 @@ impl<T: Clone> List<'_, T> {
         vec
     }
 }
-impl<T> std::iter::IntoIterator for List<'_, T> {
+impl<T> IntoIterator for List<'_, T> {
     type Item = T;
 
     type IntoIter = std::vec::IntoIter<T>;
@@ -137,9 +171,27 @@ impl<T: AstNode + std::fmt::Debug> AstNode for List<'_, T> {
     }
 
     fn name(&self) -> String {
-        format!("List \x1b[34m@{}:{} \x1b[92m{:?}\x1b[0m", self.span.location_line(), self.span.get_utf8_column(), self.span.fragment())
+        format!(
+            "List \x1b[34m@{}:{} \x1b[92m{:?}\x1b[0m",
+            self.span.location_line(),
+            self.span.get_utf8_column(),
+            self.span.fragment()
+        )
+    }
+
+    fn lsp_identifier(&self) -> Option<(String, String)> {
+        None
+    }
+
+    fn lsp_sub_node_to_rename(&self) -> Option<&dyn AstNode> {
+        None
+    }
+
+    fn lsp_symbol_info(&self) -> Option<(String, SymbolKind)> {
+        Some((String::from("List"), SymbolKind::ARRAY))
     }
 }
+
 impl<T: AstNode + std::fmt::Debug> Display for List<'_, T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut output = String::new();
@@ -175,9 +227,9 @@ pub(crate) fn ast_to_ascii_tree(node: &dyn AstNode) -> Tree {
 }
 
 mod test {
-    use super::*;
-    use super::{atom::Atom, directive::Directive, tuple::Tuple, program::Program, statement::Statement, term::Term, term::Primitive};
-    use crate::io::lexer::TokenKind;
+    
+    
+    
 
     macro_rules! s {
         ($offset:literal,$line:literal,$str:literal) => {
@@ -203,7 +255,7 @@ mod test {
         let span = Span::new(input);
         let ast = Program {
             span,
-            tl_doc_comment: Some(Token { 
+            tl_doc_comment: Some(Token {
                 kind: TokenKind::TlDocComment,
                 span: s!(0, 1, "%! This is just a test file.\n%! So the documentation of the rules is not important.\n")
             }),

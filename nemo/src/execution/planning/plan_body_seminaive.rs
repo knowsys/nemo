@@ -1,16 +1,12 @@
 //! Module defining the strategy for calculating all body matches for a rule application.
 
-use std::collections::HashSet;
-
 use nemo_physical::management::execution_plan::ExecutionNodeRef;
 
 use crate::{
     execution::{execution_engine::RuleInfo, rule_execution::VariableTranslation},
     model::{
-        chase_model::{
-            variable::is_aggregate_variable, ChaseAggregate, ChaseRule, Constructor, VariableAtom,
-        },
-        Constraint, Variable,
+        chase_model::{ChaseRule, Constructor, VariableAtom},
+        Constraint,
     },
     program_analysis::{analysis::RuleAnalysis, variable_order::VariableOrder},
     table_manager::{SubtableExecutionPlan, TableManager},
@@ -18,8 +14,7 @@ use crate::{
 
 use super::{
     operations::{
-        aggregate::node_aggregate, filter::node_filter, functions::node_functions, join::node_join,
-        negation::node_negation,
+        filter::node_filter, functions::node_functions, join::node_join, negation::node_negation,
     },
     BodyStrategy,
 };
@@ -29,54 +24,21 @@ use super::{
 pub(crate) struct SeminaiveStrategy {
     positive_atoms: Vec<VariableAtom>,
     positive_constraints: Vec<Constraint>,
+    positive_constructors: Vec<Constructor>,
 
     negative_atoms: Vec<VariableAtom>,
-    negatie_constraints: Vec<Constraint>,
-
-    constructors: Vec<Constructor>,
-
-    aggregates: Vec<ChaseAggregate>,
-    aggregate_group_by_variables: Option<HashSet<Variable>>,
+    negative_constraints: Vec<Vec<Constraint>>,
 }
 
 impl SeminaiveStrategy {
     /// Create new [SeminaiveStrategy] object.
-    pub(crate) fn initialize(rule: &ChaseRule, analysis: &RuleAnalysis) -> Self {
-        let mut used_variables_before_arithmetic_operations = HashSet::<Variable>::new();
-
-        for variable in &analysis.head_variables {
-            if let Some(constructor) = rule
-                .constructors()
-                .iter()
-                .find(|c| *c.variable() == *variable)
-            {
-                used_variables_before_arithmetic_operations
-                    .extend(constructor.term().variables().cloned());
-            } else {
-                used_variables_before_arithmetic_operations.insert(variable.clone());
-            }
-        }
-
-        let aggregate_group_by_variables: Option<HashSet<_>> = if rule.aggregates().is_empty() {
-            None
-        } else {
-            // Compute group-by variables for all aggregates in the rule
-            // This is the set of all universal variables in the head (before any arithmetic operations) except for the aggregated variables
-            Some(used_variables_before_arithmetic_operations.iter().filter(|variable| match variable {
-                Variable::Universal(_) => !is_aggregate_variable(variable),
-                Variable::Existential(_) => panic!("existential head variables are currently not supported together with aggregates"),
-                Variable::UnnamedUniversal(_) => !is_aggregate_variable(variable),
-            }).cloned().collect())
-        };
-
+    pub(crate) fn initialize(rule: &ChaseRule, _analysis: &RuleAnalysis) -> Self {
         Self {
             positive_atoms: rule.positive_body().clone(),
             positive_constraints: rule.positive_constraints().clone(),
             negative_atoms: rule.negative_body().clone(),
-            negatie_constraints: rule.negative_constraints().clone(),
-            constructors: rule.constructors().clone(),
-            aggregates: rule.aggregates().clone(),
-            aggregate_group_by_variables,
+            negative_constraints: rule.negative_constraints().clone(),
+            positive_constructors: rule.positive_constructors().clone(),
         }
     }
 }
@@ -102,10 +64,17 @@ impl BodyStrategy for SeminaiveStrategy {
             join_output_markers,
         );
 
-        let node_filter = node_filter(
+        let node_body_functions = node_functions(
             current_plan.plan_mut(),
             variable_translation,
             node_join,
+            &self.positive_constructors,
+        );
+
+        let node_body_filter = node_filter(
+            current_plan.plan_mut(),
+            variable_translation,
+            node_body_functions,
             &self.positive_constraints,
         );
 
@@ -113,31 +82,15 @@ impl BodyStrategy for SeminaiveStrategy {
             current_plan.plan_mut(),
             table_manager,
             variable_translation,
-            node_filter,
+            node_body_filter,
             step_number,
             &self.negative_atoms,
-            &self.negatie_constraints,
+            &self.negative_constraints,
         );
 
-        // Perform aggregate operations
-        // This updates the variable order with the aggregate placeholder variables replacing the aggregate input variables
-        let node_aggregation = node_aggregate(
-            current_plan.plan_mut(),
-            variable_translation,
-            node_negation,
-            &self.aggregates,
-            &self.aggregate_group_by_variables,
-        );
+        let node_result = node_negation;
 
-        let node_functions = node_functions(
-            current_plan.plan_mut(),
-            variable_translation,
-            node_aggregation,
-            &self.constructors,
-        );
-
-        current_plan.add_temporary_table(node_functions.clone(), "Body Join");
-
-        node_functions
+        current_plan.add_temporary_table(node_result.clone(), "Body");
+        node_result
     }
 }

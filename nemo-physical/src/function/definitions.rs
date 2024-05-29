@@ -10,7 +10,10 @@ pub(crate) mod string;
 
 use delegate::delegate;
 
-use crate::{datatypes::storage_type_name::StorageTypeBitSet, datavalues::AnyDataValue};
+use crate::{
+    datatypes::{storage_type_name::StorageTypeBitSet, StorageTypeName},
+    datavalues::AnyDataValue,
+};
 
 use self::{
     boolean::{BooleanConjunction, BooleanDisjunction, BooleanNegation},
@@ -22,14 +25,17 @@ use self::{
     generic::{CanonicalString, Datatype, Equals, LexicalValue, Unequals},
     language::LanguageTag,
     numeric::{
-        NumericAbsolute, NumericAddition, NumericCeil, NumericCosine, NumericDivision,
-        NumericFloor, NumericGreaterthan, NumericGreaterthaneq, NumericLessthan, NumericLessthaneq,
-        NumericLogarithm, NumericMultiplication, NumericNegation, NumericPower, NumericRemainder,
-        NumericRound, NumericSine, NumericSquareroot, NumericSubtraction, NumericTangent,
+        BitAnd, BitOr, BitXor, NumericAbsolute, NumericAddition, NumericCeil, NumericCosine,
+        NumericDivision, NumericFloor, NumericGreaterthan, NumericGreaterthaneq, NumericLessthan,
+        NumericLessthaneq, NumericLogarithm, NumericLukasiewicz, NumericMaximum, NumericMinimum,
+        NumericMultiplication, NumericNegation, NumericPower, NumericProduct, NumericRemainder,
+        NumericRound, NumericSine, NumericSquareroot, NumericSubtraction, NumericSum,
+        NumericTangent,
     },
     string::{
         StringAfter, StringBefore, StringCompare, StringConcatenation, StringContains, StringEnds,
-        StringLength, StringLowercase, StringStarts, StringSubstring, StringUppercase,
+        StringLength, StringLowercase, StringStarts, StringSubstring, StringSubstringLength,
+        StringUppercase,
     },
 };
 
@@ -40,9 +46,72 @@ pub(crate) enum FunctionTypePropagation {
     /// Types are preserved, i.e. the output has the same types as the inputs
     /// (the function returns `None` if input values differ in type)
     Preserve,
+    /// If input types are numeric, cast them to the maximum type
+    NumericUpcast,
     /// Nothing is known about the the type propagation
     _Unknown,
 }
+
+impl FunctionTypePropagation {
+    pub(crate) fn propagate(&self, input: &[StorageTypeBitSet]) -> StorageTypeBitSet {
+        match self {
+            FunctionTypePropagation::KnownOutput(storage_type) => *storage_type,
+            FunctionTypePropagation::Preserve => {
+                let mut result_type = StorageTypeBitSet::full();
+                for input_type in input {
+                    result_type = result_type.intersection(*input_type);
+                }
+
+                result_type
+            }
+            FunctionTypePropagation::_Unknown => StorageTypeBitSet::full(),
+            FunctionTypePropagation::NumericUpcast => {
+                if input.is_empty() {
+                    return StorageTypeBitSet::empty();
+                }
+
+                let mut contains_int = true;
+                let mut contains_float = true;
+                let mut contains_double = true;
+
+                let mut mixing = false;
+                let first_type = &input[0];
+
+                for input_type in input {
+                    if !input_type.contains(&StorageTypeName::Int64) {
+                        contains_int = false;
+                    }
+
+                    if !input_type.contains(&StorageTypeName::Float) {
+                        contains_float = false;
+                    }
+
+                    if !input_type.contains(&StorageTypeName::Double) {
+                        contains_double = false;
+                    }
+
+                    if input_type != first_type || (!input_type.is_unique() && input.len() > 1) {
+                        mixing = true;
+                    }
+                }
+
+                let mut result_type = StorageTypeBitSet::empty();
+                if contains_int {
+                    result_type = result_type.union(StorageTypeName::Int64.bitset());
+                }
+                if contains_float {
+                    result_type = result_type.union(StorageTypeName::Float.bitset());
+                }
+                if mixing || contains_double {
+                    result_type = result_type.union(StorageTypeName::Double.bitset());
+                }
+
+                result_type
+            }
+        }
+    }
+}
+
 /// Defines a unary function on [AnyDataValue].
 pub(crate) trait UnaryFunction {
     /// Evaluate this function on the given parameter.
@@ -159,13 +228,10 @@ pub enum BinaryFunctionEnum {
     StringAfter(StringAfter),
     StringBefore(StringBefore),
     StringCompare(StringCompare),
-    StringConcatenation(StringConcatenation),
     StringContains(StringContains),
     StringEnds(StringEnds),
     StringStarts(StringStarts),
     StringSubstring(StringSubstring),
-    BooleanConjunction(BooleanConjunction),
-    BooleanDisjunction(BooleanDisjunction),
 }
 
 impl BinaryFunction for BinaryFunctionEnum {
@@ -187,15 +253,95 @@ impl BinaryFunction for BinaryFunctionEnum {
             Self::StringAfter(function) => function,
             Self::StringBefore(function) => function,
             Self::StringCompare(function) => function,
-            Self::StringConcatenation(function) => function,
             Self::StringContains(function) => function,
             Self::StringEnds(function) => function,
             Self::StringStarts(function) => function,
             Self::StringSubstring(function) => function,
-            Self::BooleanConjunction(function) => function,
-            Self::BooleanDisjunction(function) => function,
         } {
             fn evaluate(&self, first_parameter: AnyDataValue, second_parameter: AnyDataValue) -> Option<AnyDataValue>;
+            fn type_propagation(&self) -> FunctionTypePropagation;
+        }
+    }
+}
+
+/// Defines a ternary function on [AnyDataValue]
+pub trait TernaryFunction {
+    /// Evaluate this function on the given parameters.
+    ///
+    /// Returns `None` if the result of the operation is undefined.
+    fn evaluate(
+        &self,
+        parameter_first: AnyDataValue,
+        parameter_second: AnyDataValue,
+        parameter_third: AnyDataValue,
+    ) -> Option<AnyDataValue>;
+
+    /// Return a [FunctionTypePropagation] indicating how storage types are propagated
+    /// when applying this function.
+    fn type_propagation(&self) -> FunctionTypePropagation;
+}
+
+/// Enum containing all implementations of [TernaryFunction]
+#[derive(Debug, Clone, Copy)]
+pub enum TernaryFunctionEnum {
+    StringSubstringLength(StringSubstringLength),
+}
+
+impl TernaryFunction for TernaryFunctionEnum {
+    delegate! {
+        to match self {
+            Self::StringSubstringLength(function) => function,
+        } {
+            fn evaluate(&self, first_parameter: AnyDataValue, second_parameter: AnyDataValue, third_paramter: AnyDataValue) -> Option<AnyDataValue>;
+            fn type_propagation(&self) -> FunctionTypePropagation;
+        }
+    }
+}
+
+/// Defines a n-ary function on [AnyDataValue]
+pub trait NaryFunction {
+    /// Evaluate this function on the given parameters.
+    ///
+    /// Returns `None` if the result of the operation is undefined.
+    fn evaluate(&self, parameters: &[AnyDataValue]) -> Option<AnyDataValue>;
+
+    /// Return a [FunctionTypePropagation] indicating how storage types are propagated
+    /// when applying this function.
+    fn type_propagation(&self) -> FunctionTypePropagation;
+}
+
+/// Enum containing all implementations of [NaryFunction]
+#[derive(Debug, Clone, Copy)]
+pub enum NaryFunctionEnum {
+    BitAnd(BitAnd),
+    BitOr(BitOr),
+    BitXor(BitXor),
+    BooleanConjunction(BooleanConjunction),
+    BooleanDisjunction(BooleanDisjunction),
+    NumericMaximum(NumericMaximum),
+    NumericMinimum(NumericMinimum),
+    NumericLukasiewicz(NumericLukasiewicz),
+    NumericSum(NumericSum),
+    NumericProduct(NumericProduct),
+    StringConcatenation(StringConcatenation),
+}
+
+impl NaryFunction for NaryFunctionEnum {
+    delegate! {
+        to match self {
+            Self::BitAnd(function) => function,
+            Self::BitOr(function) => function,
+            Self::BitXor(function) => function,
+            Self::BooleanConjunction(function) => function,
+            Self::BooleanDisjunction(function) => function,
+            Self::NumericMaximum(function) => function,
+            Self::NumericMinimum(function) => function,
+            Self::NumericLukasiewicz(function) => function,
+            Self::NumericSum(function) => function,
+            Self::NumericProduct(function) => function,
+            Self::StringConcatenation(function) => function,
+        } {
+            fn evaluate(&self, parameters: &[AnyDataValue]) -> Option<AnyDataValue>;
             fn type_propagation(&self) -> FunctionTypePropagation;
         }
     }

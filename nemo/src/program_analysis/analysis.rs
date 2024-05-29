@@ -130,9 +130,9 @@ fn construct_existential_aux_rule(
         Variable::Universal(name)
     };
 
-    let mut used_variables = HashSet::new();
     let mut aux_predicate_terms = Vec::new();
     for atom in &head_atoms {
+        let mut used_variables = HashSet::new();
         let mut new_terms = Vec::new();
 
         for term in atom.terms() {
@@ -179,15 +179,7 @@ fn construct_existential_aux_rule(
         let temp_head_identifier = get_fresh_rule_predicate(rule_index);
 
         let temp_head_atom = PrimitiveAtom::new(temp_head_identifier, aux_predicate_terms);
-        ChaseRule::new(
-            vec![temp_head_atom],
-            vec![],
-            vec![],
-            new_body,
-            constraints,
-            vec![],
-            vec![],
-        )
+        ChaseRule::positive_rule(vec![temp_head_atom], new_body, constraints)
     };
 
     let variable_order = build_preferable_variable_orders(
@@ -221,7 +213,7 @@ fn analyze_rule(
         is_existential: num_existential > 0,
         is_recursive: is_recursive(rule),
         has_positive_constraints: !rule.positive_constraints().is_empty(),
-        has_aggregates: !rule.aggregates().is_empty(),
+        has_aggregates: rule.aggregate().is_some(),
         positive_body_predicates: get_predicates(rule.positive_body()),
         negative_body_predicates: get_predicates(rule.negative_body()),
         head_predicates: get_predicates(rule.head()),

@@ -22,7 +22,7 @@ use nom::{
 
 use macros::traced;
 
-pub(crate) mod ast;
+pub mod ast;
 pub(crate) mod types;
 
 use types::{ConstraintOperator, IntermediateResult, Span};
@@ -694,6 +694,7 @@ impl<'a> RuleParser<'a> {
                     FILE_FORMAT_RDF_TURTLE => Ok(FileFormat::RDF(RdfVariant::Turtle)),
                     FILE_FORMAT_RDF_TRIG => Ok(FileFormat::RDF(RdfVariant::TriG)),
                     FILE_FORMAT_RDF_XML => Ok(FileFormat::RDF(RdfVariant::RDFXML)),
+                    FILE_FORMAT_JSON => Ok(FileFormat::JSON),
                     _ => Err(ParseError::FileFormatError(format.fragment().to_string())),
                 })(input)?;
 
@@ -958,17 +959,17 @@ impl<'a> RuleParser<'a> {
                     let (remainder, _) = nom::character::complete::char('#')(input)?;
                     let (remainder, aggregate_operation_identifier) =
                         self.parse_bare_iri_like_identifier()(remainder)?;
-                    let (remainder, variables) = self.parenthesised(separated_list1(
-                        self.parse_comma(),
-                        self.parse_universal_variable(),
-                    ))(remainder)?;
+                    let (remainder, terms) = self
+                        .parenthesised(separated_list1(self.parse_comma(), self.parse_term()))(
+                        remainder,
+                    )?;
 
                     if let Some(logical_aggregate_operation) =
                         (&aggregate_operation_identifier).into()
                     {
                         let aggregate = Aggregate {
                             logical_aggregate_operation,
-                            terms: variables.into_iter().map(PrimitiveTerm::Variable).collect(),
+                            terms,
                         };
 
                         Ok((remainder, Term::Aggregation(aggregate)))
@@ -1170,7 +1171,7 @@ impl<'a> RuleParser<'a> {
                             (self.parenthesised(self.parse_term()))(remainder)?;
 
                         Ok((remainder, Term::Unary(op, Box::new(subterm))))
-                    } else if let Ok(op) = BinaryOperation::construct_from_name(&name.0) {
+                    } else if let Some(op) = BinaryOperation::construct_from_name(&name.0) {
                         let (remainder, (left, _, right)) = (self.parenthesised(tuple((
                             self.parse_term(),
                             self.parse_comma(),
@@ -1183,6 +1184,38 @@ impl<'a> RuleParser<'a> {
                                 operation: op,
                                 lhs: Box::new(left),
                                 rhs: Box::new(right),
+                            },
+                        ))
+                    } else if let Some(op) = TernaryOperation::construct_from_name(&name.0) {
+                        let (remainder, (first, _, second, _, third)) =
+                            (self.parenthesised(tuple((
+                                self.parse_term(),
+                                self.parse_comma(),
+                                self.parse_term(),
+                                self.parse_comma(),
+                                self.parse_term(),
+                            ))))(remainder)?;
+
+                        Ok((
+                            remainder,
+                            Term::Ternary {
+                                operation: op,
+                                first: Box::new(first),
+                                second: Box::new(second),
+                                third: Box::new(third),
+                            },
+                        ))
+                    } else if let Some(op) = NaryOperation::construct_from_name(&name.0) {
+                        let (remainder, subterms) = (self.parenthesised(separated_list0(
+                            self.parse_comma(),
+                            self.parse_term(),
+                        )))(remainder)?;
+
+                        Ok((
+                            remainder,
+                            Term::Nary {
+                                operation: op,
+                                parameters: subterms,
                             },
                         ))
                     } else {
@@ -2142,9 +2175,9 @@ mod test {
             "#min(?VARIABLE)",
             Term::Aggregation(Aggregate {
                 logical_aggregate_operation: LogicalAggregateOperation::MinNumber,
-                terms: vec![PrimitiveTerm::Variable(Variable::Universal(String::from(
-                    "VARIABLE"
-                )))]
+                terms: vec![Term::Primitive(PrimitiveTerm::Variable(
+                    Variable::Universal(String::from("VARIABLE"))
+                ))]
             })
         );
 
@@ -2396,45 +2429,45 @@ mod test {
 }
 
 /// NEW PARSER
-mod new {
+pub mod new {
     use std::cell::RefCell;
 
     use super::ast::{
         atom::*, directive::*, map::*, program::*, statement::*, term::*, tuple::*, List, Position,
         Wsoc,
     };
-    use super::types::{Input, Label, ParserLabel, ToRange};
+    use super::types::{Input, Label, ParserLabel};
     use crate::io::lexer::{
         arrow, at, caret, close_brace, close_paren, colon, comma, dot, equal, exclamation_mark,
         exp, greater, greater_equal, hash, less, less_equal, lex_comment, lex_doc_comment,
-        lex_ident, lex_iri, lex_number, lex_operators, lex_string, lex_toplevel_doc_comment,
-        lex_whitespace, map_err, minus, open_brace, open_paren, plus, question_mark, skip_to_dot,
-        slash, star, tilde, underscore, unequal, Error, NewParseError, ParserState, Span, Token,
+        lex_ident, lex_iri, lex_number, lex_string, lex_toplevel_doc_comment,
+        lex_whitespace, minus, open_brace, open_paren, plus, question_mark, skip_to_dot,
+        slash, star, tilde, underscore, unequal, Error, ParserState, Span, Token,
         TokenKind,
     };
-    use crate::io::parser::ast::AstNode;
-    use nom::combinator::{all_consuming, cut, map, opt, recognize};
-    use nom::error::{context, ContextError, ParseError};
-    use nom::sequence::{delimited, pair};
+    
+    use nom::combinator::{all_consuming, opt, recognize};
+    use nom::error::{ParseError};
+    use nom::sequence::{pair};
     use nom::Parser;
     use nom::{
         branch::alt,
         combinator::verify,
-        multi::{many0, many1, separated_list0},
+        multi::{many0, many1},
         sequence::tuple,
         IResult,
     };
 
     fn outer_span<'a>(input: Span<'a>, rest_input: Span<'a>) -> Span<'a> {
         unsafe {
-            let span = Span::new_from_raw_offset(
+            
+            // dbg!(&input, &span, &rest_input);
+            Span::new_from_raw_offset(
                 input.location_offset(),
                 input.location_line(),
                 &input[..(rest_input.location_offset() - input.location_offset())],
                 (),
-            );
-            // dbg!(&input, &span, &rest_input);
-            span
+            )
         }
     }
 
@@ -2483,14 +2516,14 @@ mod new {
         'e,
         O: Copy,
         E: ParseError<Input<'a, 'e>>,
-        F: nom::Parser<Input<'a, 'e>, O, E>,
+        F: Parser<Input<'a, 'e>, O, E>,
     >(
         mut parser: F,
         error_msg: impl ToString,
         error_output: O,
         errors: ParserState<'e>,
     ) -> impl FnMut(Input<'a, 'e>) -> IResult<Input<'a, 'e>, O, E> {
-        move |input| match parser.parse(input.clone()) {
+        move |input| match parser.parse(input) {
             Ok(result) => Ok(result),
             Err(nom::Err::Error(_)) | Err(nom::Err::Failure(_)) => {
                 let err = Error(
@@ -2509,7 +2542,7 @@ mod new {
     }
 
     fn recover<'a, 'e, E>(
-        mut parser: impl nom::Parser<Input<'a, 'e>, Statement<'a>, E>,
+        mut parser: impl Parser<Input<'a, 'e>, Statement<'a>, E>,
         error_msg: impl ToString,
         errors: ParserState<'e>,
     ) -> impl FnMut(Input<'a, 'e>) -> IResult<Input<'a, 'e>, Statement<'a>, E> {
@@ -2534,7 +2567,7 @@ mod new {
     }
 
     fn report_label<'a, 's, O, E>(
-        mut parser: impl nom::Parser<Input<'a, 's>, O, E>,
+        mut parser: impl Parser<Input<'a, 's>, O, E>,
         label: ParserLabel,
     ) -> impl FnMut(Input<'a, 's>) -> IResult<Input<'a, 's>, O, E> {
         move |input| match parser.parse(input) {
@@ -2561,7 +2594,7 @@ mod new {
     }
 
     fn report_error<'a, 's, O, E>(
-        mut parser: impl nom::Parser<Input<'a, 's>, O, E>,
+        mut parser: impl Parser<Input<'a, 's>, O, E>,
     ) -> impl FnMut(Input<'a, 's>) -> IResult<Input<'a, 's>, O, E> {
         move |input| match parser.parse(input) {
             Ok(result) => {
@@ -2579,7 +2612,7 @@ mod new {
                                 .into_iter();
                         for label in labels {
                             if let Some(last) = furthest_errors.last() {
-                                if label.pos.offset >= (*last).0.offset {
+                                if label.pos.offset >= last.0.offset {
                                     let err =
                                         Error(label.pos, format!("expected {:?}", label.label));
                                     furthest_errors.push(err);
@@ -2646,7 +2679,7 @@ mod new {
     }
 
     /// Parse a full program consisting of directives, facts, rules and comments.
-    fn parse_program<'a, 'e>(input: Input<'a, 'e>) -> (Program<'a>, Vec<Error>) {
+    fn parse_program<'a>(input: Input<'a, '_>) -> (Program<'a>, Vec<Error>) {
         let (rest_input, (tl_doc_comment, statements)) = all_consuming(pair(
             opt(lex_toplevel_doc_comment),
             many1(recover(
@@ -2671,6 +2704,20 @@ mod new {
             },
             rest_input.parser_state.errors.take(),
         )
+    }
+
+    pub fn parse_program_str(input: &str) -> (Program<'_>, Vec<Error>) {
+        let refcell = RefCell::new(Vec::new());
+        let labels = RefCell::new(Vec::new());
+        let parser_state = ParserState {
+            errors: &refcell,
+            labels: &labels,
+        };
+        let input = Input {
+            input: Span::new(input),
+            parser_state,
+        };
+        parse_program(input)
     }
 
     /// Parse whitespace that is between directives, facts, rules and comments.
@@ -3730,7 +3777,7 @@ mod new {
                         }
                     }],
                 }
-            )
+            );
         }
 
         #[test]
@@ -4001,7 +4048,7 @@ mod new {
                         }),
                     ],
                 }
-            )
+            );
         }
 
         // #[test]
@@ -4127,7 +4174,7 @@ mod new {
                         })
                     ],
                 }
-            )
+            );
         }
 
         #[test]

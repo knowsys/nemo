@@ -112,6 +112,16 @@ impl StorageTypeBitSet {
         }
         result
     }
+
+    /// Returns `true` if there is exactly one possible type.
+    pub(crate) fn is_unique(&self) -> bool {
+        self.0.is_single()
+    }
+
+    /// Returns `true` if set contains the given type.
+    pub(crate) fn contains(&self, storage_type: &StorageTypeName) -> bool {
+        self.0.subset(storage_type.bitset().0)
+    }
 }
 
 impl From<BitSet<usize>> for StorageTypeBitSet {

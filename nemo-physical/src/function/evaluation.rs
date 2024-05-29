@@ -3,13 +3,17 @@
 use std::{collections::HashMap, fmt::Debug, hash::Hash};
 
 use crate::{
+    datatypes::storage_type_name::StorageTypeBitSet,
     datavalues::{AnyDataValue, DataValue},
     error::Error,
     function::tree::FunctionLeaf,
 };
 
 use super::{
-    definitions::{BinaryFunction, BinaryFunctionEnum, UnaryFunction, UnaryFunctionEnum},
+    definitions::{
+        BinaryFunction, BinaryFunctionEnum, FunctionTypePropagation, NaryFunction,
+        NaryFunctionEnum, TernaryFunction, TernaryFunctionEnum, UnaryFunction, UnaryFunctionEnum,
+    },
     tree::FunctionTree,
 };
 
@@ -40,6 +44,10 @@ pub(crate) enum StackOperation {
     UnaryFunction(UnaryFunctionEnum),
     /// Evaluate the given binary function on the top two elements in the stack.
     BinaryFunction(BinaryFunctionEnum),
+    /// Evaluate the given ternary function on the top three elements in the stack.
+    TernaryFunction(TernaryFunctionEnum),
+    /// Evaluate the given n-ary function on the top n elements in the stack.
+    NaryFunction(NaryFunctionEnum, usize),
 }
 
 /// Representation of a [FunctionTree] as a stack program
@@ -76,6 +84,20 @@ impl StackProgram {
                     }
 
                     current_height -= 1;
+                }
+                StackOperation::TernaryFunction(_) => {
+                    if current_height <= 2 {
+                        return Err(Error::MalformedStackProgram);
+                    }
+
+                    current_height -= 2;
+                }
+                StackOperation::NaryFunction(_, parameter_count) => {
+                    if current_height < *parameter_count {
+                        return Err(Error::MalformedStackProgram);
+                    }
+
+                    current_height -= parameter_count - 1;
                 }
             }
 
@@ -134,6 +156,28 @@ impl StackProgram {
 
                     operations.push(StackOperation::BinaryFunction(*function));
                 }
+                FunctionTree::Ternary {
+                    function,
+                    first,
+                    second,
+                    third,
+                } => {
+                    build_operations(first, this, reference_map, operations);
+                    build_operations(second, this, reference_map, operations);
+                    build_operations(third, this, reference_map, operations);
+
+                    operations.push(StackOperation::TernaryFunction(*function));
+                }
+                FunctionTree::Nary {
+                    function,
+                    parameters,
+                } => {
+                    for parameter in parameters {
+                        build_operations(parameter, this, reference_map, operations);
+                    }
+
+                    operations.push(StackOperation::NaryFunction(*function, parameters.len()))
+                }
             }
         }
 
@@ -177,6 +221,32 @@ impl StackProgram {
 
                     stack.push(function.evaluate(first_input, second_input)?);
                 }
+                StackOperation::TernaryFunction(function) => {
+                    let third_input = stack
+                        .pop()
+                        .expect("This program is valid, so the stack cannot be empty.");
+                    let second_input = stack
+                        .pop()
+                        .expect("This program is valid, so the stack cannot be empty.");
+                    let first_input = stack
+                        .pop()
+                        .expect("This program is valid, so the stack cannot be empty.");
+
+                    stack.push(function.evaluate(first_input, second_input, third_input)?);
+                }
+                StackOperation::NaryFunction(function, parameter_count) => {
+                    let mut inputs = Vec::new();
+                    for _ in 0..*parameter_count {
+                        inputs.push(
+                            stack
+                                .pop()
+                                .expect("This program is valid, so the stack cannot be empty."),
+                        );
+                    }
+                    inputs.reverse();
+
+                    stack.push(function.evaluate(&inputs)?);
+                }
             }
         }
 
@@ -188,14 +258,22 @@ impl StackProgram {
     }
 
     /// Evaluate the stack program and return the result.
+    ///
     /// Returns `None` if some function could not be evaluated.
+    ///
+    /// # Panics
+    /// Panics if the [StackProgram] is not valid.
     pub(crate) fn evaluate_data(&self, referenced_values: &[AnyDataValue]) -> Option<AnyDataValue> {
         self.evaluate(referenced_values, None)
     }
 
     /// Evaluate the stack program and return the result.
     /// This function assumes that the result will be a boolean.
+    ///
     /// Returns `None` if some function could not be evaluated.
+    ///
+    /// # Panics
+    /// Panics if the [StackProgram] is not valid.
     pub(crate) fn evaluate_bool(
         &self,
         referenced_values: &[AnyDataValue],
@@ -203,6 +281,50 @@ impl StackProgram {
     ) -> Option<bool> {
         let result = self.evaluate(referenced_values, this)?;
         result.to_boolean()
+    }
+
+    /// Computes the possible output type for a given set of possible input types.
+    ///
+    /// # Panics
+    /// Panics if the [StackProgram] is not valid.
+    pub(crate) fn type_propagation(
+        &self,
+        reference_types: &[StorageTypeBitSet],
+        this: Option<StorageTypeBitSet>,
+    ) -> StorageTypeBitSet {
+        let mut stack = Vec::<StorageTypeBitSet>::with_capacity(self.size);
+
+        for instruction in &self.instructions {
+            let mut input_types = Vec::<StorageTypeBitSet>::new();
+
+            let (pop, instruction_type_propagation) = match instruction {
+                StackOperation::Push(stack_value) => (0, match stack_value {
+                    StackValue::Constant(constant) => FunctionTypePropagation::KnownOutput(constant.value_domain().storage_type()),
+                    StackValue::Reference(id) => FunctionTypePropagation::KnownOutput(reference_types[*id]),
+                    StackValue::This => FunctionTypePropagation::KnownOutput(this.expect("If stackoperation references `this` it should be given as an argument to this function")),
+                }),
+                StackOperation::UnaryFunction(function) => {
+                    (1, function.type_propagation())
+                },
+                StackOperation::BinaryFunction(function) => (2, function.type_propagation()),
+                StackOperation::TernaryFunction(function) => (3, function.type_propagation()),
+                StackOperation::NaryFunction(function, num_arguments) => (*num_arguments, function.type_propagation()),
+            };
+
+            for _ in 0..pop {
+                input_types.push(
+                    stack
+                        .pop()
+                        .expect("Well formed stack program should not pop from empty stack"),
+                );
+            }
+
+            stack.push(instruction_type_propagation.propagate(&input_types));
+        }
+
+        stack
+            .pop()
+            .expect("The final value is on the stack, since this program is valid.")
     }
 }
 
@@ -221,6 +343,10 @@ mod test {
 
     fn any_string(string: &str) -> AnyDataValue {
         AnyDataValue::new_plain_string(String::from(string))
+    }
+
+    fn any_iri(string: &str) -> AnyDataValue {
+        AnyDataValue::new_iri(String::from(string))
     }
 
     fn any_int(integer: i64) -> AnyDataValue {
@@ -272,10 +398,10 @@ mod test {
         );
 
         let tree_concat_contains = Function::string_contains(
-            Function::string_concatenation(
+            Function::string_concatenation(vec![
                 Function::constant(any_string("algebra")),
                 Function::constant(any_string("instruction")),
-            ),
+            ]),
             Function::constant(any_string("brain")),
         );
         evaluate_expect(&tree_concat_contains, Some(AnyDataValue::new_boolean(true)));
@@ -743,20 +869,24 @@ mod test {
             Function::constant(any_int(5)),
         );
 
-        let tree_conj_true =
-            Function::boolean_conjunction(Function::constant(any_bool(true)), tree_true.clone());
+        let tree_conj_true = Function::boolean_conjunction(vec![
+            Function::constant(any_bool(true)),
+            tree_true.clone(),
+        ]);
         evaluate_bool_expect(&tree_conj_true, true);
 
-        let tree_conj_false =
-            Function::boolean_conjunction(tree_false.clone(), Function::constant(any_bool(true)));
+        let tree_conj_false = Function::boolean_conjunction(vec![
+            tree_false.clone(),
+            Function::constant(any_bool(true)),
+        ]);
         evaluate_bool_expect(&tree_conj_false, false);
 
         let tree_disj_true =
-            Function::boolean_disjunction(Function::constant(any_bool(false)), tree_true);
+            Function::boolean_disjunction(vec![Function::constant(any_bool(false)), tree_true]);
         evaluate_bool_expect(&tree_disj_true, true);
 
         let tree_disj_false =
-            Function::boolean_disjunction(tree_false, Function::constant(any_bool(false)));
+            Function::boolean_disjunction(vec![tree_false, Function::constant(any_bool(false))]);
         evaluate_bool_expect(&tree_disj_false, false);
 
         let tree_neg_true = Function::boolean_negation(Function::constant(any_bool(false)));
@@ -784,7 +914,7 @@ mod test {
         let tree_datatype = Function::datatype(tree_integer);
         evaluate_expect(
             &tree_datatype,
-            Some(any_string("http://www.w3.org/2001/XMLSchema#int")),
+            Some(any_iri("http://www.w3.org/2001/XMLSchema#int")),
         );
     }
 

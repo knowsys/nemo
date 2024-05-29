@@ -134,6 +134,8 @@ pub enum FileFormat {
     TSV,
     /// RDF Triples or Quads, with the given format variant.
     RDF(RdfVariant),
+    /// JSON objects
+    JSON,
 }
 
 impl std::fmt::Display for FileFormat {
@@ -142,6 +144,7 @@ impl std::fmt::Display for FileFormat {
             Self::DSV => write!(f, "DSV"),
             Self::CSV => write!(f, "CSV"),
             Self::TSV => write!(f, "TSV"),
+            Self::JSON => write!(f, "JSON"),
             Self::RDF(variant) => write!(f, "{variant}"),
         }
     }
