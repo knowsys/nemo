@@ -2443,12 +2443,12 @@ pub mod new {
         exp, greater, greater_equal, hash, less, less_equal, lex_comment, lex_doc_comment,
         lex_ident, lex_iri, lex_number, lex_operators, lex_string, lex_toplevel_doc_comment,
         lex_whitespace, minus, open_brace, open_paren, plus, question_mark, skip_to_dot, slash,
-        star, tilde, underscore, unequal, Error, NewParseError, ParserState, Span, Token,
+        star, tilde, underscore, unequal, Context, Error, ErrorTree, ParserState, Span, Token,
         TokenKind,
     };
     use crate::io::parser::ast::AstNode;
     use nom::combinator::{all_consuming, cut, map, opt, recognize};
-    use nom::error::{context, ContextError, ErrorKind, ParseError};
+    use nom::error::{ErrorKind, ParseError};
     use nom::sequence::{delimited, pair};
     use nom::Parser;
     use nom::{
@@ -2458,8 +2458,8 @@ pub mod new {
         sequence::tuple,
         IResult,
     };
-    use nom_greedyerror::GreedyError;
-    use nom_supreme::error::{ErrorTree, StackContext};
+    use nom_supreme::{context::ContextError, error::StackContext};
+    use sanitise_file_name::Stringy;
 
     fn outer_span<'a>(input: Span<'a>, rest_input: Span<'a>) -> Span<'a> {
         unsafe {
@@ -2472,67 +2472,6 @@ pub mod new {
             )
         }
     }
-
-    // fn ignore_ws_and_comments<'a, F, O, E: ParseError<Span<'a>> + ContextError<Span<'a>>>(
-    //     inner: F,
-    // ) -> impl FnMut(Span<'a>) -> IResult<Span<'a>, O, E>
-    // where
-    //     F: Parser<Span<'a>, O, E> + FnMut(Span<'a>) -> IResult<Span<'a>, O, E>,
-    // {
-    //     delimited(
-    //         many0(alt((lex_whitespace, lex_comment))),
-    //         inner,
-    //         many0(alt((lex_whitespace, lex_comment))),
-    //     )
-    // }
-
-    // fn expect<'a, F, E, T>(
-    //     parser: F,
-    //     error_msg: E,
-    //     state: Errors,
-    // ) -> impl Fn(Span<'a>) -> IResult<Span<'a>, T>
-    // where
-    //     F: Fn(Span<'a>) -> IResult<Span<'a>, T>,
-    //     E: ToString,
-    // {
-    //     move |input| match parser(input) {
-    //         Ok((rest_input, output)) => Ok((rest_input, output)),
-    //         Err(nom::Err::Error(nom::error::Error { input, .. }))
-    //         | Err(nom::Err::Failure(nom::error::Error { input, .. })) => {
-    //             let err = crate::io::lexer::Error(to_range(input), error_msg.to_string());
-    //             state.report_error(err);
-    //             Ok((
-    //                 input,
-    //                 Token {
-    //                     kind: TokenKind::Error,
-    //                     span: outer_span(input, rest_input),
-    //                 },
-    //             ))
-    //         }
-    //         Err(err) => Err(err),
-    //     }
-    // }
-
-    // fn context<'a, 's, O, E>(
-    //     mut f: impl FnMut(Input<'a, 's>) -> IResult<Input<'a, 's>, O, E>,
-    //     context: ParserContext,
-    // ) -> impl FnMut(Input<'a, 's>) -> IResult<Input<'a, 's>, O, E> {
-    //     move |input| {
-    //         let mut labels = *input.parser_state.labels.borrow_mut();
-    //         if let None = labels {
-    //             labels = Some(Context {
-    //                 context: context.clone(),
-    //                 label: None,
-    //                 inner: vec![],
-    //             });
-    //             labels
-    //         } else {
-    //             dbg!(&labels);
-    //             labels
-    //         };
-    //         f(input)
-    //     }
-    // }
 
     fn expect<'a, 's, O: Copy, E: ParseError<Input<'a, 's>>, F: Parser<Input<'a, 's>, O, E>>(
         mut parser: F,
@@ -2562,7 +2501,7 @@ pub mod new {
     fn recover<'a, 's, E>(
         mut parser: impl Parser<Input<'a, 's>, Statement<'a>, E>,
         error_msg: impl ToString,
-        context: &'static str,
+        context: Context,
         errors: ParserState<'s>,
     ) -> impl FnMut(Input<'a, 's>) -> IResult<Input<'a, 's>, Statement<'a>, E> {
         move |input: Input<'a, 's>| match parser.parse(input) {
@@ -2578,7 +2517,7 @@ pub mod new {
                     msg: error_msg.to_string(),
                     context: vec![context],
                 };
-                errors.report_error(err);
+                // errors.report_error(err);
                 let (rest_input, token) = skip_to_dot::<ErrorTree<Input<'_, '_>>>(input);
                 Ok((rest_input, Statement::Error(token)))
             }
@@ -2586,91 +2525,8 @@ pub mod new {
         }
     }
 
-    // fn report_label<'a, 's, O, E>(
-    //     mut parser: impl nom::Parser<Input<'a, 's>, O, E>,
-    //     label: ParserLabel,
-    // ) -> impl FnMut(Input<'a, 's>) -> IResult<Input<'a, 's>, O, E> {
-    //     move |input| match parser.parse(input) {
-    //         Ok(result) => Ok(result),
-    //         Err(err) => {
-    //             match err {
-    //                 nom::Err::Incomplete(_) => (),
-    //                 nom::Err::Error(_) | nom::Err::Failure(_) => {
-    //                     if !input.input.is_empty() {
-    //                         input.parser_state.labels.borrow_mut().push(Label {
-    //                             label,
-    //                             pos: Position {
-    //                                 offset: input.input.location_offset(),
-    //                                 line: input.input.location_line(),
-    //                                 column: input.input.get_utf8_column() as u32,
-    //                             },
-    //                         })
-    //                     };
-    //                 }
-    //             };
-    //             Err(err)
-    //         }
-    //     }
-    // }
-
-    // fn report_error<'a, 's, O, E>(
-    //     mut parser: impl nom::Parser<Input<'a, 's>, O, E>,
-    // ) -> impl FnMut(Input<'a, 's>) -> IResult<Input<'a, 's>, O, E> {
-    //     move |input| match parser.parse(input) {
-    //         Ok(result) => {
-    //             input.parser_state.labels.borrow_mut().inner.clear();
-    //             Ok(result)
-    //         }
-    //         Err(err) => {
-    //             match err {
-    //                 nom::Err::Incomplete(_) => (),
-    //                 nom::Err::Error(_) | nom::Err::Failure(_) => {
-    //                     // println!("LABELS BEFORE REPORT!!!!: {:#?}", input.parser_state.labels);
-    //                     let mut furthest_errors: Vec<Error> = Vec::new();
-    //                     let labels =
-    //                         <Vec<Label> as Clone>::clone(&input.parser_state.labels.borrow())
-    //                             .into_iter();
-    //                     for label in labels {
-    //                         if let Some(last) = furthest_errors.last() {
-    //                             if label.pos.offset >= (*last).0.offset {
-    //                                 let err =
-    //                                     Error(label.pos, format!("expected {:?}", label.label));
-    //                                 furthest_errors.push(err);
-    //                             }
-    //                         } else {
-    //                             let err = Error(label.pos, format!("expected {:?}", label.label));
-    //                             furthest_errors.push(err);
-    //                         };
-    //                     }
-    //                     for err in furthest_errors {
-    //                         input.parser_state.report_error(err)
-    //                     }
-    //                     // for label in furthest_errors {
-    //                     //     println!(
-    //                     //         "Syntax error: Parser got stuck at line {} column {}, expected {:?}",
-    //                     //         label.position.line, label.position.column, label.label
-    //                     //     );
-    //                     //     println!(
-    //                     //         "\n{}",
-    //                     //         input
-    //                     //             .parser_state
-    //                     //             .source
-    //                     //             .fragment()
-    //                     //             .lines()
-    //                     //             .collect::<Vec<_>>()
-    //                     //             .get((label.position.line - 1) as usize)
-    //                     //             .unwrap()
-    //                     //     );
-    //                     //     println!("{1:>0$}", label.position.column, "^");
-    //                     // }
-    //                 }
-    //             };
-    //             Err(err)
-    //         }
-    //     }
-    // }
     fn report_error<'a, 's, O>(
-        mut parser: impl nom::Parser<Input<'a, 's>, O, ErrorTree<Input<'a, 's>>>,
+        mut parser: impl Parser<Input<'a, 's>, O, ErrorTree<Input<'a, 's>>>,
     ) -> impl FnMut(Input<'a, 's>) -> IResult<Input<'a, 's>, O, ErrorTree<Input<'a, 's>>> {
         move |input| match parser.parse(input) {
             Ok(result) => Ok(result),
@@ -2681,8 +2537,9 @@ pub mod new {
                 match &e {
                     nom::Err::Incomplete(_) => (),
                     nom::Err::Error(err) | nom::Err::Failure(err) => {
-                        let (deepest_pos, errors) = get_deepest_errors(err);
+                        let (_deepest_pos, errors) = get_deepest_errors(err);
                         for error in errors {
+                            dbg!(&error);
                             input.parser_state.report_error(error);
                         }
                         // let error = Error(deepest_pos, format!(""));
@@ -2695,8 +2552,10 @@ pub mod new {
     }
 
     fn get_deepest_errors<'a, 's>(e: &'a ErrorTree<Input<'a, 's>>) -> (Position, Vec<Error>) {
+        dbg!(&e);
         match e {
             ErrorTree::Base { location, kind } => {
+                dbg!(&kind);
                 let span = location.input;
                 let err_pos = Position {
                     offset: span.location_offset(),
@@ -2707,7 +2566,7 @@ pub mod new {
                     err_pos,
                     vec![Error {
                         pos: err_pos,
-                        msg: format!("{}", e),
+                        msg: "".to_string(),
                         context: Vec::new(),
                     }],
                 )
@@ -2716,17 +2575,30 @@ pub mod new {
                 // let mut err_pos = Position::default();
                 match &**base {
                     ErrorTree::Base { location, kind } => {
+                        dbg!(&kind);
                         let span = location.input;
                         let err_pos = Position {
                             offset: span.location_offset(),
                             line: span.location_line(),
                             column: span.get_utf8_column() as u32,
                         };
+                        let mut msg = String::from("");
+                        for (_, context) in contexts {
+                            match context {
+                                StackContext::Kind(_) => todo!(),
+                                StackContext::Context(c) => match c {
+                                    Context::Tag(t) => {
+                                        msg.push_str(t);
+                                    }
+                                    _ => (),
+                                },
+                            }
+                        }
                         (
                             err_pos,
                             vec![Error {
                                 pos: err_pos,
-                                msg: format!("{}", base),
+                                msg,
                                 context: context_strs(contexts),
                             }],
                         )
@@ -2769,21 +2641,39 @@ pub mod new {
         }
     }
 
-    fn context_strs(
-        contexts: &Vec<(Input<'_, '_>, StackContext<&'static str>)>,
-    ) -> Vec<&'static str> {
+    fn context_strs(contexts: &Vec<(Input<'_, '_>, StackContext<Context>)>) -> Vec<Context> {
         contexts
             .iter()
             .map(|(_, c)| match c {
                 StackContext::Kind(k) => todo!(),
-                StackContext::Context(str) => *str,
+                StackContext::Context(c) => *c,
             })
             .collect()
     }
 
-    fn wsoc0<'a, 's, E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>>>(
-        input: Input<'a, 's>,
-    ) -> IResult<Input<'a, 's>, Option<Wsoc<'a>>, E> {
+    pub(crate) fn context<'a, 's, P, E, F, O>(
+        context: P,
+        mut f: F,
+    ) -> impl FnMut(Input<'a, 's>) -> IResult<Input<'a, 's>, O, E>
+    where
+        P: Clone,
+        F: Parser<Input<'a, 's>, O, E>,
+        E: ContextError<Input<'a, 's>, P>,
+    {
+        move |i| match f.parse(i.clone()) {
+            Ok(o) => Ok(o),
+            Err(nom::Err::Incomplete(i)) => Err(nom::Err::Incomplete(i)),
+            Err(nom::Err::Error(e)) => Err(nom::Err::Error(E::add_context(i, context.clone(), e))),
+            Err(nom::Err::Failure(e)) => {
+                Err(nom::Err::Failure(E::add_context(i, context.clone(), e)))
+            }
+        }
+    }
+
+    fn wsoc0<'a, 's, E>(input: Input<'a, 's>) -> IResult<Input<'a, 's>, Option<Wsoc<'a>>, E>
+    where
+        E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>, Context>,
+    {
         many0(alt((lex_whitespace, lex_comment)))(input).map(|(rest_input, vec)| {
             if vec.is_empty() {
                 (rest_input, None)
@@ -2799,7 +2689,7 @@ pub mod new {
         })
     }
 
-    fn wsoc1<'a, 's, E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>>>(
+    fn wsoc1<'a, 's, E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>, Context>>(
         input: Input<'a, 's>,
     ) -> IResult<Input<'a, 's>, Wsoc<'a>, E> {
         many1(alt((lex_whitespace, lex_comment)))(input).map(|(rest_input, vec)| {
@@ -2814,11 +2704,15 @@ pub mod new {
     }
 
     /// Parse a full program consisting of directives, facts, rules and comments.
-    fn parse_program<'a, 's, E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>>>(
+    fn parse_program<
+        'a,
+        's,
+        E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>, Context>,
+    >(
         input: Input<'a, 's>,
     ) -> (Program<'a>, Vec<Error>) {
         let result = context(
-            "program",
+            Context::Program,
             pair(
                 opt(lex_toplevel_doc_comment::<ErrorTree<Input<'_, '_>>>),
                 many0(recover(
@@ -2831,7 +2725,7 @@ pub mod new {
                         parse_comment,
                     ))),
                     "failed to parse statement",
-                    "program",
+                    Context::Program,
                     input.parser_state,
                 )),
             ),
@@ -2868,26 +2762,34 @@ pub mod new {
     }
 
     /// Parse whitespace that is between directives, facts, rules and comments.
-    fn parse_whitespace<'a, 's, E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>>>(
+    fn parse_whitespace<
+        'a,
+        's,
+        E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>, Context>,
+    >(
         input: Input<'a, 's>,
     ) -> IResult<Input<'a, 's>, Statement<'a>, E> {
         lex_whitespace(input).map(|(rest_input, ws)| (rest_input, Statement::Whitespace(ws)))
     }
 
     /// Parse normal comments that start with a `%` and ends at the line ending.
-    fn parse_comment<'a, 's, E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>>>(
+    fn parse_comment<
+        'a,
+        's,
+        E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>, Context>,
+    >(
         input: Input<'a, 's>,
     ) -> IResult<Input<'a, 's>, Statement<'a>, E> {
         lex_comment(input).map(|(rest_input, comment)| (rest_input, Statement::Comment(comment)))
     }
 
     /// Parse a fact of the form `predicateName(term1, term2, …).`
-    fn parse_fact<'a, 's, E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>>>(
+    fn parse_fact<'a, 's, E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>, Context>>(
         input: Input<'a, 's>,
     ) -> IResult<Input<'a, 's>, Statement<'a>, E> {
         // dbg!(&input.parser_state.labels);
         context(
-            "fact",
+            Context::Fact,
             tuple((opt(lex_doc_comment), parse_normal_atom, wsoc0, dot)),
         )(input)
         .map(|(rest_input, (doc_comment, atom, ws, dot))| {
@@ -2905,11 +2807,11 @@ pub mod new {
     }
 
     /// Parse a rule of the form `headPredicate1(term1, term2, …), headPredicate2(term1, term2, …) :- bodyPredicate(term1, …), term1 >= (term2 + term3) * function(term1, …) .`
-    fn parse_rule<'a, 's, E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>>>(
+    fn parse_rule<'a, 's, E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>, Context>>(
         input: Input<'a, 's>,
     ) -> IResult<Input<'a, 's>, Statement<'a>, E> {
         context(
-            "rule",
+            Context::Rule,
             tuple((
                 opt(lex_doc_comment),
                 parse_head,
@@ -2942,25 +2844,29 @@ pub mod new {
     }
 
     /// Parse the head atoms of a rule.
-    fn parse_head<'a, 's, E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>>>(
+    fn parse_head<'a, 's, E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>, Context>>(
         input: Input<'a, 's>,
     ) -> IResult<Input<'a, 's>, List<'a, Atom<'a>>, E> {
-        context("rule head", parse_list(parse_head_atoms))(input)
+        context(Context::RuleHead, parse_list(parse_head_atoms))(input)
     }
 
     /// Parse the body atoms of a rule.
-    fn parse_body<'a, 's, E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>>>(
+    fn parse_body<'a, 's, E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>, Context>>(
         input: Input<'a, 's>,
     ) -> IResult<Input<'a, 's>, List<'a, Atom<'a>>, E> {
-        context("rule body", parse_list(parse_body_atoms))(input)
+        context(Context::RuleBody, parse_list(parse_body_atoms))(input)
     }
 
     /// Parse the directives (@base, @prefix, @import, @export, @output).
-    fn parse_directive<'a, 's, E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>>>(
+    fn parse_directive<
+        'a,
+        's,
+        E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>, Context>,
+    >(
         input: Input<'a, 's>,
     ) -> IResult<Input<'a, 's>, Statement<'a>, E> {
         context(
-            "directive",
+            Context::Directive,
             alt((
                 parse_base_directive,
                 parse_prefix_directive,
@@ -2973,11 +2879,15 @@ pub mod new {
     }
 
     /// Parse the base directive.
-    fn parse_base_directive<'a, 's, E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>>>(
+    fn parse_base_directive<
+        'a,
+        's,
+        E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>, Context>,
+    >(
         input: Input<'a, 's>,
     ) -> IResult<Input<'a, 's>, Directive<'a>, E> {
         context(
-            "base directive",
+            Context::DirectiveBase,
             tuple((
                 opt(lex_doc_comment),
                 recognize(pair(
@@ -3013,12 +2923,12 @@ pub mod new {
     fn parse_prefix_directive<
         'a,
         's,
-        E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>>,
+        E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>, Context>,
     >(
         input: Input<'a, 's>,
     ) -> IResult<Input<'a, 's>, Directive<'a>, E> {
         context(
-            "prefix directive",
+            Context::DirectivePrefix,
             tuple((
                 opt(lex_doc_comment),
                 recognize(pair(
@@ -3063,12 +2973,12 @@ pub mod new {
     fn parse_import_directive<
         'a,
         's,
-        E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>>,
+        E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>, Context>,
     >(
         input: Input<'a, 's>,
     ) -> IResult<Input<'a, 's>, Directive<'a>, E> {
         context(
-            "import directive",
+            Context::DirectiveImport,
             tuple((
                 opt(lex_doc_comment),
                 recognize(pair(
@@ -3114,12 +3024,12 @@ pub mod new {
     fn parse_export_directive<
         'a,
         's,
-        E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>>,
+        E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>, Context>,
     >(
         input: Input<'a, 's>,
     ) -> IResult<Input<'a, 's>, Directive<'a>, E> {
         context(
-            "export directive",
+            Context::DirectiveExport,
             tuple((
                 opt(lex_doc_comment),
                 recognize(pair(
@@ -3165,12 +3075,12 @@ pub mod new {
     fn parse_output_directive<
         'a,
         's,
-        E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>>,
+        E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>, Context>,
     >(
         input: Input<'a, 's>,
     ) -> IResult<Input<'a, 's>, Directive<'a>, E> {
         context(
-            "output directive",
+            Context::DirectiveOutput,
             tuple((
                 opt(lex_doc_comment),
                 recognize(pair(
@@ -3205,7 +3115,7 @@ pub mod new {
     }
 
     // /// Parse a list of `ident1, ident2, …`
-    // fn parse_identifier_list<'a, 's, E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>>>(
+    // fn parse_identifier_list<'a, 's, E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>, Context>>(
     //     input: Input<'a, 's>,
     // ) -> IResult<Input<'a, 's>, List<'a, Token<'a>>, E> {
     //     pair(
@@ -3229,12 +3139,17 @@ pub mod new {
     //     })
     // }
 
-    fn parse_list<'a, 's, T, E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>>>(
+    fn parse_list<
+        'a,
+        's,
+        T,
+        E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>, Context>,
+    >(
         parse_t: fn(Input<'a, 's>) -> IResult<Input<'a, 's>, T, E>,
     ) -> impl Fn(Input<'a, 's>) -> IResult<Input<'a, 's>, List<'a, T>, E> {
         move |input: Input<'a, 's>| {
             context(
-                "list",
+                Context::List,
                 pair(parse_t, many0(tuple((wsoc0, comma, wsoc0, parse_t)))),
             )(input)
             .map(|(rest_input, (first, rest))| {
@@ -3251,21 +3166,29 @@ pub mod new {
     }
 
     /// Parse the head atoms. The same as the body atoms except for disallowing negated atoms.
-    fn parse_head_atoms<'a, 's, E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>>>(
+    fn parse_head_atoms<
+        'a,
+        's,
+        E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>, Context>,
+    >(
         input: Input<'a, 's>,
     ) -> IResult<Input<'a, 's>, Atom<'a>, E> {
         context(
-            "rule head atoms",
+            Context::HeadAtoms,
             alt((parse_normal_atom, parse_infix_atom, parse_map_atom)),
         )(input)
     }
 
     /// Parse the body atoms. The same as the head atoms except for allowing negated atoms.
-    fn parse_body_atoms<'a, 's, E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>>>(
+    fn parse_body_atoms<
+        'a,
+        's,
+        E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>, Context>,
+    >(
         input: Input<'a, 's>,
     ) -> IResult<Input<'a, 's>, Atom<'a>, E> {
         context(
-            "rule body atoms",
+            Context::BodyAtoms,
             alt((
                 parse_normal_atom,
                 parse_negative_atom,
@@ -3276,18 +3199,26 @@ pub mod new {
     }
 
     /// Parse an atom of the form `predicateName(term1, term2, …)`.
-    fn parse_normal_atom<'a, 's, E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>>>(
+    fn parse_normal_atom<
+        'a,
+        's,
+        E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>, Context>,
+    >(
         input: Input<'a, 's>,
     ) -> IResult<Input<'a, 's>, Atom<'a>, E> {
-        context("positive atom", parse_named_tuple)(input)
+        context(Context::PositiveAtom, parse_named_tuple)(input)
             .map(|(rest_input, named_tuple)| (rest_input, Atom::Positive(named_tuple)))
     }
 
     /// Parse an atom of the form `~predicateName(term1, term2, …)`.
-    fn parse_negative_atom<'a, 's, E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>>>(
+    fn parse_negative_atom<
+        'a,
+        's,
+        E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>, Context>,
+    >(
         input: Input<'a, 's>,
     ) -> IResult<Input<'a, 's>, Atom<'a>, E> {
-        context("negative atom", pair(tilde, parse_named_tuple))(input).map(
+        context(Context::NegativeAtom, pair(tilde, parse_named_tuple))(input).map(
             |(rest_input, (tilde, named_tuple))| {
                 (
                     rest_input,
@@ -3303,11 +3234,15 @@ pub mod new {
 
     /// Parse an "infix atom" of the form `term1 <infixop> term2`.
     /// The supported infix operations are `<`, `<=`, `=`, `>=`, `>` and `!=`.
-    fn parse_infix_atom<'a, 's, E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>>>(
+    fn parse_infix_atom<
+        'a,
+        's,
+        E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>, Context>,
+    >(
         input: Input<'a, 's>,
     ) -> IResult<Input<'a, 's>, Atom<'a>, E> {
         context(
-            "infix atom",
+            Context::InfixAtom,
             tuple((parse_term, wsoc0, parse_operation_token, wsoc0, parse_term)),
         )(input)
         .map(|(rest_input, (lhs, ws1, operation, ws2, rhs))| {
@@ -3327,11 +3262,11 @@ pub mod new {
 
     /// Parse a tuple with an optional name, like `ident(term1, term2)`
     /// or just `(int, int, skip)`.
-    fn parse_tuple<'a, 's, E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>>>(
+    fn parse_tuple<'a, 's, E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>, Context>>(
         input: Input<'a, 's>,
     ) -> IResult<Input<'a, 's>, Tuple<'a>, E> {
         context(
-            "tuple",
+            Context::Tuple,
             tuple((
                 opt(lex_ident),
                 wsoc0,
@@ -3363,11 +3298,15 @@ pub mod new {
 
     /// Parse a named tuple. This function is like `parse_tuple` with the difference,
     /// that is enforces the existence of an identifier for the tuple.
-    fn parse_named_tuple<'a, 's, E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>>>(
+    fn parse_named_tuple<
+        'a,
+        's,
+        E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>, Context>,
+    >(
         input: Input<'a, 's>,
     ) -> IResult<Input<'a, 's>, Tuple<'a>, E> {
         context(
-            "named tuple",
+            Context::NamedTuple,
             tuple((
                 lex_ident,
                 wsoc0,
@@ -3399,11 +3338,11 @@ pub mod new {
 
     /// Parse a map. Maps are denoted with `{…}` and can haven an optional name, e.g. `csv {…}`.
     /// Inside the curly braces ist a list of pairs.
-    fn parse_map<'a, 's, E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>>>(
+    fn parse_map<'a, 's, E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>, Context>>(
         input: Input<'a, 's>,
     ) -> IResult<Input<'a, 's>, Map<'a>, E> {
         context(
-            "map",
+            Context::Map,
             tuple((
                 opt(lex_ident),
                 wsoc0,
@@ -3434,14 +3373,18 @@ pub mod new {
     }
 
     /// Parse a map in an atom position.
-    fn parse_map_atom<'a, 's, E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>>>(
+    fn parse_map_atom<
+        'a,
+        's,
+        E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>, Context>,
+    >(
         input: Input<'a, 's>,
     ) -> IResult<Input<'a, 's>, Atom<'a>, E> {
         parse_map(input).map(|(rest_input, map)| (rest_input, Atom::Map(map)))
     }
 
     // /// Parse a pair list of the form `key1 = value1, key2 = value2, …`.
-    // fn parse_pair_list<'a, 's, E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>>>(
+    // fn parse_pair_list<'a, 's, E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>, Context>>(
     //     input: Input<'a, 's>,
     //     state: Errors,
     // ) -> IResult<Input<'a, 's>, Option<List<'a, Pair<Term<'a>, Term<'a>>>>, E> {
@@ -3474,28 +3417,30 @@ pub mod new {
     // }
 
     /// Parse a pair of the form `key = value`.
-    fn parse_pair<'a, 's, E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>>>(
+    fn parse_pair<'a, 's, E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>, Context>>(
         input: Input<'a, 's>,
     ) -> IResult<Input<'a, 's>, Pair<'a, Term<'a>, Term<'a>>, E> {
-        context("pair", tuple((parse_term, wsoc0, equal, wsoc0, parse_term)))(input).map(
-            |(rest_input, (key, ws1, equal, ws2, value))| {
-                (
-                    rest_input,
-                    Pair {
-                        span: outer_span(input.input, rest_input.input),
-                        key,
-                        ws1,
-                        equal,
-                        ws2,
-                        value,
-                    },
-                )
-            },
-        )
+        context(
+            Context::Pair,
+            tuple((parse_term, wsoc0, equal, wsoc0, parse_term)),
+        )(input)
+        .map(|(rest_input, (key, ws1, equal, ws2, value))| {
+            (
+                rest_input,
+                Pair {
+                    span: outer_span(input.input, rest_input.input),
+                    key,
+                    ws1,
+                    equal,
+                    ws2,
+                    value,
+                },
+            )
+        })
     }
 
     // /// Parse a list of terms of the form `term1, term2, …`.
-    // fn parse_term_list<'a, 's, E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>>>(
+    // fn parse_term_list<'a, 's, E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>, Context>>(
     //     input: Input<'a, 's>,
     //     state: Errors,
     // ) -> IResult<Input<'a, 's>, List<'a, Term<'a>>, E> {
@@ -3526,11 +3471,11 @@ pub mod new {
     /// Parse a term. A term can be a primitive value (constant, number, string, …),
     /// a variable (universal or existential), a map, a function (-symbol), an arithmetic
     /// operation, an aggregation or an tuple of terms, e.g. `(term1, term2, …)`.
-    fn parse_term<'a, 's, E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>>>(
+    fn parse_term<'a, 's, E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>, Context>>(
         input: Input<'a, 's>,
     ) -> IResult<Input<'a, 's>, Term<'a>, E> {
         context(
-            "term",
+            Context::Term,
             alt((
                 parse_binary_term,
                 parse_tuple_term,
@@ -3546,11 +3491,15 @@ pub mod new {
     }
 
     /// Parse a primitive term (simple constant, iri constant, number, string).
-    fn parse_primitive_term<'a, 's, E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>>>(
+    fn parse_primitive_term<
+        'a,
+        's,
+        E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>, Context>,
+    >(
         input: Input<'a, 's>,
     ) -> IResult<Input<'a, 's>, Term<'a>, E> {
         context(
-            "primitive term",
+            Context::TermPrivimitive,
             alt((
                 parse_rdf_literal,
                 parse_ident,
@@ -3563,11 +3512,15 @@ pub mod new {
     }
 
     /// Parse a rdf literal e.g. "2023-06-19"^^<http://www.w3.org/2001/XMLSchema#date>
-    fn parse_rdf_literal<'a, 's, E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>>>(
+    fn parse_rdf_literal<
+        'a,
+        's,
+        E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>, Context>,
+    >(
         input: Input<'a, 's>,
     ) -> IResult<Input<'a, 's>, Primitive<'a>, E> {
         context(
-            "RDF Literal",
+            Context::RdfLiteral,
             tuple((lex_string, recognize(pair(caret, caret)), lex_iri)),
         )(input)
         .map(|(rest_input, (string, carets, iri))| {
@@ -3586,29 +3539,33 @@ pub mod new {
         })
     }
 
-    fn parse_ident<'a, 's, E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>>>(
+    fn parse_ident<'a, 's, E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>, Context>>(
         input: Input<'a, 's>,
     ) -> IResult<Input<'a, 's>, Primitive<'a>, E> {
         lex_ident(input).map(|(rest_input, ident)| (rest_input, Primitive::Constant(ident)))
     }
 
-    fn parse_iri<'a, 's, E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>>>(
+    fn parse_iri<'a, 's, E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>, Context>>(
         input: Input<'a, 's>,
     ) -> IResult<Input<'a, 's>, Primitive<'a>, E> {
         lex_iri(input).map(|(rest_input, iri)| (rest_input, Primitive::Iri(iri)))
     }
 
-    fn parse_number<'a, 's, E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>>>(
+    fn parse_number<'a, 's, E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>, Context>>(
         input: Input<'a, 's>,
     ) -> IResult<Input<'a, 's>, Primitive<'a>, E> {
-        context("number", alt((parse_decimal, parse_integer)))(input)
+        context(Context::Number, alt((parse_decimal, parse_integer)))(input)
     }
 
-    fn parse_decimal<'a, 's, E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>>>(
+    fn parse_decimal<
+        'a,
+        's,
+        E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>, Context>,
+    >(
         input: Input<'a, 's>,
     ) -> IResult<Input<'a, 's>, Primitive<'a>, E> {
         context(
-            "decimal",
+            Context::Decimal,
             tuple((
                 opt(alt((plus, minus))),
                 opt(lex_number),
@@ -3632,10 +3589,14 @@ pub mod new {
         })
     }
 
-    fn parse_integer<'a, 's, E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>>>(
+    fn parse_integer<
+        'a,
+        's,
+        E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>, Context>,
+    >(
         input: Input<'a, 's>,
     ) -> IResult<Input<'a, 's>, Primitive<'a>, E> {
-        context("integer", pair(opt(alt((plus, minus))), lex_number))(input).map(
+        context(Context::Integer, pair(opt(alt((plus, minus))), lex_number))(input).map(
             |(rest_input, (sign, number))| {
                 (
                     rest_input,
@@ -3652,24 +3613,28 @@ pub mod new {
         )
     }
 
-    fn parse_exponent<'a, 's, E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>>>(
+    fn parse_exponent<
+        'a,
+        's,
+        E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>, Context>,
+    >(
         input: Input<'a, 's>,
     ) -> IResult<Input<'a, 's>, Exponent<'a>, E> {
         context(
-            "exponent",
+            Context::Exponent,
             tuple((exp, opt(alt((plus, minus))), lex_number)),
         )(input)
         .map(|(rest_input, (e, sign, number))| (rest_input, Exponent { e, sign, number }))
     }
 
-    fn parse_string<'a, 's, E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>>>(
+    fn parse_string<'a, 's, E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>, Context>>(
         input: Input<'a, 's>,
     ) -> IResult<Input<'a, 's>, Primitive<'a>, E> {
         lex_string(input).map(|(rest_input, string)| (rest_input, Primitive::String(string)))
     }
 
     // /// Parse an unary term.
-    // fn parse_unary_prefix_term<'a, 's, E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>>>(input: Input<'a, 's>) -> IResult<Input<'a, 's>, Term<'a>, E> {
+    // fn parse_unary_prefix_term<'a, 's, E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>, Context>>(input: Input<'a, 's>) -> IResult<Input<'a, 's>, Term<'a>, E> {
     //     pair(lex_unary_prefix_operators, parse_term)(input).map(
     //         |(rest_input, (operation, term))| {
     //             (
@@ -3685,11 +3650,15 @@ pub mod new {
     // }
 
     /// Parse a binary infix operation of the form `term1 <op> term2`.
-    fn parse_binary_term<'a, 's, E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>>>(
+    fn parse_binary_term<
+        'a,
+        's,
+        E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>, Context>,
+    >(
         input: Input<'a, 's>,
     ) -> IResult<Input<'a, 's>, Term<'a>, E> {
         context(
-            "binary term",
+            Context::TermBinary,
             pair(
                 parse_arithmetic_product,
                 opt(tuple((wsoc0, alt((plus, minus)), wsoc0, parse_binary_term))),
@@ -3719,12 +3688,12 @@ pub mod new {
     fn parse_arithmetic_product<
         'a,
         's,
-        E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>>,
+        E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>, Context>,
     >(
         input: Input<'a, 's>,
     ) -> IResult<Input<'a, 's>, Term<'a>, E> {
         context(
-            "arithmetic product",
+            Context::ArithmeticProduct,
             pair(
                 parse_arithmetic_factor,
                 opt(tuple((
@@ -3757,12 +3726,12 @@ pub mod new {
     fn parse_arithmetic_factor<
         'a,
         's,
-        E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>>,
+        E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>, Context>,
     >(
         input: Input<'a, 's>,
     ) -> IResult<Input<'a, 's>, Term<'a>, E> {
         context(
-            "arithmetic factor",
+            Context::ArithmeticFactor,
             alt((
                 parse_tuple_term,
                 parse_aggregation_term,
@@ -3798,12 +3767,12 @@ pub mod new {
     fn parse_aggregation_term<
         'a,
         's,
-        E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>>,
+        E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>, Context>,
     >(
         input: Input<'a, 's>,
     ) -> IResult<Input<'a, 's>, Term<'a>, E> {
         context(
-            "aggregation term",
+            Context::TermAggregation,
             tuple((
                 recognize(pair(hash, lex_ident)),
                 open_paren,
@@ -3835,36 +3804,48 @@ pub mod new {
     }
 
     /// Parse a `_`
-    fn parse_blank<'a, 's, E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>>>(
+    fn parse_blank<'a, 's, E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>, Context>>(
         input: Input<'a, 's>,
     ) -> IResult<Input<'a, 's>, Term<'a>, E> {
-        context("blank", underscore)(input)
+        context(Context::Blank, underscore)(input)
             .map(|(rest_input, underscore)| (rest_input, Term::Blank(underscore)))
     }
 
     /// Parse a tuple term, either with a name (function symbol) or as a term (-list) with
     /// parenthesis.
-    fn parse_tuple_term<'a, 's, E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>>>(
+    fn parse_tuple_term<
+        'a,
+        's,
+        E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>, Context>,
+    >(
         input: Input<'a, 's>,
     ) -> IResult<Input<'a, 's>, Term<'a>, E> {
-        context("tuple term", parse_tuple)(input)
+        context(Context::TermTuple, parse_tuple)(input)
             .map(|(rest_input, named_tuple)| (rest_input, Term::Tuple(Box::new(named_tuple))))
     }
 
     /// Parse a map as a term.
-    fn parse_map_term<'a, 's, E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>>>(
+    fn parse_map_term<
+        'a,
+        's,
+        E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>, Context>,
+    >(
         input: Input<'a, 's>,
     ) -> IResult<Input<'a, 's>, Term<'a>, E> {
-        context("map term", parse_map)(input)
+        context(Context::TermMap, parse_map)(input)
             .map(|(rest_input, map)| (rest_input, Term::Map(Box::new(map))))
     }
 
     /// Parse a variable.
-    fn parse_variable<'a, 's, E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>>>(
+    fn parse_variable<
+        'a,
+        's,
+        E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>, Context>,
+    >(
         input: Input<'a, 's>,
     ) -> IResult<Input<'a, 's>, Term<'a>, E> {
         context(
-            "universal variable",
+            Context::UniversalVariable,
             recognize(pair(question_mark, lex_ident)),
         )(input)
         .map(|(rest_input, var)| {
@@ -3879,11 +3860,15 @@ pub mod new {
     }
 
     /// Parse an existential variable.
-    fn parse_existential<'a, 's, E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>>>(
+    fn parse_existential<
+        'a,
+        's,
+        E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>, Context>,
+    >(
         input: Input<'a, 's>,
     ) -> IResult<Input<'a, 's>, Term<'a>, E> {
         context(
-            "existential variable",
+            Context::ExistentialVariable,
             recognize(pair(exclamation_mark, lex_ident)),
         )(input)
         .map(|(rest_input, existential)| {
@@ -3899,11 +3884,15 @@ pub mod new {
 
     // Order of parser compinator is important, because of ordered choice and no backtracking
     /// Parse the operator for an infix atom.
-    fn parse_operation_token<'a, 's, E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>>>(
+    fn parse_operation_token<
+        'a,
+        's,
+        E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>, Context>,
+    >(
         input: Input<'a, 's>,
     ) -> IResult<Input<'a, 's>, Token<'a>, E> {
         context(
-            "operators",
+            Context::Operators,
             alt((less_equal, greater_equal, equal, unequal, less, greater)),
         )(input)
     }
@@ -3916,7 +3905,6 @@ pub mod new {
         };
 
         use nom::error::{convert_error, VerboseError};
-        use nom_supreme::error::ErrorTree;
 
         use super::*;
         use crate::io::{
@@ -3970,7 +3958,7 @@ pub mod new {
             };
             assert_eq!(
                 // parse_program::<VerboseError<_>>(input).unwrap().1,
-                parse_program::<GreedyError<_, ErrorKind>>(input).0,
+                parse_program::<ErrorTree<_>>(input).0,
                 Program {
                     span: input.input,
                     tl_doc_comment: None,
@@ -4037,7 +4025,7 @@ pub mod new {
             };
             assert_eq!(
                 // parse_program::<VerboseError<_>>(input).unwrap().1,
-                parse_program::<GreedyError<_, ErrorKind>>(input).0,
+                parse_program::<ErrorTree<_>>(input).0,
                 Program {
                     tl_doc_comment: None,
                     span: input.input,
@@ -4317,7 +4305,7 @@ pub mod new {
             };
             assert_eq!(
                 // parse_program::<VerboseError<_>>(input).unwrap().1,
-                parse_program::<GreedyError<_, ErrorKind>>(input).0,
+                parse_program::<ErrorTree<_>>(input).0,
                 Program {
                     span: input.input,
                     tl_doc_comment: None,
@@ -4439,7 +4427,7 @@ oldLime(?location,?species,?age) :- tree(?location,?species,?age,?heightInMeters
                 parser_state: errors,
             };
             // let ast = parse_program::<VerboseError<_>>(input);
-            let (ast, _) = parse_program::<GreedyError<_, ErrorKind>>(input);
+            let (ast, _) = parse_program::<ErrorTree<_>>(input);
             println!("{}", ast);
             assert_eq!(
                 {
@@ -4506,7 +4494,7 @@ oldLime(?location,?species,?age) :- tree(?location,?species,?age,?heightInMeters
                         parser_state,
                     };
                     // let result = parse_term::<VerboseError<_>>(input);
-                    let result = parse_term::<GreedyError<_, ErrorKind>>(input);
+                    let result = parse_term::<ErrorTree<_>>(input);
                     result.unwrap().1
                 },
                 Term::Primitive(Primitive::Number {
@@ -4529,7 +4517,7 @@ oldLime(?location,?species,?age) :- tree(?location,?species,?age,?heightInMeters
                         parser_state,
                     };
                     // let result = parse_term::<VerboseError<_>>(input);
-                    let result = parse_term::<GreedyError<_, ErrorKind>>(input);
+                    let result = parse_term::<ErrorTree<_>>(input);
                     result.unwrap().1
                 },
                 Term::Binary {
@@ -4566,7 +4554,7 @@ oldLime(?location,?species,?age) :- tree(?location,?species,?age,?heightInMeters
                         parser_state,
                     };
                     // let result = parse_term::<VerboseError<_>>(input);
-                    let result = parse_term::<GreedyError<_, ErrorKind>>(input);
+                    let result = parse_term::<ErrorTree<_>>(input);
                     result.unwrap().1
                 },
                 Term::Binary {
@@ -4603,7 +4591,7 @@ oldLime(?location,?species,?age) :- tree(?location,?species,?age,?heightInMeters
                         parser_state,
                     };
                     // let result = parse_term::<VerboseError<_>>(input);
-                    let result = parse_term::<GreedyError<_, ErrorKind>>(input);
+                    let result = parse_term::<ErrorTree<_>>(input);
                     result.unwrap().1
                 },
                 Term::Binary {
@@ -4640,7 +4628,7 @@ oldLime(?location,?species,?age) :- tree(?location,?species,?age,?heightInMeters
                         parser_state,
                     };
                     // let result = parse_term::<VerboseError<_>>(input);
-                    let result = parse_term::<GreedyError<_, ErrorKind>>(input);
+                    let result = parse_term::<ErrorTree<_>>(input);
                     result.unwrap().1
                 },
                 Term::Binary {
@@ -4677,7 +4665,7 @@ oldLime(?location,?species,?age) :- tree(?location,?species,?age,?heightInMeters
                         parser_state,
                     };
                     // let result = parse_term::<VerboseError<_>>(input);
-                    let result = parse_term::<GreedyError<_, ErrorKind>>(input);
+                    let result = parse_term::<ErrorTree<_>>(input);
                     result.unwrap().1
                 },
                 Term::Binary {
@@ -4728,7 +4716,7 @@ oldLime(?location,?species,?age) :- tree(?location,?species,?age,?heightInMeters
                         parser_state,
                     };
                     // let result = parse_term::<VerboseError<_>>(input);
-                    let result = parse_term::<GreedyError<_, ErrorKind>>(input);
+                    let result = parse_term::<ErrorTree<_>>(input);
                     result.unwrap().1
                 },
                 Term::Binary {
@@ -4779,7 +4767,7 @@ oldLime(?location,?species,?age) :- tree(?location,?species,?age,?heightInMeters
                         parser_state,
                     };
                     // let result = parse_term::<VerboseError<_>>(input);
-                    let result = parse_term::<GreedyError<_, ErrorKind>>(input);
+                    let result = parse_term::<ErrorTree<_>>(input);
                     // let result = parse_term::<VerboseError<_>>(Span::new("(15+3*2-(7+35)*8)/3"));
                     // match result {
                     //     Ok(ast) => {
@@ -4947,7 +4935,7 @@ oldLime(?location,?species,?age) :- tree(?location,?species,?age,?heightInMeters
                         parser_state,
                     };
                     // let result = parse_term::<VerboseError<_>>(input);
-                    let result = parse_term::<GreedyError<_, ErrorKind>>(input);
+                    let result = parse_term::<ErrorTree<_>>(input);
                     result.unwrap().1
                 },
                 Term::Binary {
@@ -5097,9 +5085,7 @@ oldLime(?location,?species,?age) :- tree(?location,?species,?age,?heightInMeters
                         parser_state,
                     };
                     // parse_exponent::<VerboseError<_>>(input)
-                    parse_exponent::<GreedyError<_, ErrorKind>>(input)
-                        .unwrap()
-                        .1
+                    parse_exponent::<ErrorTree<_>>(input).unwrap().1
                 },
                 Exponent {
                     e: T! {TokenKind::Exponent, 0,1,"e"},
@@ -5118,7 +5104,7 @@ oldLime(?location,?species,?age) :- tree(?location,?species,?age,?heightInMeters
                 input,
                 parser_state,
             };
-            let result = parse_program::<GreedyError<_, ErrorKind>>(input);
+            let result = parse_program::<ErrorTree<_>>(input);
             println!("{}\n\n{:#?}", result.0, result.1);
             // assert!(false);
         }
@@ -5132,8 +5118,8 @@ oldLime(?location,?species,?age) :- tree(?location,?species,?age,?heightInMeters
                 input,
                 parser_state,
             };
-            dbg!(wsoc0::<GreedyError<_, ErrorKind>>(input));
-            dbg!(wsoc1::<GreedyError<_, ErrorKind>>(input));
+            dbg!(wsoc0::<ErrorTree<_>>(input));
+            dbg!(wsoc1::<ErrorTree<_>>(input));
         }
 
         #[test]
@@ -5148,6 +5134,7 @@ oldLime(?location,?species,?age) :- tree(?location,?species,?age,?heightInMeters
             };
             let result = parse_program::<ErrorTree<Input<'_, '_>>>(input);
             dbg!(&result);
+            println!("{}", result.0);
         }
     }
 }
