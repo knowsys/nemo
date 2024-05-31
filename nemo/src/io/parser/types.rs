@@ -822,6 +822,12 @@ impl std::fmt::Display for Input<'_, '_> {
     }
 }
 
+impl<I, C> nom_supreme::context::ContextError<I, C> for Input<'_, '_> {
+    fn add_context(location: I, ctx: C, other: Self) -> Self {
+        todo!()
+    }
+}
+
 pub(crate) trait ToRange {
     fn to_range(&self) -> Range<usize>;
 }

@@ -2,39 +2,131 @@
 
 use std::{cell::RefCell, ops::Range};
 
+use super::parser::new::context;
 use nom::{
     branch::alt,
     bytes::complete::{is_not, tag, take, take_till},
     character::complete::{alpha1, alphanumeric1, digit1, line_ending, multispace1},
     combinator::{all_consuming, cut, map, opt, recognize},
-    error::{context, ContextError, ErrorKind, ParseError},
+    error::ParseError,
     multi::{many0, many1},
     sequence::{delimited, pair, tuple},
     IResult,
 };
-use nom_greedyerror::GreedyError;
 use nom_locate::LocatedSpan;
+use nom_supreme::{context::ContextError, error::GenericErrorTree};
 use tower_lsp::lsp_types::SymbolKind;
 
-#[derive(Debug)]
-pub(crate) enum NewParseError {
-    MissingWhitespace,
-    Rule,
-    Fact,
-    Directive,
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub(crate) enum Context {
+    Tag(&'static str),
+    Exponent,
+    Punctuations,
+    Operators,
+    Identifier,
+    Iri,
+    Number,
+    String,
     Comment,
-    SyntaxError(String),
-    MissingTlDocComment,
+    DocComment,
+    TlDocComment,
+    Comments,
+    Whitespace,
+    Illegal,
+    Program,
+    Fact,
+    Rule,
+    RuleHead,
+    RuleBody,
+    Directive,
+    DirectiveBase,
+    DirectivePrefix,
+    DirectiveImport,
+    DirectiveExport,
+    DirectiveOutput,
+    List,
+    HeadAtoms,
+    BodyAtoms,
+    PositiveAtom,
+    NegativeAtom,
+    InfixAtom,
+    Tuple,
+    NamedTuple,
+    Map,
+    Pair,
+    Term,
+    TermPrivimitive,
+    TermBinary,
+    TermAggregation,
+    TermTuple,
+    TermMap,
+    RdfLiteral,
+    Decimal,
+    Integer,
+    ArithmeticProduct,
+    ArithmeticFactor,
+    Blank,
+    UniversalVariable,
+    ExistentialVariable,
 }
-impl ParseError<Input<'_, '_>> for NewParseError {
-    fn from_error_kind(input: Input, kind: nom::error::ErrorKind) -> Self {
-        NewParseError::SyntaxError(kind.description().to_string())
+impl std::fmt::Display for Context {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Context::Tag(c) => write!(f, "{}", c),
+            Context::Exponent => write!(f, "exponent"),
+            Context::Punctuations => write!(f, "punctuations"),
+            Context::Operators => write!(f, "operators"),
+            Context::Identifier => write!(f, "identifier"),
+            Context::Iri => write!(f, "lex iri"),
+            Context::Number => write!(f, "lex number"),
+            Context::String => write!(f, "lex string"),
+            Context::Comment => write!(f, "lex comment"),
+            Context::DocComment => write!(f, "lex documentation comment"),
+            Context::TlDocComment => write!(f, "lex top level documentation comment"),
+            Context::Comments => write!(f, "comments"),
+            Context::Whitespace => write!(f, "lex whitespace"),
+            Context::Illegal => write!(f, "lex illegal character"),
+            Context::Program => write!(f, "program"),
+            Context::Fact => write!(f, "fact"),
+            Context::Rule => write!(f, "rule"),
+            Context::RuleHead => write!(f, "rule head"),
+            Context::RuleBody => write!(f, "rule body"),
+            Context::Directive => write!(f, "directive"),
+            Context::DirectiveBase => write!(f, "base directive"),
+            Context::DirectivePrefix => write!(f, "prefix directive"),
+            Context::DirectiveImport => write!(f, "import directive"),
+            Context::DirectiveExport => write!(f, "export directive"),
+            Context::DirectiveOutput => write!(f, "output directive"),
+            Context::List => write!(f, "list"),
+            Context::HeadAtoms => write!(f, "head atoms"),
+            Context::BodyAtoms => write!(f, "body atoms"),
+            Context::PositiveAtom => write!(f, "positive atom"),
+            Context::NegativeAtom => write!(f, "negative atom"),
+            Context::InfixAtom => write!(f, "infix atom"),
+            Context::Tuple => write!(f, "tuple"),
+            Context::NamedTuple => write!(f, "named tuple"),
+            Context::Map => write!(f, "map"),
+            Context::Pair => write!(f, "pair"),
+            Context::Term => write!(f, "term"),
+            Context::TermPrivimitive => write!(f, "primitive term"),
+            Context::TermBinary => write!(f, "binary term"),
+            Context::TermAggregation => write!(f, "aggreation term"),
+            Context::TermTuple => write!(f, "tuple term"),
+            Context::TermMap => write!(f, "map term"),
+            Context::RdfLiteral => write!(f, "rdf literal"),
+            Context::Decimal => write!(f, "decimal"),
+            Context::Integer => write!(f, "integer"),
+            Context::ArithmeticProduct => write!(f, "arithmetic product"),
+            Context::ArithmeticFactor => write!(f, "arithmetic factor"),
+            Context::Blank => write!(f, "blank"),
+            Context::UniversalVariable => write!(f, "universal variable"),
+            Context::ExistentialVariable => write!(f, "existential variable"),
+        }
     }
+}
 
-    fn append(_: Input, _: nom::error::ErrorKind, other: Self) -> Self {
-        other
-    }
-}
+pub(crate) type ErrorTree<I> =
+    GenericErrorTree<I, &'static str, Context, Box<dyn std::error::Error + Send + Sync + 'static>>;
 
 use super::parser::{
     ast::{AstNode, Position},
@@ -45,7 +137,7 @@ use super::parser::{
 pub struct Error {
     pub pos: Position,
     pub msg: String,
-    pub context: Vec<&'static str>,
+    pub context: Vec<Context>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -317,16 +409,16 @@ impl<'a> AstNode for Token<'a> {
 
 macro_rules! syntax {
     ($func_name: ident, $tag_str: literal, $token: expr) => {
-        pub(crate) fn $func_name<
-            'a,
-            's,
-            E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>>,
-        >(
+        pub(crate) fn $func_name<'a, 's, E>(
             input: Input<'a, 's>,
-        ) -> IResult<Input<'a, 's>, Token<'a>, E> {
-            map(context($tag_str, tag($tag_str)), |span: Input| {
-                Token::new($token, span.input)
-            })(input)
+        ) -> IResult<Input<'a, 's>, Token<'a>, E>
+        where
+            E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>, Context>,
+        {
+            map(
+                context(Context::Tag($tag_str), tag($tag_str)),
+                |span: Input| Token::new($token, span.input),
+            )(input)
         }
     };
 }
@@ -351,21 +443,21 @@ syntax!(at, "@", TokenKind::At);
 syntax!(exp_lower, "e", TokenKind::Exponent);
 syntax!(exp_upper, "E", TokenKind::Exponent);
 
-pub(crate) fn exp<'a, 's, E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>>>(
-    input: Input<'a, 's>,
-) -> IResult<Input<'a, 's>, Token<'a>, E> {
-    context("lex exponent", alt((exp_lower, exp_upper)))(input)
+pub(crate) fn exp<'a, 's, E>(input: Input<'a, 's>) -> IResult<Input<'a, 's>, Token<'a>, E>
+where
+    E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>, Context>,
+{
+    context(Context::Exponent, alt((exp_lower, exp_upper)))(input)
 }
 
-pub(crate) fn lex_punctuations<
-    'a,
-    's,
-    E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>>,
->(
+pub(crate) fn lex_punctuations<'a, 's, E>(
     input: Input<'a, 's>,
-) -> IResult<Input<'a, 's>, Token<'a>, E> {
+) -> IResult<Input<'a, 's>, Token<'a>, E>
+where
+    E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>, Context>,
+{
     context(
-        "lex punctuations",
+        Context::Punctuations,
         alt((
             arrow,
             open_paren,
@@ -399,11 +491,12 @@ syntax!(minus, "-", TokenKind::Minus);
 syntax!(star, "*", TokenKind::Star);
 syntax!(slash, "/", TokenKind::Slash);
 
-pub(crate) fn lex_operators<'a, 's, E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>>>(
-    input: Input<'a, 's>,
-) -> IResult<Input<'a, 's>, Token<'a>, E> {
+pub(crate) fn lex_operators<'a, 's, E>(input: Input<'a, 's>) -> IResult<Input<'a, 's>, Token<'a>, E>
+where
+    E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>, Context>,
+{
     context(
-        "lex operators",
+        Context::Operators,
         alt((
             less_equal,
             greater_equal,
@@ -425,11 +518,12 @@ pub(crate) fn lex_operators<'a, 's, E: ParseError<Input<'a, 's>> + ContextError<
 //     alt((plus, minus))(input)
 // }
 
-pub(crate) fn lex_ident<'a, 's, E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>>>(
-    input: Input<'a, 's>,
-) -> IResult<Input<'a, 's>, Token<'a>, E> {
+pub(crate) fn lex_ident<'a, 's, E>(input: Input<'a, 's>) -> IResult<Input<'a, 's>, Token<'a>, E>
+where
+    E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>, Context>,
+{
     let (rest_input, ident) = context(
-        "lex identifier",
+        Context::Identifier,
         recognize(pair(
             alpha1,
             many0(alt((alphanumeric1, tag("_"), tag("-")))),
@@ -446,97 +540,107 @@ pub(crate) fn lex_ident<'a, 's, E: ParseError<Input<'a, 's>> + ContextError<Inpu
     Ok((rest_input, token))
 }
 
-pub(crate) fn lex_iri<'a, 's, E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>>>(
-    input: Input<'a, 's>,
-) -> IResult<Input<'a, 's>, Token<'a>, E> {
+pub(crate) fn lex_iri<'a, 's, E>(input: Input<'a, 's>) -> IResult<Input<'a, 's>, Token<'a>, E>
+where
+    E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>, Context>,
+{
     context(
-        "lex iri",
+        Context::Iri,
         recognize(delimited(tag("<"), is_not("> \n"), cut(tag(">")))),
     )(input)
     .map(|(rest, result)| (rest, Token::new(TokenKind::Iri, result.input)))
 }
 
-pub(crate) fn lex_number<'a, 's, E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>>>(
-    input: Input<'a, 's>,
-) -> IResult<Input<'a, 's>, Token<'a>, E> {
-    context("lex number", digit1)(input)
+pub(crate) fn lex_number<'a, 's, E>(input: Input<'a, 's>) -> IResult<Input<'a, 's>, Token<'a>, E>
+where
+    E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>, Context>,
+{
+    context(Context::Number, digit1)(input)
         .map(|(rest_input, result)| (rest_input, Token::new(TokenKind::Number, result.input)))
 }
 
-pub(crate) fn lex_string<'a, 's, E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>>>(
-    input: Input<'a, 's>,
-) -> IResult<Input<'a, 's>, Token<'a>, E> {
+pub(crate) fn lex_string<'a, 's, E>(input: Input<'a, 's>) -> IResult<Input<'a, 's>, Token<'a>, E>
+where
+    E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>, Context>,
+{
     context(
-        "lex string",
+        Context::String,
         recognize(delimited(tag("\""), is_not("\""), cut(tag("\"")))),
     )(input)
     .map(|(rest, result)| (rest, Token::new(TokenKind::String, result.input)))
 }
 
-pub(crate) fn lex_comment<'a, 's, E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>>>(
-    input: Input<'a, 's>,
-) -> IResult<Input<'a, 's>, Token<'a>, E> {
+pub(crate) fn lex_comment<'a, 's, E>(input: Input<'a, 's>) -> IResult<Input<'a, 's>, Token<'a>, E>
+where
+    E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>, Context>,
+{
     context(
-        "comment",
+        Context::Comment,
         recognize(tuple((tag("%"), many0(is_not("\n")), line_ending))),
     )(input)
     .map(|(rest, result)| (rest, Token::new(TokenKind::Comment, result.input)))
 }
 
-pub(crate) fn lex_doc_comment<
-    'a,
-    's,
-    E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>>,
->(
+pub(crate) fn lex_doc_comment<'a, 's, E>(
     input: Input<'a, 's>,
-) -> IResult<Input<'a, 's>, Token<'a>, E> {
+) -> IResult<Input<'a, 's>, Token<'a>, E>
+where
+    E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>, Context>,
+{
     context(
-        "documentation comment",
+        Context::DocComment,
         recognize(many1(tuple((tag("%%"), many0(is_not("\n")), line_ending)))),
     )(input)
     .map(|(rest, result)| (rest, Token::new(TokenKind::DocComment, result.input)))
 }
 
-pub(crate) fn lex_toplevel_doc_comment<
-    'a,
-    's,
-    E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>>,
->(
+pub(crate) fn lex_toplevel_doc_comment<'a, 's, E>(
     input: Input<'a, 's>,
-) -> IResult<Input<'a, 's>, Token<'a>, E> {
+) -> IResult<Input<'a, 's>, Token<'a>, E>
+where
+    E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>, Context>,
+{
     context(
-        "top level documentation comment",
+        Context::TlDocComment,
         recognize(many1(tuple((tag("%!"), many0(is_not("\n")), line_ending)))),
     )(input)
     .map(|(rest, result)| (rest, Token::new(TokenKind::TlDocComment, result.input)))
 }
 
-pub(crate) fn lex_comments<'a, 's, E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>>>(
-    input: Input<'a, 's>,
-) -> IResult<Input<'a, 's>, Token<'a>, E> {
+pub(crate) fn lex_comments<'a, 's, E>(input: Input<'a, 's>) -> IResult<Input<'a, 's>, Token<'a>, E>
+where
+    E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>, Context>,
+{
     context(
-        "comments",
+        Context::Comments,
         alt((lex_toplevel_doc_comment, lex_doc_comment, lex_comment)),
     )(input)
 }
 
-pub(crate) fn lex_whitespace<'a, 's, E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>>>(
+pub(crate) fn lex_whitespace<'a, 's, E>(
     input: Input<'a, 's>,
-) -> IResult<Input<'a, 's>, Token<'a>, E> {
-    context("whitespace", multispace1)(input)
+) -> IResult<Input<'a, 's>, Token<'a>, E>
+where
+    E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>, Context>,
+{
+    context(Context::Whitespace, multispace1)(input)
         .map(|(rest, result)| (rest, Token::new(TokenKind::Whitespace, result.input)))
 }
 
-pub(crate) fn lex_illegal<'a, 's, E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>>>(
-    input: Input<'a, 's>,
-) -> IResult<Input<'a, 's>, Token<'a>, E> {
-    context("illegal character", take(1usize))(input)
+pub(crate) fn lex_illegal<'a, 's, E>(input: Input<'a, 's>) -> IResult<Input<'a, 's>, Token<'a>, E>
+where
+    E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>, Context>,
+{
+    context(Context::Illegal, take(1usize))(input)
         .map(|(rest, result)| (rest, Token::new(TokenKind::Illegal, result.input)))
 }
 
-pub(crate) fn lex_tokens<'a, 's, E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>>>(
+pub(crate) fn lex_tokens<'a, 's, E>(
     input: Input<'a, 's>,
-) -> IResult<Input<'a, 's>, Vec<Token<'a>>, E> {
+) -> IResult<Input<'a, 's>, Vec<Token<'a>>, E>
+where
+    E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>, Context>,
+{
     all_consuming(many0(alt((
         lex_iri,
         lex_operators,
@@ -554,9 +658,10 @@ pub(crate) fn lex_tokens<'a, 's, E: ParseError<Input<'a, 's>> + ContextError<Inp
     })
 }
 
-pub(crate) fn skip_to_dot<'a, 's, E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>>>(
-    input: Input<'a, 's>,
-) -> (Input<'a, 's>, Token<'a>) {
+pub(crate) fn skip_to_dot<'a, 's, E>(input: Input<'a, 's>) -> (Input<'a, 's>, Token<'a>)
+where
+    E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>, Context>,
+{
     let (rest_input, error_input) = recognize(pair(
         take_till::<_, Input<'_, '_>, nom::error::Error<_>>(|c| c == '.'),
         opt(tag(".")),
@@ -573,6 +678,8 @@ pub(crate) fn skip_to_dot<'a, 's, E: ParseError<Input<'a, 's>> + ContextError<In
 
 #[cfg(test)]
 mod tests {
+    use super::ErrorTree;
+
     use super::TokenKind::*;
     use super::*;
 
@@ -595,7 +702,7 @@ mod tests {
         };
         assert_eq!(
             // lex_tokens::<nom::error::Error<_>>(input).unwrap().1,
-            lex_tokens::<GreedyError<_, ErrorKind>>(input).unwrap().1,
+            lex_tokens::<ErrorTree<_>>(input).unwrap().1,
             vec![T!(Eof, 0, 1, "")]
         )
     }
@@ -611,7 +718,7 @@ mod tests {
         };
         assert_eq!(
             // lex_tokens::<nom::error::Error<_>>(input).unwrap().1,
-            lex_tokens::<GreedyError<_, ErrorKind>>(input).unwrap().1,
+            lex_tokens::<ErrorTree<_>>(input).unwrap().1,
             vec![T!(At, 0, 1, "@"), T!(Base, 1, 1, "base"), T!(Eof, 5, 1, ""),]
         )
     }
@@ -627,7 +734,7 @@ mod tests {
         };
         assert_eq!(
             // lex_tokens::<nom::error::Error<_>>(input).unwrap().1,
-            lex_tokens::<GreedyError<_, ErrorKind>>(input).unwrap().1,
+            lex_tokens::<ErrorTree<_>>(input).unwrap().1,
             vec![
                 T!(At, 0, 1, "@"),
                 T!(Prefix, 1, 1, "prefix"),
@@ -647,7 +754,7 @@ mod tests {
         };
         assert_eq!(
             // lex_tokens::<nom::error::Error<_>>(input).unwrap().1,
-            lex_tokens::<GreedyError<_, ErrorKind>>(input).unwrap().1,
+            lex_tokens::<ErrorTree<_>>(input).unwrap().1,
             vec![
                 T!(At, 0, 1, "@"),
                 T!(Output, 1, 1, "output"),
@@ -667,7 +774,7 @@ mod tests {
         };
         assert_eq!(
             // lex_tokens::<nom::error::Error<_>>(input).unwrap().1,
-            lex_tokens::<GreedyError<_, ErrorKind>>(input).unwrap().1,
+            lex_tokens::<ErrorTree<_>>(input).unwrap().1,
             vec![
                 T!(At, 0, 1, "@"),
                 T!(Import, 1, 1, "import"),
@@ -687,7 +794,7 @@ mod tests {
         };
         assert_eq!(
             // lex_tokens::<nom::error::Error<_>>(input).unwrap().1,
-            lex_tokens::<GreedyError<_, ErrorKind>>(input).unwrap().1,
+            lex_tokens::<ErrorTree<_>>(input).unwrap().1,
             vec![
                 T!(At, 0, 1, "@"),
                 T!(Export, 1, 1, "export"),
@@ -707,7 +814,7 @@ mod tests {
         };
         assert_eq!(
             // lex_tokens::<nom::error::Error<_>>(input).unwrap().1,
-            lex_tokens::<GreedyError<_, ErrorKind>>(input).unwrap().1,
+            lex_tokens::<ErrorTree<_>>(input).unwrap().1,
             vec![
                 T!(At, 0, 1, "@"),
                 T!(Ident, 1, 1, "baseA"),
@@ -744,7 +851,7 @@ mod tests {
         };
         assert_eq!(
             // lex_tokens::<nom::error::Error<_>>(input).unwrap().1,
-            lex_tokens::<GreedyError<_, ErrorKind>>(input).unwrap().1,
+            lex_tokens::<ErrorTree<_>>(input).unwrap().1,
             vec![
                 T!(Ident, 0, 1, "P"),
                 T!(OpenParen, 1, 1, "("),
@@ -782,7 +889,7 @@ mod tests {
         };
         assert_eq!(
             // lex_tokens::<nom::error::Error<_>>(input).unwrap().1,
-            lex_tokens::<GreedyError<_, ErrorKind>>(input).unwrap().1,
+            lex_tokens::<ErrorTree<_>>(input).unwrap().1,
             vec![
                 T!(Whitespace, 0, 1, "    "),
                 T!(Comment, 4, 1, "% Some Comment\n"),
@@ -804,7 +911,7 @@ mod tests {
         };
         assert_eq!(
             // lex_tokens::<nom::error::Error<_>>(input).unwrap().1,
-            lex_tokens::<GreedyError<_, ErrorKind>>(input).unwrap().1,
+            lex_tokens::<ErrorTree<_>>(input).unwrap().1,
             vec![
                 T!(Ident, 0, 1, "some_Ident"),
                 T!(OpenParen, 10, 1, "("),
@@ -829,7 +936,7 @@ mod tests {
         };
         assert_eq!(
             // lex_tokens::<nom::error::Error<_>>(input).unwrap().1,
-            lex_tokens::<GreedyError<_, ErrorKind>>(input).unwrap().1,
+            lex_tokens::<ErrorTree<_>>(input).unwrap().1,
             vec![
                 T!(Underscore, 0, 1, "_"),
                 T!(Ident, 1, 1, "someIdent"),
@@ -855,7 +962,7 @@ mod tests {
         };
         assert_eq!(
             // lex_tokens::<nom::error::Error<_>>(input).unwrap().1,
-            lex_tokens::<GreedyError<_, ErrorKind>>(input).unwrap().1,
+            lex_tokens::<ErrorTree<_>>(input).unwrap().1,
             vec![
                 T!(Iri, 0, 1, "<https://résumé.example.org/>"),
                 T!(Eof, 31, 1, ""),
@@ -874,7 +981,7 @@ mod tests {
         };
         assert_eq!(
             // lex_tokens::<nom::error::Error<_>>(input).unwrap().1,
-            lex_tokens::<GreedyError<_, ErrorKind>>(input).unwrap().1,
+            lex_tokens::<ErrorTree<_>>(input).unwrap().1,
             vec![
                 T!(Iri, 0, 1, "<http://r%C3%A9sum%C3%A9.example.org>"),
                 T!(Whitespace, 37, 1, "\n"),
@@ -896,7 +1003,7 @@ mod tests {
         };
         assert_eq!(
             // lex_tokens::<nom::error::Error<_>>(input).unwrap().1,
-            lex_tokens::<GreedyError<_, ErrorKind>>(input).unwrap().1,
+            lex_tokens::<ErrorTree<_>>(input).unwrap().1,
             vec![
                 T!(Ident, 0, 1, "A"),
                 T!(OpenParen, 1, 1, "("),
@@ -936,7 +1043,7 @@ mod tests {
         };
         assert_eq!(
             // lex_tokens::<nom::error::Error<_>>(input).unwrap().1,
-            lex_tokens::<GreedyError<_, ErrorKind>>(input).unwrap().1,
+            lex_tokens::<ErrorTree<_>>(input).unwrap().1,
             vec![
                 T!(Comment, 0, 1, "%d4 this should be a comment,\n"),
                 T!(
@@ -962,7 +1069,7 @@ mod tests {
         };
         assert_eq!(
             // lex_tokens::<nom::error::Error<_>>(input).unwrap().1,
-            lex_tokens::<GreedyError<_, ErrorKind>>(input).unwrap().1,
+            lex_tokens::<ErrorTree<_>>(input).unwrap().1,
             vec![
                 T!(Ident, 0, 1, "somePred"),
                 T!(OpenParen, 8, 1, "("),
@@ -988,7 +1095,7 @@ mod tests {
         };
         assert_eq!(
             // lex_tokens::<nom::error::Error<_>>(input).unwrap().1,
-            lex_tokens::<GreedyError<_, ErrorKind>>(input).unwrap().1,
+            lex_tokens::<ErrorTree<_>>(input).unwrap().1,
             vec![
                 T!(Whitespace, 0, 1, "   \t \n\n\t   \n"),
                 T!(Eof, 12, 4, ""),
@@ -1005,6 +1112,6 @@ mod tests {
             input,
             parser_state: errors,
         };
-        dbg!(super::skip_to_dot::<GreedyError<_, ErrorKind>>(input));
+        dbg!(super::skip_to_dot::<ErrorTree<_>>(input));
     }
 }
