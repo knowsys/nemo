@@ -79,24 +79,46 @@ impl Backend {
 
         let (_program, errors) = parse_program_str(text);
 
-        let diagnostics = errors
+        use std::collections::{BTreeMap, HashSet};
+        let mut error_map: BTreeMap<Position, HashSet<String>> = BTreeMap::new();
+        for error in &errors {
+            if let Some(set) = error_map.get_mut(&error.pos) {
+                set.insert(error.msg.clone());
+            } else {
+                let mut set = HashSet::new();
+                set.insert(error.msg.clone());
+                error_map.insert(error.pos, set);
+            };
+        }
+
+        let diagnostics = error_map
             .into_iter()
-            .map(|error| Diagnostic {
-                message: error.msg,
+            .map(|(pos, error_set)| Diagnostic {
+                message: /*error.msg*/ {
+                    format!("expected{}", {
+                        let mut string = String::new();
+                        for s in error_set {
+                            string.push_str(" '");
+                            string.push_str(s.as_str());
+                            string.push_str("',");
+                        }
+                        string
+                    })
+                },
                 range: Range::new(
                     line_col_to_position(
                         &line_index,
                         LineCol {
-                            line: error.pos.line - 1,
-                            col: error.pos.column - 1,
+                            line: pos.line - 1,
+                            col: pos.column - 1,
                         },
                     )
                     .unwrap(),
                     line_col_to_position(
                         &line_index,
                         LineCol {
-                            line: error.pos.line - 1,
-                            col: error.pos.column - 1 + 1,
+                            line: pos.line - 1,
+                            col: pos.column - 1 + 1,
                         },
                     )
                     .unwrap(),
