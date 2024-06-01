@@ -146,7 +146,8 @@ impl GeneratorProjectReorder {
 #[cfg(test)]
 mod test {
     use crate::{
-        datatypes::StorageValueT, tabular::operations::OperationTableGenerator,
+        datatypes::StorageValueT,
+        tabular::{operations::OperationTableGenerator, trie::Trie},
         util::test_util::test::trie_id32,
     };
 
@@ -499,6 +500,45 @@ mod test {
             vec![StorageValueT::Id32(8), StorageValueT::Id32(1)],
             vec![StorageValueT::Id32(9), StorageValueT::Id32(1)],
         ];
+
+        assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn project_across_data_types() {
+        let trie = Trie::from_rows(vec![
+            vec![StorageValueT::Id32(0), StorageValueT::Id32(1)],
+            vec![StorageValueT::Int64(0), StorageValueT::Int64(42)],
+            vec![StorageValueT::Int64(1), StorageValueT::Int64(42)],
+            vec![StorageValueT::Int64(2), StorageValueT::Int64(42)],
+            vec![StorageValueT::Int64(3), StorageValueT::Int64(42)],
+            vec![StorageValueT::Int64(4), StorageValueT::Int64(42)],
+            vec![StorageValueT::Int64(5), StorageValueT::Int64(42)],
+        ]);
+
+        let mut marker_generator = OperationTableGenerator::new();
+        marker_generator.add_marker("x");
+        marker_generator.add_marker("y");
+
+        let markers_trie = marker_generator.operation_table(["x", "y"].iter());
+        let markers_project_1 = marker_generator.operation_table(["x"].iter());
+
+        let project_1 = GeneratorProjectReorder::new(markers_project_1, markers_trie);
+
+        let expected = vec![
+            vec![StorageValueT::Id32(0)],
+            vec![StorageValueT::Int64(0)],
+            vec![StorageValueT::Int64(1)],
+            vec![StorageValueT::Int64(2)],
+            vec![StorageValueT::Int64(3)],
+            vec![StorageValueT::Int64(4)],
+            vec![StorageValueT::Int64(5)],
+        ];
+
+        let result: Vec<_> = project_1
+            .apply_operation(trie.partial_iterator())
+            .row_iterator()
+            .collect();
 
         assert_eq!(result, expected);
     }

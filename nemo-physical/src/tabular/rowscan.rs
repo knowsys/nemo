@@ -194,7 +194,7 @@ impl<'a, Scan: PartialTrieScan<'a>> StreamingIterator for RowScan<'a, Scan> {
                         self.current_row.row[layer] = value;
                     }
 
-                    for _ in self.current_row.row.len()..=current_layer {
+                    for _ in self.current_row.row.len()..current_layer {
                         self.trie_scan.up();
                     }
 
@@ -288,6 +288,35 @@ mod test {
 
         let row_scan = RowScan::new(trie_scan, 0);
         let result = row_scan.collect::<Vec<_>>();
+
+        assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn project_across_data_types() {
+        let trie = Trie::from_rows(vec![
+            vec![StorageValueT::Id32(0), StorageValueT::Id32(1)],
+            vec![StorageValueT::Int64(0), StorageValueT::Int64(42)],
+            vec![StorageValueT::Int64(1), StorageValueT::Int64(42)],
+            vec![StorageValueT::Int64(2), StorageValueT::Int64(42)],
+            vec![StorageValueT::Int64(3), StorageValueT::Int64(42)],
+            vec![StorageValueT::Int64(4), StorageValueT::Int64(42)],
+            vec![StorageValueT::Int64(5), StorageValueT::Int64(42)],
+        ]);
+
+        let project_1 = RowScan::new(trie.partial_iterator(), 1);
+
+        let expected = vec![
+            vec![StorageValueT::Id32(0)],
+            vec![StorageValueT::Int64(0)],
+            vec![StorageValueT::Int64(1)],
+            vec![StorageValueT::Int64(2)],
+            vec![StorageValueT::Int64(3)],
+            vec![StorageValueT::Int64(4)],
+            vec![StorageValueT::Int64(5)],
+        ];
+
+        let result: Vec<_> = project_1.collect();
 
         assert_eq!(result, expected);
     }
