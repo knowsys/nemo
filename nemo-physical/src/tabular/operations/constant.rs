@@ -95,6 +95,7 @@ impl<'a> TrieScanConstant<'a> {
 impl<'a> PartialTrieScan<'a> for TrieScanConstant<'a> {
     fn up(&mut self) {
         _ = self.position.take().expect("called up on first layer");
+        self.column.get_mut().reset(self.storage_type)
     }
 
     fn down(&mut self, storage_type: StorageTypeName) {
