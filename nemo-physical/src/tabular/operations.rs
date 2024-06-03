@@ -1,6 +1,7 @@
 //! This module defines operations over tries
 
 pub mod aggregate;
+pub(crate) mod constant;
 pub(crate) mod filter;
 pub(crate) mod function;
 pub(crate) mod join;

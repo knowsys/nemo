@@ -1,12 +1,12 @@
 //! Module defining the strategy for calculating all body matches for a rule application.
 
-use nemo_physical::management::execution_plan::ExecutionNodeRef;
+use nemo_physical::{datavalues::AnyDataValue, management::execution_plan::ExecutionNodeRef};
 
 use crate::{
     execution::{execution_engine::RuleInfo, rule_execution::VariableTranslation},
     model::{
         chase_model::{ChaseRule, Constructor, VariableAtom},
-        Constraint,
+        Constraint, PrimitiveTerm, Variable,
     },
     program_analysis::{analysis::RuleAnalysis, variable_order::VariableOrder},
     table_manager::{SubtableExecutionPlan, TableManager},
@@ -25,6 +25,7 @@ pub(crate) struct SeminaiveStrategy {
     positive_atoms: Vec<VariableAtom>,
     positive_constraints: Vec<Constraint>,
     positive_constructors: Vec<Constructor>,
+    constants: Vec<(Variable, AnyDataValue)>,
 
     negative_atoms: Vec<VariableAtom>,
     negative_constraints: Vec<Vec<Constraint>>,
@@ -33,9 +34,36 @@ pub(crate) struct SeminaiveStrategy {
 impl SeminaiveStrategy {
     /// Create new [SeminaiveStrategy] object.
     pub(crate) fn initialize(rule: &ChaseRule, _analysis: &RuleAnalysis) -> Self {
+        let mut positive_constraints = Vec::new();
+        let mut constants = Vec::new();
+
+        for constraint in rule.positive_constraints().clone() {
+            match &constraint {
+                // TODO: evaluate constant expressions
+                Constraint::Equals(t1, t2) => {
+                    if let Some(PrimitiveTerm::Variable(v)) = t2.as_primitive() {
+                        if let Some(PrimitiveTerm::GroundTerm(constant)) = t1.as_primitive() {
+                            constants.push((v, constant))
+                        } else {
+                            positive_constraints.push(constraint)
+                        }
+                    } else if let Some(PrimitiveTerm::Variable(v)) = t1.as_primitive() {
+                        if let Some(PrimitiveTerm::GroundTerm(constant)) = t2.as_primitive() {
+                            constants.push((v, constant))
+                        } else {
+                            positive_constraints.push(constraint)
+                        }
+                    } else {
+                        positive_constraints.push(constraint)
+                    }
+                }
+                _ => positive_constraints.push(constraint),
+            }
+        }
         Self {
             positive_atoms: rule.positive_body().clone(),
-            positive_constraints: rule.positive_constraints().clone(),
+            positive_constraints,
+            constants,
             negative_atoms: rule.negative_body().clone(),
             negative_constraints: rule.negative_constraints().clone(),
             positive_constructors: rule.positive_constructors().clone(),
@@ -62,6 +90,7 @@ impl BodyStrategy for SeminaiveStrategy {
             step_number,
             &self.positive_atoms,
             join_output_markers,
+            &self.constants,
         );
 
         let node_body_functions = node_functions(

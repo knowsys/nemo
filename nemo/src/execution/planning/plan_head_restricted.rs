@@ -179,6 +179,7 @@ impl HeadStrategy for RestrictedChaseStrategy {
             step,
             &self.head_join_atoms,
             markers_new_satisfied_matches,
+            &[],
         );
 
         let node_new_satisfied_matches = node_filter(

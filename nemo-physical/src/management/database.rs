@@ -25,7 +25,9 @@ use crate::{
     management::{bytesized::ByteSized, database::execution_series::ExecutionTreeNode},
     meta::timing::TimedCode,
     tabular::{
-        operations::{projectreorder::ProjectReordering, OperationGenerator},
+        operations::{
+            constant::TrieScanConstant, projectreorder::ProjectReordering, OperationGenerator,
+        },
         rowscan::RowScan,
         trie::Trie,
         triescan::TrieScanEnum,
@@ -317,6 +319,12 @@ impl DatabaseInstance {
                 [*computed_id]
                 .as_ref()
                 .expect("Referenced trie shold have been computed."),
+            ExecutionTreeLeaf::LoadConstant(data_value) => {
+                let storage_value =
+                    data_value.to_storage_value_t_dict(&mut self.dictionary.borrow_mut());
+
+                return Some(TrieScanEnum::Constant(TrieScanConstant::new(storage_value)));
+            }
         };
 
         if !trie.is_empty() {

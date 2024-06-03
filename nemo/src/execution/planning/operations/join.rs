@@ -1,19 +1,24 @@
 //! This module contains a helper function for computing the seminaive join
 
 use nemo_physical::{
+    datavalues::AnyDataValue,
     management::execution_plan::{ExecutionNodeRef, ExecutionPlan},
     tabular::operations::OperationTable,
 };
 
 use crate::{
     execution::rule_execution::VariableTranslation,
-    model::chase_model::{ChaseAtom, VariableAtom},
+    model::{
+        chase_model::{ChaseAtom, VariableAtom},
+        Variable,
+    },
     table_manager::TableManager,
 };
 
 use super::union::subplan_union;
 
 /// Compute the appropriate execution plan to perform a join with the seminaive evaluation strategy.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn node_join(
     plan: &mut ExecutionPlan,
     table_manager: &TableManager,
@@ -22,6 +27,7 @@ pub(crate) fn node_join(
     current_step_number: usize,
     input_atoms: &[VariableAtom],
     output_markers: OperationTable,
+    constants: &[(Variable, AnyDataValue)],
 ) -> ExecutionNodeRef {
     let mut node_result = plan.union_empty(output_markers.clone());
 
@@ -104,6 +110,11 @@ pub(crate) fn node_join(
             );
 
             seminaive_node.add_subnode(subnode);
+        }
+
+        for (var, constant) in constants {
+            let marker = variable_translation.operation_table([var.clone()].iter());
+            seminaive_node.add_subnode(plan.constant(marker, constant.clone()));
         }
 
         node_result.add_subnode(seminaive_node);

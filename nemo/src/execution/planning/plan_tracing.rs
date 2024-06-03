@@ -85,6 +85,7 @@ impl TracingStrategy {
             step_number,
             &self.positive_atoms,
             join_output_markers,
+            &[],
         );
 
         let node_filter = node_filter(

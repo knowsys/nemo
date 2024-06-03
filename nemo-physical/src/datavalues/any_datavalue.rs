@@ -456,9 +456,6 @@ impl AnyDataValue {
 
     /// Return the corresponding [StorageValueT] for this value.
     /// Returns `None` if this value is unknown to the dictionary.
-    ///
-    /// # Panics
-    /// Panics if the data value is of a type that is managed in the dictionary but cannot be found there.
     pub(crate) fn try_to_storage_value_t(&self, dictionary: &Dict) -> Option<StorageValueT> {
         Some(match self.value_domain() {
             ValueDomain::Tuple

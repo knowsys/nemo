@@ -5,6 +5,7 @@
 use std::fmt::Debug;
 
 use crate::{
+    datavalues::AnyDataValue,
     management::execution_plan::{ColumnOrder, ExecutionResult},
     tabular::operations::{
         projectreorder::{GeneratorProjectReorder, ProjectReordering},
@@ -24,6 +25,8 @@ pub(crate) enum ExecutionTreeLeaf {
     LoadTable(LoadedTableId),
     /// Table was computed during the execution of the execution plan
     FetchComputedTable(ComputedTableId),
+    /// Virtual table, created to hold a singular constant
+    LoadConstant(AnyDataValue),
 }
 
 /// Possible operation in an [ExecutionTree]
@@ -99,6 +102,9 @@ impl ExecutionTree {
                 ExecutionTreeLeaf::FetchComputedTable(_) => {
                     ascii_tree::Tree::Leaf(vec![format!("New Table")])
                 }
+                ExecutionTreeLeaf::LoadConstant(c) => {
+                    ascii_tree::Tree::Leaf(vec![format!("Load constant ({:?})", c)])
+                }
             },
             ExecutionTreeOperation::Node {
                 generator,
@@ -124,6 +130,9 @@ impl ExecutionTree {
                     }
                     ExecutionTreeLeaf::FetchComputedTable(_) => {
                         ascii_tree::Tree::Leaf(vec![format!("New Table")])
+                    }
+                    ExecutionTreeLeaf::LoadConstant(c) => {
+                        ascii_tree::Tree::Leaf(vec![format!("Load constant ({:?})", c)])
                     }
                 };
 

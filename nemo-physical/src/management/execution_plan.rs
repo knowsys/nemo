@@ -9,6 +9,7 @@ use std::{
 };
 
 use crate::{
+    datavalues::AnyDataValue,
     management::database::execution_series::{
         ExecutionTreeLeaf, ExecutionTreeNode, ExecutionTreeOperation,
     },
@@ -122,7 +123,7 @@ impl ExecutionNodeRef {
         let node_operation = &node_rc.borrow().operation;
 
         match node_operation {
-            ExecutionOperation::FetchTable(_, _) => vec![],
+            ExecutionOperation::FetchTable(_, _) | ExecutionOperation::Constant(_) => vec![],
             ExecutionOperation::Join(subnodes) => subnodes.clone(),
             ExecutionOperation::Union(subnodes) => subnodes.clone(),
             ExecutionOperation::Subtract(subnode_main, subnodes_subtract) => {
@@ -157,6 +158,8 @@ pub(crate) struct ExecutionNode {
 pub(crate) enum ExecutionOperation {
     /// Fetch a table that is already present in the database instance
     FetchTable(PermanentTableId, ColumnOrder),
+    /// Load a virtual constant table, containing a single entry
+    Constant(AnyDataValue),
     /// Join the tables represented by the subnodes
     Join(Vec<ExecutionNodeRef>),
     /// Union of the tables represented by the subnodes
@@ -244,6 +247,13 @@ impl ExecutionPlan {
     ) -> ExecutionNodeRef {
         let new_operation = ExecutionOperation::FetchTable(id, ColumnOrder::default());
         self.push_and_return_reference(new_operation, marked_columns)
+    }
+
+    /// Return an [ExecutionNodeRef] for a virtual table consisting of a single constant
+    pub fn constant(&mut self, marker: OperationTable, value: AnyDataValue) -> ExecutionNodeRef {
+        assert_eq!(marker.len(), 1);
+        let new_operation = ExecutionOperation::Constant(value);
+        self.push_and_return_reference(new_operation, marker)
     }
 
     /// Return an [ExecutionNodeRef] for fetching a table from the [DatabaseInstance][super::database::DatabaseInstance]
@@ -804,6 +814,9 @@ impl ExecutionPlan {
                     subnodes: vec![subtree],
                 })
             }
+            ExecutionOperation::Constant(value) => ExecutionTreeNode::Operation(
+                ExecutionTreeOperation::Leaf(ExecutionTreeLeaf::LoadConstant(value.clone())),
+            ),
         }
     }
 

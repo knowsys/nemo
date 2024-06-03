@@ -24,7 +24,7 @@ pub(crate) enum StorageTypeName {
 
 /// A list of [StorageTypeName],
 /// in the order they appear in the enum.
-pub(crate) const STORAFE_TYPES: &[StorageTypeName] = &[
+pub(crate) const STORAGE_TYPES: &[StorageTypeName] = &[
     StorageTypeName::Id32,
     StorageTypeName::Id64,
     StorageTypeName::Int64,
