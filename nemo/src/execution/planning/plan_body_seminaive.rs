@@ -38,25 +38,22 @@ impl SeminaiveStrategy {
         let mut constants = Vec::new();
 
         for constraint in &positive_constraints {
-            match &constraint {
-                // TODO: evaluate constant expressions
+            // TODO: evaluate constant expressions
 
-                // HACK: instead of separating computed variables and joined variables
-                // we just perform both constant join and filter in both cases.
-                // The join against a not-yet-computed variable will just do nothing,
-                // so will the filter of the already joined variable.
-                Constraint::Equals(t1, t2) => {
-                    if let Some(PrimitiveTerm::Variable(v)) = t2.as_primitive() {
-                        if let Some(PrimitiveTerm::GroundTerm(constant)) = t1.as_primitive() {
-                            constants.push((v, constant))
-                        }
-                    } else if let Some(PrimitiveTerm::Variable(v)) = t1.as_primitive() {
-                        if let Some(PrimitiveTerm::GroundTerm(constant)) = t2.as_primitive() {
-                            constants.push((v, constant))
-                        }
+            // HACK: instead of separating computed variables and joined variables
+            // we just perform both constant join and filter in both cases.
+            // The join against a not-yet-computed variable will just do nothing,
+            // so will the filter against a already joined variable.
+            if let Constraint::Equals(t1, t2) = &constraint {
+                if let Some(PrimitiveTerm::Variable(v)) = t2.as_primitive() {
+                    if let Some(PrimitiveTerm::GroundTerm(constant)) = t1.as_primitive() {
+                        constants.push((v, constant))
+                    }
+                } else if let Some(PrimitiveTerm::Variable(v)) = t1.as_primitive() {
+                    if let Some(PrimitiveTerm::GroundTerm(constant)) = t2.as_primitive() {
+                        constants.push((v, constant))
                     }
                 }
-                _ => {}
             }
         }
 
