@@ -34,32 +34,32 @@ pub(crate) struct SeminaiveStrategy {
 impl SeminaiveStrategy {
     /// Create new [SeminaiveStrategy] object.
     pub(crate) fn initialize(rule: &ChaseRule, _analysis: &RuleAnalysis) -> Self {
-        let mut positive_constraints = Vec::new();
+        let positive_constraints = rule.positive_constraints().clone();
         let mut constants = Vec::new();
 
-        for constraint in rule.positive_constraints().clone() {
+        for constraint in &positive_constraints {
             match &constraint {
                 // TODO: evaluate constant expressions
+
+                // HACK: instead of separating computed variables and joined variables
+                // we just perform both constant join and filter in both cases.
+                // The join against a not-yet-computed variable will just do nothing,
+                // so will the filter of the already joined variable.
                 Constraint::Equals(t1, t2) => {
                     if let Some(PrimitiveTerm::Variable(v)) = t2.as_primitive() {
                         if let Some(PrimitiveTerm::GroundTerm(constant)) = t1.as_primitive() {
                             constants.push((v, constant))
-                        } else {
-                            positive_constraints.push(constraint)
                         }
                     } else if let Some(PrimitiveTerm::Variable(v)) = t1.as_primitive() {
                         if let Some(PrimitiveTerm::GroundTerm(constant)) = t2.as_primitive() {
                             constants.push((v, constant))
-                        } else {
-                            positive_constraints.push(constraint)
                         }
-                    } else {
-                        positive_constraints.push(constraint)
                     }
                 }
-                _ => positive_constraints.push(constraint),
+                _ => {}
             }
         }
+
         Self {
             positive_atoms: rule.positive_body().clone(),
             positive_constraints,
