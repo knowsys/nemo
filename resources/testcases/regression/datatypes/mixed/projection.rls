@@ -1,0 +1,14 @@
+%%% Test related to 
+%%% https://github.com/knowsys/nemo/issues/477
+%%% 
+%%% Previously, some values were lost during computation.
+
+table(str, "something").
+table(0, 42).
+table(1, 42).
+table(2, 42).
+table(3, 42).
+
+result(?x) :- table(?x, _).
+
+@export result :- csv {}.

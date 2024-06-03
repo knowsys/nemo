@@ -1,0 +1,16 @@
+%%% Test related to 
+%%% https://github.com/knowsys/nemo/issues/483
+%%% 
+%%% Previously, some values were lost during computation.
+
+rep(2, 2) .
+rep(-10, "a") .
+rep(-2, -2) .
+
+P(-2) .
+P(1) .
+P(3) .
+
+P(?i) :- rep(?i, _), P(?k), P(?l), ?i >= ?k, ?i <= ?l, ?l - ?k < 3 .
+
+@export P :- csv {} .
