@@ -48,7 +48,7 @@ impl VLogTranslation {
             result += &Self::write_variable(variable);
 
             if index < atom.terms().len() - 1 {
-                result += ", ";
+                result += ",";
             }
         }
 
@@ -66,7 +66,7 @@ impl VLogTranslation {
             result += &Self::write_primitive(term);
 
             if index < atom.terms().len() - 1 {
-                result += ", ";
+                result += ",";
             }
         }
 
@@ -83,7 +83,7 @@ impl VLogTranslation {
             result += &Self::write_primitive_atom(head_atom);
 
             if atom_index < rule.head().len() - 1 {
-                result += ", ";
+                result += ",";
             }
         }
 
@@ -93,11 +93,9 @@ impl VLogTranslation {
             result += &Self::write_variable_atom(body_atom);
 
             if atom_index < rule.positive_body().len() - 1 {
-                result += ", ";
+                result += ",";
             }
         }
-
-        result += " .";
 
         result
     }

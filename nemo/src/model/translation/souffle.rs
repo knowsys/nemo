@@ -1,5 +1,6 @@
 use std::{
     collections::{HashMap, HashSet},
+    env::var,
     fmt::format,
 };
 
@@ -19,28 +20,36 @@ use super::{util::number_to_letters, RuleTranslation, TranslationResult};
 #[derive(Debug, Copy, Clone)]
 pub(crate) struct SouffleTranslation {}
 
-struct TermPosition {
+#[derive(Debug, Clone)]
+struct SkolemPredicate {
+    pub predicate: Identifier,
     pub rule: usize,
     pub atom: usize,
     pub term: usize,
 }
 
-impl TermPosition {
-    pub fn new(rule: usize, atom: usize, term: usize) -> Self {
-        Self { rule, atom, term }
+impl SkolemPredicate {
+    pub fn new(predicate: Identifier, rule: usize, atom: usize, term: usize) -> Self {
+        Self {
+            predicate,
+            rule,
+            atom,
+            term,
+        }
     }
 }
 
+#[derive(Debug, Clone)]
 struct SkolemTerm {
-    pub predicate: Identifier,
-    pub position: TermPosition,
-    pub frontier: Vec<Variable>,
+    pub predicate: SkolemPredicate,
+    pub frontier: Vec<RewrittenTerm>,
 }
 
+#[derive(Debug, Clone)]
 enum RewrittenTerm {
     Primitive(PrimitiveTerm),
     Skolem(SkolemTerm),
-    Base(Identifier, PrimitiveTerm),
+    Base(PrimitiveTerm),
 }
 
 struct RewrittenAtom {
@@ -49,20 +58,65 @@ struct RewrittenAtom {
 }
 
 impl SouffleTranslation {
-    fn existential_positions(program: &ChaseProgram) -> HashMap<Identifier, Vec<TermPosition>> {
-        let mut result = HashMap::new();
-
-        for (rule_index, rule) in program.rules().iter().enumerate() {
-            for (atom_index, atom) in rule.head().iter().enumerate() {
-                for (term_index, term) in atom.terms().iter().enumerate() {
-                    if let PrimitiveTerm::Variable(Variable::Existential(_variable)) = term {
-                        let position_list =
-                            result.entry(atom.predicate().clone()).or_insert(Vec::new());
-                        position_list.push(TermPosition::new(rule_index, atom_index, term_index));
-                    }
+    fn find_variable(atoms: &[VariableAtom], variable: &Variable) -> Option<(Identifier, usize)> {
+        for atom in atoms {
+            for (variable_index, atom_variable) in atom.terms().iter().enumerate() {
+                if variable == atom_variable {
+                    return Some((atom.predicate(), variable_index));
                 }
             }
         }
+
+        None
+    }
+
+    fn find_variable_primitive(
+        atoms: &[PrimitiveAtom],
+        variable: &Variable,
+    ) -> Option<(Identifier, usize)> {
+        for atom in atoms {
+            for (variable_index, atom_variable) in atom.terms().iter().enumerate() {
+                if PrimitiveTerm::Variable(variable.clone()) == *atom_variable {
+                    return Some((atom.predicate(), variable_index));
+                }
+            }
+        }
+
+        None
+    }
+
+    fn existential_positions(program: &ChaseProgram) -> HashSet<(Identifier, usize)> {
+        let mut result = HashSet::new();
+        for rule in program.rules() {
+            for atom in rule.head() {
+                for (term_index, term) in atom.terms().iter().enumerate() {
+                    // if let PrimitiveTerm::Variable(Variable::Existential(_variable)) = term {
+                    result.insert((atom.predicate(), term_index));
+                    // }
+                }
+            }
+        }
+
+        // let mut previous_size = result.len() + 1;
+
+        // while result.len() != previous_size {
+        //     previous_size = result.len();
+        //     for rule in program.rules() {
+        //         for atom in rule.head() {
+        //             for (term_index, term) in atom.terms().iter().enumerate() {
+        //                 if let PrimitiveTerm::Variable(variable) = term {
+        //                     if let Some(body_position) =
+        //                         Self::find_variable(&rule.positive_body(), variable)
+        //                     {
+        //                         if result.contains(&body_position) {
+        //                             result.insert((atom.predicate().clone(), term_index));
+        //                         }
+        //                     }
+        //                 }
+        //             }
+        //         }
+        //     }
+        // }
 
         result
     }
@@ -76,35 +130,30 @@ impl SouffleTranslation {
         format!("{predicate}_{rule_index}_{atom_index}_{term_index}")
     }
 
-    fn symbol_list(elements: usize) -> String {
+    fn argument_declaration(
+        predicate: &Identifier,
+        arity: usize,
+        existential_positions: &HashSet<(Identifier, usize)>,
+    ) -> String {
         let mut result = String::new();
 
-        for argument_index in 0..elements {
+        for argument_index in 0..arity {
             result += &number_to_letters(argument_index);
-            result += ": symbol";
 
-            if argument_index < elements - 1 {
+            if existential_positions.contains(&(predicate.clone(), argument_index)) {
+                result += ": Skolem";
+            } else {
+                result += ": symbol";
+            }
+
+            // result += ": Existential";
+
+            if argument_index < arity - 1 {
                 result += ", ";
             }
         }
 
         result
-    }
-
-    fn is_existential_position(
-        positions: &HashMap<Identifier, Vec<TermPosition>>,
-        predicate: &Identifier,
-        term_position: usize,
-    ) -> bool {
-        if let Some(existential_positions) = positions.get(predicate) {
-            for position in existential_positions {
-                if position.term == term_position {
-                    return true;
-                }
-            }
-        }
-
-        false
     }
 
     fn write_variable(variable: &Variable) -> String {
@@ -138,14 +187,14 @@ impl SouffleTranslation {
         let mut result = String::from("$");
 
         result += &Self::skolem_function_name(
-            &term.predicate.name(),
-            term.position.rule,
-            term.position.atom,
-            term.position.term,
+            &term.predicate.predicate.name(),
+            term.predicate.rule,
+            term.predicate.atom,
+            term.predicate.term,
         );
         result += "(";
         for (index, frontier) in term.frontier.iter().enumerate() {
-            result += &Self::write_variable(frontier);
+            result += &Self::write_rewritten(frontier);
 
             if index < term.frontier.len() - 1 {
                 result += ", ";
@@ -157,8 +206,9 @@ impl SouffleTranslation {
         result
     }
 
-    fn write_skolem_baseterm(predicate: &Identifier, term: &PrimitiveTerm) -> String {
-        let mut result = format!("${predicate}_base(");
+    fn write_skolem_baseterm(term: &PrimitiveTerm) -> String {
+        let mut result = format!("$SkolemBase(");
+        // let mut result = String::from("");
         result += &Self::write_primitive(term);
         result += ")";
 
@@ -169,7 +219,7 @@ impl SouffleTranslation {
         match term {
             RewrittenTerm::Primitive(term) => Self::write_primitive(term),
             RewrittenTerm::Skolem(term) => Self::write_skolemterm(term),
-            RewrittenTerm::Base(predicate, term) => Self::write_skolem_baseterm(predicate, term),
+            RewrittenTerm::Base(term) => Self::write_skolem_baseterm(term),
         }
     }
 
@@ -215,10 +265,14 @@ impl SouffleTranslation {
 }
 
 impl SouffleTranslation {
-    fn statement_declare(predicate: &str, arity: usize) -> String {
+    fn statement_declare(
+        predicate: &Identifier,
+        arity: usize,
+        existential_positions: &HashSet<(Identifier, usize)>,
+    ) -> String {
         let mut result = format!(".decl {predicate}(");
 
-        result += &Self::symbol_list(arity);
+        result += &Self::argument_declaration(predicate, arity, existential_positions);
 
         result += ")";
         result
@@ -235,18 +289,23 @@ impl SouffleTranslation {
         result
     }
 
-    fn statement_type(predicate: &str, arity: usize, positions: &[TermPosition]) -> String {
-        let mut result = format!(".type Skolem_{predicate} = ");
+    fn statement_type(
+        predicate: &Identifier,
+        position_predicate: &Identifier,
+        num_frontier: usize,
+        rule_index: usize,
+        atom_index: usize,
+        term_index: usize,
+        existential_positions: &HashSet<(Identifier, usize)>,
+    ) -> String {
+        let mut result =
+            Self::skolem_function_name(&predicate.name(), rule_index, atom_index, term_index);
 
-        for position in positions {
-            result +=
-                &Self::skolem_function_name(predicate, position.rule, position.atom, position.term);
-            result += " { ";
-            result += &Self::symbol_list(arity);
-            result += " } | ";
-        }
+        result += " { ";
+        result +=
+            &Self::argument_declaration(position_predicate, num_frontier, existential_positions);
+        result += " }";
 
-        result += &format!(" {predicate}_base {{ base: symbol }}");
         result
     }
 
@@ -254,15 +313,11 @@ impl SouffleTranslation {
         rule_index: usize,
         rule: &ChaseRule,
         analysis: &RuleAnalysis,
-        existential_positions: &HashMap<Identifier, Vec<TermPosition>>,
+        existential_positions: &HashSet<(Identifier, usize)>,
     ) -> String {
         let mut result = String::from("");
 
-        let frontier = analysis
-            .head_variables
-            .intersection(&analysis.positive_body_variables)
-            .cloned()
-            .collect::<Vec<_>>();
+        let frontier = analysis.frontier.clone();
 
         let mut variable_count = HashMap::<Variable, usize>::new();
         for body_atom in rule.positive_body() {
@@ -285,6 +340,25 @@ impl SouffleTranslation {
             used_variables.insert(variable.clone());
         }
 
+        let frontier = frontier
+            .into_iter()
+            .map(|variable| {
+                if let Some(body_position) = Self::find_variable(&rule.positive_body(), &variable) {
+                    if let Some(head_position) =
+                        Self::find_variable_primitive(&rule.head(), &variable)
+                    {
+                        if !existential_positions.contains(&body_position)
+                            && existential_positions.contains(&head_position)
+                        {
+                            return RewrittenTerm::Base(PrimitiveTerm::Variable(variable));
+                        }
+                    }
+                }
+
+                RewrittenTerm::Primitive(PrimitiveTerm::Variable(variable))
+            })
+            .collect::<Vec<_>>();
+
         for (atom_index, head_atom) in rule.head().iter().enumerate() {
             let predicate = head_atom.predicate().clone();
             let rewritten_terms = head_atom
@@ -293,18 +367,33 @@ impl SouffleTranslation {
                 .enumerate()
                 .map(|(index, term)| {
                     if let PrimitiveTerm::Variable(Variable::Existential(_)) = term {
-                        let position = TermPosition::new(rule_index, atom_index, index);
                         RewrittenTerm::Skolem(SkolemTerm {
-                            predicate: predicate.clone(),
-                            position,
+                            predicate: SkolemPredicate::new(
+                                predicate.clone(),
+                                rule_index,
+                                atom_index,
+                                index,
+                            ),
                             frontier: frontier.clone(),
                         })
-                    } else if Self::is_existential_position(
-                        existential_positions,
-                        &predicate,
-                        index,
-                    ) {
-                        RewrittenTerm::Base(predicate.clone(), term.clone())
+                    } else if existential_positions.contains(&(predicate.clone(), index)) {
+                        if let PrimitiveTerm::Variable(variable) = term {
+                            if let Some(body_position) =
+                                Self::find_variable(&rule.positive_body(), variable)
+                            {
+                                if let Some(head_position) =
+                                    Self::find_variable_primitive(&rule.head(), variable)
+                                {
+                                    if !existential_positions.contains(&body_position)
+                                        && existential_positions.contains(&head_position)
+                                    {
+                                        return RewrittenTerm::Base(term.clone());
+                                    }
+                                }
+                            }
+                        }
+
+                        RewrittenTerm::Primitive(term.clone())
                     } else {
                         RewrittenTerm::Primitive(term.clone())
                     }
@@ -337,7 +426,9 @@ impl SouffleTranslation {
     }
 
     fn statement_output(predicate: &str) -> String {
-        format!(".output {predicate}(IO=file, filename=\"results/{predicate}.csv, delimiter=\",\")")
+        format!(
+            ".output {predicate}(IO=file, filename=\"results/{predicate}.csv\", delimiter=\",\")"
+        )
     }
 }
 
@@ -345,6 +436,7 @@ impl SouffleTranslation {
     fn declare_statements(
         _program: &ChaseProgram,
         analysis: &ProgramAnalysis,
+        existential_positions: &HashSet<(Identifier, usize)>,
         result_rules: &mut TranslationResult,
     ) {
         for (predicate, arity) in &analysis.all_predicates {
@@ -355,7 +447,11 @@ impl SouffleTranslation {
                 continue;
             }
 
-            result_rules.push_statement(Self::statement_declare(&predicate.name(), *arity));
+            result_rules.push_statement(Self::statement_declare(
+                predicate,
+                *arity,
+                existential_positions,
+            ));
         }
     }
 
@@ -385,24 +481,76 @@ impl SouffleTranslation {
     }
 
     fn type_statements(
-        _program: &ChaseProgram,
+        program: &ChaseProgram,
         analysis: &ProgramAnalysis,
-        existential_positions: &HashMap<Identifier, Vec<TermPosition>>,
+        existential_positions: &HashSet<(Identifier, usize)>,
         result_rules: &mut TranslationResult,
     ) {
-        for (predicate, positions) in existential_positions {
-            let arity = *analysis
-                .all_predicates
-                .get(predicate)
-                .expect("Prediate must be known");
-            result_rules.push_statement(Self::statement_type(&predicate.name(), arity, positions))
+        let mut skolem_statement = String::from(".type Skolem");
+        let mut append = false;
+        let mut existential = false;
+
+        for (rule_index, (rule, analysis)) in program
+            .rules()
+            .iter()
+            .zip(analysis.rule_analysis.iter())
+            .enumerate()
+        {
+            if analysis.is_existential {
+                existential = true;
+            }
+
+            let frontier = analysis.frontier.clone();
+
+            let dummy_identifier = Identifier::new(String::from(""));
+            let mut frontier_existential = HashSet::new();
+            for (frontier_index, variable) in frontier.iter().enumerate() {
+                if let Some(frontier_position) =
+                    Self::find_variable_primitive(&rule.head(), variable)
+                {
+                    if existential_positions.contains(&frontier_position) {
+                        frontier_existential.insert((dummy_identifier.clone(), frontier_index));
+                    }
+                }
+            }
+
+            for (head_index, head_atom) in rule.head().iter().enumerate() {
+                for (term_index, term) in head_atom.terms().iter().enumerate() {
+                    if let PrimitiveTerm::Variable(Variable::Existential(_)) = term {
+                        skolem_statement += "\n";
+
+                        if append {
+                            skolem_statement += "   | ";
+                        } else {
+                            skolem_statement += "   = ";
+                            append = true;
+                        }
+
+                        skolem_statement += &Self::statement_type(
+                            &head_atom.predicate(),
+                            &dummy_identifier,
+                            frontier.len(),
+                            rule_index,
+                            head_index,
+                            term_index,
+                            &frontier_existential,
+                        );
+                    }
+                }
+            }
+        }
+
+        skolem_statement += "\n   | SkolemBase { base: symbol }";
+
+        if existential {
+            result_rules.push_statement(skolem_statement);
         }
     }
 
     fn rule_statements(
         program: &ChaseProgram,
         analysis: &ProgramAnalysis,
-        existential_positions: &HashMap<Identifier, Vec<TermPosition>>,
+        existential_positions: &HashSet<(Identifier, usize)>,
         result_rules: &mut TranslationResult,
     ) {
         for (rule_index, (rule, analysis)) in program
@@ -442,7 +590,7 @@ impl RuleTranslation for SouffleTranslation {
 
         Self::type_statements(program, analysis, &existential_positions, &mut result_rules);
         result_rules.empty_line();
-        Self::declare_statements(program, analysis, &mut result_rules);
+        Self::declare_statements(program, analysis, &existential_positions, &mut result_rules);
         result_rules.empty_line();
         Self::import_statements(program, analysis, &mut result_rules)?;
         result_rules.empty_line();

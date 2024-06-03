@@ -52,6 +52,9 @@ pub struct RuleAnalysis {
 
     /// Variable orders that are worth considering.
     pub promising_variable_orders: Vec<VariableOrder>,
+
+    /// Frontier variables
+    pub frontier: Vec<Variable>,
 }
 
 /// Errors than can occur during rule analysis
@@ -224,6 +227,10 @@ fn analyze_rule(
         existential_aux_rule,
         existential_aux_order,
         promising_variable_orders,
+        frontier: get_variables(rule.positive_body())
+            .intersection(&get_variables(rule.head()))
+            .cloned()
+            .collect::<Vec<_>>(),
     }
 }
 

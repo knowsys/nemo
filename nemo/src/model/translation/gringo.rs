@@ -36,7 +36,6 @@ struct SkolemTerm {
 enum RewrittenTerm {
     Primitive(PrimitiveTerm),
     Skolem(SkolemTerm),
-    Base(Identifier, PrimitiveTerm),
 }
 
 struct RewrittenAtom {
@@ -119,11 +118,17 @@ impl GringoTranslation {
         let mut result = String::from("");
 
         result += &Self::skolem_function_name(
-            &term.predicate.name(),
+            &term.predicate.name().to_ascii_lowercase(),
             term.position.rule,
             term.position.atom,
             term.position.term,
         );
+
+        if term.frontier.is_empty() {
+            result += "_constant";
+            return result;
+        }
+
         result += "(";
         for (index, frontier) in term.frontier.iter().enumerate() {
             result += &Self::write_variable(frontier);
@@ -138,34 +143,21 @@ impl GringoTranslation {
         result
     }
 
-    fn write_skolem_baseterm(predicate: &Identifier, term: &PrimitiveTerm) -> String {
-        let mut result = format!("{predicate}_base(");
-        result += &Self::write_primitive(term);
-        result += ")";
-
-        result
-    }
-
     fn write_rewritten(term: &RewrittenTerm) -> String {
         match term {
             RewrittenTerm::Primitive(term) => Self::write_primitive(term),
             RewrittenTerm::Skolem(term) => Self::write_skolemterm(term),
-            RewrittenTerm::Base(predicate, term) => Self::write_skolem_baseterm(predicate, term),
         }
     }
 
-    fn write_variable_atom(atom: &VariableAtom, used: &HashSet<Variable>) -> String {
+    fn write_variable_atom(atom: &VariableAtom) -> String {
         let mut result = String::new();
 
-        result += &atom.predicate().name();
+        result += &atom.predicate().name().to_ascii_lowercase();
         result += "(";
 
         for (index, variable) in atom.terms().iter().enumerate() {
-            if used.contains(variable) {
-                result += &Self::write_variable(variable);
-            } else {
-                result += &Self::write_unused_variable(variable);
-            }
+            result += &Self::write_variable(variable);
 
             if index < atom.terms().len() - 1 {
                 result += ", ";
@@ -179,7 +171,7 @@ impl GringoTranslation {
     fn write_rewritten_atom(atom: &RewrittenAtom) -> String {
         let mut result = String::new();
 
-        result += &atom.predicate.name();
+        result += &atom.predicate.name().to_ascii_lowercase();
         result += "(";
 
         for (index, term) in atom.terms.iter().enumerate() {
@@ -203,33 +195,14 @@ impl GringoTranslation {
         existential_positions: &HashMap<Identifier, Vec<TermPosition>>,
     ) -> String {
         let mut result = String::from("");
-
         let frontier = analysis
-            .head_variables
+            .frontier
+            .iter()
+            .cloned()
+            .collect::<HashSet<_>>()
             .intersection(&analysis.positive_body_variables)
             .cloned()
             .collect::<Vec<_>>();
-
-        let mut variable_count = HashMap::<Variable, usize>::new();
-        for body_atom in rule.positive_body() {
-            for variable in body_atom.terms() {
-                let counter = variable_count.entry(variable.clone()).or_insert(0);
-                *counter += 1;
-            }
-        }
-        let mut used_variables = variable_count
-            .iter()
-            .filter_map(|(variable, count)| {
-                if *count > 1 {
-                    Some(variable.clone())
-                } else {
-                    None
-                }
-            })
-            .collect::<HashSet<_>>();
-        for variable in &frontier {
-            used_variables.insert(variable.clone());
-        }
 
         for (atom_index, head_atom) in rule.head().iter().enumerate() {
             let predicate = head_atom.predicate().clone();
@@ -245,12 +218,6 @@ impl GringoTranslation {
                             position,
                             frontier: frontier.clone(),
                         })
-                    } else if Self::is_existential_position(
-                        existential_positions,
-                        &predicate,
-                        index,
-                    ) {
-                        RewrittenTerm::Base(predicate.clone(), term.clone())
                     } else {
                         RewrittenTerm::Primitive(term.clone())
                     }
@@ -262,22 +229,22 @@ impl GringoTranslation {
                 terms: rewritten_terms,
             });
 
+            result += " :- ";
+
+            for (atom_index, body_atom) in rule.positive_body().iter().enumerate() {
+                result += &Self::write_variable_atom(body_atom);
+
+                if atom_index < rule.positive_body().len() - 1 {
+                    result += ", ";
+                }
+            }
+
+            result += " .";
+
             if atom_index < rule.head().len() - 1 {
-                result += ", ";
+                result += "\n";
             }
         }
-
-        result += " :- ";
-
-        for (atom_index, body_atom) in rule.positive_body().iter().enumerate() {
-            result += &Self::write_variable_atom(body_atom, &used_variables);
-
-            if atom_index < rule.positive_body().len() - 1 {
-                result += ", ";
-            }
-        }
-
-        result += " .";
 
         result
     }
