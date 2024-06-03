@@ -8,6 +8,7 @@ use crate::datatypes::ColumnDataType;
 /// [ColumnScan] that consists of two types of subscans:
 ///  * a main column scan
 ///  * a list of follow column scans
+///
 /// If the main scan moves to some value then the followers will point to value equal or greater than that of main.
 /// Some of the followers can be set to "subtract" which means that the main scan will skip all the values in that specific follow scan.
 #[derive(Debug)]

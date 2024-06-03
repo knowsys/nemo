@@ -722,6 +722,44 @@ mod test {
     }
 
     #[test]
+    fn generic_trie_scan_2() {
+        let rows = vec![
+            vec![StorageValueT::Id32(0), StorageValueT::Id32(42)],
+            vec![StorageValueT::Int64(0), StorageValueT::Int64(42)],
+            vec![StorageValueT::Int64(1), StorageValueT::Int64(42)],
+            vec![StorageValueT::Int64(2), StorageValueT::Int64(42)],
+            vec![StorageValueT::Int64(3), StorageValueT::Int64(42)],
+        ];
+
+        let trie = Trie::from_rows(rows);
+        let mut scan = trie.partial_iterator();
+
+        scan.down(StorageTypeName::Id32);
+        assert_eq!(
+            current_layer_next(&mut scan, StorageTypeName::Id32),
+            Some(StorageValueT::Id32(0))
+        );
+        scan.up();
+        scan.down(StorageTypeName::Int64);
+        assert_eq!(
+            current_layer_next(&mut scan, StorageTypeName::Int64),
+            Some(StorageValueT::Int64(0))
+        );
+        assert_eq!(
+            current_layer_next(&mut scan, StorageTypeName::Int64),
+            Some(StorageValueT::Int64(1))
+        );
+        assert_eq!(
+            current_layer_next(&mut scan, StorageTypeName::Int64),
+            Some(StorageValueT::Int64(2))
+        );
+        assert_eq!(
+            current_layer_next(&mut scan, StorageTypeName::Int64),
+            Some(StorageValueT::Int64(3))
+        );
+    }
+
+    #[test]
     fn trie_row_iterator() {
         let rows = vec![
             vec![
