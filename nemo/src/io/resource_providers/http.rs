@@ -45,7 +45,9 @@ impl Read for HttpResource {
 impl HttpResourceProvider {
     async fn get(url: &Resource) -> Result<HttpResource, ReadingError> {
         let response = reqwest::get(url).await?;
-        let content = response.text().await?;
+        // we're expecting potentially compressed data, don't try to
+        // do any character set guessing, as `response.text()` would do.
+        let content = response.bytes().await?;
 
         Ok(HttpResource {
             url: url.to_string(),
