@@ -72,8 +72,11 @@ impl PossibleTypes {
         }
     }
 
-    pub fn first_type(&self, layer: usize) -> StorageTypeName {
-        self.storage_types[self.used_types[layer].start]
+    pub fn first_type(&mut self, layer: usize) -> StorageTypeName {
+        let start = self.used_types[layer].start;
+
+        self.used_types[layer].used = start;
+        self.storage_types[start]
     }
 
     pub fn current_type(&self, layer: usize) -> StorageTypeName {
@@ -194,7 +197,7 @@ impl<'a, Scan: PartialTrieScan<'a>> StreamingIterator for RowScan<'a, Scan> {
                         self.current_row.row[layer] = value;
                     }
 
-                    for _ in self.current_row.row.len()..current_layer {
+                    for _ in self.current_row.row.len()..=current_layer {
                         self.trie_scan.up();
                     }
 
