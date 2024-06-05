@@ -61,6 +61,7 @@ pub(crate) enum Context {
     TermTuple,
     TermMap,
     RdfLiteral,
+    PrefixedConstant,
     Decimal,
     Integer,
     ArithmeticProduct,
@@ -114,6 +115,7 @@ impl std::fmt::Display for Context {
             Context::TermTuple => write!(f, "tuple term"),
             Context::TermMap => write!(f, "map term"),
             Context::RdfLiteral => write!(f, "rdf literal"),
+            Context::PrefixedConstant => write!(f, "prefixed constant"),
             Context::Decimal => write!(f, "decimal"),
             Context::Integer => write!(f, "integer"),
             Context::ArithmeticProduct => write!(f, "arithmetic product"),
@@ -229,6 +231,8 @@ pub(crate) enum TokenKind {
     // Multi-char tokens:
     /// Identifier for keywords and names
     Ident,
+    /// Identifier with a prefix, like `xsd:decimal`
+    PrefixedIdent,
     /// Variable like `?var`
     Variable,
     /// Existential Variable like `!var`
@@ -300,6 +304,7 @@ impl std::fmt::Display for TokenKind {
             TokenKind::Slash => write!(f, "Slash"),
             TokenKind::Exponent => write!(f, "Exponent"),
             TokenKind::Ident => write!(f, "Ident"),
+            TokenKind::PrefixedIdent => write!(f, "Prefixed Ident"),
             TokenKind::Variable => write!(f, "Variable"),
             TokenKind::Existential => write!(f, "Existential"),
             TokenKind::Aggregate => write!(f, "Aggregate"),
@@ -540,6 +545,25 @@ where
     Ok((rest_input, token))
 }
 
+pub(crate) fn lex_prefixed_ident<'a, 's, E>(
+    input: Input<'a, 's>,
+) -> IResult<Input<'a, 's>, Token<'a>, E>
+where
+    E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>, Context>,
+{
+    recognize(tuple((opt(lex_ident), colon, lex_ident)))(input).map(
+        |(rest_input, prefixed_ident)| {
+            (
+                rest_input,
+                Token {
+                    kind: TokenKind::PrefixedIdent,
+                    span: prefixed_ident.input,
+                },
+            )
+        },
+    )
+}
+
 pub(crate) fn lex_iri<'a, 's, E>(input: Input<'a, 's>) -> IResult<Input<'a, 's>, Token<'a>, E>
 where
     E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>, Context>,
@@ -602,7 +626,7 @@ where
 {
     context(
         Context::TlDocComment,
-        recognize(many1(tuple((tag("%!"), many0(is_not("\n")), line_ending)))),
+        recognize(many1(tuple((tag("%%%"), many0(is_not("\n")), line_ending)))),
     )(input)
     .map(|(rest, result)| (rest, Token::new(TokenKind::TlDocComment, result.input)))
 }

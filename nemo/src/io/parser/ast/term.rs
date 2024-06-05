@@ -165,12 +165,12 @@ impl AstNode for Term<'_> {
                 format!("aggregation/{}", operation.span().fragment()),
                 "file".to_string(),
             )),
-            Term::Tuple(tuple) => {
-                tuple.identifier.map(|identifier| (
-                        format!("function/{}", identifier.span().fragment()),
-                        "file".to_string(),
-                    ))
-            }
+            Term::Tuple(tuple) => tuple.identifier.map(|identifier| {
+                (
+                    format!("function/{}", identifier.span().fragment()),
+                    "file".to_string(),
+                )
+            }),
             _ => None,
         }
     }
@@ -230,6 +230,12 @@ impl std::fmt::Display for Term<'_> {
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum Primitive<'a> {
     Constant(Token<'a>),
+    PrefixedConstant {
+        span: Span<'a>,
+        prefix: Option<Token<'a>>,
+        colon: Token<'a>,
+        constant: Token<'a>,
+    },
     Number {
         span: Span<'a>,
         sign: Option<Token<'a>>,
@@ -252,6 +258,20 @@ impl AstNode for Primitive<'_> {
     fn children(&self) -> Option<Vec<&dyn AstNode>> {
         match self {
             Primitive::Constant(token) => Some(vec![token]),
+            Primitive::PrefixedConstant {
+                prefix,
+                colon,
+                constant,
+                ..
+            } => {
+                let mut vec: Vec<&dyn AstNode> = Vec::new();
+                if let Some(prefix) = prefix {
+                    vec.push(prefix);
+                }
+                vec.push(colon);
+                vec.push(constant);
+                Some(vec)
+            }
             Primitive::Number {
                 sign,
                 before,
@@ -292,6 +312,7 @@ impl AstNode for Primitive<'_> {
     fn span(&self) -> Span {
         match self {
             Primitive::Constant(token) => token.span,
+            Primitive::PrefixedConstant { span, .. } => *span,
             Primitive::Number { span, .. } => *span,
             Primitive::String(token) => token.span,
             Primitive::Iri(token) => token.span,
@@ -326,6 +347,7 @@ impl AstNode for Primitive<'_> {
         }
         match self {
             Primitive::Constant(_) => name!("Constant"),
+            Primitive::PrefixedConstant { .. } => name!("Prefixed Constant"),
             Primitive::Number { .. } => name!("Number"),
             Primitive::String(_) => name!("String"),
             Primitive::Iri(_) => name!("Iri"),
