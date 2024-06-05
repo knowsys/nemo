@@ -2441,10 +2441,10 @@ pub mod new {
     use crate::io::lexer::{
         arrow, at, caret, close_brace, close_paren, colon, comma, dot, equal, exclamation_mark,
         exp, greater, greater_equal, hash, less, less_equal, lex_comment, lex_doc_comment,
-        lex_ident, lex_iri, lex_number, lex_operators, lex_string, lex_toplevel_doc_comment,
-        lex_whitespace, minus, open_brace, open_paren, plus, question_mark, skip_to_dot, slash,
-        star, tilde, underscore, unequal, Context, Error, ErrorTree, ParserState, Span, Token,
-        TokenKind,
+        lex_ident, lex_iri, lex_number, lex_operators, lex_prefixed_ident, lex_string,
+        lex_toplevel_doc_comment, lex_whitespace, minus, open_brace, open_paren, plus,
+        question_mark, skip_to_dot, slash, star, tilde, underscore, unequal, Context, Error,
+        ErrorTree, ParserState, Span, Token, TokenKind,
     };
     use crate::io::parser::ast::AstNode;
     use nom::combinator::{all_consuming, cut, map, opt, recognize};
@@ -2539,7 +2539,6 @@ pub mod new {
                     nom::Err::Error(err) | nom::Err::Failure(err) => {
                         let (_deepest_pos, errors) = get_deepest_errors(err);
                         for error in errors {
-                            dbg!(&error);
                             input.parser_state.report_error(error);
                         }
                         // let error = Error(deepest_pos, format!(""));
@@ -2552,10 +2551,8 @@ pub mod new {
     }
 
     fn get_deepest_errors<'a, 's>(e: &'a ErrorTree<Input<'a, 's>>) -> (Position, Vec<Error>) {
-        dbg!(&e);
         match e {
             ErrorTree::Base { location, kind } => {
-                dbg!(&kind);
                 let span = location.input;
                 let err_pos = Position {
                     offset: span.location_offset(),
@@ -2575,7 +2572,6 @@ pub mod new {
                 // let mut err_pos = Position::default();
                 match &**base {
                     ErrorTree::Base { location, kind } => {
-                        dbg!(&kind);
                         let span = location.input;
                         let err_pos = Position {
                             offset: span.location_offset(),
@@ -2606,11 +2602,9 @@ pub mod new {
                     ErrorTree::Stack { base, contexts } => {
                         let (pos, mut deepest_errors) = get_deepest_errors(base);
                         let contexts = context_strs(contexts);
-                        dbg!(&deepest_errors);
                         for mut error in &mut deepest_errors {
                             error.context.append(&mut contexts.clone());
                         }
-                        dbg!(&deepest_errors);
                         (pos, deepest_errors)
                     }
                     ErrorTree::Alt(error_tree) => {
@@ -3308,7 +3302,7 @@ pub mod new {
         context(
             Context::NamedTuple,
             tuple((
-                lex_ident,
+                alt((lex_prefixed_ident, lex_ident)),
                 wsoc0,
                 open_paren,
                 wsoc0,
@@ -3502,6 +3496,7 @@ pub mod new {
             Context::TermPrivimitive,
             alt((
                 parse_rdf_literal,
+                parse_prefixed_ident,
                 parse_ident,
                 parse_iri,
                 parse_number,
@@ -3534,6 +3529,29 @@ pub mod new {
                         span: carets.input,
                     },
                     iri,
+                },
+            )
+        })
+    }
+
+    fn parse_prefixed_ident<'a, 's, E>(
+        input: Input<'a, 's>,
+    ) -> IResult<Input<'a, 's>, Primitive<'a>, E>
+    where
+        E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>, Context>,
+    {
+        context(
+            Context::PrefixedConstant,
+            tuple((opt(lex_ident), colon, lex_ident)),
+        )(input)
+        .map(|(rest_input, (prefix, colon, constant))| {
+            (
+                rest_input,
+                Primitive::PrefixedConstant {
+                    span: outer_span(input.input, rest_input.input),
+                    prefix,
+                    colon,
+                    constant,
                 },
             )
         })
@@ -4467,7 +4485,7 @@ oldLime(?location,?species,?age) :- tree(?location,?species,?age,?heightInMeters
                     error_map.insert(error.pos, set);
                 };
             }
-            dbg!(&error_map);
+            // dbg!(&error_map);
             println!("\n\n");
             // assert!(false);
             let lines: Vec<_> = str.lines().collect();

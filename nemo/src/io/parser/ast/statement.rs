@@ -132,7 +132,7 @@ impl AstNode for Statement<'_> {
             Statement::Rule { .. } => name!("Rule"),
             Statement::Whitespace(_) => name!("Whitespace"),
             Statement::Comment(_) => name!("Comment"),
-            Statement::Error(_) => name!("ERROR"),
+            Statement::Error(_) => name!("\x1b[1;31mERROR\x1b[0m"),
         }
     }
 
