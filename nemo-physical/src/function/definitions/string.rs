@@ -418,7 +418,7 @@ mod test {
     use super::StringSubstringLength;
 
     #[test]
-    fn test_substring_length() {
+    fn test_string_substring_length() {
         let string = AnyDataValue::new_plain_string("abc".to_string());
 
         let start1 = AnyDataValue::new_integer_from_u64(0);
