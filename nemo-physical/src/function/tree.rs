@@ -305,10 +305,14 @@ where
     /// This evaluates to `true` if all its subnodes evaluate to `true`
     /// and returns `false` otherwise.
     /// Returns `true` if there are no subnodes.
-    pub fn boolean_conjunction(parameters: Vec<Self>) -> Self {
-        Self::Nary {
-            function: NaryFunctionEnum::BooleanConjunction(BooleanConjunction),
-            parameters,
+    pub fn boolean_conjunction(mut parameters: Vec<Self>) -> Self {
+        if parameters.len() != 1 {
+            Self::Nary {
+                function: NaryFunctionEnum::BooleanConjunction(BooleanConjunction),
+                parameters,
+            }
+        } else {
+            parameters.remove(0)
         }
     }
 
@@ -317,10 +321,14 @@ where
     /// This evaluates to `true` if one of its subnodes evaluates to `true`
     /// and returns `false` otherwise.
     /// Returns `false` if there are no subnodes.
-    pub fn boolean_disjunction(parameters: Vec<Self>) -> Self {
-        Self::Nary {
-            function: NaryFunctionEnum::BooleanDisjunction(BooleanDisjunction),
-            parameters,
+    pub fn boolean_disjunction(mut parameters: Vec<Self>) -> Self {
+        if parameters.len() != 1 {
+            Self::Nary {
+                function: NaryFunctionEnum::BooleanDisjunction(BooleanDisjunction),
+                parameters,
+            }
+        } else {
+            parameters.remove(0)
         }
     }
 
@@ -729,10 +737,14 @@ where
     ///
     /// Evaluates to an integer resulting from performing the bitwise and operation
     /// on the binary representation of its integer subnodes.
-    pub fn bit_and(parameters: Vec<Self>) -> Self {
-        Self::Nary {
-            function: NaryFunctionEnum::BitAnd(BitAnd),
-            parameters,
+    pub fn bit_and(mut parameters: Vec<Self>) -> Self {
+        if parameters.len() != 1 {
+            Self::Nary {
+                function: NaryFunctionEnum::BitAnd(BitAnd),
+                parameters,
+            }
+        } else {
+            parameters.remove(0)
         }
     }
 
@@ -740,10 +752,14 @@ where
     ///
     /// Evaluates to an integer resulting from performing the bitwise or operation
     /// on the binary representation of its integer subnodes.
-    pub fn bit_or(parameters: Vec<Self>) -> Self {
-        Self::Nary {
-            function: NaryFunctionEnum::BitOr(BitOr),
-            parameters,
+    pub fn bit_or(mut parameters: Vec<Self>) -> Self {
+        if parameters.len() != 1 {
+            Self::Nary {
+                function: NaryFunctionEnum::BitOr(BitOr),
+                parameters,
+            }
+        } else {
+            parameters.remove(0)
         }
     }
 
@@ -751,58 +767,82 @@ where
     ///
     /// Evaluates to an integer resulting from performing the bitwise xor operation
     /// on the binary representation of its integer subnodes.
-    pub fn bit_xor(parameters: Vec<Self>) -> Self {
-        Self::Nary {
-            function: NaryFunctionEnum::BitXor(BitXor),
-            parameters,
+    pub fn bit_xor(mut parameters: Vec<Self>) -> Self {
+        if parameters.len() != 1 {
+            Self::Nary {
+                function: NaryFunctionEnum::BitXor(BitXor),
+                parameters,
+            }
+        } else {
+            parameters.remove(0)
         }
     }
 
     /// Create a tree node representing the sum operation.
     ///
     /// Evaluates to a number resulting from adding its subnodes.
-    pub fn numeric_sum(parameters: Vec<Self>) -> Self {
-        Self::Nary {
-            function: NaryFunctionEnum::NumericSum(NumericSum),
-            parameters,
+    pub fn numeric_sum(mut parameters: Vec<Self>) -> Self {
+        if parameters.len() != 1 {
+            Self::Nary {
+                function: NaryFunctionEnum::NumericSum(NumericSum),
+                parameters,
+            }
+        } else {
+            parameters.remove(0)
         }
     }
 
     /// Create a tree node representing the product operation.
     ///
     /// Evaluates to a number resulting from multiplying its subnodes.
-    pub fn numeric_product(parameters: Vec<Self>) -> Self {
-        Self::Nary {
-            function: NaryFunctionEnum::NumericProduct(NumericProduct),
-            parameters,
+    pub fn numeric_product(mut parameters: Vec<Self>) -> Self {
+        if parameters.len() != 1 {
+            Self::Nary {
+                function: NaryFunctionEnum::NumericProduct(NumericProduct),
+                parameters,
+            }
+        } else {
+            parameters.remove(0)
         }
     }
 
     /// Create a tree node representing the maximum operation.
     ///
     /// Evaluates to a number that is the maximum of its subnodes.
-    pub fn numeric_maximum(parameters: Vec<Self>) -> Self {
-        Self::Nary {
-            function: NaryFunctionEnum::NumericMaximum(NumericMaximum),
-            parameters,
+    pub fn numeric_maximum(mut parameters: Vec<Self>) -> Self {
+        if parameters.len() != 1 {
+            Self::Nary {
+                function: NaryFunctionEnum::NumericMaximum(NumericMaximum),
+                parameters,
+            }
+        } else {
+            parameters.remove(0)
         }
     }
 
     /// Create a tree node representing the minimum operation.
     ///
     /// Evaluates to a number that is the minimum of its subnodes.
-    pub fn numeric_minimum(parameters: Vec<Self>) -> Self {
-        Self::Nary {
-            function: NaryFunctionEnum::NumericMinimum(NumericMinimum),
-            parameters,
+    pub fn numeric_minimum(mut parameters: Vec<Self>) -> Self {
+        if parameters.len() != 1 {
+            Self::Nary {
+                function: NaryFunctionEnum::NumericMinimum(NumericMinimum),
+                parameters,
+            }
+        } else {
+            parameters.remove(0)
         }
     }
 
     /// Create a tree node representing the Lukasiewicz t-norm.
-    pub fn numeric_lukasiewicz(parameters: Vec<Self>) -> Self {
-        Self::Nary {
-            function: NaryFunctionEnum::NumericLukasiewicz(NumericLukasiewicz),
-            parameters,
+    pub fn numeric_lukasiewicz(mut parameters: Vec<Self>) -> Self {
+        if parameters.len() != 1 {
+            Self::Nary {
+                function: NaryFunctionEnum::NumericLukasiewicz(NumericLukasiewicz),
+                parameters,
+            }
+        } else {
+            parameters.remove(0)
         }
     }
 }
