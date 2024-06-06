@@ -365,6 +365,8 @@ pub enum UnaryOperation {
     NumericTangent,
     /// Length of a string value
     StringLength,
+    /// Reverse of a string value
+    StringReverse,
     /// String converted to lowercase letters
     StringLowercase,
     /// String converted to uppercase letters
@@ -392,6 +394,7 @@ impl UnaryOperation {
             "COS" => Ok(UnaryOperation::NumericCosine),
             "TAN" => Ok(UnaryOperation::NumericTangent),
             "STRLEN" => Ok(UnaryOperation::StringLength),
+            "STRREV" => Ok(UnaryOperation::StringReverse),
             "UCASE" => Ok(UnaryOperation::StringLowercase),
             "LCASE" => Ok(UnaryOperation::StringUppercase),
             "ROUND" => Ok(UnaryOperation::NumericRound),
@@ -420,6 +423,7 @@ impl UnaryOperation {
             Self::NumericSine => "SIN",
             Self::NumericTangent => "TAN",
             Self::StringLength => "STRLEN",
+            Self::StringReverse => "STRREV",
             Self::StringLowercase => "LCASE",
             Self::StringUppercase => "UCASE",
             Self::NumericCeil => "CEIL",

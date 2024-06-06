@@ -24,8 +24,8 @@ use super::{
         },
         string::{
             StringAfter, StringBefore, StringCompare, StringConcatenation, StringContains,
-            StringEnds, StringLength, StringLowercase, StringStarts, StringSubstring,
-            StringSubstringLength, StringUppercase,
+            StringEnds, StringLength, StringLowercase, StringReverse, StringStarts,
+            StringSubstring, StringSubstringLength, StringUppercase,
         },
         BinaryFunctionEnum, NaryFunctionEnum, TernaryFunctionEnum, UnaryFunctionEnum,
     },
@@ -681,6 +681,17 @@ where
     /// that is the length of the string that results from evaluating `sub`.
     pub fn string_length(sub: Self) -> Self {
         Self::Unary(UnaryFunctionEnum::StringLength(StringLength), Box::new(sub))
+    }
+
+    /// Create a tree node representing the reverse of a string.
+    ///
+    /// This evaluates to a reversed version of the string
+    /// that results from evaluating `sub`.
+    pub fn string_reverse(sub: Self) -> Self {
+        Self::Unary(
+            UnaryFunctionEnum::StringReverse(StringReverse),
+            Box::new(sub),
+        )
     }
 
     /// Create a tree node representing the lowercase of a string.

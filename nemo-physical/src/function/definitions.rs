@@ -34,8 +34,8 @@ use self::{
     },
     string::{
         StringAfter, StringBefore, StringCompare, StringConcatenation, StringContains, StringEnds,
-        StringLength, StringLowercase, StringStarts, StringSubstring, StringSubstringLength,
-        StringUppercase,
+        StringLength, StringLowercase, StringReverse, StringStarts, StringSubstring,
+        StringSubstringLength, StringUppercase,
     },
 };
 
@@ -152,6 +152,7 @@ pub enum UnaryFunctionEnum {
     NumericSquareroot(NumericSquareroot),
     NumericTangent(NumericTangent),
     StringLength(StringLength),
+    StringReverse(StringReverse),
     StringLowercase(StringLowercase),
     StringUppercase(StringUppercase),
 }
@@ -184,6 +185,7 @@ impl UnaryFunction for UnaryFunctionEnum {
             Self::NumericSquareroot(function) => function,
             Self::NumericTangent(function) => function,
             Self::StringLength(function) => function,
+            Self::StringReverse(function) => function,
             Self::StringLowercase(function) => function,
             Self::StringUppercase(function) => function,
         } {
