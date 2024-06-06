@@ -10,7 +10,7 @@ members = [
 
 [workspace.package]
 description = "Nemo, a datalog-based rule engine for fast and scalable analytic data processing in memory"
-version = "0.5.1-dev"
+version = "0.5.1"
 authors = [
 "Alex Ivliev <alex.ivliev@tu-dresden.de>",
 "Lukas Gerlach <lukas.gerlach@tu-dresden.de>",
