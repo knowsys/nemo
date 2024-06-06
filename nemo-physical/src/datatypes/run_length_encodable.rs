@@ -65,7 +65,7 @@ impl IntStep {
 
 impl ByteSized for IntStep {
     fn size_bytes(&self) -> ByteSize {
-        ByteSize::b(std::mem::size_of::<IntStep>() as u64)
+        ByteSize::b(size_of::<IntStep>() as u64)
     }
 }
 
@@ -167,7 +167,7 @@ pub(crate) struct SmallIntStep(i8);
 
 impl ByteSized for SmallIntStep {
     fn size_bytes(&self) -> ByteSize {
-        ByteSize::b(std::mem::size_of::<SmallIntStep>() as u64)
+        ByteSize::b(size_of::<SmallIntStep>() as u64)
     }
 }
 
