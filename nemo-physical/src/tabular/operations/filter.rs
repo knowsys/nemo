@@ -131,11 +131,7 @@ impl GeneratorFilter {
     /// Helper function that takes a list of boolean [Filter]s
     /// and constructs a [Filter] that represent its conjuction.
     fn fold_filters(filters: Vec<&Filter>) -> Filter {
-        if filters.len() == 1 {
-            filters[0].clone()
-        } else {
-            Filter::boolean_conjunction(filters.into_iter().cloned().collect::<Vec<_>>())
-        }
+        Filter::boolean_conjunction(filters.into_iter().cloned().collect::<Vec<_>>())
     }
 
     /// Compute the [FilterAssignment] from a list of [Filters].
