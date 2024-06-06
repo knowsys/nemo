@@ -393,7 +393,7 @@ impl TernaryFunction for StringSubstringLength {
         let start = usize::try_from(parameter_second.to_u64()?).ok()?;
         let length = usize::try_from(parameter_third.to_u64()?).ok()?;
 
-        if start + length >= string.len() {
+        if start + length > string.len() {
             return None;
         }
 
@@ -408,5 +408,50 @@ impl TernaryFunction for StringSubstringLength {
                 .bitset()
                 .union(StorageTypeName::Id64.bitset()),
         )
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use crate::{datavalues::AnyDataValue, function::definitions::TernaryFunction};
+
+    use super::StringSubstringLength;
+
+    #[test]
+    fn test_string_substring_length() {
+        let string = AnyDataValue::new_plain_string("abc".to_string());
+
+        let start1 = AnyDataValue::new_integer_from_u64(0);
+        let length1 = AnyDataValue::new_integer_from_u64(1);
+        let result1 = AnyDataValue::new_plain_string("a".to_string());
+        let actual_result1 = StringSubstringLength.evaluate(string.clone(), start1, length1);
+        assert!(actual_result1.is_some());
+        assert_eq!(result1, actual_result1.unwrap());
+
+        let start2 = AnyDataValue::new_integer_from_u64(1);
+        let length2 = AnyDataValue::new_integer_from_u64(1);
+        let result2 = AnyDataValue::new_plain_string("b".to_string());
+        let actual_result2 = StringSubstringLength.evaluate(string.clone(), start2, length2);
+        assert!(actual_result2.is_some());
+        assert_eq!(result2, actual_result2.unwrap());
+
+        let start3 = AnyDataValue::new_integer_from_u64(2);
+        let length3 = AnyDataValue::new_integer_from_u64(1);
+        let result3 = AnyDataValue::new_plain_string("c".to_string());
+        let actual_result3 = StringSubstringLength.evaluate(string.clone(), start3, length3);
+        assert!(actual_result3.is_some());
+        assert_eq!(result3, actual_result3.unwrap());
+
+        let start4 = AnyDataValue::new_integer_from_u64(3);
+        let length4 = AnyDataValue::new_integer_from_u64(1);
+        let actual_result4 = StringSubstringLength.evaluate(string.clone(), start4, length4);
+        assert!(actual_result4.is_none());
+
+        let start5 = AnyDataValue::new_integer_from_u64(0);
+        let length5 = AnyDataValue::new_integer_from_u64(3);
+        let result5 = AnyDataValue::new_plain_string("abc".to_string());
+        let actual_result5 = StringSubstringLength.evaluate(string.clone(), start5, length5);
+        assert!(actual_result5.is_some());
+        assert_eq!(result5, actual_result5.unwrap());
     }
 }
