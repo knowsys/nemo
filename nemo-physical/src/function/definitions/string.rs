@@ -393,7 +393,7 @@ impl TernaryFunction for StringSubstringLength {
         let start = usize::try_from(parameter_second.to_u64()?).ok()?;
         let length = usize::try_from(parameter_third.to_u64()?).ok()?;
 
-        if start + length >= string.len() {
+        if start + length > string.len() {
             return None;
         }
 
