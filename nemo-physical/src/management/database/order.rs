@@ -291,7 +291,7 @@ impl OrderedReferenceManager {
 
                 if !generator.is_noop() {
                     TimedCode::instance()
-                        .sub("Reasoning/Execution/Required Reorder")
+                        .sub("Reasoning/Execution/Load Table/Required Reorder")
                         .start();
 
                     let closest_trie = self.stored_tables[closest_storage_id].trie(dictionary)?;
@@ -299,7 +299,7 @@ impl OrderedReferenceManager {
                     let result_storage_id = self.add_trie(id, column_order, trie_reordered);
 
                     TimedCode::instance()
-                        .sub("Reasoning/Execution/Required Reorder")
+                        .sub("Reasoning/Execution/Load Table/Required Reorder")
                         .stop();
 
                     return Ok(result_storage_id);

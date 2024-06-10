@@ -9,7 +9,8 @@ use bytesize::ByteSize;
 use crate::{
     datasources::tuple_writer::TupleWriter,
     error::{Error, ReadingError},
-    management::{bytesized::sum_bytes, bytesized::ByteSized},
+    management::bytesized::{sum_bytes, ByteSized},
+    meta::timing::TimedCode,
     tabular::trie::Trie,
 };
 
@@ -42,6 +43,10 @@ impl TableStorage {
             .arity();
         let mut tuple_writer = TupleWriter::new(dictionary, arity);
 
+        TimedCode::instance()
+            .sub("Reasoning/Execution/Load Table/Process file")
+            .start();
+
         for source in sources {
             log::info!("Loading source {source}");
             debug_assert!(source.arity() == arity);
@@ -51,7 +56,27 @@ impl TableStorage {
                 .map_err(ReadingError::ExternalError)?;
         }
 
-        Ok(Trie::from_tuple_writer(tuple_writer))
+        TimedCode::instance()
+            .sub("Reasoning/Execution/Load Table/Process file")
+            .stop();
+
+        TimedCode::instance()
+            .sub("Reasoning/Execution/Load Table/Sort data")
+            .start();
+        let sorted_buffer = tuple_writer.finalize();
+        TimedCode::instance()
+            .sub("Reasoning/Execution/Load Table/Sort data")
+            .stop();
+
+        TimedCode::instance()
+            .sub("Reasoning/Execution/Load Table/Create trie")
+            .start();
+        let trie = Trie::from_tuple_buffer(sorted_buffer);
+        TimedCode::instance()
+            .sub("Reasoning/Execution/Load Table/Create trie")
+            .stop();
+
+        Ok(trie)
     }
 
     /// Return the [Trie] stored by this object.
