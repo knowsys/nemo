@@ -16,7 +16,7 @@ use super::{
 ///
 /// Returns the index of the first occurrence of the second parameter in the first parameter.
 /// or `None` if the second parameter is not found.
-fn unicode_find(parameter_first: String, parameter_second: String) -> Option<usize> {
+fn unicode_find(parameter_first: &String, parameter_second: &String) -> Option<usize> {
     if parameter_second.is_empty() {
         return Some(0);
     }
@@ -152,7 +152,7 @@ impl BinaryFunction for StringContains {
     ) -> Option<AnyDataValue> {
         string_pair_from_any(parameter_first, parameter_second).map(
             |(first_string, second_string)| {
-                AnyDataValue::new_boolean(unicode_find(first_string, second_string).is_some())
+                AnyDataValue::new_boolean(unicode_find(&first_string, &second_string).is_some())
             },
         )
     }
@@ -273,10 +273,11 @@ impl BinaryFunction for StringBefore {
     ) -> Option<AnyDataValue> {
         string_pair_from_any(parameter_first, parameter_second).map(
             |(first_string, second_string)| {
-                let result = first_string
-                    .find(&second_string)
-                    .map_or("", |position| &first_string[0..position])
-                    .to_string();
+                let result = if let Some(i) = unicode_find(&first_string, &second_string) {
+                    first_string[0..i].to_string()
+                } else {
+                    "".to_string()
+                };
 
                 AnyDataValue::new_plain_string(result)
             },
@@ -308,12 +309,11 @@ impl BinaryFunction for StringAfter {
     ) -> Option<AnyDataValue> {
         string_pair_from_any(parameter_first, parameter_second).map(
             |(first_string, second_string)| {
-                let result = first_string
-                    .find(&second_string)
-                    .map_or("", |position| {
-                        &first_string[(position + second_string.len())..]
-                    })
-                    .to_string();
+                let result = if let Some(i) = unicode_find(&first_string, &second_string) {
+                    first_string[i + second_string.len()..].to_string()
+                } else {
+                    "".to_string()
+                };
 
                 AnyDataValue::new_plain_string(result)
             },
@@ -536,6 +536,10 @@ mod test {
         let actual_result_unicode = StringLength.evaluate(string_unicode);
         assert!(actual_result_unicode.is_some());
         assert_eq!(result_unicode, actual_result_unicode.unwrap());
+
+        let string_notstring = AnyDataValue::new_integer_from_i64(1);
+        let actual_result_notstring = StringLength.evaluate(string_notstring);
+        assert!(actual_result_notstring.is_none());
     }
 
     #[test]
@@ -565,6 +569,10 @@ mod test {
         let actual_result_unicode = StringLowercase.evaluate(string_unicode.clone());
         assert!(actual_result_unicode.is_some());
         assert_eq!(result_unicode, actual_result_unicode.unwrap());
+
+        let string_notstring = AnyDataValue::new_integer_from_i64(1);
+        let actual_result_notstring = StringLowercase.evaluate(string_notstring);
+        assert!(actual_result_notstring.is_none());
     }
 
     #[test]
@@ -575,6 +583,11 @@ mod test {
         let actual_result_unicode = StringSubstring.evaluate(string_unicode.clone(), start_unicode);
         assert!(actual_result_unicode.is_some());
         assert_eq!(result_unicode, actual_result_unicode.unwrap());
+
+        let string_notstring = AnyDataValue::new_integer_from_i64(1);
+        let start_notstring = AnyDataValue::new_integer_from_u64(3);
+        let actual_result_notstring = StringSubstring.evaluate(string_notstring, start_notstring);
+        assert!(actual_result_notstring.is_none());
     }
 
     #[test]
@@ -634,6 +647,13 @@ mod test {
             StringSubstringLength.evaluate(string_unicode.clone(), start8, length8);
         assert!(actual_result8.is_some());
         assert_eq!(result8, actual_result8.unwrap());
+
+        let string_notstring = AnyDataValue::new_integer_from_i64(1);
+        let start_notstring = AnyDataValue::new_integer_from_u64(3);
+        let length_notstring = AnyDataValue::new_integer_from_u64(2);
+        let actual_result_notstring =
+            StringSubstringLength.evaluate(string_notstring, start_notstring, length_notstring);
+        assert!(actual_result_notstring.is_none());
     }
 
     #[test]
@@ -652,6 +672,11 @@ mod test {
             super::StringStarts.evaluate(string_unicode.clone(), start_unicode);
         assert!(actual_result_unicode.is_some());
         assert_eq!(result_unicode, actual_result_unicode.unwrap());
+
+        let string_notstring = AnyDataValue::new_integer_from_i64(1);
+        let start_notstring = AnyDataValue::new_plain_string("loẅ".to_string());
+        let actual_result_notstring = super::StringStarts.evaluate(string_notstring, start_notstring);
+        assert!(actual_result_notstring.is_none());
     }
 
     #[test]
@@ -670,6 +695,11 @@ mod test {
             super::StringEnds.evaluate(string_unicode.clone(), start_unicode);
         assert!(actual_result_unicode.is_some());
         assert_eq!(result_unicode, actual_result_unicode.unwrap());
+
+        let string_notstring = AnyDataValue::new_integer_from_i64(1);
+        let start_notstring = AnyDataValue::new_plain_string("ẅks".to_string());
+        let actual_result_notstring = super::StringEnds.evaluate(string_notstring, start_notstring);
+        assert!(actual_result_notstring.is_none());
     }
 
     #[test]
@@ -685,5 +715,55 @@ mod test {
         let actual_result_unicode = StringReverse.evaluate(string_unicode.clone());
         assert!(actual_result_unicode.is_some());
         assert_eq!(result_unicode, actual_result_unicode.unwrap());
+
+        let string_notstring = AnyDataValue::new_integer_from_i64(1);
+        let actual_result_notstring = StringReverse.evaluate(string_notstring);
+        assert!(actual_result_notstring.is_none());
+    }
+
+    #[test]
+    fn test_string_before() {
+        let string = AnyDataValue::new_plain_string("hello".to_string());
+        let start = AnyDataValue::new_plain_string("l".to_string());
+        let result = AnyDataValue::new_plain_string("he".to_string());
+        let actual_result = super::StringBefore.evaluate(string.clone(), start);
+        assert!(actual_result.is_some());
+        assert_eq!(result, actual_result.unwrap());
+
+        let string_unicode = AnyDataValue::new_plain_string("loẅks".to_string());
+        let start_unicode = AnyDataValue::new_plain_string("ẅ".to_string());
+        let result_unicode = AnyDataValue::new_plain_string("lo".to_string());
+        let actual_result_unicode =
+            super::StringBefore.evaluate(string_unicode.clone(), start_unicode);
+        assert!(actual_result_unicode.is_some());
+        assert_eq!(result_unicode, actual_result_unicode.unwrap());
+
+        let string_notstring = AnyDataValue::new_integer_from_i64(1);
+        let start_notstring = AnyDataValue::new_plain_string("ẅ".to_string());
+        let actual_result_notstring = super::StringBefore.evaluate(string_notstring, start_notstring);
+        assert!(actual_result_notstring.is_none());
+    }
+
+    #[test]
+    fn test_string_after() {
+        let string = AnyDataValue::new_plain_string("hello".to_string());
+        let start = AnyDataValue::new_plain_string("l".to_string());
+        let result = AnyDataValue::new_plain_string("lo".to_string());
+        let actual_result = super::StringAfter.evaluate(string.clone(), start);
+        assert!(actual_result.is_some());
+        assert_eq!(result, actual_result.unwrap());
+
+        let string_unicode = AnyDataValue::new_plain_string("loẅks".to_string());
+        let start_unicode = AnyDataValue::new_plain_string("ẅ".to_string());
+        let result_unicode = AnyDataValue::new_plain_string("ks".to_string());
+        let actual_result_unicode =
+            super::StringAfter.evaluate(string_unicode.clone(), start_unicode);
+        assert!(actual_result_unicode.is_some());
+        assert_eq!(result_unicode, actual_result_unicode.unwrap());
+
+        let string_notstring = AnyDataValue::new_integer_from_i64(1);
+        let start_notstring = AnyDataValue::new_plain_string("ẅ".to_string());
+        let actual_result_notstring = super::StringAfter.evaluate(string_notstring, start_notstring);
+        assert!(actual_result_notstring.is_none());
     }
 }
