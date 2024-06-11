@@ -12,7 +12,7 @@ use super::{
     BinaryFunction, FunctionTypePropagation, NaryFunction, TernaryFunction, UnaryFunction,
 };
 
-/// Unicode friendly version of [String] find.
+/// Unicode friendly version of [String] find
 ///
 /// Returns the index of the first occurrence of the second parameter in the first parameter.
 /// or `None` if the second parameter is not found.
