@@ -675,7 +675,8 @@ mod test {
 
         let string_notstring = AnyDataValue::new_integer_from_i64(1);
         let start_notstring = AnyDataValue::new_plain_string("loẅ".to_string());
-        let actual_result_notstring = super::StringStarts.evaluate(string_notstring, start_notstring);
+        let actual_result_notstring =
+            super::StringStarts.evaluate(string_notstring, start_notstring);
         assert!(actual_result_notstring.is_none());
     }
 
@@ -740,7 +741,8 @@ mod test {
 
         let string_notstring = AnyDataValue::new_integer_from_i64(1);
         let start_notstring = AnyDataValue::new_plain_string("ẅ".to_string());
-        let actual_result_notstring = super::StringBefore.evaluate(string_notstring, start_notstring);
+        let actual_result_notstring =
+            super::StringBefore.evaluate(string_notstring, start_notstring);
         assert!(actual_result_notstring.is_none());
     }
 
@@ -763,7 +765,8 @@ mod test {
 
         let string_notstring = AnyDataValue::new_integer_from_i64(1);
         let start_notstring = AnyDataValue::new_plain_string("ẅ".to_string());
-        let actual_result_notstring = super::StringAfter.evaluate(string_notstring, start_notstring);
+        let actual_result_notstring =
+            super::StringAfter.evaluate(string_notstring, start_notstring);
         assert!(actual_result_notstring.is_none());
     }
 }
