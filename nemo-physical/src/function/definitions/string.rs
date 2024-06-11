@@ -17,6 +17,7 @@ use super::{
 /// Returns the index of the first occurrence of the second parameter in the first parameter.
 /// or `None` if the second parameter is not found.
 fn unicode_find(parameter_first: &String, parameter_second: &String) -> Option<usize> {
+    // if the second string is an empty string, it is found at index 0
     if parameter_second.is_empty() {
         return Some(0);
     }
@@ -24,28 +25,36 @@ fn unicode_find(parameter_first: &String, parameter_second: &String) -> Option<u
     let first_graphemes = parameter_first.graphemes(true).collect::<Vec<&str>>();
     let second_graphemes = parameter_second.graphemes(true).collect::<Vec<&str>>();
 
+    // the second string is longer than the first string, it can't fit in the first string
     if second_graphemes.len() > first_graphemes.len() {
         return None;
     }
 
-    let max_search_space = first_graphemes.len() - second_graphemes.len() + 1;
+    // the first graphene cannot be matched beyond the difference of the string sizes since
+    // then the second string can't fit in the first string anyways
+    let first_char_index_max = first_graphemes.len() - second_graphemes.len();
 
-    for i in 0..max_search_space {
+    for i in 0..(first_char_index_max + 1) {
         if first_graphemes[i] != second_graphemes[0] {
+            // haven't matched the first grapheme yet
             continue;
         } else if second_graphemes.len() == 1 {
+            // first graphene is matched, second string only contains one grapheme
             return Some(i);
         }
 
+        // time to match the rest of the graphemes
         for j in 1..second_graphemes.len() {
             let second_index = j;
             let first_index = i + j;
 
             if second_graphemes[second_index] != first_graphemes[first_index] {
+                // next grapheme doesn't match, time to try again
                 break;
             }
 
             if second_index == (second_graphemes.len() - 1) {
+                // all the graphemes of the second word have been matched
                 return Some(i);
             }
         }
@@ -421,7 +430,7 @@ impl UnaryFunction for StringUppercase {
     fn evaluate(&self, parameter: AnyDataValue) -> Option<AnyDataValue> {
         parameter
             .to_plain_string()
-            .map(|string| AnyDataValue::new_plain_string(string.to_ascii_uppercase()))
+            .map(|string| AnyDataValue::new_plain_string(string.to_uppercase()))
     }
 
     fn type_propagation(&self) -> FunctionTypePropagation {
@@ -444,7 +453,7 @@ impl UnaryFunction for StringLowercase {
     fn evaluate(&self, parameter: AnyDataValue) -> Option<AnyDataValue> {
         parameter
             .to_plain_string()
-            .map(|string| AnyDataValue::new_plain_string(string.to_ascii_lowercase()))
+            .map(|string| AnyDataValue::new_plain_string(string.to_lowercase()))
     }
 
     fn type_propagation(&self) -> FunctionTypePropagation {
