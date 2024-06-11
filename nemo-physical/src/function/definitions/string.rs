@@ -167,7 +167,7 @@ impl BinaryFunction for StringContains {
 /// Start of a string
 ///
 /// Returns `true` from the boolean value space if the string provided as the first parameter
-/// starts with the string provided as the first paramter and `false` otherwise.
+/// starts with the string provided as the second parameter and `false` otherwise.
 ///
 /// Returns `None` if either parameter is not a string.
 #[derive(Debug, Copy, Clone)]
@@ -178,13 +178,24 @@ impl BinaryFunction for StringStarts {
         parameter_first: AnyDataValue,
         parameter_second: AnyDataValue,
     ) -> Option<AnyDataValue> {
+
         string_pair_from_any(parameter_first, parameter_second).map(
             |(first_string, second_string)| {
-                if first_string.starts_with(&second_string) {
-                    AnyDataValue::new_boolean(true)
-                } else {
-                    AnyDataValue::new_boolean(false)
+
+                let first_graphemes = first_string.graphemes(true).collect::<Vec<&str>>();
+                let second_graphemes = second_string.graphemes(true).collect::<Vec<&str>>();
+
+                if second_graphemes.len() > first_graphemes.len() {
+                    return AnyDataValue::new_boolean(false);
                 }
+
+                for i in 0..second_graphemes.len() {
+                    if first_graphemes[i] != second_graphemes[i] {
+                        return AnyDataValue::new_boolean(false);
+                    }
+                }
+
+                AnyDataValue::new_boolean(true)
             },
         )
     }
@@ -611,6 +622,24 @@ mod test {
             StringSubstringLength.evaluate(string_unicode.clone(), start8, length8);
         assert!(actual_result8.is_some());
         assert_eq!(result8, actual_result8.unwrap());
+    }
+
+    #[test]
+    fn test_string_starts() {
+        let string = AnyDataValue::new_plain_string("abc".to_string());
+        let start = AnyDataValue::new_plain_string("a".to_string());
+        let result = AnyDataValue::new_boolean(true);
+        let actual_result = super::StringStarts.evaluate(string.clone(), start);
+        assert!(actual_result.is_some());
+        assert_eq!(result, actual_result.unwrap());
+
+        let string_unicode = AnyDataValue::new_plain_string("loẅks".to_string());
+        let start_unicode = AnyDataValue::new_plain_string("loẅ".to_string());
+        let result_unicode = AnyDataValue::new_boolean(true);
+        let actual_result_unicode =
+            super::StringStarts.evaluate(string_unicode.clone(), start_unicode);
+        assert!(actual_result_unicode.is_some());
+        assert_eq!(result_unicode, actual_result_unicode.unwrap());
     }
 
     #[test]
