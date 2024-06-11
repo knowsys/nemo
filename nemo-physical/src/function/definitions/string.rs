@@ -489,5 +489,10 @@ mod test {
         let actual_result6 = StringSubstringLength.evaluate(string.clone(), start6, length6);
         assert!(actual_result6.is_some());
         assert_eq!(result6, actual_result6.unwrap());
+
+        let start7 = AnyDataValue::new_integer_from_u64(0);
+        let length7 = AnyDataValue::new_integer_from_u64(4);
+        let actual_result7 = StringSubstringLength.evaluate(string.clone(), start7, length7);
+        assert!(actual_result7.is_none());
     }
 }
