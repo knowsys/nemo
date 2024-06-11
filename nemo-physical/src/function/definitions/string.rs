@@ -12,6 +12,48 @@ use super::{
     BinaryFunction, FunctionTypePropagation, NaryFunction, TernaryFunction, UnaryFunction,
 };
 
+/// Unicode friendly version of [String] find.
+///
+/// Returns the index of the first occurrence of the second parameter in the first parameter.
+/// or `None` if the second parameter is not found.
+fn unicode_find(parameter_first: String, parameter_second: String) -> Option<usize> {
+    if parameter_second.is_empty() {
+        return Some(0);
+    }
+
+    let first_graphemes = parameter_first.graphemes(true).collect::<Vec<&str>>();
+    let second_graphemes = parameter_second.graphemes(true).collect::<Vec<&str>>();
+
+    if second_graphemes.len() > first_graphemes.len() {
+        return None;
+    }
+
+    let max_search_space = first_graphemes.len() - second_graphemes.len() + 1;
+
+    for i in 0..max_search_space {
+        if first_graphemes[i] != second_graphemes[0] {
+            continue;
+        } else if second_graphemes.len() == 1 {
+            return Some(i);
+        }
+
+        for j in 1..second_graphemes.len() {
+            let second_index = j;
+            let first_index = i + j;
+
+            if second_graphemes[second_index] != first_graphemes[first_index] {
+                break;
+            }
+
+            if second_index == (second_graphemes.len() - 1) {
+                return Some(i);
+            }
+        }
+    }
+
+    None
+}
+
 /// Given two [AnyDataValue]s,
 /// check if both are strings and return a pair of [String]
 /// if this is the case.
@@ -110,46 +152,7 @@ impl BinaryFunction for StringContains {
     ) -> Option<AnyDataValue> {
         string_pair_from_any(parameter_first, parameter_second).map(
             |(first_string, second_string)| {
-                // if the second string is empty, it is contained within any string
-                if second_string.is_empty() {
-                    return AnyDataValue::new_boolean(true);
-                }
-
-                let first_string_graphemes = first_string.graphemes(true).collect::<Vec<&str>>();
-                let second_string_graphemes = second_string.graphemes(true).collect::<Vec<&str>>();
-
-                // if the second string is longer than the first string, it cannot be contained within
-                if second_string_graphemes.len() > first_string_graphemes.len() {
-                    return AnyDataValue::new_boolean(false);
-                }
-
-                let max_search_space =
-                    first_string_graphemes.len() - second_string_graphemes.len() + 1;
-
-                for i in 0..max_search_space {
-                    if first_string_graphemes[i] != second_string_graphemes[0] {
-                        continue;
-                    } else if second_string_graphemes.len() == 1 {
-                        return AnyDataValue::new_boolean(true);
-                    }
-
-                    for j in 1..second_string_graphemes.len() {
-                        let second_index = j;
-                        let first_index = i + j;
-
-                        if second_string_graphemes[second_index]
-                            != first_string_graphemes[first_index]
-                        {
-                            break;
-                        }
-
-                        if second_index == (second_string_graphemes.len() - 1) {
-                            return AnyDataValue::new_boolean(true);
-                        }
-                    }
-                }
-
-                AnyDataValue::new_boolean(false)
+                AnyDataValue::new_boolean(unicode_find(first_string, second_string).is_some())
             },
         )
     }
@@ -178,10 +181,8 @@ impl BinaryFunction for StringStarts {
         parameter_first: AnyDataValue,
         parameter_second: AnyDataValue,
     ) -> Option<AnyDataValue> {
-
         string_pair_from_any(parameter_first, parameter_second).map(
             |(first_string, second_string)| {
-
                 let first_graphemes = first_string.graphemes(true).collect::<Vec<&str>>();
                 let second_graphemes = second_string.graphemes(true).collect::<Vec<&str>>();
 
@@ -226,7 +227,6 @@ impl BinaryFunction for StringEnds {
     ) -> Option<AnyDataValue> {
         string_pair_from_any(parameter_first, parameter_second).map(
             |(first_string, second_string)| {
-
                 let first_graphemes = first_string.graphemes(true).collect::<Vec<&str>>();
                 let second_graphemes = second_string.graphemes(true).collect::<Vec<&str>>();
 
@@ -235,7 +235,8 @@ impl BinaryFunction for StringEnds {
                 }
 
                 for i in 0..second_graphemes.len() {
-                    if first_graphemes[first_graphemes.len() - 1 - i] != second_graphemes[second_graphemes.len() - 1 - i]
+                    if first_graphemes[first_graphemes.len() - 1 - i]
+                        != second_graphemes[second_graphemes.len() - 1 - i]
                     {
                         return AnyDataValue::new_boolean(false);
                     }
