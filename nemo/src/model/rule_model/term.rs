@@ -221,7 +221,7 @@ impl BinaryOperation {
 /// Ternary operation applied to a [Term]
 #[derive(Debug, Eq, PartialEq, Copy, Clone, PartialOrd, Ord)]
 pub enum TernaryOperation {
-    /// String starting at some start position with a given length
+    /// String starting at some start position with a given maximum length
     StringSubstringLength,
 }
 

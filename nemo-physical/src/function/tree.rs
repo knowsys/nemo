@@ -734,7 +734,7 @@ where
     /// This evaluates to a string containing the
     /// characters from the string that results from evaluating `string`,
     /// starting from the position that results from evaluating `start`
-    /// with the length given by evaluating `length`.
+    /// with the maximum length given by evaluating `length`.
     pub fn string_subtstring_length(string: Self, start: Self, length: Self) -> Self {
         Self::Ternary {
             function: TernaryFunctionEnum::StringSubstringLength(StringSubstringLength),

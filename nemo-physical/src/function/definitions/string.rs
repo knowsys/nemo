@@ -399,8 +399,8 @@ impl UnaryFunction for StringLowercase {
 /// and an integer value as the second and third parameter.
 ///
 /// Return a string containing the characters from the first parameter,
-/// starting from the position given by the second paramter
-/// with the length given by the third parameter.
+/// starting from the position given by the second parameter
+/// with the maximum length given by the third parameter.
 ///
 /// Returns `None` if the type requirements from above are not met.
 #[derive(Debug, Copy, Clone)]
@@ -414,15 +414,21 @@ impl TernaryFunction for StringSubstringLength {
     ) -> Option<AnyDataValue> {
         let string = parameter_first.to_plain_string()?;
         let start = usize::try_from(parameter_second.to_u64()?).ok()?;
-        let length = usize::try_from(parameter_third.to_u64()?).ok()?;
 
-        if start + length > string.len() {
+        if start > string.len() - 1 {
             return None;
         }
 
-        Some(AnyDataValue::new_plain_string(
-            string[start..(start + length)].to_string(),
-        ))
+        let length = usize::try_from(parameter_third.to_u64()?).ok()?;
+        let end = start + length;
+
+        let result = if end > string.len() - 1 {
+            string[start..].to_string()
+        } else {
+            string[start..end].to_string()
+        };
+
+        Some(AnyDataValue::new_plain_string(result))
     }
 
     fn type_propagation(&self) -> FunctionTypePropagation {
@@ -476,5 +482,12 @@ mod test {
         let actual_result5 = StringSubstringLength.evaluate(string.clone(), start5, length5);
         assert!(actual_result5.is_some());
         assert_eq!(result5, actual_result5.unwrap());
+
+        let start6 = AnyDataValue::new_integer_from_u64(0);
+        let length6 = AnyDataValue::new_integer_from_u64(4);
+        let result6 = AnyDataValue::new_plain_string("abc".to_string());
+        let actual_result6 = StringSubstringLength.evaluate(string.clone(), start6, length6);
+        assert!(actual_result6.is_some());
+        assert_eq!(result6, actual_result6.unwrap());
     }
 }
