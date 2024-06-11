@@ -44,7 +44,7 @@ impl TableStorage {
         let mut tuple_writer = TupleWriter::new(dictionary, arity);
 
         TimedCode::instance()
-            .sub("Reasoning/Execution/Load Table/Process file")
+            .sub("Reasoning/Execution/Load Table/Process file/Read")
             .start();
 
         for source in sources {
@@ -57,23 +57,16 @@ impl TableStorage {
         }
 
         TimedCode::instance()
-            .sub("Reasoning/Execution/Load Table/Process file")
+            .sub("Reasoning/Execution/Load Table/Process file/Read")
             .stop();
 
         TimedCode::instance()
-            .sub("Reasoning/Execution/Load Table/Sort data")
+            .sub("Reasoning/Execution/Load Table/Process file/Write Buffer & Sort")
             .start();
-        let sorted_buffer = tuple_writer.finalize();
-        TimedCode::instance()
-            .sub("Reasoning/Execution/Load Table/Sort data")
-            .stop();
 
+        let trie = Trie::from_tuple_writer(tuple_writer);
         TimedCode::instance()
-            .sub("Reasoning/Execution/Load Table/Create trie")
-            .start();
-        let trie = Trie::from_tuple_buffer(sorted_buffer);
-        TimedCode::instance()
-            .sub("Reasoning/Execution/Load Table/Create trie")
+            .sub("Reasoning/Execution/Load Table/Process file/Write Buffer & Sort")
             .stop();
 
         Ok(trie)
