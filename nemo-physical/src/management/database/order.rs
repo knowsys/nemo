@@ -310,11 +310,11 @@ impl OrderedReferenceManager {
                         .stop();
 
                     TimedCode::instance()
-                        .sub("Reasoning/Execution/Load Table/Reorder")
+                        .sub("Reasoning/Execution/Load Table/Reorder trie")
                         .start();
                     let trie_reordered = generator.apply_operation(closest_trie.partial_iterator());
                     TimedCode::instance()
-                        .sub("Reasoning/Execution/Load Table/Reorder")
+                        .sub("Reasoning/Execution/Load Table/Reorder trie")
                         .stop();
 
                     let result_storage_id = self.add_trie(id, column_order, trie_reordered);

@@ -61,12 +61,20 @@ impl TableStorage {
             .stop();
 
         TimedCode::instance()
-            .sub("Reasoning/Execution/Load Table/Process file/Write Buffer & Sort")
+            .sub("Reasoning/Execution/Load Table/Process file/Sort")
+            .start();
+        let sorted_buffer = tuple_writer.finalize();
+        TimedCode::instance()
+            .sub("Reasoning/Execution/Load Table/Process file/Sort")
+            .stop();
+
+        TimedCode::instance()
+            .sub("Reasoning/Execution/Load Table/Process file/Create trie")
             .start();
 
-        let trie = Trie::from_tuple_writer(tuple_writer);
+        let trie = Trie::from_tuple_buffer(sorted_buffer);
         TimedCode::instance()
-            .sub("Reasoning/Execution/Load Table/Process file/Write Buffer & Sort")
+            .sub("Reasoning/Execution/Load Table/Process file/Create trie")
             .stop();
 
         Ok(trie)

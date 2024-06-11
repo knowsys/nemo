@@ -2,11 +2,8 @@
 
 use std::cmp::Ordering;
 
-use crate::{
-    datatypes::{
-        storage_type_name::NUM_STORAGETYPES, Double, Float, StorageTypeName, StorageValueT,
-    },
-    meta::timing::TimedCode,
+use crate::datatypes::{
+    storage_type_name::NUM_STORAGETYPES, Double, Float, StorageTypeName, StorageValueT,
 };
 
 use super::sorted_tuple_buffer::SortedTupleBuffer;
@@ -311,16 +308,7 @@ impl TupleBuffer {
 
     /// Finish writing to the [TupleBuffer] and return a [SortedTupleBuffer].
     pub(crate) fn finalize(self) -> SortedTupleBuffer {
-        TimedCode::instance()
-            .sub("Reasoning/Execution/Load Table/Sort data")
-            .start();
-
         let sorted_buffer = SortedTupleBuffer::new(self);
-
-        TimedCode::instance()
-            .sub("Reasoning/Execution/Load Table/Sort data")
-            .start();
-
         sorted_buffer
     }
 
