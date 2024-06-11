@@ -324,6 +324,29 @@ impl UnaryFunction for StringLength {
     }
 }
 
+/// Transformation of a string into its reverse
+///
+/// Returns the reversed version of the provided string.
+///
+/// Returns `None` if the provided argument is not a string.
+#[derive(Debug, Copy, Clone)]
+pub struct StringReverse;
+impl UnaryFunction for StringReverse {
+    fn evaluate(&self, parameter: AnyDataValue) -> Option<AnyDataValue> {
+        parameter
+            .to_plain_string()
+            .map(|string| AnyDataValue::new_plain_string(string.chars().rev().collect::<String>()))
+    }
+
+    fn type_propagation(&self) -> FunctionTypePropagation {
+        FunctionTypePropagation::KnownOutput(
+            StorageTypeName::Id32
+                .bitset()
+                .union(StorageTypeName::Id64.bitset()),
+        )
+    }
+}
+
 /// Transformation of a string into upper case
 ///
 /// Returns the upper case version of the provided string.

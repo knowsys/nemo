@@ -75,6 +75,7 @@ pub(super) fn term_to_function_tree(
                 UnaryOperation::NumericSquareroot => FunctionTree::numeric_squareroot(sub),
                 UnaryOperation::NumericTangent => FunctionTree::numeric_tangent(sub),
                 UnaryOperation::StringLength => FunctionTree::string_length(sub),
+                UnaryOperation::StringReverse => FunctionTree::string_reverse(sub),
                 UnaryOperation::StringLowercase => FunctionTree::string_lowercase(sub),
                 UnaryOperation::StringUppercase => FunctionTree::string_uppercase(sub),
                 UnaryOperation::NumericCeil => FunctionTree::numeric_ceil(sub),
