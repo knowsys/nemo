@@ -338,9 +338,9 @@ impl UnaryFunction for StringLength {
 pub struct StringReverse;
 impl UnaryFunction for StringReverse {
     fn evaluate(&self, parameter: AnyDataValue) -> Option<AnyDataValue> {
-        parameter
-            .to_plain_string()
-            .map(|string| AnyDataValue::new_plain_string(string.graphemes(true).rev().collect::<String>()))
+        parameter.to_plain_string().map(|string| {
+            AnyDataValue::new_plain_string(string.graphemes(true).rev().collect::<String>())
+        })
     }
 
     fn type_propagation(&self) -> FunctionTypePropagation {
@@ -451,10 +451,10 @@ impl TernaryFunction for StringSubstringLength {
 mod test {
     use crate::{
         datavalues::AnyDataValue,
-        function::definitions::{TernaryFunction, UnaryFunction, BinaryFunction},
+        function::definitions::{BinaryFunction, TernaryFunction, UnaryFunction},
     };
 
-    use super::{StringLength, StringSubstringLength, StringSubstring, StringReverse};
+    use super::{StringLength, StringReverse, StringSubstring, StringSubstringLength};
 
     #[test]
     fn test_string_length() {
@@ -540,16 +540,17 @@ mod test {
         let start8 = AnyDataValue::new_integer_from_u64(3);
         let length8 = AnyDataValue::new_integer_from_u64(2);
         let result8 = AnyDataValue::new_plain_string("ẅk".to_string());
-        let actual_result8 = StringSubstringLength.evaluate(string_unicode.clone(), start8, length8);
+        let actual_result8 =
+            StringSubstringLength.evaluate(string_unicode.clone(), start8, length8);
         assert!(actual_result8.is_some());
         assert_eq!(result8, actual_result8.unwrap());
     }
 
     #[test]
     fn test_string_reverse() {
-        let string= AnyDataValue::new_plain_string("hello".to_string());
-        let result= AnyDataValue::new_plain_string("olleh".to_string());
-        let actual_result= StringReverse.evaluate(string.clone());
+        let string = AnyDataValue::new_plain_string("hello".to_string());
+        let result = AnyDataValue::new_plain_string("olleh".to_string());
+        let actual_result = StringReverse.evaluate(string.clone());
         assert!(actual_result.is_some());
         assert_eq!(result, actual_result.unwrap());
 
