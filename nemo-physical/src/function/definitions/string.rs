@@ -289,11 +289,13 @@ impl BinaryFunction for StringSubstring {
         let string = parameter_first.to_plain_string()?;
         let start = usize::try_from(parameter_second.to_u64()?).ok()?;
 
-        if start >= string.len() {
+        if start > string.len() || start < 1 {
             return None;
         }
 
-        Some(AnyDataValue::new_plain_string(string[start..].to_string()))
+        Some(AnyDataValue::new_plain_string(
+            string[(start - 1)..].to_string(),
+        ))
     }
 
     fn type_propagation(&self) -> FunctionTypePropagation {
@@ -399,8 +401,8 @@ impl UnaryFunction for StringLowercase {
 /// and an integer value as the second and third parameter.
 ///
 /// Return a string containing the characters from the first parameter,
-/// starting from the position given by the second paramter
-/// with the length given by the third parameter.
+/// starting from the position given by the second parameter
+/// with the maximum length given by the third parameter.
 ///
 /// Returns `None` if the type requirements from above are not met.
 #[derive(Debug, Copy, Clone)]
@@ -414,15 +416,21 @@ impl TernaryFunction for StringSubstringLength {
     ) -> Option<AnyDataValue> {
         let string = parameter_first.to_plain_string()?;
         let start = usize::try_from(parameter_second.to_u64()?).ok()?;
-        let length = usize::try_from(parameter_third.to_u64()?).ok()?;
 
-        if start + length > string.len() {
+        if start > string.len() || start < 1 {
             return None;
         }
 
-        Some(AnyDataValue::new_plain_string(
-            string[start..(start + length)].to_string(),
-        ))
+        let length = usize::try_from(parameter_third.to_u64()?).ok()?;
+        let end = start + length;
+
+        let result = if end > string.len() {
+            string[(start - 1)..].to_string()
+        } else {
+            string[(start - 1)..(end - 1)].to_string()
+        };
+
+        Some(AnyDataValue::new_plain_string(result))
     }
 
     fn type_propagation(&self) -> FunctionTypePropagation {
@@ -444,37 +452,49 @@ mod test {
     fn test_string_substring_length() {
         let string = AnyDataValue::new_plain_string("abc".to_string());
 
-        let start1 = AnyDataValue::new_integer_from_u64(0);
+        let start1 = AnyDataValue::new_integer_from_u64(1);
         let length1 = AnyDataValue::new_integer_from_u64(1);
         let result1 = AnyDataValue::new_plain_string("a".to_string());
         let actual_result1 = StringSubstringLength.evaluate(string.clone(), start1, length1);
         assert!(actual_result1.is_some());
         assert_eq!(result1, actual_result1.unwrap());
 
-        let start2 = AnyDataValue::new_integer_from_u64(1);
+        let start2 = AnyDataValue::new_integer_from_u64(2);
         let length2 = AnyDataValue::new_integer_from_u64(1);
         let result2 = AnyDataValue::new_plain_string("b".to_string());
         let actual_result2 = StringSubstringLength.evaluate(string.clone(), start2, length2);
         assert!(actual_result2.is_some());
         assert_eq!(result2, actual_result2.unwrap());
 
-        let start3 = AnyDataValue::new_integer_from_u64(2);
+        let start3 = AnyDataValue::new_integer_from_u64(3);
         let length3 = AnyDataValue::new_integer_from_u64(1);
         let result3 = AnyDataValue::new_plain_string("c".to_string());
         let actual_result3 = StringSubstringLength.evaluate(string.clone(), start3, length3);
         assert!(actual_result3.is_some());
         assert_eq!(result3, actual_result3.unwrap());
 
-        let start4 = AnyDataValue::new_integer_from_u64(3);
+        let start4 = AnyDataValue::new_integer_from_u64(4);
         let length4 = AnyDataValue::new_integer_from_u64(1);
         let actual_result4 = StringSubstringLength.evaluate(string.clone(), start4, length4);
         assert!(actual_result4.is_none());
 
-        let start5 = AnyDataValue::new_integer_from_u64(0);
+        let start5 = AnyDataValue::new_integer_from_u64(1);
         let length5 = AnyDataValue::new_integer_from_u64(3);
         let result5 = AnyDataValue::new_plain_string("abc".to_string());
         let actual_result5 = StringSubstringLength.evaluate(string.clone(), start5, length5);
         assert!(actual_result5.is_some());
         assert_eq!(result5, actual_result5.unwrap());
+
+        let start6 = AnyDataValue::new_integer_from_u64(1);
+        let length6 = AnyDataValue::new_integer_from_u64(4);
+        let result6 = AnyDataValue::new_plain_string("abc".to_string());
+        let actual_result6 = StringSubstringLength.evaluate(string.clone(), start6, length6);
+        assert!(actual_result6.is_some());
+        assert_eq!(result6, actual_result6.unwrap());
+
+        let start7 = AnyDataValue::new_integer_from_u64(0);
+        let length7 = AnyDataValue::new_integer_from_u64(4);
+        let actual_result7 = StringSubstringLength.evaluate(string.clone(), start7, length7);
+        assert!(actual_result7.is_none());
     }
 }

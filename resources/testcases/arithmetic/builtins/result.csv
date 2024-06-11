@@ -39,7 +39,7 @@ concat,"""Hello World"""
 compare,-10
 contains,"""true""^^<http://www.w3.org/2001/XMLSchema#boolean>"
 stringreverse,"""olleH"""
-subString,"""llo"""
+subString,"""ello"""
 subStringLength,"""ell"""
 ucase,"""hello"""
 lcase,"""WORLD"""
