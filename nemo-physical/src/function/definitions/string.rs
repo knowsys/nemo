@@ -293,7 +293,9 @@ impl BinaryFunction for StringSubstring {
             return None;
         }
 
-        Some(AnyDataValue::new_plain_string(string[(start - 1)..].to_string()))
+        Some(AnyDataValue::new_plain_string(
+            string[(start - 1)..].to_string(),
+        ))
     }
 
     fn type_propagation(&self) -> FunctionTypePropagation {
