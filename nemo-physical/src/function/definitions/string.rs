@@ -315,7 +315,8 @@ impl BinaryFunction for StringSubstring {
 pub struct StringLength;
 impl UnaryFunction for StringLength {
     fn evaluate(&self, parameter: AnyDataValue) -> Option<AnyDataValue> {
-        parameter.to_plain_string()
+        parameter
+            .to_plain_string()
             .map(|string| AnyDataValue::new_integer_from_u64(string.graphemes(true).count() as u64))
     }
 
@@ -436,7 +437,10 @@ impl TernaryFunction for StringSubstringLength {
 
 #[cfg(test)]
 mod test {
-    use crate::{datavalues::AnyDataValue, function::definitions::{TernaryFunction, UnaryFunction}};
+    use crate::{
+        datavalues::AnyDataValue,
+        function::definitions::{TernaryFunction, UnaryFunction},
+    };
 
     use super::{StringLength, StringSubstringLength};
 
