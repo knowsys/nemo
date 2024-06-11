@@ -1,6 +1,7 @@
 //! This module defines functions on string.
 
 use std::cmp::Ordering;
+use unicode_segmentation::UnicodeSegmentation;
 
 use crate::{
     datatypes::StorageTypeName,
@@ -314,9 +315,8 @@ impl BinaryFunction for StringSubstring {
 pub struct StringLength;
 impl UnaryFunction for StringLength {
     fn evaluate(&self, parameter: AnyDataValue) -> Option<AnyDataValue> {
-        parameter
-            .to_plain_string()
-            .map(|string| AnyDataValue::new_integer_from_u64(string.len() as u64))
+        parameter.to_plain_string()
+            .map(|string| AnyDataValue::new_integer_from_u64(string.graphemes(true).count() as u64))
     }
 
     fn type_propagation(&self) -> FunctionTypePropagation {
@@ -436,9 +436,30 @@ impl TernaryFunction for StringSubstringLength {
 
 #[cfg(test)]
 mod test {
-    use crate::{datavalues::AnyDataValue, function::definitions::TernaryFunction};
+    use crate::{datavalues::AnyDataValue, function::definitions::{TernaryFunction, UnaryFunction}};
 
-    use super::StringSubstringLength;
+    use super::{StringLength, StringSubstringLength};
+
+    #[test]
+    fn test_string_length() {
+        let string = AnyDataValue::new_plain_string("abc".to_string());
+        let result_string = AnyDataValue::new_integer_from_u64(3);
+        let actual_result_string = StringLength.evaluate(string);
+        assert!(actual_result_string.is_some());
+        assert_eq!(result_string, actual_result_string.unwrap());
+
+        let null_string = AnyDataValue::new_plain_string("".to_string());
+        let result_null_string = AnyDataValue::new_integer_from_u64(0);
+        let actual_result_null_string = StringLength.evaluate(null_string);
+        assert!(actual_result_null_string.is_some());
+        assert_eq!(result_null_string, actual_result_null_string.unwrap());
+
+        let string_unicode = AnyDataValue::new_plain_string("loẅks".to_string());
+        let result_unicode = AnyDataValue::new_integer_from_u64(5);
+        let actual_result_unicode = StringLength.evaluate(string_unicode);
+        assert!(actual_result_unicode.is_some());
+        assert_eq!(result_unicode, actual_result_unicode.unwrap());
+    }
 
     #[test]
     fn test_string_substring_length() {
