@@ -414,7 +414,7 @@ mod test {
 
         let tree_substring = Function::string_subtstring(
             Function::constant(any_string("Hello World")),
-            Function::constant(AnyDataValue::new_integer_from_u64(6)),
+            Function::constant(AnyDataValue::new_integer_from_u64(7)),
         );
         evaluate_expect(&tree_substring, Some(any_string("World")));
 
