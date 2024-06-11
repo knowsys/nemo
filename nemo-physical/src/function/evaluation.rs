@@ -384,7 +384,8 @@ mod test {
         let tree_length = Function::string_length(Function::constant(any_string("12345")));
         evaluate_expect(&tree_length, Some(AnyDataValue::new_integer_from_i64(5)));
 
-        let tree_string_reverse = Function::string_reverse(Function::constant(any_string("Hello World")));
+        let tree_string_reverse =
+            Function::string_reverse(Function::constant(any_string("Hello World")));
         evaluate_expect(&tree_string_reverse, Some(any_string("dlroW olleH")));
 
         let tree_lower_case = Function::string_lowercase(Function::constant(any_string("tEsT123")));
