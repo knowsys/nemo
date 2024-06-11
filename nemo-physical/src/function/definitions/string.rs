@@ -110,11 +110,49 @@ impl BinaryFunction for StringContains {
     ) -> Option<AnyDataValue> {
         string_pair_from_any(parameter_first, parameter_second).map(
             |(first_string, second_string)| {
-                if first_string.contains(&second_string) {
-                    AnyDataValue::new_boolean(true)
-                } else {
-                    AnyDataValue::new_boolean(false)
+
+                // if the second string is empty, it is contained within any string
+                if second_string.is_empty() {
+                    return AnyDataValue::new_boolean(true);
                 }
+
+                let first_string_graphemes = first_string.graphemes(true).collect::<Vec<&str>>();
+                let second_string_graphemes = second_string.graphemes(true).collect::<Vec<&str>>();
+
+                // if the second string is longer than the first string, it cannot be contained within 
+                if second_string_graphemes.len() > first_string_graphemes.len() {
+                    return AnyDataValue::new_boolean(false);
+
+                }
+
+                let max_search_space = first_string_graphemes.len() - second_string_graphemes.len() + 1;
+
+                for i in 0..max_search_space {
+
+                    if first_string_graphemes[i] != second_string_graphemes[0] {
+                        continue
+                    }
+                    else if second_string_graphemes.len() == 1 {
+                        return AnyDataValue::new_boolean(true);
+                    }
+
+                    for j in 1..second_string_graphemes.len() {
+                        let second_index = j;
+                        let first_index = i + j;
+
+                        if second_string_graphemes[second_index] != first_string_graphemes[first_index] {
+                            break; 
+                        }
+
+                        if second_index == (second_string_graphemes.len() - 1) {
+                            return AnyDataValue::new_boolean(true);
+                        }
+
+                    }
+
+                }
+
+                AnyDataValue::new_boolean(false)
             },
         )
     }
@@ -451,7 +489,10 @@ impl TernaryFunction for StringSubstringLength {
 mod test {
     use crate::{
         datavalues::AnyDataValue,
-        function::definitions::{string::{StringLowercase, StringUppercase}, BinaryFunction, TernaryFunction, UnaryFunction},
+        function::definitions::{
+            string::{StringContains, StringLowercase, StringUppercase},
+            BinaryFunction, TernaryFunction, UnaryFunction,
+        },
     };
 
     use super::{StringLength, StringReverse, StringSubstring, StringSubstringLength};
@@ -473,6 +514,17 @@ mod test {
         let string_unicode = AnyDataValue::new_plain_string("loẅks".to_string());
         let result_unicode = AnyDataValue::new_integer_from_u64(5);
         let actual_result_unicode = StringLength.evaluate(string_unicode);
+        assert!(actual_result_unicode.is_some());
+        assert_eq!(result_unicode, actual_result_unicode.unwrap());
+    }
+
+    #[test]
+    fn test_string_contains() {
+        let string_first_unicode = AnyDataValue::new_plain_string("oẅks".to_string());
+        let string_second_unicode = AnyDataValue::new_plain_string("ẅ".to_string());
+        let result_unicode = AnyDataValue::new_boolean(true);
+        let actual_result_unicode =
+            StringContains.evaluate(string_first_unicode.clone(), string_second_unicode.clone());
         assert!(actual_result_unicode.is_some());
         assert_eq!(result_unicode, actual_result_unicode.unwrap());
     }
