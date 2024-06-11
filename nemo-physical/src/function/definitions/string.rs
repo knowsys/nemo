@@ -49,7 +49,7 @@ fn unicode_find(parameter_first: &String, parameter_second: &String) -> Option<u
             let first_index = i + j;
 
             if second_graphemes[second_index] != first_graphemes[first_index] {
-                // next grapheme doesn't match, time to try again
+                // next grapheme didn't match, time to try again
                 break;
             }
 
