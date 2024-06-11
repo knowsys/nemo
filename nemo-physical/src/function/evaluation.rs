@@ -384,6 +384,10 @@ mod test {
         let tree_length = Function::string_length(Function::constant(any_string("12345")));
         evaluate_expect(&tree_length, Some(AnyDataValue::new_integer_from_i64(5)));
 
+        let tree_string_reverse =
+            Function::string_reverse(Function::constant(any_string("Hello World")));
+        evaluate_expect(&tree_string_reverse, Some(any_string("dlroW olleH")));
+
         let tree_lower_case = Function::string_lowercase(Function::constant(any_string("tEsT123")));
         evaluate_expect(&tree_lower_case, Some(any_string("test123")));
 
@@ -412,9 +416,16 @@ mod test {
         );
         evaluate_expect(&tree_not_contains, Some(AnyDataValue::new_boolean(false)));
 
+        let tree_substring_length = Function::string_subtstring_length(
+            Function::constant(any_string("Hello World")),
+            Function::constant(AnyDataValue::new_integer_from_u64(7)),
+            Function::constant(AnyDataValue::new_integer_from_u64(3)),
+        );
+        evaluate_expect(&tree_substring_length, Some(any_string("Wor")));
+
         let tree_substring = Function::string_subtstring(
             Function::constant(any_string("Hello World")),
-            Function::constant(AnyDataValue::new_integer_from_u64(6)),
+            Function::constant(AnyDataValue::new_integer_from_u64(7)),
         );
         evaluate_expect(&tree_substring, Some(any_string("World")));
 
