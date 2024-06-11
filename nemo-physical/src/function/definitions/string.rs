@@ -451,7 +451,7 @@ impl TernaryFunction for StringSubstringLength {
 mod test {
     use crate::{
         datavalues::AnyDataValue,
-        function::definitions::{BinaryFunction, TernaryFunction, UnaryFunction},
+        function::definitions::{string::{StringLowercase, StringUppercase}, BinaryFunction, TernaryFunction, UnaryFunction},
     };
 
     use super::{StringLength, StringReverse, StringSubstring, StringSubstringLength};
@@ -473,6 +473,24 @@ mod test {
         let string_unicode = AnyDataValue::new_plain_string("loẅks".to_string());
         let result_unicode = AnyDataValue::new_integer_from_u64(5);
         let actual_result_unicode = StringLength.evaluate(string_unicode);
+        assert!(actual_result_unicode.is_some());
+        assert_eq!(result_unicode, actual_result_unicode.unwrap());
+    }
+
+    #[test]
+    fn test_uppercase() {
+        let string_unicode = AnyDataValue::new_plain_string("loẅks".to_string());
+        let result_unicode = AnyDataValue::new_plain_string("LOẄKS".to_string());
+        let actual_result_unicode = StringUppercase.evaluate(string_unicode.clone());
+        assert!(actual_result_unicode.is_some());
+        assert_eq!(result_unicode, actual_result_unicode.unwrap());
+    }
+
+    #[test]
+    fn test_lowercase() {
+        let string_unicode = AnyDataValue::new_plain_string("LOẄKS".to_string());
+        let result_unicode = AnyDataValue::new_plain_string("loẅks".to_string());
+        let actual_result_unicode = StringLowercase.evaluate(string_unicode.clone());
         assert!(actual_result_unicode.is_some());
         assert_eq!(result_unicode, actual_result_unicode.unwrap());
     }
