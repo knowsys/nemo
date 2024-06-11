@@ -110,7 +110,6 @@ impl BinaryFunction for StringContains {
     ) -> Option<AnyDataValue> {
         string_pair_from_any(parameter_first, parameter_second).map(
             |(first_string, second_string)| {
-
                 // if the second string is empty, it is contained within any string
                 if second_string.is_empty() {
                     return AnyDataValue::new_boolean(true);
@@ -119,20 +118,18 @@ impl BinaryFunction for StringContains {
                 let first_string_graphemes = first_string.graphemes(true).collect::<Vec<&str>>();
                 let second_string_graphemes = second_string.graphemes(true).collect::<Vec<&str>>();
 
-                // if the second string is longer than the first string, it cannot be contained within 
+                // if the second string is longer than the first string, it cannot be contained within
                 if second_string_graphemes.len() > first_string_graphemes.len() {
                     return AnyDataValue::new_boolean(false);
-
                 }
 
-                let max_search_space = first_string_graphemes.len() - second_string_graphemes.len() + 1;
+                let max_search_space =
+                    first_string_graphemes.len() - second_string_graphemes.len() + 1;
 
                 for i in 0..max_search_space {
-
                     if first_string_graphemes[i] != second_string_graphemes[0] {
-                        continue
-                    }
-                    else if second_string_graphemes.len() == 1 {
+                        continue;
+                    } else if second_string_graphemes.len() == 1 {
                         return AnyDataValue::new_boolean(true);
                     }
 
@@ -140,16 +137,16 @@ impl BinaryFunction for StringContains {
                         let second_index = j;
                         let first_index = i + j;
 
-                        if second_string_graphemes[second_index] != first_string_graphemes[first_index] {
-                            break; 
+                        if second_string_graphemes[second_index]
+                            != first_string_graphemes[first_index]
+                        {
+                            break;
                         }
 
                         if second_index == (second_string_graphemes.len() - 1) {
                             return AnyDataValue::new_boolean(true);
                         }
-
                     }
-
                 }
 
                 AnyDataValue::new_boolean(false)
