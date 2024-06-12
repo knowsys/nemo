@@ -11,7 +11,7 @@ use nemo::{
     datavalues::{AnyDataValue, DataValue},
     execution::{tracing::trace::ExecutionTraceTree, ExecutionEngine},
     io::{resource_providers::ResourceProviders, ExportManager, ImportManager},
-    meta::timing::{TimedCode, TimedCodeInfo},
+    meta::timing::TimedCode,
     model::{
         chase_model::{ChaseAtom, ChaseFact},
         ExportDirective, Identifier, Variable,
