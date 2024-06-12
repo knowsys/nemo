@@ -90,16 +90,14 @@ class TestExample(unittest.TestCase):
             "assignment": {"?x": 3.14, "?y": "<circle>"},
             "subtraces": [
                 {
-                    "fact":
-                    "data(\"3.14\"^^<http://www.w3.org/2001/XMLSchema#double>, circle)"
+                    "fact": 'data("3.14"^^<http://www.w3.org/2001/XMLSchema#double>, circle)'
                 },
                 {
                     "rule": "interesting(?y) :- data(?x, ?y), interesting(?x) .",
                     "assignment": {"?x": "<py>", "?y": 3.14},
                     "subtraces": [
                         {
-                            "fact":
-                            'data(py, "3.14"^^<http://www.w3.org/2001/XMLSchema#double>)'
+                            "fact": 'data(py, "3.14"^^<http://www.w3.org/2001/XMLSchema#double>)'
                         },
                         {"fact": "interesting(py)"},
                     ],
@@ -108,6 +106,14 @@ class TestExample(unittest.TestCase):
         }
 
         self.assertEqual(trace.dict(), expected_trace)
+
+    def test_timing(self):
+        timing = self.engine.timing()
+
+        expected_names = ["Rule 0", "Rule 1", "Rule 2"]
+        names = [node.name for node in timing.subnode("Reasoning/Rules").subnodes]
+
+        self.assertEqual(names, expected_names)
 
 
 if __name__ == "__main__":
