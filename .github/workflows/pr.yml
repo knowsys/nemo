@@ -104,7 +104,7 @@ jobs:
       - name: install pycodestyle
         run: pip install pycodestyle
       - name: run pycodestyle
-        run: pycodestyle nemo-python --max-line-length 90
+        run: pycodestyle nemo-python
 
   wasm-pack:
     name: Test wasm bindings
