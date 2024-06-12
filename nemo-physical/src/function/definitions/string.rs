@@ -14,7 +14,7 @@ use super::{
 
 /// Unicode friendly version of [String] find
 ///
-/// Returns the index of the first occurrence of the needle in the haystack.
+/// Returns the index of the first occurrence of the needle in the haystack
 /// or `None` if the needle is not found.
 fn unicode_find(haystack: &String, needle: &String) -> Option<usize> {
     // if the second string is an empty string, it is found at index 0
