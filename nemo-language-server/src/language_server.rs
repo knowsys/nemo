@@ -1,24 +1,25 @@
-use std::collections::HashMap;
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::vec;
 
+use anyhow::anyhow;
 use futures::lock::Mutex;
 use line_index::{LineCol, LineIndex, WideEncoding};
 use nemo::io::parser::ast::program::Program;
 use nemo::io::parser::ast::{AstNode, Position};
 use nemo::io::parser::new::parse_program_str;
-use nemo_position::{
-    lsp_position_to_nemo_position, nemo_position_to_lsp_position, PositionConversionError,
-};
+use nemo_position::{lsp_position_to_nemo_position, PositionConversionError};
 use tower_lsp::lsp_types::{
-    CompletionOptions, Diagnostic, DidChangeTextDocumentParams, DidOpenTextDocumentParams,
-    DocumentChangeOperation, DocumentChanges, DocumentSymbol, DocumentSymbolOptions,
-    DocumentSymbolParams, DocumentSymbolResponse, InitializeParams, InitializeResult,
-    InitializedParams, Location, MessageType, OneOf, OptionalVersionedTextDocumentIdentifier,
-    PrepareRenameResponse, Range, ReferenceParams, RenameOptions, RenameParams, ServerCapabilities,
-    TextDocumentEdit, TextDocumentPositionParams, TextDocumentSyncCapability, TextDocumentSyncKind,
-    TextEdit, Url, VersionedTextDocumentIdentifier, WorkDoneProgressOptions, WorkspaceEdit,
+    Diagnostic, DidChangeTextDocumentParams, DidOpenTextDocumentParams, DocumentChangeOperation,
+    DocumentChanges, DocumentSymbol, DocumentSymbolOptions, DocumentSymbolParams,
+    DocumentSymbolResponse, InitializeParams, InitializeResult, InitializedParams, Location,
+    MessageType, OneOf, OptionalVersionedTextDocumentIdentifier, PrepareRenameResponse, Range,
+    ReferenceParams, RenameOptions, RenameParams, ServerCapabilities, TextDocumentEdit,
+    TextDocumentPositionParams, TextDocumentSyncCapability, TextDocumentSyncKind, TextEdit, Url,
+    VersionedTextDocumentIdentifier, WorkDoneProgressOptions, WorkspaceEdit,
 };
 use tower_lsp::{Client, LanguageServer};
+
+use self::nemo_position::nemo_range_to_lsp_range;
 
 mod nemo_position;
 
@@ -42,18 +43,26 @@ struct TextDocumentInfo {
 }
 
 /// Converts a source position to a LSP position
-pub(crate) fn line_col_to_position(
+pub(crate) fn line_col_to_lsp_position(
     line_index: &LineIndex,
     line_col: LineCol,
-) -> Result<tower_lsp::lsp_types::Position, ()> {
+) -> Result<tower_lsp::lsp_types::Position, PositionConversionError> {
     let wide_line_col = line_index
         .to_wide(WideEncoding::Utf16, line_col)
-        .ok_or(())?;
+        .ok_or(PositionConversionError::LspLineCol(line_col))?;
 
     Ok(tower_lsp::lsp_types::Position {
         line: wide_line_col.line,
         character: wide_line_col.col,
     })
+}
+
+fn jsonrpc_error(error: anyhow::Error) -> tower_lsp::jsonrpc::Error {
+    tower_lsp::jsonrpc::Error {
+        code: tower_lsp::jsonrpc::ErrorCode::ServerError(1),
+        message: error.to_string().into(),
+        data: None,
+    }
 }
 
 impl Backend {
@@ -66,7 +75,11 @@ impl Backend {
         }
     }
 
-    async fn handle_change(&self, text_document: VersionedTextDocumentIdentifier, text: &str) {
+    async fn handle_change(
+        &self,
+        text_document: VersionedTextDocumentIdentifier,
+        text: &str,
+    ) -> anyhow::Result<()> {
         self.state.lock().await.text_document_store.insert(
             text_document.uri.clone(),
             TextDocumentInfo {
@@ -79,52 +92,50 @@ impl Backend {
 
         let (_program, errors) = parse_program_str(text);
 
-        use std::collections::{BTreeMap, HashSet};
-        let mut error_map: BTreeMap<Position, HashSet<String>> = BTreeMap::new();
-        for error in &errors {
-            if let Some(set) = error_map.get_mut(&error.pos) {
+        // Group errors by position and deduplicate error
+        let mut errors_by_posision: BTreeMap<Position, BTreeSet<String>> = BTreeMap::new();
+        for error in errors {
+            if let Some(set) = errors_by_posision.get_mut(&error.pos) {
                 set.insert(error.msg.clone());
             } else {
-                let mut set = HashSet::new();
-                set.insert(error.msg.clone());
-                error_map.insert(error.pos, set);
+                errors_by_posision.insert(error.pos, std::iter::once(error.msg.clone()).collect());
             };
         }
 
-        let diagnostics = error_map
+        let diagnostics = errors_by_posision
             .into_iter()
-            .map(|(pos, error_set)| Diagnostic {
-                message: /*error.msg*/ {
-                    format!("expected{}", {
-                        let mut string = String::new();
-                        for s in error_set {
-                            string.push_str(" '");
-                            string.push_str(s.as_str());
-                            string.push_str("',");
-                        }
-                        string
-                    })
-                },
-                range: Range::new(
-                    line_col_to_position(
-                        &line_index,
-                        LineCol {
-                            line: pos.line - 1,
-                            col: pos.column - 1,
-                        },
-                    )
-                    .unwrap(),
-                    line_col_to_position(
-                        &line_index,
-                        LineCol {
-                            line: pos.line - 1,
-                            col: pos.column - 1 + 1,
-                        },
-                    )
-                    .unwrap(),
-                ),
-                ..Default::default()
+            .map(|(pos, error_set)| {
+                Ok(Diagnostic {
+                    message: format!(
+                        "expected {}",
+                        error_set
+                            .iter()
+                            .map(|s| format!("'{s}'"))
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    ),
+                    range: Range::new(
+                        line_col_to_lsp_position(
+                            &line_index,
+                            LineCol {
+                                line: pos.line - 1,
+                                col: pos.column - 1,
+                            },
+                        )
+                        .unwrap(),
+                        line_col_to_lsp_position(
+                            &line_index,
+                            LineCol {
+                                line: pos.line - 1,
+                                col: pos.column - 1 + 1,
+                            },
+                        )
+                        .unwrap(),
+                    ),
+                    ..Default::default()
+                })
             })
+            .filter_map(|result: Result<_, PositionConversionError>| result.ok())
             .collect();
 
         self.client
@@ -134,20 +145,15 @@ impl Backend {
                 Some(text_document.version),
             )
             .await;
+
+        Ok(())
     }
 
-    async fn read_text_document_info(&self, uri: &Url) -> Option<TextDocumentInfo> {
+    async fn read_text_document_info(&self, uri: &Url) -> anyhow::Result<TextDocumentInfo> {
         if let Some(info) = self.state.lock().await.text_document_store.get(uri) {
-            let a = info.clone();
-            Some(a)
+            Ok(info.clone())
         } else {
-            self.client
-                .log_message(
-                    MessageType::ERROR,
-                    "could not find text document with URI {uri}",
-                )
-                .await;
-            None
+            Err(anyhow!("could not find text document with URI {uri}"))
         }
     }
 }
@@ -176,13 +182,6 @@ impl LanguageServer for Backend {
                         ..Default::default()
                     },
                 })),
-                completion_provider: Some(CompletionOptions {
-                    work_done_progress_options: WorkDoneProgressOptions {
-                        ..Default::default()
-                    },
-                    ..Default::default()
-                }),
-
                 ..Default::default()
             },
             ..Default::default()
@@ -196,19 +195,43 @@ impl LanguageServer for Backend {
     }
 
     async fn did_open(&self, params: DidOpenTextDocumentParams) {
-        self.handle_change(
-            VersionedTextDocumentIdentifier {
-                uri: params.text_document.uri,
-                version: params.text_document.version,
-            },
-            &params.text_document.text,
-        )
-        .await;
+        if let Err(error) = self
+            .handle_change(
+                VersionedTextDocumentIdentifier {
+                    uri: params.text_document.uri,
+                    version: params.text_document.version,
+                },
+                &params.text_document.text,
+            )
+            .await
+        {
+            self.client
+                .log_message(
+                    MessageType::ERROR,
+                    format!("error while handling textDocument/didOpen request: {error}"),
+                )
+                .await;
+        }
     }
 
     async fn did_change(&self, params: DidChangeTextDocumentParams) {
-        self.handle_change(params.text_document, &params.content_changes[0].text)
-            .await;
+        if let Err(error) = self
+            .handle_change(
+                VersionedTextDocumentIdentifier {
+                    uri: params.text_document.uri,
+                    version: params.text_document.version,
+                },
+                &params.content_changes[0].text,
+            )
+            .await
+        {
+            self.client
+                .log_message(
+                    MessageType::ERROR,
+                    format!("error while handling textDocument/didChange request: {error}"),
+                )
+                .await;
+        }
     }
 
     async fn references(
@@ -217,46 +240,44 @@ impl LanguageServer for Backend {
     ) -> tower_lsp::jsonrpc::Result<Option<Vec<Location>>> {
         let info = self
             .read_text_document_info(&params.text_document_position.text_document.uri)
-            .await;
+            .await
+            .map_err(jsonrpc_error)?;
 
-        match info {
-            Some(info) => {
-                let text = info.text;
-                let line_index = LineIndex::new(&text);
-                let position = lsp_position_to_nemo_position(
-                    &line_index,
-                    params.text_document_position.position,
-                )
-                .unwrap(); // TODO handle unwrap
+        let text = info.text;
+        let line_index = LineIndex::new(&text);
+        let position =
+            lsp_position_to_nemo_position(&line_index, params.text_document_position.position)
+                .map_err(Into::into)
+                .map_err(jsonrpc_error)?;
 
-                let program = parse_program_str(&text);
-                let program = program.0;
+        let (program, _) = parse_program_str(&text);
 
-                let node_path = find_in_ast(&program, position);
+        let node_path = find_in_ast(&program, position);
 
-                // Get most identifier most specific to the position
-                let indentified_node = node_path_deepest_identifier(&node_path);
-                let indentified_node = match indentified_node {
-                    Some(indentified_node) => indentified_node,
-                    None => return Ok(None),
-                };
+        // Get most identifier most specific to the position
+        let indentified_node = node_path_deepest_identifier(&node_path);
+        let indentified_node = match indentified_node {
+            Some(indentified_node) => indentified_node,
+            None => return Ok(None),
+        };
 
-                // Find other AST nodes with the same global identifier
-                let referenced_nodes =
-                    find_by_identifier(indentified_node.scoping_node, &indentified_node.identifier);
+        // Find other AST nodes with the same global identifier
+        let referenced_nodes =
+            find_by_identifier(indentified_node.scoping_node, &indentified_node.identifier);
 
-                let locations = referenced_nodes
-                    .iter()
-                    .map(|node| Location {
-                        uri: params.text_document_position.text_document.uri.clone(),
-                        range: node_to_range_lsp(&line_index, *node),
-                    })
-                    .collect();
+        let locations = referenced_nodes
+            .iter()
+            .filter_map(|node| node_with_range(&line_index, *node))
+            .map(|(_node, range)| {
+                Ok(Location {
+                    uri: params.text_document_position.text_document.uri.clone(),
+                    range,
+                })
+            })
+            .filter_map(|result: Result<_, ()>| result.ok())
+            .collect();
 
-                Ok(Some(locations))
-            }
-            None => Ok(None), // TODO: Handle error
-        }
+        Ok(Some(locations))
     }
 
     async fn document_symbol(
@@ -265,28 +286,23 @@ impl LanguageServer for Backend {
     ) -> tower_lsp::jsonrpc::Result<Option<DocumentSymbolResponse>> {
         let info = self
             .read_text_document_info(&params.text_document.uri)
-            .await;
+            .await
+            .map_err(jsonrpc_error)?;
 
-        match info {
-            Some(info) => {
-                let text = info.text;
-                let line_index = LineIndex::new(&text);
+        let text = info.text;
+        let line_index = LineIndex::new(&text);
 
-                let program = parse_program_str(&text);
-                let program = program.0;
+        let (program, _) = parse_program_str(&text);
 
-                let document_symbol = ast_node_to_document_symbol(&line_index, &program);
+        let document_symbol = ast_node_to_document_symbol(&line_index, &program)
+            .map_err(Into::into)
+            .map_err(jsonrpc_error)?
+            .ok_or(anyhow!("program has no document symbol"))
+            .map_err(jsonrpc_error)?;
 
-                if let Ok(document_symbol) = document_symbol {
-                    return Ok(document_symbol.map(|document_symbol| {
-                        DocumentSymbolResponse::Nested(document_symbol.children.unwrap())
-                    }));
-                }
-
-                Ok(None)
-            }
-            None => Ok(None), // TODO: Handle error
-        }
+        Ok(Some(DocumentSymbolResponse::Nested(
+            document_symbol.children.unwrap_or(vec![]),
+        )))
     }
 
     /// Finds references to symbol that was renamed and sends edit operations to language client
@@ -296,21 +312,17 @@ impl LanguageServer for Backend {
     ) -> tower_lsp::jsonrpc::Result<Option<WorkspaceEdit>> {
         let info = self
             .read_text_document_info(&params.text_document_position.text_document.uri)
-            .await;
-
-        let info = match info {
-            Some(info) => info,
-            None => return Ok(None),
-        };
+            .await
+            .map_err(jsonrpc_error)?;
 
         let text = info.text;
         let line_index = LineIndex::new(&text);
         let position =
             lsp_position_to_nemo_position(&line_index, params.text_document_position.position)
-                .unwrap();
+                .map_err(Into::into)
+                .map_err(jsonrpc_error)?;
 
-        let program = parse_program_str(&text);
-        let program = program.0;
+        let (program, _) = parse_program_str(&text);
 
         let node_path = find_in_ast(&program, position);
 
@@ -333,13 +345,17 @@ impl LanguageServer for Backend {
             edits: referenced_nodes
                 .into_iter()
                 .filter_map(|node| {
-                    node.lsp_sub_node_to_rename().map(|renamed_node| {
-                        OneOf::Left(TextEdit {
-                            range: node_to_range_lsp(&line_index, renamed_node),
-                            new_text: params.new_name.clone(),
+                    node.lsp_range_to_rename().map(|renamed_node_range| {
+                        Ok({
+                            OneOf::Left(TextEdit {
+                                range: nemo_range_to_lsp_range(&line_index, renamed_node_range)
+                                    .map_err(|_error| ())?, // TODO: Print error,
+                                new_text: params.new_name.clone(),
+                            })
                         })
                     })
                 })
+                .filter_map(|result: Result<_, ()>| result.ok())
                 .collect(),
         };
 
@@ -358,19 +374,16 @@ impl LanguageServer for Backend {
     ) -> tower_lsp::jsonrpc::Result<Option<PrepareRenameResponse>> {
         let info = self
             .read_text_document_info(&params.text_document.uri)
-            .await;
-
-        let info = match info {
-            Some(info) => info,
-            None => return Ok(None),
-        };
+            .await
+            .map_err(jsonrpc_error)?;
 
         let text = info.text;
         let line_index = LineIndex::new(&text);
-        let position = lsp_position_to_nemo_position(&line_index, params.position).unwrap();
+        let position = lsp_position_to_nemo_position(&line_index, params.position)
+            .map_err(Into::into)
+            .map_err(jsonrpc_error)?;
 
-        let program = parse_program_str(&text);
-        let program = program.0;
+        let (program, _) = parse_program_str(&text);
 
         let node_path = find_in_ast(&program, position);
 
@@ -378,14 +391,18 @@ impl LanguageServer for Backend {
         let indentified_node = node_path_deepest_identifier(&node_path);
 
         match indentified_node {
-            Some(indentified_node) => {
-                Ok(indentified_node
-                    .node
-                    .lsp_sub_node_to_rename()
-                    .map(|renamed_node| {
-                        PrepareRenameResponse::Range(node_to_range_lsp(&line_index, renamed_node))
-                    }))
-            }
+            Some(indentified_node) => Ok(Some(PrepareRenameResponse::Range(
+                nemo_range_to_lsp_range(
+                    &line_index,
+                    indentified_node
+                        .node
+                        .lsp_range_to_rename()
+                        .ok_or_else(|| anyhow!("identified node can not be renamed"))
+                        .map_err(jsonrpc_error)?,
+                )
+                .map_err(Into::into)
+                .map_err(jsonrpc_error)?,
+            ))),
             None => Ok(None),
         }
     }
@@ -393,6 +410,15 @@ impl LanguageServer for Backend {
     async fn shutdown(&self) -> tower_lsp::jsonrpc::Result<()> {
         Ok(())
     }
+}
+
+fn node_with_range<'a>(
+    line_index: &LineIndex,
+    node: &'a dyn AstNode,
+) -> Option<(&'a dyn AstNode, Range)> {
+    nemo_range_to_lsp_range(line_index, node.range())
+        .map(|range| (node, range)) // TODO: Print error,
+        .ok()
 }
 
 struct IdentifiedNode<'a> {
@@ -486,37 +512,12 @@ fn find_in_ast_recurse<'a>(
 ) {
     path.push(node);
 
-    if let Some(children) = node.children() {
-        for (child, next_child) in children.iter().zip(children.iter().skip(1)) {
-            if next_child.position() > position {
-                find_in_ast_recurse(*child, position, path);
-                return;
-            }
-        }
-        if let Some(child) = children.last() {
+    for child in node.children().iter().flatten() {
+        let range = child.range();
+        if range.start <= position && position < range.end {
             find_in_ast_recurse(*child, position, path);
+            break; // Assume no nodes overlap
         }
-    };
-}
-
-fn node_to_range_lsp(line_index: &LineIndex, node: &dyn AstNode) -> Range {
-    Range {
-        start: nemo_position_to_lsp_position(line_index, node.position()).unwrap(), // TODO: Improve error handling
-        end: nemo_position_to_lsp_position(
-            line_index,
-            Position {
-                offset: node.position().offset + node.span().len(),
-                line: node.position().line + node.span().fragment().lines().count() as u32 - 1,
-                column: if node.span().fragment().lines().count() > 1 {
-                    1 + node.span().fragment().lines().last().unwrap().len() // TODO: Check if length is in correct encoding
-                        as u32
-                } else {
-                    node.position().column + node.span().fragment().len() as u32
-                    // TODO: Check if length is in correct encoding
-                },
-            },
-        )
-        .unwrap(),
     }
 }
 
@@ -524,9 +525,7 @@ fn ast_node_to_document_symbol(
     line_index: &LineIndex,
     node: &dyn AstNode,
 ) -> Result<Option<DocumentSymbol>, PositionConversionError> {
-    let range = node_to_range_lsp(line_index, node);
-
-    let selection_range = range;
+    let range = nemo_range_to_lsp_range(line_index, node.range())?;
 
     if let Some((name, kind)) = node.lsp_symbol_info() {
         let children_results: Vec<_> = node
@@ -555,7 +554,7 @@ fn ast_node_to_document_symbol(
                 kind,
                 name,
                 range,
-                selection_range,
+                selection_range: range,
                 tags: None,
                 deprecated: None,
             },

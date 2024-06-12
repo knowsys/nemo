@@ -1,9 +1,9 @@
 use tower_lsp::lsp_types::SymbolKind;
 
+use super::map::Map;
 use super::term::Term;
 use super::tuple::Tuple;
-use super::{ast_to_ascii_tree, AstNode, Wsoc};
-use super::{map::Map, Position};
+use super::{ast_to_ascii_tree, AstNode, Range, Wsoc};
 use crate::io::lexer::{Span, Token};
 use ascii_tree::write_tree;
 
@@ -74,15 +74,6 @@ impl AstNode for Atom<'_> {
         }
     }
 
-    fn position(&self) -> Position {
-        let span = self.span();
-        Position {
-            offset: span.location_offset(),
-            line: span.location_line(),
-            column: span.get_utf8_column() as u32,
-        }
-    }
-
     fn is_token(&self) -> bool {
         false
     }
@@ -108,19 +99,18 @@ impl AstNode for Atom<'_> {
     }
 
     fn lsp_identifier(&self) -> Option<(String, String)> {
-        self.tuple().map(|tuple| (
+        self.tuple().map(|tuple| {
+            (
                 format!("atom/{}", tuple.identifier.unwrap().span().fragment()),
                 "file".to_string(),
-            ))
+            )
+        })
     }
 
-    fn lsp_sub_node_to_rename(&self) -> Option<&dyn AstNode> {
-        None
-        // TODO:
-        // match self.tuple() {
-        //     Some(tuple) => Some(&tuple.identifier.unwrap()),
-        //     None => None,
-        // }
+    fn lsp_range_to_rename(&self) -> Option<Range> {
+        self.tuple()
+            .and_then(|tuple| tuple.identifier)
+            .map(|identifier| identifier.range())
     }
 
     fn lsp_symbol_info(&self) -> Option<(String, SymbolKind)> {

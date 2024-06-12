@@ -1,12 +1,16 @@
 [workspace]
 resolver = "2"
+default-members = [
+       "nemo",
+    "nemo-cli",
+    "nemo-physical",
+    "nemo-python",
+]
 members = [
     "nemo",
     "nemo-cli",
     "nemo-physical",
     "nemo-python",
-]
-exclude = [
     "nemo-language-server",
     "nemo-wasm",
 ]

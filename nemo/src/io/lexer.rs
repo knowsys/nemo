@@ -370,14 +370,6 @@ impl<'a> AstNode for Token<'a> {
         self.span
     }
 
-    fn position(&self) -> Position {
-        Position {
-            offset: self.span.location_offset(),
-            line: self.span.location_line(),
-            column: self.span.get_utf8_column() as u32,
-        }
-    }
-
     fn is_token(&self) -> bool {
         true
     }
@@ -386,7 +378,7 @@ impl<'a> AstNode for Token<'a> {
         None
     }
 
-    fn lsp_sub_node_to_rename(&self) -> Option<&dyn AstNode> {
+    fn lsp_range_to_rename(&self) -> Option<super::parser::ast::Range> {
         None
     }
 

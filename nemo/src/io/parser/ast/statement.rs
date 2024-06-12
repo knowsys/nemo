@@ -2,7 +2,7 @@ use tower_lsp::lsp_types::SymbolKind;
 
 use super::atom::Atom;
 use super::directive::Directive;
-use super::{ast_to_ascii_tree, AstNode, List, Position, Wsoc};
+use super::{ast_to_ascii_tree, AstNode, List, Position, Range, Wsoc};
 use crate::io::lexer::{Span, Token};
 use ascii_tree::write_tree;
 
@@ -100,15 +100,6 @@ impl AstNode for Statement<'_> {
         }
     }
 
-    fn position(&self) -> Position {
-        let span = self.span();
-        Position {
-            offset: span.location_offset(),
-            line: span.location_line(),
-            column: span.get_utf8_column() as u32,
-        }
-    }
-
     fn is_token(&self) -> bool {
         false
     }
@@ -140,7 +131,7 @@ impl AstNode for Statement<'_> {
         Some(("statement".to_string(), "statement".to_string()))
     }
 
-    fn lsp_sub_node_to_rename(&self) -> Option<&dyn AstNode> {
+    fn lsp_range_to_rename(&self) -> Option<Range> {
         None
     }
 

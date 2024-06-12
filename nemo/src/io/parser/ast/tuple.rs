@@ -1,7 +1,7 @@
 use tower_lsp::lsp_types::SymbolKind;
 
 use super::term::Term;
-use super::{ast_to_ascii_tree, AstNode, List, Position, Wsoc};
+use super::{ast_to_ascii_tree, AstNode, List, Position, Range, Wsoc};
 use crate::io::lexer::{Span, Token};
 use ascii_tree::write_tree;
 
@@ -44,14 +44,6 @@ impl AstNode for Tuple<'_> {
         self.span
     }
 
-    fn position(&self) -> Position {
-        Position {
-            offset: self.span.location_offset(),
-            line: self.span.location_line(),
-            column: self.span.get_utf8_column() as u32,
-        }
-    }
-
     fn is_token(&self) -> bool {
         false
     }
@@ -69,7 +61,7 @@ impl AstNode for Tuple<'_> {
         None
     }
 
-    fn lsp_sub_node_to_rename(&self) -> Option<&dyn AstNode> {
+    fn lsp_range_to_rename(&self) -> Option<Range> {
         None
     }
 

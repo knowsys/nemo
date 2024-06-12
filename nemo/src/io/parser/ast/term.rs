@@ -2,15 +2,15 @@ use tower_lsp::lsp_types::SymbolKind;
 
 use super::map::Map;
 use super::tuple::Tuple;
-use super::{ast_to_ascii_tree, AstNode, List, Position, Wsoc};
+use super::{ast_to_ascii_tree, AstNode, List, Range, Wsoc};
 use crate::io::lexer::{Span, Token};
 use ascii_tree::write_tree;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Term<'a> {
     Primitive(Primitive<'a>),
-    Variable(Token<'a>),
-    Existential(Token<'a>),
+    UniversalVariable(Token<'a>),
+    ExistentialVariable(Token<'a>),
     // TODO: Is whitespace needed? Figure out how unary terms look
     UnaryPrefix {
         span: Span<'a>,
@@ -43,8 +43,8 @@ impl AstNode for Term<'_> {
     fn children(&self) -> Option<Vec<&dyn AstNode>> {
         match self {
             Term::Primitive(token) => Some(vec![token]),
-            Term::Variable(token) => Some(vec![token]),
-            Term::Existential(token) => Some(vec![token]),
+            Term::UniversalVariable(token) => Some(vec![token]),
+            Term::ExistentialVariable(token) => Some(vec![token]),
             Term::UnaryPrefix {
                 operation, term, ..
             } => Some(vec![operation, &**term]),
@@ -100,23 +100,14 @@ impl AstNode for Term<'_> {
     fn span(&self) -> Span {
         match self {
             Term::Primitive(t) => t.span(),
-            Term::Variable(t) => t.span(),
-            Term::Existential(t) => t.span(),
+            Term::UniversalVariable(t) => t.span(),
+            Term::ExistentialVariable(t) => t.span(),
             Term::UnaryPrefix { span, .. } => *span,
             Term::Binary { span, .. } => *span,
             Term::Aggregation { span, .. } => *span,
             Term::Tuple(named_tuple) => named_tuple.span(),
             Term::Map(map) => map.span(),
             Term::Blank(t) => t.span(),
-        }
-    }
-
-    fn position(&self) -> Position {
-        let span = self.span();
-        Position {
-            offset: span.location_offset(),
-            line: span.location_line(),
-            column: span.get_utf8_column() as u32,
         }
     }
 
@@ -138,8 +129,8 @@ impl AstNode for Term<'_> {
         }
         match self {
             Term::Primitive(_) => name!("Primitive"),
-            Term::Variable(_) => name!("Variable"),
-            Term::Existential(_) => name!("Existential Variable"),
+            Term::UniversalVariable(_) => name!("Variable"),
+            Term::ExistentialVariable(_) => name!("Existential Variable"),
             Term::UnaryPrefix { .. } => name!("Unary Term"),
             Term::Binary { .. } => name!("Binary Term"),
             Term::Aggregation { .. } => name!("Aggregation"),
@@ -157,7 +148,7 @@ impl AstNode for Term<'_> {
 
     fn lsp_identifier(&self) -> Option<(String, String)> {
         match self {
-            Term::Variable(t) => Some((
+            Term::UniversalVariable(t) => Some((
                 format!("variable/{}", t.span().fragment()),
                 "statement".to_string(),
             )),
@@ -175,31 +166,31 @@ impl AstNode for Term<'_> {
         }
     }
 
-    fn lsp_sub_node_to_rename(&self) -> Option<&dyn AstNode> {
-        None
-        // TODO:
-        // match self {
-        //     Term::Variable(t) => Some(t),
-        //     Term::Aggregation { operation, .. } => Some(operation),
-        //     Term::Tuple(tuple) => {
-        //         if let Some(identifier) = tuple.identifier {
-        //             Some(identifier)
-        //         } else {
-        //             None
-        //         }
-        //     }
-        //     // Term::Function(named_tuple) => Some(&named_tuple.identifier),
-        //     _ => None,
-        // }
+    fn lsp_range_to_rename(&self) -> Option<Range> {
+        match self {
+            Term::Primitive(_) => None,
+            Term::UniversalVariable(t) => Some(t.range()),
+            Term::UnaryPrefix { .. } => None,
+            Term::Blank { .. } => None,
+            Term::ExistentialVariable(t) => Some(t.range()),
+            Term::Binary { .. } => None,
+            Term::Aggregation { operation, .. } => Some(operation.range()),
+            Term::Tuple(tuple) => tuple.identifier.map(|identifier| identifier.range()),
+            Term::Map(_map) => None,
+        }
     }
 
     fn lsp_symbol_info(&self) -> Option<(String, SymbolKind)> {
         match self {
             Term::Primitive(_) => Some((String::from("Primitive term"), SymbolKind::CONSTANT)),
-            Term::Variable(t) => Some((format!("Variable: {}", t.span()), SymbolKind::VARIABLE)),
+            Term::UniversalVariable(t) => {
+                Some((format!("Variable: {}", t.span()), SymbolKind::VARIABLE))
+            }
             Term::UnaryPrefix { .. } => Some((String::from("Unary prefix"), SymbolKind::OPERATOR)),
             Term::Blank { .. } => Some((String::from("Unary prefix"), SymbolKind::VARIABLE)),
-            Term::Existential { .. } => Some((String::from("Unary prefix"), SymbolKind::VARIABLE)),
+            Term::ExistentialVariable { .. } => {
+                Some((String::from("Existential"), SymbolKind::VARIABLE))
+            }
             Term::Binary { .. } => Some((String::from("Binary term"), SymbolKind::OPERATOR)),
             Term::Aggregation { operation, .. } => Some((
                 format!("Aggregation: {}", operation.span.fragment()),
@@ -215,7 +206,7 @@ impl AstNode for Term<'_> {
                     Some((String::from("Tuple"), SymbolKind::ARRAY))
                 }
             }
-            Term::Map(map) => Some((String::from("Map"), SymbolKind::ARRAY)),
+            Term::Map(_map) => Some((String::from("Map"), SymbolKind::ARRAY)),
         }
     }
 }
@@ -320,15 +311,6 @@ impl AstNode for Primitive<'_> {
         }
     }
 
-    fn position(&self) -> Position {
-        let span = self.span();
-        Position {
-            offset: span.location_offset(),
-            line: span.location_line(),
-            column: span.get_utf8_column() as u32,
-        }
-    }
-
     fn is_token(&self) -> bool {
         false
     }
@@ -359,7 +341,7 @@ impl AstNode for Primitive<'_> {
         None
     }
 
-    fn lsp_sub_node_to_rename(&self) -> Option<&dyn AstNode> {
+    fn lsp_range_to_rename(&self) -> Option<Range> {
         None
     }
 
@@ -397,10 +379,6 @@ impl AstNode for Exponent<'_> {
         todo!()
     }
 
-    fn position(&self) -> Position {
-        todo!()
-    }
-
     fn is_token(&self) -> bool {
         todo!()
     }
@@ -413,7 +391,7 @@ impl AstNode for Exponent<'_> {
         None
     }
 
-    fn lsp_sub_node_to_rename(&self) -> Option<&dyn AstNode> {
+    fn lsp_range_to_rename(&self) -> Option<Range> {
         None
     }
 
