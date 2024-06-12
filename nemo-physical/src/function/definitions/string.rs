@@ -161,7 +161,7 @@ impl BinaryFunction for StringStarts {
                     return AnyDataValue::new_boolean(false);
                 }
                 AnyDataValue::new_boolean(
-                    first_graphemes[0..second_graphemes.len()] == second_graphemes,
+                    first_graphemes[..second_graphemes.len()] == second_graphemes,
                 )
             },
         )
@@ -233,7 +233,7 @@ impl BinaryFunction for StringBefore {
         string_pair_from_any(parameter_first, parameter_second).map(
             |(first_string, second_string)| {
                 let result = if let Some(i) = unicode_find(&first_string, &second_string) {
-                    first_string[0..i].to_string()
+                    first_string[..i].to_string()
                 } else {
                     "".to_string()
                 };
