@@ -157,18 +157,10 @@ impl BinaryFunction for StringStarts {
             |(first_string, second_string)| {
                 let first_graphemes = first_string.graphemes(true).collect::<Vec<&str>>();
                 let second_graphemes = second_string.graphemes(true).collect::<Vec<&str>>();
-
                 if second_graphemes.len() > first_graphemes.len() {
                     return AnyDataValue::new_boolean(false);
                 }
-
-                for i in 0..second_graphemes.len() {
-                    if first_graphemes[i] != second_graphemes[i] {
-                        return AnyDataValue::new_boolean(false);
-                    }
-                }
-
-                AnyDataValue::new_boolean(true)
+                AnyDataValue::new_boolean(first_graphemes[0..second_graphemes.len()] == second_graphemes)
             },
         )
     }
@@ -201,20 +193,10 @@ impl BinaryFunction for StringEnds {
             |(first_string, second_string)| {
                 let first_graphemes = first_string.graphemes(true).collect::<Vec<&str>>();
                 let second_graphemes = second_string.graphemes(true).collect::<Vec<&str>>();
-
                 if second_graphemes.len() > first_graphemes.len() {
                     return AnyDataValue::new_boolean(false);
                 }
-
-                for i in 0..second_graphemes.len() {
-                    if first_graphemes[first_graphemes.len() - 1 - i]
-                        != second_graphemes[second_graphemes.len() - 1 - i]
-                    {
-                        return AnyDataValue::new_boolean(false);
-                    }
-                }
-
-                AnyDataValue::new_boolean(true)
+                AnyDataValue::new_boolean(first_graphemes[first_graphemes.len() - second_graphemes.len()..] == second_graphemes)
             },
         )
     }
