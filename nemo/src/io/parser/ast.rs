@@ -1,4 +1,3 @@
-use nom::Offset;
 use tower_lsp::lsp_types::SymbolKind;
 
 use crate::io::lexer::{Span, Token};
@@ -16,7 +15,32 @@ pub(crate) mod tuple;
 pub trait AstNode: std::fmt::Debug + Display + Sync {
     fn children(&self) -> Option<Vec<&dyn AstNode>>;
     fn span(&self) -> Span;
-    fn position(&self) -> Position;
+
+    fn range(&self) -> Range {
+        let span = self.span();
+
+        let start_position = Position {
+            offset: self.span().location_offset(),
+            line: self.span().location_line(),
+            column: self.span().get_utf8_column() as u32,
+        };
+
+        let end_position = Position {
+            offset: start_position.offset + span.len(),
+            line: start_position.line + span.fragment().lines().count() as u32 - 1,
+            column: if span.fragment().lines().count() > 1 {
+                1 + span.fragment().lines().last().unwrap().len() as u32 // Column is on new line
+            } else {
+                start_position.column + span.fragment().len() as u32 // Column is on same line
+            },
+        };
+
+        Range {
+            start: start_position,
+            end: end_position,
+        }
+    }
+
     fn is_token(&self) -> bool;
 
     fn name(&self) -> String;
@@ -29,7 +53,8 @@ pub trait AstNode: std::fmt::Debug + Display + Sync {
     /// This can be used to restict rename operations to be local, e.g. for variable idenfiers inside of rules.
     fn lsp_identifier(&self) -> Option<(String, String)>;
     fn lsp_symbol_info(&self) -> Option<(String, SymbolKind)>;
-    fn lsp_sub_node_to_rename(&self) -> Option<&dyn AstNode>;
+    /// Range of the part of the node that should be renamed or [`None`] if the node can not be renamed
+    fn lsp_range_to_rename(&self) -> Option<Range>;
 }
 
 #[derive(Debug, Clone, Copy, Hash)]
@@ -64,6 +89,12 @@ impl Default for Position {
     }
 }
 
+#[derive(Debug, Clone, Copy, Hash)]
+pub struct Range {
+    pub start: Position,
+    pub end: Position,
+}
+
 /// Whitespace or Comment token
 #[derive(Debug, Clone, PartialEq)]
 pub struct Wsoc<'a> {
@@ -84,14 +115,6 @@ impl AstNode for Wsoc<'_> {
         self.span
     }
 
-    fn position(&self) -> Position {
-        Position {
-            offset: self.span.location_offset(),
-            line: self.span.location_line(),
-            column: self.span.get_utf8_column() as u32,
-        }
-    }
-
     fn is_token(&self) -> bool {
         false
     }
@@ -109,7 +132,7 @@ impl AstNode for Wsoc<'_> {
         None
     }
 
-    fn lsp_sub_node_to_rename(&self) -> Option<&dyn AstNode> {
+    fn lsp_range_to_rename(&self) -> Option<Range> {
         None
     }
 
@@ -182,14 +205,6 @@ impl<T: AstNode + std::fmt::Debug> AstNode for List<'_, T> {
         self.span
     }
 
-    fn position(&self) -> Position {
-        Position {
-            offset: self.span.location_offset(),
-            line: self.span.location_line(),
-            column: self.span.get_utf8_column() as u32,
-        }
-    }
-
     fn is_token(&self) -> bool {
         false
     }
@@ -207,7 +222,7 @@ impl<T: AstNode + std::fmt::Debug> AstNode for List<'_, T> {
         None
     }
 
-    fn lsp_sub_node_to_rename(&self) -> Option<&dyn AstNode> {
+    fn lsp_range_to_rename(&self) -> Option<Range> {
         None
     }
 
@@ -398,7 +413,7 @@ mod test {
                             ws2: None,
                             terms: Some(List {
                                 span: s!(304, 12, "?VarA"),
-                                first: Term::Variable(Token {
+                                first: Term::UniversalVariable(Token {
                                     kind: TokenKind::Variable,
                                     span: s!(304, 12, "?VarA"),
                                 }),
@@ -425,7 +440,7 @@ mod test {
                             ws2: None,
                             terms: Some(List {
                                 span: s!(328, 12, "?Var, ConstB"),
-                                first: Term::Variable(Token {
+                                first: Term::UniversalVariable(Token {
                                     kind: TokenKind::Variable,
                                     span: s!(328, 12, "?VarA"),
                                 }),

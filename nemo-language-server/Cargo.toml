@@ -22,9 +22,10 @@ js = []
 tokio = ["dep:tokio"]
 
 [dependencies]
+anyhow = "1.0"
 line-index = "0.1.1"
 nemo = { path = "../nemo", default-features = false }
 futures = "0.3.21"
-tokio = { version = "1.27.0", features = ["full"], optional = true }
+tokio = { version = "1.27.0", features = ["macros", "io-util", "rt-multi-thread"], optional = true }
 tower-lsp = { version = "0.20.0", default-features = false }
 tower-service = "0.3.2"

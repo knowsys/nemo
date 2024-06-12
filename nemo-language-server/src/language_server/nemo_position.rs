@@ -8,22 +8,33 @@
 //! * line: u32 index of the line, first line gets index 1
 //! * offset: u32 index of the UTF-8 code point (byte) within the line, first column gets index 0
 
+use anyhow::anyhow;
 use line_index::{LineCol, LineIndex, WideEncoding, WideLineCol};
 
 #[derive(Debug)]
 pub enum PositionConversionError {
     NemoPosition(nemo::io::parser::ast::Position),
     LspPosition(tower_lsp::lsp_types::Position),
+    LspLineCol(LineCol),
+}
+
+impl From<PositionConversionError> for anyhow::Error {
+    fn from(val: PositionConversionError) -> Self {
+        anyhow!("could not convert source code position: {:#?}", val)
+    }
 }
 
 fn line_col_to_nemo_position(
     line_index: &LineIndex,
     line_col: LineCol,
-) -> Result<nemo::io::parser::ast::Position, ()> {
+) -> Result<nemo::io::parser::ast::Position, PositionConversionError> {
     Ok(nemo::io::parser::ast::Position {
         line: line_col.line + 1,
         column: line_col.col,
-        offset: line_index.offset(line_col).ok_or(())?.into(),
+        offset: line_index
+            .offset(line_col)
+            .ok_or(PositionConversionError::LspLineCol(line_col))?
+            .into(),
     })
 }
 
@@ -42,7 +53,7 @@ pub fn lsp_position_to_nemo_position(
         )
         .ok_or(PositionConversionError::LspPosition(position))?;
 
-    Ok(line_col_to_nemo_position(line_index, line_col).unwrap())
+    line_col_to_nemo_position(line_index, line_col)
 }
 
 fn nemo_position_to_line_col(position: nemo::io::parser::ast::Position) -> LineCol {
@@ -65,5 +76,16 @@ pub fn nemo_position_to_lsp_position(
     Ok(tower_lsp::lsp_types::Position {
         line: wide_line_col.line,
         character: wide_line_col.col,
+    })
+}
+
+/// Converts a Nemo range to a LSP range
+pub fn nemo_range_to_lsp_range(
+    line_index: &LineIndex,
+    range: nemo::io::parser::ast::Range,
+) -> Result<tower_lsp::lsp_types::Range, PositionConversionError> {
+    Ok(tower_lsp::lsp_types::Range {
+        start: nemo_position_to_lsp_position(line_index, range.start)?,
+        end: nemo_position_to_lsp_position(line_index, range.end)?,
     })
 }

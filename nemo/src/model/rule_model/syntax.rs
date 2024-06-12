@@ -1,7 +1,6 @@
 //! Constants for strings that are relevant to the syntax of rules.
 //! These are kept in one location, since they are required in various
 //! places related to parsing and display.
-use nemo_physical::datavalues::syntax;
 
 /// The "predicate name" used for the CSV format in import/export directives.
 pub(crate) const FILE_FORMAT_CSV: &str = "csv";
