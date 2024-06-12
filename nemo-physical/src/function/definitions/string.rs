@@ -19,14 +19,7 @@ use super::{
 fn unicode_find(haystack: &String, needle: &String) -> Option<usize> {
     let haystack_graphemes = haystack.graphemes(true).collect::<Vec<&str>>();
     let needle_graphemes = needle.graphemes(true).collect::<Vec<&str>>();
-
-    for i in 0..(haystack_graphemes.len() - needle_graphemes.len() + 1) {
-        if needle_graphemes == haystack_graphemes[i..i + needle_graphemes.len()] {
-            return Some(i);
-        }
-    }
-
-    None
+    (0..(haystack_graphemes.len() - needle_graphemes.len() + 1)).find(|&i| needle_graphemes == haystack_graphemes[i..i + needle_graphemes.len()])
 }
 
 /// Given two [AnyDataValue]s,
