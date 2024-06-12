@@ -3869,7 +3869,7 @@ pub mod new {
         .map(|(rest_input, var)| {
             (
                 rest_input,
-                Term::Variable(Token {
+                Term::UniversalVariable(Token {
                     kind: TokenKind::Variable,
                     span: var.input,
                 }),
@@ -3892,7 +3892,7 @@ pub mod new {
         .map(|(rest_input, existential)| {
             (
                 rest_input,
-                Term::Existential(Token {
+                Term::ExistentialVariable(Token {
                     kind: TokenKind::Existential,
                     span: existential.input,
                 }),
