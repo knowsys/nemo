@@ -4,12 +4,14 @@
 use std::{
     collections::{HashMap, HashSet},
     fs::read_to_string,
+    time::Duration,
 };
 
 use nemo::{
     datavalues::{AnyDataValue, DataValue},
     execution::{tracing::trace::ExecutionTraceTree, ExecutionEngine},
     io::{resource_providers::ResourceProviders, ExportManager, ImportManager},
+    meta::timing::{TimedCode, TimedCodeInfo},
     model::{
         chase_model::{ChaseAtom, ChaseFact},
         ExportDirective, Identifier, Variable,
@@ -311,17 +313,88 @@ struct NemoEngine {
     engine: nemo::execution::DefaultExecutionEngine,
 }
 
+#[pyclass]
+#[derive(Debug, Clone)]
+struct NemoTiming {
+    #[pyo3(get)]
+    name: String,
+    inner: TimedCode,
+}
+
+#[pymethods]
+impl NemoTiming {
+    #[getter]
+    fn system_time(&self) -> Duration {
+        self.inner.timings().system_time()
+    }
+
+    #[getter]
+    fn process_time(&self) -> Duration {
+        self.inner.timings().process_time()
+    }
+
+    #[getter]
+    fn thread_time(&self) -> Duration {
+        self.inner.timings().thread_time()
+    }
+
+    #[getter]
+    fn subnodes(&self) -> Vec<NemoTiming> {
+        self.inner
+            .sub_nodes()
+            .map(|(name, inner)| NemoTiming {
+                name: name.to_string(),
+                inner: inner.clone(),
+            })
+            .collect()
+    }
+
+    fn subnode(&self, name: &str) -> Option<NemoTiming> {
+        let parts: Vec<_> = name.split('/').collect();
+        let mut node = &self.inner;
+
+        for part in &parts {
+            let (_, inner) = node.sub_nodes().find(|(name, _)| name == part)?;
+            node = inner;
+        }
+
+        let name = parts.last()?.to_string();
+
+        Some(NemoTiming {
+            name,
+            inner: node.clone(),
+        })
+    }
+
+    fn __repr__(&self) -> String {
+        format!(
+            "NemoTiming(name = {:?}, process_time = {}ms, system_time = {}ms, thread_time = {}ms)",
+            self.name,
+            self.process_time().as_millis(),
+            self.system_time().as_millis(),
+            self.thread_time().as_millis()
+        )
+    }
+}
+
 #[pymethods]
 impl NemoEngine {
     #[new]
     fn py_new(program: NemoProgram) -> PyResult<Self> {
+        TimedCode::instance().reset();
         let import_manager = ImportManager::new(ResourceProviders::default());
         let engine = ExecutionEngine::initialize(&program.0, import_manager).py_res()?;
         Ok(NemoEngine { program, engine })
     }
 
     fn reason(&mut self) -> PyResult<()> {
+        TimedCode::instance().start();
+        TimedCode::instance().sub("Reasoning").start();
+
         self.engine.execute().py_res()?;
+
+        TimedCode::instance().sub("Reasoning").stop();
+        TimedCode::instance().stop();
         Ok(())
     }
 
@@ -333,6 +406,13 @@ impl NemoEngine {
             .expect("Function trace always returns a handle for each input fact");
 
         trace.tree(handle).map(NemoTrace)
+    }
+
+    fn timing(&self) -> NemoTiming {
+        NemoTiming {
+            name: "root".into(),
+            inner: TimedCode::instance().clone(),
+        }
     }
 
     fn write_result(

@@ -49,6 +49,21 @@ impl TimedCodeInfo {
     pub fn new() -> Self {
         Self::default()
     }
+
+    /// Returns the total system time for this node.
+    pub fn system_time(&self) -> Duration {
+        self.total_system_time
+    }
+
+    /// Returns the total process time for this node
+    pub fn process_time(&self) -> Duration {
+        self.total_process_time
+    }
+
+    /// Returns the total thread time for this node
+    pub fn thread_time(&self) -> Duration {
+        self.total_thread_time
+    }
 }
 
 impl fmt::Debug for TimedCodeInfo {
@@ -123,6 +138,22 @@ impl TimedCode {
     /// Return the global instance
     pub fn instance() -> MutexGuard<'static, TimedCode> {
         TIMECODE_INSTANCE.lock().unwrap()
+    }
+
+    /// Return an iterator through the sub-nodes
+    pub fn sub_nodes(&self) -> impl Iterator<Item = (&str, &TimedCode)> {
+        self.subblocks.iter().map(|(k, v)| (k.as_str(), v))
+    }
+
+    /// Return the recorded timings for this block
+    pub fn timings(&self) -> &TimedCodeInfo {
+        &self.info
+    }
+
+    /// Reset the current node, remove all subnodes
+    pub fn reset(&mut self) {
+        self.info = Default::default();
+        self.subblocks.clear();
     }
 
     /// Navigate to a subblock (use forward slash to go multiple layers at once)

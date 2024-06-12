@@ -109,6 +109,13 @@ class TestExample(unittest.TestCase):
 
         self.assertEqual(trace.dict(), expected_trace)
 
+    def test_timing(self):
+        timing = self.engine.timing()
+
+        expected_names = ["Rule 0", "Rule 1", "Rule 2"]
+        names = [node.name for node in timing.subnode("Reasoning/Rules").subnodes]
+
+        self.assertEqual(names, expected_names)
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
