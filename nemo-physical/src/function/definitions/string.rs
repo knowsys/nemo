@@ -17,46 +17,12 @@ use super::{
 /// Returns the index of the first occurrence of the needle in the haystack
 /// or `None` if the needle is not found.
 fn unicode_find(haystack: &String, needle: &String) -> Option<usize> {
-    // if the second string is an empty string, it is found at index 0
-    if needle.is_empty() {
-        return Some(0);
-    }
-
     let haystack_graphemes = haystack.graphemes(true).collect::<Vec<&str>>();
     let needle_graphemes = needle.graphemes(true).collect::<Vec<&str>>();
 
-    // the second string is longer than the first string, it can't fit in the first string
-    if needle_graphemes.len() > haystack_graphemes.len() {
-        return None;
-    }
-
-    // the first graphene cannot be matched beyond the difference of the string sizes since
-    // then the second string can't fit in the first string anyways
-    let first_match_max_index = haystack_graphemes.len() - needle_graphemes.len();
-
-    for i in 0..(first_match_max_index + 1) {
-        if haystack_graphemes[i] != needle_graphemes[0] {
-            // haven't matched the first grapheme yet
-            continue;
-        } else if needle_graphemes.len() == 1 {
-            // first graphene is matched, second string only contains one grapheme
+    for i in 0..(haystack_graphemes.len() - needle_graphemes.len() + 1) {
+        if needle_graphemes == haystack_graphemes[i..i + needle_graphemes.len()] {
             return Some(i);
-        }
-
-        // time to match the rest of the graphemes
-        for j in 1..needle_graphemes.len() {
-            let needle_index = j;
-            let haystack_index = i + j;
-
-            if needle_graphemes[needle_index] != haystack_graphemes[haystack_index] {
-                // next grapheme didn't match, time to try again
-                break;
-            }
-
-            if needle_index == (needle_graphemes.len() - 1) {
-                // all the graphemes of the second word have been matched
-                return Some(i);
-            }
         }
     }
 
