@@ -17,6 +17,7 @@ use super::{
 /// Returns the index of the first occurrence of the needle in the haystack
 /// or `None` if the needle is not found.
 fn unicode_find(haystack: &String, needle: &String) -> Option<usize> {
+
     let haystack_graphemes = haystack.graphemes(true).collect::<Vec<&str>>();
     let needle_graphemes = needle.graphemes(true).collect::<Vec<&str>>();
 
@@ -526,6 +527,15 @@ mod test {
             StringContains.evaluate(string_first_unicode.clone(), string_second_unicode.clone());
         assert!(actual_result_unicode.is_some());
         assert_eq!(result_unicode, actual_result_unicode.unwrap());
+
+        let string_first_empty = AnyDataValue::new_plain_string("abc".to_string());
+        let string_second_empty = AnyDataValue::new_plain_string("".to_string());
+        let result_empty = AnyDataValue::new_boolean(true);
+        let actual_result_empty =
+            StringContains.evaluate(string_first_empty.clone(), string_second_empty.clone());
+        assert!(actual_result_empty.is_some());
+        assert_eq!(result_empty, actual_result_empty.unwrap());
+
     }
 
     #[test]
