@@ -538,7 +538,9 @@ mod test {
             string_first_impossible.clone(),
             string_second_impossible.clone(),
         );
-        assert!(actual_result_impossible.is_none());
+        let result_impossible = AnyDataValue::new_boolean(false);
+        assert!(actual_result_impossible.is_some());
+        assert_eq!(result_impossible, actual_result_impossible.unwrap());
     }
 
     #[test]
