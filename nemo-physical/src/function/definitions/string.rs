@@ -160,7 +160,9 @@ impl BinaryFunction for StringStarts {
                 if second_graphemes.len() > first_graphemes.len() {
                     return AnyDataValue::new_boolean(false);
                 }
-                AnyDataValue::new_boolean(first_graphemes[0..second_graphemes.len()] == second_graphemes)
+                AnyDataValue::new_boolean(
+                    first_graphemes[0..second_graphemes.len()] == second_graphemes,
+                )
             },
         )
     }
@@ -196,7 +198,10 @@ impl BinaryFunction for StringEnds {
                 if second_graphemes.len() > first_graphemes.len() {
                     return AnyDataValue::new_boolean(false);
                 }
-                AnyDataValue::new_boolean(first_graphemes[first_graphemes.len() - second_graphemes.len()..] == second_graphemes)
+                AnyDataValue::new_boolean(
+                    first_graphemes[first_graphemes.len() - second_graphemes.len()..]
+                        == second_graphemes,
+                )
             },
         )
     }
