@@ -14,46 +14,46 @@ use super::{
 
 /// Unicode friendly version of [String] find
 ///
-/// Returns the index of the first occurrence of the second parameter in the first parameter.
-/// or `None` if the second parameter is not found.
-fn unicode_find(parameter_first: &String, parameter_second: &String) -> Option<usize> {
+/// Returns the index of the first occurrence of the needle in the haystack.
+/// or `None` if the needle is not found.
+fn unicode_find(haystack: &String, needle: &String) -> Option<usize> {
     // if the second string is an empty string, it is found at index 0
-    if parameter_second.is_empty() {
+    if needle.is_empty() {
         return Some(0);
     }
 
-    let first_graphemes = parameter_first.graphemes(true).collect::<Vec<&str>>();
-    let second_graphemes = parameter_second.graphemes(true).collect::<Vec<&str>>();
+    let haystack_graphemes = haystack.graphemes(true).collect::<Vec<&str>>();
+    let needle_graphemes = needle.graphemes(true).collect::<Vec<&str>>();
 
     // the second string is longer than the first string, it can't fit in the first string
-    if second_graphemes.len() > first_graphemes.len() {
+    if needle_graphemes.len() > haystack_graphemes.len() {
         return None;
     }
 
     // the first graphene cannot be matched beyond the difference of the string sizes since
     // then the second string can't fit in the first string anyways
-    let first_char_index_max = first_graphemes.len() - second_graphemes.len();
+    let first_match_max_index = haystack_graphemes.len() - needle_graphemes.len();
 
-    for i in 0..(first_char_index_max + 1) {
-        if first_graphemes[i] != second_graphemes[0] {
+    for i in 0..(first_match_max_index + 1) {
+        if haystack_graphemes[i] != needle_graphemes[0] {
             // haven't matched the first grapheme yet
             continue;
-        } else if second_graphemes.len() == 1 {
+        } else if needle_graphemes.len() == 1 {
             // first graphene is matched, second string only contains one grapheme
             return Some(i);
         }
 
         // time to match the rest of the graphemes
-        for j in 1..second_graphemes.len() {
-            let second_index = j;
-            let first_index = i + j;
+        for j in 1..needle_graphemes.len() {
+            let needle_index = j;
+            let haystack_index = i + j;
 
-            if second_graphemes[second_index] != first_graphemes[first_index] {
+            if needle_graphemes[needle_index] != haystack_graphemes[haystack_index] {
                 // next grapheme didn't match, time to try again
                 break;
             }
 
-            if second_index == (second_graphemes.len() - 1) {
+            if needle_index == (needle_graphemes.len() - 1) {
                 // all the graphemes of the second word have been matched
                 return Some(i);
             }
