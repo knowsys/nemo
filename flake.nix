@@ -2,7 +2,7 @@ rec {
   description = "nemo, a datalog-based rule engine for fast and scalable analytic data processing in memory";
 
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-23.11";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-24.05";
     nixpkgs-unstable.url = "github:NixOS/nixpkgs/nixos-unstable";
 
     rust-overlay.url = "github:oxalica/rust-overlay";
@@ -25,13 +25,6 @@ rec {
 
       channels.nixpkgs.overlaysBuilder = channels: [
         rust-overlay.overlays.default
-        (final: prev: {
-          wasm-bindgen-cli = channels.nixpkgs-unstable.wasm-bindgen-cli.override {
-            version = "0.2.92";
-            hash = "sha256-1VwY8vQy7soKEgbki4LD+v259751kKxSxmo/gqE6yV0=";
-            cargoHash = "sha256-aACJ+lYNEU8FFBs158G1/JG8sc6Rq080PeKCMnwdpH0=";
-          };
-        })
       ];
 
       overlays.default = final: prev: let
