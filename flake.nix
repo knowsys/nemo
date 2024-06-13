@@ -60,6 +60,28 @@ rec {
             license = [pkgs.lib.licenses.asl20 pkgs.lib.licenses.mit];
           };
 
+          buildBinary = target: {
+            meta,
+            buildAndTestSubdir,
+            ...
+          } @ args:
+            platform.buildRustPackage {
+              pname = target;
+              src = ./.;
+              inherit (args) meta buildAndTestSubdir;
+              inherit version;
+
+              cargoLock.lockFile = ./Cargo.lock;
+
+              buildInputs = defaultBuildInputs;
+              nativeBuildInputs =
+                defaultNativeBuildInputs
+                ++ (with platform; [
+                  cargoBuildHook
+                  cargoCheckHook
+                ]);
+            };
+
           buildWasm = target: {
             pname,
             src,
@@ -100,22 +122,19 @@ rec {
               '';
             };
         in rec {
-          nemo = platform.buildRustPackage {
-            pname = "nemo";
-            src = ./.;
+          nemo = buildBinary "nemo" {
             meta = meta // {mainProgram = "nmo";};
-            inherit version;
-
-            cargoLock.lockFile = ./Cargo.lock;
-
-            buildInputs = defaultBuildInputs;
-            nativeBuildInputs =
-              defaultNativeBuildInputs
-              ++ (with platform; [
-                cargoBuildHook
-                cargoCheckHook
-              ]);
             buildAndTestSubdir = "nemo-cli";
+          };
+
+          nemo-language-server = buildBinary "nemo-language-server" {
+            meta =
+              meta
+              // {
+                mainProgram = "nemo-language-server";
+                description = "a language server for the Nemo rule language";
+              };
+            buildAndTestSubdir = "nemo-language-server";
           };
 
           nemo-python = pkgs.python3Packages.buildPythonPackage {
@@ -237,7 +256,7 @@ rec {
               // env);
           runCargo = name: runCargo' name {};
         in rec {
-          inherit (packages) nemo nemo-python nemo-wasm nemo-wasm-node;
+          inherit (packages) nemo nemo-language-server nemo-python nemo-wasm nemo-wasm-node;
           devShell = devShells.default;
 
           clippy = runCargo "nemo-check-clippy" ''
