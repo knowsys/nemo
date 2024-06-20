@@ -51,7 +51,7 @@ Example Nemo programs and datasets can be found in the [Nemo Examples repository
 
 ## Help
 
-Detailed information for users and developers is found in the [Nemo documentation](https://github.com/knowsys/nemo/wiki/Nemo-documentation).
+Detailed information for users and developers is found in the [Nemo documentation](https://github.com/knowsys/nemo/wiki/#user-documentation).
 Feel free to use [GitHub discussions](https://github.com/knowsys/nemo/discussions) to ask questions or talk about Nemo.
 
 [Bug reports](https://github.com/knowsys/nemo/issues) are also very welcome.
