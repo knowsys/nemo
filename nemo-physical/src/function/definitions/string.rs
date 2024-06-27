@@ -327,6 +327,37 @@ impl BinaryFunction for StringSubstring {
     }
 }
 
+/// Regex string matching
+///
+/// Returns `true` from the boolean value space if the regex provided as the second parameter
+/// is matched in the string provided as the first parameter and `false` otherwise.
+///
+/// Returns `None` if either parameter is not a string.
+#[derive(Debug, Copy, Clone)]
+pub struct StringRegex;
+impl BinaryFunction for StringRegex {
+    fn evaluate(
+        &self,
+        parameter_first: AnyDataValue,
+        parameter_second: AnyDataValue,
+    ) -> Option<AnyDataValue> {
+        string_pair_from_any(parameter_first, parameter_second).map(|(string, pattern)| {
+            match regex::Regex::new(&pattern) {
+                Ok(regex) => AnyDataValue::new_boolean(regex.is_match(&string)),
+                Err(_) => AnyDataValue::new_boolean(false),
+            }
+        })
+    }
+
+    fn type_propagation(&self) -> FunctionTypePropagation {
+        FunctionTypePropagation::KnownOutput(
+            StorageTypeName::Id32
+                .bitset()
+                .union(StorageTypeName::Id64.bitset()),
+        )
+    }
+}
+
 /// Length of a string
 ///
 /// Returns the length of the given string as a number from the integer value space.
@@ -745,5 +776,30 @@ mod test {
         let actual_result_notstring =
             super::StringAfter.evaluate(string_notstring, start_notstring);
         assert!(actual_result_notstring.is_none());
+    }
+
+    #[test]
+    fn test_string_regex() {
+        let string = AnyDataValue::new_plain_string("hello".to_string());
+        let pattern = AnyDataValue::new_plain_string("l".to_string());
+        let result = AnyDataValue::new_boolean(true);
+        let actual_result = super::StringRegex.evaluate(string.clone(), pattern);
+        assert!(actual_result.is_some());
+        assert_eq!(result, actual_result.unwrap());
+
+        let string_unicode = AnyDataValue::new_plain_string("loẅks".to_string());
+        let pattern_unicode = AnyDataValue::new_plain_string("ẅ".to_string());
+        let result_unicode = AnyDataValue::new_boolean(true);
+        let actual_result_unicode =
+            super::StringRegex.evaluate(string_unicode.clone(), pattern_unicode);
+        assert!(actual_result_unicode.is_some());
+        assert_eq!(result_unicode, actual_result_unicode.unwrap());
+
+        let string_regex = AnyDataValue::new_plain_string("looks".to_string());
+        let pattern_regex = AnyDataValue::new_plain_string("o+".to_string());
+        let result_regex = AnyDataValue::new_boolean(true);
+        let actual_result_regex = super::StringRegex.evaluate(string_regex.clone(), pattern_regex);
+        assert!(actual_result_regex.is_some());
+        assert_eq!(result_regex, actual_result_regex.unwrap());
     }
 }
