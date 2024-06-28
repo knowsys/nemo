@@ -129,8 +129,10 @@ pub enum BinaryOperation {
     NumericLessthaneq,
     /// Lexicographic comparison between strings
     StringCompare,
-    /// Check whether string is contained in another, correspondng to SPARQL function CONTAINS.
+    /// Check whether string is contained in another (SPARQL function CONTAINS)
     StringContains,
+    /// Check whether a pattern is matched within a string (SPARQL function REGEX)
+    StringRegex,
     /// String starting at some start position
     StringSubstring,
     /// First part of a string split by some other string
@@ -152,6 +154,7 @@ impl BinaryOperation {
             "POW" => Self::NumericPower,
             "COMPARE" => Self::StringCompare,
             "CONTAINS" => Self::StringContains,
+            "REGEX" => Self::StringRegex,
             "SUBSTR" => Self::StringSubstring,
             "STRSTARTS" => Self::StringStarts,
             "STRENDS" => Self::StringEnds,
@@ -174,6 +177,7 @@ impl BinaryOperation {
             Self::NumericLogarithm => "Logarithm",
             Self::StringCompare => "StringCompare",
             Self::StringContains => "CONTAINS",
+            Self::StringRegex => "REGEX",
             Self::StringSubstring => "SUBSTR",
             Self::Equal => "Equals",
             Self::Unequals => "Unequals",
@@ -209,6 +213,7 @@ impl BinaryOperation {
             | Self::NumericPower
             | Self::StringCompare
             | Self::StringContains
+            | Self::StringRegex
             | Self::StringSubstring
             | Self::StringStarts
             | Self::StringEnds

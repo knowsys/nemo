@@ -59,6 +59,7 @@ result(datatype, ?R) :- cast(?A), ?R = DATATYPE(?A).
 result(concat, ?R) :- strings(?A, ?B), ?R = CONCAT(?A, " ", ?B).
 result(compare, ?R) :- strings(?A, ?B), ?R = 10 * COMPARE(?A, ?B).  
 result(contains, ?R) :- strings(?A, _), ?R = CONTAINS(?A, "lo").
+result(regex, ?R) :- strings(?A, _), ?R = REGEX(?A, "l+").
 result(subString, ?R) :- strings(?A, ?B), ?R = SUBSTR(?A, STRLEN(?B) / 2).  
 result(stringreverse, ?R) :- strings(?A, _), ?R = STRREV(?A).  
 result(subStringLength, ?R) :- strings(?A, _), ?R = SUBSTRING(?A, 2, 3).

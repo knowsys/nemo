@@ -207,8 +207,14 @@ mod test {
         let pos2 = DictionaryString::rfind_hashslash_plus(s2.as_bytes());
         let pos3 = DictionaryString::rfind_hashslash_plus(s3.as_bytes());
 
-        assert_eq!(pos1, s1.rfind(|c: char| c == '/' || c == '#').unwrap() + 1);
-        assert_eq!(pos2, s2.rfind(|c: char| c == '/' || c == '#').unwrap() + 1);
+        assert_eq!(
+            pos1,
+            s1.rfind(|c: char| ['/', '#'].contains(&c)).unwrap() + 1
+        );
+        assert_eq!(
+            pos2,
+            s2.rfind(|c: char| ['/', '#'].contains(&c)).unwrap() + 1
+        );
         assert_eq!(pos3, 0);
     }
 

@@ -38,6 +38,7 @@ datatype,http://www.w3.org/2001/XMLSchema#double
 concat,"""Hello World"""
 compare,-10
 contains,"""true""^^<http://www.w3.org/2001/XMLSchema#boolean>"
+regex,"""true""^^<http://www.w3.org/2001/XMLSchema#boolean>"
 stringreverse,"""olleH"""
 subString,"""ello"""
 subStringLength,"""ell"""

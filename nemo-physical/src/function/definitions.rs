@@ -34,7 +34,7 @@ use self::{
     },
     string::{
         StringAfter, StringBefore, StringCompare, StringConcatenation, StringContains, StringEnds,
-        StringLength, StringLowercase, StringReverse, StringStarts, StringSubstring,
+        StringLength, StringLowercase, StringRegex, StringReverse, StringStarts, StringSubstring,
         StringSubstringLength, StringUppercase,
     },
 };
@@ -231,6 +231,7 @@ pub enum BinaryFunctionEnum {
     StringBefore(StringBefore),
     StringCompare(StringCompare),
     StringContains(StringContains),
+    StringRegex(StringRegex),
     StringEnds(StringEnds),
     StringStarts(StringStarts),
     StringSubstring(StringSubstring),
@@ -256,6 +257,7 @@ impl BinaryFunction for BinaryFunctionEnum {
             Self::StringBefore(function) => function,
             Self::StringCompare(function) => function,
             Self::StringContains(function) => function,
+            Self::StringRegex(function) => function,
             Self::StringEnds(function) => function,
             Self::StringStarts(function) => function,
             Self::StringSubstring(function) => function,
