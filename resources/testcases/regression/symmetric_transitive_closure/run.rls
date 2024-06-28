@@ -1,5 +1,5 @@
-@source city[1]: load-csv("city.csv").
-@source conn[2]: load-csv("conn.csv").
+@import city :- csv { resource = "city.csv" }.
+@import conn :- csv { resource = "conn.csv" }.
 
 connected(?X,?Y) :- city(?X), city(?Y), conn(?X,?Y).
 conn(?X,?Y) :- conn(?Y,?X).
