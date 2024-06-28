@@ -332,7 +332,8 @@ impl BinaryFunction for StringSubstring {
 /// Returns `true` from the boolean value space if the regex provided as the second parameter
 /// is matched in the string provided as the first parameter and `false` otherwise.
 ///
-/// Returns `None` if either parameter is not a string.
+/// Returns `None` if either parameter is not a string or the second parameter is not
+/// a regular expression.
 #[derive(Debug, Copy, Clone)]
 pub struct StringRegex;
 impl BinaryFunction for StringRegex {
