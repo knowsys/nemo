@@ -1,4 +1,4 @@
-@source input[3]: load-csv("sources/main.csv").
+@import input :- csv { resource = "sources/main.csv" }.
 
 result(?x) :- input(?x, _, _).
 
