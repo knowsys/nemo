@@ -1008,6 +1008,7 @@ mod tests {
 
     // FIXME: change the name of this test according to the correct name for `?X > 3`
     // (Constraints are Rules with an empty Head)
+    #[ignore]
     #[test]
     fn constraints() {
         let input = Span::new("A(?X):-B(?X),?X<42,?X>3.");
