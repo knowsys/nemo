@@ -1,4 +1,4 @@
-@source data[3]: load-csv("sources/data.csv").
+@import data :- csv { resource = "sources/data.csv" }.
 
 A(?X, ?Z) :- data(?X, ?Y, ?Z) .
 B(?Y, ?X) :- A(?X, ?Y) .
