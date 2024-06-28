@@ -5154,5 +5154,131 @@ oldLime(?location,?species,?age) :- tree(?location,?species,?age,?heightInMeters
             dbg!(&result);
             println!("{}", result.0);
         }
+
+        // TODO: Instead of just checking for errors, this should compare the created AST
+        #[test]
+        fn parse_language_tag() {
+            let test_string = "fact(\"テスト\"@ja).";
+            let input = Span::new(&test_string);
+            let refcell = RefCell::new(Vec::new());
+            let parser_state = ParserState { errors: &refcell };
+            let input = Input {
+                input,
+                parser_state,
+            };
+            let result = parse_program::<ErrorTree<Input<'_, '_>>>(input);
+            assert!(result.1.is_empty());
+        }
+
+        // TODO: Instead of just checking for errors, this should compare the created AST
+        #[test]
+        fn parse_rdf_literal() {
+            let test_string = "fact(\"2023\"^^xsd:gYear).";
+            let input = Span::new(&test_string);
+            let refcell = RefCell::new(Vec::new());
+            let parser_state = ParserState { errors: &refcell };
+            let input = Input {
+                input,
+                parser_state,
+            };
+            let result = parse_program::<ErrorTree<Input<'_, '_>>>(input);
+            assert!(result.1.is_empty());
+        }
+
+        // TODO: Instead of just checking for errors, this should compare the created AST
+        #[test]
+        fn parse_floating_point_numbers() {
+            // https://regex101.com/r/ObowxD/5
+
+            let valid_numbers = vec![
+                "0.2",
+                "4534.34534345",
+                ".456456",
+                "1.",
+                "1e545",
+                "1.1e435",
+                ".1e232",
+                "1.e343",
+                "112E+12",
+                "12312.1231",
+                ".1231",
+                "1231",
+                "-1e+0",
+                "1e-1",
+            ];
+
+            let invalid_numbers = vec!["3", "E9", ".e3", "7E"];
+
+            for valid in valid_numbers {
+                let input = Span::new(valid);
+                let refcell = RefCell::new(Vec::new());
+                let parser_state = ParserState { errors: &refcell };
+                let input = Input {
+                    input,
+                    parser_state,
+                };
+
+                let result = parse_decimal::<ErrorTree<Input<'_, '_>>>(input);
+                assert!(result.is_ok())
+            }
+
+            for invalid in invalid_numbers {
+                let input = Span::new(invalid);
+                let refcell = RefCell::new(Vec::new());
+                let parser_state = ParserState { errors: &refcell };
+                let input = Input {
+                    input,
+                    parser_state,
+                };
+
+                let result = parse_decimal::<ErrorTree<Input<'_, '_>>>(input);
+                assert!(result.is_err())
+            }
+        }
+
+        // TODO: Instead of just checking for errors, this should compare the created AST
+        #[test]
+        fn parse_complex_comparison() {
+            let test_string = "complex(?X, ?Y) :- data(?X, ?Y), ABS(?X - ?Y) >= ?X * ?X.";
+            let input = Span::new(&test_string);
+            let refcell = RefCell::new(Vec::new());
+            let parser_state = ParserState { errors: &refcell };
+            let input = Input {
+                input,
+                parser_state,
+            };
+            let result = parse_program::<ErrorTree<Input<'_, '_>>>(input);
+            assert!(result.1.is_empty());
+        }
+
+        // TODO: Instead of just checking for errors, this should compare the created AST
+        #[test]
+        fn parse_negation() {
+            let test_string = "R(?x, ?y, ?z) :- S(?x, ?y, ?z), ~T(?x, ?y), ~ T(a, ?z)."; // should allow for spaces
+            let input = Span::new(&test_string);
+            let refcell = RefCell::new(Vec::new());
+            let parser_state = ParserState { errors: &refcell };
+            let input = Input {
+                input,
+                parser_state,
+            };
+            let result = parse_program::<ErrorTree<Input<'_, '_>>>(input);
+            assert!(result.1.is_empty());
+        }
+
+        // TODO: Instead of just checking for errors, this should compare the created AST
+        #[test]
+        fn parse_trailing_comma() {
+            let test_string = "head(?X) :- body( (2,), (3, 4,  ), ?X) ."; // should allow for spaces
+            let input = Span::new(&test_string);
+            let refcell = RefCell::new(Vec::new());
+            let parser_state = ParserState { errors: &refcell };
+            let input = Input {
+                input,
+                parser_state,
+            };
+            let result = parse_program::<ErrorTree<Input<'_, '_>>>(input);
+            assert!(result.1.is_empty());
+        }
     }
 }
