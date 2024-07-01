@@ -151,15 +151,15 @@ impl Display for Wsoc<'_> {
 pub struct List<'a, T> {
     pub span: Span<'a>,
     pub first: T,
-    // ([ws]?[,][ws]?[T])*
-    pub rest: Option<Vec<(Option<Wsoc<'a>>, Token<'a>, Option<Wsoc<'a>>, T)>>,
+    // (,T)*
+    pub rest: Option<Vec<(Token<'a>, T)>>,
 }
 impl<T: Clone> List<'_, T> {
     pub fn to_vec(&self) -> Vec<T> {
         let mut vec = Vec::new();
         vec.push(self.first.clone());
         if let Some(rest) = &self.rest {
-            for (_, _, _, item) in rest {
+            for (_, item) in rest {
                 vec.push(item.clone());
             }
         }
@@ -175,7 +175,7 @@ impl<T> IntoIterator for List<'_, T> {
         let mut vec = Vec::new();
         vec.push(self.first);
         if let Some(rest) = self.rest {
-            for (_, _, _, item) in rest {
+            for (_, item) in rest {
                 vec.push(item);
             }
         }
@@ -187,14 +187,8 @@ impl<T: AstNode + std::fmt::Debug> AstNode for List<'_, T> {
         let mut vec: Vec<&dyn AstNode> = Vec::new();
         vec.push(&self.first);
         if let Some(rest) = &self.rest {
-            for (ws1, delim, ws2, item) in rest {
-                if let Some(ws) = ws1 {
-                    vec.push(ws);
-                };
+            for (delim, item) in rest {
                 vec.push(delim);
-                if let Some(ws) = ws2 {
-                    vec.push(ws);
-                };
                 vec.push(item);
             }
         };
@@ -312,29 +306,18 @@ mod test {
                         kind:TokenKind::DocComment,
                         span:s!(84,3,"%% This is the prefix used for datatypes\n")
                     }),
-                    kw: Token{
-                        kind:TokenKind::Prefix,
-                        span:s!(125,4,"@prefix")
-                    },
-                    ws1:Some(Wsoc {span: s!(132, 4, " "), token: vec![Token{kind:TokenKind::Whitespace,span:s!(132,4," ")}] }),
                     prefix: Token {
                         kind: TokenKind::PrefixIdent,
                         span: s!(133, 4, "xsd:"),
                     },
-                    ws2: Some(Wsoc {span: s!(137, 4, " "), token: vec![Token{kind:TokenKind::Whitespace,span:s!(137,4," ")}] }),
                     prefix_iri: Token {
                         kind: TokenKind::Iri,
                         span: s!(138, 4, "<http://www.w3.org/2001/XMLSchema#>"),
                     },
-                    ws3: None,
                     dot: Token{
                         kind:TokenKind::Dot,
                         span:s!(173,4,".")
                     }
-                }),
-                Statement::Whitespace(Token {
-                    kind: TokenKind::Whitespace,
-                    span: s!(174, 4, "\n\n"),
                 }),
                 Statement::Comment(Token {
                     kind: TokenKind::Comment,
@@ -352,12 +335,10 @@ mod test {
                             kind: TokenKind::Ident,
                             span: s!(222, 8, "somePredicate"),
                         }),
-                         ws1:None ,
                         open_paren:Token{
                             kind:TokenKind::OpenParen,
                             span:s!(235,8,"(")
                         } ,
-                         ws2:None ,
                         terms: Some(List {
                             span: s!(236, 8, "ConstA, ConstB"),
                             first: Term::Primitive(Primitive::Constant(Token {
@@ -365,34 +346,26 @@ mod test {
                                 span: s!(236, 8, "ConstA"),
                             })),
                             rest: Some(vec![(
-                                None,
                                 Token {
                                     kind: TokenKind::Comma,
                                     span: s!(242, 8, ","),
                                 },
-                                Some(Wsoc {span: s!(243, 8, " "), token: vec![Token{kind:TokenKind::Whitespace,span:s!(243,8," "),}] }),
                                 Term::Primitive(Primitive::Constant(Token {
                                     kind: TokenKind::Ident,
                                     span: s!(244, 8, "ConstB"),
                                 })),
                             )]),
                         }),
-                        ws3: None ,
                         close_paren:Token {
                             kind: TokenKind::CloseParen,
                             span:s!(250,8,")")
                         }
                     }),
-                    ws: None,
                     dot: Token {
                         kind: TokenKind::Dot,
                         span: s!(251,8,".")
                     }
                 },
-                Statement::Whitespace(Token {
-                    kind: TokenKind::Whitespace,
-                    span: s!(252, 8, "\n\n"),
-                }),
                 Statement::Comment(Token {
                     kind: TokenKind::Comment,
                     span: s!(254, 10, "% Rules\n"),
@@ -408,9 +381,7 @@ mod test {
                                 kind: TokenKind::Ident,
                                 span: s!(295, 12, "someHead"),
                             }),
-                            ws1: None,
                             open_paren: Token { kind: TokenKind::OpenParen, span: s!(303,12,"(") },
-                            ws2: None,
                             terms: Some(List {
                                 span: s!(304, 12, "?VarA"),
                                 first: Term::UniversalVariable(Token {
@@ -419,14 +390,11 @@ mod test {
                                 }),
                                 rest: None,
                             }),
-                            ws3: None,
                             close_paren: Token { kind: TokenKind::CloseParen, span: s!(309,12,")") },
                         }),
                         rest: None,
                     },
-                    ws1: Some(Wsoc {span: s!(310, 12, " "), token: vec![Token{kind:TokenKind::Whitespace,span:s!(310,12," ")}] }),
                     arrow: Token{kind:TokenKind::Arrow, span:s!(311,12,":-")},
-                    ws2: Some(Wsoc {span: s!(313, 12, " "), token: vec![Token{kind:TokenKind::Whitespace,span:s!(313,12," ")}] }),
                     body: List {
                         span: s!(314, 12, "somePredicate(?VarA, ConstB)"),
                         first: Atom::Positive(Tuple {
@@ -435,9 +403,7 @@ mod test {
                                 kind: TokenKind::Ident,
                                 span: s!(314, 12, "somePredicate"),
                             }),
-                            ws1: None,
                             open_paren: Token { kind: TokenKind::OpenParen, span: s!(327,12,"(") },
-                            ws2: None,
                             terms: Some(List {
                                 span: s!(328, 12, "?Var, ConstB"),
                                 first: Term::UniversalVariable(Token {
@@ -445,30 +411,22 @@ mod test {
                                     span: s!(328, 12, "?VarA"),
                                 }),
                                 rest: Some(vec![(
-                                    None,
                                     Token {
                                         kind: TokenKind::Comma,
                                         span: s!(333, 12, ","),
                                     },
-                                    Some(Wsoc {span: s!(334, 12, " "), token: vec![Token{kind:TokenKind::Whitespace,span:s!(334,12," "),}] }),
                                     Term::Primitive(Primitive::Constant(Token {
                                         kind: TokenKind::Ident,
                                         span: s!(335, 12, "ConstB"),
                                     })),
                                 )]),
                             }),
-                            ws3: None,
                             close_paren: Token { kind: TokenKind::CloseParen, span: s!(341, 12,")") },
                         }),
                         rest: None,
                     },
-                    ws3: None,
                     dot: Token{kind:TokenKind::Dot,span:s!(342, 12,".")},
                 },
-                Statement::Whitespace(Token {
-                    kind: TokenKind::Whitespace,
-                    span: s!(343, 12, "   "),
-                }),
                 Statement::Comment(Token {
                     kind: TokenKind::Comment,
                     span: s!(346, 12, "% all constants that are in relation with ConstB\n"),
@@ -481,12 +439,14 @@ mod test {
             println!("{}", token);
         }
 
-        assert_eq!(input, {
-            let mut result = String::new();
-            for token in &tokens1 {
-                result.push_str(token.span().fragment());
-            }
-            result
-        });
+        // This doesn't work anymore, because the whitespace and keywords got removed from
+        // from the AST, so you can't directly recreate the input exactly.
+        // assert_eq!(input, {
+        //     let mut result = String::new();
+        //     for token in &tokens1 {
+        //         result.push_str(token.span().fragment());
+        //     }
+        //     result
+        // });
     }
 }

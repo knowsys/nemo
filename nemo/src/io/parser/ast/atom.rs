@@ -18,9 +18,7 @@ pub enum Atom<'a> {
     InfixAtom {
         span: Span<'a>,
         lhs: Term<'a>,
-        ws1: Option<Wsoc<'a>>,
         operation: Token<'a>,
-        ws2: Option<Wsoc<'a>>,
         rhs: Term<'a>,
     },
     Map(Map<'a>),
@@ -43,21 +41,13 @@ impl AstNode for Atom<'_> {
             Atom::Negative { neg, atom, .. } => Some(vec![neg, atom]),
             Atom::InfixAtom {
                 lhs,
-                ws1,
                 operation,
-                ws2,
                 rhs,
                 ..
             } => {
                 let mut vec: Vec<&dyn AstNode> = Vec::new();
                 vec.push(lhs);
-                if let Some(ws) = ws1 {
-                    vec.push(ws);
-                };
                 vec.push(operation);
-                if let Some(ws) = ws2 {
-                    vec.push(ws);
-                };
                 vec.push(rhs);
                 Some(vec)
             }
