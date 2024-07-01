@@ -10,11 +10,8 @@ use std::fmt::Debug;
 pub struct Map<'a> {
     pub span: Span<'a>,
     pub identifier: Option<Token<'a>>,
-    pub ws1: Option<Wsoc<'a>>,
     pub open_brace: Token<'a>,
-    pub ws2: Option<Wsoc<'a>>,
     pub pairs: Option<List<'a, Pair<'a, Term<'a>, Term<'a>>>>,
-    pub ws3: Option<Wsoc<'a>>,
     pub close_brace: Token<'a>,
 }
 impl AstNode for Map<'_> {
@@ -23,19 +20,10 @@ impl AstNode for Map<'_> {
         if let Some(identifier) = &self.identifier {
             vec.push(identifier);
         };
-        if let Some(ws) = &self.ws1 {
-            vec.push(ws);
-        }
         vec.push(&self.open_brace);
-        if let Some(ws) = &self.ws2 {
-            vec.push(ws);
-        }
         if let Some(pairs) = &self.pairs {
             vec.push(pairs);
         };
-        if let Some(ws) = &self.ws3 {
-            vec.push(ws);
-        }
         vec.push(&self.close_brace);
         Some(vec)
     }
@@ -77,22 +65,14 @@ impl std::fmt::Display for Map<'_> {
 pub struct Pair<'a, K, V> {
     pub span: Span<'a>,
     pub key: K,
-    pub ws1: Option<Wsoc<'a>>,
     pub equal: Token<'a>,
-    pub ws2: Option<Wsoc<'a>>,
     pub value: V,
 }
 impl<K: AstNode + Debug, V: AstNode + Debug> AstNode for Pair<'_, K, V> {
     fn children(&self) -> Option<Vec<&dyn AstNode>> {
         let mut vec: Vec<&dyn AstNode> = Vec::new();
         vec.push(&self.key);
-        if let Some(ws) = &self.ws1 {
-            vec.push(ws);
-        }
         vec.push(&self.equal);
-        if let Some(ws) = &self.ws2 {
-            vec.push(ws);
-        }
         vec.push(&self.value);
         Some(vec)
     }

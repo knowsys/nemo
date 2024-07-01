@@ -2443,10 +2443,11 @@ pub mod new {
         exp, greater, greater_equal, hash, less, less_equal, lex_comment, lex_doc_comment,
         lex_ident, lex_iri, lex_number, lex_operators, lex_prefixed_ident, lex_string,
         lex_toplevel_doc_comment, lex_whitespace, minus, open_brace, open_paren, plus,
-        question_mark, skip_to_dot, slash, star, tilde, underscore, unequal, Context, Error,
-        ErrorTree, ParserState, Span, Token, TokenKind,
+        question_mark, skip_to_statement_end, slash, star, tilde, underscore, unequal, Context,
+        Error, ErrorTree, ParserState, Span, Token, TokenKind,
     };
     use crate::io::parser::ast::AstNode;
+    use nom::character::complete::multispace0;
     use nom::combinator::{all_consuming, cut, map, opt, recognize};
     use nom::error::{ErrorKind, ParseError};
     use nom::sequence::{delimited, pair};
@@ -2518,7 +2519,7 @@ pub mod new {
                     context: vec![context],
                 };
                 // errors.report_error(err);
-                let (rest_input, token) = skip_to_dot::<ErrorTree<Input<'_, '_>>>(input);
+                let (rest_input, token) = skip_to_statement_end::<ErrorTree<Input<'_, '_>>>(input);
                 Ok((rest_input, Statement::Error(token)))
             }
             Err(err) => Err(err),
@@ -2709,19 +2710,26 @@ pub mod new {
             Context::Program,
             pair(
                 opt(lex_toplevel_doc_comment::<ErrorTree<Input<'_, '_>>>),
-                many0(recover(
-                    report_error(alt((
-                        // TODO: Discuss wether directives should only get parsed at the beginning of the source file
-                        parse_rule,
-                        parse_fact,
-                        parse_whitespace,
-                        parse_directive,
-                        parse_comment,
-                    ))),
-                    "failed to parse statement",
-                    Context::Program,
-                    input.parser_state,
-                )),
+                delimited(
+                    multispace0,
+                    many0(recover(
+                        report_error(delimited(
+                            multispace0,
+                            alt((
+                                // TODO: Discuss wether directives should only get parsed at the beginning of the source file
+                                parse_rule,
+                                parse_fact,
+                                parse_directive,
+                                parse_comment,
+                            )),
+                            multispace0,
+                        )),
+                        "failed to parse statement",
+                        Context::Program,
+                        input.parser_state,
+                    )),
+                    multispace0,
+                ),
             ),
         )(input);
         match result {
@@ -2755,17 +2763,6 @@ pub mod new {
         parse_program::<ErrorTree<Input<'_, '_>>>(input)
     }
 
-    /// Parse whitespace that is between directives, facts, rules and comments.
-    fn parse_whitespace<
-        'a,
-        's,
-        E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>, Context>,
-    >(
-        input: Input<'a, 's>,
-    ) -> IResult<Input<'a, 's>, Statement<'a>, E> {
-        lex_whitespace(input).map(|(rest_input, ws)| (rest_input, Statement::Whitespace(ws)))
-    }
-
     /// Parse normal comments that start with a `%` and ends at the line ending.
     fn parse_comment<
         'a,
@@ -2786,14 +2783,13 @@ pub mod new {
             Context::Fact,
             tuple((opt(lex_doc_comment), parse_normal_atom, wsoc0, dot)),
         )(input)
-        .map(|(rest_input, (doc_comment, atom, ws, dot))| {
+        .map(|(rest_input, (doc_comment, atom, _ws, dot))| {
             (
                 rest_input,
                 Statement::Fact {
                     span: outer_span(input.input, rest_input.input),
                     doc_comment,
                     atom,
-                    ws,
                     dot,
                 },
             )
@@ -2818,18 +2814,15 @@ pub mod new {
             )),
         )(input)
         .map(
-            |(rest_input, (doc_comment, head, ws1, arrow, ws2, body, ws3, dot))| {
+            |(rest_input, (doc_comment, head, _ws1, arrow, _ws2, body, _ws3, dot))| {
                 (
                     rest_input,
                     Statement::Rule {
                         span: outer_span(input.input, rest_input.input),
                         doc_comment,
                         head,
-                        ws1,
                         arrow,
-                        ws2,
                         body,
-                        ws3,
                         dot,
                     },
                 )
@@ -2894,23 +2887,19 @@ pub mod new {
                 dot,
             )),
         )(input)
-        .map(|(rest_input, (doc_comment, kw, ws1, base_iri, ws2, dot))| {
-            (
-                rest_input,
-                Directive::Base {
-                    span: outer_span(input.input, rest_input.input),
-                    doc_comment,
-                    kw: Token {
-                        kind: TokenKind::Base,
-                        span: kw.input,
+        .map(
+            |(rest_input, (doc_comment, _kw, _ws1, base_iri, _ws2, dot))| {
+                (
+                    rest_input,
+                    Directive::Base {
+                        span: outer_span(input.input, rest_input.input),
+                        doc_comment,
+                        base_iri,
+                        dot,
                     },
-                    ws1,
-                    base_iri,
-                    ws2,
-                    dot,
-                },
-            )
-        })
+                )
+            },
+        )
     }
 
     /// Parse the prefix directive.
@@ -2938,24 +2927,17 @@ pub mod new {
             )),
         )(input)
         .map(
-            |(rest_input, (doc_comment, kw, ws1, prefix, ws2, prefix_iri, ws3, dot))| {
+            |(rest_input, (doc_comment, _kw, _ws1, prefix, _ws2, prefix_iri, _ws3, dot))| {
                 (
                     rest_input,
                     Directive::Prefix {
                         span: outer_span(input.input, rest_input.input),
                         doc_comment,
-                        kw: Token {
-                            kind: TokenKind::Prefix,
-                            span: kw.input,
-                        },
-                        ws1,
                         prefix: Token {
                             kind: TokenKind::Ident,
                             span: prefix.input,
                         },
-                        ws2,
                         prefix_iri,
-                        ws3,
                         dot,
                     },
                 )
@@ -2990,23 +2972,18 @@ pub mod new {
             )),
         )(input)
         .map(
-            |(rest_input, (doc_comment, kw, ws1, predicate, ws2, arrow, ws3, map, ws4, dot))| {
+            |(
+                rest_input,
+                (doc_comment, _kw, _ws1, predicate, _ws2, arrow, _ws3, map, _ws4, dot),
+            )| {
                 (
                     rest_input,
                     Directive::Import {
                         span: outer_span(input.input, rest_input.input),
                         doc_comment,
-                        kw: Token {
-                            kind: TokenKind::Import,
-                            span: kw.input,
-                        },
-                        ws1,
                         predicate,
-                        ws2,
                         arrow,
-                        ws3,
                         map,
-                        ws4,
                         dot,
                     },
                 )
@@ -3041,23 +3018,18 @@ pub mod new {
             )),
         )(input)
         .map(
-            |(rest_input, (doc_comment, kw, ws1, predicate, ws2, arrow, ws3, map, ws4, dot))| {
+            |(
+                rest_input,
+                (doc_comment, _kw, _ws1, predicate, _ws2, arrow, _ws3, map, _ws4, dot),
+            )| {
                 (
                     rest_input,
                     Directive::Export {
                         span: outer_span(input.input, rest_input.input),
                         doc_comment,
-                        kw: Token {
-                            kind: TokenKind::Export,
-                            span: kw.input,
-                        },
-                        ws1,
                         predicate,
-                        ws2,
                         arrow,
-                        ws3,
                         map,
-                        ws4,
                         dot,
                     },
                 )
@@ -3088,19 +3060,13 @@ pub mod new {
             )),
         )(input)
         .map(
-            |(rest_input, (doc_comment, kw, ws1, predicates, ws2, dot))| {
+            |(rest_input, (doc_comment, _kw, _ws1, predicates, _ws2, dot))| {
                 (
                     rest_input,
                     Directive::Output {
                         span: outer_span(input.input, rest_input.input),
                         doc_comment,
-                        kw: Token {
-                            kind: TokenKind::Output,
-                            span: kw.input,
-                        },
-                        ws1,
                         predicates,
-                        ws2,
                         dot,
                     },
                 )
@@ -3152,7 +3118,15 @@ pub mod new {
                     List {
                         span: outer_span(input.input, rest_input.input),
                         first,
-                        rest: if rest.is_empty() { None } else { Some(rest) },
+                        rest: if rest.is_empty() {
+                            None
+                        } else {
+                            Some(
+                                rest.into_iter()
+                                    .map(|(_ws1, comma, _ws2, t)| (comma, t))
+                                    .collect(),
+                            )
+                        },
                     },
                 )
             })
@@ -3239,15 +3213,13 @@ pub mod new {
             Context::InfixAtom,
             tuple((parse_term, wsoc0, parse_operation_token, wsoc0, parse_term)),
         )(input)
-        .map(|(rest_input, (lhs, ws1, operation, ws2, rhs))| {
+        .map(|(rest_input, (lhs, _ws1, operation, _ws2, rhs))| {
             (
                 rest_input,
                 Atom::InfixAtom {
                     span: outer_span(input.input, rest_input.input),
                     lhs,
-                    ws1,
                     operation,
-                    ws2,
                     rhs,
                 },
             )
@@ -3272,17 +3244,14 @@ pub mod new {
             )),
         )(input)
         .map(
-            |(rest_input, (identifier, ws1, open_paren, ws2, terms, ws3, close_paren))| {
+            |(rest_input, (identifier, _ws1, open_paren, _ws2, terms, _ws3, close_paren))| {
                 (
                     rest_input,
                     Tuple {
                         span: outer_span(input.input, rest_input.input),
                         identifier,
-                        ws1,
                         open_paren,
-                        ws2,
                         terms,
-                        ws3,
                         close_paren,
                     },
                 )
@@ -3312,17 +3281,14 @@ pub mod new {
             )),
         )(input)
         .map(
-            |(rest_input, (identifier, ws1, open_paren, ws2, terms, ws3, close_paren))| {
+            |(rest_input, (identifier, _ws1, open_paren, _ws2, terms, _ws3, close_paren))| {
                 (
                     rest_input,
                     Tuple {
                         span: outer_span(input.input, rest_input.input),
                         identifier: Some(identifier),
-                        ws1,
                         open_paren,
-                        ws2,
                         terms,
-                        ws3,
                         close_paren,
                     },
                 )
@@ -3348,17 +3314,14 @@ pub mod new {
             )),
         )(input)
         .map(
-            |(rest_input, (identifier, ws1, open_brace, ws2, pairs, ws3, close_brace))| {
+            |(rest_input, (identifier, _ws1, open_brace, _ws2, pairs, _ws3, close_brace))| {
                 (
                     rest_input,
                     Map {
                         span: outer_span(input.input, rest_input.input),
                         identifier,
-                        ws1,
                         open_brace,
-                        ws2,
                         pairs,
-                        ws3,
                         close_brace,
                     },
                 )
@@ -3418,15 +3381,13 @@ pub mod new {
             Context::Pair,
             tuple((parse_term, wsoc0, equal, wsoc0, parse_term)),
         )(input)
-        .map(|(rest_input, (key, ws1, equal, ws2, value))| {
+        .map(|(rest_input, (key, _ws1, equal, _ws2, value))| {
             (
                 rest_input,
                 Pair {
                     span: outer_span(input.input, rest_input.input),
                     key,
-                    ws1,
                     equal,
-                    ws2,
                     value,
                 },
             )
@@ -3685,13 +3646,11 @@ pub mod new {
         .map(|(rest_input, (lhs, opt))| {
             (
                 rest_input,
-                if let Some((ws1, operation, ws2, rhs)) = opt {
+                if let Some((_ws1, operation, _ws2, rhs)) = opt {
                     Term::Binary {
                         span: outer_span(input.input, rest_input.input),
                         lhs: Box::new(lhs),
-                        ws1,
                         operation,
-                        ws2,
                         rhs: Box::new(rhs),
                     }
                 } else {
@@ -3725,13 +3684,11 @@ pub mod new {
         .map(|(rest_input, (lhs, opt))| {
             (
                 rest_input,
-                if let Some((ws1, operation, ws2, rhs)) = opt {
+                if let Some((_ws1, operation, _ws2, rhs)) = opt {
                     Term::Binary {
                         span: outer_span(input.input, rest_input.input),
                         lhs: Box::new(lhs),
-                        ws1,
                         operation,
-                        ws2,
                         rhs: Box::new(rhs),
                     }
                 } else {
@@ -3801,7 +3758,7 @@ pub mod new {
             )),
         )(input)
         .map(
-            |(rest_input, (operation, open_paren, ws1, terms, ws2, close_paren))| {
+            |(rest_input, (operation, open_paren, _ws1, terms, _ws2, close_paren))| {
                 (
                     rest_input,
                     Term::Aggregation {
@@ -3811,9 +3768,7 @@ pub mod new {
                             span: operation.input,
                         },
                         open_paren,
-                        ws1,
                         terms: Box::new(terms),
-                        ws2,
                         close_paren,
                     },
                 )
@@ -3989,12 +3944,10 @@ pub mod new {
                                 kind: TokenKind::Ident,
                                 span: s!(0, 1, "a"),
                             }),
-                            ws1: None,
                             open_paren: Token {
                                 kind: TokenKind::OpenParen,
                                 span: s!(1, 1, "("),
                             },
-                            ws2: None,
                             terms: Some(List {
                                 span: s!(2, 1, "B,C"),
                                 first: Term::Primitive(Primitive::Constant(Token {
@@ -4002,25 +3955,21 @@ pub mod new {
                                     span: s!(2, 1, "B"),
                                 })),
                                 rest: Some(vec![(
-                                    None,
                                     Token {
                                         kind: TokenKind::Comma,
                                         span: s!(3, 1, ",")
                                     },
-                                    None,
                                     Term::Primitive(Primitive::Constant(Token {
                                         kind: TokenKind::Ident,
                                         span: s!(4, 1, "C"),
                                     })),
                                 )]),
                             }),
-                            ws3: None,
                             close_paren: Token {
                                 kind: TokenKind::CloseParen,
                                 span: s!(5, 1, ")"),
                             },
                         }),
-                        ws: None,
                         dot: Token {
                             kind: TokenKind::Dot,
                             span: s!(6, 1, ".")
@@ -4051,22 +4000,10 @@ pub mod new {
                         Statement::Directive(Directive::Base {
                             span: s!(0, 1, "@base <http://example.org/foo/>."),
                             doc_comment: None,
-                            kw: Token {
-                                kind: TokenKind::Base,
-                                span: s!(0, 1, "@base"),
-                            },
-                            ws1: Some(Wsoc {
-                                span: s!(5, 1, " "),
-                                token: vec![Token {
-                                    kind: TokenKind::Whitespace,
-                                    span: s!(5, 1, " ")
-                                }]
-                            }),
                             base_iri: Token {
                                 kind: TokenKind::Iri,
                                 span: s!(6, 1, "<http://example.org/foo/>")
                             },
-                            ws2: None,
                             dot: Token {
                                 kind: TokenKind::Dot,
                                 span: s!(31, 1, ".")
@@ -4079,27 +4016,14 @@ pub mod new {
                                 "@prefix rdfs:<http://www.w3.org/2000/01/rdf-schema#>."
                             ),
                             doc_comment: None,
-                            kw: Token {
-                                kind: TokenKind::Prefix,
-                                span: s!(32, 1, "@prefix"),
-                            },
-                            ws1: Some(Wsoc {
-                                span: s!(39, 1, " "),
-                                token: vec![Token {
-                                    kind: TokenKind::Whitespace,
-                                    span: s!(39, 1, " ")
-                                }]
-                            }),
                             prefix: Token {
                                 kind: TokenKind::Ident,
                                 span: s!(40, 1, "rdfs:"),
                             },
-                            ws2: None,
                             prefix_iri: Token {
                                 kind: TokenKind::Iri,
                                 span: s!(45, 1, "<http://www.w3.org/2000/01/rdf-schema#>"),
                             },
-                            ws3: None,
                             dot: Token {
                                 kind: TokenKind::Dot,
                                 span: s!(84, 1, ".")
@@ -4112,39 +4036,24 @@ pub mod new {
                                 r#"@import sourceA:-csv{resource="sources/dataA.csv"}."#
                             ),
                             doc_comment: None,
-                            kw: Token {
-                                kind: TokenKind::Import,
-                                span: s!(85, 1, "@import"),
-                            },
-                            ws1: Wsoc {
-                                span: s!(92, 1, " "),
-                                token: vec![Token {
-                                    kind: TokenKind::Whitespace,
-                                    span: s!(92, 1, " "),
-                                }]
-                            },
                             predicate: Token {
                                 kind: TokenKind::Ident,
                                 span: s!(93, 1, "sourceA"),
                             },
-                            ws2: None,
                             arrow: Token {
                                 kind: TokenKind::Arrow,
                                 span: s!(100, 1, ":-"),
                             },
-                            ws3: None,
                             map: Map {
                                 span: s!(102, 1, r#"csv{resource="sources/dataA.csv"}"#),
                                 identifier: Some(Token {
                                     kind: TokenKind::Ident,
                                     span: s!(102, 1, "csv")
                                 }),
-                                ws1: None,
                                 open_brace: Token {
                                     kind: TokenKind::OpenBrace,
                                     span: s!(105, 1, "{")
                                 },
-                                ws2: None,
                                 pairs: Some(List {
                                     span: s!(106, 1, "resource=\"sources/dataA.csv\""),
                                     first: Pair {
@@ -4153,12 +4062,10 @@ pub mod new {
                                             kind: TokenKind::Ident,
                                             span: s!(106, 1, "resource"),
                                         })),
-                                        ws1: None,
                                         equal: Token {
                                             kind: TokenKind::Equal,
                                             span: s!(114, 1, "="),
                                         },
-                                        ws2: None,
                                         value: Term::Primitive(Primitive::String(Token {
                                             kind: TokenKind::String,
                                             span: s!(115, 1, "\"sources/dataA.csv\""),
@@ -4166,13 +4073,11 @@ pub mod new {
                                     },
                                     rest: None,
                                 }),
-                                ws3: None,
                                 close_brace: Token {
                                     kind: TokenKind::CloseBrace,
                                     span: s!(134, 1, "}")
                                 },
                             },
-                            ws4: None,
                             dot: Token {
                                 kind: TokenKind::Dot,
                                 span: s!(135, 1, ".")
@@ -4181,47 +4086,30 @@ pub mod new {
                         Statement::Directive(Directive::Export {
                             span: s!(136, 1, "@export a:-csv{}."),
                             doc_comment: None,
-                            kw: Token {
-                                kind: TokenKind::Export,
-                                span: s!(136, 1, "@export"),
-                            },
-                            ws1: Wsoc {
-                                span: s!(143, 1, " "),
-                                token: vec![Token {
-                                    kind: TokenKind::Whitespace,
-                                    span: s!(143, 1, " "),
-                                }]
-                            },
                             predicate: Token {
                                 kind: TokenKind::Ident,
                                 span: s!(144, 1, "a"),
                             },
-                            ws2: None,
                             arrow: Token {
                                 kind: TokenKind::Arrow,
                                 span: s!(145, 1, ":-"),
                             },
-                            ws3: None,
                             map: Map {
                                 span: s!(147, 1, "csv{}"),
                                 identifier: Some(Token {
                                     kind: TokenKind::Ident,
                                     span: s!(147, 1, "csv"),
                                 }),
-                                ws1: None,
                                 open_brace: Token {
                                     kind: TokenKind::OpenBrace,
                                     span: s!(150, 1, "{"),
                                 },
-                                ws2: None,
                                 pairs: None,
-                                ws3: None,
                                 close_brace: Token {
                                     kind: TokenKind::CloseBrace,
                                     span: s!(151, 1, "}"),
                                 },
                             },
-                            ws4: None,
                             dot: Token {
                                 kind: TokenKind::Dot,
                                 span: s!(152, 1, "."),
@@ -4230,17 +4118,6 @@ pub mod new {
                         Statement::Directive(Directive::Output {
                             span: s!(153, 1, "@output a, b, c."),
                             doc_comment: None,
-                            kw: Token {
-                                kind: TokenKind::Output,
-                                span: s!(153, 1, "@output")
-                            },
-                            ws1: Wsoc {
-                                span: s!(160, 1, " "),
-                                token: vec![Token {
-                                    kind: TokenKind::Whitespace,
-                                    span: s!(160, 1, " "),
-                                }]
-                            },
                             predicates: Some(List {
                                 span: s!(161, 1, "a, b, c"),
                                 first: Token {
@@ -4249,36 +4126,20 @@ pub mod new {
                                 },
                                 rest: Some(vec![
                                     (
-                                        None,
                                         Token {
                                             kind: TokenKind::Comma,
                                             span: s!(162, 1, ","),
                                         },
-                                        Some(Wsoc {
-                                            span: s!(163, 1, " "),
-                                            token: vec![Token {
-                                                kind: TokenKind::Whitespace,
-                                                span: s!(163, 1, " "),
-                                            }]
-                                        }),
                                         Token {
                                             kind: TokenKind::Ident,
                                             span: s!(164, 1, "b"),
                                         },
                                     ),
                                     (
-                                        None,
                                         Token {
                                             kind: TokenKind::Comma,
                                             span: s!(165, 1, ","),
                                         },
-                                        Some(Wsoc {
-                                            span: s!(166, 1, " "),
-                                            token: vec![Token {
-                                                kind: TokenKind::Whitespace,
-                                                span: s!(166, 1, " "),
-                                            }]
-                                        }),
                                         Token {
                                             kind: TokenKind::Ident,
                                             span: s!(167, 1, "c"),
@@ -4286,7 +4147,6 @@ pub mod new {
                                     ),
                                 ]),
                             }),
-                            ws2: None,
                             dot: Token {
                                 kind: TokenKind::Dot,
                                 span: s!(168, 1, "."),
@@ -4337,12 +4197,10 @@ pub mod new {
                                     kind: TokenKind::Ident,
                                     span: s!(0, 1, "some"),
                                 }),
-                                ws1: None,
                                 open_paren: Token {
                                     kind: TokenKind::OpenParen,
                                     span: s!(4, 1, "(")
                                 },
-                                ws2: None,
                                 terms: Some(List {
                                     span: s!(5, 1, "Fact, with, whitespace"),
                                     first: Term::Primitive(Primitive::Constant(Token {
@@ -4351,36 +4209,20 @@ pub mod new {
                                     })),
                                     rest: Some(vec![
                                         (
-                                            None,
                                             Token {
                                                 kind: TokenKind::Comma,
                                                 span: s!(9, 1, ","),
                                             },
-                                            Some(Wsoc {
-                                                span: s!(10, 1, " "),
-                                                token: vec![Token {
-                                                    kind: TokenKind::Whitespace,
-                                                    span: s!(10, 1, " "),
-                                                }]
-                                            }),
                                             Term::Primitive(Primitive::Constant(Token {
                                                 kind: TokenKind::Ident,
                                                 span: s!(11, 1, "with")
                                             })),
                                         ),
                                         (
-                                            None,
                                             Token {
                                                 kind: TokenKind::Comma,
                                                 span: s!(15, 1, ","),
                                             },
-                                            Some(Wsoc {
-                                                span: s!(16, 1, " "),
-                                                token: vec![Token {
-                                                    kind: TokenKind::Whitespace,
-                                                    span: s!(16, 1, " "),
-                                                }]
-                                            }),
                                             Term::Primitive(Primitive::Constant(Token {
                                                 kind: TokenKind::Ident,
                                                 span: s!(17, 1, "whitespace")
@@ -4388,28 +4230,16 @@ pub mod new {
                                         ),
                                     ]),
                                 }),
-                                ws3: None,
                                 close_paren: Token {
                                     kind: TokenKind::CloseParen,
                                     span: s!(27, 1, ")")
                                 },
-                            }),
-                            ws: Some(Wsoc {
-                                span: s!(28, 1, " "),
-                                token: vec![Token {
-                                    kind: TokenKind::Whitespace,
-                                    span: s!(28, 1, " "),
-                                }]
                             }),
                             dot: Token {
                                 kind: TokenKind::Dot,
                                 span: s!(29, 1, "."),
                             },
                         },
-                        Statement::Whitespace(Token {
-                            kind: TokenKind::Whitespace,
-                            span: s!(30, 1, " ")
-                        }),
                         Statement::Comment(Token {
                             kind: TokenKind::Comment,
                             span: s!(31, 1, "% and a super useful comment\n")
@@ -4447,18 +4277,19 @@ oldLime(?location,?species,?age) :- tree(?location,?species,?age,?heightInMeters
             // let ast = parse_program::<VerboseError<_>>(input);
             let (ast, _) = parse_program::<ErrorTree<_>>(input);
             println!("{}", ast);
-            assert_eq!(
-                {
-                    let mut string_from_tokens = String::new();
-                    for token in get_all_tokens(&ast) {
-                        string_from_tokens.push_str(token.span().fragment());
-                    }
-                    println!("String from Tokens:\n");
-                    println!("{}\n", string_from_tokens);
-                    string_from_tokens
-                },
-                *input.input.fragment(),
-            );
+            // With the removal of whitespace in the AST this does not work anymore.
+            // assert_eq!(
+            //     {
+            //         let mut string_from_tokens = String::new();
+            //         for token in get_all_tokens(&ast) {
+            //             string_from_tokens.push_str(token.span().fragment());
+            //         }
+            //         println!("String from Tokens:\n");
+            //         println!("{}\n", string_from_tokens);
+            //         string_from_tokens
+            //     },
+            //     *input.input.fragment(),
+            // );
         }
 
         #[test]
@@ -4548,9 +4379,7 @@ oldLime(?location,?species,?age) :- tree(?location,?species,?age,?heightInMeters
                         after: T! {Number, 0, 1, "35"},
                         exponent: None,
                     })),
-                    ws1: None,
                     operation: T! {Plus, 2, 1, "+"},
-                    ws2: None,
                     rhs: Box::new(Term::Primitive(Primitive::Number {
                         span: s!(3, 1, "7"),
                         sign: None,
@@ -4585,9 +4414,7 @@ oldLime(?location,?species,?age) :- tree(?location,?species,?age,?heightInMeters
                         after: T! {Number, 0,1,"6"},
                         exponent: None,
                     })),
-                    ws1: None,
                     operation: T! {Star, 1,1,"*"},
-                    ws2: None,
                     rhs: Box::new(Term::Primitive(Primitive::Number {
                         span: s!(2, 1, "7"),
                         sign: None,
@@ -4622,9 +4449,7 @@ oldLime(?location,?species,?age) :- tree(?location,?species,?age,?heightInMeters
                         after: T! {Number, 0, 1, "49"},
                         exponent: None,
                     })),
-                    ws1: None,
                     operation: T! {Minus, 2, 1, "-"},
-                    ws2: None,
                     rhs: Box::new(Term::Primitive(Primitive::Number {
                         span: s!(3, 1, "7"),
                         sign: None,
@@ -4659,9 +4484,7 @@ oldLime(?location,?species,?age) :- tree(?location,?species,?age,?heightInMeters
                         after: T! {Number, 0, 1, "84"},
                         exponent: None,
                     })),
-                    ws1: None,
                     operation: T! {Slash, 2, 1, "/"},
-                    ws2: None,
                     rhs: Box::new(Term::Primitive(Primitive::Number {
                         span: s!(3, 1, "2"),
                         sign: None,
@@ -4698,9 +4521,7 @@ oldLime(?location,?species,?age) :- tree(?location,?species,?age,?heightInMeters
                             after: T! {Number, 0,1,"5"},
                             exponent: None,
                         })),
-                        ws1: None,
                         operation: T! {Star, 1,1,"*"},
-                        ws2: None,
                         rhs: Box::new(Term::Primitive(Primitive::Number {
                             span: s!(2, 1, "7"),
                             sign: None,
@@ -4710,9 +4531,7 @@ oldLime(?location,?species,?age) :- tree(?location,?species,?age,?heightInMeters
                             exponent: None,
                         })),
                     }),
-                    ws1: None,
                     operation: T! {Plus, 3,1,"+"},
-                    ws2: None,
                     rhs: Box::new(Term::Primitive(Primitive::Number {
                         span: s!(4, 1, "7"),
                         sign: None,
@@ -4747,9 +4566,7 @@ oldLime(?location,?species,?age) :- tree(?location,?species,?age,?heightInMeters
                         after: T! {Number, 0,1,"7"},
                         exponent: None
                     })),
-                    ws1: None,
                     operation: T! {Plus, 1,1,"+"},
-                    ws2: None,
                     rhs: Box::new(Term::Binary {
                         span: s!(2, 1, "5*7"),
                         lhs: Box::new(Term::Primitive(Primitive::Number {
@@ -4760,9 +4577,7 @@ oldLime(?location,?species,?age) :- tree(?location,?species,?age,?heightInMeters
                             after: T! {Number, 2,1,"5"},
                             exponent: None
                         })),
-                        ws1: None,
                         operation: T! {Star, 3,1,"*"},
-                        ws2: None,
                         rhs: Box::new(Term::Primitive(Primitive::Number {
                             span: s!(4, 1, "7"),
                             sign: None,
@@ -4816,9 +4631,7 @@ oldLime(?location,?species,?age) :- tree(?location,?species,?age,?heightInMeters
                     lhs: Box::new(Term::Tuple(Box::new(Tuple {
                         span: s!(0, 1, "(15+3*2-(7+35)*8)"),
                         identifier: None,
-                        ws1: None,
                         open_paren: T!(OpenParen, 0, 1, "("),
-                        ws2: None,
                         terms: Some(List {
                             span: s!(1, 1, "15+3*2-(7+35)*8"),
                             first: Term::Binary {
@@ -4831,9 +4644,7 @@ oldLime(?location,?species,?age) :- tree(?location,?species,?age,?heightInMeters
                                     after: T! {Number, 1,1,"15"},
                                     exponent: None,
                                 })),
-                                ws1: None,
                                 operation: T! {Plus, 3,1,"+"},
-                                ws2: None,
                                 rhs: Box::new(Term::Binary {
                                     span: s!(4, 1, "3*2-(7+35)*8"),
                                     lhs: Box::new(Term::Binary {
@@ -4846,9 +4657,7 @@ oldLime(?location,?species,?age) :- tree(?location,?species,?age,?heightInMeters
                                             after: T! {Number, 4,1,"3"},
                                             exponent: None,
                                         })),
-                                        ws1: None,
                                         operation: T! {Star, 5,1,"*"},
-                                        ws2: None,
                                         rhs: Box::new(Term::Primitive(Primitive::Number {
                                             span: s!(6, 1, "2"),
                                             sign: None,
@@ -4858,17 +4667,13 @@ oldLime(?location,?species,?age) :- tree(?location,?species,?age,?heightInMeters
                                             exponent: None,
                                         })),
                                     }),
-                                    ws1: None,
                                     operation: T! {Minus, 7,1,"-"},
-                                    ws2: None,
                                     rhs: Box::new(Term::Binary {
                                         span: s!(8, 1, "(7+35)*8"),
                                         lhs: Box::new(Term::Tuple(Box::new(Tuple {
                                             span: s!(8, 1, "(7+35)"),
                                             identifier: None,
-                                            ws1: None,
                                             open_paren: T! {OpenParen, 8, 1, "("},
-                                            ws2: None,
                                             terms: Some(List {
                                                 span: s!(9, 1, "7+35"),
                                                 first: Term::Binary {
@@ -4883,9 +4688,7 @@ oldLime(?location,?species,?age) :- tree(?location,?species,?age,?heightInMeters
                                                             exponent: None,
                                                         }
                                                     )),
-                                                    ws1: None,
                                                     operation: T! {Plus, 10,1,"+"},
-                                                    ws2: None,
                                                     rhs: Box::new(Term::Primitive(
                                                         Primitive::Number {
                                                             span: s!(11, 1, "35"),
@@ -4899,12 +4702,9 @@ oldLime(?location,?species,?age) :- tree(?location,?species,?age,?heightInMeters
                                                 },
                                                 rest: None
                                             }),
-                                            ws3: None,
                                             close_paren: T! {CloseParen, 13,1,")"},
                                         }))),
-                                        ws1: None,
                                         operation: T! {Star, 14,1,"*"},
-                                        ws2: None,
                                         rhs: Box::new(Term::Primitive(Primitive::Number {
                                             span: s!(15, 1, "8"),
                                             sign: None,
@@ -4918,12 +4718,9 @@ oldLime(?location,?species,?age) :- tree(?location,?species,?age,?heightInMeters
                             },
                             rest: None
                         }),
-                        ws3: None,
                         close_paren: T!(CloseParen, 16, 1, ")")
                     }))),
-                    ws1: None,
                     operation: T! {Slash, 17,1,"/"},
-                    ws2: None,
                     rhs: Box::new(Term::Primitive(Primitive::Number {
                         span: s!(18, 1, "3"),
                         sign: None,
@@ -4966,9 +4763,7 @@ oldLime(?location,?species,?age) :- tree(?location,?species,?age,?heightInMeters
                         after: T! {Number, 0,1,"15"},
                         exponent: None,
                     })),
-                    ws1: None,
                     operation: T! {Plus, 2,1,"+"},
-                    ws2: None,
                     rhs: Box::new(Term::Binary {
                         span: s!(3, 1, "3*2-(7+35)*8/3"),
                         lhs: Box::new(Term::Binary {
@@ -4981,9 +4776,7 @@ oldLime(?location,?species,?age) :- tree(?location,?species,?age,?heightInMeters
                                 after: T! {Number, 3,1,"3"},
                                 exponent: None,
                             })),
-                            ws1: None,
                             operation: T! {Star, 4,1,"*"},
-                            ws2: None,
                             rhs: Box::new(Term::Primitive(Primitive::Number {
                                 span: s!(5, 1, "2"),
                                 sign: None,
@@ -4993,17 +4786,13 @@ oldLime(?location,?species,?age) :- tree(?location,?species,?age,?heightInMeters
                                 exponent: None,
                             })),
                         }),
-                        ws1: None,
                         operation: T! {Minus, 6,1,"-"},
-                        ws2: None,
                         rhs: Box::new(Term::Binary {
                             span: s!(7, 1, "(7+35)*8/3"),
                             lhs: Box::new(Term::Tuple(Box::new(Tuple {
                                 span: s!(7, 1, "(7+35)"),
                                 identifier: None,
-                                ws1: None,
                                 open_paren: T! {OpenParen, 7,1,"("},
-                                ws2: None,
                                 terms: Some(List {
                                     span: s!(8, 1, "7+35"),
                                     first: Term::Binary {
@@ -5016,9 +4805,7 @@ oldLime(?location,?species,?age) :- tree(?location,?species,?age,?heightInMeters
                                             after: T! {Number, 8,1,"7"},
                                             exponent: None,
                                         })),
-                                        ws1: None,
                                         operation: T! {Plus, 9,1,"+"},
-                                        ws2: None,
                                         rhs: Box::new(Term::Primitive(Primitive::Number {
                                             span: s!(10, 1, "35"),
                                             sign: None,
@@ -5030,12 +4817,9 @@ oldLime(?location,?species,?age) :- tree(?location,?species,?age,?heightInMeters
                                     },
                                     rest: None,
                                 }),
-                                ws3: None,
                                 close_paren: T! {CloseParen, 12,1,")"},
                             }))),
-                            ws1: None,
                             operation: T! {Star, 13,1,"*"},
-                            ws2: None,
                             rhs: Box::new(Term::Binary {
                                 span: s!(14, 1, "8/3"),
                                 lhs: Box::new(Term::Primitive(Primitive::Number {
@@ -5046,9 +4830,7 @@ oldLime(?location,?species,?age) :- tree(?location,?species,?age,?heightInMeters
                                     after: T! {Number, 14,1,"8"},
                                     exponent: None,
                                 })),
-                                ws1: None,
                                 operation: T! {Slash, 15, 1, "/"},
-                                ws2: None,
                                 rhs: Box::new(Term::Primitive(Primitive::Number {
                                     span: s!(16, 1, "3"),
                                     sign: None,
@@ -5219,6 +5001,8 @@ oldLime(?location,?species,?age) :- tree(?location,?species,?age,?heightInMeters
                 };
 
                 let result = parse_decimal::<ErrorTree<Input<'_, '_>>>(input);
+                // dbg!(&input);
+                // dbg!(&result);
                 assert!(result.is_ok())
             }
 
@@ -5248,6 +5032,7 @@ oldLime(?location,?species,?age) :- tree(?location,?species,?age,?heightInMeters
                 parser_state,
             };
             let result = parse_program::<ErrorTree<Input<'_, '_>>>(input);
+            // dbg!(&result);
             assert!(result.1.is_empty());
         }
 

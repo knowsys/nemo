@@ -13,21 +13,16 @@ pub enum Statement<'a> {
         span: Span<'a>,
         doc_comment: Option<Token<'a>>,
         atom: Atom<'a>,
-        ws: Option<Wsoc<'a>>,
         dot: Token<'a>,
     },
     Rule {
         span: Span<'a>,
         doc_comment: Option<Token<'a>>,
         head: List<'a, Atom<'a>>,
-        ws1: Option<Wsoc<'a>>,
         arrow: Token<'a>,
-        ws2: Option<Wsoc<'a>>,
         body: List<'a, Atom<'a>>,
-        ws3: Option<Wsoc<'a>>,
         dot: Token<'a>,
     },
-    Whitespace(Token<'a>),
     Comment(Token<'a>),
     Error(Token<'a>),
 }
@@ -38,7 +33,6 @@ impl AstNode for Statement<'_> {
             Statement::Fact {
                 doc_comment,
                 atom,
-                ws,
                 dot,
                 ..
             } => {
@@ -47,20 +41,14 @@ impl AstNode for Statement<'_> {
                     vec.push(dc);
                 };
                 vec.push(atom);
-                if let Some(ws) = ws {
-                    vec.push(ws);
-                }
                 vec.push(dot);
                 Some(vec)
             }
             Statement::Rule {
                 doc_comment,
                 head,
-                ws1,
                 arrow,
-                ws2,
                 body,
-                ws3,
                 dot,
                 ..
             } => {
@@ -69,21 +57,11 @@ impl AstNode for Statement<'_> {
                     vec.push(dc);
                 };
                 vec.push(head);
-                if let Some(ws) = ws1 {
-                    vec.push(ws);
-                };
                 vec.push(arrow);
-                if let Some(ws) = ws2 {
-                    vec.push(ws);
-                };
                 vec.push(body);
-                if let Some(ws) = ws3 {
-                    vec.push(ws);
-                };
                 vec.push(dot);
                 Some(vec)
             }
-            Statement::Whitespace(ws) => Some(vec![ws]),
             Statement::Comment(c) => Some(vec![c]),
             Statement::Error(t) => Some(vec![t]),
         }
@@ -94,7 +72,6 @@ impl AstNode for Statement<'_> {
             Statement::Directive(directive) => directive.span(),
             Statement::Fact { span, .. } => *span,
             Statement::Rule { span, .. } => *span,
-            Statement::Whitespace(ws) => ws.span(),
             Statement::Comment(c) => c.span(),
             Statement::Error(t) => t.span,
         }
@@ -121,7 +98,6 @@ impl AstNode for Statement<'_> {
             Statement::Directive(_) => name!("Directive"),
             Statement::Fact { .. } => name!("Fact"),
             Statement::Rule { .. } => name!("Rule"),
-            Statement::Whitespace(_) => name!("Whitespace"),
             Statement::Comment(_) => name!("Comment"),
             Statement::Error(_) => name!("\x1b[1;31mERROR\x1b[0m"),
         }
@@ -140,7 +116,6 @@ impl AstNode for Statement<'_> {
             Statement::Directive(_) => "Directive",
             Statement::Fact { .. } => "Fact",
             Statement::Rule { .. } => "Rule",
-            Statement::Whitespace(_ws) => return None,
             Statement::Comment(_) => return None,
             Statement::Error(_) => "Invalid",
         };
