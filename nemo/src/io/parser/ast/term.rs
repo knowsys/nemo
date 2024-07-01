@@ -20,18 +20,14 @@ pub enum Term<'a> {
     Binary {
         span: Span<'a>,
         lhs: Box<Term<'a>>,
-        ws1: Option<Wsoc<'a>>,
         operation: Token<'a>,
-        ws2: Option<Wsoc<'a>>,
         rhs: Box<Term<'a>>,
     },
     Aggregation {
         span: Span<'a>,
         operation: Token<'a>,
         open_paren: Token<'a>,
-        ws1: Option<Wsoc<'a>>,
         terms: Box<List<'a, Term<'a>>>,
-        ws2: Option<Wsoc<'a>>,
         close_paren: Token<'a>,
     },
     Tuple(Box<Tuple<'a>>),
@@ -50,43 +46,27 @@ impl AstNode for Term<'_> {
             } => Some(vec![operation, &**term]),
             Term::Binary {
                 lhs,
-                ws1,
                 operation,
-                ws2,
                 rhs,
                 ..
             } => {
                 let mut vec: Vec<&dyn AstNode> = Vec::new();
                 vec.push(&**lhs);
-                if let Some(ws) = ws1 {
-                    vec.push(ws);
-                };
                 vec.push(operation);
-                if let Some(ws) = ws2 {
-                    vec.push(ws);
-                };
                 vec.push(&**rhs);
                 Some(vec)
             }
             Term::Aggregation {
                 operation,
                 open_paren,
-                ws1,
                 terms,
-                ws2,
                 close_paren,
                 ..
             } => {
                 let mut vec: Vec<&dyn AstNode> = Vec::new();
                 vec.push(operation);
                 vec.push(open_paren);
-                if let Some(ws) = ws1 {
-                    vec.push(ws);
-                }
                 vec.push(&**terms);
-                if let Some(ws) = ws2 {
-                    vec.push(ws);
-                }
                 vec.push(close_paren);
                 Some(vec)
             }

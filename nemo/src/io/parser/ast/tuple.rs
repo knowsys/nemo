@@ -9,11 +9,8 @@ use ascii_tree::write_tree;
 pub struct Tuple<'a> {
     pub span: Span<'a>,
     pub identifier: Option<Token<'a>>,
-    pub ws1: Option<Wsoc<'a>>,
     pub open_paren: Token<'a>,
-    pub ws2: Option<Wsoc<'a>>,
     pub terms: Option<List<'a, Term<'a>>>,
-    pub ws3: Option<Wsoc<'a>>,
     pub close_paren: Token<'a>,
 }
 
@@ -23,18 +20,9 @@ impl AstNode for Tuple<'_> {
         if let Some(identifier) = &self.identifier {
             vec.push(identifier);
         }
-        if let Some(ws) = &self.ws1 {
-            vec.push(ws);
-        }
         vec.push(&self.open_paren);
-        if let Some(ws) = &self.ws2 {
-            vec.push(ws);
-        }
         if let Some(terms) = &self.terms {
             vec.push(terms);
-        }
-        if let Some(ws) = &self.ws3 {
-            vec.push(ws);
         }
         vec.push(&self.close_paren);
         Some(vec)

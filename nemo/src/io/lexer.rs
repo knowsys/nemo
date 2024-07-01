@@ -6,7 +6,7 @@ use super::parser::new::context;
 use nom::{
     branch::alt,
     bytes::complete::{is_not, tag, take, take_till},
-    character::complete::{alpha1, alphanumeric1, digit1, line_ending, multispace1},
+    character::complete::{alpha1, alphanumeric1, digit1, line_ending, multispace0, multispace1},
     combinator::{all_consuming, cut, map, opt, recognize},
     error::ParseError,
     multi::{many0, many1},
@@ -674,14 +674,15 @@ where
     })
 }
 
-pub(crate) fn skip_to_dot<'a, 's, E>(input: Input<'a, 's>) -> (Input<'a, 's>, Token<'a>)
+pub(crate) fn skip_to_statement_end<'a, 's, E>(input: Input<'a, 's>) -> (Input<'a, 's>, Token<'a>)
 where
     E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>, Context>,
 {
-    let (rest_input, error_input) = recognize(pair(
+    let (rest_input, error_input) = recognize(tuple((
         take_till::<_, Input<'_, '_>, nom::error::Error<_>>(|c| c == '.'),
         opt(tag(".")),
-    ))(input)
+        multispace0,
+    )))(input)
     .expect("Skipping to the next dot should not fail!");
     (
         rest_input,
@@ -1129,6 +1130,6 @@ mod tests {
             input,
             parser_state: errors,
         };
-        dbg!(super::skip_to_dot::<ErrorTree<_>>(input));
+        dbg!(super::skip_to_statement_end::<ErrorTree<_>>(input));
     }
 }
