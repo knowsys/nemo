@@ -7,7 +7,7 @@ use ascii_tree::write_tree;
 #[derive(Debug, Clone, PartialEq)]
 pub struct Program<'a> {
     pub span: Span<'a>,
-    pub tl_doc_comment: Option<Token<'a>>,
+    pub tl_doc_comment: Option<Span<'a>>,
     pub statements: Vec<Statement<'a>>,
 }
 impl AstNode for Program<'_> {

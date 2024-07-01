@@ -10,42 +10,42 @@ pub enum Directive<'a> {
     // "@base <some://iri.de/> ."
     Base {
         span: Span<'a>,
-        doc_comment: Option<Token<'a>>,
-        base_iri: Token<'a>,
-        dot: Token<'a>,
+        doc_comment: Option<Span<'a>>,
+        base_iri: Span<'a>,
+        dot: Span<'a>,
     },
     // "@prefix wikidata: <http://www.wikidata.org/entity/> ."
     Prefix {
         span: Span<'a>,
-        doc_comment: Option<Token<'a>>,
-        prefix: Token<'a>,
-        prefix_iri: Token<'a>,
-        dot: Token<'a>,
+        doc_comment: Option<Span<'a>>,
+        prefix: Span<'a>,
+        prefix_iri: Span<'a>,
+        dot: Span<'a>,
     },
     // "@import table :- csv{resource="path/to/file.csv"} ."
     Import {
         span: Span<'a>,
-        doc_comment: Option<Token<'a>>,
-        predicate: Token<'a>,
-        arrow: Token<'a>,
+        doc_comment: Option<Span<'a>>,
+        predicate: Span<'a>,
+        arrow: Span<'a>,
         map: Map<'a>,
-        dot: Token<'a>,
+        dot: Span<'a>,
     },
     // "@export result :- turtle{resource="out.ttl"} ."
     Export {
         span: Span<'a>,
-        doc_comment: Option<Token<'a>>,
-        predicate: Token<'a>,
-        arrow: Token<'a>,
+        doc_comment: Option<Span<'a>>,
+        predicate: Span<'a>,
+        arrow: Span<'a>,
         map: Map<'a>,
-        dot: Token<'a>,
+        dot: Span<'a>,
     },
     // "@output A, B, C."
     Output {
         span: Span<'a>,
-        doc_comment: Option<Token<'a>>,
-        predicates: Option<List<'a, Token<'a>>>,
-        dot: Token<'a>,
+        doc_comment: Option<Span<'a>>,
+        predicates: Option<List<'a, Span<'a>>>,
+        dot: Span<'a>,
     },
 }
 impl AstNode for Directive<'_> {

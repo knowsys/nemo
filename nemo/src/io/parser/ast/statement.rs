@@ -11,20 +11,20 @@ pub enum Statement<'a> {
     Directive(Directive<'a>),
     Fact {
         span: Span<'a>,
-        doc_comment: Option<Token<'a>>,
+        doc_comment: Option<Span<'a>>,
         atom: Atom<'a>,
-        dot: Token<'a>,
+        dot: Span<'a>,
     },
     Rule {
         span: Span<'a>,
-        doc_comment: Option<Token<'a>>,
+        doc_comment: Option<Span<'a>>,
         head: List<'a, Atom<'a>>,
-        arrow: Token<'a>,
+        arrow: Span<'a>,
         body: List<'a, Atom<'a>>,
-        dot: Token<'a>,
+        dot: Span<'a>,
     },
-    Comment(Token<'a>),
-    Error(Token<'a>),
+    Comment(Span<'a>),
+    Error(Span<'a>),
 }
 impl AstNode for Statement<'_> {
     fn children(&self) -> Option<Vec<&dyn AstNode>> {
@@ -73,7 +73,7 @@ impl AstNode for Statement<'_> {
             Statement::Fact { span, .. } => *span,
             Statement::Rule { span, .. } => *span,
             Statement::Comment(c) => c.span(),
-            Statement::Error(t) => t.span,
+            Statement::Error(t) => *t,
         }
     }
 

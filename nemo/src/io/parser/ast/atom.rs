@@ -12,13 +12,13 @@ pub enum Atom<'a> {
     Positive(Tuple<'a>),
     Negative {
         span: Span<'a>,
-        neg: Token<'a>,
+        neg: Span<'a>,
         atom: Tuple<'a>,
     },
     InfixAtom {
         span: Span<'a>,
         lhs: Term<'a>,
-        operation: Token<'a>,
+        operation: Span<'a>,
         rhs: Term<'a>,
     },
     Map(Map<'a>),
@@ -106,7 +106,7 @@ impl AstNode for Atom<'_> {
     fn lsp_symbol_info(&self) -> Option<(String, SymbolKind)> {
         match self.tuple() {
             Some(tuple) => Some((
-                format!("Atom: {}", tuple.identifier.unwrap().span.fragment()),
+                format!("Atom: {}", tuple.identifier.unwrap().fragment()),
                 SymbolKind::FUNCTION,
             )),
             None => Some((String::from("Atom"), SymbolKind::FUNCTION)),
