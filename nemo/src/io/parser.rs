@@ -2519,8 +2519,8 @@ pub mod new {
                     context: vec![context],
                 };
                 // errors.report_error(err);
-                let (rest_input, token) = skip_to_statement_end::<ErrorTree<Input<'_, '_>>>(input);
-                Ok((rest_input, Statement::Error(token)))
+                let (rest_input, span) = skip_to_statement_end::<ErrorTree<Input<'_, '_>>>(input);
+                Ok((rest_input, Statement::Error(span)))
             }
             Err(err) => Err(err),
         }
@@ -2879,7 +2879,7 @@ pub mod new {
                 opt(lex_doc_comment),
                 recognize(pair(
                     at,
-                    verify(lex_ident, |token| token.kind == TokenKind::Base),
+                    verify(lex_ident, |token| *token.fragment() == "base"),
                 )),
                 wsoc0,
                 lex_iri,
@@ -2916,7 +2916,7 @@ pub mod new {
                 opt(lex_doc_comment),
                 recognize(pair(
                     at,
-                    verify(lex_ident, |token| token.kind == TokenKind::Prefix),
+                    verify(lex_ident, |token| *token.fragment() == "prefix"),
                 )),
                 wsoc0,
                 recognize(pair(opt(lex_ident), colon)),
@@ -2933,10 +2933,7 @@ pub mod new {
                     Directive::Prefix {
                         span: outer_span(input.input, rest_input.input),
                         doc_comment,
-                        prefix: Token {
-                            kind: TokenKind::Ident,
-                            span: prefix.input,
-                        },
+                        prefix: prefix.input,
                         prefix_iri,
                         dot,
                     },
@@ -2959,7 +2956,7 @@ pub mod new {
                 opt(lex_doc_comment),
                 recognize(pair(
                     at,
-                    verify(lex_ident, |token| token.kind == TokenKind::Import),
+                    verify(lex_ident, |token| *token.fragment() == "import"),
                 )),
                 wsoc1,
                 lex_ident,
@@ -3005,7 +3002,7 @@ pub mod new {
                 opt(lex_doc_comment),
                 recognize(pair(
                     at,
-                    verify(lex_ident, |token| token.kind == TokenKind::Export),
+                    verify(lex_ident, |token| *token.fragment() == "export"),
                 )),
                 wsoc1,
                 lex_ident,
@@ -3051,7 +3048,7 @@ pub mod new {
                 opt(lex_doc_comment),
                 recognize(pair(
                     at,
-                    verify(lex_ident, |token| token.kind == TokenKind::Output),
+                    verify(lex_ident, |token| *token.fragment() == "output"),
                 )),
                 wsoc1,
                 opt(parse_list(lex_ident)),
@@ -3485,10 +3482,7 @@ pub mod new {
                 Primitive::RdfLiteral {
                     span: outer_span(input.input, rest_input.input),
                     string,
-                    carets: Token {
-                        kind: TokenKind::Caret,
-                        span: carets.input,
-                    },
+                    carets: carets.input,
                     iri,
                 },
             )
@@ -3763,10 +3757,7 @@ pub mod new {
                     rest_input,
                     Term::Aggregation {
                         span: outer_span(input.input, rest_input.input),
-                        operation: Token {
-                            kind: TokenKind::Aggregate,
-                            span: operation.input,
-                        },
+                        operation: operation.input,
                         open_paren,
                         terms: Box::new(terms),
                         close_paren,
@@ -3821,15 +3812,7 @@ pub mod new {
             Context::UniversalVariable,
             recognize(pair(question_mark, lex_ident)),
         )(input)
-        .map(|(rest_input, var)| {
-            (
-                rest_input,
-                Term::UniversalVariable(Token {
-                    kind: TokenKind::Variable,
-                    span: var.input,
-                }),
-            )
-        })
+        .map(|(rest_input, var)| (rest_input, Term::UniversalVariable(var.input)))
     }
 
     /// Parse an existential variable.
@@ -3844,15 +3827,7 @@ pub mod new {
             Context::ExistentialVariable,
             recognize(pair(exclamation_mark, lex_ident)),
         )(input)
-        .map(|(rest_input, existential)| {
-            (
-                rest_input,
-                Term::ExistentialVariable(Token {
-                    kind: TokenKind::Existential,
-                    span: existential.input,
-                }),
-            )
-        })
+        .map(|(rest_input, existential)| (rest_input, Term::ExistentialVariable(existential.input)))
     }
 
     // Order of parser compinator is important, because of ordered choice and no backtracking
@@ -3863,7 +3838,7 @@ pub mod new {
         E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>, Context>,
     >(
         input: Input<'a, 's>,
-    ) -> IResult<Input<'a, 's>, Token<'a>, E> {
+    ) -> IResult<Input<'a, 's>, Span<'a>, E> {
         context(
             Context::Operators,
             alt((less_equal, greater_equal, equal, unequal, less, greater)),
@@ -3890,9 +3865,7 @@ pub mod new {
 
         macro_rules! T {
             ($tok_kind: expr, $offset: literal, $line: literal, $str: literal) => {
-                Token::new($tok_kind, unsafe {
-                    Span::new_from_raw_offset($offset, $line, $str, ())
-                })
+                unsafe { Span::new_from_raw_offset($offset, $line, $str, ()) }
             };
         }
         macro_rules! s {
@@ -3940,40 +3913,19 @@ pub mod new {
                         doc_comment: None,
                         atom: Atom::Positive(Tuple {
                             span: s!(0, 1, "a(B,C)"),
-                            identifier: Some(Token {
-                                kind: TokenKind::Ident,
-                                span: s!(0, 1, "a"),
-                            }),
-                            open_paren: Token {
-                                kind: TokenKind::OpenParen,
-                                span: s!(1, 1, "("),
-                            },
+                            identifier: Some(s!(0, 1, "a"),),
+                            open_paren: s!(1, 1, "("),
                             terms: Some(List {
                                 span: s!(2, 1, "B,C"),
-                                first: Term::Primitive(Primitive::Constant(Token {
-                                    kind: TokenKind::Ident,
-                                    span: s!(2, 1, "B"),
-                                })),
+                                first: Term::Primitive(Primitive::Constant(s!(2, 1, "B"),)),
                                 rest: Some(vec![(
-                                    Token {
-                                        kind: TokenKind::Comma,
-                                        span: s!(3, 1, ",")
-                                    },
-                                    Term::Primitive(Primitive::Constant(Token {
-                                        kind: TokenKind::Ident,
-                                        span: s!(4, 1, "C"),
-                                    })),
+                                    s!(3, 1, ","),
+                                    Term::Primitive(Primitive::Constant(s!(4, 1, "C"),)),
                                 )]),
                             }),
-                            close_paren: Token {
-                                kind: TokenKind::CloseParen,
-                                span: s!(5, 1, ")"),
-                            },
+                            close_paren: s!(5, 1, ")"),
                         }),
-                        dot: Token {
-                            kind: TokenKind::Dot,
-                            span: s!(6, 1, ".")
-                        }
+                        dot: s!(6, 1, ".")
                     }],
                 }
             );
@@ -4000,14 +3952,8 @@ pub mod new {
                         Statement::Directive(Directive::Base {
                             span: s!(0, 1, "@base <http://example.org/foo/>."),
                             doc_comment: None,
-                            base_iri: Token {
-                                kind: TokenKind::Iri,
-                                span: s!(6, 1, "<http://example.org/foo/>")
-                            },
-                            dot: Token {
-                                kind: TokenKind::Dot,
-                                span: s!(31, 1, ".")
-                            },
+                            base_iri: s!(6, 1, "<http://example.org/foo/>"),
+                            dot: s!(31, 1, "."),
                         }),
                         Statement::Directive(Directive::Prefix {
                             span: s!(
@@ -4016,18 +3962,9 @@ pub mod new {
                                 "@prefix rdfs:<http://www.w3.org/2000/01/rdf-schema#>."
                             ),
                             doc_comment: None,
-                            prefix: Token {
-                                kind: TokenKind::Ident,
-                                span: s!(40, 1, "rdfs:"),
-                            },
-                            prefix_iri: Token {
-                                kind: TokenKind::Iri,
-                                span: s!(45, 1, "<http://www.w3.org/2000/01/rdf-schema#>"),
-                            },
-                            dot: Token {
-                                kind: TokenKind::Dot,
-                                span: s!(84, 1, ".")
-                            }
+                            prefix: s!(40, 1, "rdfs:"),
+                            prefix_iri: s!(45, 1, "<http://www.w3.org/2000/01/rdf-schema#>"),
+                            dot: s!(84, 1, ".")
                         }),
                         Statement::Directive(Directive::Import {
                             span: s!(
@@ -4036,121 +3973,59 @@ pub mod new {
                                 r#"@import sourceA:-csv{resource="sources/dataA.csv"}."#
                             ),
                             doc_comment: None,
-                            predicate: Token {
-                                kind: TokenKind::Ident,
-                                span: s!(93, 1, "sourceA"),
-                            },
-                            arrow: Token {
-                                kind: TokenKind::Arrow,
-                                span: s!(100, 1, ":-"),
-                            },
+                            predicate: s!(93, 1, "sourceA"),
+                            arrow: s!(100, 1, ":-"),
                             map: Map {
                                 span: s!(102, 1, r#"csv{resource="sources/dataA.csv"}"#),
-                                identifier: Some(Token {
-                                    kind: TokenKind::Ident,
-                                    span: s!(102, 1, "csv")
-                                }),
-                                open_brace: Token {
-                                    kind: TokenKind::OpenBrace,
-                                    span: s!(105, 1, "{")
-                                },
+                                identifier: Some(s!(102, 1, "csv")),
+                                open_brace: s!(105, 1, "{"),
                                 pairs: Some(List {
                                     span: s!(106, 1, "resource=\"sources/dataA.csv\""),
                                     first: Pair {
                                         span: s!(106, 1, "resource=\"sources/dataA.csv\""),
-                                        key: Term::Primitive(Primitive::Constant(Token {
-                                            kind: TokenKind::Ident,
-                                            span: s!(106, 1, "resource"),
-                                        })),
-                                        equal: Token {
-                                            kind: TokenKind::Equal,
-                                            span: s!(114, 1, "="),
-                                        },
-                                        value: Term::Primitive(Primitive::String(Token {
-                                            kind: TokenKind::String,
-                                            span: s!(115, 1, "\"sources/dataA.csv\""),
-                                        })),
+                                        key: Term::Primitive(Primitive::Constant(s!(
+                                            106, 1, "resource"
+                                        ),)),
+                                        equal: s!(114, 1, "="),
+                                        value: Term::Primitive(Primitive::String(s!(
+                                            115,
+                                            1,
+                                            "\"sources/dataA.csv\""
+                                        ),)),
                                     },
                                     rest: None,
                                 }),
-                                close_brace: Token {
-                                    kind: TokenKind::CloseBrace,
-                                    span: s!(134, 1, "}")
-                                },
+                                close_brace: s!(134, 1, "}"),
                             },
-                            dot: Token {
-                                kind: TokenKind::Dot,
-                                span: s!(135, 1, ".")
-                            }
+                            dot: s!(135, 1, ".")
                         }),
                         Statement::Directive(Directive::Export {
                             span: s!(136, 1, "@export a:-csv{}."),
                             doc_comment: None,
-                            predicate: Token {
-                                kind: TokenKind::Ident,
-                                span: s!(144, 1, "a"),
-                            },
-                            arrow: Token {
-                                kind: TokenKind::Arrow,
-                                span: s!(145, 1, ":-"),
-                            },
+                            predicate: s!(144, 1, "a"),
+                            arrow: s!(145, 1, ":-"),
                             map: Map {
                                 span: s!(147, 1, "csv{}"),
-                                identifier: Some(Token {
-                                    kind: TokenKind::Ident,
-                                    span: s!(147, 1, "csv"),
-                                }),
-                                open_brace: Token {
-                                    kind: TokenKind::OpenBrace,
-                                    span: s!(150, 1, "{"),
-                                },
+                                identifier: Some(s!(147, 1, "csv"),),
+                                open_brace: s!(150, 1, "{"),
+
                                 pairs: None,
-                                close_brace: Token {
-                                    kind: TokenKind::CloseBrace,
-                                    span: s!(151, 1, "}"),
-                                },
+                                close_brace: s!(151, 1, "}"),
                             },
-                            dot: Token {
-                                kind: TokenKind::Dot,
-                                span: s!(152, 1, "."),
-                            },
+                            dot: s!(152, 1, "."),
                         }),
                         Statement::Directive(Directive::Output {
                             span: s!(153, 1, "@output a, b, c."),
                             doc_comment: None,
                             predicates: Some(List {
                                 span: s!(161, 1, "a, b, c"),
-                                first: Token {
-                                    kind: TokenKind::Ident,
-                                    span: s!(161, 1, "a"),
-                                },
+                                first: s!(161, 1, "a"),
                                 rest: Some(vec![
-                                    (
-                                        Token {
-                                            kind: TokenKind::Comma,
-                                            span: s!(162, 1, ","),
-                                        },
-                                        Token {
-                                            kind: TokenKind::Ident,
-                                            span: s!(164, 1, "b"),
-                                        },
-                                    ),
-                                    (
-                                        Token {
-                                            kind: TokenKind::Comma,
-                                            span: s!(165, 1, ","),
-                                        },
-                                        Token {
-                                            kind: TokenKind::Ident,
-                                            span: s!(167, 1, "c"),
-                                        },
-                                    ),
+                                    (s!(162, 1, ","), s!(164, 1, "b"),),
+                                    (s!(165, 1, ","), s!(167, 1, "c"),),
                                 ]),
                             }),
-                            dot: Token {
-                                kind: TokenKind::Dot,
-                                span: s!(168, 1, "."),
-                            }
+                            dot: s!(168, 1, "."),
                         }),
                     ],
                 }
@@ -4193,57 +4068,31 @@ pub mod new {
                             doc_comment: None,
                             atom: Atom::Positive(Tuple {
                                 span: s!(0, 1, "some(Fact, with, whitespace)"),
-                                identifier: Some(Token {
-                                    kind: TokenKind::Ident,
-                                    span: s!(0, 1, "some"),
-                                }),
-                                open_paren: Token {
-                                    kind: TokenKind::OpenParen,
-                                    span: s!(4, 1, "(")
-                                },
+                                identifier: Some(s!(0, 1, "some"),),
+                                open_paren: s!(4, 1, "("),
                                 terms: Some(List {
                                     span: s!(5, 1, "Fact, with, whitespace"),
-                                    first: Term::Primitive(Primitive::Constant(Token {
-                                        kind: TokenKind::Ident,
-                                        span: s!(5, 1, "Fact"),
-                                    })),
+                                    first: Term::Primitive(Primitive::Constant(s!(5, 1, "Fact"),)),
                                     rest: Some(vec![
                                         (
-                                            Token {
-                                                kind: TokenKind::Comma,
-                                                span: s!(9, 1, ","),
-                                            },
-                                            Term::Primitive(Primitive::Constant(Token {
-                                                kind: TokenKind::Ident,
-                                                span: s!(11, 1, "with")
-                                            })),
+                                            s!(9, 1, ","),
+                                            Term::Primitive(Primitive::Constant(s!(11, 1, "with"))),
                                         ),
                                         (
-                                            Token {
-                                                kind: TokenKind::Comma,
-                                                span: s!(15, 1, ","),
-                                            },
-                                            Term::Primitive(Primitive::Constant(Token {
-                                                kind: TokenKind::Ident,
-                                                span: s!(17, 1, "whitespace")
-                                            })),
+                                            s!(15, 1, ","),
+                                            Term::Primitive(Primitive::Constant(s!(
+                                                17,
+                                                1,
+                                                "whitespace"
+                                            ))),
                                         ),
                                     ]),
                                 }),
-                                close_paren: Token {
-                                    kind: TokenKind::CloseParen,
-                                    span: s!(27, 1, ")")
-                                },
+                                close_paren: s!(27, 1, ")"),
                             }),
-                            dot: Token {
-                                kind: TokenKind::Dot,
-                                span: s!(29, 1, "."),
-                            },
+                            dot: s!(29, 1, "."),
                         },
-                        Statement::Comment(Token {
-                            kind: TokenKind::Comment,
-                            span: s!(31, 1, "% and a super useful comment\n")
-                        })
+                        Statement::Comment(s!(31, 1, "% and a super useful comment\n"))
                     ],
                 }
             );
@@ -4305,7 +4154,8 @@ oldLime(?location,?species,?age) :- tree(?location,?species,?age,?heightInMeters
             };
             // let result = parse_program::<VerboseError<_>>(input);
             let (ast, errors) = parse_program::<ErrorTree<Input<'_, '_>>>(input);
-            println!("{}\n\n{:#?}", ast, errors);
+            // println!("{}\n\n{:#?}", ast, errors);
+            println!("{}\n\n", ast);
             let mut error_map: BTreeMap<Position, HashSet<String>> = BTreeMap::new();
             for error in errors {
                 if let Some(set) = error_map.get_mut(&error.pos) {

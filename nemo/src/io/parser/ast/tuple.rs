@@ -8,10 +8,10 @@ use ascii_tree::write_tree;
 #[derive(Debug, Clone, PartialEq)]
 pub struct Tuple<'a> {
     pub span: Span<'a>,
-    pub identifier: Option<Token<'a>>,
-    pub open_paren: Token<'a>,
+    pub identifier: Option<Span<'a>>,
+    pub open_paren: Span<'a>,
     pub terms: Option<List<'a, Term<'a>>>,
-    pub close_paren: Token<'a>,
+    pub close_paren: Span<'a>,
 }
 
 impl AstNode for Tuple<'_> {

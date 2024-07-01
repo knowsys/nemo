@@ -9,30 +9,30 @@ use ascii_tree::write_tree;
 #[derive(Debug, Clone, PartialEq)]
 pub enum Term<'a> {
     Primitive(Primitive<'a>),
-    UniversalVariable(Token<'a>),
-    ExistentialVariable(Token<'a>),
+    UniversalVariable(Span<'a>),
+    ExistentialVariable(Span<'a>),
     // TODO: Is whitespace needed? Figure out how unary terms look
     UnaryPrefix {
         span: Span<'a>,
-        operation: Token<'a>,
+        operation: Span<'a>,
         term: Box<Term<'a>>,
     },
     Binary {
         span: Span<'a>,
         lhs: Box<Term<'a>>,
-        operation: Token<'a>,
+        operation: Span<'a>,
         rhs: Box<Term<'a>>,
     },
     Aggregation {
         span: Span<'a>,
-        operation: Token<'a>,
-        open_paren: Token<'a>,
+        operation: Span<'a>,
+        open_paren: Span<'a>,
         terms: Box<List<'a, Term<'a>>>,
-        close_paren: Token<'a>,
+        close_paren: Span<'a>,
     },
     Tuple(Box<Tuple<'a>>),
     Map(Box<Map<'a>>),
-    Blank(Token<'a>),
+    Blank(Span<'a>),
 }
 
 impl AstNode for Term<'_> {
@@ -173,13 +173,13 @@ impl AstNode for Term<'_> {
             }
             Term::Binary { .. } => Some((String::from("Binary term"), SymbolKind::OPERATOR)),
             Term::Aggregation { operation, .. } => Some((
-                format!("Aggregation: {}", operation.span.fragment()),
+                format!("Aggregation: {}", operation.fragment()),
                 SymbolKind::OPERATOR,
             )),
             Term::Tuple(tuple) => {
                 if let Some(identifier) = tuple.identifier {
                     Some((
-                        format!("Function: {}", identifier.span.fragment()),
+                        format!("Function: {}", identifier.fragment()),
                         SymbolKind::OPERATOR,
                     ))
                 } else {
@@ -200,28 +200,28 @@ impl std::fmt::Display for Term<'_> {
 
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum Primitive<'a> {
-    Constant(Token<'a>),
+    Constant(Span<'a>),
     PrefixedConstant {
         span: Span<'a>,
-        prefix: Option<Token<'a>>,
-        colon: Token<'a>,
-        constant: Token<'a>,
+        prefix: Option<Span<'a>>,
+        colon: Span<'a>,
+        constant: Span<'a>,
     },
     Number {
         span: Span<'a>,
-        sign: Option<Token<'a>>,
-        before: Option<Token<'a>>,
-        dot: Option<Token<'a>>,
-        after: Token<'a>,
+        sign: Option<Span<'a>>,
+        before: Option<Span<'a>>,
+        dot: Option<Span<'a>>,
+        after: Span<'a>,
         exponent: Option<Exponent<'a>>,
     },
-    String(Token<'a>),
-    Iri(Token<'a>),
+    String(Span<'a>),
+    Iri(Span<'a>),
     RdfLiteral {
         span: Span<'a>,
-        string: Token<'a>,
-        carets: Token<'a>,
-        iri: Token<'a>,
+        string: Span<'a>,
+        carets: Span<'a>,
+        iri: Span<'a>,
     },
 }
 
@@ -282,11 +282,11 @@ impl AstNode for Primitive<'_> {
 
     fn span(&self) -> Span {
         match self {
-            Primitive::Constant(token) => token.span,
+            Primitive::Constant(span) => *span,
             Primitive::PrefixedConstant { span, .. } => *span,
             Primitive::Number { span, .. } => *span,
-            Primitive::String(token) => token.span,
-            Primitive::Iri(token) => token.span,
+            Primitive::String(span) => *span,
+            Primitive::Iri(span) => *span,
             Primitive::RdfLiteral { span, .. } => *span,
         }
     }
@@ -339,9 +339,9 @@ impl std::fmt::Display for Primitive<'_> {
 
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct Exponent<'a> {
-    pub(crate) e: Token<'a>,
-    pub(crate) sign: Option<Token<'a>>,
-    pub(crate) number: Token<'a>,
+    pub(crate) e: Span<'a>,
+    pub(crate) sign: Option<Span<'a>>,
+    pub(crate) number: Span<'a>,
 }
 
 impl AstNode for Exponent<'_> {
