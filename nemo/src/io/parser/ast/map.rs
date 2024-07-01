@@ -9,10 +9,10 @@ use std::fmt::Debug;
 #[derive(Debug, Clone, PartialEq)]
 pub struct Map<'a> {
     pub span: Span<'a>,
-    pub identifier: Option<Token<'a>>,
-    pub open_brace: Token<'a>,
+    pub identifier: Option<Span<'a>>,
+    pub open_brace: Span<'a>,
     pub pairs: Option<List<'a, Pair<'a, Term<'a>, Term<'a>>>>,
-    pub close_brace: Token<'a>,
+    pub close_brace: Span<'a>,
 }
 impl AstNode for Map<'_> {
     fn children(&self) -> Option<Vec<&dyn AstNode>> {
@@ -65,7 +65,7 @@ impl std::fmt::Display for Map<'_> {
 pub struct Pair<'a, K, V> {
     pub span: Span<'a>,
     pub key: K,
-    pub equal: Token<'a>,
+    pub equal: Span<'a>,
     pub value: V,
 }
 impl<K: AstNode + Debug, V: AstNode + Debug> AstNode for Pair<'_, K, V> {

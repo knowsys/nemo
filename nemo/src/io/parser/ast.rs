@@ -41,6 +41,7 @@ pub trait AstNode: std::fmt::Debug + Display + Sync {
         }
     }
 
+    // FIXME: With the removal of tokens is this method still usefull and/or should be renamed?
     fn is_token(&self) -> bool;
 
     fn name(&self) -> String;
@@ -99,7 +100,7 @@ pub struct Range {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Wsoc<'a> {
     pub span: Span<'a>,
-    pub token: Vec<Token<'a>>,
+    pub token: Vec<Span<'a>>,
 }
 impl AstNode for Wsoc<'_> {
     fn children(&self) -> Option<Vec<&dyn AstNode>> {
@@ -152,7 +153,7 @@ pub struct List<'a, T> {
     pub span: Span<'a>,
     pub first: T,
     // (,T)*
-    pub rest: Option<Vec<(Token<'a>, T)>>,
+    pub rest: Option<Vec<(Span<'a>, T)>>,
 }
 impl<T: Clone> List<'_, T> {
     pub fn to_vec(&self) -> Vec<T> {
@@ -250,7 +251,7 @@ pub(crate) fn ast_to_ascii_tree(node: &dyn AstNode) -> Tree {
     if let Some(children) = node.children() {
         for child in children {
             if child.is_token() {
-                vec.push(Tree::Leaf(vec![format!("{}", child)]));
+                vec.push(Tree::Leaf(vec![format!("\x1b[93m{:?}\x1b[0m", child.name())]));
             } else {
                 vec.push(ast_to_ascii_tree(child));
             }
@@ -295,142 +296,108 @@ mod test {
         let span = Span::new(input);
         let ast = Program {
             span,
-            tl_doc_comment: Some(Token {
-                kind: TokenKind::TlDocComment,
-                span: s!(0, 1, "%! This is just a test file.\n%! So the documentation of the rules is not important.\n")
-            }),
+            tl_doc_comment: Some(
+                s!(0, 1, "%! This is just a test file.\n%! So the documentation of the rules is not important.\n")
+            ),
             statements: vec![
                 Statement::Directive(Directive::Prefix {
                     span:s!(125,4,"@prefix xsd: <http://www.w3.org/2001/XMLSchema#>."),
-                    doc_comment:Some(Token {
-                        kind:TokenKind::DocComment,
-                        span:s!(84,3,"%% This is the prefix used for datatypes\n")
-                    }),
-                    prefix: Token {
-                        kind: TokenKind::PrefixIdent,
-                        span: s!(133, 4, "xsd:"),
-                    },
-                    prefix_iri: Token {
-                        kind: TokenKind::Iri,
-                        span: s!(138, 4, "<http://www.w3.org/2001/XMLSchema#>"),
-                    },
-                    dot: Token{
-                        kind:TokenKind::Dot,
-                        span:s!(173,4,".")
-                    }
+                    doc_comment:Some(
+                        s!(84,3,"%% This is the prefix used for datatypes\n")
+                    ),
+                    prefix: 
+                        s!(133, 4, "xsd:"),
+                    prefix_iri: 
+                        s!(138, 4, "<http://www.w3.org/2001/XMLSchema#>"),
+                    dot: 
+                        s!(173,4,".")
                 }),
-                Statement::Comment(Token {
-                    kind: TokenKind::Comment,
-                    span: s!(176, 6, "% Facts\n"),
-                }),
+                Statement::Comment(
+                    s!(176, 6, "% Facts\n"),
+                ),
                 Statement::Fact {
                     span:s!(222,8,"somePredicate(ConstA, ConstB)."),
-                    doc_comment: Some(Token {
-                        kind: TokenKind::DocComment,
-                        span:s!(184,7,"%% This is just an example predicate.\n")
-                    }),
+                    doc_comment: Some(
+                        s!(184,7,"%% This is just an example predicate.\n")
+                    ),
                     atom: Atom::Positive(Tuple {
                         span: s!(222,8,"somePredicate(ConstA, ConstB)"),
-                        identifier: Some(Token {
-                            kind: TokenKind::Ident,
-                            span: s!(222, 8, "somePredicate"),
-                        }),
-                        open_paren:Token{
-                            kind:TokenKind::OpenParen,
-                            span:s!(235,8,"(")
-                        } ,
+                        identifier: Some(
+                             s!(222, 8, "somePredicate"),
+                        ),
+                        open_paren:
+                            s!(235,8,"(")
+                        ,
                         terms: Some(List {
                             span: s!(236, 8, "ConstA, ConstB"),
-                            first: Term::Primitive(Primitive::Constant(Token {
-                                kind: TokenKind::Ident,
-                                span: s!(236, 8, "ConstA"),
-                            })),
+                            first: Term::Primitive(Primitive::Constant(                                s!(236, 8, "ConstA"),
+                            )),
                             rest: Some(vec![(
-                                Token {
-                                    kind: TokenKind::Comma,
-                                    span: s!(242, 8, ","),
-                                },
-                                Term::Primitive(Primitive::Constant(Token {
-                                    kind: TokenKind::Ident,
-                                    span: s!(244, 8, "ConstB"),
-                                })),
+                                    s!(242, 8, ","),
+                                Term::Primitive(Primitive::Constant(                                    s!(244, 8, "ConstB"),
+                                )),
                             )]),
                         }),
-                        close_paren:Token {
-                            kind: TokenKind::CloseParen,
-                            span:s!(250,8,")")
-                        }
+                        close_paren:
+                            s!(250,8,")")
                     }),
-                    dot: Token {
-                        kind: TokenKind::Dot,
-                        span: s!(251,8,".")
-                    }
+                    dot: 
+                        s!(251,8,".")
+                    
                 },
-                Statement::Comment(Token {
-                    kind: TokenKind::Comment,
-                    span: s!(254, 10, "% Rules\n"),
-                }),
+                Statement::Comment(
+                    s!(254, 10, "% Rules\n"),
+                ),
                 Statement::Rule {
                     span: s!(295,12,"someHead(?VarA) :- somePredicate(?VarA, ConstB)."),
-                    doc_comment: Some(Token { kind: TokenKind::DocComment, span: s!(262,11,"%% This is just an example rule.\n") }),
+                    doc_comment: Some(s!(262,11,"%% This is just an example rule.\n")),
                     head: List {
                         span: s!(295, 12, "someHead(?VarA)"),
                         first: Atom::Positive(Tuple {
                             span: s!(295,12,"someHead(?VarA)"),
-                            identifier: Some(Token {
-                                kind: TokenKind::Ident,
-                                span: s!(295, 12, "someHead"),
-                            }),
-                            open_paren: Token { kind: TokenKind::OpenParen, span: s!(303,12,"(") },
+                            identifier: Some(
+                                s!(295, 12, "someHead"),
+                            ),
+                            open_paren: s!(303,12,"(") ,
                             terms: Some(List {
                                 span: s!(304, 12, "?VarA"),
-                                first: Term::UniversalVariable(Token {
-                                    kind: TokenKind::Variable,
-                                    span: s!(304, 12, "?VarA"),
-                                }),
+                                first: Term::UniversalVariable(                                    s!(304, 12, "?VarA"),
+                                ),
                                 rest: None,
                             }),
-                            close_paren: Token { kind: TokenKind::CloseParen, span: s!(309,12,")") },
+                            close_paren: s!(309,12,")") ,
                         }),
                         rest: None,
                     },
-                    arrow: Token{kind:TokenKind::Arrow, span:s!(311,12,":-")},
+                    arrow: s!(311,12,":-"),
                     body: List {
                         span: s!(314, 12, "somePredicate(?VarA, ConstB)"),
                         first: Atom::Positive(Tuple {
                             span: s!(314, 12,"somePredicate(?VarA, ConstB)"),
-                            identifier: Some(Token {
-                                kind: TokenKind::Ident,
-                                span: s!(314, 12, "somePredicate"),
-                            }),
-                            open_paren: Token { kind: TokenKind::OpenParen, span: s!(327,12,"(") },
+                            identifier: Some(
+                                s!(314, 12, "somePredicate"),
+                            ),
+                            open_paren: s!(327,12,"("),
                             terms: Some(List {
                                 span: s!(328, 12, "?Var, ConstB"),
-                                first: Term::UniversalVariable(Token {
-                                    kind: TokenKind::Variable,
-                                    span: s!(328, 12, "?VarA"),
-                                }),
+                                first: Term::UniversalVariable(                                    s!(328, 12, "?VarA"),
+                                ),
                                 rest: Some(vec![(
-                                    Token {
-                                        kind: TokenKind::Comma,
-                                        span: s!(333, 12, ","),
-                                    },
-                                    Term::Primitive(Primitive::Constant(Token {
-                                        kind: TokenKind::Ident,
-                                        span: s!(335, 12, "ConstB"),
-                                    })),
+                                        s!(333, 12, ","),
+                                    
+                                    Term::Primitive(Primitive::Constant(s!(335, 12, "ConstB"),
+                                    )),
                                 )]),
                             }),
-                            close_paren: Token { kind: TokenKind::CloseParen, span: s!(341, 12,")") },
+                            close_paren: s!(341, 12,")") ,
                         }),
                         rest: None,
                     },
-                    dot: Token{kind:TokenKind::Dot,span:s!(342, 12,".")},
+                    dot: s!(342, 12,"."),
                 },
-                Statement::Comment(Token {
-                    kind: TokenKind::Comment,
-                    span: s!(346, 12, "% all constants that are in relation with ConstB\n"),
-                }),
+                Statement::Comment(
+                    s!(346, 12, "% all constants that are in relation with ConstB\n"),
+                ),
             ],
         };
         println!("{}", ast);

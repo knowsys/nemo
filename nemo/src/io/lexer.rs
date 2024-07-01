@@ -161,6 +161,35 @@ impl ToRange for Span<'_> {
         start..end
     }
 }
+impl AstNode for Span<'_> {
+    fn children(&self) -> Option<Vec<&dyn AstNode>> {
+        None
+    }
+
+    fn span(&self) -> Span {
+        *self
+    }
+
+    fn is_token(&self) -> bool {
+        true
+    }
+
+    fn name(&self) -> String {
+        self.fragment().to_string()
+    }
+
+    fn lsp_identifier(&self) -> Option<(String, String)> {
+        todo!()
+    }
+
+    fn lsp_symbol_info(&self) -> Option<(String, SymbolKind)> {
+        todo!()
+    }
+
+    fn lsp_range_to_rename(&self) -> Option<super::parser::ast::Range> {
+        todo!()
+    }
+}
 
 pub(crate) fn to_range(span: Span<'_>) -> Range<usize> {
     let start = span.location_offset();
@@ -408,13 +437,13 @@ macro_rules! syntax {
     ($func_name: ident, $tag_str: literal, $token: expr) => {
         pub(crate) fn $func_name<'a, 's, E>(
             input: Input<'a, 's>,
-        ) -> IResult<Input<'a, 's>, Token<'a>, E>
+        ) -> IResult<Input<'a, 's>, Span<'a>, E>
         where
             E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>, Context>,
         {
             map(
                 context(Context::Tag($tag_str), tag($tag_str)),
-                |span: Input| Token::new($token, span.input),
+                |input: Input| input.input,
             )(input)
         }
     };
@@ -440,7 +469,7 @@ syntax!(at, "@", TokenKind::At);
 syntax!(exp_lower, "e", TokenKind::Exponent);
 syntax!(exp_upper, "E", TokenKind::Exponent);
 
-pub(crate) fn exp<'a, 's, E>(input: Input<'a, 's>) -> IResult<Input<'a, 's>, Token<'a>, E>
+pub(crate) fn exp<'a, 's, E>(input: Input<'a, 's>) -> IResult<Input<'a, 's>, Span<'a>, E>
 where
     E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>, Context>,
 {
@@ -449,7 +478,7 @@ where
 
 pub(crate) fn lex_punctuations<'a, 's, E>(
     input: Input<'a, 's>,
-) -> IResult<Input<'a, 's>, Token<'a>, E>
+) -> IResult<Input<'a, 's>, Span<'a>, E>
 where
     E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>, Context>,
 {
@@ -488,7 +517,7 @@ syntax!(minus, "-", TokenKind::Minus);
 syntax!(star, "*", TokenKind::Star);
 syntax!(slash, "/", TokenKind::Slash);
 
-pub(crate) fn lex_operators<'a, 's, E>(input: Input<'a, 's>) -> IResult<Input<'a, 's>, Token<'a>, E>
+pub(crate) fn lex_operators<'a, 's, E>(input: Input<'a, 's>) -> IResult<Input<'a, 's>, Span<'a>, E>
 where
     E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>, Context>,
 {
@@ -509,13 +538,7 @@ where
     )(input)
 }
 
-// pub(crate) fn lex_unary_prefix_operators<'a, 's>(
-//     input: Input<'a, 's>,
-// ) -> IResult<Input<'a, 's>, Token<'a>> {
-//     alt((plus, minus))(input)
-// }
-
-pub(crate) fn lex_ident<'a, 's, E>(input: Input<'a, 's>) -> IResult<Input<'a, 's>, Token<'a>, E>
+pub(crate) fn lex_ident<'a, 's, E>(input: Input<'a, 's>) -> IResult<Input<'a, 's>, Span<'a>, E>
 where
     E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>, Context>,
 {
@@ -527,36 +550,27 @@ where
         )),
     )(input)?;
     let token = match *ident.input.fragment() {
-        "base" => Token::new(TokenKind::Base, ident.input),
-        "prefix" => Token::new(TokenKind::Prefix, ident.input),
-        "import" => Token::new(TokenKind::Import, ident.input),
-        "export" => Token::new(TokenKind::Export, ident.input),
-        "output" => Token::new(TokenKind::Output, ident.input),
-        _ => Token::new(TokenKind::Ident, ident.input),
+        "base" => ident.input,
+        "prefix" => ident.input,
+        "import" => ident.input,
+        "export" => ident.input,
+        "output" => ident.input,
+        _ => ident.input,
     };
     Ok((rest_input, token))
 }
 
 pub(crate) fn lex_prefixed_ident<'a, 's, E>(
     input: Input<'a, 's>,
-) -> IResult<Input<'a, 's>, Token<'a>, E>
+) -> IResult<Input<'a, 's>, Span<'a>, E>
 where
     E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>, Context>,
 {
-    recognize(tuple((opt(lex_ident), colon, lex_ident)))(input).map(
-        |(rest_input, prefixed_ident)| {
-            (
-                rest_input,
-                Token {
-                    kind: TokenKind::PrefixedIdent,
-                    span: prefixed_ident.input,
-                },
-            )
-        },
-    )
+    recognize(tuple((opt(lex_ident), colon, lex_ident)))(input)
+        .map(|(rest_input, prefixed_ident)| (rest_input, prefixed_ident.input))
 }
 
-pub(crate) fn lex_iri<'a, 's, E>(input: Input<'a, 's>) -> IResult<Input<'a, 's>, Token<'a>, E>
+pub(crate) fn lex_iri<'a, 's, E>(input: Input<'a, 's>) -> IResult<Input<'a, 's>, Span<'a>, E>
 where
     E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>, Context>,
 {
@@ -564,18 +578,17 @@ where
         Context::Iri,
         recognize(delimited(tag("<"), is_not("> \n"), cut(tag(">")))),
     )(input)
-    .map(|(rest, result)| (rest, Token::new(TokenKind::Iri, result.input)))
+    .map(|(rest, result)| (rest, result.input))
 }
 
-pub(crate) fn lex_number<'a, 's, E>(input: Input<'a, 's>) -> IResult<Input<'a, 's>, Token<'a>, E>
+pub(crate) fn lex_number<'a, 's, E>(input: Input<'a, 's>) -> IResult<Input<'a, 's>, Span<'a>, E>
 where
     E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>, Context>,
 {
-    context(Context::Number, digit1)(input)
-        .map(|(rest_input, result)| (rest_input, Token::new(TokenKind::Number, result.input)))
+    context(Context::Number, digit1)(input).map(|(rest_input, result)| (rest_input, result.input))
 }
 
-pub(crate) fn lex_string<'a, 's, E>(input: Input<'a, 's>) -> IResult<Input<'a, 's>, Token<'a>, E>
+pub(crate) fn lex_string<'a, 's, E>(input: Input<'a, 's>) -> IResult<Input<'a, 's>, Span<'a>, E>
 where
     E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>, Context>,
 {
@@ -583,10 +596,10 @@ where
         Context::String,
         recognize(delimited(tag("\""), is_not("\""), cut(tag("\"")))),
     )(input)
-    .map(|(rest, result)| (rest, Token::new(TokenKind::String, result.input)))
+    .map(|(rest, result)| (rest, result.input))
 }
 
-pub(crate) fn lex_comment<'a, 's, E>(input: Input<'a, 's>) -> IResult<Input<'a, 's>, Token<'a>, E>
+pub(crate) fn lex_comment<'a, 's, E>(input: Input<'a, 's>) -> IResult<Input<'a, 's>, Span<'a>, E>
 where
     E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>, Context>,
 {
@@ -594,12 +607,12 @@ where
         Context::Comment,
         recognize(tuple((tag("%"), many0(is_not("\n")), line_ending))),
     )(input)
-    .map(|(rest, result)| (rest, Token::new(TokenKind::Comment, result.input)))
+    .map(|(rest, result)| (rest, result.input))
 }
 
 pub(crate) fn lex_doc_comment<'a, 's, E>(
     input: Input<'a, 's>,
-) -> IResult<Input<'a, 's>, Token<'a>, E>
+) -> IResult<Input<'a, 's>, Span<'a>, E>
 where
     E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>, Context>,
 {
@@ -607,12 +620,12 @@ where
         Context::DocComment,
         recognize(many1(tuple((tag("%%"), many0(is_not("\n")), line_ending)))),
     )(input)
-    .map(|(rest, result)| (rest, Token::new(TokenKind::DocComment, result.input)))
+    .map(|(rest, result)| (rest, result.input))
 }
 
 pub(crate) fn lex_toplevel_doc_comment<'a, 's, E>(
     input: Input<'a, 's>,
-) -> IResult<Input<'a, 's>, Token<'a>, E>
+) -> IResult<Input<'a, 's>, Span<'a>, E>
 where
     E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>, Context>,
 {
@@ -620,10 +633,10 @@ where
         Context::TlDocComment,
         recognize(many1(tuple((tag("%%%"), many0(is_not("\n")), line_ending)))),
     )(input)
-    .map(|(rest, result)| (rest, Token::new(TokenKind::TlDocComment, result.input)))
+    .map(|(rest, result)| (rest, result.input))
 }
 
-pub(crate) fn lex_comments<'a, 's, E>(input: Input<'a, 's>) -> IResult<Input<'a, 's>, Token<'a>, E>
+pub(crate) fn lex_comments<'a, 's, E>(input: Input<'a, 's>) -> IResult<Input<'a, 's>, Span<'a>, E>
 where
     E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>, Context>,
 {
@@ -633,48 +646,21 @@ where
     )(input)
 }
 
-pub(crate) fn lex_whitespace<'a, 's, E>(
-    input: Input<'a, 's>,
-) -> IResult<Input<'a, 's>, Token<'a>, E>
+pub(crate) fn lex_whitespace<'a, 's, E>(input: Input<'a, 's>) -> IResult<Input<'a, 's>, Span<'a>, E>
 where
     E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>, Context>,
 {
-    context(Context::Whitespace, multispace1)(input)
-        .map(|(rest, result)| (rest, Token::new(TokenKind::Whitespace, result.input)))
+    context(Context::Whitespace, multispace1)(input).map(|(rest, result)| (rest, result.input))
 }
 
-pub(crate) fn lex_illegal<'a, 's, E>(input: Input<'a, 's>) -> IResult<Input<'a, 's>, Token<'a>, E>
+pub(crate) fn lex_illegal<'a, 's, E>(input: Input<'a, 's>) -> IResult<Input<'a, 's>, Span<'a>, E>
 where
     E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>, Context>,
 {
-    context(Context::Illegal, take(1usize))(input)
-        .map(|(rest, result)| (rest, Token::new(TokenKind::Illegal, result.input)))
+    context(Context::Illegal, take(1usize))(input).map(|(rest, result)| (rest, result.input))
 }
 
-pub(crate) fn lex_tokens<'a, 's, E>(
-    input: Input<'a, 's>,
-) -> IResult<Input<'a, 's>, Vec<Token<'a>>, E>
-where
-    E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>, Context>,
-{
-    all_consuming(many0(alt((
-        lex_iri,
-        lex_operators,
-        lex_punctuations,
-        lex_ident,
-        lex_number,
-        lex_string,
-        lex_comments,
-        lex_whitespace,
-        lex_illegal,
-    ))))(input)
-    .map(|(span, mut vec)| {
-        vec.append(&mut vec![Token::new(TokenKind::Eof, span.input)]);
-        (span, vec)
-    })
-}
-
-pub(crate) fn skip_to_statement_end<'a, 's, E>(input: Input<'a, 's>) -> (Input<'a, 's>, Token<'a>)
+pub(crate) fn skip_to_statement_end<'a, 's, E>(input: Input<'a, 's>) -> (Input<'a, 's>, Span<'a>)
 where
     E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>, Context>,
 {
@@ -684,13 +670,7 @@ where
         multispace0,
     )))(input)
     .expect("Skipping to the next dot should not fail!");
-    (
-        rest_input,
-        Token {
-            kind: TokenKind::Error,
-            span: error_input.input,
-        },
-    )
+    (rest_input, error_input.input)
 }
 
 #[cfg(test)]
@@ -709,420 +689,7 @@ mod tests {
     }
 
     #[test]
-    fn empty_input() {
-        let input = Span::new("");
-        let refcell = RefCell::new(Vec::new());
-        let errors = ParserState { errors: &refcell };
-        let input = Input {
-            input,
-            parser_state: errors,
-        };
-        assert_eq!(
-            // lex_tokens::<nom::error::Error<_>>(input).unwrap().1,
-            lex_tokens::<ErrorTree<_>>(input).unwrap().1,
-            vec![T!(Eof, 0, 1, "")]
-        )
-    }
-
-    #[test]
-    fn base() {
-        let input = Span::new("@base");
-        let refcell = RefCell::new(Vec::new());
-        let errors = ParserState { errors: &refcell };
-        let input = Input {
-            input,
-            parser_state: errors,
-        };
-        assert_eq!(
-            // lex_tokens::<nom::error::Error<_>>(input).unwrap().1,
-            lex_tokens::<ErrorTree<_>>(input).unwrap().1,
-            vec![T!(At, 0, 1, "@"), T!(Base, 1, 1, "base"), T!(Eof, 5, 1, ""),]
-        )
-    }
-
-    #[test]
-    fn prefix() {
-        let input = Span::new("@prefix");
-        let refcell = RefCell::new(Vec::new());
-        let errors = ParserState { errors: &refcell };
-        let input = Input {
-            input,
-            parser_state: errors,
-        };
-        assert_eq!(
-            // lex_tokens::<nom::error::Error<_>>(input).unwrap().1,
-            lex_tokens::<ErrorTree<_>>(input).unwrap().1,
-            vec![
-                T!(At, 0, 1, "@"),
-                T!(Prefix, 1, 1, "prefix"),
-                T!(Eof, 7, 1, ""),
-            ]
-        )
-    }
-
-    #[test]
-    fn output() {
-        let input = Span::new("@output");
-        let refcell = RefCell::new(Vec::new());
-        let errors = ParserState { errors: &refcell };
-        let input = Input {
-            input,
-            parser_state: errors,
-        };
-        assert_eq!(
-            // lex_tokens::<nom::error::Error<_>>(input).unwrap().1,
-            lex_tokens::<ErrorTree<_>>(input).unwrap().1,
-            vec![
-                T!(At, 0, 1, "@"),
-                T!(Output, 1, 1, "output"),
-                T!(Eof, 7, 1, ""),
-            ]
-        )
-    }
-
-    #[test]
-    fn import() {
-        let input = Span::new("@import");
-        let refcell = RefCell::new(Vec::new());
-        let errors = ParserState { errors: &refcell };
-        let input = Input {
-            input,
-            parser_state: errors,
-        };
-        assert_eq!(
-            // lex_tokens::<nom::error::Error<_>>(input).unwrap().1,
-            lex_tokens::<ErrorTree<_>>(input).unwrap().1,
-            vec![
-                T!(At, 0, 1, "@"),
-                T!(Import, 1, 1, "import"),
-                T!(Eof, 7, 1, ""),
-            ]
-        )
-    }
-
-    #[test]
-    fn export() {
-        let input = Span::new("@export");
-        let refcell = RefCell::new(Vec::new());
-        let errors = ParserState { errors: &refcell };
-        let input = Input {
-            input,
-            parser_state: errors,
-        };
-        assert_eq!(
-            // lex_tokens::<nom::error::Error<_>>(input).unwrap().1,
-            lex_tokens::<ErrorTree<_>>(input).unwrap().1,
-            vec![
-                T!(At, 0, 1, "@"),
-                T!(Export, 1, 1, "export"),
-                T!(Eof, 7, 1, ""),
-            ]
-        )
-    }
-
-    #[test]
-    fn idents_with_keyword_prefix() {
-        let input = Span::new("@baseA, @prefixB, @importC, @exportD, @outputE.");
-        let refcell = RefCell::new(Vec::new());
-        let errors = ParserState { errors: &refcell };
-        let input = Input {
-            input,
-            parser_state: errors,
-        };
-        assert_eq!(
-            // lex_tokens::<nom::error::Error<_>>(input).unwrap().1,
-            lex_tokens::<ErrorTree<_>>(input).unwrap().1,
-            vec![
-                T!(At, 0, 1, "@"),
-                T!(Ident, 1, 1, "baseA"),
-                T!(Comma, 6, 1, ","),
-                T!(Whitespace, 7, 1, " "),
-                T!(At, 8, 1, "@"),
-                T!(Ident, 9, 1, "prefixB"),
-                T!(Comma, 16, 1, ","),
-                T!(Whitespace, 17, 1, " "),
-                T!(At, 18, 1, "@"),
-                T!(Ident, 19, 1, "importC"),
-                T!(Comma, 26, 1, ","),
-                T!(Whitespace, 27, 1, " "),
-                T!(At, 28, 1, "@"),
-                T!(Ident, 29, 1, "exportD"),
-                T!(Comma, 36, 1, ","),
-                T!(Whitespace, 37, 1, " "),
-                T!(At, 38, 1, "@"),
-                T!(Ident, 39, 1, "outputE"),
-                T!(Dot, 46, 1, "."),
-                T!(Eof, 47, 1, ""),
-            ]
-        )
-    }
-
-    #[test]
-    fn tokenize() {
-        let input = Span::new("P(?X) :- A(?X).\t\n    A(Human).");
-        let refcell = RefCell::new(Vec::new());
-        let errors = ParserState { errors: &refcell };
-        let input = Input {
-            input,
-            parser_state: errors,
-        };
-        assert_eq!(
-            // lex_tokens::<nom::error::Error<_>>(input).unwrap().1,
-            lex_tokens::<ErrorTree<_>>(input).unwrap().1,
-            vec![
-                T!(Ident, 0, 1, "P"),
-                T!(OpenParen, 1, 1, "("),
-                T!(QuestionMark, 2, 1, "?"),
-                T!(Ident, 3, 1, "X"),
-                T!(CloseParen, 4, 1, ")"),
-                T!(Whitespace, 5, 1, " "),
-                T!(Arrow, 6, 1, ":-"),
-                T!(Whitespace, 8, 1, " "),
-                T!(Ident, 9, 1, "A"),
-                T!(OpenParen, 10, 1, "("),
-                T!(QuestionMark, 11, 1, "?"),
-                T!(Ident, 12, 1, "X"),
-                T!(CloseParen, 13, 1, ")"),
-                T!(Dot, 14, 1, "."),
-                T!(Whitespace, 15, 1, "\t\n    "),
-                T!(Ident, 21, 2, "A"),
-                T!(OpenParen, 22, 2, "("),
-                T!(Ident, 23, 2, "Human"),
-                T!(CloseParen, 28, 2, ")"),
-                T!(Dot, 29, 2, "."),
-                T!(Eof, 30, 2, ""),
-            ]
-        )
-    }
-
-    #[test]
-    fn comment() {
-        let input = Span::new("    % Some Comment\n");
-        let refcell = RefCell::new(Vec::new());
-        let errors = ParserState { errors: &refcell };
-        let input = Input {
-            input,
-            parser_state: errors,
-        };
-        assert_eq!(
-            // lex_tokens::<nom::error::Error<_>>(input).unwrap().1,
-            lex_tokens::<ErrorTree<_>>(input).unwrap().1,
-            vec![
-                T!(Whitespace, 0, 1, "    "),
-                T!(Comment, 4, 1, "% Some Comment\n"),
-                T!(Eof, 19, 2, ""),
-                // T!(Comment, Span::new(0, 1, "% Some Comment\n")),
-                // T!(Eof, Span::new(15, 2, ""))
-            ]
-        )
-    }
-
-    #[test]
-    fn ident() {
-        let input = Span::new("some_Ident(Alice). %comment at the end of a line\n");
-        let refcell = RefCell::new(Vec::new());
-        let errors = ParserState { errors: &refcell };
-        let input = Input {
-            input,
-            parser_state: errors,
-        };
-        assert_eq!(
-            // lex_tokens::<nom::error::Error<_>>(input).unwrap().1,
-            lex_tokens::<ErrorTree<_>>(input).unwrap().1,
-            vec![
-                T!(Ident, 0, 1, "some_Ident"),
-                T!(OpenParen, 10, 1, "("),
-                T!(Ident, 11, 1, "Alice"),
-                T!(CloseParen, 16, 1, ")"),
-                T!(Dot, 17, 1, "."),
-                T!(Whitespace, 18, 1, " "),
-                T!(Comment, 19, 1, "%comment at the end of a line\n"),
-                T!(Eof, 49, 2, ""),
-            ]
-        )
-    }
-
-    #[test]
-    fn forbidden_ident() {
-        let input = Span::new("_someIdent(Alice). %comment at the end of a line\n");
-        let refcell = RefCell::new(Vec::new());
-        let errors = ParserState { errors: &refcell };
-        let input = Input {
-            input,
-            parser_state: errors,
-        };
-        assert_eq!(
-            // lex_tokens::<nom::error::Error<_>>(input).unwrap().1,
-            lex_tokens::<ErrorTree<_>>(input).unwrap().1,
-            vec![
-                T!(Underscore, 0, 1, "_"),
-                T!(Ident, 1, 1, "someIdent"),
-                T!(OpenParen, 10, 1, "("),
-                T!(Ident, 11, 1, "Alice"),
-                T!(CloseParen, 16, 1, ")"),
-                T!(Dot, 17, 1, "."),
-                T!(Whitespace, 18, 1, " "),
-                T!(Comment, 19, 1, "%comment at the end of a line\n"),
-                T!(Eof, 49, 2, ""),
-            ]
-        )
-    }
-
-    #[test]
-    fn iri() {
-        let input = Span::new("<https://résumé.example.org/>");
-        let refcell = RefCell::new(Vec::new());
-        let errors = ParserState { errors: &refcell };
-        let input = Input {
-            input,
-            parser_state: errors,
-        };
-        assert_eq!(
-            // lex_tokens::<nom::error::Error<_>>(input).unwrap().1,
-            lex_tokens::<ErrorTree<_>>(input).unwrap().1,
-            vec![
-                T!(Iri, 0, 1, "<https://résumé.example.org/>"),
-                T!(Eof, 31, 1, ""),
-            ]
-        )
-    }
-
-    #[test]
-    fn iri_pct_enc() {
-        let input = Span::new("<http://r%C3%A9sum%C3%A9.example.org>\n");
-        let refcell = RefCell::new(Vec::new());
-        let errors = ParserState { errors: &refcell };
-        let input = Input {
-            input,
-            parser_state: errors,
-        };
-        assert_eq!(
-            // lex_tokens::<nom::error::Error<_>>(input).unwrap().1,
-            lex_tokens::<ErrorTree<_>>(input).unwrap().1,
-            vec![
-                T!(Iri, 0, 1, "<http://r%C3%A9sum%C3%A9.example.org>"),
-                T!(Whitespace, 37, 1, "\n"),
-                T!(Eof, 38, 2, ""),
-            ]
-        )
-    }
-
-    // FIXME: change the name of this test according to the correct name for `?X > 3`
-    // (Constraints are Rules with an empty Head)
-    #[ignore]
-    #[test]
-    fn constraints() {
-        let input = Span::new("A(?X):-B(?X),?X<42,?X>3.");
-        let refcell = RefCell::new(Vec::new());
-        let errors = ParserState { errors: &refcell };
-        let input = Input {
-            input,
-            parser_state: errors,
-        };
-        assert_eq!(
-            // lex_tokens::<nom::error::Error<_>>(input).unwrap().1,
-            lex_tokens::<ErrorTree<_>>(input).unwrap().1,
-            vec![
-                T!(Ident, 0, 1, "A"),
-                T!(OpenParen, 1, 1, "("),
-                T!(QuestionMark, 2, 1, "?"),
-                T!(Ident, 3, 1, "X"),
-                T!(CloseParen, 4, 1, ")"),
-                T!(Arrow, 5, 1, ":-"),
-                T!(Ident, 7, 1, "B"),
-                T!(OpenParen, 8, 1, "("),
-                T!(QuestionMark, 9, 1, "?"),
-                T!(Ident, 10, 1, "X"),
-                T!(CloseParen, 11, 1, ")"),
-                T!(Comma, 12, 1, ","),
-                T!(QuestionMark, 13, 1, "?"),
-                T!(Ident, 14, 1, "X"),
-                T!(Less, 15, 1, "<"),
-                T!(Number, 16, 1, "42"),
-                T!(Comma, 18, 1, ","),
-                T!(QuestionMark, 19, 1, "?"),
-                T!(Ident, 20, 1, "X"),
-                T!(Greater, 21, 1, ">"),
-                T!(Number, 22, 1, "3"),
-                T!(Dot, 23, 1, "."),
-                T!(Eof, 24, 1, ""),
-            ]
-        )
-    }
-
-    #[test]
-    fn pct_enc_comment() {
-        let input = Span::new("%d4 this should be a comment,\n% but the lexer can't distinguish a percent encoded value\n% in an iri from a comment :(\n");
-        let refcell = RefCell::new(Vec::new());
-        let errors = ParserState { errors: &refcell };
-        let input = Input {
-            input,
-            parser_state: errors,
-        };
-        assert_eq!(
-            // lex_tokens::<nom::error::Error<_>>(input).unwrap().1,
-            lex_tokens::<ErrorTree<_>>(input).unwrap().1,
-            vec![
-                T!(Comment, 0, 1, "%d4 this should be a comment,\n"),
-                T!(
-                    Comment,
-                    30,
-                    2,
-                    "% but the lexer can't distinguish a percent encoded value\n"
-                ),
-                T!(Comment, 88, 3, "% in an iri from a comment :(\n"),
-                T!(Eof, 118, 4, ""),
-            ]
-        )
-    }
-
-    #[test]
-    fn fact() {
-        let input = Span::new("somePred(term1, term2).");
-        let refcell = RefCell::new(Vec::new());
-        let errors = ParserState { errors: &refcell };
-        let input = Input {
-            input,
-            parser_state: errors,
-        };
-        assert_eq!(
-            // lex_tokens::<nom::error::Error<_>>(input).unwrap().1,
-            lex_tokens::<ErrorTree<_>>(input).unwrap().1,
-            vec![
-                T!(Ident, 0, 1, "somePred"),
-                T!(OpenParen, 8, 1, "("),
-                T!(Ident, 9, 1, "term1"),
-                T!(Comma, 14, 1, ","),
-                T!(Whitespace, 15, 1, " "),
-                T!(Ident, 16, 1, "term2"),
-                T!(CloseParen, 21, 1, ")"),
-                T!(Dot, 22, 1, "."),
-                T!(Eof, 23, 1, ""),
-            ]
-        )
-    }
-
-    #[test]
-    fn whitespace() {
-        let input = Span::new("   \t \n\n\t   \n");
-        let refcell = RefCell::new(Vec::new());
-        let errors = ParserState { errors: &refcell };
-        let input = Input {
-            input,
-            parser_state: errors,
-        };
-        assert_eq!(
-            // lex_tokens::<nom::error::Error<_>>(input).unwrap().1,
-            lex_tokens::<ErrorTree<_>>(input).unwrap().1,
-            vec![
-                T!(Whitespace, 0, 1, "   \t \n\n\t   \n"),
-                T!(Eof, 12, 4, ""),
-            ]
-        )
-    }
-
-    #[test]
-    fn skip_to_dot() {
+    fn skip_to_statement_end() {
         let input = Span::new("some ?broken :- rule). A(Fact).");
         let refcell = RefCell::new(Vec::new());
         let errors = ParserState { errors: &refcell };
