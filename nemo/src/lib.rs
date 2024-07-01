@@ -29,6 +29,7 @@ pub mod io;
 
 pub mod execution;
 pub mod model;
+pub mod rule_model;
 pub mod util;
 
 mod program_analysis;
