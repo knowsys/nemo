@@ -143,7 +143,7 @@ impl AstNode for Wsoc<'_> {
 }
 
 impl Display for Wsoc<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, _f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         todo!()
     }
 }
