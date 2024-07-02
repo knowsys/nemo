@@ -1,24 +1,33 @@
-//! This module defines a logical component and ...
+//! This module defines the logical components that make up a program.
+
+pub mod atom;
+pub mod fact;
+pub mod import_export;
+pub mod literal;
+pub mod rule;
+pub mod term;
 
 use std::fmt::{Debug, Display};
 
-use crate::io::parser::ast::AstNode;
+use super::{error::ProgramConstructionError, origin::Origin};
 
-use super::{
-    error::ProgramConstructionError,
-    origin::{ComponentOrigin, OriginParseReference},
-};
-
-pub trait ProgramComponent: Debug + Display {
-    type Node<'a>: AstNode;
-
-    fn from_ast_node<'a>(node: Self::Node<'a>, origin: OriginParseReference) -> Self;
-
-    fn parse(string: &str) -> Result<Self, ProgramConstructionError>
+/// Trait implemented by objects that are part of the logical rule model of the nemo language.
+pub trait ProgramComponent: Debug + Display + Clone + PartialEq + Eq {
+    /// Construct this object from a string.
+    fn parse(_string: &str) -> Result<Self, ProgramConstructionError>
     where
         Self: Sized;
 
-    fn origin(&self) -> &ComponentOrigin;
-}
+    /// Return the [Origin] of this component.
+    fn origin(&self) -> &Origin;
 
-pub mod variable;
+    /// Set the [Origin] of this component.
+    fn set_origin(self, origin: Origin) -> Self
+    where
+        Self: Sized;
+
+    /// Validate this component
+    fn validate(&self) -> Result<(), ProgramConstructionError>
+    where
+        Self: Sized;
+}
