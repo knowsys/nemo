@@ -1,5 +1,12 @@
 //! This module defines [Term].
 
+pub mod aggregate;
+pub mod function;
+pub mod map;
+pub mod operation;
+pub mod primitive;
+pub mod tuple;
+
 use std::fmt::{Debug, Display};
 
 use function::FunctionTerm;
@@ -7,17 +14,11 @@ use map::Map;
 use nemo_physical::datavalues::AnyDataValue;
 use operation::Operation;
 use primitive::{ground::GroundTerm, variable::Variable, Primitive};
+use tuple::Tuple;
 
 use crate::rule_model::{error::ProgramConstructionError, origin::Origin};
 
 use super::ProgramComponent;
-
-pub mod aggregate;
-pub mod function;
-pub mod map;
-pub mod operation;
-pub mod primitive;
-pub mod tuple;
 
 /// Name of a term
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -46,6 +47,8 @@ pub enum Term {
     Map(Map),
     /// Operation applied to a list of terms
     Operation(Operation),
+    /// Tuple
+    Tuple(Tuple),
 }
 
 impl Term {
@@ -64,6 +67,11 @@ impl Term {
         Self::Primitive(Primitive::Variable(Variable::existential(name)))
     }
 
+    /// Create a groud term.
+    pub fn ground(value: AnyDataValue) -> Self {
+        Self::Primitive(Primitive::Ground(GroundTerm::new(value)))
+    }
+
     /// Create an integer term
     pub fn integer(number: i64) -> Self {
         Self::Primitive(Primitive::Ground(GroundTerm::new(
@@ -73,13 +81,8 @@ impl Term {
 }
 
 impl Display for Term {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Term::Primitive(primitive) => write!(f, "{}", primitive),
-            Term::FunctionTerm(function) => write!(f, "{}", function),
-            Term::Map(map) => write!(f, "{}", map),
-            Term::Operation(operation) => write!(f, "{}", operation),
-        }
+    fn fmt(&self, _f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        todo!()
     }
 }
 
@@ -97,6 +100,7 @@ impl ProgramComponent for Term {
             Term::FunctionTerm(function) => function.origin(),
             Term::Map(map) => map.origin(),
             Term::Operation(operation) => operation.origin(),
+            Term::Tuple(tuple) => tuple.origin(),
         }
     }
 
@@ -109,6 +113,7 @@ impl ProgramComponent for Term {
             Term::FunctionTerm(function) => Term::FunctionTerm(function.set_origin(origin)),
             Term::Map(map) => Term::Map(map.set_origin(origin)),
             Term::Operation(operation) => Term::Operation(operation.set_origin(origin)),
+            Term::Tuple(tuple) => Term::Tuple(tuple.set_origin(origin)),
         }
     }
 

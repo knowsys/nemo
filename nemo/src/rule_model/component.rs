@@ -1,9 +1,11 @@
 //! This module defines the logical components that make up a program.
 
 pub mod atom;
+pub mod base;
 pub mod fact;
 pub mod import_export;
 pub mod literal;
+pub mod output;
 pub mod rule;
 pub mod term;
 

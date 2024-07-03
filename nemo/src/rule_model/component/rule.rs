@@ -147,6 +147,12 @@ impl RuleBodyBuilder {
         self
     }
 
+    /// Add a literal to the body of the rule.
+    pub fn add_literal(mut self, literal: Literal) -> Self {
+        self.literals.push(literal);
+        self
+    }
+
     /// Finish building and return a list of [Literal]s.
     pub fn finalize(self) -> Vec<Literal> {
         self.literals
@@ -175,6 +181,12 @@ impl RuleBodySubBuilder {
     /// Add an operation to the body of the rule.
     pub fn add_operation(mut self, opreation: Operation) -> Self {
         self.builder.body = self.builder.body.add_operation(opreation);
+        self
+    }
+
+    /// Add a literal to the body of the rule.
+    pub fn add_literal(mut self, literal: Literal) -> Self {
+        self.builder.body = self.builder.body.add_literal(literal);
         self
     }
 
