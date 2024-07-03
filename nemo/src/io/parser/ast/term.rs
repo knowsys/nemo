@@ -199,7 +199,7 @@ impl std::fmt::Display for Term<'_> {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub(crate) enum Primitive<'a> {
+pub enum Primitive<'a> {
     Constant(Span<'a>),
     PrefixedConstant {
         span: Span<'a>,

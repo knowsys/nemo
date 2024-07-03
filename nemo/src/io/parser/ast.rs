@@ -167,6 +167,7 @@ impl<T: Clone> List<'_, T> {
         vec
     }
 }
+
 impl<T> IntoIterator for List<'_, T> {
     type Item = T;
 

@@ -16,6 +16,16 @@ pub struct Tuple {
     terms: Vec<Term>,
 }
 
+impl Tuple {
+    /// Create a new [Tuple].
+    pub fn new(terms: Vec<Term>) -> Self {
+        Self {
+            origin: Origin::default(),
+            terms,
+        }
+    }
+}
+
 impl Display for Tuple {
     fn fmt(&self, _f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         todo!()
@@ -31,6 +41,12 @@ impl PartialEq for Tuple {
 impl Hash for Tuple {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         self.terms.hash(state);
+    }
+}
+
+impl PartialOrd for Tuple {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        self.terms.partial_cmp(&other.terms)
     }
 }
 

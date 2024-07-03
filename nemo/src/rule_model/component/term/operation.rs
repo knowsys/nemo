@@ -125,6 +125,71 @@ pub enum OperationKind {
     StringConcatenation,
 }
 
+impl OperationKind {
+    /// Return the [OperationKind] corresponding to the given operation name or `None` if there is no such operation.
+    pub fn from_name(name: &str) -> Option<OperationKind> {
+        Some(match name.to_uppercase().as_str() {
+            "+" => Self::NumericSum,
+            "-" => Self::NumericSubtraction,
+            "/" => Self::NumericDivision,
+            "*" => Self::NumericProduct,
+            "<" => Self::NumericLessthan,
+            ">" => Self::NumericGreaterthan,
+            "<=" => Self::NumericLessthaneq,
+            ">=" => Self::NumericGreaterthaneq,
+            "isInteger" => Self::CheckIsInteger,
+            "isFloat" => Self::CheckIsFloat,
+            "isDouble" => Self::CheckIsDouble,
+            "isIri" => Self::CheckIsIri,
+            "isNumeric" => Self::CheckIsNumeric,
+            "isNull" => Self::CheckIsNull,
+            "isString" => Self::CheckIsString,
+            "ABS" => Self::NumericAbsolute,
+            "SQRT" => Self::NumericSquareroot,
+            "NOT" => Self::BooleanNegation,
+            "fullStr" => Self::CanonicalString,
+            "STR" => Self::LexicalValue,
+            "SIN" => Self::NumericSine,
+            "COS" => Self::NumericCosine,
+            "TAN" => Self::NumericTangent,
+            "STRLEN" => Self::StringLength,
+            "STRREV" => Self::StringReverse,
+            "UCASE" => Self::StringLowercase,
+            "LCASE" => Self::StringUppercase,
+            "ROUND" => Self::NumericRound,
+            "CEIL" => Self::NumericCeil,
+            "FLOOR" => Self::NumericFloor,
+            "DATATYPE" => Self::Datatype,
+            "LANG" => Self::LanguageTag,
+            "INT" => Self::CastToInteger,
+            "DOUBLE" => Self::CastToDouble,
+            "FLOAT" => Self::CastToFloat,
+            "LOG" => Self::NumericLogarithm,
+            "POW" => Self::NumericPower,
+            "COMPARE" => Self::StringCompare,
+            "CONTAINS" => Self::StringContains,
+            "SUBSTR" => Self::StringSubstring,
+            "STRSTARTS" => Self::StringStarts,
+            "STRENDS" => Self::StringEnds,
+            "STRBEFORE" => Self::StringBefore,
+            "STRAFTER" => Self::StringAfter,
+            "REM" => Self::NumericRemainder,
+            "BITAND" => Self::BitAnd,
+            "BITOR" => Self::BitOr,
+            "BITXOR" => Self::BitXor,
+            "MAX" => Self::NumericMaximum,
+            "MIN" => Self::NumericMinimum,
+            "LUKA" => Self::NumericLukasiewicz,
+            "SUM" => Self::NumericSum,
+            "PROD" => Self::NumericProduct,
+            "AND" => Self::BooleanConjunction,
+            "OR" => Self::BooleanDisjunction,
+            "CONCAT" => Self::StringConcatenation,
+            _ => return None,
+        })
+    }
+}
+
 /// Operation that can be applied to terms
 #[derive(Debug, Clone, Eq)]
 pub struct Operation {
@@ -135,6 +200,22 @@ pub struct Operation {
     kind: OperationKind,
     /// The input arguments for the operation
     subterms: Vec<Term>,
+}
+
+impl Operation {
+    /// Create a new [Operation]
+    pub fn new(kind: OperationKind, subterms: Vec<Term>) -> Self {
+        Self {
+            origin: Origin::default(),
+            kind,
+            subterms,
+        }
+    }
+
+    /// Create a new [Operation] giving the string name of the operation.
+    pub fn new_from_name(operation: &str, subterms: Vec<Term>) -> Option<Self> {
+        Some(Self::new(OperationKind::from_name(operation)?, subterms))
+    }
 }
 
 impl Display for Operation {
