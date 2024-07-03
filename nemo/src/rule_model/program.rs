@@ -90,7 +90,7 @@ impl Program {
         let mut body_builder = head_builder.done().body();
 
         // TODO: Implement a normal iterator to avoid cloning
-        for (body_index, body_atom) in head.clone().into_iter().enumerate() {
+        for (body_index, body_atom) in body.clone().into_iter().enumerate() {
             let origin = Origin::External(body_index);
             body_builder = body_builder.add_literal(Self::ast_build_literal(origin, &body_atom));
         }
