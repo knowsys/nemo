@@ -125,7 +125,8 @@ impl GeneratorFilter {
             }
         }
 
-        unreachable!("Filter must only use markers from the table.")
+        // Compute constant columns in the first column
+        table[0]
     }
 
     /// Helper function that takes a list of boolean [Filter]s
