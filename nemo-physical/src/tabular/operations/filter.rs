@@ -144,7 +144,7 @@ impl GeneratorFilter {
         let mut grouped_filters = HashMap::<OperationColumnMarker, Vec<&Filter>>::new();
 
         for filter in filters {
-            let marker = Self::find_last_reference(input, filter).unwrap_or(input[0].clone());
+            let marker = Self::find_last_reference(input, filter).unwrap_or(input[0]);
             grouped_filters.entry(marker).or_default().push(filter);
         }
 
