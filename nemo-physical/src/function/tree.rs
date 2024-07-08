@@ -24,7 +24,7 @@ use super::{
         },
         string::{
             StringAfter, StringBefore, StringCompare, StringConcatenation, StringContains,
-            StringEnds, StringLength, StringLowercase, StringReverse, StringStarts,
+            StringEnds, StringLength, StringLowercase, StringRegex, StringReverse, StringStarts,
             StringSubstring, StringSubstringLength, StringUppercase,
         },
         BinaryFunctionEnum, NaryFunctionEnum, TernaryFunctionEnum, UnaryFunctionEnum,
@@ -672,6 +672,21 @@ where
             function: BinaryFunctionEnum::StringContains(StringContains),
             left: Box::new(text),
             right: Box::new(substring),
+        }
+    }
+
+    /// Create a tree node representing a check whether a string, or substring, matches
+    /// a pattern.
+    ///
+    /// This evaluates to `true` from the boolean value space
+    /// if the subtree `text` evaluates to a string that matches
+    /// the pattern resulting from evaluating the subtree `pattern`
+    /// and to `false` otherwise.
+    pub fn string_regex(text: Self, pattern: Self) -> Self {
+        Self::Binary {
+            function: BinaryFunctionEnum::StringRegex(StringRegex),
+            left: Box::new(text),
+            right: Box::new(pattern),
         }
     }
 

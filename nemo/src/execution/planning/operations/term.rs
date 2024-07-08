@@ -45,6 +45,7 @@ pub(super) fn term_to_function_tree(
                 BinaryOperation::NumericLogarithm => FunctionTree::numeric_logarithm(left, right),
                 BinaryOperation::StringCompare => FunctionTree::string_compare(left, right),
                 BinaryOperation::StringContains => FunctionTree::string_contains(left, right),
+                BinaryOperation::StringRegex => FunctionTree::string_regex(left, right),
                 BinaryOperation::StringSubstring => FunctionTree::string_subtstring(left, right),
                 BinaryOperation::Equal => FunctionTree::equals(left, right),
                 BinaryOperation::Unequals => FunctionTree::unequals(left, right),

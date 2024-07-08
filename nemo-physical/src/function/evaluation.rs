@@ -416,6 +416,12 @@ mod test {
         );
         evaluate_expect(&tree_not_contains, Some(AnyDataValue::new_boolean(false)));
 
+        let tree_regex = Function::string_regex(
+            Function::constant(any_string("hello")),
+            Function::constant(any_string("l+")),
+        );
+        evaluate_expect(&tree_regex, Some(AnyDataValue::new_boolean(true)));
+
         let tree_substring_length = Function::string_subtstring_length(
             Function::constant(any_string("Hello World")),
             Function::constant(AnyDataValue::new_integer_from_u64(7)),
