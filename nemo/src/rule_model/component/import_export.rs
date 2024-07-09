@@ -7,7 +7,7 @@ use nemo_physical::datavalues::MapDataValue;
 
 use crate::rule_model::origin::Origin;
 
-use super::{term::Identifier, ProgramComponent};
+use super::{ProgramComponent, Tag};
 
 /// The different supported variants of the RDF format.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash)]
@@ -77,11 +77,24 @@ pub(crate) struct ImportExportDirective {
     origin: Origin,
 
     /// The predicate we're handling.
-    predicate: Identifier,
+    predicate: Tag,
     /// The file format and resource we're using.
     format: FileFormat,
     /// The attributes we've been given.
     attributes: MapDataValue,
+}
+
+impl ImportExportDirective {
+    /// Helper function for the display implementations of
+    /// [ImportDirective] and [ExportDirective]
+    /// to format the content of this object.
+    fn display_content(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{} :- {} {} .",
+            self.predicate, self.format, self.attributes
+        )
+    }
 }
 
 impl PartialEq for ImportExportDirective {
@@ -106,7 +119,7 @@ pub struct ImportDirective(pub(crate) ImportExportDirective);
 
 impl ImportDirective {
     /// Create a new [ImportDirective].
-    pub fn new(predicate: Identifier, format: FileFormat, attributes: MapDataValue) -> Self {
+    pub fn new(predicate: Tag, format: FileFormat, attributes: MapDataValue) -> Self {
         Self(ImportExportDirective {
             origin: Origin::default(),
             predicate,
@@ -116,7 +129,7 @@ impl ImportDirective {
     }
 
     /// Return the predicate.
-    pub fn predicate(&self) -> &Identifier {
+    pub fn predicate(&self) -> &Tag {
         &self.0.predicate
     }
 
@@ -138,8 +151,9 @@ impl From<ImportExportDirective> for ImportDirective {
 }
 
 impl Display for ImportDirective {
-    fn fmt(&self, _f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        todo!()
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("@import ")?;
+        self.0.display_content(f)
     }
 }
 
@@ -177,7 +191,7 @@ pub struct ExportDirective(pub(crate) ImportExportDirective);
 
 impl ExportDirective {
     /// Create a new [ExportDirective].
-    pub fn new(predicate: Identifier, format: FileFormat, attributes: MapDataValue) -> Self {
+    pub fn new(predicate: Tag, format: FileFormat, attributes: MapDataValue) -> Self {
         Self(ImportExportDirective {
             origin: Origin::default(),
             predicate,
@@ -187,7 +201,7 @@ impl ExportDirective {
     }
 
     /// Return the predicate.
-    pub fn predicate(&self) -> &Identifier {
+    pub fn predicate(&self) -> &Tag {
         &self.0.predicate
     }
 
@@ -209,8 +223,9 @@ impl From<ImportExportDirective> for ExportDirective {
 }
 
 impl Display for ExportDirective {
-    fn fmt(&self, _f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        todo!()
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("@export ")?;
+        self.0.display_content(f)
     }
 }
 

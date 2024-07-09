@@ -3,30 +3,49 @@
 use std::{fmt::Display, hash::Hash};
 
 use crate::rule_model::{
-    component::ProgramComponent, error::ProgramConstructionError, origin::Origin,
+    component::{IteratableVariables, ProgramComponent, Tag},
+    error::ProgramConstructionError,
+    origin::Origin,
 };
 
-use super::{Identifier, Term};
+use super::{primitive::variable::Variable, Term};
 
 /// Function term
+///
+/// List of [Term]s with a [Tag].
 #[derive(Debug, Clone, Eq)]
 pub struct FunctionTerm {
     /// Origin of this component
     origin: Origin,
 
     /// Name of the function
-    name: Identifier,
+    tag: Tag,
     /// Subterms of the function
     terms: Vec<Term>,
 }
 
+/// Construct a [FunctionTerm].
+#[macro_export]
+macro_rules! function {
+    // Base case: no elements
+    ($name:tt) => {
+        crate::rule_model::component::term::function::FunctionTerm::new($name, Vec::new())
+    };
+    // Recursive case: handle each term, separated by commas
+    ($name:tt; $($tt:tt)*) => {{
+        let mut terms = Vec::new();
+        term_list!(terms; $($tt)*);
+        crate::rule_model::component::term::function::FunctionTerm::new($name,terms)
+    }};
+}
+
 impl FunctionTerm {
     /// Create a new [FunctionTerm].
-    pub fn new(name: &str, subterms: Vec<Term>) -> Self {
+    pub fn new<Terms: IntoIterator<Item = Term>>(name: &str, subterms: Terms) -> Self {
         Self {
             origin: Origin::Created,
-            name: Identifier::new(name.to_string()),
-            terms: subterms,
+            tag: Tag::new(name.to_string()),
+            terms: subterms.into_iter().collect(),
         }
     }
 
@@ -42,20 +61,30 @@ impl FunctionTerm {
 }
 
 impl Display for FunctionTerm {
-    fn fmt(&self, _f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        todo!()
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_fmt(format_args!("{}(", self.tag))?;
+
+        for (term_index, term) in self.terms.iter().enumerate() {
+            term.fmt(f)?;
+
+            if term_index < self.terms.len() - 1 {
+                f.write_str(", ")?;
+            }
+        }
+
+        f.write_str(")")
     }
 }
 
 impl PartialEq for FunctionTerm {
     fn eq(&self, other: &Self) -> bool {
-        self.origin == other.origin && self.name == other.name && self.terms == other.terms
+        self.origin == other.origin && self.tag == other.tag && self.terms == other.terms
     }
 }
 
 impl PartialOrd for FunctionTerm {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        match self.name.partial_cmp(&other.name) {
+        match self.tag.partial_cmp(&other.tag) {
             Some(core::cmp::Ordering::Equal) => {}
             ord => return ord,
         }
@@ -65,7 +94,7 @@ impl PartialOrd for FunctionTerm {
 
 impl Hash for FunctionTerm {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        self.name.hash(state);
+        self.tag.hash(state);
         self.terms.hash(state);
     }
 }
@@ -94,7 +123,7 @@ impl ProgramComponent for FunctionTerm {
     where
         Self: Sized,
     {
-        if !self.name.is_valid() {
+        if !self.tag.is_valid() {
             todo!()
         }
 
@@ -103,5 +132,36 @@ impl ProgramComponent for FunctionTerm {
         }
 
         Ok(())
+    }
+}
+
+impl IteratableVariables for FunctionTerm {
+    fn variables<'a>(&'a self) -> Box<dyn Iterator<Item = &'a Variable> + 'a> {
+        Box::new(self.terms.iter().flat_map(|term| term.variables()))
+    }
+
+    fn variables_mut<'a>(&'a mut self) -> Box<dyn Iterator<Item = &'a mut Variable> + 'a> {
+        Box::new(self.terms.iter_mut().flat_map(|term| term.variables_mut()))
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use crate::rule_model::component::{term::primitive::variable::Variable, IteratableVariables};
+
+    #[test]
+    fn function_basic() {
+        let variable = Variable::universal("u");
+        let function = function!("f"; 12, variable, !e, "abc", ?v);
+
+        let variables = function.variables().cloned().collect::<Vec<_>>();
+        assert_eq!(
+            variables,
+            vec![
+                Variable::universal("u"),
+                Variable::existential("e"),
+                Variable::universal("v")
+            ]
+        );
     }
 }

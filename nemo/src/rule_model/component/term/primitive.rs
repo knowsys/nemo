@@ -6,11 +6,18 @@ pub mod variable;
 use std::{fmt::Display, hash::Hash};
 
 use ground::GroundTerm;
-use variable::Variable;
+use nemo_physical::datavalues::AnyDataValue;
+use variable::{existential::ExistentialVariable, universal::UniversalVariable, Variable};
 
-use crate::rule_model::{component::ProgramComponent, origin::Origin};
+use crate::rule_model::{
+    component::{IteratableVariables, ProgramComponent},
+    origin::Origin,
+};
 
 /// Primitive term
+///
+/// Represents a basic, indivisble values, which can either be [GroundTerm]s or [Variable]s.
+/// Such terms are the atomic values used in the construction of more complex expressions.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd)]
 pub enum Primitive {
     /// Variable
@@ -23,6 +30,66 @@ impl Primitive {
     /// Return `true` when this term is not a variable and `false` otherwise.
     pub fn is_ground(&self) -> bool {
         matches!(self, Self::Ground(_))
+    }
+}
+
+impl From<Variable> for Primitive {
+    fn from(value: Variable) -> Self {
+        Self::Variable(value)
+    }
+}
+
+impl From<UniversalVariable> for Primitive {
+    fn from(value: UniversalVariable) -> Self {
+        Self::from(Variable::from(value))
+    }
+}
+
+impl From<ExistentialVariable> for Primitive {
+    fn from(value: ExistentialVariable) -> Self {
+        Self::from(Variable::from(value))
+    }
+}
+
+impl From<GroundTerm> for Primitive {
+    fn from(value: GroundTerm) -> Self {
+        Self::Ground(value)
+    }
+}
+
+impl From<AnyDataValue> for Primitive {
+    fn from(value: AnyDataValue) -> Self {
+        Self::Ground(GroundTerm::from(value))
+    }
+}
+
+impl From<i64> for Primitive {
+    fn from(value: i64) -> Self {
+        Self::from(GroundTerm::from(value))
+    }
+}
+
+impl From<i32> for Primitive {
+    fn from(value: i32) -> Self {
+        Self::from(GroundTerm::from(value))
+    }
+}
+
+impl From<u64> for Primitive {
+    fn from(value: u64) -> Self {
+        Self::from(GroundTerm::from(value))
+    }
+}
+
+impl From<String> for Primitive {
+    fn from(value: String) -> Self {
+        Self::from(GroundTerm::from(value))
+    }
+}
+
+impl From<&str> for Primitive {
+    fn from(value: &str) -> Self {
+        Self::from(GroundTerm::from(value))
     }
 }
 
@@ -71,27 +138,24 @@ impl ProgramComponent for Primitive {
     }
 }
 
-// impl ASTConstructable for Primitive {
-//     type Node<'a> = Term<'a>;
+impl IteratableVariables for Primitive {
+    fn variables<'a>(&'a self) -> Box<dyn Iterator<Item = &'a Variable> + 'a> {
+        Box::new(
+            match self {
+                Primitive::Variable(variable) => Some(variable),
+                Primitive::Ground(_) => None,
+            }
+            .into_iter(),
+        )
+    }
 
-//     fn from_ast_node<'a>(
-//         node: Self::Node<'a>,
-//         origin: ExternalReference,
-//         context: &ASTContext,
-//     ) -> Self {
-//         match node {
-//             Term::Primitive(primitive) => {
-//                 Primitive::Ground(GroundTerm::from_ast_node(primitive, origin, context))
-//             }
-//             Term::Blank(token) => {
-//                 let value: AnyDataValue = todo!();
-
-//                 Primitive::Ground(GroundTerm::create_parsed(value, origin))
-//             }
-//             Term::UniversalVariable(_) | Term::ExistentialVariable(_) => {
-//                 Primitive::Variable(Variable::from_ast_node(node, origin, context))
-//             }
-//             _ => unreachable!("TODO"),
-//         }
-//     }
-// }
+    fn variables_mut<'a>(&'a mut self) -> Box<dyn Iterator<Item = &'a mut Variable> + 'a> {
+        Box::new(
+            match self {
+                Primitive::Variable(variable) => Some(variable),
+                Primitive::Ground(_) => None,
+            }
+            .into_iter(),
+        )
+    }
+}

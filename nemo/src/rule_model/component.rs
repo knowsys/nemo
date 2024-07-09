@@ -11,7 +11,31 @@ pub mod term;
 
 use std::fmt::{Debug, Display};
 
+use term::primitive::variable::Variable;
+
 use super::{error::ProgramConstructionError, origin::Origin};
+
+/// Name of a term
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct Tag(String);
+
+impl Tag {
+    /// Create a new [Tag].
+    pub fn new(name: String) -> Self {
+        Self(name)
+    }
+
+    /// Validate term name.
+    pub fn is_valid(&self) -> bool {
+        !self.0.is_empty()
+    }
+}
+
+impl Display for Tag {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
 
 /// Trait implemented by objects that are part of the logical rule model of the nemo language.
 pub trait ProgramComponent: Debug + Display + Clone + PartialEq + Eq {
@@ -32,4 +56,13 @@ pub trait ProgramComponent: Debug + Display + Clone + PartialEq + Eq {
     fn validate(&self) -> Result<(), ProgramConstructionError>
     where
         Self: Sized;
+}
+
+/// Trait implemented by program components that allow iterating over [Variable]s
+pub trait IteratableVariables {
+    /// Return an iterator over all [Variable]s contained within this program component.
+    fn variables<'a>(&'a self) -> Box<dyn Iterator<Item = &'a Variable> + 'a>;
+
+    /// Return a mutable iterator over all [Variable]s contained within this program component.
+    fn variables_mut<'a>(&'a mut self) -> Box<dyn Iterator<Item = &'a mut Variable> + 'a>;
 }

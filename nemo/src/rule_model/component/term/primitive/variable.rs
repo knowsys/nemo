@@ -34,7 +34,10 @@ impl Display for VariableName {
     }
 }
 
-/// Variable that can be bound to a specific value
+/// Variable
+///
+/// A general placeholder that can be bound to any value.
+/// We distinguish [UniversalVariable] and [ExistentialVariable].
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd)]
 pub enum Variable {
     /// Universal variable
@@ -65,6 +68,18 @@ impl Variable {
             Variable::Universal(variable) => variable.name(),
             Variable::Existential(variable) => Some(variable.name()),
         }
+    }
+}
+
+impl From<UniversalVariable> for Variable {
+    fn from(value: UniversalVariable) -> Self {
+        Self::Universal(value)
+    }
+}
+
+impl From<ExistentialVariable> for Variable {
+    fn from(value: ExistentialVariable) -> Self {
+        Self::Existential(value)
     }
 }
 
@@ -118,23 +133,3 @@ impl ProgramComponent for Variable {
         Ok(())
     }
 }
-
-// impl ASTConstructable for Variable {
-//     type Node<'a> = Term<'a>;
-
-//     fn from_ast_node<'a>(
-//         node: Self::Node<'a>,
-//         origin: ExternalReference,
-//         context: &ASTContext,
-//     ) -> Self {
-//         match node {
-//             Term::UniversalVariable(_) => {
-//                 Variable::Universal(UniversalVariable::from_ast_node(node, origin, context))
-//             }
-//             Term::ExistentialVariable(_) => {
-//                 Variable::Existential(ExistentialVariable::from_ast_node(node, origin, context))
-//             }
-//             _ => unreachable!("TODO"),
-//         }
-//     }
-// }

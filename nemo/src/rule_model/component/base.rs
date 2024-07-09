@@ -1,15 +1,18 @@
 //! This module defines [Base]
 
-use std::fmt::Display;
+use std::{fmt::Display, hash::Hash};
 
 use crate::rule_model::origin::Origin;
 
-/// TODO
-#[derive(Debug, Clone)]
+use super::ProgramComponent;
+
+/// Global prefix
+#[derive(Debug, Clone, Eq)]
 pub struct Base {
     /// Origin of this component
     origin: Origin,
 
+    /// Prefix
     base: String,
 }
 
@@ -24,7 +27,47 @@ impl Base {
 }
 
 impl Display for Base {
-    fn fmt(&self, _f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "@base {} .", self.base)
+    }
+}
+
+impl PartialEq for Base {
+    fn eq(&self, other: &Self) -> bool {
+        self.base == other.base
+    }
+}
+
+impl Hash for Base {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.base.hash(state);
+    }
+}
+
+impl ProgramComponent for Base {
+    fn parse(_string: &str) -> Result<Self, crate::rule_model::error::ProgramConstructionError>
+    where
+        Self: Sized,
+    {
+        todo!()
+    }
+
+    fn origin(&self) -> &Origin {
+        &self.origin
+    }
+
+    fn set_origin(mut self, origin: Origin) -> Self
+    where
+        Self: Sized,
+    {
+        self.origin = origin;
+        self
+    }
+
+    fn validate(&self) -> Result<(), crate::rule_model::error::ProgramConstructionError>
+    where
+        Self: Sized,
+    {
         todo!()
     }
 }

@@ -1,30 +1,72 @@
 //! This module defines [Map]
 
-use std::{collections::BTreeMap, fmt::Display, hash::Hash};
+use std::{fmt::Display, hash::Hash};
 
-use crate::rule_model::{component::ProgramComponent, origin::Origin};
+use crate::rule_model::{
+    component::{IteratableVariables, ProgramComponent, Tag},
+    origin::Origin,
+};
 
-use super::Term;
+use super::{primitive::variable::Variable, Term};
 
-/// Map term
+/// Map
+///
+/// A collection of key-value pairs,
+/// associating [Term]s with each other.
 #[derive(Debug, Clone, Eq)]
 pub struct Map {
     /// Origin of this component
     origin: Origin,
 
-    /// Map associating [Term]s with [Term]s
-    map: BTreeMap<Term, Term>,
+    /// Name of the map
+    tag: Option<Tag>,
+
+    /// List of tuples associating [Term]s with [Term]s
+    map: Vec<(Term, Term)>,
+}
+
+impl Map {
+    /// Create a new [Map].
+    pub fn new<Pairs: IntoIterator<Item = (Term, Term)>>(name: &str, map: Pairs) -> Self {
+        Self {
+            origin: Origin::Created,
+            tag: Some(Tag::new(name.to_string())),
+            map: map.into_iter().collect(),
+        }
+    }
+
+    /// Create a new [Map].
+    pub fn new_unnamed<Pairs: IntoIterator<Item = (Term, Term)>>(map: Pairs) -> Self {
+        Self {
+            origin: Origin::Created,
+            tag: None,
+            map: map.into_iter().collect(),
+        }
+    }
 }
 
 impl Display for Map {
-    fn fmt(&self, _f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        todo!()
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_fmt(format_args!(
+            "{}{{",
+            self.tag.as_ref().map_or("", |tag| &tag.0)
+        ))?;
+
+        for (term_index, (key, value)) in self.map.iter().enumerate() {
+            f.write_fmt(format_args!("{} = {}", key, value))?;
+
+            if term_index < self.map.len() - 1 {
+                f.write_str(", ")?;
+            }
+        }
+
+        f.write_str("}")
     }
 }
 
 impl PartialEq for Map {
     fn eq(&self, other: &Self) -> bool {
-        self.map == other.map
+        self.tag == other.tag && self.map == other.map
     }
 }
 
@@ -36,6 +78,7 @@ impl PartialOrd for Map {
 
 impl Hash for Map {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.tag.hash(state);
         self.map.hash(state);
     }
 }
@@ -65,5 +108,23 @@ impl ProgramComponent for Map {
         Self: Sized,
     {
         todo!()
+    }
+}
+
+impl IteratableVariables for Map {
+    fn variables<'a>(&'a self) -> Box<dyn Iterator<Item = &'a Variable> + 'a> {
+        Box::new(
+            self.map
+                .iter()
+                .flat_map(|(key, value)| key.variables().chain(value.variables())),
+        )
+    }
+
+    fn variables_mut<'a>(&'a mut self) -> Box<dyn Iterator<Item = &'a mut Variable> + 'a> {
+        Box::new(
+            self.map
+                .iter_mut()
+                .flat_map(|(key, value)| key.variables_mut().chain(value.variables_mut())),
+        )
     }
 }

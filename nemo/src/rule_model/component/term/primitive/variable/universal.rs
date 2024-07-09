@@ -8,7 +8,9 @@ use crate::rule_model::{
 
 use super::VariableName;
 
-/// Variable that can be bound to a specific value
+/// Universally quantified variable
+///
+/// Represents a variable that can take on any value in the domain.
 ///
 /// Universal variables may not have a name,
 /// in which case we call them anonymous.
@@ -104,20 +106,3 @@ impl ProgramComponent for UniversalVariable {
         todo!()
     }
 }
-
-// impl ASTConstructable for UniversalVariable {
-//     type Node<'a> = Term<'a>;
-
-//     fn from_ast_node<'a>(node: Term<'a>, origin: ExternalReference, _context: &ASTContext) -> Self {
-//         if let Term::UniversalVariable(token) = node {
-//             let name = token.span.to_string();
-
-//             Self {
-//                 origin: Origin::External(origin),
-//                 name: Some(VariableName::new(name)),
-//             }
-//         } else {
-//             unreachable!("TODO")
-//         }
-//     }
-// }

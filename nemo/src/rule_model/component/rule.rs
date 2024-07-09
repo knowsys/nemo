@@ -6,7 +6,11 @@ use crate::rule_model::origin::Origin;
 
 use super::{atom::Atom, literal::Literal, term::operation::Operation, ProgramComponent};
 
-/// A rule
+/// Rule
+///
+/// A logical statement that defines a relationship between a head (conjunction of [Atom]s)
+/// and a body (conjunction of [Literal]s).
+/// It specifies how new facts can be inferred from existing ones.
 #[derive(Debug, Clone, Eq)]
 pub struct Rule {
     /// Origin of this component
@@ -22,6 +26,11 @@ pub struct Rule {
 }
 
 impl Rule {
+    /// Return a [RuleBuilder].
+    pub fn builder() -> RuleBuilder {
+        RuleBuilder::default()
+    }
+
     /// Create a new [Rule].
     pub fn new(head: Vec<Atom>, body: Vec<Literal>) -> Self {
         Self {
@@ -37,11 +46,49 @@ impl Rule {
         self.name = Some(name.to_string());
         self
     }
+
+    /// Return a reference to the body of the rule.
+    pub fn body(&self) -> &Vec<Literal> {
+        &self.body
+    }
+
+    /// Return a mutable reference to the body of the rule.
+    pub fn body_mut(&mut self) -> &mut Vec<Literal> {
+        &mut self.body
+    }
+
+    /// Return a reference to the head of the rule.
+    pub fn head(&self) -> &Vec<Atom> {
+        &self.head
+    }
+
+    /// Return a mutable reference to the head of the rule.
+    pub fn head_mut(&mut self) -> &mut Vec<Atom> {
+        &mut self.head
+    }
 }
 
 impl Display for Rule {
-    fn fmt(&self, _f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        todo!()
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        for (head_index, head_atom) in self.head.iter().enumerate() {
+            write!(f, "{}", head_atom)?;
+
+            if head_index < self.head.len() - 1 {
+                f.write_str(", ")?;
+            }
+        }
+
+        f.write_str(" :- ")?;
+
+        for (body_index, body_literal) in self.body.iter().enumerate() {
+            write!(f, "{}", body_literal)?;
+
+            if body_index < self.body.len() - 1 {
+                f.write_str(", ")?;
+            }
+        }
+
+        f.write_str(" .")
     }
 }
 
@@ -92,145 +139,95 @@ pub struct RuleBuilder {
     /// Origin of the rule
     origin: Origin,
 
-    /// Builder for the head of the rule
-    head: RuleHeadBuilder,
-    /// Builder for the body of the rule
-    body: RuleBodyBuilder,
+    /// Name of the rule
+    name: Option<String>,
+
+    /// Head of the rule
+    head: Vec<Atom>,
+    /// Body of the rule
+    body: Vec<Literal>,
 }
 
 impl RuleBuilder {
+    /// Set the name of the built rule.
+    pub fn name(mut self, name: &str) -> Self {
+        self.name = Some(name.to_string());
+        self
+    }
+
     /// Set the [Origin] of the built rule.
     pub fn origin(mut self, origin: Origin) -> Self {
         self.origin = origin;
         self
     }
 
-    /// Return a builder for the body of the rule.
-    pub fn body(self) -> RuleBodySubBuilder {
-        RuleBodySubBuilder { builder: self }
+    /// Add a positive atom to the body of the rule.
+    pub fn add_body_positive(mut self, atom: Atom) -> Self {
+        self.body.push(Literal::Positive(atom));
+        self
     }
 
-    /// Return a builder for the head of the rule.
-    pub fn head(self) -> RuleHeadSubBuilder {
-        RuleHeadSubBuilder { builder: self }
+    /// Add a positive atom to the body of the rule.
+    pub fn add_body_positive_mut(&mut self, atom: Atom) -> &mut Self {
+        self.body.push(Literal::Positive(atom));
+        self
+    }
+
+    /// Add a negative atom to the body of the rule.
+    pub fn add_body_negative(mut self, atom: Atom) -> Self {
+        self.body.push(Literal::Negative(atom));
+        self
+    }
+
+    /// Add a negative atom to the body of the rule.
+    pub fn add_body_negative_mut(&mut self, atom: Atom) -> &mut Self {
+        self.body.push(Literal::Negative(atom));
+        self
+    }
+
+    /// Add an operation to the body of the rule.
+    pub fn add_body_operation(mut self, opreation: Operation) -> Self {
+        self.body.push(Literal::Operation(opreation));
+        self
+    }
+
+    /// Add an operation to the body of the rule.
+    pub fn add_body_operation_mut(&mut self, opreation: Operation) -> &mut Self {
+        self.body.push(Literal::Operation(opreation));
+        self
+    }
+
+    /// Add a literal to the body of the rule.
+    pub fn add_body_literal(mut self, literal: Literal) -> Self {
+        self.body.push(literal);
+        self
+    }
+
+    /// Add a literal to the body of the rule.
+    pub fn add_body_literal_mut(&mut self, literal: Literal) -> &mut Self {
+        self.body.push(literal);
+        self
+    }
+
+    /// Add an atom to the head of the rule.
+    pub fn add_head_atom(mut self, atom: Atom) -> Self {
+        self.head.push(atom);
+        self
+    }
+
+    /// Add an atom to the head of the rule.
+    pub fn add_head_atom_mut(&mut self, atom: Atom) -> &mut Self {
+        self.head.push(atom);
+        self
     }
 
     /// Finish building and return a [Rule].
     pub fn finalize(self) -> Rule {
-        Rule::new(self.head.finalize(), self.body.finalize()).set_origin(self.origin)
-    }
-}
+        let rule = Rule::new(self.head, self.body).set_origin(self.origin);
 
-/// Builder for the rule body
-#[derive(Debug, Default)]
-pub struct RuleBodyBuilder {
-    /// Current list of [Literal]s
-    literals: Vec<Literal>,
-}
-
-impl RuleBodyBuilder {
-    /// Add a positive atom to the body of the rule.
-    pub fn add_positive_atom(mut self, atom: Atom) -> Self {
-        self.literals.push(Literal::Positive(atom));
-        self
-    }
-
-    /// Add a negative atom to the body of the rule.
-    pub fn add_negative_atom(mut self, atom: Atom) -> Self {
-        self.literals.push(Literal::Negative(atom));
-        self
-    }
-
-    /// Add an operation to the body of the rule.
-    pub fn add_operation(mut self, opreation: Operation) -> Self {
-        self.literals.push(Literal::Operation(opreation));
-        self
-    }
-
-    /// Add a literal to the body of the rule.
-    pub fn add_literal(mut self, literal: Literal) -> Self {
-        self.literals.push(literal);
-        self
-    }
-
-    /// Finish building and return a list of [Literal]s.
-    pub fn finalize(self) -> Vec<Literal> {
-        self.literals
-    }
-}
-
-/// Subbuilder for building the body of a rule
-#[derive(Debug)]
-pub struct RuleBodySubBuilder {
-    builder: RuleBuilder,
-}
-
-impl RuleBodySubBuilder {
-    /// Add a positive atom to the body of the rule.
-    pub fn add_positive_atom(mut self, atom: Atom) -> Self {
-        self.builder.body = self.builder.body.add_positive_atom(atom);
-        self
-    }
-
-    /// Add a negative atom to the body of the rule.
-    pub fn add_negative_atom(mut self, atom: Atom) -> Self {
-        self.builder.body = self.builder.body.add_negative_atom(atom);
-        self
-    }
-
-    /// Add an operation to the body of the rule.
-    pub fn add_operation(mut self, opreation: Operation) -> Self {
-        self.builder.body = self.builder.body.add_operation(opreation);
-        self
-    }
-
-    /// Add a literal to the body of the rule.
-    pub fn add_literal(mut self, literal: Literal) -> Self {
-        self.builder.body = self.builder.body.add_literal(literal);
-        self
-    }
-
-    /// Return to the [RuleBuilder]
-    pub fn done(self) -> RuleBuilder {
-        self.builder
-    }
-}
-
-/// Builder for the rule head
-#[derive(Debug, Default)]
-pub struct RuleHeadBuilder {
-    /// Current list of [Atom]s
-    atoms: Vec<Atom>,
-}
-
-impl RuleHeadBuilder {
-    /// Add another atom to the head of the rule.
-    pub fn add_atom(mut self, atom: Atom) -> Self {
-        self.atoms.push(atom);
-        self
-    }
-
-    /// Finish building and return a list of [Atom]s.
-    pub fn finalize(self) -> Vec<Atom> {
-        self.atoms
-    }
-}
-
-/// Subbuilder for building the head of a rule
-#[derive(Debug)]
-pub struct RuleHeadSubBuilder {
-    builder: RuleBuilder,
-}
-
-impl RuleHeadSubBuilder {
-    /// Add another atom to the head of the rule.
-    pub fn add_atom(mut self, atom: Atom) -> Self {
-        self.builder.head = self.builder.head.add_atom(atom);
-        self
-    }
-
-    /// Return to the [RuleBuilder]
-    pub fn done(self) -> RuleBuilder {
-        self.builder
+        match &self.name {
+            Some(name) => rule.set_name(name),
+            None => rule,
+        }
     }
 }
