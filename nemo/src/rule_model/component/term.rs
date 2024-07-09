@@ -1,9 +1,14 @@
 //! This module defines [Term].
 
+#[macro_use]
 pub mod aggregate;
+#[macro_use]
 pub mod function;
+#[macro_use]
 pub mod map;
+#[macro_use]
 pub mod operation;
+#[macro_use]
 pub mod primitive;
 #[macro_use]
 pub mod tuple;

@@ -1,5 +1,6 @@
 //! This module defines the logical components that make up a program.
 
+#[macro_use]
 pub mod atom;
 pub mod base;
 pub mod fact;
