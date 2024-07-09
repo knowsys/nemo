@@ -8,7 +8,6 @@ use ascii_tree::write_tree;
 #[derive(Debug, Clone, PartialEq)]
 pub struct Tuple<'a> {
     pub span: Span<'a>,
-    pub identifier: Option<Span<'a>>,
     pub open_paren: Span<'a>,
     pub terms: Option<List<'a, Term<'a>>>,
     pub close_paren: Span<'a>,
@@ -17,9 +16,6 @@ pub struct Tuple<'a> {
 impl AstNode for Tuple<'_> {
     fn children(&self) -> Option<Vec<&dyn AstNode>> {
         let mut vec: Vec<&dyn AstNode> = Vec::new();
-        if let Some(identifier) = &self.identifier {
-            vec.push(identifier);
-        }
         vec.push(&self.open_paren);
         if let Some(terms) = &self.terms {
             vec.push(terms);

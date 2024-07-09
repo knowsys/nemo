@@ -1,6 +1,7 @@
 use tower_lsp::lsp_types::SymbolKind;
 
 use super::map::Map;
+use super::named_tuple::NamedTuple;
 use super::tuple::Tuple;
 use super::{ast_to_ascii_tree, AstNode, List, Range, Wsoc};
 use crate::io::lexer::{Span, Token};
@@ -31,6 +32,7 @@ pub enum Term<'a> {
         close_paren: Span<'a>,
     },
     Tuple(Box<Tuple<'a>>),
+    NamedTuple(Box<NamedTuple<'a>>),
     Map(Box<Map<'a>>),
     Blank(Span<'a>),
 }
@@ -71,7 +73,8 @@ impl AstNode for Term<'_> {
                 Some(vec)
             }
             // TODO: check whether directly the children or Some(vec![named_tuple]) should get returned (for fidelity in ast)
-            Term::Tuple(named_tuple) => named_tuple.children(),
+            Term::Tuple(tuple) => tuple.children(),
+            Term::NamedTuple(named_tuple) => named_tuple.children(),
             Term::Map(map) => map.children(),
             Term::Blank(token) => Some(vec![token]),
         }
@@ -79,15 +82,16 @@ impl AstNode for Term<'_> {
 
     fn span(&self) -> Span {
         match self {
-            Term::Primitive(t) => t.span(),
-            Term::UniversalVariable(t) => t.span(),
-            Term::ExistentialVariable(t) => t.span(),
+            Term::Primitive(p) => p.span(),
+            Term::UniversalVariable(span) => *span,
+            Term::ExistentialVariable(span) => *span,
             Term::UnaryPrefix { span, .. } => *span,
             Term::Binary { span, .. } => *span,
             Term::Aggregation { span, .. } => *span,
-            Term::Tuple(named_tuple) => named_tuple.span(),
+            Term::Tuple(tuple) => tuple.span(),
+            Term::NamedTuple(named_tuple) => named_tuple.span(),
             Term::Map(map) => map.span(),
-            Term::Blank(t) => t.span(),
+            Term::Blank(span) => *span,
         }
     }
 
@@ -114,13 +118,8 @@ impl AstNode for Term<'_> {
             Term::UnaryPrefix { .. } => name!("Unary Term"),
             Term::Binary { .. } => name!("Binary Term"),
             Term::Aggregation { .. } => name!("Aggregation"),
-            Term::Tuple(f) => {
-                if f.identifier.is_some() {
-                    name!("Function Symbol")
-                } else {
-                    name!("Tuple")
-                }
-            }
+            Term::Tuple(_) => name!("Tuple"),
+            Term::NamedTuple(_) => name!("Function"),
             Term::Map(_) => name!("Map"),
             Term::Blank(_) => name!("Blank"),
         }
@@ -136,12 +135,10 @@ impl AstNode for Term<'_> {
                 format!("aggregation/{}", operation.span().fragment()),
                 "file".to_string(),
             )),
-            Term::Tuple(tuple) => tuple.identifier.map(|identifier| {
-                (
-                    format!("function/{}", identifier.span().fragment()),
-                    "file".to_string(),
-                )
-            }),
+            Term::NamedTuple(named_tuple) => Some((
+                format!("function/{}", named_tuple.identifier.span().fragment()),
+                "file".to_string(),
+            )),
             _ => None,
         }
     }
@@ -155,7 +152,8 @@ impl AstNode for Term<'_> {
             Term::ExistentialVariable(t) => Some(t.range()),
             Term::Binary { .. } => None,
             Term::Aggregation { operation, .. } => Some(operation.range()),
-            Term::Tuple(tuple) => tuple.identifier.map(|identifier| identifier.range()),
+            Term::Tuple(_) => None,
+            Term::NamedTuple(named_tuple) => Some(named_tuple.identifier.range()),
             Term::Map(_map) => None,
         }
     }
@@ -176,16 +174,11 @@ impl AstNode for Term<'_> {
                 format!("Aggregation: {}", operation.fragment()),
                 SymbolKind::OPERATOR,
             )),
-            Term::Tuple(tuple) => {
-                if let Some(identifier) = tuple.identifier {
-                    Some((
-                        format!("Function: {}", identifier.fragment()),
-                        SymbolKind::OPERATOR,
-                    ))
-                } else {
-                    Some((String::from("Tuple"), SymbolKind::ARRAY))
-                }
-            }
+            Term::Tuple(_) => Some((String::from("Tuple"), SymbolKind::ARRAY)),
+            Term::NamedTuple(named_tuple) => Some((
+                format!("Function: {}", named_tuple.identifier.fragment()),
+                SymbolKind::OPERATOR,
+            )),
             Term::Map(_map) => Some((String::from("Map"), SymbolKind::ARRAY)),
         }
     }

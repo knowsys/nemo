@@ -1,6 +1,6 @@
 use tower_lsp::lsp_types::SymbolKind;
 
-use crate::io::lexer::{Span, Token};
+use crate::io::lexer::Span;
 use ascii_tree::{write_tree, Tree};
 use std::fmt::Display;
 
@@ -11,6 +11,7 @@ pub mod program;
 pub(crate) mod statement;
 pub(crate) mod term;
 pub(crate) mod tuple;
+pub(crate) mod named_tuple;
 
 pub trait AstNode: std::fmt::Debug + Display + Sync {
     fn children(&self) -> Option<Vec<&dyn AstNode>>;
@@ -155,35 +156,19 @@ pub struct List<'a, T> {
     // (,T)*
     pub rest: Option<Vec<(Span<'a>, T)>>,
 }
-impl<T: Clone> List<'_, T> {
-    pub fn to_vec(&self) -> Vec<T> {
+impl<'a, T> List<'a, T> {
+    pub fn to_item_vec(&'a self) -> Vec<&'a T> {
         let mut vec = Vec::new();
-        vec.push(self.first.clone());
+        vec.push(&self.first);
         if let Some(rest) = &self.rest {
             for (_, item) in rest {
-                vec.push(item.clone());
+                vec.push(&item);
             }
         }
         vec
     }
 }
 
-impl<T> IntoIterator for List<'_, T> {
-    type Item = T;
-
-    type IntoIter = std::vec::IntoIter<T>;
-
-    fn into_iter(self) -> Self::IntoIter {
-        let mut vec = Vec::new();
-        vec.push(self.first);
-        if let Some(rest) = self.rest {
-            for (_, item) in rest {
-                vec.push(item);
-            }
-        }
-        vec.into_iter()
-    }
-}
 impl<T: AstNode + std::fmt::Debug> AstNode for List<'_, T> {
     fn children(&self) -> Option<Vec<&dyn AstNode>> {
         let mut vec: Vec<&dyn AstNode> = Vec::new();
@@ -235,6 +220,27 @@ impl<T: AstNode + std::fmt::Debug> Display for List<'_, T> {
     }
 }
 
+impl<'a, T> IntoIterator for &'a List<'a, T> {
+    type Item = &'a T;
+
+    type IntoIter = ListIterator<&'a T>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        ListIterator(self.to_item_vec().into_iter())
+    }
+} 
+
+#[derive(Debug)]
+pub struct ListIterator<T>(std::vec::IntoIter<T>);
+
+impl<T> Iterator for ListIterator<T> {
+    type Item = T;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.0.next()
+    }
+} 
+
 pub(crate) fn get_all_tokens(node: &dyn AstNode) -> Vec<&dyn AstNode> {
     let mut vec = Vec::new();
     if let Some(children) = node.children() {
@@ -262,6 +268,8 @@ pub(crate) fn ast_to_ascii_tree(node: &dyn AstNode) -> Tree {
 }
 
 mod test {
+    use named_tuple::NamedTuple;
+
     use super::*;
     use super::{
         atom::Atom,
@@ -321,26 +329,26 @@ mod test {
                     doc_comment: Some(
                         s!(184,7,"%% This is just an example predicate.\n")
                     ),
-                    atom: Atom::Positive(Tuple {
+                    atom: Atom::Positive(NamedTuple {
                         span: s!(222,8,"somePredicate(ConstA, ConstB)"),
-                        identifier: Some(
-                             s!(222, 8, "somePredicate"),
-                        ),
-                        open_paren:
-                            s!(235,8,"(")
-                        ,
-                        terms: Some(List {
-                            span: s!(236, 8, "ConstA, ConstB"),
-                            first: Term::Primitive(Primitive::Constant(                                s!(236, 8, "ConstA"),
-                            )),
-                            rest: Some(vec![(
-                                    s!(242, 8, ","),
-                                Term::Primitive(Primitive::Constant(                                    s!(244, 8, "ConstB"),
+                        identifier: s!(222, 8, "somePredicate"),
+                        tuple: Tuple {
+                            span: s!(235,8,"(ConstA, ConstB)"),
+                            open_paren:
+                                s!(235,8,"(")
+                            ,
+                            terms: Some(List {
+                                span: s!(236, 8, "ConstA, ConstB"),
+                                first: Term::Primitive(Primitive::Constant(                                s!(236, 8, "ConstA"),
                                 )),
-                            )]),
-                        }),
-                        close_paren:
-                            s!(250,8,")")
+                                rest: Some(vec![(
+                                        s!(242, 8, ","),
+                                    Term::Primitive(Primitive::Constant(                                    s!(244, 8, "ConstB"),
+                                    )),
+                                )]),
+                            }),
+                            close_paren: s!(250,8,")")
+                        }
                     }),
                     dot: 
                         s!(251,8,".")
@@ -354,43 +362,45 @@ mod test {
                     doc_comment: Some(s!(262,11,"%% This is just an example rule.\n")),
                     head: List {
                         span: s!(295, 12, "someHead(?VarA)"),
-                        first: Atom::Positive(Tuple {
+                        first: Atom::Positive(NamedTuple {
                             span: s!(295,12,"someHead(?VarA)"),
-                            identifier: Some(
-                                s!(295, 12, "someHead"),
-                            ),
-                            open_paren: s!(303,12,"(") ,
-                            terms: Some(List {
-                                span: s!(304, 12, "?VarA"),
-                                first: Term::UniversalVariable(                                    s!(304, 12, "?VarA"),
-                                ),
-                                rest: None,
-                            }),
-                            close_paren: s!(309,12,")") ,
+                            identifier: s!(295, 12, "someHead"),
+                            tuple: Tuple {
+                                span: s!(303,12,"(?VarA)"),
+                                open_paren: s!(303,12,"(") ,
+                                terms: Some(List {
+                                    span: s!(304, 12, "?VarA"),
+                                    first: Term::UniversalVariable(                                    s!(304, 12, "?VarA"),
+                                    ),
+                                    rest: None,
+                                }),
+                                close_paren: s!(309,12,")") ,
+                            }
                         }),
                         rest: None,
                     },
                     arrow: s!(311,12,":-"),
                     body: List {
                         span: s!(314, 12, "somePredicate(?VarA, ConstB)"),
-                        first: Atom::Positive(Tuple {
+                        first: Atom::Positive(NamedTuple {
                             span: s!(314, 12,"somePredicate(?VarA, ConstB)"),
-                            identifier: Some(
-                                s!(314, 12, "somePredicate"),
-                            ),
-                            open_paren: s!(327,12,"("),
-                            terms: Some(List {
-                                span: s!(328, 12, "?Var, ConstB"),
-                                first: Term::UniversalVariable(                                    s!(328, 12, "?VarA"),
-                                ),
-                                rest: Some(vec![(
-                                        s!(333, 12, ","),
+                            identifier: s!(314, 12, "somePredicate"),
+                            tuple: Tuple {
+                                span: s!(327,12,"(?VarA, ConstB)"),
+                                open_paren: s!(327,12,"("),
+                                terms: Some(List {
+                                    span: s!(328, 12, "?Var, ConstB"),
+                                    first: Term::UniversalVariable(                                    s!(328, 12, "?VarA"),
+                                    ),
+                                    rest: Some(vec![(
+                                            s!(333, 12, ","),
                                     
-                                    Term::Primitive(Primitive::Constant(s!(335, 12, "ConstB"),
-                                    )),
-                                )]),
-                            }),
-                            close_paren: s!(341, 12,")") ,
+                                        Term::Primitive(Primitive::Constant(s!(335, 12, "ConstB"),
+                                        )),
+                                    )]),
+                                }),
+                                close_paren: s!(341, 12,")") ,
+                            }
                         }),
                         rest: None,
                     },

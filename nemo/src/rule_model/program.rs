@@ -77,8 +77,8 @@ impl Program {
         let rule_builder = RuleBuilder::default().origin(origin);
         let mut head_builder = rule_builder.head();
 
-        // TODO: Implement a normal iterator to avoid cloning
-        for (head_index, head_atom) in head.clone().into_iter().enumerate() {
+        // TODO: check whether the list iterator implementation is good
+        for (head_index, head_atom) in head.to_item_vec().iter().enumerate() {
             let origin = Origin::External(head_index);
             if let Literal::Positive(atom) = Self::ast_build_literal(origin, &head_atom) {
                 head_builder = head_builder.add_atom(atom);
@@ -89,8 +89,8 @@ impl Program {
 
         let mut body_builder = head_builder.done().body();
 
-        // TODO: Implement a normal iterator to avoid cloning
-        for (body_index, body_atom) in body.clone().into_iter().enumerate() {
+        // TODO: check wether the list iterator implementation is good
+        for (body_index, body_atom) in body.into_iter().enumerate() {
             let origin = Origin::External(body_index);
             body_builder = body_builder.add_literal(Self::ast_build_literal(origin, &body_atom));
         }
@@ -128,13 +128,10 @@ impl Program {
         }
     }
 
-    fn ast_build_atom(origin: Origin, atom: &ast::tuple::Tuple) -> Atom {
-        let predicate_name = atom
-            .identifier
-            .expect("Atom must have a predicate name")
-            .to_string();
-        let subterms = match &atom.terms {
-            Some(terms) => terms.to_vec(),
+    fn ast_build_atom(origin: Origin, atom: &ast::named_tuple::NamedTuple) -> Atom {
+        let predicate_name = atom.identifier.to_string();
+        let subterms = match &atom.tuple.terms {
+            Some(terms) => terms.to_item_vec(),
             None => vec![],
         };
 
@@ -181,6 +178,9 @@ impl Program {
                 todo!()
             }
             ast::term::Term::Tuple(tuple) => Self::ast_build_inner_tuple(origin, tuple),
+            ast::term::Term::NamedTuple(named_tuple) => {
+                Self::ast_build_inner_named_tuple(origin, named_tuple)
+            }
             ast::term::Term::Map(_) => todo!(),
             ast::term::Term::Blank(_) => todo!(),
         }
@@ -219,7 +219,7 @@ impl Program {
 
     fn ast_build_inner_tuple(origin: Origin, tuple: &ast::tuple::Tuple) -> Term {
         let subterms = match &tuple.terms {
-            Some(terms) => terms.to_vec(),
+            Some(terms) => terms.to_item_vec(),
             None => vec![],
         };
 
@@ -230,14 +230,29 @@ impl Program {
             translated_subterms.push(Self::ast_build_inner_term(origin, &subterm));
         }
 
-        match tuple.identifier {
-            Some(name) => match OperationKind::from_name(&name.to_string()) {
-                Some(kind) => Term::Operation(Operation::new(kind, translated_subterms)),
-                None => {
-                    Term::FunctionTerm(FunctionTerm::new(&name.to_string(), translated_subterms))
-                }
-            },
-            None => Term::Tuple(Tuple::new(translated_subterms)),
+        Term::Tuple(Tuple::new(translated_subterms))
+    }
+
+    fn ast_build_inner_named_tuple(
+        origin: Origin,
+        named_tuple: &ast::named_tuple::NamedTuple,
+    ) -> Term {
+        let subterms = match &named_tuple.tuple.terms {
+            Some(terms) => terms.to_item_vec(),
+            None => vec![],
+        };
+
+        let mut translated_subterms = Vec::new();
+
+        for (term_index, subterm) in subterms.into_iter().enumerate() {
+            let origin = Origin::External(term_index);
+            translated_subterms.push(Self::ast_build_inner_term(origin, &subterm));
+        }
+
+        let name = &named_tuple.identifier.to_string();
+        match OperationKind::from_name(name) {
+            Some(kind) => Term::Operation(Operation::new(kind, translated_subterms)),
+            None => Term::FunctionTerm(FunctionTerm::new(name, translated_subterms)),
         }
     }
 

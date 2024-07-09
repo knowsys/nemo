@@ -2433,6 +2433,7 @@ pub mod new {
     use std::borrow::BorrowMut;
     use std::cell::RefCell;
 
+    use super::ast::named_tuple::NamedTuple;
     use super::ast::{
         atom::*, directive::*, map::*, program::*, statement::*, term::*, tuple::*, List, Position,
         Wsoc,
@@ -2834,14 +2835,14 @@ pub mod new {
     fn parse_head<'a, 's, E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>, Context>>(
         input: Input<'a, 's>,
     ) -> IResult<Input<'a, 's>, List<'a, Atom<'a>>, E> {
-        context(Context::RuleHead, parse_list(parse_head_atoms))(input)
+        context(Context::RuleHead, parse_list(parse_atoms))(input)
     }
 
     /// Parse the body atoms of a rule.
     fn parse_body<'a, 's, E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>, Context>>(
         input: Input<'a, 's>,
     ) -> IResult<Input<'a, 's>, List<'a, Atom<'a>>, E> {
-        context(Context::RuleBody, parse_list(parse_body_atoms))(input)
+        context(Context::RuleBody, parse_list(parse_atoms))(input)
     }
 
     /// Parse the directives (@base, @prefix, @import, @export, @output).
@@ -3130,26 +3131,8 @@ pub mod new {
         }
     }
 
-    /// Parse the head atoms. The same as the body atoms except for disallowing negated atoms.
-    fn parse_head_atoms<
-        'a,
-        's,
-        E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>, Context>,
-    >(
-        input: Input<'a, 's>,
-    ) -> IResult<Input<'a, 's>, Atom<'a>, E> {
-        context(
-            Context::HeadAtoms,
-            alt((parse_normal_atom, parse_infix_atom, parse_map_atom)),
-        )(input)
-    }
-
-    /// Parse the body atoms. The same as the head atoms except for allowing negated atoms.
-    fn parse_body_atoms<
-        'a,
-        's,
-        E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>, Context>,
-    >(
+    /// Parse the different atom variants.
+    fn parse_atoms<'a, 's, E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>, Context>>(
         input: Input<'a, 's>,
     ) -> IResult<Input<'a, 's>, Atom<'a>, E> {
         context(
@@ -3223,16 +3206,13 @@ pub mod new {
         })
     }
 
-    /// Parse a tuple with an optional name, like `ident(term1, term2)`
-    /// or just `(int, int, skip)`.
+    /// Parse a tuple like `(int, int, skip)`. A 1-tuple is denoted `(<elem>,)` (with a trailing comma) to distinquish it from parenthesised expressions.
     fn parse_tuple<'a, 's, E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>, Context>>(
         input: Input<'a, 's>,
     ) -> IResult<Input<'a, 's>, Tuple<'a>, E> {
         context(
             Context::Tuple,
             tuple((
-                opt(lex_ident),
-                wsoc0,
                 open_paren,
                 wsoc0,
                 opt(parse_list(parse_term)),
@@ -3241,12 +3221,11 @@ pub mod new {
             )),
         )(input)
         .map(
-            |(rest_input, (identifier, _ws1, open_paren, _ws2, terms, _ws3, close_paren))| {
+            |(rest_input, (open_paren, _ws1, terms, _ws2, close_paren))| {
                 (
                     rest_input,
                     Tuple {
                         span: outer_span(input.input, rest_input.input),
-                        identifier,
                         open_paren,
                         terms,
                         close_paren,
@@ -3264,33 +3243,21 @@ pub mod new {
         E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>, Context>,
     >(
         input: Input<'a, 's>,
-    ) -> IResult<Input<'a, 's>, Tuple<'a>, E> {
+    ) -> IResult<Input<'a, 's>, NamedTuple<'a>, E> {
         context(
             Context::NamedTuple,
-            tuple((
-                alt((lex_prefixed_ident, lex_ident)),
-                wsoc0,
-                open_paren,
-                wsoc0,
-                opt(parse_list(parse_term)),
-                wsoc0,
-                close_paren,
-            )),
+            tuple((alt((lex_prefixed_ident, lex_ident)), wsoc0, parse_tuple)),
         )(input)
-        .map(
-            |(rest_input, (identifier, _ws1, open_paren, _ws2, terms, _ws3, close_paren))| {
-                (
-                    rest_input,
-                    Tuple {
-                        span: outer_span(input.input, rest_input.input),
-                        identifier: Some(identifier),
-                        open_paren,
-                        terms,
-                        close_paren,
-                    },
-                )
-            },
-        )
+        .map(|(rest_input, (identifier, _ws, tuple))| {
+            (
+                rest_input,
+                NamedTuple {
+                    span: outer_span(input.input, rest_input.input),
+                    identifier,
+                    tuple,
+                },
+            )
+        })
     }
 
     /// Parse a map. Maps are denoted with `{…}` and can haven an optional name, e.g. `csv {…}`.
@@ -3911,19 +3878,22 @@ pub mod new {
                     statements: vec![Statement::Fact {
                         span: s!(0, 1, "a(B,C)."),
                         doc_comment: None,
-                        atom: Atom::Positive(Tuple {
+                        atom: Atom::Positive(NamedTuple {
                             span: s!(0, 1, "a(B,C)"),
-                            identifier: Some(s!(0, 1, "a"),),
-                            open_paren: s!(1, 1, "("),
-                            terms: Some(List {
-                                span: s!(2, 1, "B,C"),
-                                first: Term::Primitive(Primitive::Constant(s!(2, 1, "B"),)),
-                                rest: Some(vec![(
-                                    s!(3, 1, ","),
-                                    Term::Primitive(Primitive::Constant(s!(4, 1, "C"),)),
-                                )]),
-                            }),
-                            close_paren: s!(5, 1, ")"),
+                            identifier: s!(0, 1, "a"),
+                            tuple: Tuple {
+                                span: s!(1, 1, "(B,C)"),
+                                open_paren: s!(1, 1, "("),
+                                terms: Some(List {
+                                    span: s!(2, 1, "B,C"),
+                                    first: Term::Primitive(Primitive::Constant(s!(2, 1, "B"),)),
+                                    rest: Some(vec![(
+                                        s!(3, 1, ","),
+                                        Term::Primitive(Primitive::Constant(s!(4, 1, "C"),)),
+                                    )]),
+                                }),
+                                close_paren: s!(5, 1, ")"),
+                            }
                         }),
                         dot: s!(6, 1, ".")
                     }],
@@ -4066,29 +4036,36 @@ pub mod new {
                         Statement::Fact {
                             span: s!(0, 1, "some(Fact, with, whitespace) ."),
                             doc_comment: None,
-                            atom: Atom::Positive(Tuple {
+                            atom: Atom::Positive(NamedTuple {
                                 span: s!(0, 1, "some(Fact, with, whitespace)"),
-                                identifier: Some(s!(0, 1, "some"),),
-                                open_paren: s!(4, 1, "("),
-                                terms: Some(List {
-                                    span: s!(5, 1, "Fact, with, whitespace"),
-                                    first: Term::Primitive(Primitive::Constant(s!(5, 1, "Fact"),)),
-                                    rest: Some(vec![
-                                        (
-                                            s!(9, 1, ","),
-                                            Term::Primitive(Primitive::Constant(s!(11, 1, "with"))),
-                                        ),
-                                        (
-                                            s!(15, 1, ","),
-                                            Term::Primitive(Primitive::Constant(s!(
-                                                17,
-                                                1,
-                                                "whitespace"
-                                            ))),
-                                        ),
-                                    ]),
-                                }),
-                                close_paren: s!(27, 1, ")"),
+                                identifier: s!(0, 1, "some"),
+                                tuple: Tuple {
+                                    span: s!(4, 1, "(Fact, with, whitespace)"),
+                                    open_paren: s!(4, 1, "("),
+                                    terms: Some(List {
+                                        span: s!(5, 1, "Fact, with, whitespace"),
+                                        first: Term::Primitive(Primitive::Constant(s!(
+                                            5, 1, "Fact"
+                                        ),)),
+                                        rest: Some(vec![
+                                            (
+                                                s!(9, 1, ","),
+                                                Term::Primitive(Primitive::Constant(s!(
+                                                    11, 1, "with"
+                                                ))),
+                                            ),
+                                            (
+                                                s!(15, 1, ","),
+                                                Term::Primitive(Primitive::Constant(s!(
+                                                    17,
+                                                    1,
+                                                    "whitespace"
+                                                ))),
+                                            ),
+                                        ]),
+                                    }),
+                                    close_paren: s!(27, 1, ")"),
+                                }
                             }),
                             dot: s!(29, 1, "."),
                         },
@@ -4480,7 +4457,6 @@ oldLime(?location,?species,?age) :- tree(?location,?species,?age,?heightInMeters
                     span: s!(0, 1, "(15+3*2-(7+35)*8)/3"),
                     lhs: Box::new(Term::Tuple(Box::new(Tuple {
                         span: s!(0, 1, "(15+3*2-(7+35)*8)"),
-                        identifier: None,
                         open_paren: T!(OpenParen, 0, 1, "("),
                         terms: Some(List {
                             span: s!(1, 1, "15+3*2-(7+35)*8"),
@@ -4522,7 +4498,6 @@ oldLime(?location,?species,?age) :- tree(?location,?species,?age,?heightInMeters
                                         span: s!(8, 1, "(7+35)*8"),
                                         lhs: Box::new(Term::Tuple(Box::new(Tuple {
                                             span: s!(8, 1, "(7+35)"),
-                                            identifier: None,
                                             open_paren: T! {OpenParen, 8, 1, "("},
                                             terms: Some(List {
                                                 span: s!(9, 1, "7+35"),
@@ -4641,7 +4616,6 @@ oldLime(?location,?species,?age) :- tree(?location,?species,?age,?heightInMeters
                             span: s!(7, 1, "(7+35)*8/3"),
                             lhs: Box::new(Term::Tuple(Box::new(Tuple {
                                 span: s!(7, 1, "(7+35)"),
-                                identifier: None,
                                 open_paren: T! {OpenParen, 7,1,"("},
                                 terms: Some(List {
                                     span: s!(8, 1, "7+35"),

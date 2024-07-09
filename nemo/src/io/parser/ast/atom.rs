@@ -1,19 +1,19 @@
 use tower_lsp::lsp_types::SymbolKind;
 
 use super::map::Map;
+use super::named_tuple::NamedTuple;
 use super::term::Term;
-use super::tuple::Tuple;
-use super::{ast_to_ascii_tree, AstNode, Range, Wsoc};
-use crate::io::lexer::{Span, Token};
+use super::{ast_to_ascii_tree, AstNode, Range};
+use crate::io::lexer::Span;
 use ascii_tree::write_tree;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Atom<'a> {
-    Positive(Tuple<'a>),
+    Positive(NamedTuple<'a>),
     Negative {
         span: Span<'a>,
         neg: Span<'a>,
-        atom: Tuple<'a>,
+        atom: NamedTuple<'a>,
     },
     InfixAtom {
         span: Span<'a>,
@@ -25,7 +25,7 @@ pub enum Atom<'a> {
 }
 
 impl Atom<'_> {
-    fn tuple(&self) -> Option<&Tuple<'_>> {
+    fn named_tuple(&self) -> Option<&NamedTuple<'_>> {
         match &self {
             Atom::Positive(tuple) => Some(tuple),
             Atom::Negative { atom, .. } => Some(atom),
@@ -89,24 +89,24 @@ impl AstNode for Atom<'_> {
     }
 
     fn lsp_identifier(&self) -> Option<(String, String)> {
-        self.tuple().map(|tuple| {
+        self.named_tuple().map(|named_tuple| {
             (
-                format!("atom/{}", tuple.identifier.unwrap().span().fragment()),
+                format!("atom/{}", named_tuple.identifier.fragment()),
                 "file".to_string(),
             )
         })
     }
 
     fn lsp_range_to_rename(&self) -> Option<Range> {
-        self.tuple()
-            .and_then(|tuple| tuple.identifier)
+        self.named_tuple()
+            .and_then(|named_tuple| Some(named_tuple.identifier))
             .map(|identifier| identifier.range())
     }
 
     fn lsp_symbol_info(&self) -> Option<(String, SymbolKind)> {
-        match self.tuple() {
+        match self.named_tuple() {
             Some(tuple) => Some((
-                format!("Atom: {}", tuple.identifier.unwrap().fragment()),
+                format!("Atom: {}", tuple.identifier.fragment()),
                 SymbolKind::FUNCTION,
             )),
             None => Some((String::from("Atom"), SymbolKind::FUNCTION)),
