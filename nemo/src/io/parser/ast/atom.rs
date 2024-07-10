@@ -64,7 +64,7 @@ impl AstNode for Atom<'_> {
         }
     }
 
-    fn is_token(&self) -> bool {
+    fn is_leaf(&self) -> bool {
         false
     }
 

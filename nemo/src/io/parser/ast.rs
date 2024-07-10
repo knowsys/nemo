@@ -1,3 +1,6 @@
+//! This module contains the (abstract) syntax tree, generated from the parser.
+
+
 use tower_lsp::lsp_types::SymbolKind;
 
 use crate::io::lexer::Span;
@@ -13,10 +16,13 @@ pub(crate) mod term;
 pub(crate) mod tuple;
 pub(crate) mod named_tuple;
 
+/// All AST nodes have to implement this trait so you can get all children recursively.
 pub trait AstNode: std::fmt::Debug + Display + Sync {
+    /// Return all children of an AST node.
     fn children(&self) -> Option<Vec<&dyn AstNode>>;
+    /// Return the `LocatedSpan` of the AST node.
     fn span(&self) -> Span;
-
+    /// Convert the `LocatedSpan` into a range of positions.
     fn range(&self) -> Range {
         let span = self.span();
 
@@ -42,9 +48,11 @@ pub trait AstNode: std::fmt::Debug + Display + Sync {
         }
     }
 
-    // FIXME: With the removal of tokens is this method still usefull and/or should be renamed?
-    fn is_token(&self) -> bool;
+    // FIXME: With the removal of tokens is this method still usefull?
+    /// Indicates whether the current AST node is a leaf and has no children.
+    fn is_leaf(&self) -> bool;
 
+    /// Return a formatted String for use in printing the AST.
     fn name(&self) -> String;
 
     /// Returns an optional pair of the identfier and identifier scope.
@@ -59,10 +67,14 @@ pub trait AstNode: std::fmt::Debug + Display + Sync {
     fn lsp_range_to_rename(&self) -> Option<Range>;
 }
 
+/// `Position` contains the offset in the source and the line and column information.
 #[derive(Debug, Clone, Copy, Hash)]
 pub struct Position {
+    /// Offset in the source.
     pub offset: usize,
+    /// Line number
     pub line: u32,
+    /// Column number
     pub column: u32,
 }
 impl PartialEq for Position {
@@ -92,16 +104,19 @@ impl Default for Position {
 }
 
 #[derive(Debug, Clone, Copy, Hash)]
+/// A Range with start and end `Position`s.
 pub struct Range {
+    /// Start position
     pub start: Position,
+    /// End position
     pub end: Position,
 }
 
 /// Whitespace or Comment token
 #[derive(Debug, Clone, PartialEq)]
 pub struct Wsoc<'a> {
-    pub span: Span<'a>,
-    pub token: Vec<Span<'a>>,
+    pub(crate) span: Span<'a>,
+    pub(crate) token: Vec<Span<'a>>,
 }
 impl AstNode for Wsoc<'_> {
     fn children(&self) -> Option<Vec<&dyn AstNode>> {
@@ -117,7 +132,7 @@ impl AstNode for Wsoc<'_> {
         self.span
     }
 
-    fn is_token(&self) -> bool {
+    fn is_leaf(&self) -> bool {
         false
     }
 
@@ -155,6 +170,7 @@ pub struct List<'a, T> {
     pub first: T,
     // (,T)*
     pub rest: Option<Vec<(Span<'a>, T)>>,
+    pub trailing_comma: Option<Span<'a>>,
 }
 impl<'a, T> List<'a, T> {
     pub fn to_item_vec(&'a self) -> Vec<&'a T> {
@@ -202,7 +218,7 @@ impl<T: AstNode + std::fmt::Debug> AstNode for List<'_, T> {
         self.span
     }
 
-    fn is_token(&self) -> bool {
+    fn is_leaf(&self) -> bool {
         false
     }
 
@@ -252,7 +268,7 @@ pub(crate) fn ast_to_ascii_tree(node: &dyn AstNode) -> Tree {
     let mut vec = Vec::new();
     if let Some(children) = node.children() {
         for child in children {
-            if child.is_token() {
+            if child.is_leaf() {
                 vec.push(Tree::Leaf(vec![format!("\x1b[93m{:?}\x1b[0m", child.name())]));
             } else {
                 vec.push(ast_to_ascii_tree(child));
@@ -264,6 +280,7 @@ pub(crate) fn ast_to_ascii_tree(node: &dyn AstNode) -> Tree {
 
 mod test {
     use named_tuple::NamedTuple;
+    use statement::Fact;
 
     use super::*;
     use super::{
@@ -324,7 +341,7 @@ mod test {
                     doc_comment: Some(
                         s!(184,7,"%% This is just an example predicate.\n")
                     ),
-                    atom: Atom::Positive(NamedTuple {
+                    fact: Fact::NamedTuple(NamedTuple {
                         span: s!(222,8,"somePredicate(ConstA, ConstB)"),
                         identifier: s!(222, 8, "somePredicate"),
                         tuple: Tuple {
@@ -341,6 +358,7 @@ mod test {
                                     Term::Primitive(Primitive::Constant(                                    s!(244, 8, "ConstB"),
                                     )),
                                 )]),
+                                trailing_comma: None,
                             }),
                             close_paren: s!(250,8,")")
                         }
@@ -368,11 +386,13 @@ mod test {
                                     first: Term::UniversalVariable(                                    s!(304, 12, "?VarA"),
                                     ),
                                     rest: None,
+                                    trailing_comma: None,
                                 }),
                                 close_paren: s!(309,12,")") ,
                             }
                         }),
                         rest: None,
+                        trailing_comma: None,
                     },
                     arrow: s!(311,12,":-"),
                     body: List {
@@ -393,11 +413,13 @@ mod test {
                                         Term::Primitive(Primitive::Constant(s!(335, 12, "ConstB"),
                                         )),
                                     )]),
+                                    trailing_comma: None,
                                 }),
                                 close_paren: s!(341, 12,")") ,
                             }
                         }),
                         rest: None,
+                        trailing_comma: None,
                     },
                     dot: s!(342, 12,"."),
                 },

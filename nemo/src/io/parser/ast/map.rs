@@ -11,7 +11,7 @@ pub struct Map<'a> {
     pub span: Span<'a>,
     pub identifier: Option<Span<'a>>,
     pub open_brace: Span<'a>,
-    pub pairs: Option<List<'a, Pair<'a, Term<'a>, Term<'a>>>>,
+    pub pairs: Option<List<'a, Pair<'a>>>,
     pub close_brace: Span<'a>,
 }
 impl AstNode for Map<'_> {
@@ -32,7 +32,7 @@ impl AstNode for Map<'_> {
         self.span
     }
 
-    fn is_token(&self) -> bool {
+    fn is_leaf(&self) -> bool {
         false
     }
 
@@ -62,13 +62,13 @@ impl std::fmt::Display for Map<'_> {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct Pair<'a, K, V> {
+pub struct Pair<'a> {
     pub span: Span<'a>,
-    pub key: K,
+    pub key: Term<'a>,
     pub equal: Span<'a>,
-    pub value: V,
+    pub value: Term<'a>,
 }
-impl<K: AstNode + Debug, V: AstNode + Debug> AstNode for Pair<'_, K, V> {
+impl AstNode for Pair<'_> {
     fn children(&self) -> Option<Vec<&dyn AstNode>> {
         let mut vec: Vec<&dyn AstNode> = Vec::new();
         vec.push(&self.key);
@@ -81,7 +81,7 @@ impl<K: AstNode + Debug, V: AstNode + Debug> AstNode for Pair<'_, K, V> {
         self.span
     }
 
-    fn is_token(&self) -> bool {
+    fn is_leaf(&self) -> bool {
         false
     }
 
@@ -106,7 +106,7 @@ impl<K: AstNode + Debug, V: AstNode + Debug> AstNode for Pair<'_, K, V> {
         Some((String::from("Pair"), SymbolKind::ARRAY))
     }
 }
-impl<K: AstNode + Debug, V: AstNode + Debug> std::fmt::Display for Pair<'_, K, V> {
+impl std::fmt::Display for Pair<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut output = String::new();
         write_tree(&mut output, &ast_to_ascii_tree(self))?;

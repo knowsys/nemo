@@ -146,7 +146,7 @@ impl AstNode for Directive<'_> {
         }
     }
 
-    fn is_token(&self) -> bool {
+    fn is_leaf(&self) -> bool {
         false
     }
 

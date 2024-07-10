@@ -170,7 +170,7 @@ impl AstNode for Span<'_> {
         *self
     }
 
-    fn is_token(&self) -> bool {
+    fn is_leaf(&self) -> bool {
         true
     }
 
@@ -399,7 +399,7 @@ impl<'a> AstNode for Token<'a> {
         self.span
     }
 
-    fn is_token(&self) -> bool {
+    fn is_leaf(&self) -> bool {
         true
     }
 

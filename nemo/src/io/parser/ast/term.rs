@@ -95,7 +95,7 @@ impl AstNode for Term<'_> {
         }
     }
 
-    fn is_token(&self) -> bool {
+    fn is_leaf(&self) -> bool {
         false
     }
 
@@ -284,7 +284,7 @@ impl AstNode for Primitive<'_> {
         }
     }
 
-    fn is_token(&self) -> bool {
+    fn is_leaf(&self) -> bool {
         false
     }
 
@@ -352,7 +352,7 @@ impl AstNode for Exponent<'_> {
         todo!()
     }
 
-    fn is_token(&self) -> bool {
+    fn is_leaf(&self) -> bool {
         todo!()
     }
 

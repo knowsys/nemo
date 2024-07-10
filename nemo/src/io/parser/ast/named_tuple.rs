@@ -28,7 +28,7 @@ impl AstNode for NamedTuple<'_> {
         self.span
     }
 
-    fn is_token(&self) -> bool {
+    fn is_leaf(&self) -> bool {
         false
     }
 

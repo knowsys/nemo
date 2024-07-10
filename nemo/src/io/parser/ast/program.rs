@@ -1,3 +1,5 @@
+//! The root node of an AST, representing a nemo program.
+
 use tower_lsp::lsp_types::SymbolKind;
 
 use super::{ast_to_ascii_tree, statement::Statement, AstNode, Position, Range};
@@ -29,7 +31,7 @@ impl AstNode for Program<'_> {
         self.span
     }
 
-    fn is_token(&self) -> bool {
+    fn is_leaf(&self) -> bool {
         false
     }
 
