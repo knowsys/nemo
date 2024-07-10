@@ -68,7 +68,7 @@ impl Display for Variable {
 }
 
 /// Simple term that is either a constant or a variable
-#[derive(Debug, Eq, PartialEq, Clone, PartialOrd, Ord)]
+#[derive(Debug, Eq, PartialEq, Clone, PartialOrd, Ord, Hash)]
 pub enum PrimitiveTerm {
     /// A constant.
     GroundTerm(AnyDataValue),
@@ -99,7 +99,7 @@ impl Display for PrimitiveTerm {
 }
 
 /// Binary operation between two [Term]s.
-#[derive(Debug, Eq, PartialEq, Copy, Clone, PartialOrd, Ord)]
+#[derive(Debug, Eq, PartialEq, Copy, Clone, PartialOrd, Ord, Hash)]
 pub enum BinaryOperation {
     /// Equality
     Equal,
@@ -224,7 +224,7 @@ impl BinaryOperation {
 }
 
 /// Ternary operation applied to a [Term]
-#[derive(Debug, Eq, PartialEq, Copy, Clone, PartialOrd, Ord)]
+#[derive(Debug, Eq, PartialEq, Copy, Clone, PartialOrd, Ord, Hash)]
 pub enum TernaryOperation {
     /// String starting at some start position with a given maximum length
     StringSubstringLength,
@@ -251,7 +251,7 @@ impl TernaryOperation {
 }
 
 /// N-ary operation applied to a [Term]
-#[derive(Debug, Eq, PartialEq, Copy, Clone, PartialOrd, Ord)]
+#[derive(Debug, Eq, PartialEq, Copy, Clone, PartialOrd, Ord, Hash)]
 pub enum NaryOperation {
     /// Bitwise and operation
     BitAnd,
@@ -318,7 +318,7 @@ impl NaryOperation {
 }
 
 /// Unary operation applied to a [Term]
-#[derive(Debug, Eq, PartialEq, Copy, Clone, PartialOrd, Ord)]
+#[derive(Debug, Eq, PartialEq, Copy, Clone, PartialOrd, Ord, Hash)]
 pub enum UnaryOperation {
     /// Boolean negation
     BooleanNegation,
@@ -454,7 +454,7 @@ impl UnaryOperation {
 }
 
 /// Possibly complex term that may occur within an [super::Atom]
-#[derive(Eq, PartialEq, Clone, PartialOrd, Ord)]
+#[derive(Eq, PartialEq, Clone, PartialOrd, Ord, Hash)]
 pub enum Term {
     /// Primitive term.
     Primitive(PrimitiveTerm),

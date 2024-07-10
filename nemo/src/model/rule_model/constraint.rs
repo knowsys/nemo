@@ -5,7 +5,7 @@ use crate::model::{Term, Variable, VariableAssignment};
 use super::{Aggregate, BinaryOperation, PrimitiveTerm};
 
 /// Represents a constraint which is expressed as a binary operator applied to two terms
-#[derive(Debug, Eq, PartialEq, Clone, PartialOrd, Ord)]
+#[derive(Debug, Eq, PartialEq, Clone, PartialOrd, Ord, Hash)]
 pub enum Constraint {
     /// Two terms are equal.
     Equals(Term, Term),

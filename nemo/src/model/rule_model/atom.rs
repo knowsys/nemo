@@ -3,7 +3,7 @@ use crate::model::VariableAssignment;
 use super::{Aggregate, Identifier, PrimitiveTerm, Term, Variable};
 
 /// An atom.
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct Atom {
     /// The predicate.
     predicate: Identifier,
