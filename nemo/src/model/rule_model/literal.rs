@@ -5,7 +5,7 @@ use crate::model::VariableAssignment;
 use super::{Aggregate, Atom, Identifier, PrimitiveTerm, Term, Variable};
 
 /// A literal.
-#[derive(Debug, Eq, PartialEq, Clone)]
+#[derive(Debug, Eq, PartialEq, Clone, Hash)]
 pub enum Literal {
     /// A non-negated literal.
     Positive(Atom),

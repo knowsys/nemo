@@ -9,7 +9,9 @@ use js_sys::Array;
 use js_sys::Reflect;
 use js_sys::Set;
 use js_sys::Uint8Array;
+use nemo::execution::tracing::trace::ExecutionTrace;
 use nemo::execution::tracing::trace::ExecutionTraceTree;
+use nemo::execution::tracing::trace::TraceFactHandle;
 use nemo::execution::ExecutionEngine;
 
 use nemo::io::compression_format::CompressionFormat;
@@ -354,7 +356,7 @@ impl NemoEngine {
         &mut self,
         predicate: String,
         row_index: usize,
-    ) -> Result<Option<ExecutionTraceTree>, NemoError> {
+    ) -> Result<Option<(ExecutionTrace, Vec<TraceFactHandle>)>, NemoError> {
         let iter = self
             .engine
             .predicate_rows(&Identifier::from(predicate.clone()))
@@ -377,7 +379,7 @@ impl NemoEngine {
                 .engine
                 .trace(self.program.0.clone(), vec![fact_to_trace]);
 
-            Ok(trace.tree(handles[0]))
+            Ok(Some((trace, handles)))
         } else {
             Ok(None)
         }
@@ -389,46 +391,89 @@ impl NemoEngine {
         predicate: String,
         row_index: usize,
     ) -> Result<Option<String>, NemoError> {
-        self.trace_fact_at_index(predicate, row_index)
-            .map(|opt| opt.as_ref().map(ExecutionTraceTree::to_ascii_art))
+        self.trace_fact_at_index(predicate, row_index).map(|opt| {
+            opt.and_then(|(trace, handles)| {
+                trace
+                    .tree(handles[0])
+                    .as_ref()
+                    .map(ExecutionTraceTree::to_ascii_art)
+            })
+        })
     }
 
-    #[wasm_bindgen(js_name = "traceFactAtIndexGraphML")]
-    pub fn trace_fact_at_index_graphml(
+    #[wasm_bindgen(js_name = "traceFactAtIndexGraphMlTree")]
+    pub fn trace_fact_at_index_graphml_tree(
+        &mut self,
+        predicate: String,
+        row_index: usize,
+    ) -> Result<Option<String>, NemoError> {
+        self.trace_fact_at_index(predicate, row_index).map(|opt| {
+            opt.and_then(|(trace, handles)| {
+                trace
+                    .tree(handles[0])
+                    .as_ref()
+                    .map(ExecutionTraceTree::to_graphml)
+            })
+        })
+    }
+
+    #[wasm_bindgen(js_name = "traceFactAtIndexGraphMlDag")]
+    pub fn trace_fact_at_index_graphml_dag(
         &mut self,
         predicate: String,
         row_index: usize,
     ) -> Result<Option<String>, NemoError> {
         self.trace_fact_at_index(predicate, row_index)
-            .map(|opt| opt.as_ref().map(ExecutionTraceTree::to_graphml))
+            .map(|opt| opt.map(|(trace, handles)| trace.graphml(&handles)))
     }
 
     fn parse_and_trace_fact(
         &mut self,
         fact: &str,
-    ) -> Result<Option<ExecutionTraceTree>, NemoError> {
+    ) -> Result<Option<(ExecutionTrace, Vec<TraceFactHandle>)>, NemoError> {
         let parsed_fact = parse_fact(fact.to_owned())
             .map_err(WasmOrInternalNemoError::NemoError)
             .map_err(NemoError)?;
 
         let (trace, handles) = self.engine.trace(self.program.0.clone(), vec![parsed_fact]);
 
-        Ok(trace.tree(handles[0]))
+        Ok(Some((trace, handles)))
     }
 
     #[wasm_bindgen(js_name = "parseAndTraceFactAscii")]
     pub fn parse_and_trace_fact_ascii(&mut self, fact: &str) -> Result<Option<String>, NemoError> {
-        self.parse_and_trace_fact(fact)
-            .map(|opt| opt.as_ref().map(ExecutionTraceTree::to_ascii_art))
+        self.parse_and_trace_fact(fact).map(|opt| {
+            opt.and_then(|(trace, handles)| {
+                trace
+                    .tree(handles[0])
+                    .as_ref()
+                    .map(ExecutionTraceTree::to_ascii_art)
+            })
+        })
     }
 
-    #[wasm_bindgen(js_name = "parseAndTraceFactGraphML")]
-    pub fn parse_and_trace_fact_graphml(
+    #[wasm_bindgen(js_name = "parseAndTraceFactGraphMlTree")]
+    pub fn parse_and_trace_fact_graphml_tree(
+        &mut self,
+        fact: &str,
+    ) -> Result<Option<String>, NemoError> {
+        self.parse_and_trace_fact(fact).map(|opt| {
+            opt.and_then(|(trace, handles)| {
+                trace
+                    .tree(handles[0])
+                    .as_ref()
+                    .map(ExecutionTraceTree::to_graphml)
+            })
+        })
+    }
+
+    #[wasm_bindgen(js_name = "parseAndTraceFactGraphMlDag")]
+    pub fn parse_and_trace_fact_graphml_dag(
         &mut self,
         fact: &str,
     ) -> Result<Option<String>, NemoError> {
         self.parse_and_trace_fact(fact)
-            .map(|opt| opt.as_ref().map(ExecutionTraceTree::to_graphml))
+            .map(|opt| opt.map(|(trace, handles)| trace.graphml(&handles)))
     }
 }
 

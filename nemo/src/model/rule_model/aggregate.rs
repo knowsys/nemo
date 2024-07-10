@@ -28,7 +28,7 @@ impl From<&Identifier> for Option<LogicalAggregateOperation> {
 }
 
 /// Aggregate occurring in a predicate in the head
-#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd, Hash)]
 pub struct Aggregate {
     pub(crate) logical_aggregate_operation: LogicalAggregateOperation,
     pub(crate) terms: Vec<Term>,

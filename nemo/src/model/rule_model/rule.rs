@@ -5,7 +5,7 @@ use crate::{io::parser::ParseError, model::VariableAssignment};
 use super::{Atom, Constraint, Literal, PrimitiveTerm, Term, Variable};
 
 /// A rule.
-#[derive(Debug, Eq, PartialEq, Clone)]
+#[derive(Debug, Eq, PartialEq, Clone, Hash)]
 pub struct Rule {
     /// Head atoms of the rule
     head: Vec<Atom>,
