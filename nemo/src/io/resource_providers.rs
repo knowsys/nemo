@@ -2,7 +2,7 @@
 
 use std::{io::BufRead, path::PathBuf, rc::Rc};
 
-use crate::io::parser::{all_input_consumed, iri::iri};
+// use crate::io::parser::{all_input_consumed, iri::iri};
 use nemo_physical::{error::ReadingError, resource::Resource};
 
 use super::compression_format::CompressionFormat;
@@ -12,8 +12,9 @@ pub mod file;
 /// A resource provider for HTTP(s) requests.
 pub mod http;
 
-fn is_iri(resource: &Resource) -> bool {
-    all_input_consumed(iri)(resource).is_ok()
+fn is_iri(_resource: &Resource) -> bool {
+    todo!()
+    // all_input_consumed(iri)(resource).is_ok()
 }
 
 /// Allows resolving resources to readers.

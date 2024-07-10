@@ -45,16 +45,16 @@ impl Program {
     pub fn from_ast(ast_program: ast::program::Program) -> Self {
         let mut program = Program::default();
 
-        for (statement_index, statement) in ast_program.statements.iter().enumerate() {
+        for (_statement_index, statement) in ast_program.statements.iter().enumerate() {
             match statement {
                 ast::statement::Statement::Directive(directive) => {
                     program.ast_build_directive(directive);
                 }
                 ast::statement::Statement::Fact {
-                    span,
-                    doc_comment,
-                    fact: atom,
-                    dot,
+                    span: _span,
+                    doc_comment: _doc_comment,
+                    fact: _atom,
+                    dot: _dot,
                 } => todo!(),
                 ast::statement::Statement::Rule { head, body, .. } => {
                     program.ast_build_rule(head, body);
@@ -149,12 +149,6 @@ impl Program {
             ast::term::Term::ExistentialVariable(name) => {
                 Term::existential_variable(&name.to_string())
             }
-            ast::term::Term::UnaryPrefix {
-                operation, term, ..
-            } => {
-                // TODO: Currently no associated function with this
-                todo!()
-            }
             ast::term::Term::Binary {
                 lhs,
                 operation,
@@ -170,7 +164,9 @@ impl Program {
                 )
             }
             ast::term::Term::Aggregation {
-                operation, terms, ..
+                operation: _,
+                terms: _,
+                ..
             } => {
                 todo!()
             }
@@ -190,18 +186,18 @@ impl Program {
                 Term::ground(AnyDataValue::new_iri(value.to_string()))
             }
             ast::term::Primitive::PrefixedConstant {
-                span,
-                prefix,
-                colon,
-                constant,
+                span: _,
+                prefix: _,
+                colon: _,
+                constant: _,
             } => todo!(),
             ast::term::Primitive::Number {
-                span,
-                sign,
-                before,
-                dot,
-                after,
-                exponent,
+                span: _,
+                sign: _,
+                before: _,
+                dot: _,
+                after: _,
+                exponent: _,
             } => todo!(),
             ast::term::Primitive::String(string) => {
                 Term::ground(AnyDataValue::new_plain_string(string.to_string()))
@@ -214,7 +210,7 @@ impl Program {
         .set_origin(origin)
     }
 
-    fn ast_build_inner_tuple(origin: Origin, tuple: &ast::tuple::Tuple) -> Term {
+    fn ast_build_inner_tuple(_origin: Origin, tuple: &ast::tuple::Tuple) -> Term {
         let subterms = match &tuple.terms {
             Some(terms) => terms.to_item_vec(),
             None => vec![],
@@ -231,7 +227,7 @@ impl Program {
     }
 
     fn ast_build_inner_named_tuple(
-        origin: Origin,
+        _origin: Origin,
         named_tuple: &ast::named_tuple::NamedTuple,
     ) -> Term {
         let subterms = match &named_tuple.tuple.terms {
@@ -260,33 +256,33 @@ impl Program {
                 // TODO: Set origin
             }
             ast::directive::Directive::Prefix {
-                span,
-                doc_comment,
-                prefix,
-                prefix_iri,
-                dot,
+                span: _,
+                doc_comment: _,
+                prefix: _,
+                prefix_iri: _,
+                dot: _,
             } => todo!(),
             ast::directive::Directive::Import {
-                span,
-                doc_comment,
-                predicate,
-                arrow,
-                map,
-                dot,
+                span: _,
+                doc_comment: _,
+                predicate: _,
+                arrow: _,
+                map: _,
+                dot: _,
             } => todo!(),
             ast::directive::Directive::Export {
-                span,
-                doc_comment,
-                predicate,
-                arrow,
-                map,
-                dot,
+                span: _,
+                doc_comment: _,
+                predicate: _,
+                arrow: _,
+                map: _,
+                dot: _,
             } => todo!(),
             ast::directive::Directive::Output {
-                span,
-                doc_comment,
-                predicates,
-                dot,
+                span: _,
+                doc_comment: _,
+                predicates: _,
+                dot: _,
             } => todo!(),
         }
     }

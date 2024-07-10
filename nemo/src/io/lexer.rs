@@ -2,7 +2,7 @@
 
 use std::{cell::RefCell, ops::Range};
 
-use super::parser::new::context;
+use super::parser::context;
 use nom::{
     branch::alt,
     bytes::complete::{is_not, tag, take, take_till},
@@ -538,26 +538,19 @@ where
     )(input)
 }
 
-pub(crate) fn lex_ident<'a, 's, E>(input: Input<'a, 's>) -> IResult<Input<'a, 's>, Span<'a>, E>
+/// This function lexes the name of a predicate or a map, called the tag of the predicate/map.
+pub(crate) fn lex_tag<'a, 's, E>(input: Input<'a, 's>) -> IResult<Input<'a, 's>, Span<'a>, E>
 where
     E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>, Context>,
 {
-    let (rest_input, ident) = context(
+    context(
         Context::Identifier,
         recognize(pair(
             alpha1,
             many0(alt((alphanumeric1, tag("_"), tag("-")))),
         )),
-    )(input)?;
-    let token = match *ident.input.fragment() {
-        "base" => ident.input,
-        "prefix" => ident.input,
-        "import" => ident.input,
-        "export" => ident.input,
-        "output" => ident.input,
-        _ => ident.input,
-    };
-    Ok((rest_input, token))
+    )(input)
+    .map(|(rest_input, ident)| (rest_input, ident.input))
 }
 
 pub(crate) fn lex_prefixed_ident<'a, 's, E>(
@@ -566,7 +559,7 @@ pub(crate) fn lex_prefixed_ident<'a, 's, E>(
 where
     E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>, Context>,
 {
-    recognize(tuple((opt(lex_ident), colon, lex_ident)))(input)
+    recognize(tuple((opt(lex_tag), colon, lex_tag)))(input)
         .map(|(rest_input, prefixed_ident)| (rest_input, prefixed_ident.input))
 }
 

@@ -1,6 +1,7 @@
 use std::collections::{HashMap, HashSet};
 
-use crate::{io::parser::ParseError, model::VariableAssignment};
+use crate::io::parser::types::ParseError;
+use crate::model::VariableAssignment;
 
 use super::{Atom, Constraint, Literal, PrimitiveTerm, Term, Variable};
 

@@ -15,10 +15,8 @@ use thiserror::Error;
 use crate::{
     io::formats::import_export::ImportExportError,
     io::lexer::ParserState,
-    model::rule_model::{Aggregate, Constraint, Literal, Term},
+    model::rule_model::{Aggregate, Constraint, Literal, Term, Variable},
 };
-
-use super::{ast::Position, Variable};
 
 /// A [LocatedSpan] over the input.
 pub(super) type Span<'a> = LocatedSpan<&'a str>;
@@ -434,7 +432,7 @@ pub(crate) struct Input<'a, 's> {
     pub(crate) parser_state: ParserState<'s>,
 }
 impl<'a, 's> Input<'a, 's> {
-    fn new(input: &'a str, errors: ParserState<'s>) -> Input<'a, 's> {
+    pub(crate) fn new(input: &'a str, errors: ParserState<'s>) -> Input<'a, 's> {
         Input {
             input: Span::new(input),
             parser_state: errors,
@@ -516,7 +514,7 @@ impl<'a, 's> InputIter for Input<'a, 's> {
         todo!()
     }
 
-    fn position<P>(&self, predicate: P) -> Option<usize>
+    fn position<P>(&self, _predicate: P) -> Option<usize>
     where
         P: Fn(Self::Item) -> bool,
     {
@@ -575,8 +573,8 @@ impl InputTakeAtPosition for Input<'_, '_> {
 
     fn split_at_position1<P, E: nom::error::ParseError<Self>>(
         &self,
-        predicate: P,
-        e: ErrorKind,
+        _predicate: P,
+        _e: ErrorKind,
     ) -> IResult<Self, Self, E>
     where
         P: Fn(Self::Item) -> bool,
@@ -661,7 +659,7 @@ impl std::fmt::Display for Input<'_, '_> {
 }
 
 impl<I, C> nom_supreme::context::ContextError<I, C> for Input<'_, '_> {
-    fn add_context(location: I, ctx: C, other: Self) -> Self {
+    fn add_context(_location: I, _ctx: C, _other: Self) -> Self {
         todo!()
     }
 }

@@ -29,6 +29,11 @@ impl Fact {
         }
     }
 
+    /// Create a new [Fact] from an AST
+    pub fn from_ast(_ast: crate::io::parser::ast::statement::Fact) {
+        todo!("create a fact from an ast")
+    }
+
     /// Return an iterator over the subterms of this fact.
     pub fn subterms(&self) -> impl Iterator<Item = &Term> {
         self.terms.iter()

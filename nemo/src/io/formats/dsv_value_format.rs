@@ -6,13 +6,12 @@ use oxiri::Iri;
 
 use nemo_physical::datavalues::{AnyDataValue, DataValue, DataValueCreationError};
 
+use crate::io::lexer::ParserState;
+use crate::io::parser::types::Input;
 use crate::model::{
     VALUE_FORMAT_ANY, VALUE_FORMAT_DOUBLE, VALUE_FORMAT_INT, VALUE_FORMAT_SKIP, VALUE_FORMAT_STRING,
 };
-use crate::{
-    io::parser::{parse_bare_name, span_from_str},
-    model::FileFormat,
-};
+use crate::{io::lexer::lex_tag, model::FileFormat};
 
 use super::import_export::ImportExportError;
 
@@ -145,9 +144,12 @@ impl DsvValueFormat {
             _ => {}
         }
 
-        // Check if it's a valid bare name
-        if let Ok((remainder, _)) = parse_bare_name(span_from_str(input)) {
-            if remainder.is_empty() {
+        // Check if it's a valid tag name
+        let refcell = std::cell::RefCell::new(Vec::new());
+        let parser_state = ParserState { errors: &refcell };
+        if let Ok((remainder, _)) = lex_tag::<nom::error::Error<_>>(Input::new(input, parser_state))
+        {
+            if remainder.input.is_empty() {
                 return Ok(AnyDataValue::new_iri(input.to_string()));
             }
         }

@@ -3,8 +3,8 @@ use tower_lsp::lsp_types::SymbolKind;
 use super::map::Map;
 use super::named_tuple::NamedTuple;
 use super::tuple::Tuple;
-use super::{ast_to_ascii_tree, AstNode, List, Range, Wsoc};
-use crate::io::lexer::{Span, Token};
+use super::{ast_to_ascii_tree, AstNode, List, Range};
+use crate::io::lexer::Span;
 use ascii_tree::write_tree;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -12,12 +12,6 @@ pub enum Term<'a> {
     Primitive(Primitive<'a>),
     UniversalVariable(Span<'a>),
     ExistentialVariable(Span<'a>),
-    // TODO: Is whitespace needed? Figure out how unary terms look
-    UnaryPrefix {
-        span: Span<'a>,
-        operation: Span<'a>,
-        term: Box<Term<'a>>,
-    },
     Binary {
         span: Span<'a>,
         lhs: Box<Term<'a>>,
@@ -43,9 +37,6 @@ impl AstNode for Term<'_> {
             Term::Primitive(token) => Some(vec![token]),
             Term::UniversalVariable(token) => Some(vec![token]),
             Term::ExistentialVariable(token) => Some(vec![token]),
-            Term::UnaryPrefix {
-                operation, term, ..
-            } => Some(vec![operation, &**term]),
             Term::Binary {
                 lhs,
                 operation,
@@ -85,7 +76,6 @@ impl AstNode for Term<'_> {
             Term::Primitive(p) => p.span(),
             Term::UniversalVariable(span) => *span,
             Term::ExistentialVariable(span) => *span,
-            Term::UnaryPrefix { span, .. } => *span,
             Term::Binary { span, .. } => *span,
             Term::Aggregation { span, .. } => *span,
             Term::Tuple(tuple) => tuple.span(),
@@ -115,7 +105,6 @@ impl AstNode for Term<'_> {
             Term::Primitive(_) => name!("Primitive"),
             Term::UniversalVariable(_) => name!("Variable"),
             Term::ExistentialVariable(_) => name!("Existential Variable"),
-            Term::UnaryPrefix { .. } => name!("Unary Term"),
             Term::Binary { .. } => name!("Binary Term"),
             Term::Aggregation { .. } => name!("Aggregation"),
             Term::Tuple(_) => name!("Tuple"),
@@ -147,7 +136,6 @@ impl AstNode for Term<'_> {
         match self {
             Term::Primitive(_) => None,
             Term::UniversalVariable(t) => Some(t.range()),
-            Term::UnaryPrefix { .. } => None,
             Term::Blank { .. } => None,
             Term::ExistentialVariable(t) => Some(t.range()),
             Term::Binary { .. } => None,
@@ -164,7 +152,6 @@ impl AstNode for Term<'_> {
             Term::UniversalVariable(t) => {
                 Some((format!("Variable: {}", t.span()), SymbolKind::VARIABLE))
             }
-            Term::UnaryPrefix { .. } => Some((String::from("Unary prefix"), SymbolKind::OPERATOR)),
             Term::Blank { .. } => Some((String::from("Unary prefix"), SymbolKind::VARIABLE)),
             Term::ExistentialVariable { .. } => {
                 Some((String::from("Existential"), SymbolKind::VARIABLE))
