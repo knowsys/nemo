@@ -2,9 +2,12 @@
 
 use std::{fmt::Display, hash::Hash};
 
-use crate::rule_model::{component::ProgramComponent, origin::Origin};
+use crate::rule_model::{
+    component::{IteratableVariables, ProgramComponent},
+    origin::Origin,
+};
 
-use super::Term;
+use super::{primitive::variable::Variable, Term};
 
 /// Supported operations
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, PartialOrd)]
@@ -188,9 +191,89 @@ impl OperationKind {
             _ => return None,
         })
     }
+
+    /// Precendence of operations for display purposes.
+    pub(crate) fn precedence(&self) -> usize {
+        match &self {
+            Self::NumericSum => 1,
+            Self::NumericSubtraction => 1,
+            Self::NumericProduct => 2,
+            Self::NumericDivision => 2,
+            _ => 3,
+        }
+    }
 }
 
-/// Operation that can be applied to terms
+impl Display for OperationKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let string = match self {
+            OperationKind::Equal => "EQUAL",
+            OperationKind::Unequals => "UNEQUAL",
+            OperationKind::NumericSum => "SUM",
+            OperationKind::NumericSubtraction => "MINUS",
+            OperationKind::NumericProduct => "PROD",
+            OperationKind::NumericDivision => "DIV",
+            OperationKind::NumericLogarithm => "LOG",
+            OperationKind::NumericPower => "POW",
+            OperationKind::NumericRemainder => "REM",
+            OperationKind::NumericGreaterthan => "GT",
+            OperationKind::NumericGreaterthaneq => "GTE",
+            OperationKind::NumericLessthan => "LT",
+            OperationKind::NumericLessthaneq => "LTE",
+            OperationKind::StringCompare => "COMPARE",
+            OperationKind::StringContains => "CONTAINS",
+            OperationKind::StringSubstring => "SUBSTR",
+            OperationKind::StringBefore => "STRBEFORE",
+            OperationKind::StringAfter => "STRAFTER",
+            OperationKind::StringStarts => "STRSTARTS",
+            OperationKind::StringEnds => "STRENDS",
+            OperationKind::BooleanNegation => "NOT",
+            OperationKind::CastToDouble => "DOUBLE",
+            OperationKind::CastToFloat => "FLOAT",
+            OperationKind::CastToInteger => "INT",
+            OperationKind::CanonicalString => "fullStr",
+            OperationKind::CheckIsInteger => "isInteger",
+            OperationKind::CheckIsFloat => "isFloat",
+            OperationKind::CheckIsDouble => "isDouble",
+            OperationKind::CheckIsIri => "isIri",
+            OperationKind::CheckIsNumeric => "isNumeric",
+            OperationKind::CheckIsNull => "isNull",
+            OperationKind::CheckIsString => "isString",
+            OperationKind::Datatype => "DATATYPE",
+            OperationKind::LanguageTag => "LANG",
+            OperationKind::LexicalValue => "STR",
+            OperationKind::NumericAbsolute => "ABS",
+            OperationKind::NumericCosine => "COS",
+            OperationKind::NumericCeil => "CEIL",
+            OperationKind::NumericFloor => "FLOOR",
+            OperationKind::NumericNegation => "MINUS",
+            OperationKind::NumericRound => "ROUND",
+            OperationKind::NumericSine => "SIN",
+            OperationKind::NumericSquareroot => "SQRT",
+            OperationKind::NumericTangent => "TAN",
+            OperationKind::StringLength => "STRLEN",
+            OperationKind::StringReverse => "STRREV",
+            OperationKind::StringLowercase => "LCASE",
+            OperationKind::StringUppercase => "UCASE",
+            OperationKind::BitAnd => "BITAND",
+            OperationKind::BitOr => "BITOR",
+            OperationKind::BitXor => "BITXOR",
+            OperationKind::BooleanConjunction => "AND",
+            OperationKind::BooleanDisjunction => "OR",
+            OperationKind::NumericMinimum => "MIN",
+            OperationKind::NumericMaximum => "MAX",
+            OperationKind::NumericLukasiewicz => "LUKA",
+            OperationKind::StringConcatenation => "CONCAT",
+        };
+
+        write!(f, "{}", string)
+    }
+}
+
+/// Operation
+///
+/// An action or computation performed on [Term]s.
+/// This can include for example arithmetic or string operations.
 #[derive(Debug, Clone, Eq)]
 pub struct Operation {
     /// Origin of this component
@@ -218,9 +301,92 @@ impl Operation {
     }
 }
 
+// Helper functions related to the display implementation
+impl Operation {
+    /// Puts braces around `term` if it has a lower precendence than `self`.
+    fn format_braces_priority(
+        &self,
+        f: &mut std::fmt::Formatter<'_>,
+        term: &Term,
+    ) -> std::fmt::Result {
+        let need_braces = if let Term::Operation(other) = term {
+            self.kind.precedence() > other.kind.precedence()
+        } else {
+            false
+        };
+
+        if need_braces {
+            self.format_braces(f, term)
+        } else {
+            write!(f, "{}", term)
+        }
+    }
+
+    /// Put braces around the input term.
+    fn format_braces(&self, f: &mut std::fmt::Formatter<'_>, term: &Term) -> std::fmt::Result {
+        write!(f, "({})", term)
+    }
+
+    /// Formats the arguments of an operation as a delimiter separated list.
+    fn format_operation_arguments(
+        &self,
+        f: &mut std::fmt::Formatter<'_>,
+        terms: &[Term],
+        delimiter: &str,
+    ) -> std::fmt::Result {
+        for (index, term) in terms.iter().enumerate() {
+            self.format_braces_priority(f, term)?;
+
+            if index < terms.len() - 1 {
+                f.write_str(delimiter)?;
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Returns the infix symbol corresponding to the operation
+    /// or `None` if this operation should never be displayed as an infix operation.
+    fn infix_representation(&self) -> Option<&str> {
+        Some(match &self.kind {
+            OperationKind::NumericSum => "+",
+            OperationKind::NumericSubtraction => "-",
+            OperationKind::NumericProduct => "*",
+            &OperationKind::NumericDivision => "/",
+            _ => return None,
+        })
+    }
+
+    /// Format operation in the usual <name>(<arg1>, <arg2>, ...) style
+    fn format_operation(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}(", self.kind)?;
+        self.format_operation_arguments(f, &self.subterms, ",")?;
+        f.write_str(")")
+    }
+
+    /// Format operation that is more naturally written in an infix style <left> <op> <right>.
+    fn format_infix_operation(
+        &self,
+        f: &mut std::fmt::Formatter<'_>,
+        operation: &str,
+        left: &Term,
+        right: &Term,
+    ) -> std::fmt::Result {
+        self.format_braces_priority(f, left)?;
+        write!(f, " {} ", operation)?;
+        self.format_braces_priority(f, right)
+    }
+}
+
 impl Display for Operation {
-    fn fmt(&self, _f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        todo!()
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if let Some(infix) = self.infix_representation() {
+            if self.subterms.len() == 2 {
+                return self.format_infix_operation(f, infix, &self.subterms[0], &self.subterms[1]);
+            }
+        }
+
+        self.format_operation(f)
     }
 }
 
@@ -256,7 +422,7 @@ impl ProgramComponent for Operation {
     }
 
     fn origin(&self) -> &Origin {
-        todo!()
+        &self.origin
     }
 
     fn set_origin(mut self, origin: Origin) -> Self
@@ -272,5 +438,19 @@ impl ProgramComponent for Operation {
         Self: Sized,
     {
         todo!()
+    }
+}
+
+impl IteratableVariables for Operation {
+    fn variables<'a>(&'a self) -> Box<dyn Iterator<Item = &'a Variable> + 'a> {
+        Box::new(self.subterms.iter().flat_map(|term| term.variables()))
+    }
+
+    fn variables_mut<'a>(&'a mut self) -> Box<dyn Iterator<Item = &'a mut Variable> + 'a> {
+        Box::new(
+            self.subterms
+                .iter_mut()
+                .flat_map(|term| term.variables_mut()),
+        )
     }
 }

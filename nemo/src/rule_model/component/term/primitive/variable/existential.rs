@@ -8,7 +8,9 @@ use crate::rule_model::{
 
 use super::VariableName;
 
-/// Variable that allows to assert the existence of an object
+/// Existentially quantified variable
+///
+/// Variable that implies the existence of a value satisfying a certain pattern.
 #[derive(Debug, Clone, Eq)]
 pub struct ExistentialVariable {
     /// Origin of this component
@@ -84,20 +86,3 @@ impl ProgramComponent for ExistentialVariable {
         todo!()
     }
 }
-
-// impl ASTConstructable for ExistentialVariable {
-//     type Node<'a> = Term<'a>;
-
-//     fn from_ast_node<'a>(node: Term<'a>, origin: ExternalReference, _context: &ASTContext) -> Self {
-//         if let Term::UniversalVariable(token) = node {
-//             let name = token.span.to_string();
-
-//             Self {
-//                 origin: Origin::External(origin),
-//                 name: VariableName::new(name),
-//             }
-//         } else {
-//             unreachable!("TODO")
-//         }
-//     }
-// }

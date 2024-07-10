@@ -1,10 +1,16 @@
 //! This module defines [Term].
 
+#[macro_use]
 pub mod aggregate;
+#[macro_use]
 pub mod function;
+#[macro_use]
 pub mod map;
+#[macro_use]
 pub mod operation;
+#[macro_use]
 pub mod primitive;
+#[macro_use]
 pub mod tuple;
 
 use std::fmt::{Debug, Display};
@@ -13,30 +19,20 @@ use function::FunctionTerm;
 use map::Map;
 use nemo_physical::datavalues::AnyDataValue;
 use operation::Operation;
-use primitive::{ground::GroundTerm, variable::Variable, Primitive};
+use primitive::{
+    ground::GroundTerm,
+    variable::{existential::ExistentialVariable, universal::UniversalVariable, Variable},
+    Primitive,
+};
 use tuple::Tuple;
 
 use crate::rule_model::{error::ProgramConstructionError, origin::Origin};
 
-use super::ProgramComponent;
+use super::{IteratableVariables, ProgramComponent};
 
-/// Name of a term
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct Identifier(String);
-
-impl Identifier {
-    /// Create a new [Identifier].
-    pub fn new(name: String) -> Self {
-        Self(name)
-    }
-
-    /// Validate term name.
-    pub fn is_valid(&self) -> bool {
-        !self.0.is_empty()
-    }
-}
-
-/// TODO
+/// Term
+///
+/// Basic building block for expressions like atoms or facts.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd)]
 pub enum Term {
     /// Unstructured, primitive term
@@ -71,18 +67,101 @@ impl Term {
     pub fn ground(value: AnyDataValue) -> Self {
         Self::Primitive(Primitive::Ground(GroundTerm::new(value)))
     }
+}
 
-    /// Create an integer term
-    pub fn integer(number: i64) -> Self {
-        Self::Primitive(Primitive::Ground(GroundTerm::new(
-            AnyDataValue::new_integer_from_i64(number),
-        )))
+impl From<Variable> for Term {
+    fn from(value: Variable) -> Self {
+        Self::Primitive(Primitive::from(value))
+    }
+}
+
+impl From<UniversalVariable> for Term {
+    fn from(value: UniversalVariable) -> Self {
+        Self::Primitive(Primitive::from(value))
+    }
+}
+
+impl From<ExistentialVariable> for Term {
+    fn from(value: ExistentialVariable) -> Self {
+        Self::Primitive(Primitive::from(value))
+    }
+}
+
+impl From<Primitive> for Term {
+    fn from(value: Primitive) -> Self {
+        Self::Primitive(value)
+    }
+}
+
+impl From<AnyDataValue> for Term {
+    fn from(value: AnyDataValue) -> Self {
+        Self::Primitive(Primitive::from(value))
+    }
+}
+
+impl From<i64> for Term {
+    fn from(value: i64) -> Self {
+        Self::Primitive(Primitive::from(value))
+    }
+}
+
+impl From<i32> for Term {
+    fn from(value: i32) -> Self {
+        Self::Primitive(Primitive::from(value))
+    }
+}
+
+impl From<u64> for Term {
+    fn from(value: u64) -> Self {
+        Self::Primitive(Primitive::from(value))
+    }
+}
+
+impl From<String> for Term {
+    fn from(value: String) -> Self {
+        Self::Primitive(Primitive::from(value))
+    }
+}
+
+impl From<&str> for Term {
+    fn from(value: &str) -> Self {
+        Self::Primitive(Primitive::from(value))
+    }
+}
+
+impl From<FunctionTerm> for Term {
+    fn from(value: FunctionTerm) -> Self {
+        Self::FunctionTerm(value)
+    }
+}
+
+impl From<Map> for Term {
+    fn from(value: Map) -> Self {
+        Self::Map(value)
+    }
+}
+
+impl From<Operation> for Term {
+    fn from(value: Operation) -> Self {
+        Self::Operation(value)
+    }
+}
+
+impl From<Tuple> for Term {
+    fn from(value: Tuple) -> Self {
+        Self::Tuple(value)
     }
 }
 
 impl Display for Term {
-    fn fmt(&self, _f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        todo!()
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Term::Primitive(term) => write!(f, "{}", term),
+            Term::FunctionTerm(term) => write!(f, "{}", term),
+            Term::Map(term) => write!(f, "{}", term),
+            Term::Operation(term) => write!(f, "{}", term),
+            Term::Tuple(term) => write!(f, "{}", term),
+        }
     }
 }
 
@@ -125,14 +204,56 @@ impl ProgramComponent for Term {
     }
 }
 
-// impl ASTConstructable for Term {
-//     type Node<'a> = crate::io::parser::ast::term::Term<'a>;
+impl IteratableVariables for Term {
+    fn variables<'a>(&'a self) -> Box<dyn Iterator<Item = &'a Variable> + 'a> {
+        let mut iter_primitive = None;
+        let mut iter_function = None;
+        let mut iter_map = None;
+        let mut iter_operation = None;
+        let mut iter_tuple = None;
 
-//     fn from_ast_node<'a>(
-//         node: Self::Node<'a>,
-//         origin: crate::rule_model::origin::ExternalReference,
-//         context: &super::ASTContext,
-//     ) -> Self {
-//         todo!()
-//     }
-// }
+        match self {
+            Term::Primitive(primitive) => iter_primitive = Some(primitive.variables()),
+            Term::FunctionTerm(function) => iter_function = Some(function.variables()),
+            Term::Map(map) => iter_map = Some(map.variables()),
+            Term::Operation(operation) => iter_operation = Some(operation.variables()),
+            Term::Tuple(tuple) => iter_tuple = Some(tuple.variables()),
+        }
+
+        Box::new(
+            iter_primitive
+                .into_iter()
+                .flatten()
+                .chain(iter_function.into_iter().flatten())
+                .chain(iter_map.into_iter().flatten())
+                .chain(iter_operation.into_iter().flatten())
+                .chain(iter_tuple.into_iter().flatten()),
+        )
+    }
+
+    fn variables_mut<'a>(&'a mut self) -> Box<dyn Iterator<Item = &'a mut Variable> + 'a> {
+        let mut iter_primitive = None;
+        let mut iter_function = None;
+        let mut iter_map = None;
+        let mut iter_operation = None;
+        let mut iter_tuple = None;
+
+        match self {
+            Term::Primitive(primitive) => iter_primitive = Some(primitive.variables_mut()),
+            Term::FunctionTerm(function) => iter_function = Some(function.variables_mut()),
+            Term::Map(map) => iter_map = Some(map.variables_mut()),
+            Term::Operation(operation) => iter_operation = Some(operation.variables_mut()),
+            Term::Tuple(tuple) => iter_tuple = Some(tuple.variables_mut()),
+        }
+
+        Box::new(
+            iter_primitive
+                .into_iter()
+                .flatten()
+                .chain(iter_function.into_iter().flatten())
+                .chain(iter_map.into_iter().flatten())
+                .chain(iter_operation.into_iter().flatten())
+                .chain(iter_tuple.into_iter().flatten()),
+        )
+    }
+}

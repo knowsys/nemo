@@ -2,7 +2,10 @@
 
 use std::{fmt::Display, hash::Hash};
 
-use crate::rule_model::{component::ProgramComponent, origin::Origin};
+use crate::rule_model::{
+    component::{IteratableVariables, ProgramComponent},
+    origin::Origin,
+};
 
 use super::{primitive::variable::Variable, Term};
 
@@ -19,7 +22,23 @@ pub enum AggregateKind {
     SumOfNumbers,
 }
 
-/// An aggregate
+impl Display for AggregateKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let name = match self {
+            AggregateKind::CountValues => "count",
+            AggregateKind::MinNumber => "min",
+            AggregateKind::MaxNumber => "max",
+            AggregateKind::SumOfNumbers => "sum",
+        };
+
+        f.write_fmt(format_args!("#{}", name))
+    }
+}
+
+/// Aggregate
+///
+/// Function that performs a computatin over a set of [Term]s
+/// and returns a single value.
 #[derive(Debug, Clone, Eq)]
 pub struct Aggregate {
     /// Origin of this component
@@ -35,19 +54,65 @@ pub struct Aggregate {
 
 impl Aggregate {
     /// Create a new [Aggregate].
-    pub fn new(kind: AggregateKind, aggregate: Term, distinct: Vec<Variable>) -> Self {
+    pub fn new<Variables: IntoIterator<Item = Variable>>(
+        kind: AggregateKind,
+        aggregate: Term,
+        distinct: Variables,
+    ) -> Self {
         Self {
             origin: Origin::default(),
             kind,
             aggregate,
-            distinct,
+            distinct: distinct.into_iter().collect(),
         }
+    }
+
+    /// Create a new sum [Aggregate].
+    pub fn sum<Variables: IntoIterator<Item = Variable>>(
+        aggregate: Term,
+        distinct: Variables,
+    ) -> Self {
+        Self::new(AggregateKind::SumOfNumbers, aggregate, distinct)
+    }
+
+    /// Create a new count [Aggregate].
+    pub fn count<Variables: IntoIterator<Item = Variable>>(
+        aggregate: Term,
+        distinct: Variables,
+    ) -> Self {
+        Self::new(AggregateKind::CountValues, aggregate, distinct)
+    }
+
+    /// Create a new min [Aggregate].
+    pub fn min<Variables: IntoIterator<Item = Variable>>(
+        aggregate: Term,
+        distinct: Variables,
+    ) -> Self {
+        Self::new(AggregateKind::MinNumber, aggregate, distinct)
+    }
+
+    /// Create a new sum [Aggregate].
+    pub fn max<Variables: IntoIterator<Item = Variable>>(
+        aggregate: Term,
+        distinct: Variables,
+    ) -> Self {
+        Self::new(AggregateKind::MaxNumber, aggregate, distinct)
     }
 }
 
 impl Display for Aggregate {
-    fn fmt(&self, _f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        todo!()
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_fmt(format_args!("{}({}", self.kind, self.aggregate))?;
+
+        for (distinct_index, variable) in self.distinct.iter().enumerate() {
+            variable.fmt(f)?;
+
+            if distinct_index < self.distinct.len() - 1 {
+                f.write_str(", ")?;
+            }
+        }
+
+        f.write_str(")")
     }
 }
 
@@ -92,5 +157,19 @@ impl ProgramComponent for Aggregate {
         Self: Sized,
     {
         todo!()
+    }
+}
+
+impl IteratableVariables for Aggregate {
+    fn variables<'a>(&'a self) -> Box<dyn Iterator<Item = &'a Variable> + 'a> {
+        Box::new(self.aggregate.variables().chain(self.distinct.iter()))
+    }
+
+    fn variables_mut<'a>(&'a mut self) -> Box<dyn Iterator<Item = &'a mut Variable> + 'a> {
+        Box::new(
+            self.aggregate
+                .variables_mut()
+                .chain(self.distinct.iter_mut()),
+        )
     }
 }

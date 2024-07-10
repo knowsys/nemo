@@ -6,7 +6,11 @@ use crate::rule_model::error::ProgramConstructionError;
 
 use super::{atom::Atom, term::operation::Operation, ProgramComponent};
 
-/// A literal that can either be a positive or negative atom or an operation
+/// Literal
+///
+/// An [Atom], its negation, or an [Operation].
+/// Literals are used to represent conditions that must be satisfied
+/// for a rule to be applicable.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Literal {
     /// Positive atom
@@ -18,8 +22,12 @@ pub enum Literal {
 }
 
 impl Display for Literal {
-    fn fmt(&self, _f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        todo!()
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Literal::Positive(positive) => write!(f, "{}", positive),
+            Literal::Negative(negative) => write!(f, "~{}", negative),
+            Literal::Operation(operation) => write!(f, "{}", operation),
+        }
     }
 }
 

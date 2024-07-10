@@ -169,6 +169,22 @@ impl<'a, T> List<'a, T> {
     }
 }
 
+impl<T> IntoIterator for List<'_, T> {
+    type Item = T;
+
+    type IntoIter = std::vec::IntoIter<T>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        let mut vec = Vec::new();
+        vec.push(self.first);
+        if let Some(rest) = self.rest {
+            for (_, item) in rest {
+                vec.push(item);
+            }
+        }
+        vec.into_iter()
+    }
+}
 impl<T: AstNode + std::fmt::Debug> AstNode for List<'_, T> {
     fn children(&self) -> Option<Vec<&dyn AstNode>> {
         let mut vec: Vec<&dyn AstNode> = Vec::new();
@@ -219,27 +235,6 @@ impl<T: AstNode + std::fmt::Debug> Display for List<'_, T> {
         write!(f, "{output}")
     }
 }
-
-impl<'a, T> IntoIterator for &'a List<'a, T> {
-    type Item = &'a T;
-
-    type IntoIter = ListIterator<&'a T>;
-
-    fn into_iter(self) -> Self::IntoIter {
-        ListIterator(self.to_item_vec().into_iter())
-    }
-} 
-
-#[derive(Debug)]
-pub struct ListIterator<T>(std::vec::IntoIter<T>);
-
-impl<T> Iterator for ListIterator<T> {
-    type Item = T;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        self.0.next()
-    }
-} 
 
 pub(crate) fn get_all_tokens(node: &dyn AstNode) -> Vec<&dyn AstNode> {
     let mut vec = Vec::new();

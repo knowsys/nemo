@@ -2,13 +2,16 @@
 
 use std::{fmt::Display, hash::Hash};
 
-use nemo_physical::datavalues::AnyDataValue;
+use nemo_physical::datavalues::{AnyDataValue, IriDataValue};
 
 use crate::rule_model::{
     component::ProgramComponent, error::ProgramConstructionError, origin::Origin,
 };
 
 /// Primitive ground term
+///
+/// Represents a basic, indivisble constant value like integers, or strings.
+/// Such terms are the atomic values used in the construction of more complex expressions.
 #[derive(Debug, Clone, Eq)]
 pub struct GroundTerm {
     /// Origin of this component
@@ -24,6 +27,48 @@ impl GroundTerm {
             origin: Origin::Created,
             value,
         }
+    }
+}
+
+impl From<AnyDataValue> for GroundTerm {
+    fn from(value: AnyDataValue) -> Self {
+        Self::new(value)
+    }
+}
+
+impl From<i32> for GroundTerm {
+    fn from(value: i32) -> Self {
+        Self::new(AnyDataValue::new_integer_from_i64(value.into()))
+    }
+}
+
+impl From<i64> for GroundTerm {
+    fn from(value: i64) -> Self {
+        Self::new(AnyDataValue::new_integer_from_i64(value))
+    }
+}
+
+impl From<u64> for GroundTerm {
+    fn from(value: u64) -> Self {
+        Self::new(AnyDataValue::new_integer_from_u64(value))
+    }
+}
+
+impl From<String> for GroundTerm {
+    fn from(value: String) -> Self {
+        Self::new(AnyDataValue::new_plain_string(value))
+    }
+}
+
+impl From<&str> for GroundTerm {
+    fn from(value: &str) -> Self {
+        Self::new(AnyDataValue::new_plain_string(value.to_string()))
+    }
+}
+
+impl From<IriDataValue> for GroundTerm {
+    fn from(value: IriDataValue) -> Self {
+        Self::new(AnyDataValue::new_iri(value.to_string()))
     }
 }
 
@@ -78,57 +123,3 @@ impl ProgramComponent for GroundTerm {
         Ok(())
     }
 }
-
-// impl ASTConstructable for GroundTerm {
-//     type Node<'a> = Primitive<'a>;
-
-//     fn from_ast_node<'a>(
-//         node: Self::Node<'a>,
-//         origin: ExternalReference,
-//         context: &ASTContext,
-//     ) -> Self {
-//         match node {
-//             Primitive::Constant(token) => {
-//                 Self::create_parsed(AnyDataValue::new_iri(token.to_string()), origin)
-//             }
-//             Primitive::PrefixedConstant {
-//                 prefix, constant, ..
-//             } => {
-//                 let prefixed_constant = prefix
-//                     .map(|token| {
-//                         context
-//                             .prefixes
-//                             .get(&token.to_string())
-//                             .cloned()
-//                             .unwrap_or(token.to_string()) // TODO: We could also panic here
-//                     })
-//                     .unwrap_or(String::from(""))
-//                     + &constant.to_string();
-
-//                 Self::create_parsed(AnyDataValue::new_iri(prefixed_constant), origin)
-//             }
-//             Primitive::Number {
-//                 span,
-//                 sign,
-//                 before,
-//                 dot,
-//                 after,
-//                 exponent,
-//             } => {
-//                 // TODO: Create number values
-//                 // Self::create_parsed(AnyDataValue:: span.to_string(), origin)
-//                 todo!()
-//             }
-//             Primitive::String(string) => {
-//                 Self::create_parsed(AnyDataValue::new_plain_string(string.to_string()), origin)
-//             }
-//             Primitive::Iri(iri) => {
-//                 Self::create_parsed(AnyDataValue::new_iri(iri.to_string()), origin)
-//             }
-//             Primitive::RdfLiteral { string, iri, .. } => Self::create_parsed(
-//                 AnyDataValue::new_other(string.to_string(), iri.to_string()),
-//                 origin,
-//             ),
-//         }
-//     }
-// }

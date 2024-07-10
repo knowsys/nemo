@@ -74,28 +74,25 @@ impl Program {
     ) {
         let origin = Origin::External(self.rules.len());
 
-        let rule_builder = RuleBuilder::default().origin(origin);
-        let mut head_builder = rule_builder.head();
+        let mut rule_builder = RuleBuilder::default().origin(origin);
 
-        // TODO: check whether the list iterator implementation is good
-        for (head_index, head_atom) in head.to_item_vec().iter().enumerate() {
+        // TODO: Implement a normal iterator to avoid cloning
+        for (head_index, head_atom) in head.clone().into_iter().enumerate() {
             let origin = Origin::External(head_index);
             if let Literal::Positive(atom) = Self::ast_build_literal(origin, &head_atom) {
-                head_builder = head_builder.add_atom(atom);
+                rule_builder.add_head_atom_mut(atom);
             } else {
                 unreachable!("head must only contain positive atoms")
             }
         }
 
-        let mut body_builder = head_builder.done().body();
-
-        // TODO: check wether the list iterator implementation is good
-        for (body_index, body_atom) in body.into_iter().enumerate() {
+        // TODO: Implement a normal iterator to avoid cloning
+        for (body_index, body_atom) in body.clone().into_iter().enumerate() {
             let origin = Origin::External(body_index);
-            body_builder = body_builder.add_literal(Self::ast_build_literal(origin, &body_atom));
+            rule_builder.add_body_literal_mut(Self::ast_build_literal(origin, &body_atom));
         }
 
-        self.rules.push(body_builder.done().finalize());
+        self.rules.push(rule_builder.finalize());
     }
 
     fn ast_build_literal(origin: Origin, atom: &ast::atom::Atom) -> Literal {
