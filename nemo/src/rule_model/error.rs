@@ -2,23 +2,54 @@
 
 use thiserror::Error;
 
-use super::component::{
-    atom::Atom,
-    fact::Fact,
-    term::{primitive::variable::Variable, Term},
-};
+use super::component::term::{aggregate::Aggregate, primitive::variable::Variable, Term};
 
 /// Error returned during the construction of objects from nemo's logical rule model
 #[derive(Error, Debug)]
 pub enum ProgramConstructionError {
-    #[error("variable \"{0}\" has an invalid name")]
+    /// An existentially quantified variable occurs in the body of a rule.
+    #[error(r#"existential variable used in rule body: `{0}`"#)]
+    BodyExistential(Variable),
+    /// Unsafe variable used in the head of the rule.
+    #[error(r#"unsafe variable used in rule head: `{0}`"#)]
+    HeadUnsafe(Variable),
+    /// Anonymous variable used in the head of the rule.
+    #[error(r#"anonymous variable used in rule head"#)]
+    HeadAnonymous,
+    /// Operation with unsafe variable
+    #[error(r#"unsafe variable used in computation: `{0}`"#)]
+    OperationUnsafe(Variable),
+    /// Unsafe variable used in multiple negative literals
+    #[error(r#"unsafe variable used in multiple negative literals: `{0}`"#)]
+    MultipleNegativeLiteralsUnsafe(Variable),
+    /// Aggregate is used in body
+    #[error(r#"aggregate used in rule body: `{0}`"#)]
+    BodyAggregate(Aggregate),
+    /// Unsupported feature: Multiple aggregates in one rule
+    #[error(r#"multiple aggregates in one rule is currently unsupported"#)]
+    AggregateMultiple,
+    /// Unsupported feature: Aggregates combined with existential rules
+    #[error(r#"aggregates and existential variables in one rule is currently unsupported"#)]
+    AggregatesAndExistentials,
+    /// A variable is both universally and existentially quantified
+    #[error(r#"variable is both universal and existential: `{0}`"#)]
+    VariableMultipleQuantifiers(String),
+    /// Fact contains non-ground term
+    #[error(r#"non-ground term used in fact: `{0}`"#)]
+    FactNonGround(Term),
+    /// Atom used without any arguments
+    #[error(r#"atoms without arguments are currently unsupported"#)]
+    AtomNoArguments,
+    /// Non-primitive terms are currently unsupported
+    #[error(r#"complex terms are currently unsupported"#)]
+    ComplexTerm,
+    /// Invalid variable name was used
+    #[error(r#"variable name is invalid: `{0}`"#)]
     InvalidVariableName(String),
-    #[error("term \"{0}\" has an invalid name")]
-    InvalidIdentifier(String),
-    #[error("atom \"{0}\" has an invalid name")]
-    InvalidAtomName(String),
-    #[error("fact {0} contains ")]
-    NonGroundFact(Fact),
-    #[error("parse error")] // TODO: Return parser error here
-    ParseError,
+    /// Invalid tag was used
+    #[error(r#"tag is invalid: `{0}`"#)]
+    InvalidTermTag(String),
+    /// Invalid predicate name was used
+    #[error(r#"predicate name is invalid: `{0}"#)]
+    InvalidPredicateName(String),
 }
