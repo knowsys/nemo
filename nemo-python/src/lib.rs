@@ -10,7 +10,7 @@ use std::{
 use nemo::{
     datavalues::{AnyDataValue, DataValue},
     execution::{tracing::trace::ExecutionTraceTree, ExecutionEngine},
-    io::{resource_providers::ResourceProviders, ExportManager, ImportManager},
+    io::{lexer::Error, resource_providers::ResourceProviders, ExportManager, ImportManager},
     meta::timing::TimedCode,
     model::{
         chase_model::{ChaseAtom, ChaseFact},
@@ -38,6 +38,13 @@ impl<T> PythonResult for Result<T, nemo::error::Error> {
         self.map_err(|err| NemoError::new_err(format!("{}", err)))
     }
 }
+impl<T> PythonResult for (T, Vec<Error>) {
+    type Value = T;
+
+    fn py_res(self) -> PyResult<Self::Value> {
+        todo!("It is unclear what should get returned")
+    }
+}
 
 #[pyclass]
 #[derive(Clone)]
@@ -46,13 +53,17 @@ struct NemoProgram(nemo::model::Program);
 #[pyfunction]
 fn load_file(file: String) -> PyResult<NemoProgram> {
     let contents = read_to_string(file)?;
-    let program = nemo::io::parser::parse_program(contents).py_res()?;
+    let ast = nemo::io::parser::parse_program_str(&contents).py_res()?;
+    let program = nemo::rule_model::program::Program::from_ast(ast);
+    let program = todo!("update NemoProgram to use the new rule model");
     Ok(NemoProgram(program))
 }
 
 #[pyfunction]
 fn load_string(rules: String) -> PyResult<NemoProgram> {
-    let program = nemo::io::parser::parse_program(rules).py_res()?;
+    let ast = nemo::io::parser::parse_program_str(&rules).py_res()?;
+    let program = nemo::rule_model::program::Program::from_ast(ast);
+    let program = todo!("update NemoProgram to use the new rule model");
     Ok(NemoProgram(program))
 }
 
@@ -399,7 +410,10 @@ impl NemoEngine {
     }
 
     fn trace(&mut self, fact: String) -> Option<NemoTrace> {
-        let parsed_fact = nemo::io::parser::parse_fact(fact).py_res().ok()?;
+        let (ast, _errors) = nemo::io::parser::parse_fact_str(&fact); /*.py_res().ok()?;*/
+        // TODO: Report errors...
+        let parsed_fact = nemo::rule_model::component::fact::Fact::from_ast(ast);
+        let parsed_fact = todo!();
         let (trace, handles) = self.engine.trace(self.program.0.clone(), vec![parsed_fact]);
         let handle = *handles
             .first()
