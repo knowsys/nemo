@@ -1,0 +1,11 @@
+%%% Test related to 
+%%% https://github.com/knowsys/nemo/issues/500
+%%%
+%%% A panic was caused by having a filter consisting of constants
+
+pair(1, 2) .
+pair(3, 3) .
+
+equal(?x) :- pair(?x, ?y), c = d .
+
+@export equal :- csv {} .

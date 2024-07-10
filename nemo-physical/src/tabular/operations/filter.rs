@@ -117,15 +117,20 @@ impl GeneratorFilter {
 
     /// Helper function that finds the [OperationColumnMarker] used in the given [Filter]
     /// that appears closest to the end of the given [OperationTable].
-    fn find_last_reference(table: &OperationTable, filter: &Filter) -> OperationColumnMarker {
+    ///
+    /// Returns `None` if the given filter does not use any values as input.
+    fn find_last_reference(
+        table: &OperationTable,
+        filter: &Filter,
+    ) -> Option<OperationColumnMarker> {
         let references = filter.references();
         for marker in table.iter().rev() {
             if references.contains(marker) {
-                return *marker;
+                return Some(*marker);
             }
         }
 
-        unreachable!("Filter must only use markers from the table.")
+        None
     }
 
     /// Helper function that takes a list of boolean [Filter]s
@@ -139,7 +144,7 @@ impl GeneratorFilter {
         let mut grouped_filters = HashMap::<OperationColumnMarker, Vec<&Filter>>::new();
 
         for filter in filters {
-            let marker = Self::find_last_reference(input, filter);
+            let marker = Self::find_last_reference(input, filter).unwrap_or(input[0]);
             grouped_filters.entry(marker).or_default().push(filter);
         }
 

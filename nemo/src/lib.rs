@@ -1,5 +1,6 @@
 //! A fast in-memory rule engine
 
+#![type_length_limit = "5000000000"]
 #![deny(
     missing_debug_implementations,
     missing_copy_implementations,
