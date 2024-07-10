@@ -1,6 +1,7 @@
 //! This module defines functions on string.
 
-use std::cmp::Ordering;
+use once_cell::sync::OnceCell;
+use std::{cmp::Ordering, num::NonZero, sync::Mutex};
 use unicode_segmentation::UnicodeSegmentation;
 
 use crate::{
@@ -327,6 +328,9 @@ impl BinaryFunction for StringSubstring {
     }
 }
 
+const REGEX_CACHE_SIZE: NonZero<usize> = unsafe { NonZero::new_unchecked(32) };
+static REGEX_CACHE: OnceCell<Mutex<lru::LruCache<String, regex::Regex>>> = OnceCell::new();
+
 /// Regex string matching
 ///
 /// Returns `true` from the boolean value space if the regex provided as the second parameter
@@ -343,7 +347,14 @@ impl BinaryFunction for StringRegex {
         parameter_second: AnyDataValue,
     ) -> Option<AnyDataValue> {
         string_pair_from_any(parameter_first, parameter_second).map(|(string, pattern)| {
-            match regex::Regex::new(&pattern) {
+            let mut cache = REGEX_CACHE
+                .get_or_init(|| Mutex::new(lru::LruCache::new(REGEX_CACHE_SIZE)))
+                .lock()
+                .unwrap();
+
+            let regex = cache.try_get_or_insert(pattern.clone(), || regex::Regex::new(&pattern));
+
+            match regex {
                 Ok(regex) => AnyDataValue::new_boolean(regex.is_match(&string)),
                 Err(_) => AnyDataValue::new_boolean(false),
             }
