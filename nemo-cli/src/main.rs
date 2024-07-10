@@ -29,7 +29,7 @@ use nemo::{
     error::{Error, ReadingError},
     execution::{DefaultExecutionEngine, ExecutionEngine},
     io::{
-        parser::{parse_fact, parse_program},
+        parser::{parse_fact_str, parse_program_str},
         resource_providers::ResourceProviders,
         ImportManager,
     },
@@ -165,7 +165,12 @@ fn run(mut cli: CliApp) -> Result<(), Error> {
         filename: rules.to_string_lossy().to_string(),
     })?;
 
-    let mut program = parse_program(rules_content)?;
+    // let mut program = parse_program(rules_content)?;
+    let (ast, _errors) = parse_program_str(&rules_content);
+    log::debug!("AST:\n{ast}");
+    // TODO: Report errors!
+    log::debug!("ERRORS:\n{_errors:#?}");
+    let program = nemo::rule_model::program::Program::from_ast(ast);
 
     log::info!("Rules parsed");
     log::trace!("{:?}", program);
@@ -201,23 +206,33 @@ fn run(mut cli: CliApp) -> Result<(), Error> {
                 )
             });
 
-        raw_facts_to_be_traced
-            .map(|f| f.into_iter().map(parse_fact).collect::<Result<Vec<_>, _>>())
-            .transpose()?
+        // raw_facts_to_be_traced
+        //     .map(|f| {
+        //         f.into_iter()
+        //             .map(/*parse_fact_str*/) // FIXME: Iterator over Strings and not &str
+        //             .collect::<Result<Vec<_>, _>>()
+        //     })
+        //     .transpose()?
+        None::<Vec<String>> // NOTE: This is just a quick and dirty fix
     };
 
-    override_exports(&mut program, cli.output.export_setting);
+    // FIXME: Change override exports to use the new rule model
+    // override_exports(&mut program, cli.output.export_setting);
 
     let export_manager = cli.output.export_manager()?;
     // Validate exports even if we do not intend to write data:
-    for export in program.exports() {
-        export_manager.validate(export)?;
-    }
+    // FIXME: How does the new rule model handle exports?
+    // for export in program.exports() {
+    //     export_manager.validate(export)?;
+    // }
 
     let import_manager =
         ImportManager::new(ResourceProviders::with_base_path(cli.import_directory));
 
-    let mut engine: DefaultExecutionEngine = ExecutionEngine::initialize(&program, import_manager)?;
+    let mut engine: DefaultExecutionEngine = ExecutionEngine::initialize(
+        /*&program*/ todo!("change the old rule model to the new one"),
+        import_manager,
+    )?;
 
     TimedCode::instance().sub("Reading & Preprocessing").stop();
 
@@ -234,15 +249,16 @@ fn run(mut cli: CliApp) -> Result<(), Error> {
             .start();
         log::info!("writing output");
 
-        for export_directive in program.exports() {
-            if let Some(arity) = engine.predicate_arity(export_directive.predicate()) {
-                stdout_used |= export_manager.export_table(
-                    export_directive,
-                    engine.predicate_rows(export_directive.predicate())?,
-                    arity,
-                )?;
-            }
-        }
+        // FIXME: How are exports handled in the new rule model?
+        // for export_directive in program.exports() {
+        //     if let Some(arity) = engine.predicate_arity(export_directive.predicate()) {
+        //         stdout_used |= export_manager.export_table(
+        //             export_directive,
+        //             engine.predicate_rows(export_directive.predicate())?,
+        //             arity,
+        //         )?;
+        //     }
+        // }
 
         TimedCode::instance()
             .sub("Output & Final Materialization")
@@ -273,30 +289,31 @@ fn run(mut cli: CliApp) -> Result<(), Error> {
         print_memory_details(&engine);
     }
 
-    if let Some(facts) = facts_to_be_traced {
-        let (trace, handles) = engine.trace(program.clone(), facts.clone());
+    // NOTE: As a quick and dirty fix I commented this out, because `program.clone()` did not exist
+    // if let Some(facts) = facts_to_be_traced {
+    //     let (trace, handles) = engine.trace(program.clone(), facts.clone());
 
-        match cli.tracing.output_file {
-            Some(output_file) => {
-                let filename = output_file.to_string_lossy().to_string();
-                let trace_json = trace.json(&handles);
+    //     match cli.tracing.output_file {
+    //         Some(output_file) => {
+    //             let filename = output_file.to_string_lossy().to_string();
+    //             let trace_json = trace.json(&handles);
 
-                let mut json_file = File::create(output_file)?;
-                if serde_json::to_writer(&mut json_file, &trace_json).is_err() {
-                    return Err(Error::SerializationError { filename });
-                }
-            }
-            None => {
-                for (fact, handle) in facts.into_iter().zip(handles) {
-                    if let Some(tree) = trace.tree(handle) {
-                        println!("\n{}", tree.to_ascii_art());
-                    } else {
-                        println!("\n{fact} was not derived");
-                    }
-                }
-            }
-        }
-    }
+    //             let mut json_file = File::create(output_file)?;
+    //             if serde_json::to_writer(&mut json_file, &trace_json).is_err() {
+    //                 return Err(Error::SerializationError { filename });
+    //             }
+    //         }
+    //         None => {
+    //             for (fact, handle) in facts.into_iter().zip(handles) {
+    //                 if let Some(tree) = trace.tree(handle) {
+    //                     println!("\n{}", tree.to_ascii_art());
+    //                 } else {
+    //                     println!("\n{fact} was not derived");
+    //                 }
+    //             }
+    //         }
+    //     }
+    // }
 
     Ok(())
 }
