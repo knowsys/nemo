@@ -15,7 +15,7 @@ use super::{
         rule::{Rule, RuleBuilder},
         term::{
             function::FunctionTerm,
-            operation::{Operation, OperationKind},
+            operation::{operation_kind::OperationKind, Operation},
             Term,
         },
         ProgramComponent,
