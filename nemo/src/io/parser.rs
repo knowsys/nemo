@@ -2782,7 +2782,7 @@ pub mod new {
         // dbg!(&input.parser_state.labels);
         context(
             Context::Fact,
-            tuple((opt(lex_doc_comment), parse_normal_atom, wsoc0, dot)),
+            tuple((opt(lex_doc_comment), parse_fact_atom, wsoc0, dot)),
         )(input)
         .map(|(rest_input, (doc_comment, atom, _ws, dot))| {
             (
@@ -2790,11 +2790,28 @@ pub mod new {
                 Statement::Fact {
                     span: outer_span(input.input, rest_input.input),
                     doc_comment,
-                    atom,
+                    fact: atom,
                     dot,
                 },
             )
         })
+    }
+
+    fn parse_fact_atom<
+        'a,
+        's,
+        E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>, Context>,
+    >(
+        input: Input<'a, 's>,
+    ) -> IResult<Input<'a, 's>, Fact<'a>, E> {
+        // TODO: Add Context
+        match parse_named_tuple::<E>(input) {
+            Ok((rest_input, named_tuple)) => Ok((rest_input, Fact::NamedTuple(named_tuple))),
+            Err(_) => match parse_map::<E>(input) {
+                Ok((rest_input, map)) => Ok((rest_input, Fact::Map(map))),
+                Err(err) => Err(err),
+            },
+        }
     }
 
     /// Parse a rule of the form `headPredicate1(term1, term2, …), headPredicate2(term1, term2, …) :- bodyPredicate(term1, …), term1 >= (term2 + term3) * function(term1, …) .`
@@ -3108,9 +3125,13 @@ pub mod new {
         move |input: Input<'a, 's>| {
             context(
                 Context::List,
-                pair(parse_t, many0(tuple((wsoc0, comma, wsoc0, parse_t)))),
+                tuple((
+                    parse_t,
+                    many0(tuple((wsoc0, comma, wsoc0, parse_t))),
+                    pair(wsoc0, opt(comma)),
+                )),
             )(input)
-            .map(|(rest_input, (first, rest))| {
+            .map(|(rest_input, (first, rest, (_, trailing_comma)))| {
                 (
                     rest_input,
                     List {
@@ -3125,6 +3146,7 @@ pub mod new {
                                     .collect(),
                             )
                         },
+                        trailing_comma,
                     },
                 )
             })
@@ -3304,43 +3326,10 @@ pub mod new {
         parse_map(input).map(|(rest_input, map)| (rest_input, Atom::Map(map)))
     }
 
-    // /// Parse a pair list of the form `key1 = value1, key2 = value2, …`.
-    // fn parse_pair_list<'a, 's, E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>, Context>>(
-    //     input: Input<'a, 's>,
-    //     state: Errors,
-    // ) -> IResult<Input<'a, 's>, Option<List<'a, Pair<Term<'a>, Term<'a>>>>, E> {
-    //     context(
-    //         "parse pair list",
-    //         opt(pair(
-    //             parse_pair,
-    //             many0(tuple((
-    //                 opt(lex_whitespace),
-    //                 comma,
-    //                 opt(lex_whitespace),
-    //                 parse_pair,
-    //             ))),
-    //         )),
-    //     )(input)
-    //     .map(|(rest_input, pair_list)| {
-    //         if let Some((first, rest)) = pair_list {
-    //             (
-    //                 rest_input,
-    //                 Some(List {
-    //                     span: outer_span(input, rest_input),
-    //                     first,
-    //                     rest: if rest.is_empty() { None } else { Some(rest) },
-    //                 }),
-    //             )
-    //         } else {
-    //             (rest_input, None)
-    //         }
-    //     })
-    // }
-
     /// Parse a pair of the form `key = value`.
     fn parse_pair<'a, 's, E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>, Context>>(
         input: Input<'a, 's>,
-    ) -> IResult<Input<'a, 's>, Pair<'a, Term<'a>, Term<'a>>, E> {
+    ) -> IResult<Input<'a, 's>, Pair<'a>, E> {
         context(
             Context::Pair,
             tuple((parse_term, wsoc0, equal, wsoc0, parse_term)),
@@ -3357,35 +3346,6 @@ pub mod new {
             )
         })
     }
-
-    // /// Parse a list of terms of the form `term1, term2, …`.
-    // fn parse_term_list<'a, 's, E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>, Context>>(
-    //     input: Input<'a, 's>,
-    //     state: Errors,
-    // ) -> IResult<Input<'a, 's>, List<'a, Term<'a>>, E> {
-    //     context(
-    //         "parse term list",
-    //         pair(
-    //             parse_term,
-    //             many0(tuple((
-    //                 opt(lex_whitespace),
-    //                 comma,
-    //                 opt(lex_whitespace),
-    //                 parse_term,
-    //             ))),
-    //         ),
-    //     )(input)
-    //     .map(|(rest_input, (first, rest))| {
-    //         (
-    //             rest_input,
-    //             List {
-    //                 span: outer_span(input, rest_input),
-    //                 first,
-    //                 rest: if rest.is_empty() { None } else { Some(rest) },
-    //             },
-    //         )
-    //     })
-    // }
 
     /// Parse a term. A term can be a primitive value (constant, number, string, …),
     /// a variable (universal or existential), a map, a function (-symbol), an arithmetic
@@ -3878,7 +3838,7 @@ pub mod new {
                     statements: vec![Statement::Fact {
                         span: s!(0, 1, "a(B,C)."),
                         doc_comment: None,
-                        atom: Atom::Positive(NamedTuple {
+                        fact: Fact::NamedTuple(NamedTuple {
                             span: s!(0, 1, "a(B,C)"),
                             identifier: s!(0, 1, "a"),
                             tuple: Tuple {
@@ -3891,6 +3851,7 @@ pub mod new {
                                         s!(3, 1, ","),
                                         Term::Primitive(Primitive::Constant(s!(4, 1, "C"),)),
                                     )]),
+                                    trailing_comma: None,
                                 }),
                                 close_paren: s!(5, 1, ")"),
                             }
@@ -3964,6 +3925,7 @@ pub mod new {
                                         ),)),
                                     },
                                     rest: None,
+                                    trailing_comma: None,
                                 }),
                                 close_brace: s!(134, 1, "}"),
                             },
@@ -3994,6 +3956,7 @@ pub mod new {
                                     (s!(162, 1, ","), s!(164, 1, "b"),),
                                     (s!(165, 1, ","), s!(167, 1, "c"),),
                                 ]),
+                                trailing_comma: None,
                             }),
                             dot: s!(168, 1, "."),
                         }),
@@ -4036,7 +3999,7 @@ pub mod new {
                         Statement::Fact {
                             span: s!(0, 1, "some(Fact, with, whitespace) ."),
                             doc_comment: None,
-                            atom: Atom::Positive(NamedTuple {
+                            fact: Fact::NamedTuple(NamedTuple {
                                 span: s!(0, 1, "some(Fact, with, whitespace)"),
                                 identifier: s!(0, 1, "some"),
                                 tuple: Tuple {
@@ -4063,6 +4026,7 @@ pub mod new {
                                                 ))),
                                             ),
                                         ]),
+                                        trailing_comma: None,
                                     }),
                                     close_paren: s!(27, 1, ")"),
                                 }
@@ -4525,7 +4489,8 @@ oldLime(?location,?species,?age) :- tree(?location,?species,?age,?heightInMeters
                                                         }
                                                     )),
                                                 },
-                                                rest: None
+                                                rest: None,
+                                                trailing_comma: None,
                                             }),
                                             close_paren: T! {CloseParen, 13,1,")"},
                                         }))),
@@ -4541,7 +4506,8 @@ oldLime(?location,?species,?age) :- tree(?location,?species,?age,?heightInMeters
                                     }),
                                 }),
                             },
-                            rest: None
+                            rest: None,
+                            trailing_comma: None,
                         }),
                         close_paren: T!(CloseParen, 16, 1, ")")
                     }))),
@@ -4640,6 +4606,7 @@ oldLime(?location,?species,?age) :- tree(?location,?species,?age,?heightInMeters
                                         })),
                                     },
                                     rest: None,
+                                    trailing_comma: None,
                                 }),
                                 close_paren: T! {CloseParen, 12,1,")"},
                             }))),
@@ -4878,7 +4845,7 @@ oldLime(?location,?species,?age) :- tree(?location,?species,?age,?heightInMeters
         // TODO: Instead of just checking for errors, this should compare the created AST
         #[test]
         fn parse_trailing_comma() {
-            let test_string = "head(?X) :- body( (2,), (3, 4,  ), ?X) ."; // should allow for spaces
+            let test_string = "head(?X) :- body( (2 ,), (3, 4 ,  ), ?X) ."; // should allow for spaces
             let input = Span::new(&test_string);
             let refcell = RefCell::new(Vec::new());
             let parser_state = ParserState { errors: &refcell };

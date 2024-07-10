@@ -53,7 +53,7 @@ impl Program {
                 ast::statement::Statement::Fact {
                     span,
                     doc_comment,
-                    atom,
+                    fact: atom,
                     dot,
                 } => todo!(),
                 ast::statement::Statement::Rule { head, body, .. } => {
