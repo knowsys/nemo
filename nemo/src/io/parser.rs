@@ -2699,7 +2699,11 @@ fn wsoc1<'a, 's, E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>, Cont
 }
 
 /// Parse a full program consisting of directives, facts, rules and comments.
-fn parse_program<'a, 's, E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>, Context>>(
+pub fn parse_program<
+    'a,
+    's,
+    E: ParseError<Input<'a, 's>> + ContextError<Input<'a, 's>, Context>,
+>(
     input: Input<'a, 's>,
 ) -> (Program<'a>, Vec<Error>) {
     let result = context(
