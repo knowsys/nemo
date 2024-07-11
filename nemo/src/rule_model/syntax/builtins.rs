@@ -13,19 +13,19 @@ pub(crate) const BUILTIN_LESS: &str = "LESS";
 /// Check if a numeric value is smaller or equal to another
 pub(crate) const BUILTIN_LESSQ: &str = "LESSEQ";
 /// Check if value is an integer
-pub(crate) const BUILTIN_isInteger: &str = "isInteger";
+pub(crate) const BUILTIN_IS_INTEGER: &str = "isInteger";
 /// Check if value is a 32bit floating point number
-pub(crate) const BUILTIN_isFloat: &str = "isFloat";
+pub(crate) const BUILTIN_IS_FLOAT: &str = "isFloat";
 /// Check if value is a 64bit floating point number
-pub(crate) const BUILTIN_isDouble: &str = "isDouble";
+pub(crate) const BUILTIN_IS_DOUBLE: &str = "isDouble";
 /// Check if value is an iri
-pub(crate) const BUILTIN_isIri: &str = "isIri";
+pub(crate) const BUILTIN_IS_IRI: &str = "isIri";
 /// Check if value is numeric
-pub(crate) const BUILTIN_isNumeric: &str = "isNumeric";
+pub(crate) const BUILTIN_IS_NUMERIC: &str = "isNumeric";
 /// Check if value is null
-pub(crate) const BUILTIN_isNull: &str = "isNull";
+pub(crate) const BUILTIN_IS_NULL: &str = "isNull";
 /// Check if value is string
-pub(crate) const BUILTIN_isString: &str = "isString";
+pub(crate) const BUILTIN_IS_STRING: &str = "isString";
 /// Compute the absoule value of a number
 pub(crate) const BUILTIN_ABS: &str = "ABS";
 /// Compute the square root of a number
@@ -33,7 +33,7 @@ pub(crate) const BUILTIN_SQRT: &str = "SQRT";
 /// Logical negation of a boolean value
 pub(crate) const BUILTIN_NOT: &str = "NOT";
 /// String representation of a value
-pub(crate) const BUILTIN_fullStr: &str = "fullStr";
+pub(crate) const BUILTIN_FULLSTR: &str = "fullStr";
 /// Lexical value
 pub(crate) const BUILTIN_STR: &str = "STR";
 /// Compute the sine of a value
@@ -67,7 +67,7 @@ pub(crate) const BUILTIN_DOUBLE: &str = "DOUBLE";
 /// Convert the value to a 32bit floating point number
 pub(crate) const BUILTIN_FLOAT: &str = "FLOAT";
 /// Compute the logarithm of the numerical value
-pub(crate) const BUILTIN_LOG: &str = "LOG";
+pub(crate) const BUILTIN_LOGARITHM: &str = "LOG";
 /// Raise the numerical value to a power
 pub(crate) const BUILTIN_POW: &str = "POW";
 /// Compare two string values
@@ -100,8 +100,14 @@ pub(crate) const BUILTIN_MIN: &str = "MIN";
 pub(crate) const BUILTIN_LUKA: &str = "LUKA";
 /// Compute the sum of numerical values
 pub(crate) const BUILTIN_SUM: &str = "SUM";
-/// Comput the product of numerical values
-pub(crate) const BUILTIN_PROD: &str = "PROD";
+/// Compute the product of numerical values
+pub(crate) const BUILTIN_PRODUCT: &str = "PROD";
+/// Compute the difference between to numeric values
+pub(crate) const BUILTIN_SUBTRACTION: &str = "MINUS";
+/// Compute the quotient of two numeric values
+pub(crate) const BUILTIN_DIVISION: &str = "DIV";
+/// Compute the multiplicative inverse of a numeric value
+pub(crate) const BUILTIN_INVERSE: &str = "INVERSE";
 /// Compute the logical and between boolean values
 pub(crate) const BUILTIN_AND: &str = "AND";
 /// Compute the logical or between boolean values

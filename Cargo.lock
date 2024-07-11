@@ -595,6 +595,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "enum-assoc"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "24247b89d37b9502dc5a4b80d369aab1a12106067776e440094c786dae5b9d07"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 1.0.109",
+]
+
+[[package]]
 name = "enum_dispatch"
 version = "0.3.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1457,6 +1468,7 @@ dependencies = [
  "bytesize",
  "csv",
  "dyn-clone",
+ "enum-assoc",
  "env_logger 0.11.3",
  "flate2",
  "getrandom",
