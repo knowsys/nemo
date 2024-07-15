@@ -6,7 +6,7 @@ use futures::lock::Mutex;
 use line_index::{LineCol, LineIndex, WideEncoding};
 use nemo::io::parser::ast::program::Program;
 use nemo::io::parser::ast::{AstNode, Position};
-use nemo::io::parser::new::parse_program_str;
+use nemo::io::parser::parse_program_str;
 use nemo_position::{lsp_position_to_nemo_position, PositionConversionError};
 use tower_lsp::lsp_types::{
     Diagnostic, DidChangeTextDocumentParams, DidOpenTextDocumentParams, DocumentChangeOperation,

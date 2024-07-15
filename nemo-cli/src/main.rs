@@ -22,6 +22,7 @@ pub mod cli;
 
 use std::fs::{read_to_string, File};
 
+use ariadne::{Color, ColorGenerator, Fmt, Label, Report, ReportKind, Source};
 use clap::Parser;
 use cli::{CliApp, Exporting, Reporting};
 use colored::Colorize;
@@ -35,6 +36,7 @@ use nemo::{
     },
     meta::timing::{TimedCode, TimedDisplay},
     model::{ExportDirective, Program},
+    parser::ParserErrorReport,
 };
 
 /// Set exports according to command-line parameter.
@@ -165,15 +167,47 @@ fn run(mut cli: CliApp) -> Result<(), Error> {
         filename: rules.to_string_lossy().to_string(),
     })?;
 
+    let program =
+        match nemo::parser::Parser::initialize(&rules_content, rules.to_string_lossy().to_string())
+            .parse()
+        {
+            Ok(program) => program,
+            Err(report) => {
+                report.eprint(report.build_reports(Color::Red))?;
+                std::process::exit(1);
+            }
+        };
+
     // let mut program = parse_program(rules_content)?;
-    let (ast, _errors) = parse_program_str(&rules_content);
-    log::debug!("AST:\n{ast}");
+    // let (ast, errors) = parse_program_str(&rules_content);
+
+    // if !errors.is_empty() {
+    //     for error in errors {
+    //         let color = Color::Red;
+
+    //         let r = Report::build(ReportKind::Error, String::from("test"), 100)
+    //             .with_code(3)
+    //             .with_message(&error.msg)
+    //             .with_label(
+    //                 Label::new((
+    //                     String::from("test"),
+    //                     error.pos.offset..(error.pos.offset + 1),
+    //                 ))
+    //                 .with_message(&error.msg)
+    //                 .with_color(color),
+    //             )
+    //             .finish();
+    //         r.eprint((String::from("test"), Source::from(&rules_content)))?;
+    //     }
+    // }
+
+    // log::debug!("AST:\n{ast}");
     // TODO: Report errors!
-    log::debug!("ERRORS:\n{_errors:#?}");
-    let program = nemo::rule_model::program::Program::from_ast(ast);
+    // log::debug!("ERRORS:\n{_errors:#?}");
+    // let program = nemo::rule_model::program::Program::from_ast(ast);
 
     log::info!("Rules parsed");
-    log::trace!("{:?}", program);
+    // log::trace!("{:?}", program);
 
     let facts_to_be_traced: Option<Vec<_>> = {
         let raw_facts_to_be_traced: Option<Vec<String>> =
@@ -321,6 +355,9 @@ fn run(mut cli: CliApp) -> Result<(), Error> {
 fn main() {
     let cli = CliApp::parse();
 
+    // test_error_message();
+    // return;
+
     cli.logging.initialize_logging();
     log::info!("Version: {}", clap::crate_version!());
     log::debug!("Rule files: {:?}", cli.rules);
@@ -329,4 +366,45 @@ fn main() {
         log::error!("{} {err}", "error:".red().bold());
         std::process::exit(1)
     })
+}
+
+fn test_error_message() {
+    use ariadne::{Color, ColorGenerator, Fmt, Label, Report, ReportKind, Source};
+
+    let mut colors = ColorGenerator::new();
+
+    // Generate & choose some colours for each of our elements
+    let a = colors.next();
+    let b = colors.next();
+    let out = Color::Fixed(81);
+
+    Report::build(ReportKind::Error, "sample.tao", 12)
+        .with_code(3)
+        .with_message(format!("Incompatible types"))
+        .with_label(
+            Label::new(("sample.tao", 32..33))
+                .with_message(format!("This is of type {}", "Nat".fg(a)))
+                .with_color(a),
+        )
+        .with_label(
+            Label::new(("sample.tao", 42..45))
+                .with_message(format!("This is of type {}", "Str".fg(b)))
+                .with_color(b),
+        )
+        .with_label(
+            Label::new(("sample.tao", 11..48))
+                .with_message(format!(
+                    "The values are outputs of this {} expression",
+                    "match".fg(out),
+                ))
+                .with_color(out),
+        )
+        .with_note(format!(
+            "Outputs of {} expressions must coerce to the same type",
+            "match".fg(out)
+        ))
+        .with_help("Test")
+        .finish()
+        .print(("sample.tao", Source::from(include_str!("sample.tao"))))
+        .unwrap();
 }

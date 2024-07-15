@@ -412,7 +412,7 @@ impl NemoEngine {
     fn trace(&mut self, fact: String) -> Option<NemoTrace> {
         let (ast, _errors) = nemo::io::parser::parse_fact_str(&fact); /*.py_res().ok()?;*/
         // TODO: Report errors...
-        let parsed_fact = nemo::rule_model::component::fact::Fact::from_ast(ast);
+        let parsed_fact = nemo::rule_model::components::fact::Fact::from_ast(ast);
         let parsed_fact = todo!();
         let (trace, handles) = self.engine.trace(self.program.0.clone(), vec![parsed_fact]);
         let handle = *handles

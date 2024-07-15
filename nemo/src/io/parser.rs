@@ -2476,30 +2476,30 @@ fn outer_span<'a>(input: Span<'a>, rest_input: Span<'a>) -> Span<'a> {
     }
 }
 
-fn expect<'a, 's, O: Copy, E: ParseError<Input<'a, 's>>, F: Parser<Input<'a, 's>, O, E>>(
-    mut parser: F,
-    error_msg: impl ToString,
-    error_output: O,
-    errors: ParserState<'s>,
-) -> impl FnMut(Input<'a, 's>) -> IResult<Input<'a, 's>, O, E> {
-    move |input| match parser.parse(input) {
-        Ok(result) => Ok(result),
-        Err(nom::Err::Error(_)) | Err(nom::Err::Failure(_)) => {
-            let err = Error {
-                pos: Position {
-                    offset: input.input.location_offset(),
-                    line: input.input.location_line(),
-                    column: input.input.get_utf8_column() as u32,
-                },
-                msg: error_msg.to_string(),
-                context: vec![],
-            };
-            errors.report_error(err);
-            Ok((input, error_output))
-        }
-        Err(err) => Err(err),
-    }
-}
+// fn expect_abc<'a, 's, O: Copy, E: ParseError<Input<'a, 's>>, F: Parser<Input<'a, 's>, O, E>>(
+//     mut parser: F,
+//     error_msg: impl ToString,
+//     error_output: O,
+//     errors: ParserState<'s>,
+// ) -> impl FnMut(Input<'a, 's>) -> IResult<Input<'a, 's>, O, E> {
+//     move |input| match parser.parse(input) {
+//         Ok(resureport_errorlt) => Ok(result),
+//         Err(nom::Err::Error(_)) | Err(nom::Err::Failure(_)) => {
+//             let err = Error {
+//                 pos: Position {
+//                     offset: input.input.location_offset(),
+//                     line: input.input.location_line(),
+//                     column: input.input.get_utf8_column() as u32,
+//                 },
+//                 msg: error_msg.to_string(),
+//                 context: vec![],
+//             };
+//             errors.report_error(err);
+//             Ok((input, error_output))
+//         }
+//         Err(err) => Err(err),
+//     }
+// }
 
 fn recover<'a, 's, E>(
     mut parser: impl Parser<Input<'a, 's>, Statement<'a>, E>,

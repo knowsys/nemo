@@ -2,10 +2,10 @@
 
 use nemo_physical::datavalues::AnyDataValue;
 
-use crate::{io::parser::ast, rule_model::component::term::tuple::Tuple};
+use crate::{io::parser::ast, rule_model::components::term::tuple::Tuple};
 
 use super::{
-    component::{
+    components::{
         atom::Atom,
         base::Base,
         fact::Fact,
@@ -34,8 +34,6 @@ pub struct Program {
     rules: Vec<Rule>,
     /// Facts
     facts: Vec<Fact>,
-    /// Base
-    base: Option<Base>,
     /// Outputs
     outputs: Vec<Output>,
 }
@@ -251,8 +249,8 @@ impl Program {
 
     fn ast_build_directive(&mut self, directive: &ast::directive::Directive) {
         match directive {
-            ast::directive::Directive::Base { base_iri, .. } => {
-                self.base = Some(Base::new(base_iri.to_string()));
+            ast::directive::Directive::Base { base_iri: _, .. } => {
+                // self.base = Some(Base::new(base_iri.to_string()));
                 // TODO: Set origin
             }
             ast::directive::Directive::Prefix {

@@ -1,55 +1,28 @@
-//! This module defines [ProgramConstructionError]
+//! This module defines [ProgramValidationError]
 
-use thiserror::Error;
+pub mod translation_error;
+pub mod validation_error;
 
-use super::component::term::{aggregate::Aggregate, primitive::variable::Variable, Term};
+use std::fmt::Display;
 
-/// Error returned during the construction of objects from nemo's logical rule model
-#[derive(Error, Debug)]
-pub enum ProgramConstructionError {
-    /// An existentially quantified variable occurs in the body of a rule.
-    #[error(r#"existential variable used in rule body: `{0}`"#)]
-    BodyExistential(Variable),
-    /// Unsafe variable used in the head of the rule.
-    #[error(r#"unsafe variable used in rule head: `{0}`"#)]
-    HeadUnsafe(Variable),
-    /// Anonymous variable used in the head of the rule.
-    #[error(r#"anonymous variable used in rule head"#)]
-    HeadAnonymous,
-    /// Operation with unsafe variable
-    #[error(r#"unsafe variable used in computation: `{0}`"#)]
-    OperationUnsafe(Variable),
-    /// Unsafe variable used in multiple negative literals
-    #[error(r#"unsafe variable used in multiple negative literals: `{0}`"#)]
-    MultipleNegativeLiteralsUnsafe(Variable),
-    /// Aggregate is used in body
-    #[error(r#"aggregate used in rule body: `{0}`"#)]
-    BodyAggregate(Aggregate),
-    /// Unsupported feature: Multiple aggregates in one rule
-    #[error(r#"multiple aggregates in one rule is currently unsupported"#)]
-    AggregateMultiple,
-    /// Unsupported feature: Aggregates combined with existential rules
-    #[error(r#"aggregates and existential variables in one rule is currently unsupported"#)]
-    AggregatesAndExistentials,
-    /// A variable is both universally and existentially quantified
-    #[error(r#"variable is both universal and existential: `{0}`"#)]
-    VariableMultipleQuantifiers(String),
-    /// Fact contains non-ground term
-    #[error(r#"non-ground term used in fact: `{0}`"#)]
-    FactNonGround(Term),
-    /// Atom used without any arguments
-    #[error(r#"atoms without arguments are currently unsupported"#)]
-    AtomNoArguments,
-    /// Non-primitive terms are currently unsupported
-    #[error(r#"complex terms are currently unsupported"#)]
-    ComplexTerm,
-    /// Invalid variable name was used
-    #[error(r#"variable name is invalid: `{0}`"#)]
-    InvalidVariableName(String),
-    /// Invalid tag was used
-    #[error(r#"tag is invalid: `{0}`"#)]
-    InvalidTermTag(String),
-    /// Invalid predicate name was used
-    #[error(r#"predicate name is invalid: `{0}"#)]
-    InvalidPredicateName(String),
+use validation_error::ValidationErrorKind;
+
+use super::components::ProgramComponent;
+
+/// Error that occurs during validation of a program.
+#[derive(Debug)]
+pub struct ProgramValidationError {
+    /// The kind of error
+    kind: ValidationErrorKind,
+    /// stack of components in which the error occurred
+    context: Vec<Box<dyn ProgramComponent>>,
 }
+
+impl Display for ProgramValidationError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.kind)
+    }
+}
+
+// #[derive(Debug)]
+// pub struct ProgramValidationErrors {}
