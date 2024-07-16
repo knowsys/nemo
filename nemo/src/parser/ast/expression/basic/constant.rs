@@ -1,6 +1,6 @@
-//! This module defines [Blank].
+//! This module defines [Constant]
 
-use nom::{branch::alt, sequence::pair};
+use nom::{branch::alt, combinator::map};
 
 use crate::parser::{
     ast::{token::Token, ProgramAST},
@@ -10,29 +10,38 @@ use crate::parser::{
     ParserResult,
 };
 
-/// AST node representing a blank node
+use super::iri::Iri;
+
+// Type of constants
 #[derive(Debug)]
-pub struct Blank<'a> {
+enum ConstantKind<'a> {
+    /// Plain constant
+    Plain(Token<'a>),
+    /// Iri constant
+    Iri(Iri<'a>),
+}
+
+/// AST node representing a constant
+#[derive(Debug)]
+pub struct Constant<'a> {
     /// [ProgramSpan] associated with this node
     span: ProgramSpan<'a>,
 
-    /// Name of the blank node
-    name: Token<'a>,
+    /// The constant
+    constant: ConstantKind<'a>,
 }
 
-impl<'a> Blank<'a> {
-    /// Return the name of the blank node.
+impl<'a> Constant<'a> {
+    /// Return the name of the constant.
     pub fn name(&self) -> String {
-        self.name.to_string()
-    }
-
-    /// Parse name of the blank node.
-    fn parse_name(input: ParserInput<'a>) -> ParserResult<'a, Token<'a>> {
-        alt((Token::name, Token::digits))(input)
+        match &self.constant {
+            ConstantKind::Plain(token) => token.to_string(),
+            ConstantKind::Iri(iri) => iri.content(),
+        }
     }
 }
 
-impl<'a> ProgramAST<'a> for Blank<'a> {
+impl<'a> ProgramAST<'a> for Constant<'a> {
     fn children(&self) -> Vec<&dyn ProgramAST> {
         Vec::default()
     }
@@ -48,17 +57,20 @@ impl<'a> ProgramAST<'a> for Blank<'a> {
         let input_span = input.span;
 
         context(
-            ParserContext::Blank,
-            pair(Token::blank_node_prefix, Self::parse_name),
+            ParserContext::Constant,
+            alt((
+                map(Token::name, ConstantKind::Plain),
+                map(Iri::parse, ConstantKind::Iri),
+            )),
         )(input)
-        .map(|(rest, (_, name))| {
+        .map(|(rest, constant)| {
             let rest_span = rest.span;
 
             (
                 rest,
-                Blank {
+                Constant {
                     span: input_span.until_rest(&rest_span),
-                    name,
+                    constant,
                 },
             )
         })
@@ -70,18 +82,21 @@ mod test {
     use nom::combinator::all_consuming;
 
     use crate::parser::{
-        ast::{expression::basic::blank::Blank, ProgramAST},
+        ast::{expression::basic::constant::Constant, ProgramAST},
         input::ParserInput,
         ParserState,
     };
 
     #[test]
-    fn parse_blank() {
-        let test = vec![("_:a", "a".to_string()), ("_:123", "123".to_string())];
+    fn parse_constant() {
+        let test = vec![
+            ("abc", "abc".to_string()),
+            ("<http://example.com>", "http://example.com".to_string()),
+        ];
 
         for (input, expected) in test {
             let parser_input = ParserInput::new(input, ParserState::default());
-            let result = all_consuming(Blank::parse)(parser_input);
+            let result = all_consuming(Constant::parse)(parser_input);
 
             assert!(result.is_ok());
 

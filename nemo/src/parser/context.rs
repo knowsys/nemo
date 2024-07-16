@@ -31,6 +31,9 @@ pub enum ParserContext {
     /// Blank node
     #[assoc(name = "blank")]
     Blank,
+    /// Constant
+    #[assoc(name = "constant")]
+    Constant,
     /// Boolean
     #[assoc(name = "boolean")]
     Boolean,

@@ -5,7 +5,7 @@ pub mod complex;
 pub mod sequence;
 
 use basic::{
-    blank::Blank, boolean::Boolean, iri::Iri, number::Number, rdf_literal::RdfLiteral,
+    blank::Blank, boolean::Boolean, constant::Constant, number::Number, rdf_literal::RdfLiteral,
     string::StringLiteral, variable::Variable,
 };
 use complex::{atom::Atom, tuple::Tuple};
@@ -29,8 +29,8 @@ pub enum Expression<'a> {
     Blank(Blank<'a>),
     /// Boolean
     Boolean(Boolean<'a>),
-    /// Iri
-    Iri(Iri<'a>),
+    /// Constant
+    Constant(Constant<'a>),
     /// Number
     Number(Number<'a>),
     /// Rdf literal
@@ -49,7 +49,7 @@ impl<'a> ProgramAST<'a> for Expression<'a> {
             Expression::Atom(expression) => expression.children(),
             Expression::Blank(expression) => expression.children(),
             Expression::Boolean(expression) => expression.children(),
-            Expression::Iri(expression) => expression.children(),
+            Expression::Constant(expression) => expression.children(),
             Expression::Number(expression) => expression.children(),
             Expression::RdfLiteral(expression) => expression.children(),
             Expression::String(expression) => expression.children(),
@@ -63,7 +63,7 @@ impl<'a> ProgramAST<'a> for Expression<'a> {
             Expression::Atom(expression) => expression.span(),
             Expression::Blank(expression) => expression.span(),
             Expression::Boolean(expression) => expression.span(),
-            Expression::Iri(expression) => expression.span(),
+            Expression::Constant(expression) => expression.span(),
             Expression::Number(expression) => expression.span(),
             Expression::RdfLiteral(expression) => expression.span(),
             Expression::String(expression) => expression.span(),
@@ -83,7 +83,7 @@ impl<'a> ProgramAST<'a> for Expression<'a> {
                 map(Tuple::parse, Self::Tuple),
                 map(Blank::parse, Self::Blank),
                 map(Boolean::parse, Self::Boolean),
-                map(Iri::parse, Self::Iri),
+                map(Constant::parse, Self::Constant),
                 map(Number::parse, Self::Number),
                 map(RdfLiteral::parse, Self::RdfLiteral),
                 map(StringLiteral::parse, Self::String),
