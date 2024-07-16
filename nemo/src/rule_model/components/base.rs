@@ -45,7 +45,7 @@ impl Hash for Base {
 }
 
 impl ProgramComponent for Base {
-    fn parse(_string: &str) -> Result<Self, crate::rule_model::error::ProgramValidationError>
+    fn parse(_string: &str) -> Result<Self, crate::rule_model::error::ValidationError>
     where
         Self: Sized,
     {
@@ -64,7 +64,7 @@ impl ProgramComponent for Base {
         self
     }
 
-    fn validate(&self) -> Result<(), crate::rule_model::error::ProgramValidationError>
+    fn validate(&self) -> Result<(), crate::rule_model::error::ValidationError>
     where
         Self: Sized,
     {

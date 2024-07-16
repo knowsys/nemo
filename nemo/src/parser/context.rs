@@ -16,6 +16,36 @@ pub enum ParserContext {
     /// Number
     #[assoc(name = "number")]
     Number,
+    /// Variable
+    #[assoc(name = "variable")]
+    Variable,
+    /// String
+    #[assoc(name = "string")]
+    String,
+    /// Iri
+    #[assoc(name = "iri")]
+    Iri,
+    /// Rdf Literal
+    #[assoc(name = "rdf-literal")]
+    RdfLiteral,
+    /// Blank node
+    #[assoc(name = "blank")]
+    Blank,
+    /// Boolean
+    #[assoc(name = "boolean")]
+    Boolean,
+    /// Expression
+    #[assoc(name = "expression")]
+    Expression,
+    /// Tuple
+    #[assoc(name = "tuple")]
+    Tuple,
+    /// Atom
+    #[assoc(name = "atom")]
+    Atom,
+    /// Rule
+    #[assoc(name = "rule")]
+    Rule,
     /// Program
     #[assoc(name = "program")]
     Program,

@@ -5,7 +5,7 @@ use std::{fmt::Display, hash::Hash};
 use nemo_physical::datavalues::{AnyDataValue, IriDataValue};
 
 use crate::rule_model::{
-    components::ProgramComponent, error::ProgramValidationError, origin::Origin,
+    components::ProgramComponent, error::ValidationError, origin::Origin,
 };
 
 /// Primitive ground term
@@ -97,7 +97,7 @@ impl Hash for GroundTerm {
 }
 
 impl ProgramComponent for GroundTerm {
-    fn parse(_string: &str) -> Result<Self, ProgramValidationError>
+    fn parse(_string: &str) -> Result<Self, ValidationError>
     where
         Self: Sized,
     {
@@ -116,7 +116,7 @@ impl ProgramComponent for GroundTerm {
         self
     }
 
-    fn validate(&self) -> Result<(), ProgramValidationError>
+    fn validate(&self) -> Result<(), ValidationError>
     where
         Self: Sized,
     {

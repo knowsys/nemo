@@ -158,7 +158,7 @@ mod test {
     use nom::combinator::all_consuming;
 
     use crate::parser::{
-        ast::{basic::number::Number, ProgramAST},
+        ast::{expression::basic::number::Number, ProgramAST},
         ParserInput, ParserState,
     };
 

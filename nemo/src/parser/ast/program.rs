@@ -6,12 +6,12 @@ use crate::parser::{
     ParserResult,
 };
 
-use super::{basic::number::Number, ProgramAST};
+use super::{rule::Rule, ProgramAST};
 
-///
+/// AST representation of a nemo program
 #[derive(Debug)]
 pub struct Program<'a> {
-    number: Number<'a>,
+    rules: Rule<'a>,
 }
 
 impl<'a> ProgramAST<'a> for Program<'a> {
@@ -27,7 +27,7 @@ impl<'a> ProgramAST<'a> for Program<'a> {
     where
         Self: Sized + 'a,
     {
-        context(ParserContext::Program, Number::parse)(input)
-            .map(|(rest, result)| (rest, Program { number: result }))
+        context(ParserContext::Program, Rule::parse)(input)
+            .map(|(rest, result)| (rest, Program { rules: result }))
     }
 }

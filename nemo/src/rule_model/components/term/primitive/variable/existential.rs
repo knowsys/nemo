@@ -2,9 +2,7 @@
 
 use std::{fmt::Display, hash::Hash};
 
-use crate::rule_model::{
-    components::ProgramComponent, error::ProgramValidationError, origin::Origin,
-};
+use crate::rule_model::{components::ProgramComponent, error::ValidationError, origin::Origin};
 
 use super::VariableName;
 
@@ -60,7 +58,7 @@ impl Hash for ExistentialVariable {
 }
 
 impl ProgramComponent for ExistentialVariable {
-    fn parse(_string: &str) -> Result<Self, ProgramValidationError>
+    fn parse(_string: &str) -> Result<Self, ValidationError>
     where
         Self: Sized,
     {
@@ -79,7 +77,7 @@ impl ProgramComponent for ExistentialVariable {
         self
     }
 
-    fn validate(&self) -> Result<(), ProgramValidationError>
+    fn validate(&self) -> Result<(), ValidationError>
     where
         Self: Sized,
     {

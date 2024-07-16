@@ -2,7 +2,7 @@
 
 use std::{fmt::Display, hash::Hash};
 
-use crate::rule_model::error::ProgramValidationError;
+use crate::rule_model::error::ValidationError;
 
 use super::{atom::Atom, term::operation::Operation, ProgramComponent};
 
@@ -32,7 +32,7 @@ impl Display for Literal {
 }
 
 impl ProgramComponent for Literal {
-    fn parse(_string: &str) -> Result<Self, ProgramValidationError>
+    fn parse(_string: &str) -> Result<Self, ValidationError>
     where
         Self: Sized,
     {
@@ -58,7 +58,7 @@ impl ProgramComponent for Literal {
         }
     }
 
-    fn validate(&self) -> Result<(), ProgramValidationError>
+    fn validate(&self) -> Result<(), ValidationError>
     where
         Self: Sized,
     {

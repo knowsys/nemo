@@ -104,7 +104,7 @@ impl Display for ImportDirective {
 }
 
 impl ProgramComponent for ImportDirective {
-    fn parse(_string: &str) -> Result<Self, crate::rule_model::error::ProgramValidationError>
+    fn parse(_string: &str) -> Result<Self, crate::rule_model::error::ValidationError>
     where
         Self: Sized,
     {
@@ -123,7 +123,7 @@ impl ProgramComponent for ImportDirective {
         self
     }
 
-    fn validate(&self) -> Result<(), crate::rule_model::error::ProgramValidationError>
+    fn validate(&self) -> Result<(), crate::rule_model::error::ValidationError>
     where
         Self: Sized,
     {
@@ -176,7 +176,7 @@ impl Display for ExportDirective {
 }
 
 impl ProgramComponent for ExportDirective {
-    fn parse(_string: &str) -> Result<Self, crate::rule_model::error::ProgramValidationError>
+    fn parse(_string: &str) -> Result<Self, crate::rule_model::error::ValidationError>
     where
         Self: Sized,
     {
@@ -195,7 +195,7 @@ impl ProgramComponent for ExportDirective {
         self
     }
 
-    fn validate(&self) -> Result<(), crate::rule_model::error::ProgramValidationError>
+    fn validate(&self) -> Result<(), crate::rule_model::error::ValidationError>
     where
         Self: Sized,
     {

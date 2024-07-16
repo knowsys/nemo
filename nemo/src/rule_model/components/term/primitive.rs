@@ -103,7 +103,7 @@ impl Display for Primitive {
 }
 
 impl ProgramComponent for Primitive {
-    fn parse(_string: &str) -> Result<Self, crate::rule_model::error::ProgramValidationError>
+    fn parse(_string: &str) -> Result<Self, crate::rule_model::error::ValidationError>
     where
         Self: Sized,
     {
@@ -127,7 +127,7 @@ impl ProgramComponent for Primitive {
         }
     }
 
-    fn validate(&self) -> Result<(), crate::rule_model::error::ProgramValidationError>
+    fn validate(&self) -> Result<(), crate::rule_model::error::ValidationError>
     where
         Self: Sized,
     {

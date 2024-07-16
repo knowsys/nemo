@@ -157,7 +157,7 @@ impl Hash for Operation {
 }
 
 impl ProgramComponent for Operation {
-    fn parse(_string: &str) -> Result<Self, crate::rule_model::error::ProgramValidationError>
+    fn parse(_string: &str) -> Result<Self, crate::rule_model::error::ValidationError>
     where
         Self: Sized,
     {
@@ -176,7 +176,7 @@ impl ProgramComponent for Operation {
         self
     }
 
-    fn validate(&self) -> Result<(), crate::rule_model::error::ProgramValidationError>
+    fn validate(&self) -> Result<(), crate::rule_model::error::ValidationError>
     where
         Self: Sized,
     {

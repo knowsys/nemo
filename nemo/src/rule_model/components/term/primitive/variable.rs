@@ -5,7 +5,7 @@ use std::fmt::Display;
 use existential::ExistentialVariable;
 use universal::UniversalVariable;
 
-use crate::rule_model::{error::ProgramValidationError, origin::Origin};
+use crate::rule_model::{error::ValidationError, origin::Origin};
 
 use super::ProgramComponent;
 
@@ -93,7 +93,7 @@ impl Display for Variable {
 }
 
 impl ProgramComponent for Variable {
-    fn parse(_string: &str) -> Result<Self, ProgramValidationError>
+    fn parse(_string: &str) -> Result<Self, ValidationError>
     where
         Self: Sized,
     {
@@ -117,7 +117,7 @@ impl ProgramComponent for Variable {
         }
     }
 
-    fn validate(&self) -> Result<(), ProgramValidationError>
+    fn validate(&self) -> Result<(), ValidationError>
     where
         Self: Sized,
     {

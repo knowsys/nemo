@@ -14,7 +14,7 @@ use std::fmt::{Debug, Display};
 
 use term::primitive::variable::Variable;
 
-use super::{error::ProgramValidationError, origin::Origin};
+use super::{error::ValidationError, origin::Origin};
 
 /// Name of a term
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -41,7 +41,7 @@ impl Display for Tag {
 /// Trait implemented by objects that are part of the logical rule model of the nemo language.
 pub trait ProgramComponent: Debug + Display {
     /// Construct this object from a string.
-    fn parse(_string: &str) -> Result<Self, ProgramValidationError>
+    fn parse(_string: &str) -> Result<Self, ValidationError>
     where
         Self: Sized;
 
@@ -54,7 +54,7 @@ pub trait ProgramComponent: Debug + Display {
         Self: Sized;
 
     /// Validate this component
-    fn validate(&self) -> Result<(), ProgramValidationError>
+    fn validate(&self) -> Result<(), ValidationError>
     where
         Self: Sized;
 }

@@ -81,7 +81,7 @@ impl PartialOrd for Tuple {
 }
 
 impl ProgramComponent for Tuple {
-    fn parse(_string: &str) -> Result<Self, crate::rule_model::error::ProgramValidationError>
+    fn parse(_string: &str) -> Result<Self, crate::rule_model::error::ValidationError>
     where
         Self: Sized,
     {
@@ -100,7 +100,7 @@ impl ProgramComponent for Tuple {
         self
     }
 
-    fn validate(&self) -> Result<(), crate::rule_model::error::ProgramValidationError>
+    fn validate(&self) -> Result<(), crate::rule_model::error::ValidationError>
     where
         Self: Sized,
     {

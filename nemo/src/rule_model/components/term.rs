@@ -26,7 +26,7 @@ use primitive::{
 };
 use tuple::Tuple;
 
-use crate::rule_model::{error::ProgramValidationError, origin::Origin};
+use crate::rule_model::{error::ValidationError, origin::Origin};
 
 use super::{IterableVariables, ProgramComponent};
 
@@ -166,7 +166,7 @@ impl Display for Term {
 }
 
 impl ProgramComponent for Term {
-    fn parse(_string: &str) -> Result<Self, ProgramValidationError>
+    fn parse(_string: &str) -> Result<Self, ValidationError>
     where
         Self: Sized,
     {
@@ -196,7 +196,7 @@ impl ProgramComponent for Term {
         }
     }
 
-    fn validate(&self) -> Result<(), ProgramValidationError>
+    fn validate(&self) -> Result<(), ValidationError>
     where
         Self: Sized,
     {

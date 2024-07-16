@@ -4,7 +4,7 @@ use std::{fmt::Display, hash::Hash};
 
 use crate::rule_model::{
     components::{IterableVariables, ProgramComponent, Tag},
-    error::ProgramValidationError,
+    error::ValidationError,
     origin::Origin,
 };
 
@@ -100,7 +100,7 @@ impl Hash for FunctionTerm {
 }
 
 impl ProgramComponent for FunctionTerm {
-    fn parse(_string: &str) -> Result<Self, ProgramValidationError>
+    fn parse(_string: &str) -> Result<Self, ValidationError>
     where
         Self: Sized,
     {
@@ -119,7 +119,7 @@ impl ProgramComponent for FunctionTerm {
         self
     }
 
-    fn validate(&self) -> Result<(), ProgramValidationError>
+    fn validate(&self) -> Result<(), ValidationError>
     where
         Self: Sized,
     {

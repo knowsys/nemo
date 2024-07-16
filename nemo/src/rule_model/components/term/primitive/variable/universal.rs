@@ -2,9 +2,7 @@
 
 use std::{fmt::Display, hash::Hash};
 
-use crate::rule_model::{
-    components::ProgramComponent, error::ProgramValidationError, origin::Origin,
-};
+use crate::rule_model::{components::ProgramComponent, error::ValidationError, origin::Origin};
 
 use super::VariableName;
 
@@ -83,7 +81,7 @@ impl Hash for UniversalVariable {
 }
 
 impl ProgramComponent for UniversalVariable {
-    fn parse(_string: &str) -> Result<Self, ProgramValidationError> {
+    fn parse(_string: &str) -> Result<Self, ValidationError> {
         todo!()
     }
 
@@ -99,7 +97,7 @@ impl ProgramComponent for UniversalVariable {
         self
     }
 
-    fn validate(&self) -> Result<(), ProgramValidationError>
+    fn validate(&self) -> Result<(), ValidationError>
     where
         Self: Sized,
     {

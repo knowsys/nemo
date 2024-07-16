@@ -5,13 +5,11 @@ use enum_assoc::Assoc;
 
 use nom::{
     branch::alt,
-    bytes::complete::{is_not, tag, take, take_till},
-    character::complete::{alpha1, alphanumeric1, digit1, line_ending, multispace0, multispace1},
-    combinator::{all_consuming, cut, map, opt, recognize},
-    error::ParseError,
-    multi::{many0, many1},
-    sequence::{delimited, pair, tuple},
-    IResult,
+    bytes::complete::{is_not, tag},
+    character::complete::{alpha1, alphanumeric1, digit1, multispace1},
+    combinator::{map, recognize},
+    multi::many0,
+    sequence::pair,
 };
 
 use crate::parser::{
@@ -57,6 +55,9 @@ pub enum TokenKind {
     /// Dot
     #[assoc(name = ".")]
     Dot,
+    /// Comma
+    #[assoc(name = ",")]
+    Comma,
     /// Arrow, used to separate rules
     #[assoc(name = ":-")]
     Arrow,
@@ -114,9 +115,9 @@ pub enum TokenKind {
     /// Quote
     #[assoc(name = "\"")]
     Quote,
-    /// Blank node label
+    /// Blank node prefix
     #[assoc(name = "_:")]
-    BlankNodeLabel,
+    BlankNodePrefix,
     /// Name
     #[assoc(name = "name")]
     Name,
@@ -138,6 +139,9 @@ pub enum TokenKind {
     /// IRI
     #[assoc(name = "iri")]
     Iri,
+    /// String
+    #[assoc(name = "string")]
+    String,
     /// A comment (as single token)
     #[assoc(name = "comment")]
     Comment,
@@ -167,6 +171,13 @@ pub struct Token<'a> {
 
     /// The kind of token
     kind: TokenKind,
+}
+
+impl<'a> Token<'a> {
+    /// Return a copy of the underlying text
+    pub fn to_string(&self) -> String {
+        self.span.0.to_string()
+    }
 }
 
 /// Macro for generating token parser functions
@@ -213,11 +224,7 @@ impl<'a> Token<'a> {
 
     /// Parse [TokenKind::Iri].
     pub fn iri(input: ParserInput<'a>) -> ParserResult<'a, Token> {
-        context(
-            ParserContext::token(TokenKind::Iri),
-            recognize(delimited(tag("<"), is_not("> \n"), cut(tag(">")))),
-        )(input)
-        .map(|(rest, result)| {
+        is_not("> \n")(input).map(|(rest, result)| {
             (
                 rest,
                 Token {
@@ -228,9 +235,37 @@ impl<'a> Token<'a> {
         })
     }
 
+    /// Parse [TokenKind::String].
+    pub fn string(input: ParserInput<'a>) -> ParserResult<'a, Token> {
+        is_not("\"")(input).map(|(rest, result)| {
+            (
+                rest,
+                Token {
+                    span: result.span,
+                    kind: TokenKind::String,
+                },
+            )
+        })
+    }
+
     /// Parse [TokenKind::Digits].
     pub fn digits(input: ParserInput<'a>) -> ParserResult<'a, Token> {
         context(ParserContext::token(TokenKind::Digits), digit1)(input).map(
+            |(rest_input, result)| {
+                (
+                    rest_input,
+                    Token {
+                        span: result.span,
+                        kind: TokenKind::Digits,
+                    },
+                )
+            },
+        )
+    }
+
+    /// Parse [TokenKind::Whitespace].
+    pub fn whitespace(input: ParserInput<'a>) -> ParserResult<'a, Token> {
+        context(ParserContext::token(TokenKind::Whitespace), multispace1)(input).map(
             |(rest_input, result)| {
                 (
                     rest_input,
@@ -254,6 +289,9 @@ impl<'a> Token<'a> {
     string_token!(question_mark, TokenKind::QuestionMark);
     string_token!(exclamation_mark, TokenKind::ExclamationMark);
     string_token!(dot, TokenKind::Dot);
+    string_token!(comma, TokenKind::Comma);
+    string_token!(arrow, TokenKind::Arrow);
+    string_token!(colon, TokenKind::Colon);
     string_token!(greater, TokenKind::Greater);
     string_token!(greater_equal, TokenKind::GreaterEqual);
     string_token!(less, TokenKind::Less);
@@ -268,8 +306,10 @@ impl<'a> Token<'a> {
     string_token!(minus, TokenKind::Minus);
     string_token!(star, TokenKind::Star);
     string_token!(division, TokenKind::Division);
+    string_token!(boolean_true, TokenKind::True);
+    string_token!(boolean_false, TokenKind::False);
     string_token!(quote, TokenKind::Quote);
-    string_token!(blank_node_label, TokenKind::BlankNodeLabel);
+    string_token!(blank_node_prefix, TokenKind::BlankNodePrefix);
     string_token!(exponent_lower, TokenKind::ExponentLower);
     string_token!(exponent_upper, TokenKind::ExponentUpper);
     string_token!(type_marker_double, TokenKind::TypeMarkerDouble);

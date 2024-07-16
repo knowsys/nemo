@@ -2,7 +2,7 @@
 
 use std::{fmt::Display, hash::Hash};
 
-use crate::rule_model::{error::ProgramValidationError, origin::Origin};
+use crate::rule_model::{error::ValidationError, origin::Origin};
 
 use super::{
     term::{primitive::variable::Variable, Term},
@@ -93,7 +93,7 @@ impl Hash for Atom {
 }
 
 impl ProgramComponent for Atom {
-    fn parse(_string: &str) -> Result<Self, ProgramValidationError>
+    fn parse(_string: &str) -> Result<Self, ValidationError>
     where
         Self: Sized,
     {
@@ -112,7 +112,7 @@ impl ProgramComponent for Atom {
         self
     }
 
-    fn validate(&self) -> Result<(), ProgramValidationError>
+    fn validate(&self) -> Result<(), ValidationError>
     where
         Self: Sized,
     {

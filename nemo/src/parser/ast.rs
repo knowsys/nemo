@@ -1,7 +1,9 @@
 //! This module defines the abstract syntax tree representation of a nemo program.
 
-pub mod basic;
+pub mod expression;
 pub mod program;
+pub mod rule;
+pub mod tag;
 pub mod token;
 
 use super::{span::ProgramSpan, ParserInput, ParserResult};
