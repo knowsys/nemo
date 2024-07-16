@@ -76,12 +76,10 @@ impl<'a> ParserErrorReport<'a> {
         &'a self,
         color_error: Color,
     ) -> impl Iterator<Item = Report<'a, (String, Range<usize>)>> {
-        //    report.with_message(format!(""))
-
         self.errors.iter().map(move |error| {
             let message = format!("expected `{}`", error.context[0].name());
 
-            Report::build(ReportKind::Error, self.label.clone(), 0)
+            Report::build(ReportKind::Error, self.label.clone(), error.position.offset)
                 .with_message(message.clone())
                 .with_label(
                     Label::new((self.label.clone(), error.position.range()))

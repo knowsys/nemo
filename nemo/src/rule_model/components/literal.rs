@@ -2,7 +2,7 @@
 
 use std::{fmt::Display, hash::Hash};
 
-use crate::rule_model::error::ValidationError;
+use crate::rule_model::error::{ValidationError, ValidationErrorBuilder};
 
 use super::{atom::Atom, term::operation::Operation, ProgramComponent};
 
@@ -58,7 +58,7 @@ impl ProgramComponent for Literal {
         }
     }
 
-    fn validate(&self) -> Result<(), ValidationError>
+    fn validate(&self, builder: &mut ValidationErrorBuilder) -> Result<(), ()>
     where
         Self: Sized,
     {

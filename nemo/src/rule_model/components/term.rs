@@ -26,7 +26,10 @@ use primitive::{
 };
 use tuple::Tuple;
 
-use crate::rule_model::{error::ValidationError, origin::Origin};
+use crate::rule_model::{
+    error::{ValidationError, ValidationErrorBuilder},
+    origin::Origin,
+};
 
 use super::{IterableVariables, ProgramComponent};
 
@@ -196,7 +199,7 @@ impl ProgramComponent for Term {
         }
     }
 
-    fn validate(&self) -> Result<(), ValidationError>
+    fn validate(&self, builder: &mut ValidationErrorBuilder) -> Result<(), ()>
     where
         Self: Sized,
     {

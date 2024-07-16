@@ -8,6 +8,7 @@ use strum_macros::EnumIter;
 
 use crate::rule_model::{
     components::{IterableVariables, ProgramComponent},
+    error::ValidationErrorBuilder,
     origin::Origin,
     syntax::aggregates,
 };
@@ -156,7 +157,7 @@ impl ProgramComponent for Aggregate {
         self
     }
 
-    fn validate(&self) -> Result<(), crate::rule_model::error::ValidationError>
+    fn validate(&self, builder: &mut ValidationErrorBuilder) -> Result<(), ()>
     where
         Self: Sized,
     {

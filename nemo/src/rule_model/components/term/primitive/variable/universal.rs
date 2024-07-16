@@ -2,7 +2,11 @@
 
 use std::{fmt::Display, hash::Hash};
 
-use crate::rule_model::{components::ProgramComponent, error::ValidationError, origin::Origin};
+use crate::rule_model::{
+    components::ProgramComponent,
+    error::{ValidationError, ValidationErrorBuilder},
+    origin::Origin,
+};
 
 use super::VariableName;
 
@@ -97,7 +101,7 @@ impl ProgramComponent for UniversalVariable {
         self
     }
 
-    fn validate(&self) -> Result<(), ValidationError>
+    fn validate(&self, builder: &mut ValidationErrorBuilder) -> Result<(), ()>
     where
         Self: Sized,
     {

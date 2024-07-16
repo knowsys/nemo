@@ -9,3 +9,4 @@ pub(crate) mod syntax;
 pub mod components;
 pub mod error;
 pub mod program;
+pub mod translation;

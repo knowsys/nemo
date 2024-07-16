@@ -61,6 +61,13 @@ pub struct CharacterRange {
     pub end: CharacterPosition,
 }
 
+impl CharacterRange {
+    /// Return this information as a [Range].
+    pub fn range(&self) -> Range<usize> {
+        self.start.offset..self.end.offset
+    }
+}
+
 /// Maker for a region of text within a string slice
 #[derive(Debug, Clone, Copy)]
 pub struct ProgramSpan<'a>(pub(crate) LocatedSpan<&'a str>);

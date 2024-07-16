@@ -2,7 +2,7 @@
 
 use std::{fmt::Display, hash::Hash};
 
-use crate::rule_model::origin::Origin;
+use crate::rule_model::{error::ValidationErrorBuilder, origin::Origin};
 
 use super::{term::Term, ProgramComponent, Tag};
 
@@ -94,7 +94,7 @@ impl ProgramComponent for Fact {
         self
     }
 
-    fn validate(&self) -> Result<(), crate::rule_model::error::ValidationError>
+    fn validate(&self, builder: &mut ValidationErrorBuilder) -> Result<(), ()>
     where
         Self: Sized,
     {

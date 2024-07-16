@@ -4,6 +4,7 @@ use std::{fmt::Display, hash::Hash};
 
 use crate::rule_model::{
     components::{IterableVariables, ProgramComponent},
+    error::ValidationErrorBuilder,
     origin::Origin,
 };
 
@@ -100,7 +101,7 @@ impl ProgramComponent for Tuple {
         self
     }
 
-    fn validate(&self) -> Result<(), crate::rule_model::error::ValidationError>
+    fn validate(&self, builder: &mut ValidationErrorBuilder) -> Result<(), ()>
     where
         Self: Sized,
     {

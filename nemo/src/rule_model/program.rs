@@ -7,7 +7,6 @@ use crate::{io::parser::ast, rule_model::components::term::tuple::Tuple};
 use super::{
     components::{
         atom::Atom,
-        base::Base,
         fact::Fact,
         import_export::{ExportDirective, ImportDirective},
         literal::Literal,
@@ -36,6 +35,31 @@ pub struct Program {
     facts: Vec<Fact>,
     /// Outputs
     outputs: Vec<Output>,
+}
+
+/// Builder for [Program]s
+#[derive(Debug, Default)]
+pub struct ProgramBuilder {
+    /// Rules
+    rules: Vec<Rule>,
+}
+
+impl ProgramBuilder {
+    /// Finish building and return a [Program].
+    pub fn finalize(self) -> Program {
+        Program {
+            imports: Vec::default(),
+            exports: Vec::default(),
+            rules: self.rules,
+            facts: Vec::default(),
+            outputs: Vec::default(),
+        }
+    }
+
+    /// Add a [Rule].
+    pub fn add_rule(&mut self, rule: Rule) {
+        self.rules.push(rule)
+    }
 }
 
 impl Program {

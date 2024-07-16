@@ -14,7 +14,10 @@ use std::fmt::{Debug, Display};
 
 use term::primitive::variable::Variable;
 
-use super::{error::ValidationError, origin::Origin};
+use super::{
+    error::{ValidationError, ValidationErrorBuilder},
+    origin::Origin,
+};
 
 /// Name of a term
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -54,7 +57,7 @@ pub trait ProgramComponent: Debug + Display {
         Self: Sized;
 
     /// Validate this component
-    fn validate(&self) -> Result<(), ValidationError>
+    fn validate(&self, builder: &mut ValidationErrorBuilder) -> Result<(), ()>
     where
         Self: Sized;
 }

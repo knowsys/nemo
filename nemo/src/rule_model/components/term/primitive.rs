@@ -11,6 +11,7 @@ use variable::{existential::ExistentialVariable, universal::UniversalVariable, V
 
 use crate::rule_model::{
     components::{IterableVariables, ProgramComponent},
+    error::ValidationErrorBuilder,
     origin::Origin,
 };
 
@@ -127,13 +128,13 @@ impl ProgramComponent for Primitive {
         }
     }
 
-    fn validate(&self) -> Result<(), crate::rule_model::error::ValidationError>
+    fn validate(&self, builder: &mut ValidationErrorBuilder) -> Result<(), ()>
     where
         Self: Sized,
     {
         match self {
-            Primitive::Variable(variable) => variable.validate(),
-            Primitive::Ground(ground) => ground.validate(),
+            Primitive::Variable(variable) => variable.validate(builder),
+            Primitive::Ground(ground) => ground.validate(builder),
         }
     }
 }

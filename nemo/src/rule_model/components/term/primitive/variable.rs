@@ -5,7 +5,10 @@ use std::fmt::Display;
 use existential::ExistentialVariable;
 use universal::UniversalVariable;
 
-use crate::rule_model::{error::ValidationError, origin::Origin};
+use crate::rule_model::{
+    error::{ValidationError, ValidationErrorBuilder},
+    origin::Origin,
+};
 
 use super::ProgramComponent;
 
@@ -117,16 +120,16 @@ impl ProgramComponent for Variable {
         }
     }
 
-    fn validate(&self) -> Result<(), ValidationError>
+    fn validate(&self, builder: &mut ValidationErrorBuilder) -> Result<(), ()>
     where
         Self: Sized,
     {
         match &self {
             Variable::Universal(universal) => {
-                universal.validate()?;
+                universal.validate(builder)?;
             }
             Variable::Existential(existential) => {
-                existential.validate()?;
+                existential.validate(builder)?;
             }
         }
 

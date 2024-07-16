@@ -8,10 +8,14 @@ use operation_kind::OperationKind;
 
 use crate::rule_model::{
     components::{IterableVariables, ProgramComponent},
+    error::ValidationErrorBuilder,
     origin::Origin,
 };
 
-use super::{primitive::variable::Variable, Term};
+use super::{
+    primitive::{variable::Variable, Primitive},
+    Term,
+};
 
 /// Operation
 ///
@@ -41,6 +45,26 @@ impl Operation {
     /// Create a new [Operation] giving the string name of the operation.
     pub fn new_from_name(operation: &str, subterms: Vec<Term>) -> Option<Self> {
         Some(Self::new(OperationKind::from_name(operation)?, subterms))
+    }
+
+    /// Check whether this operation has the form of an assignment of a variable to a term.
+    /// If so return the variable and the term as a pair or `None` otherwise.
+    ///
+    /// # Panics
+    /// Panics if this component is invalid.
+    pub fn variable_assignment(&self) -> Option<(&Variable, &Term)> {
+        if self.kind != OperationKind::Equal {
+            return None;
+        }
+
+        let left = self.subterms.get(0).expect("invalid program component");
+        let right = self.subterms.get(1).expect("invalid program component");
+
+        if let Term::Primitive(Primitive::Variable(variable)) = left {
+            Some((variable, right))
+        } else {
+            None
+        }
     }
 }
 
@@ -176,7 +200,7 @@ impl ProgramComponent for Operation {
         self
     }
 
-    fn validate(&self) -> Result<(), crate::rule_model::error::ValidationError>
+    fn validate(&self, builder: &mut ValidationErrorBuilder) -> Result<(), ()>
     where
         Self: Sized,
     {

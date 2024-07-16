@@ -1,10 +1,24 @@
 //! This module defines [Rule] and [RuleBuilder]
 
-use std::{fmt::Display, hash::Hash};
+use std::{collections::HashSet, fmt::Display, hash::Hash};
 
-use crate::rule_model::origin::Origin;
+use nemo_physical::aggregates::operation;
 
-use super::{atom::Atom, literal::Literal, term::operation::Operation, ProgramComponent};
+use crate::rule_model::{
+    error::{validation_error::ValidationErrorKind, ValidationErrorBuilder},
+    origin::Origin,
+};
+
+use super::{
+    atom::Atom,
+    literal::Literal,
+    term::{
+        operation::Operation,
+        primitive::{variable::Variable, Primitive},
+        Term,
+    },
+    IterableVariables, ProgramComponent,
+};
 
 /// Rule
 ///
@@ -66,6 +80,46 @@ impl Rule {
     pub fn head_mut(&mut self) -> &mut Vec<Atom> {
         &mut self.head
     }
+
+    /// Return a list of "safe" variables.
+    ///
+    /// A variable is considered safe,
+    /// if it occurs in a positive body atom,
+    /// or is derived via the equality operation
+    /// from other safe variables.
+    pub fn safe_variables(&self) -> HashSet<&Variable> {
+        let mut result = HashSet::new();
+
+        for literal in &self.body {
+            if let Literal::Positive(atom) = literal {
+                for term in atom.subterms() {
+                    if let Term::Primitive(Primitive::Variable(variable)) = term {
+                        result.insert(variable);
+                    }
+                }
+            }
+        }
+
+        loop {
+            let current_count = result.len();
+
+            for literal in &self.body {
+                if let Literal::Operation(operation) = literal {
+                    if let Some((variable, term)) = operation.variable_assignment() {
+                        if term.variables().all(|variable| result.contains(variable)) {
+                            result.insert(variable);
+                        }
+                    }
+                }
+            }
+
+            if result.len() == current_count {
+                break;
+            }
+        }
+
+        result
+    }
 }
 
 impl Display for Rule {
@@ -125,11 +179,27 @@ impl ProgramComponent for Rule {
         self
     }
 
-    fn validate(&self) -> Result<(), crate::rule_model::error::ValidationError>
+    fn validate(&self, builder: &mut ValidationErrorBuilder) -> Result<(), ()>
     where
         Self: Sized,
     {
-        todo!()
+        let safe_variables = self.safe_variables();
+        let head_variables = self
+            .head
+            .iter()
+            .flat_map(|atom| atom.variables())
+            .collect::<HashSet<&Variable>>();
+
+        for &head_variable in &head_variables {
+            if !safe_variables.contains(head_variable) {
+                builder.report_error(
+                    head_variable.origin(),
+                    ValidationErrorKind::HeadUnsafe(head_variable.clone()),
+                );
+            }
+        }
+
+        Ok(())
     }
 }
 

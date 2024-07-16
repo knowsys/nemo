@@ -6,6 +6,8 @@ pub mod rule;
 pub mod tag;
 pub mod token;
 
+use crate::rule_model::origin::Origin;
+
 use super::{span::ProgramSpan, ParserInput, ParserResult};
 
 /// Trait implemented by nodes in the abstract syntax tree
@@ -20,4 +22,22 @@ pub trait ProgramAST<'a>: Sync {
     fn parse(input: ParserInput<'a>) -> ParserResult<'a, Self>
     where
         Self: Sized + 'a;
+
+    /// Locate a node from a stack of [Origin]s.
+    fn locate(&'a self, origin_stack: &[Origin]) -> Option<&'a dyn ProgramAST<'a>>
+    where
+        Self: Sized + 'a,
+    {
+        let mut current_node: &dyn ProgramAST = self;
+
+        for origin in origin_stack {
+            if let &Origin::External(index) = origin {
+                current_node = *current_node.children().get(index)?;
+            } else {
+                return None;
+            }
+        }
+
+        Some(current_node)
+    }
 }

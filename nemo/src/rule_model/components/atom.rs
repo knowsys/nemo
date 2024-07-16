@@ -2,7 +2,10 @@
 
 use std::{fmt::Display, hash::Hash};
 
-use crate::rule_model::{error::ValidationError, origin::Origin};
+use crate::rule_model::{
+    error::{ValidationError, ValidationErrorBuilder},
+    origin::Origin,
+};
 
 use super::{
     term::{primitive::variable::Variable, Term},
@@ -112,7 +115,7 @@ impl ProgramComponent for Atom {
         self
     }
 
-    fn validate(&self) -> Result<(), ValidationError>
+    fn validate(&self, builder: &mut ValidationErrorBuilder) -> Result<(), ()>
     where
         Self: Sized,
     {
@@ -121,7 +124,7 @@ impl ProgramComponent for Atom {
         }
 
         for term in self.subterms() {
-            term.validate()?;
+            term.validate(builder)?;
         }
 
         Ok(())
