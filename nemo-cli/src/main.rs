@@ -37,6 +37,7 @@ use nemo::{
     meta::timing::{TimedCode, TimedDisplay},
     model::{ExportDirective, Program},
     parser::ParserErrorReport,
+    rule_model,
 };
 
 /// Set exports according to command-line parameter.
@@ -167,7 +168,7 @@ fn run(mut cli: CliApp) -> Result<(), Error> {
         filename: rules.to_string_lossy().to_string(),
     })?;
 
-    let program =
+    let program_ast =
         match nemo::parser::Parser::initialize(&rules_content, rules.to_string_lossy().to_string())
             .parse()
         {
@@ -177,6 +178,24 @@ fn run(mut cli: CliApp) -> Result<(), Error> {
                 std::process::exit(1);
             }
         };
+
+    let program = match rule_model::translation::ASTProgramTranslation::initialize(
+        &rules_content,
+        rules.to_string_lossy().to_string(),
+    )
+    .translate(&program_ast)
+    {
+        Ok(program) => program,
+        Err(report) => {
+            report.eprint(report.build_reports(
+                &program_ast,
+                Color::Red,
+                Color::Green,
+                Color::Green,
+            ))?;
+            std::process::exit(1);
+        }
+    };
 
     // let mut program = parse_program(rules_content)?;
     // let (ast, errors) = parse_program_str(&rules_content);
