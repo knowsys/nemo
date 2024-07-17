@@ -1,0 +1,1 @@
+abc(?x, ?test, ?testt) :- p(?x, ?test) .

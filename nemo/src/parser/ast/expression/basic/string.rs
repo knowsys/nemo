@@ -49,6 +49,8 @@ impl<'a> StringLiteral<'a> {
     }
 }
 
+const CONTEXT: ParserContext = ParserContext::String;
+
 impl<'a> ProgramAST<'a> for StringLiteral<'a> {
     fn children(&self) -> Vec<&dyn ProgramAST> {
         Vec::default()
@@ -65,7 +67,7 @@ impl<'a> ProgramAST<'a> for StringLiteral<'a> {
         let input_span = input.span;
 
         context(
-            ParserContext::String,
+            CONTEXT,
             pair(Self::parse_string, opt(Self::parse_language_tag)),
         )(input)
         .map(|(rest, (content, language_tag))| {
@@ -80,6 +82,10 @@ impl<'a> ProgramAST<'a> for StringLiteral<'a> {
                 },
             )
         })
+    }
+
+    fn context(&self) -> ParserContext {
+        CONTEXT
     }
 }
 

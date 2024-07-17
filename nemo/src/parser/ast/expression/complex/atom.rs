@@ -40,6 +40,8 @@ impl<'a> Atom<'a> {
     }
 }
 
+const CONTEXT: ParserContext = ParserContext::Atom;
+
 impl<'a> ProgramAST<'a> for Atom<'a> {
     fn children(&self) -> Vec<&dyn ProgramAST> {
         let mut result: Vec<&dyn ProgramAST> = vec![];
@@ -61,7 +63,7 @@ impl<'a> ProgramAST<'a> for Atom<'a> {
         let input_span = input.span;
 
         context(
-            ParserContext::Atom,
+            CONTEXT,
             pair(
                 Tag::parse,
                 delimited(
@@ -83,6 +85,10 @@ impl<'a> ProgramAST<'a> for Atom<'a> {
                 },
             )
         })
+    }
+
+    fn context(&self) -> ParserContext {
+        CONTEXT
     }
 }
 

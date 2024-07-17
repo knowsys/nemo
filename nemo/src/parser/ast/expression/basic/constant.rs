@@ -41,6 +41,8 @@ impl<'a> Constant<'a> {
     }
 }
 
+const CONTEXT: ParserContext = ParserContext::Constant;
+
 impl<'a> ProgramAST<'a> for Constant<'a> {
     fn children(&self) -> Vec<&dyn ProgramAST> {
         Vec::default()
@@ -57,7 +59,7 @@ impl<'a> ProgramAST<'a> for Constant<'a> {
         let input_span = input.span;
 
         context(
-            ParserContext::Constant,
+            CONTEXT,
             alt((
                 map(Token::name, ConstantKind::Plain),
                 map(Iri::parse, ConstantKind::Iri),
@@ -74,6 +76,10 @@ impl<'a> ProgramAST<'a> for Constant<'a> {
                 },
             )
         })
+    }
+
+    fn context(&self) -> ParserContext {
+        CONTEXT
     }
 }
 

@@ -108,6 +108,8 @@ impl<'a> Number<'a> {
     }
 }
 
+const CONTEXT: ParserContext = ParserContext::Number;
+
 impl<'a> ProgramAST<'a> for Number<'a> {
     fn children(&self) -> Vec<&dyn ProgramAST> {
         Vec::default()
@@ -124,7 +126,7 @@ impl<'a> ProgramAST<'a> for Number<'a> {
         let input_span = input.span;
 
         context(
-            ParserContext::Number,
+            CONTEXT,
             tuple((
                 opt(Self::parse_sign),
                 Self::parse_integer,
@@ -150,6 +152,10 @@ impl<'a> ProgramAST<'a> for Number<'a> {
                 )
             },
         )
+    }
+
+    fn context(&self) -> ParserContext {
+        CONTEXT
     }
 }
 

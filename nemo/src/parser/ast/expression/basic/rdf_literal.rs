@@ -43,6 +43,8 @@ impl<'a> RdfLiteral<'a> {
     }
 }
 
+const CONTEXT: ParserContext = ParserContext::RdfLiteral;
+
 impl<'a> ProgramAST<'a> for RdfLiteral<'a> {
     fn children(&self) -> Vec<&dyn ProgramAST> {
         Vec::default()
@@ -59,7 +61,7 @@ impl<'a> ProgramAST<'a> for RdfLiteral<'a> {
         let input_span = input.span;
 
         context(
-            ParserContext::RdfLiteral,
+            CONTEXT,
             tuple((Self::parse_content, Token::double_caret, Iri::parse)),
         )(input)
         .map(|(rest, (content, _, tag))| {
@@ -74,6 +76,10 @@ impl<'a> ProgramAST<'a> for RdfLiteral<'a> {
                 },
             )
         })
+    }
+
+    fn context(&self) -> ParserContext {
+        CONTEXT
     }
 }
 

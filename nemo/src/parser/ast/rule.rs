@@ -42,6 +42,8 @@ impl<'a> Rule<'a> {
     }
 }
 
+const CONTEXT: ParserContext = ParserContext::Rule;
+
 impl<'a> ProgramAST<'a> for Rule<'a> {
     fn children(&self) -> Vec<&dyn ProgramAST> {
         let mut result = Vec::<&dyn ProgramAST>::new();
@@ -64,7 +66,7 @@ impl<'a> ProgramAST<'a> for Rule<'a> {
         let input_span = input.span;
 
         context(
-            ParserContext::Rule,
+            CONTEXT,
             tuple((
                 ExpressionSequenceSimple::parse,
                 tuple((opt(Token::whitespace), Token::arrow, opt(Token::whitespace))),
@@ -84,6 +86,10 @@ impl<'a> ProgramAST<'a> for Rule<'a> {
                 },
             )
         })
+    }
+
+    fn context(&self) -> ParserContext {
+        CONTEXT
     }
 }
 

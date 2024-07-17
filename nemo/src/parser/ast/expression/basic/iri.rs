@@ -28,6 +28,8 @@ impl<'a> Iri<'a> {
     }
 }
 
+const CONTEXT: ParserContext = ParserContext::Iri;
+
 impl<'a> ProgramAST<'a> for Iri<'a> {
     fn children(&self) -> Vec<&dyn ProgramAST> {
         Vec::default()
@@ -44,7 +46,7 @@ impl<'a> ProgramAST<'a> for Iri<'a> {
         let input_span = input.span;
 
         context(
-            ParserContext::Iri,
+            CONTEXT,
             tuple((Token::open_chevrons, Token::iri, Token::closed_chevrons)),
         )(input)
         .map(|(rest, (_, content, _))| {
@@ -58,6 +60,10 @@ impl<'a> ProgramAST<'a> for Iri<'a> {
                 },
             )
         })
+    }
+
+    fn context(&self) -> ParserContext {
+        CONTEXT
     }
 }
 

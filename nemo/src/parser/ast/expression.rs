@@ -43,6 +43,25 @@ pub enum Expression<'a> {
     Variable(Variable<'a>),
 }
 
+impl<'a> Expression<'a> {
+    /// Return the [ParserContext] of the underlying expression type.
+    pub fn context_type(&self) -> ParserContext {
+        match self {
+            Expression::Atom(expression) => expression.context(),
+            Expression::Blank(expression) => expression.context(),
+            Expression::Boolean(expression) => expression.context(),
+            Expression::Constant(expression) => expression.context(),
+            Expression::Number(expression) => expression.context(),
+            Expression::RdfLiteral(expression) => expression.context(),
+            Expression::String(expression) => expression.context(),
+            Expression::Tuple(expression) => expression.context(),
+            Expression::Variable(expression) => expression.context(),
+        }
+    }
+}
+
+const CONTEXT: ParserContext = ParserContext::Expression;
+
 impl<'a> ProgramAST<'a> for Expression<'a> {
     fn children(&self) -> Vec<&dyn ProgramAST> {
         match self {
@@ -77,7 +96,7 @@ impl<'a> ProgramAST<'a> for Expression<'a> {
         Self: Sized + 'a,
     {
         context(
-            ParserContext::Expression,
+            CONTEXT,
             alt((
                 map(Atom::parse, Self::Atom),
                 map(Tuple::parse, Self::Tuple),
@@ -90,6 +109,10 @@ impl<'a> ProgramAST<'a> for Expression<'a> {
                 map(Variable::parse, Self::Variable),
             )),
         )(input)
+    }
+
+    fn context(&self) -> ParserContext {
+        CONTEXT
     }
 }
 

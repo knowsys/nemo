@@ -2,10 +2,10 @@
 
 use std::{collections::HashSet, fmt::Display, hash::Hash};
 
-use nemo_physical::aggregates::operation;
+use similar_string::find_best_similarity;
 
 use crate::rule_model::{
-    error::{validation_error::ValidationErrorKind, ValidationErrorBuilder},
+    error::{hint::Hint, validation_error::ValidationErrorKind, ValidationErrorBuilder},
     origin::Origin,
 };
 
@@ -184,19 +184,49 @@ impl ProgramComponent for Rule {
         Self: Sized,
     {
         let safe_variables = self.safe_variables();
-        let head_variables = self
-            .head
-            .iter()
-            .flat_map(|atom| atom.variables())
-            .collect::<HashSet<&Variable>>();
 
-        for &head_variable in &head_variables {
-            if !safe_variables.contains(head_variable) {
-                builder.report_error(
-                    head_variable.origin(),
-                    ValidationErrorKind::HeadUnsafe(head_variable.clone()),
-                );
+        for atom in &self.head {
+            builder.push_origin(atom.origin().clone());
+
+            for term in atom.subterms() {
+                if let Term::Primitive(Primitive::Variable(head_variable)) = term {
+                    if !safe_variables.contains(head_variable) {
+                        let head_variable_name = head_variable
+                            .name()
+                            .expect("anonymous variables not allowed in the head");
+
+                        let hint = if let Some(closest_option) = find_best_similarity(
+                            head_variable_name.clone(),
+                            &safe_variables
+                                .iter()
+                                .filter_map(|variable| variable.name())
+                                .collect::<Vec<_>>(),
+                        ) {
+                            if head_variable_name.len() > 2
+                                && closest_option.0.len() > 2
+                                && closest_option.1 > 0.75
+                            {
+                                vec![Hint::SimilarExists {
+                                    kind: "variable".to_string(),
+                                    name: closest_option.0,
+                                }]
+                            } else {
+                                vec![]
+                            }
+                        } else {
+                            vec![]
+                        };
+
+                        builder.report_error(
+                            head_variable.origin(),
+                            ValidationErrorKind::HeadUnsafe(head_variable.clone()),
+                            hint,
+                        );
+                    }
+                }
             }
+
+            builder.pop_origin();
         }
 
         Ok(())

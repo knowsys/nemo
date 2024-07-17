@@ -32,6 +32,8 @@ impl<'a> Tuple<'a> {
     }
 }
 
+const CONTEXT: ParserContext = ParserContext::Tuple;
+
 impl<'a> ProgramAST<'a> for Tuple<'a> {
     fn children(&self) -> Vec<&dyn ProgramAST> {
         let mut result: Vec<&dyn ProgramAST> = vec![];
@@ -53,7 +55,7 @@ impl<'a> ProgramAST<'a> for Tuple<'a> {
         let input_span = input.span;
 
         context(
-            ParserContext::Tuple,
+            CONTEXT,
             delimited(
                 pair(Token::open_parenthesis, opt(Token::whitespace)),
                 terminated(
@@ -78,6 +80,10 @@ impl<'a> ProgramAST<'a> for Tuple<'a> {
                 },
             )
         })
+    }
+
+    fn context(&self) -> ParserContext {
+        CONTEXT
     }
 }
 

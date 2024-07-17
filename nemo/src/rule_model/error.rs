@@ -1,15 +1,20 @@
 //! This module defines different kinds of errors that can occur
 //! while working with nemo programs.
 
+pub mod hint;
 pub mod translation_error;
 pub mod validation_error;
 
 use std::fmt::Display;
 
+use hint::Hint;
 use translation_error::TranslationErrorKind;
 use validation_error::ValidationErrorKind;
 
-use crate::parser::{ast::ProgramAST, span::CharacterRange};
+use crate::parser::{
+    ast::ProgramAST,
+    span::{CharacterRange, ProgramSpan},
+};
 
 use super::origin::Origin;
 
@@ -20,6 +25,8 @@ pub struct ValidationError {
     kind: ValidationErrorKind,
     /// Stack of [Origin] from which the original AST node can be derived
     origin_stack: Vec<Origin>,
+    /// List of hints
+    hints: Vec<Hint>,
 }
 
 impl Display for ValidationError {
@@ -49,38 +56,46 @@ impl ValidationErrorBuilder {
     }
 
     /// Add a new error.
-    pub fn report_error(&mut self, origin: &Origin, error_kind: ValidationErrorKind) {
+    pub fn report_error(
+        &mut self,
+        origin: &Origin,
+        error_kind: ValidationErrorKind,
+        hints: Vec<Hint>,
+    ) {
         let mut origin_stack = self.origin_stack.clone();
         origin_stack.push(origin.clone());
 
         self.error_stack.push(ValidationError {
             kind: error_kind,
             origin_stack,
+            hints,
         })
     }
 
     /// Finish building and return a list of [ValidationError]s.
     pub fn finalize(self) -> Vec<ValidationError> {
-        println!("Stack: {:?}", self.error_stack);
         self.error_stack
     }
 }
 
 /// Error that occurs while translating the ast into the logical representation
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug)]
 pub struct TranslationError {
     /// The type of error that occurred
     kind: TranslationErrorKind,
     /// Range signifying the program part that should be highlighted
     range: CharacterRange,
+    /// List of hints
+    hints: Vec<Hint>,
 }
 
 impl TranslationError {
-    /// Create a new [TranslationError] from a given .
-    pub fn new<'a, Node: ProgramAST<'a>>(ast: &'a Node, kind: TranslationErrorKind) -> Self {
+    /// Create a new [TranslationError] from a given [ProgramSPan].
+    pub fn new<'a>(span: ProgramSpan<'a>, kind: TranslationErrorKind, hints: Vec<Hint>) -> Self {
         Self {
             kind,
-            range: ast.span().range(),
+            range: span.range(),
+            hints,
         }
     }
 }
@@ -96,7 +111,7 @@ pub enum ProgramError {
 }
 
 impl ProgramError {
-    /// Return the message of the error
+    /// Return the message of the error.
     pub fn message(&self) -> String {
         match self {
             ProgramError::TranslationError(error) => error.kind.to_string(),
@@ -104,7 +119,7 @@ impl ProgramError {
         }
     }
 
-    /// Return the [CharacterRange] associated with this error
+    /// Return the [CharacterRange] associated with this error.
     pub fn range<'a, Node: ProgramAST<'a>>(&self, ast: &'a Node) -> CharacterRange {
         match self {
             ProgramError::TranslationError(error) => error.range,
@@ -116,13 +131,31 @@ impl ProgramError {
         }
     }
 
-    /// Return the error code of the message
+    /// Return the error code of the message.
     pub fn error_code(&self) -> usize {
-        123
+        match self {
+            ProgramError::TranslationError(error) => error.kind.code(),
+            ProgramError::ValidationError(error) => error.kind.code(),
+        }
     }
 
-    /// Return an optional note that may be attached to the error
+    /// Return an optional note that may be attached to the error.
     pub fn note(&self) -> Option<String> {
-        None
+        match self {
+            ProgramError::TranslationError(error) => error.kind.note(),
+            ProgramError::ValidationError(error) => error.kind.note(),
+        }
+        .map(|note| note.to_string())
+    }
+
+    /// Return a list of hints that fit the error message.
+    pub fn hints(&self) -> Vec<String> {
+        match self {
+            ProgramError::TranslationError(error) => &error.hints,
+            ProgramError::ValidationError(error) => &error.hints,
+        }
+        .iter()
+        .map(|hint| hint.message().to_string())
+        .collect()
     }
 }

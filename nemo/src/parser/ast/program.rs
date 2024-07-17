@@ -22,6 +22,8 @@ impl<'a> Program<'a> {
     }
 }
 
+const CONTEXT: ParserContext = ParserContext::Program;
+
 impl<'a> ProgramAST<'a> for Program<'a> {
     fn children(&self) -> Vec<&dyn ProgramAST> {
         // TODO: Fix this once we have statements
@@ -40,7 +42,11 @@ impl<'a> ProgramAST<'a> for Program<'a> {
     where
         Self: Sized + 'a,
     {
-        context(ParserContext::Program, Rule::parse)(input)
+        context(CONTEXT, Rule::parse)(input)
             .map(|(rest, result)| (rest, Program { statements: result }))
+    }
+
+    fn context(&self) -> ParserContext {
+        CONTEXT
     }
 }

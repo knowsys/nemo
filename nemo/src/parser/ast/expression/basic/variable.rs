@@ -75,6 +75,8 @@ impl<'a> Variable<'a> {
     }
 }
 
+const CONTEXT: ParserContext = ParserContext::Variable;
+
 impl<'a> ProgramAST<'a> for Variable<'a> {
     fn children(&self) -> Vec<&dyn ProgramAST> {
         Vec::default()
@@ -91,7 +93,7 @@ impl<'a> ProgramAST<'a> for Variable<'a> {
         let input_span = input.span;
 
         context(
-            ParserContext::Variable,
+            CONTEXT,
             pair(Self::parse_variable_prefix, opt(Self::parse_variable_name)),
         )(input)
         .map(|(rest, (kind, name))| {
@@ -106,6 +108,10 @@ impl<'a> ProgramAST<'a> for Variable<'a> {
                 },
             )
         })
+    }
+
+    fn context(&self) -> ParserContext {
+        CONTEXT
     }
 }
 

@@ -54,6 +54,8 @@ impl<'a> Boolean<'a> {
     }
 }
 
+const CONTEXT: ParserContext = ParserContext::Boolean;
+
 impl<'a> ProgramAST<'a> for Boolean<'a> {
     fn children(&self) -> Vec<&dyn ProgramAST> {
         Vec::default()
@@ -69,7 +71,7 @@ impl<'a> ProgramAST<'a> for Boolean<'a> {
     {
         let input_span = input.span;
 
-        context(ParserContext::Boolean, Self::parse_boolean_value)(input).map(|(rest, value)| {
+        context(CONTEXT, Self::parse_boolean_value)(input).map(|(rest, value)| {
             let rest_span = rest.span;
 
             (
@@ -80,6 +82,10 @@ impl<'a> ProgramAST<'a> for Boolean<'a> {
                 },
             )
         })
+    }
+
+    fn context(&self) -> ParserContext {
+        CONTEXT
     }
 }
 

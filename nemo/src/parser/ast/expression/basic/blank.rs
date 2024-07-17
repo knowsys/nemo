@@ -32,6 +32,8 @@ impl<'a> Blank<'a> {
     }
 }
 
+const CONTEXT: ParserContext = ParserContext::Blank;
+
 impl<'a> ProgramAST<'a> for Blank<'a> {
     fn children(&self) -> Vec<&dyn ProgramAST> {
         Vec::default()
@@ -47,21 +49,23 @@ impl<'a> ProgramAST<'a> for Blank<'a> {
     {
         let input_span = input.span;
 
-        context(
-            ParserContext::Blank,
-            pair(Token::blank_node_prefix, Self::parse_name),
-        )(input)
-        .map(|(rest, (_, name))| {
-            let rest_span = rest.span;
+        context(CONTEXT, pair(Token::blank_node_prefix, Self::parse_name))(input).map(
+            |(rest, (_, name))| {
+                let rest_span = rest.span;
 
-            (
-                rest,
-                Blank {
-                    span: input_span.until_rest(&rest_span),
-                    name,
-                },
-            )
-        })
+                (
+                    rest,
+                    Blank {
+                        span: input_span.until_rest(&rest_span),
+                        name,
+                    },
+                )
+            },
+        )
+    }
+
+    fn context(&self) -> ParserContext {
+        CONTEXT
     }
 }
 

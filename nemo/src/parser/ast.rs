@@ -8,7 +8,7 @@ pub mod token;
 
 use crate::rule_model::origin::Origin;
 
-use super::{span::ProgramSpan, ParserInput, ParserResult};
+use super::{context::ParserContext, span::ProgramSpan, ParserInput, ParserResult};
 
 /// Trait implemented by nodes in the abstract syntax tree
 pub trait ProgramAST<'a>: Sync {
@@ -22,6 +22,9 @@ pub trait ProgramAST<'a>: Sync {
     fn parse(input: ParserInput<'a>) -> ParserResult<'a, Self>
     where
         Self: Sized + 'a;
+
+    /// Return [ParserContext] indicating the type of node.
+    fn context(&self) -> ParserContext;
 
     /// Locate a node from a stack of [Origin]s.
     fn locate(&'a self, origin_stack: &[Origin]) -> Option<&'a dyn ProgramAST<'a>>
