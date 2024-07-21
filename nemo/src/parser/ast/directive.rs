@@ -1,12 +1,15 @@
 //! This module defines [Directive]s.
+#![allow(missing_docs)]
 
 use base::Base;
 use declare::Declare;
+use enum_assoc::Assoc;
 use export::Export;
 use import::Import;
 use nom::{branch::alt, combinator::map};
 use output::Output;
 use prefix::Prefix;
+use strum_macros::EnumIter;
 use unknown::UnknownDirective;
 
 use crate::parser::{
@@ -16,7 +19,7 @@ use crate::parser::{
     ParserResult,
 };
 
-use super::ProgramAST;
+use super::{token::TokenKind, ProgramAST};
 
 pub mod base;
 pub mod declare;
@@ -26,22 +29,56 @@ pub mod output;
 pub mod prefix;
 pub mod unknown;
 
-/// Type of directives
-#[derive(Debug)]
+/// Types of directives
+#[derive(Debug, Assoc, EnumIter, Clone, Copy, PartialEq, Eq)]
+#[func(pub fn token(&self) -> Option<TokenKind>)]
+pub enum DirectiveKind {
+    /// Base
+    #[assoc(token = TokenKind::BaseDirective)]
+    Base,
+    /// Declare
+    #[assoc(token = TokenKind::DeclareDirective)]
+    Declare,
+    /// Export
+    #[assoc(token = TokenKind::ExportDirective)]
+    Export,
+    /// Import
+    #[assoc(token = TokenKind::ImportDirective)]
+    Import,
+    /// Output
+    #[assoc(token = TokenKind::OutputDirective)]
+    Output,
+    /// Prefix
+    #[assoc(token = TokenKind::PrefixDirective)]
+    Prefix,
+    /// Unknown
+    Unknown,
+}
+
+/// Directive
+#[derive(Assoc, Debug)]
+#[func(pub fn kind(&self) -> DirectiveKind)]
 pub enum Directive<'a> {
     /// Base
+    #[assoc(kind = DirectiveKind::Base)]
     Base(Base<'a>),
     /// Declare
+    #[assoc(kind = DirectiveKind::Declare)]
     Declare(Declare<'a>),
     /// Export
+    #[assoc(kind = DirectiveKind::Export)]
     Export(Export<'a>),
     /// Import
+    #[assoc(kind = DirectiveKind::Import)]
     Import(Import<'a>),
     /// Output
+    #[assoc(kind = DirectiveKind::Output)]
     Output(Output<'a>),
     /// Prefix
+    #[assoc(kind = DirectiveKind::Prefix)]
     Prefix(Prefix<'a>),
     /// Unknown
+    #[assoc(kind = DirectiveKind::Base)]
     Unknown(UnknownDirective<'a>),
 }
 

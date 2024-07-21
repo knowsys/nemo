@@ -128,7 +128,7 @@ impl<'a> ProgramSpan<'a> {
             ))
         }
     }
-    /// TODO: Description and Specify safety conditions
+
     /// Create a [ProgramSpan] that encloses the given [ProgramSpan]s.
     /// TODO: Description and Specify safety conditions and verify that this is correct
     pub fn enclose(&self, first: &Self, second: &Self) -> Self {

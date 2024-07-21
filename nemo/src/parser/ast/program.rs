@@ -8,6 +8,7 @@ use nom::{
 
 use crate::parser::{
     context::{context, ParserContext},
+    error::{recover, report_error},
     input::ParserInput,
     span::ProgramSpan,
     ParserResult,
@@ -78,14 +79,10 @@ impl<'a> ProgramAST<'a> for Program<'a> {
                 opt(TopLevelComment::parse),
                 delimited(
                     WSoC::parse,
-                    separated_list0(WSoC::parse, Statement::parse),
+                    separated_list0(WSoC::parse, recover(report_error(Statement::parse))),
                     WSoC::parse,
                 ),
-            ), // pair(
-               //     TopLevelComment::parse,
-               //     WSoC::parse,
-               //     // terminated(many0(preceded(WSoC::parse, Statement::parse)), WSoC::parse),
-               // ),
+            ),
         )(input)
         .map(|(rest, (comment, statements))| {
             let rest_span = rest.span;
@@ -95,7 +92,7 @@ impl<'a> ProgramAST<'a> for Program<'a> {
                 Self {
                     span: input_span.until_rest(&rest_span),
                     comment,
-                    statements,
+                    statements: statements.into_iter().flatten().collect(),
                 },
             )
         })
@@ -137,5 +134,35 @@ mod test {
         let result = result.unwrap();
         assert!(result.1.comment().is_some());
         assert_eq!(result.1.statements.len(), 4);
+    }
+
+    #[test]
+    fn parser_recover() {
+        let program = "//! Top-level comment\n\
+            // Declarations:\n\
+            @declare oops a(_: int, _: int) .\n\
+            @declare b(_: int, _: int) .\n\
+            /// A fact\n\
+            a(1, 2) \n\
+            \n\
+            // Rules:\n\
+            \n\
+            /// A rule\n\
+            b(?y, ?x) <- a(?x, ?y) .\n\
+            \n\
+            c(?y, ?x) :- a(?x, ?y) .\n\
+            // Some more comments
+        ";
+
+        let parser_input = ParserInput::new(program, ParserState::default());
+        let result = Program::parse(parser_input.clone())
+            .expect("This should not fail")
+            .1;
+
+        println!("{:?}", result.statements);
+
+        assert!(result.comment.is_some());
+        assert_eq!(result.statements.len(), 2);
+        // assert_eq!(parser_input.state.errors.borrow().len(), 3);
     }
 }

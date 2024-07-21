@@ -1,9 +1,21 @@
 //! This module defines the error type that is returned when the parser is unsuccessful.
 
-use nom::Parser;
+use nom::{
+    branch::alt,
+    bytes::complete::{take_until, take_while},
+    character::complete::line_ending,
+    combinator::map,
+    sequence::{preceded, terminated},
+    Parser,
+};
 use nom_supreme::error::{GenericErrorTree, StackContext};
 
-use super::{context::ParserContext, span::CharacterPosition, ParserInput, ParserResult};
+use super::{
+    ast::{statement::Statement, token::Token},
+    context::ParserContext,
+    span::CharacterPosition,
+    ParserInput, ParserResult,
+};
 
 /// Error tree used by nom parser
 pub type ParserErrorTree<'a> = GenericErrorTree<
@@ -22,32 +34,67 @@ pub(crate) struct ParserError {
     pub(crate) context: Vec<ParserContext>,
 }
 
-// fn recover<'a, E>(
-//     mut parser: impl Parser<Input<'a, 's>, Statement<'a>, E>,
-//     error_msg: impl ToString,
-//     context: Context,
-//     _errors: ParserState<'s>,
-// ) -> impl FnMut(Input<'a, 's>) -> IResult<Input<'a, 's>, Statement<'a>, E> {
-//     move |input: Input<'a, 's>| match parser.parse(input) {
-//         Ok(result) => Ok(result),
-//         Err(err) if input.input.is_empty() => Err(err),
-//         Err(nom::Err::Error(_)) | Err(nom::Err::Failure(_)) => {
-//             let _err = Error {
-//                 pos: Position {
-//                     offset: input.input.location_offset(),
-//                     line: input.input.location_line(),
-//                     column: input.input.get_utf8_column() as u32,
-//                 },
-//                 msg: error_msg.to_string(),
-//                 context: vec![context],
-//             };
-//             // errors.report_error(err);
-//             let (rest_input, span) = skip_to_statement_end::<ErrorTree<Input<'_, '_>>>(input);
-//             Ok((rest_input, Statement::Error(span)))
-//         }
-//         Err(err) => Err(err),
-//     }
-// }
+/// Skip a statement, returning an error token.
+pub(crate) fn skip_statement<'a>(input: ParserInput<'a>) -> ParserResult<'a, Token<'a>> {
+    let input_span = input.span;
+
+    let until_double_newline = map(
+        alt((
+            preceded(take_until("\n\n"), Token::double_newline),
+            preceded(take_until("\r\n\r\n"), Token::double_newline),
+            preceded(take_until("\r\r"), Token::double_newline),
+        )),
+        move |token| Token::error(input_span.enclose(&input_span, &token.span())),
+    );
+    let until_dot_newline = map(
+        alt((
+            preceded(take_until(".\n"), terminated(Token::dot, line_ending)),
+            preceded(take_until(".\r\n"), terminated(Token::dot, line_ending)),
+            preceded(take_until(".\r"), terminated(Token::dot, line_ending)),
+        )),
+        move |token| Token::error(input_span.enclose(&input_span, &token.span())),
+    );
+    let until_eof = map(take_while(|_| true), move |_| Token::error(input_span));
+
+    alt((until_dot_newline, until_double_newline, until_eof))(input)
+}
+
+pub(crate) fn recover<'a>(
+    mut parser: impl Parser<ParserInput<'a>, Statement<'a>, ParserErrorTree<'a>>,
+) -> impl FnMut(ParserInput<'a>) -> ParserResult<Option<Statement<'a>>> {
+    move |input: ParserInput<'a>| match parser.parse(input.clone()) {
+        Ok((rest, statement)) => Ok((rest, Some(statement))),
+        Err(err) if input.span.0.is_empty() => Err(err),
+        Err(nom::Err::Error(_)) | Err(nom::Err::Failure(_)) => {
+            let (rest_input, _span) = skip_statement(input).expect("this parser cannot fail");
+            Ok((rest_input, None))
+        }
+        Err(err) => Err(err),
+    }
+}
+
+pub(crate) fn report_error<'a>(
+    mut parser: impl Parser<ParserInput<'a>, Statement<'a>, ParserErrorTree<'a>>,
+) -> impl FnMut(ParserInput<'a>) -> ParserResult<Statement<'a>> {
+    move |input| match parser.parse(input.clone()) {
+        Ok(result) => Ok(result),
+        Err(e) => {
+            if input.span.0.is_empty() {
+                return Err(e);
+            };
+            match &e {
+                nom::Err::Incomplete(_) => (),
+                nom::Err::Error(err) | nom::Err::Failure(err) => {
+                    let (_deepest_pos, errors) = get_deepest_errors(err);
+                    for error in errors {
+                        input.state.report_error(error);
+                    }
+                }
+            };
+            Err(e)
+        }
+    }
+}
 
 /// Function to translate an [ParserErrorTree] returned by the nom parser
 /// into a [ParserError] that can be displayed to the user.
@@ -165,6 +212,33 @@ fn get_deepest_errors<'a, 's>(e: &'a ParserErrorTree<'a>) -> (CharacterPosition,
                 }
             }
             (deepest_pos, return_vec)
+        }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use crate::parser::{error::skip_statement, input::ParserInput, ParserState};
+
+    #[test]
+    fn skip_to_statement_end() {
+        let test = vec![
+            (
+                "some text ending in newline",
+                "some text ending in newline".to_string(),
+            ),
+            ("some text.\n More text", "some text.".to_string()),
+            ("some text\n\n More text", "some text\n\n".to_string()),
+        ];
+
+        for (input, expected) in test {
+            let parser_input = ParserInput::new(input, ParserState::default());
+            let result = skip_statement(parser_input);
+
+            assert!(result.is_ok());
+
+            let result = result.unwrap();
+            assert_eq!(expected, result.1.to_string());
         }
     }
 }

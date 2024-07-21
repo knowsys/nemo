@@ -1,7 +1,7 @@
 //! This module defines [Attribute].
 
 use nom::{
-    character::complete::newline,
+    character::complete::line_ending,
     sequence::{delimited, pair, terminated, tuple},
 };
 
@@ -56,7 +56,7 @@ impl<'a> ProgramAST<'a> for Attribute<'a> {
                     Atom::parse,
                     pair(WSoC::parse, Token::closed_bracket),
                 ),
-                newline,
+                line_ending,
             ),
         )(input)
         .map(|(rest, content)| {

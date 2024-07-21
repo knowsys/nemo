@@ -187,9 +187,9 @@ pub enum TokenKind {
     /// White spaces
     #[assoc(name = "whitespace")]
     Whitespace,
-    /// End of file
-    #[assoc(name = "end-of-file")]
-    EndOfFile,
+    /// Double new line
+    #[assoc(name = "double newline")]
+    DoubleNewline,
     /// Token that captures errors
     #[assoc(name = "error")]
     Error,
@@ -241,7 +241,7 @@ impl<'a> Token<'a> {
     }
 
     /// Parse [TokenKind::Name].
-    pub fn name(input: ParserInput<'a>) -> ParserResult<'a, Token> {
+    pub fn name(input: ParserInput<'a>) -> ParserResult<'a, Token<'a>> {
         context(
             ParserContext::token(TokenKind::Name),
             recognize(pair(
@@ -261,7 +261,7 @@ impl<'a> Token<'a> {
     }
 
     /// Parse [TokenKind::Iri].
-    pub fn iri(input: ParserInput<'a>) -> ParserResult<'a, Token> {
+    pub fn iri(input: ParserInput<'a>) -> ParserResult<'a, Token<'a>> {
         is_not("> \n")(input).map(|(rest, result)| {
             (
                 rest,
@@ -274,7 +274,7 @@ impl<'a> Token<'a> {
     }
 
     /// Parse [TokenKind::String].
-    pub fn string(input: ParserInput<'a>) -> ParserResult<'a, Token> {
+    pub fn string(input: ParserInput<'a>) -> ParserResult<'a, Token<'a>> {
         is_not("\"")(input).map(|(rest, result)| {
             (
                 rest,
@@ -287,7 +287,7 @@ impl<'a> Token<'a> {
     }
 
     /// Parse [TokenKind::Digits].
-    pub fn digits(input: ParserInput<'a>) -> ParserResult<'a, Token> {
+    pub fn digits(input: ParserInput<'a>) -> ParserResult<'a, Token<'a>> {
         context(ParserContext::token(TokenKind::Digits), digit1)(input).map(
             |(rest_input, result)| {
                 (
@@ -302,18 +302,43 @@ impl<'a> Token<'a> {
     }
 
     /// Parse [TokenKind::Whitespace].
-    pub fn whitespace(input: ParserInput<'a>) -> ParserResult<'a, Token> {
+    pub fn whitespace(input: ParserInput<'a>) -> ParserResult<'a, Token<'a>> {
         context(ParserContext::token(TokenKind::Whitespace), multispace1)(input).map(
             |(rest_input, result)| {
                 (
                     rest_input,
                     Token {
                         span: result.span,
-                        kind: TokenKind::Digits,
+                        kind: TokenKind::Whitespace,
                     },
                 )
             },
         )
+    }
+
+    /// Parse [TokenKind::DoubleNewline].
+    pub fn double_newline(input: ParserInput<'a>) -> ParserResult<'a, Token<'a>> {
+        context(
+            ParserContext::token(TokenKind::DoubleNewline),
+            alt((tag("\n\n"), tag("\r\n\r\n"), tag("\r\r"))),
+        )(input)
+        .map(|(rest_input, result)| {
+            (
+                rest_input,
+                Token {
+                    span: result.span,
+                    kind: TokenKind::DoubleNewline,
+                },
+            )
+        })
+    }
+
+    /// Create [TokenKind::Error].
+    pub fn error(span: ProgramSpan<'a>) -> Token<'a> {
+        Token {
+            span,
+            kind: TokenKind::Error,
+        }
     }
 
     string_token!(open_parenthesis, TokenKind::OpenParenthesis);

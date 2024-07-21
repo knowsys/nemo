@@ -179,6 +179,9 @@ fn run(mut cli: CliApp) -> Result<(), Error> {
             }
         };
 
+    println!("Parsing successful");
+    std::process::exit(0);
+
     let program = match rule_model::translation::ASTProgramTranslation::initialize(
         &rules_content,
         rules.to_string_lossy().to_string(),

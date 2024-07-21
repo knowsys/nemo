@@ -5,14 +5,19 @@ use nom::{
     combinator::recognize,
     sequence::{pair, preceded, separated_pair},
 };
+use nom_supreme::error::{BaseErrorKind, Expectation};
+use strum::IntoEnumIterator;
 
 use crate::parser::{
     ast::{comment::wsoc::WSoC, token::Token, ProgramAST},
     context::{context, ParserContext},
+    error::ParserErrorTree,
     input::ParserInput,
     span::ProgramSpan,
     ParserResult,
 };
+
+use super::DirectiveKind;
 
 /// Unknown directive specified by a user
 #[derive(Debug)]
@@ -36,6 +41,33 @@ impl<'a> UnknownDirective<'a> {
     pub fn content(&self) -> String {
         self.content.0.to_string()
     }
+
+    /// Parse the name of the directive.
+    pub fn parse_unknown(input: ParserInput<'a>) -> ParserResult<'a, Token<'a>> {
+        let keyword_parser = |input: ParserInput<'a>| {
+            if let Ok((rest, matched)) = Token::name(input.clone()) {
+                let mut is_known = false;
+
+                for directive in DirectiveKind::iter().map(|kind| kind.token()).flatten() {
+                    if matched.to_string() == directive.name() {
+                        is_known = true;
+                        break;
+                    }
+                }
+
+                if !is_known {
+                    return Ok((rest, matched));
+                }
+            }
+
+            Err(nom::Err::Error(ParserErrorTree::Base {
+                location: input,
+                kind: BaseErrorKind::Expected(Expectation::Tag("known directive")),
+            }))
+        };
+
+        keyword_parser(input)
+    }
 }
 
 const CONTEXT: ParserContext = ParserContext::UnknownDirective;
@@ -58,7 +90,7 @@ impl<'a> ProgramAST<'a> for UnknownDirective<'a> {
         context(
             CONTEXT,
             separated_pair(
-                preceded(Token::at, Token::name),
+                preceded(Token::at, Self::parse_unknown),
                 pair(WSoC::parse_whitespace_comment, WSoC::parse),
                 recognize(is_not(".")),
             ),
@@ -107,6 +139,22 @@ mod test {
 
             let result = result.unwrap();
             assert_eq!(expected, (result.1.name(), result.1.content()));
+        }
+
+        let known_directives = vec![
+            "@base something",
+            "@declare something",
+            "@import something",
+            "@export something",
+            "@prefix something",
+            "@output something",
+        ];
+
+        for input in known_directives {
+            let parser_input = ParserInput::new(input, ParserState::default());
+            let result = all_consuming(UnknownDirective::parse)(parser_input);
+
+            assert!(result.is_err());
         }
     }
 }
