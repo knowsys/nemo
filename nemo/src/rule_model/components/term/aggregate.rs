@@ -18,7 +18,6 @@ use super::{primitive::variable::Variable, Term};
 /// Aggregate operation on logical values
 #[derive(Assoc, EnumIter, Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 #[func(pub fn name(&self) -> &'static str)]
-#[func(pub fn from_name(name: &str) -> Option<Self>)]
 pub enum AggregateKind {
     /// Count of distinct values
     #[assoc(name = aggregates::AGGREGATE_COUNT)]

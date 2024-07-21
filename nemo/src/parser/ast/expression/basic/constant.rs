@@ -48,7 +48,7 @@ impl<'a> ProgramAST<'a> for Constant<'a> {
         Vec::default()
     }
 
-    fn span(&self) -> ProgramSpan {
+    fn span(&self) -> ProgramSpan<'a> {
         self.span
     }
 

@@ -1,16 +1,11 @@
-//! This module defines
+//! This module defines [ExpressionSequenceOne].
 
 use std::vec::IntoIter;
 
-use nom::{
-    branch::alt,
-    combinator::{map, opt},
-    multi::separated_list1,
-    sequence::tuple,
-};
+use nom::{branch::alt, combinator::map, multi::separated_list1, sequence::tuple};
 
 use crate::parser::{
-    ast::{expression::Expression, token::Token, ProgramAST},
+    ast::{comment::wsoc::WSoC, expression::Expression, token::Token, ProgramAST},
     input::ParserInput,
     span::ProgramSpan,
     ParserResult,
@@ -22,7 +17,7 @@ use crate::parser::{
 #[derive(Debug)]
 pub struct ExpressionSequenceOne<'a> {
     /// [ProgramSpan] associated with this sequence
-    span: ProgramSpan<'a>,
+    _span: ProgramSpan<'a>,
 
     /// List of expressions
     expressions: Vec<Expression<'a>>,
@@ -36,7 +31,7 @@ impl<'a> ExpressionSequenceOne<'a> {
 
     /// Parse a sequence of length one.
     fn parse_sequence_single(input: ParserInput<'a>) -> ParserResult<'a, Expression<'a>> {
-        tuple((Expression::parse, opt(Token::whitespace), Token::comma))(input)
+        tuple((Expression::parse, WSoC::parse, Token::comma))(input)
             .map(|(rest, (result, _, _))| (rest, result))
     }
 
@@ -44,9 +39,9 @@ impl<'a> ExpressionSequenceOne<'a> {
     fn parse_sequence(input: ParserInput<'a>) -> ParserResult<'a, Vec<Expression<'a>>> {
         tuple((
             Expression::parse,
-            tuple((opt(Token::whitespace), Token::comma, opt(Token::whitespace))),
+            tuple((WSoC::parse, Token::comma, WSoC::parse)),
             separated_list1(
-                tuple((opt(Token::whitespace), Token::comma, opt(Token::whitespace))),
+                tuple((WSoC::parse, Token::comma, WSoC::parse)),
                 Expression::parse,
             ),
         ))(input)
@@ -72,7 +67,7 @@ impl<'a> ExpressionSequenceOne<'a> {
             (
                 rest,
                 Self {
-                    span: input_span.until_rest(&rest_span),
+                    _span: input_span.until_rest(&rest_span),
                     expressions,
                 },
             )
@@ -103,7 +98,7 @@ mod test {
     use nom::combinator::all_consuming;
 
     use crate::parser::{
-        ast::expression::sequence::one::ExpressionSequenceOne, input::ParserInput, ParserState,
+        ast::sequence::one::ExpressionSequenceOne, input::ParserInput, ParserState,
     };
 
     #[test]

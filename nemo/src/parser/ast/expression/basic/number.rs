@@ -4,7 +4,7 @@ use enum_assoc::Assoc;
 use nom::{
     branch::alt,
     combinator::opt,
-    sequence::{pair, tuple},
+    sequence::{pair, preceded, tuple},
 };
 
 use crate::parser::{
@@ -55,15 +55,15 @@ pub struct Number<'a> {
     span: ProgramSpan<'a>,
 
     /// Sign of the integer part
-    integer_sign: NumberSign,
+    _integer_sign: NumberSign,
     /// The integer part of the number
-    integer: Token<'a>,
+    _integer: Token<'a>,
     /// The fractional part of the number
-    fractional: Option<Token<'a>>,
+    _fractional: Option<Token<'a>>,
     /// Sign and exponent of the number
-    exponent: Option<(NumberSign, Token<'a>)>,
+    _exponent: Option<(NumberSign, Token<'a>)>,
     /// Type
-    type_marker: Option<NumberTypeMarker>,
+    _type_marker: Option<NumberTypeMarker>,
 }
 
 impl<'a> Number<'a> {
@@ -72,7 +72,8 @@ impl<'a> Number<'a> {
         alt((Token::plus, Token::minus))(input).map(|(rest, sign)| {
             (
                 rest,
-                NumberSign::token(&sign.kind()).expect("unknown token"),
+                NumberSign::token(&sign.kind())
+                    .expect(&format!("unexpected token: {:?}", sign.kind())),
             )
         })
     }
@@ -84,17 +85,16 @@ impl<'a> Number<'a> {
 
     /// Parse the fractional part of the number.
     fn parse_fractional(input: ParserInput<'a>) -> ParserResult<'a, Token<'a>> {
-        pair(Token::dot, Token::digits)(input).map(|(rest, (_, result))| (rest, result))
+        preceded(Token::dot, Token::digits)(input)
     }
 
     /// Parse the exponent part of the number.
     fn parse_exponent(input: ParserInput<'a>) -> ParserResult<'a, (NumberSign, Token<'a>)> {
-        tuple((
+        preceded(
             alt((Token::exponent_lower, Token::exponent_upper)),
-            opt(Self::parse_sign),
-            Self::parse_integer,
-        ))(input)
-        .map(|(rest, (_, sign, integer))| (rest, (sign.unwrap_or_default(), integer)))
+            pair(opt(Self::parse_sign), Self::parse_integer),
+        )(input)
+        .map(|(rest, (sign, integer))| (rest, (sign.unwrap_or_default(), integer)))
     }
 
     /// Parse the type marker of the number.
@@ -115,7 +115,7 @@ impl<'a> ProgramAST<'a> for Number<'a> {
         Vec::default()
     }
 
-    fn span(&self) -> ProgramSpan {
+    fn span(&self) -> ProgramSpan<'a> {
         self.span
     }
 
@@ -143,11 +143,11 @@ impl<'a> ProgramAST<'a> for Number<'a> {
                     rest,
                     Number {
                         span: input_span.until_rest(&rest_span),
-                        integer_sign: integer_sign.unwrap_or_default(),
-                        integer,
-                        fractional,
-                        exponent,
-                        type_marker,
+                        _integer_sign: integer_sign.unwrap_or_default(),
+                        _integer: integer,
+                        _fractional: fractional,
+                        _exponent: exponent,
+                        _type_marker: type_marker,
                     },
                 )
             },

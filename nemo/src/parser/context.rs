@@ -7,12 +7,15 @@ use nom_supreme::context::ContextError;
 use super::{ast::token::TokenKind, error::ParserErrorTree, ParserInput, ParserResult};
 
 /// Context, in which a particular parse error occurred
-#[derive(Assoc, Debug, Clone, Copy)]
+#[derive(Assoc, Debug, Clone, Copy, PartialEq, Eq)]
 #[func(pub fn name(&self) -> &'static str)]
 pub enum ParserContext {
     /// Token
     #[assoc(name = _kind.name())]
     Token { kind: TokenKind },
+    /// Data type
+    #[assoc(name = "datatype")]
+    DataType,
     /// Number
     #[assoc(name = "number")]
     Number,
@@ -37,18 +40,84 @@ pub enum ParserContext {
     /// Boolean
     #[assoc(name = "boolean")]
     Boolean,
+    /// Attribute
+    #[assoc(name = "attribute")]
+    Attribute,
+    /// Base directive
+    #[assoc(name = "base directive")]
+    Base,
+    /// Declare directive
+    #[assoc(name = "declare directive")]
+    Declare,
+    /// Export directive
+    #[assoc(name = "export directive")]
+    Export,
+    /// Import directive
+    #[assoc(name = "import directive")]
+    Import,
+    /// Output directive
+    #[assoc(name = "output directive")]
+    Output,
+    /// Prefix directive
+    #[assoc(name = "prefix directive")]
+    Prefix,
+    /// Unknown directive
+    #[assoc(name = "directive")]
+    UnknownDirective,
     /// Expression
     #[assoc(name = "expression")]
     Expression,
     /// Tuple
     #[assoc(name = "tuple")]
     Tuple,
+    /// Map
+    #[assoc(name = "map")]
+    Map,
+    /// Arithmetic expression
+    #[assoc(name = "arithmetic expression")]
+    Arithmetic,
     /// Atom
     #[assoc(name = "atom")]
     Atom,
+    /// Tag
+    #[assoc(name = "tag")]
+    StructureTag,
+    /// Aggregate tag
+    #[assoc(name = "aggregate name")]
+    AggregationTag,
+    /// Operation tag
+    #[assoc(name = "operation name")]
+    OperationTag,
+    /// Operation
+    #[assoc(name = "operation")]
+    Operation,
+    /// Aggregation
+    #[assoc(name = "aggregation")]
+    Aggregation,
+    /// Negation
+    #[assoc(name = "negation")]
+    Negation,
+    /// Infix
+    #[assoc(name = "expression")] // TODO: Is there a better name?
+    Infix,
+    /// Comment
+    #[assoc(name = "comment")]
+    Comment,
+    /// Doc-comment
+    #[assoc(name = "doc-comment")]
+    DocComment,
+    /// Top-level comment
+    #[assoc(name = "top-level-comment")]
+    TopLevelComment,
     /// Rule
     #[assoc(name = "rule")]
     Rule,
+    /// Directive
+    #[assoc(name = "directive")]
+    Directive,
+    /// Statement
+    #[assoc(name = "statement")]
+    Statement,
     /// Program
     #[assoc(name = "program")]
     Program,

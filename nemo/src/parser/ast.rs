@@ -1,8 +1,13 @@
 //! This module defines the abstract syntax tree representation of a nemo program.
 
+pub mod attribute;
+pub mod comment;
+pub mod directive;
 pub mod expression;
 pub mod program;
 pub mod rule;
+pub mod sequence;
+pub mod statement;
 pub mod tag;
 pub mod token;
 
@@ -16,7 +21,7 @@ pub trait ProgramAST<'a>: Sync {
     fn children(&self) -> Vec<&dyn ProgramAST>;
 
     /// Return the region of text this node originates from.
-    fn span(&self) -> ProgramSpan;
+    fn span(&self) -> ProgramSpan<'a>;
 
     /// Parse the given input into this type of node
     fn parse(input: ParserInput<'a>) -> ParserResult<'a, Self>

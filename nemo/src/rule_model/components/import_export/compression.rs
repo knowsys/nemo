@@ -10,7 +10,6 @@ use crate::rule_model::syntax::import_export::compression;
 /// Compression formats
 #[derive(Assoc, Debug, Copy, Clone, PartialEq, Eq)]
 #[func(pub fn name(&self) -> &'static str)]
-#[func(pub fn from_name(name: &str) -> Option<Self>)]
 pub enum CompressionFormat {
     /// No compression
     #[assoc(name = compression::VALUE_COMPRESSION_NONE)]

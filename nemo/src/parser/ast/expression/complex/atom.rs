@@ -1,19 +1,16 @@
 //! This module defines [Atom].
 
-use nom::{
-    combinator::opt,
-    sequence::{delimited, pair},
-};
+use nom::sequence::{delimited, pair};
 
 use crate::parser::{
     ast::{
-        expression::{sequence::simple::ExpressionSequenceSimple, Expression},
-        tag::Tag,
-        token::Token,
-        ProgramAST,
+        comment::wsoc::WSoC, expression::Expression, sequence::simple::ExpressionSequenceSimple,
+        tag::structure::StructureTag, token::Token, ProgramAST,
     },
     context::{context, ParserContext},
+    input::ParserInput,
     span::ProgramSpan,
+    ParserResult,
 };
 
 /// A possibly tagged sequence of [Expression]s.
@@ -23,7 +20,7 @@ pub struct Atom<'a> {
     span: ProgramSpan<'a>,
 
     /// Tag of this Atom
-    tag: Tag<'a>,
+    tag: StructureTag<'a>,
     /// List of underlying expressions
     expressions: ExpressionSequenceSimple<'a>,
 }
@@ -35,7 +32,7 @@ impl<'a> Atom<'a> {
     }
 
     /// Return the tag of this atom.
-    pub fn tag(&self) -> &Tag<'a> {
+    pub fn tag(&self) -> &StructureTag<'a> {
         &self.tag
     }
 }
@@ -44,7 +41,9 @@ const CONTEXT: ParserContext = ParserContext::Atom;
 
 impl<'a> ProgramAST<'a> for Atom<'a> {
     fn children(&self) -> Vec<&dyn ProgramAST> {
-        let mut result: Vec<&dyn ProgramAST> = vec![];
+        let mut result = Vec::<&dyn ProgramAST>::new();
+        result.push(&self.tag);
+
         for expression in &self.expressions {
             result.push(expression)
         }
@@ -52,11 +51,11 @@ impl<'a> ProgramAST<'a> for Atom<'a> {
         result
     }
 
-    fn span(&self) -> ProgramSpan {
+    fn span(&self) -> ProgramSpan<'a> {
         self.span
     }
 
-    fn parse(input: crate::parser::input::ParserInput<'a>) -> crate::parser::ParserResult<'a, Self>
+    fn parse(input: ParserInput<'a>) -> ParserResult<'a, Self>
     where
         Self: Sized + 'a,
     {
@@ -65,11 +64,11 @@ impl<'a> ProgramAST<'a> for Atom<'a> {
         context(
             CONTEXT,
             pair(
-                Tag::parse,
+                StructureTag::parse,
                 delimited(
-                    pair(Token::open_parenthesis, opt(Token::whitespace)),
+                    pair(Token::open_parenthesis, WSoC::parse),
                     ExpressionSequenceSimple::parse,
-                    pair(opt(Token::whitespace), Token::closed_parenthesis),
+                    pair(WSoC::parse, Token::closed_parenthesis),
                 ),
             ),
         )(input)

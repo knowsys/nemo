@@ -1,7 +1,7 @@
 //! This module defines [Iri]
 #![allow(missing_docs)]
 
-use nom::sequence::tuple;
+use nom::sequence::delimited;
 
 use crate::parser::{
     ast::{token::Token, ProgramAST},
@@ -35,7 +35,7 @@ impl<'a> ProgramAST<'a> for Iri<'a> {
         Vec::default()
     }
 
-    fn span(&self) -> ProgramSpan {
+    fn span(&self) -> ProgramSpan<'a> {
         self.span
     }
 
@@ -47,9 +47,9 @@ impl<'a> ProgramAST<'a> for Iri<'a> {
 
         context(
             CONTEXT,
-            tuple((Token::open_chevrons, Token::iri, Token::closed_chevrons)),
+            delimited(Token::open_chevrons, Token::iri, Token::closed_chevrons),
         )(input)
-        .map(|(rest, (_, content, _))| {
+        .map(|(rest, content)| {
             let rest_span = rest.span;
 
             (

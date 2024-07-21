@@ -3,7 +3,7 @@
 
 use nom::{
     combinator::opt,
-    sequence::{pair, tuple},
+    sequence::{delimited, pair},
 };
 
 use crate::parser::{
@@ -39,8 +39,7 @@ impl<'a> StringLiteral<'a> {
 
     /// Parse the main part of the string.
     pub fn parse_string(input: ParserInput<'a>) -> ParserResult<'a, Token<'a>> {
-        tuple((Token::quote, Token::string, Token::quote))(input)
-            .map(|(rest, (_, content, _))| (rest, content))
+        delimited(Token::quote, Token::string, Token::quote)(input)
     }
 
     /// Parse the language tag of the string.
@@ -56,7 +55,7 @@ impl<'a> ProgramAST<'a> for StringLiteral<'a> {
         Vec::default()
     }
 
-    fn span(&self) -> ProgramSpan {
+    fn span(&self) -> ProgramSpan<'a> {
         self.span
     }
 

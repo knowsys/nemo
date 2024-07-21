@@ -52,8 +52,8 @@ pub fn load(file: PathBuf) -> Result<Engine, Error> {
 /// # Error
 /// Returns an appropriate [Error] variant on parsing and feature check issues.
 pub fn load_string(input: String) -> Result<Engine, Error> {
-    let (ast, _errors) = parse_program_str(&input);
-    let _program = Program::from_ast(ast);
+    // let (ast, _errors) = parse_program_str(&input);
+    // let _program = Program::from_ast(ast);
     todo!("ExecutionEngine has to use the new rule model")
     // ExecutionEngine::initialize(&program, ImportManager::new(ResourceProviders::default()))
 }

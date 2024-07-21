@@ -42,11 +42,6 @@ impl Operation {
         }
     }
 
-    /// Create a new [Operation] giving the string name of the operation.
-    pub fn new_from_name(operation: &str, subterms: Vec<Term>) -> Option<Self> {
-        Some(Self::new(OperationKind::from_name(operation)?, subterms))
-    }
-
     /// Check whether this operation has the form of an assignment of a variable to a term.
     /// If so return the variable and the term as a pair or `None` otherwise.
     ///

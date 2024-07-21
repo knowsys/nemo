@@ -128,4 +128,18 @@ impl<'a> ProgramSpan<'a> {
             ))
         }
     }
+    /// TODO: Description and Specify safety conditions
+    /// Create a [ProgramSpan] that encloses the given [ProgramSpan]s.
+    /// TODO: Description and Specify safety conditions and verify that this is correct
+    pub fn enclose(&self, first: &Self, second: &Self) -> Self {
+        unsafe {
+            Self(LocatedSpan::new_from_raw_offset(
+                first.0.location_offset(),
+                first.0.location_line(),
+                &self.0
+                    [..(second.0.location_offset() + second.0.len() - first.0.location_offset())],
+                (),
+            ))
+        }
+    }
 }

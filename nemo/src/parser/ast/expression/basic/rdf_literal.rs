@@ -1,7 +1,7 @@
 //! This module defines [RdfLiteral]
 #![allow(missing_docs)]
 
-use nom::sequence::tuple;
+use nom::sequence::{separated_pair, tuple};
 
 use crate::parser::{
     ast::{token::Token, ProgramAST},
@@ -50,7 +50,7 @@ impl<'a> ProgramAST<'a> for RdfLiteral<'a> {
         Vec::default()
     }
 
-    fn span(&self) -> ProgramSpan {
+    fn span(&self) -> ProgramSpan<'a> {
         self.span
     }
 
@@ -62,9 +62,9 @@ impl<'a> ProgramAST<'a> for RdfLiteral<'a> {
 
         context(
             CONTEXT,
-            tuple((Self::parse_content, Token::double_caret, Iri::parse)),
+            separated_pair(Self::parse_content, Token::double_caret, Iri::parse),
         )(input)
-        .map(|(rest, (content, _, tag))| {
+        .map(|(rest, (content, tag))| {
             let rest_span = rest.span;
 
             (

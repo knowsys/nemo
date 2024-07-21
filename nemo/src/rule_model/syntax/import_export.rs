@@ -3,4 +3,3 @@
 pub(crate) mod attributes;
 pub(crate) mod compression;
 pub(crate) mod file_formats;
-pub(crate) mod value_formats;

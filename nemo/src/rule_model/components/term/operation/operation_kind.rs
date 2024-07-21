@@ -41,7 +41,6 @@ impl OperationNumArguments {
 /// Supported operations
 #[derive(Assoc, EnumIter, Debug, Copy, Clone, PartialEq, Eq, Hash, PartialOrd)]
 #[func(pub fn name(&self) -> &'static str)]
-#[func(pub fn from_name(name: &str) -> Option<Self>)]
 #[func(pub fn num_arguments(&self) -> OperationNumArguments)]
 #[func(pub fn is_boolean(&self) -> bool)]
 pub enum OperationKind {
@@ -90,26 +89,26 @@ pub enum OperationKind {
     #[assoc(num_arguments = OperationNumArguments::Binary)]
     #[assoc(is_boolean = false)]
     NumericRemainder,
-    /// Numeric greater than comparison
-    #[assoc(name = builtins::BUILTIN_GREATER)]
-    #[assoc(num_arguments = OperationNumArguments::Binary)]
-    #[assoc(is_boolean = false)]
-    NumericGreaterthan,
     /// Numeric greater than or equals comparison
     #[assoc(name = builtins::BUILTIN_GREATEREQ)]
     #[assoc(num_arguments = OperationNumArguments::Binary)]
     #[assoc(is_boolean = false)]
     NumericGreaterthaneq,
+    /// Numeric greater than comparison
+    #[assoc(name = builtins::BUILTIN_GREATER)]
+    #[assoc(num_arguments = OperationNumArguments::Binary)]
+    #[assoc(is_boolean = false)]
+    NumericGreaterthan,
+    /// Numeric less than or equals comparison
+    #[assoc(name = builtins::BUILTIN_LESSEQ)]
+    #[assoc(num_arguments = OperationNumArguments::Binary)]
+    #[assoc(is_boolean = false)]
+    NumericLessthaneq,
     /// Numeric less than comparison
     #[assoc(name = builtins::BUILTIN_LESS)]
     #[assoc(num_arguments = OperationNumArguments::Binary)]
     #[assoc(is_boolean = false)]
     NumericLessthan,
-    /// Numeric less than or equals comparison
-    #[assoc(name = builtins::BUILTIN_LESSQ)]
-    #[assoc(num_arguments = OperationNumArguments::Binary)]
-    #[assoc(is_boolean = false)]
-    NumericLessthaneq,
     /// Lexicographic comparison between strings
     #[assoc(name = builtins::BUILTIN_COMPARE)]
     #[assoc(num_arguments = OperationNumArguments::Binary)]
@@ -215,11 +214,6 @@ pub enum OperationKind {
     #[assoc(num_arguments = OperationNumArguments::Unary)]
     #[assoc(is_boolean = false)]
     LanguageTag,
-    /// Lexical value
-    #[assoc(name = builtins::BUILTIN_STR)]
-    #[assoc(num_arguments = OperationNumArguments::Unary)]
-    #[assoc(is_boolean = false)]
-    LexicalValue,
     /// Absolute value of a numeric value
     #[assoc(name = builtins::BUILTIN_ABS)]
     #[assoc(num_arguments = OperationNumArguments::Unary)]
@@ -330,6 +324,11 @@ pub enum OperationKind {
     #[assoc(num_arguments = OperationNumArguments::Unary)]
     #[assoc(is_boolean = false)]
     StringConcatenation,
+    /// Lexical value
+    #[assoc(name = builtins::BUILTIN_STR)]
+    #[assoc(num_arguments = OperationNumArguments::Unary)]
+    #[assoc(is_boolean = false)]
+    LexicalValue,
 }
 
 impl OperationKind {
@@ -348,5 +347,34 @@ impl OperationKind {
 impl Display for OperationKind {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.name())
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use strum::IntoEnumIterator;
+
+    use super::OperationKind;
+
+    #[test]
+    fn operation_order() {
+        // For the parsing to work correctly,
+        // every entry in `OperationKind`
+        // must be arranged in such a way that no operation name
+        // is the prefix of a subsequent operation name
+
+        let names = OperationKind::iter()
+            .map(|kind| kind.name())
+            .collect::<Vec<_>>();
+
+        for (name_index, name) in names.iter().enumerate() {
+            if name_index == names.len() - 1 {
+                break;
+            }
+
+            assert!(names[(name_index + 1)..]
+                .iter()
+                .all(|remaining| !remaining.starts_with(name)))
+        }
     }
 }

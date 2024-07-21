@@ -1,11 +1,11 @@
-//! This module defines
+//! This module defines [ExpressionSequenceSimple].
 
 use std::vec::IntoIter;
 
-use nom::{combinator::opt, multi::separated_list1, sequence::tuple};
+use nom::{multi::separated_list1, sequence::tuple};
 
 use crate::parser::{
-    ast::{expression::Expression, token::Token, ProgramAST},
+    ast::{comment::wsoc::WSoC, expression::Expression, token::Token, ProgramAST},
     input::ParserInput,
     span::ProgramSpan,
     ParserResult,
@@ -15,7 +15,7 @@ use crate::parser::{
 #[derive(Debug)]
 pub struct ExpressionSequenceSimple<'a> {
     /// [ProgramSpan] associated with this sequence
-    span: ProgramSpan<'a>,
+    _span: ProgramSpan<'a>,
 
     /// List of expressions
     expressions: Vec<Expression<'a>>,
@@ -32,7 +32,7 @@ impl<'a> ExpressionSequenceSimple<'a> {
         let input_span = input.span;
 
         separated_list1(
-            tuple((opt(Token::whitespace), Token::comma, opt(Token::whitespace))),
+            tuple((WSoC::parse, Token::comma, WSoC::parse)),
             Expression::parse,
         )(input)
         .map(|(rest, expressions)| {
@@ -41,7 +41,7 @@ impl<'a> ExpressionSequenceSimple<'a> {
             (
                 rest,
                 Self {
-                    span: input_span.until_rest(&rest_span),
+                    _span: input_span.until_rest(&rest_span),
                     expressions,
                 },
             )
@@ -72,8 +72,7 @@ mod test {
     use nom::combinator::all_consuming;
 
     use crate::parser::{
-        ast::expression::sequence::simple::ExpressionSequenceSimple, input::ParserInput,
-        ParserState,
+        ast::sequence::simple::ExpressionSequenceSimple, input::ParserInput, ParserState,
     };
 
     #[test]
@@ -89,8 +88,6 @@ mod test {
         for (input, expected) in test {
             let parser_input = ParserInput::new(input, ParserState::default());
             let result = all_consuming(ExpressionSequenceSimple::parse)(parser_input);
-
-            println!("{:?}", result);
 
             assert!(result.is_ok());
 

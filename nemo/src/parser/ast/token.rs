@@ -64,6 +64,12 @@ pub enum TokenKind {
     /// Colon
     #[assoc(name = ":")]
     Colon,
+    /// Double Colon
+    #[assoc(name = "::")]
+    DoubleColon,
+    /// Semicolon
+    #[assoc(name = ";")]
+    Semicolon,
     /// Greater than
     #[assoc(name = ">")]
     Greater,
@@ -79,6 +85,9 @@ pub enum TokenKind {
     /// Equal
     #[assoc(name = "=")]
     Equal,
+    /// Unequal
+    #[assoc(name = "!=")]
+    Unequal,
     /// Tilde, used for negation
     #[assoc(name = "~")]
     Tilde,
@@ -142,15 +151,39 @@ pub enum TokenKind {
     /// String
     #[assoc(name = "string")]
     String,
-    /// A comment (as single token)
-    #[assoc(name = "comment")]
+    /// Token marking a normal comment
+    #[assoc(name = "//")]
     Comment,
-    /// A doc comment attached to e.g. a rule
-    #[assoc(name = "doc-comment")]
+    /// Token marking the beginning of a closed comment
+    #[assoc(name = "/*")]
+    OpenComment,
+    /// Token marking the beginning of a closed comment
+    #[assoc(name = "*/")]
+    CloseComment,
+    /// Token marking a doc comment attached to e.g. a rule
+    #[assoc(name = "///")]
     DocComment,
-    /// Toplevel comment describing the rule file
-    #[assoc(name = "top-level-comment")]
+    /// Token marking the top level comment
+    #[assoc(name = "//!")]
     TopLevelComment,
+    /// Token for the base directive
+    #[assoc(name = "base")]
+    BaseDirective,
+    /// Token for the declare directive
+    #[assoc(name = "declare")]
+    DeclareDirective,
+    /// Token for the export directive
+    #[assoc(name = "export")]
+    ExportDirective,
+    /// Token for the import directive
+    #[assoc(name = "import")]
+    ImportDirective,
+    /// Token for the output directive
+    #[assoc(name = "output")]
+    OutputDirective,
+    /// Token for the prefix directive
+    #[assoc(name = "prefix")]
+    PrefixDirective,
     /// White spaces
     #[assoc(name = "whitespace")]
     Whitespace,
@@ -290,18 +323,21 @@ impl<'a> Token<'a> {
     string_token!(open_chevrons, TokenKind::OpenChevrons);
     string_token!(closed_chevrons, TokenKind::ClosedChevrons);
     string_token!(open_bracket, TokenKind::OpenBracket);
-    string_token!(closed_bracket, TokenKind::ClosedBrace);
+    string_token!(closed_bracket, TokenKind::ClosedBracket);
     string_token!(question_mark, TokenKind::QuestionMark);
     string_token!(exclamation_mark, TokenKind::ExclamationMark);
     string_token!(dot, TokenKind::Dot);
     string_token!(comma, TokenKind::Comma);
     string_token!(arrow, TokenKind::Arrow);
     string_token!(colon, TokenKind::Colon);
+    string_token!(double_colon, TokenKind::DoubleColon);
+    string_token!(semicolon, TokenKind::Semicolon);
     string_token!(greater, TokenKind::Greater);
     string_token!(greater_equal, TokenKind::GreaterEqual);
     string_token!(less, TokenKind::Less);
     string_token!(less_equal, TokenKind::LessEqual);
     string_token!(equal, TokenKind::Equal);
+    string_token!(unequal, TokenKind::Unequal);
     string_token!(tilde, TokenKind::Tilde);
     string_token!(double_caret, TokenKind::DoubleCaret);
     string_token!(hash, TokenKind::Hash);
@@ -313,10 +349,21 @@ impl<'a> Token<'a> {
     string_token!(division, TokenKind::Division);
     string_token!(boolean_true, TokenKind::True);
     string_token!(boolean_false, TokenKind::False);
+    string_token!(comment, TokenKind::Comment);
+    string_token!(open_comment, TokenKind::OpenComment);
+    string_token!(close_comment, TokenKind::CloseComment);
+    string_token!(doc_comment, TokenKind::DocComment);
+    string_token!(toplevel_comment, TokenKind::TopLevelComment);
     string_token!(quote, TokenKind::Quote);
     string_token!(blank_node_prefix, TokenKind::BlankNodePrefix);
     string_token!(exponent_lower, TokenKind::ExponentLower);
     string_token!(exponent_upper, TokenKind::ExponentUpper);
     string_token!(type_marker_double, TokenKind::TypeMarkerDouble);
     string_token!(type_marker_float, TokenKind::TypeMarkerFloat);
+    string_token!(directive_base, TokenKind::BaseDirective);
+    string_token!(directive_declare, TokenKind::DeclareDirective);
+    string_token!(directive_export, TokenKind::ExportDirective);
+    string_token!(directive_import, TokenKind::ImportDirective);
+    string_token!(directive_output, TokenKind::OutputDirective);
+    string_token!(directive_prefix, TokenKind::PrefixDirective);
 }

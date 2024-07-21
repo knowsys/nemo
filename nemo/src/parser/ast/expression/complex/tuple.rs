@@ -7,12 +7,13 @@ use nom::{
 
 use crate::parser::{
     ast::{
-        expression::{sequence::one::ExpressionSequenceOne, Expression},
-        token::Token,
-        ProgramAST,
+        comment::wsoc::WSoC, expression::Expression, sequence::one::ExpressionSequenceOne,
+        token::Token, ProgramAST,
     },
     context::{context, ParserContext},
+    input::ParserInput,
     span::ProgramSpan,
+    ParserResult,
 };
 
 /// A sequence of [Expression]s.
@@ -36,7 +37,8 @@ const CONTEXT: ParserContext = ParserContext::Tuple;
 
 impl<'a> ProgramAST<'a> for Tuple<'a> {
     fn children(&self) -> Vec<&dyn ProgramAST> {
-        let mut result: Vec<&dyn ProgramAST> = vec![];
+        let mut result = Vec::<&dyn ProgramAST>::new();
+
         for expression in &self.expressions {
             result.push(expression)
         }
@@ -44,11 +46,11 @@ impl<'a> ProgramAST<'a> for Tuple<'a> {
         result
     }
 
-    fn span(&self) -> ProgramSpan {
+    fn span(&self) -> ProgramSpan<'a> {
         self.span
     }
 
-    fn parse(input: crate::parser::input::ParserInput<'a>) -> crate::parser::ParserResult<'a, Self>
+    fn parse(input: ParserInput<'a>) -> ParserResult<'a, Self>
     where
         Self: Sized + 'a,
     {
@@ -57,16 +59,12 @@ impl<'a> ProgramAST<'a> for Tuple<'a> {
         context(
             CONTEXT,
             delimited(
-                pair(Token::open_parenthesis, opt(Token::whitespace)),
+                pair(Token::open_parenthesis, WSoC::parse),
                 terminated(
                     ExpressionSequenceOne::parse,
-                    opt(tuple((
-                        opt(Token::whitespace),
-                        Token::comma,
-                        opt(Token::whitespace),
-                    ))),
+                    opt(tuple((WSoC::parse, Token::comma, WSoC::parse))),
                 ),
-                pair(opt(Token::whitespace), Token::closed_parenthesis),
+                pair(WSoC::parse, Token::closed_parenthesis),
             ),
         )(input)
         .map(|(rest, expressions)| {

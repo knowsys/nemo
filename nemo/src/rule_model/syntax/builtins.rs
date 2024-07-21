@@ -11,7 +11,7 @@ pub(crate) const BUILTIN_GREATEREQ: &str = "GREATEREQ";
 /// Check if a numeric value is smaller than another
 pub(crate) const BUILTIN_LESS: &str = "LESS";
 /// Check if a numeric value is smaller or equal to another
-pub(crate) const BUILTIN_LESSQ: &str = "LESSEQ";
+pub(crate) const BUILTIN_LESSEQ: &str = "LESSEQ";
 /// Check if value is an integer
 pub(crate) const BUILTIN_IS_INTEGER: &str = "isInteger";
 /// Check if value is a 32bit floating point number

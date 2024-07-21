@@ -1,6 +1,6 @@
 //! This module defines [Blank].
 
-use nom::{branch::alt, sequence::pair};
+use nom::{branch::alt, sequence::preceded};
 
 use crate::parser::{
     ast::{token::Token, ProgramAST},
@@ -39,7 +39,7 @@ impl<'a> ProgramAST<'a> for Blank<'a> {
         Vec::default()
     }
 
-    fn span(&self) -> ProgramSpan {
+    fn span(&self) -> ProgramSpan<'a> {
         self.span
     }
 
@@ -49,19 +49,21 @@ impl<'a> ProgramAST<'a> for Blank<'a> {
     {
         let input_span = input.span;
 
-        context(CONTEXT, pair(Token::blank_node_prefix, Self::parse_name))(input).map(
-            |(rest, (_, name))| {
-                let rest_span = rest.span;
+        context(
+            CONTEXT,
+            preceded(Token::blank_node_prefix, Self::parse_name),
+        )(input)
+        .map(|(rest, name)| {
+            let rest_span = rest.span;
 
-                (
-                    rest,
-                    Blank {
-                        span: input_span.until_rest(&rest_span),
-                        name,
-                    },
-                )
-            },
-        )
+            (
+                rest,
+                Blank {
+                    span: input_span.until_rest(&rest_span),
+                    name,
+                },
+            )
+        })
     }
 
     fn context(&self) -> ParserContext {

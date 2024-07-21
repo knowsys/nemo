@@ -124,33 +124,35 @@ impl<'a> ASTProgramTranslation<'a> {
     ) -> Result<Program, ProgramErrorReport<'a>> {
         let mut program_builder = ProgramBuilder::default();
 
-        for (statement_index, rule) in vec![ast.statements()].into_iter().enumerate() {
-            let origin = Origin::External(statement_index);
+        // for (statement_index, rule) in vec![ast.statements()].into_iter().enumerate() {
+        //     let origin = Origin::External(statement_index);
 
-            match self.build_rule(origin, rule) {
-                Ok(new_rule) => program_builder.add_rule(new_rule),
-                Err(translation_error) => self
-                    .errors
-                    .push(ProgramError::TranslationError(translation_error)),
-            }
-        }
+        //     match self.build_rule(origin, rule) {
+        //         Ok(new_rule) => program_builder.add_rule(new_rule),
+        //         Err(translation_error) => self
+        //             .errors
+        //             .push(ProgramError::TranslationError(translation_error)),
+        //     }
+        // }
 
-        self.errors.extend(
-            self.validation_error_builder
-                .finalize()
-                .into_iter()
-                .map(ProgramError::ValidationError),
-        );
+        // self.errors.extend(
+        //     self.validation_error_builder
+        //         .finalize()
+        //         .into_iter()
+        //         .map(ProgramError::ValidationError),
+        // );
 
-        if self.errors.is_empty() {
-            Ok(program_builder.finalize())
-        } else {
-            Err(ProgramErrorReport {
-                input: self.input,
-                label: self.input_label,
-                errors: self.errors,
-            })
-        }
+        // if self.errors.is_empty() {
+        //     Ok(program_builder.finalize())
+        // } else {
+        //     Err(ProgramErrorReport {
+        //         input: self.input,
+        //         label: self.input_label,
+        //         errors: self.errors,
+        //     })
+        // }
+
+        todo!()
     }
 
     fn build_rule(
@@ -246,6 +248,7 @@ impl<'a> ASTProgramTranslation<'a> {
         expression: &ast::expression::Expression,
     ) -> Result<Term, TranslationError> {
         Ok(match expression {
+            ast::expression::Expression::Arithmetic(_) => todo!(),
             ast::expression::Expression::Atom(atom) => todo!(),
             ast::expression::Expression::Blank(blank) => todo!(),
             ast::expression::Expression::Boolean(boolean) => todo!(),
@@ -289,13 +292,21 @@ impl<'a> ASTProgramTranslation<'a> {
                     }
                 }
             },
+            ast::expression::Expression::Aggregation(_) => todo!(),
+            ast::expression::Expression::Infix(_) => todo!(),
+            ast::expression::Expression::Map(_) => todo!(),
+            ast::expression::Expression::Negation(_) => todo!(),
+            ast::expression::Expression::Operation(_) => todo!(),
         }
         .set_origin(origin))
     }
 
-    fn resolve_tag(&self, tag: &ast::tag::Tag<'a>) -> Result<String, TranslationError> {
-        Ok(match tag {
-            ast::tag::Tag::Plain(token) => {
+    fn resolve_tag(
+        &self,
+        tag: &ast::tag::structure::StructureTag<'a>,
+    ) -> Result<String, TranslationError> {
+        Ok(match tag.kind() {
+            ast::tag::structure::StructureTagKind::Plain(token) => {
                 let token_string = token.to_string();
 
                 if let Some(base) = &self.base {
@@ -304,7 +315,7 @@ impl<'a> ASTProgramTranslation<'a> {
                     token_string
                 }
             }
-            ast::tag::Tag::Prefixed { prefix, tag } => {
+            ast::tag::structure::StructureTagKind::Prefixed { prefix, tag } => {
                 if let Some(expanded_prefix) = self.prefix_mapping.get(&prefix.to_string()) {
                     format!("{expanded_prefix}{}", tag.to_string())
                 } else {
@@ -315,7 +326,7 @@ impl<'a> ASTProgramTranslation<'a> {
                     ));
                 }
             }
-            ast::tag::Tag::Iri(iri) => iri.content(),
+            ast::tag::structure::StructureTagKind::Iri(iri) => iri.content(),
         })
     }
 }

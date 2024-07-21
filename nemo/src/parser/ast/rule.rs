@@ -1,8 +1,8 @@
 //! This module defines [Rule].
 
 use nom::{
-    combinator::opt,
-    sequence::{pair, tuple},
+    multi::many0,
+    sequence::{separated_pair, tuple},
 };
 
 use crate::parser::{
@@ -13,9 +13,8 @@ use crate::parser::{
 };
 
 use super::{
-    expression::{sequence::simple::ExpressionSequenceSimple, Expression},
-    token::Token,
-    ProgramAST,
+    attribute::Attribute, comment::wsoc::WSoC, expression::Expression,
+    sequence::simple::ExpressionSequenceSimple, token::Token, ProgramAST,
 };
 
 /// A rule describing a logical implication
@@ -23,6 +22,9 @@ use super::{
 pub struct Rule<'a> {
     /// [ProgramSpan] associated with this node
     span: ProgramSpan<'a>,
+
+    /// Attributes attached to this rule
+    attributes: Vec<Attribute<'a>>,
 
     /// Head of the rule
     head: ExpressionSequenceSimple<'a>,
@@ -40,6 +42,11 @@ impl<'a> Rule<'a> {
     pub fn body(&self) -> impl Iterator<Item = &Expression<'a>> {
         self.body.iter()
     }
+
+    /// Return an iterator over the [Attribute]s attached to this rule.
+    pub fn attributes(&self) -> impl Iterator<Item = &Attribute<'a>> {
+        self.attributes.iter()
+    }
 }
 
 const CONTEXT: ParserContext = ParserContext::Rule;
@@ -55,7 +62,7 @@ impl<'a> ProgramAST<'a> for Rule<'a> {
         result
     }
 
-    fn span(&self) -> ProgramSpan {
+    fn span(&self) -> ProgramSpan<'a> {
         self.span
     }
 
@@ -68,19 +75,22 @@ impl<'a> ProgramAST<'a> for Rule<'a> {
         context(
             CONTEXT,
             tuple((
-                ExpressionSequenceSimple::parse,
-                tuple((opt(Token::whitespace), Token::arrow, opt(Token::whitespace))),
-                ExpressionSequenceSimple::parse,
-                pair(opt(Token::whitespace), Token::dot),
+                many0(Attribute::parse),
+                (separated_pair(
+                    ExpressionSequenceSimple::parse,
+                    tuple((WSoC::parse, Token::arrow, WSoC::parse)),
+                    ExpressionSequenceSimple::parse,
+                )),
             )),
         )(input)
-        .map(|(rest, (head, _, body, _))| {
+        .map(|(rest, (attributes, (head, body)))| {
             let rest_span = rest.span;
 
             (
                 rest,
                 Self {
                     span: input_span.until_rest(&rest_span),
+                    attributes,
                     head,
                     body,
                 },
@@ -106,15 +116,14 @@ mod test {
     #[test]
     fn parse_rule() {
         let test = vec![
-            ("a(?x, ?y) :- b(?x, ?y) .", (1, 1)),
-            ("a(?x,?y), d(1), c(1) :- b(?x, ?y), c(1, 2).", (3, 2)),
+            ("a(?x, ?y) :- b(?x, ?y)", (1, 1)),
+            ("a(?x,?y), d(1), c(1) :- b(?x, ?y), c(1, 2)", (3, 2)),
+            ("#[name(\"test\")]\nresult(?x) :- test(?x)", (1, 1)),
         ];
 
         for (input, expected) in test {
             let parser_input = ParserInput::new(input, ParserState::default());
             let result = all_consuming(Rule::parse)(parser_input);
-
-            println!("{:?}", result);
 
             assert!(result.is_ok());
 

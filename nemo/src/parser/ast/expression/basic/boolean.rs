@@ -48,7 +48,8 @@ impl<'a> Boolean<'a> {
         alt((Token::boolean_true, Token::boolean_false))(input).map(|(rest, result)| {
             (
                 rest,
-                BooleanValue::token(result.kind()).expect("unexpected token"),
+                BooleanValue::token(result.kind())
+                    .expect(&format!("unexpected token: {:?}", result.kind())),
             )
         })
     }
@@ -61,7 +62,7 @@ impl<'a> ProgramAST<'a> for Boolean<'a> {
         Vec::default()
     }
 
-    fn span(&self) -> ProgramSpan {
+    fn span(&self) -> ProgramSpan<'a> {
         self.span
     }
 

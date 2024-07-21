@@ -1,0 +1,146 @@
+//! This module defines [Directive]s.
+
+use base::Base;
+use declare::Declare;
+use export::Export;
+use import::Import;
+use nom::{branch::alt, combinator::map};
+use output::Output;
+use prefix::Prefix;
+use unknown::UnknownDirective;
+
+use crate::parser::{
+    context::{context, ParserContext},
+    input::ParserInput,
+    span::ProgramSpan,
+    ParserResult,
+};
+
+use super::ProgramAST;
+
+pub mod base;
+pub mod declare;
+pub mod export;
+pub mod import;
+pub mod output;
+pub mod prefix;
+pub mod unknown;
+
+/// Type of directives
+#[derive(Debug)]
+pub enum Directive<'a> {
+    /// Base
+    Base(Base<'a>),
+    /// Declare
+    Declare(Declare<'a>),
+    /// Export
+    Export(Export<'a>),
+    /// Import
+    Import(Import<'a>),
+    /// Output
+    Output(Output<'a>),
+    /// Prefix
+    Prefix(Prefix<'a>),
+    /// Unknown
+    Unknown(UnknownDirective<'a>),
+}
+
+impl<'a> Directive<'a> {
+    /// Return the context of the underlying directive.
+    pub fn context_type(&self) -> ParserContext {
+        match self {
+            Directive::Base(directive) => directive.context(),
+            Directive::Declare(directive) => directive.context(),
+            Directive::Export(directive) => directive.context(),
+            Directive::Import(directive) => directive.context(),
+            Directive::Output(directive) => directive.context(),
+            Directive::Prefix(directive) => directive.context(),
+            Directive::Unknown(directive) => directive.context(),
+        }
+    }
+}
+
+const CONTEXT: ParserContext = ParserContext::Directive;
+
+impl<'a> ProgramAST<'a> for Directive<'a> {
+    fn children(&self) -> Vec<&dyn ProgramAST> {
+        vec![match self {
+            Directive::Base(directive) => directive,
+            Directive::Declare(directive) => directive,
+            Directive::Export(directive) => directive,
+            Directive::Import(directive) => directive,
+            Directive::Output(directive) => directive,
+            Directive::Prefix(directive) => directive,
+            Directive::Unknown(directive) => directive,
+        }]
+    }
+
+    fn span(&self) -> ProgramSpan<'a> {
+        match self {
+            Directive::Base(directive) => directive.span(),
+            Directive::Declare(directive) => directive.span(),
+            Directive::Export(directive) => directive.span(),
+            Directive::Import(directive) => directive.span(),
+            Directive::Output(directive) => directive.span(),
+            Directive::Prefix(directive) => directive.span(),
+            Directive::Unknown(directive) => directive.span(),
+        }
+    }
+
+    fn parse(input: ParserInput<'a>) -> ParserResult<'a, Self>
+    where
+        Self: Sized + 'a,
+    {
+        context(
+            CONTEXT,
+            alt((
+                map(Base::parse, Directive::Base),
+                map(Declare::parse, Directive::Declare),
+                map(Export::parse, Directive::Export),
+                map(Import::parse, Directive::Import),
+                map(Output::parse, Directive::Output),
+                map(Prefix::parse, Directive::Prefix),
+                map(UnknownDirective::parse, Directive::Unknown),
+            )),
+        )(input)
+    }
+
+    fn context(&self) -> ParserContext {
+        CONTEXT
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use nom::combinator::all_consuming;
+
+    use crate::parser::{
+        ast::{directive::Directive, ProgramAST},
+        context::ParserContext,
+        input::ParserInput,
+        ParserState,
+    };
+
+    #[test]
+    fn parse_directive() {
+        let test = vec![
+            ("@base <test>", ParserContext::Base),
+            ("@declare test(a:int)", ParserContext::Declare),
+            ("@export test :- csv {}", ParserContext::Export),
+            ("@import test :- csv {}", ParserContext::Import),
+            ("@output test", ParserContext::Output),
+            ("@prefix test: <test>", ParserContext::Prefix),
+            ("@test something", ParserContext::UnknownDirective),
+        ];
+
+        for (input, expect) in test {
+            let parser_input = ParserInput::new(input, ParserState::default());
+            let result = all_consuming(Directive::parse)(parser_input);
+
+            assert!(result.is_ok());
+
+            let result = result.unwrap();
+            assert_eq!(result.1.context_type(), expect);
+        }
+    }
+}

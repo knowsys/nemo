@@ -4,4 +4,5 @@
 
 pub(crate) mod aggregates;
 pub(crate) mod builtins;
+pub(crate) mod datatypes;
 pub(crate) mod import_export;

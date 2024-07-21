@@ -3,6 +3,7 @@
 #[macro_use]
 pub mod atom;
 pub mod base;
+pub mod datatype;
 pub mod fact;
 pub mod import_export;
 pub mod literal;

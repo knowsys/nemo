@@ -22,7 +22,6 @@ pub(crate) enum AttributeRequirement {
 /// Supported file formats
 #[derive(Assoc, Debug, Copy, Clone, Eq, PartialEq, Hash)]
 #[func(pub fn name(&self) -> &'static str)]
-#[func(pub fn from_name(name: &str) -> Option<Self>)]
 #[func(pub fn extension(&self) -> &'static str)]
 #[func(pub fn attributes(&self) -> HashMap<ImportExportAttribute, AttributeRequirement>)]
 pub enum FileFormat {
