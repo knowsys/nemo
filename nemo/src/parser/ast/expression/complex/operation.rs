@@ -113,13 +113,6 @@ mod test {
 
     #[test]
     fn parse_operation() {
-        println!(
-            "{:?}",
-            OperationKind::iter()
-                .map(|kind| kind.name())
-                .collect::<Vec<_>>()
-        );
-
         let test = vec![
             ("SUM(1)", OperationKind::NumericSum),
             ("strlen(1)", OperationKind::StringLength),

@@ -174,13 +174,10 @@ fn run(mut cli: CliApp) -> Result<(), Error> {
         {
             Ok(program) => program,
             Err(report) => {
-                report.eprint(report.build_reports(Color::Red))?;
+                report.eprint(report.build_reports())?;
                 std::process::exit(1);
             }
         };
-
-    println!("Parsing successful");
-    std::process::exit(0);
 
     let program = match rule_model::translation::ASTProgramTranslation::initialize(
         &rules_content,
@@ -190,11 +187,12 @@ fn run(mut cli: CliApp) -> Result<(), Error> {
     {
         Ok(program) => program,
         Err(report) => {
-            report.eprint(report.build_reports(&program_ast, Color::Red))?;
+            report.eprint(report.build_reports().into_iter())?;
             std::process::exit(1);
         }
     };
 
+    println!("Parsing successful");
     std::process::exit(0);
 
     // let mut program = parse_program(rules_content)?;

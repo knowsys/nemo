@@ -186,8 +186,6 @@ impl ProgramComponent for Rule {
         let safe_variables = self.safe_variables();
 
         for atom in &self.head {
-            builder.push_origin(atom.origin().clone());
-
             for term in atom.subterms() {
                 if let Term::Primitive(Primitive::Variable(head_variable)) = term {
                     if !safe_variables.contains(head_variable) {
@@ -195,7 +193,12 @@ impl ProgramComponent for Rule {
                             .name()
                             .expect("anonymous variables not allowed in the head");
 
-                        let hint = if let Some(closest_option) = find_best_similarity(
+                        let info = builder.report_error(
+                            head_variable.origin().clone(),
+                            ValidationErrorKind::HeadUnsafe(head_variable.clone()),
+                        );
+
+                        if let Some(closest_option) = find_best_similarity(
                             head_variable_name.clone(),
                             &safe_variables
                                 .iter()
@@ -206,27 +209,15 @@ impl ProgramComponent for Rule {
                                 && closest_option.0.len() > 2
                                 && closest_option.1 > 0.75
                             {
-                                vec![Hint::SimilarExists {
+                                info.add_hint(Hint::SimilarExists {
                                     kind: "variable".to_string(),
                                     name: closest_option.0,
-                                }]
-                            } else {
-                                vec![]
+                                });
                             }
-                        } else {
-                            vec![]
-                        };
-
-                        builder.report_error(
-                            head_variable.origin(),
-                            ValidationErrorKind::HeadUnsafe(head_variable.clone()),
-                            hint,
-                        );
+                        }
                     }
                 }
             }
-
-            builder.pop_origin();
         }
 
         Ok(())

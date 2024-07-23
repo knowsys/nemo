@@ -47,7 +47,7 @@ pub struct Parser<'a> {
 /// Contains all errors that occurred during parsing
 #[derive(Debug)]
 pub struct ParserErrorReport<'a> {
-    /// Reference to the text that is going to be parser
+    /// Reference to the text that is going to be parsed
     input: &'a str,
     /// Label of the input text, usually a path of the input file
     label: String,
@@ -72,10 +72,7 @@ impl<'a> ParserErrorReport<'a> {
     }
 
     /// Build a [Report] for each error.
-    pub fn build_reports(
-        &'a self,
-        color_error: Color,
-    ) -> impl Iterator<Item = Report<'a, (String, Range<usize>)>> {
+    pub fn build_reports(&'a self) -> impl Iterator<Item = Report<'a, (String, Range<usize>)>> {
         self.errors.iter().map(move |error| {
             let message = format!("expected `{}`", error.context[0].name());
 
@@ -84,7 +81,7 @@ impl<'a> ParserErrorReport<'a> {
                 .with_label(
                     Label::new((self.label.clone(), error.position.range()))
                         .with_message(message)
-                        .with_color(color_error),
+                        .with_color(Color::Red),
                 )
                 .finish()
         })

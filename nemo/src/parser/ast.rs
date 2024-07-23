@@ -11,12 +11,12 @@ pub mod statement;
 pub mod tag;
 pub mod token;
 
-use crate::rule_model::origin::Origin;
+use std::fmt::Debug;
 
 use super::{context::ParserContext, span::ProgramSpan, ParserInput, ParserResult};
 
 /// Trait implemented by nodes in the abstract syntax tree
-pub trait ProgramAST<'a>: Sync {
+pub trait ProgramAST<'a>: Debug + Sync {
     /// Return all children of this node.
     fn children(&self) -> Vec<&dyn ProgramAST>;
 
@@ -30,22 +30,4 @@ pub trait ProgramAST<'a>: Sync {
 
     /// Return [ParserContext] indicating the type of node.
     fn context(&self) -> ParserContext;
-
-    /// Locate a node from a stack of [Origin]s.
-    fn locate(&'a self, origin_stack: &[Origin]) -> Option<&'a dyn ProgramAST<'a>>
-    where
-        Self: Sized + 'a,
-    {
-        let mut current_node: &dyn ProgramAST = self;
-
-        for origin in origin_stack {
-            if let &Origin::External(index) = origin {
-                current_node = *current_node.children().get(index)?;
-            } else {
-                return None;
-            }
-        }
-
-        Some(current_node)
-    }
 }

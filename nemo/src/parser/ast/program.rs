@@ -2,8 +2,8 @@
 
 use nom::{
     combinator::opt,
-    multi::separated_list0,
-    sequence::{delimited, pair},
+    multi::many0,
+    sequence::{delimited, pair, preceded},
 };
 
 use crate::parser::{
@@ -79,7 +79,10 @@ impl<'a> ProgramAST<'a> for Program<'a> {
                 opt(TopLevelComment::parse),
                 delimited(
                     WSoC::parse,
-                    separated_list0(WSoC::parse, recover(report_error(Statement::parse))),
+                    many0(preceded(
+                        WSoC::parse,
+                        recover(report_error(Statement::parse)),
+                    )),
                     WSoC::parse,
                 ),
             ),

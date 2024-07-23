@@ -5,28 +5,161 @@ pub mod hint;
 pub mod translation_error;
 pub mod validation_error;
 
-use std::fmt::Display;
+use std::{
+    fmt::{Debug, Display},
+    ops::Range,
+};
 
+use ariadne::{Color, Label, ReportBuilder};
 use hint::Hint;
 use translation_error::TranslationErrorKind;
 use validation_error::ValidationErrorKind;
 
-use crate::parser::{
-    ast::ProgramAST,
-    span::{CharacterRange, ProgramSpan},
-};
+use crate::parser::span::{CharacterRange, ProgramSpan};
 
 use super::origin::Origin;
+
+/// Types of [ComplexError]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ComplexErrorKind {
+    /// Error
+    Error,
+    /// Warning,
+    Warning,
+}
+
+/// Types of [ComplexErrorLabel]s
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ComplexErrorLabelKind {
+    /// Error
+    Error,
+    /// Warning,
+    Warning,
+    /// Information
+    Information,
+}
+
+/// Label of a [ComplexError]
+#[derive(Debug)]
+pub struct ComplexErrorLabel<Reference>
+where
+    Reference: Debug,
+{
+    /// Kind of label
+    kind: ComplexErrorLabelKind,
+    /// Reference to the source code
+    reference: Reference,
+    /// Message
+    message: String,
+}
+
+/// Complex error that additional information to an error
+#[derive(Debug)]
+pub struct ComplexError<Reference>
+where
+    Reference: Debug,
+{
+    /// Type of error
+    pub kind: ComplexErrorKind,
+    /// Where this error occurred
+    pub reference: Reference,
+    /// Labels
+    pub labels: Vec<ComplexErrorLabel<Reference>>,
+    /// Hints
+    pub hints: Vec<Hint>,
+}
+
+impl<Reference> ComplexError<Reference>
+where
+    Reference: Debug,
+{
+    /// Check whether this is a error (and not a warning).
+    pub fn is_error(&self) -> bool {
+        matches!(self.kind, ComplexErrorKind::Error)
+    }
+
+    /// Create a new error.
+    pub fn new_error(reference: Reference) -> Self {
+        Self {
+            kind: ComplexErrorKind::Error,
+            reference,
+            labels: Vec::default(),
+            hints: Vec::default(),
+        }
+    }
+
+    /// Create a new warning
+    pub fn new_warning(reference: Reference) -> Self {
+        Self {
+            kind: ComplexErrorKind::Warning,
+            reference,
+            labels: Vec::default(),
+            hints: Vec::default(),
+        }
+    }
+
+    /// Add a new label to the error.
+    pub fn add_label(
+        &mut self,
+        kind: ComplexErrorLabelKind,
+        reference: Reference,
+        message: String,
+    ) -> &mut Self {
+        self.labels.push(ComplexErrorLabel {
+            kind: kind,
+            reference,
+            message,
+        });
+
+        self
+    }
+
+    /// Add a new hint to the error.
+    pub fn add_hint(&mut self, hint: Hint) -> &mut Self {
+        self.hints.push(hint);
+
+        self
+    }
+
+    /// Add this information to a [ReportBuilder].
+    pub fn report<'a, Translation>(
+        &self,
+        mut report: ReportBuilder<'a, (String, Range<usize>)>,
+        source_label: String,
+        translation: Translation,
+    ) -> ReportBuilder<'a, (String, Range<usize>)>
+    where
+        Translation: Fn(&Reference) -> Range<usize>,
+    {
+        for label in &self.labels {
+            let color = match label.kind {
+                ComplexErrorLabelKind::Error => Color::Red,
+                ComplexErrorLabelKind::Warning => Color::Yellow,
+                ComplexErrorLabelKind::Information => Color::Blue,
+            };
+
+            report = report.with_label(
+                Label::new((source_label.clone(), translation(&label.reference)))
+                    .with_message(label.message.clone())
+                    .with_color(color),
+            );
+        }
+
+        for hint in &self.hints {
+            report = report.with_help(hint.message());
+        }
+
+        report
+    }
+}
 
 /// Error that occurs during validation of a program.
 #[derive(Debug)]
 pub struct ValidationError {
     /// The kind of error
     kind: ValidationErrorKind,
-    /// Stack of [Origin] from which the original AST node can be derived
-    origin_stack: Vec<Origin>,
-    /// List of hints
-    hints: Vec<Hint>,
+    /// Additional information
+    info: ComplexError<Origin>,
 }
 
 impl Display for ValidationError {
@@ -38,43 +171,33 @@ impl Display for ValidationError {
 /// Builder for [ValidationError]
 #[derive(Debug, Default)]
 pub struct ValidationErrorBuilder {
-    /// Current stack of [Origin]
-    origin_stack: Vec<Origin>,
     /// Current stack of [ValidationError]s
-    error_stack: Vec<ValidationError>,
+    errors: Vec<ValidationError>,
 }
 
 impl ValidationErrorBuilder {
-    /// Push an [Origin] onto the stack.
-    pub fn push_origin(&mut self, origin: Origin) {
-        self.origin_stack.push(origin);
-    }
-
-    /// Pop the origin stack.
-    pub fn pop_origin(&mut self) {
-        self.origin_stack.pop();
-    }
-
     /// Add a new error.
     pub fn report_error(
         &mut self,
-        origin: &Origin,
-        error_kind: ValidationErrorKind,
-        hints: Vec<Hint>,
-    ) {
-        let mut origin_stack = self.origin_stack.clone();
-        origin_stack.push(origin.clone());
+        origin: Origin,
+        kind: ValidationErrorKind,
+    ) -> &mut ComplexError<Origin> {
+        let message = kind.to_string();
 
-        self.error_stack.push(ValidationError {
-            kind: error_kind,
-            origin_stack,
-            hints,
-        })
+        self.errors.push(ValidationError {
+            kind: kind,
+            info: ComplexError::new_error(origin),
+        });
+
+        let info = &mut self.errors.last_mut().expect("error was just added").info;
+        info.add_label(ComplexErrorLabelKind::Error, origin, message);
+
+        info
     }
 
     /// Finish building and return a list of [ValidationError]s.
     pub fn finalize(self) -> Vec<ValidationError> {
-        self.error_stack
+        self.errors
     }
 }
 
@@ -83,20 +206,44 @@ impl ValidationErrorBuilder {
 pub struct TranslationError {
     /// The type of error that occurred
     kind: TranslationErrorKind,
-    /// Range signifying the program part that should be highlighted
-    range: CharacterRange,
-    /// List of hints
-    hints: Vec<Hint>,
+    /// Additional information
+    info: ComplexError<CharacterRange>,
 }
 
 impl TranslationError {
     /// Create a new [TranslationError] from a given [ProgramSPan].
-    pub fn new<'a>(span: ProgramSpan<'a>, kind: TranslationErrorKind, hints: Vec<Hint>) -> Self {
-        Self {
+    pub fn new<'a>(span: ProgramSpan<'a>, kind: TranslationErrorKind) -> Self {
+        let message = kind.to_string();
+
+        let mut result = Self {
             kind,
-            range: span.range(),
-            hints,
-        }
+            info: ComplexError::new_error(span.range()),
+        };
+
+        result
+            .info
+            .add_label(ComplexErrorLabelKind::Error, span.range(), message);
+
+        result
+    }
+
+    /// Add a new label to the error.
+    pub fn add_label(
+        mut self,
+        kind: ComplexErrorLabelKind,
+        range: CharacterRange,
+        message: String,
+    ) -> Self {
+        self.info.add_label(kind, range, message);
+
+        self
+    }
+
+    /// Add a new hint to the error.
+    pub fn add_hint(mut self, hint: Hint) -> Self {
+        self.info.add_hint(hint);
+
+        self
     }
 }
 
@@ -119,18 +266,6 @@ impl ProgramError {
         }
     }
 
-    /// Return the [CharacterRange] associated with this error.
-    pub fn range<'a, Node: ProgramAST<'a>>(&self, ast: &'a Node) -> CharacterRange {
-        match self {
-            ProgramError::TranslationError(error) => error.range,
-            ProgramError::ValidationError(error) => ast
-                .locate(&error.origin_stack)
-                .expect("invalid origin")
-                .span()
-                .range(),
-        }
-    }
-
     /// Return the error code of the message.
     pub fn error_code(&self) -> usize {
         match self {
@@ -139,23 +274,39 @@ impl ProgramError {
         }
     }
 
-    /// Return an optional note that may be attached to the error.
-    pub fn note(&self) -> Option<String> {
+    /// Return the range indicating where the error occurred
+    pub fn range<Translation>(&self, translation: Translation) -> Range<usize>
+    where
+        Translation: Fn(&Origin) -> Range<usize>,
+    {
         match self {
-            ProgramError::TranslationError(error) => error.kind.note(),
-            ProgramError::ValidationError(error) => error.kind.note(),
+            ProgramError::TranslationError(error) => error.info.reference.range(),
+            ProgramError::ValidationError(error) => translation(&error.info.reference),
         }
-        .map(|note| note.to_string())
     }
 
-    /// Return a list of hints that fit the error message.
-    pub fn hints(&self) -> Vec<String> {
+    pub fn report<'a, Translation>(
+        &'a self,
+        mut report: ReportBuilder<'a, (String, Range<usize>)>,
+        source_label: String,
+        translation: Translation,
+    ) -> ReportBuilder<'a, (String, Range<usize>)>
+    where
+        Translation: Fn(&Origin) -> Range<usize>,
+    {
+        report = report
+            .with_code(self.error_code())
+            .with_message(self.message());
+
         match self {
-            ProgramError::TranslationError(error) => &error.hints,
-            ProgramError::ValidationError(error) => &error.hints,
+            ProgramError::TranslationError(error) => {
+                error
+                    .info
+                    .report(report, source_label, |range| range.range())
+            }
+            ProgramError::ValidationError(error) => {
+                error.info.report(report, source_label, translation)
+            }
         }
-        .iter()
-        .map(|hint| hint.message().to_string())
-        .collect()
     }
 }

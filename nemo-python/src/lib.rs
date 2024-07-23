@@ -53,18 +53,16 @@ struct NemoProgram(nemo::model::Program);
 #[pyfunction]
 fn load_file(file: String) -> PyResult<NemoProgram> {
     let contents = read_to_string(file)?;
-    let ast = nemo::io::parser::parse_program_str(&contents).py_res()?;
-    let program = nemo::rule_model::program::Program::from_ast(ast);
-    let program = todo!("update NemoProgram to use the new rule model");
-    Ok(NemoProgram(program))
+    load_string(contents)
 }
 
 #[pyfunction]
 fn load_string(rules: String) -> PyResult<NemoProgram> {
-    let ast = nemo::io::parser::parse_program_str(&rules).py_res()?;
-    let program = nemo::rule_model::program::Program::from_ast(ast);
-    let program = todo!("update NemoProgram to use the new rule model");
-    Ok(NemoProgram(program))
+    // let ast = nemo::io::parser::parse_program_str(&rules).py_res()?;
+    // let program = nemo::rule_model::program::Program::from_ast(ast);
+    // let program = todo!("update NemoProgram to use the new rule model");
+    // Ok(NemoProgram(program))
+    todo!()
 }
 
 #[pymethods]

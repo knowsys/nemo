@@ -29,6 +29,9 @@ pub struct ASTProgramTranslation<'a> {
     /// Label of the input file
     input_label: String,
 
+    /// Mapping of [Origin] to [ProgramAST] nodes
+    origin_map: HashMap<Origin, &'a dyn ProgramAST<'a>>,
+
     /// Prefix mapping
     prefix_mapping: HashMap<String, String>,
     /// Base
@@ -47,11 +50,21 @@ impl<'a> ASTProgramTranslation<'a> {
         Self {
             input,
             input_label,
+            origin_map: HashMap::new(),
             prefix_mapping: HashMap::new(),
             base: None,
             validation_error_builder: ValidationErrorBuilder::default(),
             errors: Vec::default(),
         }
+    }
+
+    /// Register a [ProgramAST] so that it can be associated with and later referenced by
+    /// the returned [Origin].
+    pub fn register_node(&mut self, node: &'a dyn ProgramAST<'a>) -> Origin {
+        let new_origin = Origin::External(self.origin_map.len());
+        self.origin_map.insert(new_origin, node);
+
+        new_origin
     }
 }
 
@@ -63,6 +76,8 @@ pub struct ProgramErrorReport<'a> {
     input: &'a str,
     /// Label of the input file
     label: String,
+    /// Mapping of [Origin] to [ProgramAST] nodes
+    origin_map: HashMap<Origin, &'a dyn ProgramAST<'a>>,
 
     /// Errors
     errors: Vec<ProgramError>,
@@ -70,12 +85,9 @@ pub struct ProgramErrorReport<'a> {
 
 impl<'a> ProgramErrorReport<'a> {
     /// Print the given reports.
-    pub fn eprint<'s, ReportIterator>(
-        &'s self,
-        reports: ReportIterator,
-    ) -> Result<(), std::io::Error>
+    pub fn eprint<'s, ReportIterator>(&self, reports: ReportIterator) -> Result<(), std::io::Error>
     where
-        ReportIterator: Iterator<Item = Report<'a, (String, Range<usize>)>>,
+        ReportIterator: Iterator<Item = Report<'s, (String, Range<usize>)>>,
     {
         for report in reports {
             report.eprint((self.label.clone(), Source::from(self.input)))?;
@@ -85,34 +97,30 @@ impl<'a> ProgramErrorReport<'a> {
     }
 
     /// Build a [Report] for each error.
-    pub fn build_reports(
-        &'a self,
-        ast: &'a ast::program::Program<'a>,
-        color_error: Color,
-    ) -> impl Iterator<Item = Report<'a, (String, Range<usize>)>> {
-        self.errors.iter().map(move |error| {
-            let range = error.range(ast);
+    pub fn build_reports(&self) -> Vec<Report<'_, (String, Range<usize>)>> {
+        self.errors
+            .iter()
+            .map(move |error| {
+                let translation = |origin: &Origin| {
+                    self.origin_map
+                        .get(origin)
+                        .expect("map must contain origin")
+                        .span()
+                        .range()
+                        .range()
+                };
 
-            let mut report =
-                Report::build(ReportKind::Error, self.label.clone(), range.start.offset)
-                    .with_code(error.error_code())
-                    .with_message(error.message())
-                    .with_label(
-                        Label::new((self.label.clone(), range.range()))
-                            .with_message(error.message())
-                            .with_color(color_error),
-                    );
-            if let Some(note) = error.note() {
-                report = report.with_note(note);
-            }
-            if !error.hints().is_empty() {
-                for hint in error.hints() {
-                    report = report.with_help(hint);
-                }
-            }
+                let mut report = Report::build(
+                    ReportKind::Error,
+                    self.label.clone(),
+                    error.range(translation).start,
+                );
 
-            report.finish()
-        })
+                report = error.report(report, self.label.clone(), translation);
+
+                report.finish()
+            })
+            .collect()
     }
 }
 
@@ -120,132 +128,105 @@ impl<'a> ASTProgramTranslation<'a> {
     /// Translate the given [ProgramAST] into a [Program].
     pub fn translate(
         mut self,
-        ast: &ast::program::Program<'a>,
+        ast: &'a ast::program::Program<'a>,
     ) -> Result<Program, ProgramErrorReport<'a>> {
         let mut program_builder = ProgramBuilder::default();
 
-        // for (statement_index, rule) in vec![ast.statements()].into_iter().enumerate() {
-        //     let origin = Origin::External(statement_index);
+        for statement in ast.statements() {
+            match statement.kind() {
+                ast::statement::StatementKind::Fact(_) => todo!(),
+                ast::statement::StatementKind::Rule(rule) => match self.build_rule(rule) {
+                    Ok(new_rule) => program_builder.add_rule(new_rule),
+                    Err(translation_error) => self
+                        .errors
+                        .push(ProgramError::TranslationError(translation_error)),
+                },
+                ast::statement::StatementKind::Directive(_) => todo!(),
+            }
+        }
 
-        //     match self.build_rule(origin, rule) {
-        //         Ok(new_rule) => program_builder.add_rule(new_rule),
-        //         Err(translation_error) => self
-        //             .errors
-        //             .push(ProgramError::TranslationError(translation_error)),
-        //     }
-        // }
+        self.errors.extend(
+            self.validation_error_builder
+                .finalize()
+                .into_iter()
+                .map(ProgramError::ValidationError),
+        );
 
-        // self.errors.extend(
-        //     self.validation_error_builder
-        //         .finalize()
-        //         .into_iter()
-        //         .map(ProgramError::ValidationError),
-        // );
-
-        // if self.errors.is_empty() {
-        //     Ok(program_builder.finalize())
-        // } else {
-        //     Err(ProgramErrorReport {
-        //         input: self.input,
-        //         label: self.input_label,
-        //         errors: self.errors,
-        //     })
-        // }
-
-        todo!()
+        if self.errors.is_empty() {
+            Ok(program_builder.finalize())
+        } else {
+            Err(ProgramErrorReport {
+                input: self.input,
+                label: self.input_label,
+                errors: self.errors,
+                origin_map: self.origin_map,
+            })
+        }
     }
 
-    fn build_rule(
-        &mut self,
-        origin: Origin,
-        rule: &ast::rule::Rule<'a>,
-    ) -> Result<Rule, TranslationError> {
-        self.validation_error_builder.push_origin(origin);
-        let mut rule_builder = RuleBuilder::default().origin(origin);
+    fn build_rule(&mut self, rule: &'a ast::rule::Rule<'a>) -> Result<Rule, TranslationError> {
+        let mut rule_builder = RuleBuilder::default().origin(self.register_node(rule));
 
-        let mut expression_counter: usize = 0;
         for expression in rule.head() {
-            let origin_expression = Origin::External(expression_counter);
-            rule_builder.add_head_atom_mut(self.build_head_atom(origin_expression, expression)?);
-
-            expression_counter += 1;
+            rule_builder.add_head_atom_mut(self.build_head_atom(expression)?);
         }
 
         for expression in rule.body() {
-            let origin_expression = Origin::External(expression_counter);
-            rule_builder
-                .add_body_literal_mut(self.build_body_literal(origin_expression, expression)?);
-
-            expression_counter += 1;
+            rule_builder.add_body_literal_mut(self.build_body_literal(expression)?);
         }
 
-        let rule = rule_builder.finalize().set_origin(origin);
+        let rule = rule_builder.finalize();
 
         let _ = rule.validate(&mut self.validation_error_builder);
-        self.validation_error_builder.pop_origin();
         Ok(rule)
     }
 
     fn build_body_literal(
         &mut self,
-        origin: Origin,
-        head: &ast::expression::Expression<'a>,
+        head: &'a ast::expression::Expression<'a>,
     ) -> Result<Literal, TranslationError> {
-        self.validation_error_builder.push_origin(origin);
-
         let result = if let ast::expression::Expression::Atom(atom) = head {
             let mut subterms = Vec::new();
-            for (expression_index, expression) in atom.expressions().enumerate() {
-                let term_origin = Origin::External(expression_index);
-                subterms.push(self.build_inner_term(term_origin, expression)?);
+            for expression in atom.expressions() {
+                subterms.push(self.build_inner_term(expression)?);
             }
 
-            Literal::Positive(Atom::new(&self.resolve_tag(atom.tag())?, subterms))
+            Literal::Positive(
+                Atom::new(&self.resolve_tag(atom.tag())?, subterms)
+                    .set_origin(self.register_node(atom)),
+            )
         } else {
-            return Err(TranslationError::new(
-                head.span(),
-                TranslationErrorKind::HeadNonAtom(head.context_type().name().to_string()),
-                vec![],
-            ));
+            todo!()
         }
-        .set_origin(origin);
+        .set_origin(self.register_node(head));
 
-        self.validation_error_builder.pop_origin();
         Ok(result)
     }
 
     fn build_head_atom(
         &mut self,
-        origin: Origin,
-        head: &ast::expression::Expression<'a>,
+        head: &'a ast::expression::Expression<'a>,
     ) -> Result<Atom, TranslationError> {
-        self.validation_error_builder.push_origin(origin);
-
         let result = if let ast::expression::Expression::Atom(atom) = head {
             let mut subterms = Vec::new();
-            for (expression_index, expression) in atom.expressions().enumerate() {
-                let term_origin = Origin::External(expression_index);
-                subterms.push(self.build_inner_term(term_origin, expression)?);
+            for expression in atom.expressions() {
+                subterms.push(self.build_inner_term(expression)?);
             }
 
-            Atom::new(&self.resolve_tag(atom.tag())?, subterms)
+            Atom::new(&self.resolve_tag(atom.tag())?, subterms).set_origin(self.register_node(atom))
         } else {
             return Err(TranslationError::new(
                 head.span(),
                 TranslationErrorKind::HeadNonAtom(head.context_type().name().to_string()),
-                vec![],
             ));
-        }
-        .set_origin(origin);
+        };
 
-        self.validation_error_builder.pop_origin();
         Ok(result)
     }
 
     fn build_inner_term(
-        &self,
-        origin: Origin,
-        expression: &ast::expression::Expression,
+        &mut self,
+        expression: &'a ast::expression::Expression,
     ) -> Result<Term, TranslationError> {
         Ok(match expression {
             ast::expression::Expression::Arithmetic(_) => todo!(),
@@ -261,33 +242,33 @@ impl<'a> ASTProgramTranslation<'a> {
                 ast::expression::basic::variable::VariableType::Universal => {
                     if let Some(variable_name) = variable.name() {
                         Term::universal_variable(&variable_name)
+                            .set_origin(self.register_node(variable))
                     } else {
                         return Err(TranslationError::new(
                             variable.span(),
                             TranslationErrorKind::UnnamedVariable,
-                            vec![Hint::AnonymousVariables],
-                        ));
+                        )
+                        .add_hint(Hint::AnonymousVariables));
                     }
                 }
                 ast::expression::basic::variable::VariableType::Existential => {
                     if let Some(variable_name) = variable.name() {
                         Term::existential_variable(&variable_name)
+                            .set_origin(self.register_node(variable))
                     } else {
                         return Err(TranslationError::new(
                             variable.span(),
                             TranslationErrorKind::UnnamedVariable,
-                            vec![],
                         ));
                     }
                 }
                 ast::expression::basic::variable::VariableType::Anonymous => {
                     if variable.name().is_none() {
-                        Term::anonymous_variable()
+                        Term::anonymous_variable().set_origin(self.register_node(variable))
                     } else {
                         return Err(TranslationError::new(
                             variable.span(),
                             TranslationErrorKind::NamedAnonymous(variable.span().0.to_string()),
-                            vec![],
                         ));
                     }
                 }
@@ -297,13 +278,12 @@ impl<'a> ASTProgramTranslation<'a> {
             ast::expression::Expression::Map(_) => todo!(),
             ast::expression::Expression::Negation(_) => todo!(),
             ast::expression::Expression::Operation(_) => todo!(),
-        }
-        .set_origin(origin))
+        })
     }
 
     fn resolve_tag(
         &self,
-        tag: &ast::tag::structure::StructureTag<'a>,
+        tag: &'a ast::tag::structure::StructureTag<'a>,
     ) -> Result<String, TranslationError> {
         Ok(match tag.kind() {
             ast::tag::structure::StructureTagKind::Plain(token) => {
@@ -322,7 +302,6 @@ impl<'a> ASTProgramTranslation<'a> {
                     return Err(TranslationError::new(
                         prefix.span(),
                         TranslationErrorKind::UnknownPrefix(prefix.to_string()),
-                        vec![],
                     ));
                 }
             }

@@ -63,7 +63,7 @@ pub struct Statement<'a> {
     /// Doc comment associated with this statement
     comment: Option<DocComment<'a>>,
     /// The statement
-    statement: StatementKind<'a>,
+    kind: StatementKind<'a>,
 }
 
 impl<'a> Statement<'a> {
@@ -74,8 +74,8 @@ impl<'a> Statement<'a> {
     }
 
     /// Return the [StatementKind].
-    pub fn statement(&self) -> &StatementKind<'a> {
-        &self.statement
+    pub fn kind(&self) -> &StatementKind<'a> {
+        &self.kind
     }
 }
 
@@ -83,7 +83,7 @@ const CONTEXT: ParserContext = ParserContext::Statement;
 
 impl<'a> ProgramAST<'a> for Statement<'a> {
     fn children(&self) -> Vec<&dyn ProgramAST> {
-        vec![match &self.statement {
+        vec![match &self.kind {
             StatementKind::Fact(statement) => statement,
             StatementKind::Rule(statement) => statement,
             StatementKind::Directive(statement) => statement,
@@ -119,7 +119,7 @@ impl<'a> ProgramAST<'a> for Statement<'a> {
                 Self {
                     span: input_span.until_rest(&rest_span),
                     comment,
-                    statement,
+                    kind: statement,
                 },
             )
         })
@@ -159,7 +159,7 @@ mod test {
             assert!(result.is_ok());
 
             let result = result.unwrap();
-            assert_eq!(result.1.statement.context(), expect);
+            assert_eq!(result.1.kind.context(), expect);
         }
     }
 }
