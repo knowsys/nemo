@@ -14,7 +14,7 @@ use crate::{
         },
         context::{context, ParserContext},
         input::ParserInput,
-        span::ProgramSpan,
+        span::Span,
         ParserResult,
     },
     rule_model::components::term::aggregate::AggregateKind,
@@ -26,7 +26,7 @@ use crate::{
 #[derive(Debug)]
 pub struct Aggregation<'a> {
     /// [ProgramSpan] associated with this node
-    span: ProgramSpan<'a>,
+    span: Span<'a>,
 
     /// Type of Aggregation,
     tag: AggregationTag<'a>,
@@ -68,7 +68,7 @@ impl<'a> ProgramAST<'a> for Aggregation<'a> {
         result
     }
 
-    fn span(&self) -> ProgramSpan<'a> {
+    fn span(&self) -> Span<'a> {
         self.span
     }
 

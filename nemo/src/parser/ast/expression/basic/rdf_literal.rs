@@ -7,7 +7,7 @@ use crate::parser::{
     ast::{token::Token, ProgramAST},
     context::{context, ParserContext},
     input::ParserInput,
-    span::ProgramSpan,
+    span::Span,
     ParserResult,
 };
 
@@ -17,7 +17,7 @@ use super::iri::Iri;
 #[derive(Debug)]
 pub struct RdfLiteral<'a> {
     /// [ProgramSpan] associated with this node
-    span: ProgramSpan<'a>,
+    span: Span<'a>,
 
     /// Content part rdf literal
     content: Token<'a>,
@@ -50,7 +50,7 @@ impl<'a> ProgramAST<'a> for RdfLiteral<'a> {
         Vec::default()
     }
 
-    fn span(&self) -> ProgramSpan<'a> {
+    fn span(&self) -> Span<'a> {
         self.span
     }
 

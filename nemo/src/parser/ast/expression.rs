@@ -16,7 +16,7 @@ use nom::{branch::alt, combinator::map};
 use crate::parser::{
     context::{context, ParserContext},
     input::ParserInput,
-    span::ProgramSpan,
+    span::Span,
     ParserResult,
 };
 
@@ -128,7 +128,7 @@ impl<'a> ProgramAST<'a> for Expression<'a> {
         }]
     }
 
-    fn span(&self) -> ProgramSpan<'a> {
+    fn span(&self) -> Span<'a> {
         match self {
             Expression::Aggregation(expression) => expression.span(),
             Expression::Arithmetic(expression) => expression.span(),

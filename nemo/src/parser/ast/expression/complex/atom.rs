@@ -9,7 +9,7 @@ use crate::parser::{
     },
     context::{context, ParserContext},
     input::ParserInput,
-    span::ProgramSpan,
+    span::Span,
     ParserResult,
 };
 
@@ -17,7 +17,7 @@ use crate::parser::{
 #[derive(Debug)]
 pub struct Atom<'a> {
     /// [ProgramSpan] associated with this node
-    span: ProgramSpan<'a>,
+    span: Span<'a>,
 
     /// Tag of this Atom
     tag: StructureTag<'a>,
@@ -51,7 +51,7 @@ impl<'a> ProgramAST<'a> for Atom<'a> {
         result
     }
 
-    fn span(&self) -> ProgramSpan<'a> {
+    fn span(&self) -> Span<'a> {
         self.span
     }
 

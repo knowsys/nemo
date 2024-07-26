@@ -70,15 +70,15 @@ impl CharacterRange {
 
 /// Maker for a region of text within a string slice
 #[derive(Debug, Clone, Copy)]
-pub struct ProgramSpan<'a>(pub(crate) LocatedSpan<&'a str>);
+pub struct Span<'a>(pub(crate) LocatedSpan<&'a str>);
 
-impl<'a> From<LocatedSpan<&'a str>> for ProgramSpan<'a> {
+impl<'a> From<LocatedSpan<&'a str>> for Span<'a> {
     fn from(value: LocatedSpan<&'a str>) -> Self {
         Self(value)
     }
 }
 
-impl<'a> ProgramSpan<'a> {
+impl<'a> Span<'a> {
     /// Compute the [CharacterRange] for this region of text.
     pub fn range(&self) -> CharacterRange {
         let start = CharacterPosition {

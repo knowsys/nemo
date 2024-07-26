@@ -15,7 +15,7 @@ use hint::Hint;
 use translation_error::TranslationErrorKind;
 use validation_error::ValidationErrorKind;
 
-use crate::parser::span::{CharacterRange, ProgramSpan};
+use crate::parser::span::{CharacterRange, Span};
 
 use super::origin::Origin;
 
@@ -212,7 +212,7 @@ pub struct TranslationError {
 
 impl TranslationError {
     /// Create a new [TranslationError] from a given [ProgramSPan].
-    pub fn new<'a>(span: ProgramSpan<'a>, kind: TranslationErrorKind) -> Self {
+    pub fn new<'a>(span: Span<'a>, kind: TranslationErrorKind) -> Self {
         let message = kind.to_string();
 
         let mut result = Self {

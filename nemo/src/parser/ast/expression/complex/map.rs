@@ -12,7 +12,7 @@ use crate::parser::{
     },
     context::{context, ParserContext},
     input::ParserInput,
-    span::ProgramSpan,
+    span::Span,
     ParserResult,
 };
 
@@ -20,7 +20,7 @@ use crate::parser::{
 #[derive(Debug)]
 pub struct Map<'a> {
     /// [ProgramSpan] associated with this node
-    span: ProgramSpan<'a>,
+    span: Span<'a>,
 
     /// Tag of this map, if it exists
     tag: Option<StructureTag<'a>>,
@@ -58,7 +58,7 @@ impl<'a> ProgramAST<'a> for Map<'a> {
         result
     }
 
-    fn span(&self) -> ProgramSpan<'a> {
+    fn span(&self) -> Span<'a> {
         self.span
     }
 

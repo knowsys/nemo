@@ -10,7 +10,7 @@ use crate::parser::{
     context::{context, ParserContext},
     error::{recover, report_error},
     input::ParserInput,
-    span::ProgramSpan,
+    span::Span,
     ParserResult,
 };
 
@@ -24,7 +24,7 @@ use super::{
 #[derive(Debug)]
 pub struct Program<'a> {
     /// [ProgramSpan] associated with this node
-    span: ProgramSpan<'a>,
+    span: Span<'a>,
 
     /// Top level comment
     comment: Option<TopLevelComment<'a>>,
@@ -63,7 +63,7 @@ impl<'a> ProgramAST<'a> for Program<'a> {
         result
     }
 
-    fn span(&self) -> ProgramSpan<'a> {
+    fn span(&self) -> Span<'a> {
         self.span
     }
 

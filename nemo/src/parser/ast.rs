@@ -13,7 +13,7 @@ pub mod token;
 
 use std::fmt::Debug;
 
-use super::{context::ParserContext, span::ProgramSpan, ParserInput, ParserResult};
+use super::{context::ParserContext, span::Span, ParserInput, ParserResult};
 
 /// Trait implemented by nodes in the abstract syntax tree
 pub trait ProgramAST<'a>: Debug + Sync {
@@ -21,7 +21,7 @@ pub trait ProgramAST<'a>: Debug + Sync {
     fn children(&self) -> Vec<&dyn ProgramAST>;
 
     /// Return the region of text this node originates from.
-    fn span(&self) -> ProgramSpan<'a>;
+    fn span(&self) -> Span<'a>;
 
     /// Parse the given input into this type of node
     fn parse(input: ParserInput<'a>) -> ParserResult<'a, Self>

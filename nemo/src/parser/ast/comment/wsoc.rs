@@ -10,7 +10,7 @@ use nom::{
 use crate::parser::{
     ast::{token::Token, ProgramAST},
     input::ParserInput,
-    span::ProgramSpan,
+    span::Span,
     ParserResult,
 };
 
@@ -29,7 +29,7 @@ pub enum WhiteSpaceComment<'a> {
 #[derive(Debug)]
 pub struct WSoC<'a> {
     /// [ProgramSpan] associated with this comment
-    _span: ProgramSpan<'a>,
+    _span: Span<'a>,
     /// comments
     comments: Vec<WhiteSpaceComment<'a>>,
 }

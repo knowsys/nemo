@@ -15,7 +15,7 @@ use crate::parser::{
         ProgramAST,
     },
     input::ParserInput,
-    span::ProgramSpan,
+    span::Span,
     ParserResult,
 };
 
@@ -23,7 +23,7 @@ use crate::parser::{
 #[derive(Debug)]
 pub struct DeclareSequence<'a> {
     /// [ProgramSpan] associated with this sequence
-    _span: ProgramSpan<'a>,
+    _span: Span<'a>,
 
     /// List of name-type pairs
     pairs: Vec<(ParameterName<'a>, DataTypeTag<'a>)>,

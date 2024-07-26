@@ -6,7 +6,7 @@ use crate::parser::{
     ast::{expression::basic::iri::Iri, token::Token, ProgramAST},
     context::{context, ParserContext},
     input::ParserInput,
-    span::ProgramSpan,
+    span::Span,
     ParserResult,
 };
 
@@ -25,7 +25,7 @@ pub enum StructureTagKind<'a> {
 #[derive(Debug)]
 pub struct StructureTag<'a> {
     /// [ProgramSpan] associated with this node
-    span: ProgramSpan<'a>,
+    span: Span<'a>,
 
     /// Type of [StructureTag]
     kind: StructureTagKind<'a>,
@@ -62,7 +62,7 @@ impl<'a> ProgramAST<'a> for StructureTag<'a> {
         }
     }
 
-    fn span(&self) -> ProgramSpan<'a> {
+    fn span(&self) -> Span<'a> {
         self.span
     }
 

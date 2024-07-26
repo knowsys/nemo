@@ -10,7 +10,7 @@ use crate::parser::{
     ast::{token::Token, ProgramAST},
     context::{context, ParserContext},
     input::ParserInput,
-    span::ProgramSpan,
+    span::Span,
     ParserResult,
 };
 
@@ -18,10 +18,10 @@ use crate::parser::{
 #[derive(Debug)]
 pub struct LineComment<'a> {
     /// [ProgramSpan] associated with this comment
-    span: ProgramSpan<'a>,
+    span: Span<'a>,
 
     /// Part of the comment that contains the content
-    content: ProgramSpan<'a>,
+    content: Span<'a>,
 }
 
 const CONTEXT: ParserContext = ParserContext::Comment;
@@ -38,7 +38,7 @@ impl<'a> ProgramAST<'a> for LineComment<'a> {
         Vec::default()
     }
 
-    fn span(&self) -> ProgramSpan<'a> {
+    fn span(&self) -> Span<'a> {
         self.span
     }
 

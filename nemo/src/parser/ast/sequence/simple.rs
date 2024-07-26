@@ -7,7 +7,7 @@ use nom::{multi::separated_list1, sequence::tuple};
 use crate::parser::{
     ast::{comment::wsoc::WSoC, expression::Expression, token::Token, ProgramAST},
     input::ParserInput,
-    span::ProgramSpan,
+    span::Span,
     ParserResult,
 };
 
@@ -15,7 +15,7 @@ use crate::parser::{
 #[derive(Debug)]
 pub struct ExpressionSequenceSimple<'a> {
     /// [ProgramSpan] associated with this sequence
-    _span: ProgramSpan<'a>,
+    _span: Span<'a>,
 
     /// List of expressions
     expressions: Vec<Expression<'a>>,

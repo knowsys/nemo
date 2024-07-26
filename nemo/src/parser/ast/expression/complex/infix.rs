@@ -17,7 +17,7 @@ use crate::parser::{
     },
     context::{context, ParserContext},
     input::ParserInput,
-    span::ProgramSpan,
+    span::Span,
     ParserResult,
 };
 
@@ -54,7 +54,7 @@ pub enum InfixExpressionKind {
 #[derive(Debug)]
 pub struct InfixExpression<'a> {
     /// [ProgramSpan] associated with this node
-    span: ProgramSpan<'a>,
+    span: Span<'a>,
 
     /// Kind of infix expression
     kind: InfixExpressionKind,
@@ -116,7 +116,7 @@ impl<'a> ProgramAST<'a> for InfixExpression<'a> {
         vec![&*self.left, &*self.right]
     }
 
-    fn span(&self) -> ProgramSpan<'a> {
+    fn span(&self) -> Span<'a> {
         self.span
     }
 

@@ -12,7 +12,7 @@ use crate::parser::{
     },
     context::{context, ParserContext},
     input::ParserInput,
-    span::ProgramSpan,
+    span::Span,
     ParserResult,
 };
 
@@ -20,7 +20,7 @@ use crate::parser::{
 #[derive(Debug)]
 pub struct Tuple<'a> {
     /// [ProgramSpan] associated with this node
-    span: ProgramSpan<'a>,
+    span: Span<'a>,
 
     /// List of underlying expressions
     expressions: ExpressionSequenceOne<'a>,
@@ -46,7 +46,7 @@ impl<'a> ProgramAST<'a> for Tuple<'a> {
         result
     }
 
-    fn span(&self) -> ProgramSpan<'a> {
+    fn span(&self) -> Span<'a> {
         self.span
     }
 

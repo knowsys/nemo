@@ -15,7 +15,7 @@ use unknown::UnknownDirective;
 use crate::parser::{
     context::{context, ParserContext},
     input::ParserInput,
-    span::ProgramSpan,
+    span::Span,
     ParserResult,
 };
 
@@ -112,7 +112,7 @@ impl<'a> ProgramAST<'a> for Directive<'a> {
         }]
     }
 
-    fn span(&self) -> ProgramSpan<'a> {
+    fn span(&self) -> Span<'a> {
         match self {
             Directive::Base(directive) => directive.span(),
             Directive::Declare(directive) => directive.span(),

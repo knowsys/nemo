@@ -6,7 +6,7 @@ use crate::parser::{
     ast::{comment::wsoc::WSoC, expression::basic::iri::Iri, token::Token, ProgramAST},
     context::{context, ParserContext},
     input::ParserInput,
-    span::ProgramSpan,
+    span::Span,
     ParserResult,
 };
 
@@ -14,7 +14,7 @@ use crate::parser::{
 #[derive(Debug)]
 pub struct Base<'a> {
     /// [ProgramSpan] associated with this node
-    span: ProgramSpan<'a>,
+    span: Span<'a>,
 
     /// The global prefix
     iri: Iri<'a>,
@@ -34,7 +34,7 @@ impl<'a> ProgramAST<'a> for Base<'a> {
         vec![&self.iri]
     }
 
-    fn span(&self) -> ProgramSpan<'a> {
+    fn span(&self) -> Span<'a> {
         self.span
     }
 

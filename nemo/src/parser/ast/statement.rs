@@ -10,7 +10,7 @@ use nom::{
 use crate::parser::{
     context::{context, ParserContext},
     input::ParserInput,
-    span::ProgramSpan,
+    span::Span,
     ParserResult,
 };
 
@@ -58,7 +58,7 @@ impl<'a> StatementKind<'a> {
 #[derive(Debug)]
 pub struct Statement<'a> {
     /// [ProgramSpan] associated with this node
-    span: ProgramSpan<'a>,
+    span: Span<'a>,
 
     /// Doc comment associated with this statement
     comment: Option<DocComment<'a>>,
@@ -90,7 +90,7 @@ impl<'a> ProgramAST<'a> for Statement<'a> {
         }]
     }
 
-    fn span(&self) -> ProgramSpan<'a> {
+    fn span(&self) -> Span<'a> {
         self.span
     }
 

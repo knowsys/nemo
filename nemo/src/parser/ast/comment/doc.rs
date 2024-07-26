@@ -11,7 +11,7 @@ use crate::parser::{
     ast::{token::Token, ProgramAST},
     context::{context, ParserContext},
     input::ParserInput,
-    span::ProgramSpan,
+    span::Span,
     ParserResult,
 };
 
@@ -19,10 +19,10 @@ use crate::parser::{
 #[derive(Debug)]
 pub struct DocComment<'a> {
     /// [ProgramSpan] associated with this comment
-    span: ProgramSpan<'a>,
+    span: Span<'a>,
 
     /// Each line of the comment
-    content: Vec<ProgramSpan<'a>>,
+    content: Vec<Span<'a>>,
 }
 
 impl<'a> DocComment<'a> {
@@ -41,7 +41,7 @@ impl<'a> ProgramAST<'a> for DocComment<'a> {
         Vec::default()
     }
 
-    fn span(&self) -> ProgramSpan<'a> {
+    fn span(&self) -> Span<'a> {
         self.span
     }
 

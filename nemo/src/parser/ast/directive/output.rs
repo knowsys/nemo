@@ -6,7 +6,7 @@ use crate::parser::{
     ast::{comment::wsoc::WSoC, tag::structure::StructureTag, token::Token, ProgramAST},
     context::{context, ParserContext},
     input::ParserInput,
-    span::ProgramSpan,
+    span::Span,
     ParserResult,
 };
 
@@ -14,7 +14,7 @@ use crate::parser::{
 #[derive(Debug)]
 pub struct Output<'a> {
     /// [ProgramSpan] associated with this node
-    span: ProgramSpan<'a>,
+    span: Span<'a>,
 
     /// The predicate
     predicate: StructureTag<'a>,
@@ -34,7 +34,7 @@ impl<'a> ProgramAST<'a> for Output<'a> {
         vec![&self.predicate]
     }
 
-    fn span(&self) -> ProgramSpan<'a> {
+    fn span(&self) -> Span<'a> {
         self.span
     }
 

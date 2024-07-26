@@ -8,7 +8,7 @@ use nom::{
 use crate::parser::{
     context::{context, ParserContext},
     input::ParserInput,
-    span::ProgramSpan,
+    span::Span,
     ParserResult,
 };
 
@@ -21,7 +21,7 @@ use super::{
 #[derive(Debug)]
 pub struct Rule<'a> {
     /// [ProgramSpan] associated with this node
-    span: ProgramSpan<'a>,
+    span: Span<'a>,
 
     /// Attributes attached to this rule
     attributes: Vec<Attribute<'a>>,
@@ -62,7 +62,7 @@ impl<'a> ProgramAST<'a> for Rule<'a> {
         result
     }
 
-    fn span(&self) -> ProgramSpan<'a> {
+    fn span(&self) -> Span<'a> {
         self.span
     }
 

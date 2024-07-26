@@ -10,7 +10,7 @@ use crate::{
         context::{context, ParserContext},
         error::ParserErrorTree,
         input::ParserInput,
-        span::ProgramSpan,
+        span::Span,
         ParserResult,
     },
     rule_model::components::term::aggregate::AggregateKind,
@@ -20,7 +20,7 @@ use crate::{
 #[derive(Debug)]
 pub struct AggregationTag<'a> {
     /// [ProgramSpan] associated with this node
-    span: ProgramSpan<'a>,
+    span: Span<'a>,
 
     /// Type of aggregation, if known
     kind: Option<AggregateKind>,
@@ -40,7 +40,7 @@ impl<'a> ProgramAST<'a> for AggregationTag<'a> {
         Vec::default()
     }
 
-    fn span(&self) -> ProgramSpan<'a> {
+    fn span(&self) -> Span<'a> {
         self.span
     }
 

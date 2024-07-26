@@ -10,7 +10,7 @@ use crate::parser::{
     ast::{token::Token, ProgramAST},
     context::{context, ParserContext},
     input::ParserInput,
-    span::ProgramSpan,
+    span::Span,
     ParserResult,
 };
 
@@ -18,7 +18,7 @@ use crate::parser::{
 #[derive(Debug)]
 pub struct StringLiteral<'a> {
     /// [ProgramSpan] associated with this node
-    span: ProgramSpan<'a>,
+    span: Span<'a>,
 
     /// Part of the string that is the content
     content: Token<'a>,
@@ -55,7 +55,7 @@ impl<'a> ProgramAST<'a> for StringLiteral<'a> {
         Vec::default()
     }
 
-    fn span(&self) -> ProgramSpan<'a> {
+    fn span(&self) -> Span<'a> {
         self.span
     }
 

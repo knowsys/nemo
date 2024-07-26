@@ -6,7 +6,7 @@ use crate::parser::{
     ast::{token::Token, ProgramAST},
     context::{context, ParserContext},
     input::ParserInput,
-    span::ProgramSpan,
+    span::Span,
     ParserResult,
 };
 
@@ -25,7 +25,7 @@ enum ConstantKind<'a> {
 #[derive(Debug)]
 pub struct Constant<'a> {
     /// [ProgramSpan] associated with this node
-    span: ProgramSpan<'a>,
+    span: Span<'a>,
 
     /// The constant
     constant: ConstantKind<'a>,
@@ -48,7 +48,7 @@ impl<'a> ProgramAST<'a> for Constant<'a> {
         Vec::default()
     }
 
-    fn span(&self) -> ProgramSpan<'a> {
+    fn span(&self) -> Span<'a> {
         self.span
     }
 

@@ -13,7 +13,7 @@ use crate::parser::{
     context::{context, ParserContext},
     error::ParserErrorTree,
     input::ParserInput,
-    span::ProgramSpan,
+    span::Span,
     ParserResult,
 };
 
@@ -23,12 +23,12 @@ use super::DirectiveKind;
 #[derive(Debug)]
 pub struct UnknownDirective<'a> {
     /// [ProgramSpan] associated with this node
-    span: ProgramSpan<'a>,
+    span: Span<'a>,
 
     /// Name of the directive
     name: Token<'a>,
     /// Content
-    content: ProgramSpan<'a>,
+    content: Span<'a>,
 }
 
 impl<'a> UnknownDirective<'a> {
@@ -77,7 +77,7 @@ impl<'a> ProgramAST<'a> for UnknownDirective<'a> {
         Vec::default()
     }
 
-    fn span(&self) -> ProgramSpan<'a> {
+    fn span(&self) -> Span<'a> {
         self.span
     }
 

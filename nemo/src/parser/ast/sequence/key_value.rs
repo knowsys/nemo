@@ -10,7 +10,7 @@ use nom::{
 use crate::parser::{
     ast::{comment::wsoc::WSoC, expression::Expression, token::Token, ProgramAST},
     input::ParserInput,
-    span::ProgramSpan,
+    span::Span,
     ParserResult,
 };
 
@@ -18,7 +18,7 @@ use crate::parser::{
 #[derive(Debug)]
 pub struct KeyValueSequence<'a> {
     /// [ProgramSpan] associated with this sequence
-    _span: ProgramSpan<'a>,
+    _span: Span<'a>,
 
     /// List of key-value pairs
     expressions: Vec<(Expression<'a>, Expression<'a>)>,

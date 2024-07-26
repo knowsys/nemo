@@ -9,7 +9,7 @@ use crate::parser::{
     },
     context::{context, ParserContext},
     input::ParserInput,
-    span::ProgramSpan,
+    span::Span,
     ParserResult,
 };
 
@@ -17,7 +17,7 @@ use crate::parser::{
 #[derive(Debug)]
 pub struct Import<'a> {
     /// [ProgramSpan] associated with this node
-    span: ProgramSpan<'a>,
+    span: Span<'a>,
 
     /// Predicate that is being Imported
     predicate: StructureTag<'a>,
@@ -62,7 +62,7 @@ impl<'a> ProgramAST<'a> for Import<'a> {
         vec![&self.predicate, &self.instructions]
     }
 
-    fn span(&self) -> ProgramSpan<'a> {
+    fn span(&self) -> Span<'a> {
         self.span
     }
 

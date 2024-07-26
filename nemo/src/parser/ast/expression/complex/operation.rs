@@ -11,7 +11,7 @@ use crate::{
         },
         context::{context, ParserContext},
         input::ParserInput,
-        span::ProgramSpan,
+        span::Span,
         ParserResult,
     },
     rule_model::components::term::operation::operation_kind::OperationKind,
@@ -23,7 +23,7 @@ use crate::{
 #[derive(Debug)]
 pub struct Operation<'a> {
     /// [ProgramSpan] associated with this node
-    span: ProgramSpan<'a>,
+    span: Span<'a>,
 
     /// Type of operation
     tag: OperationTag<'a>,
@@ -57,7 +57,7 @@ impl<'a> ProgramAST<'a> for Operation<'a> {
         result
     }
 
-    fn span(&self) -> ProgramSpan<'a> {
+    fn span(&self) -> Span<'a> {
         self.span
     }
 

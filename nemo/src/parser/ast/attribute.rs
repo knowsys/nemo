@@ -8,7 +8,7 @@ use nom::{
 use crate::parser::{
     context::{context, ParserContext},
     input::ParserInput,
-    span::ProgramSpan,
+    span::Span,
     ParserResult,
 };
 
@@ -18,7 +18,7 @@ use super::{comment::wsoc::WSoC, expression::complex::atom::Atom, token::Token, 
 #[derive(Debug)]
 pub struct Attribute<'a> {
     /// [ProgramSpan] associated with this node
-    span: ProgramSpan<'a>,
+    span: Span<'a>,
 
     /// [Atom] containing the content of the directive
     content: Atom<'a>,
@@ -38,7 +38,7 @@ impl<'a> ProgramAST<'a> for Attribute<'a> {
         vec![self.content()]
     }
 
-    fn span(&self) -> ProgramSpan<'a> {
+    fn span(&self) -> Span<'a> {
         self.span
     }
 

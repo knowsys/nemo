@@ -11,7 +11,7 @@ use crate::parser::{
     },
     context::{context, ParserContext},
     input::ParserInput,
-    span::ProgramSpan,
+    span::Span,
     ParserResult,
 };
 
@@ -34,7 +34,7 @@ pub enum VariableType {
 #[derive(Debug)]
 pub struct Variable<'a> {
     /// [ProgramSpan] associated with this node
-    span: ProgramSpan<'a>,
+    span: Span<'a>,
 
     /// Type of variable
     kind: VariableType,
@@ -82,7 +82,7 @@ impl<'a> ProgramAST<'a> for Variable<'a> {
         Vec::default()
     }
 
-    fn span(&self) -> ProgramSpan<'a> {
+    fn span(&self) -> Span<'a> {
         self.span
     }
 

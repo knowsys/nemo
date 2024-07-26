@@ -6,7 +6,7 @@ use crate::parser::{
     ast::{expression::Expression, token::Token, ProgramAST},
     context::{context, ParserContext},
     input::ParserInput,
-    span::ProgramSpan,
+    span::Span,
     ParserResult,
 };
 
@@ -14,7 +14,7 @@ use crate::parser::{
 #[derive(Debug)]
 pub struct Negation<'a> {
     /// [ProgramSpan] associated with this node
-    span: ProgramSpan<'a>,
+    span: Span<'a>,
 
     /// The negated expression
     expression: Box<Expression<'a>>,
@@ -34,7 +34,7 @@ impl<'a> ProgramAST<'a> for Negation<'a> {
         vec![&*self.expression]
     }
 
-    fn span(&self) -> ProgramSpan<'a> {
+    fn span(&self) -> Span<'a> {
         self.span
     }
 

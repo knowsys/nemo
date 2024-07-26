@@ -7,7 +7,7 @@ use crate::parser::{
     ast::{token::Token, ProgramAST},
     context::{context, ParserContext},
     input::ParserInput,
-    span::ProgramSpan,
+    span::Span,
     ParserResult,
 };
 
@@ -15,7 +15,7 @@ use crate::parser::{
 #[derive(Debug)]
 pub struct Iri<'a> {
     /// [ProgramSpan] associated with this node
-    span: ProgramSpan<'a>,
+    span: Span<'a>,
 
     /// Part of the Iri that is the content
     content: Token<'a>,
@@ -35,7 +35,7 @@ impl<'a> ProgramAST<'a> for Iri<'a> {
         Vec::default()
     }
 
-    fn span(&self) -> ProgramSpan<'a> {
+    fn span(&self) -> Span<'a> {
         self.span
     }
 

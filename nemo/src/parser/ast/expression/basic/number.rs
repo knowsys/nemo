@@ -13,7 +13,7 @@ use crate::parser::{
         ProgramAST,
     },
     context::{context, ParserContext},
-    span::ProgramSpan,
+    span::Span,
     ParserInput, ParserResult,
 };
 
@@ -52,7 +52,7 @@ enum NumberSign {
 #[derive(Debug)]
 pub struct Number<'a> {
     /// [ProgramSpan] associated with this node
-    span: ProgramSpan<'a>,
+    span: Span<'a>,
 
     /// Sign of the integer part
     _integer_sign: NumberSign,
@@ -115,7 +115,7 @@ impl<'a> ProgramAST<'a> for Number<'a> {
         Vec::default()
     }
 
-    fn span(&self) -> ProgramSpan<'a> {
+    fn span(&self) -> Span<'a> {
         self.span
     }
 

@@ -23,7 +23,7 @@ use crate::parser::{
     context::{context, ParserContext},
     error::ParserErrorTree,
     input::ParserInput,
-    span::ProgramSpan,
+    span::Span,
     ParserResult,
 };
 
@@ -75,7 +75,7 @@ impl ArithmeticOperation {
 #[derive(Debug)]
 pub struct Arithmetic<'a> {
     /// [ProgramSpan] associated with this node
-    span: ProgramSpan<'a>,
+    span: Span<'a>,
 
     /// Type of arithmetic operation
     kind: ArithmeticOperation,
@@ -109,7 +109,7 @@ struct ArithmeticChain<'a> {
 }
 
 impl<'a> ArithmeticChain<'a> {
-    fn fold(mut self, input_span: &ProgramSpan<'a>) -> Expression<'a> {
+    fn fold(mut self, input_span: &Span<'a>) -> Expression<'a> {
         if self.sequence.is_empty() {
             self.initial
         } else {
@@ -255,7 +255,7 @@ impl<'a> ProgramAST<'a> for Arithmetic<'a> {
         todo!()
     }
 
-    fn span(&self) -> ProgramSpan<'a> {
+    fn span(&self) -> Span<'a> {
         self.span
     }
 

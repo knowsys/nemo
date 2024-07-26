@@ -6,7 +6,7 @@ use crate::parser::{
     ast::{comment::wsoc::WSoC, expression::basic::iri::Iri, token::Token, ProgramAST},
     context::{context, ParserContext},
     input::ParserInput,
-    span::ProgramSpan,
+    span::Span,
     ParserResult,
 };
 
@@ -14,7 +14,7 @@ use crate::parser::{
 #[derive(Debug)]
 pub struct Prefix<'a> {
     /// [ProgramSpan] associated with this node
-    span: ProgramSpan<'a>,
+    span: Span<'a>,
 
     /// The prefix
     prefix: Token<'a>,
@@ -41,7 +41,7 @@ impl<'a> ProgramAST<'a> for Prefix<'a> {
         self.value.children()
     }
 
-    fn span(&self) -> ProgramSpan<'a> {
+    fn span(&self) -> Span<'a> {
         self.span
     }
 

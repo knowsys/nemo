@@ -13,7 +13,7 @@ use crate::{
         },
         context::{context, ParserContext},
         input::ParserInput,
-        span::ProgramSpan,
+        span::Span,
         ParserResult,
     },
     rule_model::components::datatype::DataType,
@@ -23,7 +23,7 @@ use crate::{
 #[derive(Debug)]
 pub struct Declare<'a> {
     /// [ProgramSpan] associated with this node
-    span: ProgramSpan<'a>,
+    span: Span<'a>,
 
     /// Predicate this statement applies to
     predicate: StructureTag<'a>,
@@ -62,7 +62,7 @@ impl<'a> ProgramAST<'a> for Declare<'a> {
         result
     }
 
-    fn span(&self) -> ProgramSpan<'a> {
+    fn span(&self) -> Span<'a> {
         self.span
     }
 

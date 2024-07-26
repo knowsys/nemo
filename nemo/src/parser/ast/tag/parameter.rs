@@ -6,7 +6,7 @@ use crate::parser::{
     ast::{token::Token, ProgramAST},
     context::{context, ParserContext},
     input::ParserInput,
-    span::ProgramSpan,
+    span::Span,
     ParserResult,
 };
 
@@ -23,7 +23,7 @@ pub enum Parameter {
 #[derive(Debug)]
 pub struct ParameterName<'a> {
     /// [ProgramSpan] associated with this node
-    span: ProgramSpan<'a>,
+    span: Span<'a>,
 
     /// Parameter
     parameter: Parameter,
@@ -43,7 +43,7 @@ impl<'a> ProgramAST<'a> for ParameterName<'a> {
         Vec::default()
     }
 
-    fn span(&self) -> ProgramSpan<'a> {
+    fn span(&self) -> Span<'a> {
         self.span
     }
 

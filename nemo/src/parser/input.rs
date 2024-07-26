@@ -7,12 +7,12 @@ use nom::{
 };
 use nom_locate::LocatedSpan;
 
-use super::{span::ProgramSpan, ParserState};
+use super::{span::Span, ParserState};
 
 /// Input to a nom parser function
 #[derive(Debug, Clone)]
 pub struct ParserInput<'a> {
-    pub(crate) span: ProgramSpan<'a>,
+    pub(crate) span: Span<'a>,
     pub(crate) state: ParserState,
 }
 
@@ -20,7 +20,7 @@ impl<'a> ParserInput<'a> {
     /// Create a new [ParserInput] from a string slice.
     pub fn new(input: &'a str, state: ParserState) -> Self {
         Self {
-            span: ProgramSpan(LocatedSpan::new(input)),
+            span: Span(LocatedSpan::new(input)),
             state,
         }
     }
@@ -106,7 +106,7 @@ impl<'a> InputIter for ParserInput<'a> {
 impl InputTake for ParserInput<'_> {
     fn take(&self, count: usize) -> Self {
         Self {
-            span: ProgramSpan(self.span.0.take(count)),
+            span: Span(self.span.0.take(count)),
             state: self.state.clone(),
         }
     }
@@ -115,11 +115,11 @@ impl InputTake for ParserInput<'_> {
         let (first, second) = self.span.0.take_split(count);
         (
             Self {
-                span: ProgramSpan(first),
+                span: Span(first),
                 state: self.state.clone(),
             },
             Self {
-                span: ProgramSpan(second),
+                span: Span(second),
                 state: self.state.clone(),
             },
         )
@@ -207,7 +207,7 @@ where
 {
     fn slice(&self, range: R) -> Self {
         ParserInput {
-            span: ProgramSpan(self.span.0.slice(range)),
+            span: Span(self.span.0.slice(range)),
             state: self.state.clone(),
         }
     }

@@ -14,7 +14,7 @@ use nom::{
 
 use crate::parser::{
     context::{context, ParserContext},
-    span::ProgramSpan,
+    span::Span,
     ParserInput, ParserResult,
 };
 
@@ -200,7 +200,7 @@ pub enum TokenKind {
 #[derive(Debug)]
 pub struct Token<'a> {
     /// [ProgramSpan] associated with this node
-    span: ProgramSpan<'a>,
+    span: Span<'a>,
 
     /// The kind of token
     kind: TokenKind,
@@ -231,7 +231,7 @@ macro_rules! string_token {
 
 impl<'a> Token<'a> {
     /// Return the [ProgramSpan] of this token.
-    pub fn span(&self) -> ProgramSpan<'a> {
+    pub fn span(&self) -> Span<'a> {
         self.span
     }
 
@@ -334,7 +334,7 @@ impl<'a> Token<'a> {
     }
 
     /// Create [TokenKind::Error].
-    pub fn error(span: ProgramSpan<'a>) -> Token<'a> {
+    pub fn error(span: Span<'a>) -> Token<'a> {
         Token {
             span,
             kind: TokenKind::Error,
