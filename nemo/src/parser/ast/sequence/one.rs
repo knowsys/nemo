@@ -31,7 +31,7 @@ impl<'a> ExpressionSequenceOne<'a> {
 
     /// Parse a sequence of length one.
     fn parse_sequence_single(input: ParserInput<'a>) -> ParserResult<'a, Expression<'a>> {
-        tuple((Expression::parse, WSoC::parse, Token::comma))(input)
+        tuple((Expression::parse, WSoC::parse, Token::seq_sep))(input)
             .map(|(rest, (result, _, _))| (rest, result))
     }
 
@@ -39,9 +39,9 @@ impl<'a> ExpressionSequenceOne<'a> {
     fn parse_sequence(input: ParserInput<'a>) -> ParserResult<'a, Vec<Expression<'a>>> {
         tuple((
             Expression::parse,
-            tuple((WSoC::parse, Token::comma, WSoC::parse)),
+            tuple((WSoC::parse, Token::seq_sep, WSoC::parse)),
             separated_list1(
-                tuple((WSoC::parse, Token::comma, WSoC::parse)),
+                tuple((WSoC::parse, Token::seq_sep, WSoC::parse)),
                 Expression::parse,
             ),
         ))(input)

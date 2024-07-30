@@ -26,6 +26,8 @@ pub struct ClosedComment<'a> {
 const CONTEXT: ParserContext = ParserContext::Comment;
 
 impl<'a> ClosedComment<'a> {
+    // NOTE: Should this return a &str, so that the consumer can decide whether to turn it into an
+    //   owned value or not?
     /// Return the content of the comment
     pub fn content(&self) -> String {
         self.content.0.to_string()
@@ -50,6 +52,8 @@ impl<'a> ProgramAST<'a> for ClosedComment<'a> {
         context(
             CONTEXT,
             delimited(
+                // NOTE: With this, nested comments are not allowed (won't get parsed
+                //   correctly).
                 Token::open_comment,
                 take_until(TokenKind::CloseComment.name()),
                 Token::close_comment,

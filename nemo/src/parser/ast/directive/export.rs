@@ -1,6 +1,6 @@
 //! This module defines the [Export] directive.
 
-use nom::sequence::{preceded, separated_pair, tuple};
+use nom::sequence::tuple;
 
 use crate::parser::{
     ast::{
@@ -36,22 +36,15 @@ impl<'a> Export<'a> {
         &self.instructions
     }
 
-    /// Parse the left part of the export directive.
-    fn parse_left_part(input: ParserInput<'a>) -> ParserResult<'a, StructureTag<'a>> {
-        preceded(
-            tuple((
-                Token::at,
-                Token::directive_export,
-                WSoC::parse_whitespace_comment,
-                WSoC::parse,
-            )),
+    pub fn parse_body(input: ParserInput<'a>) -> ParserResult<'a, (StructureTag, Map)> {
+        tuple((
             StructureTag::parse,
-        )(input)
-    }
-
-    /// Parse the right part of the export directive.
-    fn parse_right_part(input: ParserInput<'a>) -> ParserResult<'a, Map<'a>> {
-        Map::parse(input)
+            WSoC::parse,
+            Token::export_assignment,
+            WSoC::parse,
+            Map::parse,
+        ))(input)
+        .map(|(rest, (predicate, _, _, _, instructions))| (rest, (predicate, instructions)))
     }
 }
 
@@ -74,13 +67,14 @@ impl<'a> ProgramAST<'a> for Export<'a> {
 
         context(
             CONTEXT,
-            separated_pair(
-                Self::parse_left_part,
-                tuple((WSoC::parse, Token::arrow, WSoC::parse)),
-                Self::parse_right_part,
-            ),
+            tuple((
+                Token::directive_indicator,
+                Token::directive_export,
+                WSoC::parse,
+                Self::parse_body,
+            )),
         )(input)
-        .map(|(rest, (predicate, instructions))| {
+        .map(|(rest, (_, _, _, (predicate, instructions)))| {
             let rest_span = rest.span;
 
             (

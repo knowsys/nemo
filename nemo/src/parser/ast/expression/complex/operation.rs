@@ -5,9 +5,8 @@ use nom::sequence::{delimited, pair};
 use crate::{
     parser::{
         ast::{
-            comment::wsoc::WSoC, expression::Expression,
-            sequence::simple::ExpressionSequenceSimple, tag::operation::OperationTag, token::Token,
-            ProgramAST,
+            comment::wsoc::WSoC, expression::Expression, sequence::Sequence,
+            tag::operation::OperationTag, token::Token, ProgramAST,
         },
         context::{context, ParserContext},
         input::ParserInput,
@@ -28,7 +27,7 @@ pub struct Operation<'a> {
     /// Type of operation
     tag: OperationTag<'a>,
     /// List of underlying expressions
-    expressions: ExpressionSequenceSimple<'a>,
+    expressions: Sequence<'a, Expression<'a>>,
 }
 
 impl<'a> Operation<'a> {
@@ -72,9 +71,9 @@ impl<'a> ProgramAST<'a> for Operation<'a> {
             pair(
                 OperationTag::parse,
                 delimited(
-                    pair(Token::open_parenthesis, WSoC::parse),
-                    ExpressionSequenceSimple::parse,
-                    pair(WSoC::parse, Token::closed_parenthesis),
+                    pair(Token::operation_open, WSoC::parse),
+                    Sequence::<Expression>::parse,
+                    pair(WSoC::parse, Token::operation_close),
                 ),
             ),
         )(input)
@@ -100,7 +99,6 @@ impl<'a> ProgramAST<'a> for Operation<'a> {
 #[cfg(test)]
 mod test {
     use nom::combinator::all_consuming;
-    use strum::IntoEnumIterator;
 
     use crate::{
         parser::{

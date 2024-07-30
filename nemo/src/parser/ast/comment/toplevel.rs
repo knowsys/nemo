@@ -1,10 +1,11 @@
 //! This module defines [TopLevelComment].
 
 use nom::{
+    branch::alt,
     character::complete::{line_ending, not_line_ending},
-    combinator::opt,
-    multi::separated_list1,
-    sequence::{pair, preceded},
+    combinator::eof,
+    multi::many1,
+    sequence::tuple,
 };
 
 use crate::parser::{
@@ -54,17 +55,19 @@ impl<'a> ProgramAST<'a> for TopLevelComment<'a> {
 
         context(
             CONTEXT,
-            separated_list1(
-                line_ending,
-                preceded(
-                    pair(Token::toplevel_comment, opt(Token::whitespace)),
-                    not_line_ending,
-                ),
-            ),
+            many1(tuple((
+                Token::space0,
+                Token::toplevel_comment,
+                not_line_ending,
+                alt((line_ending, eof)),
+            ))),
         )(input)
         .map(|(rest, result)| {
             let rest_span = rest.span;
-            let content = result.into_iter().map(|result| result.span).collect();
+            let content = result
+                .into_iter()
+                .map(|(_, _, result, _)| result.span)
+                .collect();
 
             (
                 rest,

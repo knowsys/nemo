@@ -76,7 +76,7 @@ impl<'a> ProgramAST<'a> for StructureTag<'a> {
             CONTEXT,
             alt((
                 map(
-                    separated_pair(Token::name, Token::double_colon, Token::name),
+                    separated_pair(Token::name, Token::namespace_separator, Token::name),
                     |(prefix, tag)| StructureTagKind::Prefixed { prefix, tag },
                 ),
                 map(Token::name, StructureTagKind::Plain),

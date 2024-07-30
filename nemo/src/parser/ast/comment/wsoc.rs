@@ -8,17 +8,19 @@ use nom::{
 };
 
 use crate::parser::{
-    ast::{token::Token, ProgramAST},
+    ast::{
+        comment::{closed::ClosedComment, line::LineComment},
+        token::Token,
+        ProgramAST,
+    },
     input::ParserInput,
     span::Span,
     ParserResult,
 };
 
-use super::{closed::ClosedComment, line::LineComment};
-
 /// Type of comment that can appear in any "whit-space position"
 #[derive(Debug)]
-pub enum WhiteSpaceComment<'a> {
+pub enum CommentType<'a> {
     /// Line comment
     Line(LineComment<'a>),
     /// Closed comment
@@ -31,33 +33,32 @@ pub struct WSoC<'a> {
     /// [ProgramSpan] associated with this comment
     _span: Span<'a>,
     /// comments
-    comments: Vec<WhiteSpaceComment<'a>>,
+    comments: Vec<CommentType<'a>>,
 }
 
 impl<'a> WSoC<'a> {
     /// Return comments contained within this object.
-    pub fn comments(&self) -> &Vec<WhiteSpaceComment<'a>> {
+    pub fn comments(&self) -> &Vec<CommentType<'a>> {
         &self.comments
     }
 
-    /// Parse one or more white-spaces optionally followed by a comment.
-    pub fn parse_whitespace_comment(
-        input: ParserInput<'a>,
-    ) -> ParserResult<'a, Option<WhiteSpaceComment>> {
-        preceded(
-            Token::whitespace,
-            opt(alt((
-                map(LineComment::parse, WhiteSpaceComment::Line),
-                map(ClosedComment::parse, WhiteSpaceComment::Closed),
-            ))),
-        )(input)
+    fn parse_whitespace(input: ParserInput<'a>) -> ParserResult<'a, Option<CommentType>> {
+        Token::whitespace(input).map(|(rest, _)| (rest, None))
+    }
+
+    fn parse_comment(input: ParserInput<'a>) -> ParserResult<'a, Option<CommentType>> {
+        alt((
+            map(LineComment::parse, CommentType::Line),
+            map(ClosedComment::parse, CommentType::Closed),
+        ))(input)
+        .map(|(rest, comment)| (rest, Some(comment)))
     }
 
     /// Parse whitespace or comments.
     pub fn parse(input: ParserInput<'a>) -> ParserResult<'a, Self> {
         let input_span = input.span;
 
-        many0(Self::parse_whitespace_comment)(input).map(|(rest, comments)| {
+        many0(alt((WSoC::parse_whitespace, WSoC::parse_comment)))(input).map(|(rest, comments)| {
             let rest_span = rest.span;
 
             (

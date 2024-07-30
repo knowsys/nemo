@@ -13,8 +13,8 @@ use crate::parser::{
 };
 
 use super::{
-    attribute::Attribute, comment::wsoc::WSoC, expression::Expression,
-    sequence::simple::ExpressionSequenceSimple, token::Token, ProgramAST,
+    attribute::Attribute, comment::wsoc::WSoC, expression::Expression, sequence::Sequence,
+    token::Token, ProgramAST,
 };
 
 /// A rule describing a logical implication
@@ -27,9 +27,9 @@ pub struct Rule<'a> {
     attributes: Vec<Attribute<'a>>,
 
     /// Head of the rule
-    head: ExpressionSequenceSimple<'a>,
+    head: Sequence<'a, Expression<'a>>,
     /// Body of the rule,
-    body: ExpressionSequenceSimple<'a>,
+    body: Sequence<'a, Expression<'a>>,
 }
 
 impl<'a> Rule<'a> {
@@ -77,9 +77,9 @@ impl<'a> ProgramAST<'a> for Rule<'a> {
             tuple((
                 many0(Attribute::parse),
                 (separated_pair(
-                    ExpressionSequenceSimple::parse,
-                    tuple((WSoC::parse, Token::arrow, WSoC::parse)),
-                    ExpressionSequenceSimple::parse,
+                    Sequence::<Expression>::parse,
+                    tuple((WSoC::parse, Token::rule_arrow, WSoC::parse)),
+                    Sequence::<Expression>::parse,
                 )),
             )),
         )(input)

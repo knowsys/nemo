@@ -20,13 +20,13 @@ use crate::parser::{
 #[func(pub fn token(token: TokenKind) -> Option<Self>)]
 pub enum VariableType {
     /// Universal variable
-    #[assoc(token = TokenKind::QuestionMark)]
+    #[assoc(token = TokenKind::UniversalIndicator)]
     Universal,
     /// Existential variable
-    #[assoc(token = TokenKind::ExclamationMark)]
+    #[assoc(token = TokenKind::ExistentialIndicator)]
     Existential,
     /// Anonymous variable
-    #[assoc(token = TokenKind::Underscore)]
+    #[assoc(token = TokenKind::AnonVal)]
     Anonymous,
 }
 
@@ -57,8 +57,8 @@ impl<'a> Variable<'a> {
     /// Parse the variable prefix
     fn parse_variable_prefix(input: ParserInput<'a>) -> ParserResult<'a, VariableType> {
         alt((
-            Token::question_mark,
-            Token::exclamation_mark,
+            Token::universal_indicator,
+            Token::existential_indicator,
             Token::underscore,
         ))(input)
         .map(|(rest, result)| {

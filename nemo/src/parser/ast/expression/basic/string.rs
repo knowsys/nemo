@@ -44,7 +44,7 @@ impl<'a> StringLiteral<'a> {
 
     /// Parse the language tag of the string.
     pub fn parse_language_tag(input: ParserInput<'a>) -> ParserResult<'a, Token<'a>> {
-        pair(Token::at, Token::name)(input).map(|(rest, (_, tag))| (rest, tag))
+        pair(Token::lang_tag_indicator, Token::name)(input).map(|(rest, (_, tag))| (rest, tag))
     }
 }
 

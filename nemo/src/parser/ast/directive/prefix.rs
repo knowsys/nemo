@@ -19,7 +19,7 @@ pub struct Prefix<'a> {
     /// The prefix
     prefix: Token<'a>,
     /// Its value
-    value: Iri<'a>,
+    iri: Iri<'a>,
 }
 
 impl<'a> Prefix<'a> {
@@ -29,8 +29,16 @@ impl<'a> Prefix<'a> {
     }
 
     /// Return the value of the prefix.
-    pub fn value(&self) -> &Iri<'a> {
-        &self.value
+    pub fn iri(&self) -> &Iri<'a> {
+        &self.iri
+    }
+
+    pub fn parse_body(input: ParserInput<'a>) -> ParserResult<'a, (Token, Iri)> {
+        separated_pair(
+            Token::name,
+            tuple((WSoC::parse, Token::namespace_separator, WSoC::parse)),
+            Iri::parse,
+        )(input)
     }
 }
 
@@ -38,7 +46,7 @@ const CONTEXT: ParserContext = ParserContext::Prefix;
 
 impl<'a> ProgramAST<'a> for Prefix<'a> {
     fn children(&self) -> Vec<&dyn ProgramAST> {
-        self.value.children()
+        vec![&self.iri]
     }
 
     fn span(&self) -> Span<'a> {
@@ -55,16 +63,11 @@ impl<'a> ProgramAST<'a> for Prefix<'a> {
             CONTEXT,
             preceded(
                 tuple((
-                    Token::at,
+                    Token::directive_indicator,
                     Token::directive_prefix,
-                    WSoC::parse_whitespace_comment,
                     WSoC::parse,
                 )),
-                separated_pair(
-                    Token::name,
-                    tuple((WSoC::parse, Token::colon, WSoC::parse)),
-                    Iri::parse,
-                ),
+                Self::parse_body,
             ),
         )(input)
         .map(|(rest, (prefix, value))| {
@@ -75,7 +78,7 @@ impl<'a> ProgramAST<'a> for Prefix<'a> {
                 Self {
                     span: input_span.until_rest(&rest_span),
                     prefix,
-                    value,
+                    iri: value,
                 },
             )
         })
@@ -113,7 +116,7 @@ mod test {
             assert!(result.is_ok());
 
             let result = result.unwrap();
-            assert_eq!(expected, (result.1.prefix(), result.1.value().content()));
+            assert_eq!(expected, (result.1.prefix(), result.1.iri().content()));
         }
     }
 }

@@ -1,9 +1,6 @@
 //! This module defines [Attribute].
 
-use nom::{
-    character::complete::line_ending,
-    sequence::{delimited, pair, terminated, tuple},
-};
+use nom::sequence::{delimited, pair, terminated, tuple};
 
 use crate::parser::{
     context::{context, ParserContext},
@@ -52,11 +49,11 @@ impl<'a> ProgramAST<'a> for Attribute<'a> {
             CONTEXT,
             terminated(
                 delimited(
-                    tuple((Token::hash, Token::open_bracket, WSoC::parse)),
+                    tuple((Token::open_attribute, WSoC::parse)),
                     Atom::parse,
-                    pair(WSoC::parse, Token::closed_bracket),
+                    pair(WSoC::parse, Token::close_attribute),
                 ),
-                line_ending,
+                WSoC::parse,
             ),
         )(input)
         .map(|(rest, content)| {

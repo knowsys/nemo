@@ -1,10 +1,11 @@
 //! This module defines [DocComment].
 
 use nom::{
+    branch::alt,
     character::complete::{line_ending, not_line_ending},
-    combinator::opt,
-    multi::separated_list1,
-    sequence::{pair, preceded},
+    combinator::eof,
+    multi::many1,
+    sequence::tuple,
 };
 
 use crate::parser::{
@@ -53,17 +54,19 @@ impl<'a> ProgramAST<'a> for DocComment<'a> {
 
         context(
             CONTEXT,
-            separated_list1(
-                line_ending,
-                preceded(
-                    pair(Token::doc_comment, opt(Token::whitespace)),
-                    not_line_ending,
-                ),
-            ),
+            many1(tuple((
+                Token::space0,
+                Token::doc_comment,
+                not_line_ending,
+                alt((line_ending, eof)),
+            ))),
         )(input)
         .map(|(rest, result)| {
             let rest_span = rest.span;
-            let content = result.into_iter().map(|comment| comment.span).collect();
+            let content = result
+                .into_iter()
+                .map(|(_, _, comment, _)| comment.span)
+                .collect();
 
             (
                 rest,
@@ -95,11 +98,13 @@ mod test {
         let test = vec![
             ("/// my comment", 1),
             ("///my comment\r\n/// my other comment", 2),
+            ("///my comment\r\n    /// my other comment", 2),
         ];
 
         for (input, expected) in test {
             let parser_input = ParserInput::new(input, ParserState::default());
             let result = all_consuming(DocComment::parse)(parser_input);
+            dbg!(&result);
 
             assert!(result.is_ok());
 

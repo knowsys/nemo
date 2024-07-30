@@ -95,12 +95,12 @@ impl<'a> Expression<'a> {
     /// Parse complex expressions, except arithmetic and infix.
     pub fn parse_complex(input: ParserInput<'a>) -> ParserResult<'a, Self> {
         alt((
-            map(Tuple::parse, Self::Tuple),
             map(Aggregation::parse, Self::Aggregation),
             map(Operation::parse, Self::Operation),
             map(Atom::parse, Self::Atom),
             map(Map::parse, Self::Map),
             map(Negation::parse, Self::Negation),
+            map(Tuple::parse, Self::Tuple),
         ))(input)
     }
 }
@@ -155,9 +155,9 @@ impl<'a> ProgramAST<'a> for Expression<'a> {
         context(
             CONTEXT,
             alt((
+                map(Arithmetic::parse, Self::Arithmetic),
                 Self::parse_complex,
                 map(InfixExpression::parse, Self::Infix),
-                map(Arithmetic::parse, Self::Arithmetic),
                 Self::parse_basic,
             )),
         )(input)
@@ -211,5 +211,13 @@ mod test {
             let result = result.unwrap();
             assert_eq!(result.1.context_type(), expect);
         }
+    }
+
+    #[test]
+    fn complex_expression() {
+        let input = "?distance = SQRT(POW(?Xp - ?Xr, 2.0) + POW(?Yp - ?Yr, 2.0))";
+        let parser_input = ParserInput::new(input, ParserState::default());
+        let result = Expression::parse(parser_input);
+        assert!(result.is_ok());
     }
 }

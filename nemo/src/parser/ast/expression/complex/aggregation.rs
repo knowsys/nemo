@@ -81,17 +81,18 @@ impl<'a> ProgramAST<'a> for Aggregation<'a> {
         context(
             CONTEXT,
             pair(
-                preceded(Token::hash, AggregationTag::parse),
+                preceded(Token::aggregate_indicator, AggregationTag::parse),
                 delimited(
-                    pair(Token::open_parenthesis, WSoC::parse),
+                    pair(Token::aggregate_open, WSoC::parse),
                     pair(
                         Expression::parse,
                         opt(preceded(
+                            // TODO: What is the semicolon for?
                             tuple((WSoC::parse, Token::semicolon, WSoC::parse)),
                             ExpressionSequenceSimple::parse,
                         )),
                     ),
-                    pair(WSoC::parse, Token::closed_parenthesis),
+                    pair(WSoC::parse, Token::aggregate_close),
                 ),
             ),
         )(input)

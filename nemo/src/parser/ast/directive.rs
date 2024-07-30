@@ -168,6 +168,18 @@ mod test {
             ("@output test", ParserContext::Output),
             ("@prefix test: <test>", ParserContext::Prefix),
             ("@test something", ParserContext::UnknownDirective),
+            ("@basetest <test>", ParserContext::UnknownDirective),
+            ("@declaretest test(a:int)", ParserContext::UnknownDirective),
+            (
+                "@exporttest test :- csv {}",
+                ParserContext::UnknownDirective,
+            ),
+            (
+                "@importtest test :- csv {}",
+                ParserContext::UnknownDirective,
+            ),
+            ("@outputtest test", ParserContext::UnknownDirective),
+            ("@prefixtest test: <test>", ParserContext::UnknownDirective),
         ];
 
         for (input, expect) in test {

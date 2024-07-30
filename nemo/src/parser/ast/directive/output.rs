@@ -3,7 +3,10 @@
 use nom::sequence::{preceded, tuple};
 
 use crate::parser::{
-    ast::{comment::wsoc::WSoC, tag::structure::StructureTag, token::Token, ProgramAST},
+    ast::{
+        comment::wsoc::WSoC, sequence::Sequence, tag::structure::StructureTag, token::Token,
+        ProgramAST,
+    },
     context::{context, ParserContext},
     input::ParserInput,
     span::Span,
@@ -16,14 +19,18 @@ pub struct Output<'a> {
     /// [ProgramSpan] associated with this node
     span: Span<'a>,
 
-    /// The predicate
-    predicate: StructureTag<'a>,
+    /// A sequence of predicates
+    predicate: Sequence<'a, StructureTag<'a>>,
 }
 
 impl<'a> Output<'a> {
     /// Return the output predicate.
-    pub fn predicate(&self) -> &StructureTag<'a> {
-        &self.predicate
+    pub fn predicate(&self) -> Vec<&StructureTag<'a>> {
+        self.predicate.iter().collect()
+    }
+
+    pub fn parse_body(input: ParserInput<'a>) -> ParserResult<'a, Sequence<'a, StructureTag>> {
+        Sequence::<StructureTag>::parse(input)
     }
 }
 
@@ -48,12 +55,11 @@ impl<'a> ProgramAST<'a> for Output<'a> {
             CONTEXT,
             preceded(
                 tuple((
-                    Token::at,
+                    Token::directive_indicator,
                     Token::directive_output,
-                    WSoC::parse_whitespace_comment,
                     WSoC::parse,
                 )),
-                StructureTag::parse,
+                Self::parse_body,
             ),
         )(input)
         .map(|(rest, predicate)| {
@@ -95,7 +101,7 @@ mod test {
             assert!(result.is_ok());
 
             let result = result.unwrap();
-            assert_eq!(expected, result.1.predicate().to_string());
+            assert_eq!(expected, result.1.predicate()[0].to_string());
         }
     }
 }

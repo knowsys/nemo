@@ -1,11 +1,6 @@
 //! This module defines [DeclareSequence].
 
-use std::vec::IntoIter;
-
-use nom::{
-    multi::separated_list1,
-    sequence::{separated_pair, tuple},
-};
+use nom::sequence::{separated_pair, tuple};
 
 use crate::parser::{
     ast::{
@@ -14,75 +9,56 @@ use crate::parser::{
         token::Token,
         ProgramAST,
     },
+    context::ParserContext,
     input::ParserInput,
     span::Span,
     ParserResult,
 };
 
-/// Sequence of name-type declarations
-#[derive(Debug)]
-pub struct DeclareSequence<'a> {
-    /// [ProgramSpan] associated with this sequence
-    _span: Span<'a>,
+const CONTEXT: ParserContext = ParserContext::DeclareNameTypePair;
 
-    /// List of name-type pairs
-    pairs: Vec<(ParameterName<'a>, DataTypeTag<'a>)>,
+/// A pair of a name and a data type.
+#[derive(Debug, Clone)]
+pub struct NameTypePair<'a> {
+    _span: Span<'a>,
+    name: ParameterName<'a>,
+    datatype: DataTypeTag<'a>,
 }
 
-impl<'a> DeclareSequence<'a> {
-    /// Return an iterator over the name-type pairs.
-    pub fn iter(&self) -> impl Iterator<Item = &(ParameterName<'a>, DataTypeTag<'a>)> {
-        self.into_iter()
+impl<'a> ProgramAST<'a> for NameTypePair<'a> {
+    fn children(&'a self) -> Vec<&'a dyn ProgramAST> {
+        vec![&self.name, &self.datatype]
     }
 
-    /// Parse a single name-type pair
-    fn parse_name_type_pair(
-        input: ParserInput<'a>,
-    ) -> ParserResult<'a, (ParameterName<'a>, DataTypeTag<'a>)> {
+    fn span(&self) -> Span<'a> {
+        self._span
+    }
+
+    fn parse(input: ParserInput<'a>) -> ParserResult<'a, Self>
+    where
+        Self: Sized + 'a,
+    {
+        let input_span = input.span;
         separated_pair(
             ParameterName::parse,
-            tuple((WSoC::parse, Token::colon, WSoC::parse)),
+            tuple((WSoC::parse, Token::name_datatype_separator, WSoC::parse)),
             DataTypeTag::parse,
         )(input)
-    }
-
-    /// Parse a comma separated list of [Expression]s.
-    pub fn parse(input: ParserInput<'a>) -> ParserResult<'a, Self> {
-        let input_span = input.span;
-
-        separated_list1(
-            tuple((WSoC::parse, Token::comma, WSoC::parse)),
-            Self::parse_name_type_pair,
-        )(input)
-        .map(|(rest, pairs)| {
+        .map(|(rest, (name, datatype))| {
             let rest_span = rest.span;
-
             (
                 rest,
-                Self {
+                NameTypePair {
                     _span: input_span.until_rest(&rest_span),
-                    pairs,
+                    name,
+                    datatype,
                 },
             )
         })
     }
-}
 
-impl<'a, 'b> IntoIterator for &'b DeclareSequence<'a> {
-    type Item = &'b (ParameterName<'a>, DataTypeTag<'a>);
-    type IntoIter = std::slice::Iter<'b, (ParameterName<'a>, DataTypeTag<'a>)>;
-
-    fn into_iter(self) -> Self::IntoIter {
-        self.pairs.iter()
-    }
-}
-
-impl<'a> IntoIterator for DeclareSequence<'a> {
-    type Item = (ParameterName<'a>, DataTypeTag<'a>);
-    type IntoIter = IntoIter<(ParameterName<'a>, DataTypeTag<'a>)>;
-
-    fn into_iter(self) -> Self::IntoIter {
-        self.pairs.into_iter()
+    fn context(&self) -> ParserContext {
+        CONTEXT
     }
 }
 
@@ -92,7 +68,11 @@ mod test {
 
     use crate::{
         parser::{
-            ast::{sequence::declare::DeclareSequence, tag::parameter::Parameter},
+            ast::{
+                sequence::{declare::NameTypePair, Sequence},
+                tag::parameter::Parameter,
+                ProgramAST,
+            },
             input::ParserInput,
             ParserState,
         },
@@ -112,7 +92,7 @@ mod test {
 
         for (input, expected) in test {
             let parser_input = ParserInput::new(input, ParserState::default());
-            let result = all_consuming(DeclareSequence::parse)(parser_input);
+            let result = all_consuming(Sequence::<NameTypePair>::parse)(parser_input);
 
             assert!(result.is_ok());
 
@@ -122,7 +102,10 @@ mod test {
                 result
                     .1
                     .into_iter()
-                    .map(|(name, datatype)| (name.parameter().clone(), datatype.data_type()))
+                    .map(|NameTypePair { name, datatype, .. }| (
+                        name.parameter().clone(),
+                        datatype.data_type()
+                    ))
                     .collect::<Vec<_>>()
             );
         }

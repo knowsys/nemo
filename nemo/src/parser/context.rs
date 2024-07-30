@@ -62,17 +62,29 @@ pub enum ParserContext {
     #[assoc(name = "prefix directive")]
     Prefix,
     /// Unknown directive
-    #[assoc(name = "directive")]
+    #[assoc(name = "unknown directive")]
     UnknownDirective,
+    /// Name type pairs in declare directive
+    #[assoc(name = "name type pair")]
+    DeclareNameTypePair,
     /// Expression
     #[assoc(name = "expression")]
     Expression,
+    /// Parenthesised expression
+    #[assoc(name = "parenthesised expression")]
+    ParenthesisedExpression,
     /// Tuple
     #[assoc(name = "tuple")]
     Tuple,
     /// Map
     #[assoc(name = "map")]
     Map,
+    /// Key value pairs in maps
+    #[assoc(name = "key value pair")]
+    KeyValuePair,
+    /// Sequence
+    #[assoc(name = "sequence")]
+    Sequence,
     /// Arithmetic expression
     #[assoc(name = "arithmetic expression")]
     Arithmetic,
@@ -98,7 +110,7 @@ pub enum ParserContext {
     #[assoc(name = "negation")]
     Negation,
     /// Infix
-    #[assoc(name = "expression")] // TODO: Is there a better name?
+    #[assoc(name = "expression")] // TODO: Is there a better name? -- "infix expression"?
     Infix,
     /// Comment
     #[assoc(name = "comment")]

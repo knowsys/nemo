@@ -7,8 +7,11 @@ use nom::{
 
 use crate::parser::{
     ast::{
-        comment::wsoc::WSoC, expression::Expression, sequence::key_value::KeyValueSequence,
-        tag::structure::StructureTag, token::Token, ProgramAST,
+        comment::wsoc::WSoC,
+        sequence::{key_value::KeyValuePair, Sequence},
+        tag::structure::StructureTag,
+        token::Token,
+        ProgramAST,
     },
     context::{context, ParserContext},
     input::ParserInput,
@@ -25,12 +28,12 @@ pub struct Map<'a> {
     /// Tag of this map, if it exists
     tag: Option<StructureTag<'a>>,
     /// List of key-value pairs
-    key_value: KeyValueSequence<'a>,
+    key_value: Sequence<'a, KeyValuePair<'a>>,
 }
 
 impl<'a> Map<'a> {
     /// Return an iterator over the underlying [Expression]s.
-    pub fn key_value(&self) -> impl Iterator<Item = &(Expression<'a>, Expression<'a>)> {
+    pub fn key_value(&self) -> impl Iterator<Item = &KeyValuePair> {
         self.key_value.iter()
     }
 
@@ -50,10 +53,10 @@ impl<'a> ProgramAST<'a> for Map<'a> {
             result.push(tag)
         }
 
-        for (key, value) in &self.key_value {
-            result.push(key);
-            result.push(value);
+        for pair in &self.key_value {
+            result.push(pair);
         }
+        // result.push(&key_value);
 
         result
     }
@@ -73,9 +76,9 @@ impl<'a> ProgramAST<'a> for Map<'a> {
             pair(
                 opt(terminated(StructureTag::parse, opt(WSoC::parse))),
                 delimited(
-                    pair(Token::open_brace, WSoC::parse),
-                    KeyValueSequence::parse,
-                    pair(WSoC::parse, Token::closed_brace),
+                    pair(Token::map_open, WSoC::parse),
+                    Sequence::<KeyValuePair>::parse,
+                    pair(WSoC::parse, Token::map_close),
                 ),
             ),
         )(input)
@@ -122,6 +125,7 @@ mod test {
                 (Some("abc".to_string()), 3),
             ),
             ("{a:1, b: POW(1, 2)}", (None, 2)),
+            ("{a:b, c:d,}", (None, 2)),
         ];
 
         for (input, expected) in test {

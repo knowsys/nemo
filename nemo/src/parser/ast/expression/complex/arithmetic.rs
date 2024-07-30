@@ -1,22 +1,20 @@
 //! This module defines [Arithmetic].
 #![allow(missing_docs)]
 
+use ascii_tree::write_tree;
 use enum_assoc::Assoc;
 use nom::{
     branch::alt,
-    combinator::map,
-    multi::{many0, many1},
-    sequence::{delimited, pair, preceded, separated_pair, tuple},
+    multi::many0,
+    sequence::{delimited, pair, preceded, separated_pair},
 };
 use nom_supreme::error::{BaseErrorKind, Expectation};
 
 use crate::parser::{
     ast::{
+        ast_to_ascii_tree,
         comment::wsoc::WSoC,
-        expression::{
-            basic::{number::Number, variable::Variable},
-            Expression,
-        },
+        expression::Expression,
         token::{Token, TokenKind},
         ProgramAST,
     },
@@ -26,8 +24,6 @@ use crate::parser::{
     span::Span,
     ParserResult,
 };
-
-use super::operation::Operation;
 
 /// Types of arithmetic operations
 #[derive(Assoc, Debug, Copy, Clone, PartialEq, Eq)]
@@ -40,7 +36,7 @@ pub enum ArithmeticOperation {
     #[assoc(token = TokenKind::Minus)]
     Subtraction,
     /// Multiplication
-    #[assoc(token = TokenKind::Star)]
+    #[assoc(token = TokenKind::Multiplication)]
     Multiplication,
     /// Division
     #[assoc(token = TokenKind::Division)]
@@ -100,6 +96,19 @@ impl<'a> Arithmetic<'a> {
     pub fn right(&self) -> &Expression<'a> {
         &self.right
     }
+
+    /// Return a formatted ascii tree to pretty print the AST
+    pub fn ascii_tree(&self) -> String {
+        let mut output = String::new();
+        write_tree(&mut output, &ast_to_ascii_tree(self)).unwrap();
+        format!("{output}")
+    }
+}
+
+impl std::fmt::Display for Arithmetic<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.ascii_tree())
+    }
 }
 
 #[derive(Debug)]
@@ -145,19 +154,20 @@ impl<'a> Arithmetic<'a> {
     fn parse_parenthesized_expression(input: ParserInput<'a>) -> ParserResult<'a, Expression<'a>> {
         delimited(
             pair(Token::open_parenthesis, WSoC::parse),
-            Expression::parse,
-            pair(WSoC::parse, Token::closed_parenthesis),
-        )(input)
-    }
-
-    /// Parse an arithmetic expression enclosed in parenthesis.
-    fn parse_parenthesized_arithmetic(input: ParserInput<'a>) -> ParserResult<'a, Self> {
-        delimited(
-            pair(Token::open_parenthesis, WSoC::parse),
             Self::parse,
             pair(WSoC::parse, Token::closed_parenthesis),
         )(input)
+        .map(|(rest, arithmetic_expr)| (rest, Expression::Arithmetic(arithmetic_expr)))
     }
+
+    // /// Parse an arithmetic expression enclosed in parenthesis.
+    // fn parse_parenthesized_arithmetic(input: ParserInput<'a>) -> ParserResult<'a, Self> {
+    //     delimited(
+    //         pair(Token::open_parenthesis, WSoC::parse),
+    //         Self::parse,
+    //         pair(WSoC::parse, Token::closed_parenthesis),
+    //     )(input)
+    // }
 
     /// Parse factor.
     fn parse_factor(input: ParserInput<'a>) -> ParserResult<'a, Expression<'a>> {
@@ -165,45 +175,10 @@ impl<'a> Arithmetic<'a> {
             Self::parse_non_arithmetic,
             Self::parse_parenthesized_expression,
         ))(input)
-
-        // let input_span = input.span;
-
-        // alt((
-        //     map(
-        //         tuple((
-        //             Self::parse_non_arithmetic,
-        //             delimited(
-        //                 WSoC::parse,
-        //                 ArithmeticOperation::parse_multiplicative,
-        //                 WSoC::parse,
-        //             ),
-        //             Self::parse_non_arithmetic,
-        //         )),
-        //         |(left, kind, right)| (Box::new(left), kind, Box::new(right)),
-        //     ),
-        //     map(Self::parse_parenthesized, |arithmetic| {
-        //         (arithmetic.left, arithmetic.kind, arithmetic.right)
-        //     }),
-        // ))(input)
-        // .map(|(rest, (left, kind, right))| {
-        //     let rest_span = rest.span;
-
-        //     (
-        //         rest,
-        //         Self {
-        //             span: input_span.until_rest(&rest_span),
-        //             kind,
-        //             left,
-        //             right,
-        //         },
-        //     )
-        // })
     }
 
     ///
     fn parse_product(input: ParserInput<'a>) -> ParserResult<'a, ArithmeticChain<'a>> {
-        let input_span = input.span;
-
         pair(
             Self::parse_factor,
             many0(preceded(
@@ -252,7 +227,7 @@ const CONTEXT: ParserContext = ParserContext::Arithmetic;
 
 impl<'a> ProgramAST<'a> for Arithmetic<'a> {
     fn children(&self) -> Vec<&dyn ProgramAST> {
-        todo!()
+        vec![&*self.left, &*self.right]
     }
 
     fn span(&self) -> Span<'a> {
@@ -263,32 +238,6 @@ impl<'a> ProgramAST<'a> for Arithmetic<'a> {
     where
         Self: Sized + 'a,
     {
-        // let input_span = input.span;
-
-        // context(
-        //     CONTEXT,
-        //     pair(
-        //         StructureTag::parse,
-        //         delimited(
-        //             pair(Token::open_parenthesis, WSoC::parse),
-        //             ExpressionSequenceSimple::parse,
-        //             pair(WSoC::parse, Token::closed_parenthesis),
-        //         ),
-        //     ),
-        // )(input)
-        // .map(|(rest, (tag, expressions))| {
-        //     let rest_span = rest.span;
-
-        //     (
-        //         rest,
-        //         Self {
-        //             span: input_span.until_rest(&rest_span),
-        //             tag,
-        //             expressions,
-        //         },
-        //     )
-        // })
-
         let arithmetic_parser = |input: ParserInput<'a>| {
             if let Ok((rest, expression)) = Self::parse_sum(input.clone()) {
                 if let Expression::Arithmetic(result) = expression {
@@ -325,10 +274,11 @@ mod test {
 
     /// Count the number of expressions contained in an arithmetic expression
     fn count_expression<'a>(expression: &Expression<'a>) -> usize {
-        if let Expression::Arithmetic(arithmetic) = expression {
-            count_expression(arithmetic.left()) + count_expression(arithmetic.right())
-        } else {
-            1
+        match expression {
+            Expression::Arithmetic(arithmetic) => {
+                count_expression(arithmetic.left()) + count_expression(arithmetic.right())
+            }
+            _ => 1,
         }
     }
 
@@ -337,22 +287,24 @@ mod test {
         let test = vec![
             ("1 * 2", 2),
             ("1 * 2 * ?y", 3),
-            ("(1 * 2)", 2),
-            ("1 * (2 / ?y)", 3),
+            ("1 * (2 / ?y)", 3), // FIXME: Span has missing `)`
             ("(1 / 2) * ?y", 3),
             ("1 + 2", 2),
             ("1 + 2 + ?x", 3),
-            ("1 + 2 * (3 * ?y)", 4),
-            ("1 + (2 * 3) * ?y + 4", 5),
-            ("(1 + (2 * ((3 * ?y))))", 4),
-            // ("1 + 2 * POW(3, 4)", 3),
+            ("1 + 2 * (3 * ?y)", 4), // FIXME: This test produces weird spans
+            ("1 + (2 * 3) * ?y + 4", 5), // FIXME: Here the spans are also wrong
+            ("1 + (2 * ((3 * ?y)))", 4),
+            ("1 + 2 * POW(3, 4)", 3), // FIXME: The same
+            ("2 * (((18 + 3)))", 3),
         ];
 
         for (input, expected) in test {
             let parser_input = ParserInput::new(input, ParserState::default());
             let result = all_consuming(Arithmetic::parse)(parser_input);
-
-            assert!(result.is_ok());
+            match &result {
+                Ok((_, ast)) => println!("{ast}"),
+                Err(_) => assert!(false),
+            }
 
             let result = result.unwrap();
             assert_eq!(

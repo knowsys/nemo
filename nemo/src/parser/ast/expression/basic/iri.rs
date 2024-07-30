@@ -47,7 +47,7 @@ impl<'a> ProgramAST<'a> for Iri<'a> {
 
         context(
             CONTEXT,
-            delimited(Token::open_chevrons, Token::iri, Token::closed_chevrons),
+            delimited(Token::open_iri, Token::iri, Token::close_iri),
         )(input)
         .map(|(rest, content)| {
             let rest_span = rest.span;

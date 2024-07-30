@@ -17,7 +17,7 @@ use crate::{
 };
 
 /// Tags that are used to identify operations
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct DataTypeTag<'a> {
     /// [ProgramSpan] associated with this node
     span: Span<'a>,

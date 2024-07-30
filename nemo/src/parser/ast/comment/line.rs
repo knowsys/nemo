@@ -1,9 +1,10 @@
 //! This module defines [LineComment].
 
 use nom::{
-    character::complete::not_line_ending,
-    combinator::opt,
-    sequence::{pair, preceded},
+    branch::alt,
+    character::complete::{line_ending, not_line_ending},
+    combinator::eof,
+    sequence::tuple,
 };
 
 use crate::parser::{
@@ -50,12 +51,9 @@ impl<'a> ProgramAST<'a> for LineComment<'a> {
 
         context(
             CONTEXT,
-            preceded(
-                pair(Token::comment, opt(Token::whitespace)),
-                not_line_ending,
-            ),
+            tuple((Token::comment, not_line_ending, alt((line_ending, eof)))),
         )(input)
-        .map(|(rest, content)| {
+        .map(|(rest, (_, content, _))| {
             let rest_span = rest.span;
 
             (
@@ -86,13 +84,16 @@ mod test {
     #[test]
     fn parse_line_comment() {
         let test = vec![
-            ("// my comment", "my comment".to_string()),
+            ("// my comment", " my comment".to_string()),
             ("//my comment", "my comment".to_string()),
+            ("//  \tmy comment\n", "  \tmy comment".to_string()),
+            ("//// my comment", " my comment".to_string()),
         ];
 
         for (input, expected) in test {
             let parser_input = ParserInput::new(input, ParserState::default());
             let result = all_consuming(LineComment::parse)(parser_input);
+            dbg!(&result);
 
             assert!(result.is_ok());
 

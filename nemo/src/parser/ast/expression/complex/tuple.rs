@@ -1,14 +1,10 @@
 //! This module defines [Tuple].
 
-use nom::{
-    combinator::opt,
-    sequence::{delimited, pair, terminated, tuple},
-};
+use nom::sequence::{delimited, pair};
 
 use crate::parser::{
     ast::{
-        comment::wsoc::WSoC, expression::Expression, sequence::one::ExpressionSequenceOne,
-        token::Token, ProgramAST,
+        comment::wsoc::WSoC, expression::Expression, sequence::Sequence, token::Token, ProgramAST,
     },
     context::{context, ParserContext},
     input::ParserInput,
@@ -23,7 +19,7 @@ pub struct Tuple<'a> {
     span: Span<'a>,
 
     /// List of underlying expressions
-    expressions: ExpressionSequenceOne<'a>,
+    expressions: Sequence<'a, Expression<'a>>,
 }
 
 impl<'a> Tuple<'a> {
@@ -59,12 +55,9 @@ impl<'a> ProgramAST<'a> for Tuple<'a> {
         context(
             CONTEXT,
             delimited(
-                pair(Token::open_parenthesis, WSoC::parse),
-                terminated(
-                    ExpressionSequenceOne::parse,
-                    opt(tuple((WSoC::parse, Token::comma, WSoC::parse))),
-                ),
-                pair(WSoC::parse, Token::closed_parenthesis),
+                pair(Token::tuple_open, WSoC::parse),
+                Sequence::parse_with_first_trailing,
+                pair(WSoC::parse, Token::tuple_close),
             ),
         )(input)
         .map(|(rest, expressions)| {
@@ -103,11 +96,16 @@ mod test {
             ("( 1 ,)", 1),
             ("( 1 , 2 )", 2),
             ("( 1 , 2 ,)", 2),
+            ("( 1, 2, 3 )", 3),
+            ("(1,2,3,)", 3),
         ];
 
         for (input, expected) in test {
             let parser_input = ParserInput::new(input, ParserState::default());
             let result = all_consuming(Tuple::parse)(parser_input);
+            if result.is_err() {
+                dbg!(&result);
+            }
 
             assert!(result.is_ok());
 

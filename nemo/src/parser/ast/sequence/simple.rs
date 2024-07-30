@@ -32,7 +32,7 @@ impl<'a> ExpressionSequenceSimple<'a> {
         let input_span = input.span;
 
         separated_list1(
-            tuple((WSoC::parse, Token::comma, WSoC::parse)),
+            tuple((WSoC::parse, Token::seq_sep, WSoC::parse)),
             Expression::parse,
         )(input)
         .map(|(rest, expressions)| {

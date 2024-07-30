@@ -2,10 +2,10 @@
 
 use nom::{
     branch::alt,
-    character::complete::line_ending,
     combinator::{map, opt},
-    sequence::{delimited, pair, terminated},
+    sequence::{pair, terminated},
 };
+use nom_locate::LocatedSpan;
 
 use crate::parser::{
     context::{context, ParserContext},
@@ -103,12 +103,8 @@ impl<'a> ProgramAST<'a> for Statement<'a> {
         context(
             CONTEXT,
             pair(
-                opt(terminated(DocComment::parse, line_ending)),
-                delimited(
-                    WSoC::parse,
-                    StatementKind::parse,
-                    pair(WSoC::parse, Token::dot),
-                ),
+                opt(DocComment::parse),
+                terminated(StatementKind::parse, pair(WSoC::parse, Token::dot)),
             ),
         )(input)
         .map(|(rest, (comment, statement))| {
@@ -142,9 +138,12 @@ mod test {
     };
 
     #[test]
-    fn parse_directive() {
+    fn parse_statement() {
         let test = vec![
-            ("/// A fact \n a(1, 2) .", ParserContext::Expression),
+            (
+                "/// A fact\n/// with a multiline doc comment. \n a(1, 2) .",
+                ParserContext::Expression,
+            ),
             ("/// A rule \n a(1, 2) :- b(2, 1) .", ParserContext::Rule),
             (
                 "/// A directive \n   \t@declare a(_: int, _: int) .",
@@ -161,5 +160,27 @@ mod test {
             let result = result.unwrap();
             assert_eq!(result.1.kind.context(), expect);
         }
+    }
+}
+
+// TODO: Remove this when the debug error statement printing in the ast is no longer needed
+impl<'a> ProgramAST<'a> for Option<Statement<'a>> {
+    fn children(&'a self) -> Vec<&'a dyn ProgramAST> {
+        vec![]
+    }
+
+    fn span(&self) -> Span<'a> {
+        Span(LocatedSpan::new("ERROR!"))
+    }
+
+    fn parse(_input: ParserInput<'a>) -> ParserResult<'a, Self>
+    where
+        Self: Sized + 'a,
+    {
+        todo!()
+    }
+
+    fn context(&self) -> ParserContext {
+        ParserContext::Statement
     }
 }

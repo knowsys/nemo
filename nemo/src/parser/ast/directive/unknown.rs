@@ -3,7 +3,7 @@
 use nom::{
     bytes::complete::is_not,
     combinator::recognize,
-    sequence::{pair, preceded, separated_pair},
+    sequence::{preceded, separated_pair},
 };
 use nom_supreme::error::{BaseErrorKind, Expectation};
 use strum::IntoEnumIterator;
@@ -90,8 +90,15 @@ impl<'a> ProgramAST<'a> for UnknownDirective<'a> {
         context(
             CONTEXT,
             separated_pair(
-                preceded(Token::at, Self::parse_unknown),
-                pair(WSoC::parse_whitespace_comment, WSoC::parse),
+                preceded(Token::directive_indicator, Self::parse_unknown),
+                WSoC::parse,
+                // FIXME: Rework error recovery, because this recognises an `.` in an IRI,
+                //   e.g. in `@baseerror <https://example.org/>
+                //                                       ^
+                //   That means that content == "<https://example", and rest == ".org/>" which
+                //   will also produce an error.
+                // NOTE: Maybe we could try to parse the "body" of the other directives and if
+                //   one succeeds give a hint what directive could be the correct.
                 recognize(is_not(".")),
             ),
         )(input)
@@ -155,6 +162,27 @@ mod test {
             let result = all_consuming(UnknownDirective::parse)(parser_input);
 
             assert!(result.is_err());
+        }
+    }
+
+    #[test]
+    fn error_recovery() {
+        let test = [(
+            "@test <https://example.org> .",
+            ("test", "<https://example.org> "),
+        )];
+
+        for (input, expected) in test {
+            let parser_input = ParserInput::new(input, ParserState::default());
+            let result = UnknownDirective::parse(parser_input);
+
+            assert!(result.is_ok());
+
+            let result = result.unwrap();
+            assert_eq!(
+                expected,
+                (result.1.name().as_ref(), result.1.content().as_ref())
+            );
         }
     }
 }

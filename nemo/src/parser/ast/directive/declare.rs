@@ -1,22 +1,19 @@
 //! This module defines the [Declare] directive.
 
-use nom::sequence::{delimited, pair, preceded, tuple};
+use nom::sequence::{delimited, pair, preceded, separated_pair, tuple};
 
-use crate::{
-    parser::{
-        ast::{
-            comment::wsoc::WSoC,
-            sequence::declare::DeclareSequence,
-            tag::{parameter::Parameter, structure::StructureTag},
-            token::Token,
-            ProgramAST,
-        },
-        context::{context, ParserContext},
-        input::ParserInput,
-        span::Span,
-        ParserResult,
+use crate::parser::{
+    ast::{
+        comment::wsoc::WSoC,
+        sequence::{declare::NameTypePair, Sequence},
+        tag::structure::StructureTag,
+        token::Token,
+        ProgramAST,
     },
-    rule_model::components::datatype::DataType,
+    context::{context, ParserContext},
+    input::ParserInput,
+    span::Span,
+    ParserResult,
 };
 
 /// Declare directive, associating atom positions with names and data types
@@ -28,7 +25,7 @@ pub struct Declare<'a> {
     /// Predicate this statement applies to
     predicate: StructureTag<'a>,
     /// The declaration
-    declaration: DeclareSequence<'a>,
+    declaration: Sequence<'a, NameTypePair<'a>>,
 }
 
 impl<'a> Declare<'a> {
@@ -38,12 +35,22 @@ impl<'a> Declare<'a> {
     }
 
     /// Return an iterator over the name-type pairs.
-    pub fn name_type_pairs(&self) -> impl Iterator<Item = (Parameter, DataType)> + '_ {
-        self.declaration
-            .iter()
-            .map(|(parameter_name, tag_datatype)| {
-                (parameter_name.parameter().clone(), tag_datatype.data_type())
-            })
+    pub fn name_type_pairs(&self) -> impl Iterator<Item = NameTypePair> + '_ {
+        self.declaration.clone().into_iter()
+    }
+
+    pub fn parse_body(
+        input: ParserInput<'a>,
+    ) -> ParserResult<'a, (StructureTag, Sequence<NameTypePair>)> {
+        separated_pair(
+            StructureTag::parse,
+            WSoC::parse,
+            delimited(
+                pair(Token::atom_open, WSoC::parse),
+                Sequence::<NameTypePair>::parse,
+                pair(WSoC::parse, Token::atom_close),
+            ),
+        )(input)
     }
 }
 
@@ -54,9 +61,8 @@ impl<'a> ProgramAST<'a> for Declare<'a> {
         let mut result = Vec::<&dyn ProgramAST>::new();
         result.push(&self.predicate);
 
-        for (parameter, data_type) in self.declaration.iter() {
-            result.push(parameter);
-            result.push(data_type);
+        for pair in self.declaration.iter() {
+            result.push(pair);
         }
 
         result
@@ -76,19 +82,11 @@ impl<'a> ProgramAST<'a> for Declare<'a> {
             CONTEXT,
             preceded(
                 tuple((
-                    Token::at,
+                    Token::directive_indicator,
                     Token::directive_declare,
-                    WSoC::parse_whitespace_comment,
                     WSoC::parse,
                 )),
-                pair(
-                    StructureTag::parse,
-                    delimited(
-                        tuple((WSoC::parse, Token::open_parenthesis, WSoC::parse)),
-                        DeclareSequence::parse,
-                        tuple((WSoC::parse, Token::closed_parenthesis, WSoC::parse)),
-                    ),
-                ),
+                Self::parse_body,
             ),
         )(input)
         .map(|(rest, (predicate, declaration))| {

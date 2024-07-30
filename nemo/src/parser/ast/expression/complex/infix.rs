@@ -97,9 +97,9 @@ impl<'a> InfixExpression<'a> {
     /// Parse non-infix [Expression]s
     pub fn parse_non_infix(input: ParserInput<'a>) -> ParserResult<'a, Expression<'a>> {
         alt((
+            map(Operation::parse, Expression::Operation),
             map(Arithmetic::parse, Expression::Arithmetic),
             map(Aggregation::parse, Expression::Aggregation),
-            map(Operation::parse, Expression::Operation),
             map(Atom::parse, Expression::Atom),
             map(Tuple::parse, Expression::Tuple),
             map(Map::parse, Expression::Map),

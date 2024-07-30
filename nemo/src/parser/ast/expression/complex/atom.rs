@@ -66,9 +66,9 @@ impl<'a> ProgramAST<'a> for Atom<'a> {
             pair(
                 StructureTag::parse,
                 delimited(
-                    pair(Token::open_parenthesis, WSoC::parse),
+                    pair(Token::atom_open, WSoC::parse),
                     ExpressionSequenceSimple::parse,
-                    pair(WSoC::parse, Token::closed_parenthesis),
+                    pair(WSoC::parse, Token::atom_close),
                 ),
             ),
         )(input)

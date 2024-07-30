@@ -25,6 +25,10 @@ impl<'a> Base<'a> {
     pub fn iri(&self) -> &Iri<'a> {
         &self.iri
     }
+
+    pub fn parse_body(input: ParserInput<'a>) -> ParserResult<'a, Iri> {
+        Iri::parse(input)
+    }
 }
 
 const CONTEXT: ParserContext = ParserContext::Base;
@@ -48,12 +52,11 @@ impl<'a> ProgramAST<'a> for Base<'a> {
             CONTEXT,
             preceded(
                 tuple((
-                    Token::at,
+                    Token::directive_indicator,
                     Token::directive_base,
-                    WSoC::parse_whitespace_comment,
                     WSoC::parse,
                 )),
-                Iri::parse,
+                Self::parse_body,
             ),
         )(input)
         .map(|(rest, iri)| {

@@ -1,12 +1,15 @@
 //! This module defines [Program].
 
+use ascii_tree::write_tree;
+
 use nom::{
     combinator::opt,
     multi::many0,
-    sequence::{delimited, pair, preceded},
+    sequence::{delimited, pair},
 };
 
 use crate::parser::{
+    ast::ast_to_ascii_tree,
     context::{context, ParserContext},
     error::{recover, report_error},
     input::ParserInput,
@@ -29,7 +32,7 @@ pub struct Program<'a> {
     /// Top level comment
     comment: Option<TopLevelComment<'a>>,
     /// Statements
-    statements: Vec<Statement<'a>>,
+    statements: Vec<Option<Statement<'a>>>,
 }
 
 impl<'a> Program<'a> {
@@ -40,8 +43,15 @@ impl<'a> Program<'a> {
     }
 
     /// Return an iterator of statements in the program.
-    pub fn statements(&self) -> impl Iterator<Item = &Statement<'a>> {
+    pub fn statements(&self) -> impl Iterator<Item = &Option<Statement<'a>>> {
         self.statements.iter()
+    }
+
+    /// Return a formatted ascii tree to pretty print the AST
+    pub fn ascii_tree(&self) -> String {
+        let mut output = String::new();
+        write_tree(&mut output, &ast_to_ascii_tree(self)).unwrap();
+        format!("{output}")
     }
 }
 
@@ -57,7 +67,11 @@ impl<'a> ProgramAST<'a> for Program<'a> {
         }
 
         for statement in self.statements() {
-            result.push(statement);
+            if let Some(s) = statement {
+                result.push(s);
+            } else {
+                result.push(statement);
+            }
         }
 
         result
@@ -77,25 +91,29 @@ impl<'a> ProgramAST<'a> for Program<'a> {
             CONTEXT,
             pair(
                 opt(TopLevelComment::parse),
-                delimited(
+                many0(delimited(
                     WSoC::parse,
-                    many0(preceded(
-                        WSoC::parse,
-                        recover(report_error(Statement::parse)),
-                    )),
+                    recover(report_error(Statement::parse)),
                     WSoC::parse,
-                ),
+                )),
             ),
         )(input)
         .map(|(rest, (comment, statements))| {
             let rest_span = rest.span;
+            // TODO: Remove if debug info is no longer needed
+            if !rest_span.0.is_empty() {
+                println!(
+                    "\x1b[91mUNPARSED INPUT:\x1b[0m {:?}\n",
+                    rest.span.0.fragment()
+                );
+            }
 
             (
                 rest,
                 Self {
                     span: input_span.until_rest(&rest_span),
                     comment,
-                    statements: statements.into_iter().flatten().collect(),
+                    statements,
                 },
             )
         })
@@ -103,6 +121,12 @@ impl<'a> ProgramAST<'a> for Program<'a> {
 
     fn context(&self) -> ParserContext {
         CONTEXT
+    }
+}
+
+impl std::fmt::Display for Program<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.ascii_tree())
     }
 }
 
