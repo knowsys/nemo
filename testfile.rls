@@ -1,10 +1,19 @@
+/// base directive
 @base <http://example.org/foo/> .
+/// prefix directive
 @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
-@import sourceA :- csv { resource = "sources/dataA.csv" } .
+///import directive
+@import sourceA :- csv { resource : "sources/dataA.csv" } .
+/// export directive
 @export a :- csv {} .
-@output a .
 
-% Facts:
+/// output directive
+@output a, b, c .
+/// declare directive
+@declare father(_:any, _:any).
+@declare mother ( child : any , mother : any ) .
+
+// Facts:
 father(alice, bob).
 mother(bob, carla).
 father(bob, darius).
@@ -14,7 +23,7 @@ mother(<bob>, <carla>).
 father(<bob>, <darius>).
 mother(<alice>, <carla>).
 
-% Rules:
+// Rules:
 parent(?X, ?Y) :- mother(?X, ?Y).
 parent(?X, ?Y) :- father(?X, ?Y).
 parent( ?X , ?Y ) :- ~sibling( ?X , ?Y ) .
