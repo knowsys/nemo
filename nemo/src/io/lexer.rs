@@ -1,4 +1,7 @@
 //! Lexical tokenization of rulewerk-style rules.
+// FIXME: temporary, because this module probably will get removed
+#![allow(unused)]
+#![allow(missing_docs)]
 
 use std::{cell::RefCell, ops::Range};
 
@@ -7,7 +10,7 @@ use nom::{
     branch::alt,
     bytes::complete::{is_not, tag, take, take_till},
     character::complete::{alpha1, alphanumeric1, digit1, line_ending, multispace0, multispace1},
-    combinator::{all_consuming, cut, map, opt, recognize},
+    combinator::{cut, map, opt, recognize},
     error::ParseError,
     multi::{many0, many1},
     sequence::{delimited, pair, tuple},
@@ -18,7 +21,7 @@ use nom_supreme::{context::ContextError, error::GenericErrorTree};
 use tower_lsp::lsp_types::SymbolKind;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub(crate) enum Context {
+pub enum Context {
     Tag(&'static str),
     Exponent,
     Punctuations,
