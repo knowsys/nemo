@@ -4,7 +4,6 @@
 pub mod util;
 
 pub(crate) mod origin;
-pub(crate) mod syntax;
 
 pub mod components;
 pub mod error;
