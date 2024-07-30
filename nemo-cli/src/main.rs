@@ -178,6 +178,7 @@ fn run(mut cli: CliApp) -> Result<(), Error> {
                 std::process::exit(1);
             }
         };
+    log::debug!("AST:\n{program_ast}");
 
     let program = match rule_model::translation::ASTProgramTranslation::initialize(
         &rules_content,
