@@ -5,17 +5,17 @@ use std::fmt::Display;
 
 use enum_assoc::Assoc;
 
-use crate::rule_model::syntax::import_export::compression;
+use crate::syntax::import_export::attribute;
 
 /// Compression formats
 #[derive(Assoc, Debug, Copy, Clone, PartialEq, Eq)]
 #[func(pub fn name(&self) -> &'static str)]
 pub enum CompressionFormat {
     /// No compression
-    #[assoc(name = compression::VALUE_COMPRESSION_NONE)]
+    #[assoc(name = attribute::VALUE_COMPRESSION_NONE)]
     None,
     /// GZip compression
-    #[assoc(name = compression::VALUE_COMPRESSION_GZIP)]
+    #[assoc(name = attribute::VALUE_COMPRESSION_GZIP)]
     GZip,
 }
 

@@ -133,15 +133,17 @@ impl<'a> ASTProgramTranslation<'a> {
         let mut program_builder = ProgramBuilder::default();
 
         for statement in ast.statements() {
-            match statement.kind() {
-                ast::statement::StatementKind::Fact(_) => todo!(),
-                ast::statement::StatementKind::Rule(rule) => match self.build_rule(rule) {
-                    Ok(new_rule) => program_builder.add_rule(new_rule),
-                    Err(translation_error) => self
-                        .errors
-                        .push(ProgramError::TranslationError(translation_error)),
-                },
-                ast::statement::StatementKind::Directive(_) => todo!(),
+            if let Some(statement) = statement {
+                match statement.kind() {
+                    ast::statement::StatementKind::Fact(_) => todo!(),
+                    ast::statement::StatementKind::Rule(rule) => match self.build_rule(rule) {
+                        Ok(new_rule) => program_builder.add_rule(new_rule),
+                        Err(translation_error) => self
+                            .errors
+                            .push(ProgramError::TranslationError(translation_error)),
+                    },
+                    ast::statement::StatementKind::Directive(_) => todo!(),
+                }
             }
         }
 

@@ -5,9 +5,9 @@ use std::{collections::HashMap, fmt::Display};
 
 use enum_assoc::Assoc;
 
-use crate::rule_model::{
-    components::import_export::attributes::ImportExportAttribute,
-    syntax::import_export::file_formats,
+use crate::{
+    rule_model::components::import_export::attributes::ImportExportAttribute,
+    syntax::import_export::file_format,
 };
 
 /// Marks whether a an attribute is required or optional
@@ -26,64 +26,64 @@ pub(crate) enum AttributeRequirement {
 #[func(pub fn attributes(&self) -> HashMap<ImportExportAttribute, AttributeRequirement>)]
 pub enum FileFormat {
     /// Comma-separated values
-    #[assoc(name = file_formats::FILE_FORMAT_CSV)]
-    #[assoc(extension = file_formats::EXTENSION_CSV)]
+    #[assoc(name = file_format::CSV)]
+    #[assoc(extension = file_format::EXTENSION_CSV)]
     #[assoc(attributes = HashMap::from([
         (ImportExportAttribute::Resource, AttributeRequirement::Required)
     ]))]
     CSV,
     /// Delimiter-separated values
-    #[assoc(name = file_formats::FILE_FORMAT_DSV)]
-    #[assoc(extension = file_formats::EXTENSION_DSV)]
+    #[assoc(name = file_format::DSV)]
+    #[assoc(extension = file_format::EXTENSION_DSV)]
     #[assoc(attributes = HashMap::from([
         (ImportExportAttribute::Resource, AttributeRequirement::Required)
     ]))]
     DSV,
     /// Tab-separated values
-    #[assoc(name = file_formats::FILE_FORMAT_TSV)]
-    #[assoc(extension = file_formats::EXTENSION_TSV)]
+    #[assoc(name = file_format::TSV)]
+    #[assoc(extension = file_format::EXTENSION_TSV)]
     #[assoc(attributes = HashMap::from([
         (ImportExportAttribute::Resource, AttributeRequirement::Required)
     ]))]
     TSV,
     /// JSON objects
-    #[assoc(name = file_formats::FILE_FORMAT_JSON)]
-    #[assoc(extension = file_formats::EXTENSION_JSON)]
+    #[assoc(name = file_format::JSON)]
+    #[assoc(extension = file_format::EXTENSION_JSON)]
     #[assoc(attributes = HashMap::from([
         (ImportExportAttribute::Resource, AttributeRequirement::Required)
     ]))]
     JSON,
     /// RDF 1.1 N-Triples
-    #[assoc(name = file_formats::FILE_FORMAT_RDF_NTRIPLES)]
-    #[assoc(extension = file_formats::EXTENSION_RDF_NTRIPLES)]
+    #[assoc(name = file_format::RDF_NTRIPLES)]
+    #[assoc(extension = file_format::EXTENSION_RDF_NTRIPLES)]
     #[assoc(attributes = HashMap::from([
         (ImportExportAttribute::Resource, AttributeRequirement::Required)
     ]))]
     NTriples,
     /// RDF 1.1 N-Quads
-    #[assoc(name = file_formats::FILE_FORMAT_RDF_NQUADS)]
-    #[assoc(extension = file_formats::EXTENSION_RDF_NQUADS)]
+    #[assoc(name = file_format::RDF_NQUADS)]
+    #[assoc(extension = file_format::EXTENSION_RDF_NQUADS)]
     #[assoc(attributes = HashMap::from([
         (ImportExportAttribute::Resource, AttributeRequirement::Required)
     ]))]
     NQuads,
     /// RDF 1.1 Turtle
-    #[assoc(name = file_formats::FILE_FORMAT_RDF_TURTLE)]
-    #[assoc(extension = file_formats::EXTENSION_RDF_TURTLE)]
+    #[assoc(name = file_format::RDF_TURTLE)]
+    #[assoc(extension = file_format::EXTENSION_RDF_TURTLE)]
     #[assoc(attributes = HashMap::from([
         (ImportExportAttribute::Resource, AttributeRequirement::Required)
     ]))]
     Turtle,
     /// RDF 1.1 RDF/XML
-    #[assoc(name = file_formats::FILE_FORMAT_RDF_XML)]
-    #[assoc(extension = file_formats::EXTENSION_RDF_XML)]
+    #[assoc(name = file_format::RDF_XML)]
+    #[assoc(extension = file_format::EXTENSION_RDF_XML)]
     #[assoc(attributes = HashMap::from([
         (ImportExportAttribute::Resource, AttributeRequirement::Required)
     ]))]
     RDFXML,
     /// RDF 1.1 TriG
-    #[assoc(name = file_formats::FILE_FORMAT_RDF_TRIG)]
-    #[assoc(extension = file_formats::EXTENSION_RDF_TRIG)]
+    #[assoc(name = file_format::RDF_TRIG)]
+    #[assoc(extension = file_format::EXTENSION_RDF_TRIG)]
     #[assoc(attributes = HashMap::from([
         (ImportExportAttribute::Resource, AttributeRequirement::Required)
     ]))]

@@ -6,7 +6,7 @@ use std::fmt::Display;
 use enum_assoc::Assoc;
 use strum_macros::EnumIter;
 
-use crate::rule_model::syntax::builtins;
+use crate::syntax::builtin::function;
 
 /// Number of arguments supported by an operation
 #[derive(Debug)]
@@ -45,287 +45,287 @@ impl OperationNumArguments {
 #[func(pub fn is_boolean(&self) -> bool)]
 pub enum OperationKind {
     /// Equality
-    #[assoc(name = builtins::BUILTIN_EQUAL)]
+    #[assoc(name = function::EQUAL)]
     #[assoc(num_arguments = OperationNumArguments::Binary)]
     #[assoc(is_boolean = true)]
     Equal,
     /// Inequality
-    #[assoc(name = builtins::BUILTIN_UNEQUAL)]
+    #[assoc(name = function::UNEQUAL)]
     #[assoc(num_arguments = OperationNumArguments::Binary)]
     #[assoc(is_boolean = true)]
     Unequals,
     /// Sum of numeric values
-    #[assoc(name = builtins::BUILTIN_SUM)]
+    #[assoc(name = function::SUM)]
     #[assoc(num_arguments = OperationNumArguments::Arbitrary)]
     #[assoc(is_boolean = false)]
     NumericSum,
     /// Subtraction between two numeric values
-    #[assoc(name = builtins::BUILTIN_SUBTRACTION)]
+    #[assoc(name = function::SUBTRACTION)]
     #[assoc(num_arguments = OperationNumArguments::Binary)]
     #[assoc(is_boolean = false)]
     NumericSubtraction,
     /// Product of numeric values
-    #[assoc(name = builtins::BUILTIN_PRODUCT)]
+    #[assoc(name = function::PRODUCT)]
     #[assoc(num_arguments = OperationNumArguments::Arbitrary)]
     #[assoc(is_boolean = false)]
     NumericProduct,
     /// Division between two numeric values
-    #[assoc(name = builtins::BUILTIN_DIVISION)]
+    #[assoc(name = function::DIVISION)]
     #[assoc(num_arguments = OperationNumArguments::Binary)]
     #[assoc(is_boolean = false)]
     NumericDivision,
     /// Logarithm of a numeric value to some numeric base
     #[assoc(num_arguments = OperationNumArguments::Binary)]
-    #[assoc(name = builtins::BUILTIN_LOGARITHM)]
+    #[assoc(name = function::LOGARITHM)]
     #[assoc(is_boolean = false)]
     NumericLogarithm,
     /// Numeric value raised to another numeric value
-    #[assoc(name = builtins::BUILTIN_POW)]
+    #[assoc(name = function::POW)]
     #[assoc(num_arguments = OperationNumArguments::Binary)]
     #[assoc(is_boolean = false)]
     NumericPower,
     /// Remainder of a division between two numeric values
-    #[assoc(name = builtins::BUILTIN_REM)]
+    #[assoc(name = function::REM)]
     #[assoc(num_arguments = OperationNumArguments::Binary)]
     #[assoc(is_boolean = false)]
     NumericRemainder,
     /// Numeric greater than or equals comparison
-    #[assoc(name = builtins::BUILTIN_GREATEREQ)]
+    #[assoc(name = function::GREATEREQ)]
     #[assoc(num_arguments = OperationNumArguments::Binary)]
     #[assoc(is_boolean = false)]
     NumericGreaterthaneq,
     /// Numeric greater than comparison
-    #[assoc(name = builtins::BUILTIN_GREATER)]
+    #[assoc(name = function::GREATER)]
     #[assoc(num_arguments = OperationNumArguments::Binary)]
     #[assoc(is_boolean = false)]
     NumericGreaterthan,
     /// Numeric less than or equals comparison
-    #[assoc(name = builtins::BUILTIN_LESSEQ)]
+    #[assoc(name = function::LESSEQ)]
     #[assoc(num_arguments = OperationNumArguments::Binary)]
     #[assoc(is_boolean = false)]
     NumericLessthaneq,
     /// Numeric less than comparison
-    #[assoc(name = builtins::BUILTIN_LESS)]
+    #[assoc(name = function::LESS)]
     #[assoc(num_arguments = OperationNumArguments::Binary)]
     #[assoc(is_boolean = false)]
     NumericLessthan,
     /// Lexicographic comparison between strings
-    #[assoc(name = builtins::BUILTIN_COMPARE)]
+    #[assoc(name = function::COMPARE)]
     #[assoc(num_arguments = OperationNumArguments::Binary)]
     #[assoc(is_boolean = false)]
     StringCompare,
     /// Check whether string is contained in another, correspondng to SPARQL function CONTAINS.
-    #[assoc(name = builtins::BUILTIN_CONTAINS)]
+    #[assoc(name = function::CONTAINS)]
     #[assoc(num_arguments = OperationNumArguments::Binary)]
     #[assoc(is_boolean = true)]
     StringContains,
     /// String starting at some start position
-    #[assoc(name = builtins::BUILTIN_SUBSTR)]
+    #[assoc(name = function::SUBSTR)]
     #[assoc(num_arguments = OperationNumArguments::Choice(vec![OperationNumArguments::Binary, OperationNumArguments::Ternary]))]
     #[assoc(is_boolean = false)]
     StringSubstring,
     /// First part of a string split by some other string
-    #[assoc(name = builtins::BUILTIN_STRBEFORE)]
+    #[assoc(name = function::STRBEFORE)]
     #[assoc(num_arguments = OperationNumArguments::Binary)]
     #[assoc(is_boolean = false)]
     StringBefore,
     /// Second part of a string split by some other string
-    #[assoc(name = builtins::BUILTIN_STRAFTER)]
+    #[assoc(name = function::STRAFTER)]
     #[assoc(num_arguments = OperationNumArguments::Binary)]
     #[assoc(is_boolean = false)]
     StringAfter,
     /// Whether string starts with a certain string
-    #[assoc(name = builtins::BUILTIN_STRSTARTS)]
+    #[assoc(name = function::STRSTARTS)]
     #[assoc(num_arguments = OperationNumArguments::Binary)]
     #[assoc(is_boolean = true)]
     StringStarts,
     /// Whether string ends with a certain string
-    #[assoc(name = builtins::BUILTIN_STRENDS)]
+    #[assoc(name = function::STRENDS)]
     #[assoc(num_arguments = OperationNumArguments::Binary)]
     #[assoc(is_boolean = true)]
     StringEnds,
     /// Boolean negation
-    #[assoc(name = builtins::BUILTIN_NOT)]
+    #[assoc(name = function::NOT)]
     #[assoc(num_arguments = OperationNumArguments::Unary)]
     #[assoc(is_boolean = true)]
     BooleanNegation,
     /// Cast to double
-    #[assoc(name = builtins::BUILTIN_DOUBLE)]
+    #[assoc(name = function::DOUBLE)]
     #[assoc(num_arguments = OperationNumArguments::Unary)]
     #[assoc(is_boolean = false)]
     CastToDouble,
     /// Cast to float
-    #[assoc(name = builtins::BUILTIN_FLOAT)]
+    #[assoc(name = function::FLOAT)]
     #[assoc(num_arguments = OperationNumArguments::Unary)]
     #[assoc(is_boolean = false)]
     CastToFloat,
     /// Cast to integer
-    #[assoc(name = builtins::BUILTIN_INT)]
+    #[assoc(name = function::INT)]
     #[assoc(num_arguments = OperationNumArguments::Unary)]
     #[assoc(is_boolean = false)]
     CastToInteger,
     /// Canonical string representation of a value
-    #[assoc(name = builtins::BUILTIN_FULLSTR)]
+    #[assoc(name = function::FULLSTR)]
     #[assoc(num_arguments = OperationNumArguments::Unary)]
     #[assoc(is_boolean = false)]
     CanonicalString,
     /// Check if value is an integer
-    #[assoc(name = builtins::BUILTIN_IS_INTEGER)]
+    #[assoc(name = function::IS_INTEGER)]
     #[assoc(num_arguments = OperationNumArguments::Unary)]
     #[assoc(is_boolean = true)]
     CheckIsInteger,
     /// Check if value is a float
-    #[assoc(name = builtins::BUILTIN_IS_FLOAT)]
+    #[assoc(name = function::IS_FLOAT)]
     #[assoc(num_arguments = OperationNumArguments::Unary)]
     #[assoc(is_boolean = true)]
     CheckIsFloat,
     /// Check if value is a double
-    #[assoc(name = builtins::BUILTIN_IS_DOUBLE)]
+    #[assoc(name = function::IS_DOUBLE)]
     #[assoc(num_arguments = OperationNumArguments::Unary)]
     #[assoc(is_boolean = true)]
     CheckIsDouble,
     /// Check if value is an iri
-    #[assoc(name = builtins::BUILTIN_IS_IRI)]
+    #[assoc(name = function::IS_IRI)]
     #[assoc(num_arguments = OperationNumArguments::Unary)]
     #[assoc(is_boolean = true)]
     CheckIsIri,
     /// Check if value is numeric
-    #[assoc(name = builtins::BUILTIN_IS_NUMERIC)]
+    #[assoc(name = function::IS_NUMERIC)]
     #[assoc(num_arguments = OperationNumArguments::Unary)]
     #[assoc(is_boolean = true)]
     CheckIsNumeric,
     /// Check if value is a null
-    #[assoc(name = builtins::BUILTIN_IS_NULL)]
+    #[assoc(name = function::IS_NULL)]
     #[assoc(num_arguments = OperationNumArguments::Unary)]
     #[assoc(is_boolean = true)]
     CheckIsNull,
     /// Check if value is a string
-    #[assoc(name = builtins::BUILTIN_IS_STRING)]
+    #[assoc(name = function::IS_STRING)]
     #[assoc(num_arguments = OperationNumArguments::Unary)]
     #[assoc(is_boolean = true)]
     CheckIsString,
     /// Get datatype of a value
-    #[assoc(name = builtins::BUILTIN_DATATYPE)]
+    #[assoc(name = function::DATATYPE)]
     #[assoc(num_arguments = OperationNumArguments::Unary)]
     #[assoc(is_boolean = false)]
     Datatype,
     /// Get language tag of a languaged tagged string
-    #[assoc(name = builtins::BUILTIN_LANG)]
+    #[assoc(name = function::LANG)]
     #[assoc(num_arguments = OperationNumArguments::Unary)]
     #[assoc(is_boolean = false)]
     LanguageTag,
     /// Absolute value of a numeric value
-    #[assoc(name = builtins::BUILTIN_ABS)]
+    #[assoc(name = function::ABS)]
     #[assoc(num_arguments = OperationNumArguments::Unary)]
     #[assoc(is_boolean = false)]
     NumericAbsolute,
     /// Cosine of a numeric valueloga
-    #[assoc(name = builtins::BUILTIN_COS)]
+    #[assoc(name = function::COS)]
     #[assoc(num_arguments = OperationNumArguments::Unary)]
     #[assoc(is_boolean = false)]
     NumericCosine,
     /// Rounding up of a numeric value
-    #[assoc(name = builtins::BUILTIN_CEIL)]
+    #[assoc(name = function::CEIL)]
     #[assoc(num_arguments = OperationNumArguments::Unary)]
     #[assoc(is_boolean = false)]
     NumericCeil,
     /// Rounding down of a numeric value
-    #[assoc(name = builtins::BUILTIN_FLOOR)]
+    #[assoc(name = function::FLOOR)]
     #[assoc(num_arguments = OperationNumArguments::Unary)]
     #[assoc(is_boolean = false)]
     NumericFloor,
     /// Additive inverse of a numeric value
-    #[assoc(name = builtins::BUILTIN_INVERSE)]
+    #[assoc(name = function::INVERSE)]
     #[assoc(num_arguments = OperationNumArguments::Unary)]
     #[assoc(is_boolean = false)]
     NumericNegation,
     /// Rounding of a numeric value
-    #[assoc(name = builtins::BUILTIN_ROUND)]
+    #[assoc(name = function::ROUND)]
     #[assoc(num_arguments = OperationNumArguments::Unary)]
     #[assoc(is_boolean = false)]
     NumericRound,
     /// Sine of a numeric value
-    #[assoc(name = builtins::BUILTIN_SIN)]
+    #[assoc(name = function::SIN)]
     #[assoc(num_arguments = OperationNumArguments::Unary)]
     #[assoc(is_boolean = false)]
     NumericSine,
     /// Square root of a numeric value
-    #[assoc(name = builtins::BUILTIN_SQRT)]
+    #[assoc(name = function::SQRT)]
     #[assoc(num_arguments = OperationNumArguments::Unary)]
     #[assoc(is_boolean = false)]
     NumericSquareroot,
     /// Tangent of a numeric value
-    #[assoc(name = builtins::BUILTIN_TAN)]
+    #[assoc(name = function::TAN)]
     #[assoc(num_arguments = OperationNumArguments::Unary)]
     #[assoc(is_boolean = false)]
     NumericTangent,
     /// Length of a string value
-    #[assoc(name = builtins::BUILTIN_STRLEN)]
+    #[assoc(name = function::STRLEN)]
     #[assoc(num_arguments = OperationNumArguments::Unary)]
     #[assoc(is_boolean = false)]
     StringLength,
     /// Reverse of a string value
-    #[assoc(name = builtins::BUILTIN_STRREV)]
+    #[assoc(name = function::STRREV)]
     #[assoc(num_arguments = OperationNumArguments::Unary)]
     #[assoc(is_boolean = false)]
     StringReverse,
     /// String converted to lowercase letters
-    #[assoc(name = builtins::BUILTIN_LCASE)]
+    #[assoc(name = function::LCASE)]
     #[assoc(num_arguments = OperationNumArguments::Unary)]
     #[assoc(is_boolean = false)]
     StringLowercase,
     /// String converted to uppercase letters
-    #[assoc(name = builtins::BUILTIN_UCASE)]
+    #[assoc(name = function::UCASE)]
     #[assoc(num_arguments = OperationNumArguments::Unary)]
     #[assoc(is_boolean = false)]
     StringUppercase,
     /// Bitwise and operation
-    #[assoc(name = builtins::BUILTIN_BITAND)]
+    #[assoc(name = function::BITAND)]
     #[assoc(num_arguments = OperationNumArguments::Unary)]
     #[assoc(is_boolean = false)]
     BitAnd,
     /// Bitwise or operation
-    #[assoc(name = builtins::BUILTIN_BITOR)]
+    #[assoc(name = function::BITOR)]
     #[assoc(num_arguments = OperationNumArguments::Unary)]
     #[assoc(is_boolean = false)]
     BitOr,
     /// Bitwise xor operation
-    #[assoc(name = builtins::BUILTIN_BITXOR)]
+    #[assoc(name = function::BITXOR)]
     #[assoc(num_arguments = OperationNumArguments::Unary)]
     #[assoc(is_boolean = false)]
     BitXor,
     /// Conjunction of boolean values
-    #[assoc(name = builtins::BUILTIN_AND)]
+    #[assoc(name = function::AND)]
     #[assoc(num_arguments = OperationNumArguments::Arbitrary)]
     #[assoc(is_boolean = true)]
     BooleanConjunction,
     /// Disjunction of boolean values
-    #[assoc(name = builtins::BUILTIN_OR)]
+    #[assoc(name = function::OR)]
     #[assoc(num_arguments = OperationNumArguments::Arbitrary)]
     #[assoc(is_boolean = true)]
     BooleanDisjunction,
     /// Minimum of numeric values
-    #[assoc(name = builtins::BUILTIN_MIN)]
+    #[assoc(name = function::MIN)]
     #[assoc(num_arguments = OperationNumArguments::Arbitrary)]
     #[assoc(is_boolean = false)]
     NumericMinimum,
     /// Maximum of numeric values
-    #[assoc(name = builtins::BUILTIN_MAX)]
+    #[assoc(name = function::MAX)]
     #[assoc(num_arguments = OperationNumArguments::Arbitrary)]
     #[assoc(is_boolean = false)]
     NumericMaximum,
     /// Lukasiewicz norm of numeric values
-    #[assoc(name = builtins::BUILTIN_LUKA)]
+    #[assoc(name = function::LUKA)]
     #[assoc(num_arguments = OperationNumArguments::Arbitrary)]
     #[assoc(is_boolean = false)]
     NumericLukasiewicz,
     /// Concatentation of two string values, correspondng to SPARQL function CONCAT.
-    #[assoc(name = builtins::BUILTIN_CONCAT)]
+    #[assoc(name = function::CONCAT)]
     #[assoc(num_arguments = OperationNumArguments::Unary)]
     #[assoc(is_boolean = false)]
     StringConcatenation,
     /// Lexical value
-    #[assoc(name = builtins::BUILTIN_STR)]
+    #[assoc(name = function::STR)]
     #[assoc(num_arguments = OperationNumArguments::Unary)]
     #[assoc(is_boolean = false)]
     LexicalValue,

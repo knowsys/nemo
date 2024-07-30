@@ -6,11 +6,13 @@ use std::{fmt::Display, hash::Hash};
 use enum_assoc::Assoc;
 use strum_macros::EnumIter;
 
-use crate::rule_model::{
-    components::{IterableVariables, ProgramComponent},
-    error::ValidationErrorBuilder,
-    origin::Origin,
-    syntax::aggregates,
+use crate::{
+    rule_model::{
+        components::{IterableVariables, ProgramComponent},
+        error::ValidationErrorBuilder,
+        origin::Origin,
+    },
+    syntax::builtin::aggregate,
 };
 
 use super::{primitive::variable::Variable, Term};
@@ -20,16 +22,16 @@ use super::{primitive::variable::Variable, Term};
 #[func(pub fn name(&self) -> &'static str)]
 pub enum AggregateKind {
     /// Count of distinct values
-    #[assoc(name = aggregates::AGGREGATE_COUNT)]
+    #[assoc(name = aggregate::COUNT)]
     CountValues,
     /// Minimum numerical value
-    #[assoc(name = aggregates::AGGREGATE_MIN)]
+    #[assoc(name = aggregate::MIN)]
     MinNumber,
     /// Maximum numerical value
-    #[assoc(name = aggregates::AGGREGATE_MAX)]
+    #[assoc(name = aggregate::MAX)]
     MaxNumber,
     /// Sum of numerical values
-    #[assoc(name = aggregates::AGGREGATE_SUM)]
+    #[assoc(name = aggregate::SUM)]
     SumOfNumbers,
 }
 

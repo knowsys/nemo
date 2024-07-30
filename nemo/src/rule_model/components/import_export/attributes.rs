@@ -5,29 +5,29 @@ use std::{fmt::Display, hash::Hash};
 
 use enum_assoc::Assoc;
 
-use crate::rule_model::syntax::import_export::attributes;
+use crate::syntax::import_export::attribute;
 
 /// Supported attributes in import/export directives
 #[derive(Assoc, Debug, Copy, Clone, PartialEq, Eq, Hash)]
 #[func(pub fn name(&self) -> &'static str)]
 pub enum ImportExportAttribute {
     /// Location of the file
-    #[assoc(name = attributes::ATTRIBUTE_NAME_RESOURCE)]
+    #[assoc(name = attribute::RESOURCE)]
     Resource,
     /// Data types of the input relations
-    #[assoc(name = attributes::ATTRIBUTE_NAME_FORMAT)]
+    #[assoc(name = attribute::FORMAT)]
     Format,
     /// Base IRI
-    #[assoc(name = attributes::ATTRIBUTE_NAME_BASE)]
+    #[assoc(name = attribute::BASE)]
     Base,
     /// Delimiter used to separate values
-    #[assoc(name = attributes::ATTRIBUTE_NAME_DSV_DELIMITER)]
+    #[assoc(name = attribute::DSV_DELIMITER)]
     Delimiter,
     /// Compression format
-    #[assoc(name = attributes::ATTRIBUTE_NAME_COMPRESSION)]
+    #[assoc(name = attribute::COMPRESSION)]
     Compression,
     /// Limit import/export to first n number of facts
-    #[assoc(name = attributes::ATTRIBUTE_NAME_LIMIT)]
+    #[assoc(name = attribute::LIMIT)]
     Limit,
 }
 
