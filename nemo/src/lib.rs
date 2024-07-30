@@ -27,6 +27,7 @@ pub mod api;
 pub mod error;
 pub mod io;
 pub mod parser;
+pub mod syntax;
 
 pub mod execution;
 pub mod model;
