@@ -102,19 +102,23 @@ impl<'a> Parser<'a> {
     pub fn parse(self) -> Result<Program<'a>, ParserErrorReport<'a>> {
         let parser_input = ParserInput::new(&self.input, self.state.clone());
 
-        let error_tree = match transform_error_tree(Program::parse)(parser_input) {
-            Ok((_input, program)) => return Ok(program),
-            Err(error_tree) => error_tree,
-        };
+        let (_, program) = Program::parse(parser_input).expect("parsing should always succeed");
 
-        drop(error_tree);
+        if self.state.errors.borrow().is_empty() {
+            Ok(program)
+        } else {
+            Err(ParserErrorReport {
+                input: self.input,
+                label: self.label,
+                errors: Rc::try_unwrap(self.state.errors)
+                    .expect("there should only be one owner now")
+                    .into_inner(),
+            })
+        }
 
-        Err(ParserErrorReport {
-            input: self.input,
-            label: self.label,
-            errors: Rc::try_unwrap(self.state.errors)
-                .expect("there should only be one owner now")
-                .into_inner(),
-        })
+        // let error_tree = match transform_error_tree(Program::parse)(parser_input) {
+        //     Ok((_input, program)) => return Ok(program),
+        //     Err(error_tree) => error_tree,
+        // };
     }
 }
