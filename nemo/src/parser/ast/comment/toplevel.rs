@@ -19,7 +19,7 @@ use crate::parser::{
 /// Doc comment that is attached to e.g. rules
 #[derive(Debug)]
 pub struct TopLevelComment<'a> {
-    /// [ProgramSpan] associated with this comment
+    /// [Span] associated with this comment
     span: Span<'a>,
 
     /// Each line of the comment

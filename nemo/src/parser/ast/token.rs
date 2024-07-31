@@ -283,7 +283,7 @@ macro_rules! string_token {
 }
 
 impl<'a> Token<'a> {
-    /// Return the [ProgramSpan] of this token.
+    /// Return the [Span] of this token.
     pub fn span(&self) -> Span<'a> {
         self.span
     }

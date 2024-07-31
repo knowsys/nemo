@@ -25,7 +25,7 @@ pub enum CommentType<'a> {
 /// Represents a series of whitespaces or comments
 #[derive(Debug)]
 pub struct WSoC<'a> {
-    /// [ProgramSpan] associated with this comment
+    /// [Span] associated with this comment
     _span: Span<'a>,
     /// comments
     comments: Vec<CommentType<'a>>,

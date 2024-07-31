@@ -129,7 +129,7 @@ impl<'a> Span<'a> {
         }
     }
 
-    /// Create a [ProgramSpan] that encloses the given [ProgramSpan]s.
+    /// Create a [Span] that encloses the given [Span]s.
     /// TODO: Description and Specify safety conditions and verify that this is correct
     pub fn enclose(&self, first: &Self, second: &Self) -> Self {
         unsafe {
@@ -143,7 +143,7 @@ impl<'a> Span<'a> {
         }
     }
 
-    /// Return a [ProgramSpan] that points to the beginning.
+    /// Return a [Span] that points to the beginning.
     pub fn beginning(&self) -> Self {
         unsafe {
             if self.0.is_empty() {

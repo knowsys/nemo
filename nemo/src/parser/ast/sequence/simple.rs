@@ -14,7 +14,7 @@ use crate::parser::{
 /// Sequence of comma-delimited expressions
 #[derive(Debug)]
 pub struct ExpressionSequenceSimple<'a> {
-    /// [ProgramSpan] associated with this sequence
+    /// [Span] associated with this sequence
     _span: Span<'a>,
 
     /// List of expressions

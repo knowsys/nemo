@@ -16,7 +16,7 @@ use crate::parser::{
 /// Closed comment
 #[derive(Debug)]
 pub struct ClosedComment<'a> {
-    /// [ProgramSpan] associated with this comment
+    /// [Span] associated with this comment
     span: Span<'a>,
 
     /// Part of the comment that contains the content

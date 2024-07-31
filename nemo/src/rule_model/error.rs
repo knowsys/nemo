@@ -212,7 +212,7 @@ pub struct TranslationError {
 }
 
 impl TranslationError {
-    /// Create a new [TranslationError] from a given [ProgramSPan].
+    /// Create a new [TranslationError] from a given [Span].
     pub fn new<'a>(span: Span<'a>, kind: TranslationErrorKind) -> Self {
         let message = kind.to_string();
 

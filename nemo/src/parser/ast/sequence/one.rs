@@ -16,7 +16,7 @@ use crate::parser::{
 /// A sequence of one must be followed by a comma
 #[derive(Debug)]
 pub struct ExpressionSequenceOne<'a> {
-    /// [ProgramSpan] associated with this sequence
+    /// [Span] associated with this sequence
     _span: Span<'a>,
 
     /// List of expressions
