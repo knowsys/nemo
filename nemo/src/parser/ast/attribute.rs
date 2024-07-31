@@ -14,7 +14,7 @@ use super::{comment::wsoc::WSoC, expression::complex::atom::Atom, token::Token, 
 /// Attribute of a rule
 #[derive(Debug)]
 pub struct Attribute<'a> {
-    /// [ProgramSpan] associated with this node
+    /// [Span] associated with this node
     span: Span<'a>,
 
     /// [Atom] containing the content of the directive

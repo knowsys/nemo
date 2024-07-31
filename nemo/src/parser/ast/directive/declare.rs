@@ -19,7 +19,7 @@ use crate::parser::{
 /// Declare directive, associating atom positions with names and data types
 #[derive(Debug)]
 pub struct Declare<'a> {
-    /// [ProgramSpan] associated with this node
+    /// [Span] associated with this node
     span: Span<'a>,
 
     /// Predicate this statement applies to

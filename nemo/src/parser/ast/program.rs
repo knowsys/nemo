@@ -26,13 +26,13 @@ use super::{
 /// AST representation of a nemo program
 #[derive(Debug)]
 pub struct Program<'a> {
-    /// [ProgramSpan] associated with this node
+    /// [Span] associated with this node
     span: Span<'a>,
 
     /// Top level comment
     comment: Option<TopLevelComment<'a>>,
     /// Statements
-    statements: Vec<Option<Statement<'a>>>,
+    statements: Vec<Statement<'a>>,
 }
 
 impl<'a> Program<'a> {
@@ -43,7 +43,7 @@ impl<'a> Program<'a> {
     }
 
     /// Return an iterator of statements in the program.
-    pub fn statements(&self) -> impl Iterator<Item = &Option<Statement<'a>>> {
+    pub fn statements(&self) -> impl Iterator<Item = &Statement<'a>> {
         self.statements.iter()
     }
 
@@ -59,7 +59,6 @@ const CONTEXT: ParserContext = ParserContext::Program;
 
 impl<'a> ProgramAST<'a> for Program<'a> {
     fn children(&self) -> Vec<&dyn ProgramAST> {
-        // TODO: Fix this once we have statements
         let mut result = Vec::<&dyn ProgramAST>::new();
 
         if let Some(comment) = self.comment() {
@@ -67,11 +66,7 @@ impl<'a> ProgramAST<'a> for Program<'a> {
         }
 
         for statement in self.statements() {
-            if let Some(s) = statement {
-                result.push(s);
-            } else {
-                result.push(statement);
-            }
+            result.push(statement);
         }
 
         result
@@ -113,7 +108,7 @@ impl<'a> ProgramAST<'a> for Program<'a> {
                 Self {
                     span: input_span.until_rest(&rest_span),
                     comment,
-                    statements,
+                    statements: statements.into_iter().flatten().collect::<Vec<_>>(),
                 },
             )
         })
@@ -190,6 +185,6 @@ mod test {
 
         assert!(result.comment.is_some());
         assert_eq!(result.statements.len(), 2);
-        // assert_eq!(parser_input.state.errors.borrow().len(), 3);
+        assert_eq!(parser_input.state.errors.borrow().len(), 2);
     }
 }

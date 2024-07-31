@@ -1,4 +1,3 @@
-#![allow(unused)] // only temporary
 //! The Syntax constants for the nemo language.
 //! Every utilisation of syntax (e.g. parsing or formatting values to
 //! string representation) has to reference the constants defined
@@ -26,6 +25,9 @@ pub mod directive {
 
     /// The token used to separate prefix and name
     pub const NAMESPACE_SEPARATOR: &str = "::";
+
+    /// The token used to assign the prefix in the prefix directive.
+    pub const PREFIX_ASSIGNMENT: &str = ":";
 
     /// The string used in the keyword for the import directive.
     pub const IMPORT: &str = "import";
@@ -71,9 +73,9 @@ pub mod expression {
 
     /// Syntax for atoms
     pub mod atom {
-        /// Token for opening [Atom] term sequence.
+        /// Token for opening atom term sequence.
         pub const OPEN: &str = "(";
-        /// Token to close [Atom] term sequence.
+        /// Token to close atom term sequence.
         pub const CLOSE: &str = ")";
         /// Token to negate an atom
         pub const NEG: &str = "~";

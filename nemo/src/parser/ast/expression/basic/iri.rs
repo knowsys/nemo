@@ -14,7 +14,7 @@ use crate::parser::{
 /// AST node representing a Iri
 #[derive(Debug)]
 pub struct Iri<'a> {
-    /// [ProgramSpan] associated with this node
+    /// [Span] associated with this node
     span: Span<'a>,
 
     /// Part of the Iri that is the content

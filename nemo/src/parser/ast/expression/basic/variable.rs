@@ -33,7 +33,7 @@ pub enum VariableType {
 /// AST node representing a variable
 #[derive(Debug)]
 pub struct Variable<'a> {
-    /// [ProgramSpan] associated with this node
+    /// [Span] associated with this node
     span: Span<'a>,
 
     /// Type of variable

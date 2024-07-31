@@ -24,7 +24,7 @@ enum ConstantKind<'a> {
 /// AST node representing a constant
 #[derive(Debug)]
 pub struct Constant<'a> {
-    /// [ProgramSpan] associated with this node
+    /// [Span] associated with this node
     span: Span<'a>,
 
     /// The constant

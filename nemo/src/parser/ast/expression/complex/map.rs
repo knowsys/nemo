@@ -8,6 +8,7 @@ use nom::{
 use crate::parser::{
     ast::{
         comment::wsoc::WSoC,
+        expression::Expression,
         sequence::{key_value::KeyValuePair, Sequence},
         tag::structure::StructureTag,
         token::Token,
@@ -22,7 +23,7 @@ use crate::parser::{
 /// A possibly tagged sequence of [Expression]s.
 #[derive(Debug)]
 pub struct Map<'a> {
-    /// [ProgramSpan] associated with this node
+    /// [Span] associated with this node
     span: Span<'a>,
 
     /// Tag of this map, if it exists
@@ -33,8 +34,8 @@ pub struct Map<'a> {
 
 impl<'a> Map<'a> {
     /// Return an iterator over the underlying [Expression]s.
-    pub fn key_value(&self) -> impl Iterator<Item = &KeyValuePair> {
-        self.key_value.iter()
+    pub fn key_value(&self) -> impl Iterator<Item = (&Expression<'a>, &Expression<'a>)> {
+        self.key_value.iter().map(|key_value| key_value.pair())
     }
 
     /// Return the tag of this Map.
@@ -56,7 +57,6 @@ impl<'a> ProgramAST<'a> for Map<'a> {
         for pair in &self.key_value {
             result.push(pair);
         }
-        // result.push(&key_value);
 
         result
     }

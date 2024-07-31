@@ -13,7 +13,7 @@ use crate::parser::{
 /// AST node representing a blank node
 #[derive(Debug)]
 pub struct Blank<'a> {
-    /// [ProgramSpan] associated with this node
+    /// [Span] associated with this node
     span: Span<'a>,
 
     /// Name of the blank node

@@ -21,7 +21,7 @@ use crate::{
 /// This has the same structure as an [Operation].
 #[derive(Debug)]
 pub struct Operation<'a> {
-    /// [ProgramSpan] associated with this node
+    /// [Span] associated with this node
     span: Span<'a>,
 
     /// Type of operation

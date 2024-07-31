@@ -57,7 +57,7 @@ impl<'a> StatementKind<'a> {
 /// Statement in a program
 #[derive(Debug)]
 pub struct Statement<'a> {
-    /// [ProgramSpan] associated with this node
+    /// [Span] associated with this node
     span: Span<'a>,
 
     /// Doc comment associated with this statement

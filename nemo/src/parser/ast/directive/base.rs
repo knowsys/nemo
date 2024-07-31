@@ -13,7 +13,7 @@ use crate::parser::{
 /// Base directive, indicating a global prefix
 #[derive(Debug)]
 pub struct Base<'a> {
-    /// [ProgramSpan] associated with this node
+    /// [Span] associated with this node
     span: Span<'a>,
 
     /// The global prefix

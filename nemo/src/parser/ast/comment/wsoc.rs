@@ -1,11 +1,6 @@
 //! This module defines [WSoC].
 
-use nom::{
-    branch::alt,
-    combinator::{map, opt},
-    multi::many0,
-    sequence::preceded,
-};
+use nom::{branch::alt, combinator::map, multi::many0};
 
 use crate::parser::{
     ast::{

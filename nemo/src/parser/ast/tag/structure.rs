@@ -16,7 +16,12 @@ pub enum StructureTagKind<'a> {
     /// Plain name
     Plain(Token<'a>),
     /// Prefixed name
-    Prefixed { prefix: Token<'a>, tag: Token<'a> },
+    Prefixed {
+        /// The prefix
+        prefix: Token<'a>,
+        /// The name
+        tag: Token<'a>,
+    },
     /// Iri
     Iri(Iri<'a>),
 }
@@ -24,7 +29,7 @@ pub enum StructureTagKind<'a> {
 /// Tags that is used to give a name to complex expressions
 #[derive(Debug)]
 pub struct StructureTag<'a> {
-    /// [ProgramSpan] associated with this node
+    /// [Span] associated with this node
     span: Span<'a>,
 
     /// Type of [StructureTag]

@@ -22,7 +22,7 @@ pub enum Parameter {
 /// Tags that are used to give names to certain objects
 #[derive(Debug, Clone)]
 pub struct ParameterName<'a> {
-    /// [ProgramSpan] associated with this node
+    /// [Span] associated with this node
     span: Span<'a>,
 
     /// Parameter

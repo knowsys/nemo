@@ -70,7 +70,7 @@ impl ArithmeticOperation {
 /// Arithmetic expression on numbers
 #[derive(Debug)]
 pub struct Arithmetic<'a> {
-    /// [ProgramSpan] associated with this node
+    /// [Span] associated with this node
     span: Span<'a>,
 
     /// Type of arithmetic operation
@@ -160,15 +160,6 @@ impl<'a> Arithmetic<'a> {
         .map(|(rest, arithmetic_expr)| (rest, Expression::Arithmetic(arithmetic_expr)))
     }
 
-    // /// Parse an arithmetic expression enclosed in parenthesis.
-    // fn parse_parenthesized_arithmetic(input: ParserInput<'a>) -> ParserResult<'a, Self> {
-    //     delimited(
-    //         pair(Token::open_parenthesis, WSoC::parse),
-    //         Self::parse,
-    //         pair(WSoC::parse, Token::closed_parenthesis),
-    //     )(input)
-    // }
-
     /// Parse factor.
     fn parse_factor(input: ParserInput<'a>) -> ParserResult<'a, Expression<'a>> {
         alt((
@@ -177,7 +168,7 @@ impl<'a> Arithmetic<'a> {
         ))(input)
     }
 
-    ///
+    /// Parse product.
     fn parse_product(input: ParserInput<'a>) -> ParserResult<'a, ArithmeticChain<'a>> {
         pair(
             Self::parse_factor,
@@ -193,6 +184,7 @@ impl<'a> Arithmetic<'a> {
         .map(|(rest, (initial, sequence))| (rest, ArithmeticChain { initial, sequence }))
     }
 
+    /// Parse sum.
     fn parse_sum(input: ParserInput<'a>) -> ParserResult<'a, Expression<'a>> {
         let input_span = input.span;
 

@@ -2,6 +2,7 @@
 //! while working with nemo programs.
 
 pub mod hint;
+pub mod info;
 pub mod translation_error;
 pub mod validation_error;
 
@@ -99,16 +100,16 @@ where
     }
 
     /// Add a new label to the error.
-    pub fn add_label(
+    pub fn add_label<Message: Display>(
         &mut self,
         kind: ComplexErrorLabelKind,
         reference: Reference,
-        message: String,
+        message: Message,
     ) -> &mut Self {
         self.labels.push(ComplexErrorLabel {
             kind: kind,
             reference,
-            message,
+            message: message.to_string(),
         });
 
         self
@@ -135,7 +136,7 @@ where
             let color = match label.kind {
                 ComplexErrorLabelKind::Error => Color::Red,
                 ComplexErrorLabelKind::Warning => Color::Yellow,
-                ComplexErrorLabelKind::Information => Color::Blue,
+                ComplexErrorLabelKind::Information => Color::BrightBlue,
             };
 
             report = report.with_label(
@@ -228,11 +229,11 @@ impl TranslationError {
     }
 
     /// Add a new label to the error.
-    pub fn add_label(
+    pub fn add_label<Message: Display>(
         mut self,
         kind: ComplexErrorLabelKind,
         range: CharacterRange,
-        message: String,
+        message: Message,
     ) -> Self {
         self.info.add_label(kind, range, message);
 
@@ -285,6 +286,16 @@ impl ProgramError {
         }
     }
 
+    /// Return the note attached to this error, if it exists.
+    pub fn note(&self) -> Option<String> {
+        match self {
+            ProgramError::TranslationError(error) => error.kind.note(),
+            ProgramError::ValidationError(error) => error.kind.note(),
+        }
+        .map(|string| string.to_string())
+    }
+
+    /// Append the information of this error to a [ReportBuilder].
     pub fn report<'a, Translation>(
         &'a self,
         mut report: ReportBuilder<'a, (String, Range<usize>)>,
@@ -297,6 +308,10 @@ impl ProgramError {
         report = report
             .with_code(self.error_code())
             .with_message(self.message());
+
+        if let Some(note) = self.note() {
+            report = report.with_note(note);
+        }
 
         match self {
             ProgramError::TranslationError(error) => {

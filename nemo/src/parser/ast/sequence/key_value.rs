@@ -13,9 +13,19 @@ use crate::parser::{
 /// Pairs of Expressions, separated by [KEY_VALUE_ASSIGN][nemo_physical::datavalues::syntax::map::KEY_VALUE_ASSIGN]
 #[derive(Debug)]
 pub struct KeyValuePair<'a> {
+    /// [Span] associated with this node
     span: Span<'a>,
+    /// Key
     key: Expression<'a>,
+    /// Value
     value: Expression<'a>,
+}
+
+impl<'a> KeyValuePair<'a> {
+    /// Return the key value pair
+    pub fn pair(&self) -> (&Expression<'a>, &Expression<'a>) {
+        (&self.key, &self.value)
+    }
 }
 
 impl<'a> ProgramAST<'a> for KeyValuePair<'a> {
@@ -34,7 +44,7 @@ impl<'a> ProgramAST<'a> for KeyValuePair<'a> {
         let input_span = input.span;
         separated_pair(
             Expression::parse,
-            tuple((WSoC::parse, Token::k_v_assignment, WSoC::parse)),
+            tuple((WSoC::parse, Token::key_value_assignment, WSoC::parse)),
             Expression::parse,
         )(input)
         .map(|(rest, (key, value))| {

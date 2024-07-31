@@ -20,7 +20,7 @@ use super::{
 /// A rule describing a logical implication
 #[derive(Debug)]
 pub struct Rule<'a> {
-    /// [ProgramSpan] associated with this node
+    /// [Span] associated with this node
     span: Span<'a>,
 
     /// Attributes attached to this rule

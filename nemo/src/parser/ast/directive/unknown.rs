@@ -22,7 +22,7 @@ use super::DirectiveKind;
 /// Unknown directive specified by a user
 #[derive(Debug)]
 pub struct UnknownDirective<'a> {
-    /// [ProgramSpan] associated with this node
+    /// [Span] associated with this node
     span: Span<'a>,
 
     /// Name of the directive
@@ -35,6 +35,11 @@ impl<'a> UnknownDirective<'a> {
     /// Return the name of the directive.
     pub fn name(&self) -> String {
         self.name.to_string()
+    }
+
+    /// Return the token containing the name of the directive.
+    pub fn name_token(&self) -> &Token<'a> {
+        &self.name
     }
 
     /// Return the content of the directive.

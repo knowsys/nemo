@@ -16,7 +16,7 @@ use crate::parser::{
 /// Import directive
 #[derive(Debug)]
 pub struct Import<'a> {
-    /// [ProgramSpan] associated with this node
+    /// [Span] associated with this node
     span: Span<'a>,
 
     /// Predicate that is being Imported

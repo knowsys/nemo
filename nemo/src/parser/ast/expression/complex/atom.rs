@@ -16,7 +16,7 @@ use crate::parser::{
 /// A possibly tagged sequence of [Expression]s.
 #[derive(Debug)]
 pub struct Atom<'a> {
-    /// [ProgramSpan] associated with this node
+    /// [Span] associated with this node
     span: Span<'a>,
 
     /// Tag of this Atom

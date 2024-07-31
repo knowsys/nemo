@@ -19,7 +19,7 @@ use crate::{
 /// Tags that is used to identify aggregations
 #[derive(Debug)]
 pub struct AggregationTag<'a> {
-    /// [ProgramSpan] associated with this node
+    /// [Span] associated with this node
     span: Span<'a>,
 
     /// Type of aggregation, if known
@@ -30,6 +30,11 @@ impl<'a> AggregationTag<'a> {
     /// Return the [AggregateKind] that was parsed, if it is known.
     pub fn operation(&self) -> Option<AggregateKind> {
         self.kind
+    }
+
+    /// Return a string representation of the content of this tag.
+    pub fn content(&self) -> String {
+        self.span.0.to_string()
     }
 }
 

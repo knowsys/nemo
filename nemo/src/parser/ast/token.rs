@@ -222,6 +222,10 @@ pub enum TokenKind {
     /// Token for the export assignment
     #[assoc(name = directive::EXPORT_ASSIGNMENT)]
     ExportAssignment,
+    /// Token for the prefix assignment
+    #[assoc(name = directive::PREFIX_ASSIGNMENT)]
+    PrefixAssignment,
+    /// Token for separating names from data types
     #[assoc(name = directive::NAME_DATATYPE_SEPARATOR)]
     NameDatatypeSeparator,
     /// Opening token for attributes
@@ -248,7 +252,7 @@ pub enum TokenKind {
 /// that is used to built up more complex expressions
 #[derive(Debug)]
 pub struct Token<'a> {
-    /// [ProgramSpan] associated with this node
+    /// [Span] associated with this node
     span: Span<'a>,
 
     /// The kind of token
@@ -592,7 +596,8 @@ impl<'a> Token<'a> {
     string_token!(type_marker_float, TokenKind::TypeMarkerFloat);
     string_token!(import_assignment, TokenKind::ImportAssignment);
     string_token!(export_assignment, TokenKind::ExportAssignment);
-    string_token!(k_v_assignment, TokenKind::KeyValueAssignment);
+    string_token!(prefix_assignment, TokenKind::PrefixAssignment);
+    string_token!(key_value_assignment, TokenKind::KeyValueAssignment);
     string_token!(atom_open, TokenKind::AtomOpen);
     string_token!(atom_close, TokenKind::AtomClose);
     string_token!(map_open, TokenKind::MapOpen);

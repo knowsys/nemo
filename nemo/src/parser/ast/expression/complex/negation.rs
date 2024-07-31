@@ -13,7 +13,7 @@ use crate::parser::{
 /// A possibly tagged sequence of [Expression]s.
 #[derive(Debug)]
 pub struct Negation<'a> {
-    /// [ProgramSpan] associated with this node
+    /// [Span] associated with this node
     span: Span<'a>,
 
     /// The negated expression

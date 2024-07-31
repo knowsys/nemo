@@ -19,7 +19,7 @@ use crate::{
 /// Tags that are used to identify operations
 #[derive(Debug)]
 pub struct OperationTag<'a> {
-    /// [ProgramSpan] associated with this node
+    /// [Span] associated with this node
     span: Span<'a>,
 
     /// Type of operation

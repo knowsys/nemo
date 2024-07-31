@@ -25,7 +25,7 @@ use crate::{
 /// This has the same structure as an [Atom].
 #[derive(Debug)]
 pub struct Aggregation<'a> {
-    /// [ProgramSpan] associated with this node
+    /// [Span] associated with this node
     span: Span<'a>,
 
     /// Type of Aggregation,
@@ -40,6 +40,11 @@ impl<'a> Aggregation<'a> {
     /// Return the aggregate expression
     pub fn aggregate(&self) -> &Expression<'a> {
         &self.aggregate
+    }
+
+    /// Return the tag that specifies the aggregate operation.
+    pub fn tag(&self) -> &AggregationTag<'a> {
+        &self.tag
     }
 
     /// Return the expressions specifying the distinct variables

@@ -17,7 +17,7 @@ use crate::parser::{
 /// AST node representing a string
 #[derive(Debug)]
 pub struct StringLiteral<'a> {
-    /// [ProgramSpan] associated with this node
+    /// [Span] associated with this node
     span: Span<'a>,
 
     /// Part of the string that is the content

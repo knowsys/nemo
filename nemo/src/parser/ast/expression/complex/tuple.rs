@@ -15,7 +15,7 @@ use crate::parser::{
 /// A sequence of [Expression]s.
 #[derive(Debug)]
 pub struct Tuple<'a> {
-    /// [ProgramSpan] associated with this node
+    /// [Span] associated with this node
     span: Span<'a>,
 
     /// List of underlying expressions

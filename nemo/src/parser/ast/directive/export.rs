@@ -16,7 +16,7 @@ use crate::parser::{
 /// Export directive
 #[derive(Debug)]
 pub struct Export<'a> {
-    /// [ProgramSpan] associated with this node
+    /// [Span] associated with this node
     span: Span<'a>,
 
     /// Predicate that is being exported

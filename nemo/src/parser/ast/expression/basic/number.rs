@@ -1,4 +1,5 @@
 //! This module defines the ast node for numbers.
+#![allow(missing_docs)]
 
 use enum_assoc::Assoc;
 use nom::{
@@ -21,7 +22,7 @@ use crate::parser::{
 #[derive(Assoc, Debug, Clone, Copy, PartialEq, Eq)]
 #[func(pub fn token(token: &TokenKind) -> Option<Self>)]
 #[func(pub fn print(&self) -> &'static str)]
-enum NumberTypeMarker {
+pub enum NumberTypeMarker {
     /// Marks a number as a 32-bit floating point number
     #[assoc(token = TokenKind::TypeMarkerFloat)]
     #[assoc(print = "f")]
@@ -51,22 +52,98 @@ enum NumberSign {
 /// AST Node representing a number
 #[derive(Debug)]
 pub struct Number<'a> {
-    /// [ProgramSpan] associated with this node
+    /// [Span] associated with this node
     span: Span<'a>,
 
     /// Sign of the integer part
-    _integer_sign: NumberSign,
+    integer_sign: NumberSign,
     /// The integer part of the number
-    _integer: Token<'a>,
+    integer: Token<'a>,
     /// The fractional part of the number
-    _fractional: Option<Token<'a>>,
+    fractional: Option<Token<'a>>,
     /// Sign and exponent of the number
-    _exponent: Option<(NumberSign, Token<'a>)>,
+    exponent: Option<(NumberSign, Token<'a>)>,
     /// Type
-    _type_marker: Option<NumberTypeMarker>,
+    type_marker: Option<NumberTypeMarker>,
+}
+
+/// Value of [Number]
+#[derive(Debug)]
+pub enum NumberValue {
+    /// Integer value
+    Integer(i64),
+    /// 32-bit floating point value
+    Float(f32),
+    /// 64-bit floating point value
+    Double(f64),
+    /// Value doesn't fit into the above types
+    Large(String),
 }
 
 impl<'a> Number<'a> {
+    /// Return whether the number contains a fractional part.
+    pub fn is_fractional(&self) -> bool {
+        self.fractional.is_some()
+    }
+
+    /// Return whether the number contains an exponential part.
+    pub fn is_exponential(&self) -> bool {
+        self.exponent.is_some()
+    }
+
+    /// Return the [NumberTypeMarker] of this number.
+    pub fn type_marker(&self) -> Option<NumberTypeMarker> {
+        self.type_marker
+    }
+
+    /// Recreate the number string without the type marker.
+    fn number_string(&self) -> String {
+        let integer = format!(
+            "{}{}",
+            self.integer_sign.print(),
+            self.integer.span().0.to_string()
+        );
+
+        let fractional = if let Some(fractional) = &self.fractional {
+            format!(".{}", fractional.span().0.to_string())
+        } else {
+            String::default()
+        };
+
+        let exponent = if let Some((sign, exponent)) = &self.exponent {
+            format!("e{}{}", sign.print(), exponent.span().0.to_string())
+        } else {
+            String::default()
+        };
+
+        format!("{}{}{}", integer, fractional, exponent)
+    }
+
+    /// Return the value of this number, represented as a [NumberValue].
+    pub fn value(&self) -> NumberValue {
+        let string = self.number_string();
+
+        if let Ok(integer) = str::parse::<i64>(&string) {
+            return NumberValue::Integer(integer);
+        }
+
+        if let Some(NumberTypeMarker::Float) = self.type_marker {
+            if let Ok(float) = str::parse::<f32>(&string) {
+                return NumberValue::Float(float);
+            }
+        }
+
+        if let Ok(double) = str::parse::<f64>(&string) {
+            return NumberValue::Double(double);
+        }
+
+        if let Ok(float) = str::parse::<f32>(&string) {
+            return NumberValue::Float(float);
+        }
+
+        NumberValue::Large(string)
+    }
+
     /// Parse the sign of the number
     fn parse_sign(input: ParserInput<'a>) -> ParserResult<'a, NumberSign> {
         alt((Token::plus, Token::minus))(input).map(|(rest, sign)| {
@@ -143,11 +220,11 @@ impl<'a> ProgramAST<'a> for Number<'a> {
                     rest,
                     Number {
                         span: input_span.until_rest(&rest_span),
-                        _integer_sign: integer_sign.unwrap_or_default(),
-                        _integer: integer,
-                        _fractional: fractional,
-                        _exponent: exponent,
-                        _type_marker: type_marker,
+                        integer_sign: integer_sign.unwrap_or_default(),
+                        integer,
+                        fractional,
+                        exponent,
+                        type_marker,
                     },
                 )
             },

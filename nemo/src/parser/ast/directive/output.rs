@@ -16,7 +16,7 @@ use crate::parser::{
 /// Output directive
 #[derive(Debug)]
 pub struct Output<'a> {
-    /// [ProgramSpan] associated with this node
+    /// [Span] associated with this node
     span: Span<'a>,
 
     /// A sequence of predicates
@@ -24,12 +24,15 @@ pub struct Output<'a> {
 }
 
 impl<'a> Output<'a> {
-    /// Return the output predicate.
-    pub fn predicate(&self) -> Vec<&StructureTag<'a>> {
-        self.predicate.iter().collect()
+    /// Return an iterator over the predicates marked as output.
+    pub fn predicates(&self) -> impl Iterator<Item = &StructureTag<'a>> {
+        self.predicate.iter()
     }
 
-    pub fn parse_body(input: ParserInput<'a>) -> ParserResult<'a, Sequence<'a, StructureTag>> {
+    /// Parse the sequence of predicates that are marked as output.
+    fn parse_predicate_sequence(
+        input: ParserInput<'a>,
+    ) -> ParserResult<'a, Sequence<'a, StructureTag>> {
         Sequence::<StructureTag>::parse(input)
     }
 }
@@ -59,7 +62,7 @@ impl<'a> ProgramAST<'a> for Output<'a> {
                     Token::directive_output,
                     WSoC::parse,
                 )),
-                Self::parse_body,
+                Self::parse_predicate_sequence,
             ),
         )(input)
         .map(|(rest, predicate)| {
@@ -92,7 +95,10 @@ mod test {
 
     #[test]
     fn parse_attribute() {
-        let test = vec![("@output test", "test".to_string())];
+        let test = vec![
+            ("@output test", vec!["test"]),
+            ("@output a,b, c", vec!["a", "b", "c"]),
+        ];
 
         for (input, expected) in test {
             let parser_input = ParserInput::new(input, ParserState::default());
@@ -101,7 +107,15 @@ mod test {
             assert!(result.is_ok());
 
             let result = result.unwrap();
-            assert_eq!(expected, result.1.predicate()[0].to_string());
+
+            assert_eq!(
+                expected.into_iter().map(String::from).collect::<Vec<_>>(),
+                result
+                    .1
+                    .predicates()
+                    .map(|tag| tag.to_string())
+                    .collect::<Vec<_>>()
+            );
         }
     }
 }

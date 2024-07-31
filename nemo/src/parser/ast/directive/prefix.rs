@@ -13,7 +13,7 @@ use crate::parser::{
 /// Prefix directive
 #[derive(Debug)]
 pub struct Prefix<'a> {
-    /// [ProgramSpan] associated with this node
+    /// [Span] associated with this node
     span: Span<'a>,
 
     /// The prefix
@@ -28,6 +28,11 @@ impl<'a> Prefix<'a> {
         self.prefix.to_string()
     }
 
+    /// Return the [Token] containing the prefix
+    pub fn prefix_token(&self) -> &Token<'a> {
+        &self.prefix
+    }
+
     /// Return the value of the prefix.
     pub fn iri(&self) -> &Iri<'a> {
         &self.iri
@@ -36,7 +41,7 @@ impl<'a> Prefix<'a> {
     pub fn parse_body(input: ParserInput<'a>) -> ParserResult<'a, (Token, Iri)> {
         separated_pair(
             Token::name,
-            tuple((WSoC::parse, Token::namespace_separator, WSoC::parse)),
+            tuple((WSoC::parse, Token::prefix_assignment, WSoC::parse)),
             Iri::parse,
         )(input)
     }

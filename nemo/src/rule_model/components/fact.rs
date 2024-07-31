@@ -4,7 +4,7 @@ use std::{fmt::Display, hash::Hash};
 
 use crate::rule_model::{error::ValidationErrorBuilder, origin::Origin};
 
-use super::{term::Term, ProgramComponent, Tag};
+use super::{atom::Atom, term::Term, ProgramComponent, Tag};
 
 /// A (ground) fact
 #[derive(Debug, Clone, Eq)]
@@ -42,6 +42,16 @@ impl Fact {
     /// Return an mutable iterator over the subterms of this fact.
     pub fn subterms_mut(&mut self) -> impl Iterator<Item = &mut Term> {
         self.terms.iter_mut()
+    }
+}
+
+impl From<Atom> for Fact {
+    fn from(value: Atom) -> Self {
+        Self {
+            origin: value.origin().clone(),
+            predicate: value.predicate(),
+            terms: value.subterms().cloned().collect(),
+        }
     }
 }
 

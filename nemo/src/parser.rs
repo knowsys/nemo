@@ -11,7 +11,7 @@ use std::{cell::RefCell, ops::Range, rc::Rc};
 
 use ariadne::{Color, Label, Report, ReportKind, Source};
 use ast::{program::Program, ProgramAST};
-use error::{transform_error_tree, ParserError, ParserErrorTree};
+use error::{ParserError, ParserErrorTree};
 use input::ParserInput;
 
 use nom::IResult;

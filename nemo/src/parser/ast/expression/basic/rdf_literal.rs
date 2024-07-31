@@ -16,7 +16,7 @@ use super::iri::Iri;
 /// AST node representing an rdf literal
 #[derive(Debug)]
 pub struct RdfLiteral<'a> {
-    /// [ProgramSpan] associated with this node
+    /// [Span] associated with this node
     span: Span<'a>,
 
     /// Content part rdf literal
