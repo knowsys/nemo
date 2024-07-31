@@ -142,4 +142,20 @@ impl<'a> ProgramSpan<'a> {
             ))
         }
     }
+
+    /// Return a [ProgramSpan] that points to the beginning.
+    pub fn beginning(&self) -> Self {
+        unsafe {
+            if self.0.is_empty() {
+                self.clone()
+            } else {
+                Self(LocatedSpan::new_from_raw_offset(
+                    self.0.location_offset(),
+                    self.0.location_line(),
+                    &self.0[0..1],
+                    (),
+                ))
+            }
+        }
+    }
 }

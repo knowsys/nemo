@@ -54,9 +54,14 @@ impl FunctionTerm {
         self.terms.iter()
     }
 
-    /// Return an mutable iterator over the subterms of this function terms.
-    pub fn subterms_mut(&mut self) -> impl Iterator<Item = &mut Term> {
-        self.terms.iter_mut()
+    /// Return the number of subterms contains in this function term.
+    pub fn len(&self) -> usize {
+        self.terms.len()
+    }
+
+    /// Return whether this function terms contains no subterms.
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
     }
 }
 

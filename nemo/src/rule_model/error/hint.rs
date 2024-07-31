@@ -1,6 +1,8 @@
 //! This module defines [Hint]
 #![allow(missing_docs)]
 
+pub(crate) mod similar;
+
 use enum_assoc::Assoc;
 
 /// Hints for error messages
@@ -11,4 +13,10 @@ pub enum Hint {
     AnonymousVariables,
     #[assoc(message = format!("similar {} exists: `{}`", _kind, _name))]
     SimilarExists { kind: String, name: String },
+}
+
+impl std::fmt::Display for Hint {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.message().fmt(f)
+    }
 }

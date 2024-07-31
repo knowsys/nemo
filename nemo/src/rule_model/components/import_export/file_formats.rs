@@ -4,6 +4,7 @@
 use std::{collections::HashMap, fmt::Display};
 
 use enum_assoc::Assoc;
+use strum_macros::EnumIter;
 
 use crate::rule_model::{
     components::import_export::attributes::ImportExportAttribute,
@@ -20,7 +21,7 @@ pub(crate) enum AttributeRequirement {
 }
 
 /// Supported file formats
-#[derive(Assoc, Debug, Copy, Clone, Eq, PartialEq, Hash)]
+#[derive(Assoc, EnumIter, Debug, Copy, Clone, Eq, PartialEq, Hash)]
 #[func(pub fn name(&self) -> &'static str)]
 #[func(pub fn extension(&self) -> &'static str)]
 #[func(pub fn attributes(&self) -> HashMap<ImportExportAttribute, AttributeRequirement>)]
@@ -89,6 +90,15 @@ pub enum FileFormat {
     ]))]
     TriG,
 }
+
+/// List of RDF [FileFormat]s
+pub const FILE_FORMATS_RDF: &'static [FileFormat] = &[
+    FileFormat::NQuads,
+    FileFormat::NTriples,
+    FileFormat::RDFXML,
+    FileFormat::TriG,
+    FileFormat::Turtle,
+];
 
 impl Display for FileFormat {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

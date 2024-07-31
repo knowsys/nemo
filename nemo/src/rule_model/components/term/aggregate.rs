@@ -51,7 +51,7 @@ pub struct Aggregate {
     /// Type of aggregate operation
     kind: AggregateKind,
     /// Expression over which to aggregate
-    aggregate: Term,
+    aggregate: Box<Term>,
     /// Distinct variables
     distinct: Vec<Variable>,
 }
@@ -66,7 +66,7 @@ impl Aggregate {
         Self {
             origin: Origin::default(),
             kind,
-            aggregate,
+            aggregate: Box::new(aggregate),
             distinct: distinct.into_iter().collect(),
         }
     }
@@ -102,6 +102,21 @@ impl Aggregate {
     ) -> Self {
         Self::new(AggregateKind::MaxNumber, aggregate, distinct)
     }
+
+    /// Return a reference to aggregated term.
+    pub fn aggregate_term(&self) -> &Term {
+        &self.aggregate
+    }
+
+    /// Return the kind of aggregate.
+    pub fn kind(&self) -> AggregateKind {
+        self.kind
+    }
+
+    /// Return a iterator over the distinct variables
+    pub fn distinct(&self) -> impl Iterator<Item = &Variable> {
+        self.distinct.iter()
+    }
 }
 
 impl Display for Aggregate {
@@ -136,6 +151,20 @@ impl Hash for Aggregate {
     }
 }
 
+impl PartialOrd for Aggregate {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        match self.kind.partial_cmp(&other.kind) {
+            Some(core::cmp::Ordering::Equal) => {}
+            ord => return ord,
+        }
+        match self.aggregate.partial_cmp(&other.aggregate) {
+            Some(core::cmp::Ordering::Equal) => {}
+            ord => return ord,
+        }
+        self.distinct.partial_cmp(&other.distinct)
+    }
+}
+
 impl ProgramComponent for Aggregate {
     fn parse(_string: &str) -> Result<Self, crate::rule_model::error::ValidationError>
     where
@@ -156,7 +185,7 @@ impl ProgramComponent for Aggregate {
         self
     }
 
-    fn validate(&self, builder: &mut ValidationErrorBuilder) -> Result<(), ()>
+    fn validate(&self, _builder: &mut ValidationErrorBuilder) -> Result<(), ()>
     where
         Self: Sized,
     {

@@ -42,6 +42,11 @@ impl<'a> Aggregation<'a> {
         &self.aggregate
     }
 
+    /// Return the tag that specifies the aggregate operation.
+    pub fn tag(&self) -> &AggregationTag<'a> {
+        &self.tag
+    }
+
     /// Return the expressions specifying the distinct variables
     pub fn distinct(&self) -> impl Iterator<Item = &Expression<'a>> {
         self.distinct.iter().flat_map(|distinct| distinct.iter())

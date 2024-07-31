@@ -28,6 +28,11 @@ impl<'a> Prefix<'a> {
         self.prefix.to_string()
     }
 
+    /// Return the [Token] containing the prefix
+    pub fn prefix_token(&self) -> &Token<'a> {
+        &self.prefix
+    }
+
     /// Return the value of the prefix.
     pub fn value(&self) -> &Iri<'a> {
         &self.value

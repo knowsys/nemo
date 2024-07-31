@@ -1,4 +1,4 @@
-//! This module defines [Map]
+//! This module defines [Map].
 
 use std::{fmt::Display, hash::Hash};
 
@@ -44,6 +44,26 @@ impl Map {
             map: map.into_iter().collect(),
         }
     }
+
+    /// Return the tag of this map.
+    pub fn tag(&self) -> Option<Tag> {
+        self.tag.clone()
+    }
+
+    /// Return an iterator over the key value pairs in this map.
+    pub fn key_value(&self) -> impl Iterator<Item = &(Term, Term)> {
+        self.map.iter()
+    }
+
+    /// Return the number of entries in this map.
+    pub fn len(&self) -> usize {
+        self.map.len()
+    }
+
+    /// Return whether this map is empty.
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
 }
 
 impl Display for Map {
@@ -54,7 +74,7 @@ impl Display for Map {
         ))?;
 
         for (term_index, (key, value)) in self.map.iter().enumerate() {
-            f.write_fmt(format_args!("{} = {}", key, value))?;
+            f.write_fmt(format_args!("{}: {}", key, value))?;
 
             if term_index < self.map.len() - 1 {
                 f.write_str(", ")?;

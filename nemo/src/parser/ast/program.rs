@@ -166,6 +166,6 @@ mod test {
 
         assert!(result.comment.is_some());
         assert_eq!(result.statements.len(), 2);
-        // assert_eq!(parser_input.state.errors.borrow().len(), 3);
+        assert_eq!(parser_input.state.errors.borrow().len(), 2);
     }
 }

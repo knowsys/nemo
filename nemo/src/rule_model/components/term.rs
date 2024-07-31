@@ -15,6 +15,7 @@ pub mod tuple;
 
 use std::fmt::{Debug, Display};
 
+use aggregate::Aggregate;
 use function::FunctionTerm;
 use map::Map;
 use nemo_physical::datavalues::AnyDataValue;
@@ -40,6 +41,8 @@ use super::{IterableVariables, ProgramComponent};
 pub enum Term {
     /// Unstructured, primitive term
     Primitive(Primitive),
+    /// Aggregate
+    Aggregate(Aggregate),
     /// Abstract function over a list of terms
     FunctionTerm(FunctionTerm),
     /// Map of terms
@@ -156,6 +159,12 @@ impl From<Tuple> for Term {
     }
 }
 
+impl From<Aggregate> for Term {
+    fn from(value: Aggregate) -> Self {
+        Self::Aggregate(value)
+    }
+}
+
 impl Display for Term {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -164,6 +173,7 @@ impl Display for Term {
             Term::Map(term) => write!(f, "{}", term),
             Term::Operation(term) => write!(f, "{}", term),
             Term::Tuple(term) => write!(f, "{}", term),
+            Term::Aggregate(term) => write!(f, "{}", term),
         }
     }
 }
@@ -183,6 +193,7 @@ impl ProgramComponent for Term {
             Term::Map(map) => map.origin(),
             Term::Operation(operation) => operation.origin(),
             Term::Tuple(tuple) => tuple.origin(),
+            Term::Aggregate(aggregate) => aggregate.origin(),
         }
     }
 
@@ -196,6 +207,7 @@ impl ProgramComponent for Term {
             Term::Map(map) => Term::Map(map.set_origin(origin)),
             Term::Operation(operation) => Term::Operation(operation.set_origin(origin)),
             Term::Tuple(tuple) => Term::Tuple(tuple.set_origin(origin)),
+            Term::Aggregate(aggregate) => Term::Aggregate(aggregate.set_origin(origin)),
         }
     }
 
@@ -214,6 +226,7 @@ impl IterableVariables for Term {
         let mut iter_map = None;
         let mut iter_operation = None;
         let mut iter_tuple = None;
+        let mut iter_aggregate = None;
 
         match self {
             Term::Primitive(primitive) => iter_primitive = Some(primitive.variables()),
@@ -221,6 +234,7 @@ impl IterableVariables for Term {
             Term::Map(map) => iter_map = Some(map.variables()),
             Term::Operation(operation) => iter_operation = Some(operation.variables()),
             Term::Tuple(tuple) => iter_tuple = Some(tuple.variables()),
+            Term::Aggregate(aggregate) => iter_aggregate = Some(aggregate.variables()),
         }
 
         Box::new(
@@ -230,7 +244,8 @@ impl IterableVariables for Term {
                 .chain(iter_function.into_iter().flatten())
                 .chain(iter_map.into_iter().flatten())
                 .chain(iter_operation.into_iter().flatten())
-                .chain(iter_tuple.into_iter().flatten()),
+                .chain(iter_tuple.into_iter().flatten())
+                .chain(iter_aggregate.into_iter().flatten()),
         )
     }
 
@@ -240,6 +255,7 @@ impl IterableVariables for Term {
         let mut iter_map = None;
         let mut iter_operation = None;
         let mut iter_tuple = None;
+        let mut iter_aggregate = None;
 
         match self {
             Term::Primitive(primitive) => iter_primitive = Some(primitive.variables_mut()),
@@ -247,6 +263,7 @@ impl IterableVariables for Term {
             Term::Map(map) => iter_map = Some(map.variables_mut()),
             Term::Operation(operation) => iter_operation = Some(operation.variables_mut()),
             Term::Tuple(tuple) => iter_tuple = Some(tuple.variables_mut()),
+            Term::Aggregate(aggregate) => iter_aggregate = Some(aggregate.variables_mut()),
         }
 
         Box::new(
@@ -256,7 +273,8 @@ impl IterableVariables for Term {
                 .chain(iter_function.into_iter().flatten())
                 .chain(iter_map.into_iter().flatten())
                 .chain(iter_operation.into_iter().flatten())
-                .chain(iter_tuple.into_iter().flatten()),
+                .chain(iter_tuple.into_iter().flatten())
+                .chain(iter_aggregate.into_iter().flatten()),
         )
     }
 }

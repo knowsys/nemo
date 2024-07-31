@@ -37,6 +37,11 @@ impl<'a> UnknownDirective<'a> {
         self.name.to_string()
     }
 
+    /// Return the token containing the name of the directive.
+    pub fn name_token(&self) -> &Token<'a> {
+        &self.name
+    }
+
     /// Return the content of the directive.
     pub fn content(&self) -> String {
         self.content.0.to_string()

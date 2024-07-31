@@ -53,14 +53,24 @@ impl Atom {
         }
     }
 
+    /// Return the predicate of this atom.
+    pub fn predicate(&self) -> Tag {
+        self.predicate.clone()
+    }
+
     /// Return an iterator over the subterms of this atom.
     pub fn subterms(&self) -> impl Iterator<Item = &Term> {
         self.terms.iter()
     }
 
-    /// Return an mutable iterator over the subterms of this atom.
-    pub fn subterms_mut(&mut self) -> impl Iterator<Item = &mut Term> {
-        self.terms.iter_mut()
+    /// Return the number of subterms in this atom.
+    pub fn len(&self) -> usize {
+        self.terms.len()
+    }
+
+    /// Return whether this atom contains no subterms.
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
     }
 }
 

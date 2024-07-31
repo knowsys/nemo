@@ -31,6 +31,11 @@ impl<'a> AggregationTag<'a> {
     pub fn operation(&self) -> Option<AggregateKind> {
         self.kind
     }
+
+    /// Return a string representation of the content of this tag.
+    pub fn content(&self) -> String {
+        self.span.0.to_string()
+    }
 }
 
 const CONTEXT: ParserContext = ParserContext::AggregationTag;
