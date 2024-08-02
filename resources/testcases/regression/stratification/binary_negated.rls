@@ -1,5 +1,5 @@
-@source equal[2]: load-csv("sources/equal.csv").
-@source data[2]: load-csv("sources/data.csv").
+@import equal :- csv { resource = "sources/equal.csv" }.
+@import data :- csv { resource = "sources/data.csv" }.
 
 equal(b, b) .
 equal(c, c) .

@@ -1,19 +1,22 @@
-use std::num::{ParseFloatError, ParseIntError};
+use std::{
+    num::{ParseFloatError, ParseIntError},
+    ops::Range,
+    str::{CharIndices, Chars},
+};
 
 use nemo_physical::datavalues::DataValueCreationError;
 use nom::{
     error::{ErrorKind, FromExternalError},
-    IResult,
+    AsBytes, IResult, InputIter, InputLength, InputTake, InputTakeAtPosition,
 };
 use nom_locate::LocatedSpan;
 use thiserror::Error;
 
 use crate::{
     io::formats::import_export::ImportExportError,
-    model::rule_model::{Aggregate, Constraint, Literal, Term},
+    io::lexer::ParserState,
+    model::rule_model::{Aggregate, Constraint, Literal, Term, Variable},
 };
-
-use super::Variable;
 
 /// A [LocatedSpan] over the input.
 pub(super) type Span<'a> = LocatedSpan<&'a str>;
@@ -34,11 +37,11 @@ pub type ParseResult<'a, T> = Result<T, LocatedParseError>;
 #[error("Parse error on line {}, column {}: {}\nat {}{}", .line, .column, .source, .fragment, format_parse_error_context(.context))]
 pub struct LocatedParseError {
     #[source]
-    pub(super) source: ParseError,
-    pub(super) line: u32,
-    pub(super) column: usize,
-    pub(super) fragment: String,
-    pub(super) context: Vec<LocatedParseError>,
+    pub source: ParseError,
+    pub line: u32,
+    pub column: usize,
+    pub fragment: String,
+    pub context: Vec<LocatedParseError>,
 }
 
 impl LocatedParseError {
@@ -421,4 +424,246 @@ impl FromExternalError<Span<'_>, DataValueCreationError> for LocatedParseError {
     fn from_external_error(input: Span<'_>, _kind: ErrorKind, e: DataValueCreationError) -> Self {
         ParseError::ExternalError(Box::new(e.into())).at(input)
     }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct Input<'a, 's> {
+    pub(crate) input: crate::io::lexer::Span<'a>,
+    pub(crate) parser_state: ParserState<'s>,
+}
+impl<'a, 's> Input<'a, 's> {
+    pub(crate) fn new(input: &'a str, errors: ParserState<'s>) -> Input<'a, 's> {
+        Input {
+            input: Span::new(input),
+            parser_state: errors,
+        }
+    }
+}
+impl ToRange for Input<'_, '_> {
+    fn to_range(&self) -> Range<usize> {
+        self.input.to_range()
+    }
+}
+
+impl AsBytes for Input<'_, '_> {
+    fn as_bytes(&self) -> &[u8] {
+        self.input.fragment().as_bytes()
+    }
+}
+
+impl<'a, 's> nom::Compare<Input<'a, 's>> for Input<'a, 's> {
+    fn compare(&self, t: Input) -> nom::CompareResult {
+        self.input.compare(t.as_bytes())
+    }
+
+    fn compare_no_case(&self, t: Input) -> nom::CompareResult {
+        self.input.compare_no_case(t.as_bytes())
+    }
+}
+impl nom::Compare<&str> for Input<'_, '_> {
+    fn compare(&self, t: &str) -> nom::CompareResult {
+        self.input.compare(t)
+    }
+
+    fn compare_no_case(&self, t: &str) -> nom::CompareResult {
+        self.input.compare_no_case(t)
+    }
+}
+
+impl nom::ExtendInto for Input<'_, '_> {
+    type Item = char;
+
+    type Extender = String;
+
+    fn new_builder(&self) -> Self::Extender {
+        self.input.new_builder()
+    }
+
+    fn extend_into(&self, acc: &mut Self::Extender) {
+        self.input.extend_into(acc)
+    }
+}
+
+impl nom::FindSubstring<&str> for Input<'_, '_> {
+    fn find_substring(&self, substr: &str) -> Option<usize> {
+        self.input.find_substring(substr)
+    }
+}
+
+impl<'a, 'e, T> nom::FindToken<T> for Input<'a, 'e>
+where
+    &'a str: nom::FindToken<T>,
+{
+    fn find_token(&self, token: T) -> bool {
+        self.input.find_token(token)
+    }
+}
+
+impl<'a, 's> InputIter for Input<'a, 's> {
+    type Item = char;
+
+    type Iter = CharIndices<'a>;
+
+    type IterElem = Chars<'a>;
+
+    fn iter_indices(&self) -> Self::Iter {
+        todo!()
+    }
+
+    fn iter_elements(&self) -> Self::IterElem {
+        todo!()
+    }
+
+    fn position<P>(&self, _predicate: P) -> Option<usize>
+    where
+        P: Fn(Self::Item) -> bool,
+    {
+        todo!()
+    }
+
+    fn slice_index(&self, count: usize) -> Result<usize, nom::Needed> {
+        self.input.slice_index(count)
+    }
+}
+
+impl InputLength for Input<'_, '_> {
+    fn input_len(&self) -> usize {
+        self.input.input_len()
+    }
+}
+
+impl InputTake for Input<'_, '_> {
+    fn take(&self, count: usize) -> Self {
+        Input {
+            input: self.input.take(count),
+            parser_state: self.parser_state,
+        }
+    }
+
+    fn take_split(&self, count: usize) -> (Self, Self) {
+        let (first, second) = self.input.take_split(count);
+        (
+            Input {
+                input: first,
+                parser_state: self.parser_state,
+            },
+            Input {
+                input: second,
+                parser_state: self.parser_state,
+            },
+        )
+    }
+}
+
+impl InputTakeAtPosition for Input<'_, '_> {
+    type Item = char;
+
+    fn split_at_position<P, E: nom::error::ParseError<Self>>(
+        &self,
+        predicate: P,
+    ) -> IResult<Self, Self, E>
+    where
+        P: Fn(Self::Item) -> bool,
+    {
+        match self.input.position(predicate) {
+            Some(n) => Ok(self.take_split(n)),
+            None => Err(nom::Err::Incomplete(nom::Needed::new(1))),
+        }
+    }
+
+    fn split_at_position1<P, E: nom::error::ParseError<Self>>(
+        &self,
+        _predicate: P,
+        _e: ErrorKind,
+    ) -> IResult<Self, Self, E>
+    where
+        P: Fn(Self::Item) -> bool,
+    {
+        todo!()
+    }
+
+    fn split_at_position_complete<P, E: nom::error::ParseError<Self>>(
+        &self,
+        predicate: P,
+    ) -> IResult<Self, Self, E>
+    where
+        P: Fn(Self::Item) -> bool,
+    {
+        match self.split_at_position(predicate) {
+            Err(nom::Err::Incomplete(_)) => Ok(self.take_split(self.input_len())),
+            res => res,
+        }
+    }
+
+    fn split_at_position1_complete<P, E: nom::error::ParseError<Self>>(
+        &self,
+        predicate: P,
+        e: ErrorKind,
+    ) -> IResult<Self, Self, E>
+    where
+        P: Fn(Self::Item) -> bool,
+    {
+        match self.input.fragment().position(predicate) {
+            Some(0) => Err(nom::Err::Error(E::from_error_kind(*self, e))),
+            Some(n) => Ok(self.take_split(n)),
+            None => {
+                if self.input.fragment().input_len() == 0 {
+                    Err(nom::Err::Error(E::from_error_kind(*self, e)))
+                } else {
+                    Ok(self.take_split(self.input_len()))
+                }
+            }
+        }
+    }
+}
+
+impl nom::Offset for Input<'_, '_> {
+    fn offset(&self, second: &Self) -> usize {
+        self.input.offset(&second.input)
+    }
+}
+
+impl<R> nom::ParseTo<R> for Input<'_, '_> {
+    fn parse_to(&self) -> Option<R> {
+        todo!()
+    }
+}
+
+impl<'a, 'e, R> nom::Slice<R> for Input<'a, 'e>
+where
+    &'a str: nom::Slice<R>,
+{
+    fn slice(&self, range: R) -> Self {
+        Input {
+            input: self.input.slice(range),
+            parser_state: self.parser_state,
+        }
+    }
+}
+
+impl nom_greedyerror::Position for Input<'_, '_> {
+    fn position(&self) -> usize {
+        nom_greedyerror::Position::position(&self.input)
+    }
+}
+
+impl std::fmt::Display for Input<'_, '_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "line {}, column {}",
+            self.input.location_line(),
+            self.input.get_utf8_column()
+        )
+    }
+}
+
+impl<I, C> nom_supreme::context::ContextError<I, C> for Input<'_, '_> {
+    fn add_context(_location: I, _ctx: C, _other: Self) -> Self {
+        todo!()
+    }
+}
+
+pub(crate) trait ToRange {
+    fn to_range(&self) -> Range<usize>;
 }

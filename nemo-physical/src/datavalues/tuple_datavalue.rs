@@ -3,10 +3,7 @@
 
 use std::sync::Arc;
 
-use super::{
-    syntax::{DELIM_TUPLE_CLOSE, DELIM_TUPLE_OPEN, TUPLE_SEPARATOR},
-    AnyDataValue, DataValue, IriDataValue, ValueDomain,
-};
+use super::{syntax::tuple, AnyDataValue, DataValue, IriDataValue, ValueDomain};
 
 /// Physical representation of a fixed-length tuple of [DataValue]s.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
@@ -49,13 +46,13 @@ impl DataValue for TupleDataValue {
             .iter()
             .map(DataValue::canonical_string)
             //.by_ref()
-            .intersperse(TUPLE_SEPARATOR.to_string())
+            .intersperse(tuple::SEPARATOR.to_string())
             .collect::<String>();
 
         if let Some(iri) = self.label() {
-            iri.canonical_string() + DELIM_TUPLE_OPEN + values.as_str() + DELIM_TUPLE_CLOSE
+            iri.canonical_string() + tuple::OPEN + values.as_str() + tuple::CLOSE
         } else {
-            DELIM_TUPLE_OPEN.to_string() + values.as_str() + DELIM_TUPLE_CLOSE
+            tuple::OPEN.to_string() + values.as_str() + tuple::CLOSE
         }
     }
 
@@ -100,17 +97,17 @@ impl std::fmt::Display for TupleDataValue {
         if let Some(iri) = self.label() {
             iri.fmt(f)?;
         }
-        f.write_str(DELIM_TUPLE_OPEN)?;
+        f.write_str(tuple::OPEN)?;
         let mut first = true;
         for v in self.values.iter() {
             if first {
                 first = false;
             } else {
-                f.write_str(TUPLE_SEPARATOR)?;
+                f.write_str(tuple::SEPARATOR)?;
             }
             v.fmt(f)?;
         }
-        f.write_str(DELIM_TUPLE_CLOSE)
+        f.write_str(tuple::CLOSE)
     }
 }
 

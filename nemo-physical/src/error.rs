@@ -68,9 +68,6 @@ pub enum ReadingError {
 #[derive(Error, Debug)]
 pub enum Error {
     /// Permutation shall be sorted, but the input data is of different length
-    #[error("an invalid number of aggregated variables was provided: {0}")]
-    InvalidAggregatedVariableCount(usize),
-    /// Permutation shall be sorted, but the input data is of different length
     #[error("the provided data-structures do not have the same length: {0:?}")]
     PermutationSortLen(Vec<usize>),
     /// Permutation shall be applied to a too small amount of data

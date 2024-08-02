@@ -1,6 +1,12 @@
 //! This module provides implementations [DataValue]s that represent boolean values.
 
-use super::{DataValue, ValueDomain};
+use super::{
+    syntax::{
+        boolean::{FALSE, TRUE},
+        RDF_DATATYPE_INDICATOR,
+    },
+    DataValue, ValueDomain,
+};
 
 /// Physical representation of a boolean value
 #[repr(transparent)]
@@ -21,9 +27,9 @@ impl DataValue for BooleanDataValue {
 
     fn lexical_value(&self) -> String {
         if self.0 {
-            "true".to_string()
+            TRUE.to_string()
         } else {
-            "false".to_string()
+            FALSE.to_string()
         }
     }
 
@@ -41,9 +47,15 @@ impl DataValue for BooleanDataValue {
 
     fn canonical_string(&self) -> String {
         if self.0 {
-            "\"true\"^^<".to_string() + &self.datatype_iri() + ">"
+            format!(
+                "\"{TRUE}\"{RDF_DATATYPE_INDICATOR}<{}>",
+                &self.datatype_iri()
+            )
         } else {
-            "\"false\"^^<".to_string() + &self.datatype_iri() + ">"
+            format!(
+                "\"{FALSE}\"{RDF_DATATYPE_INDICATOR}<{}>",
+                &self.datatype_iri()
+            )
         }
     }
 }

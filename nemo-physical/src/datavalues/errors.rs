@@ -6,7 +6,7 @@ use thiserror::Error;
 
 /// Potential errors encountered when trying to construct [super::DataValue]s.
 #[allow(variant_size_differences)]
-#[derive(Error, Debug)]
+#[derive(Error, Debug, Clone)]
 pub enum DataValueCreationError {
     /// Error for floating point numbers that are not finite
     #[error("floating point number must represent a finite value (no infinity, no NaN)")]
@@ -45,8 +45,8 @@ pub enum DataValueCreationError {
     },
     /// Generic error for issues that should not arise when using the public API (and should maybe never arise
     /// if the crate works as intended)
-    #[error("internal error when trying to create a datavalue: {0}")]
-    InternalError(Box<dyn std::error::Error>),
+    #[error("internal error when trying to create a datavalue {0}")]
+    InternalError(String),
 }
 
 impl PartialEq for DataValueCreationError {
@@ -88,7 +88,7 @@ impl PartialEq for DataValueCreationError {
 
 /// Conceivable internal errors that we distinguish. These should not surface in
 /// normal operation.
-#[derive(Error, Debug)]
+#[derive(Error, Debug, Clone)]
 pub(crate) enum InternalDataValueCreationError {
     /// Error when retrieving a value from the dictionary
     #[error("could not recover DataValue from dictionary: id {0} not found")]
