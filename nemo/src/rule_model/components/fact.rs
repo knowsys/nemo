@@ -2,9 +2,12 @@
 
 use std::{fmt::Display, hash::Hash};
 
-use crate::rule_model::{error::ValidationErrorBuilder, origin::Origin};
+use crate::rule_model::{
+    error::{validation_error::ValidationErrorKind, ValidationErrorBuilder},
+    origin::Origin,
+};
 
-use super::{atom::Atom, term::Term, ProgramComponent, Tag};
+use super::{atom::Atom, tag::Tag, term::Term, IterableVariables, ProgramComponent};
 
 /// A (ground) fact
 #[derive(Debug, Clone, Eq)]
@@ -14,7 +17,6 @@ pub struct Fact {
 
     /// Predicate of the fact
     predicate: Tag,
-
     /// List of [Term]s
     terms: Vec<Term>,
 }
@@ -50,7 +52,7 @@ impl From<Atom> for Fact {
         Self {
             origin: value.origin().clone(),
             predicate: value.predicate(),
-            terms: value.subterms().cloned().collect(),
+            terms: value.arguments().cloned().collect(),
         }
     }
 }
@@ -108,6 +110,25 @@ impl ProgramComponent for Fact {
     where
         Self: Sized,
     {
-        todo!()
+        if !self.predicate.is_valid() {
+            builder.report_error(
+                self.predicate.origin().clone(),
+                ValidationErrorKind::InvalidTermTag(self.predicate.to_string()),
+            );
+        }
+
+        for term in self.subterms() {
+            if let Some(variable) = term.variables().next() {
+                builder.report_error(
+                    variable.origin().clone(),
+                    ValidationErrorKind::FactNonGround,
+                );
+                continue;
+            }
+
+            term.validate(builder)?;
+        }
+
+        Ok(())
     }
 }

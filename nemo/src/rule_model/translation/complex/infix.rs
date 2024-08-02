@@ -1,11 +1,14 @@
 //! This module contains a function to create an operation
 //! from an infix ast node.
 
-use crate::parser::ast;
-
-use crate::rule_model::components::term::operation::operation_kind::OperationKind;
-use crate::rule_model::components::term::operation::Operation;
-use crate::rule_model::{error::TranslationError, translation::ASTProgramTranslation};
+use crate::{
+    parser::ast::{self},
+    rule_model::{
+        components::term::operation::{operation_kind::OperationKind, Operation},
+        error::TranslationError,
+        translation::ASTProgramTranslation,
+    },
+};
 
 impl<'a> ASTProgramTranslation<'a> {
     /// Create an [Operation] from an infix AST node.
@@ -36,6 +39,6 @@ impl<'a> ASTProgramTranslation<'a> {
 
         let subterms = vec![self.build_inner_term(left)?, self.build_inner_term(right)?];
 
-        Ok(Operation::new(kind, subterms))
+        Ok(self.register_component(Operation::new(kind, subterms), infix))
     }
 }

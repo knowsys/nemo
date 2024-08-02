@@ -4,7 +4,7 @@ use std::{fmt::Display, hash::Hash};
 
 use crate::rule_model::{
     components::ProgramComponent,
-    error::{ValidationError, ValidationErrorBuilder},
+    error::{validation_error::ValidationErrorKind, ValidationError, ValidationErrorBuilder},
     origin::Origin,
 };
 
@@ -105,6 +105,15 @@ impl ProgramComponent for UniversalVariable {
     where
         Self: Sized,
     {
-        todo!()
+        if let Some(name) = &self.name {
+            if !name.is_valid() {
+                builder.report_error(
+                    self.origin,
+                    ValidationErrorKind::InvalidVariableName(name.0.clone()),
+                );
+            }
+        }
+
+        Ok(())
     }
 }

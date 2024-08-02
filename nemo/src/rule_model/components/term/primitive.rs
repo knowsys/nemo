@@ -15,6 +15,8 @@ use crate::rule_model::{
     origin::Origin,
 };
 
+use super::value_type::ValueType;
+
 /// Primitive term
 ///
 /// Represents a basic, indivisble values, which can either be [GroundTerm]s or [Variable]s.
@@ -31,6 +33,14 @@ impl Primitive {
     /// Return `true` when this term is not a variable and `false` otherwise.
     pub fn is_ground(&self) -> bool {
         matches!(self, Self::Ground(_))
+    }
+
+    /// Return the value type of this term.
+    pub fn value_type(&self) -> ValueType {
+        match self {
+            Primitive::Variable(_) => ValueType::Any,
+            Primitive::Ground(term) => term.value_type(),
+        }
     }
 }
 

@@ -1,14 +1,14 @@
-//! This module defines [FunctionTerm]
+//! This module defines [FunctionTerm].
 
 use std::{fmt::Display, hash::Hash};
 
 use crate::rule_model::{
-    components::{IterableVariables, ProgramComponent, Tag},
-    error::{ValidationError, ValidationErrorBuilder},
+    components::{tag::Tag, IterableVariables, ProgramComponent},
+    error::{validation_error::ValidationErrorKind, ValidationError, ValidationErrorBuilder},
     origin::Origin,
 };
 
-use super::{primitive::variable::Variable, Term};
+use super::{primitive::variable::Variable, value_type::ValueType, Term};
 
 /// Function term
 ///
@@ -29,28 +29,37 @@ pub struct FunctionTerm {
 macro_rules! function {
     // Base case: no elements
     ($name:tt) => {
-        crate::rule_model::component::term::function::FunctionTerm::new($name, Vec::new())
+        crate::rule_model::components::term::function::FunctionTerm::new(
+            crate::rule_model::components::tag::Tag::from($name), Vec::new()
+        )
     };
     // Recursive case: handle each term, separated by commas
     ($name:tt; $($tt:tt)*) => {{
         let mut terms = Vec::new();
         term_list!(terms; $($tt)*);
-        crate::rule_model::components::term::function::FunctionTerm::new($name,terms)
+        crate::rule_model::components::term::function::FunctionTerm::new(
+            crate::rule_model::components::tag::Tag::from($name), terms
+        )
     }};
 }
 
 impl FunctionTerm {
     /// Create a new [FunctionTerm].
-    pub fn new<Terms: IntoIterator<Item = Term>>(name: &str, subterms: Terms) -> Self {
+    pub fn new<Terms: IntoIterator<Item = Term>>(tag: Tag, subterms: Terms) -> Self {
         Self {
             origin: Origin::Created,
-            tag: Tag::new(name.to_string()),
+            tag,
             terms: subterms.into_iter().collect(),
         }
     }
 
-    /// Return an iterator over the subterms of this function term.
-    pub fn subterms(&self) -> impl Iterator<Item = &Term> {
+    /// Return the value type of this term.
+    pub fn value_type(&self) -> ValueType {
+        ValueType::FunctionTerm
+    }
+
+    /// Return an iterator over the arguments of this function term.
+    pub fn arguments(&self) -> impl Iterator<Item = &Term> {
         self.terms.iter()
     }
 
@@ -129,11 +138,18 @@ impl ProgramComponent for FunctionTerm {
         Self: Sized,
     {
         if !self.tag.is_valid() {
-            todo!()
+            builder.report_error(
+                self.tag.origin().clone(),
+                ValidationErrorKind::InvalidTermTag(self.tag.to_string()),
+            );
         }
 
-        for term in self.subterms() {
+        for term in self.arguments() {
             term.validate(builder)?
+        }
+
+        if self.is_empty() {
+            builder.report_error(self.origin.clone(), ValidationErrorKind::FunctionTermEmpty);
         }
 
         Ok(())

@@ -1,10 +1,12 @@
 //! This module contains a function to create a map term
 //! from the corresponding ast node.
 
-use crate::parser::ast;
-
-use crate::rule_model::components::term::map::Map;
-use crate::rule_model::{error::TranslationError, translation::ASTProgramTranslation};
+use crate::{
+    parser::ast,
+    rule_model::{
+        components::term::map::Map, error::TranslationError, translation::ASTProgramTranslation,
+    },
+};
 
 impl<'a> ASTProgramTranslation<'a> {
     /// Create a map term from the corresponding AST node.
@@ -20,9 +22,11 @@ impl<'a> ASTProgramTranslation<'a> {
             subterms.push((key, value));
         }
 
-        Ok(match map.tag() {
+        let result = match map.tag() {
             Some(tag) => Map::new(&self.resolve_tag(tag)?, subterms),
             None => Map::new_unnamed(subterms),
-        })
+        };
+
+        Ok(self.register_component(result, map))
     }
 }

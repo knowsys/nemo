@@ -12,7 +12,8 @@ use crate::{
                 file_formats::{FileFormat, FILE_FORMATS_RDF},
                 ExportDirective, ImportDirective,
             },
-            ProgramComponent, Tag,
+            tag::Tag,
+            ProgramComponent,
         },
         error::{translation_error::TranslationErrorKind, TranslationError},
         translation::ASTProgramTranslation,
@@ -101,11 +102,15 @@ impl<'a> ASTProgramTranslation<'a> {
         &mut self,
         import: &'a ast::directive::import::Import,
     ) -> Result<(), TranslationError> {
-        let predicate = Tag::new(self.resolve_tag(import.predicate())?);
+        let predicate = Tag::new(self.resolve_tag(import.predicate())?)
+            .set_origin(self.register_node(import.predicate()));
         let attributes = self.build_map(import.instructions())?;
         let file_format = self.import_export_format(import.instructions())?;
 
-        let import_directive = ImportDirective::new(predicate, file_format, attributes);
+        let import_directive = self.register_component(
+            ImportDirective::new(predicate, file_format, attributes),
+            import,
+        );
         let _ = import_directive.validate(&mut self.validation_error_builder);
 
         self.program_builder.add_import(import_directive);
@@ -118,11 +123,15 @@ impl<'a> ASTProgramTranslation<'a> {
         &mut self,
         export: &'a ast::directive::export::Export,
     ) -> Result<(), TranslationError> {
-        let predicate = Tag::new(self.resolve_tag(export.predicate())?);
+        let predicate = Tag::new(self.resolve_tag(export.predicate())?)
+            .set_origin(self.register_node(export.predicate()));
         let attributes = self.build_map(export.instructions())?;
         let file_format = self.import_export_format(export.instructions())?;
 
-        let export_directive = ExportDirective::new(predicate, file_format, attributes);
+        let export_directive = self.register_component(
+            ExportDirective::new(predicate, file_format, attributes),
+            export,
+        );
         let _ = export_directive.validate(&mut self.validation_error_builder);
 
         self.program_builder.add_export(export_directive);

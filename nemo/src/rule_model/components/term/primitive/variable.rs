@@ -27,7 +27,7 @@ impl VariableName {
 
     /// Validate variable name.
     pub fn is_valid(&self) -> bool {
-        !self.0.is_empty()
+        !self.0.starts_with("__")
     }
 }
 
@@ -71,6 +71,16 @@ impl Variable {
             Variable::Universal(variable) => variable.name(),
             Variable::Existential(variable) => Some(variable.name()),
         }
+    }
+
+    /// Return whether this is a universal variable.
+    pub fn is_universal(&self) -> bool {
+        matches!(self, Variable::Universal(_))
+    }
+
+    /// Return whether this is an existential variable.
+    pub fn is_existential(&self) -> bool {
+        matches!(self, Variable::Existential(_))
     }
 }
 
@@ -125,14 +135,8 @@ impl ProgramComponent for Variable {
         Self: Sized,
     {
         match &self {
-            Variable::Universal(universal) => {
-                universal.validate(builder)?;
-            }
-            Variable::Existential(existential) => {
-                existential.validate(builder)?;
-            }
+            Variable::Universal(universal) => universal.validate(builder),
+            Variable::Existential(existential) => existential.validate(builder),
         }
-
-        Ok(())
     }
 }

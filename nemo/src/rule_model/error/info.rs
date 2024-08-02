@@ -10,6 +10,9 @@ pub enum Info {
     /// First definition occurred somewhere
     #[assoc(message = format!("first definition occurred here"))]
     FirstDefinition,
+    /// First use occurred somewhere
+    #[assoc(message = format!("first use occurred here"))]
+    FirstUse,
 }
 
 impl std::fmt::Display for Info {

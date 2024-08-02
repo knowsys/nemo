@@ -8,12 +8,13 @@ use operation_kind::OperationKind;
 
 use crate::rule_model::{
     components::{IterableVariables, ProgramComponent},
-    error::ValidationErrorBuilder,
+    error::{validation_error::ValidationErrorKind, ValidationErrorBuilder},
     origin::Origin,
 };
 
 use super::{
     primitive::{variable::Variable, Primitive},
+    value_type::ValueType,
     Term,
 };
 
@@ -40,6 +41,21 @@ impl Operation {
             kind,
             subterms,
         }
+    }
+
+    /// Return an iterator over the arguments of this operation.
+    pub fn arguments(&self) -> impl Iterator<Item = &Term> {
+        self.subterms.iter()
+    }
+
+    /// Return the [OperationKind] of this operation.
+    pub fn kind(&self) -> OperationKind {
+        self.kind
+    }
+
+    /// Return the value type of this term.
+    pub fn value_type(&self) -> ValueType {
+        self.kind.return_type()
     }
 
     /// Check whether this operation has the form of an assignment of a variable to a term.
@@ -199,7 +215,23 @@ impl ProgramComponent for Operation {
     where
         Self: Sized,
     {
-        todo!()
+        if !self.kind.num_arguments().validate(self.subterms.len()) {
+            builder.report_error(
+                self.origin.clone(),
+                ValidationErrorKind::OperationArgumentNumber {
+                    used: self.subterms.len(),
+                    expected: self.kind.num_arguments().to_string(),
+                },
+            );
+
+            return Err(());
+        }
+
+        for argument in self.arguments() {
+            argument.validate(builder)?;
+        }
+
+        Ok(())
     }
 }
 

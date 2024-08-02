@@ -1,10 +1,12 @@
 //! This module contains a function to create a tuple term
 //! from the corresponding ast node.
 
-use crate::parser::ast;
-
-use crate::rule_model::components::term::tuple::Tuple;
-use crate::rule_model::{error::TranslationError, translation::ASTProgramTranslation};
+use crate::{
+    parser::ast,
+    rule_model::{
+        components::term::tuple::Tuple, error::TranslationError, translation::ASTProgramTranslation,
+    },
+};
 
 impl<'a> ASTProgramTranslation<'a> {
     /// Create a tuple term from the corresponding AST node.
@@ -17,6 +19,6 @@ impl<'a> ASTProgramTranslation<'a> {
             subterms.push(self.build_inner_term(expression)?);
         }
 
-        Ok(Tuple::new(subterms))
+        Ok(self.register_component(Tuple::new(subterms), tuple))
     }
 }

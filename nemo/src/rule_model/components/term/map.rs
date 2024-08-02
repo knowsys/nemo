@@ -3,12 +3,12 @@
 use std::{fmt::Display, hash::Hash};
 
 use crate::rule_model::{
-    components::{IterableVariables, ProgramComponent, Tag},
+    components::{tag::Tag, IterableVariables, ProgramComponent},
     error::ValidationErrorBuilder,
     origin::Origin,
 };
 
-use super::{primitive::variable::Variable, Term};
+use super::{primitive::variable::Variable, value_type::ValueType, Term};
 
 /// Map
 ///
@@ -45,6 +45,11 @@ impl Map {
         }
     }
 
+    /// Return the value type of this term.
+    pub fn value_type(&self) -> ValueType {
+        ValueType::Map
+    }
+
     /// Return the tag of this map.
     pub fn tag(&self) -> Option<Tag> {
         self.tag.clone()
@@ -70,7 +75,9 @@ impl Display for Map {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_fmt(format_args!(
             "{}{{",
-            self.tag.as_ref().map_or("", |tag| &tag.0)
+            self.tag
+                .as_ref()
+                .map_or(String::default(), |tag| tag.to_string())
         ))?;
 
         for (term_index, (key, value)) in self.map.iter().enumerate() {
@@ -113,7 +120,7 @@ impl ProgramComponent for Map {
     }
 
     fn origin(&self) -> &Origin {
-        todo!()
+        &self.origin
     }
 
     fn set_origin(mut self, origin: Origin) -> Self
@@ -128,7 +135,12 @@ impl ProgramComponent for Map {
     where
         Self: Sized,
     {
-        todo!()
+        for (key, value) in self.key_value() {
+            key.validate(builder)?;
+            value.validate(builder)?;
+        }
+
+        Ok(())
     }
 }
 

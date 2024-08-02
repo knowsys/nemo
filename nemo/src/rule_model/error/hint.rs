@@ -11,7 +11,7 @@ use enum_assoc::Assoc;
 pub enum Hint {
     #[assoc(message = "unnamed universal variables may be expressed with an underscore `_`".to_string())]
     AnonymousVariables,
-    #[assoc(message = format!("similar {} exists: `{}`", _kind, _name))]
+    #[assoc(message = format!("a {} with a similar name exists: `{}`", _kind, _name))]
     SimilarExists { kind: String, name: String },
 }
 

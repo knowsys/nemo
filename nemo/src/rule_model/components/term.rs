@@ -1,5 +1,7 @@
 //! This module defines [Term].
 
+pub mod value_type;
+
 #[macro_use]
 pub mod aggregate;
 #[macro_use]
@@ -26,6 +28,7 @@ use primitive::{
     Primitive,
 };
 use tuple::Tuple;
+use value_type::ValueType;
 
 use crate::rule_model::{
     error::{ValidationError, ValidationErrorBuilder},
@@ -72,6 +75,60 @@ impl Term {
     /// Create a groud term.
     pub fn ground(value: AnyDataValue) -> Self {
         Self::Primitive(Primitive::Ground(GroundTerm::new(value)))
+    }
+
+    /// Return the value type of this term.
+    pub fn value_type(&self) -> ValueType {
+        match self {
+            Term::Primitive(term) => term.value_type(),
+            Term::Aggregate(term) => term.value_type(),
+            Term::FunctionTerm(term) => term.value_type(),
+            Term::Map(term) => term.value_type(),
+            Term::Operation(term) => term.value_type(),
+            Term::Tuple(term) => term.value_type(),
+        }
+    }
+
+    /// Return whether this term is a primitive term.
+    pub fn is_primitive(&self) -> bool {
+        matches!(self, Term::Primitive(_))
+    }
+
+    /// Return whether this term is an aggregate.
+    pub fn is_aggregate(&self) -> bool {
+        matches!(self, Term::Aggregate(_))
+    }
+
+    /// Return whether this term is a function term.
+    pub fn is_function(&self) -> bool {
+        matches!(self, Term::FunctionTerm(_))
+    }
+
+    /// Return whether this term is a map.
+    pub fn is_map(&self) -> bool {
+        matches!(self, Term::Map(_))
+    }
+
+    /// Return whether this term is a operation.
+    pub fn is_operation(&self) -> bool {
+        matches!(self, Term::Operation(_))
+    }
+
+    /// Return whether this term is a tuple.
+    pub fn is_tuple(&self) -> bool {
+        matches!(self, Term::Tuple(_))
+    }
+
+    /// Return an iterator over the arguments to this term.
+    pub fn arguments(&self) -> Box<dyn Iterator<Item = &Term> + '_> {
+        match self {
+            Term::Primitive(_) => Box::new(None.into_iter()),
+            Term::Aggregate(term) => Box::new(Some(term.aggregate_term()).into_iter()),
+            Term::FunctionTerm(term) => Box::new(term.arguments()),
+            Term::Map(term) => Box::new(term.key_value().flat_map(|(key, value)| vec![key, value])),
+            Term::Operation(term) => Box::new(term.arguments()),
+            Term::Tuple(term) => Box::new(term.arguments()),
+        }
     }
 }
 
@@ -215,7 +272,14 @@ impl ProgramComponent for Term {
     where
         Self: Sized,
     {
-        todo!()
+        match self {
+            Term::Primitive(term) => term.validate(builder),
+            Term::Aggregate(term) => term.validate(builder),
+            Term::FunctionTerm(term) => term.validate(builder),
+            Term::Map(term) => term.validate(builder),
+            Term::Operation(term) => term.validate(builder),
+            Term::Tuple(term) => term.validate(builder),
+        }
     }
 }
 

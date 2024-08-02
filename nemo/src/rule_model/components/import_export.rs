@@ -11,7 +11,7 @@ use file_formats::FileFormat;
 
 use crate::rule_model::{error::ValidationErrorBuilder, origin::Origin};
 
-use super::{term::map::Map, ProgramComponent, Tag};
+use super::{tag::Tag, term::map::Map, ProgramComponent};
 
 /// An import/export specification. This object captures all information that is typically
 /// present in an import or export directive in a Nemo program, including the main format,

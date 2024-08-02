@@ -1,10 +1,13 @@
 //! This module contains a function to create an operation term
 //! from the corresponding ast node.
 
-use crate::parser::ast;
-
-use crate::rule_model::components::term::operation::Operation;
-use crate::rule_model::{error::TranslationError, translation::ASTProgramTranslation};
+use crate::{
+    parser::ast::{self},
+    rule_model::{
+        components::term::operation::Operation, error::TranslationError,
+        translation::ASTProgramTranslation,
+    },
+};
 
 impl<'a> ASTProgramTranslation<'a> {
     /// Create an operation term from the corresponding AST node.
@@ -18,6 +21,6 @@ impl<'a> ASTProgramTranslation<'a> {
             subterms.push(self.build_inner_term(expression)?);
         }
 
-        Ok(Operation::new(kind, subterms))
+        Ok(self.register_component(Operation::new(kind, subterms), operation))
     }
 }

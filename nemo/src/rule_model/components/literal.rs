@@ -4,7 +4,11 @@ use std::{fmt::Display, hash::Hash};
 
 use crate::rule_model::error::{ValidationError, ValidationErrorBuilder};
 
-use super::{atom::Atom, term::operation::Operation, ProgramComponent};
+use super::{
+    atom::Atom,
+    term::{operation::Operation, Term},
+    ProgramComponent,
+};
 
 /// Literal
 ///
@@ -19,6 +23,17 @@ pub enum Literal {
     Negative(Atom),
     /// Operation
     Operation(Operation),
+}
+
+impl Literal {
+    /// Return an iterator over the arguments contained in this literal.
+    pub fn arguments(&self) -> Box<dyn Iterator<Item = &Term> + '_> {
+        match self {
+            Literal::Positive(literal) => Box::new(literal.arguments()),
+            Literal::Negative(literal) => Box::new(literal.arguments()),
+            Literal::Operation(literal) => Box::new(literal.arguments()),
+        }
+    }
 }
 
 impl Display for Literal {
@@ -62,6 +77,10 @@ impl ProgramComponent for Literal {
     where
         Self: Sized,
     {
-        todo!()
+        match self {
+            Literal::Positive(literal) => literal.validate(builder),
+            Literal::Negative(literal) => literal.validate(builder),
+            Literal::Operation(literal) => literal.validate(builder),
+        }
     }
 }

@@ -2,10 +2,10 @@
 
 use std::{fmt::Display, hash::Hash};
 
-use nemo_physical::datavalues::{AnyDataValue, IriDataValue};
+use nemo_physical::datavalues::{AnyDataValue, DataValue, IriDataValue, ValueDomain};
 
 use crate::rule_model::{
-    components::ProgramComponent,
+    components::{term::value_type::ValueType, ProgramComponent},
     error::{ValidationError, ValidationErrorBuilder},
     origin::Origin,
 };
@@ -28,6 +28,28 @@ impl GroundTerm {
         Self {
             origin: Origin::Created,
             value,
+        }
+    }
+
+    /// Return the value type of this term.
+    pub fn value_type(&self) -> ValueType {
+        match self.value.value_domain() {
+            ValueDomain::Float
+            | ValueDomain::Double
+            | ValueDomain::UnsignedLong
+            | ValueDomain::NonNegativeLong
+            | ValueDomain::UnsignedInt
+            | ValueDomain::NonNegativeInt
+            | ValueDomain::Long
+            | ValueDomain::Int => ValueType::Number,
+            ValueDomain::PlainString => ValueType::String,
+            ValueDomain::LanguageTaggedString => ValueType::LanguageString,
+            ValueDomain::Iri => ValueType::Constant,
+            ValueDomain::Tuple => ValueType::Tuple,
+            ValueDomain::Map => ValueType::Map,
+            ValueDomain::Boolean => ValueType::Boolean,
+            ValueDomain::Null => ValueType::Null,
+            ValueDomain::Other => ValueType::Other,
         }
     }
 }
@@ -118,7 +140,7 @@ impl ProgramComponent for GroundTerm {
         self
     }
 
-    fn validate(&self, builder: &mut ValidationErrorBuilder) -> Result<(), ()>
+    fn validate(&self, _builder: &mut ValidationErrorBuilder) -> Result<(), ()>
     where
         Self: Sized,
     {

@@ -1,14 +1,15 @@
 //! This module defines the logical components that make up a program.
 
 #[macro_use]
+
 pub mod atom;
-pub mod base;
 pub mod datatype;
 pub mod fact;
 pub mod import_export;
 pub mod literal;
 pub mod output;
 pub mod rule;
+pub mod tag;
 pub mod term;
 
 use std::fmt::{Debug, Display};
@@ -20,26 +21,24 @@ use super::{
     origin::Origin,
 };
 
-/// Name of a term
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct Tag(String);
-
-impl Tag {
-    /// Create a new [Tag].
-    pub fn new(name: String) -> Self {
-        Self(name)
-    }
-
-    /// Validate term name.
-    pub fn is_valid(&self) -> bool {
-        !self.0.is_empty()
-    }
-}
-
-impl Display for Tag {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&self.0)
-    }
+/// TODO: Think whether this is needed
+/// Types of [ProgramComponent]s
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+pub enum ProgramComponentKind {
+    /// Variable
+    Variable,
+    /// Primitive groun term
+    PrimitiveGround,
+    /// Map
+    Map,
+    /// Tuple
+    Tuple,
+    /// Operation
+    Operation,
+    /// Function term
+    FunctionTerm,
+    /// Atom
+    Atom,
 }
 
 /// Trait implemented by objects that are part of the logical rule model of the nemo language.

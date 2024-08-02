@@ -14,7 +14,7 @@ impl<'a> ASTProgramTranslation<'a> {
         &mut self,
         variable: &'a ast::expression::basic::variable::Variable,
     ) -> Result<Variable, TranslationError> {
-        Ok(match variable.kind() {
+        let result = match variable.kind() {
             ast::expression::basic::variable::VariableType::Universal => {
                 if let Some(variable_name) = variable.name() {
                     Variable::universal(&variable_name).set_origin(self.register_node(variable))
@@ -46,6 +46,8 @@ impl<'a> ASTProgramTranslation<'a> {
                     ));
                 }
             }
-        })
+        };
+
+        Ok(self.register_component(result, variable))
     }
 }

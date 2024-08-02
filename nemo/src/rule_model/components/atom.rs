@@ -3,13 +3,14 @@
 use std::{fmt::Display, hash::Hash};
 
 use crate::rule_model::{
-    error::{ValidationError, ValidationErrorBuilder},
+    error::{validation_error::ValidationErrorKind, ValidationError, ValidationErrorBuilder},
     origin::Origin,
 };
 
 use super::{
+    tag::Tag,
     term::{primitive::variable::Variable, Term},
-    IterableVariables, ProgramComponent, Tag,
+    IterableVariables, ProgramComponent,
 };
 
 /// Atom
@@ -33,22 +34,28 @@ pub struct Atom {
 macro_rules! atom {
     // Base case: no elements
     ($name:tt) => {
-        crate::rule_model::component::atom::Atom::new($name, Vec::new())
+        crate::rule_model::components::atom::Atom::new(
+            crate::rule_model::components::tag::Tag::from($name),
+            Vec::new()
+        )
     };
     // Recursive case: handle each term, separated by commas
     ($name:tt; $($tt:tt)*) => {{
         let mut terms = Vec::new();
         term_list!(terms; $($tt)*);
-        crate::rule_model::components::atom::Atom::new($name, terms)
+        crate::rule_model::components::atom::Atom::new(
+            crate::rule_model::components::tag::Tag::from($name),
+            terms
+        )
     }};
 }
 
 impl Atom {
     /// Create a new [Atom].
-    pub fn new<Terms: IntoIterator<Item = Term>>(predicate: &str, subterms: Terms) -> Self {
+    pub fn new<Terms: IntoIterator<Item = Term>>(predicate: Tag, subterms: Terms) -> Self {
         Self {
             origin: Origin::Created,
-            predicate: Tag::new(predicate.to_string()),
+            predicate,
             terms: subterms.into_iter().collect(),
         }
     }
@@ -58,8 +65,8 @@ impl Atom {
         self.predicate.clone()
     }
 
-    /// Return an iterator over the subterms of this atom.
-    pub fn subterms(&self) -> impl Iterator<Item = &Term> {
+    /// Return an iterator over the arguments of this atom.
+    pub fn arguments(&self) -> impl Iterator<Item = &Term> {
         self.terms.iter()
     }
 
@@ -130,10 +137,20 @@ impl ProgramComponent for Atom {
         Self: Sized,
     {
         if !self.predicate.is_valid() {
-            todo!()
+            builder.report_error(
+                self.predicate.origin().clone(),
+                ValidationErrorKind::InvalidTermTag(self.predicate.to_string()),
+            );
         }
 
-        for term in self.subterms() {
+        if self.is_empty() {
+            builder.report_error(
+                self.origin.clone(),
+                ValidationErrorKind::UnsupportedAtomEmpty,
+            );
+        }
+
+        for term in self.arguments() {
             term.validate(builder)?;
         }
 
@@ -158,9 +175,9 @@ mod test {
     #[test]
     fn atom_basic() {
         let variable = Variable::universal("u");
-        let function = atom!("p"; 12, variable, !e, "abc", ?v);
+        let atom = atom!("p"; 12, variable, !e, "abc", ?v);
 
-        let variables = function.variables().cloned().collect::<Vec<_>>();
+        let variables = atom.variables().cloned().collect::<Vec<_>>();
         assert_eq!(
             variables,
             vec![

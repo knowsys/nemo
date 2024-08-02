@@ -15,7 +15,7 @@ use crate::{
 };
 
 use super::{
-    components::fact::Fact,
+    components::{fact::Fact, ProgramComponent},
     error::{
         translation_error::TranslationErrorKind, ProgramError, TranslationError,
         ValidationErrorBuilder,
@@ -71,6 +71,15 @@ impl<'a> ASTProgramTranslation<'a> {
         self.origin_map.insert(new_origin, node);
 
         new_origin
+    }
+
+    /// Register a [ProgramComponent]
+    pub fn register_component<Component: ProgramComponent>(
+        &mut self,
+        component: Component,
+        node: &'a dyn ProgramAST<'a>,
+    ) -> Component {
+        component.set_origin(self.register_node(node))
     }
 }
 

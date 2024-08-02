@@ -1,9 +1,9 @@
 //! This module contains a function for handling output statements.
 
 use crate::{
-    parser::ast::{self},
+    parser::ast,
     rule_model::{
-        components::{output::Output, Tag},
+        components::{output::Output, tag::Tag},
         error::TranslationError,
         translation::ASTProgramTranslation,
     },
@@ -16,7 +16,8 @@ impl<'a> ASTProgramTranslation<'a> {
         output: &'a ast::directive::output::Output,
     ) -> Result<(), TranslationError> {
         for predicate in output.predicates() {
-            let tag = Tag::new(self.resolve_tag(predicate)?);
+            let tag =
+                Tag::new(self.resolve_tag(predicate)?).set_origin(self.register_node(predicate));
             self.program_builder.add_output(Output::new(tag));
         }
 

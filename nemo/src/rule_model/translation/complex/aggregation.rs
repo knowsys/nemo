@@ -1,11 +1,14 @@
 //! This module contains a function to create an aggregation term
 //! from the corresponding ast node.
 
-use crate::parser::ast::{self, ProgramAST};
-
-use crate::rule_model::components::term::aggregate::Aggregate;
-use crate::rule_model::error::translation_error::TranslationErrorKind;
-use crate::rule_model::{error::TranslationError, translation::ASTProgramTranslation};
+use crate::{
+    parser::ast::{self, ProgramAST},
+    rule_model::{
+        components::term::aggregate::Aggregate,
+        error::{translation_error::TranslationErrorKind, TranslationError},
+        translation::ASTProgramTranslation,
+    },
+};
 
 impl<'a> ASTProgramTranslation<'a> {
     /// Create an aggregation term from the corresponding AST node.
@@ -37,6 +40,6 @@ impl<'a> ASTProgramTranslation<'a> {
             }
         }
 
-        Ok(Aggregate::new(kind, aggregate, distinct))
+        Ok(self.register_component(Aggregate::new(kind, aggregate, distinct), aggregation))
     }
 }

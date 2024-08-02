@@ -7,6 +7,7 @@ use crate::{
             atom::Atom,
             literal::Literal,
             rule::{Rule, RuleBuilder},
+            tag::Tag,
             term::Term,
             ProgramComponent,
         },
@@ -45,15 +46,15 @@ impl<'a> ASTProgramTranslation<'a> {
     ) -> Result<Literal, TranslationError> {
         let result = match body {
             ast::expression::Expression::Atom(atom) => {
+                let predicate = Tag::from(self.resolve_tag(atom.tag())?)
+                    .set_origin(self.register_node(atom.tag()));
+
                 let mut subterms = Vec::new();
                 for expression in atom.expressions() {
                     subterms.push(self.build_inner_term(expression)?);
                 }
 
-                Literal::Positive(
-                    Atom::new(&self.resolve_tag(atom.tag())?, subterms)
-                        .set_origin(self.register_node(atom)),
-                )
+                Literal::Positive(self.register_component(Atom::new(predicate, subterms), atom))
             }
             ast::expression::Expression::Negation(negated) => {
                 let atom = if let ast::expression::Expression::Atom(atom) = negated.expression() {
@@ -67,24 +68,20 @@ impl<'a> ASTProgramTranslation<'a> {
                     ));
                 };
 
+                let predicate = Tag::from(self.resolve_tag(atom.tag())?)
+                    .set_origin(self.register_node(atom.tag()));
                 let mut subterms = Vec::new();
                 for expression in atom.expressions() {
                     subterms.push(self.build_inner_term(expression)?);
                 }
 
-                Literal::Negative(
-                    Atom::new(&self.resolve_tag(atom.tag())?, subterms)
-                        .set_origin(self.register_node(atom)),
-                )
+                Literal::Negative(self.register_component(Atom::new(predicate, subterms), atom))
             }
-            ast::expression::Expression::Infix(infix) => Literal::Operation(
-                self.build_infix(infix)?
-                    .set_origin(self.register_node(infix)),
-            ),
+            ast::expression::Expression::Infix(infix) => {
+                Literal::Operation(self.build_infix(infix)?)
+            }
             ast::expression::Expression::Operation(operation) => {
-                let result = self.build_operation(operation)?;
-
-                Literal::Operation(result.set_origin(self.register_node(operation)))
+                Literal::Operation(self.build_operation(operation)?)
             }
             _ => {
                 return Err(TranslationError::new(
@@ -104,12 +101,14 @@ impl<'a> ASTProgramTranslation<'a> {
         head: &'a ast::expression::Expression<'a>,
     ) -> Result<Atom, TranslationError> {
         let result = if let ast::expression::Expression::Atom(atom) = head {
+            let predicate =
+                Tag::from(self.resolve_tag(atom.tag())?).set_origin(self.register_node(atom.tag()));
             let mut subterms = Vec::new();
             for expression in atom.expressions() {
                 subterms.push(self.build_inner_term(expression)?);
             }
 
-            Atom::new(&self.resolve_tag(atom.tag())?, subterms).set_origin(self.register_node(atom))
+            self.register_component(Atom::new(predicate, subterms), atom)
         } else {
             return Err(TranslationError::new(
                 head.span(),
@@ -125,7 +124,7 @@ impl<'a> ASTProgramTranslation<'a> {
         &mut self,
         expression: &'a ast::expression::Expression,
     ) -> Result<Term, TranslationError> {
-        match expression {
+        Ok(match expression {
             ast::expression::Expression::Arithmetic(arithmetic) => {
                 self.build_arithmetic(arithmetic).map(Term::from)
             }
@@ -167,6 +166,7 @@ impl<'a> ASTProgramTranslation<'a> {
                 infix.span(),
                 TranslationErrorKind::InnerExpressionInfix,
             )),
-        }
+        }?
+        .set_origin(self.register_node(expression)))
     }
 }

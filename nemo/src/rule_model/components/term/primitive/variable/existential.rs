@@ -4,7 +4,7 @@ use std::{fmt::Display, hash::Hash};
 
 use crate::rule_model::{
     components::ProgramComponent,
-    error::{ValidationError, ValidationErrorBuilder},
+    error::{validation_error::ValidationErrorKind, ValidationError, ValidationErrorBuilder},
     origin::Origin,
 };
 
@@ -85,6 +85,13 @@ impl ProgramComponent for ExistentialVariable {
     where
         Self: Sized,
     {
-        todo!()
+        if !self.name.is_valid() {
+            builder.report_error(
+                self.origin,
+                ValidationErrorKind::InvalidVariableName(self.name()),
+            );
+        }
+
+        Ok(())
     }
 }

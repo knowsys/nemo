@@ -1,4 +1,4 @@
-//! This module defines [Aggregate]
+//! This module defines [Aggregate].
 #![allow(missing_docs)]
 
 use std::{fmt::Display, hash::Hash};
@@ -9,29 +9,38 @@ use strum_macros::EnumIter;
 use crate::{
     rule_model::{
         components::{IterableVariables, ProgramComponent},
-        error::ValidationErrorBuilder,
+        error::{validation_error::ValidationErrorKind, ValidationErrorBuilder},
         origin::Origin,
     },
     syntax::builtin::aggregate,
 };
 
-use super::{primitive::variable::Variable, Term};
+use super::{primitive::variable::Variable, value_type::ValueType, Term};
 
 /// Aggregate operation on logical values
 #[derive(Assoc, EnumIter, Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 #[func(pub fn name(&self) -> &'static str)]
+#[func(pub fn value_type(&self) -> ValueType)]
+#[func(pub fn input_type(&self) -> Option<ValueType>)]
 pub enum AggregateKind {
     /// Count of distinct values
     #[assoc(name = aggregate::COUNT)]
+    #[assoc(value_type = ValueType::Number)]
     CountValues,
     /// Minimum numerical value
     #[assoc(name = aggregate::MIN)]
+    #[assoc(value_type = ValueType::Number)]
+    #[assoc(input_type = ValueType::Number)]
     MinNumber,
     /// Maximum numerical value
     #[assoc(name = aggregate::MAX)]
+    #[assoc(value_type = ValueType::Number)]
+    #[assoc(input_type = ValueType::Number)]
     MaxNumber,
     /// Sum of numerical values
     #[assoc(name = aggregate::SUM)]
+    #[assoc(value_type = ValueType::Number)]
+    #[assoc(input_type = ValueType::Number)]
     SumOfNumbers,
 }
 
@@ -103,6 +112,11 @@ impl Aggregate {
         distinct: Variables,
     ) -> Self {
         Self::new(AggregateKind::MaxNumber, aggregate, distinct)
+    }
+
+    /// Return the value type of this term.
+    pub fn value_type(&self) -> ValueType {
+        self.kind.value_type()
     }
 
     /// Return a reference to aggregated term.
@@ -187,11 +201,26 @@ impl ProgramComponent for Aggregate {
         self
     }
 
-    fn validate(&self, _builder: &mut ValidationErrorBuilder) -> Result<(), ()>
+    fn validate(&self, builder: &mut ValidationErrorBuilder) -> Result<(), ()>
     where
         Self: Sized,
     {
-        todo!()
+        let input_type = self.aggregate.value_type();
+        if let Some(expected_type) = self.kind.input_type() {
+            if input_type != expected_type {
+                builder.report_error(
+                    self.aggregate.origin().clone(),
+                    ValidationErrorKind::AggregateInvalidValueType {
+                        found: input_type.name().to_string(),
+                        expected: expected_type.name().to_string(),
+                    },
+                );
+
+                return Err(());
+            }
+        }
+
+        Ok(())
     }
 }
 

@@ -8,7 +8,7 @@ use crate::rule_model::{
     origin::Origin,
 };
 
-use super::{primitive::variable::Variable, Term};
+use super::{primitive::variable::Variable, value_type::ValueType, Term};
 
 /// Tuple
 ///
@@ -27,7 +27,7 @@ pub struct Tuple {
 macro_rules! tuple {
     // Base case: no elements
     () => {
-        crate::rule_model::component::term::tuple::Tuple::new(Vec::new())
+        crate::rule_model::components::term::tuple::Tuple::new(Vec::new())
     };
     // Recursive case: handle each term, separated by commas
     ($($tt:tt)*) => {{
@@ -44,6 +44,16 @@ impl Tuple {
             origin: Origin::default(),
             terms: terms.into_iter().collect(),
         }
+    }
+
+    /// Return the value type of this term.
+    pub fn value_type(&self) -> ValueType {
+        ValueType::Tuple
+    }
+
+    /// Return an iterator over the arguments of this tuple.
+    pub fn arguments(&self) -> impl Iterator<Item = &Term> {
+        self.terms.iter()
     }
 }
 
@@ -90,7 +100,7 @@ impl ProgramComponent for Tuple {
     }
 
     fn origin(&self) -> &Origin {
-        todo!()
+        &self.origin
     }
 
     fn set_origin(mut self, origin: Origin) -> Self
@@ -105,7 +115,11 @@ impl ProgramComponent for Tuple {
     where
         Self: Sized,
     {
-        todo!()
+        for term in self.arguments() {
+            term.validate(builder)?;
+        }
+
+        Ok(())
     }
 }
 
