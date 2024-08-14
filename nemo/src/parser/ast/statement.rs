@@ -32,6 +32,8 @@ pub enum StatementKind<'a> {
     Rule(Rule<'a>),
     /// Directive
     Directive(Directive<'a>),
+    /// This represents a statement, that has an error that could not get recovered in a child node.
+    Error(Token<'a>),
 }
 
 impl<'a> StatementKind<'a> {
@@ -41,6 +43,7 @@ impl<'a> StatementKind<'a> {
             StatementKind::Fact(statement) => statement.context(),
             StatementKind::Rule(statement) => statement.context(),
             StatementKind::Directive(statement) => statement.context(),
+            StatementKind::Error(_statement) => todo!(),
         }
     }
 
@@ -58,12 +61,12 @@ impl<'a> StatementKind<'a> {
 #[derive(Debug)]
 pub struct Statement<'a> {
     /// [Span] associated with this node
-    span: Span<'a>,
+    pub(crate) span: Span<'a>,
 
     /// Doc comment associated with this statement
-    comment: Option<DocComment<'a>>,
+    pub(crate) comment: Option<DocComment<'a>>,
     /// The statement
-    kind: StatementKind<'a>,
+    pub(crate) kind: StatementKind<'a>,
 }
 
 impl<'a> Statement<'a> {
@@ -83,11 +86,12 @@ const CONTEXT: ParserContext = ParserContext::Statement;
 
 impl<'a> ProgramAST<'a> for Statement<'a> {
     fn children(&self) -> Vec<&dyn ProgramAST> {
-        vec![match &self.kind {
-            StatementKind::Fact(statement) => statement,
-            StatementKind::Rule(statement) => statement,
-            StatementKind::Directive(statement) => statement,
-        }]
+        match &self.kind {
+            StatementKind::Fact(statement) => vec![statement],
+            StatementKind::Rule(statement) => vec![statement],
+            StatementKind::Directive(statement) => vec![statement],
+            StatementKind::Error(_) => vec![],
+        }
     }
 
     fn span(&self) -> Span<'a> {
@@ -160,27 +164,5 @@ mod test {
             let result = result.unwrap();
             assert_eq!(result.1.kind.context(), expect);
         }
-    }
-}
-
-// TODO: Remove this when the debug error statement printing in the ast is no longer needed
-impl<'a> ProgramAST<'a> for Option<Statement<'a>> {
-    fn children(&'a self) -> Vec<&'a dyn ProgramAST> {
-        vec![]
-    }
-
-    fn span(&self) -> Span<'a> {
-        Span(LocatedSpan::new("ERROR!"))
-    }
-
-    fn parse(_input: ParserInput<'a>) -> ParserResult<'a, Self>
-    where
-        Self: Sized + 'a,
-    {
-        todo!()
-    }
-
-    fn context(&self) -> ParserContext {
-        ParserContext::Statement
     }
 }

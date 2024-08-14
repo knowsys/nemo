@@ -173,7 +173,8 @@ fn run(mut cli: CliApp) -> Result<(), Error> {
             .parse()
         {
             Ok(program) => program,
-            Err(report) => {
+            Err((program, report)) => {
+                println!("{program}");
                 report.eprint(report.build_reports())?;
                 std::process::exit(1);
             }

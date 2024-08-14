@@ -172,6 +172,9 @@ impl<'a> ASTProgramTranslation<'a> {
                         self.errors.push(ProgramError::TranslationError(error));
                     }
                 }
+                ast::statement::StatementKind::Error(_token) => {
+                    todo!("Should faulty statements get ignored?")
+                }
             }
         }
 

@@ -108,7 +108,7 @@ impl<'a> ProgramAST<'a> for Program<'a> {
                 Self {
                     span: input_span.until_rest(&rest_span),
                     comment,
-                    statements: statements.into_iter().flatten().collect::<Vec<_>>(),
+                    statements,
                 },
             )
         })

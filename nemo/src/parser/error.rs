@@ -11,7 +11,10 @@ use nom::{
 use nom_supreme::error::{GenericErrorTree, StackContext};
 
 use super::{
-    ast::{statement::Statement, token::Token},
+    ast::{
+        statement::{Statement, StatementKind},
+        token::Token,
+    },
     context::ParserContext,
     span::CharacterPosition,
     ParserInput, ParserResult,
@@ -46,6 +49,7 @@ pub(crate) fn skip_statement<'a>(input: ParserInput<'a>) -> ParserResult<'a, Tok
         )),
         move |token| Token::error(input_span.enclose(&input_span, &token.span())),
     );
+    // TODO: Should there additional whitespace be allowed in-between the dot and the newline?
     let until_dot_newline = map(
         alt((
             preceded(take_until(".\n"), terminated(Token::dot, line_ending)),
@@ -61,13 +65,20 @@ pub(crate) fn skip_statement<'a>(input: ParserInput<'a>) -> ParserResult<'a, Tok
 
 pub(crate) fn recover<'a>(
     mut parser: impl Parser<ParserInput<'a>, Statement<'a>, ParserErrorTree<'a>>,
-) -> impl FnMut(ParserInput<'a>) -> ParserResult<Option<Statement<'a>>> {
+) -> impl FnMut(ParserInput<'a>) -> ParserResult<Statement<'a>> {
     move |input: ParserInput<'a>| match parser.parse(input.clone()) {
-        Ok((rest, statement)) => Ok((rest, Some(statement))),
+        Ok((rest, statement)) => Ok((rest, statement)),
         Err(err) if input.span.0.is_empty() => Err(err),
         Err(nom::Err::Error(_)) | Err(nom::Err::Failure(_)) => {
-            let (rest_input, _span) = skip_statement(input).expect("this parser cannot fail");
-            Ok((rest_input, None))
+            let (rest_input, token) = skip_statement(input).expect("this parser cannot fail");
+            Ok((
+                rest_input,
+                Statement {
+                    span: token.span(),
+                    comment: None,
+                    kind: StatementKind::Error(token),
+                },
+            ))
         }
         Err(err) => Err(err),
     }

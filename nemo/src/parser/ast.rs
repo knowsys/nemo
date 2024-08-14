@@ -15,6 +15,7 @@ use std::fmt::Debug;
 
 use super::{context::ParserContext, span::Span, ParserInput, ParserResult};
 use ascii_tree::Tree;
+use token::Token;
 
 /// Trait implemented by nodes in the abstract syntax tree
 pub trait ProgramAST<'a>: Debug + Sync {
