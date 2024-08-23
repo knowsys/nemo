@@ -13,8 +13,8 @@ use nemo::execution::tracing::trace::ExecutionTraceTree;
 use nemo::execution::ExecutionEngine;
 
 use nemo::io::compression_format::CompressionFormat;
-use nemo::io::parser::parse_fact;
-use nemo::io::parser::parse_program;
+use nemo::io::parser::old::parse_fact;
+use nemo::io::parser::old::parse_program;
 use nemo::io::resource_providers::{ResourceProvider, ResourceProviders};
 use nemo::io::ImportManager;
 use nemo::model::Atom;

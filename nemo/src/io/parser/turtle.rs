@@ -13,11 +13,11 @@ use macros::traced;
 use nemo_physical::datavalues::AnyDataValue;
 
 use super::{
-    map_error,
+    old::map_error,
+    old::token,
+    old::ParseError,
     sparql::{iri, Name},
-    token,
     types::{IntermediateResult, Span},
-    ParseError,
 };
 
 /// Characters requiring escape sequences in single-line string literals.

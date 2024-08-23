@@ -10,12 +10,13 @@ use nom::{
 };
 
 use super::{
-    iri, map_error,
+    iri,
+    old::map_error,
+    old::token,
+    old::ParseError,
     rfc5234::digit,
-    token,
     turtle::hex,
     types::{IntermediateResult, Span},
-    ParseError,
 };
 
 use macros::traced;

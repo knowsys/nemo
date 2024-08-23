@@ -8,8 +8,8 @@ use nom::{
 };
 
 use super::{
+    old::token,
     rfc5234::{alpha, digit, hexdig},
-    token,
     types::{IntermediateResult, Span},
 };
 
