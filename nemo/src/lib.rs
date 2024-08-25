@@ -32,6 +32,7 @@ pub mod model;
 pub mod util;
 
 mod program_analysis;
+mod static_checks;
 mod table_manager;
 
 // we use datavalues and meta from nemo_physical in our API, so re-export it here.
