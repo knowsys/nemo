@@ -27,9 +27,11 @@ pub(crate) fn quote_iri(s: &str) -> String {
     "<".to_owned() + s + ">"
 }
 
-/// Enum of different value domains that are distinguished in this code,
-/// such as "string" or "64bit floating point numbers". Even in an untyped context,
-/// it is often useful to distinguish some basic domains and to treat values accordingly.
+/// Enum of different value domains that are distinguished in this code.
+///
+/// Value domains include, e.g., "string" or "64bit floating point numbers".
+/// Even in an untyped context, it is often useful to distinguish some basic
+/// domains and to treat values accordingly.
 ///
 /// Most domains are disjoint to other domains. Where this is not the case, we make sure
 /// that the intersectoin of overlapping domains is also available as a constant.
@@ -216,7 +218,9 @@ impl PartialOrd for ValueDomain {
     }
 }
 
-/// Trait for a data value. Implementations of this trait define a single
+/// Trait for a data value.
+///
+/// Implementations of this trait define a single
 /// semantic value. It is fully identified by its datatype IRI and lexical
 /// value, and different datatype IRI -- lexical value combinations always
 /// mean different values (i.e., the representation is canonical). The possible

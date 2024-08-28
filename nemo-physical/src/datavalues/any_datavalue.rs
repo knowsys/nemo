@@ -1,5 +1,4 @@
-//! This module provides implementations [DataValue]s that can represent any
-//! datavalue that we support.
+//! This module provides implementations [DataValue]s that can represent any datavalue that we support.
 
 use std::{num::IntErrorKind, str::FromStr};
 

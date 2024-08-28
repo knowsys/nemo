@@ -1,4 +1,5 @@
 //! This module provides implementations of [DataValue]s that represent integer numbers.
+//!
 //! Integers have a more complex domain hierarchy than most other kinds of data, and the related
 //! logic is collected here as well.
 
