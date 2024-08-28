@@ -43,7 +43,9 @@ impl AddResult {
 }
 
 /// A [DvDict] represents a dictionary for datavalues, i.e., a bijective (invertible) mapping from
-/// [crate::datavalues::DataValue]s to numeric ids (`usize`). In addition, to this bijection, dictionaries maintain
+/// [crate::datavalues::DataValue]s to numeric ids (`usize`).
+///
+/// In addition, to this bijection, dictionaries maintain
 /// a set of *marked* datavalues. For these, the dictionary will always return the virtual id [KNOWN_ID_MARK],
 /// which cannot be used to retrieve datavalues.
 ///
