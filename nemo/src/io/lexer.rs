@@ -182,15 +182,18 @@ impl AstNode for Span<'_> {
     }
 
     fn lsp_identifier(&self) -> Option<(String, String)> {
-        todo!()
+        // This was todo!() before but we don't want to panic here.
+        None
     }
 
     fn lsp_symbol_info(&self) -> Option<(String, SymbolKind)> {
-        todo!()
+        // This was todo!() before but we don't want to panic here.
+        None
     }
 
     fn lsp_range_to_rename(&self) -> Option<super::parser::ast::Range> {
-        todo!()
+        // This was todo!() before but we don't want to panic here.
+        None
     }
 }
 
