@@ -137,7 +137,7 @@ pub fn map_error<'a, T: 'a>(
 }
 
 /// A combinator that creates a parser for a specific token.
-pub fn token<'a>(token: &'a str) -> impl FnMut(Span<'a>) -> IntermediateResult<Span<'a>> {
+pub fn token<'a>(token: &'a str) -> impl FnMut(Span<'a>) -> IntermediateResult<'a, Span<'a>> {
     map_error(tag(token), || ParseError::ExpectedToken(token.to_string()))
 }
 
@@ -145,7 +145,7 @@ pub fn token<'a>(token: &'a str) -> impl FnMut(Span<'a>) -> IntermediateResult<S
 /// surrounded by whitespace or comments.
 pub fn space_delimited_token<'a>(
     token: &'a str,
-) -> impl FnMut(Span<'a>) -> IntermediateResult<Span<'a>> {
+) -> impl FnMut(Span<'a>) -> IntermediateResult<'a, Span<'a>> {
     map_error(
         delimited(multispace_or_comment0, tag(token), multispace_or_comment0),
         || ParseError::ExpectedToken(token.to_string()),
@@ -322,37 +322,41 @@ impl<'a> RuleParser<'a> {
     }
 
     /// Parse the dot that ends declarations, optionally surrounded by spaces.
-    fn parse_dot(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Span<'a>> {
+    fn parse_dot(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<'a, Span<'a>> {
         traced("parse_dot", space_delimited_token("."))
     }
 
     /// Parse a comma, optionally surrounded by spaces.
-    fn parse_comma(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Span<'a>> {
+    fn parse_comma(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<'a, Span<'a>> {
         traced("parse_comma", space_delimited_token(","))
     }
 
     /// Parse an equality sign, optionally surrounded by spaces.
-    fn parse_equals(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Span<'a>> {
+    fn parse_equals(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<'a, Span<'a>> {
         traced("parse_equals", space_delimited_token("="))
     }
 
     /// Parse a negation sign (`~`), optionally surrounded by spaces.
-    fn parse_not(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Span<'a>> {
+    fn parse_not(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<'a, Span<'a>> {
         traced("parse_not", space_delimited_token("~"))
     }
 
     /// Parse an arrow (`:-`), optionally surrounded by spaces.
-    fn parse_arrow(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Span<'a>> {
+    fn parse_arrow(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<'a, Span<'a>> {
         traced("parse_arrow", space_delimited_token(":-"))
     }
 
     /// Parse an opening parenthesis, optionally surrounded by spaces.
-    fn parse_open_parenthesis(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Span<'a>> {
+    fn parse_open_parenthesis(
+        &'a self,
+    ) -> impl FnMut(Span<'a>) -> IntermediateResult<'a, Span<'a>> {
         traced("parse_open_parenthesis", space_delimited_token("("))
     }
 
     /// Parse a closing parenthesis, optionally surrounded by spaces.
-    fn parse_close_parenthesis(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Span<'a>> {
+    fn parse_close_parenthesis(
+        &'a self,
+    ) -> impl FnMut(Span<'a>) -> IntermediateResult<'a, Span<'a>> {
         traced("parse_close_parenthesis", space_delimited_token(")"))
     }
 
@@ -362,10 +366,10 @@ impl<'a> RuleParser<'a> {
     pub fn parenthesised<'b, O, F>(
         &'a self,
         parser: F,
-    ) -> impl FnMut(Span<'a>) -> IntermediateResult<O>
+    ) -> impl FnMut(Span<'a>) -> IntermediateResult<'a, O>
     where
         O: Debug + 'a,
-        F: FnMut(Span<'a>) -> IntermediateResult<O> + 'a,
+        F: FnMut(Span<'a>) -> IntermediateResult<'a, O> + 'a,
     {
         traced(
             "parenthesised",
@@ -381,17 +385,17 @@ impl<'a> RuleParser<'a> {
     }
 
     /// Parse an opening brace, optionally surrounded by spaces.
-    fn parse_open_brace(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Span<'a>> {
+    fn parse_open_brace(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<'a, Span<'a>> {
         traced("parse_open_brace", space_delimited_token("{"))
     }
 
     /// Parse a closing brace, optionally surrounded by spaces.
-    fn parse_close_brace(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Span<'a>> {
+    fn parse_close_brace(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<'a, Span<'a>> {
         traced("parse_close_brace", space_delimited_token("}"))
     }
 
     /// Parse a base declaration.
-    fn parse_base(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Identifier> {
+    fn parse_base(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<'a, Identifier> {
         traced(
             "parse_base",
             map_error(
@@ -412,7 +416,7 @@ impl<'a> RuleParser<'a> {
         )
     }
 
-    fn parse_prefix(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Span<'a>> {
+    fn parse_prefix(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<'a, Span<'a>> {
         traced(
             "parse_prefix",
             map_error(
@@ -446,7 +450,7 @@ impl<'a> RuleParser<'a> {
     /// arity is given in brackets after the predicate name, (2) the import predicate names
     /// are one of `load-csv`, `load-tsv`, `load-rdf`, and `sparql`, with the only parameter
     /// being the file name or IRI to be loaded.
-    fn parse_source(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<ImportDirective> {
+    fn parse_source(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<'a, ImportDirective> {
         traced(
             "parse_source",
             map_error(
@@ -616,7 +620,9 @@ impl<'a> RuleParser<'a> {
     }
 
     /// Parse an output directive.
-    fn parse_output_directive(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Identifier> {
+    fn parse_output_directive(
+        &'a self,
+    ) -> impl FnMut(Span<'a>) -> IntermediateResult<'a, Identifier> {
         traced(
             "parse_output",
             map_error(
@@ -636,7 +642,7 @@ impl<'a> RuleParser<'a> {
     /// Parse an entry in a [MapDataValue], i.e., am [AnyDataValue]--[AnyDataValue] pair.
     fn parse_map_entry(
         &'a self,
-    ) -> impl FnMut(Span<'a>) -> IntermediateResult<(AnyDataValue, AnyDataValue)> {
+    ) -> impl FnMut(Span<'a>) -> IntermediateResult<'a, (AnyDataValue, AnyDataValue)> {
         traced(
             "parse_map_entry",
             separated_pair(
@@ -648,7 +654,7 @@ impl<'a> RuleParser<'a> {
     }
 
     /// Parse a ground map literal.
-    fn parse_map_literal(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<MapDataValue> {
+    fn parse_map_literal(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<'a, MapDataValue> {
         traced(
             "parse_map_literal",
             delimited(
@@ -665,7 +671,7 @@ impl<'a> RuleParser<'a> {
     /// Parse a ground tuple literal.
     pub fn parse_tuple_literal(
         &'a self,
-    ) -> impl FnMut(Span<'a>) -> IntermediateResult<TupleDataValue> {
+    ) -> impl FnMut(Span<'a>) -> IntermediateResult<'a, TupleDataValue> {
         traced(
             "parse_tuple_literal",
             delimited(
@@ -680,7 +686,7 @@ impl<'a> RuleParser<'a> {
     }
 
     /// Parse a file format name.
-    fn parse_file_format(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<FileFormat> {
+    fn parse_file_format(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<'a, FileFormat> {
         traced("parse_file_format", move |input| {
             let (remainder, format) =
                 map_res(alpha1, |format: Span<'a>| match *format.fragment() {
@@ -704,7 +710,7 @@ impl<'a> RuleParser<'a> {
     /// Parse an import/export specification.
     fn parse_import_export_spec(
         &'a self,
-    ) -> impl FnMut(Span<'a>) -> IntermediateResult<ImportExportDirective> {
+    ) -> impl FnMut(Span<'a>) -> IntermediateResult<'a, ImportExportDirective> {
         traced("parse_import_export_spec", move |input| {
             let (remainder, predicate) = self.parse_iri_like_identifier()(input)?;
             let (remainder, format) = delimited(
@@ -725,7 +731,7 @@ impl<'a> RuleParser<'a> {
     }
 
     /// Parse an import directive.
-    fn parse_import(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<ImportDirective> {
+    fn parse_import(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<'a, ImportDirective> {
         traced(
             "parse_import",
             delimited(
@@ -737,7 +743,7 @@ impl<'a> RuleParser<'a> {
     }
 
     /// Parse an export directive.
-    fn parse_export(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<ExportDirective> {
+    fn parse_export(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<'a, ExportDirective> {
         traced(
             "parse_export",
             delimited(
@@ -749,7 +755,7 @@ impl<'a> RuleParser<'a> {
     }
 
     /// Parse a statement.
-    fn parse_statement(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Statement> {
+    fn parse_statement(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<'a, Statement> {
         traced(
             "parse_statement",
             map_error(
@@ -763,7 +769,7 @@ impl<'a> RuleParser<'a> {
     }
 
     /// Parse a fact.
-    fn parse_fact(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Fact> {
+    fn parse_fact(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<'a, Fact> {
         traced(
             "parse_fact",
             map_error(
@@ -793,7 +799,9 @@ impl<'a> RuleParser<'a> {
     }
 
     /// Parse an IRI identifier, e.g. for predicate names.
-    fn parse_iri_identifier(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Identifier> {
+    fn parse_iri_identifier(
+        &'a self,
+    ) -> impl FnMut(Span<'a>) -> IntermediateResult<'a, Identifier> {
         map_error(
             move |input| {
                 let (remainder, name) = traced(
@@ -824,7 +832,7 @@ impl<'a> RuleParser<'a> {
     /// * built-in functions in term trees
     fn parse_iri_like_identifier(
         &'a self,
-    ) -> impl FnMut(Span<'a>) -> IntermediateResult<Identifier> {
+    ) -> impl FnMut(Span<'a>) -> IntermediateResult<'a, Identifier> {
         traced(
             "parse_iri_like_identifier",
             map_error(
@@ -843,7 +851,7 @@ impl<'a> RuleParser<'a> {
     /// FIXME: Obsolete. Can be removed in the future.
     fn parse_qualified_predicate_name(
         &'a self,
-    ) -> impl FnMut(Span<'a>) -> IntermediateResult<(Identifier, usize)> {
+    ) -> impl FnMut(Span<'a>) -> IntermediateResult<'a, (Identifier, usize)> {
         traced(
             "parse_qualified_predicate_name",
             pair(
@@ -863,7 +871,7 @@ impl<'a> RuleParser<'a> {
     /// Parse an IRI-like identifier (e.g. a predicate name) that is not an IRI.
     fn parse_bare_iri_like_identifier(
         &'a self,
-    ) -> impl FnMut(Span<'a>) -> IntermediateResult<Identifier> {
+    ) -> impl FnMut(Span<'a>) -> IntermediateResult<'a, Identifier> {
         traced("parse_bare_iri_like_identifier", move |input| {
             let (remainder, name) = parse_bare_name(input)?;
 
@@ -872,7 +880,7 @@ impl<'a> RuleParser<'a> {
     }
 
     /// Parse a rule.
-    fn parse_rule(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Rule> {
+    fn parse_rule(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<'a, Rule> {
         traced(
             "parse_rule",
             map_error(
@@ -916,7 +924,7 @@ impl<'a> RuleParser<'a> {
     }
 
     /// Parse an atom.
-    fn parse_atom(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Atom> {
+    fn parse_atom(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<'a, Atom> {
         traced(
             "parse_atom",
             map_error(
@@ -939,7 +947,9 @@ impl<'a> RuleParser<'a> {
     }
 
     /// Parse a [PrimitiveTerm].
-    fn parse_primitive_term(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<PrimitiveTerm> {
+    fn parse_primitive_term(
+        &'a self,
+    ) -> impl FnMut(Span<'a>) -> IntermediateResult<'a, PrimitiveTerm> {
         traced(
             "parse_primitive_term",
             map_error(
@@ -950,7 +960,7 @@ impl<'a> RuleParser<'a> {
     }
 
     /// Parse an aggregate term.
-    fn parse_aggregate(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Term> {
+    fn parse_aggregate(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<'a, Term> {
         traced(
             "parse_aggregate",
             map_error(
@@ -987,7 +997,7 @@ impl<'a> RuleParser<'a> {
     }
 
     /// Parse a variable.
-    fn parse_variable(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<PrimitiveTerm> {
+    fn parse_variable(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<'a, PrimitiveTerm> {
         traced(
             "parse_variable",
             map_error(
@@ -1004,7 +1014,9 @@ impl<'a> RuleParser<'a> {
     }
 
     /// Parse a universally quantified variable.
-    fn parse_universal_variable(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Variable> {
+    fn parse_universal_variable(
+        &'a self,
+    ) -> impl FnMut(Span<'a>) -> IntermediateResult<'a, Variable> {
         traced(
             "parse_universal_variable",
             map_error(
@@ -1020,7 +1032,7 @@ impl<'a> RuleParser<'a> {
     /// Parse an existentially quantified variable.
     fn parse_existential_variable(
         &'a self,
-    ) -> impl FnMut(Span<'a>) -> IntermediateResult<Variable> {
+    ) -> impl FnMut(Span<'a>) -> IntermediateResult<'a, Variable> {
         traced(
             "parse_existential_variable",
             map_error(
@@ -1034,7 +1046,7 @@ impl<'a> RuleParser<'a> {
     }
 
     /// Parse a variable name.
-    fn parse_variable_name(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<String> {
+    fn parse_variable_name(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<'a, String> {
         traced(
             "parse_variable",
             map_error(
@@ -1049,7 +1061,7 @@ impl<'a> RuleParser<'a> {
     }
 
     /// Parse a literal (i.e., a possibly negated atom).
-    fn parse_literal(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Literal> {
+    fn parse_literal(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<'a, Literal> {
         traced(
             "parse_literal",
             map_error(
@@ -1060,7 +1072,7 @@ impl<'a> RuleParser<'a> {
     }
 
     /// Parse a non-negated literal.
-    fn parse_positive_literal(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Literal> {
+    fn parse_positive_literal(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<'a, Literal> {
         traced(
             "parse_positive_literal",
             map_error(map(self.parse_atom(), Literal::Positive), || {
@@ -1070,7 +1082,7 @@ impl<'a> RuleParser<'a> {
     }
 
     /// Parse a negated literal.
-    fn parse_negative_literal(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Literal> {
+    fn parse_negative_literal(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<'a, Literal> {
         traced(
             "parse_negative_literal",
             map_error(
@@ -1086,7 +1098,7 @@ impl<'a> RuleParser<'a> {
     /// Parse operation that is filters a variable
     fn parse_constraint_operator(
         &'a self,
-    ) -> impl FnMut(Span<'a>) -> IntermediateResult<ConstraintOperator> {
+    ) -> impl FnMut(Span<'a>) -> IntermediateResult<'a, ConstraintOperator> {
         traced(
             "parse_constraint_operator",
             map_error(
@@ -1112,7 +1124,7 @@ impl<'a> RuleParser<'a> {
     /// This may consist of:
     /// * A function term
     /// * An arithmetic expression, which handles e.g. precedence of addition over multiplication
-    fn parse_term(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Term> {
+    fn parse_term(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<'a, Term> {
         traced(
             "parse_term",
             map_error(
@@ -1136,7 +1148,7 @@ impl<'a> RuleParser<'a> {
     }
 
     /// Parse a wildcard variable.
-    fn parse_wildcard(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Term> {
+    fn parse_wildcard(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<'a, Term> {
         traced(
             "parse_wildcard",
             map_res(space_delimited_token("_"), |_| {
@@ -1148,7 +1160,7 @@ impl<'a> RuleParser<'a> {
     }
 
     /// Parse a parenthesised term tree.
-    fn parse_parenthesised_term(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Term> {
+    fn parse_parenthesised_term(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<'a, Term> {
         traced(
             "parse_parenthesised_term",
             map_error(self.parenthesised(self.parse_term()), || {
@@ -1158,7 +1170,7 @@ impl<'a> RuleParser<'a> {
     }
 
     /// Parse a function term, possibly with nested term trees.
-    fn parse_function_term(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Term> {
+    fn parse_function_term(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<'a, Term> {
         traced(
             "parse_function_term",
             map_error(
@@ -1232,7 +1244,9 @@ impl<'a> RuleParser<'a> {
     }
 
     /// Parse an arithmetic expression
-    fn parse_arithmetic_expression(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Term> {
+    fn parse_arithmetic_expression(
+        &'a self,
+    ) -> impl FnMut(Span<'a>) -> IntermediateResult<'a, Term> {
         traced(
             "parse_arithmetic_expression",
             map_error(
@@ -1265,7 +1279,7 @@ impl<'a> RuleParser<'a> {
 
     /// Parse an arithmetic product, i.e., an expression involving
     /// only `*` and `/` over subexpressions.
-    fn parse_arithmetic_product(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Term> {
+    fn parse_arithmetic_product(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<'a, Term> {
         traced(
             "parse_arithmetic_product",
             map_error(
@@ -1294,7 +1308,7 @@ impl<'a> RuleParser<'a> {
     }
 
     /// Parse an arithmetic factor.
-    fn parse_arithmetic_factor(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Term> {
+    fn parse_arithmetic_factor(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<'a, Term> {
         traced(
             "parse_arithmetic_factor",
             map_error(
@@ -1335,7 +1349,7 @@ impl<'a> RuleParser<'a> {
     }
 
     /// Parse expression of the form `<term> <operation> <term>` expressing a constraint.
-    fn parse_constraint(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Constraint> {
+    fn parse_constraint(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<'a, Constraint> {
         traced(
             "parse_constraint",
             map_error(
@@ -1355,7 +1369,7 @@ impl<'a> RuleParser<'a> {
     /// Parse body expression
     fn parse_body_expression(
         &'a self,
-    ) -> impl FnMut(Span<'a>) -> IntermediateResult<BodyExpression> {
+    ) -> impl FnMut(Span<'a>) -> IntermediateResult<'a, BodyExpression> {
         traced(
             "parse_body_expression",
             map_error(
@@ -1369,13 +1383,13 @@ impl<'a> RuleParser<'a> {
     }
 
     /// Parse a program in the rules language.
-    pub fn parse_program(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<Program> {
+    pub fn parse_program(&'a self) -> impl FnMut(Span<'a>) -> IntermediateResult<'a, Program> {
         fn check_for_invalid_statement<'a, F>(
             parser: &mut F,
             input: Span<'a>,
         ) -> IntermediateResult<'a, ()>
         where
-            F: FnMut(Span<'a>) -> IntermediateResult<ParseError>,
+            F: FnMut(Span<'a>) -> IntermediateResult<'a, ParseError>,
         {
             if let Ok((_, e)) = parser(input) {
                 return Err(Err::Failure(e.at(input)));

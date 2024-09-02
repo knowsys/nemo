@@ -52,7 +52,7 @@ pub(crate) trait PartialTrieScan<'a>: Debug {
     fn scan<'b>(&'b self, layer: usize) -> &'b UnsafeCell<ColumnScanT<'a>>;
 
     /// Return the [ColumnScanT] at the current layer.
-    fn current_scan<'b>(&'b self) -> Option<&UnsafeCell<ColumnScanT<'a>>> {
+    fn current_scan<'b>(&'b self) -> Option<&'b UnsafeCell<ColumnScanT<'a>>> {
         Some(self.scan(self.current_layer()?))
     }
 }
@@ -101,7 +101,7 @@ impl<'a> PartialTrieScan<'a> for TrieScanEnum<'a> {
             fn arity(&self) -> usize;
             fn current_layer(&self) -> Option<usize>;
             fn scan<'b>(&'b self, layer: usize) -> &'b UnsafeCell<ColumnScanT<'a>>;
-            fn current_scan<'b>(&'b self) -> Option<&UnsafeCell<ColumnScanT<'a>>>;
+            fn current_scan(&self) -> Option<&UnsafeCell<ColumnScanT<'a>>>;
         }
     }
 }
