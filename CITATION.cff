@@ -33,7 +33,7 @@ authors:
     family-names: Marx
     email: maximilian.marx@tu-dresden.de
     affiliation: "Knowledge-Based Systems, TU Dresden"
-    orcid: "orcid.org/0000-0003-1479-0341"
+    orcid: "https://orcid.org/0000-0003-1479-0341"
   - given-names: Simon
     family-names: Meusel
     email: simon.meusel@mailbox.tu-dresden.de
