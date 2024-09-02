@@ -1,0 +1,97 @@
+# This CITATION.cff file was generated with cffinit.
+# Visit https://bit.ly/cffinit to generate yours today!
+
+cff-version: 1.2.0
+title: Nemo
+message: >-
+  If you use this software, please cite it using the
+  metadata from this file. Note that the related conference
+  paper is accepted and will appear soon.
+type: software
+authors:
+  - given-names: Alex
+    family-names: Ivliev
+    email: alex.ivliev@tu-dresden.de
+    affiliation: "Knowledge-Based Systems, TU Dresden"
+    orcid: "https://orcid.org/0000-0002-1604-6308"
+  - given-names: Stefan
+    family-names: Ellmauthaler
+    email: stefan.ellmauthaler@tu-dresden.de
+    affiliation: "Knowledge-Based Systems, TU Dresden"
+    orcid: "https://orcid.org/0000-0003-3882-4286"
+  - given-names: Lukas
+    family-names: Gerlach
+    email: lukas.gerlach@tu-dresden.de
+    affiliation: "Knowledge-Based Systems, TU Dresden"
+    orcid: "https://orcid.org/0000-0003-4566-0224"
+  - given-names: Markus
+    family-names: Krötzsch
+    email: markus.kroetzsch@tu-dresden.de
+    affiliation: "Knowledge-Based Systems, TU Dresden"
+    orcid: "https://orcid.org/0000-0002-9172-2601"
+  - given-names: Maximilian
+    family-names: Marx
+    email: maximilian.marx@tu-dresden.de
+    affiliation: "Knowledge-Based Systems, TU Dresden"
+    orcid: "https://orcid.org/0000-0003-1479-0341"
+  - given-names: Simon
+    family-names: Meusel
+    email: simon.meusel@mailbox.tu-dresden.de
+    affiliation: "Knowledge-Based Systems, TU Dresden"
+  - given-names: Jakob
+    family-names: Steinberg
+    email: jakob_maximilian.steinberg@mailbox.tu-dresden.de
+    affiliation: "Knowledge-Based Systems, TU Dresden"
+repository-code: "https://github.com/knowsys/nemo"
+url: "https://knowsys.github.io/nemo-doc/"
+abstract: >-
+  Nemo is a datalog-based rule engine for fast and scalable
+  analytic data processing in memory. It is available as a
+  command-line tool nmo, through bindings to other
+  programming languages, and via a browser-based web
+  application.
+keywords:
+  - Reasoning System
+  - Datalog
+  - Existential Rules
+license: Apache-2.0
+commit: 6ccd3fcc12d57fbac5e3d7e5c5547e72a610d7f7
+version: 0.5.1
+date-released: '2024-06-06'
+preferred-citation:
+  authors:
+  - given-names: Alex
+    family-names: Ivliev
+    email: alex.ivliev@tu-dresden.de
+    affiliation: "Knowledge-Based Systems, TU Dresden"
+    orcid: "https://orcid.org/0000-0002-1604-6308"
+  - given-names: Lukas
+    family-names: Gerlach
+    email: lukas.gerlach@tu-dresden.de
+    affiliation: "Knowledge-Based Systems, TU Dresden"
+    orcid: "https://orcid.org/0000-0003-4566-0224"
+  - given-names: Simon
+    family-names: Meusel
+    email: simon.meusel@mailbox.tu-dresden.de
+    affiliation: "Knowledge-Based Systems, TU Dresden"
+  - given-names: Jakob
+    family-names: Steinberg
+    email: jakob_maximilian.steinberg@mailbox.tu-dresden.de
+    affiliation: "Knowledge-Based Systems, TU Dresden"
+  - given-names: Markus
+    family-names: Krötzsch
+    email: markus.kroetzsch@tu-dresden.de
+    affiliation: "Knowledge-Based Systems, TU Dresden"
+    orcid: "https://orcid.org/0000-0002-9172-2601"
+  title: "Nemo: Your Friendly and Versatile Rule Reasoning Toolkit"
+  type: conference-paper
+  conference:
+    name: "21st International Conference on Principles of Knowledge Representation and Reasoning"
+    location: Hanoi, Vietnam
+    alias: KR
+    website: "https://kr.org/KR2024/"
+    date-start: 2024-11-02
+    date-end: 2024-11-08
+  collection-title: "Proceedings of the 21st International Conference on Principles of Knowledge Representation and Reasoning (KR 2024)"
+  publisher: "International Joint Conferences on Artificial Intelligence Organization"
+  year: 2024
