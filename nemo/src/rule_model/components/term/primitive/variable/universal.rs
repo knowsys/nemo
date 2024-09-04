@@ -3,7 +3,7 @@
 use std::{fmt::Display, hash::Hash};
 
 use crate::rule_model::{
-    components::ProgramComponent,
+    components::{ProgramComponent, ProgramComponentKind},
     error::{validation_error::ValidationErrorKind, ValidationError, ValidationErrorBuilder},
     origin::Origin,
 };
@@ -120,5 +120,9 @@ impl ProgramComponent for UniversalVariable {
         }
 
         Ok(())
+    }
+
+    fn kind(&self) -> ProgramComponentKind {
+        ProgramComponentKind::Variable
     }
 }

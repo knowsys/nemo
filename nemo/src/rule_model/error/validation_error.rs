@@ -85,6 +85,41 @@ pub enum ValidationErrorKind {
     #[assoc(code = 216)]
     #[assoc(note = "each predicate is only allowed to have one arity")]
     InconsistentArities { predicate: String },
+    /// Import/Export: Missing required attribute
+    #[error(r#"missing required parameter `{attribute}` in {direction} statement"#)]
+    #[assoc(code = 217)]
+    ImportExportMissingRequiredAttribute {
+        attribute: String,
+        direction: String,
+    },
+    /// Import/Export: Unrecognized parameter
+    #[error(r#"file format {format} does not recognize parameter `{attribute}`"#)]
+    #[assoc(code = 218)]
+    ImportExportUnrecognizedAttribute { format: String, attribute: String },
+    /// Import/Export: wrong input type for resource attribute
+    #[error(r#"parameter `{parameter}` was given as a `{given}`, expected `{expected}`"#)]
+    #[assoc(code = 219)]
+    ImportExportAttributeValueType {
+        parameter: String,
+        given: String,
+        expected: String,
+    },
+    /// Import/Export: dsv wrong value format
+    #[error(r#"unknown {file_format} value format"#)]
+    #[assoc(code = 220)]
+    ImportExportValueFormat { file_format: String },
+    /// Import/Export: negative limit
+    #[error(r#"limit was negative"#)]
+    #[assoc(code = 221)]
+    ImportExportLimitNegative,
+    /// Import/Export: delimiter
+    #[error(r#"delimiter must be a single character"#)]
+    #[assoc(code = 222)]
+    ImportExportDelimiter,
+    /// Import/Export: unknown compression format
+    #[error(r#"unknown compression format `{format}`"#)]
+    #[assoc(code = 223)]
+    ImportExportUnknownCompression { format: String },
 
     /// Unsupported feature: Multiple aggregates in one rule
     #[error(r#"multiple aggregates in one rule is currently unsupported"#)]
@@ -102,4 +137,8 @@ pub enum ValidationErrorKind {
     #[assoc(code = 996)]
     #[error(r#"complex terms are currently unsupported"#)]
     UnsupportedComplexTerm,
+    /// Unsupported feature: Exporting Json files
+    #[error(r#"exporting in json is currently unsupported"#)]
+    #[assoc(code = 995)]
+    UnsupportedJsonExport,
 }

@@ -10,7 +10,7 @@ use crate::rule_model::{
 use super::{
     tag::Tag,
     term::{primitive::variable::Variable, Term},
-    IterableVariables, ProgramComponent,
+    IterableVariables, ProgramComponent, ProgramComponentKind,
 };
 
 /// Atom
@@ -155,6 +155,10 @@ impl ProgramComponent for Atom {
         }
 
         Ok(())
+    }
+
+    fn kind(&self) -> ProgramComponentKind {
+        ProgramComponentKind::Atom
     }
 }
 

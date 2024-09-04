@@ -7,7 +7,7 @@ use crate::rule_model::error::{ValidationError, ValidationErrorBuilder};
 use super::{
     atom::Atom,
     term::{operation::Operation, primitive::variable::Variable, Term},
-    IterableVariables, ProgramComponent,
+    IterableVariables, ProgramComponent, ProgramComponentKind,
 };
 
 /// Literal
@@ -82,6 +82,10 @@ impl ProgramComponent for Literal {
             Literal::Negative(literal) => literal.validate(builder),
             Literal::Operation(literal) => literal.validate(builder),
         }
+    }
+
+    fn kind(&self) -> ProgramComponentKind {
+        ProgramComponentKind::Literal
     }
 }
 

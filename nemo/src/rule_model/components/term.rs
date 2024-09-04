@@ -281,6 +281,17 @@ impl ProgramComponent for Term {
             Term::Tuple(term) => term.validate(builder),
         }
     }
+
+    fn kind(&self) -> super::ProgramComponentKind {
+        match self {
+            Term::Primitive(term) => term.kind(),
+            Term::Aggregate(term) => term.kind(),
+            Term::FunctionTerm(term) => term.kind(),
+            Term::Map(term) => term.kind(),
+            Term::Operation(term) => term.kind(),
+            Term::Tuple(term) => term.kind(),
+        }
+    }
 }
 
 impl IterableVariables for Term {

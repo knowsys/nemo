@@ -18,7 +18,7 @@ use crate::{
 #[derive(Assoc, Debug, Clone, Copy, PartialEq, Eq)]
 #[func(pub fn name(&self) -> &'static str)]
 #[func(pub fn from_name(name: &str) -> Option<Self>)]
-pub(super) enum RdfValueFormat {
+pub(crate) enum RdfValueFormat {
     /// General format that accepts any RDF term.
     #[assoc(name = value_formats::ANY)]
     #[assoc(from_name = value_formats::ANY)]

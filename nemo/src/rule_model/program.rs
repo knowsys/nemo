@@ -14,7 +14,7 @@ use super::{
         literal::Literal,
         output::Output,
         rule::Rule,
-        ProgramComponent,
+        ProgramComponent, ProgramComponentKind,
     },
     error::{
         info::Info, validation_error::ValidationErrorKind, ComplexErrorLabelKind,
@@ -244,6 +244,10 @@ impl ProgramComponent for Program {
         }
 
         self.validate_global_properties(builder)
+    }
+
+    fn kind(&self) -> ProgramComponentKind {
+        ProgramComponentKind::Program
     }
 }
 

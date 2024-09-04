@@ -4,7 +4,7 @@ use std::{fmt::Display, hash::Hash};
 
 use crate::rule_model::{error::ValidationErrorBuilder, origin::Origin};
 
-use super::{tag::Tag, ProgramComponent};
+use super::{tag::Tag, ProgramComponent, ProgramComponentKind};
 
 /// Output directive
 ///
@@ -76,5 +76,9 @@ impl ProgramComponent for Output {
         Self: Sized,
     {
         Ok(())
+    }
+
+    fn kind(&self) -> ProgramComponentKind {
+        ProgramComponentKind::Output
     }
 }

@@ -10,7 +10,7 @@ use nemo_physical::datavalues::AnyDataValue;
 use variable::{existential::ExistentialVariable, universal::UniversalVariable, Variable};
 
 use crate::rule_model::{
-    components::{IterableVariables, ProgramComponent},
+    components::{IterableVariables, ProgramComponent, ProgramComponentKind},
     error::ValidationErrorBuilder,
     origin::Origin,
 };
@@ -145,6 +145,13 @@ impl ProgramComponent for Primitive {
         match self {
             Primitive::Variable(variable) => variable.validate(builder),
             Primitive::Ground(ground) => ground.validate(builder),
+        }
+    }
+
+    fn kind(&self) -> ProgramComponentKind {
+        match self {
+            Primitive::Variable(primitive) => primitive.kind(),
+            Primitive::Ground(primitive) => primitive.kind(),
         }
     }
 }

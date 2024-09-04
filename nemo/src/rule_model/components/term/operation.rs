@@ -7,7 +7,7 @@ use std::{fmt::Display, hash::Hash};
 use operation_kind::OperationKind;
 
 use crate::rule_model::{
-    components::{IterableVariables, ProgramComponent},
+    components::{IterableVariables, ProgramComponent, ProgramComponentKind},
     error::{validation_error::ValidationErrorKind, ValidationErrorBuilder},
     origin::Origin,
 };
@@ -236,6 +236,10 @@ impl ProgramComponent for Operation {
         }
 
         Ok(())
+    }
+
+    fn kind(&self) -> ProgramComponentKind {
+        ProgramComponentKind::Operation
     }
 }
 

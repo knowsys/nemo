@@ -5,21 +5,33 @@ pub mod attributes;
 pub mod compression;
 pub mod file_formats;
 
-use std::{collections::HashMap, fmt::Display, hash::Hash};
+use std::{
+    collections::{HashMap, HashSet},
+    fmt::Display,
+    hash::Hash,
+};
 
 use attributes::ImportExportAttribute;
-use file_formats::FileFormat;
+use compression::CompressionFormat;
+use file_formats::{AttributeRequirement, FileFormat};
 use nemo_physical::datavalues::DataValue;
 
 use crate::{
-    io::formats::dsv::value_format::DsvValueFormats,
-    rule_model::{error::ValidationErrorBuilder, origin::Origin},
+    io::formats::{
+        dsv::value_format::{DsvValueFormat, DsvValueFormats},
+        rdf::value_format::RdfValueFormat,
+        Direction,
+    },
+    rule_model::{
+        error::{hint::Hint, validation_error::ValidationErrorKind, ValidationErrorBuilder},
+        origin::Origin,
+    },
 };
 
 use super::{
     tag::Tag,
     term::{map::Map, primitive::Primitive, Term},
-    ProgramComponent,
+    ProgramComponent, ProgramComponentKind,
 };
 
 /// An import/export specification. This object captures all information that is typically
@@ -77,7 +89,7 @@ impl ImportExportDirective {
     }
 
     /// Return a [HashMap] containing the attributes of this directive.
-    fn attribute_map(&self) -> HashMap<ImportExportAttribute, &Term> {
+    pub fn attribute_map(&self) -> HashMap<ImportExportAttribute, &Term> {
         let mut result = HashMap::new();
 
         for (key, value) in self.attributes.key_value() {
@@ -85,6 +97,22 @@ impl ImportExportDirective {
                 Self::plain_value(&key).and_then(|plain| ImportExportAttribute::from_name(&plain))
             {
                 result.insert(name, value);
+            }
+        }
+
+        result
+    }
+
+    /// Return a [HahsMap] containing the attributes of this directive,
+    /// including the origin of each key.
+    fn attribute_map_key(&self) -> HashMap<ImportExportAttribute, (&Origin, &Term)> {
+        let mut result = HashMap::new();
+
+        for (key, value) in self.attributes.key_value() {
+            if let Some(name) =
+                Self::plain_value(&key).and_then(|plain| ImportExportAttribute::from_name(&plain))
+            {
+                result.insert(name, (key.origin(), value));
             }
         }
 
@@ -123,6 +151,195 @@ impl ImportExportDirective {
             "{} :- {} {} .",
             self.predicate, self.format, self.attributes
         )
+    }
+}
+
+impl ImportExportDirective {
+    /// Validate directive
+    pub fn validate(
+        &self,
+        direction: Direction,
+        builder: &mut ValidationErrorBuilder,
+    ) -> Result<(), ()> {
+        if direction == Direction::Export && self.format == FileFormat::JSON {
+            builder.report_error(
+                self.origin.clone(),
+                ValidationErrorKind::UnsupportedJsonExport,
+            );
+            return Err(());
+        }
+
+        let attributes = self.attribute_map_key();
+        for (attribute, requirement) in self.format.attributes() {
+            if requirement == AttributeRequirement::Required && attributes.get(&attribute).is_none()
+            {
+                builder.report_error(
+                    self.origin,
+                    ValidationErrorKind::ImportExportMissingRequiredAttribute {
+                        attribute: attribute.name().to_string(),
+                        direction: direction.to_string(),
+                    },
+                )
+            }
+        }
+
+        let expected_attributes = self.format.attributes().keys().collect::<HashSet<_>>();
+        for (attribute, (attribute_origin, value)) in attributes.iter() {
+            if !expected_attributes.contains(attribute) {
+                builder
+                    .report_error(
+                        attribute_origin,
+                        ValidationErrorKind::ImportExportUnrecognizedAttribute {
+                            format: self.format.name().to_string(),
+                            attribute: attribute.name().to_string(),
+                        },
+                    )
+                    .add_hint(Hint::similar(
+                        "parameter",
+                        attribute.name(),
+                        expected_attributes.iter().map(|attribute| attribute.name()),
+                    ))
+            }
+
+            if attribute.value_type() != value.kind() {
+                builder.report_error(
+                    value.origin().clone(),
+                    ValidationErrorKind::ImportExportAttributeValueType {
+                        parameter: attribute.name().to_string(),
+                        given: value.kind().name.to_string(),
+                        expected: attribute.value_type().name().to_string(),
+                    },
+                );
+
+                continue;
+            }
+
+            let _ = match attribute {
+                ImportExportAttribute::Format => match self.format {
+                    FileFormat::CSV | FileFormat::DSV | FileFormat::TSV => {
+                        Self::validate_attribute_format_dsv(value, builder)
+                    }
+                    FileFormat::NTriples
+                    | FileFormat::NQuads
+                    | FileFormat::Turtle
+                    | FileFormat::RDFXML
+                    | FileFormat::TriG => Self::validate_attribute_format_rdf(value, builder),
+                    FileFormat::JSON => Ok(()),
+                },
+                ImportExportAttribute::Delimiter => Self::validate_delimiter(value, builder),
+                ImportExportAttribute::Compression => Self::validate_compression(value, builder),
+                ImportExportAttribute::Limit => Self::validate_limit(value, builder),
+                ImportExportAttribute::Base => Ok(()),
+                ImportExportAttribute::Resource => Ok(()),
+            };
+        }
+
+        Ok(())
+    }
+
+    /// Validate the format attribute for dsv
+    fn validate_attribute_format_dsv(
+        value: &Term,
+        builder: &mut ValidationErrorBuilder,
+    ) -> Result<(), ()> {
+        if let Term::Tuple(tuple) = value {
+            for argument in tuple.arguments() {
+                if ImportExportDirective::plain_value(value)
+                    .and_then(|name| DsvValueFormat::from_name(&name))
+                    .is_none()
+                {
+                    builder.report_error(
+                        argument.origin().clone(),
+                        ValidationErrorKind::ImportExportValueFormat {
+                            file_format: String::from("dsv"),
+                        },
+                    );
+
+                    return Err(());
+                }
+            }
+
+            Ok(())
+        } else {
+            unreachable!("value should be of correct type")
+        }
+    }
+
+    /// Validate the format attribute for dsv
+    fn validate_attribute_format_rdf(
+        value: &Term,
+        builder: &mut ValidationErrorBuilder,
+    ) -> Result<(), ()> {
+        if let Term::Tuple(tuple) = value {
+            for argument in tuple.arguments() {
+                if ImportExportDirective::plain_value(value)
+                    .and_then(|name| RdfValueFormat::from_name(&name))
+                    .is_none()
+                {
+                    builder.report_error(
+                        argument.origin().clone(),
+                        ValidationErrorKind::ImportExportValueFormat {
+                            file_format: String::from("rdf"),
+                        },
+                    );
+
+                    return Err(());
+                }
+            }
+
+            Ok(())
+        } else {
+            unreachable!("value should be of correct type")
+        }
+    }
+
+    /// Check if the delimiter is a single character string.
+    fn validate_delimiter(value: &Term, builder: &mut ValidationErrorBuilder) -> Result<(), ()> {
+        if let Some(delimiter) = ImportExportDirective::string_value(value) {
+            if delimiter.len() != 1 {
+                builder.report_error(
+                    value.origin().clone(),
+                    ValidationErrorKind::ImportExportDelimiter,
+                );
+
+                return Err(());
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Check if the limit is a non-negative number.
+    fn validate_limit(value: &Term, builder: &mut ValidationErrorBuilder) -> Result<(), ()> {
+        if let Term::Primitive(Primitive::Ground(ground)) = value {
+            if !ground.value().fits_into_u64() {
+                builder.report_error(
+                    value.origin().clone(),
+                    ValidationErrorKind::ImportExportLimitNegative,
+                );
+                return Err(());
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Check if the compression format is supported.
+    fn validate_compression(value: &Term, builder: &mut ValidationErrorBuilder) -> Result<(), ()> {
+        if let Some(compression) = ImportExportDirective::string_value(value) {
+            if CompressionFormat::from_name(&compression).is_none() {
+                builder.report_error(
+                    value.origin().clone(),
+                    ValidationErrorKind::ImportExportUnknownCompression {
+                        format: compression,
+                    },
+                );
+
+                return Err(());
+            }
+        }
+
+        Ok(())
     }
 }
 
@@ -219,6 +436,10 @@ impl ProgramComponent for ImportDirective {
     {
         todo!()
     }
+
+    fn kind(&self) -> ProgramComponentKind {
+        ProgramComponentKind::Import
+    }
 }
 
 /// An export specification.
@@ -297,5 +518,9 @@ impl ProgramComponent for ExportDirective {
         Self: Sized,
     {
         todo!()
+    }
+
+    fn kind(&self) -> ProgramComponentKind {
+        ProgramComponentKind::Export
     }
 }

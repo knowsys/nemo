@@ -7,7 +7,9 @@ use crate::rule_model::{
     origin::Origin,
 };
 
-use super::{atom::Atom, tag::Tag, term::Term, IterableVariables, ProgramComponent};
+use super::{
+    atom::Atom, tag::Tag, term::Term, IterableVariables, ProgramComponent, ProgramComponentKind,
+};
 
 /// A (ground) fact
 #[derive(Debug, Clone, Eq)]
@@ -130,5 +132,9 @@ impl ProgramComponent for Fact {
         }
 
         Ok(())
+    }
+
+    fn kind(&self) -> ProgramComponentKind {
+        ProgramComponentKind::Fact
     }
 }

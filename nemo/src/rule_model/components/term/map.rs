@@ -3,7 +3,7 @@
 use std::{fmt::Display, hash::Hash};
 
 use crate::rule_model::{
-    components::{tag::Tag, IterableVariables, ProgramComponent},
+    components::{tag::Tag, IterableVariables, ProgramComponent, ProgramComponentKind},
     error::ValidationErrorBuilder,
     origin::Origin,
 };
@@ -141,6 +141,10 @@ impl ProgramComponent for Map {
         }
 
         Ok(())
+    }
+
+    fn kind(&self) -> ProgramComponentKind {
+        ProgramComponentKind::Map
     }
 }
 

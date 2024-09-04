@@ -7,7 +7,7 @@ use nemo_physical::datavalues::{AnyDataValue, DataValue, DataValueCreationError}
 
 use crate::{
     parser::{ast::token::Token, input::ParserInput, ParserState},
-    rule_model::components::term::{primitive::Primitive, tuple::Tuple, Term},
+    rule_model::components::{import_export::ImportExportDirective, term::tuple::Tuple},
     syntax::directive::value_formats,
 };
 
@@ -72,11 +72,11 @@ impl DsvValueFormats {
         let mut result = Vec::new();
 
         for value in tuple.arguments() {
-            if let Term::Primitive(Primitive::Ground(ground)) = value {
-                if let Some(format) = DsvValueFormat::from_name(&ground.to_string()) {
-                    result.push(format);
-                    continue;
-                }
+            if let Some(format) = ImportExportDirective::plain_value(value)
+                .and_then(|name| DsvValueFormat::from_name(&name))
+            {
+                result.push(format);
+                continue;
             }
 
             return None;

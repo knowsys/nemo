@@ -6,6 +6,7 @@ use existential::ExistentialVariable;
 use universal::UniversalVariable;
 
 use crate::rule_model::{
+    components::ProgramComponentKind,
     error::{ValidationError, ValidationErrorBuilder},
     origin::Origin,
 };
@@ -146,5 +147,9 @@ impl ProgramComponent for Variable {
             Variable::Universal(universal) => universal.validate(builder),
             Variable::Existential(existential) => existential.validate(builder),
         }
+    }
+
+    fn kind(&self) -> ProgramComponentKind {
+        ProgramComponentKind::Variable
     }
 }

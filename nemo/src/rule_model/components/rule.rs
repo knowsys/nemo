@@ -18,7 +18,7 @@ use super::{
         primitive::{variable::Variable, Primitive},
         Term,
     },
-    IterableVariables, ProgramComponent,
+    IterableVariables, ProgramComponent, ProgramComponentKind,
 };
 
 /// Rule
@@ -328,10 +328,7 @@ impl ProgramComponent for Rule {
                         if let Some(hint) = Hint::similar(
                             "variable",
                             variable_name,
-                            &safe_variables
-                                .iter()
-                                .flat_map(|variable| variable.name())
-                                .collect::<Vec<_>>(),
+                            safe_variables.iter().flat_map(|variable| variable.name()),
                         ) {
                             info.add_hint(hint);
                         }
@@ -394,6 +391,10 @@ impl ProgramComponent for Rule {
         }
 
         Ok(())
+    }
+
+    fn kind(&self) -> ProgramComponentKind {
+        ProgramComponentKind::Rule
     }
 }
 

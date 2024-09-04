@@ -33,7 +33,10 @@ pub enum FileFormat {
     #[assoc(from_name = file_format::CSV)]
     #[assoc(extension = file_format::EXTENSION_CSV)]
     #[assoc(attributes = HashMap::from([
-        (ImportExportAttribute::Resource, AttributeRequirement::Required)
+        (ImportExportAttribute::Resource, AttributeRequirement::Required),
+        (ImportExportAttribute::Formats, AttributeRequirement::Optional),
+        (ImportExportAttribute::Limit, AttributeRequirement::Optional),
+        (ImportExportAttribute::Compression, AttributeRequirement::Optional),
     ]))]
     CSV,
     /// Delimiter-separated values
@@ -41,7 +44,11 @@ pub enum FileFormat {
     #[assoc(from_name = file_format::DSV)]
     #[assoc(extension = file_format::EXTENSION_DSV)]
     #[assoc(attributes = HashMap::from([
-        (ImportExportAttribute::Resource, AttributeRequirement::Required)
+        (ImportExportAttribute::Resource, AttributeRequirement::Required),
+        (ImportExportAttribute::Delimiter, AttributeRequirement::Required),
+        (ImportExportAttribute::Formats, AttributeRequirement::Optional),
+        (ImportExportAttribute::Limit, AttributeRequirement::Optional),
+        (ImportExportAttribute::Compression, AttributeRequirement::Optional),
     ]))]
     DSV,
     /// Tab-separated values
@@ -49,7 +56,10 @@ pub enum FileFormat {
     #[assoc(from_name = file_format::TSV)]
     #[assoc(extension = file_format::EXTENSION_TSV)]
     #[assoc(attributes = HashMap::from([
-        (ImportExportAttribute::Resource, AttributeRequirement::Required)
+        (ImportExportAttribute::Resource, AttributeRequirement::Required),
+        (ImportExportAttribute::Formats, AttributeRequirement::Optional),
+        (ImportExportAttribute::Limit, AttributeRequirement::Optional),
+        (ImportExportAttribute::Compression, AttributeRequirement::Optional),
     ]))]
     TSV,
     /// JSON objects
@@ -66,7 +76,11 @@ pub enum FileFormat {
     #[assoc(from_name = file_format::RDF_NTRIPLES)]
     #[assoc(extension = file_format::EXTENSION_RDF_NTRIPLES)]
     #[assoc(attributes = HashMap::from([
-        (ImportExportAttribute::Resource, AttributeRequirement::Required)
+        (ImportExportAttribute::Resource, AttributeRequirement::Required),
+        (ImportExportAttribute::Base, AttributeRequirement::Optional),
+        (ImportExportAttribute::Formats, AttributeRequirement::Optional),
+        (ImportExportAttribute::Limit, AttributeRequirement::Optional),
+        (ImportExportAttribute::Compression, AttributeRequirement::Optional),
     ]))]
     #[assoc(arity = 3)]
     NTriples,
@@ -75,7 +89,11 @@ pub enum FileFormat {
     #[assoc(from_name = file_format::RDF_NQUADS)]
     #[assoc(extension = file_format::EXTENSION_RDF_NQUADS)]
     #[assoc(attributes = HashMap::from([
-        (ImportExportAttribute::Resource, AttributeRequirement::Required)
+        (ImportExportAttribute::Resource, AttributeRequirement::Required),
+        (ImportExportAttribute::Base, AttributeRequirement::Optional),
+        (ImportExportAttribute::Formats, AttributeRequirement::Optional),
+        (ImportExportAttribute::Limit, AttributeRequirement::Optional),
+        (ImportExportAttribute::Compression, AttributeRequirement::Optional),
     ]))]
     #[assoc(arity = 4)]
     NQuads,
@@ -84,7 +102,11 @@ pub enum FileFormat {
     #[assoc(from_name = file_format::RDF_TURTLE)]
     #[assoc(extension = file_format::EXTENSION_RDF_TURTLE)]
     #[assoc(attributes = HashMap::from([
-        (ImportExportAttribute::Resource, AttributeRequirement::Required)
+        (ImportExportAttribute::Resource, AttributeRequirement::Required),
+        (ImportExportAttribute::Base, AttributeRequirement::Optional),
+        (ImportExportAttribute::Formats, AttributeRequirement::Optional),
+        (ImportExportAttribute::Limit, AttributeRequirement::Optional),
+        (ImportExportAttribute::Compression, AttributeRequirement::Optional),
     ]))]
     #[assoc(arity = 3)]
     Turtle,
@@ -93,7 +115,11 @@ pub enum FileFormat {
     #[assoc(from_name = file_format::RDF_XML)]
     #[assoc(extension = file_format::EXTENSION_RDF_XML)]
     #[assoc(attributes = HashMap::from([
-        (ImportExportAttribute::Resource, AttributeRequirement::Required)
+        (ImportExportAttribute::Resource, AttributeRequirement::Required),
+        (ImportExportAttribute::Base, AttributeRequirement::Optional),
+        (ImportExportAttribute::Formats, AttributeRequirement::Optional),
+        (ImportExportAttribute::Limit, AttributeRequirement::Optional),
+        (ImportExportAttribute::Compression, AttributeRequirement::Optional),
     ]))]
     #[assoc(arity = 3)]
     RDFXML,
@@ -102,7 +128,11 @@ pub enum FileFormat {
     #[assoc(from_name = file_format::RDF_TRIG)]
     #[assoc(extension = file_format::EXTENSION_RDF_TRIG)]
     #[assoc(attributes = HashMap::from([
-        (ImportExportAttribute::Resource, AttributeRequirement::Required)
+        (ImportExportAttribute::Resource, AttributeRequirement::Required),
+        (ImportExportAttribute::Base, AttributeRequirement::Optional),
+        (ImportExportAttribute::Formats, AttributeRequirement::Optional),
+        (ImportExportAttribute::Limit, AttributeRequirement::Optional),
+        (ImportExportAttribute::Compression, AttributeRequirement::Optional),
     ]))]
     #[assoc(arity = 4)]
     TriG,

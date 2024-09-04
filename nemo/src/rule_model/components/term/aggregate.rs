@@ -8,7 +8,7 @@ use strum_macros::EnumIter;
 
 use crate::{
     rule_model::{
-        components::{IterableVariables, ProgramComponent},
+        components::{IterableVariables, ProgramComponent, ProgramComponentKind},
         error::{validation_error::ValidationErrorKind, ValidationErrorBuilder},
         origin::Origin,
     },
@@ -221,6 +221,10 @@ impl ProgramComponent for Aggregate {
         }
 
         Ok(())
+    }
+
+    fn kind(&self) -> ProgramComponentKind {
+        ProgramComponentKind::Aggregation
     }
 }
 

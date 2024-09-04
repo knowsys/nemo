@@ -5,7 +5,7 @@ use std::{fmt::Display, hash::Hash};
 use nemo_physical::datavalues::{AnyDataValue, DataValue, IriDataValue, ValueDomain};
 
 use crate::rule_model::{
-    components::{term::value_type::ValueType, ProgramComponent},
+    components::{term::value_type::ValueType, ProgramComponent, ProgramComponentKind},
     error::{ValidationError, ValidationErrorBuilder},
     origin::Origin,
 };
@@ -150,5 +150,26 @@ impl ProgramComponent for GroundTerm {
         Self: Sized,
     {
         Ok(())
+    }
+
+    fn kind(&self) -> ProgramComponentKind {
+        match self.value.value_domain() {
+            ValueDomain::PlainString => ProgramComponentKind::PlainString,
+            ValueDomain::LanguageTaggedString => ProgramComponentKind::LanguageTaggedString,
+            ValueDomain::Iri => ProgramComponentKind::Iri,
+            ValueDomain::Float => ProgramComponentKind::Float,
+            ValueDomain::Double => ProgramComponentKind::Double,
+            ValueDomain::UnsignedLong
+            | ValueDomain::NonNegativeLong
+            | ValueDomain::UnsignedInt
+            | ValueDomain::NonNegativeInt
+            | ValueDomain::Int
+            | ValueDomain::Long => ProgramComponentKind::Integer,
+            ValueDomain::Tuple => ProgramComponentKind::Tuple,
+            ValueDomain::Map => ProgramComponentKind::Map,
+            ValueDomain::Boolean => ProgramComponentKind::Boolean,
+            ValueDomain::Null => ProgramComponentKind::Null,
+            ValueDomain::Other => ProgramComponentKind::Other,
+        }
     }
 }

@@ -3,7 +3,7 @@
 use std::{fmt::Display, hash::Hash};
 
 use crate::rule_model::{
-    components::{IterableVariables, ProgramComponent},
+    components::{IterableVariables, ProgramComponent, ProgramComponentKind},
     error::ValidationErrorBuilder,
     origin::Origin,
 };
@@ -120,6 +120,10 @@ impl ProgramComponent for Tuple {
         }
 
         Ok(())
+    }
+
+    fn kind(&self) -> ProgramComponentKind {
+        ProgramComponentKind::Tuple
     }
 }
 

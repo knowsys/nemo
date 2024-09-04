@@ -118,6 +118,15 @@ pub(crate) enum Direction {
     Export,
 }
 
+impl std::fmt::Display for Direction {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Direction::Import => f.write_str("import"),
+            Direction::Export => f.write_str("export"),
+        }
+    }
+}
+
 /// A trait for exporting table data, e.g., to some file.
 // TODO Maybe this should be directly in io, since it is the interface to the OutputManager?
 pub trait TableWriter {

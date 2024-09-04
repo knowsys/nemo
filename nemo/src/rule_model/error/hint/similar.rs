@@ -11,10 +11,10 @@ const SIMILARITY_THRESHOLD: f64 = 0.8;
 impl Hint {
     /// Checks whether a similar string exist in a collection of source strings.
     /// Returns the most similar string, if there is one
-    pub fn similar(
+    pub fn similar<Options: Iterator<Item = dyn AsRef<str>>>(
         kind: &str,
         target: impl AsRef<str>,
-        options: &[impl AsRef<str>],
+        options: Options,
     ) -> Option<Self> {
         if target.as_ref().len() < SIMILARITY_MIN_LENGTH {
             return None;

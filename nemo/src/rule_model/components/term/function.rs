@@ -3,7 +3,7 @@
 use std::{fmt::Display, hash::Hash};
 
 use crate::rule_model::{
-    components::{tag::Tag, IterableVariables, ProgramComponent},
+    components::{tag::Tag, IterableVariables, ProgramComponent, ProgramComponentKind},
     error::{validation_error::ValidationErrorKind, ValidationError, ValidationErrorBuilder},
     origin::Origin,
 };
@@ -153,6 +153,10 @@ impl ProgramComponent for FunctionTerm {
         }
 
         Ok(())
+    }
+
+    fn kind(&self) -> ProgramComponentKind {
+        ProgramComponentKind::FunctionTerm
     }
 }
 

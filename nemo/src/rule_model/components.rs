@@ -14,6 +14,7 @@ pub mod term;
 
 use std::fmt::{Debug, Display};
 
+use enum_assoc::Assoc;
 use term::primitive::variable::Variable;
 
 use super::{
@@ -23,26 +24,85 @@ use super::{
 
 /// TODO: Think whether this is needed
 /// Types of [ProgramComponent]s
-#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+#[derive(Assoc, Debug, Copy, Clone, Eq, PartialEq)]
+#[func(pub fn name(&self) -> &'static str)]
 pub enum ProgramComponentKind {
     /// Variable
+    #[assoc(name = "variable")]
     Variable,
-    /// Primitive groun term
-    PrimitiveGround,
+    /// Plain String
+    #[assoc(name = "string")]
+    PlainString,
+    /// Language tagged string
+    #[assoc(name = "language tagged string")]
+    LanguageTaggedString,
+    /// Iri
+    #[assoc(name = "iri")]
+    Iri,
+    /// Single precision point number
+    #[assoc(name = "float")]
+    Float,
+    /// Double precision floating point number
+    #[assoc(name = "double")]
+    Double,
+    /// Integer value
+    #[assoc(name = "integer")]
+    Integer,
+    /// Boolean
+    #[assoc(name = "boolean")]
+    Boolean,
+    /// Null
+    #[assoc(name = "null")]
+    Null,
+    /// Other
+    #[assoc(name = "data value")]
+    Other,
     /// Map
+    #[assoc(name = "map")]
     Map,
     /// Tuple
+    #[assoc(name = "tuple")]
     Tuple,
     /// Operation
+    #[assoc(name = "operation")]
     Operation,
     /// Function term
+    #[assoc(name = "function")]
     FunctionTerm,
+    /// Aggregation term
+    #[assoc(name = "aggregation")]
+    Aggregation,
     /// Atom
+    #[assoc(name = "atom")]
     Atom,
+    /// Literal
+    #[assoc(name = "literal")]
+    Literal,
+    /// Rule
+    #[assoc(name = "rule")]
+    Rule,
+    /// Fact
+    #[assoc(name = "fact")]
+    Fact,
+    /// Import
+    #[assoc(name = "import")]
+    Import,
+    /// Export
+    #[assoc(name = "export")]
+    Export,
+    /// Output
+    #[assoc(name = "output")]
+    Output,
+    /// Program
+    #[assoc(name = "program")]
+    Program,
 }
 
 /// Trait implemented by objects that are part of the logical rule model of the nemo language.
 pub trait ProgramComponent: Debug + Display {
+    /// Return the [ProgramComponentKind] of this component.
+    fn kind(&self) -> ProgramComponentKind;
+
     /// Construct this object from a string.
     fn parse(_string: &str) -> Result<Self, ValidationError>
     where
