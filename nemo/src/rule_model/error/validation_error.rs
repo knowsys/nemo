@@ -80,6 +80,11 @@ pub enum ValidationErrorKind {
     #[error(r#"anonymous variable used in operation"#)]
     #[assoc(code = 215)]
     OperationAnonymous,
+    /// Inconsistent arities for predicates
+    #[error(r#"predicate {predicate} used with multiple arities."#)]
+    #[assoc(code = 216)]
+    #[assoc(note = "each predicate is only allowed to have one arity")]
+    InconsistentArities { predicate: String },
 
     /// Unsupported feature: Multiple aggregates in one rule
     #[error(r#"multiple aggregates in one rule is currently unsupported"#)]

@@ -72,10 +72,14 @@ impl Operation {
         let right = self.subterms.get(1).expect("invalid program component");
 
         if let Term::Primitive(Primitive::Variable(variable)) = left {
-            Some((variable, right))
+            return Some((variable, right));
         } else {
-            None
+            if let Term::Primitive(Primitive::Variable(variable)) = right {
+                return Some((variable, left));
+            }
         }
+
+        None
     }
 }
 

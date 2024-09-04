@@ -55,6 +55,11 @@ impl UniversalVariable {
     pub fn is_anonymous(&self) -> bool {
         self.name.is_none()
     }
+
+    /// Change the name of this variable.
+    pub fn rename(&mut self, name: VariableName) {
+        self.name = Some(name);
+    }
 }
 
 impl Display for UniversalVariable {

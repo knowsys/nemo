@@ -31,9 +31,9 @@ impl Fact {
         }
     }
 
-    /// Create a new [Fact] from an AST
-    pub fn from_ast(_ast: crate::io::parser::ast::statement::Fact) {
-        todo!("create a fact from an ast")
+    /// Return the predicate associated with this fact.
+    pub fn predicate(&self) -> &Tag {
+        &self.predicate
     }
 
     /// Return an iterator over the subterms of this fact.

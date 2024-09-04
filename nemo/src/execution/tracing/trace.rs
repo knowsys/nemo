@@ -13,7 +13,7 @@ use serde::Serialize;
 
 use crate::model::{
     chase_model::{ChaseAtom, ChaseFact},
-    Atom, PrimitiveTerm, Program, Rule, Term, Variable,
+    Atom, PrimitiveTerm, Term, Variable,
 };
 
 /// Index of a rule within a [Program]

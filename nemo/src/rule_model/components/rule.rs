@@ -82,13 +82,8 @@ impl Rule {
         &mut self.head
     }
 
-    /// Return a list of "safe" variables.
-    ///
-    /// A variable is considered safe,
-    /// if it occurs in a positive body atom,
-    /// or is derived via the equality operation
-    /// from other safe variables.
-    pub fn safe_variables(&self) -> HashSet<&Variable> {
+    /// Return the set of variables that are bound in positive body atoms.
+    pub fn positive_variables(&self) -> HashSet<&Variable> {
         let mut result = HashSet::new();
 
         for literal in &self.body {
@@ -102,6 +97,18 @@ impl Rule {
                 }
             }
         }
+
+        result
+    }
+
+    /// Return a set of "safe" variables.
+    ///
+    /// A variable is considered safe,
+    /// if it occurs in a positive body atom,
+    /// or is derived via the equality operation
+    /// from other safe variables.
+    pub fn safe_variables(&self) -> HashSet<&Variable> {
+        let mut result = self.positive_variables();
 
         loop {
             let current_count = result.len();
@@ -127,7 +134,9 @@ impl Rule {
         result
     }
 
-    /// Check for
+    /// Check if
+    ///     * are no complex terms occurring in the head
+    ///     * an aggregate occurs at most once
     fn validate_term_head(builder: &mut ValidationErrorBuilder, term: &Term) -> Result<bool, ()> {
         if term.is_map() || term.is_tuple() || term.is_function() {
             builder.report_error(
@@ -157,7 +166,12 @@ impl Rule {
         Ok(first_aggregate)
     }
 
-    /// Check for
+    /// Check if
+    ///     * body does not contain any existential variables
+    ///     * body does not contain aggregation
+    ///     * body does not contain any complex term
+    ///     * used operations do not use anonymous variables
+    ///     * operations only use safe variables
     fn validate_term_body(
         builder: &mut ValidationErrorBuilder,
         term: &Term,
@@ -380,6 +394,28 @@ impl ProgramComponent for Rule {
         }
 
         Ok(())
+    }
+}
+
+impl IterableVariables for Rule {
+    fn variables<'a>(&'a self) -> Box<dyn Iterator<Item = &'a Variable> + 'a> {
+        Box::new(
+            self.head()
+                .iter()
+                .flat_map(|atom| atom.variables())
+                .chain(self.body().iter().flat_map(|literal| literal.variables())),
+        )
+    }
+
+    fn variables_mut<'a>(&'a mut self) -> Box<dyn Iterator<Item = &'a mut Variable> + 'a> {
+        let head_variables = self.head.iter_mut().flat_map(|atom| atom.variables_mut());
+
+        let body_variables = self
+            .body
+            .iter_mut()
+            .flat_map(|literal| literal.variables_mut());
+
+        Box::new(head_variables.chain(body_variables))
     }
 }
 

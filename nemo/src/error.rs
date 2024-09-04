@@ -6,8 +6,7 @@ use nemo_physical::datavalues::DataValueCreationError;
 use thiserror::Error;
 
 use crate::{
-    execution::selection_strategy::strategy::SelectionStrategyError,
-    io::{formats::import_export::ImportExportError, parser::LocatedParseError},
+    execution::selection_strategy::strategy::SelectionStrategyError, io::error::ImportExportError,
     program_analysis::analysis::RuleAnalysisError,
 };
 
@@ -35,9 +34,6 @@ pub enum Error {
     /// Rule analysis errors
     #[error(transparent)]
     RuleAnalysisError(#[from] RuleAnalysisError),
-    /// Parse errors
-    #[error(transparent)]
-    ParseError(#[from] LocatedParseError),
     /// IO Error
     #[error(transparent)]
     IO(#[from] std::io::Error),

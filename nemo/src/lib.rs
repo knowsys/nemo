@@ -30,10 +30,10 @@ pub mod parser;
 pub mod syntax;
 
 pub mod execution;
-pub mod model;
 pub mod rule_model;
 pub mod util;
 
+mod chase_model;
 mod program_analysis;
 mod table_manager;
 

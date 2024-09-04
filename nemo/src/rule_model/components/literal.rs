@@ -6,8 +6,8 @@ use crate::rule_model::error::{ValidationError, ValidationErrorBuilder};
 
 use super::{
     atom::Atom,
-    term::{operation::Operation, Term},
-    ProgramComponent,
+    term::{operation::Operation, primitive::variable::Variable, Term},
+    IterableVariables, ProgramComponent,
 };
 
 /// Literal
@@ -82,5 +82,19 @@ impl ProgramComponent for Literal {
             Literal::Negative(literal) => literal.validate(builder),
             Literal::Operation(literal) => literal.validate(builder),
         }
+    }
+}
+
+impl IterableVariables for Literal {
+    fn variables<'a>(&'a self) -> Box<dyn Iterator<Item = &'a Variable> + 'a> {
+        match self {
+            Literal::Positive(literal) => literal.variables(),
+            Literal::Negative(literal) => literal.variables(),
+            Literal::Operation(literal) => literal.variables(),
+        }
+    }
+
+    fn variables_mut<'a>(&'a mut self) -> Box<dyn Iterator<Item = &'a mut Variable> + 'a> {
+        todo!()
     }
 }

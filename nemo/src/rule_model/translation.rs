@@ -178,6 +178,10 @@ impl<'a> ASTProgramTranslation<'a> {
             }
         }
 
+        let _ = self
+            .program_builder
+            .validate(&mut self.validation_error_builder);
+
         self.errors.extend(
             self.validation_error_builder
                 .finalize()

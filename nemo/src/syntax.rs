@@ -52,6 +52,21 @@ pub mod directive {
 
     /// The string used in the keyword for the output directive.
     pub const OUTPUT: &str = "output";
+
+    pub mod value_formats {
+        /// The string used to represent the import/export format any
+        pub const ANY: &str = "any";
+        /// The string used to represent the import/export format string
+        pub const STRING: &str = "string";
+        /// The string used to represent the import/export format integer
+        pub const INT: &str = "int";
+        /// The string used to represent the import/export format double
+        pub const DOUBLE: &str = "double";
+        /// The string used to represent the import/export format float
+        pub const FLOAT: &str = "float";
+        /// The string used to indicate that a column is skipped
+        pub const SKIP: &str = "skip";
+    }
 }
 
 pub mod rule {

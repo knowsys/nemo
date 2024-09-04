@@ -13,6 +13,9 @@ pub enum Info {
     /// First use occurred somewhere
     #[assoc(message = format!("first use occurred here"))]
     FirstUse,
+    /// Predicate different arity
+    #[assoc(message = format!("predicate was used here with arity {}", _arity))]
+    PredicateArity { arity: usize },
 }
 
 impl std::fmt::Display for Info {

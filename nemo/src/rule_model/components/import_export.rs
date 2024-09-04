@@ -5,13 +5,22 @@ pub mod attributes;
 pub mod compression;
 pub mod file_formats;
 
-use std::{fmt::Display, hash::Hash};
+use std::{collections::HashMap, fmt::Display, hash::Hash};
 
+use attributes::ImportExportAttribute;
 use file_formats::FileFormat;
+use nemo_physical::datavalues::DataValue;
 
-use crate::rule_model::{error::ValidationErrorBuilder, origin::Origin};
+use crate::{
+    io::formats::dsv::value_format::DsvValueFormats,
+    rule_model::{error::ValidationErrorBuilder, origin::Origin},
+};
 
-use super::{tag::Tag, term::map::Map, ProgramComponent};
+use super::{
+    tag::Tag,
+    term::{map::Map, primitive::Primitive, Term},
+    ProgramComponent,
+};
 
 /// An import/export specification. This object captures all information that is typically
 /// present in an import or export directive in a Nemo program, including the main format,
@@ -31,6 +40,80 @@ pub(crate) struct ImportExportDirective {
 }
 
 impl ImportExportDirective {
+    /// For a given [Term] return its contents as a plain string.
+    ///
+    /// This returns a value if the term is am iri and
+    /// returns `None` otherwise.
+    pub fn plain_value(term: &Term) -> Option<String> {
+        if let Term::Primitive(Primitive::Ground(any_value)) = term {
+            return any_value.value().to_iri();
+        }
+
+        None
+    }
+
+    /// For a given [Term] return its contents as a plain string.
+    ///
+    /// This returns a value if the term is a plain string and
+    /// returns `None` otherwise.
+    pub fn string_value(term: &Term) -> Option<String> {
+        if let Term::Primitive(Primitive::Ground(any_value)) = term {
+            return any_value.value().to_plain_string();
+        }
+
+        None
+    }
+
+    /// For a given [Term] return its contents as an integer.
+    ///
+    /// This returns a value if the term is an integer and
+    /// returns `None` otherwise.
+    pub fn integer_value(term: &Term) -> Option<i64> {
+        if let Term::Primitive(Primitive::Ground(any_value)) = term {
+            return any_value.value().to_i64();
+        }
+
+        None
+    }
+
+    /// Return a [HashMap] containing the attributes of this directive.
+    fn attribute_map(&self) -> HashMap<ImportExportAttribute, &Term> {
+        let mut result = HashMap::new();
+
+        for (key, value) in self.attributes.key_value() {
+            if let Some(name) =
+                Self::plain_value(&key).and_then(|plain| ImportExportAttribute::from_name(&plain))
+            {
+                result.insert(name, value);
+            }
+        }
+
+        result
+    }
+
+    /// Return the expected arity based on the format or given type information,
+    ///
+    /// Returns `None` if it is not possible to deduce this information.
+    pub fn expected_arity(&self) -> Option<usize> {
+        if let Some(arity) = self.format.arity() {
+            return Some(arity);
+        }
+
+        match self.format {
+            FileFormat::CSV | FileFormat::DSV | FileFormat::TSV => {
+                if let Some(value_format) = self.attribute_map().get(&ImportExportAttribute::Format)
+                {
+                    if let Term::Tuple(tuple) = value_format {
+                        return DsvValueFormats::from_tuple(tuple).map(|format| format.arity());
+                    }
+                }
+            }
+            _ => {}
+        }
+
+        None
+    }
+
     /// Helper function for the display implementations of
     /// [ImportDirective] and [ExportDirective]
     /// to format the content of this object.
@@ -85,8 +168,15 @@ impl ImportDirective {
     }
 
     /// Return the attributes.
-    pub fn attributes(&self) -> &Map {
-        &self.0.attributes
+    pub fn attributes(&self) -> HashMap<ImportExportAttribute, &Term> {
+        self.0.attribute_map()
+    }
+
+    /// Return the expected arity based on the format or given type information,
+    ///
+    /// Returns `None` if it is not possible to deduce this information.
+    pub fn expected_arity(&self) -> Option<usize> {
+        self.0.expected_arity()
     }
 }
 
@@ -157,8 +247,15 @@ impl ExportDirective {
     }
 
     /// Return the attributes.
-    pub fn attributes(&self) -> &Map {
-        &self.0.attributes
+    pub fn attributes(&self) -> HashMap<ImportExportAttribute, &Term> {
+        self.0.attribute_map()
+    }
+
+    /// Return the expected arity based on the format or given type information,
+    ///
+    /// Returns `None` if it is not possible to deduce this information.
+    pub fn expected_arity(&self) -> Option<usize> {
+        self.0.expected_arity()
     }
 }
 

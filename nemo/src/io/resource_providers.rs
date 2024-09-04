@@ -5,7 +5,7 @@ use std::{io::BufRead, path::PathBuf, rc::Rc};
 // use crate::io::parser::{all_input_consumed, iri::iri};
 use nemo_physical::{error::ReadingError, resource::Resource};
 
-use super::compression_format::CompressionFormat;
+use crate::rule_model::components::import_export::compression::CompressionFormat;
 
 /// A resource provider for files.
 pub mod file;

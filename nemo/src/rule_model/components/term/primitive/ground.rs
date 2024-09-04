@@ -52,6 +52,11 @@ impl GroundTerm {
             ValueDomain::Other => ValueType::Other,
         }
     }
+
+    /// Return the [AnyDataValue] of this term
+    pub fn value(&self) -> AnyDataValue {
+        self.value.clone()
+    }
 }
 
 impl From<AnyDataValue> for GroundTerm {

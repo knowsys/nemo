@@ -21,7 +21,7 @@ pub struct VariableName(String);
 
 impl VariableName {
     /// Create a new [VariableName].
-    fn new(name: String) -> Self {
+    pub fn new(name: String) -> Self {
         Self(name)
     }
 
@@ -81,6 +81,14 @@ impl Variable {
     /// Return whether this is an existential variable.
     pub fn is_existential(&self) -> bool {
         matches!(self, Variable::Existential(_))
+    }
+
+    /// Change the name of this variable.
+    pub fn rename(&mut self, name: VariableName) {
+        match self {
+            Variable::Universal(variable) => variable.rename(name),
+            Variable::Existential(variable) => variable.rename(name),
+        }
     }
 }
 

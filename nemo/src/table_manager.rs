@@ -1,8 +1,6 @@
 //! Managing of tables
 
-use crate::error::Error;
-
-use super::model::Identifier;
+use crate::{error::Error, rule_model::components::tag::Tag};
 
 use bytesize::ByteSize;
 use nemo_physical::{
@@ -209,16 +207,16 @@ struct PredicateInfo {
     arity: usize,
 }
 
-/// Identifier of a subtable in a chase sequence.
+/// Tag of a subtable in a chase sequence.
 #[derive(Debug, Clone)]
 pub struct SubtableIdentifier {
-    predicate: Identifier,
+    predicate: Tag,
     step: usize,
 }
 
 impl SubtableIdentifier {
     /// Create a new [SubtableIdentifier].
-    pub fn new(predicate: Identifier, step: usize) -> Self {
+    pub fn new(predicate: Tag, step: usize) -> Self {
         Self { predicate, step }
     }
 }
@@ -332,10 +330,10 @@ pub(crate) struct TableManager {
     database: DatabaseInstance,
 
     /// Map containg all the ids of all the sub tables associated with a predicate.
-    predicate_subtables: HashMap<Identifier, SubtableHandler>,
+    predicate_subtables: HashMap<Tag, SubtableHandler>,
 
     /// Mapping predicate identifiers to a [PredicateInfo] which contains relevant information.
-    predicate_to_info: HashMap<Identifier, PredicateInfo>,
+    predicate_to_info: HashMap<Tag, PredicateInfo>,
 }
 
 impl Default for TableManager {
@@ -364,14 +362,14 @@ impl TableManager {
 
     /// Return the step number of the last subtable that was added under a predicate.
     /// Returns None if the predicate has no subtables.
-    pub(crate) fn last_step(&self, predicate: &Identifier) -> Option<usize> {
+    pub(crate) fn last_step(&self, predicate: &Tag) -> Option<usize> {
         self.predicate_subtables.get(predicate)?.last_step()
     }
 
     /// Count all the rows in the table manager that belong to a predicate.
     ///
     /// TODO: Currently only counting of in-memory facts is supported, see <https://github.com/knowsys/nemo/issues/335>
-    pub(crate) fn predicate_count_rows(&self, predicate: &Identifier) -> Option<usize> {
+    pub(crate) fn predicate_count_rows(&self, predicate: &Tag) -> Option<usize> {
         self.predicate_subtables
             .get(predicate)
             .map(|s| s.count_rows(&self.database))
@@ -389,7 +387,7 @@ impl TableManager {
     /// and return the [PermanentTableId] of that new table.
     pub(crate) fn combine_predicate(
         &mut self,
-        predicate: &Identifier,
+        predicate: &Tag,
     ) -> Result<Option<PermanentTableId>, Error> {
         match self.last_step(predicate) {
             Some(last_step) => self.combine_tables(predicate, 0..(last_step + 1)),
@@ -400,7 +398,7 @@ impl TableManager {
     /// Generates an appropriate table name for subtable.
     pub(crate) fn generate_table_name(
         &self,
-        predicate: &Identifier,
+        predicate: &Tag,
         order: &ColumnOrder,
         step: usize,
     ) -> String {
@@ -413,7 +411,7 @@ impl TableManager {
     /// Generates an appropriate table name for a table that represents multiple subtables.
     fn generate_table_name_combined(
         &self,
-        predicate: &Identifier,
+        predicate: &Tag,
         order: &ColumnOrder,
         steps: &Range<usize>,
     ) -> String {
@@ -429,7 +427,7 @@ impl TableManager {
     /// Generates an appropriate table name for a table that is a reordered version of another.
     fn generate_table_name_reference(
         &self,
-        predicate: &Identifier,
+        predicate: &Tag,
         step: usize,
         referenced_table_id: PermanentTableId,
         permutation: &Permutation,
@@ -442,7 +440,7 @@ impl TableManager {
 
     /// Intitializes helper structures that are needed for handling the table associated with the predicate.
     /// Must be done before calling functions that add tables to that predicate.
-    pub(crate) fn register_predicate(&mut self, predicate: Identifier, arity: usize) {
+    pub(crate) fn register_predicate(&mut self, predicate: Tag, arity: usize) {
         let predicate_info = PredicateInfo { arity };
 
         if self
@@ -458,7 +456,7 @@ impl TableManager {
 
     /// Check whether a predicate has been registered.
     #[allow(dead_code)]
-    fn predicate_exists(&self, predicate: &Identifier) -> bool {
+    fn predicate_exists(&self, predicate: &Tag) -> bool {
         self.predicate_subtables.contains_key(predicate)
     }
 
@@ -473,7 +471,7 @@ impl TableManager {
 
     /// Add a table that represents the input facts for some predicate for the chase procedure.
     /// Predicate must be registered before calling this function.
-    pub(crate) fn add_edb(&mut self, predicate: Identifier, sources: Vec<TableSource>) {
+    pub(crate) fn add_edb(&mut self, predicate: Tag, sources: Vec<TableSource>) {
         let arity = if let Some(source) = sources.first() {
             source.arity()
         } else {
@@ -494,7 +492,7 @@ impl TableManager {
     /// Add a [Trie] as a subtable of a predicate.
     /// Predicate must be registered before calling this function.
     #[allow(dead_code)]
-    fn add_table(&mut self, predicate: Identifier, step: usize, order: ColumnOrder, trie: Trie) {
+    fn add_table(&mut self, predicate: Tag, step: usize, order: ColumnOrder, trie: Trie) {
         let name = self.generate_table_name(&predicate, &order, step);
 
         let table_id = self.database.register_add_trie(&name, order, trie);
@@ -534,7 +532,7 @@ impl TableManager {
     ///
     /// # Panics
     /// Panics if the predicate has not been registered yet.
-    pub(crate) fn arity(&self, predicate: &Identifier) -> usize {
+    pub(crate) fn arity(&self, predicate: &Tag) -> usize {
         self.predicate_to_info
             .get(predicate)
             .expect("Predicate should be registered before calling this function")
@@ -542,11 +540,7 @@ impl TableManager {
     }
 
     /// Return the ids of all subtables of a predicate within a certain range of steps.
-    pub fn tables_in_range(
-        &self,
-        predicate: &Identifier,
-        range: &Range<usize>,
-    ) -> Vec<PermanentTableId> {
+    pub fn tables_in_range(&self, predicate: &Tag, range: &Range<usize>) -> Vec<PermanentTableId> {
         self.predicate_subtables
             .get(predicate)
             .map(|handler| handler.cover_range(range))
@@ -556,7 +550,7 @@ impl TableManager {
     /// Combine subtables in a certain range into one larger table.
     pub fn combine_tables(
         &mut self,
-        predicate: &Identifier,
+        predicate: &Tag,
         range: Range<usize>,
     ) -> Result<Option<PermanentTableId>, Error> {
         let combined_order: ColumnOrder = ColumnOrder::default();
@@ -594,7 +588,7 @@ impl TableManager {
     pub fn execute_plan(
         &mut self,
         subtable_plan: SubtableExecutionPlan,
-    ) -> Result<Vec<Identifier>, Error> {
+    ) -> Result<Vec<Tag>, Error> {
         let result = self.database.execute_plan(subtable_plan.execution_plan)?;
 
         let mut updated_predicates = Vec::new();
@@ -646,11 +640,7 @@ impl TableManager {
 
     /// Return the chase step of the sub table that contains the given row within the given predicate.
     /// Returns None if the row does not exist.
-    pub fn find_table_row(
-        &mut self,
-        predicate: &Identifier,
-        row: &[AnyDataValue],
-    ) -> Option<usize> {
+    pub fn find_table_row(&mut self, predicate: &Tag, row: &[AnyDataValue]) -> Option<usize> {
         let handler = self.predicate_subtables.get(predicate)?;
 
         for (step, id) in &handler.single {

@@ -35,6 +35,11 @@ impl ExistentialVariable {
     pub fn name(&self) -> String {
         self.name.to_string()
     }
+
+    /// Change the name of this variable.
+    pub fn rename(&mut self, name: VariableName) {
+        self.name = name;
+    }
 }
 
 impl Display for ExistentialVariable {

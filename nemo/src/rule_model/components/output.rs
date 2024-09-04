@@ -19,12 +19,17 @@ pub struct Output {
 }
 
 impl Output {
-    /// Create a mew [Output]
+    /// Create a mew [Output].
     pub fn new(predicate: Tag) -> Self {
         Self {
             origin: Origin::default(),
             predicate,
         }
+    }
+
+    /// Return the output predicate.
+    pub fn predicate(&self) -> &Tag {
+        &self.predicate
     }
 }
 
