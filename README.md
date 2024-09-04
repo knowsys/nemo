@@ -46,12 +46,12 @@ Run the following command for an overview of current options:
 
 `nmo --help`
 
-Further details are found in the [Nemo client documentation](https://github.com/knowsys/nemo/wiki/Nemo-client).
+Further details are found in the [Nemo client documentation](https://knowsys.github.io/nemo-doc/guides/cli/).
 Example Nemo programs and datasets can be found in the [Nemo Examples repository](https://github.com/knowsys/nemo-examples).
 
 ## Help
 
-Detailed information for users and developers is found in the [Nemo documentation](https://github.com/knowsys/nemo/wiki/#user-documentation).
+Detailed information for users and developers is found in the [Nemo documentation](https://knowsys.github.io/nemo-doc/).
 Feel free to use [GitHub discussions](https://github.com/knowsys/nemo/discussions) to ask questions or talk about Nemo.
 
 [Bug reports](https://github.com/knowsys/nemo/issues) are also very welcome.
