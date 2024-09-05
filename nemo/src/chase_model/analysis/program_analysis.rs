@@ -10,15 +10,12 @@ use crate::{
         rule::ChaseRule,
         term::operation_term::{Operation, OperationTerm},
     },
-    rule_model::{
-        components::{
-            tag::Tag,
-            term::{
-                operation::operation_kind::OperationKind,
-                primitive::{variable::Variable, Primitive},
-            },
+    rule_model::components::{
+        tag::Tag,
+        term::{
+            operation::operation_kind::OperationKind,
+            primitive::{variable::Variable, Primitive},
         },
-        origin::Origin,
     },
 };
 
@@ -151,7 +148,6 @@ fn construct_existential_aux_rule(
                         new_terms.push(generated_variable.clone());
 
                         let new_constraint = Operation::new(
-                            Origin::default(),
                             OperationKind::Equal,
                             vec![
                                 OperationTerm::Primitive(Primitive::Variable(generated_variable)),
@@ -159,10 +155,9 @@ fn construct_existential_aux_rule(
                             ],
                         );
 
-                        result.add_positive_filter(ChaseFilter::new(
-                            Origin::default(),
-                            OperationTerm::Operation(new_constraint),
-                        ));
+                        result.add_positive_filter(ChaseFilter::new(OperationTerm::Operation(
+                            new_constraint,
+                        )));
                     } else {
                         if variable.is_universal() {
                             aux_predicate_terms.push(Primitive::Variable(variable.clone()));
@@ -178,7 +173,6 @@ fn construct_existential_aux_rule(
                     new_terms.push(generated_variable.clone());
 
                     let new_constraint = Operation::new(
-                        Origin::default(),
                         OperationKind::Equal,
                         vec![
                             OperationTerm::Primitive(Primitive::Variable(generated_variable)),
@@ -186,23 +180,18 @@ fn construct_existential_aux_rule(
                         ],
                     );
 
-                    result.add_positive_filter(ChaseFilter::new(
-                        Origin::default(),
-                        OperationTerm::Operation(new_constraint),
-                    ));
+                    result.add_positive_filter(ChaseFilter::new(OperationTerm::Operation(
+                        new_constraint,
+                    )));
                 }
             }
         }
 
-        result.add_positive_atom(VariableAtom::new(
-            Origin::default(),
-            atom.predicate(),
-            new_terms,
-        ));
+        result.add_positive_atom(VariableAtom::new(atom.predicate(), new_terms));
     }
 
     let temp_head_tag = get_fresh_rule_predicate(rule_index);
-    let temp_head_atom = PrimitiveAtom::new(Origin::default(), temp_head_tag, aux_predicate_terms);
+    let temp_head_atom = PrimitiveAtom::new(temp_head_tag, aux_predicate_terms);
     result.add_head_atom(temp_head_atom);
 
     let mut rule_program = ChaseProgram::default();

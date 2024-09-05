@@ -30,9 +30,9 @@ pub(crate) struct PrimitiveAtom {
 
 impl PrimitiveAtom {
     /// Construct a new [PrimitiveAtom].
-    pub(crate) fn new(origin: Origin, predicate: Tag, terms: Vec<Primitive>) -> Self {
+    pub(crate) fn new(predicate: Tag, terms: Vec<Primitive>) -> Self {
         Self {
-            origin,
+            origin: Origin::default(),
             predicate,
             terms,
         }

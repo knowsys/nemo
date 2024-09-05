@@ -2,7 +2,7 @@
 //! logical facts into chase facts.
 
 use crate::{
-    chase_model::components::atom::ground_atom::GroundAtom,
+    chase_model::components::{atom::ground_atom::GroundAtom, ChaseComponent},
     rule_model::components::{
         term::{primitive::Primitive, Term},
         ProgramComponent,
@@ -38,6 +38,6 @@ impl ProgramChaseTranslation {
             }
         }
 
-        GroundAtom::new(origin, predicate, terms)
+        GroundAtom::new(predicate, terms).set_origin(origin)
     }
 }

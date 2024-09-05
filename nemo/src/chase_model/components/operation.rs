@@ -20,9 +20,9 @@ pub(crate) struct ChaseOperation {
 
 impl ChaseOperation {
     /// Create a new [ChaseOperation].
-    pub(crate) fn new(origin: Origin, output_variable: Variable, operation: OperationTerm) -> Self {
+    pub(crate) fn new(output_variable: Variable, operation: OperationTerm) -> Self {
         Self {
-            origin,
+            origin: Origin::default(),
             output_variable,
             operation,
         }

@@ -30,9 +30,9 @@ pub(crate) struct GroundAtom {
 
 impl GroundAtom {
     /// Construct a new [GroundAtom].
-    pub(crate) fn new(origin: Origin, predicate: Tag, terms: Vec<GroundTerm>) -> Self {
+    pub(crate) fn new(predicate: Tag, terms: Vec<GroundTerm>) -> Self {
         Self {
-            origin,
+            origin: Origin::default(),
             predicate,
             terms,
         }

@@ -1,8 +1,11 @@
 //! This module defines [Operation] and [OperationTerm].
 
-use crate::rule_model::{
-    components::term::{operation::operation_kind::OperationKind, primitive::Primitive},
-    origin::Origin,
+use crate::{
+    chase_model::components::ChaseComponent,
+    rule_model::{
+        components::term::{operation::operation_kind::OperationKind, primitive::Primitive},
+        origin::Origin,
+    },
 };
 
 /// Operation
@@ -22,12 +25,26 @@ pub(crate) struct Operation {
 
 impl Operation {
     /// Create a new [Operation].
-    pub(crate) fn new(origin: Origin, kind: OperationKind, subterms: Vec<OperationTerm>) -> Self {
+    pub(crate) fn new(kind: OperationKind, subterms: Vec<OperationTerm>) -> Self {
         Self {
-            origin,
+            origin: Origin::default(),
             kind,
             subterms,
         }
+    }
+}
+
+impl ChaseComponent for Operation {
+    fn origin(&self) -> &Origin {
+        &self.origin
+    }
+
+    fn set_origin(mut self, origin: Origin) -> Self
+    where
+        Self: Sized,
+    {
+        self.origin = origin;
+        self
     }
 }
 

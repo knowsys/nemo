@@ -74,6 +74,11 @@ impl ChaseAggregate {
     pub fn group_by_variables(&self) -> &HashSet<Variable> {
         &self.group_by_variables
     }
+
+    /// Return which operation is performed.
+    pub fn aggregate_kind(&self) -> AggregateKind {
+        self.kind
+    }
 }
 
 impl ChaseComponent for ChaseAggregate {

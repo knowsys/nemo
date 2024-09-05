@@ -24,9 +24,9 @@ pub(crate) struct VariableAtom {
 
 impl VariableAtom {
     /// Construct a new [VariableAtom].
-    pub(crate) fn new(origin: Origin, predicate: Tag, variables: Vec<Variable>) -> Self {
+    pub(crate) fn new(predicate: Tag, variables: Vec<Variable>) -> Self {
         Self {
-            origin,
+            origin: Origin::default(),
             predicate,
             variables,
         }

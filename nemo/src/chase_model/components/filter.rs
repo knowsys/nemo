@@ -2,7 +2,7 @@
 
 use crate::rule_model::origin::Origin;
 
-use super::term::operation_term::OperationTerm;
+use super::{term::operation_term::OperationTerm, ChaseComponent};
 
 /// Indicates that a new value must be created according to [OperationTerm].
 ///
@@ -18,12 +18,29 @@ pub(crate) struct ChaseFilter {
 
 impl ChaseFilter {
     /// Create a new [ChaseFilter].
-    pub(crate) fn new(origin: Origin, filter: OperationTerm) -> Self {
-        Self { origin, filter }
+    pub(crate) fn new(filter: OperationTerm) -> Self {
+        Self {
+            origin: Origin::default(),
+            filter,
+        }
     }
 
     /// Return the filter that is being applied.
     pub(crate) fn filter(&self) -> &OperationTerm {
         &self.filter
+    }
+}
+
+impl ChaseComponent for ChaseFilter {
+    fn origin(&self) -> &Origin {
+        &self.origin
+    }
+
+    fn set_origin(mut self, origin: Origin) -> Self
+    where
+        Self: Sized,
+    {
+        self.origin = origin;
+        self
     }
 }

@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use oxiri::Iri;
 
 use crate::{
-    chase_model::components::import::ChaseImport,
+    chase_model::components::{import::ChaseImport, ChaseComponent},
     io::formats::{
         dsv::{value_format::DsvValueFormats, DsvHandler},
         json::JsonHandler,
@@ -53,7 +53,7 @@ impl ProgramChaseTranslation {
             FileFormat::TriG => todo!(),
         };
 
-        ChaseImport::new(origin, predicate, handler)
+        ChaseImport::new(predicate, handler).set_origin(origin)
     }
 
     /// Read resource attribute and check compression.

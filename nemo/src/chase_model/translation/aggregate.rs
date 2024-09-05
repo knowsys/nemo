@@ -8,6 +8,7 @@ use crate::{
         operation::ChaseOperation,
         rule::ChaseRule,
         term::operation_term::{Operation, OperationTerm},
+        ChaseComponent,
     },
     rule_model::components::{
         term::{
@@ -38,21 +39,25 @@ impl ProgramChaseTranslation {
             Term::Primitive(Primitive::Variable(variable)) => variable.clone(),
             Term::Primitive(primitive) => {
                 let new_variable = Variable::universal(&self.create_fresh_variable());
-                result.add_positive_operation(ChaseOperation::new(
-                    origin,
-                    new_variable.clone(),
-                    OperationTerm::Primitive(primitive.clone()),
-                ));
+                result.add_positive_operation(
+                    ChaseOperation::new(
+                        new_variable.clone(),
+                        OperationTerm::Primitive(primitive.clone()),
+                    )
+                    .set_origin(origin),
+                );
 
                 new_variable
             }
             Term::Operation(operation) => {
                 let new_variable = Variable::universal(&self.create_fresh_variable());
-                result.add_positive_operation(ChaseOperation::new(
-                    origin,
-                    new_variable.clone(),
-                    Self::build_operation_term(operation),
-                ));
+                result.add_positive_operation(
+                    ChaseOperation::new(
+                        new_variable.clone(),
+                        Self::build_operation_term(operation),
+                    )
+                    .set_origin(origin),
+                );
 
                 new_variable
             }
@@ -113,7 +118,7 @@ impl ProgramChaseTranslation {
             }
         }
 
-        OperationTerm::Operation(Operation::new(origin, kind, subterms))
+        OperationTerm::Operation(Operation::new(kind, subterms).set_origin(origin))
     }
 
     /// Create a [ChaseOperation] from a given
@@ -137,6 +142,7 @@ impl ProgramChaseTranslation {
             group_by_variables,
             chase_aggregate,
         );
-        ChaseOperation::new(operation.origin().clone(), output_variable, operation_term)
+
+        ChaseOperation::new(output_variable, operation_term).set_origin(operation.origin().clone())
     }
 }

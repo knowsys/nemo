@@ -8,6 +8,7 @@ use crate::{
         atom::{primitive_atom::PrimitiveAtom, variable_atom::VariableAtom},
         filter::ChaseFilter,
         rule::ChaseRule,
+        ChaseComponent,
     },
     rule_model::components::{
         atom::Atom,
@@ -168,7 +169,7 @@ impl ProgramChaseTranslation {
             }
         }
 
-        let variable_atom = VariableAtom::new(origin, predicate, variables);
+        let variable_atom = VariableAtom::new(predicate, variables).set_origin(origin);
         (variable_atom, filters)
     }
 
@@ -229,7 +230,8 @@ impl ProgramChaseTranslation {
 
             if let Literal::Operation(operation) = literal {
                 let new_operation = Self::build_operation_term(operation);
-                let new_filter = ChaseFilter::new(operation.origin().clone(), new_operation);
+                let new_filter =
+                    ChaseFilter::new(new_operation).set_origin(operation.origin().clone());
 
                 result.add_positive_filter(new_filter);
             }
@@ -277,7 +279,7 @@ impl ProgramChaseTranslation {
                 }
             }
 
-            result.add_head_atom(PrimitiveAtom::new(origin, predicate, terms))
+            result.add_head_atom(PrimitiveAtom::new(predicate, terms).set_origin(origin))
         }
     }
 

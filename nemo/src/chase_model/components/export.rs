@@ -21,13 +21,9 @@ pub(crate) struct ChaseExport {
 
 impl ChaseExport {
     /// Create a new [ChaseExport].
-    pub(crate) fn new(
-        origin: Origin,
-        predicate: Tag,
-        handler: Box<dyn ImportExportHandler>,
-    ) -> Self {
+    pub(crate) fn new(predicate: Tag, handler: Box<dyn ImportExportHandler>) -> Self {
         Self {
-            origin,
+            origin: Origin::default(),
             predicate,
             handler,
         }

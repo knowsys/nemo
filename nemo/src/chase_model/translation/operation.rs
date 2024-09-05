@@ -5,6 +5,7 @@ use crate::{
     chase_model::components::{
         operation::ChaseOperation,
         term::operation_term::{Operation, OperationTerm},
+        ChaseComponent,
     },
     rule_model::components::{
         term::{primitive::variable::Variable, Term},
@@ -40,7 +41,7 @@ impl ProgramChaseTranslation {
             }
         }
 
-        OperationTerm::Operation(Operation::new(origin, kind, subterms))
+        OperationTerm::Operation(Operation::new(kind, subterms).set_origin(origin))
     }
 
     /// Create a [ChaseOperation] form a given
@@ -56,6 +57,6 @@ impl ProgramChaseTranslation {
         let origin = operation.origin().clone();
         let operation = Self::build_operation_term(operation);
 
-        ChaseOperation::new(origin, output_variable.clone(), operation)
+        ChaseOperation::new(output_variable.clone(), operation).set_origin(origin)
     }
 }
