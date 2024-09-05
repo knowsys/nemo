@@ -4,7 +4,6 @@ use crate::error::Error;
 
 use super::model::Identifier;
 
-use bytesize::ByteSize;
 use nemo_physical::{
     datavalues::any_datavalue::AnyDataValue,
     management::{
@@ -265,14 +264,13 @@ impl SubtableExecutionPlan {
 #[derive(Debug)]
 pub struct MemoryUsage {
     name: String,
-    memory: ByteSize,
-
+    memory: u64,
     sub_blocks: Vec<MemoryUsage>,
 }
 
 impl MemoryUsage {
     /// Create a new [MemoryUsage].
-    pub fn new(name: &str, memory: ByteSize) -> Self {
+    pub fn new(name: &str, memory: u64) -> Self {
         Self {
             name: name.to_string(),
             memory,
@@ -282,7 +280,7 @@ impl MemoryUsage {
 
     /// Create a new [MemoryUsage] block.
     pub fn new_block(name: &str) -> Self {
-        Self::new(name, ByteSize(0))
+        Self::new(name, 0)
     }
 
     /// Add a sub-block.
@@ -627,11 +625,11 @@ impl TableManager {
             let mut predicate_usage = MemoryUsage::new_block(&identifier.to_string());
 
             for (step, id) in &subtable_handler.single {
-                let memory = self.database.memory_consumption(*id);
+                let memory = self.database.table_size_bytes(*id);
                 predicate_usage.add_sub_block(MemoryUsage::new(&format!("Step {}", step), memory));
             }
             for (steps, id) in &subtable_handler.combined {
-                let memory = self.database.memory_consumption(*id);
+                let memory = self.database.table_size_bytes(*id);
                 predicate_usage.add_sub_block(MemoryUsage::new(
                     &format!("Steps {}-{}", steps.start, steps.start + steps.len),
                     memory,

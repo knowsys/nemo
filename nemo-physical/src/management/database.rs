@@ -16,8 +16,6 @@ use std::{
     fmt::Debug,
 };
 
-use bytesize::ByteSize;
-
 use crate::{
     datasources::table_providers::TableProvider,
     datavalues::AnyDataValue,
@@ -120,13 +118,13 @@ impl DatabaseInstance {
         self.dictionary.borrow_mut()
     }
 
-    /// Return the amount of memory consumed by the table under the given [PermanentTableId].
+    /// Returns the approximate number of bytes of memory used by the table under the given [PermanentTableId].
     /// This also includes additional index structures but excludes tables that are currently stored on disk.
     ///
     /// # Panics
     /// Panics if the given id does not exist.
-    pub fn memory_consumption(&self, id: PermanentTableId) -> ByteSize {
-        self.reference_manager.memory_consumption(id)
+    pub fn table_size_bytes(&self, id: PermanentTableId) -> u64 {
+        self.reference_manager.table_size_bytes(id)
     }
 
     /// Return the number of rows contained in this table.
