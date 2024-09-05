@@ -15,12 +15,11 @@ use std::fmt::Debug;
 
 use super::{context::ParserContext, span::Span, ParserInput, ParserResult};
 use ascii_tree::Tree;
-use token::Token;
 
 /// Trait implemented by nodes in the abstract syntax tree
 pub trait ProgramAST<'a>: Debug + Sync {
     /// Return all children of this node.
-    fn children(&'a self) -> Vec<&'a dyn ProgramAST>;
+    fn children(&'a self) -> Vec<&'a dyn ProgramAST<'a>>;
 
     /// Return the region of text this node originates from.
     fn span(&self) -> Span<'a>;

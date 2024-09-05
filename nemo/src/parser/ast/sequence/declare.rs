@@ -26,7 +26,7 @@ pub struct NameTypePair<'a> {
 }
 
 impl<'a> ProgramAST<'a> for NameTypePair<'a> {
-    fn children(&'a self) -> Vec<&'a dyn ProgramAST> {
+    fn children(&'a self) -> Vec<&'a dyn ProgramAST<'a>> {
         vec![&self.name, &self.datatype]
     }
 

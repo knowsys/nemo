@@ -65,7 +65,7 @@ pub(crate) fn skip_statement<'a>(input: ParserInput<'a>) -> ParserResult<'a, Tok
 
 pub(crate) fn recover<'a>(
     mut parser: impl Parser<ParserInput<'a>, Statement<'a>, ParserErrorTree<'a>>,
-) -> impl FnMut(ParserInput<'a>) -> ParserResult<Statement<'a>> {
+) -> impl FnMut(ParserInput<'a>) -> ParserResult<'a, Statement<'a>> {
     move |input: ParserInput<'a>| match parser.parse(input.clone()) {
         Ok((rest, statement)) => Ok((rest, statement)),
         Err(err) if input.span.0.is_empty() => Err(err),
@@ -86,7 +86,7 @@ pub(crate) fn recover<'a>(
 
 pub(crate) fn report_error<'a>(
     mut parser: impl Parser<ParserInput<'a>, Statement<'a>, ParserErrorTree<'a>>,
-) -> impl FnMut(ParserInput<'a>) -> ParserResult<Statement<'a>> {
+) -> impl FnMut(ParserInput<'a>) -> ParserResult<'a, Statement<'a>> {
     move |input| match parser.parse(input.clone()) {
         Ok(result) => Ok(result),
         Err(e) => {

@@ -37,11 +37,11 @@ impl<'a> WSoC<'a> {
         &self.comments
     }
 
-    fn parse_whitespace(input: ParserInput<'a>) -> ParserResult<'a, Option<CommentType>> {
+    fn parse_whitespace(input: ParserInput<'a>) -> ParserResult<'a, Option<CommentType<'a>>> {
         Token::whitespace(input).map(|(rest, _)| (rest, None))
     }
 
-    fn parse_comment(input: ParserInput<'a>) -> ParserResult<'a, Option<CommentType>> {
+    fn parse_comment(input: ParserInput<'a>) -> ParserResult<'a, Option<CommentType<'a>>> {
         alt((
             map(LineComment::parse, CommentType::Line),
             map(ClosedComment::parse, CommentType::Closed),

@@ -270,7 +270,7 @@ impl<'a> Token<'a> {
 macro_rules! string_token {
     ($func_name: ident, $token: expr) => {
         /// Parse this token.
-        pub fn $func_name(input: ParserInput<'a>) -> ParserResult<'a, Token> {
+        pub fn $func_name(input: ParserInput<'a>) -> ParserResult<'a, Token<'a>> {
             map(
                 context(ParserContext::Token { kind: $token }, tag($token.name())),
                 |input: ParserInput| Token {
@@ -523,7 +523,7 @@ impl<'a> Token<'a> {
         })
     }
 
-    pub fn comment(input: ParserInput<'a>) -> ParserResult<'a, Token> {
+    pub fn comment(input: ParserInput<'a>) -> ParserResult<'a, Token<'a>> {
         context(
             ParserContext::token(TokenKind::Comment),
             verify(

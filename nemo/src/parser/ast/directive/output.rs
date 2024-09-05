@@ -32,7 +32,7 @@ impl<'a> Output<'a> {
     /// Parse the sequence of predicates that are marked as output.
     fn parse_predicate_sequence(
         input: ParserInput<'a>,
-    ) -> ParserResult<'a, Sequence<'a, StructureTag>> {
+    ) -> ParserResult<'a, Sequence<'a, StructureTag<'a>>> {
         Sequence::<StructureTag>::parse(input)
     }
 }

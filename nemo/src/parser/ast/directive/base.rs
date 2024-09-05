@@ -26,7 +26,7 @@ impl<'a> Base<'a> {
         &self.iri
     }
 
-    pub fn parse_body(input: ParserInput<'a>) -> ParserResult<'a, Iri> {
+    pub fn parse_body(input: ParserInput<'a>) -> ParserResult<'a, Iri<'a>> {
         Iri::parse(input)
     }
 }

@@ -38,7 +38,7 @@ impl<'a> Prefix<'a> {
         &self.iri
     }
 
-    pub fn parse_body(input: ParserInput<'a>) -> ParserResult<'a, (Token, Iri)> {
+    pub fn parse_body(input: ParserInput<'a>) -> ParserResult<'a, (Token<'a>, Iri<'a>)> {
         separated_pair(
             Token::name,
             tuple((WSoC::parse, Token::prefix_assignment, WSoC::parse)),

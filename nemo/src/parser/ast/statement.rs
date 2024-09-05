@@ -5,7 +5,6 @@ use nom::{
     combinator::{map, opt},
     sequence::{pair, terminated},
 };
-use nom_locate::LocatedSpan;
 
 use crate::parser::{
     context::{context, ParserContext},

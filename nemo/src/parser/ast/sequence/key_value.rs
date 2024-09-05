@@ -29,7 +29,7 @@ impl<'a> KeyValuePair<'a> {
 }
 
 impl<'a> ProgramAST<'a> for KeyValuePair<'a> {
-    fn children(&'a self) -> Vec<&'a dyn ProgramAST> {
+    fn children(&'a self) -> Vec<&'a dyn ProgramAST<'a>> {
         vec![&self.key, &self.value]
     }
 

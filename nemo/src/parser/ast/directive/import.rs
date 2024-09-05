@@ -36,7 +36,7 @@ impl<'a> Import<'a> {
         &self.instructions
     }
 
-    pub fn parse_body(input: ParserInput<'a>) -> ParserResult<'a, (StructureTag, Map)> {
+    pub fn parse_body(input: ParserInput<'a>) -> ParserResult<'a, (StructureTag<'a>, Map<'a>)> {
         tuple((
             StructureTag::parse,
             WSoC::parse,
