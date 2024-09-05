@@ -1,5 +1,6 @@
 //! This module defines the trait [ByteSized],
-//! which should be implemented by objects
+//! which should be implemented by types that can
+//! calculate their own size.
 
 use bytesize::ByteSize;
 
@@ -9,8 +10,8 @@ pub trait ByteSized {
     fn size_bytes(&self) -> ByteSize;
 }
 
-/// Helper method to sum a collection of [ByteSize],
-/// since the `Sum`is not implemented.
+/// Helper method to sum up a collection of [ByteSize],
+/// since the `Sum` is not implemented.
 pub(crate) fn sum_bytes<ByteIterator: Iterator<Item = ByteSize>>(
     iterator: ByteIterator,
 ) -> ByteSize {
