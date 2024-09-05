@@ -122,6 +122,16 @@ where
         self
     }
 
+    /// Add a new hint to the error if `hint` is Some.
+    /// Does nothing otherwise.
+    pub fn add_hint_option(&mut self, hint: Option<Hint>) -> &mut Self {
+        if let Some(hint) = hint {
+            self.hints.push(hint);
+        }
+
+        self
+    }
+
     /// Add this information to a [ReportBuilder].
     pub fn report<'a, Translation>(
         &self,
@@ -243,6 +253,16 @@ impl TranslationError {
     /// Add a new hint to the error.
     pub fn add_hint(mut self, hint: Hint) -> Self {
         self.info.add_hint(hint);
+
+        self
+    }
+
+    /// Add a new hint to the error if `hint` is Some.
+    /// Does nothing otherwise.
+    pub fn add_hint_option(&mut self, hint: Option<Hint>) -> &mut Self {
+        if let Some(hint) = hint {
+            self.info.add_hint(hint);
+        }
 
         self
     }

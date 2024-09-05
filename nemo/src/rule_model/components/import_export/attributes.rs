@@ -31,7 +31,7 @@ pub enum ImportExportAttribute {
     /// Delimiter used to separate values
     #[assoc(name = attribute::DSV_DELIMITER)]
     #[assoc(from_name = attribute::DSV_DELIMITER)]
-    #[assoc(value_type = ProgramComponentKind::String)]
+    #[assoc(value_type = ProgramComponentKind::PlainString)]
     Delimiter,
     /// Compression format
     #[assoc(name = attribute::COMPRESSION)]

@@ -125,7 +125,7 @@ impl Aggregate {
     }
 
     /// Return the kind of aggregate.
-    pub fn kind(&self) -> AggregateKind {
+    pub fn aggregate_kind(&self) -> AggregateKind {
         self.kind
     }
 

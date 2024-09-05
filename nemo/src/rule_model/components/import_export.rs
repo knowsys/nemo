@@ -179,26 +179,31 @@ impl ImportExportDirective {
                         attribute: attribute.name().to_string(),
                         direction: direction.to_string(),
                     },
-                )
+                );
             }
         }
 
-        let expected_attributes = self.format.attributes().keys().collect::<HashSet<_>>();
-        for (attribute, (attribute_origin, value)) in attributes.iter() {
+        let expected_attributes = self
+            .format
+            .attributes()
+            .keys()
+            .cloned()
+            .collect::<HashSet<_>>();
+        for (attribute, (&attribute_origin, value)) in attributes.iter() {
             if !expected_attributes.contains(attribute) {
                 builder
                     .report_error(
-                        attribute_origin,
+                        attribute_origin.clone(),
                         ValidationErrorKind::ImportExportUnrecognizedAttribute {
                             format: self.format.name().to_string(),
                             attribute: attribute.name().to_string(),
                         },
                     )
-                    .add_hint(Hint::similar(
+                    .add_hint_option(Hint::similar(
                         "parameter",
                         attribute.name(),
                         expected_attributes.iter().map(|attribute| attribute.name()),
-                    ))
+                    ));
             }
 
             if attribute.value_type() != value.kind() {
@@ -206,7 +211,7 @@ impl ImportExportDirective {
                     value.origin().clone(),
                     ValidationErrorKind::ImportExportAttributeValueType {
                         parameter: attribute.name().to_string(),
-                        given: value.kind().name.to_string(),
+                        given: value.kind().name().to_string(),
                         expected: attribute.value_type().name().to_string(),
                     },
                 );
@@ -434,7 +439,7 @@ impl ProgramComponent for ImportDirective {
     where
         Self: Sized,
     {
-        todo!()
+        self.0.validate(Direction::Import, builder)
     }
 
     fn kind(&self) -> ProgramComponentKind {
@@ -517,7 +522,7 @@ impl ProgramComponent for ExportDirective {
     where
         Self: Sized,
     {
-        todo!()
+        self.0.validate(Direction::Export, builder)
     }
 
     fn kind(&self) -> ProgramComponentKind {

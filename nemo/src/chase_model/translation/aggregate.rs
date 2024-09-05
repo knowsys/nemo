@@ -33,7 +33,7 @@ impl ProgramChaseTranslation {
         group_by_variables: &HashSet<Variable>,
     ) -> ChaseAggregate {
         let origin = aggregate.origin().clone();
-        let kind = aggregate.kind();
+        let kind = aggregate.aggregate_kind();
         let input_variable = match aggregate.aggregate_term() {
             Term::Primitive(Primitive::Variable(variable)) => variable.clone(),
             Term::Primitive(primitive) => {
@@ -89,7 +89,7 @@ impl ProgramChaseTranslation {
         chase_aggregate: &mut Option<ChaseAggregate>,
     ) -> OperationTerm {
         let origin = operation.origin().clone();
-        let kind = operation.kind();
+        let kind = operation.operation_kind();
         let mut subterms = Vec::new();
 
         for argument in operation.arguments() {

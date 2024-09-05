@@ -321,17 +321,16 @@ impl ProgramComponent for Rule {
             for variable in atom.variables() {
                 if let Some(variable_name) = variable.name() {
                     if !safe_variables.contains(variable) {
-                        let info = builder.report_error(
-                            variable.origin().clone(),
-                            ValidationErrorKind::HeadUnsafe(variable.clone()),
-                        );
-                        if let Some(hint) = Hint::similar(
-                            "variable",
-                            variable_name,
-                            safe_variables.iter().flat_map(|variable| variable.name()),
-                        ) {
-                            info.add_hint(hint);
-                        }
+                        builder
+                            .report_error(
+                                variable.origin().clone(),
+                                ValidationErrorKind::HeadUnsafe(variable.clone()),
+                            )
+                            .add_hint_option(Hint::similar(
+                                "variable",
+                                variable_name,
+                                safe_variables.iter().flat_map(|variable| variable.name()),
+                            ));
 
                         return Err(());
                     }

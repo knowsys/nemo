@@ -34,16 +34,16 @@ impl ProgramChaseTranslation {
     ) -> ChaseImport {
         let origin = import.origin().clone();
         let predicate = import.predicate().clone();
-        let arity = predicate_arity.get(&predicate);
+        let arity = predicate_arity.get(&predicate).cloned();
         let attributes = import.attributes();
 
         let handler = match import.file_format() {
             FileFormat::CSV => {
-                Self::build_dsv_handler(Direction::Import, Some(','), arity, &attributes)
+                Self::build_dsv_handler(Direction::Import, Some(b','), arity, &attributes)
             }
             FileFormat::DSV => Self::build_dsv_handler(Direction::Import, None, arity, &attributes),
             FileFormat::TSV => {
-                Self::build_dsv_handler(Direction::Import, Some('\t'), arity, &attributes)
+                Self::build_dsv_handler(Direction::Import, Some(b'\t'), arity, &attributes)
             }
             FileFormat::JSON => todo!(),
             FileFormat::NTriples => todo!(),
@@ -87,7 +87,7 @@ impl ProgramChaseTranslation {
     /// Read the [RdfValueFormats] from the attributes.
     fn read_rdf_value_formats(
         attributes: &HashMap<ImportExportAttribute, &Term>,
-    ) -> Option<DsvValueFormats> {
+    ) -> Option<RdfValueFormats> {
         let term = attributes.get(&ImportExportAttribute::Format)?;
 
         if let Term::Tuple(tuple) = term {
@@ -129,7 +129,7 @@ impl ProgramChaseTranslation {
     /// Read the iri base path from the attributes.
     fn read_base(attributes: &HashMap<ImportExportAttribute, &Term>) -> Option<Iri<String>> {
         let term = attributes.get(&ImportExportAttribute::Base)?;
-        Some(Iri::from(
+        Some(Iri::parse_unchecked(
             ImportExportDirective::plain_value(term)
                 .expect("invalid program: base given in the wrong type"),
         ))
@@ -145,7 +145,7 @@ impl ProgramChaseTranslation {
         let (mut compression_format, resource) = Self::read_resource(attributes);
 
         let value_formats = Self::read_dsv_value_formats(attributes)
-            .or_else(DsvValueFormats::default(arity.unwrap_or_default()));
+            .unwrap_or(DsvValueFormats::default(arity.unwrap_or_default()));
 
         let limit = Self::read_limit(attributes);
 
@@ -188,7 +188,7 @@ impl ProgramChaseTranslation {
         }
 
         let value_formats =
-            Self::read_rdf_value_formats(attributes).or_else(DsvValueFormats::default(arity));
+            Self::read_rdf_value_formats(attributes).unwrap_or(RdfValueFormats::default(arity));
 
         let limit = Self::read_limit(attributes);
 

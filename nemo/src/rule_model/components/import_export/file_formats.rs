@@ -34,7 +34,7 @@ pub enum FileFormat {
     #[assoc(extension = file_format::EXTENSION_CSV)]
     #[assoc(attributes = HashMap::from([
         (ImportExportAttribute::Resource, AttributeRequirement::Required),
-        (ImportExportAttribute::Formats, AttributeRequirement::Optional),
+        (ImportExportAttribute::Format, AttributeRequirement::Optional),
         (ImportExportAttribute::Limit, AttributeRequirement::Optional),
         (ImportExportAttribute::Compression, AttributeRequirement::Optional),
     ]))]
@@ -46,7 +46,7 @@ pub enum FileFormat {
     #[assoc(attributes = HashMap::from([
         (ImportExportAttribute::Resource, AttributeRequirement::Required),
         (ImportExportAttribute::Delimiter, AttributeRequirement::Required),
-        (ImportExportAttribute::Formats, AttributeRequirement::Optional),
+        (ImportExportAttribute::Format, AttributeRequirement::Optional),
         (ImportExportAttribute::Limit, AttributeRequirement::Optional),
         (ImportExportAttribute::Compression, AttributeRequirement::Optional),
     ]))]
@@ -57,7 +57,7 @@ pub enum FileFormat {
     #[assoc(extension = file_format::EXTENSION_TSV)]
     #[assoc(attributes = HashMap::from([
         (ImportExportAttribute::Resource, AttributeRequirement::Required),
-        (ImportExportAttribute::Formats, AttributeRequirement::Optional),
+        (ImportExportAttribute::Format, AttributeRequirement::Optional),
         (ImportExportAttribute::Limit, AttributeRequirement::Optional),
         (ImportExportAttribute::Compression, AttributeRequirement::Optional),
     ]))]
@@ -78,7 +78,7 @@ pub enum FileFormat {
     #[assoc(attributes = HashMap::from([
         (ImportExportAttribute::Resource, AttributeRequirement::Required),
         (ImportExportAttribute::Base, AttributeRequirement::Optional),
-        (ImportExportAttribute::Formats, AttributeRequirement::Optional),
+        (ImportExportAttribute::Format, AttributeRequirement::Optional),
         (ImportExportAttribute::Limit, AttributeRequirement::Optional),
         (ImportExportAttribute::Compression, AttributeRequirement::Optional),
     ]))]
@@ -91,7 +91,7 @@ pub enum FileFormat {
     #[assoc(attributes = HashMap::from([
         (ImportExportAttribute::Resource, AttributeRequirement::Required),
         (ImportExportAttribute::Base, AttributeRequirement::Optional),
-        (ImportExportAttribute::Formats, AttributeRequirement::Optional),
+        (ImportExportAttribute::Format, AttributeRequirement::Optional),
         (ImportExportAttribute::Limit, AttributeRequirement::Optional),
         (ImportExportAttribute::Compression, AttributeRequirement::Optional),
     ]))]
@@ -104,7 +104,7 @@ pub enum FileFormat {
     #[assoc(attributes = HashMap::from([
         (ImportExportAttribute::Resource, AttributeRequirement::Required),
         (ImportExportAttribute::Base, AttributeRequirement::Optional),
-        (ImportExportAttribute::Formats, AttributeRequirement::Optional),
+        (ImportExportAttribute::Format, AttributeRequirement::Optional),
         (ImportExportAttribute::Limit, AttributeRequirement::Optional),
         (ImportExportAttribute::Compression, AttributeRequirement::Optional),
     ]))]
@@ -117,7 +117,7 @@ pub enum FileFormat {
     #[assoc(attributes = HashMap::from([
         (ImportExportAttribute::Resource, AttributeRequirement::Required),
         (ImportExportAttribute::Base, AttributeRequirement::Optional),
-        (ImportExportAttribute::Formats, AttributeRequirement::Optional),
+        (ImportExportAttribute::Format, AttributeRequirement::Optional),
         (ImportExportAttribute::Limit, AttributeRequirement::Optional),
         (ImportExportAttribute::Compression, AttributeRequirement::Optional),
     ]))]
@@ -130,7 +130,7 @@ pub enum FileFormat {
     #[assoc(attributes = HashMap::from([
         (ImportExportAttribute::Resource, AttributeRequirement::Required),
         (ImportExportAttribute::Base, AttributeRequirement::Optional),
-        (ImportExportAttribute::Formats, AttributeRequirement::Optional),
+        (ImportExportAttribute::Format, AttributeRequirement::Optional),
         (ImportExportAttribute::Limit, AttributeRequirement::Optional),
         (ImportExportAttribute::Compression, AttributeRequirement::Optional),
     ]))]

@@ -49,7 +49,7 @@ impl Operation {
     }
 
     /// Return the [OperationKind] of this operation.
-    pub fn kind(&self) -> OperationKind {
+    pub fn operation_kind(&self) -> OperationKind {
         self.kind
     }
 

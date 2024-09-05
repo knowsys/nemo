@@ -3,12 +3,13 @@ use std::collections::{HashMap, HashSet};
 use nemo_physical::management::execution_plan::ColumnOrder;
 
 use crate::{
-    error::Error,
-    model::chase_model::{ChaseProgram, ChaseRule},
-    model::{
-        chase_model::{ChaseAtom, PrimitiveAtom, VariableAtom},
-        Constraint, Identifier, PrimitiveTerm, Term, Variable,
+    chase_model::components::{
+        atom::{primitive_atom::PrimitiveAtom, ChaseAtom},
+        program::ChaseProgram,
+        rule::ChaseRule,
     },
+    error::Error,
+    rule_model::components::{tag::Tag, term::primitive::variable::Variable},
 };
 
 use super::variable_order::{
@@ -30,11 +31,11 @@ pub struct RuleAnalysis {
     pub has_aggregates: bool,
 
     /// Predicates appearing in the positive part of the body.
-    pub positive_body_predicates: HashSet<Identifier>,
+    pub positive_body_predicates: HashSet<Tag>,
     /// Predicates appearing in the negative part of the body.
-    pub negative_body_predicates: HashSet<Identifier>,
+    pub negative_body_predicates: HashSet<Tag>,
     /// Predicates appearing in the head.
-    pub head_predicates: HashSet<Identifier>,
+    pub head_predicates: HashSet<Tag>,
 
     /// Variables occurring in the positive part of the body.
     pub positive_body_variables: HashSet<Variable>,
@@ -63,13 +64,13 @@ pub enum RuleAnalysisError {
         "predicate \"{predicate}\" required to have conflicting arities {arity1} and {arity2}"
     )]
     UnsupportedFeaturePredicateOverloading {
-        predicate: Identifier,
+        predicate: Tag,
         arity1: usize,
         arity2: usize,
     },
     /// There is a predicate whose arity could not be determined  
     #[error("arity of predicate \"{predicate}\" could not be derived")]
-    UnspecifiedPredicateArity { predicate: Identifier },
+    UnspecifiedPredicateArity { predicate: Tag },
 }
 
 /// Return true if there is a predicate in the positive part of the rule that also appears in the head of the rule.
@@ -105,20 +106,18 @@ fn get_variables<Atom: ChaseAtom>(atoms: &[Atom]) -> HashSet<Variable> {
     result
 }
 
-fn get_predicates<Atom: ChaseAtom>(atoms: &[Atom]) -> HashSet<Identifier> {
+fn get_predicates<Atom: ChaseAtom>(atoms: &[Atom]) -> HashSet<Tag> {
     atoms.iter().map(|a| a.predicate()).collect()
 }
 
-pub(super) fn get_fresh_rule_predicate(rule_index: usize) -> Identifier {
-    Identifier(format!(
-        "FRESH_HEAD_MATCHES_IDENTIFIER_FOR_RULE_{rule_index}"
-    ))
+pub(super) fn get_fresh_rule_predicate(rule_index: usize) -> Tag {
+    Tag::new(format!("FRESH_HEAD_MATCHES_Tag_FOR_RULE_{rule_index}"))
 }
 
 fn construct_existential_aux_rule(
     rule_index: usize,
     head_atoms: Vec<PrimitiveAtom>,
-    column_orders: &HashMap<Identifier, HashSet<ColumnOrder>>,
+    column_orders: &HashMap<Tag, HashSet<ColumnOrder>>,
 ) -> (ChaseRule, VariableOrder) {
     let mut new_body = Vec::new();
     let mut constraints = Vec::new();
@@ -176,9 +175,9 @@ fn construct_existential_aux_rule(
     }
 
     let temp_rule = {
-        let temp_head_identifier = get_fresh_rule_predicate(rule_index);
+        let temp_head_Tag = get_fresh_rule_predicate(rule_index);
 
-        let temp_head_atom = PrimitiveAtom::new(temp_head_identifier, aux_predicate_terms);
+        let temp_head_atom = PrimitiveAtom::new(temp_head_Tag, aux_predicate_terms);
         ChaseRule::positive_rule(vec![temp_head_atom], new_body, constraints)
     };
 
@@ -197,7 +196,7 @@ fn construct_existential_aux_rule(
 fn analyze_rule(
     rule: &ChaseRule,
     promising_variable_orders: Vec<VariableOrder>,
-    promising_column_orders: &[HashMap<Identifier, HashSet<ColumnOrder>>],
+    promising_column_orders: &[HashMap<Tag, HashSet<ColumnOrder>>],
     rule_index: usize,
 ) -> RuleAnalysis {
     let num_existential = count_distinct_existential_variables(rule);
@@ -233,15 +232,15 @@ pub struct ProgramAnalysis {
     /// Analysis result for each rule.
     pub rule_analysis: Vec<RuleAnalysis>,
     /// Set of all the predicates that are derived in the chase.
-    pub derived_predicates: HashSet<Identifier>,
+    pub derived_predicates: HashSet<Tag>,
     /// Set of all predicates and their arity.
-    pub all_predicates: HashMap<Identifier, usize>,
+    pub all_predicates: HashMap<Tag, usize>,
 }
 
 impl ChaseProgram {
     /// Collect all predicates that appear in a head atom into a [HashSet]
-    fn get_head_predicates(&self) -> HashSet<Identifier> {
-        let mut result = HashSet::<Identifier>::new();
+    fn get_head_predicates(&self) -> HashSet<Tag> {
+        let mut result = HashSet::<Tag>::new();
 
         for rule in self.rules() {
             for head_atom in rule.head() {
@@ -254,17 +253,15 @@ impl ChaseProgram {
 
     /// Collect all predicates in the program, and determine their arity.
     /// An error is returned if arities required for a predicate are not unique.
-    pub(super) fn get_all_predicates(
-        &self,
-    ) -> Result<HashMap<Identifier, usize>, RuleAnalysisError> {
-        let mut result = HashMap::<Identifier, usize>::new();
-        let mut missing = HashSet::<Identifier>::new();
+    pub(super) fn get_all_predicates(&self) -> Result<HashMap<Tag, usize>, RuleAnalysisError> {
+        let mut result = HashMap::<Tag, usize>::new();
+        let mut missing = HashSet::<Tag>::new();
 
         fn add_arity(
-            predicate: Identifier,
+            predicate: Tag,
             arity: usize,
-            arities: &mut HashMap<Identifier, usize>,
-            missing: &mut HashSet<Identifier>,
+            arities: &mut HashMap<Tag, usize>,
+            missing: &mut HashSet<Tag>,
         ) -> Result<(), RuleAnalysisError> {
             if let Some(current) = arities.get(&predicate) {
                 if *current != arity {
@@ -280,11 +277,7 @@ impl ChaseProgram {
             }
             Ok(())
         }
-        fn add_missing(
-            predicate: Identifier,
-            arities: &HashMap<Identifier, usize>,
-            missing: &mut HashSet<Identifier>,
-        ) {
+        fn add_missing(predicate: Tag, arities: &HashMap<Tag, usize>, missing: &mut HashSet<Tag>) {
             if arities.get(&predicate).is_none() {
                 missing.insert(predicate);
             }

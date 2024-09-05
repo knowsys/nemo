@@ -25,7 +25,7 @@ impl ProgramChaseTranslation {
         operation: &crate::rule_model::components::term::operation::Operation,
     ) -> OperationTerm {
         let origin = operation.origin().clone();
-        let kind = operation.kind();
+        let kind = operation.operation_kind();
         let mut subterms = Vec::new();
 
         for argument in operation.arguments() {
