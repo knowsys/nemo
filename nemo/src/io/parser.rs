@@ -202,9 +202,16 @@ pub(crate) fn parse_bare_name(input: Span<'_>) -> IntermediateResult<Span<'_>> {
         recognize(pair(
             alpha1,
             opt(many1(satisfy(|c| {
-                ['0'..='9', 'a'..='z', 'A'..='Z', '-'..='-', '_'..='_']
-                    .iter()
-                    .any(|range| range.contains(&c))
+                [
+                    '0'..='9',
+                    'a'..='z',
+                    'A'..='Z',
+                    '-'..='-',
+                    '_'..='_',
+                    '%'..='%',
+                ]
+                .iter()
+                .any(|range| range.contains(&c))
             }))),
         )),
         || ParseError::ExpectedBareName,

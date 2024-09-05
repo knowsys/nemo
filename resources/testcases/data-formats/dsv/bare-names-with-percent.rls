@@ -1,0 +1,10 @@
+@import fromCsv :- csv{resource="./sources/bareNameWithPercent.csv",format=(any)}.
+
+% comments still work
+inProg(<Hello%20World>). % comments still work
+inProg2(Hello%20World). % comments still work
+
+@export inProg :- csv{}.
+@export inProg2 :- csv{}.
+@export fromCsv :- csv{}.
+
