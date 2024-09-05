@@ -8,7 +8,7 @@ use crate::{
 use super::ChaseComponent;
 
 /// Component for handling exports
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub(crate) struct ChaseExport {
     /// Origin of this component
     origin: Origin,
@@ -41,6 +41,11 @@ impl ChaseExport {
     /// Return the handler.
     pub(crate) fn handler(&self) -> &Box<dyn ImportExportHandler> {
         &self.handler
+    }
+
+    /// Return the arity of this import.
+    pub(crate) fn arity(&self) -> usize {
+        self.handler.predicate_arity()
     }
 }
 

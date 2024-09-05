@@ -7,7 +7,7 @@ use super::term::operation_term::OperationTerm;
 /// Indicates that a new value must be created according to [OperationTerm].
 ///
 /// The result will be "stored" in the given variable.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub(crate) struct ChaseFilter {
     /// Origin of this component
     origin: Origin,

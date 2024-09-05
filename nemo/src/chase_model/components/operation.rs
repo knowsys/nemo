@@ -7,7 +7,7 @@ use super::{term::operation_term::OperationTerm, ChaseComponent};
 /// Indicates that a new value must be created according to [OperationTerm].
 ///
 /// The result will be "stored" in the given variable.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub(crate) struct ChaseOperation {
     /// Origin of this component
     origin: Origin,

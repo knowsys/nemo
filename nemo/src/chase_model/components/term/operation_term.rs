@@ -9,7 +9,7 @@ use crate::rule_model::{
 ///
 /// An action or computation performed on [Term]s.
 /// This can include for example arithmetic or string operations.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub(crate) struct Operation {
     /// Origin of this component
     origin: Origin,
@@ -32,7 +32,7 @@ impl Operation {
 }
 
 /// Term that can be evaluated
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub(crate) enum OperationTerm {
     Primitive(Primitive),
     Operation(Operation),

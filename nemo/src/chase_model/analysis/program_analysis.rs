@@ -4,12 +4,22 @@ use nemo_physical::management::execution_plan::ColumnOrder;
 
 use crate::{
     chase_model::components::{
-        atom::{primitive_atom::PrimitiveAtom, ChaseAtom},
+        atom::{primitive_atom::PrimitiveAtom, variable_atom::VariableAtom, ChaseAtom},
+        filter::ChaseFilter,
         program::ChaseProgram,
         rule::ChaseRule,
+        term::operation_term::{Operation, OperationTerm},
     },
-    error::Error,
-    rule_model::components::{tag::Tag, term::primitive::variable::Variable},
+    rule_model::{
+        components::{
+            tag::Tag,
+            term::{
+                operation::operation_kind::OperationKind,
+                primitive::{variable::Variable, Primitive},
+            },
+        },
+        origin::Origin,
+    },
 };
 
 use super::variable_order::{
@@ -87,7 +97,7 @@ fn count_distinct_existential_variables(rule: &ChaseRule) -> usize {
 
     for head_atom in rule.head() {
         for term in head_atom.terms() {
-            if let PrimitiveTerm::Variable(Variable::Existential(id)) = term {
+            if let Primitive::Variable(Variable::Existential(id)) = term {
                 existentials.insert(Variable::Existential(id.clone()));
             }
         }
@@ -99,7 +109,7 @@ fn count_distinct_existential_variables(rule: &ChaseRule) -> usize {
 fn get_variables<Atom: ChaseAtom>(atoms: &[Atom]) -> HashSet<Variable> {
     let mut result = HashSet::new();
     for atom in atoms {
-        for variable in atom.get_variables() {
+        for variable in atom.variables().cloned() {
             result.insert(variable);
         }
     }
@@ -119,14 +129,13 @@ fn construct_existential_aux_rule(
     head_atoms: Vec<PrimitiveAtom>,
     column_orders: &HashMap<Tag, HashSet<ColumnOrder>>,
 ) -> (ChaseRule, VariableOrder) {
-    let mut new_body = Vec::new();
-    let mut constraints = Vec::new();
+    let mut result = ChaseRule::default();
 
     let mut variable_index = 0;
     let mut generate_variable = move || {
         variable_index += 1;
         let name = format!("__GENERATED_HEAD_AUX_VARIABLE_{}", variable_index);
-        Variable::Universal(name)
+        Variable::universal(&name)
     };
 
     let mut aux_predicate_terms = Vec::new();
@@ -136,20 +145,27 @@ fn construct_existential_aux_rule(
 
         for term in atom.terms() {
             match term {
-                PrimitiveTerm::Variable(variable) => {
+                Primitive::Variable(variable) => {
                     if !used_variables.insert(variable.clone()) {
                         let generated_variable = generate_variable();
                         new_terms.push(generated_variable.clone());
 
-                        let new_constraint = Constraint::Equals(
-                            Term::Primitive(PrimitiveTerm::Variable(generated_variable)),
-                            Term::Primitive(term.clone()),
+                        let new_constraint = Operation::new(
+                            Origin::default(),
+                            OperationKind::Equal,
+                            vec![
+                                OperationTerm::Primitive(Primitive::Variable(generated_variable)),
+                                OperationTerm::Primitive(term.clone()),
+                            ],
                         );
 
-                        constraints.push(new_constraint);
+                        result.add_positive_filter(ChaseFilter::new(
+                            Origin::default(),
+                            OperationTerm::Operation(new_constraint),
+                        ));
                     } else {
                         if variable.is_universal() {
-                            aux_predicate_terms.push(PrimitiveTerm::Variable(variable.clone()));
+                            aux_predicate_terms.push(Primitive::Variable(variable.clone()));
                         }
 
                         new_terms.push(variable.clone());
@@ -157,40 +173,49 @@ fn construct_existential_aux_rule(
 
                     if variable.is_universal() && used_variables.insert(variable.clone()) {}
                 }
-                PrimitiveTerm::GroundTerm(_) => {
+                Primitive::Ground(_) => {
                     let generated_variable = generate_variable();
                     new_terms.push(generated_variable.clone());
 
-                    let new_constraint = Constraint::Equals(
-                        Term::Primitive(PrimitiveTerm::Variable(generated_variable)),
-                        Term::Primitive(term.clone()),
+                    let new_constraint = Operation::new(
+                        Origin::default(),
+                        OperationKind::Equal,
+                        vec![
+                            OperationTerm::Primitive(Primitive::Variable(generated_variable)),
+                            OperationTerm::Primitive(term.clone()),
+                        ],
                     );
 
-                    constraints.push(new_constraint);
+                    result.add_positive_filter(ChaseFilter::new(
+                        Origin::default(),
+                        OperationTerm::Operation(new_constraint),
+                    ));
                 }
             }
         }
 
-        new_body.push(VariableAtom::new(atom.predicate(), new_terms));
+        result.add_positive_atom(VariableAtom::new(
+            Origin::default(),
+            atom.predicate(),
+            new_terms,
+        ));
     }
 
-    let temp_rule = {
-        let temp_head_Tag = get_fresh_rule_predicate(rule_index);
+    let temp_head_tag = get_fresh_rule_predicate(rule_index);
+    let temp_head_atom = PrimitiveAtom::new(Origin::default(), temp_head_tag, aux_predicate_terms);
+    result.add_head_atom(temp_head_atom);
 
-        let temp_head_atom = PrimitiveAtom::new(temp_head_Tag, aux_predicate_terms);
-        ChaseRule::positive_rule(vec![temp_head_atom], new_body, constraints)
-    };
+    let mut rule_program = ChaseProgram::default();
+    rule_program.add_rule(result.clone());
 
-    let variable_order = build_preferable_variable_orders(
-        &ChaseProgram::builder().rule(temp_rule.clone()).build(),
-        Some(column_orders.clone()),
-    )
-    .all_variable_orders
-    .pop()
-    .and_then(|mut v| v.pop())
-    .expect("This functions provides at least one variable order");
+    let variable_order =
+        build_preferable_variable_orders(&rule_program, Some(column_orders.clone()))
+            .all_variable_orders
+            .pop()
+            .and_then(|mut v| v.pop())
+            .expect("This functions provides at least one variable order");
 
-    (temp_rule, variable_order)
+    (result, variable_order)
 }
 
 fn analyze_rule(
@@ -211,7 +236,7 @@ fn analyze_rule(
     RuleAnalysis {
         is_existential: num_existential > 0,
         is_recursive: is_recursive(rule),
-        has_positive_constraints: !rule.positive_constraints().is_empty(),
+        has_positive_constraints: !rule.positive_filters().is_empty(),
         has_aggregates: rule.aggregate().is_some(),
         positive_body_predicates: get_predicates(rule.positive_body()),
         negative_body_predicates: get_predicates(rule.negative_body()),
@@ -253,30 +278,19 @@ impl ChaseProgram {
 
     /// Collect all predicates in the program, and determine their arity.
     /// An error is returned if arities required for a predicate are not unique.
-    pub(super) fn get_all_predicates(&self) -> Result<HashMap<Tag, usize>, RuleAnalysisError> {
+    pub(super) fn get_all_predicates(&self) -> HashMap<Tag, usize> {
         let mut result = HashMap::<Tag, usize>::new();
-        let mut missing = HashSet::<Tag>::new();
 
-        fn add_arity(
-            predicate: Tag,
-            arity: usize,
-            arities: &mut HashMap<Tag, usize>,
-            missing: &mut HashSet<Tag>,
-        ) -> Result<(), RuleAnalysisError> {
+        fn add_arity(predicate: Tag, arity: usize, arities: &mut HashMap<Tag, usize>) {
             if let Some(current) = arities.get(&predicate) {
                 if *current != arity {
-                    return Err(RuleAnalysisError::UnsupportedFeaturePredicateOverloading {
-                        predicate,
-                        arity1: *current,
-                        arity2: arity,
-                    });
+                    unreachable!("invalid program: same predicate used with different arities");
                 }
             } else {
-                missing.remove(&predicate);
                 arities.insert(predicate, arity);
             }
-            Ok(())
         }
+
         fn add_missing(predicate: Tag, arities: &HashMap<Tag, usize>, missing: &mut HashSet<Tag>) {
             if arities.get(&predicate).is_none() {
                 missing.insert(predicate);
@@ -284,51 +298,32 @@ impl ChaseProgram {
         }
 
         // Predicates in import statements
-        for (pred, handler) in self.imports() {
-            if let Some(arity) = handler.predicate_arity() {
-                add_arity(pred.clone(), arity, &mut result, &mut missing)?;
-            } else {
-                add_missing(pred.clone(), &result, &mut missing);
-            }
+        for import in self.imports() {
+            add_arity(import.predicate().clone(), import.arity(), &mut result);
         }
 
         // Predicates in export statements
-        for (pred, handler) in self.exports() {
-            if let Some(arity) = handler.predicate_arity() {
-                add_arity(pred.clone(), arity, &mut result, &mut missing)?;
-            } else {
-                add_missing(pred.clone(), &result, &mut missing);
-            }
+        for export in self.exports() {
+            add_arity(export.predicate().clone(), export.arity(), &mut result);
         }
 
         // Predicates in rules
         for rule in self.rules() {
             for atom in rule.head() {
-                add_arity(
-                    atom.predicate(),
-                    atom.terms().len(),
-                    &mut result,
-                    &mut missing,
-                )?;
+                add_arity(atom.predicate(), atom.arity(), &mut result);
             }
-            for atom in rule.all_body() {
-                add_arity(
-                    atom.predicate(),
-                    atom.terms().len(),
-                    &mut result,
-                    &mut missing,
-                )?;
+            for atom in rule
+                .positive_body()
+                .iter()
+                .chain(rule.negative_body().iter())
+            {
+                add_arity(atom.predicate(), atom.arity(), &mut result);
             }
         }
 
         // Predicates in facts
         for fact in self.facts() {
-            add_arity(
-                fact.predicate(),
-                fact.terms().len(),
-                &mut result,
-                &mut missing,
-            )?;
+            add_arity(fact.predicate(), fact.arity(), &mut result);
         }
 
         // Additional predicates for existential rules
@@ -344,39 +339,23 @@ impl ChaseProgram {
             let predicate = get_fresh_rule_predicate(rule_index);
             let arity = head_variables.difference(&body_variables).count();
 
-            add_arity(predicate, arity, &mut result, &mut missing)?;
+            add_arity(predicate, arity, &mut result);
         }
 
-        if !missing.is_empty() {
-            return Err(RuleAnalysisError::UnspecifiedPredicateArity {
-                predicate: missing.iter().next().expect("not empty").clone(),
-            });
-        }
-
-        Ok(result)
-    }
-
-    /// Check if the program contains rules with unsupported features.
-    /// This is always performed as part of [ChaseProgram::analyze].
-    fn check_for_unsupported_features(&self) -> Result<(), RuleAnalysisError> {
-        // Currently no interesting checks here. Uniqueness of arities is already checked in the analysis phase.
-        // In general, should we maybe just do all checks in the analysis?
-        Ok(())
+        result
     }
 
     /// Analyze the program and return a struct containing the results.
     /// This method also checks for structural problems that are not detected
     /// in parsing.
-    pub fn analyze(&self) -> Result<ProgramAnalysis, Error> {
+    pub fn analyze(&self) -> ProgramAnalysis {
         let BuilderResultVariants {
             all_variable_orders,
             all_column_orders,
         } = build_preferable_variable_orders(self, None);
 
-        let all_predicates = self.get_all_predicates()?;
+        let all_predicates = self.get_all_predicates();
         let derived_predicates = self.get_head_predicates();
-
-        self.check_for_unsupported_features()?;
 
         let rule_analysis: Vec<RuleAnalysis> = self
             .rules()
@@ -392,10 +371,10 @@ impl ChaseProgram {
             })
             .collect();
 
-        Ok(ProgramAnalysis {
+        ProgramAnalysis {
             rule_analysis,
             derived_predicates,
             all_predicates,
-        })
+        }
     }
 }

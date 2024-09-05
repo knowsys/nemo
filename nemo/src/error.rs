@@ -6,8 +6,8 @@ use nemo_physical::datavalues::DataValueCreationError;
 use thiserror::Error;
 
 use crate::{
+    chase_model::analysis::program_analysis::RuleAnalysisError,
     execution::selection_strategy::strategy::SelectionStrategyError, io::error::ImportExportError,
-    program_analysis::analysis::RuleAnalysisError,
 };
 
 pub use nemo_physical::error::ReadingError;
