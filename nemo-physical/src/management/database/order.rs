@@ -10,7 +10,7 @@ use bytesize::ByteSize;
 use crate::{
     error::Error,
     management::{
-        bytesized::sum_bytes, bytesized::ByteSized, execution_plan::ColumnOrder,
+        bytesized::ByteSized, execution_plan::ColumnOrder,
         util::closest_order,
     },
     meta::timing::TimedCode,
@@ -326,8 +326,8 @@ impl OrderedReferenceManager {
 }
 
 impl ByteSized for OrderedReferenceManager {
-    fn size_bytes(&self) -> ByteSize {
-        sum_bytes(self.stored_tables.iter().map(|table| table.size_bytes()))
+    fn size_bytes(&self) -> u64 {
+        self.stored_tables.iter().fold(0, |acc, table| acc+table.size_bytes())
     }
 }
 

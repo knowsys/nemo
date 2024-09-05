@@ -4,12 +4,10 @@
 
 use std::cell::RefCell;
 
-use bytesize::ByteSize;
-
 use crate::{
     datasources::tuple_writer::TupleWriter,
     error::{Error, ReadingError},
-    management::{bytesized::sum_bytes, bytesized::ByteSized},
+    management::bytesized::ByteSized,
     tabular::trie::Trie,
 };
 
@@ -114,13 +112,13 @@ impl TableStorage {
 }
 
 impl ByteSized for TableStorage {
-    fn size_bytes(&self) -> ByteSize {
+    fn size_bytes(&self) -> u64 {
         match self {
             TableStorage::InMemory(trie) => trie.size_bytes(),
             TableStorage::FromSources(sources) => {
-                sum_bytes(sources.iter().map(|source| source.size_bytes()))
+                sources.iter().fold(0, |acc, source| acc+source.size_bytes())
             }
-            TableStorage::Empty => ByteSize::b(0),
+            TableStorage::Empty => 0,
         }
     }
 }

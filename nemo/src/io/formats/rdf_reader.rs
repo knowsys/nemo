@@ -1,6 +1,5 @@
 //! Reader for various RDF formats, which supports triples files (N-Triples, Turtle, RDF/XML) and
 //! quads files (N-Quads, TriG).
-use bytesize::ByteSize;
 use nemo_physical::{
     datasources::{table_providers::TableProvider, tuple_writer::TupleWriter},
     datavalues::{AnyDataValue, DataValueCreationError},
@@ -343,8 +342,8 @@ impl std::fmt::Debug for RdfReader {
 }
 
 impl ByteSized for RdfReader {
-    fn size_bytes(&self) -> ByteSize {
-        ByteSize::b(size_of::<Self>() as u64)
+    fn size_bytes(&self) -> u64 {
+        size_of::<Self>() as u64
     }
 }
 

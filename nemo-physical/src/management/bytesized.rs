@@ -2,24 +2,12 @@
 //! which should be implemented by types that can
 //! calculate their own size.
 
-use bytesize::ByteSize;
-
-/// Objects that are able calculate their current size in bytes
+/// Objects that are able calculate their current approximate size in bytes.
+/// 
+/// We use `u64` rather than `usize` here to avoid overflows in case of overestimations.
 pub trait ByteSized {
     /// Return the number of bytes this object consumes
-    fn size_bytes(&self) -> ByteSize;
+    fn size_bytes(&self) -> u64;
 }
 
-/// Helper method to sum up a collection of [ByteSize],
-/// since the `Sum` is not implemented.
-pub(crate) fn sum_bytes<ByteIterator: Iterator<Item = ByteSize>>(
-    iterator: ByteIterator,
-) -> ByteSize {
-    let mut result = ByteSize::b(0);
 
-    for byte_size in iterator {
-        result += byte_size;
-    }
-
-    result
-}

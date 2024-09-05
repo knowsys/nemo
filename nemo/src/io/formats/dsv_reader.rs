@@ -3,7 +3,6 @@
 use std::io::BufRead;
 use std::mem::size_of;
 
-use bytesize::ByteSize;
 use csv::{Reader, ReaderBuilder};
 use nemo_physical::management::bytesized::ByteSized;
 
@@ -139,8 +138,8 @@ impl std::fmt::Debug for DsvReader {
 }
 
 impl ByteSized for DsvReader {
-    fn size_bytes(&self) -> ByteSize {
-        ByteSize::b(size_of::<Self>() as u64)
+    fn size_bytes(&self) -> u64 {
+        size_of::<Self>() as u64
     }
 }
 

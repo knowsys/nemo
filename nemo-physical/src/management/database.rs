@@ -558,7 +558,7 @@ impl DatabaseInstance {
 }
 
 impl ByteSized for DatabaseInstance {
-    fn size_bytes(&self) -> ByteSize {
+    fn size_bytes(&self) -> u64 {
         // TODO: Add size of the dictionary
         self.reference_manager.size_bytes()
     }

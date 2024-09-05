@@ -2,8 +2,6 @@
 
 use std::{fmt::Debug, mem::size_of, num::NonZeroUsize, ops::Range};
 
-use bytesize::ByteSize;
-
 use crate::{
     columnar::{columnbuilder::rle::RleElement, columnscan::ColumnScan},
     datatypes::{ColumnDataType, RunLengthEncodable},
@@ -134,13 +132,13 @@ where
 }
 
 impl<T: RunLengthEncodable> ByteSized for ColumnRle<T> {
-    fn size_bytes(&self) -> ByteSize {
+    fn size_bytes(&self) -> u64 {
         let size_values = size_of::<T>() as u64 * self.values.capacity() as u64;
         let size_end_indices =
             size_of::<NonZeroUsize>() as u64 * self.end_indices.capacity() as u64;
         let size_increments = size_of::<T::Step>() as u64 * self.increments.capacity() as u64;
 
-        ByteSize::b(size_of::<Self>() as u64 + size_values + size_end_indices + size_increments)
+        size_of::<Self>() as u64 + size_values + size_end_indices + size_increments
     }
 }
 

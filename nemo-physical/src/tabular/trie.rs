@@ -18,7 +18,7 @@ use crate::{
         storage_type_name::{StorageTypeBitSet, STORAFE_TYPES},
         StorageTypeName, StorageValueT,
     },
-    management::bytesized::{sum_bytes, ByteSized},
+    management::bytesized::ByteSized,
     tabular::{buffer::tuple_buffer::TupleBuffer, rowscan::RowScan},
     util::bitset::BitSet,
 };
@@ -519,8 +519,8 @@ impl Trie {
 }
 
 impl ByteSized for Trie {
-    fn size_bytes(&self) -> bytesize::ByteSize {
-        sum_bytes(self.columns.iter().map(|column| column.size_bytes()))
+    fn size_bytes(&self) -> u64 {
+        self.columns.iter().fold(0, |acc, column| acc + column.size_bytes())
     }
 }
 
