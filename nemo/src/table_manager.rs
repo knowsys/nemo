@@ -7,11 +7,11 @@ use super::model::Identifier;
 use nemo_physical::{
     datavalues::any_datavalue::AnyDataValue,
     management::{
-        database::DatabaseInstance,
+        bytesized::ByteSized,
         database::{
             id::{ExecutionId, PermanentTableId},
             sources::TableSource,
-            Dict,
+            DatabaseInstance, Dict,
         },
         execution_plan::{ColumnOrder, ExecutionNodeRef, ExecutionPlan},
     },
@@ -619,7 +619,12 @@ impl TableManager {
 
     /// Return the current [MemoryUsage].
     pub fn memory_usage(&self) -> MemoryUsage {
-        let mut result = MemoryUsage::new_block("Chase");
+        let mut result = MemoryUsage::new_block("Total");
+
+        let memory = self.database.dictionary().size_bytes();
+        result.add_sub_block(MemoryUsage::new("Dictionary", memory));
+
+        let mut steps = MemoryUsage::new_block("Chase steps");
 
         for (identifier, subtable_handler) in &self.predicate_subtables {
             let mut predicate_usage = MemoryUsage::new_block(&identifier.to_string());
@@ -636,8 +641,9 @@ impl TableManager {
                 ));
             }
 
-            result.add_sub_block(predicate_usage)
+            steps.add_sub_block(predicate_usage);
         }
+        result.add_sub_block(steps);
 
         result
     }
