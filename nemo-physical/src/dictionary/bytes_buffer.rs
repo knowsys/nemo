@@ -143,13 +143,6 @@ impl BytesBuffer {
         result
     }
 
-    /// Computes and returns the overall number of bytes that this [BytesBuffer] occupies.
-    fn size_bytes(&self) -> u64 {
-        (self.pages.len() * (size_of::<(usize, Vec<u8>)>() + PAGE_SIZE)
-            + self.cur_pages.len() * size_of::<usize>()
-            + size_of::<Self>()) as u64
-    }
-
     /// Computes and returns the overall number of bytes that have been alocated for managing
     /// a specific buffer. This includes management data for that buffer but no shared management
     /// data for the [BytesBuffer] as such.
@@ -159,6 +152,15 @@ impl BytesBuffer {
                 .iter()
                 .fold(0, |acc, x| if x.0 == buffer { acc + 1 } else { acc });
         (page_count * (size_of::<(usize, Vec<u8>)>() + PAGE_SIZE) + size_of::<usize>()) as u64
+    }
+}
+
+impl ByteSized for BytesBuffer {
+    /// Computes and returns the overall number of bytes that this [BytesBuffer] occupies.
+    fn size_bytes(&self) -> u64 {
+        (self.pages.len() * (size_of::<(usize, Vec<u8>)>() + PAGE_SIZE)
+            + self.cur_pages.len() * size_of::<usize>()
+            + size_of::<Self>()) as u64
     }
 }
 
@@ -208,9 +210,7 @@ pub(crate) unsafe trait GlobalBytesBuffer: Debug + Sized {
     /// Computes and returns the overall number of bytes that have been alocated for managing
     /// a specific buffer.
     fn buffer_size_bytes(buffer: usize) -> u64 {
-        unsafe {
-            BytesBuffer::buffer_size_bytes(&*Self::get(), buffer)
-        }
+        unsafe { BytesBuffer::buffer_size_bytes(&*Self::get(), buffer) }
     }
 }
 
@@ -296,6 +296,12 @@ impl<B: GlobalBytesBuffer> BytesRef<B> {
     }
 }
 
+impl<B: GlobalBytesBuffer> ByteSized for BytesRef<B> {
+    fn size_bytes(&self) -> u64 {
+        size_of::<Self>() as u64
+    }
+}
+
 impl<B: GlobalBytesBuffer> Display for BytesRef<B> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         unsafe {
@@ -355,8 +361,12 @@ macro_rules! declare_bytes_buffer {
 }
 pub(crate) use declare_bytes_buffer;
 
+use crate::management::bytesized::ByteSized;
+
 #[cfg(test)]
 mod test {
+    use crate::dictionary::bytes_buffer::PAGE_SIZE;
+
     use super::{BytesBuffer, GlobalBytesBuffer};
 
     crate::dictionary::bytes_buffer::declare_bytes_buffer!(TestGlobalBuffer, TEST_BUFFER);
@@ -388,6 +398,8 @@ mod test {
 
         assert_ne!(bytes_ref1, bytes_ref2);
         assert_eq!(bytes_ref1, bytes_ref1);
+
+        assert!(TestGlobalBuffer::buffer_size_bytes(bufid1) > PAGE_SIZE as u64);
 
         TestGlobalBuffer::drop_buffer(bufid1);
         TestGlobalBuffer::drop_buffer(bufid2);

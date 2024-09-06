@@ -57,8 +57,7 @@ impl TableProvider for SimpleTable {
 impl ByteSized for SimpleTable {
     fn size_bytes(&self) -> u64 {
         // cast everything to u64 separately to avoid overflows
-        size_of::<Self>() as u64
-                + self.data.capacity() as u64 * size_of::<AnyDataValue>() as u64
+        size_of::<Self>() as u64 + self.data.capacity() as u64 * size_of::<AnyDataValue>() as u64
     }
 }
 

@@ -3,6 +3,7 @@
 use crate::datavalues::ValueDomain;
 use crate::datavalues::{AnyDataValue, DataValue};
 use crate::dictionary::NONEXISTING_ID_MARK;
+use crate::management::bytesized::{ByteSizeHelpers, ByteSized};
 
 use super::DvDict;
 use super::IriDvDictionary;
@@ -534,6 +535,18 @@ impl DvDict for MetaDvDictionary {
 
     fn has_marked(&self) -> bool {
         false
+    }
+}
+
+impl ByteSized for MetaDvDictionary {
+    fn size_bytes(&self) -> u64 {
+        size_of::<Self>() as u64
+            + ByteSizeHelpers::size_inner_vec_flat(&self.dictblocks)
+            + ByteSizeHelpers::size_inner_vec_flat(&self.dicts)
+            + ByteSizeHelpers::size_inner_vec_flat(&self.generic_dicts)
+            + self.dicts.iter().fold(0, |acc, dr| {
+                acc + dr.dict.size_bytes() + ByteSizeHelpers::size_inner_vec_flat(&dr.gblocks)
+            })
     }
 }
 

@@ -7,10 +7,7 @@ use std::{
 
 use crate::{
     error::Error,
-    management::{
-        bytesized::ByteSized, execution_plan::ColumnOrder,
-        util::closest_order,
-    },
+    management::{bytesized::ByteSized, execution_plan::ColumnOrder, util::closest_order},
     meta::timing::TimedCode,
     tabular::{operations::projectreorder::GeneratorProjectReorder, trie::Trie},
     util::mapping::{permutation::Permutation, traits::NatMapping},
@@ -325,7 +322,9 @@ impl OrderedReferenceManager {
 
 impl ByteSized for OrderedReferenceManager {
     fn size_bytes(&self) -> u64 {
-        self.stored_tables.iter().fold(0, |acc, table| acc+table.size_bytes())
+        self.stored_tables
+            .iter()
+            .fold(0, |acc, table| acc + table.size_bytes())
     }
 }
 

@@ -115,9 +115,9 @@ impl ByteSized for TableStorage {
     fn size_bytes(&self) -> u64 {
         match self {
             TableStorage::InMemory(trie) => trie.size_bytes(),
-            TableStorage::FromSources(sources) => {
-                sources.iter().fold(0, |acc, source| acc+source.size_bytes())
-            }
+            TableStorage::FromSources(sources) => sources
+                .iter()
+                .fold(0, |acc, source| acc + source.size_bytes()),
             TableStorage::Empty => 0,
         }
     }

@@ -1,6 +1,6 @@
 //! General traits and global constants for dictionaries that work for datavalues.
 
-use crate::datavalues::AnyDataValue;
+use crate::{datavalues::AnyDataValue, management::bytesized::ByteSized};
 use std::fmt::Debug;
 
 /// Fake id that dictionaries use to indicate that an entry has no id.
@@ -51,7 +51,7 @@ impl AddResult {
 ///
 /// The id values are provided when the dictionary is used, whereas the ids are newly
 /// assigned by the dictionary itself.
-pub trait DvDict: Debug {
+pub trait DvDict: Debug + ByteSized {
     /// Adds a new [AnyDataValue] to the dictionary. If the value is not known yet, it will
     /// be assigned a new id. Unsupported datavalues can also be rejected, which specialized
     /// dictionary implementations might do.
