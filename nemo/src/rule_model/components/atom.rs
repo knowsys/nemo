@@ -9,8 +9,11 @@ use crate::rule_model::{
 
 use super::{
     tag::Tag,
-    term::{primitive::variable::Variable, Term},
-    IterableVariables, ProgramComponent, ProgramComponentKind,
+    term::{
+        primitive::{variable::Variable, Primitive},
+        Term,
+    },
+    IterablePrimitives, IterableVariables, ProgramComponent, ProgramComponentKind,
 };
 
 /// Atom
@@ -169,6 +172,20 @@ impl IterableVariables for Atom {
 
     fn variables_mut<'a>(&'a mut self) -> Box<dyn Iterator<Item = &'a mut Variable> + 'a> {
         Box::new(self.terms.iter_mut().flat_map(|term| term.variables_mut()))
+    }
+}
+
+impl IterablePrimitives for Atom {
+    fn primitive_terms<'a>(&'a self) -> Box<dyn Iterator<Item = &'a Primitive> + 'a> {
+        Box::new(self.terms.iter().flat_map(|term| term.primitive_terms()))
+    }
+
+    fn primitive_terms_mut<'a>(&'a mut self) -> Box<dyn Iterator<Item = &'a mut Primitive> + 'a> {
+        Box::new(
+            self.terms
+                .iter_mut()
+                .flat_map(|term| term.primitive_terms_mut()),
+        )
     }
 }
 

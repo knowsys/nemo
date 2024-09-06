@@ -1,6 +1,12 @@
 //! This module defines [ChaseOperation].
 
-use crate::rule_model::{components::term::primitive::variable::Variable, origin::Origin};
+use crate::rule_model::{
+    components::{
+        term::primitive::{variable::Variable, Primitive},
+        IterablePrimitives, IterableVariables,
+    },
+    origin::Origin,
+};
 
 use super::{term::operation_term::OperationTerm, ChaseComponent};
 
@@ -50,5 +56,33 @@ impl ChaseComponent for ChaseOperation {
     {
         self.origin = origin;
         self
+    }
+}
+
+impl IterableVariables for ChaseOperation {
+    fn variables<'a>(&'a self) -> Box<dyn Iterator<Item = &'a Variable> + 'a> {
+        Box::new(
+            Some(self.variable())
+                .into_iter()
+                .chain(self.operation.variables()),
+        )
+    }
+
+    fn variables_mut<'a>(&'a mut self) -> Box<dyn Iterator<Item = &'a mut Variable> + 'a> {
+        Box::new(
+            Some(&mut self.output_variable)
+                .into_iter()
+                .chain(self.operation.variables_mut()),
+        )
+    }
+}
+
+impl IterablePrimitives for ChaseOperation {
+    fn primitive_terms<'a>(&'a self) -> Box<dyn Iterator<Item = &'a Primitive> + 'a> {
+        self.operation.primitive_terms()
+    }
+
+    fn primitive_terms_mut<'a>(&'a mut self) -> Box<dyn Iterator<Item = &'a mut Primitive> + 'a> {
+        self.operation.primitive_terms_mut()
     }
 }

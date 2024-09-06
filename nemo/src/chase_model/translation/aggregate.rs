@@ -1,7 +1,5 @@
 //! This module contains functions for creating [ChaseAggregate]s.
 
-use std::collections::HashSet;
-
 use crate::{
     chase_model::components::{
         aggregate::ChaseAggregate,
@@ -31,7 +29,7 @@ impl ProgramChaseTranslation {
         &mut self,
         result: &mut ChaseRule,
         aggregate: &crate::rule_model::components::term::aggregate::Aggregate,
-        group_by_variables: &HashSet<Variable>,
+        group_by_variables: &Vec<Variable>,
     ) -> ChaseAggregate {
         let origin = aggregate.origin().clone();
         let kind = aggregate.aggregate_kind();
@@ -90,7 +88,7 @@ impl ProgramChaseTranslation {
         &mut self,
         result: &mut ChaseRule,
         operation: &crate::rule_model::components::term::operation::Operation,
-        group_by_variables: &HashSet<Variable>,
+        group_by_variables: &Vec<Variable>,
         chase_aggregate: &mut Option<ChaseAggregate>,
     ) -> OperationTerm {
         let origin = operation.origin().clone();
@@ -132,7 +130,7 @@ impl ProgramChaseTranslation {
         &mut self,
         result: &mut ChaseRule,
         operation: &crate::rule_model::components::term::operation::Operation,
-        group_by_variables: &HashSet<Variable>,
+        group_by_variables: &Vec<Variable>,
         output_variable: Variable,
         chase_aggregate: &mut Option<ChaseAggregate>,
     ) -> ChaseOperation {

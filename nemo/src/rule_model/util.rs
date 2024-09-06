@@ -1,6 +1,6 @@
 //! This module collects miscellaneous functionality for the rule model.
 
-/// Macro that parses individual [super::component::term::Term]s
+/// Macro that parses individual [Term][super::components::term::Term]s
 #[macro_export]
 macro_rules! term_list {
     // Base case

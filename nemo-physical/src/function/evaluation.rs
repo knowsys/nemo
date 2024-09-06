@@ -422,14 +422,14 @@ mod test {
         );
         evaluate_expect(&tree_regex, Some(AnyDataValue::new_boolean(true)));
 
-        let tree_substring_length = Function::string_subtstring_length(
+        let tree_substring_length = Function::string_substring_length(
             Function::constant(any_string("Hello World")),
             Function::constant(AnyDataValue::new_integer_from_u64(7)),
             Function::constant(AnyDataValue::new_integer_from_u64(3)),
         );
         evaluate_expect(&tree_substring_length, Some(any_string("Wor")));
 
-        let tree_substring = Function::string_subtstring(
+        let tree_substring = Function::string_substring(
             Function::constant(any_string("Hello World")),
             Function::constant(AnyDataValue::new_integer_from_u64(7)),
         );

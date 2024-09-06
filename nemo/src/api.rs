@@ -26,9 +26,7 @@ use std::{fs::read_to_string, path::PathBuf};
 use crate::{
     error::{Error, ReadingError},
     execution::DefaultExecutionEngine,
-    io::parser::parse_program_str,
-    model::Identifier,
-    rule_model::program::Program,
+    rule_model::components::tag::Tag,
 };
 
 /// Reasoning Engine exposed by the API
@@ -51,7 +49,7 @@ pub fn load(file: PathBuf) -> Result<Engine, Error> {
 ///
 /// # Error
 /// Returns an appropriate [Error] variant on parsing and feature check issues.
-pub fn load_string(input: String) -> Result<Engine, Error> {
+pub fn load_string(_input: String) -> Result<Engine, Error> {
     // let (ast, _errors) = parse_program_str(&input);
     // let _program = Program::from_ast(ast);
     todo!("ExecutionEngine has to use the new rule model")
@@ -69,11 +67,12 @@ pub fn reason(engine: &mut Engine) -> Result<(), Error> {
 }
 
 /// Get a [Vec] of all output predicates that are computed by the engine.
-pub fn output_predicates(engine: &Engine) -> Vec<Identifier> {
+pub fn output_predicates(engine: &Engine) -> Vec<Tag> {
     engine
         .program()
         .exports()
-        .map(|(id, _)| id)
+        .into_iter()
+        .map(|export| export.predicate())
         .cloned()
         .collect()
 }

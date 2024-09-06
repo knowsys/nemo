@@ -24,7 +24,7 @@ use super::{
 };
 
 /// Representation of a nemo program
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct Program {
     /// Origin of this component
     origin: Origin,
@@ -55,6 +55,14 @@ impl Program {
     /// Return an iterator over all rules.
     pub fn rules(&self) -> impl Iterator<Item = &Rule> {
         self.rules.iter()
+    }
+
+    /// Return the rule at a particular index.
+    ///
+    /// # Panics
+    /// Panics if there is no rule at this position.
+    pub fn rule(&self, index: usize) -> &Rule {
+        &self.rules[index]
     }
 
     /// Return an iterator over all facts.
@@ -255,23 +263,23 @@ impl std::fmt::Display for Program {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         for import in self.imports() {
             import.fmt(f)?;
-            f.write_char('\n');
+            f.write_char('\n')?;
         }
         for fact in self.facts() {
             fact.fmt(f)?;
-            f.write_char('\n');
+            f.write_char('\n')?;
         }
         for rule in self.rules() {
             rule.fmt(f)?;
-            f.write_char('\n');
+            f.write_char('\n')?;
         }
         for output in self.outputs() {
             output.fmt(f)?;
-            f.write_char('\n');
+            f.write_char('\n')?;
         }
         for export in self.exports() {
             export.fmt(f)?;
-            f.write_char('\n');
+            f.write_char('\n')?;
         }
 
         Ok(())

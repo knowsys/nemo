@@ -3,7 +3,13 @@
 use crate::{
     chase_model::components::ChaseComponent,
     rule_model::{
-        components::term::{operation::operation_kind::OperationKind, primitive::Primitive},
+        components::{
+            term::{
+                operation::operation_kind::OperationKind,
+                primitive::{variable::Variable, Primitive},
+            },
+            IterablePrimitives, IterableVariables,
+        },
         origin::Origin,
     },
 };
@@ -32,6 +38,16 @@ impl Operation {
             subterms,
         }
     }
+
+    /// Return the kind of operation.
+    pub(crate) fn operation_kind(&self) -> OperationKind {
+        self.kind
+    }
+
+    /// Return the list of subterms.
+    pub(crate) fn subterms(&self) -> &Vec<OperationTerm> {
+        &self.subterms
+    }
 }
 
 impl ChaseComponent for Operation {
@@ -48,9 +64,69 @@ impl ChaseComponent for Operation {
     }
 }
 
+impl IterableVariables for Operation {
+    fn variables<'a>(&'a self) -> Box<dyn Iterator<Item = &'a Variable> + 'a> {
+        Box::new(self.subterms.iter().flat_map(|term| term.variables()))
+    }
+
+    fn variables_mut<'a>(&'a mut self) -> Box<dyn Iterator<Item = &'a mut Variable> + 'a> {
+        Box::new(
+            self.subterms
+                .iter_mut()
+                .flat_map(|term| term.variables_mut()),
+        )
+    }
+}
+
+impl IterablePrimitives for Operation {
+    fn primitive_terms<'a>(&'a self) -> Box<dyn Iterator<Item = &'a Primitive> + 'a> {
+        Box::new(self.subterms.iter().flat_map(|term| term.primitive_terms()))
+    }
+
+    fn primitive_terms_mut<'a>(&'a mut self) -> Box<dyn Iterator<Item = &'a mut Primitive> + 'a> {
+        Box::new(
+            self.subterms
+                .iter_mut()
+                .flat_map(|term| term.primitive_terms_mut()),
+        )
+    }
+}
+
 /// Term that can be evaluated
 #[derive(Debug, Clone)]
 pub(crate) enum OperationTerm {
     Primitive(Primitive),
     Operation(Operation),
+}
+
+impl IterableVariables for OperationTerm {
+    fn variables<'a>(&'a self) -> Box<dyn Iterator<Item = &'a Variable> + 'a> {
+        match self {
+            OperationTerm::Primitive(primitive) => primitive.variables(),
+            OperationTerm::Operation(operation) => operation.variables(),
+        }
+    }
+
+    fn variables_mut<'a>(&'a mut self) -> Box<dyn Iterator<Item = &'a mut Variable> + 'a> {
+        match self {
+            OperationTerm::Primitive(primitive) => primitive.variables_mut(),
+            OperationTerm::Operation(operation) => operation.variables_mut(),
+        }
+    }
+}
+
+impl IterablePrimitives for OperationTerm {
+    fn primitive_terms<'a>(&'a self) -> Box<dyn Iterator<Item = &'a Primitive> + 'a> {
+        match self {
+            OperationTerm::Primitive(primitive) => Box::new(Some(primitive).into_iter()),
+            OperationTerm::Operation(operation) => operation.primitive_terms(),
+        }
+    }
+
+    fn primitive_terms_mut<'a>(&'a mut self) -> Box<dyn Iterator<Item = &'a mut Primitive> + 'a> {
+        match self {
+            OperationTerm::Primitive(primitive) => Box::new(Some(primitive).into_iter()),
+            OperationTerm::Operation(operation) => operation.primitive_terms_mut(),
+        }
+    }
 }

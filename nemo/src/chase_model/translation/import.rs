@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use oxiri::Iri;
 
 use crate::{
-    chase_model::components::{import::ChaseImport, ChaseComponent},
+    chase_model::components::{export::ChaseExport, import::ChaseImport, ChaseComponent},
     io::formats::{
         dsv::{value_format::DsvValueFormats, DsvHandler},
         json::JsonHandler,
@@ -29,15 +29,57 @@ impl ProgramChaseTranslation {
     /// Build a [ChaseImport] from a given
     /// [ImportDirective][crate::rule_model::components::import_export::ImportDirective].
     pub(crate) fn build_import(
-        predicate_arity: &HashMap<Tag, usize>,
+        &self,
         import: &crate::rule_model::components::import_export::ImportDirective,
     ) -> ChaseImport {
         let origin = import.origin().clone();
         let predicate = import.predicate().clone();
-        let arity = predicate_arity.get(&predicate).cloned();
         let attributes = import.attributes();
+        let file_format = import.file_format();
 
-        let handler = match import.file_format() {
+        let handler = self.import_export_handler(
+            Direction::Import,
+            predicate.clone(),
+            attributes,
+            file_format,
+        );
+
+        ChaseImport::new(predicate, handler).set_origin(origin)
+    }
+
+    /// Build a [ChaseExport] from a given
+    /// [ExportDirective][crate::rule_model::components::import_export::ExportDirective].
+    pub(crate) fn build_export(
+        &self,
+        export: &crate::rule_model::components::import_export::ExportDirective,
+    ) -> ChaseExport {
+        let origin = export.origin().clone();
+        let predicate = export.predicate().clone();
+        let attributes = export.attributes();
+        let file_format = export.file_format();
+
+        let handler = self.import_export_handler(
+            Direction::Import,
+            predicate.clone(),
+            attributes,
+            file_format,
+        );
+
+        ChaseExport::new(predicate, handler).set_origin(origin)
+    }
+
+    /// Create a [ImportExportHandler].
+    /// [ImportDirective][crate::rule_model::components::import_export::ImportDirective].
+    fn import_export_handler(
+        &self,
+        direction: Direction,
+        predicate: Tag,
+        attributes: HashMap<ImportExportAttribute, &Term>,
+        file_format: FileFormat,
+    ) -> Box<dyn ImportExportHandler> {
+        let arity = self.predicate_arity.get(&predicate).cloned();
+
+        match file_format {
             FileFormat::CSV => {
                 Self::build_dsv_handler(Direction::Import, Some(b','), arity, &attributes)
             }
@@ -45,15 +87,23 @@ impl ProgramChaseTranslation {
             FileFormat::TSV => {
                 Self::build_dsv_handler(Direction::Import, Some(b'\t'), arity, &attributes)
             }
-            FileFormat::JSON => todo!(),
-            FileFormat::NTriples => todo!(),
-            FileFormat::NQuads => todo!(),
-            FileFormat::Turtle => todo!(),
-            FileFormat::RDFXML => todo!(),
-            FileFormat::TriG => todo!(),
-        };
-
-        ChaseImport::new(predicate, handler).set_origin(origin)
+            FileFormat::JSON => Self::build_json_handler(&attributes),
+            FileFormat::NTriples => {
+                Self::build_rdf_handler(direction, RdfVariant::NTriples, arity, &attributes)
+            }
+            FileFormat::NQuads => {
+                Self::build_rdf_handler(direction, RdfVariant::NQuads, arity, &attributes)
+            }
+            FileFormat::Turtle => {
+                Self::build_rdf_handler(direction, RdfVariant::Turtle, arity, &attributes)
+            }
+            FileFormat::RDFXML => {
+                Self::build_rdf_handler(direction, RdfVariant::RDFXML, arity, &attributes)
+            }
+            FileFormat::TriG => {
+                Self::build_rdf_handler(direction, RdfVariant::TriG, arity, &attributes)
+            }
+        }
     }
 
     /// Read resource attribute and check compression.
@@ -178,9 +228,10 @@ impl ProgramChaseTranslation {
     fn build_rdf_handler(
         direction: Direction,
         variant: RdfVariant,
-        arity: usize,
+        arity: Option<usize>,
         attributes: &HashMap<ImportExportAttribute, &Term>,
     ) -> Box<dyn ImportExportHandler> {
+        let arity = arity.expect("rdf types have known arity");
         let (mut compression_format, resource) = Self::read_resource(attributes);
 
         if let Some(format) = Self::read_compression(attributes) {

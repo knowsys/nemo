@@ -48,17 +48,21 @@ impl ProgramChaseTranslation {
             match literal {
                 Literal::Positive(atom) => {
                     let (variable_atom, filters) = self.build_body_atom(atom);
+
                     result.add_positive_atom(variable_atom);
                     for filter in filters {
                         result.add_positive_filter(filter);
                     }
+                    self.predicate_arity.insert(atom.predicate(), atom.len());
                 }
                 Literal::Negative(atom) => {
                     let (variable_atom, filters) = self.build_body_atom(atom);
+
                     result.add_negative_atom(variable_atom);
                     for filter in filters {
                         result.add_negative_filter_last(filter);
                     }
+                    self.predicate_arity.insert(atom.predicate(), atom.len());
                 }
                 Literal::Operation(_) => {
                     // Will be handled below
@@ -243,7 +247,7 @@ impl ProgramChaseTranslation {
     fn handle_head(&mut self, result: &mut ChaseRule, head: &Vec<Atom>) {
         let mut chase_aggregate: Option<ChaseAggregate> = None;
 
-        for atom in head {
+        for (head_index, atom) in head.iter().enumerate() {
             let origin = atom.origin().clone();
             let predicate = atom.predicate().clone();
             let mut terms = Vec::new();
@@ -277,9 +281,14 @@ impl ProgramChaseTranslation {
                     }
                     _ => unreachable!("invalid program: rule head contains complex terms"),
                 }
+
+                if let Some(aggregate) = chase_aggregate.clone() {
+                    result.add_aggregation(aggregate, head_index);
+                }
             }
 
-            result.add_head_atom(PrimitiveAtom::new(predicate, terms).set_origin(origin))
+            self.predicate_arity.insert(predicate.clone(), terms.len());
+            result.add_head_atom(PrimitiveAtom::new(predicate, terms).set_origin(origin));
         }
     }
 
@@ -290,7 +299,7 @@ impl ProgramChaseTranslation {
     fn compute_group_by_variables<'a>(
         terms: impl Iterator<Item = &'a Term>,
         current_index: usize,
-    ) -> HashSet<Variable> {
+    ) -> Vec<Variable> {
         let mut result = HashSet::new();
 
         for (term_index, term) in terms.enumerate() {
@@ -301,6 +310,6 @@ impl ProgramChaseTranslation {
             result.extend(term.variables().cloned());
         }
 
-        result
+        result.into_iter().collect()
     }
 }

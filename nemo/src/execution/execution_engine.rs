@@ -10,14 +10,26 @@ use nemo_physical::{
 };
 
 use crate::{
+    chase_model::{
+        analysis::program_analysis::ProgramAnalysis,
+        components::{
+            atom::{ground_atom::GroundAtom, ChaseAtom},
+            program::ChaseProgram,
+        },
+        translation::ProgramChaseTranslation,
+    },
     error::Error,
     execution::{planning::plan_tracing::TracingStrategy, tracing::trace::TraceDerivation},
     io::import_manager::ImportManager,
-    model::{
-        chase_model::{ChaseAtom, ChaseFact, ChaseProgram},
-        Fact, Identifier, PrimitiveTerm, Program, Variable,
+    rule_model::{
+        components::{
+            fact::Fact,
+            tag::Tag,
+            term::primitive::{ground::GroundTerm, variable::Variable, Primitive},
+        },
+        program::Program,
+        term_map::PrimitiveTermMap,
     },
-    program_analysis::analysis::ProgramAnalysis,
     table_manager::{MemoryUsage, SubtableExecutionPlan, TableManager},
 };
 
@@ -58,8 +70,8 @@ pub struct ExecutionEngine<RuleSelectionStrategy> {
     input_manager: ImportManager,
     table_manager: TableManager,
 
-    predicate_fragmentation: HashMap<Identifier, usize>,
-    predicate_last_union: HashMap<Identifier, usize>,
+    predicate_fragmentation: HashMap<Tag, usize>,
+    predicate_last_union: HashMap<Tag, usize>,
 
     rule_infos: Vec<RuleInfo>,
     rule_history: Vec<usize>,
@@ -69,9 +81,9 @@ pub struct ExecutionEngine<RuleSelectionStrategy> {
 impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
     /// Initialize [ExecutionEngine].
     pub fn initialize(program: &Program, input_manager: ImportManager) -> Result<Self, Error> {
-        let chase_program: ChaseProgram = program.clone().try_into()?;
+        let chase_program = ProgramChaseTranslation::new().translate(program.clone());
 
-        let analysis = chase_program.analyze()?;
+        let analysis = chase_program.analyze();
 
         let mut table_manager = TableManager::new();
         Self::register_all_predicates(&mut table_manager, &analysis);
@@ -112,8 +124,8 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
 
     /// Add all constants appearing in the rules of the program to the dictionary.
     fn add_all_constants(table_manager: &mut TableManager, program: &ChaseProgram) {
-        for dv in program.all_datavalues() {
-            table_manager.dictionary_mut().add_datavalue(dv.clone());
+        for value in program.datavalues() {
+            table_manager.dictionary_mut().add_datavalue(value);
         }
     }
 
@@ -124,30 +136,29 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         input_manager: &ImportManager,
         program: &ChaseProgram,
     ) -> Result<(), Error> {
-        let mut predicate_to_sources = HashMap::<Identifier, Vec<TableSource>>::new();
+        let mut predicate_to_sources = HashMap::<Tag, Vec<TableSource>>::new();
 
         // Add all the import specifications
-        for (import_predicate, import_handler) in program.imports() {
-            let import_arity = table_manager.arity(import_predicate);
+        for import in program.imports() {
             let table_source = TableSource::new(
-                input_manager.table_provider_from_handler(&**import_handler, import_arity)?,
-                import_arity,
+                input_manager.table_provider_from_handler(&**import.handler())?,
+                import.arity(),
             );
 
             predicate_to_sources
-                .entry(import_predicate.clone())
+                .entry(import.predicate().clone())
                 .or_default()
                 .push(table_source);
         }
 
         // Add all the facts contained in the rule file as a source
-        let mut predicate_to_rows = HashMap::<Identifier, SimpleTable>::new();
+        let mut predicate_to_rows = HashMap::<Tag, SimpleTable>::new();
 
         for fact in program.facts() {
             let table = predicate_to_rows
                 .entry(fact.predicate())
                 .or_insert(SimpleTable::new(fact.arity()));
-            table.add_row(fact.terms().to_vec());
+            table.add_row(fact.datavalues().collect());
         }
 
         for (predicate, table) in predicate_to_rows.into_iter() {
@@ -250,7 +261,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
     /// Creates an [Iterator] over all facts of a predicate.
     pub fn predicate_rows(
         &mut self,
-        predicate: &Identifier,
+        predicate: &Tag,
     ) -> Result<Option<impl Iterator<Item = Vec<AnyDataValue>> + '_>, Error> {
         let Some(table_id) = self.table_manager.combine_predicate(predicate)? else {
             return Ok(None);
@@ -261,14 +272,14 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
 
     /// Returns the arity of the predicate if the predicate is known to the engine,
     /// and `None` otherwise.
-    pub fn predicate_arity(&self, predicate: &Identifier) -> Option<usize> {
+    pub fn predicate_arity(&self, predicate: &Tag) -> Option<usize> {
         self.analysis.all_predicates.get(predicate).copied()
     }
 
     /// Counts the facts of a single predicate.
     ///
     /// TODO: Currently only counting of in-memory facts is supported, see <https://github.com/knowsys/nemo/issues/335>
-    pub fn count_facts_of_predicate(&self, predicate: &Identifier) -> Option<usize> {
+    pub fn count_facts_of_predicate(&self, predicate: &Tag) -> Option<usize> {
         self.table_manager.predicate_count_rows(predicate)
     }
 
@@ -296,7 +307,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         &mut self,
         program: &ChaseProgram,
         trace: &mut ExecutionTrace,
-        fact: ChaseFact,
+        fact: GroundAtom,
     ) -> TraceFactHandle {
         let trace_handle = trace.register_fact(fact.clone());
 
@@ -307,7 +318,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         // Find the origin of the given fact
         let step = match self
             .table_manager
-            .find_table_row(&fact.predicate(), fact.terms())
+            .find_table_row(&fact.predicate(), &fact.datavalues().collect::<Vec<_>>())
         {
             Some(s) => s,
             None => {
@@ -341,15 +352,15 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
             // Contains the head variable and the ground term it aligns with.
             let mut grounding = HashMap::<Variable, AnyDataValue>::new();
 
-            for (head_term, fact_term) in head_atom.terms().iter().zip(fact.terms().iter()) {
+            for (head_term, fact_term) in head_atom.terms().zip(fact.terms()) {
                 match head_term {
-                    PrimitiveTerm::GroundTerm(ground) => {
+                    Primitive::Ground(ground) => {
                         if ground != fact_term {
                             compatible = false;
                             break;
                         }
                     }
-                    PrimitiveTerm::Variable(variable) => {
+                    Primitive::Variable(variable) => {
                         // Matching with existential variables should not produce any restrictions,
                         // so we just consider universal variables here
                         if variable.is_existential() {
@@ -358,13 +369,13 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
 
                         match grounding.entry(variable.clone()) {
                             Entry::Occupied(entry) => {
-                                if entry.get() != fact_term {
+                                if *entry.get() != fact_term.value() {
                                     compatible = false;
                                     break;
                                 }
                             }
                             Entry::Vacant(entry) => {
-                                entry.insert(fact_term.clone());
+                                entry.insert(fact_term.value());
                             }
                         }
                     }
@@ -404,16 +415,17 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                     let next_fact_predicate = body_atom.predicate();
                     let next_fact_terms = body_atom
                         .terms()
-                        .iter()
                         .map(|variable| {
-                            variable_assignment
-                                .get(variable)
-                                .expect("Query must assign value to each variable.")
-                                .clone()
+                            GroundTerm::from(
+                                variable_assignment
+                                    .get(variable)
+                                    .expect("Query must assign value to each variable.")
+                                    .clone(),
+                            )
                         })
                         .collect::<Vec<_>>();
 
-                    let next_fact = ChaseFact::new(next_fact_predicate, next_fact_terms);
+                    let next_fact = GroundAtom::new(next_fact_predicate, next_fact_terms);
 
                     let next_handle = self.trace_recursive(program, trace, next_fact);
 
@@ -429,8 +441,13 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                     continue;
                 }
 
-                let rule_application =
-                    TraceRuleApplication::new(rule_index, variable_assignment, head_index);
+                let rule_application = TraceRuleApplication::new(
+                    rule_index,
+                    PrimitiveTermMap::new(variable_assignment.into_iter().map(
+                        |(variable, value)| (Primitive::from(variable), Primitive::from(value)),
+                    )),
+                    head_index,
+                );
 
                 let derivation = TraceDerivation::Derived(rule_application, subtraces);
                 trace.update_status(trace_handle, TraceStatus::Success(derivation));
@@ -447,21 +464,22 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
 
     /// Build an [ExecutionTrace] for a list of facts.
     /// Also returns a list containing a [TraceFactHandle] for each fact.
+    ///
+    /// TODO: Verify that Fact is ground
     pub fn trace(
         &mut self,
         program: Program,
         facts: Vec<Fact>,
     ) -> (ExecutionTrace, Vec<TraceFactHandle>) {
         let mut trace = ExecutionTrace::new(program);
+        let chase_program = self.program.clone();
 
         let mut handles = Vec::new();
 
         for fact in facts {
-            let chase_fact = ChaseFact::from_flat_atom(&fact.0);
+            let chase_fact = ProgramChaseTranslation::new().build_fact(&fact);
 
-            let program = self.program().clone();
-
-            handles.push(self.trace_recursive(&program, &mut trace, chase_fact));
+            handles.push(self.trace_recursive(&chase_program, &mut trace, chase_fact));
         }
 
         (trace, handles)

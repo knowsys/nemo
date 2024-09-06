@@ -33,8 +33,8 @@ pub mod execution;
 pub mod rule_model;
 pub mod util;
 
-mod chase_model;
-mod table_manager;
+pub mod chase_model; // TODO: Make private
+pub(crate) mod table_manager;
 
 // we use datavalues and meta from nemo_physical in our API, so re-export it here.
 pub use nemo_physical::datavalues;

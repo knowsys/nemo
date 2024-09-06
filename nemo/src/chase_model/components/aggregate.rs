@@ -1,9 +1,10 @@
 //! This module defines [ChaseAggregate].
 
-use std::collections::HashSet;
-
 use crate::rule_model::{
-    components::term::{aggregate::AggregateKind, primitive::variable::Variable},
+    components::{
+        term::{aggregate::AggregateKind, primitive::variable::Variable},
+        IterableVariables,
+    },
     origin::Origin,
 };
 
@@ -32,7 +33,7 @@ pub(crate) struct ChaseAggregate {
     /// Distinct variables
     distinct_variables: Vec<Variable>,
     /// Group-by variables
-    group_by_variables: HashSet<Variable>,
+    group_by_variables: Vec<Variable>,
 }
 
 impl ChaseAggregate {
@@ -43,7 +44,7 @@ impl ChaseAggregate {
         input_variable: Variable,
         output_variable: Variable,
         distinct_variables: Vec<Variable>,
-        group_by_variables: HashSet<Variable>,
+        group_by_variables: Vec<Variable>,
     ) -> Self {
         Self {
             origin,
@@ -71,7 +72,7 @@ impl ChaseAggregate {
     }
 
     /// Return the group by variable.
-    pub fn group_by_variables(&self) -> &HashSet<Variable> {
+    pub fn group_by_variables(&self) -> &Vec<Variable> {
         &self.group_by_variables
     }
 
@@ -92,5 +93,35 @@ impl ChaseComponent for ChaseAggregate {
     {
         self.origin = origin;
         self
+    }
+}
+
+impl IterableVariables for ChaseAggregate {
+    fn variables<'a>(&'a self) -> Box<dyn Iterator<Item = &'a Variable> + 'a> {
+        let input_variables = Some(&self.input_variable).into_iter();
+        let output_variables = Some(&self.output_variable).into_iter();
+        let distinct_variables = self.distinct_variables.iter();
+        let group_by_variables = self.group_by_variables.iter();
+
+        Box::new(
+            input_variables
+                .chain(output_variables)
+                .chain(distinct_variables)
+                .chain(group_by_variables),
+        )
+    }
+
+    fn variables_mut<'a>(&'a mut self) -> Box<dyn Iterator<Item = &'a mut Variable> + 'a> {
+        let input_variables = Some(&mut self.input_variable).into_iter();
+        let output_variables = Some(&mut self.output_variable).into_iter();
+        let distinct_variables = self.distinct_variables.iter_mut();
+        let group_by_variables = self.group_by_variables.iter_mut();
+
+        Box::new(
+            input_variables
+                .chain(output_variables)
+                .chain(distinct_variables)
+                .chain(group_by_variables),
+        )
     }
 }

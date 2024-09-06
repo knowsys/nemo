@@ -1,6 +1,9 @@
 //! This module defines [ChaseRule].
 
-use crate::rule_model::origin::Origin;
+use crate::rule_model::{
+    components::{term::primitive::variable::Variable, IterablePrimitives, IterableVariables},
+    origin::Origin,
+};
 
 use super::{
     aggregate::ChaseAggregate,
@@ -54,7 +57,7 @@ struct ChaseRuleHead {
 /// Representation of a rule in a [ChaseProgram][super::program::ChaseProgram]
 #[allow(dead_code)]
 #[derive(Debug, Default, Clone)]
-pub(crate) struct ChaseRule {
+pub struct ChaseRule {
     /// Origin of this component
     origin: Origin,
 
@@ -70,6 +73,7 @@ pub(crate) struct ChaseRule {
 
 impl ChaseRule {
     /// Create a simple positive rule.
+    #[cfg(test)]
     pub(crate) fn positive_rule(
         head: Vec<PrimitiveAtom>,
         body: Vec<VariableAtom>,
@@ -159,11 +163,6 @@ impl ChaseRule {
     }
 
     /// Add a filter to the negative part of the body.
-    pub(crate) fn add_negative_filter(&mut self, atom_index: usize, filter: ChaseFilter) {
-        self.negative.filters[atom_index].push(filter)
-    }
-
-    /// Add a filter to the negative part of the body.
     ///
     /// # Panics
     /// Panics if the current filter vector is empty.
@@ -187,7 +186,7 @@ impl ChaseRule {
     }
 
     /// Add a new filter that uses the result of aggregation.
-    pub(crate) fn add_aggregation_filter(&mut self, filter: ChaseFilter) {
+    pub(crate) fn _add_aggregation_filter(&mut self, filter: ChaseFilter) {
         self.aggregation.filters.push(filter);
     }
 
@@ -208,5 +207,171 @@ impl ChaseComponent for ChaseRule {
     {
         self.origin = origin;
         self
+    }
+}
+
+impl IterableVariables for ChaseRule {
+    fn variables<'a>(&'a self) -> Box<dyn Iterator<Item = &'a Variable> + 'a> {
+        let head_variables = self.head().iter().flat_map(|atom| atom.variables());
+        let positive_body_variables = self
+            .positive_body()
+            .iter()
+            .flat_map(|atom| atom.variables());
+        let positive_operation_variables = self
+            .positive_operations()
+            .iter()
+            .flat_map(|operation| operation.variables());
+        let positive_filter_variables = self
+            .positive_filters()
+            .iter()
+            .flat_map(|filter| filter.variables());
+
+        let negative_body_variables = self
+            .negative_body()
+            .iter()
+            .flat_map(|atom| atom.variables());
+        let negative_filter_variables = self
+            .negative_filters()
+            .iter()
+            .flatten()
+            .flat_map(|filter| filter.variables());
+
+        let aggregation_variables = self
+            .aggregate()
+            .into_iter()
+            .flat_map(|aggregate| aggregate.variables());
+        let aggregation_operation_variables = self
+            .aggregate_operations()
+            .iter()
+            .flat_map(|operation| operation.variables());
+        let aggregation_filter_variables = self
+            .aggregate_filters()
+            .iter()
+            .flat_map(|filter| filter.variables());
+
+        Box::new(
+            head_variables
+                .chain(positive_body_variables)
+                .chain(positive_operation_variables)
+                .chain(positive_filter_variables)
+                .chain(negative_body_variables)
+                .chain(negative_filter_variables)
+                .chain(aggregation_variables)
+                .chain(aggregation_operation_variables)
+                .chain(aggregation_filter_variables),
+        )
+    }
+
+    fn variables_mut<'a>(&'a mut self) -> Box<dyn Iterator<Item = &'a mut Variable> + 'a> {
+        let head_variables = self
+            .head
+            .atoms
+            .iter_mut()
+            .flat_map(|atom| atom.variables_mut());
+        let positive_body_variables = self
+            .positive
+            .atoms
+            .iter_mut()
+            .flat_map(|atom| atom.variables_mut());
+        let positive_operation_variables = self
+            .positive
+            .operations
+            .iter_mut()
+            .flat_map(|operation| operation.variables_mut());
+        let positive_filter_variables = self
+            .positive
+            .filters
+            .iter_mut()
+            .flat_map(|filter| filter.variables_mut());
+
+        let negative_body_variables = self
+            .negative
+            .atoms
+            .iter_mut()
+            .flat_map(|atom| atom.variables_mut());
+        let negative_filter_variables = self
+            .negative
+            .filters
+            .iter_mut()
+            .flatten()
+            .flat_map(|filter| filter.variables_mut());
+
+        let aggregation_variables = self
+            .aggregation
+            .aggregate
+            .as_mut()
+            .into_iter()
+            .flat_map(|aggregate| aggregate.variables_mut());
+        let aggregation_operation_variables = self
+            .aggregation
+            .operations
+            .iter_mut()
+            .flat_map(|operation| operation.variables_mut());
+        let aggregation_filter_variables = self
+            .aggregation
+            .filters
+            .iter_mut()
+            .flat_map(|filter| filter.variables_mut());
+
+        Box::new(
+            head_variables
+                .chain(positive_body_variables)
+                .chain(positive_operation_variables)
+                .chain(positive_filter_variables)
+                .chain(negative_body_variables)
+                .chain(negative_filter_variables)
+                .chain(aggregation_variables)
+                .chain(aggregation_operation_variables)
+                .chain(aggregation_filter_variables),
+        )
+    }
+}
+
+impl IterablePrimitives for ChaseRule {
+    fn primitive_terms<'a>(
+        &'a self,
+    ) -> Box<dyn Iterator<Item = &'a crate::rule_model::components::term::primitive::Primitive> + 'a>
+    {
+        let head_terms = self.head().iter().flat_map(|atom| atom.primitive_terms());
+        let positive_operation_terms = self
+            .positive_operations()
+            .iter()
+            .flat_map(|operation| operation.primitive_terms());
+        let positive_filter_terms = self
+            .positive_filters()
+            .iter()
+            .flat_map(|filter| filter.primitive_terms());
+
+        let negative_filter_terms = self
+            .negative_filters()
+            .iter()
+            .flatten()
+            .flat_map(|filter| filter.primitive_terms());
+
+        let aggregation_operation_terms = self
+            .aggregate_operations()
+            .iter()
+            .flat_map(|operation| operation.primitive_terms());
+        let aggregation_filter_terms = self
+            .aggregate_filters()
+            .iter()
+            .flat_map(|filter| filter.primitive_terms());
+
+        Box::new(
+            head_terms
+                .chain(positive_operation_terms)
+                .chain(positive_filter_terms)
+                .chain(negative_filter_terms)
+                .chain(aggregation_operation_terms)
+                .chain(aggregation_filter_terms),
+        )
+    }
+
+    fn primitive_terms_mut<'a>(
+        &'a mut self,
+    ) -> Box<
+        dyn Iterator<Item = &'a mut crate::rule_model::components::term::primitive::Primitive> + 'a,
+    > {
+        todo!()
     }
 }

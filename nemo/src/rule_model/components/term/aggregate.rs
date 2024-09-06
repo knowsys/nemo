@@ -4,18 +4,25 @@
 use std::{fmt::Display, hash::Hash};
 
 use enum_assoc::Assoc;
+use nemo_physical::aggregates::operation::AggregateOperation;
 use strum_macros::EnumIter;
 
 use crate::{
     rule_model::{
-        components::{IterableVariables, ProgramComponent, ProgramComponentKind},
+        components::{
+            IterablePrimitives, IterableVariables, ProgramComponent, ProgramComponentKind,
+        },
         error::{validation_error::ValidationErrorKind, ValidationErrorBuilder},
         origin::Origin,
     },
     syntax::builtin::aggregate,
 };
 
-use super::{primitive::variable::Variable, value_type::ValueType, Term};
+use super::{
+    primitive::{variable::Variable, Primitive},
+    value_type::ValueType,
+    Term,
+};
 
 /// Aggregate operation on logical values
 #[derive(Assoc, EnumIter, Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
@@ -36,6 +43,7 @@ pub enum AggregateKind {
     #[assoc(name = aggregate::MAX)]
     #[assoc(value_type = ValueType::Number)]
     #[assoc(input_type = ValueType::Number)]
+    #[assoc(physical = AggregateOperation::Max)]
     MaxNumber,
     /// Sum of numerical values
     #[assoc(name = aggregate::SUM)]
@@ -47,6 +55,17 @@ pub enum AggregateKind {
 impl Display for AggregateKind {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_fmt(format_args!("#{}", self.name()))
+    }
+}
+
+impl Into<AggregateOperation> for AggregateKind {
+    fn into(self) -> AggregateOperation {
+        match self {
+            AggregateKind::CountValues => AggregateOperation::Count,
+            AggregateKind::MinNumber => AggregateOperation::Min,
+            AggregateKind::MaxNumber => AggregateOperation::Max,
+            AggregateKind::SumOfNumbers => AggregateOperation::Sum,
+        }
     }
 }
 
@@ -239,5 +258,15 @@ impl IterableVariables for Aggregate {
                 .variables_mut()
                 .chain(self.distinct.iter_mut()),
         )
+    }
+}
+
+impl IterablePrimitives for Aggregate {
+    fn primitive_terms<'a>(&'a self) -> Box<dyn Iterator<Item = &'a Primitive> + 'a> {
+        self.aggregate.primitive_terms()
+    }
+
+    fn primitive_terms_mut<'a>(&'a mut self) -> Box<dyn Iterator<Item = &'a mut Primitive> + 'a> {
+        self.aggregate.primitive_terms_mut()
     }
 }

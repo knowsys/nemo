@@ -7,7 +7,7 @@ use std::{fmt::Display, hash::Hash};
 use operation_kind::OperationKind;
 
 use crate::rule_model::{
-    components::{IterableVariables, ProgramComponent, ProgramComponentKind},
+    components::{IterablePrimitives, IterableVariables, ProgramComponent, ProgramComponentKind},
     error::{validation_error::ValidationErrorKind, ValidationErrorBuilder},
     origin::Origin,
 };
@@ -253,6 +253,20 @@ impl IterableVariables for Operation {
             self.subterms
                 .iter_mut()
                 .flat_map(|term| term.variables_mut()),
+        )
+    }
+}
+
+impl IterablePrimitives for Operation {
+    fn primitive_terms<'a>(&'a self) -> Box<dyn Iterator<Item = &'a Primitive> + 'a> {
+        Box::new(self.subterms.iter().flat_map(|term| term.primitive_terms()))
+    }
+
+    fn primitive_terms_mut<'a>(&'a mut self) -> Box<dyn Iterator<Item = &'a mut Primitive> + 'a> {
+        Box::new(
+            self.subterms
+                .iter_mut()
+                .flat_map(|term| term.primitive_terms_mut()),
         )
     }
 }

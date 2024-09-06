@@ -736,7 +736,7 @@ where
     /// This evaluates to a string containing the
     /// characters from the string that results from evaluating `string`,
     /// starting from the position that results from evaluating `start`.
-    pub fn string_subtstring(string: Self, start: Self) -> Self {
+    pub fn string_substring(string: Self, start: Self) -> Self {
         Self::Binary {
             function: BinaryFunctionEnum::StringSubstring(StringSubstring),
             left: Box::new(string),
@@ -750,7 +750,7 @@ where
     /// characters from the string that results from evaluating `string`,
     /// starting from the position that results from evaluating `start`
     /// with the maximum length given by evaluating `length`.
-    pub fn string_subtstring_length(string: Self, start: Self, length: Self) -> Self {
+    pub fn string_substring_length(string: Self, start: Self, length: Self) -> Self {
         Self::Ternary {
             function: TernaryFunctionEnum::StringSubstringLength(StringSubstringLength),
             first: Box::new(string),

@@ -18,7 +18,7 @@ use super::{
         primitive::{variable::Variable, Primitive},
         Term,
     },
-    IterableVariables, ProgramComponent, ProgramComponentKind,
+    IterablePrimitives, IterableVariables, ProgramComponent, ProgramComponentKind,
 };
 
 /// Rule
@@ -416,6 +416,31 @@ impl IterableVariables for Rule {
             .flat_map(|literal| literal.variables_mut());
 
         Box::new(head_variables.chain(body_variables))
+    }
+}
+
+impl IterablePrimitives for Rule {
+    fn primitive_terms<'a>(&'a self) -> Box<dyn Iterator<Item = &'a Primitive> + 'a> {
+        let head_primitives = self.head().iter().flat_map(|atom| atom.primitive_terms());
+        let body_primitives = self
+            .body()
+            .iter()
+            .flat_map(|literal| literal.primitive_terms());
+
+        Box::new(head_primitives.chain(body_primitives))
+    }
+
+    fn primitive_terms_mut<'a>(&'a mut self) -> Box<dyn Iterator<Item = &'a mut Primitive> + 'a> {
+        let head_primitives = self
+            .head
+            .iter_mut()
+            .flat_map(|atom| atom.primitive_terms_mut());
+        let body_primitives = self
+            .body
+            .iter_mut()
+            .flat_map(|literal| literal.primitive_terms_mut());
+
+        Box::new(head_primitives.chain(body_primitives))
     }
 }
 

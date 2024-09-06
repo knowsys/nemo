@@ -3,12 +3,16 @@
 use std::{fmt::Display, hash::Hash};
 
 use crate::rule_model::{
-    components::{IterableVariables, ProgramComponent, ProgramComponentKind},
+    components::{IterablePrimitives, IterableVariables, ProgramComponent, ProgramComponentKind},
     error::ValidationErrorBuilder,
     origin::Origin,
 };
 
-use super::{primitive::variable::Variable, value_type::ValueType, Term};
+use super::{
+    primitive::{variable::Variable, Primitive},
+    value_type::ValueType,
+    Term,
+};
 
 /// Tuple
 ///
@@ -134,6 +138,20 @@ impl IterableVariables for Tuple {
 
     fn variables_mut<'a>(&'a mut self) -> Box<dyn Iterator<Item = &'a mut Variable> + 'a> {
         Box::new(self.terms.iter_mut().flat_map(|term| term.variables_mut()))
+    }
+}
+
+impl IterablePrimitives for Tuple {
+    fn primitive_terms<'a>(&'a self) -> Box<dyn Iterator<Item = &'a Primitive> + 'a> {
+        Box::new(self.terms.iter().flat_map(|term| term.primitive_terms()))
+    }
+
+    fn primitive_terms_mut<'a>(&'a mut self) -> Box<dyn Iterator<Item = &'a mut Primitive> + 'a> {
+        Box::new(
+            self.terms
+                .iter_mut()
+                .flat_map(|term| term.primitive_terms_mut()),
+        )
     }
 }
 

@@ -35,7 +35,7 @@ use crate::rule_model::{
     origin::Origin,
 };
 
-use super::{IterableVariables, ProgramComponent};
+use super::{IterablePrimitives, IterableVariables, ProgramComponent};
 
 /// Term
 ///
@@ -158,6 +158,12 @@ impl From<Primitive> for Term {
 
 impl From<AnyDataValue> for Term {
     fn from(value: AnyDataValue) -> Self {
+        Self::Primitive(Primitive::from(value))
+    }
+}
+
+impl From<GroundTerm> for Term {
+    fn from(value: GroundTerm) -> Self {
         Self::Primitive(Primitive::from(value))
     }
 }
@@ -296,60 +302,102 @@ impl ProgramComponent for Term {
 
 impl IterableVariables for Term {
     fn variables<'a>(&'a self) -> Box<dyn Iterator<Item = &'a Variable> + 'a> {
-        let mut iter_primitive = None;
-        let mut iter_function = None;
-        let mut iter_map = None;
-        let mut iter_operation = None;
-        let mut iter_tuple = None;
-        let mut iter_aggregate = None;
-
         match self {
-            Term::Primitive(primitive) => iter_primitive = Some(primitive.variables()),
-            Term::FunctionTerm(function) => iter_function = Some(function.variables()),
-            Term::Map(map) => iter_map = Some(map.variables()),
-            Term::Operation(operation) => iter_operation = Some(operation.variables()),
-            Term::Tuple(tuple) => iter_tuple = Some(tuple.variables()),
-            Term::Aggregate(aggregate) => iter_aggregate = Some(aggregate.variables()),
+            Term::Primitive(term) => term.variables(),
+            Term::Aggregate(term) => term.variables(),
+            Term::FunctionTerm(term) => term.variables(),
+            Term::Map(term) => term.variables(),
+            Term::Operation(term) => term.variables(),
+            Term::Tuple(term) => term.variables(),
         }
 
-        Box::new(
-            iter_primitive
-                .into_iter()
-                .flatten()
-                .chain(iter_function.into_iter().flatten())
-                .chain(iter_map.into_iter().flatten())
-                .chain(iter_operation.into_iter().flatten())
-                .chain(iter_tuple.into_iter().flatten())
-                .chain(iter_aggregate.into_iter().flatten()),
-        )
+        // let mut iter_primitive = None;
+        // let mut iter_function = None;
+        // let mut iter_map = None;
+        // let mut iter_operation = None;
+        // let mut iter_tuple = None;
+        // let mut iter_aggregate = None;
+
+        // match self {
+        //     Term::Primitive(primitive) => iter_primitive = Some(primitive.variables()),
+        //     Term::FunctionTerm(function) => iter_function = Some(function.variables()),
+        //     Term::Map(map) => iter_map = Some(map.variables()),
+        //     Term::Operation(operation) => iter_operation = Some(operation.variables()),
+        //     Term::Tuple(tuple) => iter_tuple = Some(tuple.variables()),
+        //     Term::Aggregate(aggregate) => iter_aggregate = Some(aggregate.variables()),
+        // }
+
+        // Box::new(
+        //     iter_primitive
+        //         .into_iter()
+        //         .flatten()
+        //         .chain(iter_function.into_iter().flatten())
+        //         .chain(iter_map.into_iter().flatten())
+        //         .chain(iter_operation.into_iter().flatten())
+        //         .chain(iter_tuple.into_iter().flatten())
+        //         .chain(iter_aggregate.into_iter().flatten()),
+        // )
     }
 
     fn variables_mut<'a>(&'a mut self) -> Box<dyn Iterator<Item = &'a mut Variable> + 'a> {
-        let mut iter_primitive = None;
-        let mut iter_function = None;
-        let mut iter_map = None;
-        let mut iter_operation = None;
-        let mut iter_tuple = None;
-        let mut iter_aggregate = None;
-
         match self {
-            Term::Primitive(primitive) => iter_primitive = Some(primitive.variables_mut()),
-            Term::FunctionTerm(function) => iter_function = Some(function.variables_mut()),
-            Term::Map(map) => iter_map = Some(map.variables_mut()),
-            Term::Operation(operation) => iter_operation = Some(operation.variables_mut()),
-            Term::Tuple(tuple) => iter_tuple = Some(tuple.variables_mut()),
-            Term::Aggregate(aggregate) => iter_aggregate = Some(aggregate.variables_mut()),
+            Term::Primitive(term) => term.variables_mut(),
+            Term::Aggregate(term) => term.variables_mut(),
+            Term::FunctionTerm(term) => term.variables_mut(),
+            Term::Map(term) => term.variables_mut(),
+            Term::Operation(term) => term.variables_mut(),
+            Term::Tuple(term) => term.variables_mut(),
         }
 
-        Box::new(
-            iter_primitive
-                .into_iter()
-                .flatten()
-                .chain(iter_function.into_iter().flatten())
-                .chain(iter_map.into_iter().flatten())
-                .chain(iter_operation.into_iter().flatten())
-                .chain(iter_tuple.into_iter().flatten())
-                .chain(iter_aggregate.into_iter().flatten()),
-        )
+        // let mut iter_primitive = None;
+        // let mut iter_function = None;
+        // let mut iter_map = None;
+        // let mut iter_operation = None;
+        // let mut iter_tuple = None;
+        // let mut iter_aggregate = None;
+
+        // match self {
+        //     Term::Primitive(primitive) => iter_primitive = Some(primitive.variables_mut()),
+        //     Term::FunctionTerm(function) => iter_function = Some(function.variables_mut()),
+        //     Term::Map(map) => iter_map = Some(map.variables_mut()),
+        //     Term::Operation(operation) => iter_operation = Some(operation.variables_mut()),
+        //     Term::Tuple(tuple) => iter_tuple = Some(tuple.variables_mut()),
+        //     Term::Aggregate(aggregate) => iter_aggregate = Some(aggregate.variables_mut()),
+        // }
+
+        // Box::new(
+        //     iter_primitive
+        //         .into_iter()
+        //         .flatten()
+        //         .chain(iter_function.into_iter().flatten())
+        //         .chain(iter_map.into_iter().flatten())
+        //         .chain(iter_operation.into_iter().flatten())
+        //         .chain(iter_tuple.into_iter().flatten())
+        //         .chain(iter_aggregate.into_iter().flatten()),
+        // )
+    }
+}
+
+impl IterablePrimitives for Term {
+    fn primitive_terms<'a>(&'a self) -> Box<dyn Iterator<Item = &'a Primitive> + 'a> {
+        match self {
+            Term::Primitive(term) => Box::new(Some(term).into_iter()),
+            Term::Aggregate(term) => term.primitive_terms(),
+            Term::FunctionTerm(term) => term.primitive_terms(),
+            Term::Map(term) => term.primitive_terms(),
+            Term::Operation(term) => term.primitive_terms(),
+            Term::Tuple(term) => term.primitive_terms(),
+        }
+    }
+
+    fn primitive_terms_mut<'a>(&'a mut self) -> Box<dyn Iterator<Item = &'a mut Primitive> + 'a> {
+        match self {
+            Term::Primitive(term) => Box::new(Some(term).into_iter()),
+            Term::Aggregate(term) => term.primitive_terms_mut(),
+            Term::FunctionTerm(term) => term.primitive_terms_mut(),
+            Term::Map(term) => term.primitive_terms_mut(),
+            Term::Operation(term) => term.primitive_terms_mut(),
+            Term::Tuple(term) => term.primitive_terms_mut(),
+        }
     }
 }

@@ -53,6 +53,7 @@ pub mod directive {
     /// The string used in the keyword for the output directive.
     pub const OUTPUT: &str = "output";
 
+    /// Syntax elements relating to import/export value formats.
     pub mod value_formats {
         /// The string used to represent the import/export format any
         pub const ANY: &str = "any";

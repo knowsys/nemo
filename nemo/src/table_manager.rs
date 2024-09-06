@@ -402,10 +402,7 @@ impl TableManager {
         order: &ColumnOrder,
         step: usize,
     ) -> String {
-        let predicate_name = predicate.name();
-        let order_string = format!("{order:?}");
-
-        format!("{predicate_name} ({step}) {order_string}")
+        format!("{predicate} ({step}) {order:?}")
     }
 
     /// Generates an appropriate table name for a table that represents multiple subtables.
@@ -415,13 +412,7 @@ impl TableManager {
         order: &ColumnOrder,
         steps: &Range<usize>,
     ) -> String {
-        let predicate_name = predicate.name();
-        let order_string = format!("{order:?}");
-
-        format!(
-            "{predicate_name} ({}-{}) {order_string}",
-            steps.start, steps.end
-        )
+        format!("{predicate} ({}-{}) {order:?}", steps.start, steps.end)
     }
 
     /// Generates an appropriate table name for a table that is a reordered version of another.
@@ -432,10 +423,9 @@ impl TableManager {
         referenced_table_id: PermanentTableId,
         permutation: &Permutation,
     ) -> String {
-        let predicate_name = predicate.name();
         let referenced_table_name = self.database.table_name(referenced_table_id);
 
-        format!("{predicate_name} ({step}) -> {referenced_table_name} {permutation}")
+        format!("{predicate} ({step}) -> {referenced_table_name} {permutation}")
     }
 
     /// Intitializes helper structures that are needed for handling the table associated with the predicate.

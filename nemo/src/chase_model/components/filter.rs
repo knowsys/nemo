@@ -1,6 +1,12 @@
 //! This module defines [ChaseFilter].
 
-use crate::rule_model::origin::Origin;
+use crate::rule_model::{
+    components::{
+        term::primitive::{variable::Variable, Primitive},
+        IterablePrimitives, IterableVariables,
+    },
+    origin::Origin,
+};
 
 use super::{term::operation_term::OperationTerm, ChaseComponent};
 
@@ -42,5 +48,25 @@ impl ChaseComponent for ChaseFilter {
     {
         self.origin = origin;
         self
+    }
+}
+
+impl IterableVariables for ChaseFilter {
+    fn variables<'a>(&'a self) -> Box<dyn Iterator<Item = &'a Variable> + 'a> {
+        self.filter.variables()
+    }
+
+    fn variables_mut<'a>(&'a mut self) -> Box<dyn Iterator<Item = &'a mut Variable> + 'a> {
+        self.filter.variables_mut()
+    }
+}
+
+impl IterablePrimitives for ChaseFilter {
+    fn primitive_terms<'a>(&'a self) -> Box<dyn Iterator<Item = &'a Primitive> + 'a> {
+        self.filter.primitive_terms()
+    }
+
+    fn primitive_terms_mut<'a>(&'a mut self) -> Box<dyn Iterator<Item = &'a mut Primitive> + 'a> {
+        self.filter.primitive_terms_mut()
     }
 }

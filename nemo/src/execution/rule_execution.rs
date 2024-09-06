@@ -3,9 +3,12 @@
 use nemo_physical::tabular::operations::OperationTableGenerator;
 
 use crate::{
+    chase_model::{
+        analysis::{program_analysis::RuleAnalysis, variable_order::VariableOrder},
+        components::rule::ChaseRule,
+    },
     error::Error,
-    model::{chase_model::ChaseRule, Identifier, Variable},
-    program_analysis::{analysis::RuleAnalysis, variable_order::VariableOrder},
+    rule_model::components::{tag::Tag, term::primitive::variable::Variable, IterableVariables},
     table_manager::{SubtableExecutionPlan, TableManager},
 };
 
@@ -45,10 +48,10 @@ impl RuleExecution {
     /// Create new [RuleExecution].
     pub(crate) fn initialize(rule: &ChaseRule, analysis: &RuleAnalysis) -> Self {
         let mut variable_translation = VariableTranslation::new();
-        for variable in rule.all_variables() {
+        for variable in rule.variables().cloned() {
             variable_translation.add_marker(variable);
         }
-        for variable in analysis.existential_aux_rule.all_variables() {
+        for variable in analysis.existential_aux_rule().variables().cloned() {
             variable_translation.add_marker(variable);
         }
 
@@ -80,7 +83,7 @@ impl RuleExecution {
         table_manager: &mut TableManager,
         rule_info: &RuleInfo,
         step_number: usize,
-    ) -> Result<Vec<Identifier>, Error> {
+    ) -> Result<Vec<Tag>, Error> {
         log::info!(
             "Available orders: {}",
             self.promising_variable_orders.iter().enumerate().fold(

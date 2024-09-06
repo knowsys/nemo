@@ -2,7 +2,9 @@
 
 use std::collections::HashSet;
 
-use crate::rule_model::components::tag::Tag;
+use nemo_physical::datavalues::AnyDataValue;
+
+use crate::rule_model::components::{tag::Tag, term::primitive::Primitive, IterablePrimitives};
 
 use super::{
     atom::{ground_atom::GroundAtom, ChaseAtom},
@@ -11,7 +13,7 @@ use super::{
     rule::ChaseRule,
 };
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub(crate) struct ChaseProgram {
     /// Imports
     imports: Vec<ChaseImport>,
@@ -26,23 +28,6 @@ pub(crate) struct ChaseProgram {
 }
 
 impl ChaseProgram {
-    /// Create a new [ChaseProgram].
-    pub(crate) fn new(
-        imports: Vec<ChaseImport>,
-        exports: Vec<ChaseExport>,
-        rules: Vec<ChaseRule>,
-        facts: Vec<GroundAtom>,
-        output_predicates: Vec<Tag>,
-    ) -> Self {
-        Self {
-            imports,
-            exports,
-            rules,
-            facts,
-            output_predicates,
-        }
-    }
-
     /// Add a new rule to the program.
     pub(crate) fn add_rule(&mut self, rule: ChaseRule) {
         self.rules.push(rule)
@@ -91,7 +76,7 @@ impl ChaseProgram {
     }
 
     /// Return a list of output predicates contained in this program.
-    pub(crate) fn output_predicates(&self) -> &Vec<Tag> {
+    pub(crate) fn _output_predicates(&self) -> &Vec<Tag> {
         &self.output_predicates
     }
 }
@@ -104,5 +89,20 @@ impl ChaseProgram {
             .flat_map(|rule| rule.head())
             .map(|atom| atom.predicate())
             .collect()
+    }
+
+    /// Return an iterator over all [AnyDataValue]s contained in this program.
+    pub fn datavalues(&self) -> impl Iterator<Item = AnyDataValue> + '_ {
+        let datavalues_rules = self
+            .rules
+            .iter()
+            .flat_map(|rule| rule.primitive_terms())
+            .filter_map(|primitive| match primitive {
+                Primitive::Variable(_) => None,
+                Primitive::Ground(ground) => Some(ground.value()),
+            });
+        let datavalues_facts = self.facts.iter().flat_map(|fact| fact.datavalues());
+
+        datavalues_facts.chain(datavalues_rules)
     }
 }

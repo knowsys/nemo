@@ -1,11 +1,23 @@
 //! This module defines [VariableAtom].
 
+use std::fmt::Display;
+
 use crate::{
     chase_model::components::ChaseComponent,
     rule_model::{
-        components::{tag::Tag, term::primitive::variable::Variable, IterableVariables},
+        components::{
+            atom::Atom,
+            tag::Tag,
+            term::{
+                primitive::{variable::Variable, Primitive},
+                Term,
+            },
+            IterableVariables, ProgramComponent,
+        },
         origin::Origin,
     },
+    syntax,
+    util::seperated_list::DisplaySeperatedList,
 };
 
 use super::ChaseAtom;
@@ -30,6 +42,22 @@ impl VariableAtom {
             predicate,
             variables,
         }
+    }
+}
+
+impl Display for VariableAtom {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let terms = DisplaySeperatedList::display(
+            self.terms(),
+            &format!("{} ", syntax::SEQUENCE_SEPARATOR),
+        );
+        let predicate = self.predicate();
+
+        f.write_str(&format!(
+            "{predicate}{}{terms}{}",
+            syntax::expression::atom::OPEN,
+            syntax::expression::atom::CLOSE
+        ))
     }
 }
 
@@ -70,5 +98,35 @@ impl ChaseComponent for VariableAtom {
     {
         self.origin = origin;
         self
+    }
+}
+
+/// Error struct for converting logical atoms to [VariableAtom]s
+#[derive(Debug)]
+pub(crate) struct VariableAtomConversionError;
+
+impl Display for VariableAtomConversionError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("atom contains non-variable terms")
+    }
+}
+
+impl TryFrom<Atom> for VariableAtom {
+    type Error = VariableAtomConversionError;
+
+    fn try_from(value: Atom) -> Result<Self, Self::Error> {
+        let origin = value.origin().clone();
+        let predicate = value.predicate();
+        let mut terms = Vec::new();
+
+        for term in value.arguments().cloned() {
+            if let Term::Primitive(Primitive::Variable(variable)) = term {
+                terms.push(variable)
+            } else {
+                return Err(VariableAtomConversionError);
+            }
+        }
+
+        Ok(Self::new(predicate, terms).set_origin(origin))
     }
 }

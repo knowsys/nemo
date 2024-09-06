@@ -1,5 +1,7 @@
 //! This module defines the logical components that make up a program.
 
+#![allow(missing_docs)]
+
 #[macro_use]
 
 pub mod atom;
@@ -15,7 +17,7 @@ pub mod term;
 use std::fmt::{Debug, Display};
 
 use enum_assoc::Assoc;
-use term::primitive::variable::Variable;
+use term::primitive::{variable::Variable, Primitive};
 
 use super::{
     error::{ValidationError, ValidationErrorBuilder},
@@ -129,4 +131,13 @@ pub trait IterableVariables {
 
     /// Return a mutable iterator over all [Variable]s contained within this program component.
     fn variables_mut<'a>(&'a mut self) -> Box<dyn Iterator<Item = &'a mut Variable> + 'a>;
+}
+
+/// Trait implemented by program components that allow iterating over [Primitive] terms
+pub trait IterablePrimitives {
+    /// Return an iterator over all [Primitive] terms contained within this program component.
+    fn primitive_terms<'a>(&'a self) -> Box<dyn Iterator<Item = &'a Primitive> + 'a>;
+
+    /// Return a mutable iterator over all [Primitive] terms contained within this program component.
+    fn primitive_terms_mut<'a>(&'a mut self) -> Box<dyn Iterator<Item = &'a mut Primitive> + 'a>;
 }

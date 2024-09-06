@@ -8,7 +8,7 @@ use nemo_physical::{
     tabular::operations::OperationTable,
 };
 
-use crate::{model::Identifier, table_manager::TableManager};
+use crate::{rule_model::components::tag::Tag, table_manager::TableManager};
 
 /// Given a predicate and a range of execution steps,
 /// adds to the given [ExecutionPlan]
@@ -18,7 +18,7 @@ use crate::{model::Identifier, table_manager::TableManager};
 pub(crate) fn subplan_union(
     plan: &mut ExecutionPlan,
     table_manager: &TableManager,
-    predicate: &Identifier,
+    predicate: &Tag,
     steps: Range<usize>,
     output_markers: OperationTable,
 ) -> ExecutionNodeRef {
@@ -40,7 +40,7 @@ pub(crate) fn subplan_union(
 pub(super) fn _subplan_union_reordered(
     plan: &mut ExecutionPlan,
     table_manager: &TableManager,
-    predicate: &Identifier,
+    predicate: &Tag,
     steps: Range<usize>,
     output_markers: OperationTable,
     column_order: ColumnOrder,

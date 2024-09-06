@@ -1,6 +1,6 @@
 //! Defines the execution strategy by which each rule is applied in the order it appears.
 
-use crate::{model::chase_model::ChaseRule, program_analysis::analysis::RuleAnalysis};
+use crate::chase_model::{analysis::program_analysis::RuleAnalysis, components::rule::ChaseRule};
 
 use super::strategy::{RuleSelectionStrategy, SelectionStrategyError};
 

@@ -36,7 +36,7 @@ impl VariableOrder {
     }
 
     /// Insert a new variable at a certain position.
-    pub fn push_position(&mut self, variable: Variable, position: usize) {
+    pub fn _push_position(&mut self, variable: Variable, position: usize) {
         for current_position in &mut self.0.values_mut() {
             if *current_position >= position {
                 *current_position += 1;
@@ -58,7 +58,7 @@ impl VariableOrder {
     }
 
     /// Returns a [VariableOrder] which is restricted to the given variables (but preserve their order)
-    pub fn restrict_to(&self, variables: &HashSet<Variable>) -> Self {
+    pub fn _restrict_to(&self, variables: &HashSet<Variable>) -> Self {
         let mut variable_vector = Vec::<Variable>::with_capacity(variables.len());
         for variable in variables {
             if self.0.contains_key(variable) {
@@ -83,12 +83,12 @@ impl VariableOrder {
     }
 
     /// Returns the number of entries.
-    pub fn len(&self) -> usize {
+    pub fn _len(&self) -> usize {
         self.0.len()
     }
 
     /// Returns whether it contains any entry.
-    pub fn is_empty(&self) -> bool {
+    pub fn _is_empty(&self) -> bool {
         self.0.is_empty()
     }
 

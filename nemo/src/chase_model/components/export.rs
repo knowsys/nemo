@@ -35,7 +35,7 @@ impl ChaseExport {
     }
 
     /// Return the handler.
-    pub(crate) fn handler(&self) -> &Box<dyn ImportExportHandler> {
+    pub(crate) fn _handler(&self) -> &Box<dyn ImportExportHandler> {
         &self.handler
     }
 

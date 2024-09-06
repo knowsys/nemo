@@ -33,7 +33,7 @@ pub struct RuleAnalysis {
     /// Whether an atom in the head also occurs in the body.
     pub is_recursive: bool,
     /// Whether the rule has positive constraints that need to be applied.
-    pub has_positive_constraints: bool,
+    pub _has_positive_constraints: bool,
     /// Whether the rule has at least one aggregate term in the head.
     pub has_aggregates: bool,
 
@@ -45,21 +45,28 @@ pub struct RuleAnalysis {
     pub head_predicates: HashSet<Tag>,
 
     /// Variables occurring in the positive part of the body.
-    pub positive_body_variables: HashSet<Variable>,
+    pub _positive_body_variables: HashSet<Variable>,
     /// Variables occurring in the positive part of the body.
-    pub negative_body_variables: HashSet<Variable>,
+    pub _negative_body_variables: HashSet<Variable>,
     /// Variables occurring in the head.
     pub head_variables: HashSet<Variable>,
     /// Number of existential variables.
-    pub num_existential: usize,
+    pub _num_existential: usize,
 
     /// Rule that represents the calculation of the satisfied matches for an existential rule.
-    pub existential_aux_rule: ChaseRule,
+    existential_aux_rule: ChaseRule,
     /// The associated variable order for the join of the head atoms
     pub existential_aux_order: VariableOrder,
 
     /// Variable orders that are worth considering.
     pub promising_variable_orders: Vec<VariableOrder>,
+}
+
+impl RuleAnalysis {
+    /// Return the existential auxillary rule.
+    pub(crate) fn existential_aux_rule(&self) -> &ChaseRule {
+        &self.existential_aux_rule
+    }
 }
 
 /// Errors than can occur during rule analysis
@@ -225,15 +232,15 @@ fn analyze_rule(
     RuleAnalysis {
         is_existential: num_existential > 0,
         is_recursive: is_recursive(rule),
-        has_positive_constraints: !rule.positive_filters().is_empty(),
+        _has_positive_constraints: !rule.positive_filters().is_empty(),
         has_aggregates: rule.aggregate().is_some(),
         positive_body_predicates: get_predicates(rule.positive_body()),
         negative_body_predicates: get_predicates(rule.negative_body()),
         head_predicates: get_predicates(rule.head()),
-        positive_body_variables: get_variables(rule.positive_body()),
-        negative_body_variables: get_variables(rule.negative_body()),
+        _positive_body_variables: get_variables(rule.positive_body()),
+        _negative_body_variables: get_variables(rule.negative_body()),
         head_variables: get_variables(rule.head()),
-        num_existential,
+        _num_existential: num_existential,
         existential_aux_rule,
         existential_aux_order,
         promising_variable_orders,
@@ -277,12 +284,6 @@ impl ChaseProgram {
                 }
             } else {
                 arities.insert(predicate, arity);
-            }
-        }
-
-        fn add_missing(predicate: Tag, arities: &HashMap<Tag, usize>, missing: &mut HashSet<Tag>) {
-            if arities.get(&predicate).is_none() {
-                missing.insert(predicate);
             }
         }
 

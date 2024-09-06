@@ -38,6 +38,8 @@ impl ProgramChaseTranslation {
             }
         }
 
+        self.predicate_arity.insert(predicate.clone(), terms.len());
+
         GroundAtom::new(predicate, terms).set_origin(origin)
     }
 }

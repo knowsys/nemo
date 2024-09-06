@@ -1,17 +1,23 @@
 //! This module defines [PrimitiveAtom].
 
-use nemo_physical::datavalues::AnyDataValue;
+use std::fmt::Display;
 
 use crate::{
     chase_model::components::ChaseComponent,
     rule_model::{
         components::{
+            atom::Atom,
             tag::Tag,
-            term::primitive::{variable::Variable, Primitive},
-            IterableVariables,
+            term::{
+                primitive::{variable::Variable, Primitive},
+                Term,
+            },
+            IterablePrimitives, IterableVariables, ProgramComponent,
         },
         origin::Origin,
     },
+    syntax,
+    util::seperated_list::DisplaySeperatedList,
 };
 
 use super::ChaseAtom;
@@ -37,14 +43,6 @@ impl PrimitiveAtom {
             terms,
         }
     }
-
-    /// Returns all [AnyDataValue]s used as constants in this atom.
-    pub(crate) fn datavalues(&self) -> impl Iterator<Item = AnyDataValue> + '_ {
-        self.terms.iter().filter_map(|term| match term {
-            Primitive::Ground(ground) => Some(ground.value().clone()),
-            Primitive::Variable(_) => None,
-        })
-    }
 }
 
 impl ChaseAtom for PrimitiveAtom {
@@ -60,6 +58,22 @@ impl ChaseAtom for PrimitiveAtom {
 
     fn terms_mut(&mut self) -> impl Iterator<Item = &mut Self::TypeTerm> {
         self.terms.iter_mut()
+    }
+}
+
+impl Display for PrimitiveAtom {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let terms = DisplaySeperatedList::display(
+            self.terms(),
+            &format!("{} ", syntax::SEQUENCE_SEPARATOR),
+        );
+        let predicate = self.predicate();
+
+        f.write_str(&format!(
+            "{predicate}{}{terms}{}",
+            syntax::expression::atom::OPEN,
+            syntax::expression::atom::CLOSE
+        ))
     }
 }
 
@@ -79,6 +93,16 @@ impl IterableVariables for PrimitiveAtom {
     }
 }
 
+impl IterablePrimitives for PrimitiveAtom {
+    fn primitive_terms<'a>(&'a self) -> Box<dyn Iterator<Item = &'a Primitive> + 'a> {
+        Box::new(self.terms.iter())
+    }
+
+    fn primitive_terms_mut<'a>(&'a mut self) -> Box<dyn Iterator<Item = &'a mut Primitive> + 'a> {
+        Box::new(self.terms.iter_mut())
+    }
+}
+
 impl ChaseComponent for PrimitiveAtom {
     fn origin(&self) -> &Origin {
         &self.origin
@@ -90,5 +114,35 @@ impl ChaseComponent for PrimitiveAtom {
     {
         self.origin = origin;
         self
+    }
+}
+
+/// Error struct for converting logical atoms to [PrimitiveAtom]s
+#[derive(Debug)]
+pub(crate) struct PrimitiveAtomConversionError;
+
+impl Display for PrimitiveAtomConversionError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("atom contains non-primitive terms")
+    }
+}
+
+impl TryFrom<Atom> for PrimitiveAtom {
+    type Error = PrimitiveAtomConversionError;
+
+    fn try_from(value: Atom) -> Result<Self, Self::Error> {
+        let origin = value.origin().clone();
+        let predicate = value.predicate();
+        let mut terms = Vec::new();
+
+        for term in value.arguments().cloned() {
+            if let Term::Primitive(primitive_term) = term {
+                terms.push(primitive_term)
+            } else {
+                return Err(PrimitiveAtomConversionError);
+            }
+        }
+
+        Ok(Self::new(predicate, terms).set_origin(origin))
     }
 }

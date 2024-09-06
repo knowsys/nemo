@@ -7,7 +7,10 @@ use nemo_physical::{
     tabular::operations::{aggregate::AggregateAssignment, OperationColumnMarker, OperationTable},
 };
 
-use crate::{execution::rule_execution::VariableTranslation, model::chase_model::ChaseAggregate};
+use crate::{
+    chase_model::components::aggregate::ChaseAggregate,
+    execution::rule_execution::VariableTranslation,
+};
 
 fn operations_tables(
     input: &OperationTable,
@@ -47,14 +50,14 @@ pub(crate) fn node_aggregate(
     aggregate: &ChaseAggregate,
 ) -> ExecutionNodeRef {
     let aggregate_input_column = *variable_translation
-        .get(&aggregate.input_variable)
+        .get(aggregate.input_variable())
         .expect("aggregated variable has to be known");
     let aggregate_output_column = *variable_translation
-        .get(&aggregate.output_variable)
+        .get(aggregate.output_variable())
         .expect("aggregate output has to be known");
 
     let distinct_columns: Vec<_> = aggregate
-        .distinct_variables
+        .distinct_variables()
         .iter()
         .map(|variable| {
             *variable_translation
@@ -64,7 +67,7 @@ pub(crate) fn node_aggregate(
         .collect();
 
     let group_by_columns: Vec<_> = aggregate
-        .group_by_variables
+        .group_by_variables()
         .iter()
         .map(|variable| {
             *variable_translation
@@ -88,7 +91,7 @@ pub(crate) fn node_aggregate(
         output_markers,
         input_node,
         AggregateAssignment {
-            aggregate_operation: aggregate.aggregate_operation,
+            aggregate_operation: aggregate.aggregate_kind().into(),
             distinct_columns,
             group_by_columns,
             aggregated_column: aggregate_input_column,

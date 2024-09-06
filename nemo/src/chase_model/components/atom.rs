@@ -4,12 +4,14 @@ pub(crate) mod ground_atom;
 pub(crate) mod primitive_atom;
 pub(crate) mod variable_atom;
 
+use std::fmt::Display;
+
 use crate::rule_model::components::{tag::Tag, IterableVariables};
 
 use super::ChaseComponent;
 
 /// Tagged list of terms.
-pub(crate) trait ChaseAtom: ChaseComponent + IterableVariables {
+pub(crate) trait ChaseAtom: ChaseComponent + IterableVariables + Display {
     /// Type of the terms within the atom.
     type TypeTerm;
 

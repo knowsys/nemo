@@ -2,13 +2,22 @@
 
 use std::{fmt::Display, hash::Hash};
 
-use crate::rule_model::{
-    error::{validation_error::ValidationErrorKind, ValidationErrorBuilder},
-    origin::Origin,
+use crate::{
+    chase_model::components::{
+        atom::{ground_atom::GroundAtom, ChaseAtom},
+        ChaseComponent,
+    },
+    rule_model::{
+        error::{validation_error::ValidationErrorKind, ValidationErrorBuilder},
+        origin::Origin,
+    },
 };
 
 use super::{
-    atom::Atom, tag::Tag, term::Term, IterableVariables, ProgramComponent, ProgramComponentKind,
+    atom::Atom,
+    tag::Tag,
+    term::{primitive::Primitive, Term},
+    IterablePrimitives, IterableVariables, ProgramComponent, ProgramComponentKind,
 };
 
 /// A (ground) fact
@@ -136,5 +145,37 @@ impl ProgramComponent for Fact {
 
     fn kind(&self) -> ProgramComponentKind {
         ProgramComponentKind::Fact
+    }
+}
+
+impl IterablePrimitives for Fact {
+    fn primitive_terms<'a>(&'a self) -> Box<dyn Iterator<Item = &'a Primitive> + 'a> {
+        Box::new(self.subterms().flat_map(|term| term.primitive_terms()))
+    }
+
+    fn primitive_terms_mut<'a>(&'a mut self) -> Box<dyn Iterator<Item = &'a mut Primitive> + 'a> {
+        Box::new(
+            self.terms
+                .iter_mut()
+                .flat_map(|term| term.primitive_terms_mut()),
+        )
+    }
+}
+
+impl From<GroundAtom> for Fact {
+    fn from(value: GroundAtom) -> Self {
+        let origin = value.origin().clone();
+        let predicate = value.predicate();
+        let terms = value
+            .terms()
+            .cloned()
+            .map(|term| Term::from(term))
+            .collect();
+
+        Self {
+            origin,
+            predicate,
+            terms,
+        }
     }
 }

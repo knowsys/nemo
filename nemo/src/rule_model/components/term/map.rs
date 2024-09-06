@@ -3,12 +3,18 @@
 use std::{fmt::Display, hash::Hash};
 
 use crate::rule_model::{
-    components::{tag::Tag, IterableVariables, ProgramComponent, ProgramComponentKind},
+    components::{
+        tag::Tag, IterablePrimitives, IterableVariables, ProgramComponent, ProgramComponentKind,
+    },
     error::ValidationErrorBuilder,
     origin::Origin,
 };
 
-use super::{primitive::variable::Variable, value_type::ValueType, Term};
+use super::{
+    primitive::{variable::Variable, Primitive},
+    value_type::ValueType,
+    Term,
+};
 
 /// Map
 ///
@@ -162,6 +168,24 @@ impl IterableVariables for Map {
             self.map
                 .iter_mut()
                 .flat_map(|(key, value)| key.variables_mut().chain(value.variables_mut())),
+        )
+    }
+}
+
+impl IterablePrimitives for Map {
+    fn primitive_terms<'a>(&'a self) -> Box<dyn Iterator<Item = &'a Primitive> + 'a> {
+        Box::new(
+            self.map
+                .iter()
+                .flat_map(|(key, value)| key.primitive_terms().chain(value.primitive_terms())),
+        )
+    }
+
+    fn primitive_terms_mut<'a>(&'a mut self) -> Box<dyn Iterator<Item = &'a mut Primitive> + 'a> {
+        Box::new(
+            self.map.iter_mut().flat_map(|(key, value)| {
+                key.primitive_terms_mut().chain(value.primitive_terms_mut())
+            }),
         )
     }
 }

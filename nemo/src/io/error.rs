@@ -1,3 +1,5 @@
+//! This module contains errors relating to io.
+
 use std::path::PathBuf;
 
 use nemo_physical::datavalues::AnyDataValue;

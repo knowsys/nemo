@@ -104,7 +104,7 @@ impl DsvValueFormats {
     }
 
     /// Return whether the tuple is empty.
-    pub(crate) fn is_empty(&self) -> bool {
+    pub(crate) fn _is_empty(&self) -> bool {
         self.len() == 0
     }
 

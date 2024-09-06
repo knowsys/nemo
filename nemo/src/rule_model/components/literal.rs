@@ -6,8 +6,12 @@ use crate::rule_model::error::{ValidationError, ValidationErrorBuilder};
 
 use super::{
     atom::Atom,
-    term::{operation::Operation, primitive::variable::Variable, Term},
-    IterableVariables, ProgramComponent, ProgramComponentKind,
+    term::{
+        operation::Operation,
+        primitive::{variable::Variable, Primitive},
+        Term,
+    },
+    IterablePrimitives, IterableVariables, ProgramComponent, ProgramComponentKind,
 };
 
 /// Literal
@@ -99,6 +103,28 @@ impl IterableVariables for Literal {
     }
 
     fn variables_mut<'a>(&'a mut self) -> Box<dyn Iterator<Item = &'a mut Variable> + 'a> {
-        todo!()
+        match self {
+            Literal::Positive(literal) => literal.variables_mut(),
+            Literal::Negative(literal) => literal.variables_mut(),
+            Literal::Operation(literal) => literal.variables_mut(),
+        }
+    }
+}
+
+impl IterablePrimitives for Literal {
+    fn primitive_terms<'a>(&'a self) -> Box<dyn Iterator<Item = &'a Primitive> + 'a> {
+        match self {
+            Literal::Positive(literal) => literal.primitive_terms(),
+            Literal::Negative(literal) => literal.primitive_terms(),
+            Literal::Operation(literal) => literal.primitive_terms(),
+        }
+    }
+
+    fn primitive_terms_mut<'a>(&'a mut self) -> Box<dyn Iterator<Item = &'a mut Primitive> + 'a> {
+        match self {
+            Literal::Positive(literal) => literal.primitive_terms_mut(),
+            Literal::Negative(literal) => literal.primitive_terms_mut(),
+            Literal::Operation(literal) => literal.primitive_terms_mut(),
+        }
     }
 }

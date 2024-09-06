@@ -8,4 +8,5 @@ pub(crate) mod origin;
 pub mod components;
 pub mod error;
 pub mod program;
+pub mod term_map;
 pub mod translation;
