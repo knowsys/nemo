@@ -115,6 +115,11 @@ impl BenchmarkStringDictionary {
         self.0.is_empty()
     }
 }
+impl ByteSized for BenchmarkStringDictionary {
+    fn size_bytes(&self) -> u64 {
+        self.0.size_bytes()
+    }
+}
 
 #[cfg(test)]
 mod test {

@@ -5,6 +5,7 @@ use nemo_physical::datavalues::ValueDomain;
 use nemo_physical::dictionary::meta_dv_dict::MetaDvDictionary;
 use nemo_physical::dictionary::string_dictionary::BenchmarkStringDictionary;
 use nemo_physical::dictionary::DvDict;
+use nemo_physical::management::bytesized::ByteSized;
 use std::env;
 use std::fs::File;
 use std::io::prelude::*;
@@ -67,6 +68,15 @@ impl DictEnum {
             DictEnum::StringMeta(dict) => dict.len(),
             DictEnum::StringBuffer(dict) => dict.len(),
             DictEnum::DvMeta(dict) => dict.len(),
+        }
+    }
+
+    fn size_bytes(&mut self) -> u64 {
+        match &self {
+            DictEnum::StringHash(_) => 0,
+            DictEnum::StringMeta(_) => 0,
+            DictEnum::StringBuffer(dict) => dict.size_bytes(),
+            DictEnum::DvMeta(dict) => dict.size_bytes(),
         }
     }
 }
@@ -203,6 +213,7 @@ fn main() {
         "  Dictionary rejected {} (non-unique) strings with {} bytes overall.",
         count_rejected, bytes_rejected
     );
+    println!("  Dictionary reports own size as {}.", dict.size_bytes());
 
     TimedCode::instance().stop();
 
