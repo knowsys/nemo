@@ -6,8 +6,6 @@ use std::{
     ops::{Index, Range},
 };
 
-use bytesize::ByteSize;
-
 use crate::{columnar::columnscan::ColumnScan, management::bytesized::ByteSized};
 
 use super::Column;
@@ -53,9 +51,9 @@ impl<T: Debug + Copy + Ord> Index<usize> for ColumnVector<T> {
 }
 
 impl<T> ByteSized for ColumnVector<T> {
-    fn size_bytes(&self) -> ByteSize {
-        // We cast everything to u64 separately to avoid overflows
-        ByteSize::b(size_of::<Self>() as u64 + self.data.capacity() as u64 * size_of::<T>() as u64)
+    fn size_bytes(&self) -> u64 {
+        // cast everything to u64 separately to avoid overflows
+        size_of::<Self>() as u64 + self.data.capacity() as u64 * size_of::<T>() as u64
     }
 }
 

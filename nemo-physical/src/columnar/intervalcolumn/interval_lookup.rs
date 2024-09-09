@@ -59,7 +59,7 @@ impl<LookupMethod> ByteSized for IntervalLookupT<LookupMethod>
 where
     LookupMethod: IntervalLookup,
 {
-    fn size_bytes(&self) -> bytesize::ByteSize {
+    fn size_bytes(&self) -> u64 {
         self.lookup_id32.size_bytes()
             + self.lookup_id64.size_bytes()
             + self.lookup_int64.size_bytes()

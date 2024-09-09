@@ -3,7 +3,6 @@
 
 use std::{fmt::Debug, io::BufRead, mem::size_of};
 
-use bytesize::ByteSize;
 use nemo_physical::{
     datasources::{table_providers::TableProvider, tuple_writer::TupleWriter},
     datavalues::AnyDataValue,
@@ -28,8 +27,8 @@ impl Debug for JsonReader {
 }
 
 impl ByteSized for JsonReader {
-    fn size_bytes(&self) -> ByteSize {
-        ByteSize::b(size_of::<Self>() as u64)
+    fn size_bytes(&self) -> u64 {
+        size_of::<Self>() as u64
     }
 }
 

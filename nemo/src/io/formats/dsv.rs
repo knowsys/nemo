@@ -227,13 +227,9 @@ impl ImportExportHandler for DsvHandler {
     fn predicate_arity(&self) -> Option<usize> {
         match self.direction {
             Direction::Import => self.value_formats.as_ref().map(|vfs| {
-                vfs.iter().fold(0, |acc, fmt| {
-                    if *fmt == DsvValueFormat::Skip {
-                        acc
-                    } else {
-                        acc + 1
-                    }
-                })
+                vfs.iter()
+                    .filter(|&&fmt| fmt != DsvValueFormat::Skip)
+                    .count()
             }),
             Direction::Export => self.value_formats.as_ref().map(|vfs| vfs.len()),
         }

@@ -1,5 +1,7 @@
 //! This module defines a string based dictionary.
 
+use crate::management::bytesized::ByteSized;
+
 use super::{
     bytes_buffer::{BytesBuffer, GlobalBytesBuffer},
     bytes_dictionary::BytesDictionary,
@@ -79,6 +81,12 @@ impl<B: GlobalBytesBuffer> Default for GenericStringDictionary<B> {
     }
 }
 
+impl<B: GlobalBytesBuffer> ByteSized for GenericStringDictionary<B> {
+    fn size_bytes(&self) -> u64 {
+        self.bytes_dict.size_bytes()
+    }
+}
+
 crate::dictionary::bytes_buffer::declare_bytes_buffer!(
     StringDictBytesBuffer,
     STRING_DICT_BYTES_BUFFER
@@ -105,6 +113,11 @@ impl BenchmarkStringDictionary {
     /// True when the dictionary is empty. False otherwise.
     pub fn is_empty(&self) -> bool {
         self.0.is_empty()
+    }
+}
+impl ByteSized for BenchmarkStringDictionary {
+    fn size_bytes(&self) -> u64 {
+        self.0.size_bytes()
     }
 }
 

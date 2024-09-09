@@ -3,7 +3,6 @@ use std::{
     ops::{Add, Sub},
 };
 
-use bytesize::ByteSize;
 use num::Zero;
 
 use crate::management::bytesized::ByteSized;
@@ -64,8 +63,8 @@ impl IntStep {
 }
 
 impl ByteSized for IntStep {
-    fn size_bytes(&self) -> ByteSize {
-        ByteSize::b(size_of::<IntStep>() as u64)
+    fn size_bytes(&self) -> u64 {
+        size_of::<IntStep>() as u64
     }
 }
 
@@ -166,8 +165,8 @@ impl RunLengthEncodable for i64 {
 pub(crate) struct SmallIntStep(i8);
 
 impl ByteSized for SmallIntStep {
-    fn size_bytes(&self) -> ByteSize {
-        ByteSize::b(size_of::<SmallIntStep>() as u64)
+    fn size_bytes(&self) -> u64 {
+        size_of::<SmallIntStep>() as u64
     }
 }
 
@@ -213,7 +212,7 @@ impl RunLengthEncodable for i8 {
 pub(crate) struct FloatingStep;
 
 impl ByteSized for FloatingStep {
-    fn size_bytes(&self) -> ByteSize {
-        ByteSize::b(0)
+    fn size_bytes(&self) -> u64 {
+        0
     }
 }

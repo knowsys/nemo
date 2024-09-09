@@ -286,13 +286,9 @@ impl ImportExportHandler for RdfHandler {
         // list of value formats if we know the RDF variant.
         match self.direction {
             Direction::Import => self.value_formats.as_ref().map(|vfs| {
-                vfs.iter().fold(0, |acc, fmt| {
-                    if *fmt == RdfValueFormat::Skip {
-                        acc
-                    } else {
-                        acc + 1
-                    }
-                })
+                vfs.iter()
+                    .filter(|&&fmt| fmt != RdfValueFormat::Skip)
+                    .count()
             }),
             Direction::Export => self.value_formats.as_ref().map(|vfs| vfs.len()),
         }
