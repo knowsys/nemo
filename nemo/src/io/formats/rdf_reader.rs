@@ -155,13 +155,7 @@ impl RdfReader {
         assert_eq!(skip.len(), 3);
         assert_eq!(
             tuple_writer.column_number(),
-            skip.iter().fold(0, |acc: usize, b| {
-                if *b {
-                    acc
-                } else {
-                    acc + 1
-                }
-            })
+            skip.iter().filter(|b| !*b).count()
         );
 
         let stop_limit = self.limit.unwrap_or(u64::MAX);
@@ -236,13 +230,7 @@ impl RdfReader {
         assert_eq!(skip.len(), 4);
         assert_eq!(
             tuple_writer.column_number(),
-            skip.iter().fold(0, |acc: usize, b| {
-                if *b {
-                    acc
-                } else {
-                    acc + 1
-                }
-            })
+            skip.iter().filter(|b| !*b).count()
         );
 
         let stop_limit = self.limit.unwrap_or(u64::MAX);

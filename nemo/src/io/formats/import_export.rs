@@ -484,14 +484,13 @@ impl ImportExportHandlers {
             if let Some(ref vfs) = value_format_strings {
                 let declared_file_arity = match direction {
                     Direction::Import => vfs.len(),
-                    Direction::Export => vfs.iter().fold(0, |acc: usize, fmt| {
-                        // Only count formats other than VALUE_FORMAT_SKIP:
-                        if *fmt == VALUE_FORMAT_SKIP {
-                            acc
-                        } else {
-                            acc + 1
-                        }
-                    }),
+                    Direction::Export => vfs
+                        .iter()
+                        .filter(|fmt| {
+                            // Only count formats other than VALUE_FORMAT_SKIP:
+                            *fmt != VALUE_FORMAT_SKIP
+                        })
+                        .count(),
                 };
 
                 // Check if arity is consistent with given value formats.

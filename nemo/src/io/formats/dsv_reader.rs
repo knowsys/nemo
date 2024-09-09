@@ -74,13 +74,7 @@ impl DsvReader {
         let expected_file_arity = parsers.len();
         assert_eq!(
             tuple_writer.column_number(),
-            skip.iter().fold(0, |acc: usize, b| {
-                if *b {
-                    acc
-                } else {
-                    acc + 1
-                }
-            })
+            skip.iter().filter(|b| !*b).count()
         );
 
         let stop_limit = self.limit.unwrap_or(0);

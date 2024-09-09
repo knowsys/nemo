@@ -544,9 +544,11 @@ impl ByteSized for MetaDvDictionary {
             + ByteSizeHelpers::size_inner_vec_flat(&self.dictblocks)
             + ByteSizeHelpers::size_inner_vec_flat(&self.dicts)
             + ByteSizeHelpers::size_inner_vec_flat(&self.generic_dicts)
-            + self.dicts.iter().fold(0, |acc, dr| {
-                acc + dr.dict.size_bytes() + ByteSizeHelpers::size_inner_vec_flat(&dr.gblocks)
-            })
+            + self
+                .dicts
+                .iter()
+                .map(|dr| dr.dict.size_bytes() + ByteSizeHelpers::size_inner_vec_flat(&dr.gblocks))
+                .sum::<u64>()
     }
 }
 

@@ -324,7 +324,8 @@ impl ByteSized for OrderedReferenceManager {
     fn size_bytes(&self) -> u64 {
         self.stored_tables
             .iter()
-            .fold(0, |acc, table| acc + table.size_bytes())
+            .map(|table| table.size_bytes())
+            .sum()
     }
 }
 

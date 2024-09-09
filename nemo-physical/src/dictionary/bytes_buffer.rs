@@ -147,10 +147,7 @@ impl BytesBuffer {
     /// a specific buffer. This includes management data for that buffer but no shared management
     /// data for the [BytesBuffer] as such.
     fn buffer_size_bytes(&self, buffer: usize) -> u64 {
-        let page_count: usize =
-            self.pages
-                .iter()
-                .fold(0, |acc, x| if x.0 == buffer { acc + 1 } else { acc });
+        let page_count: usize = self.pages.iter().filter(|x| x.0 == buffer).count();
         (page_count * (size_of::<(usize, Vec<u8>)>() + PAGE_SIZE) + size_of::<usize>()) as u64
     }
 }

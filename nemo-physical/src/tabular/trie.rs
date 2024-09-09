@@ -520,9 +520,7 @@ impl Trie {
 
 impl ByteSized for Trie {
     fn size_bytes(&self) -> u64 {
-        self.columns
-            .iter()
-            .fold(0, |acc, column| acc + column.size_bytes())
+        self.columns.iter().map(|column| column.size_bytes()).sum()
     }
 }
 
