@@ -34,7 +34,7 @@ const FID_BIT_MASK: u8 = 0b0011_1111;
 /// where the integers are automatically assigned upon insertion.
 /// Data is stored in a the given [GlobalBytesBuffer].
 ///
-/// The implementation optimizes for a situation, where one component of the pair is
+/// The implementation optimizes for a situation where one component of the pair is
 /// "frequent" (few values used often) and another is "rare" (many values, used rarely).
 /// The optimization aims to reduce memory usage by keeping the frequent values separately,
 /// storing each of them only once, at the cost of insertion/retrieval speeds.
@@ -42,6 +42,17 @@ const FID_BIT_MASK: u8 = 0b0011_1111;
 /// The implementation will also work if the assumption about frequency does not hold in
 /// a strong sense, but there will be no memory savings in such cases, whereas the slower
 /// access might be more pronounced.
+/// 
+/// # Implementation details
+/// 
+/// The implementation chains two dictionaries: the dictionary for frequent arrays assigns
+/// ids to this part of a pair in the usual way; the dictionary for pairs assigns ids to a
+/// byte array that combines the rare part with an encoding of the id for the frequent part.
+/// This encoding will use 1, 2, 3, or 4 bytes, where the first two bits (of the first byte)
+/// are used to mark which case we are in. Therefore, the largest frequent-bytes id that can
+/// be stored in 3 bytes uses 22 bits (8 * 3 - 2). The maximal number of frequent byte arrays
+/// that can be stored is therefore 2 to the power of 30. However, the typical usage should
+/// allow us to work with much smaller numbers.
 #[derive(Debug)]
 pub(crate) struct GenericRankedPairDictionary<B: GlobalBytesBuffer> {
     frequent_dict: BytesDictionary<B>,
