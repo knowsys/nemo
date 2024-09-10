@@ -14,6 +14,7 @@ pub mod string_dictionary;
 pub(crate) use string_dictionary::StringDictionary;
 pub(crate) mod bytes_buffer;
 pub(crate) mod bytes_dictionary;
+pub(crate) mod ranked_pair_dictionary;
 pub(crate) mod dv_converter;
 pub(crate) mod string_dv_dict;
 
