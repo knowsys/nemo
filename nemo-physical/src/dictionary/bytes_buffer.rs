@@ -377,7 +377,7 @@ use crate::management::bytesized::ByteSized;
 
 #[cfg(test)]
 mod test {
-    use crate::dictionary::bytes_buffer::PAGE_SIZE;
+    use crate::dictionary::bytes_buffer::PAGE_SIZE_INITIAL;
 
     use super::{BytesBuffer, GlobalBytesBuffer};
 
@@ -411,7 +411,7 @@ mod test {
         assert_ne!(bytes_ref1, bytes_ref2);
         assert_eq!(bytes_ref1, bytes_ref1);
 
-        assert!(TestGlobalBuffer::buffer_size_bytes(bufid1) > PAGE_SIZE as u64);
+        assert!(TestGlobalBuffer::buffer_size_bytes(bufid1) > PAGE_SIZE_INITIAL as u64);
 
         TestGlobalBuffer::drop_buffer(bufid1);
         TestGlobalBuffer::drop_buffer(bufid2);
