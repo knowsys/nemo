@@ -38,24 +38,9 @@ pub(crate) use hash_map_dictionary::HashMapDictionary;
 
 pub(crate) mod infix_dictionary;
 pub(crate) use infix_dictionary::InfixDictionary;
-#[cfg(feature = "stringpairdictionary")]
-pub(crate) mod bytes_pair_dictionary;
 
 pub mod meta_dictionary;
-#[cfg(feature = "stringpairdictionary")]
-pub mod string_pair_dictionary;
-#[cfg(feature = "stringpairdictionary")]
-pub(crate) use string_pair_dictionary::StringPairDictionary;
-#[cfg(feature = "stringpairdictionary")]
-/// Module to define dv_converters
-pub(crate) mod pair_dv_converter;
-#[cfg(feature = "stringpairdictionary")]
-/// Module to define string-pair-based datavalue dictionaries.
-pub(crate) mod string_pair_dv_dict;
-#[cfg(feature = "stringpairdictionary")]
-pub(crate) use string_pair_dv_dict::LangStringDvDictionary;
-#[cfg(feature = "stringpairdictionary")]
-pub(crate) use string_pair_dv_dict::OtherDvDictionary;
+
 
 /// A Dictionary represents a bijective (invertible) mapping from objects to numeric ids.
 ///

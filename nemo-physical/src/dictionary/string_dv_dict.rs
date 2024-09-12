@@ -11,7 +11,6 @@ use crate::{
 use std::{fmt::Debug, marker::PhantomData};
 
 use crate::dictionary::dv_converter::{DvConverter, IriDvConverter, StringDvConverter};
-#[cfg(not(feature = "stringpairdictionary"))]
 use crate::dictionary::dv_converter::{LangStringDvConverter, OtherDvConverter};
 
 /// Implementation of [DvDict] that will only handle [ValueDomain::PlainString] values.
@@ -20,10 +19,8 @@ pub(crate) type StringDvDictionary = StringBasedDvDictionary<StringDvConverter>;
 pub(crate) type IriDvDictionary = StringBasedDvDictionary<IriDvConverter>;
 
 /// Implementation of [DvDict] that will only handle [ValueDomain::Other] values.
-#[cfg(not(feature = "stringpairdictionary"))]
 pub(crate) type OtherDvDictionary = StringBasedDvDictionary<OtherDvConverter>;
 /// Implementation of [DvDict] that will only handle [ValueDomain::LanguageTaggedString] values.
-#[cfg(not(feature = "stringpairdictionary"))]
 pub(crate) type LangStringDvDictionary = StringBasedDvDictionary<LangStringDvConverter>;
 
 /// A generic [DvDict] dictionary based on converting datavalues to strings. The
@@ -138,11 +135,8 @@ mod test {
     };
 
     use crate::dictionary::string_dv_dict::{IriDvDictionary, StringDvDictionary};
-    #[cfg(not(feature = "stringpairdictionary"))]
     use crate::dictionary::string_dv_dict::{LangStringDvDictionary, OtherDvDictionary};
-    #[cfg(feature = "stringpairdictionary")]
-    use crate::dictionary::string_pair_dv_dict::{LangStringDvDictionary, OtherDvDictionary};
-
+    
     #[test]
     fn string_dict_add_and_mark() {
         let mut dict = StringDvDictionary::new();
