@@ -1,23 +1,21 @@
-//! A [DvDict] implementation based on converting IRI data values to strings.
+//! A [DvDict] implementation based on converting language-tagged string data values to pairs of strings.
 
-use super::string_dv_dict::{
-    one_string_to_two, two_strings_to_one, DvConverter, StringBasedDvDictionary,
-};
+use super::ranked_pair_dv_dict::{DvPairConverter, RankedPairBasedDvDictionary};
 use crate::datavalues::{AnyDataValue, DataValue, ValueDomain};
 
 /// Implementation of [DvDict] that will only handle [ValueDomain::LanguageTaggedString] values.
-pub(crate) type LangStringDvDictionary = StringBasedDvDictionary<LangStringDvConverter>;
-
-/// Implementation of [DvConverter] to handle [ValueDomain::LanguageTaggedString] values.
+pub(crate) type LangStringSplittingDvDictionary =
+    RankedPairBasedDvDictionary<LangStringDvPairConverter>;
+/// Implementation of [DvPairConverter] to handle [ValueDomain::LanguageTaggedString] values.
 #[derive(Debug)]
-pub(crate) struct LangStringDvConverter;
-impl DvConverter for LangStringDvConverter {
+pub(crate) struct LangStringDvPairConverter;
+impl DvPairConverter for LangStringDvPairConverter {
     /// Function to use with StringBasedDvDictionary
     #[inline(always)]
-    fn dict_string(dv: &AnyDataValue) -> Option<String> {
+    fn dict_pair(dv: &AnyDataValue) -> Option<(String, String)> {
         if dv.value_domain() == ValueDomain::LanguageTaggedString {
             let (string, lang) = dv.to_language_tagged_string_unchecked();
-            Some(two_strings_to_one(string.as_str(), lang.as_str()))
+            Some((lang, string))
         } else {
             None
         }
@@ -25,9 +23,11 @@ impl DvConverter for LangStringDvConverter {
 
     /// Function to use with StringBasedDvDictionary
     #[inline(always)]
-    fn string_to_datavalue(string: &str) -> Option<AnyDataValue> {
-        one_string_to_two(string)
-            .map(|(value, language)| AnyDataValue::new_language_tagged_string(value, language))
+    fn pair_to_datavalue(frequent: &str, rare: &str) -> Option<AnyDataValue> {
+        Some(AnyDataValue::new_language_tagged_string(
+            rare.to_string(),
+            frequent.to_string(),
+        ))
     }
 
     fn supported_value_domain() -> ValueDomain {
@@ -37,16 +37,18 @@ impl DvConverter for LangStringDvConverter {
 
 #[cfg(test)]
 mod test {
+
     use crate::{
         datavalues::AnyDataValue,
         dictionary::{
-            string_langstring_dv_dict::LangStringDvDictionary, AddResult, DvDict, KNOWN_ID_MARK,
+            ranked_pair_langstring_dv_dict::LangStringSplittingDvDictionary, AddResult, DvDict,
+            KNOWN_ID_MARK,
         },
     };
 
     #[test]
     fn langstring_dict_add_and_mark() {
-        let mut dict = LangStringDvDictionary::new();
+        let mut dict = LangStringSplittingDvDictionary::new();
 
         fn long_string() -> String {
             let length = 500;

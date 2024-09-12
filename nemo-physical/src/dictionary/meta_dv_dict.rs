@@ -5,9 +5,8 @@ use crate::datavalues::{AnyDataValue, DataValue};
 use crate::dictionary::NONEXISTING_ID_MARK;
 use crate::management::bytesized::{size_inner_vec_flat, ByteSized};
 
-use super::ranked_pair_dv_dict::{
-    IriSplittingDvDictionary, OtherSplittingDvDictionary,
-};
+use super::ranked_pair_iri_dv_dict::IriSplittingDvDictionary;
+use super::ranked_pair_other_dv_dict::OtherSplittingDvDictionary;
 use super::string_langstring_dv_dict::LangStringDvDictionary;
 use super::DvDict;
 use super::StringDvDictionary;

@@ -14,9 +14,11 @@ pub mod string_dictionary;
 pub(crate) use string_dictionary::StringDictionary;
 pub(crate) mod bytes_buffer;
 pub(crate) mod bytes_dictionary;
-pub(crate) mod dv_converter;
 pub(crate) mod ranked_pair_dictionary;
 pub(crate) mod ranked_pair_dv_dict;
+pub(crate) mod ranked_pair_iri_dv_dict;
+pub(crate) mod ranked_pair_other_dv_dict;
+// pub(crate) mod ranked_pair_langstring_dv_dict;
 
 pub mod string_map;
 
@@ -41,7 +43,6 @@ pub(crate) mod infix_dictionary;
 pub(crate) use infix_dictionary::InfixDictionary;
 
 pub mod meta_dictionary;
-
 
 /// A Dictionary represents a bijective (invertible) mapping from objects to numeric ids.
 ///

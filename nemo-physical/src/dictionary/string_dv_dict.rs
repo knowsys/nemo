@@ -221,7 +221,7 @@ mod test {
     };
 
     use crate::dictionary::string_dv_dict::StringDvDictionary;
-    
+
     #[test]
     fn string_dict_add_and_mark() {
         let mut dict = StringDvDictionary::new();
