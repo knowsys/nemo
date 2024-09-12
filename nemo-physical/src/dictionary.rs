@@ -17,13 +17,14 @@ pub(crate) mod bytes_dictionary;
 pub(crate) mod dv_converter;
 pub(crate) mod ranked_pair_dictionary;
 pub(crate) mod ranked_pair_dv_dict;
-pub(crate) mod string_dv_dict;
 
 pub mod string_map;
-pub(crate) use string_dv_dict::IriDvDictionary;
-pub(crate) use string_dv_dict::LangStringDvDictionary;
-pub(crate) use string_dv_dict::OtherDvDictionary;
+
+pub(crate) mod string_dv_dict;
 pub(crate) use string_dv_dict::StringDvDictionary;
+// pub(crate) mod string_iri_dv_dict;
+// pub(crate) mod string_other_dv_dict;
+pub(crate) mod string_langstring_dv_dict;
 
 pub(crate) mod null_dv_dict;
 pub(crate) use null_dv_dict::NullDvDictionary;

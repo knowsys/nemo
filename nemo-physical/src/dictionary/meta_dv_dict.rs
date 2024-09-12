@@ -6,12 +6,10 @@ use crate::dictionary::NONEXISTING_ID_MARK;
 use crate::management::bytesized::{size_inner_vec_flat, ByteSized};
 
 use super::ranked_pair_dv_dict::{
-    IriSplittingDvDictionary, LangStringSplittingDvDictionary, OtherSplittingDvDictionary,
+    IriSplittingDvDictionary, OtherSplittingDvDictionary,
 };
+use super::string_langstring_dv_dict::LangStringDvDictionary;
 use super::DvDict;
-use super::IriDvDictionary;
-use super::LangStringDvDictionary;
-use super::OtherDvDictionary;
 use super::StringDvDictionary;
 use super::{AddResult, NullDvDictionary};
 
