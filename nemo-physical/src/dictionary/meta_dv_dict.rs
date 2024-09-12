@@ -3,6 +3,7 @@
 use crate::datavalues::ValueDomain;
 use crate::datavalues::{AnyDataValue, DataValue};
 use crate::dictionary::NONEXISTING_ID_MARK;
+use crate::management::bytesized::{size_inner_vec_flat, ByteSized};
 
 use super::DvDict;
 use super::IriDvDictionary;
@@ -145,6 +146,7 @@ type DictId = usize;
 const NO_DICT: DictId = usize::MAX;
 
 /// A dictionary that combines several other dictionaries.
+///
 /// The design integrates specific optimized dictionaries that support specific content types,
 /// but it is also designed with the possibility of external read-only dictionaries in mind,
 /// as they might occur when loading pre-indexed data from external sources.
@@ -533,6 +535,20 @@ impl DvDict for MetaDvDictionary {
 
     fn has_marked(&self) -> bool {
         false
+    }
+}
+
+impl ByteSized for MetaDvDictionary {
+    fn size_bytes(&self) -> u64 {
+        size_of::<Self>() as u64
+            + size_inner_vec_flat(&self.dictblocks)
+            + size_inner_vec_flat(&self.dicts)
+            + size_inner_vec_flat(&self.generic_dicts)
+            + self
+                .dicts
+                .iter()
+                .map(|dr| dr.dict.size_bytes() + size_inner_vec_flat(&dr.gblocks))
+                .sum::<u64>()
     }
 }
 

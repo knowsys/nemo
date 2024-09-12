@@ -1,4 +1,5 @@
 //! This module provides functionalities for creating and maintaining dictionaries.
+//!
 //! A dictionary is a data structure that assigns numeric ids to complex objects (such as [String]s),
 //! and that provides an bijective (invertible) mapping between the two.
 use std::fmt::Debug;
@@ -57,6 +58,7 @@ pub(crate) use string_pair_dv_dict::LangStringDvDictionary;
 pub(crate) use string_pair_dv_dict::OtherDvDictionary;
 
 /// A Dictionary represents a bijective (invertible) mapping from objects to numeric ids.
+///
 /// The "objects" are provided when the dictionary is used, whereas the ids are newly
 /// assigned by the dictionary itself.
 pub trait Dictionary: Debug {

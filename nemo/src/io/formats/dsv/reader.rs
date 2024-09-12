@@ -3,7 +3,6 @@
 use std::io::BufRead;
 use std::mem::size_of;
 
-use bytesize::ByteSize;
 use csv::{Reader, ReaderBuilder};
 use nemo_physical::management::bytesized::ByteSized;
 
@@ -82,13 +81,7 @@ impl DsvReader {
         let expected_file_arity = parsers.len();
         assert_eq!(
             tuple_writer.column_number(),
-            skip.iter().fold(0, |acc: usize, b| {
-                if *b {
-                    acc
-                } else {
-                    acc + 1
-                }
-            })
+            skip.iter().filter(|b| !*b).count()
         );
 
         let stop_limit = self.limit.unwrap_or(0);
@@ -146,8 +139,8 @@ impl std::fmt::Debug for DsvReader {
 }
 
 impl ByteSized for DsvReader {
-    fn size_bytes(&self) -> ByteSize {
-        ByteSize::b(size_of::<Self>() as u64)
+    fn size_bytes(&self) -> u64 {
+        size_of::<Self>() as u64
     }
 }
 

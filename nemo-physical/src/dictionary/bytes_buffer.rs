@@ -19,7 +19,7 @@ const PAGE_SIZE: usize = 1 << PAGE_ADDR_BITS;
 /// Buffers might be dropped, upon which all of its pages will be freed. There is no other way
 /// of removing contents from a buffer.
 ///
-/// Individual pages have a size of at most [PAGE_SIZE`] bytes, so that [`PAGE_ADDR_BITS]
+/// Individual pages have a size of at most [PAGE_SIZE] bytes, so that [PAGE_ADDR_BITS]
 /// are needed to specify a position within a page. References to buffered strings are represented
 /// by [BytesRef], which stores a starting address and length of the slice. The `usize` starting
 /// address is global (uniform for all buffers), with the lower [PAGE_ADDR_BITS] bits encoding a position within a page,
@@ -30,9 +30,9 @@ const PAGE_SIZE: usize = 1 << PAGE_ADDR_BITS;
 /// The number of bits reserved for length is [BYTESREF_BYTES_LENGTH_BITS], which should always be less
 /// than [PAGE_ADDR_BITS] since longer tuples would not fit any buffer page anyway.
 ///
-/// The implementaion can be used in multiple parallel threads.
+/// The implementation can be used in multiple parallel threads.
 ///
-/// Note: The multi-thrading support is based on aggressive locking of all major operations. It might be
+/// Note: The multi-threading support is based on aggressive locking of all major operations. It might be
 /// possible to reduce the amount of locking by designing more careful data structures. For example, locking
 /// could be limited to the rare page-writing operations if Vectors would not move existing entries on (some)
 /// writes, which causes races that may lead to reading errors unless all reads are also locked.
@@ -121,7 +121,7 @@ impl BytesBuffer {
         }
     }
 
-    /// Acquire the lock that we use for operations that read or write any of the internal data
+    /// Acquires the lock that we use for operations that read or write any of the internal data
     /// structures that multiple buffers might use.
     fn acquire_page_lock(&self) {
         while self
@@ -131,7 +131,7 @@ impl BytesBuffer {
         {}
     }
 
-    /// Release the lock.
+    /// Releases the lock.
     fn release_page_lock(&self) {
         self.lock.store(false, Ordering::Release);
     }
@@ -141,6 +141,23 @@ impl BytesBuffer {
         let result = &self.pages[page_num].1;
         self.release_page_lock();
         result
+    }
+
+    /// Computes and returns the overall number of bytes that have been alocated for managing
+    /// a specific buffer. This includes management data for that buffer but no shared management
+    /// data for the [BytesBuffer] as such.
+    fn buffer_size_bytes(&self, buffer: usize) -> u64 {
+        let page_count: usize = self.pages.iter().filter(|x| x.0 == buffer).count();
+        (page_count * (size_of::<(usize, Vec<u8>)>() + PAGE_SIZE) + size_of::<usize>()) as u64
+    }
+}
+
+impl ByteSized for BytesBuffer {
+    /// Computes and returns the overall number of bytes that this [BytesBuffer] occupies.
+    fn size_bytes(&self) -> u64 {
+        (self.pages.len() * (size_of::<(usize, Vec<u8>)>() + PAGE_SIZE)
+            + self.cur_pages.len() * size_of::<usize>()
+            + size_of::<Self>()) as u64
     }
 }
 
@@ -185,6 +202,12 @@ pub(crate) unsafe trait GlobalBytesBuffer: Debug + Sized {
         unsafe {
             BytesBuffer::drop_buffer(&mut *Self::get(), buffer);
         }
+    }
+
+    /// Computes and returns the overall number of bytes that have been alocated for managing
+    /// a specific buffer.
+    fn buffer_size_bytes(buffer: usize) -> u64 {
+        unsafe { BytesBuffer::buffer_size_bytes(&*Self::get(), buffer) }
     }
 }
 
@@ -270,6 +293,12 @@ impl<B: GlobalBytesBuffer> BytesRef<B> {
     }
 }
 
+impl<B: GlobalBytesBuffer> ByteSized for BytesRef<B> {
+    fn size_bytes(&self) -> u64 {
+        size_of::<Self>() as u64
+    }
+}
+
 impl<B: GlobalBytesBuffer> Display for BytesRef<B> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         unsafe {
@@ -329,8 +358,12 @@ macro_rules! declare_bytes_buffer {
 }
 pub(crate) use declare_bytes_buffer;
 
+use crate::management::bytesized::ByteSized;
+
 #[cfg(test)]
 mod test {
+    use crate::dictionary::bytes_buffer::PAGE_SIZE;
+
     use super::{BytesBuffer, GlobalBytesBuffer};
 
     crate::dictionary::bytes_buffer::declare_bytes_buffer!(TestGlobalBuffer, TEST_BUFFER);
@@ -362,6 +395,8 @@ mod test {
 
         assert_ne!(bytes_ref1, bytes_ref2);
         assert_eq!(bytes_ref1, bytes_ref1);
+
+        assert!(TestGlobalBuffer::buffer_size_bytes(bufid1) > PAGE_SIZE as u64);
 
         TestGlobalBuffer::drop_buffer(bufid1);
         TestGlobalBuffer::drop_buffer(bufid2);

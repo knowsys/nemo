@@ -4,6 +4,8 @@ use crate::chase_model::{analysis::program_analysis::RuleAnalysis, components::r
 
 use super::strategy::{RuleSelectionStrategy, SelectionStrategyError};
 
+/// Round-Robin rule selection strategy
+///
 /// Defines a strategy whereby each rule is applied one after another in the order they appear in the rule file.
 /// Once every rule was applied it loops back to the first one.
 /// If a round is completed without new derivations, the execution stops.

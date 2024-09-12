@@ -2,6 +2,7 @@
 
 [![Build and Test main](https://img.shields.io/github/actions/workflow/status/knowsys/nemo/build.yml?branch=main&label=build)](https://github.com/knowsys/nemo/actions/workflows/build.yml)
 [![dependency status](https://deps.rs/repo/github/knowsys/nemo/status.svg)](https://deps.rs/repo/github/knowsys/nemo)
+[![Documentations](https://img.shields.io/github/actions/workflow/status/knowsys/nemo/build.yml?branch=main&label=docs)](https://knowsys.github.io/nemo-doc)
 [![built with nix](https://img.shields.io/static/v1?logo=nixos&logoColor=white&label=&message=Built%20with%20Nix&color=41439a)](https://builtwithnix.org)
 
 *Nemo* is a datalog-based rule engine for fast and scalable analytic data processing in memory. It is available as a command-line tool ```nmo```,  through bindings to other programming languages, and via a [browser-based web application](https://tools.iccl.inf.tu-dresden.de/nemo/).
@@ -15,7 +16,7 @@ Nemo's datatypes allow the use of RDF-style data values but also "plain" names a
 
 The following [publication](https://github.com/knowsys/nemo/wiki/Publications) gives a first overview of the system and can be used for citing Nemo:
 
-* Alex Ivliev, Stefan Ellmauthaler, Lukas Gerlach, Maximilian Marx, Matthias Meißner, Simon Meusel, Markus Krötzsch: **[Nemo: First Glimpse of a New Rule Engine](https://iccl.inf.tu-dresden.de/web/Inproceedings3354/en).** _Proceedings 39th International Conference on Logic Programming (ICLP 2023)_, volume 385 of EPTCS, pp. 333–335, September 2023. <a href="https://iccl.inf.tu-dresden.de/web/Inproceedings3354/en">PDF + bibtex</a>
+* Alex Ivliev, Lukas Gerlach, Simon Meusel, Jakob Steinberg, Markus Krötzsch **[Nemo: Your Friendly and Versatile Rule Reasoning Toolkit](https://iccl.inf.tu-dresden.de/web/Inproceedings3390).** _Proceedings of the 21st International Conference on Principles of Knowledge Representation and Reasoning (KR 2024)_, volume 21 of Proceedings of the International Conference on Principles of Knowledge Representation and Reasoning, To appear. <a href="https://iccl.inf.tu-dresden.de/web/Inproceedings3390">PDF + bibtex</a>
 
 Nemo is in heavy development and the current releases should still be considered unstable.
 
@@ -46,12 +47,12 @@ Run the following command for an overview of current options:
 
 `nmo --help`
 
-Further details are found in the [Nemo client documentation](https://github.com/knowsys/nemo/wiki/Nemo-client).
+Further details are found in the [Nemo client documentation](https://knowsys.github.io/nemo-doc/guides/cli/).
 Example Nemo programs and datasets can be found in the [Nemo Examples repository](https://github.com/knowsys/nemo-examples).
 
 ## Help
 
-Detailed information for users and developers is found in the [Nemo documentation](https://github.com/knowsys/nemo/wiki/#user-documentation).
+Detailed information for users and developers is found in the [Nemo documentation](https://knowsys.github.io/nemo-doc/).
 Feel free to use [GitHub discussions](https://github.com/knowsys/nemo/discussions) to ask questions or talk about Nemo.
 
 [Bug reports](https://github.com/knowsys/nemo/issues) are also very welcome.

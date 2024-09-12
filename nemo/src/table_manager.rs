@@ -2,15 +2,14 @@
 
 use crate::{error::Error, rule_model::components::tag::Tag};
 
-use bytesize::ByteSize;
 use nemo_physical::{
     datavalues::any_datavalue::AnyDataValue,
     management::{
-        database::DatabaseInstance,
+        bytesized::ByteSized,
         database::{
             id::{ExecutionId, PermanentTableId},
             sources::TableSource,
-            Dict,
+            DatabaseInstance, Dict,
         },
         execution_plan::{ColumnOrder, ExecutionNodeRef, ExecutionPlan},
     },
@@ -263,14 +262,13 @@ impl SubtableExecutionPlan {
 #[derive(Debug)]
 pub struct MemoryUsage {
     name: String,
-    memory: ByteSize,
-
+    memory: u64,
     sub_blocks: Vec<MemoryUsage>,
 }
 
 impl MemoryUsage {
     /// Create a new [MemoryUsage].
-    pub fn new(name: &str, memory: ByteSize) -> Self {
+    pub fn new(name: &str, memory: u64) -> Self {
         Self {
             name: name.to_string(),
             memory,
@@ -280,7 +278,7 @@ impl MemoryUsage {
 
     /// Create a new [MemoryUsage] block.
     pub fn new_block(name: &str) -> Self {
-        Self::new(name, ByteSize(0))
+        Self::new(name, 0)
     }
 
     /// Add a sub-block.
@@ -605,25 +603,31 @@ impl TableManager {
 
     /// Return the current [MemoryUsage].
     pub fn memory_usage(&self) -> MemoryUsage {
-        let mut result = MemoryUsage::new_block("Chase");
+        let mut result = MemoryUsage::new_block("Total");
+
+        let memory = self.database.dictionary().size_bytes();
+        result.add_sub_block(MemoryUsage::new("Dictionary", memory));
+
+        let mut steps = MemoryUsage::new_block("Chase steps");
 
         for (identifier, subtable_handler) in &self.predicate_subtables {
             let mut predicate_usage = MemoryUsage::new_block(&identifier.to_string());
 
             for (step, id) in &subtable_handler.single {
-                let memory = self.database.memory_consumption(*id);
+                let memory = self.database.table_size_bytes(*id);
                 predicate_usage.add_sub_block(MemoryUsage::new(&format!("Step {}", step), memory));
             }
             for (steps, id) in &subtable_handler.combined {
-                let memory = self.database.memory_consumption(*id);
+                let memory = self.database.table_size_bytes(*id);
                 predicate_usage.add_sub_block(MemoryUsage::new(
                     &format!("Steps {}-{}", steps.start, steps.start + steps.len),
                     memory,
                 ));
             }
 
-            result.add_sub_block(predicate_usage)
+            steps.add_sub_block(predicate_usage);
         }
+        result.add_sub_block(steps);
 
         result
     }

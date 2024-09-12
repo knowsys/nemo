@@ -4,7 +4,10 @@
 //! string representations without any risk of confusion.
 
 use super::{AddResult, DvDict, StringDictionary};
-use crate::datavalues::{AnyDataValue, ValueDomain};
+use crate::{
+    datavalues::{AnyDataValue, ValueDomain},
+    management::bytesized::ByteSized,
+};
 use std::{fmt::Debug, marker::PhantomData};
 
 use crate::dictionary::dv_converter::{DvConverter, IriDvConverter, StringDvConverter};
@@ -112,6 +115,12 @@ impl<C: DvConverter> DvDict for StringBasedDvDictionary<C> {
 
     fn has_marked(&self) -> bool {
         self.string_dict.has_marked()
+    }
+}
+
+impl<C: DvConverter> ByteSized for StringBasedDvDictionary<C> {
+    fn size_bytes(&self) -> u64 {
+        self.string_dict.size_bytes()
     }
 }
 

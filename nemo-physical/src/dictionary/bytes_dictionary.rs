@@ -5,6 +5,7 @@ use hashbrown::HashMap;
 use super::bytes_buffer::{BytesRef, GlobalBytesBuffer};
 use super::{AddResult, KNOWN_ID_MARK};
 use crate::dictionary::datavalue_dictionary::{SMALL_KNOWN_ID_MARK, SMALL_KNOWN_ID_MARK_AS_USIZE};
+use crate::management::bytesized::{size_inner_hashmap_flat, size_inner_vec_flat, ByteSized};
 
 pub(crate) struct IdUtils {}
 
@@ -180,6 +181,16 @@ impl<B: GlobalBytesBuffer> Default for BytesDictionary<B> {
 impl<B: GlobalBytesBuffer> Drop for BytesDictionary<B> {
     fn drop(&mut self) {
         B::drop_buffer(self.buffer_id);
+    }
+}
+
+impl<B: GlobalBytesBuffer> ByteSized for BytesDictionary<B> {
+    fn size_bytes(&self) -> u64 {
+        size_of::<Self>() as u64
+            + size_inner_vec_flat(&self.store)
+            + size_inner_hashmap_flat(&self.map_short)
+            + size_inner_hashmap_flat(&self.map_long)
+            + B::buffer_size_bytes(self.buffer_id)
     }
 }
 
