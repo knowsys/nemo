@@ -109,7 +109,8 @@ impl ProgramComponent for Fact {
             string,
             crate::parser::ast::expression::Expression::parse_complex,
             ASTProgramTranslation::build_head_atom
-        ).map(Fact::from)
+        )
+        .map(Fact::from)
     }
 
     fn origin(&self) -> &Origin {

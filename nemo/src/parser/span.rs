@@ -70,7 +70,7 @@ impl CharacterRange {
 
 /// Maker for a region of text within a string slice
 #[derive(Debug, Clone, Copy)]
-pub struct Span<'a>(pub(crate) LocatedSpan<&'a str>);
+pub struct Span<'a>(pub LocatedSpan<&'a str>);
 
 impl<'a> From<LocatedSpan<&'a str>> for Span<'a> {
     fn from(value: LocatedSpan<&'a str>) -> Self {

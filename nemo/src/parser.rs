@@ -4,7 +4,6 @@ pub mod ast;
 pub mod context;
 pub mod error;
 pub mod input;
-pub mod lsp;
 pub mod span;
 
 use std::{cell::RefCell, ops::Range, rc::Rc};
@@ -85,6 +84,11 @@ impl<'a> ParserErrorReport<'a> {
                 )
                 .finish()
         })
+    }
+
+    /// Return raw [`ParserError`s]
+    pub fn errors(&self) -> &Vec<ParserError> {
+        &self.errors
     }
 }
 

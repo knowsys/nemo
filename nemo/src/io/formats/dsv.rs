@@ -1,7 +1,7 @@
 //! Handler for resources of type DSV (delimiter-separated values).
 
 pub(crate) mod reader;
-pub(crate) mod value_format;
+pub mod value_format;
 pub(crate) mod writer;
 
 use std::io::{BufRead, Write};
@@ -22,7 +22,7 @@ use super::{Direction, ImportExportHandler, ImportExportResource, TableWriter};
 
 /// An [ImportExportHandler] for delimiter-separated values.
 #[derive(Debug, Clone)]
-pub(crate) struct DsvHandler {
+pub struct DsvHandler {
     /// The specific delimiter for this format.
     delimiter: u8,
     /// The resource to write to/read from.
@@ -42,7 +42,7 @@ pub(crate) struct DsvHandler {
 
 impl DsvHandler {
     /// Create a new [DsvHandler].
-    pub(crate) fn new(
+    pub fn new(
         delimiter: u8,
         resource: ImportExportResource,
         value_formats: DsvValueFormats,
