@@ -1,10 +1,14 @@
-//! This module defines a dictionary for pairs of byte arrays where
+//! This module defines dictionaries for pairs of byte arrays (resp. strings) where
 //! one part is "frequent" (few values used often) and another is "rare"
 //! (many values, used rarely).
 
 use crate::management::bytesized::ByteSized;
 
-use super::{bytes_buffer::GlobalBytesBuffer, bytes_dictionary::BytesDictionary, AddResult};
+use super::{
+    bytes_buffer::{BytesBuffer, GlobalBytesBuffer},
+    bytes_dictionary::BytesDictionary,
+    AddResult,
+};
 
 /// Smallest "frequent ID" that cannot be stored in a single byte.
 ///
@@ -42,9 +46,9 @@ const FID_BIT_MASK: u8 = 0b0011_1111;
 /// The implementation will also work if the assumption about frequency does not hold in
 /// a strong sense, but there will be no memory savings in such cases, whereas the slower
 /// access might be more pronounced.
-/// 
+///
 /// # Implementation details
-/// 
+///
 /// The implementation chains two dictionaries: the dictionary for frequent arrays assigns
 /// ids to this part of a pair in the usual way; the dictionary for pairs assigns ids to a
 /// byte array that combines the rare part with an encoding of the id for the frequent part.
@@ -197,9 +201,11 @@ impl<B: GlobalBytesBuffer> GenericRankedPairDictionary<B> {
         self.pair_dict.len()
     }
 
-    /// True when the dictionary is empty. False otherwise.
-    pub(crate) fn is_empty(&self) -> bool {
-        self.pair_dict.is_empty()
+    /// Returns the number of frequent elements stored in the dictionary. This includes
+    /// frequent elements that were added to mark a pairs that were not truly added.
+    #[allow(dead_code)]
+    pub(crate) fn frequent_len(&self) -> usize {
+        self.frequent_dict.len()
     }
 
     /// Marks the given pair as being known without storing it under an own id.
@@ -235,9 +241,110 @@ impl<B: GlobalBytesBuffer> Default for GenericRankedPairDictionary<B> {
 
 impl<B: GlobalBytesBuffer> ByteSized for GenericRankedPairDictionary<B> {
     fn size_bytes(&self) -> u64 {
+        // Code for debugging/profiling dictionary
+        // let sizef = self.frequent_dict.size_bytes();
+        // let sizep = self.pair_dict.size_bytes();
+        // println!("Ranked Pair dict: Frequent {}, Pairs {}", sizef, sizep);
+        // sizef + sizep
         self.frequent_dict.size_bytes() + self.pair_dict.size_bytes()
     }
 }
+
+/// A struct that implements a bijection between pairs of strings and integers, where the integers
+/// are automatically assigned upon insertion.
+/// Data is stored in a the given [GlobalBytesBuffer]. See [GenericRankedPairDictionary] for
+/// remarks on the underlying frequent-rare implementation.
+#[derive(Debug)]
+pub(crate) struct GenericRankedStringPairDictionary<B: GlobalBytesBuffer> {
+    ranked_pair_dict: GenericRankedPairDictionary<B>,
+}
+impl<B: GlobalBytesBuffer> GenericRankedStringPairDictionary<B> {
+    /// Adds a new string pair to the dictionary. If the pair is not known yet, it will
+    /// be assigned a new id.
+    ///
+    /// The result is an [AddResult] that indicates if the string was newly added,
+    /// or previoulsy present (it will never be rejected). The result then also yields
+    /// the pair's id.
+    pub(crate) fn add_pair(&mut self, frequent: &str, rare: &str) -> AddResult {
+        self.ranked_pair_dict
+            .add_pair(frequent.as_bytes(), rare.as_bytes())
+    }
+
+    /// Looks for a given string pair and returns `Some(id)` if it is in the dictionary,
+    /// and `None` otherwise. The special value [super::KNOWN_ID_MARK] will be returned
+    /// if the pair was marked but not actually inserted.
+    pub(crate) fn pair_to_id(&self, frequent: &str, rare: &str) -> Option<usize> {
+        self.ranked_pair_dict
+            .pair_to_id(frequent.as_bytes(), rare.as_bytes())
+    }
+
+    /// Returns the pair of [String]s associated with the `id`, or `None`` if no string pair has been
+    /// associated to this id.
+    pub(crate) fn id_to_pair(&self, id: usize) -> Option<(String, String)> {
+        self.ranked_pair_dict
+            .id_to_pair(id)
+            .map(|bytes_pair| unsafe {
+                (
+                    String::from_utf8_unchecked(bytes_pair.0),
+                    String::from_utf8_unchecked(bytes_pair.1),
+                )
+            })
+    }
+
+    /// Returns true if a value is associated with the id.
+    pub(crate) fn knows_id(&self, id: usize) -> bool {
+        self.ranked_pair_dict.knows_id(id)
+    }
+
+    /// Returns the number of elements in the dictionary. Pairs that are merely
+    /// marked are not counted here.
+    pub(crate) fn len(&self) -> usize {
+        self.ranked_pair_dict.len()
+    }
+
+    /// Returns the number of frequent elements stored in the dictionary. This includes
+    /// frequent elements that were added to mark a pairs that were not truly added.
+    #[allow(dead_code)]
+    pub(crate) fn frequent_len(&self) -> usize {
+        self.ranked_pair_dict.frequent_len()
+    }
+
+    /// Marks the given pair as being known without storing it under an own id.
+    /// If the entry exists already, the old id will be kept and returned.
+    ///
+    /// Once a pair has been marked, it cannot be added anymore, since it will
+    /// be known already. A use case that would require other behavior is not
+    /// known so far, so we do not make any effort there.
+    pub(crate) fn mark_pair(&mut self, frequent: &str, rare: &str) -> AddResult {
+        self.ranked_pair_dict
+            .mark_pair(frequent.as_bytes(), rare.as_bytes())
+    }
+
+    /// Returns true if the dictionary contains any marked elements.
+    pub(crate) fn has_marked(&self) -> bool {
+        self.ranked_pair_dict.has_marked()
+    }
+}
+
+impl<B: GlobalBytesBuffer> Default for GenericRankedStringPairDictionary<B> {
+    fn default() -> Self {
+        GenericRankedStringPairDictionary {
+            ranked_pair_dict: Default::default(),
+        }
+    }
+}
+
+impl<B: GlobalBytesBuffer> ByteSized for GenericRankedStringPairDictionary<B> {
+    fn size_bytes(&self) -> u64 {
+        self.ranked_pair_dict.size_bytes()
+    }
+}
+
+crate::dictionary::bytes_buffer::declare_bytes_buffer!(
+    StringPairDictBytesBuffer,
+    STRING_PAIR_DICT_BYTES_BUFFER
+);
+pub(crate) type StringPairDictionary = GenericRankedStringPairDictionary<StringPairDictBytesBuffer>;
 
 #[cfg(test)]
 mod test {
@@ -293,7 +400,6 @@ mod test {
         assert_eq!(dict.pair_to_id(&[], &[]), Some(0));
         assert_eq!(dict.len(), 1);
         assert!(!dict.has_marked());
-        assert!(!dict.is_empty());
     }
 
     #[test]

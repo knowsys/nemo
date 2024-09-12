@@ -11,6 +11,10 @@ use std::{
 const PAGE_ADDR_BITS: usize = 25; // 32MB
 /// Size of pages in the buffer
 const PAGE_SIZE: usize = 1 << PAGE_ADDR_BITS;
+/// Size of smaller pages when first initializing a buffer
+/// Using a smaller size here instad of [PAGE_SIZE] is a heurisitc
+/// to save memory for small dictionaries.
+const PAGE_SIZE_INITIAL: usize = 1 << 20;
 
 /// A manager for buffers for byte array data, using compact memory regions managed in pages.
 /// New buffers need to be initialized, upon which they will receive an identifying buffer id
@@ -62,8 +66,7 @@ impl BytesBuffer {
     fn init_buffer(&mut self) -> usize {
         self.acquire_page_lock();
         let buf_id = self.cur_pages.len();
-        self.pages.push((buf_id, Vec::with_capacity(PAGE_SIZE)));
-        self.cur_pages.push(self.pages.len() - 1);
+        self.cur_pages.push(0); // defer first page allocation to later
         self.release_page_lock();
         buf_id
     }
@@ -92,7 +95,12 @@ impl BytesBuffer {
 
         self.acquire_page_lock();
         let mut page_num = self.cur_pages[buffer];
-        if self.pages[page_num].1.len() + len > PAGE_SIZE {
+        if self.pages.len() == 0 || self.pages[page_num].0 != buffer {
+            self.pages
+                .push((buffer, Vec::with_capacity(PAGE_SIZE_INITIAL)));
+            page_num = self.pages.len() - 1;
+            self.cur_pages[buffer] = page_num;
+        } else if self.pages[page_num].1.len() + len > PAGE_SIZE {
             self.pages.push((buffer, Vec::with_capacity(PAGE_SIZE)));
             page_num = self.pages.len() - 1;
             self.cur_pages[buffer] = page_num;
@@ -147,8 +155,15 @@ impl BytesBuffer {
     /// a specific buffer. This includes management data for that buffer but no shared management
     /// data for the [BytesBuffer] as such.
     fn buffer_size_bytes(&self, buffer: usize) -> u64 {
-        let page_count: usize = self.pages.iter().filter(|x| x.0 == buffer).count();
-        (page_count * (size_of::<(usize, Vec<u8>)>() + PAGE_SIZE) + size_of::<usize>()) as u64
+        let page_size: usize = self.pages.iter().fold(0, |acc, page_data| {
+            if page_data.0 == buffer {
+                acc + page_data.1.capacity()
+            } else {
+                acc
+            }
+        });
+        // Add size of usize, the space used for the current page number of that buffer:
+        (page_size + size_of::<usize>()) as u64
     }
 }
 

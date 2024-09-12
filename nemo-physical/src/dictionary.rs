@@ -16,13 +16,12 @@ pub(crate) mod bytes_buffer;
 pub(crate) mod bytes_dictionary;
 pub(crate) mod dv_converter;
 pub(crate) mod ranked_pair_dictionary;
+pub(crate) mod ranked_pair_dv_dict;
 pub(crate) mod string_dv_dict;
 
 pub mod string_map;
 pub(crate) use string_dv_dict::IriDvDictionary;
-#[cfg(not(feature = "stringpairdictionary"))]
 pub(crate) use string_dv_dict::LangStringDvDictionary;
-#[cfg(not(feature = "stringpairdictionary"))]
 pub(crate) use string_dv_dict::OtherDvDictionary;
 pub(crate) use string_dv_dict::StringDvDictionary;
 
