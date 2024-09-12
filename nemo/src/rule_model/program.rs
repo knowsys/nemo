@@ -1,7 +1,7 @@
 //! This module defines [Program].
 
 use std::{
-    collections::{hash_map::Entry, HashMap},
+    collections::{hash_map::Entry, HashMap, HashSet},
     fmt::Write,
 };
 
@@ -75,6 +75,42 @@ impl Program {
         self.outputs.iter()
     }
 
+    /// Return the set of all predicates that are defined by import statements.
+    pub fn import_predicates(&self) -> HashSet<Tag> {
+        self.imports()
+            .map(|import| import.predicate().clone())
+            .collect()
+    }
+
+    /// Return the set of all predicates that can be derived by applying rules.
+    pub fn derived_predicates(&self) -> HashSet<Tag> {
+        let rule_head = self
+            .rules()
+            .flat_map(|rule| rule.head())
+            .map(|atom| atom.predicate().clone());
+        let facts = self.facts().map(|fact| fact.predicate().clone());
+
+        rule_head.chain(facts).collect()
+    }
+
+    /// Return the set of all predicates contained in this program.
+    pub fn all_predicates(&self) -> HashSet<Tag> {
+        let rules = self.rules().flat_map(|rule| {
+            rule.head()
+                .iter()
+                .map(|atom| atom.predicate().clone())
+                .chain(rule.body().iter().filter_map(|literal| match literal {
+                    Literal::Positive(atom) | Literal::Negative(atom) => {
+                        Some(atom.predicate().clone())
+                    }
+                    Literal::Operation(_) => None,
+                }))
+        });
+        let facts = self.facts().map(|fact| fact.predicate().clone());
+
+        rules.chain(facts).collect()
+    }
+
     /// Return an iterator over all imports.
     pub fn imports_mut(&mut self) -> impl Iterator<Item = &mut ImportDirective> {
         self.imports.iter_mut()
@@ -98,6 +134,39 @@ impl Program {
     /// Return an iterator over all outputs.
     pub fn outputs_mut(&mut self) -> impl Iterator<Item = &mut Output> {
         self.outputs.iter_mut()
+    }
+
+    /// Add a new export statement to the program.
+    pub fn add_export(&mut self, directive: ExportDirective) {
+        self.exports.push(directive);
+    }
+
+    /// Add new export statements to the program.
+    pub fn add_exports<Iterator: IntoIterator<Item = ExportDirective>>(
+        &mut self,
+        exports: Iterator,
+    ) {
+        self.exports.extend(exports.into_iter())
+    }
+
+    /// Remove all export statements
+    pub fn clear_exports(&mut self) {
+        self.exports.clear();
+    }
+
+    /// Remove all export statements
+    pub fn clear_imports(&mut self) {
+        self.imports.clear();
+    }
+
+    /// Add a new import statement to the program.
+    pub fn add_import(&mut self, directive: ImportDirective) {
+        self.imports.push(directive);
+    }
+
+    /// Mark a predicate as an output predicate.
+    pub fn add_output(&mut self, predicate: Tag) {
+        self.outputs.push(Output::new(predicate));
     }
 
     /// Check if a different arity was already used for the given predicate
@@ -326,6 +395,6 @@ impl ProgramBuilder {
 
     /// Validate the current program.
     pub fn validate(&self, builder: &mut ValidationErrorBuilder) -> Result<(), ()> {
-        self.program.validate(builder)
+        self.program.validate_global_properties(builder)
     }
 }

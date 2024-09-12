@@ -3,7 +3,7 @@
 pub(crate) mod aggregate;
 pub(crate) mod fact;
 pub(crate) mod filter;
-pub(crate) mod import;
+pub(crate) mod import_export;
 pub(crate) mod operation;
 pub(crate) mod rule;
 

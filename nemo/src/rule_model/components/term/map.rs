@@ -42,12 +42,30 @@ impl Map {
         }
     }
 
-    /// Create a new [Map].
+    /// Create a new [Map] without a name.
     pub fn new_unnamed<Pairs: IntoIterator<Item = (Term, Term)>>(map: Pairs) -> Self {
         Self {
             origin: Origin::Created,
             tag: None,
             map: map.into_iter().collect(),
+        }
+    }
+
+    /// Create a new empty [Map].
+    pub fn empty(name: &str) -> Self {
+        Self {
+            origin: Origin::Created,
+            tag: Some(Tag::new(name.to_string())),
+            map: Vec::default(),
+        }
+    }
+
+    /// Create a new empty [Map].
+    pub fn empty_unnamed() -> Self {
+        Self {
+            origin: Origin::Created,
+            tag: None,
+            map: Vec::default(),
         }
     }
 

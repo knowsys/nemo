@@ -1,5 +1,7 @@
 //! Handler for resources of type RDF (Rsource Description Format).
 
+#![allow(missing_docs)]
+
 pub mod error;
 pub(crate) mod reader;
 pub(crate) mod value_format;
@@ -70,7 +72,7 @@ pub struct RdfHandler {
     /// Compression format to be used
     compression_format: CompressionFormat,
     /// Direction of the operation.
-    direction: Direction,
+    _direction: Direction,
 }
 
 impl RdfHandler {
@@ -82,7 +84,7 @@ impl RdfHandler {
         value_formats: RdfValueFormats,
         limit: Option<u64>,
         compression_format: CompressionFormat,
-        direction: Direction,
+        _direction: Direction,
     ) -> Self {
         Self {
             resource,
@@ -91,7 +93,7 @@ impl RdfHandler {
             value_formats,
             limit,
             compression_format,
-            direction,
+            _direction,
         }
     }
 

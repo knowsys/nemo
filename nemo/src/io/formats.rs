@@ -23,7 +23,7 @@ const PROGRESS_NOTIFY_INCREMENT: u64 = 10_000_000;
 
 /// Representation of a resource (file, URL, etc.) for import or export.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) enum ImportExportResource {
+pub enum ImportExportResource {
     /// A concrete resource string.
     Resource(Resource),
     /// Use stdout (only for export)
@@ -60,7 +60,7 @@ impl ImportExportResource {
 /// that were used with this format, to create suitable [TableProvider] and [TableWriter] objects
 /// to read and write data in the given format, and to report information about the type of
 /// data that this format can handle (such as predicate arity and type).
-pub(crate) trait ImportExportHandler: std::fmt::Debug + DynClone + Send {
+pub trait ImportExportHandler: std::fmt::Debug + DynClone + Send {
     /// Return the associated [FileFormat].
     fn file_format(&self) -> FileFormat;
 
@@ -111,7 +111,7 @@ dyn_clone::clone_trait_object!(ImportExportHandler);
 /// We often share code for the two directions, and a direction
 /// is then used to enable smaller distinctions where needed.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub(crate) enum Direction {
+pub enum Direction {
     /// Processing input.
     Import,
     /// Processing output.
@@ -128,7 +128,6 @@ impl std::fmt::Display for Direction {
 }
 
 /// A trait for exporting table data, e.g., to some file.
-// TODO Maybe this should be directly in io, since it is the interface to the OutputManager?
 pub trait TableWriter {
     /// Export a table.
     fn export_table_data<'a>(

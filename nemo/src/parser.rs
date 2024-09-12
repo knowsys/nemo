@@ -98,7 +98,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    /// Parse the input
+    /// Parse the input.
     pub fn parse(self) -> Result<Program<'a>, (Program<'a>, ParserErrorReport<'a>)> {
         let parser_input = ParserInput::new(&self.input, self.state.clone());
 

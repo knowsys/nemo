@@ -1,20 +1,21 @@
-//! This module contains the [ExportManager], which provides the main API to handle
-//! [ExportDirective]s and to write tables to files.
-
+//! This module contains the [ExportManager].
 use std::{
+    fs::{create_dir_all, OpenOptions},
     io::{ErrorKind, Write},
     path::PathBuf,
 };
 
-use crate::{error::Error, rule_model::components::import_export::compression::CompressionFormat};
+use crate::{
+    error::Error,
+    rule_model::components::{import_export::compression::CompressionFormat, tag::Tag},
+};
 
 use nemo_physical::datavalues::AnyDataValue;
 use sanitise_file_name::{sanitise_with_options, Options};
 
 use super::formats::ImportExportHandler;
 
-/// Main object for exporting data to files and for accessing aspects
-/// of [ExportDirective]s that might be of public interest.
+/// Main object for exporting data to files.
 #[derive(Debug, Default)]
 pub struct ExportManager {
     /// The base path for writing files.
@@ -64,16 +65,18 @@ impl ExportManager {
         self.disable_write
     }
 
-    /// Validates the given [ExportDirective].
+    /// Validates the given [ImportExportHandler].
     /// This also checks whether the specified file could (likely) be written.
-    pub fn validate(&self, handler: &dyn ImportExportHandler) -> Result<(), Error> {
-        // let handler = ImportExportHandlers::export_handler(export_directive)?;
-
+    pub fn validate(
+        &self,
+        predicate: &Tag,
+        handler: &Box<dyn ImportExportHandler>,
+    ) -> Result<(), Error> {
         if handler.resource_is_stdout() {
             return Ok(());
         }
 
-        let path = self.output_file_path(handler);
+        let path = self.output_file_path(predicate, &**handler);
 
         let meta_info = path.metadata();
         if let Err(err) = meta_info {
@@ -92,11 +95,42 @@ impl ExportManager {
         }
     }
 
-    /// Get the output file name for the given [ExportDirective].
+    /// Create a writer based on an export handler. The predicate is used to
+    /// obtain a default file name if needed.
+    ///
+    /// This function may already create directories, and should not be used if
+    /// [ExportManager::disable_write] is `true`.
+    fn writer(
+        &self,
+        export_handler: &dyn ImportExportHandler,
+        predicate: &Tag,
+    ) -> Result<Box<dyn Write>, Error> {
+        if export_handler.resource_is_stdout() {
+            Ok(Box::new(std::io::stdout().lock()))
+        } else {
+            let output_path = self.output_file_path(predicate, export_handler);
+
+            log::info!("Exporting predicate \"{}\" to {output_path:?}", predicate);
+
+            if let Some(parent) = output_path.parent() {
+                create_dir_all(parent)?;
+            }
+
+            export_handler
+                .compression_format()
+                .file_writer(output_path, Self::open_options(self.overwrite))
+        }
+    }
+
+    /// Get the output file name for the given [ImportExportHandler].
     ///
     /// This is a complete path (based on our base path),
     /// which includes all extensions.
-    fn output_file_path(&self, export_handler: &dyn ImportExportHandler) -> PathBuf {
+    fn output_file_path(
+        &self,
+        predicate: &Tag,
+        export_handler: &dyn ImportExportHandler,
+    ) -> PathBuf {
         let mut pred_path = self.base_path.to_path_buf();
 
         let sanitize_options = Options::<Option<char>> {
@@ -104,9 +138,11 @@ impl ExportManager {
             ..Default::default()
         };
 
-        let file_name_unsafe = export_handler
-            .resource()
-            .unwrap_or_else(|| export_handler.file_extension());
+        let file_name_unsafe = export_handler.resource().unwrap_or(format!(
+            "{}.{}",
+            predicate,
+            export_handler.file_extension()
+        ));
         let file_name = sanitise_with_options(&file_name_unsafe, &sanitize_options);
         pred_path.push(file_name);
 
@@ -123,15 +159,17 @@ impl ExportManager {
     ///
     /// If this operation succeeds, then it returns `Ok(true)` if the resource is stdout
     /// and `Ok(false)` otherwise.
-    pub(crate) fn export_table_with_handler_writer<'a>(
+    pub fn export_table<'a>(
         &self,
-        export_handler: &dyn ImportExportHandler,
-        writer: Box<dyn Write>,
+        predicate: &Tag,
+        export_handler: &Box<dyn ImportExportHandler>,
         table: Option<impl Iterator<Item = Vec<AnyDataValue>> + 'a>,
     ) -> Result<bool, Error> {
         if self.disable_write {
             return Ok(false);
         }
+
+        let writer = self.writer(&**export_handler, predicate)?;
 
         if let Some(table) = table {
             let table_writer = export_handler.writer(writer)?;
@@ -139,5 +177,42 @@ impl ExportManager {
         }
 
         Ok(export_handler.resource_is_stdout())
+    }
+
+    /// Export a (possibly empty) table according to the given [ExportDirective],
+    /// but direct output into the given writer instead of using whatever
+    /// resource the directive specifies.
+    ///
+    /// The `predicate_arity` is the arity of the predicate that is to be exported. This information
+    /// is used for validation and as a hint to exporters that were not initialized with details
+    /// about the arity.
+    ///
+    /// This function ignores [ExportManager::disable_write].
+    pub fn export_table_with_writer<'a>(
+        &self,
+        writer: Box<dyn Write>,
+        export_handler: &Box<dyn ImportExportHandler>,
+        table: Option<impl Iterator<Item = Vec<AnyDataValue>> + 'a>,
+    ) -> Result<(), Error> {
+        if let Some(table) = table {
+            let table_writer = export_handler.writer(writer)?;
+            table_writer.export_table_data(Box::new(table))?;
+        }
+
+        Ok(())
+    }
+
+    /// Provide suitable options writing to files under the given settings.
+    fn open_options(overwrite: bool) -> OpenOptions {
+        let mut options = OpenOptions::new();
+        options.write(true);
+
+        if overwrite {
+            options.create(true).truncate(true);
+        } else {
+            options.create_new(true);
+        };
+
+        options
     }
 }

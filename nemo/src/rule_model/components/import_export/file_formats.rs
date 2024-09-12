@@ -33,7 +33,7 @@ pub enum FileFormat {
     #[assoc(from_name = file_format::CSV)]
     #[assoc(extension = file_format::EXTENSION_CSV)]
     #[assoc(attributes = HashMap::from([
-        (ImportExportAttribute::Resource, AttributeRequirement::Required),
+        (ImportExportAttribute::Resource, AttributeRequirement::Optional),
         (ImportExportAttribute::Format, AttributeRequirement::Optional),
         (ImportExportAttribute::Limit, AttributeRequirement::Optional),
         (ImportExportAttribute::Compression, AttributeRequirement::Optional),
@@ -44,7 +44,7 @@ pub enum FileFormat {
     #[assoc(from_name = file_format::DSV)]
     #[assoc(extension = file_format::EXTENSION_DSV)]
     #[assoc(attributes = HashMap::from([
-        (ImportExportAttribute::Resource, AttributeRequirement::Required),
+        (ImportExportAttribute::Resource, AttributeRequirement::Optional),
         (ImportExportAttribute::Delimiter, AttributeRequirement::Required),
         (ImportExportAttribute::Format, AttributeRequirement::Optional),
         (ImportExportAttribute::Limit, AttributeRequirement::Optional),
@@ -56,7 +56,7 @@ pub enum FileFormat {
     #[assoc(from_name = file_format::TSV)]
     #[assoc(extension = file_format::EXTENSION_TSV)]
     #[assoc(attributes = HashMap::from([
-        (ImportExportAttribute::Resource, AttributeRequirement::Required),
+        (ImportExportAttribute::Resource, AttributeRequirement::Optional),
         (ImportExportAttribute::Format, AttributeRequirement::Optional),
         (ImportExportAttribute::Limit, AttributeRequirement::Optional),
         (ImportExportAttribute::Compression, AttributeRequirement::Optional),
@@ -67,7 +67,7 @@ pub enum FileFormat {
     #[assoc(from_name = file_format::JSON)]
     #[assoc(extension = file_format::EXTENSION_JSON)]
     #[assoc(attributes = HashMap::from([
-        (ImportExportAttribute::Resource, AttributeRequirement::Required)
+        (ImportExportAttribute::Resource, AttributeRequirement::Optional)
     ]))]
     #[assoc(arity = 3)] // TODO: In the future we probably want arbitrary arity here
     JSON,
@@ -76,7 +76,7 @@ pub enum FileFormat {
     #[assoc(from_name = file_format::RDF_NTRIPLES)]
     #[assoc(extension = file_format::EXTENSION_RDF_NTRIPLES)]
     #[assoc(attributes = HashMap::from([
-        (ImportExportAttribute::Resource, AttributeRequirement::Required),
+        (ImportExportAttribute::Resource, AttributeRequirement::Optional),
         (ImportExportAttribute::Base, AttributeRequirement::Optional),
         (ImportExportAttribute::Format, AttributeRequirement::Optional),
         (ImportExportAttribute::Limit, AttributeRequirement::Optional),
@@ -89,7 +89,7 @@ pub enum FileFormat {
     #[assoc(from_name = file_format::RDF_NQUADS)]
     #[assoc(extension = file_format::EXTENSION_RDF_NQUADS)]
     #[assoc(attributes = HashMap::from([
-        (ImportExportAttribute::Resource, AttributeRequirement::Required),
+        (ImportExportAttribute::Resource, AttributeRequirement::Optional),
         (ImportExportAttribute::Base, AttributeRequirement::Optional),
         (ImportExportAttribute::Format, AttributeRequirement::Optional),
         (ImportExportAttribute::Limit, AttributeRequirement::Optional),
@@ -102,7 +102,7 @@ pub enum FileFormat {
     #[assoc(from_name = file_format::RDF_TURTLE)]
     #[assoc(extension = file_format::EXTENSION_RDF_TURTLE)]
     #[assoc(attributes = HashMap::from([
-        (ImportExportAttribute::Resource, AttributeRequirement::Required),
+        (ImportExportAttribute::Resource, AttributeRequirement::Optional),
         (ImportExportAttribute::Base, AttributeRequirement::Optional),
         (ImportExportAttribute::Format, AttributeRequirement::Optional),
         (ImportExportAttribute::Limit, AttributeRequirement::Optional),
@@ -115,7 +115,7 @@ pub enum FileFormat {
     #[assoc(from_name = file_format::RDF_XML)]
     #[assoc(extension = file_format::EXTENSION_RDF_XML)]
     #[assoc(attributes = HashMap::from([
-        (ImportExportAttribute::Resource, AttributeRequirement::Required),
+        (ImportExportAttribute::Resource, AttributeRequirement::Optional),
         (ImportExportAttribute::Base, AttributeRequirement::Optional),
         (ImportExportAttribute::Format, AttributeRequirement::Optional),
         (ImportExportAttribute::Limit, AttributeRequirement::Optional),
@@ -128,7 +128,7 @@ pub enum FileFormat {
     #[assoc(from_name = file_format::RDF_TRIG)]
     #[assoc(extension = file_format::EXTENSION_RDF_TRIG)]
     #[assoc(attributes = HashMap::from([
-        (ImportExportAttribute::Resource, AttributeRequirement::Required),
+        (ImportExportAttribute::Resource, AttributeRequirement::Optional),
         (ImportExportAttribute::Base, AttributeRequirement::Optional),
         (ImportExportAttribute::Format, AttributeRequirement::Optional),
         (ImportExportAttribute::Limit, AttributeRequirement::Optional),

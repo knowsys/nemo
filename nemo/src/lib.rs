@@ -19,8 +19,7 @@
 #![feature(iter_intersperse)]
 
 /// The crate for underlying physical operations.
-#[macro_use]
-extern crate nemo_physical;
+pub extern crate nemo_physical;
 
 pub mod api;
 pub mod error;

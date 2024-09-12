@@ -74,10 +74,18 @@ impl ProgramChaseTranslation {
         &self,
         direction: Direction,
         predicate: Tag,
-        attributes: HashMap<ImportExportAttribute, &Term>,
+        mut attributes: HashMap<ImportExportAttribute, Term>,
         file_format: FileFormat,
     ) -> Box<dyn ImportExportHandler> {
         let arity = self.predicate_arity.get(&predicate).cloned();
+
+        if attributes.get(&ImportExportAttribute::Resource).is_none() {
+            let default_file_name = format!("{}.{}", predicate, file_format.extension());
+            attributes.insert(
+                ImportExportAttribute::Resource,
+                Term::from(default_file_name),
+            );
+        }
 
         match file_format {
             FileFormat::CSV => {
@@ -108,7 +116,7 @@ impl ProgramChaseTranslation {
 
     /// Read resource attribute and check compression.
     fn read_resource(
-        attributes: &HashMap<ImportExportAttribute, &Term>,
+        attributes: &HashMap<ImportExportAttribute, Term>,
     ) -> (CompressionFormat, ImportExportResource) {
         attributes
             .get(&ImportExportAttribute::Resource)
@@ -120,7 +128,7 @@ impl ProgramChaseTranslation {
 
     /// Read the [DsvValueFormats] from the attributes.
     fn read_dsv_value_formats(
-        attributes: &HashMap<ImportExportAttribute, &Term>,
+        attributes: &HashMap<ImportExportAttribute, Term>,
     ) -> Option<DsvValueFormats> {
         let term = attributes.get(&ImportExportAttribute::Format)?;
 
@@ -136,7 +144,7 @@ impl ProgramChaseTranslation {
 
     /// Read the [RdfValueFormats] from the attributes.
     fn read_rdf_value_formats(
-        attributes: &HashMap<ImportExportAttribute, &Term>,
+        attributes: &HashMap<ImportExportAttribute, Term>,
     ) -> Option<RdfValueFormats> {
         let term = attributes.get(&ImportExportAttribute::Format)?;
 
@@ -151,7 +159,7 @@ impl ProgramChaseTranslation {
     }
 
     /// Read the limit from the attributes.
-    fn read_limit(attributes: &HashMap<ImportExportAttribute, &Term>) -> Option<u64> {
+    fn read_limit(attributes: &HashMap<ImportExportAttribute, Term>) -> Option<u64> {
         attributes
             .get(&ImportExportAttribute::Limit)
             .and_then(|term| ImportExportDirective::integer_value(term))
@@ -160,7 +168,7 @@ impl ProgramChaseTranslation {
 
     /// Read the compression format from the attributes.
     fn read_compression(
-        attributes: &HashMap<ImportExportAttribute, &Term>,
+        attributes: &HashMap<ImportExportAttribute, Term>,
     ) -> Option<CompressionFormat> {
         if let Some(term) = attributes.get(&ImportExportAttribute::Compression) {
             return Some(
@@ -177,7 +185,7 @@ impl ProgramChaseTranslation {
     }
 
     /// Read the iri base path from the attributes.
-    fn read_base(attributes: &HashMap<ImportExportAttribute, &Term>) -> Option<Iri<String>> {
+    fn read_base(attributes: &HashMap<ImportExportAttribute, Term>) -> Option<Iri<String>> {
         let term = attributes.get(&ImportExportAttribute::Base)?;
         Some(Iri::parse_unchecked(
             ImportExportDirective::plain_value(term)
@@ -190,7 +198,7 @@ impl ProgramChaseTranslation {
         direction: Direction,
         delimiter: Option<u8>,
         arity: Option<usize>,
-        attributes: &HashMap<ImportExportAttribute, &Term>,
+        attributes: &HashMap<ImportExportAttribute, Term>,
     ) -> Box<dyn ImportExportHandler> {
         let (mut compression_format, resource) = Self::read_resource(attributes);
 
@@ -229,7 +237,7 @@ impl ProgramChaseTranslation {
         direction: Direction,
         variant: RdfVariant,
         arity: Option<usize>,
-        attributes: &HashMap<ImportExportAttribute, &Term>,
+        attributes: &HashMap<ImportExportAttribute, Term>,
     ) -> Box<dyn ImportExportHandler> {
         let arity = arity.expect("rdf types have known arity");
         let (mut compression_format, resource) = Self::read_resource(attributes);
@@ -258,7 +266,7 @@ impl ProgramChaseTranslation {
 
     /// Build a [JsonHandler].
     fn build_json_handler(
-        attributes: &HashMap<ImportExportAttribute, &Term>,
+        attributes: &HashMap<ImportExportAttribute, Term>,
     ) -> Box<dyn ImportExportHandler> {
         let (_, resource) = Self::read_resource(attributes);
 

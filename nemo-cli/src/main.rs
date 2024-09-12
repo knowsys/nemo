@@ -19,25 +19,32 @@
 
 pub mod cli;
 
-use std::fs::{read_to_string, File};
+use std::fs::read_to_string;
 
-use ariadne::{Color, ColorGenerator, Fmt, Label, Report, ReportKind, Source};
 use clap::Parser;
-use cli::{CliApp, Exporting, Reporting};
 use colored::Colorize;
+
+use cli::{CliApp, Exporting, Reporting};
+
 use nemo::{
     error::{Error, ReadingError},
     execution::{DefaultExecutionEngine, ExecutionEngine},
-    io::{
-        parser::{parse_fact_str, parse_program_str},
-        resource_providers::ResourceProviders,
-        ImportManager,
-    },
+    io::{resource_providers::ResourceProviders, ImportManager},
     meta::timing::{TimedCode, TimedDisplay},
-    model::{ExportDirective, Program},
-    parser::ParserErrorReport,
-    rule_model,
+    rule_model::{
+        self,
+        components::{
+            import_export::{file_formats::FileFormat, ExportDirective},
+            tag::Tag,
+            term::map::Map,
+        },
+        program::Program,
+    },
 };
+
+fn default_export(predicate: Tag) -> ExportDirective {
+    ExportDirective::new(predicate, FileFormat::CSV, Map::empty_unnamed())
+}
 
 /// Set exports according to command-line parameter.
 /// This disables all existing exports.
@@ -51,18 +58,18 @@ fn override_exports(program: &mut Program, value: Exporting) {
     let mut additional_exports = Vec::new();
     match value {
         Exporting::Idb => {
-            for predicate in program.idb_predicates() {
-                additional_exports.push(ExportDirective::default(predicate));
+            for predicate in program.derived_predicates() {
+                additional_exports.push(default_export(predicate));
             }
         }
         Exporting::Edb => {
-            for predicate in program.edb_predicates() {
-                additional_exports.push(ExportDirective::default(predicate));
+            for predicate in program.import_predicates() {
+                additional_exports.push(default_export(predicate));
             }
         }
         Exporting::All => {
-            for predicate in program.predicates() {
-                additional_exports.push(ExportDirective::default(predicate));
+            for predicate in program.all_predicates() {
+                additional_exports.push(default_export(predicate));
             }
         }
         Exporting::None => {}
@@ -151,6 +158,20 @@ fn print_memory_details(engine: &DefaultExecutionEngine) {
     println!("\nMemory report:\n\n{}", engine.memory_usage());
 }
 
+/// Retrieve all facts that need to be traced from the cli arguments.
+fn parse_trace_facts(cli: &CliApp) -> Result<Vec<String>, Error> {
+    let mut facts = cli.tracing.facts.clone().unwrap_or_default();
+
+    if let Some(input_files) = &cli.tracing.input_file {
+        for input_file in input_files {
+            let file_content = read_to_string(input_file)?;
+            facts.extend(file_content.split(';').map(str::to_string));
+        }
+    }
+
+    Ok(facts)
+}
+
 fn run(mut cli: CliApp) -> Result<(), Error> {
     TimedCode::instance().start();
     TimedCode::instance().sub("Reading & Preprocessing").start();
@@ -161,28 +182,30 @@ fn run(mut cli: CliApp) -> Result<(), Error> {
         return Err(Error::MultipleFilesNotImplemented);
     }
 
-    let rules = cli.rules.pop().ok_or(Error::NoInput)?;
-    let rules_content = read_to_string(rules.clone()).map_err(|err| ReadingError::IoReading {
-        error: err,
-        filename: rules.to_string_lossy().to_string(),
-    })?;
+    let program_file = cli.rules.pop().ok_or(Error::NoInput)?;
+    let program_filename = program_file.to_string_lossy().to_string();
+    let program_content =
+        read_to_string(program_file.clone()).map_err(|err| ReadingError::IoReading {
+            error: err,
+            filename: program_filename.clone(),
+        })?;
 
-    let program_ast =
-        match nemo::parser::Parser::initialize(&rules_content, rules.to_string_lossy().to_string())
-            .parse()
-        {
-            Ok(program) => program,
-            Err((program, report)) => {
-                println!("{program}");
-                report.eprint(report.build_reports())?;
-                std::process::exit(1);
-            }
-        };
-    log::debug!("AST:\n{program_ast}");
+    let program_ast = match nemo::parser::Parser::initialize(
+        &program_content,
+        program_filename.clone(),
+    )
+    .parse()
+    {
+        Ok(program) => program,
+        Err((_program, report)) => {
+            report.eprint(report.build_reports())?;
+            std::process::exit(1);
+        }
+    };
 
-    let program = match rule_model::translation::ASTProgramTranslation::initialize(
-        &rules_content,
-        rules.to_string_lossy().to_string(),
+    let mut program = match rule_model::translation::ASTProgramTranslation::initialize(
+        &program_content,
+        program_filename,
     )
     .translate(&program_ast)
     {
@@ -192,99 +215,21 @@ fn run(mut cli: CliApp) -> Result<(), Error> {
             std::process::exit(1);
         }
     };
-
-    println!("Parsing successful");
-    std::process::exit(0);
-
-    // let mut program = parse_program(rules_content)?;
-    // let (ast, errors) = parse_program_str(&rules_content);
-
-    // if !errors.is_empty() {
-    //     for error in errors {
-    //         let color = Color::Red;
-
-    //         let r = Report::build(ReportKind::Error, String::from("test"), 100)
-    //             .with_code(3)
-    //             .with_message(&error.msg)
-    //             .with_label(
-    //                 Label::new((
-    //                     String::from("test"),
-    //                     error.pos.offset..(error.pos.offset + 1),
-    //                 ))
-    //                 .with_message(&error.msg)
-    //                 .with_color(color),
-    //             )
-    //             .finish();
-    //         r.eprint((String::from("test"), Source::from(&rules_content)))?;
-    //     }
-    // }
-
-    // log::debug!("AST:\n{ast}");
-    // TODO: Report errors!
-    // log::debug!("ERRORS:\n{_errors:#?}");
-    // let program = nemo::rule_model::program::Program::from_ast(ast);
-
+    override_exports(&mut program, cli.output.export_setting);
     log::info!("Rules parsed");
-    // log::trace!("{:?}", program);
 
-    let facts_to_be_traced: Option<Vec<_>> = {
-        let raw_facts_to_be_traced: Option<Vec<String>> =
-            cli.tracing.facts_to_be_traced.or_else(|| {
-                Some(
-                    cli.tracing
-                        .trace_input_file?
-                        .into_iter()
-                        .filter_map(|filename| {
-                            match read_to_string(filename.clone()).map_err(|err| {
-                                ReadingError::IoReading {
-                                    error: err,
-                                    filename: filename.to_string_lossy().to_string(),
-                                }
-                            }) {
-                                Ok(inner) => Some(inner),
-                                Err(err) => {
-                                    log::error!("!Error: Could not read trace input file {}. We continue by skipping it. Detailed error message: {err}", filename.to_string_lossy().to_string());
-                                    None
-                                }
-                            }
-                        })
-                        .flat_map(|fact_string| {
-                            fact_string
-                                .split(';')
-                                .map(|s| s.trim().to_string())
-                                .collect::<Vec<String>>()
-                        })
-                        .collect(),
-                )
-            });
-
-        // raw_facts_to_be_traced
-        //     .map(|f| {
-        //         f.into_iter()
-        //             .map(/*parse_fact_str*/) // FIXME: Iterator over Strings and not &str
-        //             .collect::<Result<Vec<_>, _>>()
-        //     })
-        //     .transpose()?
-        None::<Vec<String>> // NOTE: This is just a quick and dirty fix
-    };
-
-    // FIXME: Change override exports to use the new rule model
-    // override_exports(&mut program, cli.output.export_setting);
+    let facts_to_be_traced = parse_trace_facts(&cli);
 
     let export_manager = cli.output.export_manager()?;
-    // Validate exports even if we do not intend to write data:
-    // FIXME: How does the new rule model handle exports?
-    // for export in program.exports() {
-    //     export_manager.validate(export)?;
-    // }
 
     let import_manager =
         ImportManager::new(ResourceProviders::with_base_path(cli.import_directory));
 
-    let mut engine: DefaultExecutionEngine = ExecutionEngine::initialize(
-        /*&program*/ todo!("change the old rule model to the new one"),
-        import_manager,
-    )?;
+    let mut engine: DefaultExecutionEngine = ExecutionEngine::initialize(&program, import_manager)?;
+
+    for (predicate, handler) in engine.exports() {
+        export_manager.validate(&predicate, &handler)?;
+    }
 
     TimedCode::instance().sub("Reading & Preprocessing").stop();
 
@@ -295,22 +240,20 @@ fn run(mut cli: CliApp) -> Result<(), Error> {
     TimedCode::instance().sub("Reasoning").stop();
 
     let mut stdout_used = false;
+
     if !export_manager.write_disabled() {
         TimedCode::instance()
             .sub("Output & Final Materialization")
             .start();
         log::info!("writing output");
 
-        // FIXME: How are exports handled in the new rule model?
-        // for export_directive in program.exports() {
-        //     if let Some(arity) = engine.predicate_arity(export_directive.predicate()) {
-        //         stdout_used |= export_manager.export_table(
-        //             export_directive,
-        //             engine.predicate_rows(export_directive.predicate())?,
-        //             arity,
-        //         )?;
-        //     }
-        // }
+        for (predicate, handler) in engine.exports() {
+            stdout_used |= export_manager.export_table(
+                &predicate,
+                &handler,
+                engine.predicate_rows(&predicate)?,
+            )?;
+        }
 
         TimedCode::instance()
             .sub("Output & Final Materialization")

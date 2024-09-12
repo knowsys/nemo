@@ -20,7 +20,7 @@ use crate::{
     },
     error::Error,
     execution::{planning::plan_tracing::TracingStrategy, tracing::trace::TraceDerivation},
-    io::import_manager::ImportManager,
+    io::{formats::ImportExportHandler, import_manager::ImportManager},
     rule_model::{
         components::{
             fact::Fact,
@@ -274,6 +274,16 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
     /// and `None` otherwise.
     pub fn predicate_arity(&self, predicate: &Tag) -> Option<usize> {
         self.analysis.all_predicates.get(predicate).copied()
+    }
+
+    /// Return a list of all all export predicates and their respective [ImportExportHandler]s,
+    /// which can be used for exporting into files.
+    pub fn exports(&self) -> Vec<(Tag, Box<dyn ImportExportHandler>)> {
+        self.program
+            .exports()
+            .iter()
+            .map(|export| (export.predicate().clone(), export.handler().clone()))
+            .collect()
     }
 
     /// Counts the facts of a single predicate.

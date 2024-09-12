@@ -89,14 +89,14 @@ impl ImportExportDirective {
     }
 
     /// Return a [HashMap] containing the attributes of this directive.
-    pub fn attribute_map(&self) -> HashMap<ImportExportAttribute, &Term> {
+    pub fn attribute_map(&self) -> HashMap<ImportExportAttribute, Term> {
         let mut result = HashMap::new();
 
         for (key, value) in self.attributes.key_value() {
             if let Some(name) =
                 Self::plain_value(&key).and_then(|plain| ImportExportAttribute::from_name(&plain))
             {
-                result.insert(name, value);
+                result.insert(name, value.clone());
             }
         }
 
@@ -390,7 +390,7 @@ impl ImportDirective {
     }
 
     /// Return the attributes.
-    pub fn attributes(&self) -> HashMap<ImportExportAttribute, &Term> {
+    pub fn attributes(&self) -> HashMap<ImportExportAttribute, Term> {
         self.0.attribute_map()
     }
 
@@ -473,7 +473,7 @@ impl ExportDirective {
     }
 
     /// Return the attributes.
-    pub fn attributes(&self) -> HashMap<ImportExportAttribute, &Term> {
+    pub fn attributes(&self) -> HashMap<ImportExportAttribute, Term> {
         self.0.attribute_map()
     }
 

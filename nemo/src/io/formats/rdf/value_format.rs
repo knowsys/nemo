@@ -32,7 +32,7 @@ pub(crate) enum RdfValueFormat {
 
 /// Indicate what value parser should be used for each column.
 #[derive(Debug, Clone)]
-pub(crate) struct RdfValueFormats(Vec<RdfValueFormat>);
+pub struct RdfValueFormats(Vec<RdfValueFormat>);
 
 impl RdfValueFormats {
     pub(crate) fn new(formats: Vec<RdfValueFormat>) -> Self {
