@@ -62,11 +62,8 @@ pub(crate) fn one_string_to_two(string: &str) -> Option<(String, String)> {
     let string2: String;
     let marker = string.as_bytes()[0] as usize;
     if marker > 0 {
-        if let Some(iri_string) = string.get(1..marker + 1) {
-            string2 = iri_string.into();
-        } else {
-            return None;
-        }
+        let iri_string = string.get(1..marker + 1)?;
+        string2 = iri_string.into();
         string1 = string
             .get(marker + 1..)
             .expect("must be valid if previous call was")

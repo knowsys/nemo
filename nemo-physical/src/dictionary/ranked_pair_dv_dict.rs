@@ -66,20 +66,14 @@ impl<C: DvPairConverter> DvDict for RankedPairBasedDvDictionary<C> {
     }
 
     fn datavalue_to_id(&self, dv: &AnyDataValue) -> Option<usize> {
-        if let Some((frequent, rare)) = C::dict_pair(dv) {
-            self.string_pair_dict
-                .pair_to_id(frequent.as_str(), rare.as_str())
-        } else {
-            None
-        }
+        let (frequent, rare) = C::dict_pair(dv)?;
+        self.string_pair_dict
+            .pair_to_id(frequent.as_str(), rare.as_str())
     }
 
     fn id_to_datavalue(&self, id: usize) -> Option<AnyDataValue> {
-        if let Some((frequent, rare)) = self.string_pair_dict.id_to_pair(id) {
-            C::pair_to_datavalue(frequent.as_str(), rare.as_str())
-        } else {
-            None
-        }
+        let (frequent, rare) = self.string_pair_dict.id_to_pair(id)?;
+        C::pair_to_datavalue(frequent.as_str(), rare.as_str())
     }
 
     fn len(&self) -> usize {

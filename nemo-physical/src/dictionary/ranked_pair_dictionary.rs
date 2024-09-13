@@ -2,6 +2,8 @@
 //! one part is "frequent" (few values used often) and another is "rare"
 //! (many values, used rarely).
 
+use std::num::NonZero;
+
 use crate::management::bytesized::ByteSized;
 
 use super::{
@@ -45,11 +47,11 @@ struct LruArray {
     len: usize,
 }
 impl LruArray {
-    fn create(capacity: usize) -> Self {
+    fn new(capacity: NonZero<usize>) -> Self {
         LruArray {
-            cache: vec![(vec![0], usize::MAX); capacity],
+            cache: vec![(vec![0], usize::MAX); capacity.into()],
             top: 0,
-            len: capacity,
+            len: capacity.into(),
         }
     }
 
@@ -180,15 +182,12 @@ impl<B: GlobalBytesBuffer> GenericRankedPairDictionary<B> {
         if fid == usize::MAX {
             fid = match self.frequent_dict.add_bytes(frequent) {
                 // In theory, we could exploit the Fresh case to save the check for
-                // existing values in the pairs dictionary. However, there is currently
-                // no API for adding values in such unchecked manner, and the case should
-                // be rare under the assumption that "frequent" values are not added a lot.
-                AddResult::Fresh(id) | AddResult::Known(id) => {
-                    self.recent_array.put(frequent, id);
-                    id
-                }
+                // existing values in the pairs dictionary. However, the case of fresh
+                // frequents is too rare to have any performance impact.
+                AddResult::Fresh(id) | AddResult::Known(id) => id,
                 AddResult::Rejected => unreachable!("the BytesDictionary never rejects values"),
             };
+            self.recent_array.put(frequent, fid);
         }
 
         self.pair_dict
@@ -199,59 +198,53 @@ impl<B: GlobalBytesBuffer> GenericRankedPairDictionary<B> {
     /// and `None` otherwise. The special value [super::KNOWN_ID_MARK] will be returned
     /// if the pair was marked but not actually inserted.
     pub(crate) fn pair_to_id(&self, frequent: &[u8], rare: &[u8]) -> Option<usize> {
-        if let Some(fid) = self.frequent_dict.bytes_to_id(frequent) {
-            self.pair_dict.bytes_to_id(&Self::pair_bytes(fid, rare))
-        } else {
-            None
-        }
+        let fid = self.frequent_dict.bytes_to_id(frequent);
+        self.pair_dict.bytes_to_id(&Self::pair_bytes(fid?, rare))
     }
 
     /// Returns the pair associated with the `id`, or `None`` if no string has been
     /// associated to this id. The first value of the result is the "frequent" part,
     /// the second the "rare".
     pub(crate) fn id_to_pair(&self, id: usize) -> Option<(Vec<u8>, Vec<u8>)> {
-        if let Some(pair_bytes) = self.pair_dict.id_to_bytes(id) {
-            let mut rare: Vec<u8>;
-            let fid: usize;
-            let fid_len: usize;
-            match pair_bytes[0] & FTYPE_BIT_MASK {
-                0b0000_0000 => {
-                    // 1 byte for frequent id
-                    fid = pair_bytes[0] as usize;
-                    fid_len = 1;
-                }
-                0b0100_0000 => {
-                    let mut fid_bytes: [u8; USIZE_BYTES] = usize::to_be_bytes(0);
-                    fid_bytes[USIZE_BYTES - 1] = pair_bytes[1];
-                    fid_bytes[USIZE_BYTES - 2] = pair_bytes[0] & FID_BIT_MASK;
-                    fid = usize::from_be_bytes(fid_bytes);
-                    fid_len = 2;
-                }
-                0b1000_0000 => {
-                    let mut fid_bytes: [u8; USIZE_BYTES] = usize::to_be_bytes(0);
-                    fid_bytes[USIZE_BYTES - 3..].copy_from_slice(&pair_bytes[0..=2]);
-                    fid_bytes[USIZE_BYTES - 3] &= FID_BIT_MASK;
-                    fid = usize::from_be_bytes(fid_bytes);
-                    fid_len = 3;
-                }
-                0b1100_0000 => {
-                    let mut fid_bytes: [u8; USIZE_BYTES] = usize::to_be_bytes(0);
-                    fid_bytes[USIZE_BYTES - 4..].copy_from_slice(&pair_bytes[0..=3]);
-                    fid_bytes[USIZE_BYTES - 4] &= FID_BIT_MASK;
-                    fid = usize::from_be_bytes(fid_bytes);
-                    fid_len = 4;
-                }
-                _ => unreachable!("The bit mask ensures that values match one of the other arms"),
+        let pair_bytes = self.pair_dict.id_to_bytes(id)?;
+        let mut rare: Vec<u8>;
+        let fid: usize;
+        let fid_len: usize;
+        match pair_bytes[0] & FTYPE_BIT_MASK {
+            0b0000_0000 => {
+                // 1 byte for frequent id
+                fid = pair_bytes[0] as usize;
+                fid_len = 1;
             }
-
-            rare = vec![0; pair_bytes.len() - fid_len];
-            rare.copy_from_slice(&pair_bytes[fid_len..]);
-            let frequent = self.frequent_dict.id_to_bytes(fid).expect("");
-
-            Some((frequent, rare))
-        } else {
-            None
+            0b0100_0000 => {
+                let mut fid_bytes: [u8; USIZE_BYTES] = usize::to_be_bytes(0);
+                fid_bytes[USIZE_BYTES - 1] = pair_bytes[1];
+                fid_bytes[USIZE_BYTES - 2] = pair_bytes[0] & FID_BIT_MASK;
+                fid = usize::from_be_bytes(fid_bytes);
+                fid_len = 2;
+            }
+            0b1000_0000 => {
+                let mut fid_bytes: [u8; USIZE_BYTES] = usize::to_be_bytes(0);
+                fid_bytes[USIZE_BYTES - 3..].copy_from_slice(&pair_bytes[0..=2]);
+                fid_bytes[USIZE_BYTES - 3] &= FID_BIT_MASK;
+                fid = usize::from_be_bytes(fid_bytes);
+                fid_len = 3;
+            }
+            0b1100_0000 => {
+                let mut fid_bytes: [u8; USIZE_BYTES] = usize::to_be_bytes(0);
+                fid_bytes[USIZE_BYTES - 4..].copy_from_slice(&pair_bytes[0..=3]);
+                fid_bytes[USIZE_BYTES - 4] &= FID_BIT_MASK;
+                fid = usize::from_be_bytes(fid_bytes);
+                fid_len = 4;
+            }
+            _ => unreachable!("The bit mask ensures that values match one of the other arms"),
         }
+
+        rare = vec![0; pair_bytes.len() - fid_len];
+        rare.copy_from_slice(&pair_bytes[fid_len..]);
+        let frequent = self.frequent_dict.id_to_bytes(fid).expect("");
+
+        Some((frequent, rare))
     }
 
     /// Returns true if a value is associated with the id.
@@ -299,7 +292,7 @@ impl<B: GlobalBytesBuffer> Default for GenericRankedPairDictionary<B> {
         GenericRankedPairDictionary {
             frequent_dict: Default::default(),
             pair_dict: Default::default(),
-            recent_array: LruArray::create(3),
+            recent_array: LruArray::new(NonZero::new(3).unwrap()),
         }
     }
 }
