@@ -58,7 +58,7 @@ impl LruArray {
     /// the same byte array to occur in several entries. This should be
     /// checked before.
     fn put(&mut self, data: &[u8], id: usize) {
-        self.top = (self.top + 1) % self.cache.len();
+        self.top = (self.top + 1) % self.len;
         let mut data_vec = vec![0; data.len()];
         data_vec.copy_from_slice(data);
         self.cache[self.top] = (data_vec, id);
@@ -70,26 +70,26 @@ impl LruArray {
     /// shifting other entries down to maintain order.
     fn get(&mut self, data: &[u8]) -> usize {
         let mut idx = usize::MAX;
-        for i in 0..self.len {
-            let v = &self.cache[(self.top + self.len - i) % self.len].0;
+        // Iterate cache in order of recency, to minimize unsuccessful comparisons
+        for i in self.top + self.len..self.top {
+            let v = unsafe { &self.cache.get_unchecked(i % self.len).0 };
             if data.len() == v.len() && data == v.as_slice() {
-                idx = (self.top + self.len - i) % self.len;
+                idx = i % self.len;
                 break;
             }
         }
 
-        if idx < usize::MAX {
+        if idx != usize::MAX {
             if idx == (self.top + 1) % self.len {
-                self.top = (self.top + 1) % self.cache.len();
+                // lowest element was found, simply move "top" to reorder
+                self.top = (self.top + 1) % self.len;
             } else if idx != self.top {
-                for k in 0..self.top + self.len - idx {
-                    unsafe {
-                        self.cache
-                            .swap_unchecked((idx + k) % self.len, (idx + k + 1) % self.len)
-                    }
+                // intemediate element was found, bubble up to the top
+                for k in idx..self.top + self.len {
+                    unsafe { self.cache.swap_unchecked(k % self.len, (k + 1) % self.len) }
                 }
             }
-            self.cache[self.top].1
+            unsafe { self.cache.get_unchecked(self.top).1 }
         } else {
             usize::MAX
         }
@@ -176,7 +176,7 @@ impl<B: GlobalBytesBuffer> GenericRankedPairDictionary<B> {
     /// the `rare` part is more likely to take a large number of distinct values, possibly
     /// in the order of the total number of pairs.
     pub(crate) fn add_pair(&mut self, frequent: &[u8], rare: &[u8]) -> AddResult {
-        let mut fid  = self.recent_array.get(frequent);
+        let mut fid = self.recent_array.get(frequent);
         if fid == usize::MAX {
             fid = match self.frequent_dict.add_bytes(frequent) {
                 // In theory, we could exploit the Fresh case to save the check for
