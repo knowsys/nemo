@@ -95,7 +95,7 @@ impl BytesBuffer {
 
         self.acquire_page_lock();
         let mut page_num = self.cur_pages[buffer];
-        if self.pages.len() == 0 || self.pages[page_num].0 != buffer {
+        if self.pages.is_empty() || self.pages[page_num].0 != buffer {
             self.pages
                 .push((buffer, Vec::with_capacity(PAGE_SIZE_INITIAL)));
             page_num = self.pages.len() - 1;
