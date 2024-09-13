@@ -2,6 +2,8 @@
 //! one part is "frequent" (few values used often) and another is "rare"
 //! (many values, used rarely).
 
+use std::usize;
+
 use crate::management::bytesized::ByteSized;
 
 use super::{
@@ -34,6 +36,68 @@ const FTYPE_BIT_MASK: u8 = 0b1100_0000;
 /// used to encode the type.
 const FID_BIT_MASK: u8 = 0b0011_1111;
 
+/// Simple least-recently used data structure that can be used as a cache for
+/// mappings from byte arrays to usize ids. The implementation is intended for
+/// very small cache sizes, where the most efficient way of getting an item is
+/// to iterate over all entries.
+#[derive(Debug)]
+struct LruArray {
+    cache: Vec<(Vec<u8>, usize)>,
+    top: usize,
+    len: usize,
+}
+impl LruArray {
+    fn create(capacity: usize) -> Self {
+        LruArray {
+            cache: vec![(vec![0], usize::MAX); capacity],
+            top: 0,
+            len: capacity,
+        }
+    }
+
+    /// Puts a new entry into the cache, replacing the oldest entry.
+    /// There is not duplicate check, i.e., the implementation allows
+    /// the same byte array to occur in several entries. This should be
+    /// checked before.
+    fn put(&mut self, data: &[u8], id: usize) {
+        self.top = (self.top + 1) % self.cache.len();
+        let mut data_vec = vec![0; data.len()];
+        data_vec.copy_from_slice(&data);
+        self.cache[self.top] = (data_vec, id);
+    }
+
+    /// Gets the index stored for a given byte array. If the byte array is
+    /// not in the cache, `usize::MAX` is returned instead.
+    /// Getting a known entry will move it up to the highest position,
+    /// shifting other entries down to maintain order.
+    fn get(&mut self, data: &[u8]) -> usize {
+        let mut idx = usize::MAX;
+        for i in 0..self.len {
+            let v = &self.cache[(self.top + self.len - i) % self.len].0;
+            if data.len() == v.len() && data == v.as_slice() {
+                idx = (self.top + self.len - i) % self.len;
+                break;
+            }
+        }
+
+        if idx < usize::MAX {
+            if idx == (self.top + 1) % self.len {
+                self.top = (self.top + 1) % self.cache.len();
+            } else if idx != self.top {
+                for k in 0..self.top + self.len - idx {
+                    unsafe {
+                        self.cache
+                            .swap_unchecked((idx + k) % self.len, (idx + k + 1) % self.len)
+                    }
+                }
+            }
+            self.cache[self.top].1
+        } else {
+            usize::MAX
+        }
+    }
+}
+
 /// A struct that implements a bijection between pairs of byte arrays and integers,
 /// where the integers are automatically assigned upon insertion.
 /// Data is stored in a the given [GlobalBytesBuffer].
@@ -61,6 +125,7 @@ const FID_BIT_MASK: u8 = 0b0011_1111;
 pub(crate) struct GenericRankedPairDictionary<B: GlobalBytesBuffer> {
     frequent_dict: BytesDictionary<B>,
     pair_dict: BytesDictionary<B>,
+    recent_array: LruArray,
 }
 impl<B: GlobalBytesBuffer> GenericRankedPairDictionary<B> {
     /// Helper function to produce the bytes that are to be inserted in the
@@ -97,8 +162,6 @@ impl<B: GlobalBytesBuffer> GenericRankedPairDictionary<B> {
                 panic!("dictionary overflow: pair dictionary can hold at most 2^30 different frequent values");
             }
         };
-        // DEBUG:
-        // println!("Fid {}, rare {:?}, pbytes {:?}", fid, rare, pair_bytes);
 
         pair_bytes
     }
@@ -115,17 +178,24 @@ impl<B: GlobalBytesBuffer> GenericRankedPairDictionary<B> {
     /// the `rare` part is more likely to take a large number of distinct values, possibly
     /// in the order of the total number of pairs.
     pub(crate) fn add_pair(&mut self, frequent: &[u8], rare: &[u8]) -> AddResult {
-        let fid = match self.frequent_dict.add_bytes(frequent) {
-            // In theory, we could exploit the Fresh case to save the check for
-            // existing values in the pairs dictionary. However, there is currently
-            // no API for adding values in such unchecked manner, and the case should
-            // be rare under the assumption that "frequent" values are not added a lot.
-            AddResult::Fresh(id) | AddResult::Known(id) => id,
-            AddResult::Rejected => unreachable!("the BytesDictionary never rejects values"),
-        };
+        let fid: usize;
 
-        // DEBUG:
-        // println!("Fid bytes: {:?} bits {:#b}", fid.to_be_bytes(), fid);
+        let cached_id = self.recent_array.get(frequent);
+        if cached_id != usize::MAX {
+            fid = cached_id;
+        } else {
+            fid = match self.frequent_dict.add_bytes(frequent) {
+                // In theory, we could exploit the Fresh case to save the check for
+                // existing values in the pairs dictionary. However, there is currently
+                // no API for adding values in such unchecked manner, and the case should
+                // be rare under the assumption that "frequent" values are not added a lot.
+                AddResult::Fresh(id) | AddResult::Known(id) => {
+                    self.recent_array.put(frequent, id);
+                    id
+                }
+                AddResult::Rejected => unreachable!("the BytesDictionary never rejects values"),
+            };
+        }
 
         self.pair_dict
             .add_bytes(Self::pair_bytes(fid, rare).as_slice())
@@ -235,6 +305,7 @@ impl<B: GlobalBytesBuffer> Default for GenericRankedPairDictionary<B> {
         GenericRankedPairDictionary {
             frequent_dict: Default::default(),
             pair_dict: Default::default(),
+            recent_array: LruArray::create(3),
         }
     }
 }
