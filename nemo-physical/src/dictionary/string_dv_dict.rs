@@ -203,11 +203,12 @@ impl<C: DvConverter> DvDict for StringBasedDvDictionary<C> {
 
 impl<C: DvConverter> ByteSized for StringBasedDvDictionary<C> {
     fn size_bytes(&self) -> u64 {
-        println!(
-            "String DV Dict for {:?}: size {}",
-            C::supported_value_domain(),
-            self.string_dict.size_bytes()
-        );
+        // DEBUG
+        // println!(
+        //     "String DV Dict for {:?}: size {}",
+        //     C::supported_value_domain(),
+        //     self.string_dict.size_bytes()
+        // );
         self.string_dict.size_bytes()
     }
 }
