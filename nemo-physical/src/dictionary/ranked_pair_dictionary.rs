@@ -2,8 +2,6 @@
 //! one part is "frequent" (few values used often) and another is "rare"
 //! (many values, used rarely).
 
-use std::usize;
-
 use crate::management::bytesized::ByteSized;
 
 use super::{
@@ -62,7 +60,7 @@ impl LruArray {
     fn put(&mut self, data: &[u8], id: usize) {
         self.top = (self.top + 1) % self.cache.len();
         let mut data_vec = vec![0; data.len()];
-        data_vec.copy_from_slice(&data);
+        data_vec.copy_from_slice(data);
         self.cache[self.top] = (data_vec, id);
     }
 
@@ -178,12 +176,8 @@ impl<B: GlobalBytesBuffer> GenericRankedPairDictionary<B> {
     /// the `rare` part is more likely to take a large number of distinct values, possibly
     /// in the order of the total number of pairs.
     pub(crate) fn add_pair(&mut self, frequent: &[u8], rare: &[u8]) -> AddResult {
-        let fid: usize;
-
-        let cached_id = self.recent_array.get(frequent);
-        if cached_id != usize::MAX {
-            fid = cached_id;
-        } else {
+        let mut fid  = self.recent_array.get(frequent);
+        if fid == usize::MAX {
             fid = match self.frequent_dict.add_bytes(frequent) {
                 // In theory, we could exploit the Fresh case to save the check for
                 // existing values in the pairs dictionary. However, there is currently
