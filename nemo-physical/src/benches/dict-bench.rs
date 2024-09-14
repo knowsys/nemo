@@ -3,6 +3,9 @@ use nemo_physical::datavalues::AnyDataValue;
 use nemo_physical::datavalues::DataValue;
 use nemo_physical::datavalues::ValueDomain;
 use nemo_physical::dictionary::meta_dv_dict::MetaDvDictionary;
+use nemo_physical::dictionary::old_dictionaries::dictionary::Dictionary;
+use nemo_physical::dictionary::old_dictionaries::hash_map_dictionary::HashMapDictionary;
+use nemo_physical::dictionary::old_dictionaries::meta_dictionary::MetaDictionary;
 use nemo_physical::dictionary::string_dictionary::BenchmarkStringDictionary;
 use nemo_physical::dictionary::DvDict;
 use nemo_physical::management::bytesized::ByteSized;
@@ -14,9 +17,7 @@ use std::io::BufReader;
 
 use core::cmp;
 
-use nemo_physical::dictionary::{
-    hash_map_dictionary::HashMapDictionary, meta_dictionary::MetaDictionary, AddResult, Dictionary,
-};
+use nemo_physical::dictionary::AddResult;
 use nemo_physical::meta::timing::{TimedCode, TimedDisplay, TimedSorting};
 
 /// If true, additional statistics about the length of some entry values

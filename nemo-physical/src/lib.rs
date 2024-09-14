@@ -21,6 +21,7 @@
 #![feature(macro_metavar_expr)]
 #![feature(iter_intersperse)]
 #![feature(test)]
+#![feature(slice_swap_unchecked)]
 
 mod benches;
 

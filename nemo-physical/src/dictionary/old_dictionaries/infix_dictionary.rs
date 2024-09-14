@@ -1,8 +1,9 @@
 //! This module defines [InfixDictionary].
 
+use crate::dictionary::AddResult;
+
+use super::dictionary::Dictionary;
 use super::hash_map_dictionary::HashMapDictionary;
-use super::AddResult;
-use super::Dictionary;
 use super::DictionaryString;
 
 /// A read-only [Dictionary] to implement a bijection between integer ids and strings that start and end
@@ -102,9 +103,10 @@ impl Dictionary for InfixDictionary {
 #[cfg(test)]
 mod test {
 
-    use crate::dictionary::AddResult;
-    use crate::dictionary::Dictionary;
-    use crate::dictionary::DictionaryString;
+    use crate::dictionary::{
+        old_dictionaries::{dictionary::Dictionary, DictionaryString},
+        AddResult,
+    };
 
     use super::InfixDictionary;
 

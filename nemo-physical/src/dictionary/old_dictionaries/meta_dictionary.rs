@@ -1,7 +1,9 @@
 //! This module defines [MetaDictionary].
 
-use super::AddResult;
-use super::Dictionary;
+use crate::dictionary::AddResult;
+use crate::dictionary::KNOWN_ID_MARK;
+
+use super::dictionary::Dictionary;
 use super::DictionaryString;
 use super::HashMapDictionary;
 use super::InfixDictionary;
@@ -322,7 +324,7 @@ impl MetaDictionary {
                 .dict
                 .fetch_id_for_dictionary_string(&ds)
             {
-                if idx != super::KNOWN_ID_MARK {
+                if idx != KNOWN_ID_MARK {
                     return AddResult::Known(self.local_to_global_unchecked(dict_idx, idx));
                 } // else: marked, continue search for real id
             } else if self.dicts[dict_idx].dict.has_marked() {
@@ -453,12 +455,12 @@ impl Dictionary for MetaDictionary {
 
 #[cfg(test)]
 mod test {
+    use crate::dictionary::old_dictionaries::dictionary::Dictionary;
+    use crate::dictionary::old_dictionaries::dictionary_string::LONG_STRING_THRESHOLD;
     use crate::dictionary::AddResult;
-    use crate::dictionary::Dictionary;
 
     use super::MetaDictionary;
     use super::DICT_THRESHOLD;
-    use crate::dictionary::dictionary_string::LONG_STRING_THRESHOLD;
 
     /// Pads a string to make it longer than the threshold applied to distinguish blobs.
     fn long_string(s: &str) -> String {

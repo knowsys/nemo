@@ -74,7 +74,7 @@ impl<'a> TupleWriter<'a> {
 }
 
 #[cfg(test)]
-pub mod test {
+mod test {
     use std::cell::RefCell;
 
     use crate::{

@@ -5,10 +5,10 @@ use crate::datavalues::{AnyDataValue, DataValue};
 use crate::dictionary::NONEXISTING_ID_MARK;
 use crate::management::bytesized::{size_inner_vec_flat, ByteSized};
 
+use super::ranked_pair_iri_dv_dict::IriSplittingDvDictionary;
+use super::ranked_pair_other_dv_dict::OtherSplittingDvDictionary;
+use super::string_langstring_dv_dict::LangStringDvDictionary;
 use super::DvDict;
-use super::IriDvDictionary;
-use super::LangStringDvDictionary;
-use super::OtherDvDictionary;
 use super::StringDvDictionary;
 use super::{AddResult, NullDvDictionary};
 
@@ -305,20 +305,23 @@ impl MetaDvDictionary {
                     return;
                 }
                 dict = Box::new(LangStringDvDictionary::new());
+                //dict = Box::new(LangStringSplittingDvDictionary::new());
                 self.langstring_dict = self.dicts.len();
             }
             DictionaryType::Iri => {
                 if self.iri_dict != NO_DICT {
                     return;
                 }
-                dict = Box::new(IriDvDictionary::new());
+                //dict = Box::new(IriDvDictionary::new());
+                dict = Box::new(IriSplittingDvDictionary::new());
                 self.iri_dict = self.dicts.len();
             }
             DictionaryType::Other => {
                 if self.other_dict != NO_DICT {
                     return;
                 }
-                dict = Box::new(OtherDvDictionary::new());
+                //dict = Box::new(OtherDvDictionary::new());
+                dict = Box::new(OtherSplittingDvDictionary::new());
                 self.other_dict = self.dicts.len();
             }
             DictionaryType::Null => {
