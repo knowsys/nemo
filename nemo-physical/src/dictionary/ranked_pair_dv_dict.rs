@@ -114,14 +114,13 @@ impl<C: DvPairConverter> DvDict for RankedPairBasedDvDictionary<C> {
 
 impl<C: DvPairConverter> ByteSized for RankedPairBasedDvDictionary<C> {
     fn size_bytes(&self) -> u64 {
-        // Code for debugging/profiling dictionary
-        // let result = self.string_pair_dict.size_bytes();
-        // println!(
-        //     "Ranked Pair DV Dict for {:?}: size {}",
-        //     C::supported_value_domain(),
-        //     result
-        // );
-        // result
-        self.string_pair_dict.size_bytes()
+        let size = self.string_pair_dict.size_bytes();
+        log::debug!(
+            "RankedPairBasedDvDictionary for {:?} with {} entries: {} bytes",
+            C::supported_value_domain(),
+            self.len(),
+            size
+        );
+        size
     }
 }

@@ -193,20 +193,19 @@ impl<B: GlobalBytesBuffer> Drop for BytesDictionary<B> {
 
 impl<B: GlobalBytesBuffer> ByteSized for BytesDictionary<B> {
     fn size_bytes(&self) -> u64 {
-        // Code for debugging/profiling dictionary
-        // println!(
-        //     "*** BytesDict Sizes: vec {}, mapshort {}, maplong {}, buffer {}, length {}",
-        //     size_inner_vec_flat(&self.store),
-        //     size_inner_hashmap_flat(&self.map_short),
-        //     size_inner_hashmap_flat(&self.map_long),
-        //     B::buffer_size_bytes(self.buffer_id),
-        //     self.len()
-        // );
-        size_of::<Self>() as u64
-            + size_inner_vec_flat(&self.store)
-            + size_inner_hashmap_flat(&self.map_short)
-            + size_inner_hashmap_flat(&self.map_long)
-            + B::buffer_size_bytes(self.buffer_id)
+        let size_vec = size_inner_vec_flat(&self.store);
+        let size_map32 = size_inner_hashmap_flat(&self.map_short);
+        let size_map64 = size_inner_hashmap_flat(&self.map_long);
+        let size_buffer = B::buffer_size_bytes(self.buffer_id);
+        log::debug!(
+            "BytesDictionary with {} entries. Mem use: vec {}, map32 {}, map64 {}, buffer{}",
+            self.len(),
+            size_vec,
+            size_map32,
+            size_map64,
+            size_buffer
+        );
+        size_of::<Self>() as u64 + size_vec + size_map32 + size_map64 + size_buffer
     }
 }
 
