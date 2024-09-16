@@ -7,7 +7,7 @@ use thiserror::Error;
 
 use crate::{
     chase_model::analysis::program_analysis::RuleAnalysisError,
-    execution::selection_strategy::strategy::SelectionStrategyError, io::error::ImportExportError,
+    execution::selection_strategy::strategy::SelectionStrategyError,
 };
 
 pub use nemo_physical::error::ReadingError;
@@ -22,6 +22,9 @@ pub enum Error {
     /// Rule analysis errors
     #[error(transparent)]
     RuleAnalysisError(#[from] RuleAnalysisError),
+    /// Error occurred during parsing
+    #[error("error while parsing program")]
+    ProgramParseError,
     /// IO Error
     #[error(transparent)]
     IO(#[from] std::io::Error),
@@ -47,15 +50,6 @@ pub enum Error {
     /// Error in the physical layer
     #[error(transparent)]
     PhysicalError(#[from] nemo_physical::error::Error),
-    /// Error when trying to lookup unary operations
-    #[error("The unary operation {operation} is unknown.")]
-    UnknownUnaryOpertation {
-        /// The operation causing the failure
-        operation: String,
-    },
-    /// Error related to handling of file formats
-    #[error(transparent)]
-    FileFormatError(#[from] ImportExportError),
     /// Error related to the creation of data values
     #[error(transparent)]
     DataValueCreationError(#[from] DataValueCreationError),

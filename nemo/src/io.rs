@@ -3,7 +3,6 @@
 //! This module acts as a mediation layer between the logical and physical layer and offers traits to allow both layers an abstract view on the io process.
 
 pub mod compression_format;
-pub mod error;
 pub mod export_manager;
 pub mod formats;
 pub mod import_manager;

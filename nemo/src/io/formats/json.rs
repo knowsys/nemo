@@ -22,15 +22,6 @@ impl JsonHandler {
     pub fn new(resource: ImportExportResource) -> Self {
         Self { resource }
     }
-
-    // pub(crate) fn try_new_import(
-    //     attributes: &MapDataValue,
-    // ) -> Result<Box<dyn ImportExportHandler>, ImportExportError> {
-    //     // todo: check attributes
-    //     let resource = ImportExportHandler::extract_resource(attributes, Direction::Import)?;
-
-    //     Ok(Box::new(JsonHandler { resource }))
-    // }
 }
 
 impl ImportExportHandler for JsonHandler {
