@@ -23,7 +23,6 @@ use term::primitive::{variable::Variable, Primitive};
 
 use super::{error::ValidationErrorBuilder, origin::Origin};
 
-/// TODO: Think whether this is needed
 /// Types of [ProgramComponent]s
 #[derive(Assoc, Debug, Copy, Clone, Eq, PartialEq)]
 #[func(pub fn name(&self) -> &'static str)]

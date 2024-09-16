@@ -24,7 +24,7 @@ pub mod directive {
     pub const PREFIX: &str = "prefix";
 
     /// The token used to separate prefix and name
-    pub const NAMESPACE_SEPARATOR: &str = "::";
+    pub const NAMESPACE_SEPARATOR: &str = ":";
 
     /// The token used to assign the prefix in the prefix directive.
     pub const PREFIX_ASSIGNMENT: &str = ":";
@@ -128,15 +128,15 @@ pub mod comment {
     //! This module contains the syntax definitions for comments.
 
     /// The token identifying top level documentation comments.
-    pub const TOP_LEVEL: &str = "//!";
+    pub const TOP_LEVEL: &str = "%!";
     /// The token identifying documentation comments.
-    pub const DOC_COMMENT: &str = "///";
+    pub const DOC_COMMENT: &str = "%%%";
     /// The token identifying normal comments.
-    pub const COMMENT: &str = "//";
-    /// The token to handle four slashes as a norma comment and not a doc comment.
-    pub const COMMENT_LONG: &str = "////";
+    pub const COMMENT: &str = "%";
+    /// The token to handle four comment symbols as a normal comment and not a doc comment.
+    pub const COMMENT_LONG: &str = "%%%%";
     /// The continuation of the comment syntax
-    pub(crate) const COMMENT_EXT: &str = "/";
+    pub(crate) const COMMENT_EXT: &str = "%";
     /// The opening token for closed comments.
     pub const CLOSED_OPEN: &str = "/*";
     /// The closing token for closed comments.

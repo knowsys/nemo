@@ -19,7 +19,7 @@ pub mod map {
     /// Closing delimiter for tuples.
     pub const CLOSE: &str = "}";
     /// Assignment operator for maps.
-    pub const KEY_VALUE_ASSIGN: &str = ":";
+    pub const KEY_VALUE_ASSIGN: &str = "=";
     /// Separator for key-value pairs in maps
     pub const SEPARATOR: &str = ",";
 }
