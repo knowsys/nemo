@@ -22,13 +22,17 @@ use crate::{
         rdf::value_format::RdfValueFormat,
         Direction,
     },
+    parse_component,
+    parser::ast::ProgramAST,
     rule_model::{
         error::{hint::Hint, validation_error::ValidationErrorKind, ValidationErrorBuilder},
         origin::Origin,
+        translation::ASTProgramTranslation,
     },
 };
 
 use super::{
+    parse::ComponentParseError,
     tag::Tag,
     term::{map::Map, primitive::Primitive, Term},
     ProgramComponent, ProgramComponentKind,
@@ -416,11 +420,15 @@ impl Display for ImportDirective {
 }
 
 impl ProgramComponent for ImportDirective {
-    fn parse(_string: &str) -> Result<Self, crate::rule_model::error::ValidationError>
+    fn parse(string: &str) -> Result<Self, ComponentParseError>
     where
         Self: Sized,
     {
-        todo!()
+        parse_component!(
+            string,
+            crate::parser::ast::directive::import::Import::parse,
+            ASTProgramTranslation::build_import
+        )
     }
 
     fn origin(&self) -> &Origin {
@@ -499,11 +507,15 @@ impl Display for ExportDirective {
 }
 
 impl ProgramComponent for ExportDirective {
-    fn parse(_string: &str) -> Result<Self, crate::rule_model::error::ValidationError>
+    fn parse(string: &str) -> Result<Self, ComponentParseError>
     where
         Self: Sized,
     {
-        todo!()
+        parse_component!(
+            string,
+            crate::parser::ast::directive::export::Export::parse,
+            ASTProgramTranslation::build_export
+        )
     }
 
     fn origin(&self) -> &Origin {

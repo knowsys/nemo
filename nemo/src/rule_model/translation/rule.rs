@@ -40,7 +40,7 @@ impl<'a> ASTProgramTranslation<'a> {
     }
 
     /// Create a body [Literal] from the corresponding ast node.
-    fn build_body_literal(
+    pub(crate) fn build_body_literal(
         &mut self,
         body: &'a ast::expression::Expression<'a>,
     ) -> Result<Literal, TranslationError> {

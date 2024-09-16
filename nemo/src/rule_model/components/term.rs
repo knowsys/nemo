@@ -30,12 +30,14 @@ use primitive::{
 use tuple::Tuple;
 use value_type::ValueType;
 
-use crate::rule_model::{
-    error::{ValidationError, ValidationErrorBuilder},
-    origin::Origin,
+use crate::{
+    parse_component,
+    rule_model::{
+        error::ValidationErrorBuilder, origin::Origin, translation::ASTProgramTranslation,
+    },
 };
 
-use super::{IterablePrimitives, IterableVariables, ProgramComponent};
+use super::{parse::ComponentParseError, IterablePrimitives, IterableVariables, ProgramComponent};
 
 /// Term
 ///
@@ -242,11 +244,15 @@ impl Display for Term {
 }
 
 impl ProgramComponent for Term {
-    fn parse(_string: &str) -> Result<Self, ValidationError>
+    fn parse(string: &str) -> Result<Self, ComponentParseError>
     where
         Self: Sized,
     {
-        todo!()
+        parse_component!(
+            string,
+            crate::parser::ast::expression::Expression::parse_complex,
+            ASTProgramTranslation::build_inner_term
+        )
     }
 
     fn origin(&self) -> &Origin {

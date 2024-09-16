@@ -2,9 +2,12 @@
 
 use std::{fmt::Display, hash::Hash};
 
-use crate::rule_model::{error::ValidationErrorBuilder, origin::Origin};
+use crate::{
+    parser::ast::ProgramAST,
+    rule_model::{error::ValidationErrorBuilder, origin::Origin},
+};
 
-use super::{tag::Tag, ProgramComponent, ProgramComponentKind};
+use super::{parse::ComponentParseError, tag::Tag, ProgramComponent, ProgramComponentKind};
 
 /// Output directive
 ///
@@ -52,11 +55,31 @@ impl Hash for Output {
 }
 
 impl ProgramComponent for Output {
-    fn parse(_string: &str) -> Result<Self, crate::rule_model::error::ValidationError>
+    fn parse(string: &str) -> Result<Self, ComponentParseError>
     where
         Self: Sized,
     {
-        todo!()
+        use nom::InputLength;
+
+        let input =
+            crate::parser::input::ParserInput::new(string, crate::parser::ParserState::default());
+        let ast = match crate::parser::ast::directive::output::Output::parse(input) {
+            Ok((input, ast)) => {
+                if input.input_len() == 0 {
+                    ast
+                } else {
+                    return Err(ComponentParseError::ParseError);
+                }
+            }
+            Err(_) => return Err(ComponentParseError::ParseError),
+        };
+
+        if let Some(predicate) = ast.predicates().next() {
+            let tag = Tag::new(predicate.to_string());
+            return Ok(Output::new(tag));
+        }
+
+        Err(ComponentParseError::ParseError)
     }
 
     fn origin(&self) -> &Origin {

@@ -36,7 +36,7 @@ pub type ParserResult<'a, Output> = IResult<ParserInput<'a>, Output, ParserError
 /// Parser for the nemo rule language
 #[derive(Debug)]
 pub struct Parser<'a> {
-    /// Reference to the text that is going to be parser
+    /// Reference to the text that is going to be parsed
     input: &'a str,
     /// Label of the input text, usually a path of the input file
     label: String,
@@ -118,10 +118,5 @@ impl<'a> Parser<'a> {
                 },
             ))
         }
-
-        // let error_tree = match transform_error_tree(Program::parse)(parser_input) {
-        //     Ok((_input, program)) => return Ok(program),
-        //     Err(error_tree) => error_tree,
-        // };
     }
 }

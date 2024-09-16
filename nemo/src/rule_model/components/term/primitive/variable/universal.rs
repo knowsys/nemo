@@ -2,13 +2,18 @@
 
 use std::{fmt::Display, hash::Hash};
 
-use crate::rule_model::{
-    components::{ProgramComponent, ProgramComponentKind},
-    error::{validation_error::ValidationErrorKind, ValidationError, ValidationErrorBuilder},
-    origin::Origin,
+use crate::{
+    parse_component,
+    parser::ast::ProgramAST,
+    rule_model::{
+        components::{parse::ComponentParseError, ProgramComponent, ProgramComponentKind},
+        error::{validation_error::ValidationErrorKind, ValidationErrorBuilder},
+        origin::Origin,
+        translation::ASTProgramTranslation,
+    },
 };
 
-use super::VariableName;
+use super::{Variable, VariableName};
 
 /// Universally quantified variable
 ///
@@ -90,8 +95,18 @@ impl Hash for UniversalVariable {
 }
 
 impl ProgramComponent for UniversalVariable {
-    fn parse(_string: &str) -> Result<Self, ValidationError> {
-        todo!()
+    fn parse(string: &str) -> Result<Self, ComponentParseError> {
+        let variable = parse_component!(
+            string,
+            crate::parser::ast::expression::basic::variable::Variable::parse,
+            ASTProgramTranslation::build_variable
+        )?;
+
+        if let Variable::Universal(universal) = variable {
+            return Ok(universal);
+        }
+
+        Err(ComponentParseError::ParseError)
     }
 
     fn origin(&self) -> &Origin {

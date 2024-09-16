@@ -6,10 +6,18 @@ use std::{fmt::Display, hash::Hash};
 
 use operation_kind::OperationKind;
 
-use crate::rule_model::{
-    components::{IterablePrimitives, IterableVariables, ProgramComponent, ProgramComponentKind},
-    error::{validation_error::ValidationErrorKind, ValidationErrorBuilder},
-    origin::Origin,
+use crate::{
+    parse_component,
+    parser::ast::ProgramAST,
+    rule_model::{
+        components::{
+            parse::ComponentParseError, IterablePrimitives, IterableVariables, ProgramComponent,
+            ProgramComponentKind,
+        },
+        error::{validation_error::ValidationErrorKind, ValidationErrorBuilder},
+        origin::Origin,
+        translation::ASTProgramTranslation,
+    },
 };
 
 use super::{
@@ -196,11 +204,15 @@ impl Hash for Operation {
 }
 
 impl ProgramComponent for Operation {
-    fn parse(_string: &str) -> Result<Self, crate::rule_model::error::ValidationError>
+    fn parse(string: &str) -> Result<Self, ComponentParseError>
     where
         Self: Sized,
     {
-        todo!()
+        parse_component!(
+            string,
+            crate::parser::ast::expression::complex::operation::Operation::parse,
+            ASTProgramTranslation::build_operation
+        )
     }
 
     fn origin(&self) -> &Origin {

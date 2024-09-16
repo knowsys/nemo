@@ -97,20 +97,28 @@ impl<'a> ASTProgramTranslation<'a> {
         }
     }
 
-    /// Handle a import ast node.
-    pub fn handle_import(
+    /// Given a [ast::directive::import::Import], build an [ImportDirective].
+    pub fn build_import(
         &mut self,
         import: &'a ast::directive::import::Import,
-    ) -> Result<(), TranslationError> {
+    ) -> Result<ImportDirective, TranslationError> {
         let predicate = Tag::new(self.resolve_tag(import.predicate())?)
             .set_origin(self.register_node(import.predicate()));
         let attributes = self.build_map(import.instructions())?;
         let file_format = self.import_export_format(import.instructions())?;
 
-        let import_directive = self.register_component(
+        Ok(self.register_component(
             ImportDirective::new(predicate, file_format, attributes),
             import,
-        );
+        ))
+    }
+
+    /// Handle a import ast node.
+    pub fn handle_import(
+        &mut self,
+        import: &'a ast::directive::import::Import,
+    ) -> Result<(), TranslationError> {
+        let import_directive = self.build_import(import)?;
         let _ = import_directive.validate(&mut self.validation_error_builder);
 
         self.program_builder.add_import(import_directive);
@@ -118,20 +126,28 @@ impl<'a> ASTProgramTranslation<'a> {
         Ok(())
     }
 
-    /// Handle a export ast node.
-    pub fn handle_export(
+    /// Given a [ast::directive::export::Export], builds a [ExportDirective].
+    pub fn build_export(
         &mut self,
         export: &'a ast::directive::export::Export,
-    ) -> Result<(), TranslationError> {
+    ) -> Result<ExportDirective, TranslationError> {
         let predicate = Tag::new(self.resolve_tag(export.predicate())?)
             .set_origin(self.register_node(export.predicate()));
         let attributes = self.build_map(export.instructions())?;
         let file_format = self.import_export_format(export.instructions())?;
 
-        let export_directive = self.register_component(
+        Ok(self.register_component(
             ExportDirective::new(predicate, file_format, attributes),
             export,
-        );
+        ))
+    }
+
+    /// Handle a export ast node.
+    pub fn handle_export(
+        &mut self,
+        export: &'a ast::directive::export::Export,
+    ) -> Result<(), TranslationError> {
+        let export_directive = self.build_export(export)?;
         let _ = export_directive.validate(&mut self.validation_error_builder);
 
         self.program_builder.add_export(export_directive);

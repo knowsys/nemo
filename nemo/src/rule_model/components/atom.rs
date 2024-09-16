@@ -2,12 +2,18 @@
 
 use std::{fmt::Display, hash::Hash};
 
-use crate::rule_model::{
-    error::{validation_error::ValidationErrorKind, ValidationError, ValidationErrorBuilder},
-    origin::Origin,
+use crate::{
+    parse_component,
+    rule_model::{
+        error::{validation_error::ValidationErrorKind, ValidationErrorBuilder},
+        origin::Origin,
+        translation::ASTProgramTranslation,
+    },
 };
 
 use super::{
+    literal::Literal,
+    parse::ComponentParseError,
     tag::Tag,
     term::{
         primitive::{variable::Variable, Primitive},
@@ -116,11 +122,21 @@ impl Hash for Atom {
 }
 
 impl ProgramComponent for Atom {
-    fn parse(_string: &str) -> Result<Self, ValidationError>
+    fn parse(string: &str) -> Result<Self, ComponentParseError>
     where
         Self: Sized,
     {
-        todo!()
+        let literal = parse_component!(
+            string,
+            crate::parser::ast::expression::Expression::parse_complex,
+            ASTProgramTranslation::build_body_literal
+        )?;
+
+        if let Literal::Positive(atom) = literal {
+            return Ok(atom);
+        }
+
+        Err(ComponentParseError::ParseError)
     }
 
     fn origin(&self) -> &Origin {

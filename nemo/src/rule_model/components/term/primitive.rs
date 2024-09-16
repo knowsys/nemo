@@ -9,13 +9,19 @@ use ground::GroundTerm;
 use nemo_physical::datavalues::AnyDataValue;
 use variable::{existential::ExistentialVariable, universal::UniversalVariable, Variable};
 
-use crate::rule_model::{
-    components::{IterableVariables, ProgramComponent, ProgramComponentKind},
-    error::ValidationErrorBuilder,
-    origin::Origin,
+use crate::{
+    parse_component,
+    rule_model::{
+        components::{
+            parse::ComponentParseError, IterableVariables, ProgramComponent, ProgramComponentKind,
+        },
+        error::ValidationErrorBuilder,
+        origin::Origin,
+        translation::ASTProgramTranslation,
+    },
 };
 
-use super::value_type::ValueType;
+use super::{value_type::ValueType, Term};
 
 /// Primitive term
 ///
@@ -114,11 +120,21 @@ impl Display for Primitive {
 }
 
 impl ProgramComponent for Primitive {
-    fn parse(_string: &str) -> Result<Self, crate::rule_model::error::ValidationError>
+    fn parse(string: &str) -> Result<Self, ComponentParseError>
     where
         Self: Sized,
     {
-        todo!()
+        let term = parse_component!(
+            string,
+            crate::parser::ast::expression::Expression::parse_complex,
+            ASTProgramTranslation::build_inner_term
+        )?;
+
+        if let Term::Primitive(primitive) = term {
+            return Ok(primitive);
+        }
+
+        Err(ComponentParseError::ParseError)
     }
 
     fn origin(&self) -> &Origin {

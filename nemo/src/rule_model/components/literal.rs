@@ -2,10 +2,14 @@
 
 use std::{fmt::Display, hash::Hash};
 
-use crate::rule_model::error::{ValidationError, ValidationErrorBuilder};
+use crate::{
+    parse_component,
+    rule_model::{error::ValidationErrorBuilder, translation::ASTProgramTranslation},
+};
 
 use super::{
     atom::Atom,
+    parse::ComponentParseError,
     term::{
         operation::Operation,
         primitive::{variable::Variable, Primitive},
@@ -51,11 +55,15 @@ impl Display for Literal {
 }
 
 impl ProgramComponent for Literal {
-    fn parse(_string: &str) -> Result<Self, ValidationError>
+    fn parse(string: &str) -> Result<Self, ComponentParseError>
     where
         Self: Sized,
     {
-        todo!()
+        parse_component!(
+            string,
+            crate::parser::ast::expression::Expression::parse_complex,
+            ASTProgramTranslation::build_body_literal
+        )
     }
 
     fn origin(&self) -> &crate::rule_model::origin::Origin {

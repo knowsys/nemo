@@ -2,17 +2,23 @@
 
 use std::{collections::HashSet, fmt::Display, hash::Hash};
 
-use crate::rule_model::{
-    error::{
-        hint::Hint, info::Info, validation_error::ValidationErrorKind, ComplexErrorLabelKind,
-        ValidationErrorBuilder,
+use crate::{
+    parse_component,
+    parser::ast::ProgramAST,
+    rule_model::{
+        error::{
+            hint::Hint, info::Info, validation_error::ValidationErrorKind, ComplexErrorLabelKind,
+            ValidationErrorBuilder,
+        },
+        origin::Origin,
+        translation::ASTProgramTranslation,
     },
-    origin::Origin,
 };
 
 use super::{
     atom::Atom,
     literal::Literal,
+    parse::ComponentParseError,
     term::{
         operation::Operation,
         primitive::{variable::Variable, Primitive},
@@ -264,11 +270,15 @@ impl Hash for Rule {
 }
 
 impl ProgramComponent for Rule {
-    fn parse(_string: &str) -> Result<Self, crate::rule_model::error::ValidationError>
+    fn parse(string: &str) -> Result<Self, ComponentParseError>
     where
         Self: Sized,
     {
-        todo!()
+        parse_component!(
+            string,
+            crate::parser::ast::rule::Rule::parse,
+            ASTProgramTranslation::build_rule
+        )
     }
 
     fn origin(&self) -> &Origin {

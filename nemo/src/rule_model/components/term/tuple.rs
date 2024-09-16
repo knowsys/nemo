@@ -2,10 +2,18 @@
 
 use std::{fmt::Display, hash::Hash};
 
-use crate::rule_model::{
-    components::{IterablePrimitives, IterableVariables, ProgramComponent, ProgramComponentKind},
-    error::ValidationErrorBuilder,
-    origin::Origin,
+use crate::{
+    parse_component,
+    parser::ast::ProgramAST,
+    rule_model::{
+        components::{
+            parse::ComponentParseError, IterablePrimitives, IterableVariables, ProgramComponent,
+            ProgramComponentKind,
+        },
+        error::ValidationErrorBuilder,
+        origin::Origin,
+        translation::ASTProgramTranslation,
+    },
 };
 
 use super::{
@@ -96,11 +104,15 @@ impl PartialOrd for Tuple {
 }
 
 impl ProgramComponent for Tuple {
-    fn parse(_string: &str) -> Result<Self, crate::rule_model::error::ValidationError>
+    fn parse(string: &str) -> Result<Self, ComponentParseError>
     where
         Self: Sized,
     {
-        todo!()
+        parse_component!(
+            string,
+            crate::parser::ast::expression::complex::tuple::Tuple::parse,
+            ASTProgramTranslation::build_tuple
+        )
     }
 
     fn origin(&self) -> &Origin {

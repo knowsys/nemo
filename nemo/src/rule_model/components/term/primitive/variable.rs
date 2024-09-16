@@ -5,10 +5,15 @@ use std::fmt::Display;
 use existential::ExistentialVariable;
 use universal::UniversalVariable;
 
-use crate::rule_model::{
-    components::ProgramComponentKind,
-    error::{ValidationError, ValidationErrorBuilder},
-    origin::Origin,
+use crate::{
+    parse_component,
+    parser::ast::ProgramAST,
+    rule_model::{
+        components::{parse::ComponentParseError, ProgramComponentKind},
+        error::ValidationErrorBuilder,
+        origin::Origin,
+        translation::ASTProgramTranslation,
+    },
 };
 
 use super::ProgramComponent;
@@ -115,11 +120,15 @@ impl Display for Variable {
 }
 
 impl ProgramComponent for Variable {
-    fn parse(_string: &str) -> Result<Self, ValidationError>
+    fn parse(string: &str) -> Result<Self, ComponentParseError>
     where
         Self: Sized,
     {
-        todo!()
+        parse_component!(
+            string,
+            crate::parser::ast::expression::basic::variable::Variable::parse,
+            ASTProgramTranslation::build_variable
+        )
     }
 
     fn origin(&self) -> &Origin {

@@ -4,11 +4,21 @@ use std::{fmt::Display, hash::Hash};
 
 use nemo_physical::datavalues::{AnyDataValue, DataValue, IriDataValue, ValueDomain};
 
-use crate::rule_model::{
-    components::{term::value_type::ValueType, ProgramComponent, ProgramComponentKind},
-    error::{ValidationError, ValidationErrorBuilder},
-    origin::Origin,
+use crate::{
+    parse_component,
+    rule_model::{
+        components::{
+            parse::ComponentParseError,
+            term::{value_type::ValueType, Term},
+            ProgramComponent, ProgramComponentKind,
+        },
+        error::ValidationErrorBuilder,
+        origin::Origin,
+        translation::ASTProgramTranslation,
+    },
 };
+
+use super::Primitive;
 
 /// Primitive ground term
 ///
@@ -126,11 +136,23 @@ impl Hash for GroundTerm {
 }
 
 impl ProgramComponent for GroundTerm {
-    fn parse(_string: &str) -> Result<Self, ValidationError>
+    fn parse(string: &str) -> Result<Self, ComponentParseError>
     where
         Self: Sized,
     {
-        todo!()
+        let term = parse_component!(
+            string,
+            crate::parser::ast::expression::Expression::parse_basic,
+            ASTProgramTranslation::build_inner_term
+        )?;
+
+        if let Term::Primitive(primitive) = term {
+            if let Primitive::Ground(ground) = primitive {
+                return Ok(ground);
+            }
+        }
+
+        Err(ComponentParseError::ParseError)
     }
 
     fn origin(&self) -> &Origin {

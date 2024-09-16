@@ -5,7 +5,12 @@ use std::{
     fmt::Write,
 };
 
-use crate::rule_model::components::tag::Tag;
+use nom::InputLength;
+
+use crate::{
+    parser::{ast::ProgramAST, input::ParserInput},
+    rule_model::components::tag::Tag,
+};
 
 use super::{
     components::{
@@ -13,6 +18,7 @@ use super::{
         import_export::{ExportDirective, ImportDirective},
         literal::Literal,
         output::Output,
+        parse::ComponentParseError,
         rule::Rule,
         ProgramComponent, ProgramComponentKind,
     },
@@ -21,6 +27,7 @@ use super::{
         ValidationErrorBuilder,
     },
     origin::Origin,
+    translation::ASTProgramTranslation,
 };
 
 /// Representation of a nemo program
@@ -277,11 +284,28 @@ impl Program {
 }
 
 impl ProgramComponent for Program {
-    fn parse(_string: &str) -> Result<Self, super::error::ValidationError>
+    fn parse(string: &str) -> Result<Self, ComponentParseError>
     where
         Self: Sized,
     {
-        todo!()
+        let input = ParserInput::new(string, crate::parser::ParserState::default());
+        let ast = match crate::parser::ast::program::Program::parse(input) {
+            Ok((input, ast)) => {
+                if input.input_len() == 0 {
+                    ast
+                } else {
+                    return Err(ComponentParseError::ParseError);
+                }
+            }
+            Err(_) => return Err(ComponentParseError::ParseError),
+        };
+
+        let translation = ASTProgramTranslation::initialize(string, String::default());
+
+        match translation.translate(&ast) {
+            Ok(program) => Ok(program),
+            Err(_report) => Err(ComponentParseError::ParseError), // TODO: Skip validation
+        }
     }
 
     fn origin(&self) -> &Origin {

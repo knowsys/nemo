@@ -7,14 +7,17 @@ use crate::{
         atom::{ground_atom::GroundAtom, ChaseAtom},
         ChaseComponent,
     },
+    parse_component,
     rule_model::{
         error::{validation_error::ValidationErrorKind, ValidationErrorBuilder},
         origin::Origin,
+        translation::ASTProgramTranslation,
     },
 };
 
 use super::{
     atom::Atom,
+    parse::ComponentParseError,
     tag::Tag,
     term::{primitive::Primitive, Term},
     IterablePrimitives, IterableVariables, ProgramComponent, ProgramComponentKind,
@@ -98,11 +101,15 @@ impl Hash for Fact {
 }
 
 impl ProgramComponent for Fact {
-    fn parse(_string: &str) -> Result<Self, crate::rule_model::error::ValidationError>
+    fn parse(string: &str) -> Result<Self, ComponentParseError>
     where
         Self: Sized,
     {
-        todo!()
+        parse_component!(
+            string,
+            crate::parser::ast::expression::Expression::parse_complex,
+            ASTProgramTranslation::build_head_atom
+        ).map(Fact::from)
     }
 
     fn origin(&self) -> &Origin {

@@ -10,6 +10,7 @@ pub mod fact;
 pub mod import_export;
 pub mod literal;
 pub mod output;
+pub mod parse;
 pub mod rule;
 pub mod tag;
 pub mod term;
@@ -17,12 +18,10 @@ pub mod term;
 use std::fmt::{Debug, Display};
 
 use enum_assoc::Assoc;
+use parse::ComponentParseError;
 use term::primitive::{variable::Variable, Primitive};
 
-use super::{
-    error::{ValidationError, ValidationErrorBuilder},
-    origin::Origin,
-};
+use super::{error::ValidationErrorBuilder, origin::Origin};
 
 /// TODO: Think whether this is needed
 /// Types of [ProgramComponent]s
@@ -106,7 +105,7 @@ pub trait ProgramComponent: Debug + Display {
     fn kind(&self) -> ProgramComponentKind;
 
     /// Construct this object from a string.
-    fn parse(_string: &str) -> Result<Self, ValidationError>
+    fn parse(string: &str) -> Result<Self, ComponentParseError>
     where
         Self: Sized;
 

@@ -8,12 +8,16 @@ use nemo_physical::aggregates::operation::AggregateOperation;
 use strum_macros::EnumIter;
 
 use crate::{
+    parse_component,
+    parser::ast::ProgramAST,
     rule_model::{
         components::{
-            IterablePrimitives, IterableVariables, ProgramComponent, ProgramComponentKind,
+            parse::ComponentParseError, IterablePrimitives, IterableVariables, ProgramComponent,
+            ProgramComponentKind,
         },
         error::{validation_error::ValidationErrorKind, ValidationErrorBuilder},
         origin::Origin,
+        translation::ASTProgramTranslation,
     },
     syntax::builtin::aggregate,
 };
@@ -201,11 +205,15 @@ impl PartialOrd for Aggregate {
 }
 
 impl ProgramComponent for Aggregate {
-    fn parse(_string: &str) -> Result<Self, crate::rule_model::error::ValidationError>
+    fn parse(string: &str) -> Result<Self, ComponentParseError>
     where
         Self: Sized,
     {
-        todo!()
+        parse_component!(
+            string,
+            crate::parser::ast::expression::complex::aggregation::Aggregation::parse,
+            ASTProgramTranslation::build_aggregation
+        )
     }
 
     fn origin(&self) -> &Origin {
