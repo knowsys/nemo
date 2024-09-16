@@ -25,8 +25,10 @@ use std::{fs::read_to_string, path::PathBuf};
 
 use crate::{
     error::{Error, ReadingError},
-    execution::DefaultExecutionEngine,
-    rule_model::components::tag::Tag,
+    execution::{DefaultExecutionEngine, ExecutionEngine},
+    io::{resource_providers::ResourceProviders, ImportManager},
+    parser::Parser,
+    rule_model::{components::tag::Tag, translation::ASTProgramTranslation},
 };
 
 /// Reasoning Engine exposed by the API
@@ -49,11 +51,15 @@ pub fn load(file: PathBuf) -> Result<Engine, Error> {
 ///
 /// # Error
 /// Returns an appropriate [Error] variant on parsing and feature check issues.
-pub fn load_string(_input: String) -> Result<Engine, Error> {
-    // let (ast, _errors) = parse_program_str(&input);
-    // let _program = Program::from_ast(ast);
-    todo!("ExecutionEngine has to use the new rule model")
-    // ExecutionEngine::initialize(&program, ImportManager::new(ResourceProviders::default()))
+pub fn load_string(input: String) -> Result<Engine, Error> {
+    let program_ast = Parser::initialize(&input, String::default())
+        .parse()
+        .map_err(|_| Error::ProgramParseError)?;
+    let program = ASTProgramTranslation::initialize(&input, String::default())
+        .translate(&program_ast)
+        .map_err(|_| Error::ProgramParseError)?;
+
+    ExecutionEngine::initialize(&program, ImportManager::new(ResourceProviders::default()))
 }
 
 /// Executes the reasoning process of the [Engine].
