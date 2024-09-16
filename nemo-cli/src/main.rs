@@ -18,6 +18,7 @@
 #![feature(macro_metavar_expr)]
 
 pub mod cli;
+pub mod error;
 
 use std::fs::{read_to_string, File};
 
@@ -26,8 +27,9 @@ use colored::Colorize;
 
 use cli::{CliApp, Exporting, Reporting};
 
+use error::CliError;
 use nemo::{
-    error::{Error, ReadingError},
+    error::Error,
     execution::{DefaultExecutionEngine, ExecutionEngine},
     io::{resource_providers::ResourceProviders, ImportManager},
     meta::timing::{TimedCode, TimedDisplay},
@@ -175,20 +177,70 @@ fn parse_trace_facts(cli: &CliApp) -> Result<Vec<String>, Error> {
     Ok(facts)
 }
 
-fn run(mut cli: CliApp) -> Result<(), Error> {
+/// Deal with tracing
+fn handle_tracing(
+    cli: &CliApp,
+    engine: &mut DefaultExecutionEngine,
+    program: Program,
+) -> Result<(), CliError> {
+    let tracing_facts = parse_trace_facts(&cli)?;
+    if !tracing_facts.is_empty() {
+        let mut facts = Vec::<Fact>::with_capacity(tracing_facts.len());
+        for fact_string in &tracing_facts {
+            let fact = Fact::parse(fact_string).map_err(|_| CliError::TracingInvalidFact {
+                fact: fact_string.clone(),
+            })?;
+            let mut builder = ValidationErrorBuilder::default();
+            if fact.validate(&mut builder).is_err() {
+                return Err(CliError::TracingInvalidFact {
+                    fact: fact_string.clone(),
+                });
+            }
+
+            facts.push(fact);
+        }
+
+        let (trace, handles) = engine.trace(program, facts);
+
+        match &cli.tracing.output_file {
+            Some(output_file) => {
+                let filename = output_file.to_string_lossy().to_string();
+                let trace_json = trace.json(&handles);
+
+                let mut json_file = File::create(output_file)?;
+                if serde_json::to_writer(&mut json_file, &trace_json).is_err() {
+                    return Err(CliError::SerializationError { filename });
+                }
+            }
+            None => {
+                for (fact, handle) in tracing_facts.into_iter().zip(handles) {
+                    if let Some(tree) = trace.tree(handle) {
+                        println!("\n{}", tree.to_ascii_art());
+                    } else {
+                        println!("\n{fact} was not derived");
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(())
+}
+
+fn run(mut cli: CliApp) -> Result<(), CliError> {
     TimedCode::instance().start();
     TimedCode::instance().sub("Reading & Preprocessing").start();
 
     log::info!("Parsing rules ...");
 
     if cli.rules.len() > 1 {
-        return Err(Error::MultipleFilesNotImplemented);
+        return Err(CliError::MultipleFilesNotImplemented);
     }
 
-    let program_file = cli.rules.pop().ok_or(Error::NoInput)?;
+    let program_file = cli.rules.pop().ok_or(CliError::NoInput)?;
     let program_filename = program_file.to_string_lossy().to_string();
     let program_content =
-        read_to_string(program_file.clone()).map_err(|err| ReadingError::IoReading {
+        read_to_string(program_file.clone()).map_err(|err| CliError::IoReading {
             error: err,
             filename: program_filename.clone(),
         })?;
@@ -202,20 +254,24 @@ fn run(mut cli: CliApp) -> Result<(), Error> {
         Ok(program) => program,
         Err((_program, report)) => {
             report.eprint(report.build_reports())?;
-            std::process::exit(1);
+            return Err(CliError::ProgramParsing {
+                filename: program_filename.clone(),
+            });
         }
     };
 
     let mut program = match rule_model::translation::ASTProgramTranslation::initialize(
         &program_content,
-        program_filename,
+        program_filename.clone(),
     )
     .translate(&program_ast)
     {
         Ok(program) => program,
         Err(report) => {
             report.eprint(report.build_reports().into_iter())?;
-            std::process::exit(1);
+            return Err(CliError::ProgramParsing {
+                filename: program_filename,
+            });
         }
     };
     override_exports(&mut program, cli.output.export_setting);
@@ -285,42 +341,7 @@ fn run(mut cli: CliApp) -> Result<(), Error> {
         print_memory_details(&engine);
     }
 
-    let tracing_facts = parse_trace_facts(&cli)?;
-    if !tracing_facts.is_empty() {
-        let mut facts = Vec::<Fact>::with_capacity(tracing_facts.len());
-        for fact_string in &tracing_facts {
-            let fact = Fact::parse(fact_string).unwrap(); // TODO: Handle errors
-            let mut builder = ValidationErrorBuilder::default();
-            if fact.validate(&mut builder).is_err() {} // TODO: Handle errors
-
-            facts.push(fact);
-        }
-
-        let (trace, handles) = engine.trace(program, facts);
-
-        match cli.tracing.output_file {
-            Some(output_file) => {
-                let filename = output_file.to_string_lossy().to_string();
-                let trace_json = trace.json(&handles);
-
-                let mut json_file = File::create(output_file)?;
-                if serde_json::to_writer(&mut json_file, &trace_json).is_err() {
-                    return Err(Error::SerializationError { filename });
-                }
-            }
-            None => {
-                for (fact, handle) in tracing_facts.into_iter().zip(handles) {
-                    if let Some(tree) = trace.tree(handle) {
-                        println!("\n{}", tree.to_ascii_art());
-                    } else {
-                        println!("\n{fact} was not derived");
-                    }
-                }
-            }
-        }
-    }
-
-    Ok(())
+    handle_tracing(&cli, &mut engine, program)
 }
 
 fn main() {

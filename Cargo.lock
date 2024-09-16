@@ -1523,6 +1523,7 @@ dependencies = [
  "predicates",
  "serde_json",
  "test-log",
+ "thiserror",
 ]
 
 [[package]]
