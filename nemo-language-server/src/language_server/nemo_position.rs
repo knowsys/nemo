@@ -1,19 +1,21 @@
 //! LSP position:
 //!
 //! * line: u32 index of the line, first line gets index 0
-//! * offset: u32 index of the UTF-16 code point within the line, first column gets index 0
+//! * character: u32 index of the UTF-16 code point within the line, first column gets index 0
 //!
 //! Nemo position:
 //!
 //! * line: u32 index of the line, first line gets index 1
-//! * offset: u32 index of the UTF-8 code point (byte) within the line, first column gets index 0
+//! * column: u32 index of the UTF-8 character within the line, first column gets index 1
+//! * offset: usize index of the UTF-8 code point (byte) from the start of the parser input (0-indexed)
 
 use anyhow::anyhow;
 use line_index::{LineCol, LineIndex, WideEncoding, WideLineCol};
+use nemo::parser::span::{CharacterPosition, CharacterRange};
 
 #[derive(Debug)]
 pub enum PositionConversionError {
-    NemoPosition(nemo::io::parser::ast::Position),
+    NemoPosition(CharacterPosition),
     LspPosition(tower_lsp::lsp_types::Position),
     LspLineCol(LineCol),
 }
@@ -27,10 +29,10 @@ impl From<PositionConversionError> for anyhow::Error {
 fn line_col_to_nemo_position(
     line_index: &LineIndex,
     line_col: LineCol,
-) -> Result<nemo::io::parser::ast::Position, PositionConversionError> {
-    Ok(nemo::io::parser::ast::Position {
+) -> Result<CharacterPosition, PositionConversionError> {
+    Ok(CharacterPosition {
         line: line_col.line + 1,
-        column: line_col.col,
+        column: line_col.col + 1,
         offset: line_index
             .offset(line_col)
             .ok_or(PositionConversionError::LspLineCol(line_col))?
@@ -42,7 +44,7 @@ fn line_col_to_nemo_position(
 pub fn lsp_position_to_nemo_position(
     line_index: &LineIndex,
     position: tower_lsp::lsp_types::Position,
-) -> Result<nemo::io::parser::ast::Position, PositionConversionError> {
+) -> Result<CharacterPosition, PositionConversionError> {
     let line_col = line_index
         .to_utf8(
             WideEncoding::Utf16,
@@ -56,7 +58,7 @@ pub fn lsp_position_to_nemo_position(
     line_col_to_nemo_position(line_index, line_col)
 }
 
-fn nemo_position_to_line_col(position: nemo::io::parser::ast::Position) -> LineCol {
+fn nemo_position_to_line_col(position: CharacterPosition) -> LineCol {
     LineCol {
         line: position.line - 1,
         col: position.column - 1,
@@ -66,9 +68,8 @@ fn nemo_position_to_line_col(position: nemo::io::parser::ast::Position) -> LineC
 /// Converts a source position to a LSP position
 pub fn nemo_position_to_lsp_position(
     line_index: &LineIndex,
-    position: nemo::io::parser::ast::Position,
+    position: CharacterPosition,
 ) -> Result<tower_lsp::lsp_types::Position, PositionConversionError> {
-    // TODO: Find out what UTF encoding nemo parser uses
     let wide_line_col = line_index
         .to_wide(WideEncoding::Utf16, nemo_position_to_line_col(position))
         .ok_or(PositionConversionError::NemoPosition(position))?;
@@ -82,7 +83,7 @@ pub fn nemo_position_to_lsp_position(
 /// Converts a Nemo range to a LSP range
 pub fn nemo_range_to_lsp_range(
     line_index: &LineIndex,
-    range: nemo::io::parser::ast::Range,
+    range: CharacterRange,
 ) -> Result<tower_lsp::lsp_types::Range, PositionConversionError> {
     Ok(tower_lsp::lsp_types::Range {
         start: nemo_position_to_lsp_position(line_index, range.start)?,

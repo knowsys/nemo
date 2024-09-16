@@ -1,13 +1,21 @@
+mod lsp_component;
+mod nemo_position;
+
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::vec;
 
 use anyhow::anyhow;
 use futures::lock::Mutex;
 use line_index::{LineCol, LineIndex, WideEncoding};
-use nemo::io::parser::ast::program::Program;
-use nemo::io::parser::ast::{AstNode, Position};
-use nemo::io::parser::parse_program_str;
-use nemo_position::{lsp_position_to_nemo_position, PositionConversionError};
+use lsp_component::LSPComponent;
+use nemo::parser::ast::program::Program;
+use nemo::parser::ast::ProgramAST;
+use nemo::parser::context::ParserContext;
+use nemo::parser::span::CharacterPosition;
+use nemo::parser::{Parser, ParserErrorReport};
+use nemo_position::{
+    lsp_position_to_nemo_position, nemo_range_to_lsp_range, PositionConversionError,
+};
 use tower_lsp::lsp_types::{
     Diagnostic, DidChangeTextDocumentParams, DidOpenTextDocumentParams, DocumentChangeOperation,
     DocumentChanges, DocumentSymbol, DocumentSymbolOptions, DocumentSymbolParams,
@@ -18,10 +26,6 @@ use tower_lsp::lsp_types::{
     VersionedTextDocumentIdentifier, WorkDoneProgressOptions, WorkspaceEdit,
 };
 use tower_lsp::{Client, LanguageServer};
-
-use self::nemo_position::nemo_range_to_lsp_range;
-
-mod nemo_position;
 
 #[derive(Debug)]
 pub struct Backend {
@@ -90,15 +94,22 @@ impl Backend {
 
         let line_index = LineIndex::new(text);
 
-        let (_program, errors) = parse_program_str(text);
+        let (_program, errors): (Program, Option<ParserErrorReport>) =
+            Parser::initialize(text, text_document.uri.to_string())
+                .parse()
+                .map(|prg| (prg, None))
+                .unwrap_or_else(|(prg, err)| (prg, Some(err)));
 
         // Group errors by position and deduplicate error
-        let mut errors_by_posision: BTreeMap<Position, BTreeSet<String>> = BTreeMap::new();
-        for error in errors {
-            if let Some(set) = errors_by_posision.get_mut(&error.pos) {
-                set.insert(error.msg.clone());
+        let mut errors_by_posision: BTreeMap<CharacterPosition, BTreeSet<String>> = BTreeMap::new();
+        for error in errors.iter().flat_map(|report| report.errors()) {
+            if let Some(set) = errors_by_posision.get_mut(&error.position) {
+                set.insert(format!("expected `{}`", error.context[0].name()));
             } else {
-                errors_by_posision.insert(error.pos, std::iter::once(error.msg.clone()).collect());
+                errors_by_posision.insert(
+                    error.position,
+                    std::iter::once(format!("expected `{}`", error.context[0].name())).collect(),
+                );
             };
         }
 
@@ -250,7 +261,13 @@ impl LanguageServer for Backend {
                 .map_err(Into::into)
                 .map_err(jsonrpc_error)?;
 
-        let (program, _) = parse_program_str(&text);
+        let (program, _): (Program, Option<ParserErrorReport>) = Parser::initialize(
+            &text,
+            params.text_document_position.text_document.uri.to_string(),
+        )
+        .parse()
+        .map(|prg| (prg, None))
+        .unwrap_or_else(|(prg, err)| (prg, Some(err)));
 
         let node_path = find_in_ast(&program, position);
 
@@ -292,17 +309,19 @@ impl LanguageServer for Backend {
         let text = info.text;
         let line_index = LineIndex::new(&text);
 
-        let (program, _) = parse_program_str(&text);
+        let (program, _): (Program, Option<ParserErrorReport>) =
+            Parser::initialize(&text, params.text_document.uri.to_string())
+                .parse()
+                .map(|prg| (prg, None))
+                .unwrap_or_else(|(prg, err)| (prg, Some(err)));
 
-        let document_symbol = ast_node_to_document_symbol(&line_index, &program)
+        let document_symbols = ast_node_to_document_symbol(&line_index, &program)
             .map_err(Into::into)
             .map_err(jsonrpc_error)?
             .ok_or(anyhow!("program has no document symbol"))
             .map_err(jsonrpc_error)?;
 
-        Ok(Some(DocumentSymbolResponse::Nested(
-            document_symbol.children.unwrap_or(vec![]),
-        )))
+        Ok(Some(DocumentSymbolResponse::Nested(document_symbols)))
     }
 
     /// Finds references to symbol that was renamed and sends edit operations to language client
@@ -322,7 +341,13 @@ impl LanguageServer for Backend {
                 .map_err(Into::into)
                 .map_err(jsonrpc_error)?;
 
-        let (program, _) = parse_program_str(&text);
+        let (program, _): (Program, Option<ParserErrorReport>) = Parser::initialize(
+            &text,
+            params.text_document_position.text_document.uri.to_string(),
+        )
+        .parse()
+        .map(|prg| (prg, None))
+        .unwrap_or_else(|(prg, err)| (prg, Some(err)));
 
         let node_path = find_in_ast(&program, position);
 
@@ -345,7 +370,7 @@ impl LanguageServer for Backend {
             edits: referenced_nodes
                 .into_iter()
                 .filter_map(|node| {
-                    node.lsp_range_to_rename().map(|renamed_node_range| {
+                    node.range_renaming().map(|renamed_node_range| {
                         Ok({
                             OneOf::Left(TextEdit {
                                 range: nemo_range_to_lsp_range(&line_index, renamed_node_range)
@@ -383,7 +408,11 @@ impl LanguageServer for Backend {
             .map_err(Into::into)
             .map_err(jsonrpc_error)?;
 
-        let (program, _) = parse_program_str(&text);
+        let (program, _): (Program, Option<ParserErrorReport>) =
+            Parser::initialize(&text, params.text_document.uri.to_string())
+                .parse()
+                .map(|prg| (prg, None))
+                .unwrap_or_else(|(prg, err)| (prg, Some(err)));
 
         let node_path = find_in_ast(&program, position);
 
@@ -396,7 +425,7 @@ impl LanguageServer for Backend {
                     &line_index,
                     indentified_node
                         .node
-                        .lsp_range_to_rename()
+                        .range_renaming()
                         .ok_or_else(|| anyhow!("identified node can not be renamed"))
                         .map_err(jsonrpc_error)?,
                 )
@@ -414,43 +443,45 @@ impl LanguageServer for Backend {
 
 fn node_with_range<'a>(
     line_index: &LineIndex,
-    node: &'a dyn AstNode,
-) -> Option<(&'a dyn AstNode, Range)> {
-    nemo_range_to_lsp_range(line_index, node.range())
-        .map(|range| (node, range)) // TODO: Print error,
+    node: &'a dyn ProgramAST<'a>,
+) -> Option<(&'a dyn ProgramAST<'a>, Range)> {
+    nemo_range_to_lsp_range(line_index, node.span().range())
+        .map(|range| (node, range)) // TODO: Handle error
         .ok()
 }
 
 struct IdentifiedNode<'a> {
-    node: &'a dyn AstNode,
-    identifier: String,
-    scoping_node: &'a dyn AstNode,
+    node: &'a dyn ProgramAST<'a>,
+    identifier: (ParserContext, String),
+    scoping_node: &'a dyn ProgramAST<'a>,
 }
 
 struct PariallyIdentifiedNode<'a> {
-    node: &'a dyn AstNode,
-    identifier: String,
-    identifier_scope: String,
+    node: &'a dyn ProgramAST<'a>,
+    identifier: (ParserContext, String),
+    identifier_scope: ParserContext,
 }
 
 /// Get identifier most specific to the position of the node path
-fn node_path_deepest_identifier<'a>(node_path: &[&'a dyn AstNode]) -> Option<IdentifiedNode<'a>> {
+fn node_path_deepest_identifier<'a>(
+    node_path: &[&'a dyn ProgramAST<'a>],
+) -> Option<IdentifiedNode<'a>> {
     let mut info = None;
 
     for node in node_path.iter().rev() {
         match info {
             None => {
-                if let Some((identifier, identifier_scope)) = node.lsp_identifier() {
+                if let Some(lsp_ident) = node.identifier() {
                     info = Some(PariallyIdentifiedNode {
                         node: *node,
-                        identifier,
-                        identifier_scope,
+                        identifier: lsp_ident.identifier().clone(),
+                        identifier_scope: *lsp_ident.scope(),
                     });
                 }
             }
             Some(ref info) => {
-                if let Some(parent_identifier) = node.lsp_identifier()
-                    && parent_identifier.0.starts_with(&info.identifier_scope)
+                if let Some(parent_identifier) = node.identifier()
+                    && parent_identifier.identifier().0 == info.identifier_scope
                 {
                     return Some(IdentifiedNode {
                         node: info.node,
@@ -469,7 +500,10 @@ fn node_path_deepest_identifier<'a>(node_path: &[&'a dyn AstNode]) -> Option<Ide
     });
 }
 
-fn find_by_identifier<'a>(node: &'a dyn AstNode, identifier: &str) -> Vec<&'a dyn AstNode> {
+fn find_by_identifier<'a>(
+    node: &'a dyn ProgramAST<'a>,
+    identifier: &(ParserContext, String),
+) -> Vec<&'a dyn ProgramAST<'a>> {
     let mut references = Vec::new();
 
     find_by_identifier_recurse(node, identifier, &mut references);
@@ -478,26 +512,27 @@ fn find_by_identifier<'a>(node: &'a dyn AstNode, identifier: &str) -> Vec<&'a dy
 }
 
 fn find_by_identifier_recurse<'a>(
-    node: &'a dyn AstNode,
-    identifier: &str,
-    references: &mut Vec<&'a dyn AstNode>,
+    node: &'a dyn ProgramAST<'a>,
+    identifier: &(ParserContext, String),
+    references: &mut Vec<&'a dyn ProgramAST<'a>>,
 ) {
     if node
-        .lsp_identifier()
-        .map(|(i, _)| i == identifier)
+        .identifier()
+        .map(|ident| ident.identifier() == identifier)
         .unwrap_or(false)
     {
         references.push(node);
     }
 
-    if let Some(children) = node.children() {
-        for child in children {
-            find_by_identifier_recurse(child, identifier, references);
-        }
-    };
+    for child in node.children() {
+        find_by_identifier_recurse(child, identifier, references);
+    }
 }
 
-fn find_in_ast<'a>(node: &'a Program<'a>, position: Position) -> Vec<&'a dyn AstNode> {
+fn find_in_ast<'a>(
+    node: &'a Program<'a>,
+    position: CharacterPosition,
+) -> Vec<&'a dyn ProgramAST<'a>> {
     let mut path = Vec::new();
 
     find_in_ast_recurse(node, position, &mut path);
@@ -506,60 +541,60 @@ fn find_in_ast<'a>(node: &'a Program<'a>, position: Position) -> Vec<&'a dyn Ast
 }
 
 fn find_in_ast_recurse<'a>(
-    node: &'a dyn AstNode,
-    position: Position,
-    path: &mut Vec<&'a dyn AstNode>,
+    node: &'a dyn ProgramAST<'a>,
+    position: CharacterPosition,
+    path: &mut Vec<&'a dyn ProgramAST<'a>>,
 ) {
     path.push(node);
 
-    for child in node.children().iter().flatten() {
-        let range = child.range();
+    for child in node.children() {
+        let range = child.span().range();
         if range.start <= position && position < range.end {
-            find_in_ast_recurse(*child, position, path);
+            find_in_ast_recurse(child, position, path);
             break; // Assume no nodes overlap
         }
     }
 }
 
-fn ast_node_to_document_symbol(
+fn ast_node_to_document_symbol<'a>(
     line_index: &LineIndex,
-    node: &dyn AstNode,
-) -> Result<Option<DocumentSymbol>, PositionConversionError> {
-    let range = nemo_range_to_lsp_range(line_index, node.range())?;
+    node: &'a dyn ProgramAST<'a>,
+) -> Result<Option<Vec<DocumentSymbol>>, PositionConversionError> {
+    let range = nemo_range_to_lsp_range(line_index, node.span().range())?;
 
-    if let Some((name, kind)) = node.lsp_symbol_info() {
-        let children_results: Vec<_> = node
-            .children()
+    let children_results: Vec<_> = node
+        .children()
+        .into_iter()
+        .map(|child| ast_node_to_document_symbol(line_index, child))
+        .collect();
+    let mut children = Vec::with_capacity(children_results.len());
+    for child_result in children_results {
+        child_result?
             .into_iter()
             .flatten()
-            .map(|child| ast_node_to_document_symbol(line_index, child))
-            .collect();
-        let mut children = Vec::with_capacity(children_results.len());
-        for child_result in children_results {
-            child_result?
-                .into_iter()
-                .for_each(|symbol| children.push(symbol))
-        }
-        let children = if children.is_empty() {
-            None
-        } else {
-            Some(children)
-        };
+            .for_each(|symbol| children.push(symbol))
+    }
+    let children = if children.is_empty() {
+        None
+    } else {
+        Some(children)
+    };
 
-        Ok(Some(
+    if let Some(symb_info) = node.symbol_info() {
+        Ok(Some(vec![
             #[allow(deprecated)]
             DocumentSymbol {
                 children,
                 detail: None,
-                kind,
-                name,
+                kind: *symb_info.kind(),
+                name: symb_info.name().to_string(),
                 range,
                 selection_range: range,
                 tags: None,
                 deprecated: None,
             },
-        ))
+        ]))
     } else {
-        Ok(None)
+        Ok(children)
     }
 }

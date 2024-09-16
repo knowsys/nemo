@@ -41,7 +41,7 @@ pub enum ComplexErrorLabelKind {
 }
 
 /// Label of a [ComplexError]
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct ComplexErrorLabel<Reference>
 where
     Reference: Debug,
@@ -55,7 +55,7 @@ where
 }
 
 /// Complex error that additional information to an error
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct ComplexError<Reference>
 where
     Reference: Debug,
@@ -107,7 +107,7 @@ where
         message: Message,
     ) -> &mut Self {
         self.labels.push(ComplexErrorLabel {
-            kind: kind,
+            kind,
             reference,
             message: message.to_string(),
         });
@@ -165,7 +165,7 @@ where
 }
 
 /// Error that occurs during validation of a program.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct ValidationError {
     /// The kind of error
     kind: ValidationErrorKind,
@@ -213,7 +213,7 @@ impl ValidationErrorBuilder {
 }
 
 /// Error that occurs while translating the ast into the logical representation
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct TranslationError {
     /// The type of error that occurred
     kind: TranslationErrorKind,
@@ -269,7 +269,7 @@ impl TranslationError {
 }
 
 /// Error that may occur while translating or validating a nemo program
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum ProgramError {
     /// Error occurred while translating
     /// the AST representation into the logical representation

@@ -6,7 +6,7 @@ pub(crate) mod similar;
 use enum_assoc::Assoc;
 
 /// Hints for error messages
-#[derive(Assoc, Debug)]
+#[derive(Assoc, Clone, Debug)]
 #[func(pub fn message(&self) -> String)]
 pub enum Hint {
     #[assoc(message = "unnamed universal variables may be expressed with an underscore `_`".to_string())]

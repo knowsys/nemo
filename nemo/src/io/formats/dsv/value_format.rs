@@ -53,7 +53,7 @@ pub(crate) enum DsvValueFormat {
 
 /// Indicate what value parser should be used for each column.
 #[derive(Debug, Clone)]
-pub(crate) struct DsvValueFormats(Vec<DsvValueFormat>);
+pub struct DsvValueFormats(Vec<DsvValueFormat>);
 
 impl DsvValueFormats {
     pub(crate) fn new(formats: Vec<DsvValueFormat>) -> Self {
@@ -61,7 +61,7 @@ impl DsvValueFormats {
     }
 
     /// Return a list of [DsvValueFormat]s with default entries.
-    pub(crate) fn default(arity: usize) -> Self {
+    pub fn default(arity: usize) -> Self {
         Self((0..arity).map(|_| DsvValueFormat::Anything).collect())
     }
 

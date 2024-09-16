@@ -29,12 +29,12 @@ pub type ParserErrorTree<'a> = GenericErrorTree<
 >;
 
 /// Error while parsing a nemo program
-#[derive(Debug)]
-pub(crate) struct ParserError {
+#[derive(Clone, Debug)]
+pub struct ParserError {
     /// Position where the error occurred
-    pub(crate) position: CharacterPosition,
+    pub position: CharacterPosition,
     /// Parsing stack
-    pub(crate) context: Vec<ParserContext>,
+    pub context: Vec<ParserContext>,
 }
 
 /// Skip a statement, returning an error token.

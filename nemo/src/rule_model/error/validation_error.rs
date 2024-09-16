@@ -7,7 +7,7 @@ use thiserror::Error;
 use crate::rule_model::components::term::primitive::variable::Variable;
 
 /// Types of errors that occur while building the logical rule model
-#[derive(Assoc, Error, Debug)]
+#[derive(Assoc, Error, Clone, Debug)]
 #[func(pub fn note(&self) -> Option<&'static str>)]
 #[func(pub fn code(&self) -> usize)]
 pub enum ValidationErrorKind {
