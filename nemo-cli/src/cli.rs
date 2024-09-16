@@ -105,9 +105,9 @@ pub(crate) struct OutputArgs {
 
 impl OutputArgs {
     /// Creates an output file manager with the current options
-    pub(crate) fn export_manager(self) -> Result<ExportManager, Error> {
+    pub(crate) fn export_manager(&self) -> Result<ExportManager, Error> {
         let export_manager = ExportManager::default()
-            .set_base_path(self.export_directory)
+            .set_base_path(self.export_directory.clone())
             .overwrite(self.overwrite)
             .compress(self.gz);
         Ok(export_manager)

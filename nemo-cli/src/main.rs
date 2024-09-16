@@ -19,7 +19,7 @@
 
 pub mod cli;
 
-use std::fs::read_to_string;
+use std::fs::{read_to_string, File};
 
 use clap::Parser;
 use colored::Colorize;
@@ -34,10 +34,13 @@ use nemo::{
     rule_model::{
         self,
         components::{
+            fact::Fact,
             import_export::{file_formats::FileFormat, ExportDirective},
             tag::Tag,
             term::map::Map,
+            ProgramComponent,
         },
+        error::ValidationErrorBuilder,
         program::Program,
     },
 };
@@ -218,12 +221,10 @@ fn run(mut cli: CliApp) -> Result<(), Error> {
     override_exports(&mut program, cli.output.export_setting);
     log::info!("Rules parsed");
 
-    let facts_to_be_traced = parse_trace_facts(&cli);
-
     let export_manager = cli.output.export_manager()?;
-
-    let import_manager =
-        ImportManager::new(ResourceProviders::with_base_path(cli.import_directory));
+    let import_manager = ImportManager::new(ResourceProviders::with_base_path(
+        cli.import_directory.clone(),
+    ));
 
     let mut engine: DefaultExecutionEngine = ExecutionEngine::initialize(&program, import_manager)?;
 
@@ -284,31 +285,40 @@ fn run(mut cli: CliApp) -> Result<(), Error> {
         print_memory_details(&engine);
     }
 
-    // NOTE: As a quick and dirty fix I commented this out, because `program.clone()` did not exist
-    // if let Some(facts) = facts_to_be_traced {
-    //     let (trace, handles) = engine.trace(program.clone(), facts.clone());
+    let tracing_facts = parse_trace_facts(&cli)?;
+    if !tracing_facts.is_empty() {
+        let mut facts = Vec::<Fact>::with_capacity(tracing_facts.len());
+        for fact_string in &tracing_facts {
+            let fact = Fact::parse(fact_string).unwrap(); // TODO: Handle errors
+            let mut builder = ValidationErrorBuilder::default();
+            if fact.validate(&mut builder).is_err() {} // TODO: Handle errors
 
-    //     match cli.tracing.output_file {
-    //         Some(output_file) => {
-    //             let filename = output_file.to_string_lossy().to_string();
-    //             let trace_json = trace.json(&handles);
+            facts.push(fact);
+        }
 
-    //             let mut json_file = File::create(output_file)?;
-    //             if serde_json::to_writer(&mut json_file, &trace_json).is_err() {
-    //                 return Err(Error::SerializationError { filename });
-    //             }
-    //         }
-    //         None => {
-    //             for (fact, handle) in facts.into_iter().zip(handles) {
-    //                 if let Some(tree) = trace.tree(handle) {
-    //                     println!("\n{}", tree.to_ascii_art());
-    //                 } else {
-    //                     println!("\n{fact} was not derived");
-    //                 }
-    //             }
-    //         }
-    //     }
-    // }
+        let (trace, handles) = engine.trace(program, facts);
+
+        match cli.tracing.output_file {
+            Some(output_file) => {
+                let filename = output_file.to_string_lossy().to_string();
+                let trace_json = trace.json(&handles);
+
+                let mut json_file = File::create(output_file)?;
+                if serde_json::to_writer(&mut json_file, &trace_json).is_err() {
+                    return Err(Error::SerializationError { filename });
+                }
+            }
+            None => {
+                for (fact, handle) in tracing_facts.into_iter().zip(handles) {
+                    if let Some(tree) = trace.tree(handle) {
+                        println!("\n{}", tree.to_ascii_art());
+                    } else {
+                        println!("\n{fact} was not derived");
+                    }
+                }
+            }
+        }
+    }
 
     Ok(())
 }
