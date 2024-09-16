@@ -16,7 +16,7 @@ pub(crate) mod rule;
 pub(crate) mod term;
 
 /// Trait implemented by components of the chase model
-pub(crate) trait ChaseComponent {
+pub trait ChaseComponent {
     /// Return the [Origin] of this component.
     fn origin(&self) -> &Origin;
 

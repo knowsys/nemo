@@ -1,6 +1,9 @@
 //! This module defines [PrimitiveTermMap].
 
-use std::collections::HashMap;
+use std::collections::{
+    hash_map::{IntoIter, Iter, IterMut},
+    HashMap,
+};
 
 use super::components::{term::primitive::Primitive, IterablePrimitives};
 
@@ -37,5 +40,32 @@ impl PrimitiveTermMap {
 impl From<HashMap<Primitive, Primitive>> for PrimitiveTermMap {
     fn from(value: HashMap<Primitive, Primitive>) -> Self {
         Self { map: value }
+    }
+}
+
+impl IntoIterator for PrimitiveTermMap {
+    type Item = (Primitive, Primitive);
+    type IntoIter = IntoIter<Primitive, Primitive>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.map.into_iter()
+    }
+}
+
+impl<'a> IntoIterator for &'a PrimitiveTermMap {
+    type Item = (&'a Primitive, &'a Primitive);
+    type IntoIter = Iter<'a, Primitive, Primitive>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.map.iter()
+    }
+}
+
+impl<'a> IntoIterator for &'a mut PrimitiveTermMap {
+    type Item = (&'a Primitive, &'a mut Primitive);
+    type IntoIter = IterMut<'a, Primitive, Primitive>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.map.iter_mut()
     }
 }

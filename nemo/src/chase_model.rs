@@ -4,3 +4,7 @@
 pub(crate) mod analysis;
 pub(crate) mod components;
 pub(crate) mod translation;
+
+// TODO: This is required for tracing, try to use logical model instead
+pub use components::atom::ground_atom::GroundAtom;
+pub use components::atom::ChaseAtom;

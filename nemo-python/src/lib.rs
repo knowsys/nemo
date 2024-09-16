@@ -1,20 +1,19 @@
 // FIXME: remove this once the pyo3 macros don't trigger this
 #![allow(non_local_definitions)]
 
-use std::{
-    collections::{HashMap, HashSet},
-    fs::read_to_string,
-    time::Duration,
-};
+use std::{collections::HashSet, fs::read_to_string, time::Duration};
 
 use nemo::{
+    chase_model::ChaseAtom,
     datavalues::{AnyDataValue, DataValue},
+    error::Error,
     execution::{tracing::trace::ExecutionTraceTree, ExecutionEngine},
-    io::{lexer::Error, resource_providers::ResourceProviders, ExportManager, ImportManager},
+    io::{resource_providers::ResourceProviders, ExportManager, ImportManager},
     meta::timing::TimedCode,
-    model::{
-        chase_model::{ChaseAtom, ChaseFact},
-        ExportDirective, Identifier, Variable,
+    rule_model::{
+        components::{fact::Fact, tag::Tag, term::primitive::Primitive, ProgramComponent},
+        error::ValidationErrorBuilder,
+        term_map::PrimitiveTermMap,
     },
 };
 
@@ -48,7 +47,7 @@ impl<T> PythonResult for (T, Vec<Error>) {
 
 #[pyclass]
 #[derive(Clone)]
-struct NemoProgram(nemo::model::Program);
+struct NemoProgram(nemo::rule_model::program::Program);
 
 #[pyfunction]
 fn load_file(file: String) -> PyResult<NemoProgram> {
@@ -58,24 +57,33 @@ fn load_file(file: String) -> PyResult<NemoProgram> {
 
 #[pyfunction]
 fn load_string(rules: String) -> PyResult<NemoProgram> {
-    // let ast = nemo::io::parser::parse_program_str(&rules).py_res()?;
-    // let program = nemo::rule_model::program::Program::from_ast(ast);
-    // let program = todo!("update NemoProgram to use the new rule model");
-    // Ok(NemoProgram(program))
-    todo!()
+    let program_ast = nemo::parser::Parser::initialize(&rules, String::default())
+        .parse()
+        .map_err(|_| Error::ProgramParseError)
+        .py_res()?;
+    let program =
+        nemo::rule_model::translation::ASTProgramTranslation::initialize(&rules, String::default())
+            .translate(&program_ast)
+            .map_err(|_| Error::ProgramParseError)
+            .py_res()?;
+
+    Ok(NemoProgram(program))
 }
 
 #[pymethods]
 impl NemoProgram {
     fn output_predicates(&self) -> Vec<String> {
-        self.0.output_predicates().map(|id| id.name()).collect()
+        self.0
+            .outputs()
+            .map(|output| output.predicate().to_string())
+            .collect()
     }
 
     fn edb_predicates(&self) -> HashSet<String> {
         self.0
-            .edb_predicates()
+            .import_predicates()
             .into_iter()
-            .map(|id| id.name())
+            .map(|predicate| predicate.to_string())
             .collect()
     }
 }
@@ -88,7 +96,7 @@ impl NemoOutputManager {
     #[new]
     #[pyo3(signature=(path, overwrite=false, gzip=false))]
     fn py_new(path: String, overwrite: bool, gzip: bool) -> PyResult<Self> {
-        let export_manager = ExportManager::new()
+        let export_manager = ExportManager::default()
             .set_base_path(path.into())
             .overwrite(overwrite)
             .compress(gzip);
@@ -199,7 +207,7 @@ fn datavalue_to_python(py: Python<'_>, v: AnyDataValue) -> PyResult<Bound<PyAny>
 }
 
 #[pyclass]
-struct NemoFact(ChaseFact);
+struct NemoFact(nemo::chase_model::GroundAtom);
 
 #[pymethods]
 impl NemoFact {
@@ -210,8 +218,7 @@ impl NemoFact {
     fn constants<'a>(&self, py: Python<'a>) -> PyResult<Vec<Bound<'a, PyAny>>> {
         self.0
             .terms()
-            .iter()
-            .map(|c| datavalue_to_python(py, c.clone()))
+            .map(|c| datavalue_to_python(py, c.value()))
             .collect()
     }
 
@@ -262,16 +269,15 @@ impl NemoTrace {
     }
 }
 
-fn assignement_to_dict(
-    assignment: &HashMap<Variable, AnyDataValue>,
-    py: Python,
-) -> PyResult<PyObject> {
+fn assignement_to_dict(assignment: &PrimitiveTermMap, py: Python) -> PyResult<PyObject> {
     let dict = PyDict::new_bound(py);
-    for (variable, value) in assignment {
-        dict.set_item(
-            variable.to_string(),
-            datavalue_to_python(py, value.clone())?,
-        )?;
+    for (variable, term) in assignment {
+        if let Primitive::Ground(ground) = term {
+            dict.set_item(
+                variable.to_string(),
+                datavalue_to_python(py, ground.value())?,
+            )?;
+        }
     }
 
     Ok(dict.to_object(py))
@@ -407,12 +413,14 @@ impl NemoEngine {
         Ok(())
     }
 
-    fn trace(&mut self, fact: String) -> Option<NemoTrace> {
-        let (ast, _errors) = nemo::io::parser::parse_fact_str(&fact); /*.py_res().ok()?;*/
-        // TODO: Report errors...
-        let parsed_fact = nemo::rule_model::components::fact::Fact::from_ast(ast);
-        let parsed_fact = todo!();
-        let (trace, handles) = self.engine.trace(self.program.0.clone(), vec![parsed_fact]);
+    fn trace(&mut self, fact_string: String) -> Option<NemoTrace> {
+        let fact = Fact::parse(&fact_string).ok()?;
+        let mut builder = ValidationErrorBuilder::default();
+        if fact.validate(&mut builder).is_err() {
+            return None;
+        }
+
+        let (trace, handles) = self.engine.trace(self.program.0.clone(), vec![fact]);
         let handle = *handles
             .first()
             .expect("Function trace always returns a handle for each input fact");
@@ -432,9 +440,20 @@ impl NemoEngine {
         predicate: String,
         output_manager: &Bound<NemoOutputManager>,
     ) -> PyResult<()> {
-        let identifier = Identifier::from(predicate);
+        let tag = Tag::new(predicate);
 
-        let Some(arity) = self.engine.predicate_arity(&identifier) else {
+        let Some(_arity) = self.engine.predicate_arity(&tag) else {
+            return Ok(());
+        };
+
+        let export_handler = if let Some((_, handler)) = self
+            .engine
+            .exports()
+            .iter()
+            .find(|(predicate, _)| *predicate == tag)
+        {
+            handler.clone()
+        } else {
             return Ok(());
         };
 
@@ -442,9 +461,9 @@ impl NemoEngine {
             .borrow()
             .0
             .export_table(
-                &ExportDirective::default(identifier.clone()),
-                self.engine.predicate_rows(&identifier).py_res()?,
-                arity,
+                &tag,
+                &export_handler,
+                self.engine.predicate_rows(&tag).py_res()?,
             )
             .py_res()?;
 
@@ -452,10 +471,7 @@ impl NemoEngine {
     }
 
     fn result(mut slf: PyRefMut<'_, Self>, predicate: String) -> PyResult<Py<NemoResults>> {
-        let iter = slf
-            .engine
-            .predicate_rows(&Identifier::from(predicate))
-            .py_res()?;
+        let iter = slf.engine.predicate_rows(&Tag::new(predicate)).py_res()?;
         let results = NemoResults(Box::new(
             iter.into_iter().flatten().collect::<Vec<_>>().into_iter(),
         ));
