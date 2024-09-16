@@ -8,7 +8,7 @@ use super::{Atom, Constraint, Literal, PrimitiveTerm, Term, Variable};
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub struct Rule {
     /// Head atoms of the rule
-    head: Vec<Atom>,
+    pub head: Vec<Atom>,
     /// Body literals of the rule
     body: Vec<Literal>,
     /// Constraints on the body of the rule
@@ -287,34 +287,6 @@ impl Rule {
     /// or is equal to such a value.
     pub fn safe_variables(&self) -> HashSet<Variable> {
         Self::safe_variables_literals(&self.body)
-    }
-
-    fn safe_variables_atom(atoms: &[Atom]) -> HashSet<Variable> {
-        let mut result: HashSet<Variable> = HashSet::<Variable>::new();
-        for atom in atoms.iter() {
-            for term in atom.terms() {
-                if let Term::Primitive(PrimitiveTerm::Variable(Variable::Universal(name))) = term {
-                    result.insert(Variable::Universal(name.clone()).clone());
-                }
-            }
-        }
-        result
-    }
-
-    pub fn safe_variables_of_head(&self) -> HashSet<Variable> {
-        Self::safe_variables_atom(&self.head)
-    }
-
-    pub fn frontier_variables(&self) -> HashSet<Variable> {
-        let safe_body_variables: HashSet<Variable> = self.safe_variables();
-        let safe_head_variables: HashSet<Variable> = self.safe_variables_of_head();
-        let mut ret_val: HashSet<Variable> = HashSet::<Variable>::new();
-        for variable in safe_body_variables.iter() {
-            if safe_head_variables.contains(variable) {
-                ret_val.insert(variable.clone());
-            }
-        }
-        ret_val
     }
 
     /// Return the head atoms of the rule - immutable.
