@@ -7,6 +7,13 @@
 
 *Nemo* is a datalog-based rule engine for fast and scalable analytic data processing in memory. It is available as a command-line tool ```nmo```,  through bindings to other programming languages, and via a [browser-based web application](https://tools.iccl.inf.tu-dresden.de/nemo/).
 
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/knowsys/nemo-doc/main/logo/build/with-text/nemo-logo-white.svg">
+    <img width="40%" alt="Nemo logo" src="https://raw.githubusercontent.com/knowsys/nemo-doc/main/logo/build/with-text/nemo-logo-rusty.svg">
+  </picture>
+</p>
+
 Goals of Nemo are performance, declarativity, versatility, and reliability. It is written in Rust. Nemo's data model aims at compatibility with [RDF](https://www.w3.org/TR/rdf11-concepts/)/[SPARQL](https://www.w3.org/TR/sparql11-overview/) while preserving established logic programming conventions and features. The following formats are currently supported:
 - Input: CSV, TSV, [DSV](https://en.wikipedia.org/wiki/Delimiter-separated_values), [N-Triples](https://www.w3.org/TR/n-triples/), [Turtle](https://www.w3.org/TR/turtle/), [RDF/XML](https://www.w3.org/TR/rdf-syntax-grammar/), [N-Quads](https://www.w3.org/TR/n-quads/), [TriG](https://www.w3.org/TR/trig/)
 - Rules: datalog dialect with support for existential rules (tuple-generating dependencies), stratified negation, and datatypes (including numeric comparison and arithmetic functions)
