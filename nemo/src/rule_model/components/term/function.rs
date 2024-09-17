@@ -86,6 +86,11 @@ impl FunctionTerm {
     pub fn is_empty(&self) -> bool {
         self.len() == 0
     }
+
+    /// Return the [Tag] of the function term.
+    pub fn tag(&self) -> &Tag {
+        &self.tag
+    }
 }
 
 impl Display for FunctionTerm {

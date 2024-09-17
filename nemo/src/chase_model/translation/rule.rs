@@ -4,7 +4,6 @@ use std::collections::{HashMap, HashSet};
 
 use crate::{
     chase_model::components::{
-        aggregate::ChaseAggregate,
         atom::{primitive_atom::PrimitiveAtom, variable_atom::VariableAtom},
         filter::ChaseFilter,
         rule::ChaseRule,
@@ -14,6 +13,7 @@ use crate::{
         atom::Atom,
         literal::Literal,
         term::{
+            aggregate::Aggregate,
             primitive::{
                 variable::{Variable, VariableName},
                 Primitive,
@@ -137,11 +137,14 @@ impl ProgramChaseTranslation {
         for argument in atom.arguments() {
             match argument {
                 Term::Primitive(Primitive::Variable(variable)) => {
-                    if !used_variables.insert(variable) {
+                    if variable.is_anonymous() {
+                        let new_variable = self.create_fresh_variable();
+                        variables.push(new_variable);
+                    } else if !used_variables.insert(variable) {
                         // If the variable was already used in the same atom,
                         // we create a new variable
 
-                        let new_variable = Variable::universal(&self.create_fresh_variable());
+                        let new_variable = self.create_fresh_variable();
                         let new_filter = Self::build_filter_primitive(
                             &new_variable,
                             &Primitive::Variable(variable.clone()),
@@ -154,14 +157,14 @@ impl ProgramChaseTranslation {
                     }
                 }
                 Term::Primitive(primitive) => {
-                    let new_variable = Variable::universal(&self.create_fresh_variable());
+                    let new_variable = self.create_fresh_variable();
                     let new_filter = Self::build_filter_primitive(&new_variable, primitive);
 
                     variables.push(new_variable);
                     filters.push(new_filter);
                 }
                 Term::Operation(operation) => {
-                    let new_variable = Variable::universal(&self.create_fresh_variable());
+                    let new_variable = self.create_fresh_variable();
                     let new_filter = Self::build_filter_operation(&new_variable, operation);
 
                     variables.push(new_variable);
@@ -209,10 +212,11 @@ impl ProgramChaseTranslation {
                             && term
                                 .variables()
                                 .all(|variable| derived_variables.contains(variable))
+                            && !derived_variables.contains(variable)
                         {
                             derived_variables.insert(variable);
 
-                            let new_operation = Self::build_operation(variable, operation);
+                            let new_operation = Self::build_operation(variable, term);
                             result.add_positive_operation(new_operation);
 
                             handled_literals.insert(literal_index);
@@ -244,46 +248,63 @@ impl ProgramChaseTranslation {
     /// Translates each head atom into the [PrimitiveAtom],
     /// while taking care of operations and aggregates.
     fn handle_head(&mut self, result: &mut ChaseRule, head: &[Atom]) {
-        let mut chase_aggregate: Option<ChaseAggregate> = None;
-
         for (head_index, atom) in head.iter().enumerate() {
             let origin = *atom.origin();
             let predicate = atom.predicate().clone();
             let mut terms = Vec::new();
 
-            for (argument_index, argument) in atom.arguments().enumerate() {
-                let group_by_variables =
-                    Self::compute_group_by_variables(atom.arguments(), argument_index);
+            let mut aggregate: Option<(&Aggregate, usize, HashSet<Variable>)> = None;
+            let aggregate_variable = Variable::universal("__AGGREGATE");
 
+            for (argument_index, argument) in atom.arguments().enumerate() {
                 match argument {
                     Term::Primitive(primitive) => terms.push(primitive.clone()),
-                    Term::Aggregate(aggregate) => {
-                        let new_aggregate =
-                            self.build_aggregate(result, aggregate, &group_by_variables);
+                    Term::Aggregate(term_aggregate) => {
+                        aggregate = Some((term_aggregate, argument_index, HashSet::default()));
 
-                        terms.push(Primitive::Variable(new_aggregate.output_variable().clone()));
-                        chase_aggregate = Some(new_aggregate);
+                        terms.push(Primitive::Variable(aggregate_variable.clone()));
                     }
                     Term::Operation(operation) => {
-                        let new_variable = Variable::universal(&self.create_fresh_variable());
+                        let new_variable = self.create_fresh_variable();
 
-                        let new_operation = self.build_operation_with_aggregate(
-                            result,
-                            operation,
-                            &group_by_variables,
-                            new_variable.clone(),
-                            &mut chase_aggregate,
-                        );
+                        let (new_operation, operation_aggregate) = self
+                            .build_operation_with_aggregate(
+                                result,
+                                operation,
+                                aggregate_variable.clone(),
+                                new_variable.clone(),
+                            );
+                        if let Some(operation_aggregate) = operation_aggregate {
+                            let mut operation_variables =
+                                new_operation.variables().cloned().collect::<HashSet<_>>();
+                            operation_variables.remove(&aggregate_variable);
+                            operation_variables.remove(new_operation.variable());
 
-                        result.add_aggregation_operation(new_operation);
+                            aggregate =
+                                Some((operation_aggregate, argument_index, operation_variables));
+                            result.add_aggregation_operation(new_operation);
+                        } else {
+                            result.add_positive_operation(new_operation)
+                        }
+
                         terms.push(Primitive::Variable(new_variable));
                     }
                     _ => unreachable!("invalid program: rule head contains complex terms"),
                 }
+            }
 
-                if let Some(aggregate) = chase_aggregate.clone() {
-                    result.add_aggregation(aggregate, head_index);
-                }
+            if let Some((aggregate, argument_index, initial)) = aggregate {
+                let group_by_variables =
+                    Self::compute_group_by_variables(initial, terms.iter(), argument_index);
+
+                let chase_aggregate = self.build_aggregate(
+                    result,
+                    aggregate,
+                    &group_by_variables,
+                    aggregate_variable.clone(),
+                );
+
+                result.add_aggregation(chase_aggregate, head_index);
             }
 
             self.predicate_arity.insert(predicate.clone(), terms.len());
@@ -296,10 +317,11 @@ impl ProgramChaseTranslation {
     /// Essentially, these are all variables contained in some terms
     /// that are not the term containing the aggregate.
     fn compute_group_by_variables<'a>(
-        terms: impl Iterator<Item = &'a Term>,
+        initial: HashSet<Variable>,
+        terms: impl Iterator<Item = &'a Primitive>,
         current_index: usize,
     ) -> Vec<Variable> {
-        let mut result = HashSet::new();
+        let mut result = initial;
 
         for (term_index, term) in terms.enumerate() {
             if term_index == current_index {

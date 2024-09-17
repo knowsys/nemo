@@ -84,6 +84,7 @@ pub(super) fn operation_to_function_tree(
         OperationKind::StringAfter => binary!(string_after, sub),
         OperationKind::StringStarts => binary!(string_starts, sub),
         OperationKind::StringEnds => binary!(string_ends, sub),
+        OperationKind::StringRegex => binary!(string_regex, sub),
         OperationKind::StringSubstring => {
             if sub.len() == 2 {
                 let start = sub.pop().expect("length must be 2");

@@ -27,7 +27,7 @@ pub(crate) struct AggregateStategy {
 }
 
 impl AggregateStategy {
-    /// Create new [SeminaiveStrategy] object.
+    /// Create new [AggregateStategy] object.
     pub(crate) fn initialize(rule: &ChaseRule, _analysis: &RuleAnalysis) -> Self {
         Self {
             aggregate: rule

@@ -1,7 +1,10 @@
 //! This module defines [Aggregate].
 #![allow(missing_docs)]
 
-use std::{fmt::Display, hash::Hash};
+use std::{
+    fmt::{Display, Write},
+    hash::Hash,
+};
 
 use enum_assoc::Assoc;
 use nemo_physical::aggregates::operation::AggregateOperation;
@@ -162,6 +165,10 @@ impl Display for Aggregate {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_fmt(format_args!("{}({}", self.kind, self.aggregate))?;
 
+        if !self.distinct.is_empty() {
+            f.write_char(',')?;
+        }
+
         for (distinct_index, variable) in self.distinct.iter().enumerate() {
             variable.fmt(f)?;
 
@@ -234,7 +241,7 @@ impl ProgramComponent for Aggregate {
     {
         let input_type = self.aggregate.value_type();
         if let Some(expected_type) = self.kind.input_type() {
-            if input_type != expected_type {
+            if input_type != ValueType::Any && input_type != expected_type {
                 builder.report_error(
                     *self.aggregate.origin(),
                     ValidationErrorKind::AggregateInvalidValueType {

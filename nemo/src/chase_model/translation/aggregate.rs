@@ -30,13 +30,14 @@ impl ProgramChaseTranslation {
         result: &mut ChaseRule,
         aggregate: &crate::rule_model::components::term::aggregate::Aggregate,
         group_by_variables: &[Variable],
+        output_variable: Variable,
     ) -> ChaseAggregate {
         let origin = *aggregate.origin();
         let kind = aggregate.aggregate_kind();
         let input_variable = match aggregate.aggregate_term() {
             Term::Primitive(Primitive::Variable(variable)) => variable.clone(),
             Term::Primitive(primitive) => {
-                let new_variable = Variable::universal(&self.create_fresh_variable());
+                let new_variable = self.create_fresh_variable();
                 result.add_positive_operation(
                     ChaseOperation::new(
                         new_variable.clone(),
@@ -48,7 +49,7 @@ impl ProgramChaseTranslation {
                 new_variable
             }
             Term::Operation(operation) => {
-                let new_variable = Variable::universal(&self.create_fresh_variable());
+                let new_variable = self.create_fresh_variable();
                 result.add_positive_operation(
                     ChaseOperation::new(
                         new_variable.clone(),
@@ -62,7 +63,6 @@ impl ProgramChaseTranslation {
             Term::Aggregate(_) => unreachable!("invalid program: Recursive aggregates not allowed"),
             _ => unreachable!("invalid program: complex terms not allowed"),
         };
-        let output_variable = Variable::universal(&self.create_fresh_variable());
         let distinct_variables = aggregate.distinct().cloned().collect();
 
         ChaseAggregate::new(
@@ -78,37 +78,49 @@ impl ProgramChaseTranslation {
     /// Create an [OperationTerm] from a given
     /// [Operation][crate::rule_model::components::term::operation::Operation].
     ///
-    /// If this function encounters an aggregate it will use its `output_variable` instead.
-    /// In this case the given `chase_aggregate` parameter will be set.
+    /// If this function encounters an aggregate it will
+    /// use the provided variable instead.
     ///
     /// # Panics
     /// Panics if the operation is not "pure", i.e. if it contains as subterms
     /// terms that are not operations or primitive terms.
-    fn build_operation_term_with_aggregate(
-        &mut self,
+    fn build_operation_term_with_aggregate<'a>(
         result: &mut ChaseRule,
-        operation: &crate::rule_model::components::term::operation::Operation,
-        group_by_variables: &[Variable],
-        chase_aggregate: &mut Option<ChaseAggregate>,
-    ) -> OperationTerm {
+        operation: &'a crate::rule_model::components::term::operation::Operation,
+        aggregation_variable: &Variable,
+    ) -> (
+        OperationTerm,
+        Option<&'a crate::rule_model::components::term::aggregate::Aggregate>,
+    ) {
         let origin = *operation.origin();
         let kind = operation.operation_kind();
         let mut subterms = Vec::new();
+
+        let mut aggregation_result = None;
 
         for argument in operation.arguments() {
             match argument {
                 Term::Primitive(primitive) => {
                     subterms.push(OperationTerm::Primitive(primitive.clone()))
                 }
-                Term::Operation(operation) => subterms.push(Self::build_operation_term(operation)),
-                Term::Aggregate(aggregate) => {
-                    let new_aggregate = self.build_aggregate(result, aggregate, group_by_variables);
+                Term::Operation(operation) => {
+                    let (term, result) = Self::build_operation_term_with_aggregate(
+                        result,
+                        operation,
+                        aggregation_variable,
+                    );
+                    if aggregation_result.is_none() {
+                        aggregation_result = result;
+                    }
 
+                    subterms.push(term);
+                }
+                Term::Aggregate(aggregate) => {
                     subterms.push(OperationTerm::Primitive(Primitive::Variable(
-                        new_aggregate.output_variable().clone(),
+                        aggregation_variable.clone(),
                     )));
 
-                    *chase_aggregate = Some(new_aggregate);
+                    aggregation_result = Some(aggregate);
                 }
                 _ => unreachable!(
                     "invalid program: operation term does not only consist of operation terms"
@@ -116,7 +128,10 @@ impl ProgramChaseTranslation {
             }
         }
 
-        OperationTerm::Operation(Operation::new(kind, subterms).set_origin(origin))
+        (
+            OperationTerm::Operation(Operation::new(kind, subterms).set_origin(origin)),
+            aggregation_result,
+        )
     }
 
     /// Create a [ChaseOperation] from a given
@@ -126,21 +141,22 @@ impl ProgramChaseTranslation {
     ///
     /// # Panics
     /// Panics if operation contains complex terms or multiple aggregates.
-    pub(crate) fn build_operation_with_aggregate(
+    pub(crate) fn build_operation_with_aggregate<'a>(
         &mut self,
         result: &mut ChaseRule,
-        operation: &crate::rule_model::components::term::operation::Operation,
-        group_by_variables: &[Variable],
+        operation: &'a crate::rule_model::components::term::operation::Operation,
+        aggregation_variable: Variable,
         output_variable: Variable,
-        chase_aggregate: &mut Option<ChaseAggregate>,
-    ) -> ChaseOperation {
-        let operation_term = self.build_operation_term_with_aggregate(
-            result,
-            operation,
-            group_by_variables,
-            chase_aggregate,
-        );
+    ) -> (
+        ChaseOperation,
+        Option<&'a crate::rule_model::components::term::aggregate::Aggregate>,
+    ) {
+        let (operation_term, aggregate) =
+            Self::build_operation_term_with_aggregate(result, operation, &aggregation_variable);
 
-        ChaseOperation::new(output_variable, operation_term).set_origin(*operation.origin())
+        (
+            ChaseOperation::new(output_variable, operation_term).set_origin(*operation.origin()),
+            aggregate,
+        )
     }
 }

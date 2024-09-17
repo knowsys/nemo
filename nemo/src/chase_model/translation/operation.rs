@@ -16,6 +16,20 @@ use crate::{
 use super::ProgramChaseTranslation;
 
 impl ProgramChaseTranslation {
+    /// Create a [OperationTerm] from a given [Term].
+    ///
+    /// # Panics
+    /// Panics if term is not primitive or an operation.
+    fn operation_term(term: &Term) -> OperationTerm {
+        match term {
+            Term::Primitive(primitive) => OperationTerm::Primitive(primitive.clone()),
+            Term::Operation(operation) => Self::build_operation_term(operation),
+            _ => unreachable!(
+                "invalid program: operation term does not only consist of operation terms"
+            ),
+        }
+    }
+
     /// Create an [OperationTerm] from a given
     /// [Operation][crate::rule_model::components::term::operation::Operation].
     ///
@@ -27,35 +41,19 @@ impl ProgramChaseTranslation {
     ) -> OperationTerm {
         let origin = *operation.origin();
         let kind = operation.operation_kind();
-        let mut subterms = Vec::new();
-
-        for argument in operation.arguments() {
-            match argument {
-                Term::Primitive(primitive) => {
-                    subterms.push(OperationTerm::Primitive(primitive.clone()))
-                }
-                Term::Operation(operation) => subterms.push(Self::build_operation_term(operation)),
-                _ => unreachable!(
-                    "invalid program: operation term does not only consist of operation terms"
-                ),
-            }
-        }
+        let subterms = operation.arguments().map(Self::operation_term).collect();
 
         OperationTerm::Operation(Operation::new(kind, subterms).set_origin(origin))
     }
 
-    /// Create a [ChaseOperation] form a given
-    /// [Operation][crate::rule_model::components::term::operation::Operation].
+    /// Create a [ChaseOperation] form a given [Term].
     ///
     /// # Panics
     /// Panics if the operation is not "pure", i.e. if it contains as subterms
     /// terms that are not operations or primitive terms.
-    pub(crate) fn build_operation(
-        output_variable: &Variable,
-        operation: &crate::rule_model::components::term::operation::Operation,
-    ) -> ChaseOperation {
-        let origin = *operation.origin();
-        let operation = Self::build_operation_term(operation);
+    pub(crate) fn build_operation(output_variable: &Variable, term: &Term) -> ChaseOperation {
+        let origin = *term.origin();
+        let operation = Self::operation_term(term);
 
         ChaseOperation::new(output_variable.clone(), operation).set_origin(origin)
     }

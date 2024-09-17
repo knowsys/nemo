@@ -89,6 +89,15 @@ impl Variable {
         matches!(self, Variable::Existential(_))
     }
 
+    /// Return whether this is an anonymous universal variable.
+    pub fn is_anonymous(&self) -> bool {
+        if let Variable::Universal(universal) = self {
+            return universal.is_anonymous();
+        }
+
+        false
+    }
+
     /// Change the name of this variable.
     pub fn rename(&mut self, name: VariableName) {
         match self {

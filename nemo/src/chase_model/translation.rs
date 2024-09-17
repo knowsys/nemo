@@ -9,15 +9,32 @@ pub(crate) mod rule;
 
 use std::collections::HashMap;
 
-use crate::rule_model::{components::tag::Tag, program::Program};
+use crate::rule_model::{
+    components::{tag::Tag, term::primitive::variable::Variable},
+    program::Program,
+};
 
 use super::components::program::ChaseProgram;
 
-/// Object for translating a [Program] into a [ChaseProgram]
-#[derive(Debug)]
-pub(crate) struct ProgramChaseTranslation {
+#[derive(Debug, Default, Clone, Copy)]
+struct FreshVariableGenerator {
     /// Counter for generating ids for fresh variables
     fresh_variable_counter: usize,
+}
+
+impl FreshVariableGenerator {
+    /// Create a fresh universal variable.
+    pub fn create_fresh_variable(&mut self) -> Variable {
+        self.fresh_variable_counter += 1;
+        Variable::universal(&format!("__VARIABLE_{}", self.fresh_variable_counter))
+    }
+}
+
+/// Object for translating a [Program] into a [ChaseProgram]
+#[derive(Debug, Default)]
+pub(crate) struct ProgramChaseTranslation {
+    /// Generator for fresh variables
+    fresh_variable_generator: FreshVariableGenerator,
     /// Map associating each predicate with its arity
     predicate_arity: HashMap<Tag, usize>,
 }
@@ -26,7 +43,7 @@ impl ProgramChaseTranslation {
     /// Initialize a new [ProgramChaseTranslation].
     pub fn new() -> Self {
         Self {
-            fresh_variable_counter: 0,
+            fresh_variable_generator: FreshVariableGenerator::default(),
             predicate_arity: HashMap::default(),
         }
     }
@@ -73,8 +90,7 @@ impl ProgramChaseTranslation {
     }
 
     /// Create a fresh variable name
-    fn create_fresh_variable(&mut self) -> String {
-        self.fresh_variable_counter += 1;
-        format!("__VARIABLE_{}", self.fresh_variable_counter)
+    fn create_fresh_variable(&mut self) -> Variable {
+        self.fresh_variable_generator.create_fresh_variable()
     }
 }

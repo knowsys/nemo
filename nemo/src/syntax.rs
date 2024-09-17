@@ -106,6 +106,8 @@ pub mod expression {
         pub const OPEN: &str = "(";
         /// Closing delimiter
         pub const CLOSE: &str = ")";
+        /// Symbol to separate distinct variables
+        pub const SEPARATOR_DISTINCT: &str = ",";
     }
 
     /// Syntax for variables
@@ -258,6 +260,8 @@ pub mod builtin {
         pub(crate) const STRBEFORE: &str = "STRBEFORE";
         /// Return the second part of a string split by some other string
         pub(crate) const STRAFTER: &str = "STRAFTER";
+        /// Check whether regex pattern holds in a given string
+        pub(crate) const REGEX: &str = "REGEX";
         /// Compute the remainder of two numerical values
         pub(crate) const REM: &str = "REM";
         /// Compute the and on the bit representation of integer values

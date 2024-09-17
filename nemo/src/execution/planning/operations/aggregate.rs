@@ -19,13 +19,16 @@ fn operations_tables(
     distinct_columns: &[OperationColumnMarker],
     group_by_columns: &[OperationColumnMarker],
 ) -> (OperationTable, OperationTable) {
-    // Create input order that produces inteded output order
+    // Create input order that produces intended output order
 
     let mut ordered_input = OperationTable::default();
     let mut ordered_output = OperationTable::default();
     for column in input.iter() {
         if group_by_columns.contains(column) {
-            ordered_input.push(*column);
+            if column != aggregate_input_column {
+                ordered_input.push(*column);
+            }
+
             ordered_output.push(*column);
         }
     }

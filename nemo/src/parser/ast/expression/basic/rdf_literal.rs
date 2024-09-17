@@ -4,14 +4,12 @@
 use nom::sequence::{separated_pair, tuple};
 
 use crate::parser::{
-    ast::{token::Token, ProgramAST},
+    ast::{tag::structure::StructureTag, token::Token, ProgramAST},
     context::{context, ParserContext},
     input::ParserInput,
     span::Span,
     ParserResult,
 };
-
-use super::iri::Iri;
 
 /// AST node representing an rdf literal
 #[derive(Debug)]
@@ -22,7 +20,7 @@ pub struct RdfLiteral<'a> {
     /// Content part rdf literal
     content: Token<'a>,
     /// Tag of the rdf literal
-    tag: Iri<'a>,
+    tag: StructureTag<'a>,
 }
 
 impl<'a> RdfLiteral<'a> {
@@ -32,8 +30,8 @@ impl<'a> RdfLiteral<'a> {
     }
 
     // Return the tag of the rdf literal.
-    pub fn tag(&self) -> String {
-        self.tag.content()
+    pub fn tag(&self) -> &StructureTag<'a> {
+        &self.tag
     }
 
     /// Parse the content part of the rdf literal.
@@ -62,7 +60,11 @@ impl<'a> ProgramAST<'a> for RdfLiteral<'a> {
 
         context(
             CONTEXT,
-            separated_pair(Self::parse_content, Token::double_caret, Iri::parse),
+            separated_pair(
+                Self::parse_content,
+                Token::double_caret,
+                StructureTag::parse,
+            ),
         )(input)
         .map(|(rest, (content, tag))| {
             let rest_span = rest.span;
@@ -110,7 +112,7 @@ mod test {
             assert!(result.is_ok());
 
             let result = result.unwrap();
-            assert_eq!(expected, (result.1.content(), result.1.tag()));
+            assert_eq!(expected, (result.1.content(), result.1.tag().to_string()));
         }
     }
 }

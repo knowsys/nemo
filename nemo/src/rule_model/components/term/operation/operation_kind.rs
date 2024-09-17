@@ -146,6 +146,11 @@ pub enum OperationKind {
     #[assoc(num_arguments = OperationNumArguments::Binary)]
     #[assoc(return_type = ValueType::Boolean)]
     StringContains,
+    /// Check whether the pattern given as a regular expression holds
+    #[assoc(name = function::REGEX)]
+    #[assoc(num_arguments = OperationNumArguments::Binary)]
+    #[assoc(return_type = ValueType::Boolean)]
+    StringRegex,
     /// String starting at some start position
     #[assoc(name = function::SUBSTR)]
     #[assoc(num_arguments = OperationNumArguments::Choice(vec![2, 3]))]
@@ -308,17 +313,17 @@ pub enum OperationKind {
     StringUppercase,
     /// Bitwise and operation
     #[assoc(name = function::BITAND)]
-    #[assoc(num_arguments = OperationNumArguments::Unary)]
+    #[assoc(num_arguments = OperationNumArguments::Arbitrary)]
     #[assoc(return_type = ValueType::Number)]
     BitAnd,
     /// Bitwise or operation
     #[assoc(name = function::BITOR)]
-    #[assoc(num_arguments = OperationNumArguments::Unary)]
+    #[assoc(num_arguments = OperationNumArguments::Arbitrary)]
     #[assoc(return_type = ValueType::Number)]
     BitOr,
     /// Bitwise xor operation
     #[assoc(name = function::BITXOR)]
-    #[assoc(num_arguments = OperationNumArguments::Unary)]
+    #[assoc(num_arguments = OperationNumArguments::Arbitrary)]
     #[assoc(return_type = ValueType::Number)]
     BitXor,
     /// Conjunction of boolean values
@@ -348,7 +353,7 @@ pub enum OperationKind {
     NumericLukasiewicz,
     /// Concatentation of two string values, correspondng to SPARQL function CONCAT.
     #[assoc(name = function::CONCAT)]
-    #[assoc(num_arguments = OperationNumArguments::Unary)]
+    #[assoc(num_arguments = OperationNumArguments::Arbitrary)]
     #[assoc(return_type = ValueType::String)]
     StringConcatenation,
     /// Lexical value

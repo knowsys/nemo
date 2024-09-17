@@ -95,13 +95,6 @@ impl<'a> ProgramAST<'a> for Program<'a> {
         )(input)
         .map(|(rest, (comment, statements))| {
             let rest_span = rest.span;
-            // TODO: Remove if debug info is no longer needed
-            if !rest_span.0.is_empty() {
-                println!(
-                    "\x1b[91mUNPARSED INPUT:\x1b[0m {:?}\n",
-                    rest.span.0.fragment()
-                );
-            }
 
             (
                 rest,

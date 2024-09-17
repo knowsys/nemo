@@ -82,7 +82,6 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
     /// Initialize [ExecutionEngine].
     pub fn initialize(program: &Program, input_manager: ImportManager) -> Result<Self, Error> {
         let chase_program = ProgramChaseTranslation::new().translate(program.clone());
-
         let analysis = chase_program.analyze();
 
         let mut table_manager = TableManager::new();

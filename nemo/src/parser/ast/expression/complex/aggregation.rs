@@ -90,8 +90,11 @@ impl<'a> ProgramAST<'a> for Aggregation<'a> {
                     pair(
                         Expression::parse,
                         opt(preceded(
-                            // TODO: What is the semicolon for?
-                            tuple((WSoC::parse, Token::semicolon, WSoC::parse)),
+                            tuple((
+                                WSoC::parse,
+                                Token::aggregate_distinct_separator,
+                                WSoC::parse,
+                            )),
                             ExpressionSequenceSimple::parse,
                         )),
                     ),
@@ -136,7 +139,7 @@ mod test {
     fn parse_aggregation() {
         let test = vec![
             ("#sum(?x)", (AggregateKind::SumOfNumbers, 0)),
-            ("#max(?x; ?y, ?z)", (AggregateKind::MaxNumber, 2)),
+            ("#max(?x, ?y, ?z)", (AggregateKind::MaxNumber, 2)),
         ];
 
         for (input, expected) in test {

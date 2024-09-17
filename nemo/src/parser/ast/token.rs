@@ -57,9 +57,6 @@ pub enum TokenKind {
     /// Closing delimiter for tuples
     #[assoc(name = tuple::CLOSE)]
     TupleClose,
-    /// Semicolon, in aggregates? (for what?)
-    #[assoc(name = ";")]
-    Semicolon,
     /// [UNIVERSAL_INDICATOR](variable::UNIVERSAL_INDICATOR), used to mark universal variables
     #[assoc(name = variable::UNIVERSAL_INDICATOR)]
     UniversalIndicator,
@@ -123,6 +120,9 @@ pub enum TokenKind {
     /// Aggregate close
     #[assoc(name = aggregate::CLOSE)]
     AggregateClose,
+    /// Distinct Variable Separator
+    #[assoc(name = aggregate::SEPARATOR_DISTINCT)]
+    AggregateDistinctSeparator,
     /// Underscore, used for anonymous values as defined in [ANONYMOUS](datavalues::ANONYMOUS)
     #[assoc(name = datavalues::ANONYMOUS)]
     AnonVal,
@@ -566,7 +566,6 @@ impl<'a> Token<'a> {
     string_token!(dot, TokenKind::Dot);
     string_token!(seq_sep, TokenKind::SequenceSeparator);
     string_token!(arrow, TokenKind::RuleArrow);
-    string_token!(semicolon, TokenKind::Semicolon);
     string_token!(greater, TokenKind::Greater);
     string_token!(greater_equal, TokenKind::GreaterEqual);
     string_token!(less, TokenKind::Less);
@@ -578,6 +577,10 @@ impl<'a> Token<'a> {
     string_token!(aggregate_indicator, TokenKind::AggregateIndicator);
     string_token!(aggregate_open, TokenKind::AggregateOpen);
     string_token!(aggregate_close, TokenKind::AggregateClose);
+    string_token!(
+        aggregate_distinct_separator,
+        TokenKind::AggregateDistinctSeparator
+    );
     string_token!(underscore, TokenKind::AnonVal);
     string_token!(plus, TokenKind::Plus);
     string_token!(minus, TokenKind::Minus);

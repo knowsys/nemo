@@ -14,7 +14,9 @@ impl<'a> ASTProgramTranslation<'a> {
         &mut self,
         rdf: &'a ast::expression::basic::rdf_literal::RdfLiteral,
     ) -> Result<AnyDataValue, TranslationError> {
-        match AnyDataValue::new_from_typed_literal(rdf.content(), rdf.tag()) {
+        let datatype_iri = self.resolve_tag(rdf.tag())?;
+
+        match AnyDataValue::new_from_typed_literal(rdf.content(), datatype_iri) {
             Ok(data_value) => Ok(data_value),
             Err(error) => Err(TranslationError::new(
                 rdf.span(),

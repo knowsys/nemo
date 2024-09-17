@@ -145,7 +145,9 @@ impl Rule {
     ///     * an aggregate occurs at most once
     fn validate_term_head(builder: &mut ValidationErrorBuilder, term: &Term) -> Result<bool, ()> {
         if term.is_map() || term.is_tuple() || term.is_function() {
-            builder.report_error(*term.origin(), ValidationErrorKind::UnsupportedComplexTerm);
+            builder
+                .report_error(*term.origin(), ValidationErrorKind::UnsupportedComplexTerm)
+                .add_hint_option(Self::hint_term_operation(term));
             return Err(());
         }
 
@@ -214,7 +216,9 @@ impl Rule {
         }
 
         if term.is_map() || term.is_tuple() || term.is_function() {
-            builder.report_error(*term.origin(), ValidationErrorKind::UnsupportedComplexTerm);
+            builder
+                .report_error(*term.origin(), ValidationErrorKind::UnsupportedComplexTerm)
+                .add_hint_option(Self::hint_term_operation(term));
             return Err(());
         }
 
@@ -223,6 +227,17 @@ impl Rule {
         }
 
         Ok(())
+    }
+
+    /// If the given [Term] is a function term,
+    /// then this function returns a [Hint] returning the operation
+    /// with the closest name to its tag.
+    fn hint_term_operation(term: &Term) -> Option<Hint> {
+        if let Term::FunctionTerm(function) = term {
+            Hint::similar_operation(function.tag().to_string())
+        } else {
+            None
+        }
     }
 }
 
@@ -324,7 +339,7 @@ impl ProgramComponent for Rule {
 
             for variable in atom.variables() {
                 if let Some(variable_name) = variable.name() {
-                    if !safe_variables.contains(variable) {
+                    if !variable.is_existential() && !safe_variables.contains(variable) {
                         builder
                             .report_error(
                                 *variable.origin(),

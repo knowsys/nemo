@@ -176,7 +176,7 @@ mod test {
     #[test]
     fn parse_expression() {
         let test = vec![
-            ("#sum(1 + POW(?x, 2); ?y, ?z)", ParserContext::Aggregation),
+            ("#sum(1 + POW(?x, 2), ?y, ?z)", ParserContext::Aggregation),
             ("(1 + 2)", ParserContext::Arithmetic),
             ("test(?x, (1,), (1 + 2))", ParserContext::Atom),
             ("_:12", ParserContext::Blank),
