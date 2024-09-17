@@ -9,7 +9,7 @@
 
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/knowsys/nemo-doc/main/logo/build/with-text/nemo-logo-white.svg">
+    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/knowsys/nemo-doc/main/logo/build/with-text/nemo-logo-rusty-bright.svg">
     <img width="40%" alt="Nemo logo" src="https://raw.githubusercontent.com/knowsys/nemo-doc/main/logo/build/with-text/nemo-logo-rusty.svg">
   </picture>
 </p>
