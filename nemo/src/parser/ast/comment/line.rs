@@ -84,10 +84,10 @@ mod test {
     #[test]
     fn parse_line_comment() {
         let test = vec![
-            ("// my comment", " my comment".to_string()),
-            ("//my comment", "my comment".to_string()),
-            ("//  \tmy comment\n", "  \tmy comment".to_string()),
-            ("//// my comment", " my comment".to_string()),
+            ("% my comment", " my comment".to_string()),
+            ("%my comment", "my comment".to_string()),
+            ("%  \tmy comment\n", "  \tmy comment".to_string()),
+            ("%%%% my comment", " my comment".to_string()),
         ];
 
         for (input, expected) in test {

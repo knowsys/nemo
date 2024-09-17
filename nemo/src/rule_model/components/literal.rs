@@ -4,6 +4,7 @@ use std::{fmt::Display, hash::Hash};
 
 use crate::{
     parse_component,
+    parser::ast::ProgramAST,
     rule_model::{error::ValidationErrorBuilder, translation::ASTProgramTranslation},
 };
 
@@ -61,7 +62,7 @@ impl ProgramComponent for Literal {
     {
         parse_component!(
             string,
-            crate::parser::ast::expression::Expression::parse_complex,
+            crate::parser::ast::guard::Guard::parse,
             ASTProgramTranslation::build_body_literal
         )
     }

@@ -114,18 +114,18 @@ mod test {
     #[test]
     fn parse_map() {
         let test = vec![
-            ("{?x: 7}", (None, 1)),
-            ("abc { ?x: 7 }", (Some("abc".to_string()), 1)),
+            ("{?x=7}", (None, 1)),
+            ("abc { ?x = 7 }", (Some("abc".to_string()), 1)),
             (
-                "abc { ?x: 7, ?y: 12, ?z: 13 }",
+                "abc { ?x = 7, ?y = 12, ?z = 13 }",
                 (Some("abc".to_string()), 3),
             ),
             (
-                "abc { ?x : 7 ,  ?y    :   13  , ?z       : 15   }",
+                "abc { ?x = 7 ,  ?y    =   13  , ?z       = 15   }",
                 (Some("abc".to_string()), 3),
             ),
-            ("{a:1, b: POW(1, 2)}", (None, 2)),
-            ("{a:b, c:d,}", (None, 2)),
+            ("{a=1, b= POW(1, 2)}", (None, 2)),
+            ("{a=b, c=d,}", (None, 2)),
         ];
 
         for (input, expected) in test {

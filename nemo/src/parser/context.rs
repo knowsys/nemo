@@ -70,6 +70,9 @@ pub enum ParserContext {
     /// Expression
     #[assoc(name = "expression")]
     Expression,
+    /// Guard
+    #[assoc(name = "expression")] // Guard seems like a technical name
+    Guard,
     /// Parenthesised expression
     #[assoc(name = "parenthesised expression")]
     ParenthesisedExpression,
@@ -133,6 +136,9 @@ pub enum ParserContext {
     /// Program
     #[assoc(name = "program")]
     Program,
+    /// Error
+    #[assoc(name = "error")]
+    Error,
 }
 
 impl ParserContext {

@@ -4,7 +4,6 @@
 use enum_assoc::Assoc;
 use nom::{
     branch::alt,
-    combinator::map,
     sequence::{delimited, tuple},
 };
 
@@ -19,11 +18,6 @@ use crate::parser::{
     input::ParserInput,
     span::Span,
     ParserResult,
-};
-
-use super::{
-    aggregation::Aggregation, arithmetic::Arithmetic, atom::Atom, map::Map, negation::Negation,
-    operation::Operation, tuple::Tuple,
 };
 
 /// Types of infix expression connectives
@@ -93,20 +87,6 @@ impl<'a> InfixExpression<'a> {
             )
         })
     }
-
-    /// Parse non-infix [Expression]s
-    pub fn parse_non_infix(input: ParserInput<'a>) -> ParserResult<'a, Expression<'a>> {
-        alt((
-            map(Operation::parse, Expression::Operation),
-            map(Arithmetic::parse, Expression::Arithmetic),
-            map(Aggregation::parse, Expression::Aggregation),
-            map(Atom::parse, Expression::Atom),
-            map(Tuple::parse, Expression::Tuple),
-            map(Map::parse, Expression::Map),
-            map(Negation::parse, Expression::Negation),
-            Expression::parse_basic,
-        ))(input)
-    }
 }
 
 const CONTEXT: ParserContext = ParserContext::Infix;
@@ -129,9 +109,9 @@ impl<'a> ProgramAST<'a> for InfixExpression<'a> {
         context(
             CONTEXT,
             tuple((
-                Self::parse_non_infix,
+                Expression::parse,
                 delimited(WSoC::parse, Self::parse_infix_kind, WSoC::parse),
-                Self::parse_non_infix,
+                Expression::parse,
             )),
         )(input)
         .map(|(rest, (left, kind, right))| {

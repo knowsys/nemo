@@ -1,6 +1,9 @@
 //! This module defines [NameTypePair].
 
-use nom::sequence::{separated_pair, tuple};
+use nom::{
+    combinator::opt,
+    sequence::{pair, preceded, tuple},
+};
 
 use crate::parser::{
     ast::{
@@ -22,12 +25,16 @@ const CONTEXT: ParserContext = ParserContext::DeclareNameTypePair;
 pub struct NameTypePair<'a> {
     _span: Span<'a>,
     name: ParameterName<'a>,
-    datatype: DataTypeTag<'a>,
+    datatype: Option<DataTypeTag<'a>>,
 }
 
 impl<'a> ProgramAST<'a> for NameTypePair<'a> {
     fn children(&'a self) -> Vec<&'a dyn ProgramAST<'a>> {
-        vec![&self.name, &self.datatype]
+        if let Some(datatype) = &self.datatype {
+            vec![&self.name, datatype]
+        } else {
+            vec![&self.name]
+        }
     }
 
     fn span(&self) -> Span<'a> {
@@ -39,10 +46,12 @@ impl<'a> ProgramAST<'a> for NameTypePair<'a> {
         Self: Sized + 'a,
     {
         let input_span = input.span;
-        separated_pair(
+        pair(
             ParameterName::parse,
-            tuple((WSoC::parse, Token::name_datatype_separator, WSoC::parse)),
-            DataTypeTag::parse,
+            opt(preceded(
+                tuple((WSoC::parse, Token::name_datatype_separator, WSoC::parse)),
+                DataTypeTag::parse,
+            )),
         )(input)
         .map(|(rest, (name, datatype))| {
             let rest_span = rest.span;
@@ -82,11 +91,12 @@ mod test {
     #[test]
     fn parse_expression_sequence_simple() {
         let test = vec![(
-            "_, test: string, _: int, name: any",
+            "_, test: string, _: int, name:any",
             vec![
-                (Parameter::Named("test".to_string()), DataType::String),
-                (Parameter::Unnamed, DataType::Integer),
-                (Parameter::Named("name".to_string()), DataType::Any),
+                (Parameter::Unnamed, None),
+                (Parameter::Named("test".to_string()), Some(DataType::String)),
+                (Parameter::Unnamed, Some(DataType::Integer)),
+                (Parameter::Named("name".to_string()), Some(DataType::Any)),
             ],
         )];
 
@@ -104,7 +114,7 @@ mod test {
                     .into_iter()
                     .map(|NameTypePair { name, datatype, .. }| (
                         name.parameter().clone(),
-                        datatype.data_type()
+                        datatype.map(|data| data.data_type())
                     ))
                     .collect::<Vec<_>>()
             );

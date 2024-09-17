@@ -50,7 +50,7 @@ impl<'a> Display for StructureTag<'a> {
         match &self.kind {
             StructureTagKind::Plain(token) => token.fmt(f),
             StructureTagKind::Prefixed { prefix, tag } => {
-                f.write_fmt(format_args!("{}::{}", prefix, tag))
+                f.write_fmt(format_args!("{}:{}", prefix, tag))
             }
             StructureTagKind::Iri(iri) => iri.content().fmt(f),
         }
@@ -120,7 +120,7 @@ mod test {
     fn parse_tag() {
         let test = vec![
             ("abc", "abc".to_string()),
-            ("abc::def", "abc::def".to_string()),
+            ("abc:def", "abc:def".to_string()),
             ("<http://example.com>", "http://example.com".to_string()),
         ];
 

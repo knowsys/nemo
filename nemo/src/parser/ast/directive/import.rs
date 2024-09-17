@@ -106,7 +106,7 @@ mod test {
     #[test]
     fn parse_import() {
         let test = vec![(
-            "@import predicate :- csv { resource: \"test.csv\" }",
+            "@import predicate :- csv { resource = \"test.csv\" }",
             ("predicate".to_string(), "csv".to_string()),
         )];
 

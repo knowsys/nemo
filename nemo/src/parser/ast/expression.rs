@@ -8,8 +8,8 @@ use basic::{
     string::StringLiteral, variable::Variable,
 };
 use complex::{
-    aggregation::Aggregation, arithmetic::Arithmetic, atom::Atom, infix::InfixExpression, map::Map,
-    negation::Negation, operation::Operation, tuple::Tuple,
+    aggregation::Aggregation, arithmetic::Arithmetic, atom::Atom, map::Map, negation::Negation,
+    operation::Operation, tuple::Tuple,
 };
 use nom::{branch::alt, combinator::map};
 
@@ -22,7 +22,7 @@ use crate::parser::{
 
 use super::ProgramAST;
 
-/// An expression that is the building block of rules.
+/// An expression of potentially complex terms
 #[derive(Debug)]
 pub enum Expression<'a> {
     /// Aggregation
@@ -37,8 +37,6 @@ pub enum Expression<'a> {
     Boolean(Boolean<'a>),
     /// Constant
     Constant(Constant<'a>),
-    /// Infix
-    Infix(InfixExpression<'a>),
     /// Map
     Map(Map<'a>),
     /// Negation
@@ -67,7 +65,6 @@ impl<'a> Expression<'a> {
             Expression::Blank(expression) => expression.context(),
             Expression::Boolean(expression) => expression.context(),
             Expression::Constant(expression) => expression.context(),
-            Expression::Infix(expression) => expression.context(),
             Expression::Map(expression) => expression.context(),
             Expression::Number(expression) => expression.context(),
             Expression::Negation(expression) => expression.context(),
@@ -116,7 +113,6 @@ impl<'a> ProgramAST<'a> for Expression<'a> {
             Expression::Blank(expression) => expression,
             Expression::Boolean(expression) => expression,
             Expression::Constant(expression) => expression,
-            Expression::Infix(expression) => expression,
             Expression::Map(expression) => expression,
             Expression::Number(expression) => expression,
             Expression::Negation(expression) => expression,
@@ -136,7 +132,6 @@ impl<'a> ProgramAST<'a> for Expression<'a> {
             Expression::Blank(expression) => expression.span(),
             Expression::Boolean(expression) => expression.span(),
             Expression::Constant(expression) => expression.span(),
-            Expression::Infix(expression) => expression.span(),
             Expression::Map(expression) => expression.span(),
             Expression::Number(expression) => expression.span(),
             Expression::Negation(expression) => expression.span(),
@@ -157,7 +152,6 @@ impl<'a> ProgramAST<'a> for Expression<'a> {
             alt((
                 map(Arithmetic::parse, Self::Arithmetic),
                 Self::parse_complex,
-                map(InfixExpression::parse, Self::Infix),
                 Self::parse_basic,
             )),
         )(input)
@@ -188,8 +182,7 @@ mod test {
             ("_:12", ParserContext::Blank),
             ("true", ParserContext::Boolean),
             ("constant", ParserContext::Constant),
-            ("(1 + 2) = 2 + 1", ParserContext::Infix),
-            ("{a:1,b:POW(1, 2)}", ParserContext::Map),
+            ("{a=1,b=POW(1, 2)}", ParserContext::Map),
             ("12", ParserContext::Number),
             ("~test(1)", ParserContext::Negation),
             ("substr(\"string\", 1+?x)", ParserContext::Operation),

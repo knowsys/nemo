@@ -4,6 +4,7 @@ pub mod attribute;
 pub mod comment;
 pub mod directive;
 pub mod expression;
+pub mod guard;
 pub mod program;
 pub mod rule;
 pub mod sequence;

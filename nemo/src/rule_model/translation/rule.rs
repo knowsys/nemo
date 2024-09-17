@@ -42,10 +42,10 @@ impl<'a> ASTProgramTranslation<'a> {
     /// Create a body [Literal] from the corresponding ast node.
     pub(crate) fn build_body_literal(
         &mut self,
-        body: &'a ast::expression::Expression<'a>,
+        body: &'a ast::guard::Guard<'a>,
     ) -> Result<Literal, TranslationError> {
         let result = match body {
-            ast::expression::Expression::Atom(atom) => {
+            ast::guard::Guard::Expression(ast::expression::Expression::Atom(atom)) => {
                 let predicate = Tag::from(self.resolve_tag(atom.tag())?)
                     .set_origin(self.register_node(atom.tag()));
 
@@ -56,7 +56,7 @@ impl<'a> ASTProgramTranslation<'a> {
 
                 Literal::Positive(self.register_component(Atom::new(predicate, subterms), atom))
             }
-            ast::expression::Expression::Negation(negated) => {
+            ast::guard::Guard::Expression(ast::expression::Expression::Negation(negated)) => {
                 let atom = if let ast::expression::Expression::Atom(atom) = negated.expression() {
                     atom
                 } else {
@@ -77,10 +77,8 @@ impl<'a> ASTProgramTranslation<'a> {
 
                 Literal::Negative(self.register_component(Atom::new(predicate, subterms), atom))
             }
-            ast::expression::Expression::Infix(infix) => {
-                Literal::Operation(self.build_infix(infix)?)
-            }
-            ast::expression::Expression::Operation(operation) => {
+            ast::guard::Guard::Infix(infix) => Literal::Operation(self.build_infix(infix)?),
+            ast::guard::Guard::Expression(ast::expression::Expression::Operation(operation)) => {
                 Literal::Operation(self.build_operation(operation)?)
             }
             _ => {
@@ -98,23 +96,24 @@ impl<'a> ASTProgramTranslation<'a> {
     /// Create a head [Atom] from the corresponding ast node.
     pub(crate) fn build_head_atom(
         &mut self,
-        head: &'a ast::expression::Expression<'a>,
+        head: &'a ast::guard::Guard<'a>,
     ) -> Result<Atom, TranslationError> {
-        let result = if let ast::expression::Expression::Atom(atom) = head {
-            let predicate =
-                Tag::from(self.resolve_tag(atom.tag())?).set_origin(self.register_node(atom.tag()));
-            let mut subterms = Vec::new();
-            for expression in atom.expressions() {
-                subterms.push(self.build_inner_term(expression)?);
-            }
+        let result =
+            if let ast::guard::Guard::Expression(ast::expression::Expression::Atom(atom)) = head {
+                let predicate = Tag::from(self.resolve_tag(atom.tag())?)
+                    .set_origin(self.register_node(atom.tag()));
+                let mut subterms = Vec::new();
+                for expression in atom.expressions() {
+                    subterms.push(self.build_inner_term(expression)?);
+                }
 
-            self.register_component(Atom::new(predicate, subterms), atom)
-        } else {
-            return Err(TranslationError::new(
-                head.span(),
-                TranslationErrorKind::HeadNonAtom(head.context_type().name().to_string()),
-            ));
-        };
+                self.register_component(Atom::new(predicate, subterms), atom)
+            } else {
+                return Err(TranslationError::new(
+                    head.span(),
+                    TranslationErrorKind::HeadNonAtom(head.context_type().name().to_string()),
+                ));
+            };
 
         Ok(result)
     }
@@ -161,10 +160,6 @@ impl<'a> ASTProgramTranslation<'a> {
             ast::expression::Expression::Negation(negation) => Err(TranslationError::new(
                 negation.span(),
                 TranslationErrorKind::InnerExpressionNegation,
-            )),
-            ast::expression::Expression::Infix(infix) => Err(TranslationError::new(
-                infix.span(),
-                TranslationErrorKind::InnerExpressionInfix,
             )),
         }?
         .set_origin(self.register_node(expression)))

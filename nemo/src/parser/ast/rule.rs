@@ -13,8 +13,8 @@ use crate::parser::{
 };
 
 use super::{
-    attribute::Attribute, comment::wsoc::WSoC, expression::Expression, sequence::Sequence,
-    token::Token, ProgramAST,
+    attribute::Attribute, comment::wsoc::WSoC, guard::Guard, sequence::Sequence, token::Token,
+    ProgramAST,
 };
 
 /// A rule describing a logical implication
@@ -27,19 +27,19 @@ pub struct Rule<'a> {
     attributes: Vec<Attribute<'a>>,
 
     /// Head of the rule
-    head: Sequence<'a, Expression<'a>>,
+    head: Sequence<'a, Guard<'a>>,
     /// Body of the rule,
-    body: Sequence<'a, Expression<'a>>,
+    body: Sequence<'a, Guard<'a>>,
 }
 
 impl<'a> Rule<'a> {
     /// Return an iterator of the [Expression]s contained in the head.
-    pub fn head(&self) -> impl Iterator<Item = &Expression<'a>> {
+    pub fn head(&self) -> impl Iterator<Item = &Guard<'a>> {
         self.head.iter()
     }
 
     /// Return an iterator of the [Expression]s contained in the body.
-    pub fn body(&self) -> impl Iterator<Item = &Expression<'a>> {
+    pub fn body(&self) -> impl Iterator<Item = &Guard<'a>> {
         self.body.iter()
     }
 
@@ -77,9 +77,9 @@ impl<'a> ProgramAST<'a> for Rule<'a> {
             tuple((
                 many0(Attribute::parse),
                 (separated_pair(
-                    Sequence::<Expression>::parse,
+                    Sequence::<Guard>::parse,
                     tuple((WSoC::parse, Token::rule_arrow, WSoC::parse)),
-                    Sequence::<Expression>::parse,
+                    Sequence::<Guard>::parse,
                 )),
             )),
         )(input)

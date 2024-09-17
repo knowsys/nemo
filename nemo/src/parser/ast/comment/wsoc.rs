@@ -78,7 +78,7 @@ mod test {
         let test = vec![
             ("", 0),
             ("  \n  ", 0),
-            ("   // my comment \n  // Another comment \n    ", 2),
+            ("   % my comment \n  % Another comment \n    ", 2),
             ("   /* a comment */", 1),
         ];
 

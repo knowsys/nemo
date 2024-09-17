@@ -1,15 +1,16 @@
 //! This module defines the [UnknownDirective] directive.
 
 use nom::{
+    branch::alt,
     bytes::complete::is_not,
-    combinator::recognize,
-    sequence::{preceded, separated_pair},
+    combinator::{map, recognize},
+    sequence::{preceded, separated_pair, terminated},
 };
 use nom_supreme::error::{BaseErrorKind, Expectation};
 use strum::IntoEnumIterator;
 
 use crate::parser::{
-    ast::{comment::wsoc::WSoC, token::Token, ProgramAST},
+    ast::{comment::wsoc::WSoC, expression::Expression, token::Token, ProgramAST},
     context::{context, ParserContext},
     error::ParserErrorTree,
     input::ParserInput,
@@ -97,14 +98,13 @@ impl<'a> ProgramAST<'a> for UnknownDirective<'a> {
             separated_pair(
                 preceded(Token::directive_indicator, Self::parse_unknown),
                 WSoC::parse,
-                // FIXME: Rework error recovery, because this recognises an `.` in an IRI,
-                //   e.g. in `@baseerror <https://example.org/>
-                //                                       ^
-                //   That means that content == "<https://example", and rest == ".org/>" which
-                //   will also produce an error.
-                // NOTE: Maybe we could try to parse the "body" of the other directives and if
-                //   one succeeds give a hint what directive could be the correct.
-                recognize(is_not(".")),
+                alt((
+                    map(
+                        terminated(Expression::parse, recognize(is_not("."))),
+                        |expression| expression.span(),
+                    ),
+                    map(recognize(is_not(".")), |x: ParserInput<'_>| x.span),
+                )),
             ),
         )(input)
         .map(|(rest, (name, content))| {
@@ -115,7 +115,7 @@ impl<'a> ProgramAST<'a> for UnknownDirective<'a> {
                 Self {
                     span: input_span.until_rest(&rest_span),
                     name,
-                    content: content.span,
+                    content,
                 },
             )
         })
@@ -174,7 +174,7 @@ mod test {
     fn error_recovery() {
         let test = [(
             "@test <https://example.org> .",
-            ("test", "<https://example.org> "),
+            ("test", "<https://example.org>"),
         )];
 
         for (input, expected) in test {

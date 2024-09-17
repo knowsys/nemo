@@ -3,7 +3,7 @@
 use nom::{
     branch::alt,
     combinator::{map, opt},
-    sequence::{pair, terminated},
+    sequence::{delimited, pair},
 };
 
 use crate::parser::{
@@ -16,7 +16,7 @@ use crate::parser::{
 use super::{
     comment::{doc::DocComment, wsoc::WSoC},
     directive::Directive,
-    expression::Expression,
+    guard::Guard,
     rule::Rule,
     token::Token,
     ProgramAST,
@@ -26,7 +26,7 @@ use super::{
 #[derive(Debug)]
 pub enum StatementKind<'a> {
     /// Fact
-    Fact(Expression<'a>),
+    Fact(Guard<'a>),
     /// Rule
     Rule(Rule<'a>),
     /// Directive
@@ -42,7 +42,7 @@ impl<'a> StatementKind<'a> {
             StatementKind::Fact(statement) => statement.context(),
             StatementKind::Rule(statement) => statement.context(),
             StatementKind::Directive(statement) => statement.context(),
-            StatementKind::Error(_statement) => todo!(),
+            StatementKind::Error(_statement) => ParserContext::Error,
         }
     }
 
@@ -51,7 +51,7 @@ impl<'a> StatementKind<'a> {
         alt((
             map(Directive::parse, Self::Directive),
             map(Rule::parse, Self::Rule),
-            map(Expression::parse, Self::Fact),
+            map(Guard::parse, Self::Fact),
         ))(input)
     }
 }
@@ -107,7 +107,11 @@ impl<'a> ProgramAST<'a> for Statement<'a> {
             CONTEXT,
             pair(
                 opt(DocComment::parse),
-                terminated(StatementKind::parse, pair(WSoC::parse, Token::dot)),
+                delimited(
+                    WSoC::parse,
+                    StatementKind::parse,
+                    pair(WSoC::parse, Token::dot),
+                ),
             ),
         )(input)
         .map(|(rest, (comment, statement))| {
@@ -144,12 +148,12 @@ mod test {
     fn parse_statement() {
         let test = vec![
             (
-                "/// A fact\n/// with a multiline doc comment. \n a(1, 2) .",
-                ParserContext::Expression,
+                "%%% A fact\n%%% with a multiline doc comment. \n a(1, 2) .",
+                ParserContext::Guard,
             ),
-            ("/// A rule \n a(1, 2) :- b(2, 1) .", ParserContext::Rule),
+            ("%%% A rule \n a(1, 2) :- b(2, 1) .", ParserContext::Rule),
             (
-                "/// A directive \n   \t@declare a(_: int, _: int) .",
+                "%%% A directive \n   \t@declare a(_: int, _: int) .",
                 ParserContext::Directive,
             ),
         ];

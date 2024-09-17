@@ -106,7 +106,7 @@ mod test {
     #[test]
     fn parse_export() {
         let test = vec![(
-            "@export predicate :- csv { resource: \"test.csv\" }",
+            "@export predicate :- csv { resource = \"test.csv\" }",
             ("predicate".to_string(), "csv".to_string()),
         )];
 

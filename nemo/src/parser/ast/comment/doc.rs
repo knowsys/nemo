@@ -96,9 +96,9 @@ mod test {
     #[test]
     fn parse_doc_comment() {
         let test = vec![
-            ("/// my comment", 1),
-            ("///my comment\r\n/// my other comment", 2),
-            ("///my comment\r\n    /// my other comment", 2),
+            ("%%% my comment", 1),
+            ("%%%my comment\r\n%%% my other comment", 2),
+            ("%%%my comment\r\n    %%% my other comment", 2),
         ];
 
         for (input, expected) in test {

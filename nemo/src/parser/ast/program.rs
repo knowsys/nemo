@@ -133,19 +133,19 @@ mod test {
 
     #[test]
     fn parse_program() {
-        let program = "//! Top-level comment\n\
-            // Declarations:\n\
+        let program = "%! Top-level comment\n\
+            % Declarations:\n\
             @declare a(_: int, _: int) .\n\
             @declare b(_: int, _: int) .\n\
-            /// A fact\n\
+            %%% A fact\n\
             a(1, 2) .\n\
             \n\
-            // Rules:\n\
+            % Rules:\n\
             \n\
-            /// A rule\n\
+            %%% A rule\n\
             b(?y, ?x) :- a(?x, ?y) .\n\
             \n\
-            // Some more comments
+            % Some more comments
         ";
 
         let parser_input = ParserInput::new(program, ParserState::default());
@@ -160,20 +160,20 @@ mod test {
 
     #[test]
     fn parser_recover() {
-        let program = "//! Top-level comment\n\
-            // Declarations:\n\
+        let program = "%! Top-level comment\n\
+            % Declarations:\n\
             @declare oops a(_: int, _: int) .\n\
             @declare b(_: int, _: int) .\n\
-            /// A fact\n\
+            %%% A fact\n\
             a(1, 2) \n\
             \n\
-            // Rules:\n\
+            % Rules:\n\
             \n\
-            /// A rule\n\
+            %%% A rule\n\
             b(?y, ?x) <- a(?x, ?y) .\n\
             \n\
             c(?y, ?x) :- a(?x, ?y) .\n\
-            // Some more comments
+            % Some more comments
         ";
 
         let parser_input = ParserInput::new(program, ParserState::default());
@@ -181,10 +181,8 @@ mod test {
             .expect("This should not fail")
             .1;
 
-        println!("{:?}", result.statements);
-
         assert!(result.comment.is_some());
-        assert_eq!(result.statements.len(), 2);
+        assert_eq!(result.statements.len(), 4);
         assert_eq!(parser_input.state.errors.borrow().len(), 2);
     }
 }
