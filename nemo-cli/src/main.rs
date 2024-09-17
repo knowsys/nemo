@@ -183,7 +183,7 @@ fn handle_tracing(
     engine: &mut DefaultExecutionEngine,
     program: Program,
 ) -> Result<(), CliError> {
-    let tracing_facts = parse_trace_facts(&cli)?;
+    let tracing_facts = parse_trace_facts(cli)?;
     if !tracing_facts.is_empty() {
         let mut facts = Vec::<Fact>::with_capacity(tracing_facts.len());
         for fact_string in &tracing_facts {
