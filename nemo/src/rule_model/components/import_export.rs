@@ -249,7 +249,7 @@ impl ImportExportDirective {
     ) -> Result<(), ()> {
         if let Term::Tuple(tuple) = value {
             for argument in tuple.arguments() {
-                if ImportExportDirective::plain_value(value)
+                if ImportExportDirective::plain_value(argument)
                     .and_then(|name| DsvValueFormat::from_name(&name))
                     .is_none()
                 {
@@ -277,7 +277,7 @@ impl ImportExportDirective {
     ) -> Result<(), ()> {
         if let Term::Tuple(tuple) = value {
             for argument in tuple.arguments() {
-                if ImportExportDirective::plain_value(value)
+                if ImportExportDirective::plain_value(argument)
                     .and_then(|name| RdfValueFormat::from_name(&name))
                     .is_none()
                 {
