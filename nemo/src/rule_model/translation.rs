@@ -138,7 +138,7 @@ impl<'a> ProgramErrorReport<'a> {
             .collect()
     }
 
-    /// Return raw [`ProgramError`s]
+    /// Return raw [ProgramError]s.
     pub fn errors(&self) -> &Vec<ProgramError> {
         &self.errors
     }

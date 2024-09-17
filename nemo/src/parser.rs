@@ -86,7 +86,7 @@ impl<'a> ParserErrorReport<'a> {
         })
     }
 
-    /// Return raw [`ParserError`s]
+    /// Return raw [ParserError]s.
     pub fn errors(&self) -> &Vec<ParserError> {
         &self.errors
     }

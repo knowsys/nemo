@@ -60,7 +60,7 @@ impl DsvValueFormats {
         Self(formats)
     }
 
-    /// Return a list of [DsvValueFormat]s with default entries.
+    /// Return a list of value formats with default entries.
     pub fn default(arity: usize) -> Self {
         Self((0..arity).map(|_| DsvValueFormat::Anything).collect())
     }

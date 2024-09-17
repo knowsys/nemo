@@ -1,4 +1,4 @@
-//! This module defines [ParseInput].
+//! This module defines [ParserInput].
 
 use std::str::{CharIndices, Chars};
 

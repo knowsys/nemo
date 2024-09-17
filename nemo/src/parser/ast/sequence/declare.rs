@@ -1,4 +1,4 @@
-//! This module defines [DeclareSequence].
+//! This module defines [NameTypePair].
 
 use nom::sequence::{separated_pair, tuple};
 

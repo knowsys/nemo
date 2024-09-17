@@ -456,7 +456,7 @@ struct IdentifiedNode<'a> {
     scoping_node: &'a dyn ProgramAST<'a>,
 }
 
-struct PariallyIdentifiedNode<'a> {
+struct PartiallyIdentifiedNode<'a> {
     node: &'a dyn ProgramAST<'a>,
     identifier: (ParserContext, String),
     identifier_scope: ParserContext,
@@ -472,7 +472,7 @@ fn node_path_deepest_identifier<'a>(
         match info {
             None => {
                 if let Some(lsp_ident) = node.identifier() {
-                    info = Some(PariallyIdentifiedNode {
+                    info = Some(PartiallyIdentifiedNode {
                         node: *node,
                         identifier: lsp_ident.identifier().clone(),
                         identifier_scope: *lsp_ident.scope(),

@@ -1,4 +1,4 @@
-//! This module defines [PrimitiveTerm].
+//! This module defines [Primitive].
 
 pub mod ground;
 pub mod variable;

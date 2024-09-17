@@ -5,7 +5,7 @@ use thiserror::Error;
 use nemo_physical::{datavalues::DataValueCreationError, resource::Resource};
 
 /// Errors that can occur when reading/writing RDF resources and converting them
-/// to/from [AnyDataValue]s.
+/// to/from Nemo's data value representation.
 #[allow(variant_size_differences)]
 #[derive(Error, Debug)]
 pub enum RdfFormatError {

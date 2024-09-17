@@ -1,4 +1,4 @@
-//! This module defines [KeyValueSequence].
+//! This module defines [KeyValuePair].
 
 use nom::sequence::{separated_pair, tuple};
 

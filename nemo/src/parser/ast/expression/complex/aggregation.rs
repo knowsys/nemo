@@ -21,8 +21,6 @@ use crate::{
 };
 
 /// A known Aggregation applied to a series of [Expression]s.
-///
-/// This has the same structure as an [Atom].
 #[derive(Debug)]
 pub struct Aggregation<'a> {
     /// [Span] associated with this node

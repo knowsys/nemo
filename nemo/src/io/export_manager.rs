@@ -179,13 +179,8 @@ impl ExportManager {
         Ok(export_handler.resource_is_stdout())
     }
 
-    /// Export a (possibly empty) table according to the given [ExportDirective],
-    /// but direct output into the given writer instead of using whatever
-    /// resource the directive specifies.
-    ///
-    /// The `predicate_arity` is the arity of the predicate that is to be exported. This information
-    /// is used for validation and as a hint to exporters that were not initialized with details
-    /// about the arity.
+    /// Export a (possibly empty) table according to the given [ImportExportHandler],
+    /// and directly output into the given writer.
     ///
     /// This function ignores [ExportManager::disable_write].
     pub fn export_table_with_writer<'a>(
