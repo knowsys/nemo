@@ -64,7 +64,7 @@ impl Fact {
 impl From<Atom> for Fact {
     fn from(value: Atom) -> Self {
         Self {
-            origin: value.origin().clone(),
+            origin: *value.origin(),
             predicate: value.predicate(),
             terms: value.arguments().cloned().collect(),
         }
@@ -125,30 +125,27 @@ impl ProgramComponent for Fact {
         self
     }
 
-    fn validate(&self, builder: &mut ValidationErrorBuilder) -> Result<(), ()>
+    fn validate(&self, builder: &mut ValidationErrorBuilder) -> Option<()>
     where
         Self: Sized,
     {
         if !self.predicate.is_valid() {
             builder.report_error(
-                self.predicate.origin().clone(),
+                *self.predicate.origin(),
                 ValidationErrorKind::InvalidTermTag(self.predicate.to_string()),
             );
         }
 
         for term in self.subterms() {
             if let Some(variable) = term.variables().next() {
-                builder.report_error(
-                    variable.origin().clone(),
-                    ValidationErrorKind::FactNonGround,
-                );
+                builder.report_error(*variable.origin(), ValidationErrorKind::FactNonGround);
                 continue;
             }
 
             term.validate(builder)?;
         }
 
-        Ok(())
+        Some(())
     }
 
     fn kind(&self) -> ProgramComponentKind {
@@ -172,13 +169,9 @@ impl IterablePrimitives for Fact {
 
 impl From<GroundAtom> for Fact {
     fn from(value: GroundAtom) -> Self {
-        let origin = value.origin().clone();
+        let origin = *value.origin();
         let predicate = value.predicate();
-        let terms = value
-            .terms()
-            .cloned()
-            .map(|term| Term::from(term))
-            .collect();
+        let terms = value.terms().cloned().map(Term::from).collect();
 
         Self {
             origin,

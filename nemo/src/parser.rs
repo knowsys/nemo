@@ -103,8 +103,8 @@ impl<'a> Parser<'a> {
     }
 
     /// Parse the input.
-    pub fn parse(self) -> Result<Program<'a>, (Program<'a>, ParserErrorReport<'a>)> {
-        let parser_input = ParserInput::new(&self.input, self.state.clone());
+    pub fn parse(self) -> Result<Program<'a>, (Box<Program<'a>>, ParserErrorReport<'a>)> {
+        let parser_input = ParserInput::new(self.input, self.state.clone());
 
         let (_, program) = Program::parse(parser_input).expect("parsing should always succeed");
 
@@ -112,7 +112,7 @@ impl<'a> Parser<'a> {
             Ok(program)
         } else {
             Err((
-                program,
+                Box::new(program),
                 ParserErrorReport {
                     input: self.input,
                     label: self.label,

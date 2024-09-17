@@ -146,10 +146,8 @@ impl ProgramComponent for GroundTerm {
             ASTProgramTranslation::build_inner_term
         )?;
 
-        if let Term::Primitive(primitive) = term {
-            if let Primitive::Ground(ground) = primitive {
-                return Ok(ground);
-            }
+        if let Term::Primitive(Primitive::Ground(ground)) = term {
+            return Ok(ground);
         }
 
         Err(ComponentParseError::ParseError)
@@ -167,11 +165,11 @@ impl ProgramComponent for GroundTerm {
         self
     }
 
-    fn validate(&self, _builder: &mut ValidationErrorBuilder) -> Result<(), ()>
+    fn validate(&self, _builder: &mut ValidationErrorBuilder) -> Option<()>
     where
         Self: Sized,
     {
-        Ok(())
+        Some(())
     }
 
     fn kind(&self) -> ProgramComponentKind {

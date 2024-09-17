@@ -26,20 +26,22 @@ macro_rules! parse_component {
     ($string:expr, $parser:expr, $builder:expr) => {{
         use nom::InputLength;
 
-        let input =
-            crate::parser::input::ParserInput::new($string, crate::parser::ParserState::default());
+        let input = $crate::parser::input::ParserInput::new(
+            $string,
+            $crate::parser::ParserState::default(),
+        );
         let ast = match $parser(input) {
             Ok((input, ast)) => {
                 if input.input_len() == 0 {
                     ast
                 } else {
                     return Err(
-                        crate::rule_model::components::parse::ComponentParseError::ParseError,
+                        $crate::rule_model::components::parse::ComponentParseError::ParseError,
                     );
                 }
             }
             Err(_) => {
-                return Err(crate::rule_model::components::parse::ComponentParseError::ParseError)
+                return Err($crate::rule_model::components::parse::ComponentParseError::ParseError)
             }
         };
 
@@ -48,7 +50,7 @@ macro_rules! parse_component {
         match $builder(&mut translation, &ast) {
             Ok(component) => Ok(component),
             Err(error) => Err(
-                crate::rule_model::components::parse::ComponentParseError::TranslationError(error),
+                $crate::rule_model::components::parse::ComponentParseError::TranslationError(error),
             ),
         }
     }};

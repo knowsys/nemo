@@ -32,7 +32,7 @@ impl ProgramChaseTranslation {
         &self,
         import: &crate::rule_model::components::import_export::ImportDirective,
     ) -> ChaseImport {
-        let origin = import.origin().clone();
+        let origin = *import.origin();
         let predicate = import.predicate().clone();
         let attributes = import.attributes();
         let file_format = import.file_format();
@@ -53,7 +53,7 @@ impl ProgramChaseTranslation {
         &self,
         export: &crate::rule_model::components::import_export::ExportDirective,
     ) -> ChaseExport {
-        let origin = export.origin().clone();
+        let origin = *export.origin();
         let predicate = export.predicate().clone();
         let attributes = export.attributes();
         let file_format = export.file_format();
@@ -79,13 +79,12 @@ impl ProgramChaseTranslation {
     ) -> Box<dyn ImportExportHandler> {
         let arity = self.predicate_arity.get(&predicate).cloned();
 
-        if attributes.get(&ImportExportAttribute::Resource).is_none() {
-            let default_file_name = format!("{}.{}", predicate, file_format.extension());
-            attributes.insert(
-                ImportExportAttribute::Resource,
-                Term::from(default_file_name),
-            );
-        }
+        attributes
+            .entry(ImportExportAttribute::Resource)
+            .or_insert_with(|| {
+                let default_file_name = format!("{}.{}", predicate, file_format.extension());
+                Term::from(default_file_name)
+            });
 
         match file_format {
             FileFormat::CSV => {
@@ -120,7 +119,7 @@ impl ProgramChaseTranslation {
     ) -> (CompressionFormat, ImportExportResource) {
         attributes
             .get(&ImportExportAttribute::Resource)
-            .and_then(|term| ImportExportDirective::string_value(term))
+            .and_then(ImportExportDirective::string_value)
             .map(|resource| CompressionFormat::from_resource(&resource))
             .map(|(format, resource)| (format, ImportExportResource::from_string(resource)))
             .expect("invalid program: missing resource in import/export")
@@ -162,7 +161,7 @@ impl ProgramChaseTranslation {
     fn read_limit(attributes: &HashMap<ImportExportAttribute, Term>) -> Option<u64> {
         attributes
             .get(&ImportExportAttribute::Limit)
-            .and_then(|term| ImportExportDirective::integer_value(term))
+            .and_then(ImportExportDirective::integer_value)
             .map(|limit| u64::try_from(limit).unwrap_or_default())
     }
 

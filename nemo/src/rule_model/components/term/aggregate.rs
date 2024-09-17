@@ -62,9 +62,9 @@ impl Display for AggregateKind {
     }
 }
 
-impl Into<AggregateOperation> for AggregateKind {
-    fn into(self) -> AggregateOperation {
-        match self {
+impl From<AggregateKind> for AggregateOperation {
+    fn from(value: AggregateKind) -> Self {
+        match value {
             AggregateKind::CountValues => AggregateOperation::Count,
             AggregateKind::MinNumber => AggregateOperation::Min,
             AggregateKind::MaxNumber => AggregateOperation::Max,
@@ -228,7 +228,7 @@ impl ProgramComponent for Aggregate {
         self
     }
 
-    fn validate(&self, builder: &mut ValidationErrorBuilder) -> Result<(), ()>
+    fn validate(&self, builder: &mut ValidationErrorBuilder) -> Option<()>
     where
         Self: Sized,
     {
@@ -236,18 +236,18 @@ impl ProgramComponent for Aggregate {
         if let Some(expected_type) = self.kind.input_type() {
             if input_type != expected_type {
                 builder.report_error(
-                    self.aggregate.origin().clone(),
+                    *self.aggregate.origin(),
                     ValidationErrorKind::AggregateInvalidValueType {
                         found: input_type.name().to_string(),
                         expected: expected_type.name().to_string(),
                     },
                 );
 
-                return Err(());
+                return None;
             }
         }
 
-        Ok(())
+        Some(())
     }
 
     fn kind(&self) -> ProgramComponentKind {

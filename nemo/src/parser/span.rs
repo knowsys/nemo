@@ -6,7 +6,7 @@ use nom_locate::LocatedSpan;
 
 /// Locates a certain character within a file,
 /// giving its offset, line and column number
-#[derive(Debug, Clone, Copy, Eq)]
+#[derive(Debug, Default, Clone, Copy, Eq)]
 pub struct CharacterPosition {
     /// Index of the character in the source file
     pub offset: usize,
@@ -20,17 +20,6 @@ impl CharacterPosition {
     /// Return a one character range at this position
     pub fn range(&self) -> Range<usize> {
         self.offset..(self.offset + 1)
-    }
-}
-
-// TODO: Remove this once error is cleaned up
-impl Default for CharacterPosition {
-    fn default() -> Self {
-        Self {
-            offset: Default::default(),
-            line: Default::default(),
-            column: Default::default(),
-        }
     }
 }
 
@@ -147,7 +136,7 @@ impl<'a> Span<'a> {
     pub fn beginning(&self) -> Self {
         unsafe {
             if self.0.is_empty() {
-                self.clone()
+                *self
             } else {
                 Self(LocatedSpan::new_from_raw_offset(
                     self.0.location_offset(),

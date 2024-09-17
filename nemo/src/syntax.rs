@@ -1,5 +1,6 @@
 //! The Syntax constants for the nemo language.
-//! Every utilisation of syntax (e.g. parsing or formatting values to
+//!
+//! Every utilization of syntax (e.g. parsing or formatting values to
 //! string representation) has to reference the constants defined
 //! in this module and must not use strings directly.
 

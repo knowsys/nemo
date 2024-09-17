@@ -416,9 +416,7 @@ impl NemoEngine {
     fn trace(&mut self, fact_string: String) -> Option<NemoTrace> {
         let fact = Fact::parse(&fact_string).ok()?;
         let mut builder = ValidationErrorBuilder::default();
-        if fact.validate(&mut builder).is_err() {
-            return None;
-        }
+        fact.validate(&mut builder)?;
 
         let (trace, handles) = self.engine.trace(self.program.0.clone(), vec![fact]);
         let handle = *handles
@@ -462,7 +460,7 @@ impl NemoEngine {
             .0
             .export_table(
                 &tag,
-                &export_handler,
+                &*export_handler,
                 self.engine.predicate_rows(&tag).py_res()?,
             )
             .py_res()?;

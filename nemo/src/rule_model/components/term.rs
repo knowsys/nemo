@@ -280,7 +280,7 @@ impl ProgramComponent for Term {
         }
     }
 
-    fn validate(&self, builder: &mut ValidationErrorBuilder) -> Result<(), ()>
+    fn validate(&self, builder: &mut ValidationErrorBuilder) -> Option<()>
     where
         Self: Sized,
     {
@@ -316,33 +316,6 @@ impl IterableVariables for Term {
             Term::Operation(term) => term.variables(),
             Term::Tuple(term) => term.variables(),
         }
-
-        // let mut iter_primitive = None;
-        // let mut iter_function = None;
-        // let mut iter_map = None;
-        // let mut iter_operation = None;
-        // let mut iter_tuple = None;
-        // let mut iter_aggregate = None;
-
-        // match self {
-        //     Term::Primitive(primitive) => iter_primitive = Some(primitive.variables()),
-        //     Term::FunctionTerm(function) => iter_function = Some(function.variables()),
-        //     Term::Map(map) => iter_map = Some(map.variables()),
-        //     Term::Operation(operation) => iter_operation = Some(operation.variables()),
-        //     Term::Tuple(tuple) => iter_tuple = Some(tuple.variables()),
-        //     Term::Aggregate(aggregate) => iter_aggregate = Some(aggregate.variables()),
-        // }
-
-        // Box::new(
-        //     iter_primitive
-        //         .into_iter()
-        //         .flatten()
-        //         .chain(iter_function.into_iter().flatten())
-        //         .chain(iter_map.into_iter().flatten())
-        //         .chain(iter_operation.into_iter().flatten())
-        //         .chain(iter_tuple.into_iter().flatten())
-        //         .chain(iter_aggregate.into_iter().flatten()),
-        // )
     }
 
     fn variables_mut<'a>(&'a mut self) -> Box<dyn Iterator<Item = &'a mut Variable> + 'a> {
@@ -354,33 +327,6 @@ impl IterableVariables for Term {
             Term::Operation(term) => term.variables_mut(),
             Term::Tuple(term) => term.variables_mut(),
         }
-
-        // let mut iter_primitive = None;
-        // let mut iter_function = None;
-        // let mut iter_map = None;
-        // let mut iter_operation = None;
-        // let mut iter_tuple = None;
-        // let mut iter_aggregate = None;
-
-        // match self {
-        //     Term::Primitive(primitive) => iter_primitive = Some(primitive.variables_mut()),
-        //     Term::FunctionTerm(function) => iter_function = Some(function.variables_mut()),
-        //     Term::Map(map) => iter_map = Some(map.variables_mut()),
-        //     Term::Operation(operation) => iter_operation = Some(operation.variables_mut()),
-        //     Term::Tuple(tuple) => iter_tuple = Some(tuple.variables_mut()),
-        //     Term::Aggregate(aggregate) => iter_aggregate = Some(aggregate.variables_mut()),
-        // }
-
-        // Box::new(
-        //     iter_primitive
-        //         .into_iter()
-        //         .flatten()
-        //         .chain(iter_function.into_iter().flatten())
-        //         .chain(iter_map.into_iter().flatten())
-        //         .chain(iter_operation.into_iter().flatten())
-        //         .chain(iter_tuple.into_iter().flatten())
-        //         .chain(iter_aggregate.into_iter().flatten()),
-        // )
     }
 }
 

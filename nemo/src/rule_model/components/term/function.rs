@@ -41,17 +41,19 @@ pub struct FunctionTerm {
 macro_rules! function {
     // Base case: no elements
     ($name:tt) => {
-        crate::rule_model::components::term::function::FunctionTerm::new(
-            crate::rule_model::components::tag::Tag::from($name), Vec::new()
+        $crate::rule_model::components::term::function::FunctionTerm::new(
+            $crate::rule_model::components::tag::Tag::from($name), Vec::new()
         )
     };
     // Recursive case: handle each term, separated by commas
     ($name:tt; $($tt:tt)*) => {{
-        let mut terms = Vec::new();
-        term_list!(terms; $($tt)*);
-        crate::rule_model::components::term::function::FunctionTerm::new(
-            crate::rule_model::components::tag::Tag::from($name), terms
-        )
+        #[allow(clippy::vec_init_then_push)] {
+            let mut terms = Vec::new();
+            term_list!(terms; $($tt)*);
+            $crate::rule_model::components::term::function::FunctionTerm::new(
+                $crate::rule_model::components::tag::Tag::from($name), terms
+            )
+        }
     }};
 }
 
@@ -149,13 +151,13 @@ impl ProgramComponent for FunctionTerm {
         self
     }
 
-    fn validate(&self, builder: &mut ValidationErrorBuilder) -> Result<(), ()>
+    fn validate(&self, builder: &mut ValidationErrorBuilder) -> Option<()>
     where
         Self: Sized,
     {
         if !self.tag.is_valid() {
             builder.report_error(
-                self.tag.origin().clone(),
+                *self.tag.origin(),
                 ValidationErrorKind::InvalidTermTag(self.tag.to_string()),
             );
         }
@@ -165,10 +167,10 @@ impl ProgramComponent for FunctionTerm {
         }
 
         if self.is_empty() {
-            builder.report_error(self.origin.clone(), ValidationErrorKind::FunctionTermEmpty);
+            builder.report_error(self.origin, ValidationErrorKind::FunctionTermEmpty);
         }
 
-        Ok(())
+        Some(())
     }
 
     fn kind(&self) -> ProgramComponentKind {

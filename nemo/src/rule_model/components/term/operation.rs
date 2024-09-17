@@ -76,15 +76,13 @@ impl Operation {
             return None;
         }
 
-        let left = self.subterms.get(0).expect("invalid program component");
+        let left = self.subterms.first().expect("invalid program component");
         let right = self.subterms.get(1).expect("invalid program component");
 
         if let Term::Primitive(Primitive::Variable(variable)) = left {
             return Some((variable, right));
-        } else {
-            if let Term::Primitive(Primitive::Variable(variable)) = right {
-                return Some((variable, left));
-            }
+        } else if let Term::Primitive(Primitive::Variable(variable)) = right {
+            return Some((variable, left));
         }
 
         None
@@ -227,27 +225,27 @@ impl ProgramComponent for Operation {
         self
     }
 
-    fn validate(&self, builder: &mut ValidationErrorBuilder) -> Result<(), ()>
+    fn validate(&self, builder: &mut ValidationErrorBuilder) -> Option<()>
     where
         Self: Sized,
     {
         if !self.kind.num_arguments().validate(self.subterms.len()) {
             builder.report_error(
-                self.origin.clone(),
+                self.origin,
                 ValidationErrorKind::OperationArgumentNumber {
                     used: self.subterms.len(),
                     expected: self.kind.num_arguments().to_string(),
                 },
             );
 
-            return Err(());
+            return None;
         }
 
         for argument in self.arguments() {
             argument.validate(builder)?;
         }
 
-        Ok(())
+        Some(())
     }
 
     fn kind(&self) -> ProgramComponentKind {

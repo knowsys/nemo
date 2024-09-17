@@ -1,5 +1,7 @@
 //! This module defines [StructureTag].
 
+use std::fmt::Display;
+
 use nom::{branch::alt, combinator::map, sequence::separated_pair};
 
 use crate::parser::{
@@ -41,17 +43,16 @@ impl<'a> StructureTag<'a> {
     pub fn kind(&self) -> &StructureTagKind<'a> {
         &self.kind
     }
+}
 
-    /// Return a string representation of the [Tag].
-    ///
-    /// Note that this does not resolve prefixes.
-    pub fn to_string(&self) -> String {
+impl<'a> Display for StructureTag<'a> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match &self.kind {
-            StructureTagKind::Plain(token) => token.to_string(),
+            StructureTagKind::Plain(token) => token.fmt(f),
             StructureTagKind::Prefixed { prefix, tag } => {
-                format!("{}::{}", prefix.to_string(), tag.to_string())
+                f.write_fmt(format_args!("{}::{}", prefix, tag))
             }
-            StructureTagKind::Iri(iri) => iri.content(),
+            StructureTagKind::Iri(iri) => iri.content().fmt(f),
         }
     }
 }

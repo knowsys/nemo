@@ -98,7 +98,7 @@ impl ImportExportDirective {
 
         for (key, value) in self.attributes.key_value() {
             if let Some(name) =
-                Self::plain_value(&key).and_then(|plain| ImportExportAttribute::from_name(&plain))
+                Self::plain_value(key).and_then(|plain| ImportExportAttribute::from_name(&plain))
             {
                 result.insert(name, value.clone());
             }
@@ -114,7 +114,7 @@ impl ImportExportDirective {
 
         for (key, value) in self.attributes.key_value() {
             if let Some(name) =
-                Self::plain_value(&key).and_then(|plain| ImportExportAttribute::from_name(&plain))
+                Self::plain_value(key).and_then(|plain| ImportExportAttribute::from_name(&plain))
             {
                 result.insert(name, (key.origin(), value));
             }
@@ -133,11 +133,10 @@ impl ImportExportDirective {
 
         match self.format {
             FileFormat::CSV | FileFormat::DSV | FileFormat::TSV => {
-                if let Some(value_format) = self.attribute_map().get(&ImportExportAttribute::Format)
+                if let Some(Term::Tuple(tuple)) =
+                    self.attribute_map().get(&ImportExportAttribute::Format)
                 {
-                    if let Term::Tuple(tuple) = value_format {
-                        return DsvValueFormats::from_tuple(tuple).map(|format| format.arity());
-                    }
+                    return DsvValueFormats::from_tuple(tuple).map(|format| format.arity());
                 }
             }
             _ => {}
@@ -159,23 +158,20 @@ impl ImportExportDirective {
 }
 
 impl ImportExportDirective {
-    /// Validate directive
+    /// Validate directive.
     pub fn validate(
         &self,
         direction: Direction,
         builder: &mut ValidationErrorBuilder,
-    ) -> Result<(), ()> {
+    ) -> Option<()> {
         if direction == Direction::Export && self.format == FileFormat::JSON {
-            builder.report_error(
-                self.origin.clone(),
-                ValidationErrorKind::UnsupportedJsonExport,
-            );
-            return Err(());
+            builder.report_error(self.origin, ValidationErrorKind::UnsupportedJsonExport);
+            return None;
         }
 
         let attributes = self.attribute_map_key();
         for (attribute, requirement) in self.format.attributes() {
-            if requirement == AttributeRequirement::Required && attributes.get(&attribute).is_none()
+            if requirement == AttributeRequirement::Required && !attributes.contains_key(&attribute)
             {
                 builder.report_error(
                     self.origin,
@@ -197,7 +193,7 @@ impl ImportExportDirective {
             if !expected_attributes.contains(attribute) {
                 builder
                     .report_error(
-                        attribute_origin.clone(),
+                        attribute_origin,
                         ValidationErrorKind::ImportExportUnrecognizedAttribute {
                             format: self.format.name().to_string(),
                             attribute: attribute.name().to_string(),
@@ -212,7 +208,7 @@ impl ImportExportDirective {
 
             if attribute.value_type() != value.kind() {
                 builder.report_error(
-                    value.origin().clone(),
+                    *value.origin(),
                     ValidationErrorKind::ImportExportAttributeValueType {
                         parameter: attribute.name().to_string(),
                         given: value.kind().name().to_string(),
@@ -243,7 +239,7 @@ impl ImportExportDirective {
             };
         }
 
-        Ok(())
+        Some(())
     }
 
     /// Validate the format attribute for dsv
@@ -258,7 +254,7 @@ impl ImportExportDirective {
                     .is_none()
                 {
                     builder.report_error(
-                        argument.origin().clone(),
+                        *argument.origin(),
                         ValidationErrorKind::ImportExportValueFormat {
                             file_format: String::from("dsv"),
                         },
@@ -286,7 +282,7 @@ impl ImportExportDirective {
                     .is_none()
                 {
                     builder.report_error(
-                        argument.origin().clone(),
+                        *argument.origin(),
                         ValidationErrorKind::ImportExportValueFormat {
                             file_format: String::from("rdf"),
                         },
@@ -306,10 +302,7 @@ impl ImportExportDirective {
     fn validate_delimiter(value: &Term, builder: &mut ValidationErrorBuilder) -> Result<(), ()> {
         if let Some(delimiter) = ImportExportDirective::string_value(value) {
             if delimiter.len() != 1 {
-                builder.report_error(
-                    value.origin().clone(),
-                    ValidationErrorKind::ImportExportDelimiter,
-                );
+                builder.report_error(*value.origin(), ValidationErrorKind::ImportExportDelimiter);
 
                 return Err(());
             }
@@ -323,7 +316,7 @@ impl ImportExportDirective {
         if let Term::Primitive(Primitive::Ground(ground)) = value {
             if !ground.value().fits_into_u64() {
                 builder.report_error(
-                    value.origin().clone(),
+                    *value.origin(),
                     ValidationErrorKind::ImportExportLimitNegative,
                 );
                 return Err(());
@@ -338,7 +331,7 @@ impl ImportExportDirective {
         if let Some(compression) = ImportExportDirective::string_value(value) {
             if CompressionFormat::from_name(&compression).is_none() {
                 builder.report_error(
-                    value.origin().clone(),
+                    *value.origin(),
                     ValidationErrorKind::ImportExportUnknownCompression {
                         format: compression,
                     },
@@ -443,7 +436,7 @@ impl ProgramComponent for ImportDirective {
         self
     }
 
-    fn validate(&self, builder: &mut ValidationErrorBuilder) -> Result<(), ()>
+    fn validate(&self, builder: &mut ValidationErrorBuilder) -> Option<()>
     where
         Self: Sized,
     {
@@ -530,7 +523,7 @@ impl ProgramComponent for ExportDirective {
         self
     }
 
-    fn validate(&self, builder: &mut ValidationErrorBuilder) -> Result<(), ()>
+    fn validate(&self, builder: &mut ValidationErrorBuilder) -> Option<()>
     where
         Self: Sized,
     {

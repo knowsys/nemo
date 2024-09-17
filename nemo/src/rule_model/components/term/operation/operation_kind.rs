@@ -51,10 +51,10 @@ impl Display for OperationNumArguments {
                     for (index, value) in choice.iter().enumerate() {
                         write!(f, "{}", value)?;
 
-                        if index < choice.len() - 2 {
-                            write!(f, ", ")?;
-                        } else if index == choice.len() - 2 {
-                            write!(f, ", or ")?;
+                        match index.cmp(&(choice.len() - 2)) {
+                            std::cmp::Ordering::Less => write!(f, ", ")?,
+                            std::cmp::Ordering::Equal => write!(f, ", or ")?,
+                            std::cmp::Ordering::Greater => {}
                         }
                     }
 

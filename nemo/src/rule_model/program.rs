@@ -153,7 +153,7 @@ impl Program {
         &mut self,
         exports: Iterator,
     ) {
-        self.exports.extend(exports.into_iter())
+        self.exports.extend(exports)
     }
 
     /// Remove all export statements
@@ -201,7 +201,7 @@ impl Program {
                         )
                         .add_label(
                             ComplexErrorLabelKind::Information,
-                            previous_origin.clone(),
+                            *previous_origin,
                             Info::PredicateArity {
                                 arity: *previous_arity,
                             },
@@ -219,12 +219,12 @@ impl Program {
     pub(crate) fn validate_global_properties(
         &self,
         builder: &mut ValidationErrorBuilder,
-    ) -> Result<(), ()> {
+    ) -> Option<()> {
         let mut predicate_arity = HashMap::<Tag, (usize, Origin)>::new();
 
         for import in self.imports() {
             let predicate = import.predicate().clone();
-            let origin = import.origin().clone();
+            let origin = *import.origin();
 
             if let Some(arity) = import.expected_arity() {
                 Self::validate_arity(&mut predicate_arity, predicate, arity, origin, builder);
@@ -234,7 +234,7 @@ impl Program {
         for fact in self.facts() {
             let predicate = fact.predicate().clone();
             let arity = fact.subterms().count();
-            let origin = fact.origin().clone();
+            let origin = *fact.origin();
 
             Self::validate_arity(&mut predicate_arity, predicate, arity, origin, builder);
         }
@@ -243,7 +243,7 @@ impl Program {
             for atom in rule.head() {
                 let predicate = atom.predicate().clone();
                 let arity = atom.arguments().count();
-                let origin = atom.origin().clone();
+                let origin = *atom.origin();
 
                 Self::validate_arity(&mut predicate_arity, predicate, arity, origin, builder);
             }
@@ -253,7 +253,7 @@ impl Program {
                     Literal::Positive(atom) | Literal::Negative(atom) => {
                         let predicate = atom.predicate().clone();
                         let arity = atom.arguments().count();
-                        let origin = atom.origin().clone();
+                        let origin = *atom.origin();
 
                         Self::validate_arity(
                             &mut predicate_arity,
@@ -272,14 +272,14 @@ impl Program {
 
         for export in self.exports() {
             let predicate = export.predicate().clone();
-            let origin = export.origin().clone();
+            let origin = *export.origin();
 
             if let Some(arity) = export.expected_arity() {
                 Self::validate_arity(&mut predicate_arity, predicate, arity, origin, builder);
             }
         }
 
-        Ok(())
+        Some(())
     }
 }
 
@@ -320,7 +320,7 @@ impl ProgramComponent for Program {
         self
     }
 
-    fn validate(&self, builder: &mut ValidationErrorBuilder) -> Result<(), ()>
+    fn validate(&self, builder: &mut ValidationErrorBuilder) -> Option<()>
     where
         Self: Sized,
     {
@@ -418,7 +418,7 @@ impl ProgramBuilder {
     }
 
     /// Validate the current program.
-    pub fn validate(&self, builder: &mut ValidationErrorBuilder) -> Result<(), ()> {
+    pub fn validate(&self, builder: &mut ValidationErrorBuilder) -> Option<()> {
         self.program.validate_global_properties(builder)
     }
 }

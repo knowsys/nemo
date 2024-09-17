@@ -52,7 +52,7 @@ pub(crate) fn ast_to_ascii_tree<'a>(node: &'a dyn ProgramAST<'a>) -> Tree {
     Tree::Node(
         format!(
             "{} \x1b[34m@{}:{} {colour}{str}\x1b[0m",
-            node.context().name().to_string(),
+            node.context().name(),
             node.span().0.location_line(),
             node.span().0.get_utf8_column()
         ),

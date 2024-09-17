@@ -70,13 +70,13 @@ impl ExportManager {
     pub fn validate(
         &self,
         predicate: &Tag,
-        handler: &Box<dyn ImportExportHandler>,
+        handler: &dyn ImportExportHandler,
     ) -> Result<(), Error> {
         if handler.resource_is_stdout() {
             return Ok(());
         }
 
-        let path = self.output_file_path(predicate, &**handler);
+        let path = self.output_file_path(predicate, handler);
 
         let meta_info = path.metadata();
         if let Err(err) = meta_info {
@@ -162,14 +162,14 @@ impl ExportManager {
     pub fn export_table<'a>(
         &self,
         predicate: &Tag,
-        export_handler: &Box<dyn ImportExportHandler>,
+        export_handler: &dyn ImportExportHandler,
         table: Option<impl Iterator<Item = Vec<AnyDataValue>> + 'a>,
     ) -> Result<bool, Error> {
         if self.disable_write {
             return Ok(false);
         }
 
-        let writer = self.writer(&**export_handler, predicate)?;
+        let writer = self.writer(export_handler, predicate)?;
 
         if let Some(table) = table {
             let table_writer = export_handler.writer(writer)?;
@@ -191,7 +191,7 @@ impl ExportManager {
     pub fn export_table_with_writer<'a>(
         &self,
         writer: Box<dyn Write>,
-        export_handler: &Box<dyn ImportExportHandler>,
+        export_handler: &dyn ImportExportHandler,
         table: Option<impl Iterator<Item = Vec<AnyDataValue>> + 'a>,
     ) -> Result<(), Error> {
         if let Some(table) = table {

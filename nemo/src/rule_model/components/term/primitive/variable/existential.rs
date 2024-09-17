@@ -101,7 +101,7 @@ impl ProgramComponent for ExistentialVariable {
         self
     }
 
-    fn validate(&self, builder: &mut ValidationErrorBuilder) -> Result<(), ()>
+    fn validate(&self, builder: &mut ValidationErrorBuilder) -> Option<()>
     where
         Self: Sized,
     {
@@ -112,7 +112,7 @@ impl ProgramComponent for ExistentialVariable {
             );
         }
 
-        Ok(())
+        Some(())
     }
 
     fn kind(&self) -> ProgramComponentKind {

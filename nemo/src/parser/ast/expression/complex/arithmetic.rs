@@ -45,23 +45,23 @@ pub enum ArithmeticOperation {
 
 impl ArithmeticOperation {
     /// Parse additive operation.
-    pub fn parse_additive<'a>(input: ParserInput<'a>) -> ParserResult<'a, Self> {
+    pub fn parse_additive(input: ParserInput<'_>) -> ParserResult<'_, Self> {
         alt((Token::plus, Token::minus))(input).map(|(rest, result)| {
             (
                 rest,
                 ArithmeticOperation::token(result.kind())
-                    .expect(&format!("unexpected token: {:?}", result.kind())),
+                    .unwrap_or_else(|| panic!("unexpected token: {:?}", result.kind())),
             )
         })
     }
 
     /// Parse multiplicative operation.
-    pub fn parse_multiplicative<'a>(input: ParserInput<'a>) -> ParserResult<'a, Self> {
+    pub fn parse_multiplicative(input: ParserInput<'_>) -> ParserResult<'_, Self> {
         alt((Token::star, Token::division))(input).map(|(rest, result)| {
             (
                 rest,
                 ArithmeticOperation::token(result.kind())
-                    .expect(&format!("unexpected token: {:?}", result.kind())),
+                    .unwrap_or_else(|| panic!("unexpected token: {:?}", result.kind())),
             )
         })
     }
@@ -101,7 +101,7 @@ impl<'a> Arithmetic<'a> {
     pub fn ascii_tree(&self) -> String {
         let mut output = String::new();
         write_tree(&mut output, &ast_to_ascii_tree(self)).unwrap();
-        format!("{output}")
+        output.to_string()
     }
 }
 
@@ -231,10 +231,8 @@ impl<'a> ProgramAST<'a> for Arithmetic<'a> {
         Self: Sized + 'a,
     {
         let arithmetic_parser = |input: ParserInput<'a>| {
-            if let Ok((rest, expression)) = Self::parse_sum(input.clone()) {
-                if let Expression::Arithmetic(result) = expression {
-                    return Ok((rest, result));
-                }
+            if let Ok((rest, Expression::Arithmetic(result))) = Self::parse_sum(input.clone()) {
+                return Ok((rest, result));
             }
 
             Err(nom::Err::Error(ParserErrorTree::Base {
@@ -265,7 +263,7 @@ mod test {
     };
 
     /// Count the number of expressions contained in an arithmetic expression
-    fn count_expression<'a>(expression: &Expression<'a>) -> usize {
+    fn count_expression(expression: &Expression) -> usize {
         match expression {
             Expression::Arithmetic(arithmetic) => {
                 count_expression(arithmetic.left()) + count_expression(arithmetic.right())
@@ -293,10 +291,6 @@ mod test {
         for (input, expected) in test {
             let parser_input = ParserInput::new(input, ParserState::default());
             let result = all_consuming(Arithmetic::parse)(parser_input);
-            match &result {
-                Ok((_, ast)) => println!("{ast}"),
-                Err(_) => assert!(false),
-            }
 
             let result = result.unwrap();
             assert_eq!(

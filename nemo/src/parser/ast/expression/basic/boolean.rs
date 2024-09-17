@@ -49,7 +49,7 @@ impl<'a> Boolean<'a> {
             (
                 rest,
                 BooleanValue::token(result.kind())
-                    .expect(&format!("unexpected token: {:?}", result.kind())),
+                    .unwrap_or_else(|| panic!("unexpected token: {:?}", result.kind())),
             )
         })
     }

@@ -145,10 +145,7 @@ impl Rule {
     ///     * an aggregate occurs at most once
     fn validate_term_head(builder: &mut ValidationErrorBuilder, term: &Term) -> Result<bool, ()> {
         if term.is_map() || term.is_tuple() || term.is_function() {
-            builder.report_error(
-                term.origin().clone(),
-                ValidationErrorKind::UnsupportedComplexTerm,
-            );
+            builder.report_error(*term.origin(), ValidationErrorKind::UnsupportedComplexTerm);
             return Err(());
         }
 
@@ -159,7 +156,7 @@ impl Rule {
 
             if contains_aggregate && first_aggregate {
                 builder.report_error(
-                    subterm.origin().clone(),
+                    *subterm.origin(),
                     ValidationErrorKind::UnsupportedAggregateMultiple,
                 );
 
@@ -185,14 +182,14 @@ impl Rule {
     ) -> Result<(), ()> {
         if let Term::Primitive(Primitive::Variable(Variable::Existential(existential))) = term {
             builder.report_error(
-                existential.origin().clone(),
+                *existential.origin(),
                 ValidationErrorKind::BodyExistential(Variable::Existential(existential.clone())),
             );
             return Err(());
         }
 
         if term.is_aggregate() {
-            builder.report_error(term.origin().clone(), ValidationErrorKind::BodyAggregate);
+            builder.report_error(*term.origin(), ValidationErrorKind::BodyAggregate);
             return Err(());
         }
 
@@ -200,7 +197,7 @@ impl Rule {
             for operation_variable in term.variables() {
                 if operation_variable.name().is_none() {
                     builder.report_error(
-                        operation_variable.origin().clone(),
+                        *operation_variable.origin(),
                         ValidationErrorKind::OperationAnonymous,
                     );
                     return Err(());
@@ -208,7 +205,7 @@ impl Rule {
 
                 if !safe_variables.contains(operation_variable) {
                     builder.report_error(
-                        operation_variable.origin().clone(),
+                        *operation_variable.origin(),
                         ValidationErrorKind::OperationUnsafe(operation_variable.clone()),
                     );
                     return Err(());
@@ -217,10 +214,7 @@ impl Rule {
         }
 
         if term.is_map() || term.is_tuple() || term.is_function() {
-            builder.report_error(
-                term.origin().clone(),
-                ValidationErrorKind::UnsupportedComplexTerm,
-            );
+            builder.report_error(*term.origin(), ValidationErrorKind::UnsupportedComplexTerm);
             return Err(());
         }
 
@@ -293,7 +287,7 @@ impl ProgramComponent for Rule {
         self
     }
 
-    fn validate(&self, builder: &mut ValidationErrorBuilder) -> Result<(), ()>
+    fn validate(&self, builder: &mut ValidationErrorBuilder) -> Option<()>
     where
         Self: Sized,
     {
@@ -312,14 +306,14 @@ impl ProgramComponent for Rule {
                 if let Ok(aggregate) = Self::validate_term_head(builder, term) {
                     if aggregate && contains_aggregate {
                         builder.report_error(
-                            term.origin().clone(),
+                            *term.origin(),
                             ValidationErrorKind::UnsupportedAggregateMultiple,
                         );
                     }
 
                     if aggregate && is_existential {
                         builder.report_error(
-                            term.origin().clone(),
+                            *term.origin(),
                             ValidationErrorKind::UnsupportedAggregatesAndExistentials,
                         );
                     }
@@ -333,7 +327,7 @@ impl ProgramComponent for Rule {
                     if !safe_variables.contains(variable) {
                         builder
                             .report_error(
-                                variable.origin().clone(),
+                                *variable.origin(),
                                 ValidationErrorKind::HeadUnsafe(variable.clone()),
                             )
                             .add_hint_option(Hint::similar(
@@ -342,14 +336,11 @@ impl ProgramComponent for Rule {
                                 safe_variables.iter().flat_map(|variable| variable.name()),
                             ));
 
-                        return Err(());
+                        return None;
                     }
                 } else {
-                    builder.report_error(
-                        variable.origin().clone(),
-                        ValidationErrorKind::HeadAnonymous,
-                    );
-                    return Err(());
+                    builder.report_error(*variable.origin(), ValidationErrorKind::HeadAnonymous);
+                    return None;
                 }
             }
         }
@@ -384,14 +375,14 @@ impl ProgramComponent for Rule {
 
                 builder
                     .report_error(
-                        repeated_use.origin().clone(),
+                        *repeated_use.origin(),
                         ValidationErrorKind::MultipleNegativeLiteralsUnsafe(
                             (*repeated_use).clone(),
                         ),
                     )
                     .add_label(
                         ComplexErrorLabelKind::Information,
-                        first_use.origin().clone(),
+                        *first_use.origin(),
                         Info::FirstUse,
                     );
             }
@@ -399,7 +390,7 @@ impl ProgramComponent for Rule {
             negative_variables.extend(current_negative_variables);
         }
 
-        Ok(())
+        Some(())
     }
 
     fn kind(&self) -> ProgramComponentKind {

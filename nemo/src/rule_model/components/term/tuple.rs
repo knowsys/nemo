@@ -39,13 +39,15 @@ pub struct Tuple {
 macro_rules! tuple {
     // Base case: no elements
     () => {
-        crate::rule_model::components::term::tuple::Tuple::new(Vec::new())
+        $crate::rule_model::components::term::tuple::Tuple::new(Vec::new())
     };
     // Recursive case: handle each term, separated by commas
     ($($tt:tt)*) => {{
-        let mut terms = Vec::new();
-        term_list!(terms; $($tt)*);
-        crate::rule_model::components::term::tuple::Tuple::new(terms)
+        #[allow(clippy::vec_init_then_push)] {
+            let mut terms = Vec::new();
+            term_list!(terms; $($tt)*);
+            $crate::rule_model::components::term::tuple::Tuple::new(terms)
+        }
     }};
 }
 
@@ -127,7 +129,7 @@ impl ProgramComponent for Tuple {
         self
     }
 
-    fn validate(&self, builder: &mut ValidationErrorBuilder) -> Result<(), ()>
+    fn validate(&self, builder: &mut ValidationErrorBuilder) -> Option<()>
     where
         Self: Sized,
     {
@@ -135,7 +137,7 @@ impl ProgramComponent for Tuple {
             term.validate(builder)?;
         }
 
-        Ok(())
+        Some(())
     }
 
     fn kind(&self) -> ProgramComponentKind {

@@ -38,7 +38,7 @@ pub struct ParserError {
 }
 
 /// Skip a statement, returning an error token.
-pub(crate) fn skip_statement<'a>(input: ParserInput<'a>) -> ParserResult<'a, Token<'a>> {
+pub(crate) fn skip_statement(input: ParserInput<'_>) -> ParserResult<'_, Token<'_>> {
     let input_span = input.span;
 
     let until_double_newline = map(
@@ -109,7 +109,7 @@ pub(crate) fn report_error<'a>(
 
 /// Function to translate an [ParserErrorTree] returned by the nom parser
 /// into a [ParserError] that can be displayed to the user.
-pub(crate) fn transform_error_tree<'a, Output>(
+pub(crate) fn _transform_error_tree<'a, Output>(
     mut parser: impl Parser<ParserInput<'a>, Output, ParserErrorTree<'a>>,
 ) -> impl FnMut(ParserInput<'a>) -> ParserResult<'a, Output> {
     move |input| match parser.parse(input.clone()) {
@@ -132,9 +132,7 @@ pub(crate) fn transform_error_tree<'a, Output>(
     }
 }
 
-fn context_strs(
-    contexts: &Vec<(ParserInput<'_>, StackContext<ParserContext>)>,
-) -> Vec<ParserContext> {
+fn context_strs(contexts: &[(ParserInput<'_>, StackContext<ParserContext>)]) -> Vec<ParserContext> {
     contexts
         .iter()
         .map(|(_, c)| match c {
@@ -144,7 +142,7 @@ fn context_strs(
         .collect()
 }
 
-fn get_deepest_errors<'a, 's>(e: &'a ParserErrorTree<'a>) -> (CharacterPosition, Vec<ParserError>) {
+fn get_deepest_errors<'a>(e: &'a ParserErrorTree<'a>) -> (CharacterPosition, Vec<ParserError>) {
     match e {
         ParserErrorTree::Base { location, .. } => {
             let span = location.span.0;
@@ -175,12 +173,11 @@ fn get_deepest_errors<'a, 's>(e: &'a ParserErrorTree<'a>) -> (CharacterPosition,
                     for (_, context) in contexts {
                         match context {
                             StackContext::Kind(_) => todo!(),
-                            StackContext::Context(c) => match c {
-                                ParserContext::Token { kind: t } => {
-                                    msg.push_str(&t.name());
+                            StackContext::Context(c) => {
+                                if let ParserContext::Token { kind: t } = c {
+                                    msg.push_str(t.name());
                                 }
-                                _ => (),
-                            },
+                            }
                         }
                     }
                     (
@@ -214,12 +211,16 @@ fn get_deepest_errors<'a, 's>(e: &'a ParserErrorTree<'a>) -> (CharacterPosition,
             let mut deepest_pos = CharacterPosition::default();
             for error in vec {
                 let (pos, mut deepest_errors) = get_deepest_errors(error);
-                if pos > deepest_pos {
-                    deepest_pos = pos;
-                    return_vec.clear();
-                    return_vec.append(&mut deepest_errors);
-                } else if pos == deepest_pos {
-                    return_vec.append(&mut deepest_errors);
+                match pos.cmp(&deepest_pos) {
+                    std::cmp::Ordering::Equal => {
+                        return_vec.append(&mut deepest_errors);
+                    }
+                    std::cmp::Ordering::Greater => {
+                        deepest_pos = pos;
+                        return_vec.clear();
+                        return_vec.append(&mut deepest_errors);
+                    }
+                    std::cmp::Ordering::Less => {}
                 }
             }
             (deepest_pos, return_vec)

@@ -29,9 +29,9 @@ impl ProgramChaseTranslation {
         &mut self,
         result: &mut ChaseRule,
         aggregate: &crate::rule_model::components::term::aggregate::Aggregate,
-        group_by_variables: &Vec<Variable>,
+        group_by_variables: &[Variable],
     ) -> ChaseAggregate {
-        let origin = aggregate.origin().clone();
+        let origin = *aggregate.origin();
         let kind = aggregate.aggregate_kind();
         let input_variable = match aggregate.aggregate_term() {
             Term::Primitive(Primitive::Variable(variable)) => variable.clone(),
@@ -71,7 +71,7 @@ impl ProgramChaseTranslation {
             input_variable,
             output_variable,
             distinct_variables,
-            group_by_variables.clone(),
+            group_by_variables.to_vec(),
         )
     }
 
@@ -88,10 +88,10 @@ impl ProgramChaseTranslation {
         &mut self,
         result: &mut ChaseRule,
         operation: &crate::rule_model::components::term::operation::Operation,
-        group_by_variables: &Vec<Variable>,
+        group_by_variables: &[Variable],
         chase_aggregate: &mut Option<ChaseAggregate>,
     ) -> OperationTerm {
-        let origin = operation.origin().clone();
+        let origin = *operation.origin();
         let kind = operation.operation_kind();
         let mut subterms = Vec::new();
 
@@ -130,7 +130,7 @@ impl ProgramChaseTranslation {
         &mut self,
         result: &mut ChaseRule,
         operation: &crate::rule_model::components::term::operation::Operation,
-        group_by_variables: &Vec<Variable>,
+        group_by_variables: &[Variable],
         output_variable: Variable,
         chase_aggregate: &mut Option<ChaseAggregate>,
     ) -> ChaseOperation {
@@ -141,6 +141,6 @@ impl ProgramChaseTranslation {
             chase_aggregate,
         );
 
-        ChaseOperation::new(output_variable, operation_term).set_origin(operation.origin().clone())
+        ChaseOperation::new(output_variable, operation_term).set_origin(*operation.origin())
     }
 }

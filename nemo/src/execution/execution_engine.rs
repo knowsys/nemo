@@ -141,7 +141,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         // Add all the import specifications
         for import in program.imports() {
             let table_source = TableSource::new(
-                input_manager.table_provider_from_handler(&**import.handler())?,
+                input_manager.table_provider_from_handler(&*import.handler())?,
                 import.arity(),
             );
 
@@ -282,7 +282,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         self.program
             .exports()
             .iter()
-            .map(|export| (export.predicate().clone(), export.handler().clone()))
+            .map(|export| (export.predicate().clone(), export.handler()))
             .collect()
     }
 

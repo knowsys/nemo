@@ -60,7 +60,7 @@ impl<'a> WSoC<'a> {
                 rest,
                 Self {
                     _span: input_span.until_rest(&rest_span),
-                    comments: comments.into_iter().filter_map(|comment| comment).collect(),
+                    comments: comments.into_iter().flatten().collect(),
                 },
             )
         })

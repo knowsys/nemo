@@ -122,7 +122,7 @@ impl TryFrom<Atom> for GroundAtom {
     type Error = GroundAtomConversionError;
 
     fn try_from(value: Atom) -> Result<Self, Self::Error> {
-        let origin = value.origin().clone();
+        let origin = *value.origin();
         let predicate = value.predicate();
         let mut terms = Vec::new();
 

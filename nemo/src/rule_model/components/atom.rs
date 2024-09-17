@@ -43,19 +43,21 @@ pub struct Atom {
 macro_rules! atom {
     // Base case: no elements
     ($name:tt) => {
-        crate::rule_model::components::atom::Atom::new(
-            crate::rule_model::components::tag::Tag::from($name),
+        $crate::rule_model::components::atom::Atom::new(
+            $crate::rule_model::components::tag::Tag::from($name),
             Vec::new()
         )
     };
     // Recursive case: handle each term, separated by commas
     ($name:tt; $($tt:tt)*) => {{
-        let mut terms = Vec::new();
-        term_list!(terms; $($tt)*);
-        crate::rule_model::components::atom::Atom::new(
-            crate::rule_model::components::tag::Tag::from($name),
-            terms
-        )
+        #[allow(clippy::vec_init_then_push)] {
+            let mut terms = Vec::new();
+            term_list!(terms; $($tt)*);
+            $crate::rule_model::components::atom::Atom::new(
+                $crate::rule_model::components::tag::Tag::from($name),
+                terms
+            )
+        }
     }};
 }
 
@@ -151,29 +153,26 @@ impl ProgramComponent for Atom {
         self
     }
 
-    fn validate(&self, builder: &mut ValidationErrorBuilder) -> Result<(), ()>
+    fn validate(&self, builder: &mut ValidationErrorBuilder) -> Option<()>
     where
         Self: Sized,
     {
         if !self.predicate.is_valid() {
             builder.report_error(
-                self.predicate.origin().clone(),
+                *self.predicate.origin(),
                 ValidationErrorKind::InvalidTermTag(self.predicate.to_string()),
             );
         }
 
         if self.is_empty() {
-            builder.report_error(
-                self.origin.clone(),
-                ValidationErrorKind::UnsupportedAtomEmpty,
-            );
+            builder.report_error(self.origin, ValidationErrorKind::UnsupportedAtomEmpty);
         }
 
         for term in self.arguments() {
             term.validate(builder)?;
         }
 
-        Ok(())
+        Some(())
     }
 
     fn kind(&self) -> ProgramComponentKind {

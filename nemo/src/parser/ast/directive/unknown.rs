@@ -53,7 +53,7 @@ impl<'a> UnknownDirective<'a> {
             if let Ok((rest, matched)) = Token::name(input.clone()) {
                 let mut is_known = false;
 
-                for directive in DirectiveKind::iter().map(|kind| kind.token()).flatten() {
+                for directive in DirectiveKind::iter().flat_map(|kind| kind.token()) {
                     if matched.to_string() == directive.name() {
                         is_known = true;
                         break;

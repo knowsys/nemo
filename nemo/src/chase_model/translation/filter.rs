@@ -24,7 +24,7 @@ impl ProgramChaseTranslation {
         variable: &Variable,
         operation: &crate::rule_model::components::term::operation::Operation,
     ) -> ChaseFilter {
-        let origin = operation.origin().clone();
+        let origin = *operation.origin();
         let operation = Self::build_operation_term(operation);
 
         let filter = OperationTerm::Operation(
@@ -35,7 +35,7 @@ impl ProgramChaseTranslation {
                     operation,
                 ],
             )
-            .set_origin(origin.clone()),
+            .set_origin(origin),
         );
 
         ChaseFilter::new(filter).set_origin(origin)
@@ -50,8 +50,8 @@ impl ProgramChaseTranslation {
                 OperationTerm::Primitive(term.clone()),
             ],
         )
-        .set_origin(term.origin().clone());
+        .set_origin(*term.origin());
 
-        ChaseFilter::new(OperationTerm::Operation(filter)).set_origin(term.origin().clone())
+        ChaseFilter::new(OperationTerm::Operation(filter)).set_origin(*term.origin())
     }
 }

@@ -116,8 +116,11 @@ pub trait ProgramComponent: Debug + Display {
     where
         Self: Sized;
 
-    /// Validate this component
-    fn validate(&self, builder: &mut ValidationErrorBuilder) -> Result<(), ()>
+    /// Validate this component.
+    ///
+    /// Errors will be appended to the given [ValidationErrorBuilder].
+    /// Returns `Some(())` if successful and `None` otherwise.
+    fn validate(&self, builder: &mut ValidationErrorBuilder) -> Option<()>
     where
         Self: Sized;
 }

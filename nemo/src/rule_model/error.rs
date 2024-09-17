@@ -196,7 +196,7 @@ impl ValidationErrorBuilder {
         let message = kind.to_string();
 
         self.errors.push(ValidationError {
-            kind: kind,
+            kind,
             info: ComplexError::new_error(origin),
         });
 
@@ -218,17 +218,17 @@ pub struct TranslationError {
     /// The type of error that occurred
     kind: TranslationErrorKind,
     /// Additional information
-    info: ComplexError<CharacterRange>,
+    info: Box<ComplexError<CharacterRange>>,
 }
 
 impl TranslationError {
     /// Create a new [TranslationError] from a given [Span].
-    pub fn new<'a>(span: Span<'a>, kind: TranslationErrorKind) -> Self {
+    pub fn new(span: Span<'_>, kind: TranslationErrorKind) -> Self {
         let message = kind.to_string();
 
         let mut result = Self {
             kind,
-            info: ComplexError::new_error(span.range()),
+            info: Box::new(ComplexError::new_error(span.range())),
         };
 
         result

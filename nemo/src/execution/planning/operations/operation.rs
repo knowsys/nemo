@@ -20,7 +20,7 @@ pub(super) fn operation_term_to_function_tree(
             Primitive::Ground(datavalue) => FunctionTree::constant(datavalue.value()),
             Primitive::Variable(variable) => FunctionTree::reference(
                 *translation
-                    .get(&variable)
+                    .get(variable)
                     .expect("Every variable must be known"),
             ),
         },

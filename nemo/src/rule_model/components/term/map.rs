@@ -165,7 +165,7 @@ impl ProgramComponent for Map {
         self
     }
 
-    fn validate(&self, builder: &mut ValidationErrorBuilder) -> Result<(), ()>
+    fn validate(&self, builder: &mut ValidationErrorBuilder) -> Option<()>
     where
         Self: Sized,
     {
@@ -174,7 +174,7 @@ impl ProgramComponent for Map {
             value.validate(builder)?;
         }
 
-        Ok(())
+        Some(())
     }
 
     fn kind(&self) -> ProgramComponentKind {

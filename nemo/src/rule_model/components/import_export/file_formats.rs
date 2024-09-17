@@ -139,7 +139,7 @@ pub enum FileFormat {
 }
 
 /// List of RDF [FileFormat]s
-pub const FILE_FORMATS_RDF: &'static [FileFormat] = &[
+pub const FILE_FORMATS_RDF: &[FileFormat] = &[
     FileFormat::NQuads,
     FileFormat::NTriples,
     FileFormat::RDFXML,

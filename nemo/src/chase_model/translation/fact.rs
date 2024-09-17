@@ -21,18 +21,13 @@ impl ProgramChaseTranslation {
         &mut self,
         fact: &crate::rule_model::components::fact::Fact,
     ) -> GroundAtom {
-        let origin = fact.origin().clone();
+        let origin = *fact.origin();
         let predicate = fact.predicate().clone();
         let mut terms = Vec::new();
 
         for term in fact.subterms() {
-            if let Term::Primitive(primitive) = term {
-                if let Primitive::Ground(value) = primitive {
-                    terms.push(value.clone());
-                    continue;
-                } else {
-                    unreachable!("invalid program: fact contains non-ground values")
-                }
+            if let Term::Primitive(Primitive::Ground(value)) = term {
+                terms.push(value.clone());
             } else {
                 unreachable!("invalid program: fact contains non-primitive values")
             }

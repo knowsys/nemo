@@ -153,15 +153,11 @@ where
     move |i| match f.parse(i.clone()) {
         Ok(o) => Ok(o),
         Err(nom::Err::Incomplete(i)) => Err(nom::Err::Incomplete(i)),
-        Err(nom::Err::Error(e)) => Err(nom::Err::Error(ParserErrorTree::add_context(
-            i,
-            context.clone(),
-            e,
-        ))),
+        Err(nom::Err::Error(e)) => {
+            Err(nom::Err::Error(ParserErrorTree::add_context(i, context, e)))
+        }
         Err(nom::Err::Failure(e)) => Err(nom::Err::Failure(ParserErrorTree::add_context(
-            i,
-            context.clone(),
-            e,
+            i, context, e,
         ))),
     }
 }

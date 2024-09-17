@@ -50,8 +50,9 @@ impl ImportExportResource {
     }
 }
 
-/// An [ImportExportHandler] represents a data format for input and/or output, and provides
-/// specific methods for handling data of that format. Each handler is configured by format-specific
+/// An [ImportExportHandler] represents a data format for input and/or output.
+///
+/// It provides specific methods for handling data of that format. Each handler is configured by format-specific
 /// attributes, which define the behavior in detail, including the kind of data that this format
 /// is compatible with. The attributes are provided when creating the format, and should then
 /// be validated.

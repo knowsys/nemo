@@ -94,11 +94,11 @@ impl ProgramComponent for Output {
         self
     }
 
-    fn validate(&self, _builder: &mut ValidationErrorBuilder) -> Result<(), ()>
+    fn validate(&self, _builder: &mut ValidationErrorBuilder) -> Option<()>
     where
         Self: Sized,
     {
-        Ok(())
+        Some(())
     }
 
     fn kind(&self) -> ProgramComponentKind {

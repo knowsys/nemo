@@ -98,20 +98,16 @@ impl<'a> Number<'a> {
 
     /// Recreate the number string without the type marker.
     fn number_string(&self) -> String {
-        let integer = format!(
-            "{}{}",
-            self.integer_sign.print(),
-            self.integer.span().0.to_string()
-        );
+        let integer = format!("{}{}", self.integer_sign.print(), self.integer.span().0);
 
         let fractional = if let Some(fractional) = &self.fractional {
-            format!(".{}", fractional.span().0.to_string())
+            format!(".{}", fractional.span().0)
         } else {
             String::default()
         };
 
         let exponent = if let Some((sign, exponent)) = &self.exponent {
-            format!("e{}{}", sign.print(), exponent.span().0.to_string())
+            format!("e{}{}", sign.print(), exponent.span().0)
         } else {
             String::default()
         };
@@ -150,7 +146,7 @@ impl<'a> Number<'a> {
             (
                 rest,
                 NumberSign::token(&sign.kind())
-                    .expect(&format!("unexpected token: {:?}", sign.kind())),
+                    .unwrap_or_else(|| panic!("unexpected token: {:?}", sign.kind())),
             )
         })
     }

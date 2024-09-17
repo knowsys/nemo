@@ -98,7 +98,7 @@ impl Backend {
             Parser::initialize(text, text_document.uri.to_string())
                 .parse()
                 .map(|prg| (prg, None))
-                .unwrap_or_else(|(prg, err)| (prg, Some(err)));
+                .unwrap_or_else(|(prg, err)| (*prg, Some(err)));
 
         // Group errors by position and deduplicate error
         let mut errors_by_posision: BTreeMap<CharacterPosition, BTreeSet<String>> = BTreeMap::new();
@@ -267,7 +267,7 @@ impl LanguageServer for Backend {
         )
         .parse()
         .map(|prg| (prg, None))
-        .unwrap_or_else(|(prg, err)| (prg, Some(err)));
+        .unwrap_or_else(|(prg, err)| (*prg, Some(err)));
 
         let node_path = find_in_ast(&program, position);
 
@@ -313,7 +313,7 @@ impl LanguageServer for Backend {
             Parser::initialize(&text, params.text_document.uri.to_string())
                 .parse()
                 .map(|prg| (prg, None))
-                .unwrap_or_else(|(prg, err)| (prg, Some(err)));
+                .unwrap_or_else(|(prg, err)| (*prg, Some(err)));
 
         let document_symbols = ast_node_to_document_symbol(&line_index, &program)
             .map_err(Into::into)
@@ -347,7 +347,7 @@ impl LanguageServer for Backend {
         )
         .parse()
         .map(|prg| (prg, None))
-        .unwrap_or_else(|(prg, err)| (prg, Some(err)));
+        .unwrap_or_else(|(prg, err)| (*prg, Some(err)));
 
         let node_path = find_in_ast(&program, position);
 
@@ -412,7 +412,7 @@ impl LanguageServer for Backend {
             Parser::initialize(&text, params.text_document.uri.to_string())
                 .parse()
                 .map(|prg| (prg, None))
-                .unwrap_or_else(|(prg, err)| (prg, Some(err)));
+                .unwrap_or_else(|(prg, err)| (*prg, Some(err)));
 
         let node_path = find_in_ast(&program, position);
 

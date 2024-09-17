@@ -372,7 +372,7 @@ impl NemoEngine {
         let export_manager: ExportManager = Default::default();
 
         export_manager
-            .export_table_with_writer(Box::new(writer), &export_handler, Some(record_iter))
+            .export_table_with_writer(Box::new(writer), &*export_handler, Some(record_iter))
             .map_err(WasmOrInternalNemoError::Nemo)
             .map_err(NemoError)
     }

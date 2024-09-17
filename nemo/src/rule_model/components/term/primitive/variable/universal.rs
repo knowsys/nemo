@@ -121,7 +121,7 @@ impl ProgramComponent for UniversalVariable {
         self
     }
 
-    fn validate(&self, builder: &mut ValidationErrorBuilder) -> Result<(), ()>
+    fn validate(&self, builder: &mut ValidationErrorBuilder) -> Option<()>
     where
         Self: Sized,
     {
@@ -134,7 +134,7 @@ impl ProgramComponent for UniversalVariable {
             }
         }
 
-        Ok(())
+        Some(())
     }
 
     fn kind(&self) -> ProgramComponentKind {

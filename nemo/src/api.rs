@@ -77,7 +77,7 @@ pub fn output_predicates(engine: &Engine) -> Vec<Tag> {
     engine
         .program()
         .exports()
-        .into_iter()
+        .iter()
         .map(|export| export.predicate())
         .cloned()
         .collect()

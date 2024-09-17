@@ -191,7 +191,7 @@ fn handle_tracing(
                 fact: fact_string.clone(),
             })?;
             let mut builder = ValidationErrorBuilder::default();
-            if fact.validate(&mut builder).is_err() {
+            if fact.validate(&mut builder).is_none() {
                 return Err(CliError::TracingInvalidFact {
                     fact: fact_string.clone(),
                 });
@@ -285,7 +285,7 @@ fn run(mut cli: CliApp) -> Result<(), CliError> {
     let mut engine: DefaultExecutionEngine = ExecutionEngine::initialize(&program, import_manager)?;
 
     for (predicate, handler) in engine.exports() {
-        export_manager.validate(&predicate, &handler)?;
+        export_manager.validate(&predicate, &*handler)?;
     }
 
     TimedCode::instance().sub("Reading & Preprocessing").stop();
@@ -307,7 +307,7 @@ fn run(mut cli: CliApp) -> Result<(), CliError> {
         for (predicate, handler) in engine.exports() {
             stdout_used |= export_manager.export_table(
                 &predicate,
-                &handler,
+                &*handler,
                 engine.predicate_rows(&predicate)?,
             )?;
         }

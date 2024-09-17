@@ -89,7 +89,7 @@ impl<'a> InfixExpression<'a> {
             (
                 rest,
                 InfixExpressionKind::token(result.kind())
-                    .expect(&format!("unexpected token: {:?}", result.kind())),
+                    .unwrap_or_else(|| panic!("unexpected token: {:?}", result.kind())),
             )
         })
     }

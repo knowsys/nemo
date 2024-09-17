@@ -87,16 +87,16 @@ impl ProgramChaseTranslation {
 
         for literal in rule.body() {
             if let Literal::Operation(operation) = literal {
-                if let Some((left, term)) = operation.variable_assignment() {
-                    if let Term::Primitive(Primitive::Variable(right)) = term {
-                        // Operation has the form ?left = ?right
-                        if let Some(assigned) = assignment.get(left) {
-                            assignment.insert(right.clone(), assigned.clone());
-                        } else if let Some(assigned) = assignment.get(right) {
-                            assignment.insert(left.clone(), assigned.clone());
-                        } else {
-                            assignment.insert(left.clone(), right.clone());
-                        }
+                if let Some((left, Term::Primitive(Primitive::Variable(right)))) =
+                    operation.variable_assignment()
+                {
+                    // Operation has the form ?left = ?right
+                    if let Some(assigned) = assignment.get(left) {
+                        assignment.insert(right.clone(), assigned.clone());
+                    } else if let Some(assigned) = assignment.get(right) {
+                        assignment.insert(left.clone(), assigned.clone());
+                    } else {
+                        assignment.insert(left.clone(), right.clone());
                     }
                 }
             }
@@ -126,7 +126,7 @@ impl ProgramChaseTranslation {
     /// # Panics
     /// Panics if atom contains a structured term or an aggregate.
     fn build_body_atom(&mut self, atom: &Atom) -> (VariableAtom, Vec<ChaseFilter>) {
-        let origin = atom.origin().clone();
+        let origin = *atom.origin();
         let predicate = atom.predicate().clone();
         let mut variables = Vec::new();
 
@@ -234,8 +234,7 @@ impl ProgramChaseTranslation {
 
             if let Literal::Operation(operation) = literal {
                 let new_operation = Self::build_operation_term(operation);
-                let new_filter =
-                    ChaseFilter::new(new_operation).set_origin(operation.origin().clone());
+                let new_filter = ChaseFilter::new(new_operation).set_origin(*operation.origin());
 
                 result.add_positive_filter(new_filter);
             }
@@ -244,11 +243,11 @@ impl ProgramChaseTranslation {
 
     /// Translates each head atom into the [PrimitiveAtom],
     /// while taking care of operations and aggregates.
-    fn handle_head(&mut self, result: &mut ChaseRule, head: &Vec<Atom>) {
+    fn handle_head(&mut self, result: &mut ChaseRule, head: &[Atom]) {
         let mut chase_aggregate: Option<ChaseAggregate> = None;
 
         for (head_index, atom) in head.iter().enumerate() {
-            let origin = atom.origin().clone();
+            let origin = *atom.origin();
             let predicate = atom.predicate().clone();
             let mut terms = Vec::new();
 

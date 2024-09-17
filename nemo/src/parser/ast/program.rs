@@ -51,7 +51,7 @@ impl<'a> Program<'a> {
     pub fn ascii_tree(&self) -> String {
         let mut output = String::new();
         write_tree(&mut output, &ast_to_ascii_tree(self)).unwrap();
-        format!("{output}")
+        output.to_string()
     }
 }
 

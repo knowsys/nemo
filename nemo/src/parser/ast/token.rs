@@ -1,6 +1,8 @@
 //! This module defines [Token].
 #![allow(missing_docs)]
 
+use std::fmt::Display;
+
 use enum_assoc::Assoc;
 
 use nom::{
@@ -259,10 +261,9 @@ pub struct Token<'a> {
     kind: TokenKind,
 }
 
-impl<'a> Token<'a> {
-    /// Return a copy of the underlying text
-    pub fn to_string(&self) -> String {
-        self.span.0.to_string()
+impl<'a> Display for Token<'a> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.span.0.fmt(f)
     }
 }
 
