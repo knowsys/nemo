@@ -7,7 +7,9 @@ use thiserror::Error;
 
 use crate::{
     chase_model::analysis::program_analysis::RuleAnalysisError,
-    execution::selection_strategy::strategy::SelectionStrategyError,
+    execution::{
+        selection_strategy::strategy::SelectionStrategyError, tracing::error::TracingError,
+    },
 };
 
 pub use nemo_physical::error::ReadingError;
@@ -25,6 +27,9 @@ pub enum Error {
     /// Error occurred during parsing
     #[error("error while parsing program")]
     ProgramParseError,
+    /// Error occurred during tracing
+    #[error(transparent)]
+    TracingError(#[from] TracingError),
     /// IO Error
     #[error(transparent)]
     IO(#[from] std::io::Error),

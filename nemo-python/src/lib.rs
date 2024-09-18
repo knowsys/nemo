@@ -418,7 +418,7 @@ impl NemoEngine {
         let mut builder = ValidationErrorBuilder::default();
         fact.validate(&mut builder)?;
 
-        let (trace, handles) = self.engine.trace(self.program.0.clone(), vec![fact]);
+        let (trace, handles) = self.engine.trace(self.program.0.clone(), vec![fact]).ok()?;
         let handle = *handles
             .first()
             .expect("Function trace always returns a handle for each input fact");

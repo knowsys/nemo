@@ -200,7 +200,7 @@ fn handle_tracing(
             facts.push(fact);
         }
 
-        let (trace, handles) = engine.trace(program, facts);
+        let (trace, handles) = engine.trace(program, facts)?;
 
         match &cli.tracing.output_file {
             Some(output_file) => {

@@ -36,7 +36,10 @@ use crate::{
 use super::{
     rule_execution::RuleExecution,
     selection_strategy::strategy::RuleSelectionStrategy,
-    tracing::trace::{ExecutionTrace, TraceFactHandle, TraceRuleApplication, TraceStatus},
+    tracing::{
+        error::TracingError,
+        trace::{ExecutionTrace, TraceFactHandle, TraceRuleApplication, TraceStatus},
+    },
 };
 
 // Number of tables that are periodically combined into one.
@@ -317,11 +320,11 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         program: &ChaseProgram,
         trace: &mut ExecutionTrace,
         fact: GroundAtom,
-    ) -> TraceFactHandle {
+    ) -> Result<TraceFactHandle, TracingError> {
         let trace_handle = trace.register_fact(fact.clone());
 
         if trace.status(trace_handle).is_known() {
-            return trace_handle;
+            return Ok(trace_handle);
         }
 
         // Find the origin of the given fact
@@ -334,14 +337,14 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                 // If the table manager does not know the predicate of the fact
                 // then it could not have been derived
                 trace.update_status(trace_handle, TraceStatus::Fail);
-                return trace_handle;
+                return Ok(trace_handle);
             }
         };
 
         if step == 0 {
             // If a fact was derived in step 0 it must have been given as an EDB fact
             trace.update_status(trace_handle, TraceStatus::Success(TraceDerivation::Input));
-            return trace_handle;
+            return Ok(trace_handle);
         }
 
         // Rule index of the rule that was applied to derive the given fact
@@ -399,7 +402,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
             let rule = self.program.rules()[rule_index].clone();
             let analysis = &self.analysis.rule_analysis[rule_index];
             let mut variable_order = analysis.promising_variable_orders[0].clone(); // TODO: This selection is arbitrary
-            let trace_strategy = TracingStrategy::initialize(&rule, grounding);
+            let trace_strategy = TracingStrategy::initialize(&rule, grounding)?;
 
             let mut execution_plan = SubtableExecutionPlan::default();
 
@@ -436,7 +439,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
 
                     let next_fact = GroundAtom::new(next_fact_predicate, next_fact_terms);
 
-                    let next_handle = self.trace_recursive(program, trace, next_fact);
+                    let next_handle = self.trace_recursive(program, trace, next_fact)?;
 
                     if trace.status(next_handle).is_success() {
                         subtraces.push(next_handle);
@@ -461,14 +464,14 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                 let derivation = TraceDerivation::Derived(rule_application, subtraces);
                 trace.update_status(trace_handle, TraceStatus::Success(derivation));
 
-                return trace_handle;
+                return Ok(trace_handle);
             } else {
                 continue;
             }
         }
 
         trace.update_status(trace_handle, TraceStatus::Fail);
-        trace_handle
+        Ok(trace_handle)
     }
 
     /// Build an [ExecutionTrace] for a list of facts.
@@ -479,7 +482,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         &mut self,
         program: Program,
         facts: Vec<Fact>,
-    ) -> (ExecutionTrace, Vec<TraceFactHandle>) {
+    ) -> Result<(ExecutionTrace, Vec<TraceFactHandle>), Error> {
         let mut trace = ExecutionTrace::new(program);
         let chase_program = self.program.clone();
 
@@ -488,9 +491,9 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         for fact in facts {
             let chase_fact = ProgramChaseTranslation::new().build_fact(&fact);
 
-            handles.push(self.trace_recursive(&chase_program, &mut trace, chase_fact));
+            handles.push(self.trace_recursive(&chase_program, &mut trace, chase_fact)?);
         }
 
-        (trace, handles)
+        Ok((trace, handles))
     }
 }

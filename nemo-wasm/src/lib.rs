@@ -401,7 +401,9 @@ impl NemoEngine {
 
             let (trace, handles) = self
                 .engine
-                .trace(self.program.0.clone(), vec![fact_to_trace]);
+                .trace(self.program.0.clone(), vec![fact_to_trace])
+                .map_err(WasmOrInternalNemoError::Nemo)
+                .map_err(NemoError)?;
 
             Ok(Some((trace, handles)))
         } else {
@@ -459,7 +461,11 @@ impl NemoEngine {
             .map_err(WasmOrInternalNemoError::ComponentParse)
             .map_err(NemoError)?;
 
-        let (trace, handles) = self.engine.trace(self.program.0.clone(), vec![parsed_fact]);
+        let (trace, handles) = self
+            .engine
+            .trace(self.program.0.clone(), vec![parsed_fact])
+            .map_err(WasmOrInternalNemoError::Nemo)
+            .map_err(NemoError)?;
 
         Ok(Some((trace, handles)))
     }

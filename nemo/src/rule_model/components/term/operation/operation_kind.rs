@@ -364,14 +364,16 @@ pub enum OperationKind {
 }
 
 impl OperationKind {
-    /// Precendence of operations for display purposes.
+    /// Precedence of operations for display purposes.
     pub(crate) fn precedence(&self) -> usize {
         match &self {
-            Self::NumericSum => 1,
-            Self::NumericSubtraction => 1,
-            Self::NumericProduct => 2,
-            Self::NumericDivision => 2,
-            _ => 3,
+            Self::NumericSum => 2,
+            Self::NumericSubtraction => 2,
+            Self::NumericProduct => 3,
+            Self::NumericDivision => 3,
+            Self::Equal => 0,
+            Self::Unequals => 0,
+            _ => 1,
         }
     }
 }

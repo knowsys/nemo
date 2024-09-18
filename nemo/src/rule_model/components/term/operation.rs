@@ -126,7 +126,7 @@ impl Operation {
             self.format_braces_priority(f, term)?;
 
             if index < terms.len() - 1 {
-                f.write_str(delimiter)?;
+                f.write_fmt(format_args!("{delimiter} "))?;
             }
         }
 
@@ -140,7 +140,9 @@ impl Operation {
             OperationKind::NumericSum => "+",
             OperationKind::NumericSubtraction => "-",
             OperationKind::NumericProduct => "*",
-            &OperationKind::NumericDivision => "/",
+            OperationKind::NumericDivision => "/",
+            OperationKind::Equal => "=",
+            OperationKind::Unequals => "!=",
             _ => return None,
         })
     }
