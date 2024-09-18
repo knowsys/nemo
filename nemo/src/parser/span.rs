@@ -1,4 +1,5 @@
 //! This module defines data structures that mark spans of text in an input file.
+//! The `Span` implementation is inspired by nom_locate. (https://github.com/fflorent/nom_locate)
 
 use core::str;
 use std::ops::{Deref, Range};
