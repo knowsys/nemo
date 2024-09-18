@@ -153,7 +153,6 @@ mod test {
 
     // TODO: This test cases causes a warning in miri
     #[test]
-    #[cfg_attr(miri, ignore)]
     fn parser_recover() {
         let program = "%! Top-level comment\n\
             % Declarations:\n\

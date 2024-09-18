@@ -80,7 +80,7 @@ where
 
         scope.map(|scope| LSPIdentifier {
             scope,
-            identifier: (self.context(), self.span().0.fragment().to_string()),
+            identifier: (self.context(), self.span().fragment().to_string()),
         })
     }
 
@@ -155,7 +155,7 @@ where
 
         kind.map(|kind| LSPSymbolInfo {
             kind,
-            name: format!("{}", self.span().0.fragment()),
+            name: format!("{}", self.span().fragment()),
         })
     }
 

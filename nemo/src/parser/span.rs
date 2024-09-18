@@ -69,6 +69,7 @@ pub struct Span<'a> {
 
 // SAFETY: Conceptionally, a span is just a slice inside a slice.
 unsafe impl Sync for Span<'_> {}
+unsafe impl Send for Span<'_> {}
 
 impl<'a> Span<'a> {
     /// Create a span for a particular input with default offset and line values and empty extra data.
