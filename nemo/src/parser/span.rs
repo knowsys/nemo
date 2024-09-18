@@ -167,7 +167,7 @@ impl<'a> Span<'a> {
     /// Return a [Span] that points to the beginning.
     pub fn beginning(&self) -> Self {
         if self.fragment.is_empty() {
-            self.clone()
+            self
         } else {
             Self {
                 allocation_start: self.allocation_start,
@@ -213,7 +213,7 @@ impl<'a> Span<'a> {
 
     /// The fragment that is spanned. The fragment represents a part of the input of the parser.
     pub fn fragment(&self) -> &'_ str {
-        &self.fragment
+        self.fragment
     }
 }
 
@@ -237,7 +237,7 @@ where
 {
     fn slice(&self, range: R) -> Self {
         let next_fragment = self.fragment.slice(range);
-        let consumed = &self.fragment[..self.fragment.offset(&next_fragment)];
+        let consumed = &self.fragment[..self.fragment.offset(next_fragment)];
         let line_offset: u32 = consumed
             .bytes()
             .filter(|b| *b == b'\n')
@@ -247,7 +247,7 @@ where
 
         Span {
             allocation_start: self.allocation_start,
-            fragment: &next_fragment,
+            fragment: next_fragment,
             line: self.line + line_offset,
         }
     }
