@@ -122,11 +122,14 @@ impl<'a> Span<'a> {
     /// TODO: Description and Specify safety conditions and verify that this is correct
     pub fn enclose(&self, first: &Self, second: &Self) -> Self {
         unsafe {
+            let slice_length =
+                second.0.location_offset() + second.0.len() - first.0.location_offset();
+            let slice_beginning = first.0.location_offset() - self.0.location_offset();
+
             Self(LocatedSpan::new_from_raw_offset(
                 first.0.location_offset(),
                 first.0.location_line(),
-                &self.0
-                    [..(second.0.location_offset() + second.0.len() - first.0.location_offset())],
+                &self.0[slice_beginning..(slice_beginning + slice_length)],
                 (),
             ))
         }
