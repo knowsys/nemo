@@ -247,7 +247,7 @@ where
         self.map.get(marker)
     }
 
-    /// Given a [OperationColumnMarker], find the corresponding [ExternalMarker].
+    /// Given a [OperationColumnMarker], find the corresponding external marker.
     pub fn find<'a>(&'a self, marker: &OperationColumnMarker) -> Option<&'a ExternalMarker> {
         Some(
             self.map
