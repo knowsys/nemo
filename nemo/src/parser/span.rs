@@ -1,10 +1,9 @@
 //! This module defines data structures that mark spans of text in an input file.
 
-use std::{ops::Range, path::Display};
+use std::ops::Range;
 
 use nom::InputIter;
 use nom_locate::LocatedSpan;
-use serde::de::Expected;
 
 /// Locates a certain character within a file,
 /// giving its offset, line and column number
@@ -64,6 +63,14 @@ impl CharacterRange {
 pub struct Span<'a>(LocatedSpan<&'a str>);
 
 impl<'a> Span<'a> {
+    /// Create a span for a particular input with default offset and line values and empty extra data.
+    /// You can compute the column through the get_column or get_utf8_column methods.
+    ///
+    /// offset starts at 0, line starts at 1, and column starts at 1.
+    ///
+    /// Do not use this constructor in parser functions;
+    /// nom and nom_locate assume span offsets are relative to the beginning of the same input.
+    /// In these cases, you probably want to use the nom::traits::Slice trait instead.
     pub fn new(inner: &'a str) -> Span<'a> {
         Span(LocatedSpan::new(inner))
     }
@@ -167,18 +174,22 @@ impl<'a> Span<'a> {
         }
     }
 
+    /// The offset represents the position of the fragment relatively to the input of the parser. It starts at offset 0.
     pub fn location_offset(&self) -> usize {
         self.0.location_offset()
     }
 
+    /// The line number of the fragment relatively to the input of the parser. It starts at line 1.
     pub fn location_line(&self) -> u32 {
         self.0.location_line()
     }
 
+    /// Return the column index for UTF8 text. Return value is unspecified for non-utf8 text.
     pub fn get_utf8_column(&self) -> usize {
         self.0.get_utf8_column()
     }
 
+    /// The fragment that is spanned. The fragment represents a part of the input of the parser.
     pub fn fragment(&self) -> &'_ str {
         self.0.fragment()
     }

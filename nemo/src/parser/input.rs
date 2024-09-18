@@ -5,7 +5,6 @@ use std::str::{CharIndices, Chars};
 use nom::{
     error::ErrorKind, AsBytes, IResult, InputIter, InputLength, InputTake, InputTakeAtPosition,
 };
-use nom_locate::LocatedSpan;
 
 use super::{span::Span, ParserState};
 
