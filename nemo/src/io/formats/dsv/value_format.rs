@@ -203,7 +203,7 @@ impl DsvValueFormat {
         // Check if it's a valid tag name
         let parser_input = ParserInput::new(input, ParserState::default());
         if let Ok((rest, _)) = Token::name(parser_input) {
-            if rest.span.0.is_empty() {
+            if rest.span.fragment().is_empty() {
                 return Ok(AnyDataValue::new_iri(input.to_string()));
             }
         }
@@ -211,7 +211,7 @@ impl DsvValueFormat {
         // Might still be a full IRI
         let parser_input = ParserInput::new(input, ParserState::default());
         if let Ok((rest, iri)) = Token::iri(parser_input) {
-            if rest.span.0.is_empty() {
+            if rest.span.fragment().is_empty() {
                 return Ok(AnyDataValue::new_iri(iri.to_string()));
             }
         }

@@ -44,18 +44,18 @@ pub(crate) fn ast_to_ascii_tree<'a>(node: &'a dyn ProgramAST<'a>) -> Tree {
     } else {
         "\x1b[92m"
     };
-    let fragment = *node.span().0.fragment();
-    let str = if fragment.len() > 60 {
-        format!("{:?}[…]", &fragment[0..60])
+    let span = node.span();
+    let str = if span.fragment().len() > 60 {
+        format!("{:?}[…]", &span.fragment()[0..60])
     } else {
-        format!("{:?}", fragment)
+        format!("{:?}", span.fragment())
     };
     Tree::Node(
         format!(
             "{} \x1b[34m@{}:{} {colour}{str}\x1b[0m",
             node.context().name(),
-            node.span().0.location_line(),
-            node.span().0.get_utf8_column()
+            node.span().location_line(),
+            node.span().get_utf8_column()
         ),
         vec,
     )

@@ -34,7 +34,7 @@ impl<'a> AggregationTag<'a> {
 
     /// Return a string representation of the content of this tag.
     pub fn content(&self) -> String {
-        self.span.0.to_string()
+        self.span.fragment().to_string()
     }
 }
 

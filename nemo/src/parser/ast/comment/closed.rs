@@ -30,7 +30,7 @@ impl<'a> ClosedComment<'a> {
     //   owned value or not?
     /// Return the content of the comment
     pub fn content(&self) -> String {
-        self.content.0.to_string()
+        self.content.fragment().to_string()
     }
 }
 

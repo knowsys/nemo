@@ -20,7 +20,7 @@ impl<'a> ParserInput<'a> {
     /// Create a new [ParserInput] from a string slice.
     pub fn new(input: &'a str, state: ParserState) -> Self {
         Self {
-            span: Span(LocatedSpan::new(input)),
+            span: Span::new(input),
             state,
         }
     }
@@ -28,27 +28,27 @@ impl<'a> ParserInput<'a> {
 
 impl<'a> AsBytes for ParserInput<'a> {
     fn as_bytes(&self) -> &[u8] {
-        self.span.0.fragment().as_bytes()
+        self.span.fragment().as_bytes()
     }
 }
 
 impl<'a> nom::Compare<ParserInput<'a>> for ParserInput<'a> {
     fn compare(&self, t: ParserInput) -> nom::CompareResult {
-        self.span.0.compare(t.as_bytes())
+        self.span.compare(t.span)
     }
 
     fn compare_no_case(&self, t: ParserInput) -> nom::CompareResult {
-        self.span.0.compare_no_case(t.as_bytes())
+        self.span.compare_no_case(t.span)
     }
 }
 
 impl<'a> nom::Compare<&str> for ParserInput<'a> {
     fn compare(&self, t: &str) -> nom::CompareResult {
-        self.span.0.compare(t)
+        self.span.compare(t)
     }
 
     fn compare_no_case(&self, t: &str) -> nom::CompareResult {
-        self.span.0.compare_no_case(t)
+        self.span.compare_no_case(t)
     }
 }
 
@@ -58,23 +58,23 @@ impl<'a> nom::ExtendInto for ParserInput<'a> {
     type Extender = String;
 
     fn new_builder(&self) -> Self::Extender {
-        self.span.0.new_builder()
+        String::new()
     }
 
     fn extend_into(&self, acc: &mut Self::Extender) {
-        self.span.0.extend_into(acc)
+        acc.push_str(self.span.fragment())
     }
 }
 
 impl<'a> nom::FindSubstring<&str> for ParserInput<'a> {
     fn find_substring(&self, substr: &str) -> Option<usize> {
-        self.span.0.find_substring(substr)
+        self.span.find_substring(substr)
     }
 }
 
 impl<'a> InputLength for ParserInput<'a> {
     fn input_len(&self) -> usize {
-        self.span.0.input_len()
+        self.span.input_len()
     }
 }
 
@@ -84,42 +84,42 @@ impl<'a> InputIter for ParserInput<'a> {
     type IterElem = Chars<'a>;
 
     fn iter_indices(&self) -> Self::Iter {
-        self.span.0.iter_indices()
+        self.span.iter_indices()
     }
 
     fn iter_elements(&self) -> Self::IterElem {
-        self.span.0.iter_elements()
+        self.span.iter_elements()
     }
 
     fn position<P>(&self, predicate: P) -> Option<usize>
     where
         P: Fn(Self::Item) -> bool,
     {
-        self.span.0.position(predicate)
+        self.span.position(predicate)
     }
 
     fn slice_index(&self, count: usize) -> Result<usize, nom::Needed> {
-        self.span.0.slice_index(count)
+        self.span.slice_index(count)
     }
 }
 
 impl InputTake for ParserInput<'_> {
     fn take(&self, count: usize) -> Self {
         Self {
-            span: Span(self.span.0.take(count)),
+            span: self.span.take(count),
             state: self.state.clone(),
         }
     }
 
     fn take_split(&self, count: usize) -> (Self, Self) {
-        let (first, second) = self.span.0.take_split(count);
+        let (first, second) = self.span.take_split(count);
         (
             Self {
-                span: Span(first),
+                span: first,
                 state: self.state.clone(),
             },
             Self {
-                span: Span(second),
+                span: second,
                 state: self.state.clone(),
             },
         )
@@ -136,7 +136,7 @@ impl InputTakeAtPosition for ParserInput<'_> {
     where
         P: Fn(Self::Item) -> bool,
     {
-        match self.span.0.position(predicate) {
+        match self.span.position(predicate) {
             Some(n) => Ok(self.take_split(n)),
             None => Err(nom::Err::Incomplete(nom::Needed::new(1))),
         }
@@ -175,11 +175,11 @@ impl InputTakeAtPosition for ParserInput<'_> {
     where
         P: Fn(Self::Item) -> bool,
     {
-        match self.span.0.fragment().position(predicate) {
+        match self.span.fragment().position(predicate) {
             Some(0) => Err(nom::Err::Error(E::from_error_kind(self.clone(), e))),
             Some(n) => Ok(self.take_split(n)),
             None => {
-                if self.span.0.fragment().input_len() == 0 {
+                if self.span.fragment().input_len() == 0 {
                     Err(nom::Err::Error(E::from_error_kind(self.clone(), e)))
                 } else {
                     Ok(self.take_split(self.input_len()))
@@ -191,7 +191,7 @@ impl InputTakeAtPosition for ParserInput<'_> {
 
 impl nom::Offset for ParserInput<'_> {
     fn offset(&self, second: &Self) -> usize {
-        self.span.0.offset(&second.span.0)
+        self.span.offset(&second.span)
     }
 }
 
@@ -207,7 +207,7 @@ where
 {
     fn slice(&self, range: R) -> Self {
         ParserInput {
-            span: Span(self.span.0.slice(range)),
+            span: self.span.slice(range),
             state: self.state.clone(),
         }
     }
@@ -215,7 +215,7 @@ where
 
 impl nom_greedyerror::Position for ParserInput<'_> {
     fn position(&self) -> usize {
-        nom_greedyerror::Position::position(&self.span.0)
+        nom_greedyerror::Position::position(&self.span)
     }
 }
 
@@ -224,8 +224,8 @@ impl std::fmt::Display for ParserInput<'_> {
         write!(
             f,
             "line {}, column {}",
-            self.span.0.location_line(),
-            self.span.0.get_utf8_column()
+            self.span.location_line(),
+            self.span.get_utf8_column()
         )
     }
 }

@@ -98,16 +98,16 @@ impl<'a> Number<'a> {
 
     /// Recreate the number string without the type marker.
     fn number_string(&self) -> String {
-        let integer = format!("{}{}", self.integer_sign.print(), self.integer.span().0);
+        let integer = format!("{}{}", self.integer_sign.print(), self.integer.span());
 
         let fractional = if let Some(fractional) = &self.fractional {
-            format!(".{}", fractional.span().0)
+            format!(".{}", fractional.span())
         } else {
             String::default()
         };
 
         let exponent = if let Some((sign, exponent)) = &self.exponent {
-            format!("e{}{}", sign.print(), exponent.span().0)
+            format!("e{}{}", sign.print(), exponent.span())
         } else {
             String::default()
         };

@@ -1,8 +1,10 @@
 //! This module defines data structures that mark spans of text in an input file.
 
-use std::ops::Range;
+use std::{ops::Range, path::Display};
 
+use nom::InputIter;
 use nom_locate::LocatedSpan;
+use serde::de::Expected;
 
 /// Locates a certain character within a file,
 /// giving its offset, line and column number
@@ -59,15 +61,13 @@ impl CharacterRange {
 
 /// Maker for a region of text within a string slice
 #[derive(Debug, Clone, Copy)]
-pub struct Span<'a>(pub LocatedSpan<&'a str>);
-
-impl<'a> From<LocatedSpan<&'a str>> for Span<'a> {
-    fn from(value: LocatedSpan<&'a str>) -> Self {
-        Self(value)
-    }
-}
+pub struct Span<'a>(LocatedSpan<&'a str>);
 
 impl<'a> Span<'a> {
+    pub fn new(inner: &'a str) -> Span<'a> {
+        Span(LocatedSpan::new(inner))
+    }
+
     /// Compute the [CharacterRange] for this region of text.
     pub fn range(&self) -> CharacterRange {
         let start = CharacterPosition {
@@ -165,5 +165,116 @@ impl<'a> Span<'a> {
                 ))
             }
         }
+    }
+
+    pub fn location_offset(&self) -> usize {
+        self.0.location_offset()
+    }
+
+    pub fn location_line(&self) -> u32 {
+        self.0.location_line()
+    }
+
+    pub fn get_utf8_column(&self) -> usize {
+        self.0.get_utf8_column()
+    }
+
+    pub fn fragment(&self) -> &'_ str {
+        self.0.fragment()
+    }
+}
+
+impl<'a> std::fmt::Display for Span<'a> {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+        self.0.fmt(formatter)
+    }
+}
+
+impl<'a, R> nom::Slice<R> for Span<'a>
+where
+    &'a str: nom::Slice<R>,
+{
+    fn slice(&self, range: R) -> Self {
+        Span(self.0.slice(range))
+    }
+}
+
+impl nom_greedyerror::Position for Span<'_> {
+    fn position(&self) -> usize {
+        nom_greedyerror::Position::position(&self.0)
+    }
+}
+
+impl nom::Offset for Span<'_> {
+    fn offset(&self, second: &Self) -> usize {
+        self.0.offset(&second.0)
+    }
+}
+
+impl<'a> InputIter for Span<'a> {
+    type Item = char;
+    type Iter = <&'a str as InputIter>::Iter;
+    type IterElem = <&'a str as InputIter>::IterElem;
+
+    fn iter_indices(&self) -> Self::Iter {
+        self.0.iter_indices()
+    }
+
+    fn iter_elements(&self) -> Self::IterElem {
+        self.0.iter_elements()
+    }
+
+    fn position<P>(&self, predicate: P) -> Option<usize>
+    where
+        P: Fn(Self::Item) -> bool,
+    {
+        self.0.position(predicate)
+    }
+
+    fn slice_index(&self, count: usize) -> Result<usize, nom::Needed> {
+        self.0.slice_index(count)
+    }
+}
+
+impl nom::InputTake for Span<'_> {
+    fn take(&self, count: usize) -> Self {
+        Self(self.0.take(count))
+    }
+
+    fn take_split(&self, count: usize) -> (Self, Self) {
+        let (left, right) = self.0.take_split(count);
+        (Self(left), Self(right))
+    }
+}
+
+impl nom::InputLength for Span<'_> {
+    fn input_len(&self) -> usize {
+        self.0.input_len()
+    }
+}
+
+impl nom::FindSubstring<&'_ str> for Span<'_> {
+    fn find_substring(&self, substr: &str) -> Option<usize> {
+        self.0.find_substring(substr)
+    }
+}
+
+impl<'a> nom::Compare<Span<'a>> for Span<'a> {
+    fn compare(&self, t: Span) -> nom::CompareResult {
+        self.0.compare(t.fragment().as_bytes())
+    }
+
+    fn compare_no_case(&self, t: Span) -> nom::CompareResult {
+        self.0.compare_no_case(t.fragment().as_bytes())
+    }
+}
+
+impl<'a> nom::Compare<&str> for Span<'a> {
+    fn compare(&self, t: &str) -> nom::CompareResult {
+        self.0.compare(t)
+    }
+
+    fn compare_no_case(&self, t: &str) -> nom::CompareResult {
+        self.0.compare_no_case(t)
     }
 }

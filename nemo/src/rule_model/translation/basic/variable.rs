@@ -42,7 +42,9 @@ impl<'a> ASTProgramTranslation<'a> {
                 } else {
                     return Err(TranslationError::new(
                         variable.span(),
-                        TranslationErrorKind::NamedAnonymous(variable.span().0.to_string()),
+                        TranslationErrorKind::NamedAnonymous(
+                            variable.span().fragment().to_string(),
+                        ),
                     ));
                 }
             }

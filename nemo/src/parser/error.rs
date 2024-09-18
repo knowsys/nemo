@@ -68,7 +68,7 @@ pub(crate) fn recover<'a>(
 ) -> impl FnMut(ParserInput<'a>) -> ParserResult<'a, Statement<'a>> {
     move |input: ParserInput<'a>| match parser.parse(input.clone()) {
         Ok((rest, statement)) => Ok((rest, statement)),
-        Err(err) if input.span.0.is_empty() => Err(err),
+        Err(err) if input.span.fragment().is_empty() => Err(err),
         Err(nom::Err::Error(_)) | Err(nom::Err::Failure(_)) => {
             let (rest_input, token) = skip_statement(input).expect("this parser cannot fail");
             Ok((
@@ -90,7 +90,7 @@ pub(crate) fn report_error<'a>(
     move |input| match parser.parse(input.clone()) {
         Ok(result) => Ok(result),
         Err(e) => {
-            if input.span.0.is_empty() {
+            if input.span.fragment().is_empty() {
                 return Err(e);
             };
             match &e {
@@ -99,9 +99,9 @@ pub(crate) fn report_error<'a>(
                     let error = match err {
                         GenericErrorTree::Base { location, .. } => ParserError {
                             position: CharacterPosition {
-                                offset: location.span.0.location_offset(),
-                                line: location.span.0.location_line(),
-                                column: location.span.0.get_utf8_column() as u32,
+                                offset: location.span.location_offset(),
+                                line: location.span.location_line(),
+                                column: location.span.get_utf8_column() as u32,
                             },
                             context: vec![],
                         },
@@ -110,9 +110,9 @@ pub(crate) fn report_error<'a>(
                             contexts,
                         } => ParserError {
                             position: CharacterPosition {
-                                offset: contexts[0].0.span.0.location_offset(),
-                                line: contexts[0].0.span.0.location_line(),
-                                column: contexts[0].0.span.0.get_utf8_column() as u32,
+                                offset: contexts[0].0.span.location_offset(),
+                                line: contexts[0].0.span.location_line(),
+                                column: contexts[0].0.span.get_utf8_column() as u32,
                             },
                             context: match contexts[0].1 {
                                 StackContext::Kind(_) => todo!(),
@@ -145,7 +145,7 @@ pub(crate) fn _transform_error_tree<'a, Output>(
     move |input| match parser.parse(input.clone()) {
         Ok(result) => Ok(result),
         Err(e) => {
-            if input.span.0.is_empty() {
+            if input.span.fragment().is_empty() {
                 return Err(e);
             };
             match &e {
@@ -177,7 +177,7 @@ fn _context_strs(
 fn _get_deepest_errors<'a>(e: &'a ParserErrorTree<'a>) -> (CharacterPosition, Vec<ParserError>) {
     match e {
         ParserErrorTree::Base { location, .. } => {
-            let span = location.span.0;
+            let span = location.span;
             let err_pos = CharacterPosition {
                 offset: span.location_offset(),
                 line: span.location_line(),
@@ -195,7 +195,7 @@ fn _get_deepest_errors<'a>(e: &'a ParserErrorTree<'a>) -> (CharacterPosition, Ve
             // let mut err_pos = Position::default();
             match &**base {
                 ParserErrorTree::Base { location, .. } => {
-                    let span = location.span.0;
+                    let span = location.span;
                     let err_pos = CharacterPosition {
                         offset: span.location_offset(),
                         line: span.location_line(),

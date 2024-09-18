@@ -45,7 +45,7 @@ impl<'a> UnknownDirective<'a> {
 
     /// Return the content of the directive.
     pub fn content(&self) -> String {
-        self.content.0.to_string()
+        self.content.fragment().to_string()
     }
 
     /// Parse the name of the directive.
