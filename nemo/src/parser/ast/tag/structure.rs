@@ -82,7 +82,11 @@ impl<'a> ProgramAST<'a> for StructureTag<'a> {
             CONTEXT,
             alt((
                 map(
-                    separated_pair(Token::name, Token::namespace_separator, Token::name),
+                    separated_pair(
+                        alt((Token::name, Token::empty)),
+                        Token::namespace_separator,
+                        Token::name,
+                    ),
                     |(prefix, tag)| StructureTagKind::Prefixed { prefix, tag },
                 ),
                 map(Token::name, StructureTagKind::Plain),
@@ -121,6 +125,7 @@ mod test {
         let test = vec![
             ("abc", "abc".to_string()),
             ("abc:def", "abc:def".to_string()),
+            (":def", ":def".to_string()),
             ("<http://example.com>", "http://example.com".to_string()),
         ];
 

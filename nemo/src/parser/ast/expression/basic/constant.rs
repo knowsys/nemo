@@ -1,25 +1,12 @@
 //! This module defines [Constant]
 
-use nom::{branch::alt, combinator::map};
-
 use crate::parser::{
-    ast::{token::Token, ProgramAST},
+    ast::{tag::structure::StructureTag, ProgramAST},
     context::{context, ParserContext},
     input::ParserInput,
     span::Span,
     ParserResult,
 };
-
-use super::iri::Iri;
-
-// Type of constants
-#[derive(Debug)]
-enum ConstantKind<'a> {
-    /// Plain constant
-    Plain(Token<'a>),
-    /// Iri constant
-    Iri(Iri<'a>),
-}
 
 /// AST node representing a constant
 #[derive(Debug)]
@@ -28,16 +15,13 @@ pub struct Constant<'a> {
     span: Span<'a>,
 
     /// The constant
-    constant: ConstantKind<'a>,
+    constant: StructureTag<'a>,
 }
 
 impl<'a> Constant<'a> {
-    /// Return the name of the constant.
-    pub fn name(&self) -> String {
-        match &self.constant {
-            ConstantKind::Plain(token) => token.to_string(),
-            ConstantKind::Iri(iri) => iri.content(),
-        }
+    /// Return the [StructureTag] representing the constant.
+    pub fn tag(&self) -> &StructureTag<'a> {
+        &self.constant
     }
 }
 
@@ -58,14 +42,7 @@ impl<'a> ProgramAST<'a> for Constant<'a> {
     {
         let input_span = input.span;
 
-        context(
-            CONTEXT,
-            alt((
-                map(Token::name, ConstantKind::Plain),
-                map(Iri::parse, ConstantKind::Iri),
-            )),
-        )(input)
-        .map(|(rest, constant)| {
+        context(CONTEXT, StructureTag::parse)(input).map(|(rest, constant)| {
             let rest_span = rest.span;
 
             (
@@ -97,6 +74,7 @@ mod test {
     fn parse_constant() {
         let test = vec![
             ("abc", "abc".to_string()),
+            ("abc:def", "abc:def".to_string()),
             ("<http://example.com>", "http://example.com".to_string()),
         ];
 
@@ -107,7 +85,7 @@ mod test {
             assert!(result.is_ok());
 
             let result = result.unwrap();
-            assert_eq!(expected, result.1.name());
+            assert_eq!(expected, result.1.tag().to_string());
         }
     }
 }

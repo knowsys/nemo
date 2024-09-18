@@ -29,7 +29,7 @@ impl<'a> ASTProgramTranslation<'a> {
     ) -> Option<(String, &'a ast::expression::Expression<'a>)> {
         for (key, value) in map.key_value() {
             if let ast::expression::Expression::Constant(constant) = key {
-                if &constant.name() == "resource" {
+                if &constant.tag().to_string() == "resource" {
                     if let ast::expression::Expression::String(string) = value {
                         return Some((
                             Path::new(&string.content())

@@ -13,7 +13,7 @@ impl<'a> ASTProgramTranslation<'a> {
         &mut self,
         constant: &'a ast::expression::basic::constant::Constant,
     ) -> Result<AnyDataValue, TranslationError> {
-        let name = constant.name();
+        let name = self.resolve_tag(constant.tag())?;
 
         Ok(AnyDataValue::new_iri(name))
     }

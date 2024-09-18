@@ -122,7 +122,7 @@ mod test {
     use super::*;
 
     #[cfg_attr(miri, ignore)]
-    // #[test]
+    #[test]
     fn reason() {
         std::env::set_current_dir("../resources/testcases/lcs-diff-computation/").unwrap();
         let mut engine = load("run-lcs-10.rls".into()).unwrap();
@@ -134,7 +134,7 @@ mod test {
             .filter(|pred| pred.to_string().contains('i'))
             .collect::<Vec<_>>();
 
-        assert_eq!(results.len(), 5);
+        assert_eq!(results.len(), 4);
         let _temp_dir = TempDir::new().unwrap();
         // Disabled:
         // write(temp_dir.to_str().unwrap().to_string(), &mut engine, results).unwrap();

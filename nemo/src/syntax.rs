@@ -177,17 +177,17 @@ pub mod builtin {
     /// This module contains all strings of the supported builtin functions.
     pub mod function {
         /// Check if two values are equal to each other
-        pub(crate) const EQUAL: &str = "EQUAL";
+        pub(crate) const EQUAL: &str = "EQUALITY";
         /// Check if two values are not equal to each other
-        pub(crate) const UNEQUAL: &str = "UNEQUAL";
+        pub(crate) const UNEQUAL: &str = "UNEQUALITY";
         /// Check if a numeric value is greater than another
-        pub(crate) const GREATER: &str = "GREATER";
+        pub(crate) const GREATER: &str = "NUMGREATER";
         /// Check if a numeric value is greater or equal to another
-        pub(crate) const GREATEREQ: &str = "GREATEREQ";
+        pub(crate) const GREATEREQ: &str = "NUMGREATEREQ";
         /// Check if a numeric value is smaller than another
-        pub(crate) const LESS: &str = "LESS";
+        pub(crate) const LESS: &str = "NUMLESS";
         /// Check if a numeric value is smaller or equal to another
-        pub(crate) const LESSEQ: &str = "LESSEQ";
+        pub(crate) const LESSEQ: &str = "NUMLESSEQ";
         /// Check if value is an integer
         pub(crate) const IS_INTEGER: &str = "isInteger";
         /// Check if value is a 32bit floating point number
@@ -279,11 +279,11 @@ pub mod builtin {
         /// Compute the sum of numerical values
         pub(crate) const SUM: &str = "SUM";
         /// Compute the product of numerical values
-        pub(crate) const PRODUCT: &str = "PROD";
+        pub(crate) const PRODUCT: &str = "PRODUCT";
         /// Compute the difference between to numeric values
-        pub(crate) const SUBTRACTION: &str = "MINUS";
+        pub(crate) const SUBTRACTION: &str = "SUBTRACTION";
         /// Compute the quotient of two numeric values
-        pub(crate) const DIVISION: &str = "DIV";
+        pub(crate) const DIVISION: &str = "DIVISION";
         /// Compute the multiplicative inverse of a numeric value
         pub(crate) const INVERSE: &str = "INVERSE";
         /// Compute the logical and between boolean values

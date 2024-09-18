@@ -248,6 +248,9 @@ pub enum TokenKind {
     /// Token that captures errors
     #[assoc(name = "error")]
     Error,
+    /// Empty token
+    #[assoc(name = "empty")]
+    Empty,
 }
 
 /// A token is the smallest unit recognized by the parser
@@ -294,13 +297,26 @@ impl<'a> Token<'a> {
         self.kind
     }
 
+    /// Parse [TokenKind::Empty].
+    pub fn empty(input: ParserInput<'a>) -> ParserResult<'a, Token<'a>> {
+        let beginning = input.span.empty();
+
+        ParserResult::Ok((
+            input,
+            Token {
+                span: beginning,
+                kind: TokenKind::Empty,
+            },
+        ))
+    }
+
     /// Parse [TokenKind::Name].
     pub fn name(input: ParserInput<'a>) -> ParserResult<'a, Token<'a>> {
         context(
             ParserContext::token(TokenKind::Name),
             recognize(pair(
                 alpha1,
-                many0(alt((alphanumeric1, tag("_"), tag("-")))),
+                many0(alt((alphanumeric1, tag("_"), tag("-"), tag("%")))),
             )),
         )(input)
         .map(|(rest_input, result)| {

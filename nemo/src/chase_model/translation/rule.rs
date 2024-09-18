@@ -269,7 +269,6 @@ impl ProgramChaseTranslation {
 
                         let (new_operation, operation_aggregate) = self
                             .build_operation_with_aggregate(
-                                result,
                                 operation,
                                 aggregate_variable.clone(),
                                 new_variable.clone(),

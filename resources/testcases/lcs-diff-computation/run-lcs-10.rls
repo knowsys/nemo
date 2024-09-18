@@ -1,16 +1,16 @@
-%%% This program computes the longest common subsequence (LCS) of two words
-%%% using (mostly) Datalog rules.
-%%%
-%%% See "An O(ND) Difference Algorithm and its Variations" [Myers 1986] for details
-%%% on the algorithm that we follow here.
-%%%
-%%% Existential quantification is used to create some extra elements to represent numbers.
-%%% One could simplify this and many other places if native number support were available.
-%%% Likewise, some manual listings could be simplified by using stratified negation (inequality would suffice).
-%%% Conversely, a pure Datalog version would also be possible by using "flattened skolem functions"
-%%% for the few acyclic nulls we actually need (see [Kroetzsch and Rudolph, IJCAI 2011]).
+%! This program computes the longest common subsequence (LCS) of two words
+%! using (mostly) Datalog rules.
+%!
+%! See "An O(ND) Difference Algorithm and its Variations" [Myers 1986] for details
+%! on the algorithm that we follow here.
+%!
+%! Existential quantification is used to create some extra elements to represent numbers.
+%! One could simplify this and many other places if native number support were available.
+%! Likewise, some manual listings could be simplified by using stratified negation (inequality would suffice).
+%! Conversely, a pure Datalog version would also be possible by using "flattened skolem functions"
+%! for the few acyclic nulls we actually need (see [Kroetzsch and Rudolph, IJCAI 2011]).
 
-%%% Input data: two documents, A and B, that consist of a sequence of letters (or lines) to diff over:
+%! Input data: two documents, A and B, that consist of a sequence of letters (or lines) to diff over:
 
 % @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
 
@@ -45,11 +45,11 @@ ge(?X,?X) :- eq(?X,?Y) .
 % Add some more numbers to our list:
 doPlus(?X,p0) :- docAend(?X) .
 s(?X,!Xp), doPlus(!Xp,?Bp) :- doPlus(?X,?B), s(?B,?Bp), lt(?B,?Bmax), docBend(?Bmax) .
-max(?X) :- doPlus(?X,?Bmax), docBend(?Bmax).
+greatest(?X) :- doPlus(?X,?Bmax), docBend(?Bmax).
 
 minus(p0,p0) .
 minus(?Up,!Lm), s(!Lm,?L) :- minus(?U,?L), s(?U,?Up) .
-min(?X) :- minus(?Y,?X), max(?Y).
+smallest(?X) :- minus(?Y,?X), greatest(?Y).
 
 % Plus 2:
 s2(?X,?Z) :- s(?X,?Y),s(?Y,?Z) .
@@ -97,11 +97,11 @@ lcs(?A,?B,?content), gather(?Ap,?Bp) :- gather(?A,?B), edge(?Ap,?Bp,?A,?B,eq), d
 gather(?Ap,?Bp) :- gather(?A,?B), edge(?Ap,?Bp,?A,?B,down) .
 gather(?Ap,?Bp) :- gather(?A,?B), edge(?Ap,?Bp,?A,?B,right) .
 
-@export min :- csv {}.
+@export smallest :- csv {}.
 @export eq :- csv {}.
 @export nonfinal :- csv {}.
 @export infDocA :- csv {}.
-@export max :- csv {}.
+@export greatest :- csv {}.
 @export docAend :- csv {}.
 @export gather :- csv {}.
 @export docBend :- csv {}.

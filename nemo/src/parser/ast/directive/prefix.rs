@@ -1,6 +1,9 @@
 //! This module defines the [Prefix] directive.
 
-use nom::sequence::{preceded, separated_pair, tuple};
+use nom::{
+    branch::alt,
+    sequence::{preceded, separated_pair, tuple},
+};
 
 use crate::parser::{
     ast::{comment::wsoc::WSoC, expression::basic::iri::Iri, token::Token, ProgramAST},
@@ -40,7 +43,7 @@ impl<'a> Prefix<'a> {
 
     pub fn parse_body(input: ParserInput<'a>) -> ParserResult<'a, (Token<'a>, Iri<'a>)> {
         separated_pair(
-            Token::name,
+            alt((Token::name, Token::empty)),
             tuple((WSoC::parse, Token::prefix_assignment, WSoC::parse)),
             Iri::parse,
         )(input)

@@ -33,12 +33,12 @@ pub struct Rule<'a> {
 }
 
 impl<'a> Rule<'a> {
-    /// Return an iterator of the [Expression]s contained in the head.
+    /// Return an iterator of the [Guard]s contained in the head.
     pub fn head(&self) -> impl Iterator<Item = &Guard<'a>> {
         self.head.iter()
     }
 
-    /// Return an iterator of the [Expression]s contained in the body.
+    /// Return an iterator of the [Guard]s contained in the body.
     pub fn body(&self) -> impl Iterator<Item = &Guard<'a>> {
         self.body.iter()
     }

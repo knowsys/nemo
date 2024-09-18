@@ -85,7 +85,6 @@ impl ProgramChaseTranslation {
     /// Panics if the operation is not "pure", i.e. if it contains as subterms
     /// terms that are not operations or primitive terms.
     fn build_operation_term_with_aggregate<'a>(
-        result: &mut ChaseRule,
         operation: &'a crate::rule_model::components::term::operation::Operation,
         aggregation_variable: &Variable,
     ) -> (
@@ -104,11 +103,8 @@ impl ProgramChaseTranslation {
                     subterms.push(OperationTerm::Primitive(primitive.clone()))
                 }
                 Term::Operation(operation) => {
-                    let (term, result) = Self::build_operation_term_with_aggregate(
-                        result,
-                        operation,
-                        aggregation_variable,
-                    );
+                    let (term, result) =
+                        Self::build_operation_term_with_aggregate(operation, aggregation_variable);
                     if aggregation_result.is_none() {
                         aggregation_result = result;
                     }
@@ -143,7 +139,6 @@ impl ProgramChaseTranslation {
     /// Panics if operation contains complex terms or multiple aggregates.
     pub(crate) fn build_operation_with_aggregate<'a>(
         &mut self,
-        result: &mut ChaseRule,
         operation: &'a crate::rule_model::components::term::operation::Operation,
         aggregation_variable: Variable,
         output_variable: Variable,
@@ -152,7 +147,7 @@ impl ProgramChaseTranslation {
         Option<&'a crate::rule_model::components::term::aggregate::Aggregate>,
     ) {
         let (operation_term, aggregate) =
-            Self::build_operation_term_with_aggregate(result, operation, &aggregation_variable);
+            Self::build_operation_term_with_aggregate(operation, &aggregation_variable);
 
         (
             ChaseOperation::new(output_variable, operation_term).set_origin(*operation.origin()),

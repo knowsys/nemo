@@ -1,9 +1,9 @@
 //! This module defines [Negation].
 
-use nom::sequence::preceded;
+use nom::sequence::{preceded, terminated};
 
 use crate::parser::{
-    ast::{expression::Expression, token::Token, ProgramAST},
+    ast::{comment::wsoc::WSoC, expression::Expression, token::Token, ProgramAST},
     context::{context, ParserContext},
     input::ParserInput,
     span::Span,
@@ -44,19 +44,21 @@ impl<'a> ProgramAST<'a> for Negation<'a> {
     {
         let input_span = input.span;
 
-        context(CONTEXT, preceded(Token::tilde, Expression::parse))(input).map(
-            |(rest, expression)| {
-                let rest_span = rest.span;
+        context(
+            CONTEXT,
+            preceded(terminated(Token::tilde, WSoC::parse), Expression::parse),
+        )(input)
+        .map(|(rest, expression)| {
+            let rest_span = rest.span;
 
-                (
-                    rest,
-                    Self {
-                        span: input_span.until_rest(&rest_span),
-                        expression: Box::new(expression),
-                    },
-                )
-            },
-        )
+            (
+                rest,
+                Self {
+                    span: input_span.until_rest(&rest_span),
+                    expression: Box::new(expression),
+                },
+            )
+        })
     }
 
     fn context(&self) -> ParserContext {

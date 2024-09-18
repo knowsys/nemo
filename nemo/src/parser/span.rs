@@ -147,4 +147,20 @@ impl<'a> Span<'a> {
             }
         }
     }
+
+    /// Return an empty [Span] that points to the beginning.
+    pub fn empty(&self) -> Self {
+        unsafe {
+            if self.0.is_empty() {
+                *self
+            } else {
+                Self(LocatedSpan::new_from_raw_offset(
+                    self.0.location_offset(),
+                    self.0.location_line(),
+                    &self.0[0..0],
+                    (),
+                ))
+            }
+        }
+    }
 }

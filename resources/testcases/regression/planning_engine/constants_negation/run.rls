@@ -1,7 +1,7 @@
-%%% Test related to 
-%%% https://github.com/knowsys/nemo/issues/452
-%%%
-%%% Previously, an incorrect plan was produced, which lead to a crash. 
+%! Test related to 
+%! https://github.com/knowsys/nemo/issues/452
+%!
+%! Previously, an incorrect plan was produced, which lead to a crash. 
 
 S(a, b, c).
 S(r, r, r).
