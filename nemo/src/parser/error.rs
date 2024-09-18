@@ -96,10 +96,42 @@ pub(crate) fn report_error<'a>(
             match &e {
                 nom::Err::Incomplete(_) => (),
                 nom::Err::Error(err) | nom::Err::Failure(err) => {
-                    let (_deepest_pos, errors) = get_deepest_errors(err);
-                    for error in errors {
-                        input.state.report_error(error);
-                    }
+                    let error = match err {
+                        GenericErrorTree::Base { location, .. } => ParserError {
+                            position: CharacterPosition {
+                                offset: location.span.0.location_offset(),
+                                line: location.span.0.location_line(),
+                                column: location.span.0.get_utf8_column() as u32,
+                            },
+                            context: vec![],
+                        },
+                        GenericErrorTree::Stack { base, contexts } => {
+                            dbg!(&base);
+                            dbg!(&contexts);
+                            ParserError {
+                                position: CharacterPosition {
+                                    offset: contexts[0].0.span.0.location_offset(),
+                                    line: contexts[0].0.span.0.location_line(),
+                                    column: contexts[0].0.span.0.get_utf8_column() as u32,
+                                },
+                                context: match contexts[0].1 {
+                                    StackContext::Kind(_) => todo!(),
+                                    StackContext::Context(ctx) => {
+                                        vec![ctx]
+                                    }
+                                },
+                            }
+                        }
+                        GenericErrorTree::Alt(vec) => {
+                            dbg!(&vec);
+                            todo!()
+                        }
+                    };
+                    input.state.report_error(error);
+                    // let (_deepest_pos, errors) = get_deepest_errors(err);
+                    // for error in errors {
+                    //     input.state.report_error(error);
+                    // }
                 }
             };
             Err(e)
@@ -121,7 +153,7 @@ pub(crate) fn _transform_error_tree<'a, Output>(
             match &e {
                 nom::Err::Incomplete(_) => (),
                 nom::Err::Error(err) | nom::Err::Failure(err) => {
-                    let (_deepest_pos, errors) = get_deepest_errors(err);
+                    let (_deepest_pos, errors) = _get_deepest_errors(err);
                     for error in errors {
                         input.state.report_error(error);
                     }
@@ -132,7 +164,9 @@ pub(crate) fn _transform_error_tree<'a, Output>(
     }
 }
 
-fn context_strs(contexts: &[(ParserInput<'_>, StackContext<ParserContext>)]) -> Vec<ParserContext> {
+fn _context_strs(
+    contexts: &[(ParserInput<'_>, StackContext<ParserContext>)],
+) -> Vec<ParserContext> {
     contexts
         .iter()
         .map(|(_, c)| match c {
@@ -142,7 +176,7 @@ fn context_strs(contexts: &[(ParserInput<'_>, StackContext<ParserContext>)]) -> 
         .collect()
 }
 
-fn get_deepest_errors<'a>(e: &'a ParserErrorTree<'a>) -> (CharacterPosition, Vec<ParserError>) {
+fn _get_deepest_errors<'a>(e: &'a ParserErrorTree<'a>) -> (CharacterPosition, Vec<ParserError>) {
     match e {
         ParserErrorTree::Base { location, .. } => {
             let span = location.span.0;
@@ -184,21 +218,21 @@ fn get_deepest_errors<'a>(e: &'a ParserErrorTree<'a>) -> (CharacterPosition, Vec
                         err_pos,
                         vec![ParserError {
                             position: err_pos,
-                            context: context_strs(contexts),
+                            context: _context_strs(contexts),
                         }],
                     )
                 }
                 ParserErrorTree::Stack { base, contexts } => {
-                    let (pos, mut deepest_errors) = get_deepest_errors(base);
-                    let contexts = context_strs(contexts);
+                    let (pos, mut deepest_errors) = _get_deepest_errors(base);
+                    let contexts = _context_strs(contexts);
                     for error in &mut deepest_errors {
                         error.context.append(&mut contexts.clone());
                     }
                     (pos, deepest_errors)
                 }
                 ParserErrorTree::Alt(_error_tree) => {
-                    let (pos, mut deepest_errors) = get_deepest_errors(base);
-                    let contexts = context_strs(contexts);
+                    let (pos, mut deepest_errors) = _get_deepest_errors(base);
+                    let contexts = _context_strs(contexts);
                     for error in &mut deepest_errors {
                         error.context.append(&mut contexts.clone());
                     }
@@ -210,7 +244,7 @@ fn get_deepest_errors<'a>(e: &'a ParserErrorTree<'a>) -> (CharacterPosition, Vec
             let mut return_vec: Vec<ParserError> = Vec::new();
             let mut deepest_pos = CharacterPosition::default();
             for error in vec {
-                let (pos, mut deepest_errors) = get_deepest_errors(error);
+                let (pos, mut deepest_errors) = _get_deepest_errors(error);
                 match pos.cmp(&deepest_pos) {
                     std::cmp::Ordering::Equal => {
                         return_vec.append(&mut deepest_errors);
