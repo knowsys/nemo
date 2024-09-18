@@ -1,5 +1,5 @@
 //! This module defines data structures that mark spans of text in an input file.
-//! The `Span` implementation is inspired by nom_locate. (https://github.com/fflorent/nom_locate)
+//! The `Span` implementation is inspired by nom_locate. (See <https://github.com/fflorent/nom_locate>)
 
 use core::str;
 use std::ops::{Deref, Range};
@@ -167,7 +167,7 @@ impl<'a> Span<'a> {
     /// Return a [Span] that points to the beginning.
     pub fn beginning(&self) -> Self {
         if self.fragment.is_empty() {
-            self
+            *self
         } else {
             Self {
                 allocation_start: self.allocation_start,
