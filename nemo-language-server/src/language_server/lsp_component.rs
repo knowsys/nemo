@@ -86,6 +86,16 @@ where
 
     fn symbol_info(&self) -> Option<LSPSymbolInfo> {
         let kind = match self.context() {
+            ParserContext::Program => return Some(LSPSymbolInfo {kind: SymbolKind::FILE, name: "Program".to_string()}),
+            ParserContext::Rule => return Some(LSPSymbolInfo {kind: SymbolKind::CLASS, name: "Rule".to_string()}),
+            ParserContext::Base => return Some(LSPSymbolInfo {kind: SymbolKind::PROPERTY, name: "Base".to_string()}),
+            ParserContext::Declare => return Some(LSPSymbolInfo {kind: SymbolKind::PROPERTY, name: "Declare".to_string()}),
+            ParserContext::Import => return Some(LSPSymbolInfo {kind: SymbolKind::PROPERTY, name: "Import".to_string()}),
+            ParserContext::Export => return Some(LSPSymbolInfo {kind: SymbolKind::PROPERTY, name: "Export".to_string()}),
+            ParserContext::Prefix => return Some(LSPSymbolInfo {kind: SymbolKind::PROPERTY, name: "Prefix".to_string()}),
+            ParserContext::Output => return Some(LSPSymbolInfo {kind: SymbolKind::PROPERTY, name: "Output".to_string()}),
+            
+            ParserContext::Atom => Some(SymbolKind::FIELD),
             ParserContext::DataType => Some(SymbolKind::TYPE_PARAMETER),
             ParserContext::Variable => Some(SymbolKind::VARIABLE),
             ParserContext::Iri => Some(SymbolKind::STRING),
@@ -96,25 +106,16 @@ where
             ParserContext::Number => Some(SymbolKind::NUMBER),
             ParserContext::String => Some(SymbolKind::STRING),
             ParserContext::Boolean => Some(SymbolKind::BOOLEAN),
-            ParserContext::Base
-            | ParserContext::Declare
-            | ParserContext::Export
-            | ParserContext::Import
-            | ParserContext::Output
-            | ParserContext::Prefix
-            | ParserContext::UnknownDirective => Some(SymbolKind::PROPERTY),
             ParserContext::Arithmetic
-            | ParserContext::Negation
-            | ParserContext::AggregationTag
-            | ParserContext::OperationTag
-            | ParserContext::Infix => Some(SymbolKind::OPERATOR),
-            ParserContext::Program => Some(SymbolKind::FILE),
+            | ParserContext::Operation
+            | ParserContext::Aggregation
+            | ParserContext::Negation => Some(SymbolKind::OPERATOR),
             _ => None,
         };
 
         kind.map(|kind| LSPSymbolInfo {
             kind,
-            name: format!("{}: {}", self.context().name(), self.span().0.fragment()),
+            name: format!("{}", self.span().0.fragment()),
         })
     }
 

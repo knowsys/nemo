@@ -1534,6 +1534,8 @@ dependencies = [
  "futures",
  "line-index",
  "nemo",
+ "strum",
+ "strum_macros",
  "tokio",
  "tower-lsp",
  "tower-service",

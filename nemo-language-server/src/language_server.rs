@@ -1,6 +1,8 @@
 mod lsp_component;
 mod nemo_position;
+mod token_type;
 
+use strum::IntoEnumIterator;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::vec;
 
@@ -16,14 +18,9 @@ use nemo::parser::{Parser, ParserErrorReport};
 use nemo_position::{
     lsp_position_to_nemo_position, nemo_range_to_lsp_range, PositionConversionError,
 };
+use token_type::TokenType;
 use tower_lsp::lsp_types::{
-    Diagnostic, DidChangeTextDocumentParams, DidOpenTextDocumentParams, DocumentChangeOperation,
-    DocumentChanges, DocumentSymbol, DocumentSymbolOptions, DocumentSymbolParams,
-    DocumentSymbolResponse, InitializeParams, InitializeResult, InitializedParams, Location,
-    MessageType, OneOf, OptionalVersionedTextDocumentIdentifier, PrepareRenameResponse, Range,
-    ReferenceParams, RenameOptions, RenameParams, ServerCapabilities, TextDocumentEdit,
-    TextDocumentPositionParams, TextDocumentSyncCapability, TextDocumentSyncKind, TextEdit, Url,
-    VersionedTextDocumentIdentifier, WorkDoneProgressOptions, WorkspaceEdit,
+    Diagnostic, DidChangeTextDocumentParams, DidOpenTextDocumentParams, DocumentChangeOperation, DocumentChanges, DocumentSymbol, DocumentSymbolOptions, DocumentSymbolParams, DocumentSymbolResponse, InitializeParams, InitializeResult, InitializedParams, Location, MessageType, OneOf, OptionalVersionedTextDocumentIdentifier, Position, PrepareRenameResponse, Range, ReferenceParams, RenameOptions, RenameParams, SemanticToken, SemanticTokens, SemanticTokensFullOptions, SemanticTokensLegend, SemanticTokensOptions, SemanticTokensParams, SemanticTokensResult, SemanticTokensServerCapabilities, ServerCapabilities, TextDocumentEdit, TextDocumentPositionParams, TextDocumentSyncCapability, TextDocumentSyncKind, TextEdit, Url, VersionedTextDocumentIdentifier, WorkDoneProgressOptions, WorkspaceEdit
 };
 use tower_lsp::{Client, LanguageServer};
 
@@ -79,6 +76,7 @@ impl Backend {
         }
     }
 
+    /// Parses the Nemo Program and returns errors with their respective positions
     async fn handle_change(
         &self,
         text_document: VersionedTextDocumentIdentifier,
@@ -171,6 +169,7 @@ impl Backend {
 
 #[tower_lsp::async_trait]
 impl LanguageServer for Backend {
+    /// Called when the language server is started from the client
     async fn initialize(
         &self,
         _: InitializeParams,
@@ -193,18 +192,34 @@ impl LanguageServer for Backend {
                         ..Default::default()
                     },
                 })),
+                semantic_tokens_provider: Some(
+                    SemanticTokensServerCapabilities::SemanticTokensOptions(
+                        SemanticTokensOptions {
+                            legend: SemanticTokensLegend {
+                                token_types: TokenType::iter()
+                                    .map(TokenType::to_semantic_token_type)
+                                    .collect(),
+                                token_modifiers: vec![],
+                            },
+                            full: Some(SemanticTokensFullOptions::Bool(true)),
+                            ..Default::default()
+                        },
+                    ),
+                ),
                 ..Default::default()
             },
             ..Default::default()
         })
     }
 
+    /// Called when initialization finished on the client side
     async fn initialized(&self, _: InitializedParams) {
         self.client
             .log_message(MessageType::INFO, "server initialized")
             .await;
     }
 
+    /// Called when a document is opened on the client side
     async fn did_open(&self, params: DidOpenTextDocumentParams) {
         if let Err(error) = self
             .handle_change(
@@ -225,6 +240,7 @@ impl LanguageServer for Backend {
         }
     }
 
+    /// Called when the opened document changes
     async fn did_change(&self, params: DidChangeTextDocumentParams) {
         if let Err(error) = self
             .handle_change(
@@ -245,6 +261,7 @@ impl LanguageServer for Backend {
         }
     }
 
+    /// Called when the client requests references of the symbol under the cursor
     async fn references(
         &self,
         params: ReferenceParams,
@@ -297,6 +314,7 @@ impl LanguageServer for Backend {
         Ok(Some(locations))
     }
 
+    /// Returns all DocumentSymbols in the Nemo Program, which are used to produce an outline
     async fn document_symbol(
         &self,
         params: DocumentSymbolParams,
@@ -322,6 +340,55 @@ impl LanguageServer for Backend {
             .map_err(jsonrpc_error)?;
 
         Ok(Some(DocumentSymbolResponse::Nested(document_symbols)))
+    }
+
+    /// Called to receive syntax highlighting information
+    async fn semantic_tokens_full(
+        &self,
+        params: SemanticTokensParams,
+    ) -> tower_lsp::jsonrpc::Result<Option<SemanticTokensResult>> {
+        let info = self
+            .read_text_document_info(&params.text_document.uri)
+            .await
+            .map_err(jsonrpc_error)?;
+
+        let text = info.text;
+        let line_index = LineIndex::new(&text);
+
+        let (program, _): (Program, Option<ParserErrorReport>) =
+            Parser::initialize(&text, params.text_document.uri.to_string())
+                .parse()
+                .map(|prg| (prg, None))
+                .unwrap_or_else(|(prg, err)| (*prg, Some(err)));
+
+        let token_types_with_ranges = ast_node_to_semantic_tokens(&line_index, &program);
+
+        Ok(Some(SemanticTokensResult::Tokens(SemanticTokens {
+            result_id: None,
+            data: token_types_with_ranges
+                .into_iter()
+                .scan(Position::new(0, 0), |last_pos, (token_type, range)| {
+                    let delta_line = range.start.line - last_pos.line;
+                    let result: SemanticToken = SemanticToken {
+                        delta_line,
+                        delta_start: if delta_line == 0 {
+                            range.start.character - last_pos.character
+                        } else {
+                            range.start.character
+                        },
+                        length: if range.start.line == range.end.line {
+                            range.end.character - range.start.character
+                        } else {
+                            range.end.character
+                        },
+                        token_type: token_type as u32,
+                        token_modifiers_bitset: 0,
+                    };
+                    *last_pos = range.start;
+                    Some(result)
+                })
+                .collect(),
+        })))
     }
 
     /// Finds references to symbol that was renamed and sends edit operations to language client
@@ -441,6 +508,7 @@ impl LanguageServer for Backend {
     }
 }
 
+/// Associates a ProgramAST node with its corresponding range in the LSP world
 fn node_with_range<'a>(
     line_index: &LineIndex,
     node: &'a dyn ProgramAST<'a>,
@@ -500,6 +568,7 @@ fn node_path_deepest_identifier<'a>(
     });
 }
 
+/// Finds all children of the given node (potentially the node itself) that match the identifier
 fn find_by_identifier<'a>(
     node: &'a dyn ProgramAST<'a>,
     identifier: &(ParserContext, String),
@@ -511,6 +580,7 @@ fn find_by_identifier<'a>(
     references
 }
 
+/// Actual implementation of [`find_by_identifier`]
 fn find_by_identifier_recurse<'a>(
     node: &'a dyn ProgramAST<'a>,
     identifier: &(ParserContext, String),
@@ -529,6 +599,7 @@ fn find_by_identifier_recurse<'a>(
     }
 }
 
+/// Returns the path of AST nodes that lead to a given position from a given node
 fn find_in_ast<'a>(
     node: &'a Program<'a>,
     position: CharacterPosition,
@@ -540,6 +611,7 @@ fn find_in_ast<'a>(
     path
 }
 
+/// Actual implementation of [`find_in_ast`]
 fn find_in_ast_recurse<'a>(
     node: &'a dyn ProgramAST<'a>,
     position: CharacterPosition,
@@ -556,6 +628,8 @@ fn find_in_ast_recurse<'a>(
     }
 }
 
+/// Turns a given AST node into a DocumentSymbol to show in the outline; the DocumentSymbol has a
+/// tree structure in itself so this function calls itself recursively.
 fn ast_node_to_document_symbol<'a>(
     line_index: &LineIndex,
     node: &'a dyn ProgramAST<'a>,
@@ -596,5 +670,27 @@ fn ast_node_to_document_symbol<'a>(
         ]))
     } else {
         Ok(children)
+    }
+}
+
+/// Returns syntax highlighting information for all children of the given node including the node
+/// itself. Once a child has syntax highlighting information associated with it, the recursion does
+/// not go any deeper.
+fn ast_node_to_semantic_tokens<'a>(
+    line_index: &LineIndex,
+    node: &'a dyn ProgramAST<'a>,
+) -> Vec<(TokenType, Range)> {
+    if let Some(token_type) = TokenType::from_parser_context(node.context()) {
+        let range_res = nemo_range_to_lsp_range(line_index, node.span().range());
+        if let Ok(range) = range_res {
+            vec![(token_type, range)]
+        } else {
+            vec![]
+        }
+    } else {
+        node.children()
+            .into_iter()
+            .flat_map(|child| ast_node_to_semantic_tokens(line_index, child))
+            .collect()
     }
 }
