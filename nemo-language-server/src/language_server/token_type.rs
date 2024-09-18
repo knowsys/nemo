@@ -1,5 +1,5 @@
-use strum_macros::EnumIter;
 use nemo::parser::context::ParserContext;
+use strum_macros::EnumIter;
 use tower_lsp::lsp_types::SemanticTokenType;
 
 /// All syntax highlighting types that are used in Nemo programs
@@ -24,7 +24,11 @@ impl TokenType {
         match ctx {
             ParserContext::DataType => Some(TokenType::Type),
             ParserContext::Variable => Some(TokenType::Variable),
-            ParserContext::Iri | ParserContext::Constant | ParserContext::RdfLiteral | ParserContext::Blank | ParserContext::String => Some(TokenType::String),
+            ParserContext::Iri
+            | ParserContext::Constant
+            | ParserContext::RdfLiteral
+            | ParserContext::Blank
+            | ParserContext::String => Some(TokenType::String),
             ParserContext::StructureTag => Some(TokenType::Function),
             ParserContext::Number => Some(TokenType::Number),
             ParserContext::Boolean => Some(TokenType::Bool),

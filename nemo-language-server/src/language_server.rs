@@ -2,9 +2,9 @@ mod lsp_component;
 mod nemo_position;
 mod token_type;
 
-use strum::IntoEnumIterator;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::vec;
+use strum::IntoEnumIterator;
 
 use anyhow::anyhow;
 use futures::lock::Mutex;
@@ -20,7 +20,15 @@ use nemo_position::{
 };
 use token_type::TokenType;
 use tower_lsp::lsp_types::{
-    Diagnostic, DidChangeTextDocumentParams, DidOpenTextDocumentParams, DocumentChangeOperation, DocumentChanges, DocumentSymbol, DocumentSymbolOptions, DocumentSymbolParams, DocumentSymbolResponse, InitializeParams, InitializeResult, InitializedParams, Location, MessageType, OneOf, OptionalVersionedTextDocumentIdentifier, Position, PrepareRenameResponse, Range, ReferenceParams, RenameOptions, RenameParams, SemanticToken, SemanticTokens, SemanticTokensFullOptions, SemanticTokensLegend, SemanticTokensOptions, SemanticTokensParams, SemanticTokensResult, SemanticTokensServerCapabilities, ServerCapabilities, TextDocumentEdit, TextDocumentPositionParams, TextDocumentSyncCapability, TextDocumentSyncKind, TextEdit, Url, VersionedTextDocumentIdentifier, WorkDoneProgressOptions, WorkspaceEdit
+    Diagnostic, DidChangeTextDocumentParams, DidOpenTextDocumentParams, DocumentChangeOperation,
+    DocumentChanges, DocumentSymbol, DocumentSymbolOptions, DocumentSymbolParams,
+    DocumentSymbolResponse, InitializeParams, InitializeResult, InitializedParams, Location,
+    MessageType, OneOf, OptionalVersionedTextDocumentIdentifier, Position, PrepareRenameResponse,
+    Range, ReferenceParams, RenameOptions, RenameParams, SemanticToken, SemanticTokens,
+    SemanticTokensFullOptions, SemanticTokensLegend, SemanticTokensOptions, SemanticTokensParams,
+    SemanticTokensResult, SemanticTokensServerCapabilities, ServerCapabilities, TextDocumentEdit,
+    TextDocumentPositionParams, TextDocumentSyncCapability, TextDocumentSyncKind, TextEdit, Url,
+    VersionedTextDocumentIdentifier, WorkDoneProgressOptions, WorkspaceEdit,
 };
 use tower_lsp::{Client, LanguageServer};
 

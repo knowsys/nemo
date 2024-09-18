@@ -86,15 +86,55 @@ where
 
     fn symbol_info(&self) -> Option<LSPSymbolInfo> {
         let kind = match self.context() {
-            ParserContext::Program => return Some(LSPSymbolInfo {kind: SymbolKind::FILE, name: "Program".to_string()}),
-            ParserContext::Rule => return Some(LSPSymbolInfo {kind: SymbolKind::CLASS, name: "Rule".to_string()}),
-            ParserContext::Base => return Some(LSPSymbolInfo {kind: SymbolKind::PROPERTY, name: "Base".to_string()}),
-            ParserContext::Declare => return Some(LSPSymbolInfo {kind: SymbolKind::PROPERTY, name: "Declare".to_string()}),
-            ParserContext::Import => return Some(LSPSymbolInfo {kind: SymbolKind::PROPERTY, name: "Import".to_string()}),
-            ParserContext::Export => return Some(LSPSymbolInfo {kind: SymbolKind::PROPERTY, name: "Export".to_string()}),
-            ParserContext::Prefix => return Some(LSPSymbolInfo {kind: SymbolKind::PROPERTY, name: "Prefix".to_string()}),
-            ParserContext::Output => return Some(LSPSymbolInfo {kind: SymbolKind::PROPERTY, name: "Output".to_string()}),
-            
+            ParserContext::Program => {
+                return Some(LSPSymbolInfo {
+                    kind: SymbolKind::FILE,
+                    name: "Program".to_string(),
+                })
+            }
+            ParserContext::Rule => {
+                return Some(LSPSymbolInfo {
+                    kind: SymbolKind::CLASS,
+                    name: "Rule".to_string(),
+                })
+            }
+            ParserContext::Base => {
+                return Some(LSPSymbolInfo {
+                    kind: SymbolKind::PROPERTY,
+                    name: "Base".to_string(),
+                })
+            }
+            ParserContext::Declare => {
+                return Some(LSPSymbolInfo {
+                    kind: SymbolKind::PROPERTY,
+                    name: "Declare".to_string(),
+                })
+            }
+            ParserContext::Import => {
+                return Some(LSPSymbolInfo {
+                    kind: SymbolKind::PROPERTY,
+                    name: "Import".to_string(),
+                })
+            }
+            ParserContext::Export => {
+                return Some(LSPSymbolInfo {
+                    kind: SymbolKind::PROPERTY,
+                    name: "Export".to_string(),
+                })
+            }
+            ParserContext::Prefix => {
+                return Some(LSPSymbolInfo {
+                    kind: SymbolKind::PROPERTY,
+                    name: "Prefix".to_string(),
+                })
+            }
+            ParserContext::Output => {
+                return Some(LSPSymbolInfo {
+                    kind: SymbolKind::PROPERTY,
+                    name: "Output".to_string(),
+                })
+            }
+
             ParserContext::Atom => Some(SymbolKind::FIELD),
             ParserContext::DataType => Some(SymbolKind::TYPE_PARAMETER),
             ParserContext::Variable => Some(SymbolKind::VARIABLE),
