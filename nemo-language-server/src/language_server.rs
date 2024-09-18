@@ -76,6 +76,7 @@ impl Backend {
         }
     }
 
+    /// Parses the Nemo Program and returns errors with their respective positions
     async fn handle_change(
         &self,
         text_document: VersionedTextDocumentIdentifier,
@@ -168,6 +169,7 @@ impl Backend {
 
 #[tower_lsp::async_trait]
 impl LanguageServer for Backend {
+    /// Called when the language server is started from the client
     async fn initialize(
         &self,
         _: InitializeParams,
@@ -210,12 +212,14 @@ impl LanguageServer for Backend {
         })
     }
 
+    /// Called when initialization finished on the client side
     async fn initialized(&self, _: InitializedParams) {
         self.client
             .log_message(MessageType::INFO, "server initialized")
             .await;
     }
 
+    /// Called when a document is opened on the client side
     async fn did_open(&self, params: DidOpenTextDocumentParams) {
         if let Err(error) = self
             .handle_change(
@@ -236,6 +240,7 @@ impl LanguageServer for Backend {
         }
     }
 
+    /// Called when the opened document changes
     async fn did_change(&self, params: DidChangeTextDocumentParams) {
         if let Err(error) = self
             .handle_change(
@@ -256,6 +261,7 @@ impl LanguageServer for Backend {
         }
     }
 
+    /// Called when the client requests references of the symbol under the cursor
     async fn references(
         &self,
         params: ReferenceParams,
@@ -308,6 +314,7 @@ impl LanguageServer for Backend {
         Ok(Some(locations))
     }
 
+    /// Returns all DocumentSymbols in the Nemo Program, which are used to produce an outline
     async fn document_symbol(
         &self,
         params: DocumentSymbolParams,
@@ -335,6 +342,7 @@ impl LanguageServer for Backend {
         Ok(Some(DocumentSymbolResponse::Nested(document_symbols)))
     }
 
+    /// Called to receive syntax highlighting information
     async fn semantic_tokens_full(
         &self,
         params: SemanticTokensParams,
@@ -500,6 +508,7 @@ impl LanguageServer for Backend {
     }
 }
 
+/// Associates a ProgramAST node with its corresponding range in the LSP world
 fn node_with_range<'a>(
     line_index: &LineIndex,
     node: &'a dyn ProgramAST<'a>,
@@ -559,6 +568,7 @@ fn node_path_deepest_identifier<'a>(
     });
 }
 
+/// Finds all children of the given node (potentially the node itself) that match the identifier
 fn find_by_identifier<'a>(
     node: &'a dyn ProgramAST<'a>,
     identifier: &(ParserContext, String),
@@ -570,6 +580,7 @@ fn find_by_identifier<'a>(
     references
 }
 
+/// Actual implementation of [`find_by_identifier`]
 fn find_by_identifier_recurse<'a>(
     node: &'a dyn ProgramAST<'a>,
     identifier: &(ParserContext, String),
@@ -588,6 +599,7 @@ fn find_by_identifier_recurse<'a>(
     }
 }
 
+/// Returns the path of AST nodes that lead to a given position from a given node
 fn find_in_ast<'a>(
     node: &'a Program<'a>,
     position: CharacterPosition,
@@ -599,6 +611,7 @@ fn find_in_ast<'a>(
     path
 }
 
+/// Actual implementation of [`find_in_ast`]
 fn find_in_ast_recurse<'a>(
     node: &'a dyn ProgramAST<'a>,
     position: CharacterPosition,
@@ -615,6 +628,8 @@ fn find_in_ast_recurse<'a>(
     }
 }
 
+/// Turns a given AST node into a DocumentSymbol to show in the outline; the DocumentSymbol has a
+/// tree structure in itself so this function calls itself recursively.
 fn ast_node_to_document_symbol<'a>(
     line_index: &LineIndex,
     node: &'a dyn ProgramAST<'a>,
@@ -658,6 +673,9 @@ fn ast_node_to_document_symbol<'a>(
     }
 }
 
+/// Returns syntax highlighting information for all children of the given node including the node
+/// itself. Once a child has syntax highlighting information associated with it, the recursion does
+/// not go any deeper.
 fn ast_node_to_semantic_tokens<'a>(
     line_index: &LineIndex,
     node: &'a dyn ProgramAST<'a>,
