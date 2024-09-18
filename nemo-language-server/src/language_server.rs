@@ -1,6 +1,8 @@
 mod lsp_component;
 mod nemo_position;
+mod token_type;
 
+use strum::IntoEnumIterator;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::vec;
 
@@ -16,14 +18,9 @@ use nemo::parser::{Parser, ParserErrorReport};
 use nemo_position::{
     lsp_position_to_nemo_position, nemo_range_to_lsp_range, PositionConversionError,
 };
+use token_type::TokenType;
 use tower_lsp::lsp_types::{
-    Diagnostic, DidChangeTextDocumentParams, DidOpenTextDocumentParams, DocumentChangeOperation,
-    DocumentChanges, DocumentSymbol, DocumentSymbolOptions, DocumentSymbolParams,
-    DocumentSymbolResponse, InitializeParams, InitializeResult, InitializedParams, Location,
-    MessageType, OneOf, OptionalVersionedTextDocumentIdentifier, PrepareRenameResponse, Range,
-    ReferenceParams, RenameOptions, RenameParams, ServerCapabilities, TextDocumentEdit,
-    TextDocumentPositionParams, TextDocumentSyncCapability, TextDocumentSyncKind, TextEdit, Url,
-    VersionedTextDocumentIdentifier, WorkDoneProgressOptions, WorkspaceEdit,
+    Diagnostic, DidChangeTextDocumentParams, DidOpenTextDocumentParams, DocumentChangeOperation, DocumentChanges, DocumentSymbol, DocumentSymbolOptions, DocumentSymbolParams, DocumentSymbolResponse, InitializeParams, InitializeResult, InitializedParams, Location, MessageType, OneOf, OptionalVersionedTextDocumentIdentifier, Position, PrepareRenameResponse, Range, ReferenceParams, RenameOptions, RenameParams, SemanticToken, SemanticTokens, SemanticTokensFullOptions, SemanticTokensLegend, SemanticTokensOptions, SemanticTokensParams, SemanticTokensResult, SemanticTokensServerCapabilities, ServerCapabilities, TextDocumentEdit, TextDocumentPositionParams, TextDocumentSyncCapability, TextDocumentSyncKind, TextEdit, Url, VersionedTextDocumentIdentifier, WorkDoneProgressOptions, WorkspaceEdit
 };
 use tower_lsp::{Client, LanguageServer};
 
@@ -193,6 +190,20 @@ impl LanguageServer for Backend {
                         ..Default::default()
                     },
                 })),
+                semantic_tokens_provider: Some(
+                    SemanticTokensServerCapabilities::SemanticTokensOptions(
+                        SemanticTokensOptions {
+                            legend: SemanticTokensLegend {
+                                token_types: TokenType::iter()
+                                    .map(TokenType::to_semantic_token_type)
+                                    .collect(),
+                                token_modifiers: vec![],
+                            },
+                            full: Some(SemanticTokensFullOptions::Bool(true)),
+                            ..Default::default()
+                        },
+                    ),
+                ),
                 ..Default::default()
             },
             ..Default::default()
@@ -322,6 +333,54 @@ impl LanguageServer for Backend {
             .map_err(jsonrpc_error)?;
 
         Ok(Some(DocumentSymbolResponse::Nested(document_symbols)))
+    }
+
+    async fn semantic_tokens_full(
+        &self,
+        params: SemanticTokensParams,
+    ) -> tower_lsp::jsonrpc::Result<Option<SemanticTokensResult>> {
+        let info = self
+            .read_text_document_info(&params.text_document.uri)
+            .await
+            .map_err(jsonrpc_error)?;
+
+        let text = info.text;
+        let line_index = LineIndex::new(&text);
+
+        let (program, _): (Program, Option<ParserErrorReport>) =
+            Parser::initialize(&text, params.text_document.uri.to_string())
+                .parse()
+                .map(|prg| (prg, None))
+                .unwrap_or_else(|(prg, err)| (*prg, Some(err)));
+
+        let token_types_with_ranges = ast_node_to_semantic_tokens(&line_index, &program);
+
+        Ok(Some(SemanticTokensResult::Tokens(SemanticTokens {
+            result_id: None,
+            data: token_types_with_ranges
+                .into_iter()
+                .scan(Position::new(0, 0), |last_pos, (token_type, range)| {
+                    let delta_line = range.start.line - last_pos.line;
+                    let result: SemanticToken = SemanticToken {
+                        delta_line,
+                        delta_start: if delta_line == 0 {
+                            range.start.character - last_pos.character
+                        } else {
+                            range.start.character
+                        },
+                        length: if range.start.line == range.end.line {
+                            range.end.character - range.start.character
+                        } else {
+                            range.end.character
+                        },
+                        token_type: token_type as u32,
+                        token_modifiers_bitset: 0,
+                    };
+                    *last_pos = range.start;
+                    Some(result)
+                })
+                .collect(),
+        })))
     }
 
     /// Finds references to symbol that was renamed and sends edit operations to language client
@@ -596,5 +655,24 @@ fn ast_node_to_document_symbol<'a>(
         ]))
     } else {
         Ok(children)
+    }
+}
+
+fn ast_node_to_semantic_tokens<'a>(
+    line_index: &LineIndex,
+    node: &'a dyn ProgramAST<'a>,
+) -> Vec<(TokenType, Range)> {
+    if let Some(token_type) = TokenType::from_parser_context(node.context()) {
+        let range_res = nemo_range_to_lsp_range(line_index, node.span().range());
+        if let Ok(range) = range_res {
+            vec![(token_type, range)]
+        } else {
+            vec![]
+        }
+    } else {
+        node.children()
+            .into_iter()
+            .flat_map(|child| ast_node_to_semantic_tokens(line_index, child))
+            .collect()
     }
 }
