@@ -16,7 +16,7 @@ use super::{
         token::Token,
     },
     context::ParserContext,
-    span::CharacterPosition,
+    span::{CharacterPosition, Span},
     ParserInput, ParserResult,
 };
 
@@ -47,7 +47,7 @@ pub(crate) fn skip_statement(input: ParserInput<'_>) -> ParserResult<'_, Token<'
             preceded(take_until("\r\n\r\n"), Token::double_newline),
             preceded(take_until("\r\r"), Token::double_newline),
         )),
-        move |token| Token::error(input_span.enclose(&input_span, &token.span())),
+        move |token| Token::error(Span::enclose(&input_span, &token.span())),
     );
     // TODO: Should there additional whitespace be allowed in-between the dot and the newline?
     let until_dot_newline = map(
@@ -56,7 +56,7 @@ pub(crate) fn skip_statement(input: ParserInput<'_>) -> ParserResult<'_, Token<'
             preceded(take_until(".\r\n"), terminated(Token::dot, line_ending)),
             preceded(take_until(".\r"), terminated(Token::dot, line_ending)),
         )),
-        move |token| Token::error(input_span.enclose(&input_span, &token.span())),
+        move |token| Token::error(Span::enclose(&input_span, &token.span())),
     );
     let until_eof = map(take_while(|_| true), move |_| Token::error(input_span));
 
