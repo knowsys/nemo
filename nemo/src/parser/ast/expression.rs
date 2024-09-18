@@ -191,6 +191,7 @@ mod test {
                 ParserContext::RdfLiteral,
             ),
             ("\"string\"", ParserContext::String),
+            ("\"\"", ParserContext::String),
             ("(1,)", ParserContext::Tuple),
             ("?variable", ParserContext::Variable),
         ];

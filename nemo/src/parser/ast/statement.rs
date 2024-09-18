@@ -156,6 +156,10 @@ mod test {
                 "%%% A directive \n   \t@declare a(_: int, _: int) .",
                 ParserContext::Directive,
             ),
+            (
+                "@export test :- csv{resource = \"\"}.",
+                ParserContext::Directive,
+            ),
         ];
 
         for (input, expect) in test {

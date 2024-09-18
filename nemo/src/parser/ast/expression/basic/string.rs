@@ -107,6 +107,7 @@ mod test {
     fn parse_string() {
         let test = vec![
             ("\"test\"", ("test".to_string(), None)),
+            ("\"\"", ("".to_string(), None)),
             (
                 "\"テスト\"@ja",
                 ("テスト".to_string(), Some("ja".to_string())),

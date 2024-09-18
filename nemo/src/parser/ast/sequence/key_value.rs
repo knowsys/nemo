@@ -88,6 +88,7 @@ mod test {
             ("x=3, ?x = 2, 2 = 5", 3),
             ("x=3  ,   ?x     = 12,   2=  1", 3),
             ("x=POW(1,2)", 1),
+            ("resource=\"\"", 1),
         ];
 
         for (input, expected) in test {

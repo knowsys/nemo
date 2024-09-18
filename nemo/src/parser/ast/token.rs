@@ -345,11 +345,17 @@ impl<'a> Token<'a> {
 
     /// Parse [TokenKind::String].
     pub fn string(input: ParserInput<'a>) -> ParserResult<'a, Token<'a>> {
-        is_not("\"")(input).map(|(rest, result)| {
+        let input_span = input.span;
+        // NOTE: Optional for empty string, because `is_not` fails on "\""
+        opt(is_not("\""))(input).map(|(rest, result)| {
             (
-                rest,
+                rest.clone(),
                 Token {
-                    span: result.span,
+                    span: if let Some(result) = result {
+                        result.span
+                    } else {
+                        input_span.until_rest(&rest.span)
+                    },
                     kind: TokenKind::String,
                 },
             )
