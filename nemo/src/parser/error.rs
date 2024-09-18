@@ -105,25 +105,23 @@ pub(crate) fn report_error<'a>(
                             },
                             context: vec![],
                         },
-                        GenericErrorTree::Stack { base, contexts } => {
-                            dbg!(&base);
-                            dbg!(&contexts);
-                            ParserError {
-                                position: CharacterPosition {
-                                    offset: contexts[0].0.span.0.location_offset(),
-                                    line: contexts[0].0.span.0.location_line(),
-                                    column: contexts[0].0.span.0.get_utf8_column() as u32,
-                                },
-                                context: match contexts[0].1 {
-                                    StackContext::Kind(_) => todo!(),
-                                    StackContext::Context(ctx) => {
-                                        vec![ctx]
-                                    }
-                                },
-                            }
-                        }
-                        GenericErrorTree::Alt(vec) => {
-                            dbg!(&vec);
+                        GenericErrorTree::Stack {
+                            base: _base,
+                            contexts,
+                        } => ParserError {
+                            position: CharacterPosition {
+                                offset: contexts[0].0.span.0.location_offset(),
+                                line: contexts[0].0.span.0.location_line(),
+                                column: contexts[0].0.span.0.get_utf8_column() as u32,
+                            },
+                            context: match contexts[0].1 {
+                                StackContext::Kind(_) => todo!(),
+                                StackContext::Context(ctx) => {
+                                    vec![ctx]
+                                }
+                            },
+                        },
+                        GenericErrorTree::Alt(_vec) => {
                             todo!()
                         }
                     };
