@@ -266,7 +266,7 @@ pub struct Token<'a> {
 
 impl<'a> Display for Token<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.span.0.fmt(f)
+        self.span.fmt(f)
     }
 }
 
@@ -442,7 +442,7 @@ impl<'a> Token<'a> {
             // @baseerror would get matched and rest would be "error" and that will cause an
             // error. The desired behaviour is, that "baseerror" gets matched as a whole and
             // produces an [UnknownDirective].
-            verify(Self::name, |tag| *tag.span.0.fragment() == directive::BASE),
+            verify(Self::name, |tag| tag.span.fragment() == directive::BASE),
         )(input)
         .map(|(rest, result)| {
             (
@@ -459,9 +459,7 @@ impl<'a> Token<'a> {
         context(
             ParserContext::token(TokenKind::DeclareDirective),
             // The reasoning behind using `verify` is the same as in the `directive_base` function.
-            verify(Self::name, |tag| {
-                *tag.span.0.fragment() == directive::DECLARE
-            }),
+            verify(Self::name, |tag| tag.span.fragment() == directive::DECLARE),
         )(input)
         .map(|(rest, result)| {
             (
@@ -477,9 +475,7 @@ impl<'a> Token<'a> {
         context(
             ParserContext::token(TokenKind::ExportDirective),
             // The reasoning behind using `verify` is the same as in the `directive_base` function.
-            verify(Self::name, |tag| {
-                *tag.span.0.fragment() == directive::EXPORT
-            }),
+            verify(Self::name, |tag| tag.span.fragment() == directive::EXPORT),
         )(input)
         .map(|(rest, result)| {
             (
@@ -495,9 +491,7 @@ impl<'a> Token<'a> {
         context(
             ParserContext::token(TokenKind::ImportDirective),
             // The reasoning behind using `verify` is the same as in the `directive_base` function.
-            verify(Self::name, |tag| {
-                *tag.span.0.fragment() == directive::IMPORT
-            }),
+            verify(Self::name, |tag| tag.span.fragment() == directive::IMPORT),
         )(input)
         .map(|(rest, result)| {
             (
@@ -513,9 +507,7 @@ impl<'a> Token<'a> {
         context(
             ParserContext::token(TokenKind::OutputDirective),
             // The reasoning behind using `verify` is the same as in the `directive_base` function.
-            verify(Self::name, |tag| {
-                *tag.span.0.fragment() == directive::OUTPUT
-            }),
+            verify(Self::name, |tag| tag.span.fragment() == directive::OUTPUT),
         )(input)
         .map(|(rest, result)| {
             (
@@ -531,9 +523,7 @@ impl<'a> Token<'a> {
         context(
             ParserContext::token(TokenKind::PrefixDirective),
             // The reasoning behind using `verify` is the same as in the `directive_base` function.
-            verify(Self::name, |tag| {
-                *tag.span.0.fragment() == directive::PREFIX
-            }),
+            verify(Self::name, |tag| tag.span.fragment() == directive::PREFIX),
         )(input)
         .map(|(rest, result)| {
             (
@@ -558,7 +548,7 @@ impl<'a> Token<'a> {
                     tag(comment::DOC_COMMENT),
                     tag(comment::COMMENT),
                 )),
-                |result: &ParserInput| *result.span.0.fragment() != comment::DOC_COMMENT,
+                |result: &ParserInput| result.span.fragment() != comment::DOC_COMMENT,
             ),
         )(input)
         .map(|(rest, result)| {

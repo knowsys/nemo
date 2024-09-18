@@ -118,7 +118,7 @@ struct ArithmeticChain<'a> {
 }
 
 impl<'a> ArithmeticChain<'a> {
-    fn fold(mut self, input_span: &Span<'a>) -> Expression<'a> {
+    fn fold(mut self) -> Expression<'a> {
         if self.sequence.is_empty() {
             self.initial
         } else {
@@ -126,7 +126,7 @@ impl<'a> ArithmeticChain<'a> {
             let sequence_first = self.sequence.remove(0);
 
             let start = Arithmetic {
-                span: input_span.enclose(&self.initial.span(), &sequence_first.1.span()),
+                span: Span::enclose(&self.initial.span(), &sequence_first.1.span()),
                 kind: sequence_first.0,
                 left: Box::new(self.initial),
                 right: Box::new(sequence_first.1),
@@ -135,7 +135,7 @@ impl<'a> ArithmeticChain<'a> {
             Expression::Arithmetic(sequence_rest.into_iter().fold(
                 start,
                 |acc, (kind, expression)| Arithmetic {
-                    span: input_span.enclose(&acc.span, &expression.span()),
+                    span: Span::enclose(&acc.span, &expression.span()),
                     kind,
                     left: Box::new(Expression::Arithmetic(acc)),
                     right: Box::new(expression),
@@ -186,8 +186,6 @@ impl<'a> Arithmetic<'a> {
 
     /// Parse sum.
     fn parse_sum(input: ParserInput<'a>) -> ParserResult<'a, Expression<'a>> {
-        let input_span = input.span;
-
         pair(
             Self::parse_product,
             many0(preceded(
@@ -203,13 +201,13 @@ impl<'a> Arithmetic<'a> {
             (
                 rest,
                 ArithmeticChain {
-                    initial: initial.fold(&input_span),
+                    initial: initial.fold(),
                     sequence: sequence
                         .into_iter()
-                        .map(|(operation, chain)| (operation, chain.fold(&input_span)))
+                        .map(|(operation, chain)| (operation, chain.fold()))
                         .collect(),
                 }
-                .fold(&input_span),
+                .fold(),
             )
         })
     }

@@ -17,6 +17,7 @@
 #![feature(macro_metavar_expr)]
 #![feature(assert_matches)]
 #![feature(iter_intersperse)]
+#![feature(str_from_raw_parts)]
 
 /// The crate for underlying physical operations.
 pub extern crate nemo_physical;

@@ -31,7 +31,7 @@ impl<'a> DocComment<'a> {
     pub fn content(&self) -> Vec<String> {
         self.content
             .iter()
-            .map(|comment| comment.0.to_string())
+            .map(|comment| comment.fragment().to_string())
             .collect()
     }
 }
