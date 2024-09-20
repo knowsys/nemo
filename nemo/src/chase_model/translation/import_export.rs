@@ -120,7 +120,7 @@ impl ProgramChaseTranslation {
         attributes
             .get(&ImportExportAttribute::Resource)
             .and_then(ImportExportDirective::string_value)
-            .map(|resource| CompressionFormat::from_resource(&resource))
+            .map(|resource| (CompressionFormat::from_resource(&resource).0, resource))
             .map(|(format, resource)| (format, ImportExportResource::from_string(resource)))
             .expect("invalid program: missing resource in import/export")
     }

@@ -9,6 +9,7 @@ use crate::{
     rule_model::{
         components::{
             import_export::{
+                compression::CompressionFormat,
                 file_formats::{FileFormat, FILE_FORMATS_RDF},
                 ExportDirective, ImportDirective,
             },
@@ -24,15 +25,16 @@ use crate::{
 impl<'a> ASTProgramTranslation<'a> {
     /// Find the extension given for this import/export statement.
     fn import_export_extension(
-        &self,
         map: &'a ast::expression::complex::map::Map,
     ) -> Option<(String, &'a ast::expression::Expression<'a>)> {
         for (key, value) in map.key_value() {
             if let ast::expression::Expression::Constant(constant) = key {
                 if &constant.tag().to_string() == "resource" {
                     if let ast::expression::Expression::String(string) = value {
+                        let (_, path) = CompressionFormat::from_resource(&string.content());
+
                         return Some((
-                            Path::new(&string.content())
+                            Path::new(&path)
                                 .extension()?
                                 .to_owned()
                                 .into_string()
@@ -56,7 +58,7 @@ impl<'a> ASTProgramTranslation<'a> {
             let format_tag = structure_tag.to_string();
 
             if format_tag.to_ascii_lowercase() == RDF_UNSPECIFIED {
-                let extension = self.import_export_extension(map);
+                let extension = Self::import_export_extension(map);
 
                 if let Some((extension, origin)) = extension {
                     for &rdf_format in FILE_FORMATS_RDF {
