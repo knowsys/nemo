@@ -86,18 +86,6 @@ where
 
     fn symbol_info(&self) -> Option<LSPSymbolInfo> {
         let kind = match self.context() {
-            ParserContext::Program => {
-                return Some(LSPSymbolInfo {
-                    kind: SymbolKind::FILE,
-                    name: "Program".to_string(),
-                })
-            }
-            ParserContext::Rule => {
-                return Some(LSPSymbolInfo {
-                    kind: SymbolKind::CLASS,
-                    name: "Rule".to_string(),
-                })
-            }
             ParserContext::Base => {
                 return Some(LSPSymbolInfo {
                     kind: SymbolKind::PROPERTY,
@@ -135,6 +123,7 @@ where
                 })
             }
 
+            ParserContext::Rule => Some(SymbolKind::CLASS),
             ParserContext::Atom => Some(SymbolKind::FIELD),
             ParserContext::DataType => Some(SymbolKind::TYPE_PARAMETER),
             ParserContext::Variable => Some(SymbolKind::VARIABLE),
@@ -155,7 +144,7 @@ where
 
         kind.map(|kind| LSPSymbolInfo {
             kind,
-            name: format!("{}", self.span().fragment()),
+            name: format!("{}", self.span().fragment().split_whitespace().collect::<Vec<_>>().join(" ")),
         })
     }
 

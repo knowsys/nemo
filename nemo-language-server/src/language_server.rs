@@ -2,6 +2,8 @@ mod lsp_component;
 mod nemo_position;
 mod token_type;
 
+use nemo::rule_model::error::ProgramError;
+use nemo::rule_model::translation::ProgramErrorReport;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::vec;
 use strum::IntoEnumIterator;
@@ -100,15 +102,17 @@ impl Backend {
 
         let line_index = LineIndex::new(text);
 
-        let (_program, errors): (Program, Option<ParserErrorReport>) =
+        let (program, parse_errors): (Program, Option<ParserErrorReport>) =
             Parser::initialize(text, text_document.uri.to_string())
                 .parse()
                 .map(|prg| (prg, None))
                 .unwrap_or_else(|(prg, err)| (*prg, Some(err)));
 
+        let translation_result: Option<Result<nemo::rule_model::program::Program, ProgramErrorReport>> = parse_errors.is_none().then(|| nemo::rule_model::translation::ASTProgramTranslation::initialize(text, text_document.uri.to_string()).translate(&program));
+
         // Group errors by position and deduplicate error
         let mut errors_by_posision: BTreeMap<CharacterPosition, BTreeSet<String>> = BTreeMap::new();
-        for error in errors.iter().flat_map(|report| report.errors()) {
+        for error in parse_errors.iter().flat_map(|report| report.errors()) {
             if let Some(set) = errors_by_posision.get_mut(&error.position) {
                 set.insert(format!("expected `{}`", error.context[0].name()));
             } else {
@@ -119,18 +123,39 @@ impl Backend {
             };
         }
 
+        if let Some(Err(program_error_report)) = translation_result {
+            for error in program_error_report.errors() {
+                // TODO: get rid of if; but currently I don't see how to get the position of a
+                // validation error
+                if let ProgramError::TranslationError(translation_error) = error {
+                    let position = translation_error.character_range().start;
+                    let message = format!(
+                        "{}{}",
+                        error.message(),
+                        error
+                            .note()
+                            .map(|n| format!("\n{n}"))
+                            .unwrap_or("".to_string())
+                    );
+
+                    if let Some(set) = errors_by_posision.get_mut(&position) {
+                        set.insert(message);
+                    } else {
+                        errors_by_posision.insert(position, std::iter::once(message).collect());
+                    };
+                }
+            }
+        }
+
         let diagnostics = errors_by_posision
             .into_iter()
             .map(|(pos, error_set)| {
                 Ok(Diagnostic {
-                    message: format!(
-                        "expected {}",
-                        error_set
-                            .iter()
-                            .map(|s| format!("'{s}'"))
-                            .collect::<Vec<_>>()
-                            .join(", ")
-                    ),
+                    message: error_set
+                        .iter()
+                        .map(|s| format!("'{s}'"))
+                        .collect::<Vec<_>>()
+                        .join(", "),
                     range: Range::new(
                         line_col_to_lsp_position(
                             &line_index,

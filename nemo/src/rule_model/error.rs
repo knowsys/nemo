@@ -266,6 +266,11 @@ impl TranslationError {
 
         self
     }
+
+    /// Return the [`CharacterRange`] of the error
+    pub fn character_range(&self) -> CharacterRange {
+        self.info.reference
+    }
 }
 
 /// Error that may occur while translating or validating a nemo program
