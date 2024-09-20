@@ -144,7 +144,14 @@ where
 
         kind.map(|kind| LSPSymbolInfo {
             kind,
-            name: format!("{}", self.span().fragment().split_whitespace().collect::<Vec<_>>().join(" ")),
+            name: format!(
+                "{}",
+                self.span()
+                    .fragment()
+                    .split_whitespace()
+                    .collect::<Vec<_>>()
+                    .join(" ")
+            ),
         })
     }
 

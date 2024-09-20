@@ -266,11 +266,6 @@ impl TranslationError {
 
         self
     }
-
-    /// Return the [`CharacterRange`] of the error
-    pub fn character_range(&self) -> CharacterRange {
-        self.info.reference
-    }
 }
 
 /// Error that may occur while translating or validating a nemo program
@@ -311,6 +306,17 @@ impl ProgramError {
         }
     }
 
+    /// Return the [`CharacterRange`] where the error occurred
+    pub fn character_range<Translation>(&self, translation: Translation) -> Option<CharacterRange>
+    where
+        Translation: Fn(&Origin) -> Option<CharacterRange>,
+    {
+        match self {
+            ProgramError::TranslationError(error) => Some(error.info.reference),
+            ProgramError::ValidationError(error) => translation(&error.info.reference),
+        }
+    }
+
     /// Return the note attached to this error, if it exists.
     pub fn note(&self) -> Option<String> {
         match self {
@@ -318,6 +324,14 @@ impl ProgramError {
             ProgramError::ValidationError(error) => error.kind.note(),
         }
         .map(|string| string.to_string())
+    }
+
+    /// Return the [`Hint`]s attached to this error.
+    pub fn hints(&self) -> &Vec<Hint> {
+        match self {
+            ProgramError::TranslationError(error) => &error.info.hints,
+            ProgramError::ValidationError(error) => &error.info.hints,
+        }
     }
 
     /// Append the information of this error to a [ReportBuilder].

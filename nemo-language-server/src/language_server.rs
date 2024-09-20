@@ -2,7 +2,6 @@ mod lsp_component;
 mod nemo_position;
 mod token_type;
 
-use nemo::rule_model::error::ProgramError;
 use nemo::rule_model::translation::ProgramErrorReport;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::vec;
@@ -108,7 +107,15 @@ impl Backend {
                 .map(|prg| (prg, None))
                 .unwrap_or_else(|(prg, err)| (*prg, Some(err)));
 
-        let translation_result: Option<Result<nemo::rule_model::program::Program, ProgramErrorReport>> = parse_errors.is_none().then(|| nemo::rule_model::translation::ASTProgramTranslation::initialize(text, text_document.uri.to_string()).translate(&program));
+        let translation_result: Option<
+            Result<nemo::rule_model::program::Program, ProgramErrorReport>,
+        > = parse_errors.is_none().then(|| {
+            nemo::rule_model::translation::ASTProgramTranslation::initialize(
+                text,
+                text_document.uri.to_string(),
+            )
+            .translate(&program)
+        });
 
         // Group errors by position and deduplicate error
         let mut errors_by_posision: BTreeMap<CharacterPosition, BTreeSet<String>> = BTreeMap::new();
@@ -125,25 +132,35 @@ impl Backend {
 
         if let Some(Err(program_error_report)) = translation_result {
             for error in program_error_report.errors() {
-                // TODO: get rid of if; but currently I don't see how to get the position of a
-                // validation error
-                if let ProgramError::TranslationError(translation_error) = error {
-                    let position = translation_error.character_range().start;
-                    let message = format!(
-                        "{}{}",
-                        error.message(),
-                        error
-                            .note()
-                            .map(|n| format!("\n{n}"))
-                            .unwrap_or("".to_string())
-                    );
+                let range_opt = error.character_range(|origin| {
+                    program_error_report
+                        .origin_map()
+                        .get(origin)
+                        .map(|node| node.span().range())
+                });
+                let Some(position) = range_opt.map(|r| r.start) else {
+                    continue;
+                };
 
-                    if let Some(set) = errors_by_posision.get_mut(&position) {
-                        set.insert(message);
-                    } else {
-                        errors_by_posision.insert(position, std::iter::once(message).collect());
-                    };
-                }
+                let message = format!(
+                    "{}{}{}",
+                    error.message(),
+                    error
+                        .note()
+                        .map(|n| format!("\nNote: {n}"))
+                        .unwrap_or("".to_string()),
+                    error
+                        .hints()
+                        .iter()
+                        .map(|h| format!("\nHint: {h}"))
+                        .collect::<String>(),
+                );
+
+                if let Some(set) = errors_by_posision.get_mut(&position) {
+                    set.insert(message);
+                } else {
+                    errors_by_posision.insert(position, std::iter::once(message).collect());
+                };
             }
         }
 
@@ -151,11 +168,7 @@ impl Backend {
             .into_iter()
             .map(|(pos, error_set)| {
                 Ok(Diagnostic {
-                    message: error_set
-                        .iter()
-                        .map(|s| format!("'{s}'"))
-                        .collect::<Vec<_>>()
-                        .join(", "),
+                    message: error_set.into_iter().collect::<Vec<_>>().join("\n\n"),
                     range: Range::new(
                         line_col_to_lsp_position(
                             &line_index,
