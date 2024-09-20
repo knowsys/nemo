@@ -137,7 +137,7 @@ impl<'a> ProgramErrorReport<'a> {
             })
             .collect()
     }
-    
+
     /// Return the mapping from origins to AST nodes.
     pub fn origin_map(&self) -> &HashMap<Origin, &'a dyn ProgramAST<'a>> {
         &self.origin_map
