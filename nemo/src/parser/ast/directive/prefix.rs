@@ -41,6 +41,7 @@ impl<'a> Prefix<'a> {
         &self.iri
     }
 
+    /// Parse the main part of this directive.
     pub fn parse_body(input: ParserInput<'a>) -> ParserResult<'a, (Token<'a>, Iri<'a>)> {
         context(
             ParserContext::PrefixBody,
