@@ -11,7 +11,10 @@ r2(?x) :- a(?x, ?y), 2 / ?y != 1.
 
 r3(?x) :- a(?x, ?y), ?z = ?x + ?y, ?z = 4.
 
+r4(?x, ?y) :- a(?x, ?y), OR(NUMGREATER(?x, 2), EQUALITY(?y, 0)).
+
 @export r0 :- csv {}.
 @export r1 :- csv {}.
 @export r2 :- csv {}.
 @export r3 :- csv {}.
+@export r4 :- csv {}.
