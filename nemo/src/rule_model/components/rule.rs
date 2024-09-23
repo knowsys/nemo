@@ -73,6 +73,14 @@ impl Rule {
         &self.body
     }
 
+    /// Return an iterator over the positive literals in the body of this rule.
+    pub fn body_positive(&self) -> impl Iterator<Item = &Atom> {
+        self.body.iter().filter_map(|literal| match literal {
+            Literal::Positive(atom) => Some(atom),
+            Literal::Negative(_) | Literal::Operation(_) => None,
+        })
+    }
+
     /// Return a mutable reference to the body of the rule.
     pub fn body_mut(&mut self) -> &mut Vec<Literal> {
         &mut self.body
@@ -143,18 +151,41 @@ impl Rule {
     /// Check if
     ///     * are no complex terms occurring in the head
     ///     * an aggregate occurs at most once
-    fn validate_term_head(builder: &mut ValidationErrorBuilder, term: &Term) -> Result<bool, ()> {
+    ///     * there is no aggregation over a group-by variable
+    fn validate_term_head(
+        builder: &mut ValidationErrorBuilder,
+        term: &Term,
+        group_by_variable: &HashSet<&Variable>,
+    ) -> Option<bool> {
         if term.is_map() || term.is_tuple() || term.is_function() {
             builder
                 .report_error(*term.origin(), ValidationErrorKind::UnsupportedComplexTerm)
                 .add_hint_option(Self::hint_term_operation(term));
-            return Err(());
+            return None;
         }
 
-        let mut first_aggregate = term.is_aggregate();
+        let mut first_aggregate = if let Term::Aggregate(aggregate) = term {
+            if let Term::Primitive(Primitive::Variable(aggregate_variable)) =
+                aggregate.aggregate_term()
+            {
+                if group_by_variable.contains(aggregate_variable) {
+                    builder.report_error(
+                        *aggregate.aggregate_term().origin(),
+                        ValidationErrorKind::AggregateOverGroupByVariable {
+                            variable: aggregate_variable.name().unwrap_or_default(),
+                        },
+                    );
+                    return None;
+                }
+            }
+
+            true
+        } else {
+            false
+        };
 
         for subterm in term.arguments() {
-            let contains_aggregate = Self::validate_term_head(builder, subterm)?;
+            let contains_aggregate = Self::validate_term_head(builder, subterm, group_by_variable)?;
 
             if contains_aggregate && first_aggregate {
                 builder.report_error(
@@ -162,13 +193,13 @@ impl Rule {
                     ValidationErrorKind::UnsupportedAggregateMultiple,
                 );
 
-                return Err(());
+                return None;
             }
 
             first_aggregate |= contains_aggregate;
         }
 
-        Ok(first_aggregate)
+        Some(first_aggregate)
     }
 
     /// Check if
@@ -181,18 +212,18 @@ impl Rule {
         builder: &mut ValidationErrorBuilder,
         term: &Term,
         safe_variables: &HashSet<&Variable>,
-    ) -> Result<(), ()> {
+    ) -> Option<()> {
         if let Term::Primitive(Primitive::Variable(Variable::Existential(existential))) = term {
             builder.report_error(
                 *existential.origin(),
                 ValidationErrorKind::BodyExistential(Variable::Existential(existential.clone())),
             );
-            return Err(());
+            return None;
         }
 
         if term.is_aggregate() {
             builder.report_error(*term.origin(), ValidationErrorKind::BodyAggregate);
-            return Err(());
+            return None;
         }
 
         if term.is_operation() {
@@ -202,7 +233,7 @@ impl Rule {
                         *operation_variable.origin(),
                         ValidationErrorKind::OperationAnonymous,
                     );
-                    return Err(());
+                    return None;
                 }
 
                 if !safe_variables.contains(operation_variable) {
@@ -210,7 +241,7 @@ impl Rule {
                         *operation_variable.origin(),
                         ValidationErrorKind::OperationUnsafe(operation_variable.clone()),
                     );
-                    return Err(());
+                    return None;
                 }
             }
         }
@@ -219,14 +250,14 @@ impl Rule {
             builder
                 .report_error(*term.origin(), ValidationErrorKind::UnsupportedComplexTerm)
                 .add_hint_option(Self::hint_term_operation(term));
-            return Err(());
+            return None;
         }
 
         for subterm in term.arguments() {
             Self::validate_term_body(builder, subterm, safe_variables)?;
         }
 
-        Ok(())
+        Some(())
     }
 
     /// If the given [Term] is a function term,
@@ -306,6 +337,14 @@ impl ProgramComponent for Rule {
     where
         Self: Sized,
     {
+        if self.body_positive().next().is_none() {
+            builder.report_error(
+                self.origin,
+                ValidationErrorKind::UnsupportedNoPositiveLiterals,
+            );
+            return None;
+        }
+
         let safe_variables = self.safe_variables();
         let is_existential = self
             .head()
@@ -315,27 +354,6 @@ impl ProgramComponent for Rule {
 
         for atom in self.head() {
             atom.validate(builder)?;
-
-            let mut contains_aggregate = false;
-            for term in atom.arguments() {
-                if let Ok(aggregate) = Self::validate_term_head(builder, term) {
-                    if aggregate && contains_aggregate {
-                        builder.report_error(
-                            *term.origin(),
-                            ValidationErrorKind::UnsupportedAggregateMultiple,
-                        );
-                    }
-
-                    if aggregate && is_existential {
-                        builder.report_error(
-                            *term.origin(),
-                            ValidationErrorKind::UnsupportedAggregatesAndExistentials,
-                        );
-                    }
-
-                    contains_aggregate |= aggregate;
-                }
-            }
 
             for variable in atom.variables() {
                 if let Some(variable_name) = variable.name() {
@@ -356,6 +374,40 @@ impl ProgramComponent for Rule {
                 } else {
                     builder.report_error(*variable.origin(), ValidationErrorKind::HeadAnonymous);
                     return None;
+                }
+            }
+
+            let group_by_variables = atom
+                .arguments()
+                .flat_map(|term| {
+                    if let Term::Primitive(Primitive::Variable(variable)) = term {
+                        Some(variable)
+                    } else {
+                        None
+                    }
+                })
+                .collect::<HashSet<_>>();
+
+            let mut contains_aggregate = false;
+            for term in atom.arguments() {
+                if let Some(aggregate) =
+                    Self::validate_term_head(builder, term, &group_by_variables)
+                {
+                    if aggregate && contains_aggregate {
+                        builder.report_error(
+                            *term.origin(),
+                            ValidationErrorKind::UnsupportedAggregateMultiple,
+                        );
+                    }
+
+                    if aggregate && is_existential {
+                        builder.report_error(
+                            *term.origin(),
+                            ValidationErrorKind::UnsupportedAggregatesAndExistentials,
+                        );
+                    }
+
+                    contains_aggregate |= aggregate;
                 }
             }
         }

@@ -2,6 +2,7 @@
 #![allow(missing_docs)]
 
 use std::{
+    collections::HashSet,
     fmt::{Display, Write},
     hash::Hash,
 };
@@ -250,6 +251,39 @@ impl ProgramComponent for Aggregate {
                     },
                 );
 
+                return None;
+            }
+        }
+
+        let mut distinct_set = HashSet::new();
+        for variable in &self.distinct {
+            let name = if variable.is_universal() {
+                if let Some(name) = variable.name() {
+                    name
+                } else {
+                    builder.report_error(
+                        *variable.origin(),
+                        ValidationErrorKind::AggregateDistinctNonNamedUniversal {
+                            variable_type: String::from("anonymous"),
+                        },
+                    );
+                    return None;
+                }
+            } else {
+                builder.report_error(
+                    *variable.origin(),
+                    ValidationErrorKind::AggregateDistinctNonNamedUniversal {
+                        variable_type: String::from("existential"),
+                    },
+                );
+                return None;
+            };
+
+            if !distinct_set.insert(variable) {
+                builder.report_error(
+                    *variable.origin(),
+                    ValidationErrorKind::AggregateRepeatedDistinctVariable { variable: name },
+                );
                 return None;
             }
         }
