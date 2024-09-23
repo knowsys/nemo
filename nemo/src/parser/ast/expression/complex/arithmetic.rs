@@ -25,6 +25,8 @@ use crate::parser::{
     ParserResult,
 };
 
+use super::parenthesized::ParenthesizedExpression;
+
 /// Types of arithmetic operations
 #[derive(Assoc, Debug, Copy, Clone, PartialEq, Eq)]
 #[func(pub fn token(token: TokenKind) -> Option<Self>)]
@@ -146,23 +148,53 @@ impl<'a> ArithmeticChain<'a> {
 }
 
 impl<'a> Arithmetic<'a> {
+    /// Parse expression (not including arithmetic expressions).
     fn parse_non_arithmetic(input: ParserInput<'a>) -> ParserResult<'a, Expression<'a>> {
         alt((Expression::parse_complex, Expression::parse_basic))(input)
     }
 
+    /// Parse parenthesized non-arithmetic expressions.
+    fn parse_parenthesized_non_arithmetic(
+        input: ParserInput<'a>,
+    ) -> ParserResult<'a, Expression<'a>> {
+        let input_span = input.span;
+        delimited(
+            pair(Token::open_parenthesis, WSoC::parse),
+            Self::parse_non_arithmetic,
+            pair(WSoC::parse, Token::closed_parenthesis),
+        )(input)
+        .map(|(rest, expression)| {
+            let rest_span = rest.span;
+            (
+                rest,
+                Expression::Parenthesized(ParenthesizedExpression::new(
+                    input_span.until_rest(&rest_span),
+                    expression,
+                )),
+            )
+        })
+    }
+
     /// Parse an expression enclosed in parenthesis.
     fn parse_parenthesized_expression(input: ParserInput<'a>) -> ParserResult<'a, Expression<'a>> {
+        let input_span = input.span;
+
         delimited(
             pair(Token::open_parenthesis, WSoC::parse),
             Self::parse,
             pair(WSoC::parse, Token::closed_parenthesis),
         )(input)
-        .map(|(rest, arithmetic_expr)| (rest, Expression::Arithmetic(arithmetic_expr)))
+        .map(|(rest, mut arithmetic_expression)| {
+            arithmetic_expression.span = input_span.until_rest(&rest.span);
+
+            (rest, Expression::Arithmetic(arithmetic_expression))
+        })
     }
 
     /// Parse factor.
     fn parse_factor(input: ParserInput<'a>) -> ParserResult<'a, Expression<'a>> {
         alt((
+            Self::parse_parenthesized_non_arithmetic,
             Self::parse_non_arithmetic,
             Self::parse_parenthesized_expression,
         ))(input)
@@ -275,15 +307,16 @@ mod test {
         let test = vec![
             ("1 * 2", 2),
             ("1 * 2 * ?y", 3),
-            ("1 * (2 / ?y)", 3), // FIXME: Span has missing `)`
+            ("1 * (2 / ?y)", 3),
             ("(1 / 2) * ?y", 3),
             ("1 + 2", 2),
             ("1 + 2 + ?x", 3),
-            ("1 + 2 * (3 * ?y)", 4), // FIXME: This test produces weird spans
-            ("1 + (2 * 3) * ?y + 4", 5), // FIXME: Here the spans are also wrong
+            ("1 + 2 * (3 * ?y)", 4),
+            ("1 + (2 * 3) * ?y + 4", 5),
             ("1 + (2 * ((3 * ?y)))", 4),
-            ("1 + 2 * POW(3, 4)", 3), // FIXME: The same
+            ("1 + 2 * POW(3, 4)", 3),
             ("2 * (((18 + 3)))", 3),
+            ("1 + (2)", 2),
         ];
 
         for (input, expected) in test {

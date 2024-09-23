@@ -7,4 +7,5 @@ pub mod infix;
 pub mod map;
 pub mod negation;
 pub mod operation;
+pub mod parenthesized;
 pub mod tuple;

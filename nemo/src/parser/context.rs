@@ -88,9 +88,9 @@ pub enum ParserContext {
     /// Guard
     #[assoc(name = "expression")] // Guard seems like a technical name
     Guard,
-    /// Parenthesised expression
-    #[assoc(name = "parenthesised expression")]
-    ParenthesisedExpression,
+    /// Parenthesized expression
+    #[assoc(name = "expression")]
+    ParenthesizedExpression,
     /// Tuple
     #[assoc(name = "tuple")]
     Tuple,

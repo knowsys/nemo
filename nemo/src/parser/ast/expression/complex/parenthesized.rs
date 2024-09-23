@@ -1,3 +1,5 @@
+//! This module defines [ParenthesizedExpression].
+
 use nom::sequence::{delimited, pair};
 
 use crate::parser::{
@@ -8,34 +10,41 @@ use crate::parser::{
     ParserResult,
 };
 
+/// An [Expression] enclosed in parenthesis
 #[derive(Debug)]
-pub struct ParenthesisedExpression<'a> {
+pub struct ParenthesizedExpression<'a> {
+    /// [Span] associated with this node
     span: Span<'a>,
-    expression: Expression<'a>,
+    /// The [Expression]
+    expression: Box<Expression<'a>>,
 }
 
-impl<'a> ParenthesisedExpression<'a> {
+impl<'a> ParenthesizedExpression<'a> {
+    /// Create a new [ParenthesizedExpression].
+    pub(crate) fn new(span: Span<'a>, expression: Expression<'a>) -> Self {
+        Self {
+            span,
+            expression: Box::new(expression),
+        }
+    }
+
+    /// Return the underlying expression.
     pub fn expression(&self) -> &Expression {
         &self.expression
     }
-
-    pub fn parse_expression(input: ParserInput<'a>) -> ParserResult<'a, Expression<'a>> {
-        Self::parse(input).map(|(rest, paren_expr)| (rest, paren_expr.expression))
-    }
 }
 
-const CONTEXT: ParserContext = ParserContext::ParenthesisedExpression;
+const CONTEXT: ParserContext = ParserContext::ParenthesizedExpression;
 
-impl<'a> ProgramAST<'a> for ParenthesisedExpression<'a> {
-    fn children(&'a self) -> Vec<&'a dyn ProgramAST> {
-        vec![&self.expression]
+impl<'a> ProgramAST<'a> for ParenthesizedExpression<'a> {
+    fn children(&'a self) -> Vec<&'a dyn ProgramAST<'a>> {
+        vec![&*self.expression]
     }
 
     fn span(&self) -> Span<'a> {
         self.span
     }
 
-    /// Parse an expression enclosed in parenthesis.
     fn parse(input: ParserInput<'a>) -> ParserResult<'a, Self>
     where
         Self: Sized + 'a,
@@ -50,9 +59,9 @@ impl<'a> ProgramAST<'a> for ParenthesisedExpression<'a> {
             let rest_span = rest.span;
             (
                 rest,
-                ParenthesisedExpression {
+                ParenthesizedExpression {
                     span: input_span.until_rest(&rest_span),
-                    expression,
+                    expression: Box::new(expression),
                 },
             )
         })
@@ -73,17 +82,14 @@ mod test {
 
     #[test]
     fn paren_expr() {
-        let test = ["(1 * 2)"];
+        let test = ["(int)"];
 
         for input in test {
             let parser_input = ParserInput::new(input, ParserState::default());
-            let result = all_consuming(Expression::parse)(parser_input);
+            let result = all_consuming(ParenthesizedExpression::parse)(parser_input);
             dbg!(&result);
 
             assert!(result.is_ok());
-
-            // let result = result.unwrap();
-            // assert_eq!(result.1.context_type(), expect);
         }
     }
 }

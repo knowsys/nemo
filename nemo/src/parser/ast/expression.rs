@@ -9,7 +9,7 @@ use basic::{
 };
 use complex::{
     aggregation::Aggregation, arithmetic::Arithmetic, atom::Atom, map::Map, negation::Negation,
-    operation::Operation, tuple::Tuple,
+    operation::Operation, parenthesized::ParenthesizedExpression, tuple::Tuple,
 };
 use nom::{branch::alt, combinator::map};
 
@@ -45,6 +45,8 @@ pub enum Expression<'a> {
     Number(Number<'a>),
     /// Operation
     Operation(Operation<'a>),
+    /// Parenthesized expression
+    Parenthesized(ParenthesizedExpression<'a>),
     /// Rdf literal
     RdfLiteral(RdfLiteral<'a>),
     /// String
@@ -69,6 +71,7 @@ impl<'a> Expression<'a> {
             Expression::Number(expression) => expression.context(),
             Expression::Negation(expression) => expression.context(),
             Expression::Operation(expression) => expression.context(),
+            Expression::Parenthesized(expression) => expression.context(),
             Expression::RdfLiteral(expression) => expression.context(),
             Expression::String(expression) => expression.context(),
             Expression::Tuple(expression) => expression.context(),
@@ -117,6 +120,7 @@ impl<'a> ProgramAST<'a> for Expression<'a> {
             Expression::Number(expression) => expression,
             Expression::Negation(expression) => expression,
             Expression::Operation(expression) => expression,
+            Expression::Parenthesized(expression) => expression,
             Expression::RdfLiteral(expression) => expression,
             Expression::String(expression) => expression,
             Expression::Tuple(expression) => expression,
@@ -136,6 +140,7 @@ impl<'a> ProgramAST<'a> for Expression<'a> {
             Expression::Number(expression) => expression.span(),
             Expression::Negation(expression) => expression.span(),
             Expression::Operation(expression) => expression.span(),
+            Expression::Parenthesized(expression) => expression.span(),
             Expression::RdfLiteral(expression) => expression.span(),
             Expression::String(expression) => expression.span(),
             Expression::Tuple(expression) => expression.span(),
@@ -151,6 +156,7 @@ impl<'a> ProgramAST<'a> for Expression<'a> {
             CONTEXT,
             alt((
                 map(Arithmetic::parse, Self::Arithmetic),
+                map(ParenthesizedExpression::parse, Self::Parenthesized),
                 Self::parse_complex,
                 Self::parse_basic,
             )),
@@ -177,7 +183,7 @@ mod test {
     fn parse_expression() {
         let test = vec![
             ("#sum(1 + POW(?x, 2), ?y, ?z)", ParserContext::Aggregation),
-            ("(1 + 2)", ParserContext::Arithmetic),
+            ("1 + 2", ParserContext::Arithmetic),
             ("test(?x, (1,), (1 + 2))", ParserContext::Atom),
             ("_:12", ParserContext::Blank),
             ("true", ParserContext::Boolean),
@@ -186,6 +192,7 @@ mod test {
             ("12", ParserContext::Number),
             ("~test(1)", ParserContext::Negation),
             ("substr(\"string\", 1+?x)", ParserContext::Operation),
+            ("(int)", ParserContext::ParenthesizedExpression),
             (
                 "\"true\"^^<http://www.w3.org/2001/XMLSchema#boolean>",
                 ParserContext::RdfLiteral,

@@ -161,6 +161,9 @@ impl<'a> ASTProgramTranslation<'a> {
                 negation.span(),
                 TranslationErrorKind::InnerExpressionNegation,
             )),
+            ast::expression::Expression::Parenthesized(parenthesized) => {
+                self.build_inner_term(parenthesized.expression())
+            }
         }?
         .set_origin(self.register_node(expression)))
     }
