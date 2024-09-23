@@ -128,7 +128,7 @@ pub(crate) fn report_error<'a>(
                     //         todo!()
                     //     }
                     // };
-                    for error in _get_deepest_error(&err) {
+                    for error in _get_deepest_error(err) {
                         input.state.report_error(error);
                     }
                     // let (_deepest_pos, errors) = get_deepest_errors(err);
@@ -205,7 +205,7 @@ fn _get_deepest_error<'a>(e: &'a ParserErrorTree<'a>) -> Vec<ParserError> {
                 context.append(&mut error.context);
                 context.append(
                     &mut contexts
-                        .into_iter()
+                        .iter()
                         .map(|(_, stack_context)| match stack_context {
                             StackContext::Kind(_) => todo!("unclear when NomErrorKind will occur"),
                             StackContext::Context(cxt) => *cxt,
@@ -220,7 +220,7 @@ fn _get_deepest_error<'a>(e: &'a ParserErrorTree<'a>) -> Vec<ParserError> {
                 vec![ParserError {
                     position: errors[0].position,
                     context: contexts
-                        .into_iter()
+                        .iter()
                         .map(|(_, stack_context)| match stack_context {
                             StackContext::Kind(_) => todo!("unclear when NomErrorKind will occur"),
                             StackContext::Context(cxt) => *cxt,
@@ -235,12 +235,14 @@ fn _get_deepest_error<'a>(e: &'a ParserErrorTree<'a>) -> Vec<ParserError> {
             for error in vec {
                 let errors = _get_deepest_error(error);
                 for inner_error in errors {
-                    if inner_error.position == farthest_pos {
-                        farthest_errors.push(inner_error);
-                    } else if inner_error.position > farthest_pos {
-                        farthest_pos = inner_error.position;
-                        farthest_errors.clear();
-                        farthest_errors.push(inner_error);
+                    match inner_error.position.cmp(&farthest_pos) {
+                        std::cmp::Ordering::Equal => farthest_errors.push(inner_error),
+                        std::cmp::Ordering::Greater => {
+                            farthest_pos = inner_error.position;
+                            farthest_errors.clear();
+                            farthest_errors.push(inner_error);
+                        }
+                        std::cmp::Ordering::Less => {}
                     }
                 }
             }
