@@ -96,36 +96,41 @@ pub(crate) fn report_error<'a>(
             match &e {
                 nom::Err::Incomplete(_) => (),
                 nom::Err::Error(err) | nom::Err::Failure(err) => {
-                    let error = match err {
-                        GenericErrorTree::Base { location, .. } => ParserError {
-                            position: CharacterPosition {
-                                offset: location.span.location_offset(),
-                                line: location.span.location_line(),
-                                column: location.span.get_utf8_column() as u32,
-                            },
-                            context: vec![],
-                        },
-                        GenericErrorTree::Stack {
-                            base: _base,
-                            contexts,
-                        } => ParserError {
-                            position: CharacterPosition {
-                                offset: contexts[0].0.span.location_offset(),
-                                line: contexts[0].0.span.location_line(),
-                                column: contexts[0].0.span.get_utf8_column() as u32,
-                            },
-                            context: match contexts[0].1 {
-                                StackContext::Kind(_) => todo!(),
-                                StackContext::Context(ctx) => {
-                                    vec![ctx]
-                                }
-                            },
-                        },
-                        GenericErrorTree::Alt(_vec) => {
-                            todo!()
-                        }
-                    };
-                    input.state.report_error(error);
+                    // dbg!(&err);
+                    // let error = _get_deepest_error(&err);
+                    // dbg!(&error);
+                    // let error = match err {
+                    //     GenericErrorTree::Base { location, .. } => ParserError {
+                    //         position: CharacterPosition {
+                    //             offset: location.span.location_offset(),
+                    //             line: location.span.location_line(),
+                    //             column: location.span.get_utf8_column() as u32,
+                    //         },
+                    //         context: vec![],
+                    //     },
+                    //     GenericErrorTree::Stack {
+                    //         base: _base,
+                    //         contexts,
+                    //     } => ParserError {
+                    //         position: CharacterPosition {
+                    //             offset: contexts[0].0.span.location_offset(),
+                    //             line: contexts[0].0.span.location_line(),
+                    //             column: contexts[0].0.span.get_utf8_column() as u32,
+                    //         },
+                    //         context: match contexts[0].1 {
+                    //             StackContext::Kind(_) => todo!(),
+                    //             StackContext::Context(ctx) => {
+                    //                 vec![ctx]
+                    //             }
+                    //         },
+                    //     },
+                    //     GenericErrorTree::Alt(_vec) => {
+                    //         todo!()
+                    //     }
+                    // };
+                    for error in _get_deepest_error(&err) {
+                        input.state.report_error(error);
+                    }
                     // let (_deepest_pos, errors) = get_deepest_errors(err);
                     // for error in errors {
                     //     input.state.report_error(error);
@@ -151,10 +156,13 @@ pub(crate) fn _transform_error_tree<'a, Output>(
             match &e {
                 nom::Err::Incomplete(_) => (),
                 nom::Err::Error(err) | nom::Err::Failure(err) => {
-                    let (_deepest_pos, errors) = _get_deepest_errors(err);
-                    for error in errors {
-                        input.state.report_error(error);
-                    }
+                    let error = _get_deepest_error(err);
+                    dbg!(error);
+                    todo!()
+                    // let (_deepest_pos, errors) = _get_deepest_errors(err);
+                    // for error in errors {
+                    //     input.state.report_error(error);
+                    // }
                 }
             };
             Err(e)
@@ -174,88 +182,73 @@ fn _context_strs(
         .collect()
 }
 
-fn _get_deepest_errors<'a>(e: &'a ParserErrorTree<'a>) -> (CharacterPosition, Vec<ParserError>) {
+fn _get_deepest_error<'a>(e: &'a ParserErrorTree<'a>) -> Vec<ParserError> {
     match e {
         ParserErrorTree::Base { location, .. } => {
             let span = location.span;
-            let err_pos = CharacterPosition {
-                offset: span.location_offset(),
-                line: span.location_line(),
-                column: span.get_utf8_column() as u32,
-            };
-            (
-                err_pos,
-                vec![ParserError {
-                    position: err_pos,
-                    context: Vec::new(),
-                }],
-            )
+            vec![ParserError {
+                position: CharacterPosition {
+                    offset: span.location_offset(),
+                    line: span.location_line(),
+                    column: span.get_utf8_column() as u32,
+                },
+                context: vec![],
+            }]
         }
         ParserErrorTree::Stack { base, contexts } => {
-            // let mut err_pos = Position::default();
-            match &**base {
-                ParserErrorTree::Base { location, .. } => {
-                    let span = location.span;
-                    let err_pos = CharacterPosition {
-                        offset: span.location_offset(),
-                        line: span.location_line(),
-                        column: span.get_utf8_column() as u32,
-                    };
-                    let mut msg = String::from("");
-                    for (_, context) in contexts {
-                        match context {
-                            StackContext::Kind(_) => todo!(),
-                            StackContext::Context(c) => {
-                                if let ParserContext::Token { kind: t } = c {
-                                    msg.push_str(t.name());
-                                }
-                            }
-                        }
-                    }
-                    (
-                        err_pos,
-                        vec![ParserError {
-                            position: err_pos,
-                            context: _context_strs(contexts),
-                        }],
-                    )
-                }
-                ParserErrorTree::Stack { base, contexts } => {
-                    let (pos, mut deepest_errors) = _get_deepest_errors(base);
-                    let contexts = _context_strs(contexts);
-                    for error in &mut deepest_errors {
-                        error.context.append(&mut contexts.clone());
-                    }
-                    (pos, deepest_errors)
-                }
-                ParserErrorTree::Alt(_error_tree) => {
-                    let (pos, mut deepest_errors) = _get_deepest_errors(base);
-                    let contexts = _context_strs(contexts);
-                    for error in &mut deepest_errors {
-                        error.context.append(&mut contexts.clone());
-                    }
-                    (pos, deepest_errors)
-                }
+            let mut errors = _get_deepest_error(base);
+            if errors.len() == 1 {
+                let error = errors.get_mut(0).expect(
+                    "get deepest error called on base should return a vec with one element",
+                );
+                let mut context = vec![];
+                context.append(&mut error.context);
+                context.append(
+                    &mut contexts
+                        .into_iter()
+                        .map(|(_, stack_context)| match stack_context {
+                            StackContext::Kind(_) => todo!("unclear when NomErrorKind will occur"),
+                            StackContext::Context(cxt) => *cxt,
+                        })
+                        .collect(),
+                );
+                vec![ParserError {
+                    position: error.position,
+                    context,
+                }]
+            } else {
+                vec![ParserError {
+                    position: errors[0].position,
+                    context: contexts
+                        .into_iter()
+                        .map(|(_, stack_context)| match stack_context {
+                            StackContext::Kind(_) => todo!("unclear when NomErrorKind will occur"),
+                            StackContext::Context(cxt) => *cxt,
+                        })
+                        .collect(),
+                }]
             }
         }
         ParserErrorTree::Alt(vec) => {
-            let mut return_vec: Vec<ParserError> = Vec::new();
-            let mut deepest_pos = CharacterPosition::default();
+            let mut farthest_pos = CharacterPosition::default();
+            let mut farthest_errors = Vec::new();
             for error in vec {
-                let (pos, mut deepest_errors) = _get_deepest_errors(error);
-                match pos.cmp(&deepest_pos) {
-                    std::cmp::Ordering::Equal => {
-                        return_vec.append(&mut deepest_errors);
+                let errors = _get_deepest_error(error);
+                for inner_error in errors {
+                    if inner_error.position == farthest_pos {
+                        farthest_errors.push(inner_error);
+                    } else if inner_error.position > farthest_pos {
+                        farthest_pos = inner_error.position;
+                        farthest_errors.clear();
+                        farthest_errors.push(inner_error);
                     }
-                    std::cmp::Ordering::Greater => {
-                        deepest_pos = pos;
-                        return_vec.clear();
-                        return_vec.append(&mut deepest_errors);
-                    }
-                    std::cmp::Ordering::Less => {}
                 }
             }
-            (deepest_pos, return_vec)
+            farthest_errors
+            // ParserError {
+            //     position: farthest_pos,
+            //     context: vec![],
+            // }
         }
     }
 }

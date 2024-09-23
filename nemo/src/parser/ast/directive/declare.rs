@@ -42,13 +42,16 @@ impl<'a> Declare<'a> {
     pub fn parse_body(
         input: ParserInput<'a>,
     ) -> ParserResult<'a, (StructureTag<'a>, Sequence<'a, NameTypePair<'a>>)> {
-        separated_pair(
-            StructureTag::parse,
-            WSoC::parse,
-            delimited(
-                pair(Token::atom_open, WSoC::parse),
-                Sequence::<NameTypePair>::parse,
-                pair(WSoC::parse, Token::atom_close),
+        context(
+            ParserContext::DeclareBody,
+            separated_pair(
+                StructureTag::parse,
+                WSoC::parse,
+                delimited(
+                    pair(Token::atom_open, WSoC::parse),
+                    Sequence::<NameTypePair>::parse,
+                    pair(WSoC::parse, Token::atom_close),
+                ),
             ),
         )(input)
     }

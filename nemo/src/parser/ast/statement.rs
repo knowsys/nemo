@@ -48,11 +48,14 @@ impl<'a> StatementKind<'a> {
 
     /// Parse the [StatementKind].
     pub fn parse(input: ParserInput<'a>) -> ParserResult<'a, Self> {
-        alt((
-            map(Directive::parse, Self::Directive),
-            map(Rule::parse, Self::Rule),
-            map(Guard::parse, Self::Fact),
-        ))(input)
+        context(
+            ParserContext::StatementKind,
+            alt((
+                map(Directive::parse, Self::Directive),
+                map(Rule::parse, Self::Rule),
+                map(Guard::parse, Self::Fact),
+            )),
+        )(input)
     }
 }
 

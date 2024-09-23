@@ -27,7 +27,7 @@ impl<'a> Base<'a> {
     }
 
     pub fn parse_body(input: ParserInput<'a>) -> ParserResult<'a, Iri<'a>> {
-        Iri::parse(input)
+        context(ParserContext::BaseBody, Iri::parse)(input)
     }
 }
 

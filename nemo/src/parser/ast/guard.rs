@@ -2,7 +2,7 @@
 
 use nom::{branch::alt, combinator::map};
 
-use crate::parser::context::ParserContext;
+use crate::parser::context::{context, ParserContext};
 
 use super::{
     expression::{complex::infix::InfixExpression, Expression},
@@ -49,10 +49,13 @@ impl<'a> ProgramAST<'a> for Guard<'a> {
     where
         Self: Sized + 'a,
     {
-        alt((
-            map(InfixExpression::parse, Self::Infix),
-            map(Expression::parse, Self::Expression),
-        ))(input)
+        context(
+            CONTEXT,
+            alt((
+                map(InfixExpression::parse, Self::Infix),
+                map(Expression::parse_complex, Self::Expression),
+            )),
+        )(input)
     }
 
     fn context(&self) -> ParserContext {

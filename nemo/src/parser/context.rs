@@ -46,21 +46,36 @@ pub enum ParserContext {
     /// Base directive
     #[assoc(name = "base directive")]
     Base,
+    /// body of base directive
+    #[assoc(name = "base body")]
+    BaseBody,
     /// Declare directive
     #[assoc(name = "declare directive")]
     Declare,
+    /// body of declare directive
+    #[assoc(name = "declare body")]
+    DeclareBody,
     /// Export directive
     #[assoc(name = "export directive")]
     Export,
+    /// body of export directive
+    #[assoc(name = "export body")]
+    ExportBody,
     /// Import directive
     #[assoc(name = "import directive")]
     Import,
+    /// body of import directive
+    #[assoc(name = "import body")]
+    ImportBody,
     /// Output directive
     #[assoc(name = "output directive")]
     Output,
     /// Prefix directive
     #[assoc(name = "prefix directive")]
     Prefix,
+    /// body of prefix directive
+    #[assoc(name = "prefix body")]
+    PrefixBody,
     /// Unknown directive
     #[assoc(name = "unknown directive")]
     UnknownDirective,
@@ -133,6 +148,9 @@ pub enum ParserContext {
     /// Statement
     #[assoc(name = "statement")]
     Statement,
+    /// Statement kind
+    #[assoc(name = "statement kind")]
+    StatementKind,
     /// Program
     #[assoc(name = "program")]
     Program,

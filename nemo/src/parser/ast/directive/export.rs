@@ -37,13 +37,16 @@ impl<'a> Export<'a> {
     }
 
     pub fn parse_body(input: ParserInput<'a>) -> ParserResult<'a, (StructureTag<'a>, Map<'a>)> {
-        tuple((
-            StructureTag::parse,
-            WSoC::parse,
-            Token::export_assignment,
-            WSoC::parse,
-            Map::parse,
-        ))(input)
+        context(
+            ParserContext::ExportBody,
+            tuple((
+                StructureTag::parse,
+                WSoC::parse,
+                Token::export_assignment,
+                WSoC::parse,
+                Map::parse,
+            )),
+        )(input)
         .map(|(rest, (predicate, _, _, _, instructions))| (rest, (predicate, instructions)))
     }
 }

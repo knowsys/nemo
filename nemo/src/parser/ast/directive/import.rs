@@ -37,13 +37,16 @@ impl<'a> Import<'a> {
     }
 
     pub fn parse_body(input: ParserInput<'a>) -> ParserResult<'a, (StructureTag<'a>, Map<'a>)> {
-        tuple((
-            StructureTag::parse,
-            WSoC::parse,
-            Token::import_assignment,
-            WSoC::parse,
-            Map::parse,
-        ))(input)
+        context(
+            ParserContext::ImportBody,
+            tuple((
+                StructureTag::parse,
+                WSoC::parse,
+                Token::import_assignment,
+                WSoC::parse,
+                Map::parse,
+            )),
+        )(input)
         .map(|(rest, (predicate, _, _, _, instructions))| (rest, (predicate, instructions)))
     }
 }
