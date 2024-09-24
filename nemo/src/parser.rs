@@ -8,7 +8,7 @@ pub mod span;
 
 use std::{cell::RefCell, ops::Range, rc::Rc};
 
-use ariadne::{Color, Label, Report, ReportKind, Source};
+use ariadne::{Color, Config, Label, Report, ReportKind, Source};
 use ast::{program::Program, ProgramAST};
 use error::{ParserError, ParserErrorTree};
 use input::ParserInput;
@@ -82,6 +82,7 @@ impl<'a> ParserErrorReport<'a> {
                         .with_message(message)
                         .with_color(Color::Red),
                 )
+                .with_config(Config::default().with_index_type(ariadne::IndexType::Byte))
                 .finish()
         })
     }

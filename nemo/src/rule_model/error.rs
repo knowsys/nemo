@@ -149,11 +149,13 @@ where
                 ComplexErrorLabelKind::Information => Color::BrightBlue,
             };
 
-            report = report.with_label(
-                Label::new((source_label.clone(), translation(&label.reference)))
-                    .with_message(label.message.clone())
-                    .with_color(color),
-            );
+            report = report
+                .with_label(
+                    Label::new((source_label.clone(), translation(&label.reference)))
+                        .with_message(label.message.clone())
+                        .with_color(color),
+                )
+                .with_config(Config::default().with_index_type(ariadne::IndexType::Byte));
         }
 
         for hint in &self.hints {
