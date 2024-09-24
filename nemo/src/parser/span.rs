@@ -44,7 +44,7 @@ impl Ord for CharacterPosition {
 }
 
 /// Describes a region of text with [CharacterPosition]s
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct CharacterRange {
     /// Start position
     pub start: CharacterPosition,
@@ -56,6 +56,31 @@ impl CharacterRange {
     /// Return this information as a [Range].
     pub fn range(&self) -> Range<usize> {
         self.start.offset..self.end.offset
+    }
+}
+
+impl Ord for CharacterRange {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.start.cmp(&other.start).then(self.end.cmp(&other.end))
+    }
+}
+
+impl PartialOrd for CharacterRange {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl From<CharacterPosition> for CharacterRange {
+    fn from(pos: CharacterPosition) -> Self {
+        CharacterRange {
+            start: pos,
+            end: CharacterPosition {
+                offset: pos.offset + 1,
+                line: pos.line,
+                column: pos.column + 1,
+            },
+        }
     }
 }
 

@@ -14,7 +14,7 @@ use lsp_component::LSPComponent;
 use nemo::parser::ast::program::Program;
 use nemo::parser::ast::ProgramAST;
 use nemo::parser::context::ParserContext;
-use nemo::parser::span::CharacterPosition;
+use nemo::parser::span::{CharacterPosition, CharacterRange};
 use nemo::parser::{Parser, ParserErrorReport};
 use nemo_position::{
     lsp_position_to_nemo_position, nemo_range_to_lsp_range, PositionConversionError,
@@ -118,13 +118,13 @@ impl Backend {
         });
 
         // Group errors by position and deduplicate error
-        let mut errors_by_posision: BTreeMap<CharacterPosition, BTreeSet<String>> = BTreeMap::new();
+        let mut errors_by_posision: BTreeMap<CharacterRange, BTreeSet<String>> = BTreeMap::new();
         for error in parse_errors.iter().flat_map(|report| report.errors()) {
-            if let Some(set) = errors_by_posision.get_mut(&error.position) {
+            if let Some(set) = errors_by_posision.get_mut(&CharacterRange::from(error.position)) {
                 set.insert(format!("expected `{}`", error.context[0].name()));
             } else {
                 errors_by_posision.insert(
-                    error.position,
+                    CharacterRange::from(error.position),
                     std::iter::once(format!("expected `{}`", error.context[0].name())).collect(),
                 );
             };
@@ -138,7 +138,7 @@ impl Backend {
                         .get(origin)
                         .map(|node| node.span().range())
                 });
-                let Some(position) = range_opt.map(|r| r.start) else {
+                let Some(range) = range_opt else {
                     continue;
                 };
 
@@ -156,33 +156,33 @@ impl Backend {
                         .collect::<String>(),
                 );
 
-                if let Some(set) = errors_by_posision.get_mut(&position) {
+                if let Some(set) = errors_by_posision.get_mut(&range) {
                     set.insert(message);
                 } else {
-                    errors_by_posision.insert(position, std::iter::once(message).collect());
+                    errors_by_posision.insert(range, std::iter::once(message).collect());
                 };
             }
         }
 
         let diagnostics = errors_by_posision
             .into_iter()
-            .map(|(pos, error_set)| {
+            .map(|(range, error_set)| {
                 Ok(Diagnostic {
                     message: error_set.into_iter().collect::<Vec<_>>().join("\n\n"),
                     range: Range::new(
                         line_col_to_lsp_position(
                             &line_index,
                             LineCol {
-                                line: pos.line - 1,
-                                col: pos.column - 1,
+                                line: range.start.line - 1,
+                                col: range.start.column - 1,
                             },
                         )
                         .unwrap(),
                         line_col_to_lsp_position(
                             &line_index,
                             LineCol {
-                                line: pos.line - 1,
-                                col: pos.column - 1 + 1,
+                                line: range.end.line - 1,
+                                col: range.end.column - 1,
                             },
                         )
                         .unwrap(),
