@@ -11,7 +11,7 @@ use std::{
     ops::Range,
 };
 
-use ariadne::{Color, Label, ReportBuilder};
+use ariadne::{Color, Config, Label, ReportBuilder};
 use hint::Hint;
 use translation_error::TranslationErrorKind;
 use validation_error::ValidationErrorKind;
@@ -344,9 +344,11 @@ impl ProgramError {
     where
         Translation: Fn(&Origin) -> Range<usize>,
     {
+        let config = Config::default().with_index_type(ariadne::IndexType::Byte);
         report = report
             .with_code(self.error_code())
-            .with_message(self.message());
+            .with_message(self.message())
+            .with_config(config);
 
         if let Some(note) = self.note() {
             report = report.with_note(note);
