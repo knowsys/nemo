@@ -52,6 +52,7 @@ strum = "0.26.3"
 strum_macros = "0.26.4"
 similar-string = "1.4.3"
 bytecount = "0.6.8"
+colored = "2"
 
 [dev-dependencies]
 env_logger = "*"

@@ -16,6 +16,7 @@ use std::fmt::Debug;
 
 use super::{context::ParserContext, span::Span, ParserInput, ParserResult};
 use ascii_tree::Tree;
+use colored::Colorize;
 
 /// Trait implemented by nodes in the abstract syntax tree
 pub trait ProgramAST<'a>: Debug + Sync {
@@ -39,11 +40,6 @@ pub(crate) fn ast_to_ascii_tree<'a>(node: &'a dyn ProgramAST<'a>) -> Tree {
     for child in node.children() {
         vec.push(ast_to_ascii_tree(child));
     }
-    let colour = if node.children().is_empty() {
-        "\x1b[91m"
-    } else {
-        "\x1b[92m"
-    };
     let span = node.span();
     let str = if span.fragment().len() > 60 {
         format!("{:?}[…]", &span.fragment()[0..60])
@@ -52,10 +48,15 @@ pub(crate) fn ast_to_ascii_tree<'a>(node: &'a dyn ProgramAST<'a>) -> Tree {
     };
     Tree::Node(
         format!(
-            "{} \x1b[34m@{}:{} {colour}{str}\x1b[0m",
+            "{} @{}:{} {}",
             node.context().name(),
-            node.span().location_line(),
-            node.span().get_utf8_column()
+            node.span().location_line().to_string().blue(),
+            node.span().get_utf8_column(),
+            if node.children().is_empty() {
+                str.bright_red()
+            } else {
+                str.bright_green()
+            }
         ),
         vec,
     )

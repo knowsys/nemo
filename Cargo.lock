@@ -1470,6 +1470,7 @@ dependencies = [
  "ascii_tree",
  "assert_fs",
  "bytecount",
+ "colored",
  "csv",
  "dyn-clone",
  "enum-assoc",
