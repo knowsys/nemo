@@ -19,9 +19,9 @@ pub struct CharacterPosition {
 }
 
 impl CharacterPosition {
-    /// Return a one character range at this position
+    /// Return a zero character range at this position
     pub fn range(&self) -> Range<usize> {
-        self.offset..(self.offset + 1)
+        self.offset..self.offset
     }
 }
 
