@@ -153,7 +153,6 @@ impl Display for SortedChoice {
 #[cfg(test)]
 impl SortedChoice {
     /// Return an instance of the function from a vector representation where the input `vec[i]` is mapped to `i`.
-
     pub(crate) fn from_vector(vec: Vec<usize>, domain_size: usize) -> Self {
         let mut map = HashMap::<usize, usize>::new();
         for (value, input) in vec.into_iter().enumerate() {

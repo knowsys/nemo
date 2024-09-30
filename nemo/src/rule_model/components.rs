@@ -3,7 +3,6 @@
 #![allow(missing_docs)]
 
 #[macro_use]
-
 pub mod atom;
 pub mod datatype;
 pub mod fact;

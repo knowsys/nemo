@@ -255,7 +255,7 @@ impl TimedCode {
     }
 
     /// Turns e.g. (Test, 0.642355,1234,56) into "Test [64.2%, 1234ms, 56x]"
-    fn format_title(title: &String, percentage: f64, msecs: u128, runs: u64) -> String {
+    fn format_title(title: &str, percentage: f64, msecs: u128, runs: u64) -> String {
         let result = format!("{title} [{percentage:.1}%, {msecs}ms, {runs}x]");
         result
     }
