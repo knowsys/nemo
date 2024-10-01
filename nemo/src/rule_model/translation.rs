@@ -173,7 +173,7 @@ impl<'a> std::fmt::Debug for ProgramErrorReport<'a> {
 impl<'a> std::fmt::Display for ProgramErrorReport<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut buffer = Vec::new();
-        if let Err(_) = self.write(&mut buffer) {
+        if self.write(&mut buffer).is_err() {
             return Err(std::fmt::Error);
         }
 
