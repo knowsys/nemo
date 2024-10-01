@@ -23,6 +23,7 @@ class TestExample(unittest.TestCase):
         data(3.14, circle).
 
         calculated(?x, !v) :- data(?y, ?x) .
+        @export calculated :- csv {}.
 
         interesting(py).
         interesting(msg).

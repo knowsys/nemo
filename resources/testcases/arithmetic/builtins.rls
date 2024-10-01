@@ -62,7 +62,7 @@ result(contains, ?R) :- strings(?A, _), ?R = CONTAINS(?A, "lo").
 result(regex, ?R) :- strings(?A, _), ?R = REGEX(?A, "l+").
 result(subString, ?R) :- strings(?A, ?B), ?R = SUBSTR(?A, STRLEN(?B) / 2).  
 result(stringreverse, ?R) :- strings(?A, _), ?R = STRREV(?A).  
-result(subStringLength, ?R) :- strings(?A, _), ?R = SUBSTRING(?A, 2, 3).
+result(subStringLength, ?R) :- strings(?A, _), ?R = SUBSTR(?A, 2, 3).
 result(ucase, ?R) :- strings(?A, _), ?R = UCASE(?A).
 result(lcase, ?R) :- strings(_, ?B), ?R = LCASE(?B).
 result(stringbefore, ?R) :- strings(?A, _), ?R = STRBEFORE(?A, "ll").
@@ -82,7 +82,7 @@ result(Boolean, ?R) :- boolean(?True, ?False), ?R = STR(OR(AND(?True, ?False, ?T
 
 % Nary functions
 result(sum, ?R) :- doubles(?A, ?B, ?C), ?R = SUM(?A, ?B, ?C).
-result(prod, ?R) :- doubles(?A, ?B, ?C), ?R = PROD(?A, ?B, ?C).
+result(prod, ?R) :- doubles(?A, ?B, ?C), ?R = PRODUCT(?A, ?B, ?C).
 result(min, ?R) :- doubles(?A, ?B, ?C), ?R = MIN(?A, ?B, ?C).
 result(max, ?R) :- doubles(?A, ?B, ?C), ?R = MAX(?A, ?B, ?C).
 result(luka, ?R) :- numbers(?A, ?B, ?C), ?R = LUKA(?A, ?B, ?C) .

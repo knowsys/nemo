@@ -7,7 +7,7 @@ use std::{
 use nemo_physical::{error::ReadingError, resource::Resource};
 use path_slash::PathBufExt;
 
-use crate::io::compression_format::CompressionFormat;
+use crate::rule_model::components::import_export::compression::CompressionFormat;
 
 use super::{is_iri, ResourceProvider};
 

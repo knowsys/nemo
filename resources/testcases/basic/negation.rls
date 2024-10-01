@@ -1,7 +1,7 @@
-@source main[3]: load-csv("sources/main.csv").
-@source s1[1]: load-csv("sources/S1.csv").
-@source s2[2]: load-csv("sources/S2.csv").
-@source s3[3]: load-csv("sources/S3.csv").
+@import main :- csv { resource = "sources/main.csv" }.
+@import s1 :- csv { resource = "sources/S1.csv" }.
+@import s2 :- csv { resource = "sources/S2.csv" }.
+@import s3 :- csv { resource = "sources/S3.csv" }.
 
 singlePositionX(?X, ?Y, ?Z) :- main(?X, ?Y, ?Z), ~s1(?X) .
 singlePositionY(?X, ?Y, ?Z) :- main(?X, ?Y, ?Z), ~s1(?Y) .

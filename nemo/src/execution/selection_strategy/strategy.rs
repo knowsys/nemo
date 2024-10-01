@@ -2,12 +2,12 @@
 
 use thiserror::Error;
 
-use crate::{model::chase_model::ChaseRule, program_analysis::analysis::RuleAnalysis};
+use crate::chase_model::{analysis::program_analysis::RuleAnalysis, components::rule::ChaseRule};
 
 /// Errors that can occur while creating a strategy.
 #[derive(Error, Debug, Copy, Clone)]
 pub enum SelectionStrategyError {
-    /// Non-Stratifyable
+    /// Rules of the program cannot be stratified
     #[error("The rules of the program are not stratified.")]
     NonStratifiedProgram,
 }

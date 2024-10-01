@@ -5,66 +5,116 @@ use std::collections::HashMap;
 use nemo_physical::{datavalues::AnyDataValue, management::execution_plan::ExecutionNodeRef};
 
 use crate::{
-    execution::rule_execution::VariableTranslation,
-    model::{
-        chase_model::{ChaseRule, VariableAtom},
-        Constraint, Identifier, PrimitiveTerm, Term, Variable,
+    chase_model::{
+        analysis::variable_order::VariableOrder,
+        components::{
+            atom::variable_atom::VariableAtom,
+            filter::ChaseFilter,
+            operation::ChaseOperation,
+            rule::ChaseRule,
+            term::operation_term::{Operation, OperationTerm},
+        },
     },
-    program_analysis::variable_order::VariableOrder,
+    execution::{rule_execution::VariableTranslation, tracing::error::TracingError},
+    rule_model::components::{
+        tag::Tag,
+        term::{
+            aggregate::AggregateKind,
+            operation::operation_kind::OperationKind,
+            primitive::{variable::Variable, Primitive},
+        },
+        IterableVariables,
+    },
     table_manager::{SubtableExecutionPlan, SubtableIdentifier, TableManager},
 };
 
-use super::operations::{filter::node_filter, join::node_join, negation::node_negation};
+use super::operations::{
+    filter::node_filter, functions::node_functions, join::node_join, negation::node_negation,
+};
 
 /// Implementation of the semi-naive existential rule evaluation strategy.
 #[derive(Debug)]
 pub(crate) struct TracingStrategy {
     positive_atoms: Vec<VariableAtom>,
-    positive_constraints: Vec<Constraint>,
+    positive_filters: Vec<ChaseFilter>,
+    positive_operations: Vec<ChaseOperation>,
 
     negative_atoms: Vec<VariableAtom>,
-    negatie_constraints: Vec<Vec<Constraint>>,
+    negative_filters: Vec<Vec<ChaseFilter>>,
 
     variable_translation: VariableTranslation,
 }
 
 impl TracingStrategy {
     /// Create new [TracingStrategy] object.
-    pub(crate) fn initialize(rule: &ChaseRule, grounding: HashMap<Variable, AnyDataValue>) -> Self {
-        let mut variable_translation = VariableTranslation::new();
-        for variable in rule.all_variables() {
-            variable_translation.add_marker(variable);
-        }
-
-        let mut positive_constraints = rule.positive_constraints().clone();
-
-        let constructors = rule
-            .positive_constructors()
-            .iter()
-            .map(|constructor| (constructor.variable().clone(), constructor.term().clone()))
-            .collect::<HashMap<Variable, Term>>();
-
-        for (variable, value) in grounding {
-            if let Some(term) = constructors.get(&variable) {
-                positive_constraints.push(Constraint::Equals(
-                    term.clone(),
-                    Term::Primitive(PrimitiveTerm::GroundTerm(value)),
-                ));
-            } else {
-                positive_constraints.push(Constraint::Equals(
-                    Term::Primitive(PrimitiveTerm::Variable(variable)),
-                    Term::Primitive(PrimitiveTerm::GroundTerm(value)),
-                ));
+    pub(crate) fn initialize(
+        rule: &ChaseRule,
+        grounding: HashMap<Variable, AnyDataValue>,
+    ) -> Result<Self, TracingError> {
+        if let Some(aggregate) = rule.aggregate() {
+            match aggregate.aggregate_kind() {
+                AggregateKind::CountValues | AggregateKind::SumOfNumbers => {
+                    return Err(TracingError::UnsupportedFeatureNonMinMaxAggregation)
+                }
+                AggregateKind::MinNumber | AggregateKind::MaxNumber => {}
             }
         }
 
-        Self {
-            positive_atoms: rule.positive_body().clone(),
-            positive_constraints,
-            negative_atoms: rule.negative_body().clone(),
-            negatie_constraints: rule.negative_constraints().clone(),
-            variable_translation,
+        if !rule.aggregate_operations().is_empty() || !rule.aggregate_filters().is_empty() {
+            return Err(TracingError::UnsupportedFeatureComplexAggregates);
         }
+
+        let mut variable_translation = VariableTranslation::new();
+        for variable in rule.variables().cloned() {
+            variable_translation.add_marker(variable);
+        }
+
+        let mut positive_filters = rule.positive_filters().clone();
+        let positive_operations = rule.positive_operations().clone();
+
+        let operations = rule
+            .positive_operations()
+            .iter()
+            .map(|operation| (operation.variable().clone(), operation.operation().clone()))
+            .collect::<HashMap<Variable, OperationTerm>>();
+
+        for (mut variable, value) in grounding {
+            if let Some(term) = operations.get(&variable) {
+                let filter = ChaseFilter::new(OperationTerm::Operation(Operation::new(
+                    OperationKind::Equal,
+                    vec![
+                        OperationTerm::Primitive(Primitive::from(value)),
+                        term.clone(),
+                    ],
+                )));
+                positive_filters.push(filter);
+            } else {
+                if let Some(aggregate) = rule.aggregate() {
+                    if &variable == aggregate.output_variable() {
+                        variable = aggregate.input_variable().clone();
+                    }
+                }
+
+                let filter = ChaseFilter::new(OperationTerm::Operation(Operation::new(
+                    OperationKind::Equal,
+                    vec![
+                        OperationTerm::Primitive(Primitive::from(variable)),
+                        OperationTerm::Primitive(Primitive::from(value)),
+                    ],
+                )));
+
+                positive_filters.push(filter);
+            }
+        }
+
+        Ok(Self {
+            positive_atoms: rule.positive_body().clone(),
+            positive_filters,
+            positive_operations,
+            negative_atoms: rule.negative_body().clone(),
+            negative_filters: rule.negative_filters().clone(),
+            variable_translation,
+        })
     }
 
     pub(crate) fn add_plan(
@@ -87,11 +137,18 @@ impl TracingStrategy {
             join_output_markers,
         );
 
-        let node_filter = node_filter(
+        let node_body_functions = node_functions(
             current_plan.plan_mut(),
             &self.variable_translation,
             node_join,
-            &self.positive_constraints,
+            &self.positive_operations,
+        );
+
+        let node_filter = node_filter(
+            current_plan.plan_mut(),
+            &self.variable_translation,
+            node_body_functions,
+            &self.positive_filters,
         );
 
         let node_negation = node_negation(
@@ -101,15 +158,22 @@ impl TracingStrategy {
             node_filter,
             step_number,
             &self.negative_atoms,
-            &self.negatie_constraints,
+            &self.negative_filters,
         );
 
         current_plan.add_permanent_table(
             node_negation.clone(),
             "Tracing Query",
             "Tracing Query",
-            SubtableIdentifier::new(Identifier::new(String::from("_TRACING")), step_number),
+            SubtableIdentifier::new(Tag::new(String::from("_TRACING")), step_number),
         );
+
+        *variable_order = VariableOrder::default();
+        for marker in node_negation.markers_cloned() {
+            if let Some(variable) = self.variable_translation.find(&marker) {
+                variable_order.push(variable.clone());
+            }
+        }
 
         node_negation
     }

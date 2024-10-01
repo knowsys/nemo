@@ -20,8 +20,10 @@ clap = { version = "4.0.32", features = [ "derive", "cargo", "env" ] }
 colored = "2"
 env_logger = "*"
 serde_json = "1.0.108"
+thiserror = "1.0"
 
 nemo = { path = "../nemo" }
+ariadne = "0.4.1"
 
 [dev-dependencies]
 assert_cmd = "2.0"

@@ -17,7 +17,7 @@ use super::{
 ///
 /// Returns the index of the first occurrence of the needle in the haystack
 /// or `None` if the needle is not found.
-fn unicode_find(haystack: &String, needle: &String) -> Option<usize> {
+fn unicode_find(haystack: &str, needle: &str) -> Option<usize> {
     let haystack_graphemes = haystack.graphemes(true).collect::<Vec<&str>>();
     let needle_graphemes = needle.graphemes(true).collect::<Vec<&str>>();
     if needle_graphemes.len() > haystack_graphemes.len() {

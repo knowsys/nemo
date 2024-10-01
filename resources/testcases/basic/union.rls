@@ -1,6 +1,6 @@
-@source sourceA[3]: load-csv("sources/dataA.csv").
-@source sourceB[3]: load-csv("sources/dataB.csv").
-@source sourceC[3]: load-csv("sources/dataC.csv").
+@import sourceA :- csv { resource = "sources/dataA.csv" }.
+@import sourceB :- csv { resource = "sources/dataB.csv" }.
+@import sourceC :- csv { resource = "sources/dataC.csv" }.
 
 ABC(?X, ?Y, ?Z) :- sourceA(?X, ?Y, ?Z) .
 ABC(?X, ?Y, ?Z) :- sourceB(?X, ?Y, ?Z) .

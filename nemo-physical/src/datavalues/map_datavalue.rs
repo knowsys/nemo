@@ -3,10 +3,7 @@
 
 use std::collections::BTreeMap;
 
-use super::{
-    syntax::{DELIM_MAP_CLOSE, DELIM_MAP_OPEN, MAP_ASSIGN, MAP_SEPARATOR},
-    AnyDataValue, DataValue, IriDataValue, ValueDomain,
-};
+use super::{syntax::map, AnyDataValue, DataValue, IriDataValue, ValueDomain};
 
 /// Physical representation of a finite map on [DataValue]s.
 ///
@@ -57,16 +54,16 @@ impl DataValue for MapDataValue {
             .iter()
             .map(|v| {
                 DataValue::canonical_string(v.0)
-                    + MAP_ASSIGN
+                    + map::KEY_VALUE_ASSIGN
                     + DataValue::canonical_string(v.1).as_str()
             })
-            .intersperse(MAP_SEPARATOR.to_string())
+            .intersperse(map::SEPARATOR.to_string())
             .collect::<String>();
 
         if let Some(iri) = self.label() {
-            iri.canonical_string() + DELIM_MAP_OPEN + pairs.as_str() + DELIM_MAP_CLOSE
+            iri.canonical_string() + map::OPEN + pairs.as_str() + map::CLOSE
         } else {
-            DELIM_MAP_OPEN.to_string() + pairs.as_str() + DELIM_MAP_CLOSE
+            map::OPEN.to_string() + pairs.as_str() + map::CLOSE
         }
     }
 
@@ -117,19 +114,19 @@ impl std::fmt::Display for MapDataValue {
         if let Some(iri) = self.label() {
             iri.fmt(f)?;
         }
-        f.write_str(DELIM_MAP_OPEN)?;
+        f.write_str(map::OPEN)?;
         let mut first = true;
         for (key, value) in self.pairs.iter() {
             if first {
                 first = false;
             } else {
-                f.write_str(MAP_SEPARATOR)?;
+                f.write_str(map::SEPARATOR)?;
             }
             key.fmt(f)?;
-            f.write_str(MAP_ASSIGN)?;
+            f.write_str(map::KEY_VALUE_ASSIGN)?;
             value.fmt(f)?;
         }
-        f.write_str(DELIM_MAP_CLOSE)
+        f.write_str(map::CLOSE)
     }
 }
 

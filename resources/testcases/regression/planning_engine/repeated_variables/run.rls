@@ -1,6 +1,6 @@
-@source sourceA[3]: load-csv("sources/dataA.csv").
-@source sourceB[3]: load-csv("sources/dataB.csv").
-@source sourceC[3]: load-csv("sources/dataC.csv").
+@import sourceA :- csv { resource = "sources/dataA.csv" }.
+@import sourceB :- csv { resource = "sources/dataB.csv" }.
+@import sourceC :- csv { resource = "sources/dataC.csv" }.
 
 RepeatBody(?R, ?S) :- sourceA(?X, ?X, ?R), sourceB(?S, ?Y, ?Y) .
 RepeatHead(?X, ?Y, ?X, ?Y, ?Z, ?Z, ?X) :- sourceA(?X, ?Z, ?Y), sourceB(?X, ?Y, ?T) .

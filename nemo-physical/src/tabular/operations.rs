@@ -246,6 +246,16 @@ where
     pub fn get<'a>(&'a self, marker: &ExternalMarker) -> Option<&'a OperationColumnMarker> {
         self.map.get(marker)
     }
+
+    /// Given a [OperationColumnMarker], find the corresponding external marker.
+    pub fn find<'a>(&'a self, marker: &OperationColumnMarker) -> Option<&'a ExternalMarker> {
+        Some(
+            self.map
+                .iter()
+                .find(|(_, &operation)| operation == *marker)?
+                .0,
+        )
+    }
 }
 
 /// Trait for objects that are able to generate [TrieScanEnum],

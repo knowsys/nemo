@@ -4,8 +4,8 @@
 use std::collections::HashMap;
 
 use crate::{
-    model::{chase_model::ChaseRule, Identifier},
-    program_analysis::analysis::RuleAnalysis,
+    chase_model::{analysis::program_analysis::RuleAnalysis, components::rule::ChaseRule},
+    rule_model::components::tag::Tag,
 };
 
 use super::graph_constructor::{DependencyGraph, DependencyGraphConstructor};
@@ -20,8 +20,8 @@ impl DependencyGraphConstructor for GraphConstructorPositive {
         debug_assert!(rules.len() == rule_analyses.len());
         let rule_count = rules.len();
 
-        let mut predicate_to_rules_body = HashMap::<Identifier, Vec<usize>>::new();
-        let mut predicate_to_rules_head = HashMap::<Identifier, Vec<usize>>::new();
+        let mut predicate_to_rules_body = HashMap::<Tag, Vec<usize>>::new();
+        let mut predicate_to_rules_head = HashMap::<Tag, Vec<usize>>::new();
 
         for (rule_index, rule_analysis) in rule_analyses.iter().enumerate() {
             for body_predicate in &rule_analysis.positive_body_predicates {

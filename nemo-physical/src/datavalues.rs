@@ -3,7 +3,7 @@
 //! Data values are conceived on this level as canonical representations of unique (semantic)
 //! values across a number of domains (integers, strings, etc.).
 
-pub(crate) mod syntax;
+pub mod syntax;
 
 // Module to define the general [DataValue] trait.
 pub mod datavalue;

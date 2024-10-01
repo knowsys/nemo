@@ -10,10 +10,13 @@ use nemo_physical::{
 };
 
 use crate::{
+    chase_model::components::atom::{
+        primitive_atom::PrimitiveAtom, variable_atom::VariableAtom, ChaseAtom,
+    },
     execution::rule_execution::VariableTranslation,
-    model::{
-        chase_model::{ChaseAtom, PrimitiveAtom, VariableAtom},
-        PrimitiveTerm, Variable,
+    rule_model::components::{
+        term::primitive::{variable::Variable, Primitive},
+        IterableVariables,
     },
 };
 
@@ -40,7 +43,7 @@ pub(crate) struct HeadInstruction {
 /// Given an atom, bring compute the corresponding [HeadInstruction].
 /// TODO: This needs to be revised once the Type System on the logical layer has been implemented.
 pub(crate) fn head_instruction_from_atom(atom: &PrimitiveAtom) -> HeadInstruction {
-    let arity = atom.terms().len();
+    let arity = atom.arity();
     let mut reduced_terms = Vec::<Variable>::with_capacity(arity);
 
     let mut append_instructions = Vec::<Vec<AppendInstruction>>::new();
@@ -51,7 +54,7 @@ pub(crate) fn head_instruction_from_atom(atom: &PrimitiveAtom) -> HeadInstructio
 
     for term in atom.terms() {
         match term {
-            PrimitiveTerm::Variable(variable) => {
+            Primitive::Variable(variable) => {
                 if !variable_set.insert(variable) {
                     let instruction = AppendInstruction::Repeat(variable.clone());
                     current_append_vector.push(instruction);
@@ -62,8 +65,8 @@ pub(crate) fn head_instruction_from_atom(atom: &PrimitiveAtom) -> HeadInstructio
                     current_append_vector = append_instructions.last_mut().unwrap();
                 }
             }
-            PrimitiveTerm::GroundTerm(datavalue) => {
-                let instruction = AppendInstruction::Constant(datavalue.clone());
+            Primitive::Ground(datavalue) => {
+                let instruction = AppendInstruction::Constant(datavalue.value());
                 current_append_vector.push(instruction);
             }
         }
@@ -86,7 +89,7 @@ pub(crate) fn node_head_instruction(
     instruction: &HeadInstruction,
 ) -> ExecutionNodeRef {
     let project_markers =
-        variable_translation.operation_table(instruction.reduced_atom.get_variables().iter());
+        variable_translation.operation_table(instruction.reduced_atom.variables());
     let project_node = plan.projectreorder(project_markers.clone(), subnode);
 
     let mut append_markers = project_markers;

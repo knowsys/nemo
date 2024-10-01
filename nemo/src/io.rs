@@ -6,7 +6,6 @@ pub mod compression_format;
 pub mod export_manager;
 pub mod formats;
 pub mod import_manager;
-pub mod parser;
 pub mod resource_providers;
 
 pub use export_manager::ExportManager;
