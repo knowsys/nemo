@@ -140,28 +140,35 @@ impl<B: GlobalBytesBuffer> BytesDictionary<B> {
             }
             None => match self.map_long.get(bytes) {
                 Some(idx) => AddResult::Known(IdUtils::id64_to_id(*idx)),
-                None => {
-                    let sref = B::push_bytes(self.buffer_id, bytes);
-                    if insert {
-                        let id = self.store.len();
-                        let inner_id = IdUtils::id_to_innerid(id);
-                        self.store.push(sref);
-                        if let Ok(id_u32) = u32::try_from(inner_id) {
-                            self.map_short.insert(sref, id_u32);
-                        } else {
-                            self.map_long.insert(
-                                sref,
-                                u64::try_from(inner_id)
-                                    .expect("no support for platforms with more than 64bits"),
-                            );
-                        }
-                        AddResult::Fresh(id)
-                    } else {
-                        self.map_short.insert(sref, SMALL_KNOWN_ID_MARK);
-                        AddResult::Fresh(KNOWN_ID_MARK)
-                    }
-                }
+                None => self.insert_bytes_inner(bytes, insert),
             },
+        }
+    }
+
+    /// Add the bytes array to the dictionary, without checking if it is already there
+    /// or marked as known. If `insert` is true, the bytes will be given a new id and
+    /// stored under this id. Otherwise, the bytes will merely be marked as
+    /// known.
+    #[inline(always)]
+    fn insert_bytes_inner(&mut self, bytes: &[u8], insert: bool) -> AddResult {
+        let sref = B::push_bytes(self.buffer_id, bytes);
+        if insert {
+            let id = self.store.len();
+            let inner_id = IdUtils::id_to_innerid(id);
+            self.store.push(sref);
+            if let Ok(id_u32) = u32::try_from(inner_id) {
+                self.map_short.insert(sref, id_u32);
+            } else {
+                self.map_long.insert(
+                    sref,
+                    u64::try_from(inner_id)
+                        .expect("no support for platforms with more than 64bits"),
+                );
+            }
+            AddResult::Fresh(id)
+        } else {
+            self.map_short.insert(sref, SMALL_KNOWN_ID_MARK);
+            AddResult::Fresh(KNOWN_ID_MARK)
         }
     }
 }
@@ -186,11 +193,19 @@ impl<B: GlobalBytesBuffer> Drop for BytesDictionary<B> {
 
 impl<B: GlobalBytesBuffer> ByteSized for BytesDictionary<B> {
     fn size_bytes(&self) -> u64 {
-        size_of::<Self>() as u64
-            + size_inner_vec_flat(&self.store)
-            + size_inner_hashmap_flat(&self.map_short)
-            + size_inner_hashmap_flat(&self.map_long)
-            + B::buffer_size_bytes(self.buffer_id)
+        let size_vec = size_inner_vec_flat(&self.store);
+        let size_map32 = size_inner_hashmap_flat(&self.map_short);
+        let size_map64 = size_inner_hashmap_flat(&self.map_long);
+        let size_buffer = B::buffer_size_bytes(self.buffer_id);
+        log::debug!(
+            "BytesDictionary with {} entries. Mem use: vec {}, map32 {}, map64 {}, buffer{}",
+            self.len(),
+            size_vec,
+            size_map32,
+            size_map64,
+            size_buffer
+        );
+        size_of::<Self>() as u64 + size_vec + size_map32 + size_map64 + size_buffer
     }
 }
 

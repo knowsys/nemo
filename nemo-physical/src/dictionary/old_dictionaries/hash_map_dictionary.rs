@@ -1,6 +1,8 @@
 //! This module defines [HashMapDictionary].
 
-use super::{AddResult, Dictionary, DictionaryString, StringDictionary};
+use crate::dictionary::{AddResult, StringDictionary};
+
+use super::{dictionary::Dictionary, DictionaryString};
 
 /// A read-only, hashmap-based [Dictionary] to implement a bijection between strings and integers.  
 /// Strings are stored in a compact buffer to reduce memory overhead and fragmentation.
@@ -52,8 +54,7 @@ impl Dictionary for HashMapDictionary {
 
 #[cfg(test)]
 mod test {
-    use crate::dictionary::AddResult;
-    use crate::dictionary::Dictionary;
+    use crate::dictionary::{old_dictionaries::dictionary::Dictionary, AddResult};
 
     use super::HashMapDictionary;
 

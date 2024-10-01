@@ -1,11 +1,18 @@
 # Nemo
 
 [![Build and Test main](https://img.shields.io/github/actions/workflow/status/knowsys/nemo/build.yml?branch=main&label=build)](https://github.com/knowsys/nemo/actions/workflows/build.yml)
+[![Documentations](https://img.shields.io/github/actions/workflow/status/knowsys/nemo/build.yml?branch=main&label=documentation)](https://knowsys.github.io/nemo-doc)
 [![dependency status](https://deps.rs/repo/github/knowsys/nemo/status.svg)](https://deps.rs/repo/github/knowsys/nemo)
-[![Documentations](https://img.shields.io/github/actions/workflow/status/knowsys/nemo/build.yml?branch=main&label=docs)](https://knowsys.github.io/nemo-doc)
 [![built with nix](https://img.shields.io/static/v1?logo=nixos&logoColor=white&label=&message=Built%20with%20Nix&color=41439a)](https://builtwithnix.org)
 
 *Nemo* is a datalog-based rule engine for fast and scalable analytic data processing in memory. It is available as a command-line tool ```nmo```,  through bindings to other programming languages, and via a [browser-based web application](https://tools.iccl.inf.tu-dresden.de/nemo/).
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/knowsys/nemo-doc/main/logo/build/with-text/nemo-logo-rusty-bright.svg">
+    <img width="40%" alt="Nemo logo" src="https://raw.githubusercontent.com/knowsys/nemo-doc/main/logo/build/with-text/nemo-logo-rusty.svg">
+  </picture>
+</p>
 
 Goals of Nemo are performance, declarativity, versatility, and reliability. It is written in Rust. Nemo's data model aims at compatibility with [RDF](https://www.w3.org/TR/rdf11-concepts/)/[SPARQL](https://www.w3.org/TR/sparql11-overview/) while preserving established logic programming conventions and features. The following formats are currently supported:
 - Input: CSV, TSV, [DSV](https://en.wikipedia.org/wiki/Delimiter-separated_values), [N-Triples](https://www.w3.org/TR/n-triples/), [Turtle](https://www.w3.org/TR/turtle/), [RDF/XML](https://www.w3.org/TR/rdf-syntax-grammar/), [N-Quads](https://www.w3.org/TR/n-quads/), [TriG](https://www.w3.org/TR/trig/)
@@ -16,7 +23,7 @@ Nemo's datatypes allow the use of RDF-style data values but also "plain" names a
 
 The following [publication](https://github.com/knowsys/nemo/wiki/Publications) gives a first overview of the system and can be used for citing Nemo:
 
-* Alex Ivliev, Lukas Gerlach, Simon Meusel, Jakob Steinberg, Markus Krötzsch **[Nemo: Your Friendly and Versatile Rule Reasoning Toolkit](https://iccl.inf.tu-dresden.de/web/Inproceedings3390).** _Proceedings of the 21st International Conference on Principles of Knowledge Representation and Reasoning (KR 2024)_, volume 21 of Proceedings of the International Conference on Principles of Knowledge Representation and Reasoning, To appear. <a href="https://iccl.inf.tu-dresden.de/web/Inproceedings3390">PDF + bibtex</a>
+* Alex Ivliev, Lukas Gerlach, Simon Meusel, Jakob Steinberg, Markus Krötzsch: **[Nemo: Your Friendly and Versatile Rule Reasoning Toolkit](https://iccl.inf.tu-dresden.de/web/Inproceedings3390).** _Proceedings of the 21st International Conference on Principles of Knowledge Representation and Reasoning (KR 2024)_, IJCAI Organization 2024, to appear. <a href="https://iccl.inf.tu-dresden.de/w/images/f/fb/KR-2024-CR.pdf">PDF</a>, <a href="https://iccl.inf.tu-dresden.de/web/Inproceedings3390">bibtex</a>
 
 Nemo is in heavy development and the current releases should still be considered unstable.
 
