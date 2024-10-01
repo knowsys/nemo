@@ -80,7 +80,7 @@ where
     Union(ColumnScanUnion<'a, T>),
 }
 
-/// The following impl statements allow converting from a specific [ColumnScan] into a gerneral [ColumnScanEnum]
+// The following impl statements allow converting from a specific [ColumnScan] into a general [ColumnScanEnum]
 
 impl<'a, T> From<ColumnScanVector<'a, T>> for ColumnScanEnum<'a, T>
 where

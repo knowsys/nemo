@@ -85,11 +85,10 @@ impl<'a> ASTProgramTranslation<'a> {
 
 /// Report of all [ProgramError]s occurred
 /// during the translation and validation of the AST
-#[derive(Debug)]
 pub struct ProgramErrorReport<'a> {
     /// Original input string
     input: &'a str,
-    /// Label of the input file
+    /// Label of the input file::Program
     label: String,
     /// Mapping of [Origin] to [ProgramAST] nodes
     origin_map: HashMap<Origin, &'a dyn ProgramAST<'a>>,
@@ -99,13 +98,23 @@ pub struct ProgramErrorReport<'a> {
 }
 
 impl<'a> ProgramErrorReport<'a> {
-    /// Print the given reports.
-    pub fn eprint<'s, ReportIterator>(&self, reports: ReportIterator) -> Result<(), std::io::Error>
-    where
-        ReportIterator: Iterator<Item = Report<'s, (String, Range<usize>)>>,
-    {
+    /// Print this report to standard error.
+    pub fn eprint(&self) -> Result<(), std::io::Error> {
+        let reports = self.build_reports();
+
         for report in reports {
             report.eprint((self.label.clone(), Source::from(self.input)))?;
+        }
+
+        Ok(())
+    }
+
+    /// Write this report to a given writer.
+    pub fn write(&self, writer: &mut impl std::io::Write) -> Result<(), std::io::Error> {
+        let reports = self.build_reports();
+
+        for report in reports {
+            report.write((self.label.clone(), Source::from(self.input)), &mut *writer)?
         }
 
         Ok(())
@@ -146,6 +155,29 @@ impl<'a> ProgramErrorReport<'a> {
     /// Return raw [ProgramError]s.
     pub fn errors(&self) -> &Vec<ProgramError> {
         &self.errors
+    }
+}
+
+impl<'a> std::fmt::Debug for ProgramErrorReport<'a> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let reports = self.build_reports();
+
+        for report in reports {
+            report.fmt(f)?
+        }
+
+        Ok(())
+    }
+}
+
+impl<'a> std::fmt::Display for ProgramErrorReport<'a> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut buffer = Vec::new();
+        if let Err(_) = self.write(&mut buffer) {
+            return Err(std::fmt::Error);
+        }
+
+        write!(f, "{}", String::from_utf8(buffer).expect("invalid string"))
     }
 }
 

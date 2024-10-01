@@ -1,38 +1,34 @@
 #![feature(alloc_error_hook)]
 
-use std::alloc::Layout;
-use std::collections::HashMap;
-use std::fmt::Formatter;
-use std::io::Cursor;
+use std::{alloc::Layout, collections::HashMap, fmt::Formatter, io::Cursor};
 
-use js_sys::Array;
-use js_sys::Reflect;
-use js_sys::Set;
-use js_sys::Uint8Array;
-use nemo::execution::tracing::trace::ExecutionTrace;
-use nemo::execution::tracing::trace::ExecutionTraceTree;
-use nemo::execution::tracing::trace::TraceFactHandle;
-use nemo::execution::ExecutionEngine;
-
-use nemo::io::resource_providers::{ResourceProvider, ResourceProviders};
-use nemo::io::ImportManager;
-use nemo::rule_model::components::import_export::attributes::ImportExportAttribute;
-use nemo::rule_model::components::ProgramComponent;
-use nemo::rule_model::components::{
-    fact::Fact, import_export::compression::CompressionFormat, tag::Tag,
-    term::primitive::Primitive, term::Term,
-};
-use nemo_physical::datavalues::AnyDataValue;
-use nemo_physical::datavalues::DataValue;
-use nemo_physical::error::ExternalReadingError;
-use nemo_physical::error::ReadingError;
-use nemo_physical::resource::Resource;
+use js_sys::{Array, Reflect, Set, Uint8Array};
 use thiserror::Error;
-use wasm_bindgen::prelude::wasm_bindgen;
-use wasm_bindgen::JsCast;
-use wasm_bindgen::JsValue;
-use web_sys::Blob;
-use web_sys::FileReaderSync;
+use wasm_bindgen::{prelude::wasm_bindgen, JsCast, JsValue};
+use web_sys::{Blob, FileReaderSync};
+
+use nemo::{
+    datavalues::{AnyDataValue, DataValue},
+    error::ReadingError,
+    execution::{
+        tracing::trace::{ExecutionTrace, ExecutionTraceTree, TraceFactHandle},
+        ExecutionEngine,
+    },
+    io::{
+        resource_providers::{ResourceProvider, ResourceProviders},
+        ImportManager,
+    },
+    rule_model::components::{
+        fact::Fact,
+        import_export::{attributes::ImportExportAttribute, compression::CompressionFormat},
+        parse::ComponentParseError,
+        tag::Tag,
+        term::{primitive::Primitive, Term},
+        ProgramComponent,
+    },
+};
+
+use nemo_physical::{error::ExternalReadingError, resource::Resource};
 
 mod language_server;
 
@@ -47,12 +43,12 @@ enum WasmOrInternalNemoError {
     /// Nemo-internal error
     #[error(transparent)]
     Nemo(#[from] nemo::error::Error),
-    #[error("ComponentParseError: {0:#?}")]
-    ComponentParse(nemo::rule_model::components::parse::ComponentParseError),
-    #[error("ParserError: {0:#?}")]
-    Parser(Vec<nemo::parser::error::ParserError>),
-    #[error("ProgramError: {0:#?}")]
-    Program(Vec<nemo::rule_model::error::ProgramError>),
+    #[error("Unable to parse component:\n {0}")]
+    ComponentParse(ComponentParseError),
+    #[error("Unable to parse program:\n {0}")]
+    Parser(String),
+    #[error("Invalid program:\n {0}")]
+    Program(String),
     #[error("Internal reflection error: {0:#?}")]
     Reflection(JsValue),
 }
@@ -67,7 +63,7 @@ impl NemoError {
     #[allow(clippy::inherent_to_string)]
     #[wasm_bindgen(js_name = "toString")]
     pub fn to_string(&self) -> String {
-        format!("NemoError: {}", self.0)
+        format!("{}", self.0)
     }
 }
 
@@ -77,7 +73,7 @@ impl NemoProgram {
     pub fn new(input: &str) -> Result<NemoProgram, NemoError> {
         nemo::parser::Parser::initialize(input, PROGRAM_LABEL.to_string())
             .parse()
-            .map_err(|(_, report)| WasmOrInternalNemoError::Parser(report.errors().clone()))
+            .map_err(|(_, report)| WasmOrInternalNemoError::Parser(format!("{}", report)))
             .map_err(NemoError)
             .and_then(|ast| {
                 nemo::rule_model::translation::ASTProgramTranslation::initialize(
@@ -85,7 +81,7 @@ impl NemoProgram {
                     PROGRAM_LABEL.to_string(),
                 )
                 .translate(&ast)
-                .map_err(|report| WasmOrInternalNemoError::Program(report.errors().clone()))
+                .map_err(|report| WasmOrInternalNemoError::Program(format!("{}", report)))
                 .map_err(NemoError)
                 .map(NemoProgram)
             })
@@ -392,7 +388,7 @@ impl NemoEngine {
             iter.into_iter().flatten().nth(row_index);
 
         if let Some(terms_to_trace) = terms_to_trace_opt {
-            let fact_to_trace: Fact = Fact::new(
+            let fact_to_trace = Fact::new(
                 &predicate,
                 terms_to_trace
                     .into_iter()

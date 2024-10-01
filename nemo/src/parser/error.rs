@@ -1,5 +1,7 @@
 //! This module defines the error type that is returned when the parser is unsuccessful.
 
+use std::fmt::Display;
+
 use nom::{
     branch::alt,
     bytes::complete::{take_until, take_while},
@@ -35,6 +37,13 @@ pub struct ParserError {
     pub position: CharacterPosition,
     /// Parsing stack
     pub context: Vec<ParserContext>,
+}
+
+impl Display for ParserError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // TODO: We only use the first context to generate an error message
+        f.write_fmt(format_args!("expected `{}`", self.context[0].name()))
+    }
 }
 
 /// Skip a statement, returning an error token.
