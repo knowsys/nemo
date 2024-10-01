@@ -96,10 +96,10 @@ pub enum ValidationErrorKind {
     #[assoc(code = 218)]
     OperationAnonymous,
     /// Inconsistent arities for predicates
-    #[error(r#"predicate {predicate} used with multiple arities."#)]
+    #[error(r#"predicate `{predicate}` used with arity {arity}."#)]
     #[assoc(code = 219)]
     #[assoc(note = "each predicate is only allowed to have one arity")]
-    InconsistentArities { predicate: String },
+    InconsistentArities { predicate: String, arity: usize },
     /// Import/Export: Missing required attribute
     #[error(r#"missing required parameter `{attribute}` in {direction} statement"#)]
     #[assoc(code = 220)]

@@ -197,6 +197,7 @@ impl Program {
                             origin,
                             ValidationErrorKind::InconsistentArities {
                                 predicate: predicate_string,
+                                arity,
                             },
                         )
                         .add_label(
