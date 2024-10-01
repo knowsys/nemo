@@ -175,12 +175,6 @@ pub struct ValidationError {
     info: ComplexError<Origin>,
 }
 
-impl Display for ValidationError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.kind)
-    }
-}
-
 /// Builder for [ValidationError]
 #[derive(Debug, Default)]
 pub struct ValidationErrorBuilder {

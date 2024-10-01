@@ -44,7 +44,6 @@ pub struct Parser<'a> {
 }
 
 /// Contains all errors that occurred during parsing
-#[derive(Debug)]
 pub struct ParserErrorReport<'a> {
     /// Reference to the text that is going to be parsed
     input: &'a str,
@@ -56,15 +55,22 @@ pub struct ParserErrorReport<'a> {
 
 impl<'a> ParserErrorReport<'a> {
     /// Print the given reports.
-    pub fn eprint<'s, ReportIterator>(
-        &'s self,
-        reports: ReportIterator,
-    ) -> Result<(), std::io::Error>
-    where
-        ReportIterator: Iterator<Item = Report<'a, (String, Range<usize>)>>,
-    {
+    pub fn eprint(&self) -> Result<(), std::io::Error> {
+        let reports = self.build_reports();
+
         for report in reports {
             report.eprint((self.label.clone(), Source::from(self.input)))?;
+        }
+
+        Ok(())
+    }
+
+    /// Write this report to a given writer.
+    pub fn write(&self, writer: &mut impl std::io::Write) -> Result<(), std::io::Error> {
+        let reports = self.build_reports();
+
+        for report in reports {
+            report.write((self.label.clone(), Source::from(self.input)), &mut *writer)?
         }
 
         Ok(())
@@ -73,7 +79,7 @@ impl<'a> ParserErrorReport<'a> {
     /// Build a [Report] for each error.
     pub fn build_reports(&'a self) -> impl Iterator<Item = Report<'a, (String, Range<usize>)>> {
         self.errors.iter().map(move |error| {
-            let message = format!("expected `{}`", error.context[0].name());
+            let message = error.to_string();
 
             Report::build(ReportKind::Error, self.label.clone(), error.position.offset)
                 .with_message(message.clone())
@@ -90,6 +96,29 @@ impl<'a> ParserErrorReport<'a> {
     /// Return raw [ParserError]s.
     pub fn errors(&self) -> &Vec<ParserError> {
         &self.errors
+    }
+}
+
+impl<'a> std::fmt::Debug for ParserErrorReport<'a> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let reports = self.build_reports();
+
+        for report in reports {
+            report.fmt(f)?;
+        }
+
+        Ok(())
+    }
+}
+
+impl<'a> std::fmt::Display for ParserErrorReport<'a> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut buffer = Vec::new();
+        if let Err(_) = self.write(&mut buffer) {
+            return Err(std::fmt::Error);
+        }
+
+        write!(f, "{}", String::from_utf8(buffer).expect("invalid string"))
     }
 }
 

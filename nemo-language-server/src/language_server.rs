@@ -121,11 +121,11 @@ impl Backend {
         let mut errors_by_posision: BTreeMap<CharacterRange, BTreeSet<String>> = BTreeMap::new();
         for error in parse_errors.iter().flat_map(|report| report.errors()) {
             if let Some(set) = errors_by_posision.get_mut(&CharacterRange::from(error.position)) {
-                set.insert(format!("expected `{}`", error.context[0].name()));
+                set.insert(error.to_string());
             } else {
                 errors_by_posision.insert(
                     CharacterRange::from(error.position),
-                    std::iter::once(format!("expected `{}`", error.context[0].name())).collect(),
+                    std::iter::once(error.to_string()).collect(),
                 );
             };
         }

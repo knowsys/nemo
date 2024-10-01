@@ -253,7 +253,7 @@ fn run(mut cli: CliApp) -> Result<(), CliError> {
     {
         Ok(program) => program,
         Err((_program, report)) => {
-            report.eprint(report.build_reports())?;
+            report.eprint()?;
             return Err(CliError::ProgramParsing {
                 filename: program_filename.clone(),
             });
@@ -268,7 +268,7 @@ fn run(mut cli: CliApp) -> Result<(), CliError> {
     {
         Ok(program) => program,
         Err(report) => {
-            report.eprint(report.build_reports().into_iter())?;
+            report.eprint()?;
             return Err(CliError::ProgramParsing {
                 filename: program_filename,
             });
