@@ -55,8 +55,8 @@ keywords:
   - Datalog
   - Existential Rules
 license: Apache-2.0
-commit: 6ccd3fcc12d57fbac5e3d7e5c5547e72a610d7f7
-version: 0.5.1
+commit: 349e183c771ba4df93e8c6037c24d13c48636a83
+version: 0.6.0
 date-released: '2024-06-06'
 preferred-citation:
   authors:
