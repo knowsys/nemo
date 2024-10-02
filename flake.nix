@@ -8,7 +8,6 @@ rec {
     rust-overlay.url = "github:oxalica/rust-overlay";
     rust-overlay.inputs = {
       nixpkgs.follows = "nixpkgs";
-      flake-utils.follows = "utils/flake-utils";
     };
 
     utils.url = "github:gytis-ivaskevicius/flake-utils-plus";
