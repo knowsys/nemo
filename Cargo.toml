@@ -17,15 +17,16 @@ members = [
 
 [workspace.package]
 description = "Nemo, a datalog-based rule engine for fast and scalable analytic data processing in memory"
-version = "0.5.2-dev"
+version = "0.6.0"
 authors = [
 "Alex Ivliev <alex.ivliev@tu-dresden.de>",
+"Aidan Bailey <dev@aidanbailey.me>",
+"Jakob Steinberg <jakob_maximilian.steinberg@mailbox.tu-dresden.de>",
 "Lukas Gerlach <lukas.gerlach@tu-dresden.de>",
 "Larry González <larry.gonzalez@tu-dresden.de>",
 "Markus Krötzsch <markus.kroetzsch@tu-dresden.de>",
 "Matthias Meissner <matthias.meissner2@mailbox.tu-dresden.de>",
 "Maximilian Marx <maximilian.marx@tu-dresden.de>",
-"Philipp Hanisch <philipp.hanisch1@tu-dresden.de>",
 "Simon Meusel <simon.meusel@mailbox.tu-dresden.de>",
 "Stefan Ellmauthaler <stefan.ellmauthaler@tu-dresden.de>",
 ]
