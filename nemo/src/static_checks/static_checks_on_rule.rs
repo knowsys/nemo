@@ -250,7 +250,7 @@ impl Rule {
     ) -> HashSet<Variable> {
         let mut affected_variables: HashSet<Variable> = HashSet::<Variable>::new();
         for variable in variables.iter() {
-            if variable.is_affected(&self, affected_positions) {
+            if variable.is_affected(self, affected_positions) {
                 affected_variables.insert(variable.clone());
             }
         }
@@ -276,32 +276,18 @@ impl Rule {
     }
 
     fn get_positions_of_variable_in_body(&self, variable: &Variable) -> Positions {
-        // let mut positions_of_variable_in_body: Positions = Positions::new();
-        // for literal in self.body().iter() {
-        //     let predicate: Identifier = literal.predicate();
-        //     let variables_of_literal: Vec<Variable> = literal.variables().cloned().collect();
-        //     if variables_of_literal.contains(variable) {
-        //         let position_of_variable_in_literal: usize =
-        //             literal.get_position_of_variable(variable);
-        //         if !positions_of_variable_in_body.contains_key(&predicate) {
-        //             positions_of_variable_in_body
-        //                 .insert(predicate.clone(), HashSet::<usize>::new());
-        //         }
-        //         positions_of_variable_in_body
-        //             .get(&predicate)
-        //             .unwrap()
-        //             .insert(position_of_variable_in_literal);
-        //     }
-        // }
-        todo!("IMPLEMENT");
-        // TODO: IMPLEMENT
-    }
-}
-
-impl Literal {
-    fn get_position_of_variable(&self, variable: &Variable) -> usize {
-        todo!("IMPLEMENT");
-        // TODO: IMPLEMENT
+        let mut positions_of_variable_in_body: Positions = Positions::new();
+        for literal in self.body().iter() {
+            let variables_of_literal: Vec<Variable> = literal.variables().cloned().collect();
+            if !variables_of_literal.contains(variable) {
+                continue;
+            }
+            let predicate: Identifier = literal.predicate();
+            let new_positions_of_variable: HashSet<usize> = positions_of_variable_in_body
+                .union_positions_of_variable_in_literal(variable, literal);
+            positions_of_variable_in_body.insert(predicate.clone(), new_positions_of_variable);
+        }
+        positions_of_variable_in_body
     }
 }
 

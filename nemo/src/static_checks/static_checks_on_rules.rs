@@ -1,4 +1,7 @@
-use crate::model::rule_model::{Identifier, Literal, Rule, Term, Variable};
+use crate::model::{
+    rule_model::{Identifier, Literal, Rule, Term, Variable},
+    PrimitiveTerm,
+};
 use crate::static_checks::static_checks_on_rule::RuleProperties;
 use std::collections::{HashMap, HashSet};
 
@@ -15,7 +18,7 @@ impl RuleSet {
     }
 }
 
-pub struct Positions(HashMap<Identifier, HashSet<usize>>);
+pub struct Positions(pub HashMap<Identifier, HashSet<usize>>);
 
 impl Positions {
     pub fn new() -> Self {
@@ -24,6 +27,10 @@ impl Positions {
 
     pub fn positions(&self) -> &HashMap<Identifier, HashSet<usize>> {
         &self.0
+    }
+
+    fn positions_mut(&mut self) -> &mut HashMap<Identifier, HashSet<usize>> {
+        &mut self.0
     }
 
     fn contains_predicate(&self, predicate: &Identifier) -> bool {
@@ -47,7 +54,8 @@ impl Positions {
         predicate: Identifier,
         positions_in_predicate: HashSet<usize>,
     ) -> Option<HashSet<usize>> {
-        self.0.insert(predicate, positions_in_predicate)
+        self.positions_mut()
+            .insert(predicate, positions_in_predicate)
     }
 
     pub fn contains_only_affected_variable_position(&self, affected_positions: &Positions) -> bool {
@@ -59,6 +67,32 @@ impl Positions {
                         .contains(pos)
                 })
         })
+    }
+
+    pub fn union_positions_of_variable_in_literal(
+        &self,
+        variable: &Variable,
+        literal: &Literal,
+    ) -> HashSet<usize> {
+        let predicate: Identifier = literal.predicate();
+        let new_positions: HashSet<usize> = variable.get_positions_in_literal(literal);
+        let old_positions: &HashSet<usize> = self.get(&predicate).unwrap_or(&new_positions);
+        new_positions.union(old_positions).cloned().collect()
+    }
+}
+
+impl Variable {
+    fn get_positions_in_literal(&self, literal: &Literal) -> HashSet<usize> {
+        let mut positions_in_literal: HashSet<usize> = HashSet::<usize>::new();
+        let terms: &Vec<Term> = literal.terms();
+        for (position, term) in terms.iter().enumerate() {
+            if let Term::Primitive(PrimitiveTerm::Variable(variable)) = term {
+                if variable == self {
+                    positions_in_literal.insert(position);
+                }
+            }
+        }
+        positions_in_literal
     }
 }
 
