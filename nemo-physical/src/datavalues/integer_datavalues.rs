@@ -1,4 +1,5 @@
 //! This module provides implementations of [DataValue]s that represent integer numbers.
+//!
 //! Integers have a more complex domain hierarchy than most other kinds of data, and the related
 //! logic is collected here as well.
 
@@ -19,7 +20,7 @@ const U32MAX_AS_I64: i64 = 0xFFFF_FFFF;
 const I32MAX_AS_I64: i64 = U32MAX_AS_I64 >> 1;
 /// Minimal value of an i32, i.e. -2^31.
 const I32MIN_AS_I64: i64 = -I32MAX_AS_I64 - 1;
-/// Minimal value of an i64, i.e. -2^63.
+// /// Minimal value of an i64, i.e. -2^63.
 //const I64MIN_AS_I64: i64 = i64::MIN;
 
 /// Physical representation of an integer as an u64.

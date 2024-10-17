@@ -3,12 +3,14 @@
 use nemo_physical::management::execution_plan::ExecutionNodeRef;
 
 use crate::{
-    execution::{execution_engine::RuleInfo, rule_execution::VariableTranslation},
-    model::{
-        chase_model::{ChaseRule, Constructor, VariableAtom},
-        Constraint,
+    chase_model::{
+        analysis::{program_analysis::RuleAnalysis, variable_order::VariableOrder},
+        components::{
+            atom::variable_atom::VariableAtom, filter::ChaseFilter, operation::ChaseOperation,
+            rule::ChaseRule,
+        },
     },
-    program_analysis::{analysis::RuleAnalysis, variable_order::VariableOrder},
+    execution::{execution_engine::RuleInfo, rule_execution::VariableTranslation},
     table_manager::{SubtableExecutionPlan, TableManager},
 };
 
@@ -23,11 +25,11 @@ use super::{
 #[derive(Debug)]
 pub(crate) struct SeminaiveStrategy {
     positive_atoms: Vec<VariableAtom>,
-    positive_constraints: Vec<Constraint>,
-    positive_constructors: Vec<Constructor>,
+    positive_filters: Vec<ChaseFilter>,
+    positive_operations: Vec<ChaseOperation>,
 
     negative_atoms: Vec<VariableAtom>,
-    negative_constraints: Vec<Vec<Constraint>>,
+    negative_filters: Vec<Vec<ChaseFilter>>,
 }
 
 impl SeminaiveStrategy {
@@ -35,10 +37,10 @@ impl SeminaiveStrategy {
     pub(crate) fn initialize(rule: &ChaseRule, _analysis: &RuleAnalysis) -> Self {
         Self {
             positive_atoms: rule.positive_body().clone(),
-            positive_constraints: rule.positive_constraints().clone(),
+            positive_filters: rule.positive_filters().clone(),
             negative_atoms: rule.negative_body().clone(),
-            negative_constraints: rule.negative_constraints().clone(),
-            positive_constructors: rule.positive_constructors().clone(),
+            negative_filters: rule.negative_filters().clone(),
+            positive_operations: rule.positive_operations().clone(),
         }
     }
 }
@@ -68,14 +70,14 @@ impl BodyStrategy for SeminaiveStrategy {
             current_plan.plan_mut(),
             variable_translation,
             node_join,
-            &self.positive_constructors,
+            &self.positive_operations,
         );
 
         let node_body_filter = node_filter(
             current_plan.plan_mut(),
             variable_translation,
             node_body_functions,
-            &self.positive_constraints,
+            &self.positive_filters,
         );
 
         let node_negation = node_negation(
@@ -85,7 +87,7 @@ impl BodyStrategy for SeminaiveStrategy {
             node_body_filter,
             step_number,
             &self.negative_atoms,
-            &self.negative_constraints,
+            &self.negative_filters,
         );
 
         let node_result = node_negation;

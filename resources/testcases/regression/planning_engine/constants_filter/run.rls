@@ -1,7 +1,7 @@
-%%% Test related to 
-%%% https://github.com/knowsys/nemo/issues/500
-%%%
-%%% A panic was caused by having a filter consisting of constants
+%! Test related to 
+%! https://github.com/knowsys/nemo/issues/500
+%!
+%! A panic was caused by having a filter consisting of constants
 
 pair(1, 2) .
 pair(3, 3) .

@@ -29,22 +29,30 @@ csv = "1.1.6"
 thiserror = "1.0"
 flate2 = "1"
 sanitise-file-name = "1.0.0"
-nom_locate = { version = "4.1.0", features = [ "runtime-dispatch-simd" ] }
-bytecount = "0.6.7"
 getrandom = { version = "0.2.9", default-features = false }
 path-slash = "0.2.1"
 rio_api = "0.8.4"
 rio_turtle = "0.8.4"
 rio_xml = "0.8.4"
 oxiri = "0.2.2"
-tokio = { version = "1.29.1", features = [ "rt" ] }
+tokio = { version = "1.40.0", features = ["rt"] }
 reqwest = { version = "0.12.2" }
 num = "0.4.0"
-bytesize = "1.2"
 ascii_tree = "0.1.1"
 serde_json = "1.0.108"
-serde = {version = "1.0.138", features = ["derive"] }
+serde = { version = "1.0.138", features = ["derive"] }
+tower-lsp = "0.20.0"
 dyn-clone = "1.0.16"
+unicode-ident = "1.0.12"
+nom-greedyerror = "0.5.0"
+nom-supreme = "0.8.0"
+enum-assoc = "1.1.0"
+ariadne = { version = "0.4.1", features = ["auto-color"] }
+strum = "0.26.3"
+strum_macros = "0.26.4"
+similar-string = "1.4.3"
+bytecount = "0.6.8"
+colored = "2"
 
 [dev-dependencies]
 env_logger = "*"
@@ -52,4 +60,3 @@ assert_fs = "1.0"
 test-log = "0.2"
 quickcheck = "1"
 quickcheck_macros = "1"
-

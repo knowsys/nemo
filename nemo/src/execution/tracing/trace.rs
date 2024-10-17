@@ -6,15 +6,39 @@ use std::{
 };
 
 use ascii_tree::write_tree;
-use nemo_physical::datavalues::AnyDataValue;
 use petgraph::graph::{DiGraph, NodeIndex};
 use petgraph_graphml::GraphMl;
 use serde::Serialize;
 
-use crate::model::{
-    chase_model::{ChaseAtom, ChaseFact},
-    Atom, PrimitiveTerm, Program, Rule, Term, Variable,
+use crate::{
+    chase_model::components::atom::{ground_atom::GroundAtom, ChaseAtom},
+    rule_model::{
+        components::{fact::Fact, rule::Rule},
+        program::Program,
+        term_map::PrimitiveTermMap,
+    },
 };
+
+trait ToGraphMl {
+    fn to_graphml(&self) -> String;
+}
+
+impl ToGraphMl for DiGraph<TracePetGraphNodeLabel, ()> {
+    fn to_graphml(&self) -> String {
+        GraphMl::new(&self)
+            .export_node_weights(Box::new(|node_label| match node_label {
+                TracePetGraphNodeLabel::Fact(chase_fact) => vec![
+                    (Cow::from("type"), Cow::from("axiom")),
+                    (Cow::from("element"), Cow::from(chase_fact.to_string())),
+                ],
+                TracePetGraphNodeLabel::Rule(rule) => vec![
+                    (Cow::from("type"), Cow::from("DLRule")),
+                    (Cow::from("element"), Cow::from(rule.to_string())),
+                ],
+            }))
+            .to_string()
+    }
+}
 
 /// Index of a rule within a [Program]
 type RuleIndex = usize;
@@ -25,18 +49,14 @@ pub(crate) struct TraceRuleApplication {
     /// Index of the rule that was applied
     rule_index: RuleIndex,
     /// Variable assignment used during the rule application
-    assignment: HashMap<Variable, AnyDataValue>,
+    assignment: PrimitiveTermMap,
     /// Index of the head atom which produced the fact under consideration
     _position: usize,
 }
 
 impl TraceRuleApplication {
     /// Create new [TraceRuleApplication].
-    pub fn new(
-        rule_index: RuleIndex,
-        assignment: HashMap<Variable, AnyDataValue>,
-        _position: usize,
-    ) -> Self {
+    pub fn new(rule_index: RuleIndex, assignment: PrimitiveTermMap, _position: usize) -> Self {
         Self {
             rule_index,
             assignment,
@@ -70,14 +90,14 @@ pub(crate) enum TraceStatus {
 }
 
 impl TraceStatus {
-    /// Return `true` when fact was successfully derived
-    /// and `false` otherwise.
+    /// Return true when fact was successfully derived
+    /// and false otherwise.
     pub fn is_success(&self) -> bool {
         matches!(self, TraceStatus::Success(_))
     }
 
-    /// Return `true` if it has already been decided whether
-    /// a given fact has been derived and `false` otherwise.
+    /// Return true if it has already been decided whether
+    /// a given fact has been derived and false otherwise.
     pub fn is_known(&self) -> bool {
         !matches!(self, TraceStatus::Unknown)
     }
@@ -87,7 +107,7 @@ impl TraceStatus {
 #[derive(Debug)]
 struct TracedFact {
     /// The considered fact
-    fact: ChaseFact,
+    fact: GroundAtom,
     /// Its current status with resepect to its derivablity in the chase
     status: TraceStatus,
 }
@@ -119,10 +139,9 @@ impl ExecutionTrace {
         &mut self.facts[handle.0]
     }
 
-    /// Search a given [ChaseFact] in `self.facts`.
+    /// Search a given [GroundAtom] in self.facts.
     /// Also takes into account that the interpretation of a constant depends on its type.
-
-    fn find_fact(&self, fact: &ChaseFact) -> Option<TraceFactHandle> {
+    fn find_fact(&self, fact: &GroundAtom) -> Option<TraceFactHandle> {
         for (fact_index, traced_fact) in self.facts.iter().enumerate() {
             if traced_fact.fact.predicate() != fact.predicate()
                 || traced_fact.fact.arity() != fact.arity()
@@ -131,7 +150,7 @@ impl ExecutionTrace {
             }
 
             let mut identical = true;
-            for (term_fact, term_traced_fact) in fact.terms().iter().zip(traced_fact.fact.terms()) {
+            for (term_fact, term_traced_fact) in fact.terms().zip(traced_fact.fact.terms()) {
                 if term_fact != term_traced_fact {
                     identical = false;
                     break;
@@ -146,12 +165,12 @@ impl ExecutionTrace {
         None
     }
 
-    /// Registers a new [ChaseFact].
+    /// Registers a new [GroundAtom].
     ///
     /// If the fact was not already known then it will return a fresh handle
-    /// with the status `TraceStatus::Known`.
+    /// with the status TraceStatus::Known.
     /// Otherwise a handle to the existing fact will be returned.
-    pub fn register_fact(&mut self, fact: ChaseFact) -> TraceFactHandle {
+    pub fn register_fact(&mut self, fact: GroundAtom) -> TraceFactHandle {
         if let Some(handle) = self.find_fact(&fact) {
             handle
         } else {
@@ -182,35 +201,25 @@ pub struct TraceTreeRuleApplication {
     /// Rule that was applied
     pub rule: Rule,
     /// Variable assignment used during the rule application
-    pub assignment: HashMap<Variable, AnyDataValue>,
+    pub assignment: PrimitiveTermMap,
     /// Index of the head atom which produced the fact under consideration
     _position: usize,
 }
 
 impl TraceTreeRuleApplication {
-    /// Instantiate the given rule with its assignment producing a [`Rule`] with only ground terms.
+    /// Instantiate the given rule with its assignment producing a [Rule] with only ground terms.
     fn to_instantiated_rule(&self) -> Rule {
         let mut rule = self.rule.clone();
-        rule.apply_assignment(
-            &self
-                .assignment
-                .iter()
-                .map(|(variable, constant)| {
-                    (
-                        variable.clone(),
-                        Term::Primitive(PrimitiveTerm::GroundTerm(constant.clone())),
-                    )
-                })
-                .collect(),
-        );
+        self.assignment.apply(&mut rule);
+
         rule
     }
 
-    /// Get the [`Atom`] that was produced by this rule application.
-    fn to_derived_atom(&self) -> Atom {
+    /// Get the [Fact] that was produced by this rule application.
+    fn to_derived_atom(&self) -> Fact {
         let rule = self.to_instantiated_rule();
         let derived_atom = rule.head()[self._position].clone();
-        derived_atom
+        Fact::from(derived_atom)
     }
 
     /// Get a string representation of the Instantiated rule.
@@ -219,18 +228,18 @@ impl TraceTreeRuleApplication {
     }
 }
 
-/// Tree representation of an [`ExecutionTrace`] from a given start node
+/// Tree representation of an [ExecutionTrace] from a given start node
 #[derive(Debug, Clone)]
 pub enum ExecutionTraceTree {
     /// Node represent a fact in the initial data base
-    Fact(ChaseFact),
+    Fact(GroundAtom),
     /// Node represents a derived fact
     Rule(TraceTreeRuleApplication, Vec<ExecutionTraceTree>),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Hash, PartialEq, Eq, Clone)]
 enum TracePetGraphNodeLabel {
-    Fact(Atom),
+    Fact(Fact),
     Rule(Rule),
 }
 
@@ -264,7 +273,7 @@ impl ExecutionTraceTree {
             let next_node_index = match next_node {
                 Self::Fact(ref chase_fact) => {
                     let next_node_index = graph
-                        .add_node(TracePetGraphNodeLabel::Fact(Atom::from(chase_fact.clone())));
+                        .add_node(TracePetGraphNodeLabel::Fact(Fact::from(chase_fact.clone())));
                     if let Some(parent_node_index) = parent_node_index_opt {
                         graph.add_edge(next_node_index, parent_node_index, ());
                     }
@@ -300,21 +309,9 @@ impl ExecutionTraceTree {
         graph
     }
 
-    /// Return [`ExecutionTraceTree`] in [GraphML](http://graphml.graphdrawing.org/) format (for [Evonne](https://github.com/imldresden/evonne) integration)
+    /// Return [ExecutionTraceTree] in [GraphML](http://graphml.graphdrawing.org/) format (for [Evonne](https://github.com/imldresden/evonne) integration)
     pub fn to_graphml(&self) -> String {
-        let petgraph = self.to_petgraph();
-        GraphMl::new(&petgraph)
-            .export_node_weights(Box::new(|node_label| match node_label {
-                TracePetGraphNodeLabel::Fact(chase_fact) => vec![
-                    (Cow::from("type"), Cow::from("axiom")),
-                    (Cow::from("element"), Cow::from(chase_fact.to_string())),
-                ],
-                TracePetGraphNodeLabel::Rule(rule) => vec![
-                    (Cow::from("type"), Cow::from("DLRule")),
-                    (Cow::from("element"), Cow::from(rule.to_string())),
-                ],
-            }))
-            .to_string()
+        self.to_petgraph().to_graphml()
     }
 }
 
@@ -338,7 +335,7 @@ impl ExecutionTrace {
                     }
 
                     let tree_application = TraceTreeRuleApplication {
-                        rule: self.program.rules()[application.rule_index].clone(),
+                        rule: self.program.rule(application.rule_index).clone(),
                         assignment: application.assignment.clone(),
                         _position: application._position,
                     };
@@ -352,69 +349,117 @@ impl ExecutionTrace {
     }
 }
 
-/// Represents an inference in an [`ExecutionTraceJson`]
+type OptDerivationRule = Option<Rule>;
+
+#[derive(Debug)]
+struct ExecutionTraceInference {
+    rule: OptDerivationRule,
+    conclusion: GroundAtom,
+    premises: Vec<GroundAtom>,
+}
+
 #[derive(Debug, Serialize)]
-struct ExecutionTraceJsonInference {
+struct ExecutionTraceInferenceJSON {
     #[serde(rename = "ruleName")]
     rule_name: String,
-
     conclusion: String,
     premises: Vec<String>,
 }
 
-impl ExecutionTraceJsonInference {
-    /// Create a new [ExecutionTraceJsonInference]
-    pub fn new(rule_name: String, conclusion: String, premises: Vec<String>) -> Self {
+const DEFAULT_DERIVATION_ANNOTATION: &str = "Asserted";
+
+impl From<ExecutionTraceInference> for ExecutionTraceInferenceJSON {
+    fn from(value: ExecutionTraceInference) -> Self {
         Self {
-            rule_name,
+            rule_name: value
+                .rule
+                .map(|rule| rule.to_string())
+                .unwrap_or(DEFAULT_DERIVATION_ANNOTATION.to_string()),
+            conclusion: value.conclusion.to_string(),
+            premises: value
+                .premises
+                .into_iter()
+                .map(|premise| premise.to_string())
+                .collect(),
+        }
+    }
+}
+
+impl ExecutionTraceInference {
+    /// Create a new [ExecutionTraceInference]
+    pub fn new(rule: OptDerivationRule, conclusion: GroundAtom, premises: Vec<GroundAtom>) -> Self {
+        Self {
+            rule,
             conclusion,
             premises,
         }
     }
 }
 
-/// Object representing an [ExecutionTrace] that can be sertialized into a json format
+#[derive(Debug)]
+struct ExecutionTraceListOfInferences {
+    final_conclusions: Vec<GroundAtom>,
+
+    inferences: Vec<ExecutionTraceInference>,
+}
+
+/// Object representing an [ExecutionTrace] that can be sertialized into JSON
 #[derive(Debug, Serialize, Default)]
-pub struct ExecutionTraceJson {
+pub struct ExecutionTraceListOfInferencesJSON {
     #[serde(rename = "finalConclusion")]
     final_conclusions: Vec<String>,
 
-    inferences: Vec<ExecutionTraceJsonInference>,
+    inferences: Vec<ExecutionTraceInferenceJSON>,
+}
+
+impl From<ExecutionTraceListOfInferences> for ExecutionTraceListOfInferencesJSON {
+    fn from(value: ExecutionTraceListOfInferences) -> Self {
+        Self {
+            final_conclusions: value
+                .final_conclusions
+                .into_iter()
+                .map(|concl| concl.to_string())
+                .collect(),
+            inferences: value
+                .inferences
+                .into_iter()
+                .map(ExecutionTraceInferenceJSON::from)
+                .collect(),
+        }
+    }
 }
 
 impl ExecutionTrace {
-    /// Translate an [TraceDerivation] into an [ExecutionTraceJsonInference].
-    fn json_inference(
+    /// Translate an [TraceDerivation] into an [ExecutionTraceInference].
+    fn inference_from_derivation(
         &self,
         derivation: &TraceDerivation,
-        conclusion: &ChaseFact,
-    ) -> ExecutionTraceJsonInference {
-        const RULE_NAME_FACT: &str = "Asserted";
-
+        conclusion: &GroundAtom,
+    ) -> ExecutionTraceInference {
         match derivation {
-            TraceDerivation::Input => ExecutionTraceJsonInference::new(
-                String::from(RULE_NAME_FACT),
-                conclusion.to_string(),
-                vec![],
-            ),
+            TraceDerivation::Input => {
+                ExecutionTraceInference::new(None, conclusion.clone(), vec![])
+            }
             TraceDerivation::Derived(application, premises_handles) => {
-                let rule = &self.program.rules()[application.rule_index];
+                let rule = self.program.rule(application.rule_index);
 
                 let premises = premises_handles
                     .iter()
-                    .map(|&handle| self.get_fact(handle).fact.to_string())
+                    .map(|&handle| self.get_fact(handle).fact.clone())
                     .collect();
 
-                ExecutionTraceJsonInference::new(rule.to_string(), conclusion.to_string(), premises)
+                ExecutionTraceInference::new(Some(rule.clone()), conclusion.clone(), premises)
             }
         }
     }
 
-    /// Create a json representation of the trace.
-    pub fn json(&self, fact_handles: &[TraceFactHandle]) -> ExecutionTraceJson {
-        let mut final_conclusions = Vec::<String>::new();
+    fn list_of_inferences(
+        &self,
+        fact_handles: &[TraceFactHandle],
+    ) -> ExecutionTraceListOfInferences {
+        let mut final_conclusions = Vec::<GroundAtom>::new();
         let mut fact_stack = fact_handles.to_vec();
-        let mut inferences = Vec::<ExecutionTraceJsonInference>::new();
+        let mut inferences = Vec::<ExecutionTraceInference>::new();
         let mut inferred_conclusions = HashSet::<TraceFactHandle>::new();
 
         for &final_handle in fact_handles {
@@ -430,7 +475,7 @@ impl ExecutionTrace {
                 let traced_fact = self.get_fact(current_fact);
 
                 if let TraceStatus::Success(derivation) = &traced_fact.status {
-                    let inference = self.json_inference(derivation, &traced_fact.fact);
+                    let inference = self.inference_from_derivation(derivation, &traced_fact.fact);
                     inferences.push(inference);
 
                     if let TraceDerivation::Derived(_, handles_derived) = derivation {
@@ -443,130 +488,126 @@ impl ExecutionTrace {
             }
 
             if successful_derivation {
-                final_conclusions.push(self.get_fact(final_handle).fact.to_string());
+                final_conclusions.push(self.get_fact(final_handle).fact.clone());
             }
         }
 
-        ExecutionTraceJson {
+        ExecutionTraceListOfInferences {
             final_conclusions,
             inferences,
         }
+    }
+
+    /// Create a json representation of the trace.
+    pub fn json(&self, fact_handles: &[TraceFactHandle]) -> ExecutionTraceListOfInferencesJSON {
+        ExecutionTraceListOfInferencesJSON::from(self.list_of_inferences(fact_handles))
+    }
+
+    /// Return [`ExecutionTrace`] in [GraphML](http://graphml.graphdrawing.org/) format as DAG (for [Evonne](https://github.com/imldresden/evonne) integration)
+    pub fn graphml(&self, fact_handles: &[TraceFactHandle]) -> String {
+        self.list_of_inferences(fact_handles).to_graphml()
+    }
+}
+
+impl ExecutionTraceListOfInferences {
+    fn to_petgraph(&self) -> DiGraph<TracePetGraphNodeLabel, ()> {
+        let mut graph = DiGraph::new();
+        let mut label_to_node_index: HashMap<TracePetGraphNodeLabel, NodeIndex> = HashMap::new();
+
+        self.inferences.iter().for_each(|inference| {
+            let conclusion = &inference.conclusion;
+            let rule_opt = &inference.rule;
+            let premises = &inference.premises;
+
+            let conclusion_label = TracePetGraphNodeLabel::Fact(Fact::from(conclusion.clone()));
+            let conclusion_node_index = label_to_node_index
+                .entry(conclusion_label.clone())
+                .or_insert_with(|| graph.add_node(conclusion_label));
+
+            if let Some(rule) = rule_opt {
+                let rule_node_index = graph.add_node(TracePetGraphNodeLabel::Rule(rule.clone()));
+                graph.add_edge(rule_node_index, *conclusion_node_index, ());
+
+                premises.iter().for_each(|premise| {
+                    let premise_label = TracePetGraphNodeLabel::Fact(Fact::from(premise.clone()));
+                    let premise_node_index = label_to_node_index
+                        .entry(premise_label.clone())
+                        .or_insert_with(|| graph.add_node(premise_label));
+
+                    graph.add_edge(*premise_node_index, rule_node_index, ());
+                })
+            }
+        });
+
+        graph
+    }
+
+    fn to_graphml(&self) -> String {
+        self.to_petgraph().to_graphml()
     }
 }
 
 #[cfg(test)]
 mod test {
-    use std::collections::HashMap;
-
     use nemo_physical::datavalues::AnyDataValue;
 
     use crate::{
+        chase_model::components::atom::ground_atom::GroundAtom,
         execution::tracing::trace::{TraceDerivation, TraceStatus},
-        model::{
-            chase_model::ChaseFact, Atom, Identifier, Literal, PrimitiveTerm, Program, Rule, Term,
-            Variable,
+        rule_model::{
+            components::{
+                atom::Atom,
+                rule::Rule,
+                term::primitive::{variable::Variable, Primitive},
+                ProgramComponent,
+            },
+            program::ProgramBuilder,
+            term_map::PrimitiveTermMap,
         },
     };
 
     use super::{ExecutionTrace, TraceRuleApplication};
 
     macro_rules! variable_assignment {
-        ($($k:expr => $v:expr),*) => {
-            [$(($k, $v)),*]
-                .into_iter()
-                .map(|(k, v)| {
-                    (
-                        Variable::Universal(k.to_string()),
-                        AnyDataValue::new_iri(v.to_string()),
-                    )
-                })
-                .collect()
-        };
-    }
+        ($($k:expr => $v:expr),*) => {{
+            let terms = [$(($k, $v)),*]
+            .into_iter()
+            .map(|(k, v)| {
+                (
+                    Primitive::from(Variable::universal(k)),
+                    Primitive::from(AnyDataValue::new_iri(v.to_string())),
+                )
+            });
 
-    macro_rules! atom_term {
-        (? $var:expr ) => {
-            Term::Primitive(PrimitiveTerm::Variable(Variable::Universal(
-                $var.to_string(),
-            )))
-        };
-    }
-
-    macro_rules! atom {
-        ( $pred:expr; $( $marker:tt $t:tt ),* ) => {
-            Atom::new(Identifier($pred.to_string()), vec![ $( atom_term!( $marker $t ) ),* ])
-        };
+            PrimitiveTermMap::new(terms)
+        }};
     }
 
     fn test_trace() -> ExecutionTrace {
-        // P(?x, ?y) :- Q(?y, ?x) .
-        let rule_1 = Rule::new(
-            vec![atom!("P"; ?"x", ?"y")],
-            vec![Literal::Positive(atom!("Q"; ?"y", ?"x"))],
-            vec![],
-        );
+        let rule_1 = Rule::parse("P(?x, ?y) :- Q(?y, ?x)").unwrap();
         let rule_1_assignment = variable_assignment!("x" => "b", "y" => "a");
 
-        // S(?x) :- T(?x) .
-        let rule_2 = Rule::new(
-            vec![atom!("S"; ?"x")],
-            vec![Literal::Positive(atom!("T"; ?"x"))],
-            vec![],
-        );
-
+        let rule_2 = Rule::parse("S(?x) :- T(?x)").unwrap();
         let rule_2_assignment = variable_assignment!("x" => "a");
 
-        // R(?x, ?y) :- P(?x, ?y), S(?y) .
-        let rule_3 = Rule::new(
-            vec![atom!("R"; ?"x", ?"y")],
-            vec![
-                Literal::Positive(atom!("P"; ?"x", ?"y")),
-                Literal::Positive(atom!("S"; ?"y")),
-            ],
-            vec![],
-        );
-        let rule_3_assignment: HashMap<_, _> = variable_assignment!("x" => "b", "y" => "a");
+        let rule_3 = Rule::parse("R(?x, ?y) :- P(?x, ?y), S(?y)").unwrap();
+        let rule_3_assignment = variable_assignment!("x" => "b", "y" => "a");
 
-        let q_ab = ChaseFact::new(
-            Identifier("Q".to_string()),
-            vec![
-                AnyDataValue::new_iri("a".to_string()),
-                AnyDataValue::new_iri("b".to_string()),
-            ],
-        );
+        let q_ab = GroundAtom::try_from(Atom::parse("Q(a,b)").unwrap()).unwrap();
+        let p_ba = GroundAtom::try_from(Atom::parse("P(b,a)").unwrap()).unwrap();
+        let r_ba = GroundAtom::try_from(Atom::parse("R(b,a)").unwrap()).unwrap();
+        let s_a = GroundAtom::try_from(Atom::parse("S(a)").unwrap()).unwrap();
+        let t_a = GroundAtom::try_from(Atom::parse("T(a)").unwrap()).unwrap();
 
-        let p_ba = ChaseFact::new(
-            Identifier("P".to_string()),
-            vec![
-                AnyDataValue::new_iri("b".to_string()),
-                AnyDataValue::new_iri("a".to_string()),
-            ],
-        );
-
-        let r_ba = ChaseFact::new(
-            Identifier("R".to_string()),
-            vec![
-                AnyDataValue::new_iri("b".to_string()),
-                AnyDataValue::new_iri("a".to_string()),
-            ],
-        );
-
-        let s_a = ChaseFact::new(
-            Identifier("S".to_string()),
-            vec![AnyDataValue::new_iri("a".to_string())],
-        );
-
-        let t_a = ChaseFact::new(
-            Identifier("T".to_string()),
-            vec![AnyDataValue::new_iri("a".to_string())],
-        );
-
-        let rules = vec![rule_1, rule_2, rule_3];
         let rule_1_index = 0;
         let rule_2_index = 1;
         let rule_3_index = 2;
 
-        let program = Program::builder().rules(rules).build();
+        let mut program = ProgramBuilder::default();
+        program.add_rule(rule_1);
+        program.add_rule(rule_2);
+        program.add_rule(rule_3);
+        let program = program.finalize();
 
         let mut trace = ExecutionTrace::new(program);
 
@@ -606,13 +647,8 @@ mod test {
     #[test]
     fn trace_ascii() {
         let trace = test_trace();
-        let r_ba = ChaseFact::new(
-            Identifier("R".to_string()),
-            vec![
-                AnyDataValue::new_iri("b".to_string()),
-                AnyDataValue::new_iri("a".to_string()),
-            ],
-        );
+        let r_ba = GroundAtom::try_from(Atom::parse("R(b,a)").unwrap()).unwrap();
+
         let trace_r_ba = trace.find_fact(&r_ba).unwrap();
 
         let trace_string = r#" R(b, a) :- P(b, a), S(a) .
@@ -632,20 +668,8 @@ mod test {
     fn trace_json() {
         let trace = test_trace();
 
-        let r_ba = ChaseFact::new(
-            Identifier("R".to_string()),
-            vec![
-                AnyDataValue::new_iri("b".to_string()),
-                AnyDataValue::new_iri("a".to_string()),
-            ],
-        );
-        let p_ba = ChaseFact::new(
-            Identifier("P".to_string()),
-            vec![
-                AnyDataValue::new_iri("b".to_string()),
-                AnyDataValue::new_iri("a".to_string()),
-            ],
-        );
+        let r_ba = GroundAtom::try_from(Atom::parse("R(b,a)").unwrap()).unwrap();
+        let p_ba = GroundAtom::try_from(Atom::parse("P(b,a)").unwrap()).unwrap();
 
         let trace_r_ba = trace.find_fact(&r_ba).unwrap();
         let trace_p_ba = trace.find_fact(&p_ba).unwrap();

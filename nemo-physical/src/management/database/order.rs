@@ -5,14 +5,9 @@ use std::{
     collections::{hash_map::Entry, HashMap},
 };
 
-use bytesize::ByteSize;
-
 use crate::{
     error::Error,
-    management::{
-        bytesized::sum_bytes, bytesized::ByteSized, execution_plan::ColumnOrder,
-        util::closest_order,
-    },
+    management::{bytesized::ByteSized, execution_plan::ColumnOrder, util::closest_order},
     meta::timing::TimedCode,
     tabular::{operations::projectreorder::GeneratorProjectReorder, trie::Trie},
     util::mapping::{permutation::Permutation, traits::NatMapping},
@@ -119,15 +114,15 @@ impl OrderedReferenceManager {
         }
     }
 
-    /// Return the amount of memory consumed by the table under the given [PermanentTableId].
+    /// Returns the approximate number of bytes of memory used by the table under the given [PermanentTableId].
     /// This also includes additional index structures but excludes tables that are currently stored on disk.
     ///
     /// # Panics
     /// Panics if the given id does not exist.
-    pub(crate) fn memory_consumption(&self, id: PermanentTableId) -> ByteSize {
+    pub(crate) fn table_size_bytes(&self, id: PermanentTableId) -> u64 {
         let (id, _) = self.resolve_reference(id, ColumnOrder::default());
 
-        let mut result = ByteSize::b(0);
+        let mut result = 0;
         for &storage_id in self
             .storage_map
             .get(&id)
@@ -326,8 +321,11 @@ impl OrderedReferenceManager {
 }
 
 impl ByteSized for OrderedReferenceManager {
-    fn size_bytes(&self) -> ByteSize {
-        sum_bytes(self.stored_tables.iter().map(|table| table.size_bytes()))
+    fn size_bytes(&self) -> u64 {
+        self.stored_tables
+            .iter()
+            .map(|table| table.size_bytes())
+            .sum()
     }
 }
 

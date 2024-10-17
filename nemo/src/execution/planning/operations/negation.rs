@@ -4,11 +4,11 @@
 use nemo_physical::management::execution_plan::{ExecutionNodeRef, ExecutionPlan};
 
 use crate::{
-    execution::rule_execution::VariableTranslation,
-    model::{
-        chase_model::{ChaseAtom, VariableAtom},
-        Constraint,
+    chase_model::components::{
+        atom::{variable_atom::VariableAtom, ChaseAtom},
+        filter::ChaseFilter,
     },
+    execution::rule_execution::VariableTranslation,
     table_manager::TableManager,
 };
 
@@ -22,13 +22,13 @@ pub(crate) fn node_negation(
     node_main: ExecutionNodeRef,
     current_step_number: usize,
     subtracted_atoms: &[VariableAtom],
-    subtracted_filters: &[Vec<Constraint>],
+    subtracted_filters: &[Vec<ChaseFilter>],
 ) -> ExecutionNodeRef {
     let subtracted = subtracted_atoms
         .iter()
         .zip(subtracted_filters.iter())
         .map(|(atom, constraints)| {
-            let subtract_markers = variable_translation.operation_table(atom.terms().iter());
+            let subtract_markers = variable_translation.operation_table(atom.terms());
 
             let node = subplan_union(
                 plan,

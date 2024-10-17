@@ -4,8 +4,8 @@
 use nemo_physical::management::execution_plan::ExecutionNodeRef;
 
 use crate::{
+    chase_model::analysis::variable_order::VariableOrder,
     execution::{execution_engine::RuleInfo, rule_execution::VariableTranslation},
-    program_analysis::variable_order::VariableOrder,
     table_manager::{SubtableExecutionPlan, TableManager},
 };
 

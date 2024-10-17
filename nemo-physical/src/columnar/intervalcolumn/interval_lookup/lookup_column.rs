@@ -1,8 +1,6 @@
 //! This module implements [IntervalLookupColumn]
 //! and the associated builder [IntervalLookupColumnBuilder].
 
-use bytesize::ByteSize;
-
 use crate::{
     columnar::{
         column::{Column, ColumnEnum},
@@ -57,7 +55,7 @@ impl IntervalLookup for IntervalLookupColumn {
 }
 
 impl ByteSized for IntervalLookupColumn {
-    fn size_bytes(&self) -> ByteSize {
+    fn size_bytes(&self) -> u64 {
         self.lookup.size_bytes()
     }
 }

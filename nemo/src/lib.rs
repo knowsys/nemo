@@ -15,25 +15,27 @@
     variant_size_differences
 )]
 #![feature(macro_metavar_expr)]
-#![feature(is_sorted)]
 #![feature(assert_matches)]
 #![feature(iter_intersperse)]
+#![feature(str_from_raw_parts)]
 
 /// The crate for underlying physical operations.
-#[macro_use]
-extern crate nemo_physical;
+pub extern crate nemo_physical;
 
 pub mod api;
 pub mod error;
 pub mod io;
+pub mod parser;
+pub mod syntax;
 
 pub mod execution;
-pub mod model;
+pub mod rule_model;
 pub mod util;
 
-mod program_analysis;
 mod static_checks;
-mod table_manager;
+
+pub mod chase_model; // TODO: Make private
+pub(crate) mod table_manager;
 
 // we use datavalues and meta from nemo_physical in our API, so re-export it here.
 pub use nemo_physical::datavalues;

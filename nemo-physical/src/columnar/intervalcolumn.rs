@@ -7,7 +7,6 @@ pub(crate) mod interval_lookup;
 
 use std::ops::Range;
 
-use bytesize::ByteSize;
 use delegate::delegate;
 
 use crate::{
@@ -93,7 +92,7 @@ where
     T: ColumnDataType,
     LookupMethod: IntervalLookup,
 {
-    fn size_bytes(&self) -> ByteSize {
+    fn size_bytes(&self) -> u64 {
         self.data.size_bytes() + self.intervals.size_bytes() + self.interval_lookup.size_bytes()
     }
 }
@@ -199,7 +198,7 @@ impl<LookupMethod> ByteSized for IntervalColumnT<LookupMethod>
 where
     LookupMethod: IntervalLookup,
 {
-    fn size_bytes(&self) -> ByteSize {
+    fn size_bytes(&self) -> u64 {
         self.column_id32.size_bytes()
             + self.column_id64.size_bytes()
             + self.column_int64.size_bytes()

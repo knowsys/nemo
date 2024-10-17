@@ -7,8 +7,6 @@ pub(crate) mod vector;
 
 use std::{fmt::Debug, mem::size_of};
 
-use bytesize::ByteSize;
-
 use crate::{
     datatypes::{ColumnDataType, RunLengthEncodable},
     generate_forwarder,
@@ -82,8 +80,8 @@ where
 }
 
 impl<T: RunLengthEncodable> ByteSized for ColumnEnum<T> {
-    fn size_bytes(&self) -> ByteSize {
+    fn size_bytes(&self) -> u64 {
         let size_column = forward_to_column!(self, size_bytes);
-        ByteSize::b(size_of::<Self>() as u64) + size_column
+        size_of::<Self>() as u64 + size_column
     }
 }

@@ -1,6 +1,9 @@
 //! A [DvDict] implementation for nulls (and nulls only).
 
-use crate::datavalues::{AnyDataValue, DataValue, NullDataValue, ValueDomain};
+use crate::{
+    datavalues::{AnyDataValue, DataValue, NullDataValue, ValueDomain},
+    management::bytesized::ByteSized,
+};
 
 use super::{AddResult, DvDict};
 
@@ -98,6 +101,12 @@ impl DvDict for NullDvDictionary {
 
     fn has_marked(&self) -> bool {
         false
+    }
+}
+
+impl ByteSized for NullDvDictionary {
+    fn size_bytes(&self) -> u64 {
+        size_of::<Self>() as u64
     }
 }
 

@@ -3,8 +3,12 @@ use nemo_physical::datavalues::AnyDataValue;
 use nemo_physical::datavalues::DataValue;
 use nemo_physical::datavalues::ValueDomain;
 use nemo_physical::dictionary::meta_dv_dict::MetaDvDictionary;
+use nemo_physical::dictionary::old_dictionaries::dictionary::Dictionary;
+use nemo_physical::dictionary::old_dictionaries::hash_map_dictionary::HashMapDictionary;
+use nemo_physical::dictionary::old_dictionaries::meta_dictionary::MetaDictionary;
 use nemo_physical::dictionary::string_dictionary::BenchmarkStringDictionary;
 use nemo_physical::dictionary::DvDict;
+use nemo_physical::management::bytesized::ByteSized;
 use std::env;
 use std::fs::File;
 use std::io::prelude::*;
@@ -13,9 +17,7 @@ use std::io::BufReader;
 
 use core::cmp;
 
-use nemo_physical::dictionary::{
-    hash_map_dictionary::HashMapDictionary, meta_dictionary::MetaDictionary, AddResult, Dictionary,
-};
+use nemo_physical::dictionary::AddResult;
 use nemo_physical::meta::timing::{TimedCode, TimedDisplay, TimedSorting};
 
 /// If true, additional statistics about the length of some entry values
@@ -67,6 +69,15 @@ impl DictEnum {
             DictEnum::StringMeta(dict) => dict.len(),
             DictEnum::StringBuffer(dict) => dict.len(),
             DictEnum::DvMeta(dict) => dict.len(),
+        }
+    }
+
+    fn size_bytes(&mut self) -> u64 {
+        match &self {
+            DictEnum::StringHash(_) => 0,
+            DictEnum::StringMeta(_) => 0,
+            DictEnum::StringBuffer(dict) => dict.size_bytes(),
+            DictEnum::DvMeta(dict) => dict.size_bytes(),
         }
     }
 }
@@ -203,6 +214,7 @@ fn main() {
         "  Dictionary rejected {} (non-unique) strings with {} bytes overall.",
         count_rejected, bytes_rejected
     );
+    println!("  Dictionary reports own size as {}.", dict.size_bytes());
 
     TimedCode::instance().stop();
 

@@ -2,7 +2,7 @@
 
 use std::marker::PhantomData;
 
-use crate::{model::chase_model::ChaseRule, program_analysis::analysis::RuleAnalysis};
+use crate::chase_model::{analysis::program_analysis::RuleAnalysis, components::rule::ChaseRule};
 
 use super::{
     dependency_graph::graph_constructor::DependencyGraphConstructor,

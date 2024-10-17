@@ -1,6 +1,6 @@
 //! General traits and global constants for dictionaries that work for datavalues.
 
-use crate::datavalues::AnyDataValue;
+use crate::{datavalues::AnyDataValue, management::bytesized::ByteSized};
 use std::fmt::Debug;
 
 /// Fake id that dictionaries use to indicate that an entry has no id.
@@ -43,13 +43,15 @@ impl AddResult {
 }
 
 /// A [DvDict] represents a dictionary for datavalues, i.e., a bijective (invertible) mapping from
-/// [crate::datavalues::DataValue]s to numeric ids (`usize`). In addition, to this bijection, dictionaries maintain
+/// [crate::datavalues::DataValue]s to numeric ids (`usize`).
+///
+/// In addition, to this bijection, dictionaries maintain
 /// a set of *marked* datavalues. For these, the dictionary will always return the virtual id [KNOWN_ID_MARK],
 /// which cannot be used to retrieve datavalues.
 ///
 /// The id values are provided when the dictionary is used, whereas the ids are newly
 /// assigned by the dictionary itself.
-pub trait DvDict: Debug {
+pub trait DvDict: Debug + ByteSized {
     /// Adds a new [AnyDataValue] to the dictionary. If the value is not known yet, it will
     /// be assigned a new id. Unsupported datavalues can also be rejected, which specialized
     /// dictionary implementations might do.

@@ -12,6 +12,8 @@ use crate::{
 
 use delegate::delegate;
 
+/// Allows sending of [AnyDataValue]s tuples to the database.
+///
 /// The [TupleWriter] is used to send the tuples of [AnyDataValue]s to the database, so that they
 /// can be turned into a table. The interface allows values to be added one by one, and also provides
 /// some roll-back functionality for dropping a previously started tuple in case of errors.
@@ -72,7 +74,7 @@ impl<'a> TupleWriter<'a> {
 }
 
 #[cfg(test)]
-pub mod test {
+mod test {
     use std::cell::RefCell;
 
     use crate::{

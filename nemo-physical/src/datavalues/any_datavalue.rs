@@ -1,5 +1,4 @@
-//! This module provides implementations [DataValue]s that can represent any
-//! datavalue that we support.
+//! This module provides implementations [DataValue]s that can represent any datavalue that we support.
 
 use std::{num::IntErrorKind, str::FromStr};
 
@@ -150,22 +149,24 @@ impl AnyDataValue {
                 if let Some(value) = dict.id_to_datavalue(usize::try_from(id).unwrap()) {
                     Ok(value)
                 } else {
-                    Err(DataValueCreationError::InternalError(Box::new(
+                    Err(DataValueCreationError::InternalError(
                         InternalDataValueCreationError::DictionaryIdNotFound(
                             usize::try_from(id).unwrap(),
-                        ),
-                    )))
+                        )
+                        .to_string(),
+                    ))
                 }
             }
             StorageValueT::Id64(id) => {
                 if let Some(value) = dict.id_to_datavalue(usize::try_from(id).unwrap()) {
                     Ok(value)
                 } else {
-                    Err(DataValueCreationError::InternalError(Box::new(
+                    Err(DataValueCreationError::InternalError(
                         InternalDataValueCreationError::DictionaryIdNotFound(
                             usize::try_from(id).unwrap(),
-                        ),
-                    )))
+                        )
+                        .to_string(),
+                    ))
                 }
             }
             StorageValueT::Int64(num) => Ok(AnyDataValue::new_integer_from_i64(num)),

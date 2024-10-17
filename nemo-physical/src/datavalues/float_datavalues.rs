@@ -1,5 +1,6 @@
-//! This module provides implementations [DataValue]s that represent finite-valued floating
-//! point numbers. That means that NaN and positive or negative infinite are not accepted here.
+//! This module provides implementations [DataValue]s that represent finite-valued floating point numbers.
+//!
+//! That means that NaN and positive or negative infinite are not accepted here.
 //! This ensures smooth arithmetic and comparison operations are possible.
 //!
 //! By convention (following XML Schema), we consider the value spaces of floats of different precisions

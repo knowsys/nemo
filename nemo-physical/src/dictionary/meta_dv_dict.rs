@@ -3,11 +3,12 @@
 use crate::datavalues::ValueDomain;
 use crate::datavalues::{AnyDataValue, DataValue};
 use crate::dictionary::NONEXISTING_ID_MARK;
+use crate::management::bytesized::{size_inner_vec_flat, ByteSized};
 
+use super::ranked_pair_iri_dv_dict::IriSplittingDvDictionary;
+use super::ranked_pair_other_dv_dict::OtherSplittingDvDictionary;
+use super::string_langstring_dv_dict::LangStringDvDictionary;
 use super::DvDict;
-use super::IriDvDictionary;
-use super::LangStringDvDictionary;
-use super::OtherDvDictionary;
 use super::StringDvDictionary;
 use super::{AddResult, NullDvDictionary};
 
@@ -145,6 +146,7 @@ type DictId = usize;
 const NO_DICT: DictId = usize::MAX;
 
 /// A dictionary that combines several other dictionaries.
+///
 /// The design integrates specific optimized dictionaries that support specific content types,
 /// but it is also designed with the possibility of external read-only dictionaries in mind,
 /// as they might occur when loading pre-indexed data from external sources.
@@ -303,20 +305,23 @@ impl MetaDvDictionary {
                     return;
                 }
                 dict = Box::new(LangStringDvDictionary::new());
+                //dict = Box::new(LangStringSplittingDvDictionary::new());
                 self.langstring_dict = self.dicts.len();
             }
             DictionaryType::Iri => {
                 if self.iri_dict != NO_DICT {
                     return;
                 }
-                dict = Box::new(IriDvDictionary::new());
+                //dict = Box::new(IriDvDictionary::new());
+                dict = Box::new(IriSplittingDvDictionary::new());
                 self.iri_dict = self.dicts.len();
             }
             DictionaryType::Other => {
                 if self.other_dict != NO_DICT {
                     return;
                 }
-                dict = Box::new(OtherDvDictionary::new());
+                //dict = Box::new(OtherDvDictionary::new());
+                dict = Box::new(OtherSplittingDvDictionary::new());
                 self.other_dict = self.dicts.len();
             }
             DictionaryType::Null => {
@@ -533,6 +538,20 @@ impl DvDict for MetaDvDictionary {
 
     fn has_marked(&self) -> bool {
         false
+    }
+}
+
+impl ByteSized for MetaDvDictionary {
+    fn size_bytes(&self) -> u64 {
+        size_of::<Self>() as u64
+            + size_inner_vec_flat(&self.dictblocks)
+            + size_inner_vec_flat(&self.dicts)
+            + size_inner_vec_flat(&self.generic_dicts)
+            + self
+                .dicts
+                .iter()
+                .map(|dr| dr.dict.size_bytes() + size_inner_vec_flat(&dr.gblocks))
+                .sum::<u64>()
     }
 }
 

@@ -2,8 +2,6 @@
 
 use std::{error::Error, fmt::Display, mem::size_of};
 
-use bytesize::ByteSize;
-
 use crate::{
     datasources::{table_providers::TableProvider, tuple_writer::TupleWriter},
     datavalues::AnyDataValue,
@@ -57,12 +55,9 @@ impl TableProvider for SimpleTable {
 }
 
 impl ByteSized for SimpleTable {
-    fn size_bytes(&self) -> ByteSize {
-        // We cast everything to u64 separately to avoid overflows
-        ByteSize::b(
-            size_of::<Self>() as u64
-                + self.data.capacity() as u64 * size_of::<AnyDataValue>() as u64,
-        )
+    fn size_bytes(&self) -> u64 {
+        // cast everything to u64 separately to avoid overflows
+        size_of::<Self>() as u64 + self.data.capacity() as u64 * size_of::<AnyDataValue>() as u64
     }
 }
 
@@ -107,7 +102,7 @@ impl Display for TableSource {
 }
 
 impl ByteSized for TableSource {
-    fn size_bytes(&self) -> ByteSize {
-        ByteSize::b(size_of::<Self>() as u64) + self.provider.size_bytes()
+    fn size_bytes(&self) -> u64 {
+        size_of::<Self>() as u64 + self.provider.size_bytes()
     }
 }

@@ -1,4 +1,5 @@
 //! This module provides implementations [DataValue]s that represent IRIs.
+//!
 //! In essence, IRIs are represented by Unicode strings, but they are considered
 //! distinct from elements of [ValueDomain::PlainString]. Moreover, some IRI-specific
 //! requirements and normalizations might apply.
