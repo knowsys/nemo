@@ -1,7 +1,14 @@
-use crate::model::{
-    rule_model::{Identifier, Literal, Rule, Term, Variable},
-    PrimitiveTerm,
+use crate::rule_model::components::{
+    literal::Literal,
+    rule::Rule,
+    tag::Tag,
+    term::primitive::{variable::Variable, Primitive},
+    IterablePrimitives,
 };
+// use crate::model::{
+//     rule_model::{Tag, Literal, Rule, Term, Variable},
+//     PrimitiveTerm,
+// };
 use crate::static_checks::static_checks_on_rule::RuleProperties;
 use std::collections::{HashMap, HashSet};
 
@@ -18,40 +25,40 @@ impl RuleSet {
     }
 }
 
-pub struct Positions(pub HashMap<Identifier, HashSet<usize>>);
+pub struct Positions(pub HashMap<Tag, HashSet<usize>>);
 
 impl Positions {
     pub fn new() -> Self {
-        Positions(HashMap::<Identifier, HashSet<usize>>::new())
+        Positions(HashMap::<Tag, HashSet<usize>>::new())
     }
 
-    pub fn positions(&self) -> &HashMap<Identifier, HashSet<usize>> {
+    pub fn positions(&self) -> &HashMap<Tag, HashSet<usize>> {
         &self.0
     }
 
-    fn positions_mut(&mut self) -> &mut HashMap<Identifier, HashSet<usize>> {
+    fn positions_mut(&mut self) -> &mut HashMap<Tag, HashSet<usize>> {
         &mut self.0
     }
 
-    fn contains_predicate(&self, predicate: &Identifier) -> bool {
+    fn contains_predicate(&self, predicate: &Tag) -> bool {
         self.positions().contains_key(predicate)
     }
 
-    fn get_and_unwrap_predicate(&self, predicate: &Identifier) -> &HashSet<usize> {
+    fn get_and_unwrap_predicate(&self, predicate: &Tag) -> &HashSet<usize> {
         self.positions().get(predicate).unwrap()
     }
 
-    pub fn get(&self, predicate: &Identifier) -> Option<&HashSet<usize>> {
+    pub fn get(&self, predicate: &Tag) -> Option<&HashSet<usize>> {
         self.positions().get(predicate)
     }
 
-    pub fn contains_key(&self, predicate: &Identifier) -> bool {
+    pub fn contains_key(&self, predicate: &Tag) -> bool {
         self.positions().contains_key(predicate)
     }
 
     pub fn insert(
         &mut self,
-        predicate: Identifier,
+        predicate: Tag,
         positions_in_predicate: HashSet<usize>,
     ) -> Option<HashSet<usize>> {
         self.positions_mut()
@@ -74,7 +81,7 @@ impl Positions {
         variable: &Variable,
         literal: &Literal,
     ) -> HashSet<usize> {
-        let predicate: Identifier = literal.predicate();
+        let predicate: Tag = literal.predicate();
         let new_positions: HashSet<usize> = variable.get_positions_in_literal(literal);
         let old_positions: &HashSet<usize> = self.get(&predicate).unwrap_or(&new_positions);
         new_positions.union(old_positions).cloned().collect()
@@ -84,9 +91,8 @@ impl Positions {
 impl Variable {
     fn get_positions_in_literal(&self, literal: &Literal) -> HashSet<usize> {
         let mut positions_in_literal: HashSet<usize> = HashSet::<usize>::new();
-        let terms: &Vec<Term> = literal.terms();
-        for (position, term) in terms.iter().enumerate() {
-            if let Term::Primitive(PrimitiveTerm::Variable(variable)) = term {
+        for (position, term) in literal.primitive_terms().enumerate() {
+            if let Primitive::Variable(variable) = term {
                 if variable == self {
                     positions_in_literal.insert(position);
                 }
