@@ -73,7 +73,7 @@ impl RuleProperties for Rule {
     }
 
     fn is_guarded(&self) -> bool {
-        self.is_guarded_for_variables(self.safe_variables_unreferenced())
+        self.is_guarded_for_variables(self.safe_variables_dereferenced())
     }
 
     fn is_sticky(&self) -> bool {
@@ -83,7 +83,7 @@ impl RuleProperties for Rule {
 
     fn is_domain_restricted(&self) -> bool {
         let all_body_variables_from_positive_literals: HashSet<Variable> =
-            self.safe_variables_unreferenced();
+            self.safe_variables_dereferenced();
         for atom in self.head().iter() {
             let universal_variables_of_atom: HashSet<Variable> = atom.universal_variables();
             if !universal_variables_of_atom.is_empty()
@@ -219,7 +219,7 @@ impl RuleProperties for Rule {
 }
 
 impl Rule {
-    fn safe_variables_unreferenced(&self) -> HashSet<Variable> {
+    fn safe_variables_dereferenced(&self) -> HashSet<Variable> {
         self.safe_variables()
             .iter()
             .map(|var| (*var).clone())
@@ -251,11 +251,11 @@ impl Rule {
     }
 
     fn safe_variables_of_head(&self) -> HashSet<Variable> {
-        Self::safe_variables_atom(&self.head())
+        Self::safe_variables_atom(self.head())
     }
 
     fn frontier_variables(&self) -> HashSet<Variable> {
-        let safe_body_variables: HashSet<Variable> = self.safe_variables_unreferenced();
+        let safe_body_variables: HashSet<Variable> = self.safe_variables_dereferenced();
         let safe_head_variables: HashSet<Variable> = self.safe_variables_of_head();
         let mut frontier_variables: HashSet<Variable> = HashSet::<Variable>::new();
         for variable in safe_body_variables.iter() {
@@ -281,7 +281,7 @@ impl Rule {
     }
 
     fn affected_universal_variables(&self, affected_positions: &Positions) -> HashSet<Variable> {
-        self.affected_variables(self.safe_variables_unreferenced(), affected_positions)
+        self.affected_variables(self.safe_variables_dereferenced(), affected_positions)
     }
 
     fn affected_frontier_variables(&self, affected_positions: &Positions) -> HashSet<Variable> {
@@ -298,31 +298,65 @@ impl Rule {
         false
     }
 
-    fn get_positions_of_variable_in_body(&self, variable: &Variable) -> Positions {
-        let mut positions_of_variable_in_body: Positions = Positions::new();
-        for literal in self.body().iter() {
-            let variables_of_literal: Vec<Variable> = literal.variables().cloned().collect();
-            if !variables_of_literal.contains(variable) {
-                continue;
-            }
-            let predicate: Tag = literal.predicate();
-            let new_positions_of_variable: HashSet<usize> = positions_of_variable_in_body
-                .union_positions_of_variable_in_literal(variable, literal);
-            positions_of_variable_in_body.insert(predicate.clone(), new_positions_of_variable);
+    // TODO: SHORTEN FUNCTION
+    pub fn initial_affected_positions(&self) -> Positions {
+        let mut initial_affected_positions: Positions = Positions::new();
+        for atom in self.head().iter() {
+            initial_affected_positions.union(
+                &atom
+                    .existential_variables()
+                    .iter()
+                    .map(|var| var.get_positions_in_literal(&Literal::Positive(atom.clone())))
+                    .fold(Positions::new(), |mut pos_start, pos| {
+                        pos_start.union(&pos);
+                        pos_start
+                    }),
+            );
         }
-        positions_of_variable_in_body
+        initial_affected_positions
     }
 }
 
 impl Variable {
     fn is_affected(&self, rule: &Rule, affected_positions: &Positions) -> bool {
-        let positions_of_variable_in_body: Positions = rule.get_positions_of_variable_in_body(self);
+        let positions_of_variable_in_body: Positions = self.get_positions_in_literals(rule.body());
         positions_of_variable_in_body.contains_only_affected_variable_position(affected_positions)
+    }
+
+    fn get_positions_in_literals(&self, literals: &[Literal]) -> Positions {
+        let mut positions_of_variable_in_body: Positions = Positions::new();
+        for literal in literals.iter() {
+            positions_of_variable_in_body.union(&self.get_positions_in_literal(literal));
+        }
+        positions_of_variable_in_body
+    }
+
+    // TODO: SHORTEN FUNCTION
+    pub fn get_positions_in_literal(&self, literal: &Literal) -> Positions {
+        let mut positions_in_literal: Positions = Positions::new();
+        let predicate: Tag = literal.predicate();
+        positions_in_literal.insert(predicate.clone(), HashSet::<usize>::new());
+        for (position, term) in literal.primitive_terms().enumerate() {
+            if let Primitive::Variable(variable) = term {
+                if variable == self {
+                    positions_in_literal
+                        .get_predicate_and_unwrap_mut(&predicate)
+                        .insert(position);
+                }
+            }
+        }
+        if positions_in_literal
+            .get_predicate_and_unwrap(&predicate)
+            .is_empty()
+        {
+            return Positions::new();
+        }
+        positions_in_literal
     }
 }
 
 impl Atom {
-    fn existential_variables(&self) -> HashSet<Variable> {
+    pub fn existential_variables(&self) -> HashSet<Variable> {
         self.variables()
             .filter_map(|var| {
                 if let Variable::Existential(ex) = var {
