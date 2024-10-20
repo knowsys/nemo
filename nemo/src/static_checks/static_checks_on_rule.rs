@@ -298,20 +298,10 @@ impl Rule {
         false
     }
 
-    // TODO: SHORTEN FUNCTION
     pub fn initial_affected_positions(&self) -> Positions {
         let mut initial_affected_positions: Positions = Positions::new();
         for atom in self.head().iter() {
-            initial_affected_positions.union(
-                &atom
-                    .existential_variables()
-                    .iter()
-                    .map(|var| var.get_positions_in_literal(&Literal::Positive(atom.clone())))
-                    .fold(Positions::new(), |mut pos_start, pos| {
-                        pos_start.union(&pos);
-                        pos_start
-                    }),
-            );
+            initial_affected_positions.union(&atom.positions_of_existential_variables());
         }
         initial_affected_positions
     }
@@ -320,15 +310,15 @@ impl Rule {
 impl Variable {
     fn is_affected(&self, rule: &Rule, affected_positions: &Positions) -> bool {
         let positions_of_variable_in_body: Positions = self.get_positions_in_literals(rule.body());
-        positions_of_variable_in_body.contains_only_affected_variable_position(affected_positions)
+        affected_positions.subsumes(&positions_of_variable_in_body)
     }
 
     fn get_positions_in_literals(&self, literals: &[Literal]) -> Positions {
-        let mut positions_of_variable_in_body: Positions = Positions::new();
+        let mut positions_in_literals: Positions = Positions::new();
         for literal in literals.iter() {
-            positions_of_variable_in_body.union(&self.get_positions_in_literal(literal));
+            positions_in_literals.union(&self.get_positions_in_literal(literal));
         }
-        positions_of_variable_in_body
+        positions_in_literals
     }
 
     // TODO: SHORTEN FUNCTION
@@ -378,6 +368,16 @@ impl Atom {
                 }
             })
             .collect()
+    }
+
+    fn positions_of_existential_variables(&self) -> Positions {
+        self.existential_variables()
+            .iter()
+            .map(|var| var.get_positions_in_literal(&Literal::Positive(self.clone())))
+            .fold(Positions::new(), |mut pos_start, pos| {
+                pos_start.union(&pos);
+                pos_start
+            })
     }
 }
 

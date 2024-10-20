@@ -7,7 +7,8 @@ use crate::rule_model::components::{
     IterablePrimitives,
 };
 use crate::static_checks::static_checks_on_rule::RuleProperties;
-use std::collections::{HashMap, HashSet};
+use std::collections::{hash_map::Keys, hash_set::Union, HashMap, HashSet};
+use std::hash::RandomState;
 
 struct RuleSet(Vec<Rule>);
 
@@ -17,9 +18,16 @@ impl RuleSet {
     }
 
     fn affected_positions(&self) -> Positions {
-        let initial_affected_positions: Positions = self.initial_affected_positions();
-        todo!("IMPLEMENT");
-        // TODO: IMPLEMENT
+        let mut affected_positions: Positions = self.initial_affected_positions();
+        let mut new_in_last_iteration: Positions = affected_positions.clone();
+        while !new_in_last_iteration.is_empty() {
+            let mut new_found_affected_positions: Positions =
+                new_in_last_iteration.conclude_affected_positions();
+            new_found_affected_positions.subtract(&affected_positions);
+            affected_positions.union(&new_found_affected_positions);
+            new_in_last_iteration = new_found_affected_positions;
+        }
+        affected_positions
     }
 
     fn initial_affected_positions(&self) -> Positions {
@@ -31,8 +39,14 @@ impl RuleSet {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Positions(HashMap<Tag, HashSet<usize>>);
+
+impl Default for Positions {
+    fn default() -> Self {
+        Positions::new()
+    }
+}
 
 impl Positions {
     pub fn new() -> Self {
@@ -59,6 +73,10 @@ impl Positions {
         self.positions().contains_key(predicate)
     }
 
+    fn keys(&self) -> Keys<Tag, HashSet<usize>> {
+        self.positions().keys()
+    }
+
     pub fn get_predicate_and_unwrap(&self, predicate: &Tag) -> &HashSet<usize> {
         self.positions().get(predicate).unwrap()
     }
@@ -76,34 +94,82 @@ impl Positions {
             .insert(predicate, positions_in_predicate)
     }
 
-    pub fn contains_only_affected_variable_position(&self, affected_positions: &Positions) -> bool {
-        self.positions().iter().all(|pred| {
-            affected_positions.contains_key(pred.0)
-                && self.get_predicate_and_unwrap(pred.0).iter().all(|pos| {
-                    affected_positions
-                        .get_predicate_and_unwrap(pred.0)
-                        .contains(pos)
-                })
+    fn is_empty(&self) -> bool {
+        self.positions().is_empty()
+    }
+
+    fn pred_is_empty(&self, pred: &Tag) -> bool {
+        self.get_predicate_and_unwrap(pred).is_empty()
+    }
+
+    fn pred_contains_index(&self, pred: &Tag, index: &usize) -> bool {
+        self.get_predicate_and_unwrap(pred).contains(index)
+    }
+
+    fn pred_remove_index(&mut self, pred: &Tag, index: &usize) -> bool {
+        self.get_predicate_and_unwrap_mut(pred).remove(index)
+    }
+
+    fn remove(&mut self, pred: &Tag) -> Option<HashSet<usize>> {
+        self.positions_mut().remove(pred)
+    }
+
+    pub fn subsumes(&self, positions: &Positions) -> bool {
+        positions.keys().all(|pred| {
+            self.contains_key(pred)
+                && positions
+                    .get_predicate_and_unwrap(pred)
+                    .iter()
+                    .all(|index| self.pred_contains_index(pred, index))
         })
     }
 
+    fn conclude_affected_positions(&self) -> Positions {
+        todo!("IMPLEMENT");
+        // TODO: IMPLEMENT
+    }
+
+    // TODO: LOOK IF FUNCTION WILL WORK DUE TO USE OF CLONE
+    // TODO: SHORTEN FUNCTION
+    fn subtract(&mut self, positions: &Positions) {
+        for pred in self.clone().keys() {
+            if !positions.contains_key(pred) {
+                continue;
+            }
+            self.subtract_indexes_of_pred(pred, positions);
+        }
+    }
+
+    // TODO: LOOK IF FUNCTION WILL WORK DUE TO USE OF CLONE
+    fn subtract_indexes_of_pred(&mut self, pred: &Tag, positions: &Positions) {
+        for index in self.clone().get_predicate_and_unwrap(pred) {
+            if !positions.pred_contains_index(pred, index) {
+                continue;
+            }
+            self.pred_remove_index(pred, index);
+        }
+        if self.pred_is_empty(pred) {
+            self.remove(pred);
+        }
+    }
+
     pub fn union(&mut self, positions: &Positions) {
-        for pred in positions.positions().keys() {
+        for pred in positions.keys() {
             if !self.contains_key(pred) {
                 self.insert(
                     pred.clone(),
                     positions.get_predicate_and_unwrap(pred).clone(),
                 );
             }
-            self.insert(pred.clone(), self.new_positions_of_pred(pred, positions));
+            self.union_indexes_of_pred(pred, positions);
+            // self.insert(pred.clone(), self.union_indexes_of_pred(pred, positions));
         }
     }
 
-    fn new_positions_of_pred(&self, pred: &Tag, positions: &Positions) -> HashSet<usize> {
+    // TODO: RETURN UNION TYPE
+    fn union_indexes_of_pred(&self, pred: &Tag, positions: &Positions) {
         self.get_predicate_and_unwrap(pred)
-            .union(positions.get_predicate_and_unwrap(pred))
-            .copied()
-            .collect()
+            .union(positions.get_predicate_and_unwrap(pred));
     }
 }
 
