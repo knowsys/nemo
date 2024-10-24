@@ -17,6 +17,10 @@ impl RuleSet {
         &self.0
     }
 
+    fn iter(&self) -> std::slice::Iter<Rule> {
+        self.rules().iter()
+    }
+
     fn affected_positions(&self) -> Positions {
         let mut affected_positions: Positions = self.initial_affected_positions();
         let mut new_in_last_iteration: Positions = affected_positions.clone();
@@ -36,6 +40,11 @@ impl RuleSet {
             initial_affected_positions.union(&rule.initial_affected_positions());
         }
         initial_affected_positions
+    }
+
+    fn marking(&self) -> Positions {
+        todo!("IMPLEMENT");
+        // TODO: IMPLEMENT
     }
 }
 
@@ -85,6 +94,10 @@ impl Positions {
         self.positions_mut().get_mut(predicate).unwrap()
     }
 
+    pub fn len(&self) -> usize {
+        self.positions().len()
+    }
+
     pub fn insert(
         &mut self,
         predicate: Tag,
@@ -132,6 +145,15 @@ impl Positions {
                 && positions
                     .iter_of_pred(pred)
                     .all(|index| self.pred_contains_index(pred, index))
+        })
+    }
+
+    pub fn are_disjoint(&self, positions: &Positions) -> bool {
+        self.keys().all(|pred| {
+            !positions.contains_key(pred)
+                || self
+                    .iter_of_pred(pred)
+                    .all(|index| !positions.pred_contains_index(pred, index))
         })
     }
 
@@ -215,53 +237,51 @@ pub trait RulesProperties {
 
 impl RulesProperties for RuleSet {
     fn is_joinless(&self) -> bool {
-        self.rules().iter().all(|rule| rule.is_joinless())
+        self.iter().all(|rule| rule.is_joinless())
     }
 
     fn is_linear(&self) -> bool {
-        self.rules().iter().all(|rule| rule.is_linear())
+        self.iter().all(|rule| rule.is_linear())
     }
 
     fn is_guarded(&self) -> bool {
-        self.rules().iter().all(|rule| rule.is_guarded())
+        self.iter().all(|rule| rule.is_guarded())
     }
 
     fn is_sticky(&self) -> bool {
-        todo!("IMPLEMENT");
-        // TODO: IMPLEMENT
+        let marking: Positions = self.marking();
+        self.iter().all(|rule| rule.is_sticky(&marking))
     }
 
     fn is_domain_restricted(&self) -> bool {
-        self.rules().iter().all(|rule| rule.is_domain_restricted())
+        self.iter().all(|rule| rule.is_domain_restricted())
     }
 
     fn is_frontier_one(&self) -> bool {
-        self.rules().iter().all(|rule| rule.is_frontier_one())
+        self.iter().all(|rule| rule.is_frontier_one())
     }
 
     fn is_datalog(&self) -> bool {
-        self.rules().iter().all(|rule| rule.is_datalog())
+        self.iter().all(|rule| rule.is_datalog())
     }
 
     fn is_monadic(&self) -> bool {
-        self.rules().iter().all(|rule| rule.is_monadic())
+        self.iter().all(|rule| rule.is_monadic())
     }
 
     fn is_frontier_guarded(&self) -> bool {
-        self.rules().iter().all(|rule| rule.is_frontier_guarded())
+        self.iter().all(|rule| rule.is_frontier_guarded())
     }
 
     fn is_weakly_guarded(&self) -> bool {
         let affected_positions: Positions = self.affected_positions();
-        self.rules()
-            .iter()
+        self.iter()
             .all(|rule| rule.is_weakly_guarded(&affected_positions))
     }
 
     fn is_weakly_frontier_guarded(&self) -> bool {
         let affected_positions: Positions = self.affected_positions();
-        self.rules()
-            .iter()
+        self.iter()
             .all(|rule| rule.is_weakly_frontier_guarded(&affected_positions))
     }
 

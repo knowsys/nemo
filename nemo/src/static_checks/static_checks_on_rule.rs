@@ -13,7 +13,7 @@ pub trait RuleProperties {
     fn is_joinless(&self) -> bool;
     fn is_linear(&self) -> bool;
     fn is_guarded(&self) -> bool;
-    fn is_sticky(&self) -> bool;
+    fn is_sticky(&self, marking: &Positions) -> bool;
     fn is_domain_restricted(&self) -> bool;
     fn is_frontier_one(&self) -> bool;
     fn is_datalog(&self) -> bool;
@@ -39,33 +39,9 @@ pub trait RuleProperties {
 }
 
 impl RuleProperties for Rule {
-    // fn is_joinless(&self) -> bool {
-    //     let mut variables: HashSet<Variable> = HashSet::<Variable>::new();
-    //     for literal in self.body().iter() {
-    //         let terms: &Vec<Term> = literal.atom().terms();
-    //         for term in terms.iter() {
-    //             if let Term::Primitive(PrimitiveTerm::Variable(variable)) = term {
-    //                 if !variables.insert(variable.clone()) {
-    //                     return false;
-    //                 }
-    //             }
-    //         }
-    //     }
-    //     true
-    // }
-
     fn is_joinless(&self) -> bool {
-        let mut variables: HashSet<Variable> = HashSet::<Variable>::new();
-        for literal in self.body().iter() {
-            for term in literal.primitive_terms() {
-                if let Primitive::Variable(variable) = term {
-                    if !variables.insert(variable.clone()) {
-                        return false;
-                    }
-                }
-            }
-        }
-        true
+        self.variables()
+            .all(|var| !var.is_join_variable_in_rule(self))
     }
 
     fn is_linear(&self) -> bool {
@@ -76,23 +52,33 @@ impl RuleProperties for Rule {
         self.is_guarded_for_variables(self.safe_variables_dereferenced())
     }
 
-    fn is_sticky(&self) -> bool {
-        todo!("IMPLEMENT");
-        // TODO: IMPLEMENT
+    // TODO: SHORTEN FUNCTION
+    fn is_sticky(&self, marking: &Positions) -> bool {
+        self.body().iter().all(|literal| {
+            literal.variables().all(|var_1| {
+                if var_1.is_join_variable_in_rule(self)
+                    || var_1.appears_at_positions_in_atom(marking, &literal.atom())
+                {
+                    self.head().iter().all(|atom| {
+                        atom.variables()
+                            .filter(|var_2| *var_2 == var_1)
+                            .any(|var_2| var_2.appears_at_positions_in_atom(marking, atom))
+                    })
+                } else {
+                    true
+                }
+            })
+        })
     }
 
     fn is_domain_restricted(&self) -> bool {
         let all_body_variables_from_positive_literals: HashSet<Variable> =
             self.safe_variables_dereferenced();
-        for atom in self.head().iter() {
+        self.head().iter().all(|atom| {
             let universal_variables_of_atom: HashSet<Variable> = atom.universal_variables();
-            if !universal_variables_of_atom.is_empty()
-                && universal_variables_of_atom != all_body_variables_from_positive_literals
-            {
-                return false;
-            }
-        }
-        true
+            universal_variables_of_atom.is_empty()
+                || universal_variables_of_atom == all_body_variables_from_positive_literals
+        })
     }
 
     fn is_frontier_one(&self) -> bool {
@@ -100,34 +86,15 @@ impl RuleProperties for Rule {
     }
 
     fn is_datalog(&self) -> bool {
-        let atoms_of_head: &Vec<Atom> = self.head();
-        for atom in atoms_of_head.iter() {
-            let existential_variables_of_atom: HashSet<Variable> = atom.existential_variables();
-            if !existential_variables_of_atom.is_empty() {
-                return false;
-            }
-        }
-        true
+        self.head()
+            .iter()
+            .all(|atom| atom.existential_variables().is_empty())
     }
 
-    // fn is_monadic(&self) -> bool {
-    //     let atoms_of_head: &Vec<Atom> = self.head();
-    //     for atom in atoms_of_head.iter() {
-    //         if atom.terms().len() != 1 {
-    //             return false;
-    //         }
-    //     }
-    //     true
-    // }
-
     fn is_monadic(&self) -> bool {
-        let atoms_of_head: &Vec<Atom> = self.head();
-        for atom in atoms_of_head.iter() {
-            if atom.primitive_terms().count() != 1 {
-                return false;
-            }
-        }
-        true
+        self.head()
+            .iter()
+            .all(|atom| 1 == atom.primitive_terms().count())
     }
 
     fn is_frontier_guarded(&self) -> bool {
@@ -277,20 +244,17 @@ impl Rule {
     }
 
     fn is_guarded_for_variables(&self, variables: HashSet<Variable>) -> bool {
-        for literal in self.body().iter() {
-            let variables_of_literal: HashSet<Variable> = literal.variables().cloned().collect();
-            if variables == variables_of_literal {
-                return true;
-            }
-        }
+        self.body().iter().any(|literal| {
+            literal.variables().cloned().collect::<HashSet<Variable>>() == variables
+        });
         false
     }
 
     pub fn initial_affected_positions(&self) -> Positions {
         let mut initial_affected_positions: Positions = Positions::new();
-        for atom in self.head().iter() {
-            initial_affected_positions.union(&atom.positions_of_existential_variables());
-        }
+        self.head().iter().for_each(|atom| {
+            initial_affected_positions.union(&atom.positions_of_existential_variables())
+        });
         initial_affected_positions
     }
 }
@@ -301,35 +265,56 @@ impl Variable {
         affected_positions.subsumes(&positions_of_variable_in_body)
     }
 
-    fn get_positions_in_literals(&self, literals: &[Literal]) -> Positions {
-        let mut positions_in_literals: Positions = Positions::new();
-        for literal in literals.iter() {
-            positions_in_literals.union(&self.get_positions_in_literal(literal));
-        }
-        positions_in_literals
+    fn is_join_variable_in_rule(&self, rule: &Rule) -> bool {
+        let positions_of_variable_in_body: Positions = self.get_positions_in_literals(rule.body());
+        positions_of_variable_in_body.len() >= 2
+    }
+
+    fn get_positions_in_atoms(&self, atoms: &[Atom]) -> Positions {
+        atoms.iter().fold(
+            Positions::new(),
+            |mut positions_in_atoms: Positions, atom| {
+                positions_in_atoms.union(&self.get_positions_in_atom(atom));
+                positions_in_atoms
+            },
+        )
     }
 
     // TODO: SHORTEN FUNCTION
-    pub fn get_positions_in_literal(&self, literal: &Literal) -> Positions {
-        let mut positions_in_literal: Positions = Positions::new();
-        let predicate: Tag = literal.predicate();
-        positions_in_literal.insert(predicate.clone(), HashSet::<usize>::new());
-        for (position, term) in literal.primitive_terms().enumerate() {
+    pub fn get_positions_in_atom(&self, atom: &Atom) -> Positions {
+        let mut positions_in_atom: Positions = Positions::new();
+        let predicate: Tag = atom.predicate();
+        positions_in_atom.insert(predicate.clone(), HashSet::<usize>::new());
+        for (position, term) in atom.primitive_terms().enumerate() {
             if let Primitive::Variable(variable) = term {
                 if variable == self {
-                    positions_in_literal
+                    positions_in_atom
                         .get_predicate_and_unwrap_mut(&predicate)
                         .insert(position);
                 }
             }
         }
-        if positions_in_literal
+        if positions_in_atom
             .get_predicate_and_unwrap(&predicate)
             .is_empty()
         {
             return Positions::new();
         }
-        positions_in_literal
+        positions_in_atom
+    }
+
+    fn get_positions_in_literals(&self, literals: &[Literal]) -> Positions {
+        let atoms: Vec<Atom> = literals.iter().map(|literal| literal.atom()).collect();
+        self.get_positions_in_atoms(&atoms)
+    }
+
+    fn get_positions_in_literal(&self, literal: &Literal) -> Positions {
+        self.get_positions_in_atom(&literal.atom())
+    }
+
+    fn appears_at_positions_in_atom(&self, positions: &Positions, atom: &Atom) -> bool {
+        let positions_in_atom: Positions = self.get_positions_in_atom(atom);
+        !positions_in_atom.are_disjoint(positions)
     }
 }
 
@@ -361,28 +346,40 @@ impl Atom {
     fn positions_of_existential_variables(&self) -> Positions {
         self.existential_variables()
             .iter()
-            .map(|var| var.get_positions_in_literal(&Literal::Positive(self.clone())))
+            .map(|var| var.get_positions_in_atom(self))
             .fold(Positions::new(), |mut pos_start, pos| {
                 pos_start.union(&pos);
                 pos_start
             })
     }
+
+    // NOTE: MAYBE NOT NEEDED
+    fn marked_positions(&self, positions: &Positions) -> Positions {
+        todo!("IMPLEMENT");
+        // TODO: IMPLEMENT
+    }
 }
 
 impl Literal {
+    /// Return the predicate of this literal.
     pub fn predicate(&self) -> Tag {
-        let atom: Atom = match self.atom() {
-            Some(at) => at,
-            None => panic!("not possible to get an operation here"),
-        };
-        atom.predicate()
+        self.atom().predicate()
     }
 
-    fn atom(&self) -> Option<Atom> {
+    fn atom(&self) -> Atom {
         match self {
-            Literal::Positive(atom) => Some(atom.clone()),
-            Literal::Negative(atom) => Some(atom.clone()),
-            _ => None,
+            Literal::Positive(atom) => atom.clone(),
+            Literal::Negative(atom) => atom.clone(),
+            _ => todo!("HANDLING OPERATION CASE"),
+        }
+    }
+
+    // NOTE: MAYBE NOT NEEDED
+    fn marked_positions(&self, positions: &Positions) -> Positions {
+        match self {
+            Literal::Positive(atom) => atom.marked_positions(positions),
+            Literal::Negative(atom) => atom.marked_positions(positions),
+            _ => todo!("HANDLING OPERATION CASE"),
         }
     }
 }
