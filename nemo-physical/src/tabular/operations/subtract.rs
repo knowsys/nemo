@@ -38,7 +38,7 @@ impl GeneratorSubtract {
 
         for input in inputs {
             let layer_map: SubtractedLayerMap = input.into_iter().map(|input_marker| output.position(&input_marker).expect("Every column of the subtracted tables should be assigned to a column in the main trie.")).collect();
-            // debug_assert!(layer_map.is_sorted());
+            debug_assert!(layer_map.is_sorted());
 
             layer_maps.push(layer_map);
         }

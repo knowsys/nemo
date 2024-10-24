@@ -226,18 +226,6 @@ impl Rule {
             .collect()
     }
 
-    // fn safe_variables_atom(atoms: &[Atom]) -> HashSet<Variable> {
-    //     let mut result: HashSet<Variable> = HashSet::<Variable>::new();
-    //     for atom in atoms.iter() {
-    //         for term in atom.terms() {
-    //             if let Term::Primitive(PrimitiveTerm::Variable(Variable::Universal(name))) = term {
-    //                 result.insert(Variable::Universal(name.clone()));
-    //             }
-    //         }
-    //     }
-    //     result
-    // }
-
     fn safe_variables_atom(atoms: &[Atom]) -> HashSet<Variable> {
         let mut result: HashSet<Variable> = HashSet::<Variable>::new();
         for atom in atoms.iter() {

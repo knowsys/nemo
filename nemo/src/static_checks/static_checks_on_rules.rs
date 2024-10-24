@@ -114,12 +114,23 @@ impl Positions {
         self.positions_mut().remove(pred)
     }
 
+    fn iter(&self) -> std::collections::hash_map::Iter<Tag, HashSet<usize>> {
+        self.positions().iter()
+    }
+
+    fn iter_mut(&mut self) -> std::collections::hash_map::IterMut<Tag, HashSet<usize>> {
+        self.positions_mut().iter_mut()
+    }
+
+    fn iter_of_pred(&self, pred: &Tag) -> std::collections::hash_set::Iter<usize> {
+        self.get_predicate_and_unwrap(pred).iter()
+    }
+
     pub fn subsumes(&self, positions: &Positions) -> bool {
         positions.keys().all(|pred| {
             self.contains_key(pred)
                 && positions
-                    .get_predicate_and_unwrap(pred)
-                    .iter()
+                    .iter_of_pred(pred)
                     .all(|index| self.pred_contains_index(pred, index))
         })
     }
@@ -130,29 +141,27 @@ impl Positions {
     }
 
     // TODO: LOOK IF FUNCTION WILL WORK DUE TO USE OF CLONE
-    // TODO: SHORTEN FUNCTION
     fn subtract(&mut self, positions: &Positions) {
-        for pred in self.clone().keys() {
-            if !positions.contains_key(pred) {
-                continue;
+        self.clone().keys().for_each(|pred| {
+            if positions.contains_key(pred) {
+                self.subtract_indexes_of_pred(pred, positions);
             }
-            self.subtract_indexes_of_pred(pred, positions);
-        }
+        });
     }
 
     // TODO: LOOK IF FUNCTION WILL WORK DUE TO USE OF CLONE
     fn subtract_indexes_of_pred(&mut self, pred: &Tag, positions: &Positions) {
-        for index in self.clone().get_predicate_and_unwrap(pred) {
-            if !positions.pred_contains_index(pred, index) {
-                continue;
+        self.clone().iter_of_pred(pred).for_each(|index| {
+            if positions.pred_contains_index(pred, index) {
+                self.pred_remove_index(pred, index);
             }
-            self.pred_remove_index(pred, index);
-        }
+        });
         if self.pred_is_empty(pred) {
             self.remove(pred);
         }
     }
 
+    // TODO: MAYBE RETURN UNION TYPE???
     pub fn union(&mut self, positions: &Positions) {
         for pred in positions.keys() {
             if !self.contains_key(pred) {
@@ -162,14 +171,16 @@ impl Positions {
                 );
             }
             self.union_indexes_of_pred(pred, positions);
-            // self.insert(pred.clone(), self.union_indexes_of_pred(pred, positions));
         }
     }
 
-    // TODO: RETURN UNION TYPE
-    fn union_indexes_of_pred(&self, pred: &Tag, positions: &Positions) {
+    fn union_indexes_of_pred<'a>(
+        &'a self,
+        pred: &Tag,
+        positions: &'a Positions,
+    ) -> Union<'a, usize, RandomState> {
         self.get_predicate_and_unwrap(pred)
-            .union(positions.get_predicate_and_unwrap(pred));
+            .union(positions.get_predicate_and_unwrap(pred))
     }
 }
 
@@ -204,15 +215,15 @@ pub trait RulesProperties {
 
 impl RulesProperties for RuleSet {
     fn is_joinless(&self) -> bool {
-        self.0.iter().all(|rule| rule.is_joinless())
+        self.rules().iter().all(|rule| rule.is_joinless())
     }
 
     fn is_linear(&self) -> bool {
-        self.0.iter().all(|rule| rule.is_linear())
+        self.rules().iter().all(|rule| rule.is_linear())
     }
 
     fn is_guarded(&self) -> bool {
-        self.0.iter().all(|rule| rule.is_guarded())
+        self.rules().iter().all(|rule| rule.is_guarded())
     }
 
     fn is_sticky(&self) -> bool {
@@ -221,35 +232,35 @@ impl RulesProperties for RuleSet {
     }
 
     fn is_domain_restricted(&self) -> bool {
-        self.0.iter().all(|rule| rule.is_domain_restricted())
+        self.rules().iter().all(|rule| rule.is_domain_restricted())
     }
 
     fn is_frontier_one(&self) -> bool {
-        self.0.iter().all(|rule| rule.is_frontier_one())
+        self.rules().iter().all(|rule| rule.is_frontier_one())
     }
 
     fn is_datalog(&self) -> bool {
-        self.0.iter().all(|rule| rule.is_datalog())
+        self.rules().iter().all(|rule| rule.is_datalog())
     }
 
     fn is_monadic(&self) -> bool {
-        self.0.iter().all(|rule| rule.is_monadic())
+        self.rules().iter().all(|rule| rule.is_monadic())
     }
 
     fn is_frontier_guarded(&self) -> bool {
-        self.0.iter().all(|rule| rule.is_frontier_guarded())
+        self.rules().iter().all(|rule| rule.is_frontier_guarded())
     }
 
     fn is_weakly_guarded(&self) -> bool {
         let affected_positions: Positions = self.affected_positions();
-        self.0
+        self.rules()
             .iter()
             .all(|rule| rule.is_weakly_guarded(&affected_positions))
     }
 
     fn is_weakly_frontier_guarded(&self) -> bool {
         let affected_positions: Positions = self.affected_positions();
-        self.0
+        self.rules()
             .iter()
             .all(|rule| rule.is_weakly_frontier_guarded(&affected_positions))
     }
