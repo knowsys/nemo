@@ -162,25 +162,18 @@ impl Positions {
         // TODO: IMPLEMENT
     }
 
-    // TODO: LOOK IF FUNCTION WILL WORK DUE TO USE OF CLONE
     fn subtract(&mut self, positions: &Positions) {
-        self.clone().keys().for_each(|pred| {
-            if positions.contains_key(pred) {
-                self.subtract_indexes_of_pred(pred, positions);
-            }
-        });
-    }
+        positions.iter().for_each(|(pred, pos_indices)| {
+            self.0.entry(pred.clone()).and_modify(|self_indices| {
+                pos_indices.into_iter().for_each(|i| {
+                    self_indices.remove(i);
+                })
+            });
 
-    // TODO: LOOK IF FUNCTION WILL WORK DUE TO USE OF CLONE
-    fn subtract_indexes_of_pred(&mut self, pred: &Tag, positions: &Positions) {
-        self.clone().iter_of_pred(pred).for_each(|index| {
-            if positions.pred_contains_index(pred, index) {
-                self.pred_remove_index(pred, index);
+            if self.get(pred).unwrap_or(&HashSet::new()).is_empty() {
+                self.remove(pred);
             }
         });
-        if self.pred_is_empty(pred) {
-            self.remove(pred);
-        }
     }
 
     // TODO: MAYBE RETURN UNION TYPE???
