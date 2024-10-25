@@ -6,7 +6,7 @@ use crate::rule_model::components::{
     term::primitive::{variable::Variable, Primitive},
     IterablePrimitives, IterableVariables,
 };
-use crate::static_checks::static_checks_on_rules::Positions;
+use crate::static_checks::positions::Positions;
 use std::collections::HashSet;
 
 pub trait RuleProperties {
@@ -262,7 +262,7 @@ impl Rule {
 impl Variable {
     fn is_affected(&self, rule: &Rule, affected_positions: &Positions) -> bool {
         let positions_of_variable_in_body: Positions = self.get_positions_in_literals(rule.body());
-        affected_positions.subsumes(&positions_of_variable_in_body)
+        affected_positions.is_superset(&positions_of_variable_in_body)
     }
 
     fn is_join_variable_in_rule(&self, rule: &Rule) -> bool {
@@ -314,7 +314,7 @@ impl Variable {
 
     fn appears_at_positions_in_atom(&self, positions: &Positions, atom: &Atom) -> bool {
         let positions_in_atom: Positions = self.get_positions_in_atom(atom);
-        !positions_in_atom.are_disjoint(positions)
+        !positions_in_atom.is_disjoint(positions)
     }
 }
 
