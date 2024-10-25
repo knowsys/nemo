@@ -23,7 +23,7 @@ impl Positions {
         self.0.contains_key(predicate)
     }
 
-    fn entry(&mut self, pred: Tag) -> Entry<Tag, HashSet<usize>> {
+    pub fn entry(&mut self, pred: Tag) -> Entry<Tag, HashSet<usize>> {
         self.0.entry(pred)
     }
 
@@ -102,8 +102,7 @@ impl Positions {
             .is_disjoint(positions.get_predicate_and_unwrap(pred))
     }
 
-    #[warn(dead_code)]
-    fn pred_is_empty(&self, pred: &Tag) -> bool {
+    pub fn pred_is_empty(&self, pred: &Tag) -> bool {
         self.get_predicate_and_unwrap(pred).is_empty()
     }
 
@@ -117,7 +116,7 @@ impl Positions {
         self.get_predicate_and_unwrap_mut(pred).remove(index)
     }
 
-    fn remove(&mut self, pred: &Tag) -> Option<HashSet<usize>> {
+    pub fn remove(&mut self, pred: &Tag) -> Option<HashSet<usize>> {
         self.0.remove(pred)
     }
 
