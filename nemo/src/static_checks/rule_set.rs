@@ -4,14 +4,6 @@ use crate::static_checks::positions::Positions;
 pub struct RuleSet(Vec<Rule>);
 
 impl RuleSet {
-    fn rules(&self) -> &Vec<Rule> {
-        &self.0
-    }
-
-    pub fn iter(&self) -> std::slice::Iter<Rule> {
-        self.rules().iter()
-    }
-
     pub fn affected_positions(&self) -> Positions {
         let mut affected_positions: Positions = self.initial_affected_positions();
         let mut new_in_last_iteration: Positions = affected_positions.clone();
@@ -27,10 +19,14 @@ impl RuleSet {
 
     fn initial_affected_positions(&self) -> Positions {
         let mut initial_affected_positions: Positions = Positions::new();
-        for rule in self.rules().iter() {
+        for rule in self.iter() {
             initial_affected_positions.union(&rule.initial_affected_positions());
         }
         initial_affected_positions
+    }
+
+    pub fn iter(&self) -> std::slice::Iter<Rule> {
+        self.0.iter()
     }
 
     pub fn marking(&self) -> Positions {
