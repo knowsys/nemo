@@ -1,9 +1,5 @@
 use crate::rule_model::components::{
-    atom::Atom,
-    literal::Literal,
-    rule::Rule,
-    tag::Tag,
-    term::primitive::{variable::Variable, Primitive},
+    atom::Atom, literal::Literal, rule::Rule, tag::Tag, term::primitive::variable::Variable,
     IterablePrimitives, IterableVariables,
 };
 use crate::static_checks::positions::Positions;
@@ -225,12 +221,13 @@ impl Rule {
         )
     }
 
+    /// Returns the initial affected positions of the rule. A position of a rule is initial
+    /// affected if an existential variable appears on it.
     pub fn initial_affected_positions(&self) -> Positions {
         self.head()
             .iter()
-            .fold(Positions::new(), |mut initial_affected_positions, atom| {
-                initial_affected_positions.union(&atom.positions_of_existential_variables());
-                initial_affected_positions
+            .fold(Positions::new(), |initial_affected_positions, atom| {
+                initial_affected_positions.union(&atom.positions_of_existential_variables())
             })
     }
 
@@ -256,12 +253,25 @@ impl Rule {
 
 // NOTE: MAYBE CREATE A TRAIT???
 impl Variable {
-    fn appears_at_positions_in_atom(&self, positions: &Positions, atom: &Atom) -> bool {
+    /// Returns whether the variable appears in an atom at the given positions.
+    pub fn appears_at_positions_in_atom(&self, positions: &Positions, atom: &Atom) -> bool {
         let positions_in_atom: Positions = self.get_positions_in_atom(atom);
         !positions_in_atom.is_disjoint(positions)
     }
 
+    /// Returns whether the variable appears in the atoms at the given positions.
+    pub fn appears_at_positions_in_atoms(
+        &self,
+        positions: &Positions,
+        atoms: HashSet<&Atom>,
+    ) -> bool {
+        atoms
+            .iter()
+            .any(|atom| self.appears_at_positions_in_atom(positions, atom))
+    }
+
     // TODO: SHORTEN FUNCTION
+    /// Returns the positions of the variable in the atom.
     pub fn get_positions_in_atom(&self, atom: &Atom) -> Positions {
         atom.variables().enumerate().fold(
             Positions::new(),
@@ -279,14 +289,13 @@ impl Variable {
         )
     }
 
-    fn get_positions_in_atoms(&self, atoms: &[Atom]) -> Positions {
-        atoms.iter().fold(
-            Positions::new(),
-            |mut positions_in_atoms: Positions, atom| {
-                positions_in_atoms.union(&self.get_positions_in_atom(atom));
-                positions_in_atoms
-            },
-        )
+    /// Returns the positions where the variable appears in the given atoms.
+    pub fn get_positions_in_atoms(&self, atoms: &[Atom]) -> Positions {
+        atoms
+            .iter()
+            .fold(Positions::new(), |positions_in_atoms: Positions, atom| {
+                positions_in_atoms.union(&self.get_positions_in_atom(atom))
+            })
     }
 
     fn get_positions_in_literal(&self, literal: &Literal) -> Positions {
@@ -310,6 +319,7 @@ impl Variable {
 }
 
 impl Atom {
+    /// Return all existential variables that appear in this atom.
     pub fn existential_variables(&self) -> HashSet<&Variable> {
         self.variables()
             .filter(|var| var.is_existential())
@@ -320,10 +330,7 @@ impl Atom {
         self.existential_variables()
             .iter()
             .map(|var| var.get_positions_in_atom(self))
-            .fold(Positions::new(), |mut pos_start, pos| {
-                pos_start.union(&pos);
-                pos_start
-            })
+            .fold(Positions::new(), |pos_start, pos| pos_start.union(&pos))
     }
 
     fn universal_variables(&self) -> HashSet<&Variable> {
@@ -337,7 +344,7 @@ impl Literal {
         self.atom().predicate()
     }
 
-    fn atom(&self) -> Atom {
+    pub fn atom(&self) -> Atom {
         match self {
             Literal::Positive(atom) => atom.clone(),
             Literal::Negative(atom) => atom.clone(),

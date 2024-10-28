@@ -1,4 +1,4 @@
-use crate::rule_model::components::tag::Tag;
+use crate::rule_model::components::{rule::Rule, tag::Tag};
 use std::collections::{
     hash_map::{Entry, Keys},
     HashMap, HashSet,
@@ -14,14 +14,39 @@ impl Default for Positions {
 }
 
 impl Positions {
-    pub fn conclude_affected_positions(&self) -> Positions {
-        todo!("IMPLEMENT");
-        // TODO: IMPLEMENT
-    }
-
     fn contains_key(&self, predicate: &Tag) -> bool {
         self.0.contains_key(predicate)
     }
+
+    // NOTE: MAYBE USE difference() OF HashSet
+    pub fn difference(self, positions: &Positions) -> Positions {
+        positions
+            .iter()
+            .fold(self, |mut differenced_pos, (pred, pos_indices)| {
+                differenced_pos
+                    .entry(pred.clone())
+                    .and_modify(|differenced_indices| {
+                        pos_indices.iter().for_each(|i| {
+                            differenced_indices.remove(i);
+                        });
+                    });
+                differenced_pos
+            })
+    }
+
+    // NOTE: SAME DIFFERENCE FUNCTION BUT CHANGES SELF TO THE DIFFERENCED POSITIONS
+    // pub fn difference(&mut self, positions: &Positions) {
+    //     positions.iter().for_each(|(pred, pos_indices)| {
+    //         self.entry(pred.clone()).and_modify(|self_indices| {
+    //             pos_indices.iter().for_each(|i| {
+    //                 self_indices.remove(i);
+    //             })
+    //         });
+    //         if self.get_predicate_and_unwrap(pred).is_empty() {
+    //             self.remove(pred);
+    //         }
+    //     });
+    // }
 
     pub fn entry(&mut self, pred: Tag) -> Entry<Tag, HashSet<usize>> {
         self.0.entry(pred)
@@ -120,29 +145,33 @@ impl Positions {
         self.0.remove(pred)
     }
 
-    // NOTE: MAYBE USE difference() OF HashSet
-    pub fn subtract(&mut self, positions: &Positions) {
-        positions.iter().for_each(|(pred, pos_indices)| {
-            self.entry(pred.clone()).and_modify(|self_indices| {
-                pos_indices.iter().for_each(|i| {
-                    self_indices.remove(i);
-                })
-            });
-            if self.get_predicate_and_unwrap(pred).is_empty() {
-                self.remove(pred);
-            }
-        });
+    // NOTE: MAYBE USE union() OF HashSet
+    pub fn union(self, positions: &Positions) -> Positions {
+        positions
+            .iter()
+            .fold(self, |mut unioned_pos, (pred, pos_indices)| {
+                unioned_pos
+                    .entry(pred.clone())
+                    .and_modify(|unioned_indices| {
+                        pos_indices.iter().for_each(|i| {
+                            unioned_indices.insert(*i);
+                        });
+                    })
+                    .or_insert(pos_indices.clone());
+                unioned_pos
+            })
     }
 
-    pub fn union(&mut self, positions: &Positions) {
-        positions.iter().for_each(|(pred, pos_indices)| {
-            self.entry(pred.clone())
-                .and_modify(|self_indices| {
-                    pos_indices.iter().for_each(|i| {
-                        self_indices.insert(*i);
-                    });
-                })
-                .or_insert(pos_indices.clone());
-        });
-    }
+    // NOTE: SAME UNION FUNCTION BUT CHANGES SELF TO THE UNIONED POSITIONS
+    // fn union(&mut self, positions: &Positions) {
+    //     positions.iter().for_each(|(pred, pos_indices)| {
+    //         self.entry(pred.clone())
+    //             .and_modify(|self_indices| {
+    //                 pos_indices.iter().for_each(|i| {
+    //                     self_indices.insert(*i);
+    //                 });
+    //             })
+    //             .or_insert(pos_indices.clone());
+    //     });
+    // }
 }
