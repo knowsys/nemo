@@ -62,8 +62,7 @@ impl<'a> ASTProgramTranslation<'a> {
 
                 if let Some((extension, origin)) = extension {
                     for &rdf_format in FILE_FORMATS_RDF {
-                        if extension.eq_ignore_ascii_case(rdf_format.extension())
-                        {
+                        if extension.eq_ignore_ascii_case(rdf_format.extension()) {
                             return Ok(rdf_format);
                         }
                     }
