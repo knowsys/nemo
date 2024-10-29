@@ -27,7 +27,7 @@ pub struct LineComment<'a> {
 
 const CONTEXT: ParserContext = ParserContext::Comment;
 
-impl<'a> LineComment<'a> {
+impl LineComment<'_> {
     /// Return the content of the comment
     pub fn content(&self) -> String {
         self.content.fragment().to_string()

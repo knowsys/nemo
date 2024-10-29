@@ -26,7 +26,7 @@ pub struct OperationTag<'a> {
     kind: OperationKind,
 }
 
-impl<'a> OperationTag<'a> {
+impl OperationTag<'_> {
     /// Return the [OperationKind] that was parsed.
     pub fn operation(&self) -> OperationKind {
         self.kind

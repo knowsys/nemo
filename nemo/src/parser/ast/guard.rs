@@ -18,7 +18,7 @@ pub enum Guard<'a> {
     Infix(InfixExpression<'a>),
 }
 
-impl<'a> Guard<'a> {
+impl Guard<'_> {
     /// Return the [ParserContext] of the underlying expression type.
     pub fn context_type(&self) -> ParserContext {
         match self {

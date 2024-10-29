@@ -99,7 +99,7 @@ impl<'a> ParserErrorReport<'a> {
     }
 }
 
-impl<'a> std::fmt::Debug for ParserErrorReport<'a> {
+impl std::fmt::Debug for ParserErrorReport<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let reports = self.build_reports();
 
@@ -111,7 +111,7 @@ impl<'a> std::fmt::Debug for ParserErrorReport<'a> {
     }
 }
 
-impl<'a> std::fmt::Display for ParserErrorReport<'a> {
+impl std::fmt::Display for ParserErrorReport<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut buffer = Vec::new();
         if self.write(&mut buffer).is_err() {

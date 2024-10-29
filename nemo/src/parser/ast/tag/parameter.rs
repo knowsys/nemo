@@ -29,7 +29,7 @@ pub struct ParameterName<'a> {
     parameter: Parameter,
 }
 
-impl<'a> ParameterName<'a> {
+impl ParameterName<'_> {
     /// Return the [Parameter] that was parsed.
     pub fn parameter(&self) -> &Parameter {
         &self.parameter

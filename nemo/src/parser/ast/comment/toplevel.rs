@@ -28,7 +28,7 @@ pub struct TopLevelComment<'a> {
 
 const CONTEXT: ParserContext = ParserContext::TopLevelComment;
 
-impl<'a> TopLevelComment<'a> {
+impl TopLevelComment<'_> {
     /// Return the content of the comment
     pub fn content(&self) -> Vec<String> {
         self.content

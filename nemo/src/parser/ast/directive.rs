@@ -82,7 +82,7 @@ pub enum Directive<'a> {
     Unknown(UnknownDirective<'a>),
 }
 
-impl<'a> Directive<'a> {
+impl Directive<'_> {
     /// Return the context of the underlying directive.
     pub fn context_type(&self) -> ParserContext {
         match self {

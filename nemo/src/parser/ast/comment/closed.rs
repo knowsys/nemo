@@ -25,7 +25,7 @@ pub struct ClosedComment<'a> {
 
 const CONTEXT: ParserContext = ParserContext::Comment;
 
-impl<'a> ClosedComment<'a> {
+impl ClosedComment<'_> {
     // NOTE: Should this return a &str, so that the consumer can decide whether to turn it into an
     //   owned value or not?
     /// Return the content of the comment

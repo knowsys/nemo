@@ -264,7 +264,7 @@ pub struct Token<'a> {
     kind: TokenKind,
 }
 
-impl<'a> Display for Token<'a> {
+impl Display for Token<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         self.span.fmt(f)
     }
@@ -316,7 +316,7 @@ impl<'a> Token<'a> {
             ParserContext::token(TokenKind::Name),
             recognize(pair(
                 alpha1,
-                many0(alt((alphanumeric1, tag("_"), tag("-"), tag("%")))),
+                many0(alt((alphanumeric1, tag("_"), tag("%")))),
             )),
         )(input)
         .map(|(rest_input, result)| {

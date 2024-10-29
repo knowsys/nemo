@@ -121,7 +121,7 @@ impl<'a> TrieScanTrim<'a> {
     }
 }
 
-impl<'a> TrieScan for TrieScanTrim<'a> {
+impl TrieScan for TrieScanTrim<'_> {
     fn num_columns(&self) -> usize {
         self.trie_scan.arity()
     }
