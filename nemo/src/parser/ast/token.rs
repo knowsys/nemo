@@ -316,7 +316,7 @@ impl<'a> Token<'a> {
             ParserContext::token(TokenKind::Name),
             recognize(pair(
                 alpha1,
-                many0(alt((alphanumeric1, tag("_"), tag("-"), tag("%")))),
+                many0(alt((alphanumeric1, tag("_"), tag("%")))),
             )),
         )(input)
         .map(|(rest_input, result)| {
