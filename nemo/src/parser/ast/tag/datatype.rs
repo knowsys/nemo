@@ -26,7 +26,7 @@ pub struct DataTypeTag<'a> {
     data_type: DataType,
 }
 
-impl<'a> DataTypeTag<'a> {
+impl DataTypeTag<'_> {
     /// Return the [DataType] that was parsed.
     pub fn data_type(&self) -> DataType {
         self.data_type

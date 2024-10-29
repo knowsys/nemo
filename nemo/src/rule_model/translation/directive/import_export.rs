@@ -62,8 +62,7 @@ impl<'a> ASTProgramTranslation<'a> {
 
                 if let Some((extension, origin)) = extension {
                     for &rdf_format in FILE_FORMATS_RDF {
-                        if extension.to_ascii_lowercase()
-                            == rdf_format.extension().to_ascii_lowercase()
+                        if extension.eq_ignore_ascii_case(rdf_format.extension())
                         {
                             return Ok(rdf_format);
                         }
@@ -81,7 +80,7 @@ impl<'a> ASTProgramTranslation<'a> {
                 }
             } else {
                 for format in FileFormat::iter() {
-                    if format_tag.to_ascii_lowercase() == format.name().to_ascii_lowercase() {
+                    if format_tag.eq_ignore_ascii_case(format.name()) {
                         return Ok(format);
                     }
                 }

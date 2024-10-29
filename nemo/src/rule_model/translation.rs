@@ -158,7 +158,7 @@ impl<'a> ProgramErrorReport<'a> {
     }
 }
 
-impl<'a> std::fmt::Debug for ProgramErrorReport<'a> {
+impl std::fmt::Debug for ProgramErrorReport<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let reports = self.build_reports();
 
@@ -170,7 +170,7 @@ impl<'a> std::fmt::Debug for ProgramErrorReport<'a> {
     }
 }
 
-impl<'a> std::fmt::Display for ProgramErrorReport<'a> {
+impl std::fmt::Display for ProgramErrorReport<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut buffer = Vec::new();
         if self.write(&mut buffer).is_err() {

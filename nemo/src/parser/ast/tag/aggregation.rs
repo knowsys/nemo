@@ -26,7 +26,7 @@ pub struct AggregationTag<'a> {
     kind: Option<AggregateKind>,
 }
 
-impl<'a> AggregationTag<'a> {
+impl AggregationTag<'_> {
     /// Return the [AggregateKind] that was parsed, if it is known.
     pub fn operation(&self) -> Option<AggregateKind> {
         self.kind

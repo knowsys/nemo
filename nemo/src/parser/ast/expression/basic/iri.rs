@@ -21,7 +21,7 @@ pub struct Iri<'a> {
     content: Token<'a>,
 }
 
-impl<'a> Iri<'a> {
+impl Iri<'_> {
     /// Return the content of the iri.
     pub fn content(&self) -> String {
         self.content.to_string()
