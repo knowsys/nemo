@@ -7,3 +7,5 @@ fact(1) .
 
 result(?variable_name) :- fact(?variable_name) .
 result(?arithmetic-1) :- fact(?arithmetic) .
+
+@export result :- csv {} .
