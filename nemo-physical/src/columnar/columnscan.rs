@@ -100,7 +100,7 @@ where
     }
 }
 
-impl<'a, T> From<ColumnScanConstant<T>> for ColumnScanEnum<'a, T>
+impl<T> From<ColumnScanConstant<T>> for ColumnScanEnum<'_, T>
 where
     T: ColumnDataType,
 {

@@ -216,7 +216,7 @@ where
     }
 }
 
-impl<'a, T> Iterator for ColumnScanRle<'a, T>
+impl<T> Iterator for ColumnScanRle<'_, T>
 where
     T: ColumnDataType,
 {
@@ -255,7 +255,7 @@ where
     }
 }
 
-impl<'a, T> ColumnScan for ColumnScanRle<'a, T>
+impl<T> ColumnScan for ColumnScanRle<'_, T>
 where
     T: ColumnDataType,
 {
