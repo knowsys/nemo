@@ -86,6 +86,12 @@ where
 
     fn symbol_info(&self) -> Option<LSPSymbolInfo> {
         let kind = match self.context() {
+            ParserContext::Program => {
+                return Some(LSPSymbolInfo {
+                    kind: SymbolKind::FILE,
+                    name: "Program".to_string(),
+                })
+            }
             ParserContext::Base => {
                 return Some(LSPSymbolInfo {
                     kind: SymbolKind::PROPERTY,
