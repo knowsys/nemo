@@ -124,7 +124,7 @@ impl<'a> Span<'a> {
 
         let end_offset = start.offset + self.fragment.len();
         let end_line = start.line
-            + u32::try_from(self.fragment.lines().count() - 1)
+            + u32::try_from(self.fragment.lines().count().saturating_sub(1))
                 .expect("cannot convert line number to u32");
         let end_column = if self.fragment.lines().count() > 1 {
             u32::try_from(
