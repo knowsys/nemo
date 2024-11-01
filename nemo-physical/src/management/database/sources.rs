@@ -66,5 +66,4 @@ impl ByteSized for SimpleTable {
 }
 
 /// Source of a table
-pub type TableSource =  Box<dyn TableProvider>;
-
+pub type TableSource = Box<dyn TableProvider>;

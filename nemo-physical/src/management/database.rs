@@ -237,8 +237,7 @@ impl DatabaseInstance {
     ) {
         let arity = self.table_arity(id);
 
-        self.reference_manager
-            .add_source(id, order, provider);
+        self.reference_manager.add_source(id, order, provider);
     }
 
     /// Add a table given as [SimpleTable].

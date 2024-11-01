@@ -164,10 +164,7 @@ mod test {
 
         let dictionary = RefCell::new(Dict::default());
 
-        let mut storage = TableStorage::FromSources(vec![
-            Box::new(table_a),
-            Box::new(table_b),
-        ]);
+        let mut storage = TableStorage::FromSources(vec![Box::new(table_a), Box::new(table_b)]);
         let trie = storage.trie(&dictionary).unwrap();
 
         let expected_rows = vec![

@@ -76,7 +76,10 @@ impl RdfValueFormats {
 
     /// Return the arity (ignoring the skipped columns)
     pub(crate) fn arity(&self) -> usize {
-        self.0.iter().filter(|format| **format != RdfValueFormat::Skip).count()
+        self.0
+            .iter()
+            .filter(|format| **format != RdfValueFormat::Skip)
+            .count()
     }
 
     /// Return an iterator over the [RdfValueFormat]s.

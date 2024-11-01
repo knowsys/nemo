@@ -87,7 +87,10 @@ impl DsvValueFormats {
 
     /// Return the arity (ignoring the skipped columns)
     pub(crate) fn arity(&self) -> usize {
-        self.0.iter().filter(|format| **format != DsvValueFormat::Skip).count()
+        self.0
+            .iter()
+            .filter(|format| **format != DsvValueFormat::Skip)
+            .count()
     }
 
     /// Return the length of the format tuple.
