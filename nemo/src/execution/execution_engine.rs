@@ -314,7 +314,6 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
 
     fn trace_recursive(
         &mut self,
-        program: &ChaseProgram,
         trace: &mut ExecutionTrace,
         fact: GroundAtom,
     ) -> Result<TraceFactHandle, TracingError> {
@@ -346,7 +345,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
 
         // Rule index of the rule that was applied to derive the given fact
         let rule_index = self.rule_history[step];
-        let rule = &program.rules()[rule_index];
+        let rule = self.program.rules()[rule_index].clone();
 
         // Iterate over all head atoms which could have derived the given fact
         for (head_index, head_atom) in rule.head().iter().enumerate() {
@@ -436,7 +435,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
 
                     let next_fact = GroundAtom::new(next_fact_predicate, next_fact_terms);
 
-                    let next_handle = self.trace_recursive(program, trace, next_fact)?;
+                    let next_handle = self.trace_recursive(trace, next_fact)?;
 
                     if trace.status(next_handle).is_success() {
                         subtraces.push(next_handle);
@@ -481,14 +480,12 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         facts: Vec<Fact>,
     ) -> Result<(ExecutionTrace, Vec<TraceFactHandle>), Error> {
         let mut trace = ExecutionTrace::new(program);
-        let chase_program = self.program.clone();
-
         let mut handles = Vec::new();
 
         for fact in facts {
             let chase_fact = ProgramChaseTranslation::new().build_fact(&fact);
 
-            handles.push(self.trace_recursive(&chase_program, &mut trace, chase_fact)?);
+            handles.push(self.trace_recursive(&mut trace, chase_fact)?);
         }
 
         Ok((trace, handles))
