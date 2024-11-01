@@ -1,4 +1,4 @@
-use crate::rule_model::components::{rule::Rule, tag::Tag};
+use crate::rule_model::components::tag::Tag;
 use std::collections::{
     hash_map::{Entry, Keys},
     HashMap, HashSet,

@@ -10,7 +10,8 @@ pub trait RuleProperties {
     fn is_joinless(&self) -> bool;
     fn is_linear(&self) -> bool;
     fn is_guarded(&self) -> bool;
-    fn is_sticky(&self, marking: &Positions) -> bool;
+    // NOTE: IS_STICKY FUNCTION FOR SINGLE RULES PROPABLY NOT NEEDED
+    // fn is_sticky(&self, marking: &Positions) -> bool;
     fn is_domain_restricted(&self) -> bool;
     fn is_frontier_one(&self) -> bool;
     fn is_datalog(&self) -> bool;
@@ -49,25 +50,6 @@ impl RuleProperties for Rule {
         self.is_guarded_for_variables(self.positive_variables())
     }
 
-    // TODO: SHORTEN FUNCTION
-    fn is_sticky(&self, marking: &Positions) -> bool {
-        self.body().iter().all(|literal| {
-            literal.variables().all(|var_1| {
-                if var_1.is_join_variable_in_rule(self)
-                    || var_1.appears_at_positions_in_atom(marking, &literal.atom())
-                {
-                    self.head().iter().all(|atom| {
-                        atom.variables()
-                            .filter(|var_2| *var_2 == var_1)
-                            .any(|var_2| var_2.appears_at_positions_in_atom(marking, atom))
-                    })
-                } else {
-                    true
-                }
-            })
-        })
-    }
-
     fn is_domain_restricted(&self) -> bool {
         let positive_body_variables: HashSet<&Variable> = self.positive_variables();
         self.head().iter().all(|atom| {
@@ -82,9 +64,7 @@ impl RuleProperties for Rule {
     }
 
     fn is_datalog(&self) -> bool {
-        self.head()
-            .iter()
-            .all(|atom| atom.existential_variables().is_empty())
+        self.existential_variables().is_empty()
     }
 
     fn is_monadic(&self) -> bool {
@@ -207,27 +187,90 @@ impl Rule {
         )
     }
 
+    // TODO: SHORTEN FUNCTION
+    /// Returns the new found affected positions in the head based on the last iteration positions.
+    pub fn conclude_affected_positions(&self, last_iteration_positions: &Positions) -> Positions {
+        self.positive_variables()
+            .iter()
+            .filter(|var| {
+                var.appears_at_positions_in_atoms(
+                    last_iteration_positions,
+                    self.body_positive().collect(),
+                )
+            })
+            .fold(Positions::new(), |new_aff_pos_in_rule, var| {
+                new_aff_pos_in_rule.union(&var.get_positions_in_atoms(self.head()))
+            })
+    }
+
+    // TODO: SHORTEN FUNCTION
+    /// Returns the new found marked positions in the head based on the last iteration positions or
+    /// returns None if the marking condition for the last iteration positions fails.
+    pub fn conclude_marked_positions(
+        &self,
+        last_iteration_positions: &Positions,
+    ) -> Option<Positions> {
+        self.positive_variables()
+            .iter()
+            .filter(|var| {
+                var.appears_at_positions_in_atoms(
+                    last_iteration_positions,
+                    self.body_positive().collect(),
+                )
+            })
+            .try_fold(Positions::new(), |new_mar_pos_in_rule, var| {
+                if self
+                    .head()
+                    .iter()
+                    .any(|atom| !atom.variables().collect::<Vec<&Variable>>().contains(var))
+                {
+                    return None;
+                }
+                Some(new_mar_pos_in_rule.union(&var.get_positions_in_atoms(self.head())))
+            })
+    }
+
+    fn existential_variables(&self) -> HashSet<&Variable> {
+        self.variables()
+            .filter(|var| var.is_existential())
+            .collect()
+    }
+
     fn frontier_variables(&self) -> HashSet<&Variable> {
         let positive_body_variables: HashSet<&Variable> = self.positive_variables();
         let universal_head_variables: HashSet<&Variable> = self.universal_head_variables();
-        positive_body_variables.iter().fold(
-            HashSet::<&Variable>::new(),
-            |mut frontier_variables, variable| {
-                if universal_head_variables.contains(variable) {
-                    frontier_variables.insert(variable);
-                }
-                frontier_variables
-            },
-        )
+        positive_body_variables
+            .intersection(&universal_head_variables)
+            .cloned()
+            .collect()
+    }
+
+    fn join_variables(&self) -> HashSet<&Variable> {
+        self.variables()
+            .filter(|var| var.is_join_variable_in_rule(self))
+            .collect()
+    }
+
+    // NOTE: only use variables of positive body atoms or use all body atoms?
+    /// Returns the initial marked positions of a rule. A position of a rule is initial marked if
+    /// an join variable appears on it.
+    pub fn positions_of_join_variables(&self) -> Positions {
+        let join_variables: HashSet<&Variable> = self.join_variables();
+        join_variables
+            .iter()
+            .fold(Positions::new(), |pos_of_join_vars, var| {
+                pos_of_join_vars.union(&var.get_positions_in_literals(self.body()))
+            })
     }
 
     /// Returns the initial affected positions of the rule. A position of a rule is initial
     /// affected if an existential variable appears on it.
-    pub fn initial_affected_positions(&self) -> Positions {
-        self.head()
+    pub fn positions_of_existential_variables(&self) -> Positions {
+        let existential_variables: HashSet<&Variable> = self.existential_variables();
+        existential_variables
             .iter()
-            .fold(Positions::new(), |initial_affected_positions, atom| {
-                initial_affected_positions.union(&atom.positions_of_existential_variables())
+            .fold(Positions::new(), |pos_of_ex_vars, var| {
+                pos_of_ex_vars.union(&var.get_positions_in_atoms(self.head()))
             })
     }
 
@@ -273,20 +316,18 @@ impl Variable {
     // TODO: SHORTEN FUNCTION
     /// Returns the positions of the variable in the atom.
     pub fn get_positions_in_atom(&self, atom: &Atom) -> Positions {
-        atom.variables().enumerate().fold(
-            Positions::new(),
-            |mut positions_in_atom, (index, var)| {
-                if var == self {
-                    positions_in_atom
-                        .entry(atom.predicate().clone())
-                        .and_modify(|indeces| {
-                            indeces.insert(index);
-                        })
-                        .or_insert(HashSet::from([index]));
-                }
+        atom.variables()
+            .filter(|var| self == *var)
+            .enumerate()
+            .fold(Positions::new(), |mut positions_in_atom, (index, _)| {
                 positions_in_atom
-            },
-        )
+                    .entry(atom.predicate().clone())
+                    .and_modify(|indeces| {
+                        indeces.insert(index);
+                    })
+                    .or_insert(HashSet::from([index]));
+                positions_in_atom
+            })
     }
 
     /// Returns the positions where the variable appears in the given atoms.
@@ -298,6 +339,7 @@ impl Variable {
             })
     }
 
+    #[warn(dead_code)]
     fn get_positions_in_literal(&self, literal: &Literal) -> Positions {
         self.get_positions_in_atom(&literal.atom())
     }
@@ -326,13 +368,6 @@ impl Atom {
             .collect()
     }
 
-    fn positions_of_existential_variables(&self) -> Positions {
-        self.existential_variables()
-            .iter()
-            .map(|var| var.get_positions_in_atom(self))
-            .fold(Positions::new(), |pos_start, pos| pos_start.union(&pos))
-    }
-
     fn universal_variables(&self) -> HashSet<&Variable> {
         self.variables().filter(|var| var.is_universal()).collect()
     }
@@ -344,6 +379,7 @@ impl Literal {
         self.atom().predicate()
     }
 
+    /// Returns the atom of the literal.
     pub fn atom(&self) -> Atom {
         match self {
             Literal::Positive(atom) => atom.clone(),

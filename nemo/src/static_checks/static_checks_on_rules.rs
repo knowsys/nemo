@@ -45,8 +45,7 @@ impl RulesProperties for RuleSet {
     }
 
     fn is_sticky(&self) -> bool {
-        let marking: Positions = self.marking();
-        self.iter().all(|rule| rule.is_sticky(&marking))
+        self.build_and_check_marking().is_some()
     }
 
     fn is_domain_restricted(&self) -> bool {
@@ -90,54 +89,67 @@ impl RulesProperties for RuleSet {
         todo!("IMPLEMENT");
         // TODO: IMPLEMENT
     }
+
     fn is_weakly_acyclic(&self) -> bool {
         todo!("IMPLEMENT");
         // TODO: IMPLEMENT
     }
+
     fn is_jointly_acyclic(&self) -> bool {
         todo!("IMPLEMENT");
         // TODO: IMPLEMENT
     }
+
     fn is_weakly_sticky(&self) -> bool {
         todo!("IMPLEMENT");
         // TODO: IMPLEMENT
     }
+
     fn is_glut_guarded(&self) -> bool {
         todo!("IMPLEMENT");
         // TODO: IMPLEMENT
     }
+
     fn is_glut_frontier_guarded(&self) -> bool {
         todo!("IMPLEMENT");
         // TODO: IMPLEMENT
     }
+
     fn is_shy(&self) -> bool {
         todo!("IMPLEMENT");
         // TODO: IMPLEMENT
     }
+
     fn is_mfa(&self) -> bool {
         todo!("IMPLEMENT");
         // TODO: IMPLEMENT
     }
+
     fn is_dmfa(&self) -> bool {
         todo!("IMPLEMENT");
         // TODO: IMPLEMENT
     }
+
     fn is_rmfa(&self) -> bool {
         todo!("IMPLEMENT");
         // TODO: IMPLEMENT
     }
+
     fn is_mfc(&self) -> bool {
         todo!("IMPLEMENT");
         // TODO: IMPLEMENT
     }
+
     fn is_dmfc(&self) -> bool {
         todo!("IMPLEMENT");
         // TODO: IMPLEMENT
     }
+
     fn is_drpc(&self) -> bool {
         todo!("IMPLEMENT");
         // TODO: IMPLEMENT
     }
+
     fn is_rpc(&self) -> bool {
         todo!("IMPLEMENT");
         // TODO: IMPLEMENT
