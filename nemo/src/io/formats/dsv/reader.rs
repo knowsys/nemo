@@ -125,6 +125,10 @@ impl TableProvider for DsvReader {
     ) -> Result<(), Box<dyn std::error::Error>> {
         self.read(tuple_writer)
     }
+
+    fn arity(&self) -> usize {
+        self.value_formats.arity()
+    }
 }
 
 impl std::fmt::Debug for DsvReader {

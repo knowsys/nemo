@@ -15,4 +15,6 @@ pub trait TableProvider: std::fmt::Debug + ByteSized {
         self: Box<Self>,
         tuple_writer: &mut TupleWriter,
     ) -> Result<(), Box<dyn Error>>;
+
+    fn arity(&self) -> usize;
 }

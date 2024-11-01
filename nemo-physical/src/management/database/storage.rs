@@ -41,7 +41,7 @@ impl TableStorage {
         let mut tuple_writer = TupleWriter::new(dictionary, arity);
 
         for source in sources {
-            log::info!("Loading source {source}");
+            log::info!("Loading source {source:?}");
             debug_assert!(source.arity() == arity);
 
             source
@@ -162,13 +162,12 @@ mod test {
             AnyDataValue::new_plain_string(String::from("Test")),
         ]);
 
-        let sources = vec![
-            TableSource::from_simple_table(table_a),
-            TableSource::from_simple_table(table_b),
-        ];
         let dictionary = RefCell::new(Dict::default());
 
-        let mut storage = TableStorage::FromSources(sources);
+        let mut storage = TableStorage::FromSources(vec![
+            Box::new(table_a),
+            Box::new(table_b),
+        ]);
         let trie = storage.trie(&dictionary).unwrap();
 
         let expected_rows = vec![

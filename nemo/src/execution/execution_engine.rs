@@ -142,10 +142,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
 
         // Add all the import specifications
         for import in program.imports() {
-            let table_source = TableSource::new(
-                input_manager.table_provider_from_handler(&*import.handler())?,
-                import.arity(),
-            );
+            let table_source = input_manager.table_provider_from_handler(&*import.handler())?;
 
             predicate_to_sources
                 .entry(import.predicate().clone())
@@ -167,7 +164,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
             predicate_to_sources
                 .entry(predicate)
                 .or_default()
-                .push(TableSource::from_simple_table(table));
+                .push(Box::new(table));
         }
 
         // Add all the sources to the table manager
