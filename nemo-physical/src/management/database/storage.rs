@@ -130,10 +130,7 @@ mod test {
     use crate::{
         datatypes::{Float, StorageValueT},
         datavalues::AnyDataValue,
-        management::database::{
-            sources::{SimpleTable, TableSource},
-            Dict,
-        },
+        management::database::{sources::SimpleTable, Dict},
     };
 
     use super::TableStorage;

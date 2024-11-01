@@ -1,6 +1,6 @@
 //! This module defines possible sources of tables to be stored as [Trie][crate::tabular::trie::Trie]s.
 
-use std::{error::Error, fmt::Display, mem::size_of};
+use std::{error::Error, mem::size_of};
 
 use crate::{
     datasources::{table_providers::TableProvider, tuple_writer::TupleWriter},
@@ -22,11 +22,6 @@ impl SimpleTable {
             arity,
             data: Vec::new(),
         }
-    }
-
-    /// Return the number of columns of this table.
-    pub(crate) fn arity(&self) -> usize {
-        self.arity
     }
 
     /// Add a new row to table

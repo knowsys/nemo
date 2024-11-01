@@ -16,5 +16,6 @@ pub trait TableProvider: std::fmt::Debug + ByteSized {
         tuple_writer: &mut TupleWriter,
     ) -> Result<(), Box<dyn Error>>;
 
+    /// Return the number of columns of this table.
     fn arity(&self) -> usize;
 }
