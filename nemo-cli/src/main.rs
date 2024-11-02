@@ -282,7 +282,8 @@ fn run(mut cli: CliApp) -> Result<(), CliError> {
         cli.import_directory.clone(),
     ));
 
-    let mut engine: DefaultExecutionEngine = ExecutionEngine::initialize(&program, import_manager)?;
+    let mut engine: DefaultExecutionEngine =
+        ExecutionEngine::initialize(program.clone(), import_manager)?;
 
     for (predicate, handler) in engine.exports() {
         export_manager.validate(&predicate, &*handler)?;
