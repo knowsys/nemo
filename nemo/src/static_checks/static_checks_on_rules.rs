@@ -1,6 +1,8 @@
+use crate::rule_model::components::term::primitive::variable::Variable;
 use crate::static_checks::{
     positions::Positions, rule_set::RuleSet, static_checks_on_rule::RuleProperties,
 };
+use std::collections::HashMap;
 
 pub trait RulesProperties {
     fn is_joinless(&self) -> bool;
@@ -81,13 +83,17 @@ impl RulesProperties for RuleSet {
     }
 
     fn is_jointly_guarded(&self) -> bool {
-        todo!("IMPLEMENT");
-        // TODO: IMPLEMENT
+        let attacked_pos_by_vars: HashMap<&Variable, Positions> =
+            self.attacked_positions_by_variables();
+        self.iter()
+            .all(|rule| rule.is_jointly_guarded(&attacked_pos_by_vars))
     }
 
     fn is_jointly_frontier_guarded(&self) -> bool {
-        todo!("IMPLEMENT");
-        // TODO: IMPLEMENT
+        let attacked_pos_by_vars: HashMap<&Variable, Positions> =
+            self.attacked_positions_by_variables();
+        self.iter()
+            .all(|rule| rule.is_jointly_frontier_guarded(&attacked_pos_by_vars))
     }
 
     fn is_weakly_acyclic(&self) -> bool {
@@ -116,8 +122,7 @@ impl RulesProperties for RuleSet {
     }
 
     fn is_shy(&self) -> bool {
-        todo!("IMPLEMENT");
-        // TODO: IMPLEMENT
+        self.iter().all(|rule| rule.is_shy())
     }
 
     fn is_mfa(&self) -> bool {

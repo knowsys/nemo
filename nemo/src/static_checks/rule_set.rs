@@ -1,7 +1,6 @@
-use crate::rule_model::components::IterableVariables;
 use crate::rule_model::components::{rule::Rule, term::primitive::variable::Variable};
 use crate::static_checks::positions::Positions;
-
+use std::collections::{HashMap, HashSet};
 pub struct RuleSet(Vec<Rule>);
 
 impl RuleSet {
@@ -14,6 +13,27 @@ impl RuleSet {
             affected_positions = affected_positions.union(&new_found_affected_positions);
         }
         affected_positions
+    }
+
+    fn attacked_positions(&self, variable: &Variable, rule: &Rule) -> Positions {
+        let mut attacked_positions: Positions = self.initial_attacked_positions(variable, rule);
+        let mut new_found_attacked_positions: Positions = attacked_positions.clone();
+        while !new_found_attacked_positions.is_empty() {
+            new_found_attacked_positions = self.new_attacked_positions(&attacked_positions);
+            attacked_positions = attacked_positions.union(&new_found_attacked_positions);
+        }
+        attacked_positions
+    }
+
+    pub fn attacked_positions_by_variables(&self) -> HashMap<&Variable, Positions> {
+        self.iter()
+            .flat_map(|rule| {
+                rule.existential_variables()
+                    .iter()
+                    .map(|var| (*var, self.attacked_positions(var, rule)))
+                    .collect::<HashMap<&Variable, Positions>>()
+            })
+            .collect()
     }
 
     pub fn build_and_check_marking(&self) -> Option<Positions> {
@@ -33,6 +53,15 @@ impl RuleSet {
                 let new_aff_pos_in_rule: Positions =
                     rule.conclude_affected_positions(last_iteration_positions);
                 new_found_affected_positions.union(&new_aff_pos_in_rule)
+            })
+    }
+
+    fn conclude_attacked_positions(&self, currently_attacked_positions: &Positions) -> Positions {
+        self.iter()
+            .fold(Positions::new(), |new_found_attacked_positions, rule| {
+                let new_att_pos_in_rule: Positions =
+                    rule.conclude_attacked_positions(currently_attacked_positions);
+                new_found_attacked_positions.union(&new_att_pos_in_rule)
             })
     }
 
@@ -59,6 +88,10 @@ impl RuleSet {
             })
     }
 
+    fn initial_attacked_positions(&self, variable: &Variable, rule: &Rule) -> Positions {
+        variable.get_positions_in_atoms(rule.head())
+    }
+
     pub fn iter(&self) -> std::slice::Iter<Rule> {
         self.0.iter()
     }
@@ -71,6 +104,12 @@ impl RuleSet {
         let new_found_affected_positions: Positions =
             self.conclude_affected_positions(last_iteration_positions);
         new_found_affected_positions.difference(currently_affected_positions)
+    }
+
+    fn new_attacked_positions(&self, currently_attacked_postions: &Positions) -> Positions {
+        let new_found_attacked_positions: Positions =
+            self.conclude_attacked_positions(currently_attacked_postions);
+        new_found_attacked_positions.difference(currently_attacked_postions)
     }
 
     fn new_marked_positions(

@@ -3,7 +3,7 @@ use crate::rule_model::components::{
     IterablePrimitives, IterableVariables,
 };
 use crate::static_checks::positions::Positions;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 #[warn(dead_code)]
 pub trait RuleProperties {
@@ -19,8 +19,11 @@ pub trait RuleProperties {
     fn is_frontier_guarded(&self) -> bool;
     fn is_weakly_guarded(&self, affected_positions: &Positions) -> bool;
     fn is_weakly_frontier_guarded(&self, affected_positions: &Positions) -> bool;
-    fn is_jointly_guarded(&self) -> bool;
-    fn is_jointly_frontier_guarded(&self) -> bool;
+    fn is_jointly_guarded(&self, attacked_pos_by_vars: &HashMap<&Variable, Positions>) -> bool;
+    fn is_jointly_frontier_guarded(
+        &self,
+        attacked_pos_by_vars: &HashMap<&Variable, Positions>,
+    ) -> bool;
     fn is_weakly_acyclic(&self) -> bool;
     fn is_jointly_acyclic(&self) -> bool;
     fn is_weakly_sticky(&self) -> bool;
@@ -85,14 +88,15 @@ impl RuleProperties for Rule {
         self.is_guarded_for_variables(self.affected_frontier_variables(affected_positions))
     }
 
-    fn is_jointly_guarded(&self) -> bool {
-        todo!("IMPLEMENT");
-        // TODO: IMPLEMENT
+    fn is_jointly_guarded(&self, attacked_pos_by_vars: &HashMap<&Variable, Positions>) -> bool {
+        self.is_guarded_for_variables(self.attacked_universal_variables(attacked_pos_by_vars))
     }
 
-    fn is_jointly_frontier_guarded(&self) -> bool {
-        todo!("IMPLEMENT");
-        // TODO: IMPLEMENT
+    fn is_jointly_frontier_guarded(
+        &self,
+        attacked_pos_by_vars: &HashMap<&Variable, Positions>,
+    ) -> bool {
+        self.is_guarded_for_variables(self.attacked_frontier_variables(attacked_pos_by_vars))
     }
 
     fn is_weakly_acyclic(&self) -> bool {
@@ -176,15 +180,37 @@ impl Rule {
         variables: HashSet<&'a Variable>,
         affected_positions: &Positions,
     ) -> HashSet<&'a Variable> {
-        variables.iter().fold(
-            HashSet::<&Variable>::new(),
-            |mut affected_variables, variable| {
-                if variable.is_affected(self, affected_positions) {
-                    affected_variables.insert(variable);
-                }
-                affected_variables
-            },
-        )
+        variables
+            .iter()
+            .filter(|var| var.is_affected(self, affected_positions))
+            .cloned()
+            .collect()
+    }
+
+    fn attacked_frontier_variables(
+        &self,
+        attacked_pos_by_vars: &HashMap<&Variable, Positions>,
+    ) -> HashSet<&Variable> {
+        self.attacked_variables(self.frontier_variables(), attacked_pos_by_vars)
+    }
+
+    fn attacked_universal_variables(
+        &self,
+        attacked_pos_by_vars: &HashMap<&Variable, Positions>,
+    ) -> HashSet<&Variable> {
+        self.attacked_variables(self.positive_variables(), attacked_pos_by_vars)
+    }
+
+    fn attacked_variables<'a>(
+        &self,
+        variables: HashSet<&'a Variable>,
+        attacked_pos_by_vars: &HashMap<&Variable, Positions>,
+    ) -> HashSet<&'a Variable> {
+        variables
+            .iter()
+            .filter(|var| var.is_attacked(self, attacked_pos_by_vars))
+            .cloned()
+            .collect()
     }
 
     // TODO: SHORTEN FUNCTION
@@ -200,6 +226,26 @@ impl Rule {
             })
             .fold(Positions::new(), |new_aff_pos_in_rule, var| {
                 new_aff_pos_in_rule.union(&var.get_positions_in_atoms(self.head()))
+            })
+    }
+
+    // TODO: SHORTEN FUNCTION
+    /// Returns the new found attacked positions in the head based on the whole attacked positions.
+    pub fn conclude_attacked_positions(
+        &self,
+        currently_attacked_positions: &Positions,
+    ) -> Positions {
+        self.positive_variables()
+            .iter()
+            .filter(|var| {
+                currently_attacked_positions.is_superset(
+                    &var.get_positions_in_atoms(
+                        &self.body_positive().cloned().collect::<Vec<Atom>>(),
+                    ),
+                )
+            })
+            .fold(Positions::new(), |new_att_pos_in_rule, var| {
+                new_att_pos_in_rule.union(&var.get_positions_in_atoms(self.head()))
             })
     }
 
@@ -230,7 +276,8 @@ impl Rule {
             })
     }
 
-    fn existential_variables(&self) -> HashSet<&Variable> {
+    /// Returns all existential variables of the given rule.
+    pub fn existential_variables(&self) -> HashSet<&Variable> {
         self.variables()
             .filter(|var| var.is_existential())
             .collect()
@@ -245,6 +292,7 @@ impl Rule {
             .collect()
     }
 
+    // NOTE: Maybe use only the positive variables?
     fn join_variables(&self) -> HashSet<&Variable> {
         self.variables()
             .filter(|var| var.is_join_variable_in_rule(self))
@@ -255,8 +303,7 @@ impl Rule {
     /// Returns the initial marked positions of a rule. A position of a rule is initial marked if
     /// an join variable appears on it.
     pub fn positions_of_join_variables(&self) -> Positions {
-        let join_variables: HashSet<&Variable> = self.join_variables();
-        join_variables
+        self.join_variables()
             .iter()
             .fold(Positions::new(), |pos_of_join_vars, var| {
                 pos_of_join_vars.union(&var.get_positions_in_literals(self.body()))
@@ -266,8 +313,7 @@ impl Rule {
     /// Returns the initial affected positions of the rule. A position of a rule is initial
     /// affected if an existential variable appears on it.
     pub fn positions_of_existential_variables(&self) -> Positions {
-        let existential_variables: HashSet<&Variable> = self.existential_variables();
-        existential_variables
+        self.existential_variables()
             .iter()
             .fold(Positions::new(), |pos_of_ex_vars, var| {
                 pos_of_ex_vars.union(&var.get_positions_in_atoms(self.head()))
@@ -352,6 +398,17 @@ impl Variable {
     fn is_affected(&self, rule: &Rule, affected_positions: &Positions) -> bool {
         let positions_of_variable_in_body: Positions = self.get_positions_in_literals(rule.body());
         affected_positions.is_superset(&positions_of_variable_in_body)
+    }
+
+    fn is_attacked(
+        &self,
+        rule: &Rule,
+        attacked_pos_by_vars: &HashMap<&Variable, Positions>,
+    ) -> bool {
+        let positions_of_variable_in_body: Positions = self.get_positions_in_literals(rule.body());
+        attacked_pos_by_vars
+            .values()
+            .any(|att_pos| att_pos.is_superset(&positions_of_variable_in_body))
     }
 
     fn is_join_variable_in_rule(&self, rule: &Rule) -> bool {
