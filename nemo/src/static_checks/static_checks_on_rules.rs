@@ -50,6 +50,11 @@ impl RulesProperties for RuleSet {
         self.build_and_check_marking().is_some()
     }
 
+    fn is_weakly_sticky(&self) -> bool {
+        todo!("IMPLEMENT");
+        // TODO: IMPLEMENT
+    }
+
     fn is_domain_restricted(&self) -> bool {
         self.iter().all(|rule| rule.is_domain_restricted())
     }
@@ -106,11 +111,6 @@ impl RulesProperties for RuleSet {
         // TODO: IMPLEMENT
     }
 
-    fn is_weakly_sticky(&self) -> bool {
-        todo!("IMPLEMENT");
-        // TODO: IMPLEMENT
-    }
-
     fn is_glut_guarded(&self) -> bool {
         todo!("IMPLEMENT");
         // TODO: IMPLEMENT
@@ -122,7 +122,9 @@ impl RulesProperties for RuleSet {
     }
 
     fn is_shy(&self) -> bool {
-        self.iter().all(|rule| rule.is_shy())
+        let attacked_pos_by_vars: HashMap<&Variable, Positions> =
+            self.attacked_positions_by_variables();
+        self.iter().all(|rule| rule.is_shy(&attacked_pos_by_vars))
     }
 
     fn is_mfa(&self) -> bool {

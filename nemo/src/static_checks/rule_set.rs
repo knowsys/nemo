@@ -1,6 +1,6 @@
 use crate::rule_model::components::{rule::Rule, term::primitive::variable::Variable};
 use crate::static_checks::positions::Positions;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 pub struct RuleSet(Vec<Rule>);
 
 impl RuleSet {

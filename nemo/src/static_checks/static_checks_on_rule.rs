@@ -29,7 +29,7 @@ pub trait RuleProperties {
     fn is_weakly_sticky(&self) -> bool;
     fn is_glut_guarded(&self) -> bool;
     fn is_glut_frontier_guarded(&self) -> bool;
-    fn is_shy(&self) -> bool;
+    fn is_shy(&self, attacked_pos_by_vars: &HashMap<&Variable, Positions>) -> bool;
     fn is_mfa(&self) -> bool;
     fn is_dmfa(&self) -> bool;
     fn is_rmfa(&self) -> bool;
@@ -41,8 +41,7 @@ pub trait RuleProperties {
 
 impl RuleProperties for Rule {
     fn is_joinless(&self) -> bool {
-        self.variables()
-            .all(|var| !var.is_join_variable_in_rule(self))
+        self.join_variables().is_empty()
     }
 
     fn is_linear(&self) -> bool {
@@ -124,9 +123,20 @@ impl RuleProperties for Rule {
         // TODO: IMPLEMENT
     }
 
-    fn is_shy(&self) -> bool {
-        todo!("IMPLEMENT");
-        // TODO: IMPLEMENT
+    // TODO: SHORTEN FUNCTION
+    fn is_shy(&self, attacked_pos_by_vars: &HashMap<&Variable, Positions>) -> bool {
+        self.join_variables()
+            .iter()
+            .all(|var| !var.is_attacked(self, attacked_pos_by_vars))
+            && self
+                .pairs_of_frontier_variables()
+                .iter()
+                .all(|[var1, var2]| {
+                    attacked_pos_by_vars.values().all(|ex_var_pos| {
+                        !var1.is_attacked_by_variable(self, ex_var_pos)
+                            || !var2.is_attacked_by_variable(self, ex_var_pos)
+                    })
+                })
     }
 
     fn is_mfa(&self) -> bool {
@@ -299,6 +309,21 @@ impl Rule {
             .collect()
     }
 
+    fn pairs_of_frontier_variables(&self) -> HashSet<[&Variable; 2]> {
+        self.frontier_variables().iter().fold(
+            HashSet::<[&Variable; 2]>::new(),
+            |mut pairs, var1| {
+                self.frontier_variables()
+                    .iter()
+                    .filter(|var2| var1 != *var2)
+                    .for_each(|var2| {
+                        pairs.insert([var1, var2]);
+                    });
+                pairs
+            },
+        )
+    }
+
     // NOTE: only use variables of positive body atoms or use all body atoms?
     /// Returns the initial marked positions of a rule. A position of a rule is initial marked if
     /// an join variable appears on it.
@@ -409,6 +434,11 @@ impl Variable {
         attacked_pos_by_vars
             .values()
             .any(|att_pos| att_pos.is_superset(&positions_of_variable_in_body))
+    }
+
+    fn is_attacked_by_variable(&self, rule: &Rule, attacked_pos_of_var: &Positions) -> bool {
+        let positions_of_variable_in_body: Positions = self.get_positions_in_literals(rule.body());
+        attacked_pos_of_var.is_superset(&positions_of_variable_in_body)
     }
 
     fn is_join_variable_in_rule(&self, rule: &Rule) -> bool {
