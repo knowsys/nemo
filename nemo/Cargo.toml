@@ -26,7 +26,7 @@ petgraph = "0.6.3"
 petgraph-graphml = "3.0.0"
 rand = "0.8.5"
 csv = "1.1.6"
-thiserror = "1.0"
+thiserror = "2.0"
 flate2 = "1"
 sanitise-file-name = "1.0.0"
 getrandom = { version = "0.2.9", default-features = false }
