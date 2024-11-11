@@ -15,6 +15,12 @@ impl RuleSet {
         affected_positions
     }
 
+    pub fn all_positive_positions(&self) -> Positions {
+        self.iter().fold(Positions::new(), |all_pos, rule| {
+            all_pos.union(&rule.all_positive_positions())
+        })
+    }
+
     fn attacked_positions(&self, variable: &Variable, rule: &Rule) -> Positions {
         let mut attacked_positions: Positions = self.initial_attacked_positions(variable, rule);
         let mut new_found_attacked_positions: Positions = attacked_positions.clone();

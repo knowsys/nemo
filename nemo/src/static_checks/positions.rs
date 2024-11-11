@@ -1,3 +1,7 @@
+// TODO: POSSIBLY ALL OVER THAT MODULE: ONLY USE POSITIVE BODY ATOMS
+// TODO: RECONSIDER USING SINGLE TUPLE STRUCTS
+// TODO: CONSIDER USING REFERENCES IN SINGLE TUPLE STRUCTS
+// TODO: CONSIDER IMPLEMENTING TRAIT INTO OR DEREF TO GET TO THE INNER OF THE SINGLE TUPLE STRUCT
 use crate::rule_model::components::tag::Tag;
 use std::collections::{
     hash_map::{Entry, Keys},
@@ -10,6 +14,12 @@ pub struct Positions(HashMap<Tag, HashSet<usize>>);
 impl Default for Positions {
     fn default() -> Self {
         Positions::new()
+    }
+}
+
+impl From<HashMap<Tag, HashSet<usize>>> for Positions {
+    fn from(positions: HashMap<Tag, HashSet<usize>>) -> Self {
+        Positions(positions)
     }
 }
 
@@ -91,7 +101,7 @@ impl Positions {
             .all(|pred| self.contains_key(pred) && self.pred_is_superset(pred, positions))
     }
 
-    fn iter(&self) -> std::collections::hash_map::Iter<Tag, HashSet<usize>> {
+    pub fn iter(&self) -> std::collections::hash_map::Iter<Tag, HashSet<usize>> {
         self.0.iter()
     }
 

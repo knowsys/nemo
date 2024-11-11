@@ -177,6 +177,22 @@ impl RuleProperties for Rule {
 
 // NOTE: MAYBE CREATE A TRAIT???
 impl Rule {
+    fn all_positions_of_atoms(&self, atoms: &[Atom]) -> Positions {
+        atoms.iter().fold(Positions::new(), |all_pos, atom| {
+            all_pos.union(&Positions::from(HashMap::from([(
+                atom.predicate(),
+                (0..atom.len()).collect(),
+            )])))
+        })
+    }
+
+    pub fn all_positive_positions(&self) -> Positions {
+        let all_positive_body_positions: Positions =
+            self.all_positions_of_atoms(&self.body_positive().cloned().collect::<Vec<Atom>>());
+        let all_head_positions: Positions = self.all_positions_of_atoms(self.head());
+        all_positive_body_positions.union(&all_head_positions)
+    }
+
     fn affected_frontier_variables(&self, affected_positions: &Positions) -> HashSet<&Variable> {
         self.affected_variables(self.frontier_variables(), affected_positions)
     }
