@@ -211,8 +211,7 @@ impl DatabaseInstance {
         order: ColumnOrder,
         trie: Trie,
     ) -> PermanentTableId {
-        let arity = trie.arity();
-        let id = self.register_table(name, arity);
+        let id = self.register_table(name, trie.arity());
         self.add_trie(id, order, trie);
 
         id
@@ -235,10 +234,7 @@ impl DatabaseInstance {
         order: ColumnOrder,
         provider: Box<dyn TableProvider>,
     ) {
-        let arity = self.table_arity(id);
-
-        self.reference_manager
-            .add_source(id, order, TableSource::new(provider, arity));
+        self.reference_manager.add_source(id, order, provider);
     }
 
     /// Add a table given as [SimpleTable].
@@ -248,10 +244,8 @@ impl DatabaseInstance {
         order: ColumnOrder,
         table: SimpleTable,
     ) {
-        let arity = table.arity();
-
         self.reference_manager
-            .add_source(id, order, TableSource::new(Box::new(table), arity));
+            .add_source(id, order, Box::new(table));
     }
 
     /// Add a new table that is a reordered version of an existing table.

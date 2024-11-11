@@ -144,4 +144,8 @@ impl TableProvider for JsonReader {
 
         Ok(())
     }
+
+    fn arity(&self) -> usize {
+        3
+    }
 }
