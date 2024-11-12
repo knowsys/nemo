@@ -282,7 +282,7 @@ impl NemoEngine {
         };
         let import_manager = ImportManager::new(resource_providers);
 
-        let engine = ExecutionEngine::initialize(&program.0, import_manager)
+        let engine = ExecutionEngine::initialize(program.0.clone(), import_manager)
             .map_err(WasmOrInternalNemoError::Nemo)
             .map_err(NemoError)?;
 

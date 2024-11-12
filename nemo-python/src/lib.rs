@@ -398,7 +398,7 @@ impl NemoEngine {
     fn py_new(program: NemoProgram) -> PyResult<Self> {
         TimedCode::instance().reset();
         let import_manager = ImportManager::new(ResourceProviders::default());
-        let engine = ExecutionEngine::initialize(&program.0, import_manager).py_res()?;
+        let engine = ExecutionEngine::initialize(program.0.clone(), import_manager).py_res()?;
         Ok(NemoEngine { program, engine })
     }
 

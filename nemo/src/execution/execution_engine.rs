@@ -83,8 +83,8 @@ pub struct ExecutionEngine<RuleSelectionStrategy> {
 
 impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
     /// Initialize [ExecutionEngine].
-    pub fn initialize(program: &Program, input_manager: ImportManager) -> Result<Self, Error> {
-        let chase_program = ProgramChaseTranslation::new().translate(program.clone());
+    pub fn initialize(program: Program, input_manager: ImportManager) -> Result<Self, Error> {
+        let chase_program = ProgramChaseTranslation::new().translate(program);
         let analysis = chase_program.analyze();
 
         let mut table_manager = TableManager::new();
@@ -175,6 +175,57 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         Ok(())
     }
 
+    fn step(&mut self, rule_index: usize, execution: &RuleExecution) -> Result<Vec<Tag>, Error> {
+        let timing_string = format!("Reasoning/Rules/Rule {rule_index}");
+
+        TimedCode::instance().sub(&timing_string).start();
+        log::info!("<<< {0}: APPLYING RULE {rule_index} >>>", self.current_step);
+
+        self.rule_history.push(rule_index);
+
+        let current_info = &mut self.rule_infos[rule_index];
+
+        let updated_predicates =
+            execution.execute(&mut self.table_manager, current_info, self.current_step)?;
+
+        current_info.step_last_applied = self.current_step;
+
+        let rule_duration = TimedCode::instance().sub(&timing_string).stop();
+        log::info!("Rule duration: {} ms", rule_duration.as_millis());
+
+        self.current_step += 1;
+        Ok(updated_predicates)
+    }
+
+    fn defrag(&mut self, updated_predicates: Vec<Tag>) -> Result<(), Error> {
+        for updated_pred in updated_predicates {
+            let counter = self
+                .predicate_fragmentation
+                .entry(updated_pred.clone())
+                .or_insert(0);
+            *counter += 1;
+
+            if *counter == MAX_FRAGMENTATION {
+                let start = if let Some(last_union) = self.predicate_last_union.get(&updated_pred) {
+                    last_union + 1
+                } else {
+                    0
+                };
+
+                let range = start..(self.current_step + 1);
+
+                self.table_manager.combine_tables(&updated_pred, range)?;
+
+                self.predicate_last_union
+                    .insert(updated_pred, self.current_step);
+
+                *counter = 0;
+            }
+        }
+
+        Ok(())
+    }
+
     /// Executes the program.
     pub fn execute(&mut self) -> Result<(), Error> {
         TimedCode::instance().sub("Reasoning/Rules").start();
@@ -190,61 +241,11 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
 
         let mut new_derivations: Option<bool> = None;
 
-        while let Some(current_rule_index) = self.rule_strategy.next_rule(new_derivations) {
-            let timing_string = format!("Reasoning/Rules/Rule {current_rule_index}");
-
-            TimedCode::instance().sub(&timing_string).start();
-            log::info!(
-                "<<< {0}: APPLYING RULE {current_rule_index} >>>",
-                self.current_step
-            );
-
-            self.rule_history.push(current_rule_index);
-
-            let current_info = &mut self.rule_infos[current_rule_index];
-            let current_execution = &rule_execution[current_rule_index];
-
-            let updated_predicates = current_execution.execute(
-                &mut self.table_manager,
-                current_info,
-                self.current_step,
-            )?;
-
+        while let Some(index) = self.rule_strategy.next_rule(new_derivations) {
+            let updated_predicates = self.step(index, &rule_execution[index])?;
             new_derivations = Some(!updated_predicates.is_empty());
 
-            current_info.step_last_applied = self.current_step;
-
-            let rule_duration = TimedCode::instance().sub(&timing_string).stop();
-            log::info!("Rule duration: {} ms", rule_duration.as_millis());
-
-            // We prevent fragmentation by periodically collecting single-step tables into larger ones
-            for updated_pred in updated_predicates {
-                let counter = self
-                    .predicate_fragmentation
-                    .entry(updated_pred.clone())
-                    .or_insert(0);
-                *counter += 1;
-
-                if *counter == MAX_FRAGMENTATION {
-                    let start =
-                        if let Some(last_union) = self.predicate_last_union.get(&updated_pred) {
-                            last_union + 1
-                        } else {
-                            0
-                        };
-
-                    let range = start..(self.current_step + 1);
-
-                    self.table_manager.combine_tables(&updated_pred, range)?;
-
-                    self.predicate_last_union
-                        .insert(updated_pred, self.current_step);
-
-                    *counter = 0;
-                }
-            }
-
-            self.current_step += 1;
+            self.defrag(updated_predicates)?;
         }
 
         TimedCode::instance().sub("Reasoning/Rules").stop();
@@ -314,7 +315,6 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
 
     fn trace_recursive(
         &mut self,
-        program: &ChaseProgram,
         trace: &mut ExecutionTrace,
         fact: GroundAtom,
     ) -> Result<TraceFactHandle, TracingError> {
@@ -346,7 +346,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
 
         // Rule index of the rule that was applied to derive the given fact
         let rule_index = self.rule_history[step];
-        let rule = &program.rules()[rule_index];
+        let rule = self.program.rules()[rule_index].clone();
 
         // Iterate over all head atoms which could have derived the given fact
         for (head_index, head_atom) in rule.head().iter().enumerate() {
@@ -436,7 +436,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
 
                     let next_fact = GroundAtom::new(next_fact_predicate, next_fact_terms);
 
-                    let next_handle = self.trace_recursive(program, trace, next_fact)?;
+                    let next_handle = self.trace_recursive(trace, next_fact)?;
 
                     if trace.status(next_handle).is_success() {
                         subtraces.push(next_handle);
@@ -481,14 +481,12 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         facts: Vec<Fact>,
     ) -> Result<(ExecutionTrace, Vec<TraceFactHandle>), Error> {
         let mut trace = ExecutionTrace::new(program);
-        let chase_program = self.program.clone();
-
         let mut handles = Vec::new();
 
         for fact in facts {
             let chase_fact = ProgramChaseTranslation::new().build_fact(&fact);
 
-            handles.push(self.trace_recursive(&chase_program, &mut trace, chase_fact)?);
+            handles.push(self.trace_recursive(&mut trace, chase_fact)?);
         }
 
         Ok((trace, handles))
