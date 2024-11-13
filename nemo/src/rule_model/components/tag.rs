@@ -5,7 +5,7 @@ use std::{fmt::Display, hash::Hash};
 use crate::rule_model::origin::Origin;
 
 /// Name of a term or predicate
-#[derive(Debug, Clone, Eq)]
+#[derive(Debug, Clone, Eq, Ord)]
 pub struct Tag {
     /// Origin of this component.
     origin: Origin,

@@ -1,9 +1,12 @@
 use crate::rule_model::components::tag::Tag;
 use crate::static_checks::{positions::Positions, rule_set::RuleSet};
-use petgraph::graph::Graph;
-use std::collections::HashSet;
+use petgraph::{graphmap::GraphMap, Directed};
+use std::collections::{
+    hash_set::{IntoIter, Iter},
+    HashSet,
+};
 
-#[derive(Clone, Eq, Hash, PartialEq)]
+#[derive(Clone, Copy, Eq, Hash, Ord, PartialEq, PartialOrd)]
 struct Position<'a>(&'a Tag, usize);
 
 struct ExtendedPositions<'a>(HashSet<Position<'a>>);
@@ -12,28 +15,54 @@ impl<'a> ExtendedPositions<'a> {
     pub fn new() -> Self {
         ExtendedPositions(HashSet::<Position>::new())
     }
+
+    fn into_iter(self) -> IntoIter<Position<'a>> {
+        self.0.into_iter()
+    }
+
+    fn iter(&self) -> Iter<Position> {
+        self.0.iter()
+    }
 }
 
-// FIXME: EDGETYPECHECKS CAN BE CONFUSED WITH PETGRAPH::EDGETYPE
-enum EdgeTypeChecks {
+enum WeaklyAcyclicityGraphEdgeType {
     CommonEdge,
     SpeciaEdge,
 }
 
-// FIXME: DEPENDENCYGRAPHCHECKS CAN BE CONFUSED WITH
-// CRATE::EXECUTION::SELECTION_STRATEGY::DEPENDENCY_GRAPH::GRAPH_CONSTRUCTOR::DEPENDENCYGRAPH
-type DependencyGraphChecks<'a> = Graph<Position<'a>, EdgeTypeChecks>;
+type WeaklyAcyclicityGraph<'a> = GraphMap<Position<'a>, WeaklyAcyclicityGraphEdgeType, Directed>;
 
-trait DependencyGraphChecksConstructor {
-    fn build_graph(&self) -> DependencyGraphChecks;
+trait WeaklyAcyclicityGraphBuilder<'a> {
+    fn add_edges(&mut self, rule_set: &RuleSet);
+    fn add_nodes(&'a mut self, all_positive_extended_positions: ExtendedPositions<'a>);
 }
 
-impl DependencyGraphChecksConstructor for RuleSet {
-    fn build_graph(&self) -> DependencyGraphChecks {
-        let all_positions: ExtendedPositions =
-            ExtendedPositions::from(&self.all_positive_positions());
+impl<'a> WeaklyAcyclicityGraphBuilder<'a> for WeaklyAcyclicityGraph<'a> {
+    fn add_edges(&mut self, rule_set: &RuleSet) {
         todo!("IMPLEMENT");
         // TODO: IMPLEMENT
+    }
+
+    fn add_nodes(&'a mut self, all_positive_extended_positions: ExtendedPositions<'a>) {
+        all_positive_extended_positions.into_iter().for_each(|pos| {
+            self.add_node(pos);
+        });
+    }
+}
+
+trait WeaklyAcyclicityGraphConstructor {
+    fn build_graph(&self) -> WeaklyAcyclicityGraph;
+}
+
+impl WeaklyAcyclicityGraphConstructor for RuleSet {
+    fn build_graph(&self) -> WeaklyAcyclicityGraph {
+        let all_positive_positions: Positions = self.all_positive_positions();
+        let all_positions_extended_positions: ExtendedPositions =
+            ExtendedPositions::from(&all_positive_positions);
+        let mut we_ac_graph: WeaklyAcyclicityGraph = WeaklyAcyclicityGraph::new();
+        // we_ac_graph.add_nodes(all_positions_extended_positions);
+        // we_ac_graph.add_edges(self);
+        we_ac_graph
     }
 }
 
