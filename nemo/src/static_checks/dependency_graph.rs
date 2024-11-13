@@ -6,7 +6,7 @@ use std::collections::{
     HashSet,
 };
 
-#[derive(Clone, Copy, Eq, Hash, Ord, PartialEq, PartialOrd)]
+#[derive(Clone, Copy, Eq, Hash, PartialEq, Ord, PartialOrd)]
 struct Position<'a>(&'a Tag, usize);
 
 struct ExtendedPositions<'a>(HashSet<Position<'a>>);
@@ -20,9 +20,9 @@ impl<'a> ExtendedPositions<'a> {
         self.0.into_iter()
     }
 
-    fn iter(&self) -> Iter<Position> {
-        self.0.iter()
-    }
+    // fn iter(&self) -> Iter<Position> {
+    //     self.0.iter()
+    // }
 }
 
 enum WeaklyAcyclicityGraphEdgeType {
