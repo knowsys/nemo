@@ -25,6 +25,12 @@ impl<'a> ExtendedPositions<'a> {
     // }
 }
 
+impl<'a> From<HashSet<Position<'a>>> for ExtendedPositions<'a> {
+    fn from(position_set: HashSet<Position<'a>>) -> Self {
+        ExtendedPositions(position_set)
+    }
+}
+
 enum WeaklyAcyclicityGraphEdgeType {
     CommonEdge,
     SpeciaEdge,
@@ -58,7 +64,7 @@ impl WeaklyAcyclicityGraphConstructor for RuleSet {
     fn build_graph(&self) -> WeaklyAcyclicityGraph {
         let all_positive_positions: Positions = self.all_positive_positions();
         let all_positions_extended_positions: ExtendedPositions =
-            ExtendedPositions::from(&all_positive_positions);
+            ExtendedPositions::from(all_positive_positions);
         let mut we_ac_graph: WeaklyAcyclicityGraph = WeaklyAcyclicityGraph::new();
         // we_ac_graph.add_nodes(all_positions_extended_positions);
         // we_ac_graph.add_edges(self);
@@ -67,11 +73,11 @@ impl WeaklyAcyclicityGraphConstructor for RuleSet {
 }
 
 // TODO: MAYBE SHORTEN FUNCTION
-impl<'a> From<&'a Positions> for ExtendedPositions<'a> {
-    fn from(positions: &'a Positions) -> Self {
-        ExtendedPositions(positions.iter().fold(
+impl<'a> From<Positions<'a>> for ExtendedPositions<'a> {
+    fn from(positions: Positions<'a>) -> Self {
+        ExtendedPositions::from(positions.into_iter().fold(
             HashSet::<Position>::new(),
-            |ex_pos, (pred, indices): (&'a Tag, _)| {
+            |ex_pos: HashSet<Position>, (pred, indices): (&'a Tag, HashSet<usize>)| {
                 ex_pos
                     .union(&indices.iter().map(|index| Position(pred, *index)).collect())
                     .cloned()

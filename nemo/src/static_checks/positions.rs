@@ -1,6 +1,6 @@
 // TODO: POSSIBLY ALL OVER THAT MODULE: ONLY USE POSITIVE BODY ATOMS
 // TODO: RECONSIDER USING SINGLE TUPLE STRUCTS
-// TODO: CONSIDER USING REFERENCES IN SINGLE TUPLE STRUCTS
+// TODO: CONSIDER USING SMART POINTER RC FOR THE REFERENCES IN THE SINGLE TUPLE STRUCTS
 // TODO: CONSIDER IMPLEMENTING TRAIT INTO OR DEREF TO GET TO THE INNER OF THE SINGLE TUPLE STRUCT
 use crate::rule_model::components::tag::Tag;
 use std::collections::{
@@ -9,32 +9,32 @@ use std::collections::{
 };
 
 #[derive(Debug, Clone)]
-pub struct Positions(HashMap<Tag, HashSet<usize>>);
+pub struct Positions<'a>(HashMap<&'a Tag, HashSet<usize>>);
 
-impl Default for Positions {
+impl Default for Positions<'_> {
     fn default() -> Self {
         Positions::new()
     }
 }
 
-impl From<HashMap<Tag, HashSet<usize>>> for Positions {
-    fn from(positions: HashMap<Tag, HashSet<usize>>) -> Self {
+impl<'a> From<HashMap<&'a Tag, HashSet<usize>>> for Positions<'a> {
+    fn from(positions: HashMap<&'a Tag, HashSet<usize>>) -> Self {
         Positions(positions)
     }
 }
 
-impl Positions {
+impl<'a> Positions<'a> {
     fn contains_key(&self, predicate: &Tag) -> bool {
         self.0.contains_key(predicate)
     }
 
     // NOTE: MAYBE USE difference() OF HashSet
-    pub fn difference(self, positions: &Positions) -> Positions {
+    pub fn difference(self, positions: Positions<'a>) -> Positions<'a> {
         positions
-            .iter()
+            .into_iter()
             .fold(self, |mut differenced_pos, (pred, pos_indices)| {
                 differenced_pos
-                    .entry(pred.clone())
+                    .entry(pred)
                     .and_modify(|differenced_indices| {
                         pos_indices.iter().for_each(|i| {
                             differenced_indices.remove(i);
@@ -58,7 +58,7 @@ impl Positions {
     //     });
     // }
 
-    pub fn entry(&mut self, pred: Tag) -> Entry<Tag, HashSet<usize>> {
+    pub fn entry(&mut self, pred: &'a Tag) -> Entry<&'a Tag, HashSet<usize>> {
         self.0.entry(pred)
     }
 
@@ -80,10 +80,14 @@ impl Positions {
 
     pub fn insert(
         &mut self,
-        predicate: Tag,
+        predicate: &'a Tag,
         positions_in_predicate: HashSet<usize>,
     ) -> Option<HashSet<usize>> {
         self.0.insert(predicate, positions_in_predicate)
+    }
+
+    pub fn into_iter(self) -> std::collections::hash_map::IntoIter<&'a Tag, HashSet<usize>> {
+        self.0.into_iter()
     }
 
     pub fn is_disjoint(&self, positions: &Positions) -> bool {
@@ -101,12 +105,12 @@ impl Positions {
             .all(|pred| self.contains_key(pred) && self.pred_is_superset(pred, positions))
     }
 
-    pub fn iter(&self) -> std::collections::hash_map::Iter<Tag, HashSet<usize>> {
+    pub fn iter(&self) -> std::collections::hash_map::Iter<&Tag, HashSet<usize>> {
         self.0.iter()
     }
 
     #[warn(dead_code)]
-    fn iter_mut(&mut self) -> std::collections::hash_map::IterMut<Tag, HashSet<usize>> {
+    fn iter_mut(&mut self) -> std::collections::hash_map::IterMut<&Tag, HashSet<usize>> {
         self.0.iter_mut()
     }
 
@@ -115,7 +119,7 @@ impl Positions {
         self.get_predicate_and_unwrap(pred).iter()
     }
 
-    fn keys(&self) -> Keys<Tag, HashSet<usize>> {
+    fn keys(&self) -> Keys<&Tag, HashSet<usize>> {
         self.0.keys()
     }
 
@@ -124,7 +128,7 @@ impl Positions {
     }
 
     pub fn new() -> Self {
-        Positions(HashMap::<Tag, HashSet<usize>>::new())
+        Positions(HashMap::<&Tag, HashSet<usize>>::new())
     }
 
     #[warn(dead_code)]
@@ -156,12 +160,12 @@ impl Positions {
     }
 
     // NOTE: MAYBE USE union() OF HashSet
-    pub fn union(self, positions: &Positions) -> Positions {
+    pub fn union(self, positions: Positions<'a>) -> Positions<'a> {
         positions
-            .iter()
+            .into_iter()
             .fold(self, |mut unioned_pos, (pred, pos_indices)| {
                 unioned_pos
-                    .entry(pred.clone())
+                    .entry(pred)
                     .and_modify(|unioned_indices| {
                         pos_indices.iter().for_each(|i| {
                             unioned_indices.insert(*i);

@@ -81,6 +81,10 @@ impl Rule {
         })
     }
 
+    pub fn body_positive_refs(&self) -> Vec<&Atom> {
+        self.body_positive().collect()
+    }
+
     /// Return a mutable reference to the body of the rule.
     pub fn body_mut(&mut self) -> &mut Vec<Literal> {
         &mut self.body
@@ -89,6 +93,10 @@ impl Rule {
     /// Return a reference to the head of the rule.
     pub fn head(&self) -> &Vec<Atom> {
         &self.head
+    }
+
+    pub fn head_refs(&self) -> Vec<&Atom> {
+        self.head().iter().collect()
     }
 
     /// Return a mutable reference to the head of the rule.
