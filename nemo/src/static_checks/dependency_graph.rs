@@ -1,4 +1,4 @@
-use crate::rule_model::components::tag::Tag;
+use crate::rule_model::components::{rule::Rule, tag::Tag, term::primitive::variable::Variable};
 use crate::static_checks::{positions::Positions, rule_set::RuleSet};
 use petgraph::{graphmap::GraphMap, Directed};
 use std::collections::{
@@ -6,7 +6,7 @@ use std::collections::{
     HashSet,
 };
 
-#[derive(Clone, Copy, Eq, Hash, PartialEq, Ord, PartialOrd)]
+#[derive(Copy, Clone, Eq, Hash, PartialEq, Ord, PartialOrd)]
 struct Position<'a>(&'a Tag, usize);
 
 struct ExtendedPositions<'a>(HashSet<Position<'a>>);
@@ -20,9 +20,9 @@ impl<'a> ExtendedPositions<'a> {
         self.0.into_iter()
     }
 
-    // fn iter(&self) -> Iter<Position> {
-    //     self.0.iter()
-    // }
+    fn iter(&self) -> Iter<Position> {
+        self.0.iter()
+    }
 }
 
 impl<'a> From<HashSet<Position<'a>>> for ExtendedPositions<'a> {
@@ -31,6 +31,7 @@ impl<'a> From<HashSet<Position<'a>>> for ExtendedPositions<'a> {
     }
 }
 
+#[derive(Clone)]
 enum WeaklyAcyclicityGraphEdgeType {
     CommonEdge,
     SpeciaEdge,
@@ -39,17 +40,41 @@ enum WeaklyAcyclicityGraphEdgeType {
 type WeaklyAcyclicityGraph<'a> = GraphMap<Position<'a>, WeaklyAcyclicityGraphEdgeType, Directed>;
 
 trait WeaklyAcyclicityGraphBuilder<'a> {
-    fn add_edges(&mut self, rule_set: &RuleSet);
-    fn add_nodes(&'a mut self, all_positive_extended_positions: ExtendedPositions<'a>);
+    fn add_edges(&mut self, rule_set: &'a RuleSet);
+    fn add_edges_for_rule(&mut self, rule: &'a Rule);
+    fn add_nodes(&mut self, all_positive_extended_positions: ExtendedPositions<'a>);
 }
 
 impl<'a> WeaklyAcyclicityGraphBuilder<'a> for WeaklyAcyclicityGraph<'a> {
-    fn add_edges(&mut self, rule_set: &RuleSet) {
-        todo!("IMPLEMENT");
-        // TODO: IMPLEMENT
+    fn add_edges(&mut self, rule_set: &'a RuleSet) {
+        rule_set.iter().for_each(|rule| {
+            self.add_edges_for_rule(rule);
+        });
     }
 
-    fn add_nodes(&'a mut self, all_positive_extended_positions: ExtendedPositions<'a>) {
+    fn add_edges_for_rule(&mut self, rule: &'a Rule) {
+        let positive_variables: HashSet<&Variable> = rule.positive_variables();
+        let existential_variables: HashSet<&Variable> = rule.existential_variables();
+        positive_variables.iter().for_each(|variable_body| {
+            let body_pos_of_var: Positions =
+                variable_body.get_positions_in_atoms(&rule.body_positive_refs());
+            let head_pos_of_var: Positions =
+                variable_body.get_positions_in_atoms(&rule.head_refs());
+            let body_pos_of_var_ex: ExtendedPositions = ExtendedPositions::from(body_pos_of_var);
+            let head_pos_of_var_ex: ExtendedPositions = ExtendedPositions::from(head_pos_of_var);
+            body_pos_of_var_ex.iter().for_each(|pos_body| {
+                head_pos_of_var_ex.iter().for_each(|pos_head| {
+                    self.add_edge(
+                        pos_body,
+                        pos_head,
+                        WeaklyAcyclicityGraphEdgeType::CommonEdge,
+                    );
+                })
+            })
+        });
+    }
+
+    fn add_nodes(&mut self, all_positive_extended_positions: ExtendedPositions<'a>) {
         all_positive_extended_positions.into_iter().for_each(|pos| {
             self.add_node(pos);
         });
@@ -57,17 +82,21 @@ impl<'a> WeaklyAcyclicityGraphBuilder<'a> for WeaklyAcyclicityGraph<'a> {
 }
 
 trait WeaklyAcyclicityGraphConstructor {
+    fn all_positive_extended_positions(&self) -> ExtendedPositions;
     fn build_graph(&self) -> WeaklyAcyclicityGraph;
 }
 
 impl WeaklyAcyclicityGraphConstructor for RuleSet {
-    fn build_graph(&self) -> WeaklyAcyclicityGraph {
+    fn all_positive_extended_positions(&self) -> ExtendedPositions {
         let all_positive_positions: Positions = self.all_positive_positions();
-        let all_positions_extended_positions: ExtendedPositions =
-            ExtendedPositions::from(all_positive_positions);
+        ExtendedPositions::from(all_positive_positions)
+    }
+
+    fn build_graph(&self) -> WeaklyAcyclicityGraph {
         let mut we_ac_graph: WeaklyAcyclicityGraph = WeaklyAcyclicityGraph::new();
-        // we_ac_graph.add_nodes(all_positions_extended_positions);
-        // we_ac_graph.add_edges(self);
+        let all_positive_ex_pos: ExtendedPositions = self.all_positive_extended_positions();
+        we_ac_graph.add_nodes(all_positive_ex_pos);
+        we_ac_graph.add_edges(self);
         we_ac_graph
     }
 }
@@ -80,7 +109,7 @@ impl<'a> From<Positions<'a>> for ExtendedPositions<'a> {
             |ex_pos: HashSet<Position>, (pred, indices): (&'a Tag, HashSet<usize>)| {
                 ex_pos
                     .union(&indices.iter().map(|index| Position(pred, *index)).collect())
-                    .cloned()
+                    .copied()
                     .collect()
             },
         ))

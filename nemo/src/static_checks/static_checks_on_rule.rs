@@ -187,6 +187,7 @@ impl Rule {
         })
     }
 
+    /// Returns all positions of the Rule.
     pub fn all_positive_positions(&self) -> Positions {
         let all_positive_body_positions: Positions =
             self.all_positions_of_atoms(&self.body_positive_refs());

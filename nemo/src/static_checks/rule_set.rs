@@ -6,12 +6,15 @@ pub struct RuleSet(Vec<Rule>);
 
 impl<'a> RuleSet {
     // TODO: INSTEAD OF CLONING EVERYTHING USE SMART POINTER RC
-    pub fn affected_positions(&'a self) -> Positions<'a> {
+    pub fn affected_positions<'b>(&'b self) -> Positions<'a>
+    where
+        'b: 'a,
+    {
         let mut affected_positions: Positions = self.initial_affected_positions();
         let mut new_found_affected_positions: Positions = affected_positions.clone();
         while !new_found_affected_positions.is_empty() {
-            new_found_affected_positions = self
-                .new_affected_positions(new_found_affected_positions, affected_positions.clone());
+            new_found_affected_positions =
+                self.new_affected_positions(&new_found_affected_positions, &affected_positions);
             affected_positions = affected_positions.union(new_found_affected_positions.clone());
         }
         affected_positions
@@ -57,7 +60,7 @@ impl<'a> RuleSet {
         Some(marking)
     }
 
-    fn conclude_affected_positions(&self, last_iteration_positions: Positions) -> Positions {
+    fn conclude_affected_positions(&self, last_iteration_positions: &Positions) -> Positions {
         self.iter()
             .fold(Positions::new(), |new_found_affected_positions, rule| {
                 let new_aff_pos_in_rule: Positions =
@@ -106,12 +109,15 @@ impl<'a> RuleSet {
         self.0.iter()
     }
 
-    fn new_affected_positions(
+    fn new_affected_positions<'b>(
         &'a self,
-        last_iteration_positions: Positions,
-        currently_affected_positions: Positions<'a>,
-    ) -> Positions<'a> {
-        let new_found_affected_positions: Positions =
+        last_iteration_positions: &Positions<'a>,
+        currently_affected_positions: &'b Positions<'a>,
+    ) -> Positions<'a>
+    where
+        'b: 'a,
+    {
+        let new_found_affected_positions: Positions<'a> =
             self.conclude_affected_positions(last_iteration_positions);
         new_found_affected_positions.difference(currently_affected_positions)
     }

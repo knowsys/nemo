@@ -29,9 +29,12 @@ impl<'a> Positions<'a> {
     }
 
     // NOTE: MAYBE USE difference() OF HashSet
-    pub fn difference(self, positions: Positions<'a>) -> Positions<'a> {
+    pub fn difference<'b>(self, positions: &'b Positions<'a>) -> Positions<'a>
+    where
+        'b: 'a,
+    {
         positions
-            .into_iter()
+            .iter()
             .fold(self, |mut differenced_pos, (pred, pos_indices)| {
                 differenced_pos
                     .entry(pred)
@@ -160,7 +163,7 @@ impl<'a> Positions<'a> {
     }
 
     // NOTE: MAYBE USE union() OF HashSet
-    pub fn union(self, positions: Positions<'a>) -> Positions<'a> {
+    pub fn union<'b>(self, positions: Positions<'a>) -> Positions<'a> {
         positions
             .into_iter()
             .fold(self, |mut unioned_pos, (pred, pos_indices)| {
