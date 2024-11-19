@@ -28,38 +28,18 @@ impl<'a> Positions<'a> {
         self.0.contains_key(predicate)
     }
 
-    // NOTE: MAYBE USE difference() OF HashSet
-    pub fn difference<'b>(self, positions: &'b Positions<'a>) -> Positions<'a>
-    where
-        'b: 'a,
-    {
+    pub fn difference(self, positions: &Positions<'a>) -> Positions<'a> {
         positions
             .iter()
             .fold(self, |mut differenced_pos, (pred, pos_indices)| {
-                differenced_pos
-                    .entry(pred)
-                    .and_modify(|differenced_indices| {
-                        pos_indices.iter().for_each(|i| {
-                            differenced_indices.remove(i);
-                        });
+                if let Some(differenced_indices) = differenced_pos.get_mut(pred) {
+                    pos_indices.iter().for_each(|i| {
+                        differenced_indices.remove(i);
                     });
+                }
                 differenced_pos
             })
     }
-
-    // NOTE: SAME DIFFERENCE FUNCTION BUT CHANGES SELF TO THE DIFFERENCED POSITIONS
-    // pub fn difference(&mut self, positions: &Positions) {
-    //     positions.iter().for_each(|(pred, pos_indices)| {
-    //         self.entry(pred.clone()).and_modify(|self_indices| {
-    //             pos_indices.iter().for_each(|i| {
-    //                 self_indices.remove(i);
-    //             })
-    //         });
-    //         if self.get_predicate_and_unwrap(pred).is_empty() {
-    //             self.remove(pred);
-    //         }
-    //     });
-    // }
 
     pub fn entry(&mut self, pred: &'a Tag) -> Entry<&'a Tag, HashSet<usize>> {
         self.0.entry(pred)
@@ -162,33 +142,20 @@ impl<'a> Positions<'a> {
         self.0.remove(pred)
     }
 
-    // NOTE: MAYBE USE union() OF HashSet
-    pub fn union<'b>(self, positions: Positions<'a>) -> Positions<'a> {
+    // TODO: TAKE POSITIONS AS A REF
+    pub fn union(self, positions: Positions<'a>) -> Positions<'a> {
         positions
             .into_iter()
             .fold(self, |mut unioned_pos, (pred, pos_indices)| {
-                unioned_pos
-                    .entry(pred)
-                    .and_modify(|unioned_indices| {
-                        pos_indices.iter().for_each(|i| {
-                            unioned_indices.insert(*i);
-                        });
-                    })
-                    .or_insert(pos_indices.clone());
+                if let None = unioned_pos.get(pred) {
+                    unioned_pos.insert(pred, HashSet::<usize>::new());
+                }
+                let unioned_indices: &mut HashSet<usize> =
+                    unioned_pos.get_predicate_and_unwrap_mut(pred);
+                pos_indices.iter().for_each(|i| {
+                    unioned_indices.insert(*i);
+                });
                 unioned_pos
             })
     }
-
-    // NOTE: SAME UNION FUNCTION BUT CHANGES SELF TO THE UNIONED POSITIONS
-    // fn union(&mut self, positions: &Positions) {
-    //     positions.iter().for_each(|(pred, pos_indices)| {
-    //         self.entry(pred.clone())
-    //             .and_modify(|self_indices| {
-    //                 pos_indices.iter().for_each(|i| {
-    //                     self_indices.insert(*i);
-    //                 });
-    //             })
-    //             .or_insert(pos_indices.clone());
-    //     });
-    // }
 }

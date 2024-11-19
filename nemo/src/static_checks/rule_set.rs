@@ -6,15 +6,12 @@ pub struct RuleSet(Vec<Rule>);
 
 impl<'a> RuleSet {
     // TODO: INSTEAD OF CLONING EVERYTHING USE SMART POINTER RC
-    pub fn affected_positions<'b>(&'b self) -> Positions<'a>
-    where
-        'b: 'a,
-    {
+    pub fn affected_positions(&'a self) -> Positions<'a> {
         let mut affected_positions: Positions = self.initial_affected_positions();
         let mut new_found_affected_positions: Positions = affected_positions.clone();
         while !new_found_affected_positions.is_empty() {
             new_found_affected_positions =
-                self.new_affected_positions(&new_found_affected_positions, &affected_positions);
+                self.new_affected_positions(new_found_affected_positions, &affected_positions);
             affected_positions = affected_positions.union(new_found_affected_positions.clone());
         }
         affected_positions
@@ -31,7 +28,7 @@ impl<'a> RuleSet {
         let mut attacked_positions: Positions = self.initial_attacked_positions(variable, rule);
         let mut new_found_attacked_positions: Positions = attacked_positions.clone();
         while !new_found_attacked_positions.is_empty() {
-            new_found_attacked_positions = self.new_attacked_positions(attacked_positions.clone());
+            new_found_attacked_positions = self.new_attacked_positions(&attacked_positions);
             attacked_positions = attacked_positions.union(new_found_attacked_positions.clone());
         }
         attacked_positions
@@ -54,13 +51,13 @@ impl<'a> RuleSet {
         let mut new_found_marked_positions: Positions = marking.clone();
         while !new_found_marked_positions.is_empty() {
             new_found_marked_positions =
-                self.new_marked_positions(new_found_marked_positions, marking.clone())?;
+                self.new_marked_positions(new_found_marked_positions, &marking)?;
             marking = marking.union(new_found_marked_positions.clone());
         }
         Some(marking)
     }
 
-    fn conclude_affected_positions(&self, last_iteration_positions: &Positions) -> Positions {
+    fn conclude_affected_positions(&self, last_iteration_positions: Positions) -> Positions {
         self.iter()
             .fold(Positions::new(), |new_found_affected_positions, rule| {
                 let new_aff_pos_in_rule: Positions =
@@ -111,12 +108,9 @@ impl<'a> RuleSet {
 
     fn new_affected_positions<'b>(
         &'a self,
-        last_iteration_positions: &Positions<'a>,
-        currently_affected_positions: &'b Positions<'a>,
-    ) -> Positions<'a>
-    where
-        'b: 'a,
-    {
+        last_iteration_positions: Positions<'a>,
+        currently_affected_positions: &Positions<'a>,
+    ) -> Positions<'a> {
         let new_found_affected_positions: Positions<'a> =
             self.conclude_affected_positions(last_iteration_positions);
         new_found_affected_positions.difference(currently_affected_positions)
@@ -124,17 +118,17 @@ impl<'a> RuleSet {
 
     fn new_attacked_positions(
         &'a self,
-        currently_attacked_postions: Positions<'a>,
+        currently_attacked_postions: &Positions<'a>,
     ) -> Positions<'a> {
         let new_found_attacked_positions: Positions =
-            self.conclude_attacked_positions(&currently_attacked_postions);
+            self.conclude_attacked_positions(currently_attacked_postions);
         new_found_attacked_positions.difference(currently_attacked_postions)
     }
 
     fn new_marked_positions(
         &'a self,
         last_iteration_positions: Positions,
-        current_marking: Positions<'a>,
+        current_marking: &Positions<'a>,
     ) -> Option<Positions<'a>> {
         let new_found_marked_positions: Positions =
             self.conclude_marked_positions(last_iteration_positions)?;
