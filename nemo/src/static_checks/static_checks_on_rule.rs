@@ -399,7 +399,14 @@ impl Variable {
             .any(|atom| self.appears_at_positions_in_atom(positions, atom))
     }
 
-    // TODO: SHORTEN FUNCTION
+    // TODO: &RULE SHOULD NOT HAVE LIFETIME 'A
+    /// Returns the positions of the variable in the positive body.
+    pub fn get_positions_in_positive_body<'a>(&self, rule: &'a Rule) -> Positions<'a> {
+        let positive_body_atoms: Vec<&Atom> = rule.body_positive_refs();
+        self.get_positions_in_atoms(&positive_body_atoms)
+    }
+
+    // TODO: &ATOM SHOULD NOT HAVE LIFETIME 'A
     /// Returns the positions of the variable in the atom.
     pub fn get_positions_in_atom<'a>(&self, atom: &'a Atom) -> Positions<'a> {
         atom.variables()
@@ -416,25 +423,13 @@ impl Variable {
             })
     }
 
+    // TODO: &ATOM SHOULD NOT HAVE LIFETIME 'A
     /// Returns the positions where the variable appears in the given atoms.
     pub fn get_positions_in_atoms<'a>(&self, atoms: &[&'a Atom]) -> Positions<'a> {
         atoms
             .iter()
             .fold(Positions::new(), |positions_in_atoms, atom| {
                 positions_in_atoms.union(self.get_positions_in_atom(atom))
-            })
-    }
-
-    #[warn(dead_code)]
-    fn get_positions_in_literal<'a>(&self, literal: &'a Literal) -> Positions<'a> {
-        self.get_positions_in_atom(literal.atom())
-    }
-
-    fn get_positions_in_literals<'a>(&self, literals: &[&'a Literal]) -> Positions<'a> {
-        literals
-            .iter()
-            .fold(Positions::new(), |positions_in_literal, literal| {
-                positions_in_literal.union(self.get_positions_in_literal(literal))
             })
     }
 

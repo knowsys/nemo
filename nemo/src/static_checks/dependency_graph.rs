@@ -9,6 +9,7 @@ use std::collections::{
 #[derive(Copy, Clone, Eq, Hash, PartialEq, Ord, PartialOrd)]
 struct Position<'a>(&'a Tag, usize);
 
+#[derive(Clone)]
 struct ExtendedPositions<'a>(HashSet<Position<'a>>);
 
 impl<'a> ExtendedPositions<'a> {
@@ -48,7 +49,7 @@ trait WeaklyAcyclicityGraphBuilder<'a> {
         head_pos_of_var_ex: ExtendedPositions<'a>,
     );
     fn add_edges_for_rule(&mut self, rule: &'a Rule);
-    fn add_special_edges_for_rule_and_body_var(&mut self, rule: &'a Rule, variable_body: &Variable);
+    fn add_special_edges_for_rule(&mut self, rule: &'a Rule, variable_body: &Variable);
     fn add_nodes(&mut self, all_positive_extended_positions: ExtendedPositions<'a>);
 }
 
@@ -65,11 +66,12 @@ impl<'a> WeaklyAcyclicityGraphBuilder<'a> for WeaklyAcyclicityGraph<'a> {
         let body_pos_of_var_ex: ExtendedPositions = ExtendedPositions::from(body_pos_of_var);
         let head_pos_of_var: Positions = variable_body.get_positions_in_atoms(&rule.head_refs());
         let head_pos_of_var_ex: ExtendedPositions = ExtendedPositions::from(head_pos_of_var);
-        body_pos_of_var_ex
-            .into_iter()
-            .for_each(|body_pos| self.add_common_edges_for_pos(body_pos, head_pos_of_var_ex))
+        body_pos_of_var_ex.into_iter().for_each(|body_pos| {
+            self.add_common_edges_for_pos(body_pos, head_pos_of_var_ex.clone())
+        });
     }
 
+    // TODO: HEAD_POS_OF_VAR_EX SHOULD BE A REF
     fn add_common_edges_for_pos(
         &mut self,
         body_pos: Position<'a>,
@@ -89,15 +91,11 @@ impl<'a> WeaklyAcyclicityGraphBuilder<'a> for WeaklyAcyclicityGraph<'a> {
         let existential_variables: HashSet<&Variable> = rule.existential_variables();
         positive_variables.iter().for_each(|variable_body| {
             self.add_common_edges_for_var(rule, variable_body);
-            self.add_special_edges_for_rule_and_body_var(rule, variable_body);
+            self.add_special_edges_for_rule(rule, variable_body);
         });
     }
 
-    fn add_special_edges_for_rule_and_body_var(
-        &mut self,
-        rule: &'a Rule,
-        variable_body: &Variable,
-    ) {
+    fn add_special_edges_for_rule(&mut self, rule: &'a Rule, variable_body: &Variable) {
         todo!("IMPLEMENT");
         // TODO: IMPLEMENT
     }
