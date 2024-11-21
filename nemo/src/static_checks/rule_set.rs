@@ -5,7 +5,7 @@ use std::collections::HashMap;
 pub struct RuleSet(Vec<Rule>);
 
 impl<'a> RuleSet {
-    // TODO: INSTEAD OF CLONING EVERYTHING USE SMART POINTER RC
+    // TODO: SELF SHOULD NOT HAVE LIFETIME 'A
     pub fn affected_positions(&'a self) -> Positions<'a> {
         let mut affected_positions: Positions = self.initial_affected_positions();
         let mut new_found_affected_positions: Positions = affected_positions.clone();
@@ -19,11 +19,12 @@ impl<'a> RuleSet {
 
     pub fn all_positive_positions(&self) -> Positions {
         self.iter().fold(Positions::new(), |all_pos, rule| {
-            all_pos.union(rule.all_positive_positions())
+            let all_pos_of_rule: Positions = rule.all_positive_positions();
+            all_pos.union(all_pos_of_rule)
         })
     }
 
-    // TODO: INSTEAD OF CLONING EVERYTHING USE SMART POINTER RC
+    // TODO: SELF AND RULE SHOULD NOT HAVE LIFETIME 'A
     fn attacked_positions(&'a self, variable: &Variable, rule: &'a Rule) -> Positions<'a> {
         let mut attacked_positions: Positions = self.initial_attacked_positions(variable, rule);
         let mut new_found_attacked_positions: Positions = attacked_positions.clone();
@@ -45,7 +46,6 @@ impl<'a> RuleSet {
             .collect()
     }
 
-    // TODO: INSTEAD OF CLONING EVERYTHING USE SMART POINTER RC
     pub fn build_and_check_marking(&self) -> Option<Positions> {
         let mut marking: Positions = self.initial_marked_positions();
         let mut new_found_marked_positions: Positions = marking.clone();
@@ -87,26 +87,29 @@ impl<'a> RuleSet {
     fn initial_marked_positions(&self) -> Positions {
         self.iter()
             .fold(Positions::new(), |initial_marked_positions, rule| {
-                initial_marked_positions.union(rule.positions_of_join_variables())
+                let pos_of_join_vars: Positions = rule.positions_of_join_variables();
+                initial_marked_positions.union(pos_of_join_vars)
             })
     }
 
     fn initial_affected_positions(&self) -> Positions {
         self.iter()
             .fold(Positions::new(), |initial_affected_positions, rule| {
-                initial_affected_positions.union(rule.positions_of_existential_variables())
+                let pos_of_ex_vars: Positions = rule.positions_of_existential_variables();
+                initial_affected_positions.union(pos_of_ex_vars)
             })
     }
 
     fn initial_attacked_positions(&self, variable: &Variable, rule: &'a Rule) -> Positions<'a> {
-        variable.get_positions_in_atoms(&rule.head_refs())
+        variable.get_positions_in_head(rule)
     }
 
     pub fn iter(&self) -> std::slice::Iter<Rule> {
         self.0.iter()
     }
 
-    fn new_affected_positions<'b>(
+    // TODO: SELF SHOULD NOT HAVE LIFETIME 'A
+    fn new_affected_positions(
         &'a self,
         last_iteration_positions: Positions<'a>,
         currently_affected_positions: &Positions<'a>,
@@ -116,6 +119,7 @@ impl<'a> RuleSet {
         new_found_affected_positions.difference(currently_affected_positions)
     }
 
+    // TODO: SELF SHOULD NOT HAVE LIFETIME 'A
     fn new_attacked_positions(
         &'a self,
         currently_attacked_postions: &Positions<'a>,
@@ -125,6 +129,7 @@ impl<'a> RuleSet {
         new_found_attacked_positions.difference(currently_attacked_postions)
     }
 
+    // TODO: SELF SHOULD NOT HAVE LIFETIME 'A
     fn new_marked_positions(
         &'a self,
         last_iteration_positions: Positions,

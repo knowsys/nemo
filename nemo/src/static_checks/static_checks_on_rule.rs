@@ -49,7 +49,8 @@ impl RuleProperties for Rule {
     }
 
     fn is_guarded(&self) -> bool {
-        self.is_guarded_for_variables(self.positive_variables())
+        let positive_variables: HashSet<&Variable> = self.positive_variables();
+        self.is_guarded_for_variables(positive_variables)
     }
 
     fn is_domain_restricted(&self) -> bool {
@@ -76,26 +77,35 @@ impl RuleProperties for Rule {
     }
 
     fn is_frontier_guarded(&self) -> bool {
-        self.is_guarded_for_variables(self.frontier_variables())
+        let frontier_variables: HashSet<&Variable> = self.frontier_variables();
+        self.is_guarded_for_variables(frontier_variables)
     }
 
     fn is_weakly_guarded(&self, affected_positions: &Positions) -> bool {
-        self.is_guarded_for_variables(self.affected_universal_variables(affected_positions))
+        let affected_universal_variables: HashSet<&Variable> =
+            self.affected_universal_variables(affected_positions);
+        self.is_guarded_for_variables(affected_universal_variables)
     }
 
     fn is_weakly_frontier_guarded(&self, affected_positions: &Positions) -> bool {
-        self.is_guarded_for_variables(self.affected_frontier_variables(affected_positions))
+        let affected_frontier_variables: HashSet<&Variable> =
+            self.affected_frontier_variables(affected_positions);
+        self.is_guarded_for_variables(affected_frontier_variables)
     }
 
     fn is_jointly_guarded(&self, attacked_pos_by_vars: &HashMap<&Variable, Positions>) -> bool {
-        self.is_guarded_for_variables(self.attacked_universal_variables(attacked_pos_by_vars))
+        let attacked_universal_variables: HashSet<&Variable> =
+            self.attacked_universal_variables(attacked_pos_by_vars);
+        self.is_guarded_for_variables(attacked_universal_variables)
     }
 
     fn is_jointly_frontier_guarded(
         &self,
         attacked_pos_by_vars: &HashMap<&Variable, Positions>,
     ) -> bool {
-        self.is_guarded_for_variables(self.attacked_frontier_variables(attacked_pos_by_vars))
+        let attacked_frontier_variables: HashSet<&Variable> =
+            self.attacked_frontier_variables(attacked_pos_by_vars);
+        self.is_guarded_for_variables(attacked_frontier_variables)
     }
 
     fn is_weakly_acyclic(&self) -> bool {
@@ -177,6 +187,7 @@ impl RuleProperties for Rule {
 
 // NOTE: MAYBE CREATE A TRAIT???
 impl Rule {
+    // TODO: ATOM SHOULD NOT HAVE LIFETIME 'A
     fn all_positions_of_atoms<'a>(&self, atoms: &[&'a Atom]) -> Positions<'a> {
         atoms.iter().fold(Positions::new(), |all_pos, atom| {
             let positions: Positions = Positions::from(HashMap::from([(
@@ -187,11 +198,20 @@ impl Rule {
         })
     }
 
+    fn all_positions_of_head(&self) -> Positions {
+        let head_atoms: Vec<&Atom> = self.head_refs();
+        self.all_positions_of_atoms(&head_atoms)
+    }
+
+    fn all_positions_of_positive_body(&self) -> Positions {
+        let positive_body_atoms: Vec<&Atom> = self.body_positive_refs();
+        self.all_positions_of_atoms(&positive_body_atoms)
+    }
+
     /// Returns all positions of the Rule.
     pub fn all_positive_positions(&self) -> Positions {
-        let all_positive_body_positions: Positions =
-            self.all_positions_of_atoms(&self.body_positive_refs());
-        let all_head_positions: Positions = self.all_positions_of_atoms(&self.head_refs());
+        let all_positive_body_positions: Positions = self.all_positions_of_positive_body();
+        let all_head_positions: Positions = self.all_positions_of_head();
         all_positive_body_positions.union(all_head_positions)
     }
 
@@ -241,19 +261,23 @@ impl Rule {
             .collect()
     }
 
+    /// Returns the positive body atoms.
+    pub fn body_positive_refs(&self) -> Vec<&Atom> {
+        self.body_positive().collect()
+    }
+
     // TODO: SHORTEN FUNCTION
     /// Returns the new found affected positions in the head based on the last iteration positions.
     pub fn conclude_affected_positions(&self, last_iteration_positions: &Positions) -> Positions {
         self.positive_variables()
             .iter()
             .filter(|var| {
-                var.appears_at_positions_in_atoms(
-                    last_iteration_positions,
-                    self.body_positive().collect(),
-                )
+                let positive_body_atoms: Vec<&Atom> = self.body_positive_refs();
+                var.appears_at_positions_in_atoms(last_iteration_positions, &positive_body_atoms)
             })
             .fold(Positions::new(), |new_aff_pos_in_rule, var| {
-                new_aff_pos_in_rule.union(var.get_positions_in_atoms(&self.head_refs()))
+                let pos_of_var_in_head: Positions = var.get_positions_in_head(self);
+                new_aff_pos_in_rule.union(pos_of_var_in_head)
             })
     }
 
@@ -266,11 +290,12 @@ impl Rule {
         self.positive_variables()
             .iter()
             .filter(|var| {
-                currently_attacked_positions
-                    .is_superset(&var.get_positions_in_atoms(&self.body_positive_refs()))
+                let pos_of_var_in_body: Positions = var.get_positions_in_positive_body(self);
+                currently_attacked_positions.is_superset(&pos_of_var_in_body)
             })
             .fold(Positions::new(), |new_att_pos_in_rule, var| {
-                new_att_pos_in_rule.union(var.get_positions_in_atoms(&self.head_refs()))
+                let pos_of_var_in_head: Positions = var.get_positions_in_head(self);
+                new_att_pos_in_rule.union(pos_of_var_in_head)
             })
     }
 
@@ -284,10 +309,8 @@ impl Rule {
         self.positive_variables()
             .iter()
             .filter(|var| {
-                var.appears_at_positions_in_atoms(
-                    last_iteration_positions,
-                    self.body_positive().collect(),
-                )
+                let positive_body_atoms: Vec<&Atom> = self.body_positive_refs();
+                var.appears_at_positions_in_atoms(last_iteration_positions, &positive_body_atoms)
             })
             .try_fold(Positions::new(), |new_mar_pos_in_rule, var| {
                 if self
@@ -297,7 +320,8 @@ impl Rule {
                 {
                     return None;
                 }
-                Some(new_mar_pos_in_rule.union(var.get_positions_in_atoms(&self.head_refs())))
+                let pos_of_var_in_head: Positions = var.get_positions_in_head(self);
+                Some(new_mar_pos_in_rule.union(pos_of_var_in_head))
             })
     }
 
@@ -317,10 +341,16 @@ impl Rule {
             .collect()
     }
 
-    // NOTE: Maybe use only the positive variables?
+    /// Returns the head atoms as a reference.
+    pub fn head_refs(&self) -> Vec<&Atom> {
+        self.head().iter().collect()
+    }
+
     fn join_variables(&self) -> HashSet<&Variable> {
-        self.variables()
+        self.positive_variables()
+            .iter()
             .filter(|var| var.is_join_variable_in_rule(self))
+            .cloned()
             .collect()
     }
 
@@ -339,14 +369,14 @@ impl Rule {
         )
     }
 
-    // NOTE: only use variables of positive body atoms or use all body atoms?
     /// Returns the initial marked positions of a rule. A position of a rule is initial marked if
     /// an join variable appears on it.
     pub fn positions_of_join_variables(&self) -> Positions {
         self.join_variables()
             .iter()
             .fold(Positions::new(), |pos_of_join_vars, var| {
-                pos_of_join_vars.union(var.get_positions_in_atoms(&self.body_positive_refs()))
+                let pos_of_var_in_body: Positions = var.get_positions_in_positive_body(self);
+                pos_of_join_vars.union(pos_of_var_in_body)
             })
     }
 
@@ -356,14 +386,15 @@ impl Rule {
         self.existential_variables()
             .iter()
             .fold(Positions::new(), |pos_of_ex_vars, var| {
-                pos_of_ex_vars.union(var.get_positions_in_atoms(&self.head_refs()))
+                let pos_of_var_in_head: Positions = var.get_positions_in_head(self);
+                pos_of_ex_vars.union(pos_of_var_in_head)
             })
     }
 
     fn is_guarded_for_variables(&self, variables: HashSet<&Variable>) -> bool {
-        self.body().iter().any(|literal| {
-            let variables_of_literal: HashSet<&Variable> = literal.variables().collect();
-            variables_of_literal == variables
+        self.body_positive_refs().iter().any(|atom| {
+            let vars_of_atom: HashSet<&Variable> = atom.variables_refs();
+            vars_of_atom == variables
         })
     }
 
@@ -371,8 +402,9 @@ impl Rule {
         self.head().iter().fold(
             HashSet::<&Variable>::new(),
             |universal_head_variables: HashSet<&Variable>, atom| {
+                let un_vars_of_atom: HashSet<&Variable> = atom.universal_variables();
                 universal_head_variables
-                    .union(&atom.universal_variables())
+                    .union(&un_vars_of_atom)
                     .cloned()
                     .collect()
             },
@@ -389,11 +421,7 @@ impl Variable {
     }
 
     /// Returns whether the variable appears in the atoms at the given positions.
-    pub fn appears_at_positions_in_atoms(
-        &self,
-        positions: &Positions,
-        atoms: HashSet<&Atom>,
-    ) -> bool {
+    pub fn appears_at_positions_in_atoms(&self, positions: &Positions, atoms: &Vec<&Atom>) -> bool {
         atoms
             .iter()
             .any(|atom| self.appears_at_positions_in_atom(positions, atom))
@@ -404,6 +432,13 @@ impl Variable {
     pub fn get_positions_in_positive_body<'a>(&self, rule: &'a Rule) -> Positions<'a> {
         let positive_body_atoms: Vec<&Atom> = rule.body_positive_refs();
         self.get_positions_in_atoms(&positive_body_atoms)
+    }
+
+    // TODO: &RULE SHOULD NOT HAVE LIFETIME 'A
+    /// Returns the positions of the variablen in the head.
+    pub fn get_positions_in_head<'a>(&self, rule: &'a Rule) -> Positions<'a> {
+        let head_atoms: Vec<&Atom> = rule.head_refs();
+        self.get_positions_in_atoms(&head_atoms)
     }
 
     // TODO: &ATOM SHOULD NOT HAVE LIFETIME 'A
@@ -429,13 +464,13 @@ impl Variable {
         atoms
             .iter()
             .fold(Positions::new(), |positions_in_atoms, atom| {
-                positions_in_atoms.union(self.get_positions_in_atom(atom))
+                let positions_in_atom: Positions = self.get_positions_in_atom(atom);
+                positions_in_atoms.union(positions_in_atom)
             })
     }
 
     fn is_affected(&self, rule: &Rule, affected_positions: &Positions) -> bool {
-        let positions_of_variable_in_body: Positions =
-            self.get_positions_in_atoms(&rule.body_positive_refs());
+        let positions_of_variable_in_body: Positions = self.get_positions_in_positive_body(rule);
         affected_positions.is_superset(&positions_of_variable_in_body)
     }
 
@@ -444,22 +479,19 @@ impl Variable {
         rule: &Rule,
         attacked_pos_by_vars: &HashMap<&Variable, Positions>,
     ) -> bool {
-        let positions_of_variable_in_body: Positions =
-            self.get_positions_in_atoms(&rule.body_positive_refs());
+        let positions_of_variable_in_body: Positions = self.get_positions_in_positive_body(rule);
         attacked_pos_by_vars
             .values()
             .any(|att_pos| att_pos.is_superset(&positions_of_variable_in_body))
     }
 
     fn is_attacked_by_variable(&self, rule: &Rule, attacked_pos_of_var: &Positions) -> bool {
-        let positions_of_variable_in_body: Positions =
-            self.get_positions_in_atoms(&rule.body_positive_refs());
+        let positions_of_variable_in_body: Positions = self.get_positions_in_positive_body(rule);
         attacked_pos_of_var.is_superset(&positions_of_variable_in_body)
     }
 
     fn is_join_variable_in_rule(&self, rule: &Rule) -> bool {
-        let positions_of_variable_in_body: Positions =
-            self.get_positions_in_atoms(&rule.body_positive_refs());
+        let positions_of_variable_in_body: Positions = self.get_positions_in_positive_body(rule);
         2 <= positions_of_variable_in_body.len()
     }
 }
@@ -475,6 +507,10 @@ impl Atom {
     fn universal_variables(&self) -> HashSet<&Variable> {
         self.variables().filter(|var| var.is_universal()).collect()
     }
+
+    fn variables_refs(&self) -> HashSet<&Variable> {
+        self.variables().collect()
+    }
 }
 
 impl Literal {
@@ -486,8 +522,8 @@ impl Literal {
     /// Returns the atom of the literal.
     pub fn atom(&self) -> &Atom {
         match self {
-            Literal::Positive(atom) => &atom,
-            Literal::Negative(atom) => &atom,
+            Literal::Positive(atom) => atom,
+            Literal::Negative(atom) => atom,
             _ => todo!("HANDLING OPERATION CASE"),
         }
     }
