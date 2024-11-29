@@ -1,6 +1,7 @@
 use crate::rule_model::components::{rule::Rule, term::primitive::variable::Variable};
-use crate::static_checks::positions::Positions;
-use std::collections::HashMap;
+use crate::static_checks::{acyclicity_graphs::ExtendedPositions, positions::Positions};
+use core::hash;
+use std::collections::{HashMap, HashSet};
 
 pub struct RuleSet(Vec<Rule>);
 
@@ -17,7 +18,12 @@ impl<'a> RuleSet {
         affected_positions
     }
 
-    pub fn all_positive_positions(&self) -> Positions {
+    pub fn all_positive_extended_positions(&self) -> ExtendedPositions {
+        let all_positive_positions: Positions = self.all_positive_positions();
+        ExtendedPositions::from(all_positive_positions)
+    }
+
+    fn all_positive_positions(&self) -> Positions {
         self.iter().fold(Positions::new(), |all_pos, rule| {
             let all_pos_of_rule: Positions = rule.all_positive_positions();
             all_pos.union(all_pos_of_rule)
@@ -25,7 +31,11 @@ impl<'a> RuleSet {
     }
 
     // TODO: SELF AND RULE SHOULD NOT HAVE LIFETIME 'A
-    fn attacked_positions(&'a self, variable: &Variable, rule: &'a Rule) -> Positions<'a> {
+    fn attacked_positions_by_var_in_rule(
+        &'a self,
+        variable: &Variable,
+        rule: &'a Rule,
+    ) -> Positions<'a> {
         let mut attacked_positions: Positions = self.initial_attacked_positions(variable, rule);
         let mut new_found_attacked_positions: Positions = attacked_positions.clone();
         while !new_found_attacked_positions.is_empty() {
@@ -40,7 +50,7 @@ impl<'a> RuleSet {
             .flat_map(|rule| {
                 rule.existential_variables()
                     .iter()
-                    .map(|var| (*var, self.attacked_positions(var, rule)))
+                    .map(|var| (*var, self.attacked_positions_by_var_in_rule(var, rule)))
                     .collect::<HashMap<&Variable, Positions>>()
             })
             .collect()
@@ -81,6 +91,14 @@ impl<'a> RuleSet {
                 let new_mar_pos_in_rule: Positions =
                     rule.conclude_marked_positions(&last_iteration_positions)?;
                 Some(new_found_marked_positions.union(new_mar_pos_in_rule))
+            })
+    }
+
+    pub fn existential_variables(&self) -> HashSet<&Variable> {
+        self.iter()
+            .fold(HashSet::<&Variable>::new(), |ex_vars, rule| {
+                let ex_vars_of_rule: HashSet<&Variable> = rule.existential_variables();
+                ex_vars.union(&ex_vars_of_rule).copied().collect()
             })
     }
 

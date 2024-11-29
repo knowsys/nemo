@@ -2,7 +2,7 @@ use crate::rule_model::components::{
     atom::Atom, literal::Literal, rule::Rule, tag::Tag, term::primitive::variable::Variable,
     IterablePrimitives, IterableVariables,
 };
-use crate::static_checks::positions::Positions;
+use crate::static_checks::{acyclicity_graphs::ExtendedPositions, positions::Positions};
 use std::collections::{HashMap, HashSet};
 
 #[warn(dead_code)]
@@ -10,8 +10,6 @@ pub trait RuleProperties {
     fn is_joinless(&self) -> bool;
     fn is_linear(&self) -> bool;
     fn is_guarded(&self) -> bool;
-    // NOTE: IS_STICKY FUNCTION FOR SINGLE RULES PROPABLY NOT NEEDED
-    // fn is_sticky(&self, marking: &Positions) -> bool;
     fn is_domain_restricted(&self) -> bool;
     fn is_frontier_one(&self) -> bool;
     fn is_datalog(&self) -> bool;
@@ -143,8 +141,8 @@ impl RuleProperties for Rule {
                 .iter()
                 .all(|[var1, var2]| {
                     attacked_pos_by_vars.values().all(|ex_var_pos| {
-                        !var1.is_attacked_by_variable(self, ex_var_pos)
-                            || !var2.is_attacked_by_variable(self, ex_var_pos)
+                        !var1.is_attacked_by_positions_in_rule(self, ex_var_pos)
+                            || !var2.is_attacked_by_positions_in_rule(self, ex_var_pos)
                     })
                 })
     }
@@ -231,7 +229,7 @@ impl Rule {
         variables
             .iter()
             .filter(|var| var.is_affected(self, affected_positions))
-            .cloned()
+            .copied()
             .collect()
     }
 
@@ -242,7 +240,8 @@ impl Rule {
         self.attacked_variables(self.frontier_variables(), attacked_pos_by_vars)
     }
 
-    fn attacked_universal_variables(
+    /// Returns the attacked universal variables of the rule.
+    pub fn attacked_universal_variables(
         &self,
         attacked_pos_by_vars: &HashMap<&Variable, Positions>,
     ) -> HashSet<&Variable> {
@@ -257,7 +256,7 @@ impl Rule {
         variables
             .iter()
             .filter(|var| var.is_attacked(self, attacked_pos_by_vars))
-            .cloned()
+            .copied()
             .collect()
     }
 
@@ -289,10 +288,7 @@ impl Rule {
     ) -> Positions {
         self.positive_variables()
             .iter()
-            .filter(|var| {
-                let pos_of_var_in_body: Positions = var.get_positions_in_positive_body(self);
-                currently_attacked_positions.is_superset(&pos_of_var_in_body)
-            })
+            .filter(|var| var.is_attacked_by_positions_in_rule(self, currently_attacked_positions))
             .fold(Positions::new(), |new_att_pos_in_rule, var| {
                 let pos_of_var_in_head: Positions = var.get_positions_in_head(self);
                 new_att_pos_in_rule.union(pos_of_var_in_head)
@@ -337,7 +333,7 @@ impl Rule {
         let universal_head_variables: HashSet<&Variable> = self.universal_head_variables();
         positive_body_variables
             .intersection(&universal_head_variables)
-            .cloned()
+            .copied()
             .collect()
     }
 
@@ -380,7 +376,14 @@ impl Rule {
             })
     }
 
-    /// Returns the initial affected positions of the rule. A position of a rule is initial
+    /// Returns the extended positions of all existential variables in the rule.
+    pub fn extended_positions_of_existential_variables(&self) -> ExtendedPositions {
+        let pos_of_ex_vars: Positions = self.positions_of_existential_variables();
+        ExtendedPositions::from(pos_of_ex_vars)
+    }
+
+    /// Returns the positions of all existential variables in the rule.
+    /// Therefore, it returns also the initial affected positions of the rule. A position of a rule is initial
     /// affected if an existential variable appears on it.
     pub fn positions_of_existential_variables(&self) -> Positions {
         self.existential_variables()
@@ -405,7 +408,7 @@ impl Rule {
                 let un_vars_of_atom: HashSet<&Variable> = atom.universal_variables();
                 universal_head_variables
                     .union(&un_vars_of_atom)
-                    .cloned()
+                    .copied()
                     .collect()
             },
         )
@@ -427,21 +430,33 @@ impl Variable {
             .any(|atom| self.appears_at_positions_in_atom(positions, atom))
     }
 
-    // TODO: &RULE SHOULD NOT HAVE LIFETIME 'A
+    /// Returns the extended positions of the variable in the positive body.
+    pub fn get_extended_positions_in_positive_body<'a>(
+        &self,
+        rule: &'a Rule,
+    ) -> ExtendedPositions<'a> {
+        let body_pos_of_var: Positions = self.get_positions_in_positive_body(rule);
+        ExtendedPositions::from(body_pos_of_var)
+    }
+
+    /// Returns the extended positions of the variable in the head.
+    pub fn get_extended_positions_in_head<'a>(&self, rule: &'a Rule) -> ExtendedPositions<'a> {
+        let head_pos_of_var: Positions = self.get_positions_in_head(rule);
+        ExtendedPositions::from(head_pos_of_var)
+    }
+
     /// Returns the positions of the variable in the positive body.
     pub fn get_positions_in_positive_body<'a>(&self, rule: &'a Rule) -> Positions<'a> {
         let positive_body_atoms: Vec<&Atom> = rule.body_positive_refs();
         self.get_positions_in_atoms(&positive_body_atoms)
     }
 
-    // TODO: &RULE SHOULD NOT HAVE LIFETIME 'A
     /// Returns the positions of the variablen in the head.
     pub fn get_positions_in_head<'a>(&self, rule: &'a Rule) -> Positions<'a> {
         let head_atoms: Vec<&Atom> = rule.head_refs();
         self.get_positions_in_atoms(&head_atoms)
     }
 
-    // TODO: &ATOM SHOULD NOT HAVE LIFETIME 'A
     /// Returns the positions of the variable in the atom.
     pub fn get_positions_in_atom<'a>(&self, atom: &'a Atom) -> Positions<'a> {
         atom.variables()
@@ -458,7 +473,6 @@ impl Variable {
             })
     }
 
-    // TODO: &ATOM SHOULD NOT HAVE LIFETIME 'A
     /// Returns the positions where the variable appears in the given atoms.
     pub fn get_positions_in_atoms<'a>(&self, atoms: &[&'a Atom]) -> Positions<'a> {
         atoms
@@ -485,9 +499,24 @@ impl Variable {
             .any(|att_pos| att_pos.is_superset(&positions_of_variable_in_body))
     }
 
-    fn is_attacked_by_variable(&self, rule: &Rule, attacked_pos_of_var: &Positions) -> bool {
+    fn is_attacked_by_positions_in_rule(
+        &self,
+        rule: &Rule,
+        attacked_pos_of_var: &Positions,
+    ) -> bool {
         let positions_of_variable_in_body: Positions = self.get_positions_in_positive_body(rule);
         attacked_pos_of_var.is_superset(&positions_of_variable_in_body)
+    }
+
+    /// Returns whether the variable is attacked by the given variable.
+    pub fn is_attacked_by_variable(
+        &self,
+        attacking_var: &Variable,
+        rule: &Rule,
+        attacked_pos_by_vars: &HashMap<&Variable, Positions>,
+    ) -> bool {
+        let attacked_pos_by_var: &Positions = attacked_pos_by_vars.get(attacking_var).unwrap();
+        self.is_attacked_by_positions_in_rule(rule, attacked_pos_by_var)
     }
 
     fn is_join_variable_in_rule(&self, rule: &Rule) -> bool {
