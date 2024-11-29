@@ -26,7 +26,7 @@ pub struct DocComment<'a> {
     content: Vec<Span<'a>>,
 }
 
-impl<'a> DocComment<'a> {
+impl DocComment<'_> {
     /// Return the content of the comment
     pub fn content(&self) -> Vec<String> {
         self.content

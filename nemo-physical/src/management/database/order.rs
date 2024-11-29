@@ -344,7 +344,7 @@ mod test {
     };
 
     fn empty_source() -> TableSource {
-        TableSource::from_simple_table(SimpleTable::new(1))
+        Box::new(SimpleTable::new(1))
     }
 
     #[test]

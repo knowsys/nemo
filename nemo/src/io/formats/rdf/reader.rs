@@ -339,6 +339,10 @@ impl TableProvider for RdfReader {
             }),
         }
     }
+
+    fn arity(&self) -> usize {
+        self.value_formats.arity()
+    }
 }
 
 impl std::fmt::Debug for RdfReader {

@@ -25,7 +25,7 @@ impl<'a> ParserInput<'a> {
     }
 }
 
-impl<'a> AsBytes for ParserInput<'a> {
+impl AsBytes for ParserInput<'_> {
     fn as_bytes(&self) -> &[u8] {
         self.span.fragment().as_bytes()
     }
@@ -41,7 +41,7 @@ impl<'a> nom::Compare<ParserInput<'a>> for ParserInput<'a> {
     }
 }
 
-impl<'a> nom::Compare<&str> for ParserInput<'a> {
+impl nom::Compare<&str> for ParserInput<'_> {
     fn compare(&self, t: &str) -> nom::CompareResult {
         self.span.compare(t)
     }
@@ -51,7 +51,7 @@ impl<'a> nom::Compare<&str> for ParserInput<'a> {
     }
 }
 
-impl<'a> nom::ExtendInto for ParserInput<'a> {
+impl nom::ExtendInto for ParserInput<'_> {
     type Item = char;
 
     type Extender = String;
@@ -65,13 +65,13 @@ impl<'a> nom::ExtendInto for ParserInput<'a> {
     }
 }
 
-impl<'a> nom::FindSubstring<&str> for ParserInput<'a> {
+impl nom::FindSubstring<&str> for ParserInput<'_> {
     fn find_substring(&self, substr: &str) -> Option<usize> {
         self.span.find_substring(substr)
     }
 }
 
-impl<'a> InputLength for ParserInput<'a> {
+impl InputLength for ParserInput<'_> {
     fn input_len(&self) -> usize {
         self.span.input_len()
     }

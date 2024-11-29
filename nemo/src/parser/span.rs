@@ -124,7 +124,7 @@ impl<'a> Span<'a> {
 
         let end_offset = start.offset + self.fragment.len();
         let end_line = start.line
-            + u32::try_from(self.fragment.lines().count() - 1)
+            + u32::try_from(self.fragment.lines().count().saturating_sub(1))
                 .expect("cannot convert line number to u32");
         let end_column = if self.fragment.lines().count() > 1 {
             u32::try_from(
@@ -243,7 +243,7 @@ impl<'a> Span<'a> {
     }
 }
 
-impl<'a> std::fmt::Display for Span<'a> {
+impl std::fmt::Display for Span<'_> {
     fn fmt(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
         self.fragment.fmt(formatter)
     }
@@ -349,7 +349,7 @@ impl<'a> nom::Compare<Span<'a>> for Span<'a> {
     }
 }
 
-impl<'a> nom::Compare<&str> for Span<'a> {
+impl nom::Compare<&str> for Span<'_> {
     fn compare(&self, t: &str) -> nom::CompareResult {
         self.fragment.compare(t)
     }

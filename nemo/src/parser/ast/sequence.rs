@@ -33,7 +33,7 @@ pub struct Sequence<'a, T> {
     elements: Vec<T>,
 }
 
-impl<'a, T> Sequence<'a, T> {
+impl<T> Sequence<'_, T> {
     /// Return an iterator over the elements.
     pub fn iter(&self) -> impl Iterator<Item = &T> {
         self.into_iter()
@@ -136,7 +136,7 @@ impl<'a, T: std::fmt::Debug + Sync + ProgramAST<'a>> ProgramAST<'a> for Sequence
     }
 }
 
-impl<'a, 'b, T> IntoIterator for &'b Sequence<'a, T> {
+impl<'b, T> IntoIterator for &'b Sequence<'_, T> {
     type Item = &'b T;
     type IntoIter = std::slice::Iter<'b, T>;
 
@@ -145,7 +145,7 @@ impl<'a, 'b, T> IntoIterator for &'b Sequence<'a, T> {
     }
 }
 
-impl<'a, T> IntoIterator for Sequence<'a, T> {
+impl<T> IntoIterator for Sequence<'_, T> {
     type Item = T;
     type IntoIter = IntoIter<T>;
 

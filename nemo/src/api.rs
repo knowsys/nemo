@@ -59,7 +59,7 @@ pub fn load_string(input: String) -> Result<Engine, Error> {
         .translate(&program_ast)
         .map_err(|_| Error::ProgramParseError)?;
 
-    ExecutionEngine::initialize(&program, ImportManager::new(ResourceProviders::default()))
+    ExecutionEngine::initialize(program, ImportManager::new(ResourceProviders::default()))
 }
 
 /// Executes the reasoning process of the [Engine].

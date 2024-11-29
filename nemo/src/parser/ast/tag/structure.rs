@@ -45,7 +45,7 @@ impl<'a> StructureTag<'a> {
     }
 }
 
-impl<'a> Display for StructureTag<'a> {
+impl Display for StructureTag<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match &self.kind {
             StructureTagKind::Plain(token) => token.fmt(f),

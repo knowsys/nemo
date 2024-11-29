@@ -33,7 +33,7 @@ impl<'a> TrieScanPrune<'a> {
         let input_trie_scan_arity = input_trie_scan.arity();
 
         let mut output_column_scans =
-            Vec::<UnsafeCell<ColumnScanT<'a>>>::with_capacity(input_trie_scan.arity());
+            Vec::<UnsafeCell<ColumnScanT<'_>>>::with_capacity(input_trie_scan.arity());
 
         // TODO: One could check if some of the entries are empty here
         // and from that deduce that the result of this will be empty
@@ -563,7 +563,7 @@ impl<'a> TrieScanPruneState<'a> {
     }
 }
 
-impl<'a> TrieScanPrune<'a> {
+impl TrieScanPrune<'_> {
     /// Moves to the next value on a given layer while ensuring that only materialized tuples are returned (see guarantees provided by [TrieScanPrune]).
     ///
     /// It is assumed that the trie scan has been initialized by calling `down()` at least once.
@@ -639,7 +639,7 @@ impl<'a> PartialTrieScan<'a> for TrieScanPrune<'a> {
     }
 }
 
-impl<'a> TrieScan for TrieScanPrune<'a> {
+impl TrieScan for TrieScanPrune<'_> {
     fn advance_on_layer(&mut self, layer: usize) -> Option<usize> {
         if !unsafe { (*self.state.get()).initialized } {
             for current_layer in 0..=layer {
