@@ -2,7 +2,7 @@ use crate::rule_model::components::{
     atom::Atom, literal::Literal, rule::Rule, tag::Tag, term::primitive::variable::Variable,
     IterablePrimitives, IterableVariables,
 };
-use crate::static_checks::{acyclicity_graphs::ExtendedPositions, positions::Positions};
+use crate::static_checks::positions::{ExtendedPositions, Positions};
 use std::collections::{HashMap, HashSet};
 
 #[warn(dead_code)]

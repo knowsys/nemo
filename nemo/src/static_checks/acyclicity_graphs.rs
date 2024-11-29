@@ -1,36 +1,10 @@
-use crate::rule_model::components::{rule::Rule, tag::Tag, term::primitive::variable::Variable};
-use crate::static_checks::{positions::Positions, rule_set::RuleSet};
-use petgraph::graphmap::DiGraphMap;
-use std::collections::{
-    hash_set::{IntoIter, Iter},
-    HashMap, HashSet,
+use crate::rule_model::components::{rule::Rule, term::primitive::variable::Variable};
+use crate::static_checks::{
+    positions::{ExtendedPositions, Position, Positions},
+    rule_set::RuleSet,
 };
-
-#[derive(Copy, Clone, Debug, Eq, Hash, PartialEq, Ord, PartialOrd)]
-struct Position<'a>(&'a Tag, usize);
-
-#[derive(Clone, Debug)]
-pub struct ExtendedPositions<'a>(HashSet<Position<'a>>);
-
-impl<'a> ExtendedPositions<'a> {
-    pub fn new() -> Self {
-        ExtendedPositions(HashSet::<Position>::new())
-    }
-
-    fn into_iter(self) -> IntoIter<Position<'a>> {
-        self.0.into_iter()
-    }
-
-    fn iter(&self) -> Iter<Position<'a>> {
-        self.0.iter()
-    }
-}
-
-impl Default for ExtendedPositions<'_> {
-    fn default() -> Self {
-        ExtendedPositions::new()
-    }
-}
+use petgraph::graphmap::DiGraphMap;
+use std::collections::{HashMap, HashSet};
 
 #[derive(Clone)]
 enum WeaklyAcyclicityGraphEdgeType {
@@ -242,25 +216,5 @@ impl<'a> AcyclicityGraphConstructor<'a> for RuleSet {
 
     fn jointly_acyclicity_graph(&'a self) -> JointlyAcyclicityGraph<'a> {
         JointlyAcyclicityGraph::build_graph(self)
-    }
-}
-
-impl<'a> From<Positions<'a>> for ExtendedPositions<'a> {
-    fn from(positions: Positions<'a>) -> Self {
-        ExtendedPositions::from(positions.into_iter().fold(
-            HashSet::<Position>::new(),
-            |ex_pos: HashSet<Position>, (pred, indices): (&'a Tag, HashSet<usize>)| {
-                ex_pos
-                    .union(&indices.iter().map(|index| Position(pred, *index)).collect())
-                    .copied()
-                    .collect()
-            },
-        ))
-    }
-}
-
-impl<'a> From<HashSet<Position<'a>>> for ExtendedPositions<'a> {
-    fn from(position_set: HashSet<Position<'a>>) -> Self {
-        ExtendedPositions(position_set)
     }
 }

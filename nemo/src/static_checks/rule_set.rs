@@ -1,12 +1,10 @@
 use crate::rule_model::components::{rule::Rule, term::primitive::variable::Variable};
-use crate::static_checks::{acyclicity_graphs::ExtendedPositions, positions::Positions};
-use core::hash;
+use crate::static_checks::positions::{ExtendedPositions, Positions};
 use std::collections::{HashMap, HashSet};
 
 pub struct RuleSet(Vec<Rule>);
 
 impl<'a> RuleSet {
-    // TODO: SELF SHOULD NOT HAVE LIFETIME 'A
     pub fn affected_positions(&'a self) -> Positions<'a> {
         let mut affected_positions: Positions = self.initial_affected_positions();
         let mut new_found_affected_positions: Positions = affected_positions.clone();
@@ -30,7 +28,6 @@ impl<'a> RuleSet {
         })
     }
 
-    // TODO: SELF AND RULE SHOULD NOT HAVE LIFETIME 'A
     fn attacked_positions_by_var_in_rule(
         &'a self,
         variable: &Variable,
@@ -126,7 +123,6 @@ impl<'a> RuleSet {
         self.0.iter()
     }
 
-    // TODO: SELF SHOULD NOT HAVE LIFETIME 'A
     fn new_affected_positions(
         &'a self,
         last_iteration_positions: Positions<'a>,
@@ -137,7 +133,6 @@ impl<'a> RuleSet {
         new_found_affected_positions.difference(currently_affected_positions)
     }
 
-    // TODO: SELF SHOULD NOT HAVE LIFETIME 'A
     fn new_attacked_positions(
         &'a self,
         currently_attacked_postions: &Positions<'a>,
@@ -147,7 +142,6 @@ impl<'a> RuleSet {
         new_found_attacked_positions.difference(currently_attacked_postions)
     }
 
-    // TODO: SELF SHOULD NOT HAVE LIFETIME 'A
     fn new_marked_positions(
         &'a self,
         last_iteration_positions: Positions,

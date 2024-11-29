@@ -1,10 +1,8 @@
 // TODO: POSSIBLY ALL OVER THAT MODULE: ONLY USE POSITIVE BODY ATOMS
-// TODO: RECONSIDER USING SINGLE TUPLE STRUCTS
-// TODO: CONSIDER USING SMART POINTER RC FOR THE REFERENCES IN THE SINGLE TUPLE STRUCTS
-// TODO: CONSIDER IMPLEMENTING TRAIT INTO OR DEREF TO GET TO THE INNER OF THE SINGLE TUPLE STRUCT
 use crate::rule_model::components::tag::Tag;
 use std::collections::{
     hash_map::{Entry, Keys},
+    hash_set::{IntoIter, Iter},
     HashMap, HashSet,
 };
 
@@ -147,7 +145,7 @@ impl<'a> Positions<'a> {
         positions
             .into_iter()
             .fold(self, |mut unioned_pos, (pred, pos_indices)| {
-                if let None = unioned_pos.get(pred) {
+                if !unioned_pos.contains_key(pred) {
                     unioned_pos.insert(pred, HashSet::<usize>::new());
                 }
                 let unioned_indices: &mut HashSet<usize> =
@@ -157,5 +155,51 @@ impl<'a> Positions<'a> {
                 });
                 unioned_pos
             })
+    }
+}
+
+#[derive(Copy, Clone, Debug, Eq, Hash, PartialEq, Ord, PartialOrd)]
+pub struct Position<'a>(&'a Tag, usize);
+
+#[derive(Clone, Debug)]
+pub struct ExtendedPositions<'a>(HashSet<Position<'a>>);
+
+impl Default for ExtendedPositions<'_> {
+    fn default() -> Self {
+        ExtendedPositions::new()
+    }
+}
+
+impl<'a> From<Positions<'a>> for ExtendedPositions<'a> {
+    fn from(positions: Positions<'a>) -> Self {
+        ExtendedPositions::from(positions.into_iter().fold(
+            HashSet::<Position>::new(),
+            |ex_pos: HashSet<Position>, (pred, indices): (&'a Tag, HashSet<usize>)| {
+                ex_pos
+                    .union(&indices.iter().map(|index| Position(pred, *index)).collect())
+                    .copied()
+                    .collect()
+            },
+        ))
+    }
+}
+
+impl<'a> From<HashSet<Position<'a>>> for ExtendedPositions<'a> {
+    fn from(position_set: HashSet<Position<'a>>) -> Self {
+        ExtendedPositions(position_set)
+    }
+}
+
+impl<'a> ExtendedPositions<'a> {
+    pub fn new() -> Self {
+        ExtendedPositions(HashSet::<Position>::new())
+    }
+
+    pub fn into_iter(self) -> IntoIter<Position<'a>> {
+        self.0.into_iter()
+    }
+
+    pub fn iter(&self) -> Iter<Position<'a>> {
+        self.0.iter()
     }
 }
