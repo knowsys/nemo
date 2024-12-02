@@ -46,7 +46,7 @@ pub(crate) type TupleBytesPairDictionary =
 /// Dictionary for storing IDs of tuples. This is not a subdictionary like the others, since
 /// we need mut access to the parent [MetaDvDictionary] to recursively create IDs for subterms
 /// of a tuple.
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub(crate) struct TupleDvDict {
     /// Internal dictionary to store tuple term types and parameter values.
     ///
@@ -72,14 +72,6 @@ impl TupleDvDict {
     /// Construct a new and empty dictionary.
     pub(crate) fn new() -> Self {
         Self::default()
-    }
-}
-
-impl Default for TupleDvDict {
-    fn default() -> Self {
-        TupleDvDict {
-            dict: TupleBytesPairDictionary::default(),
-        }
     }
 }
 
@@ -318,7 +310,7 @@ fn tuple_bytes(parent_dict: &MetaDvDictionary, dv: &AnyDataValue) -> Option<(Vec
             | ValueDomain::Other
             | ValueDomain::Tuple
             | ValueDomain::Map => {
-                if let Some(term_id) = parent_dict.datavalue_to_id(&dvi) {
+                if let Some(term_id) = parent_dict.datavalue_to_id(dvi) {
                     if let Ok(i32id) = u32::try_from(term_id) {
                         cur_type = TUPLE_TYPE_DICTID32;
                         tuple_content.extend_from_slice(&i32id.to_be_bytes());
@@ -442,8 +434,8 @@ fn id_to_tuple_datavalue_with_parent(
     // read label, if any
     let label: Option<IriDataValue>;
     let mut pos_types: usize = 0;
-    // Note: the len==0 case can occur when storing an empty tuple that has no label
-    if tuple_type.len() > 0 && tuple_type[0] == TUPLE_TYPE_LABELID32 {
+    // Note: the case is_empty() can occur when storing an empty tuple that has no label
+    if !tuple_type.is_empty() && tuple_type[0] == TUPLE_TYPE_LABELID32 {
         pos_types += 1; // consume initial type byte
         get_value_bytes!(4, pos_types, tuple_type, label_bytes);
         if let Ok(label_id) = usize::try_from(u32::from_be_bytes(label_bytes)) {
@@ -455,7 +447,7 @@ fn id_to_tuple_datavalue_with_parent(
                 "failed to convert u32 to usize; platforms with less than 32bit are not supported"
             );
         }
-    } else if tuple_type.len() > 0 && tuple_type[0] == TUPLE_TYPE_LABELID64 {
+    } else if !tuple_type.is_empty() && tuple_type[0] == TUPLE_TYPE_LABELID64 {
         pos_types += 1; // consume initial type byte
         get_value_bytes!(8, pos_types, tuple_type, label_bytes);
         if let Ok(label_id) = usize::try_from(u64::from_be_bytes(label_bytes)) {
