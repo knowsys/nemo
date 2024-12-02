@@ -232,8 +232,8 @@ impl MetaDvDictionary {
     /// Returns a pointer to the [DvDict] that is identified by the given id. This function
     /// must only be called with ids that are given out by [MetaDvDictionary], and will panic
     /// if invalid IDs are used.
-    pub(crate) fn sub_dictionary_unchecked(&self, dict_id: usize) -> &Box<dyn DvDict> {
-        &self.dicts[dict_id].dict
+    pub(crate) fn sub_dictionary_unchecked(&self, dict_id: usize) -> &dyn DvDict {
+        &*self.dicts[dict_id].dict
     }
 
     /// Convert the local ID of a given dictionary to a global ID.
@@ -601,8 +601,6 @@ impl ByteSized for MetaDvDictionary {
 
 #[cfg(test)]
 mod test {
-    use std::u64;
-
     use crate::{
         datavalues::{
             syntax::XSD_PREFIX, AnyDataValue, IriDataValue, NullDataValue, TupleDataValue,
@@ -729,7 +727,7 @@ mod test {
             AnyDataValue::new_plain_string("another string".to_string()),
             AnyDataValue::new_boolean(true),
             dv_null,
-            AnyDataValue::new_float_from_f32(3.14).expect("must work"),
+            AnyDataValue::new_float_from_f32(3.9914).expect("must work"),
             AnyDataValue::new_double_from_f64(1.2345).expect("must work"),
             AnyDataValue::new_iri("http://example.org".to_string()),
             AnyDataValue::new_language_tagged_string("Hallo".to_string(), "de".to_string()),
