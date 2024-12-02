@@ -8,7 +8,7 @@ use crate::management::bytesized::{size_inner_vec_flat, ByteSized};
 use super::ranked_pair_iri_dv_dict::IriSplittingDvDictionary;
 use super::ranked_pair_other_dv_dict::OtherSplittingDvDictionary;
 use super::string_langstring_dv_dict::LangStringDvDictionary;
-use super::tuple_dict::TupleDvDict;
+use super::tuple_dv_dict::TupleDvDict;
 use super::DvDict;
 use super::StringDvDictionary;
 use super::{AddResult, NullDvDictionary};
