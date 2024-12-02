@@ -8,6 +8,7 @@ use crate::management::bytesized::{size_inner_vec_flat, ByteSized};
 use super::ranked_pair_iri_dv_dict::IriSplittingDvDictionary;
 use super::ranked_pair_other_dv_dict::OtherSplittingDvDictionary;
 use super::string_langstring_dv_dict::LangStringDvDictionary;
+use super::tuple_dict::TupleDvDict;
 use super::DvDict;
 use super::StringDvDictionary;
 use super::{AddResult, NullDvDictionary};
@@ -34,6 +35,8 @@ enum DictionaryType {
     Other,
     /// Dictionary for null datavalues
     Null,
+    /// Dictionary for (variable-free) tuples
+    Tuple,
     // /// Dictionary for long strings (blobs)
     // Blob,
     // /// Dictionary for strings with a fixed prefix and suffix
@@ -120,6 +123,7 @@ impl DictIterator {
                 ValueDomain::Iri => return md.iri_dict,
                 ValueDomain::Other => return md.other_dict,
                 ValueDomain::Null => return md.null_dict,
+                ValueDomain::Tuple => return md.tuple_dict,
                 ValueDomain::Boolean => return md.other_dict, // TODO: maybe not the best place, using a whole page for two values if there is not much "other"
                 ValueDomain::UnsignedLong => return md.other_dict, // TODO: maybe not the best place either
                 _ => {}
@@ -167,6 +171,8 @@ pub struct MetaDvDictionary {
     other_dict: DictId,
     /// Id of the null dictionary, if any (otherwise [NO_DICT])
     null_dict: DictId,
+    /// Id of the tuple dictionary, if any (otherwise [NO_DICT])
+    tuple_dict: DictId,
     /// Ids of further general-purpose dictionaries,
     /// which might be used for any kind of datavalue.
     generic_dicts: Vec<DictId>,
@@ -192,6 +198,7 @@ impl Default for MetaDvDictionary {
             iri_dict: NO_DICT,
             other_dict: NO_DICT,
             null_dict: NO_DICT,
+            tuple_dict: NO_DICT,
             // dict_candidates: LruCache::new(NonZeroUsize::new(150).unwrap()),
             //infix_dicts: HashMap::new(),
             generic_dicts: Vec::new(),
@@ -203,6 +210,7 @@ impl Default for MetaDvDictionary {
         result.add_dictionary(DictionaryType::LangString);
         result.add_dictionary(DictionaryType::Other);
         result.add_dictionary(DictionaryType::Null);
+        result.add_dictionary(DictionaryType::Tuple);
 
         result
     }
@@ -212,6 +220,20 @@ impl MetaDvDictionary {
     /// Construct a new and empty dictionary.
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// Returns a pointer to the [DvDict] that is identified by the given id. This function
+    /// must only be called with ids that are given out by [MetaDvDictionary], and will panic
+    /// if invalid IDs are used.
+    pub(crate) fn sub_dictionary_mut_unchecked(&mut self, dict_id: usize) -> &mut Box<dyn DvDict> {
+        &mut self.dicts[dict_id].dict
+    }
+
+    /// Returns a pointer to the [DvDict] that is identified by the given id. This function
+    /// must only be called with ids that are given out by [MetaDvDictionary], and will panic
+    /// if invalid IDs are used.
+    pub(crate) fn sub_dictionary_unchecked(&self, dict_id: usize) -> &Box<dyn DvDict> {
+        &self.dicts[dict_id].dict
     }
 
     /// Convert the local ID of a given dictionary to a global ID.
@@ -330,6 +352,13 @@ impl MetaDvDictionary {
                 }
                 dict = Box::new(NullDvDictionary::new());
                 self.null_dict = self.dicts.len();
+            }
+            DictionaryType::Tuple => {
+                if self.tuple_dict != NO_DICT {
+                    return;
+                }
+                dict = Box::new(TupleDvDict::new());
+                self.tuple_dict = self.dicts.len();
             } // DictionaryType::Infix {
               //     ref prefix,
               //     ref suffix,
@@ -364,7 +393,8 @@ impl MetaDvDictionary {
             if best_dict_idx == usize::MAX {
                 best_dict_idx = dict_idx;
             }
-            if let Some(idx) = self.dicts[dict_idx].dict.datavalue_to_id(&dv) {
+            let dti_fn = self.dicts[dict_idx].dict.datavalue_to_id_with_parent_fn();
+            if let Some(idx) = dti_fn(self, dict_idx, &dv) {
                 if idx != super::KNOWN_ID_MARK {
                     return AddResult::Known(self.local_to_global_unchecked(dict_idx, idx));
                 } // else: marked, continue search for real id
@@ -435,7 +465,11 @@ impl MetaDvDictionary {
 
         // Add entry to preferred dictionary
         self.size += 1;
-        let local_id = self.dicts[best_dict_idx].dict.add_datavalue(dv).value();
+        let add_fn = self.dicts[best_dict_idx]
+            .dict
+            .add_datavalue_with_parent_fn();
+        let local_id = add_fn(self, best_dict_idx, dv).value();
+        // let local_id = self.dicts[best_dict_idx].dict.add_datavalue(dv).value();
         if local_id != NONEXISTING_ID_MARK {
             // Compute global id based on block and local id, possibly allocating new block in the process
             AddResult::Fresh(self.local_to_global(best_dict_idx, local_id))
@@ -469,7 +503,8 @@ impl DvDict for MetaDvDictionary {
             dict_idx
         } != usize::MAX
         {
-            if let Some(idx) = self.dicts[dict_idx].dict.datavalue_to_id(dv) {
+            let dti_fn = self.dicts[dict_idx].dict.datavalue_to_id_with_parent_fn();
+            if let Some(idx) = dti_fn(self, dict_idx, dv) {
                 return Some(self.local_to_global_unchecked(dict_idx, idx));
             }
         }
@@ -481,7 +516,8 @@ impl DvDict for MetaDvDictionary {
         if dict_id == NO_DICT {
             None
         } else {
-            self.dicts[dict_id].dict.id_to_datavalue(local_id)
+            let itd_fn = self.dicts[dict_id].dict.id_to_datavalue_with_parent_fn();
+            itd_fn(self, dict_id, local_id)
         }
     }
 
@@ -539,6 +575,14 @@ impl DvDict for MetaDvDictionary {
     fn has_marked(&self) -> bool {
         false
     }
+
+    fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
+        self
+    }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
 }
 
 impl ByteSized for MetaDvDictionary {
@@ -557,8 +601,12 @@ impl ByteSized for MetaDvDictionary {
 
 #[cfg(test)]
 mod test {
+    use std::u64;
+
     use crate::{
-        datavalues::{syntax::XSD_PREFIX, AnyDataValue, NullDataValue},
+        datavalues::{
+            syntax::XSD_PREFIX, AnyDataValue, IriDataValue, NullDataValue, TupleDataValue,
+        },
         dictionary::{AddResult, DvDict},
     };
 
@@ -665,5 +713,122 @@ mod test {
         .expect("Failed to create unsigned long");
 
         assert_eq!(dict.add_datavalue(dv), AddResult::Fresh(0));
+    }
+
+    #[test]
+    fn add_and_get_tuple() {
+        let mut dict = MetaDvDictionary::new();
+
+        let dv_label = IriDataValue::new("f".to_string());
+        let null_id = dict.fresh_null_id();
+        let dv_null = dict.id_to_datavalue(null_id).unwrap();
+        let dvs = vec![
+            AnyDataValue::new_plain_string("http://example.org".to_string()),
+            AnyDataValue::new_integer_from_i64(42),
+            AnyDataValue::new_integer_from_u64(u64::MAX - 3),
+            AnyDataValue::new_plain_string("another string".to_string()),
+            AnyDataValue::new_boolean(true),
+            dv_null,
+            AnyDataValue::new_float_from_f32(3.14).expect("must work"),
+            AnyDataValue::new_double_from_f64(1.2345).expect("must work"),
+            AnyDataValue::new_iri("http://example.org".to_string()),
+            AnyDataValue::new_language_tagged_string("Hallo".to_string(), "de".to_string()),
+            AnyDataValue::new_other(
+                "abc".to_string(),
+                "http://example.org/mydatatype".to_string(),
+            ),
+        ];
+
+        let dv_tuple: AnyDataValue = TupleDataValue::new(Some(dv_label), dvs).into();
+
+        let ar = dict.add_datavalue(dv_tuple.clone());
+        let AddResult::Fresh(dv_tuple_id) = ar else {
+            panic!("add failed: {:?}", ar);
+        };
+
+        assert_eq!(dict.datavalue_to_id(&dv_tuple), Some(dv_tuple_id));
+        assert_eq!(
+            dict.add_datavalue(dv_tuple.clone()),
+            AddResult::Known(dv_tuple_id)
+        );
+        assert_eq!(dict.id_to_datavalue(dv_tuple_id), Some(dv_tuple.clone()));
+    }
+
+    #[test]
+    fn add_and_get_tuple_nolabel() {
+        let mut dict = MetaDvDictionary::new();
+
+        let dvs = vec![
+            AnyDataValue::new_integer_from_i64(42),
+            AnyDataValue::new_integer_from_i64(43),
+            AnyDataValue::new_integer_from_i64(44),
+        ];
+
+        let dv_tuple: AnyDataValue = TupleDataValue::new(None, dvs).into();
+
+        let ar = dict.add_datavalue(dv_tuple.clone());
+        let AddResult::Fresh(dv_tuple_id) = ar else {
+            panic!("add failed: {:?}", ar);
+        };
+
+        assert_eq!(dict.datavalue_to_id(&dv_tuple), Some(dv_tuple_id));
+        assert_eq!(
+            dict.add_datavalue(dv_tuple.clone()),
+            AddResult::Known(dv_tuple_id)
+        );
+        assert_eq!(dict.id_to_datavalue(dv_tuple_id), Some(dv_tuple.clone()));
+    }
+
+    #[test]
+    fn add_and_get_tuple_empty() {
+        let mut dict = MetaDvDictionary::new();
+
+        let dvs = vec![];
+
+        let dv_tuple: AnyDataValue = TupleDataValue::new(None, dvs).into();
+
+        let ar = dict.add_datavalue(dv_tuple.clone());
+        let AddResult::Fresh(dv_tuple_id) = ar else {
+            panic!("add failed: {:?}", ar);
+        };
+
+        assert_eq!(dict.datavalue_to_id(&dv_tuple), Some(dv_tuple_id));
+        assert_eq!(
+            dict.add_datavalue(dv_tuple.clone()),
+            AddResult::Known(dv_tuple_id)
+        );
+        assert_eq!(dict.id_to_datavalue(dv_tuple_id), Some(dv_tuple.clone()));
+    }
+
+    #[test]
+    fn add_and_get_tuple_nested() {
+        let mut dict = MetaDvDictionary::new();
+
+        let dvs1 = vec![
+            AnyDataValue::new_integer_from_i64(42),
+            AnyDataValue::new_integer_from_i64(43),
+            AnyDataValue::new_integer_from_i64(44),
+        ];
+        let dv_tuple1: AnyDataValue = TupleDataValue::new(None, dvs1).into();
+
+        let dvs2 = vec![
+            dv_tuple1.clone(),
+            AnyDataValue::new_integer_from_i64(4),
+            dv_tuple1.clone(),
+            dv_tuple1.clone(),
+        ];
+        let dv_tuple2: AnyDataValue = TupleDataValue::new(None, dvs2).into();
+
+        let ar = dict.add_datavalue(dv_tuple2.clone());
+        let AddResult::Fresh(dv_tuple_id) = ar else {
+            panic!("add failed: {:?}", ar);
+        };
+
+        assert_eq!(dict.datavalue_to_id(&dv_tuple2), Some(dv_tuple_id));
+        assert_eq!(
+            dict.add_datavalue(dv_tuple2.clone()),
+            AddResult::Known(dv_tuple_id)
+        );
+        assert_eq!(dict.id_to_datavalue(dv_tuple_id), Some(dv_tuple2.clone()));
     }
 }
