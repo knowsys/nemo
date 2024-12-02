@@ -12,6 +12,14 @@ use nemo_physical::{
 };
 
 use crate::{
+    chase_model::{
+        analysis::{program_analysis::RuleAnalysis, variable_order::VariableOrder},
+        components::{
+            atom::{variable_atom::VariableAtom, ChaseAtom},
+            filter::ChaseFilter,
+            rule::ChaseRule,
+        },
+    },
     execution::{
         execution_engine::RuleInfo,
         planning::operations::{
@@ -20,11 +28,10 @@ use crate::{
         },
         rule_execution::VariableTranslation,
     },
-    model::{
-        chase_model::{ChaseAtom, ChaseRule, VariableAtom},
-        Constraint, Identifier, PrimitiveTerm, Variable,
+    rule_model::components::{
+        tag::Tag,
+        term::primitive::{variable::Variable, Primitive},
     },
-    program_analysis::{analysis::RuleAnalysis, variable_order::VariableOrder},
     table_manager::{SubtableExecutionPlan, SubtableIdentifier, TableManager},
 };
 
@@ -39,17 +46,17 @@ pub(crate) struct RestrictedChaseStrategy {
     /// Atoms for computing the table "new satisfied matches"
     head_join_atoms: Vec<VariableAtom>,
     /// Constraints associated with computing the table "new satisfied matches"
-    head_join_constraints: Vec<Constraint>,
+    head_join_filters: Vec<ChaseFilter>,
 
-    predicate_to_instructions: HashMap<Identifier, Vec<HeadInstruction>>,
-    predicate_to_full_existential: HashMap<Identifier, bool>,
+    predicate_to_instructions: HashMap<Tag, Vec<HeadInstruction>>,
+    predicate_to_full_existential: HashMap<Tag, bool>,
 
     /// The calculation of "new statified matches" is represented by an auxillary rule
     /// "head -> aux_predicate(frontier_variables)".
     /// This is the order of those variables
     aux_head_order: VariableOrder,
     /// This is the predicate of the auxillary table containing the "satisfied matches"
-    aux_predicate: Identifier,
+    aux_predicate: Tag,
 
     analysis: RuleAnalysis,
 }
@@ -57,14 +64,14 @@ pub(crate) struct RestrictedChaseStrategy {
 impl RestrictedChaseStrategy {
     /// Create a new [RestrictedChaseStrategy] object.
     pub(crate) fn initialize(rule: &ChaseRule, analysis: &RuleAnalysis) -> Self {
-        let mut predicate_to_instructions = HashMap::<Identifier, Vec<HeadInstruction>>::new();
-        let mut predicate_to_full_existential = HashMap::<Identifier, bool>::new();
+        let hash_map = HashMap::<Tag, Vec<HeadInstruction>>::new();
+        let mut predicate_to_instructions = hash_map;
+        let mut predicate_to_full_existential = HashMap::<Tag, bool>::new();
 
         for head_atom in rule.head() {
             let is_existential = head_atom
                 .terms()
-                .iter()
-                .any(|t| matches!(t, PrimitiveTerm::Variable(Variable::Existential(_))));
+                .any(|t| matches!(t, Primitive::Variable(Variable::Existential(_))));
 
             let instructions = predicate_to_instructions
                 .entry(head_atom.predicate())
@@ -77,14 +84,14 @@ impl RestrictedChaseStrategy {
             *is_full_existential &= is_existential;
         }
 
-        let head_join_atoms = analysis.existential_aux_rule.positive_body().clone();
-        let head_join_constraints = analysis.existential_aux_rule.positive_constraints().clone();
+        let head_join_atoms = analysis.existential_aux_rule().positive_body().clone();
+        let head_join_filters = analysis.existential_aux_rule().positive_filters().clone();
 
-        let aux_head = &analysis.existential_aux_rule.head()[0];
+        let aux_head = &analysis.existential_aux_rule().head()[0];
         let mut aux_head_order = VariableOrder::new();
         let mut used_join_head_variables = HashSet::<Variable>::new();
         for term in aux_head.terms() {
-            if let PrimitiveTerm::Variable(variable) = term {
+            if let Primitive::Variable(variable) = term {
                 aux_head_order.push(variable.clone());
                 used_join_head_variables.insert(variable.clone());
             } else {
@@ -96,7 +103,7 @@ impl RestrictedChaseStrategy {
 
         RestrictedChaseStrategy {
             head_join_atoms,
-            head_join_constraints,
+            head_join_filters,
             predicate_to_instructions,
             predicate_to_full_existential,
             analysis: analysis.clone(),
@@ -185,7 +192,7 @@ impl HeadStrategy for RestrictedChaseStrategy {
             current_plan.plan_mut(),
             variable_translation,
             node_new_satisfied_matches,
-            &self.head_join_constraints,
+            &self.head_join_filters,
         );
 
         current_plan.add_temporary_table(

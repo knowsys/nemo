@@ -5,8 +5,8 @@ use std::collections::HashMap;
 use petgraph::Directed;
 
 use crate::{
-    model::{chase_model::ChaseRule, Identifier},
-    program_analysis::analysis::RuleAnalysis,
+    chase_model::{analysis::program_analysis::RuleAnalysis, components::rule::ChaseRule},
+    rule_model::components::tag::Tag,
     util::labeled_graph::LabeledGraph,
 };
 
@@ -34,9 +34,9 @@ pub struct StrategyStratifiedNegation<SubStrategy: RuleSelectionStrategy> {
 
 impl<SubStrategy: RuleSelectionStrategy> StrategyStratifiedNegation<SubStrategy> {
     fn build_graph(rule_analyses: &[&RuleAnalysis]) -> NegationGraph {
-        let mut predicate_to_rules_body_positive = HashMap::<Identifier, Vec<usize>>::new();
-        let mut predicate_to_rules_body_negative = HashMap::<Identifier, Vec<usize>>::new();
-        let mut predicate_to_rules_head = HashMap::<Identifier, Vec<usize>>::new();
+        let mut predicate_to_rules_body_positive = HashMap::<Tag, Vec<usize>>::new();
+        let mut predicate_to_rules_body_negative = HashMap::<Tag, Vec<usize>>::new();
+        let mut predicate_to_rules_head = HashMap::<Tag, Vec<usize>>::new();
 
         for (rule_index, rule_analysis) in rule_analyses.iter().enumerate() {
             for body_predicate in &rule_analysis.positive_body_predicates {

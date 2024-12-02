@@ -26,12 +26,9 @@ use std::{fs::read_to_string, path::PathBuf};
 use crate::{
     error::{Error, ReadingError},
     execution::{DefaultExecutionEngine, ExecutionEngine},
-    io::{
-        parser::{all_input_consumed, RuleParser},
-        resource_providers::ResourceProviders,
-        ImportManager,
-    },
-    model::Identifier,
+    io::{resource_providers::ResourceProviders, ImportManager},
+    parser::Parser,
+    rule_model::{components::tag::Tag, translation::ASTProgramTranslation},
 };
 
 /// Reasoning Engine exposed by the API
@@ -55,8 +52,14 @@ pub fn load(file: PathBuf) -> Result<Engine, Error> {
 /// # Error
 /// Returns an appropriate [Error] variant on parsing and feature check issues.
 pub fn load_string(input: String) -> Result<Engine, Error> {
-    let program = all_input_consumed(RuleParser::new().parse_program())(&input)?;
-    ExecutionEngine::initialize(&program, ImportManager::new(ResourceProviders::default()))
+    let program_ast = Parser::initialize(&input, String::default())
+        .parse()
+        .map_err(|_| Error::ProgramParseError)?;
+    let program = ASTProgramTranslation::initialize(&input, String::default())
+        .translate(&program_ast)
+        .map_err(|_| Error::ProgramParseError)?;
+
+    ExecutionEngine::initialize(program, ImportManager::new(ResourceProviders::default()))
 }
 
 /// Executes the reasoning process of the [Engine].
@@ -70,11 +73,12 @@ pub fn reason(engine: &mut Engine) -> Result<(), Error> {
 }
 
 /// Get a [Vec] of all output predicates that are computed by the engine.
-pub fn output_predicates(engine: &Engine) -> Vec<Identifier> {
+pub fn output_predicates(engine: &Engine) -> Vec<Tag> {
     engine
         .program()
         .exports()
-        .map(|(id, _)| id)
+        .iter()
+        .map(|export| export.predicate())
         .cloned()
         .collect()
 }
@@ -130,7 +134,7 @@ mod test {
             .filter(|pred| pred.to_string().contains('i'))
             .collect::<Vec<_>>();
 
-        assert_eq!(results.len(), 5);
+        assert_eq!(results.len(), 4);
         let _temp_dir = TempDir::new().unwrap();
         // Disabled:
         // write(temp_dir.to_str().unwrap().to_string(), &mut engine, results).unwrap();

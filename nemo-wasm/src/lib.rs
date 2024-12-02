@@ -1,52 +1,56 @@
 #![feature(alloc_error_hook)]
 
-use std::alloc::Layout;
-use std::collections::HashMap;
-use std::fmt::Formatter;
-use std::io::Cursor;
+use std::{alloc::Layout, collections::HashMap, fmt::Formatter, io::Cursor};
 
-use js_sys::Array;
-use js_sys::Reflect;
-use js_sys::Set;
-use js_sys::Uint8Array;
-use nemo::execution::tracing::trace::ExecutionTrace;
-use nemo::execution::tracing::trace::ExecutionTraceTree;
-use nemo::execution::tracing::trace::TraceFactHandle;
-use nemo::execution::ExecutionEngine;
-
-use nemo::io::compression_format::CompressionFormat;
-use nemo::io::parser::parse_fact;
-use nemo::io::parser::parse_program;
-use nemo::io::resource_providers::{ResourceProvider, ResourceProviders};
-use nemo::io::ImportManager;
-use nemo::model::Atom;
-use nemo::model::Fact;
-use nemo::model::Identifier;
-use nemo::model::PrimitiveTerm;
-use nemo::model::Term;
-use nemo_physical::datavalues::AnyDataValue;
-use nemo_physical::datavalues::DataValue;
-use nemo_physical::error::ExternalReadingError;
-use nemo_physical::error::ReadingError;
-use nemo_physical::resource::Resource;
+use js_sys::{Array, Reflect, Set, Uint8Array};
 use thiserror::Error;
-use wasm_bindgen::prelude::wasm_bindgen;
-use wasm_bindgen::JsCast;
-use wasm_bindgen::JsValue;
-use web_sys::Blob;
-use web_sys::FileReaderSync;
+use wasm_bindgen::{prelude::wasm_bindgen, JsCast, JsValue};
+use web_sys::{Blob, FileReaderSync};
+
+use nemo::{
+    datavalues::{AnyDataValue, DataValue},
+    error::ReadingError,
+    execution::{
+        tracing::trace::{ExecutionTrace, ExecutionTraceTree, TraceFactHandle},
+        ExecutionEngine,
+    },
+    io::{
+        resource_providers::{ResourceProvider, ResourceProviders},
+        ImportManager,
+    },
+    rule_model::components::{
+        fact::Fact,
+        import_export::{attributes::ImportExportAttribute, compression::CompressionFormat},
+        parse::ComponentParseError,
+        tag::Tag,
+        term::{primitive::Primitive, Term},
+        ProgramComponent,
+    },
+};
+
+use nemo_physical::{error::ExternalReadingError, resource::Resource};
+
+mod language_server;
+
+const PROGRAM_LABEL: &str = "nemo-web";
 
 #[wasm_bindgen]
 #[derive(Clone)]
-pub struct NemoProgram(nemo::model::Program);
+pub struct NemoProgram(nemo::rule_model::program::Program);
 
 #[derive(Error, Debug)]
 enum WasmOrInternalNemoError {
     /// Nemo-internal error
     #[error(transparent)]
-    NemoError(#[from] nemo::error::Error),
+    Nemo(#[from] nemo::error::Error),
+    #[error("Unable to parse component:\n {0}")]
+    ComponentParse(ComponentParseError),
+    #[error("Unable to parse program:\n {0}")]
+    Parser(String),
+    #[error("Invalid program:\n {0}")]
+    Program(String),
     #[error("Internal reflection error: {0:#?}")]
-    ReflectionError(JsValue),
+    Reflection(JsValue),
 }
 
 #[wasm_bindgen]
@@ -59,7 +63,7 @@ impl NemoError {
     #[allow(clippy::inherent_to_string)]
     #[wasm_bindgen(js_name = "toString")]
     pub fn to_string(&self) -> String {
-        format!("NemoError: {}", self.0)
+        format!("{}", self.0)
     }
 }
 
@@ -67,10 +71,20 @@ impl NemoError {
 impl NemoProgram {
     #[wasm_bindgen(constructor)]
     pub fn new(input: &str) -> Result<NemoProgram, NemoError> {
-        parse_program(input)
-            .map(NemoProgram)
-            .map_err(WasmOrInternalNemoError::NemoError)
+        nemo::parser::Parser::initialize(input, PROGRAM_LABEL.to_string())
+            .parse()
+            .map_err(|(_, report)| WasmOrInternalNemoError::Parser(format!("{}", report)))
             .map_err(NemoError)
+            .and_then(|ast| {
+                nemo::rule_model::translation::ASTProgramTranslation::initialize(
+                    input,
+                    PROGRAM_LABEL.to_string(),
+                )
+                .translate(&ast)
+                .map_err(|report| WasmOrInternalNemoError::Program(format!("{}", report)))
+                .map_err(NemoError)
+                .map(NemoProgram)
+            })
     }
 
     /// Get all resources that are referenced in import directives of the program.
@@ -80,36 +94,33 @@ impl NemoProgram {
     /// just make sure that things validate upon creation, and make sure that problems
     /// are detected early.
     #[wasm_bindgen(js_name = "getResourcesUsedInImports")]
-    pub fn resources_used_in_imports(&self) -> Result<Set, NemoError> {
+    pub fn resources_used_in_imports(&self) -> Set {
         let js_set = Set::new(&JsValue::undefined());
 
         for directive in self.0.imports() {
-            let resource = ImportManager::resource(directive)
-                .map_err(WasmOrInternalNemoError::NemoError)
-                .map_err(NemoError)?;
-            js_set.add(&JsValue::from(resource));
+            if let Some(resource) = directive.attributes().get(&ImportExportAttribute::Resource) {
+                js_set.add(&JsValue::from(resource.to_string()));
+            }
         }
 
-        Ok(js_set)
+        js_set
     }
 
     // If there are no outputs, marks all predicates as outputs.
     #[wasm_bindgen(js_name = "markDefaultOutputs")]
     pub fn mark_default_output_predicates(&mut self) {
-        if self.0.output_predicates().next().is_none() {
-            let mut additional_outputs = Vec::new();
-            for predicate in self.0.predicates() {
-                additional_outputs.push(predicate);
+        if self.0.outputs().next().is_none() {
+            for predicate in self.0.all_predicates() {
+                self.0.add_output(predicate)
             }
-            self.0.add_output_predicates(additional_outputs);
         }
     }
 
     #[wasm_bindgen(js_name = "getOutputPredicates")]
     pub fn output_predicates(&self) -> Array {
         self.0
-            .output_predicates()
-            .map(|id| JsValue::from(id.name()))
+            .outputs()
+            .map(|o| JsValue::from(o.predicate().to_string()))
             .collect()
     }
 
@@ -117,8 +128,8 @@ impl NemoProgram {
     pub fn edb_predicates(&self) -> Set {
         let js_set = Set::new(&JsValue::undefined());
 
-        for identifier in self.0.edb_predicates().into_iter() {
-            js_set.add(&JsValue::from(identifier.name()));
+        for tag in self.0.import_predicates().into_iter() {
+            js_set.add(&JsValue::from(tag.to_string()));
         }
 
         js_set
@@ -247,12 +258,12 @@ impl NemoEngine {
         // Parse JavaScript object into `HashMap`
         let mut resource_blobs = HashMap::new();
         for key in Reflect::own_keys(&resource_blobs_js_value)
-            .map_err(WasmOrInternalNemoError::ReflectionError)
+            .map_err(WasmOrInternalNemoError::Reflection)
             .map_err(NemoError)?
         {
             if let Some(resource) = key.as_string() {
                 let value = Reflect::get(&resource_blobs_js_value, &key)
-                    .map_err(WasmOrInternalNemoError::ReflectionError)
+                    .map_err(WasmOrInternalNemoError::Reflection)
                     .map_err(NemoError)?;
                 let blob: Blob = JsCast::dyn_into(value).unwrap();
 
@@ -265,14 +276,14 @@ impl NemoEngine {
         } else {
             ResourceProviders::from(vec![Box::new(
                 BlobResourceProvider::new(resource_blobs)
-                    .map_err(WasmOrInternalNemoError::ReflectionError)
+                    .map_err(WasmOrInternalNemoError::Reflection)
                     .map_err(NemoError)?,
             )])
         };
         let import_manager = ImportManager::new(resource_providers);
 
-        let engine = ExecutionEngine::initialize(&program.0, import_manager)
-            .map_err(WasmOrInternalNemoError::NemoError)
+        let engine = ExecutionEngine::initialize(program.0.clone(), import_manager)
+            .map_err(WasmOrInternalNemoError::Nemo)
             .map_err(NemoError)?;
 
         Ok(NemoEngine {
@@ -285,7 +296,7 @@ impl NemoEngine {
     pub fn reason(&mut self) -> Result<(), NemoError> {
         self.engine
             .execute()
-            .map_err(WasmOrInternalNemoError::NemoError)
+            .map_err(WasmOrInternalNemoError::Nemo)
             .map_err(NemoError)
     }
 
@@ -303,8 +314,8 @@ impl NemoEngine {
     pub fn result(&mut self, predicate: String) -> Result<NemoResults, NemoError> {
         let iter = self
             .engine
-            .predicate_rows(&Identifier::from(predicate))
-            .map_err(WasmOrInternalNemoError::NemoError)
+            .predicate_rows(&Tag::from(predicate))
+            .map_err(WasmOrInternalNemoError::Nemo)
             .map_err(NemoError)?;
 
         let results = NemoResults(Box::new(
@@ -321,12 +332,15 @@ impl NemoEngine {
         predicate: String,
         sync_access_handle: web_sys::FileSystemSyncAccessHandle,
     ) -> Result<(), NemoError> {
-        use nemo::{
-            io::ExportManager,
-            model::{ExportDirective, Identifier},
+        use nemo::io::{
+            formats::{
+                dsv::{value_format::DsvValueFormats, DsvHandler},
+                Direction, ImportExportHandler, ImportExportResource,
+            },
+            ExportManager,
         };
 
-        let identifier = Identifier::from(predicate.clone());
+        let identifier = Tag::from(predicate.clone());
 
         let Some(arity) = self.engine.predicate_arity(&identifier) else {
             return Ok(());
@@ -335,7 +349,7 @@ impl NemoEngine {
         let Some(record_iter) = self
             .engine
             .predicate_rows(&identifier)
-            .map_err(WasmOrInternalNemoError::NemoError)
+            .map_err(WasmOrInternalNemoError::Nemo)
             .map_err(NemoError)?
         else {
             return Ok(());
@@ -343,12 +357,19 @@ impl NemoEngine {
 
         let writer = SyncAccessHandleWriter(sync_access_handle);
 
-        let export_spec = ExportDirective::default(identifier);
+        let export_handler: Box<dyn ImportExportHandler> = Box::new(DsvHandler::new(
+            b',',
+            ImportExportResource::Stdout,
+            DsvValueFormats::default(arity),
+            None,
+            CompressionFormat::None,
+            Direction::Export,
+        ));
         let export_manager: ExportManager = Default::default();
 
         export_manager
-            .export_table_with_writer(&export_spec, Box::new(writer), Some(record_iter), arity)
-            .map_err(WasmOrInternalNemoError::NemoError)
+            .export_table_with_writer(Box::new(writer), &*export_handler, Some(record_iter))
+            .map_err(WasmOrInternalNemoError::Nemo)
             .map_err(NemoError)
     }
 
@@ -359,25 +380,26 @@ impl NemoEngine {
     ) -> Result<Option<(ExecutionTrace, Vec<TraceFactHandle>)>, NemoError> {
         let iter = self
             .engine
-            .predicate_rows(&Identifier::from(predicate.clone()))
-            .map_err(WasmOrInternalNemoError::NemoError)
+            .predicate_rows(&Tag::from(predicate.clone()))
+            .map_err(WasmOrInternalNemoError::Nemo)
             .map_err(NemoError)?;
 
         let terms_to_trace_opt: Option<Vec<AnyDataValue>> =
             iter.into_iter().flatten().nth(row_index);
 
         if let Some(terms_to_trace) = terms_to_trace_opt {
-            let fact_to_trace: Fact = Fact(Atom::new(
-                Identifier::from(predicate),
+            let fact_to_trace = Fact::new(
+                &predicate,
                 terms_to_trace
                     .into_iter()
-                    .map(|term| Term::Primitive(PrimitiveTerm::from(term)))
-                    .collect(),
-            ));
+                    .map(|term| Term::Primitive(Primitive::from(term))),
+            );
 
             let (trace, handles) = self
                 .engine
-                .trace(self.program.0.clone(), vec![fact_to_trace]);
+                .trace(self.program.0.clone(), vec![fact_to_trace])
+                .map_err(WasmOrInternalNemoError::Nemo)
+                .map_err(NemoError)?;
 
             Ok(Some((trace, handles)))
         } else {
@@ -431,11 +453,15 @@ impl NemoEngine {
         &mut self,
         fact: &str,
     ) -> Result<Option<(ExecutionTrace, Vec<TraceFactHandle>)>, NemoError> {
-        let parsed_fact = parse_fact(fact.to_owned())
-            .map_err(WasmOrInternalNemoError::NemoError)
+        let parsed_fact = Fact::parse(fact)
+            .map_err(WasmOrInternalNemoError::ComponentParse)
             .map_err(NemoError)?;
 
-        let (trace, handles) = self.engine.trace(self.program.0.clone(), vec![parsed_fact]);
+        let (trace, handles) = self
+            .engine
+            .trace(self.program.0.clone(), vec![parsed_fact])
+            .map_err(WasmOrInternalNemoError::Nemo)
+            .map_err(NemoError)?;
 
         Ok(Some((trace, handles)))
     }

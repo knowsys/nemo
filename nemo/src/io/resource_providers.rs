@@ -2,18 +2,24 @@
 
 use std::{io::BufRead, path::PathBuf, rc::Rc};
 
-use crate::io::parser::{all_input_consumed, iri::iri};
+// use crate::io::parser::{all_input_consumed, iri::iri};
 use nemo_physical::{error::ReadingError, resource::Resource};
 
-use super::compression_format::CompressionFormat;
+use crate::rule_model::components::import_export::compression::CompressionFormat;
 
 /// A resource provider for files.
 pub mod file;
 /// A resource provider for HTTP(s) requests.
 pub mod http;
 
+/// Helper function that determines whether resource has the form of an iri.
+///
+/// For now, we don't validate the exact requirements but simply check
+/// whether the string contains a `:`.
+///
+/// TODO: Revise if deemed necessary.
 fn is_iri(resource: &Resource) -> bool {
-    all_input_consumed(iri)(resource).is_ok()
+    resource.contains(':')
 }
 
 /// Allows resolving resources to readers.

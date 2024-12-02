@@ -3,12 +3,14 @@
 use nemo_physical::management::execution_plan::ExecutionNodeRef;
 
 use crate::{
-    execution::rule_execution::VariableTranslation,
-    model::{
-        chase_model::{ChaseAggregate, ChaseRule, Constructor},
-        Constraint,
+    chase_model::{
+        analysis::program_analysis::RuleAnalysis,
+        components::{
+            aggregate::ChaseAggregate, filter::ChaseFilter, operation::ChaseOperation,
+            rule::ChaseRule,
+        },
     },
-    program_analysis::analysis::RuleAnalysis,
+    execution::rule_execution::VariableTranslation,
     table_manager::SubtableExecutionPlan,
 };
 
@@ -20,20 +22,20 @@ use super::operations::{
 #[derive(Debug)]
 pub(crate) struct AggregateStategy {
     aggregate: ChaseAggregate,
-    aggregate_constructors: Vec<Constructor>,
-    aggregate_constraints: Vec<Constraint>,
+    aggregate_operation: Vec<ChaseOperation>,
+    aggregate_filters: Vec<ChaseFilter>,
 }
 
 impl AggregateStategy {
-    /// Create new [SeminaiveStrategy] object.
+    /// Create new [AggregateStategy] object.
     pub(crate) fn initialize(rule: &ChaseRule, _analysis: &RuleAnalysis) -> Self {
         Self {
             aggregate: rule
                 .aggregate()
-                .clone()
+                .cloned()
                 .expect("do not call this if there is no aggregate"),
-            aggregate_constructors: rule.aggregate_constructors().clone(),
-            aggregate_constraints: rule.aggregate_constraints().clone(),
+            aggregate_operation: rule.aggregate_operations().clone(),
+            aggregate_filters: rule.aggregate_filters().clone(),
         }
     }
 
@@ -54,14 +56,14 @@ impl AggregateStategy {
             current_plan.plan_mut(),
             variable_translation,
             node_aggregation,
-            &self.aggregate_constructors,
+            &self.aggregate_operation,
         );
 
         let node_result = node_filter(
             current_plan.plan_mut(),
             variable_translation,
             node_aggregate_functions,
-            &self.aggregate_constraints,
+            &self.aggregate_filters,
         );
 
         current_plan.add_temporary_table(node_result.clone(), "Aggregation");

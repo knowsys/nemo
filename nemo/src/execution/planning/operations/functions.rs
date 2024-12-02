@@ -7,25 +7,29 @@ use nemo_physical::{
     tabular::operations::FunctionAssignment,
 };
 
-use crate::{execution::rule_execution::VariableTranslation, model::chase_model::Constructor};
+use crate::{
+    chase_model::components::operation::ChaseOperation,
+    execution::rule_execution::VariableTranslation,
+};
 
-use super::term::term_to_function_tree;
+use super::operation::operation_term_to_function_tree;
 
 /// Calculate helper structures that define the filters that need to be applied.
 pub(crate) fn node_functions(
     plan: &mut ExecutionPlan,
     variable_translation: &VariableTranslation,
     subnode: ExecutionNodeRef,
-    constructors: &[Constructor],
+    operations: &[ChaseOperation],
 ) -> ExecutionNodeRef {
     let mut output_markers = subnode.markers_cloned();
     let mut assignments = FunctionAssignment::new();
 
-    for constructor in constructors {
+    for operation in operations {
         let marker = *variable_translation
-            .get(constructor.variable())
+            .get(operation.variable())
             .expect("All variables are known");
-        let function_tree = term_to_function_tree(variable_translation, constructor.term());
+        let function_tree =
+            operation_term_to_function_tree(variable_translation, operation.operation());
 
         assignments.insert(marker, function_tree);
         output_markers.push(marker);

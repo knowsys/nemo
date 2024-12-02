@@ -9,12 +9,12 @@ use nemo_physical::{
 };
 
 use crate::{
-    execution::{execution_engine::RuleInfo, rule_execution::VariableTranslation},
-    model::{
-        chase_model::{ChaseAtom, ChaseRule},
-        Identifier,
+    chase_model::{
+        analysis::program_analysis::RuleAnalysis,
+        components::{atom::ChaseAtom, rule::ChaseRule},
     },
-    program_analysis::analysis::RuleAnalysis,
+    execution::{execution_engine::RuleInfo, rule_execution::VariableTranslation},
+    rule_model::components::tag::Tag,
     table_manager::{SubtableExecutionPlan, SubtableIdentifier, TableManager},
 };
 
@@ -26,13 +26,13 @@ use super::{
 /// Strategy for computing the results for a datalog (non-existential) rule.
 #[derive(Debug)]
 pub(crate) struct DatalogStrategy {
-    predicate_to_atoms: HashMap<Identifier, Vec<(HeadInstruction, bool)>>,
+    predicate_to_atoms: HashMap<Tag, Vec<(HeadInstruction, bool)>>,
 }
 
 impl DatalogStrategy {
     /// Create a new [DatalogStrategy] object.
     pub(crate) fn initialize(rule: &ChaseRule, _analysis: &RuleAnalysis) -> Self {
-        let mut predicate_to_atoms = HashMap::<Identifier, Vec<(HeadInstruction, bool)>>::new();
+        let mut predicate_to_atoms = HashMap::<Tag, Vec<(HeadInstruction, bool)>>::new();
 
         for (head_index, head_atom) in rule.head().iter().enumerate() {
             let is_aggregate_atom = if let Some(aggregate_index) = rule.aggregate_head_index() {

@@ -31,6 +31,7 @@ data(hi,42) .
 data(hello,world) .
 
 calculated(?x, !v) :- data(?y, ?x) .
+@export calculated :- csv {}.
 """
 
 engine = NemoEngine(load_string(rules))

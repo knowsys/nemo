@@ -6,11 +6,11 @@ use std::{
     path::PathBuf,
 };
 
-use flate2::bufread::MultiGzDecoder;
-use flate2::{write::GzEncoder, Compression};
+use flate2::{bufread::MultiGzDecoder, write::GzEncoder, Compression};
+
 use nemo_physical::resource::Resource;
 
-use crate::error::Error;
+use crate::{error::Error, rule_model::components::import_export::compression::CompressionFormat};
 
 /// Compression level for gzip output, cf. gzip(1):
 ///
@@ -21,23 +21,13 @@ use crate::error::Error;
 /// > (that is, biased towards high compression at expense of speed).
 const GZIP_COMPRESSION_LEVEL: Compression = Compression::new(6);
 
-/// Represent the compression of a file
-#[derive(Debug, Copy, Clone, Default, PartialEq, Eq)]
-pub enum CompressionFormat {
-    /// No file compression
-    #[default]
-    None,
-    /// Compress with Gzip
-    Gzip,
-}
-
 impl CompressionFormat {
     /// Derive a compression format from the file extension of the given resource,
     /// and return the compression format and the resource string without this extenions.
     pub fn from_resource(resource: &Resource) -> (CompressionFormat, Resource) {
         match resource {
             resource if resource.ends_with(".gz") => (
-                CompressionFormat::Gzip,
+                CompressionFormat::GZip,
                 resource.as_str()[0..resource.len() - 3].to_string(),
             ),
             _ => (CompressionFormat::None, resource.to_owned()),
@@ -58,7 +48,7 @@ impl CompressionFormat {
                 let writer = options.open(path)?;
                 Ok(Box::new(writer))
             }
-            CompressionFormat::Gzip => {
+            CompressionFormat::GZip => {
                 let writer = GzEncoder::new(options.open(path)?, GZIP_COMPRESSION_LEVEL);
                 Ok(Box::new(writer))
             }
@@ -75,7 +65,7 @@ impl CompressionFormat {
     pub fn try_decompression<R: BufRead + 'static>(&self, read: R) -> Option<Box<dyn BufRead>> {
         match self {
             Self::None => Some(Box::new(read)),
-            Self::Gzip => {
+            Self::GZip => {
                 let gz_reader = MultiGzDecoder::new(read);
                 if gz_reader.header().is_some() {
                     Some(Box::new(BufReader::new(gz_reader)))
@@ -90,7 +80,7 @@ impl CompressionFormat {
     pub(crate) fn extension(&self) -> Option<&str> {
         match self {
             Self::None => None,
-            Self::Gzip => Some("gz"),
+            Self::GZip => Some("gz"),
         }
     }
 
@@ -111,15 +101,6 @@ impl CompressionFormat {
                 None => new_ext.to_string(),
             }),
             None => path,
-        }
-    }
-}
-
-impl std::fmt::Display for CompressionFormat {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::None => write!(f, "None (no compression)"),
-            Self::Gzip => write!(f, "GZip"),
         }
     }
 }
