@@ -1,5 +1,9 @@
 use crate::rule_model::components::{rule::Rule, term::primitive::variable::Variable};
+use crate::static_checks::acyclicity_graphs::{
+    AcyclicityGraphBuilder, JointlyAcyclicityGraph, WeaklyAcyclicityGraph,
+};
 use crate::static_checks::positions::{ExtendedPositions, Positions};
+
 use std::collections::{HashMap, HashSet};
 
 pub struct RuleSet(Vec<Rule>);
