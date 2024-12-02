@@ -18,7 +18,6 @@ pub(crate) mod ranked_pair_dv_dict;
 pub(crate) mod ranked_pair_iri_dv_dict;
 pub(crate) mod ranked_pair_other_dv_dict;
 // pub(crate) mod ranked_pair_langstring_dv_dict;
-pub(crate) mod tuple_dv_dict;
 
 pub mod string_map;
 
@@ -30,6 +29,8 @@ pub(crate) mod string_langstring_dv_dict;
 
 pub(crate) mod null_dv_dict;
 pub(crate) use null_dv_dict::NullDvDictionary;
+
+pub(crate) mod tuple_dv_dict;
 
 pub mod meta_dv_dict;
 
