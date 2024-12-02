@@ -1,220 +1,51 @@
-use crate::rule_model::components::{rule::Rule, term::primitive::variable::Variable};
-use crate::static_checks::{
-    positions::{ExtendedPositions, Position, Positions},
-    rule_set::RuleSet,
+use crate::rule_model::components::term::primitive::variable::Variable;
+use crate::static_checks::acyclicity_graphs::acyclicity_graphs_internal::{
+    AcyclicityGraphBuilderInternal, AcyclicityGraphCycleInternal, WeaklyAcyclicityGraphEdgeType,
 };
-use petgraph::graphmap::DiGraphMap;
-use std::collections::{HashMap, HashSet};
+use crate::static_checks::{positions::Position, rule_set::RuleSet};
 
-#[derive(Clone)]
-enum WeaklyAcyclicityGraphEdgeType {
-    CommonEdge,
-    SpecialEdge,
-}
+use petgraph::graphmap::{DiGraphMap, NodeTrait};
+use std::collections::{BTreeSet, HashSet};
 
-type JointlyAcyclicityGraph<'a> = DiGraphMap<&'a Variable, ()>;
+mod acyclicity_graphs_internal;
 
-type WeaklyAcyclicityGraph<'a> = DiGraphMap<Position<'a>, WeaklyAcyclicityGraphEdgeType>;
+pub type JointlyAcyclicityGraph<'a> = DiGraphMap<&'a Variable, ()>;
 
-trait AcyclicityGraphBuilder<'a> {
+pub type WeaklyAcyclicityGraph<'a> = DiGraphMap<Position<'a>, WeaklyAcyclicityGraphEdgeType>;
+
+pub trait AcyclicityGraphBuilder<'a>: AcyclicityGraphBuilderInternal<'a> {
     fn build_graph(rule_set: &'a RuleSet) -> Self;
-    fn add_nodes(&mut self, rule_set: &'a RuleSet);
-    fn add_edges(&mut self, rule_set: &'a RuleSet);
 }
 
 impl<'a> AcyclicityGraphBuilder<'a> for JointlyAcyclicityGraph<'a> {
-    fn add_edges(&mut self, rule_set: &'a RuleSet) {
-        let attacked_pos_by_vars: HashMap<&Variable, Positions> =
-            rule_set.attacked_positions_by_variables();
-        rule_set.iter().for_each(|rule| {
-            self.add_edges_for_rule(rule, &attacked_pos_by_vars);
-        })
-    }
-
-    fn add_nodes(&mut self, rule_set: &'a RuleSet) {
-        let existential_variables: HashSet<&Variable> = rule_set.existential_variables();
-        existential_variables.iter().for_each(|var| {
-            self.add_node(var);
-        })
-    }
-
     fn build_graph(rule_set: &'a RuleSet) -> Self {
-        let mut jo_ac_graph: JointlyAcyclicityGraph = JointlyAcyclicityGraph::new();
-        jo_ac_graph.add_nodes(rule_set);
-        jo_ac_graph.add_edges(rule_set);
-        jo_ac_graph
+        JointlyAcyclicityGraph::build_graph_internal(rule_set)
     }
 }
 
 impl<'a> AcyclicityGraphBuilder<'a> for WeaklyAcyclicityGraph<'a> {
-    fn add_edges(&mut self, rule_set: &'a RuleSet) {
-        rule_set.iter().for_each(|rule| {
-            self.add_edges_for_rule(rule);
-        });
-    }
-
-    fn add_nodes(&mut self, rule_set: &'a RuleSet) {
-        let all_positive_ex_pos: ExtendedPositions = rule_set.all_positive_extended_positions();
-        all_positive_ex_pos.into_iter().for_each(|pos| {
-            self.add_node(pos);
-        });
-    }
-
     fn build_graph(rule_set: &'a RuleSet) -> Self {
-        let mut we_ac_graph: WeaklyAcyclicityGraph = WeaklyAcyclicityGraph::new();
-        we_ac_graph.add_nodes(rule_set);
-        we_ac_graph.add_edges(rule_set);
-        we_ac_graph
+        WeaklyAcyclicityGraph::build_graph_internal(rule_set)
     }
 }
 
-trait WeaklyAcyclicityGraphBuilder<'a>: AcyclicityGraphBuilder<'a> {
-    fn add_common_edges_for_var(&mut self, rule: &'a Rule, variable_body: &Variable);
-    fn add_common_edges_for_pos(
-        &mut self,
-        body_pos: Position<'a>,
-        head_ex_pos_of_var: &ExtendedPositions<'a>,
-    );
-    fn add_edges_for_rule(&mut self, rule: &'a Rule);
-    fn add_special_edges_for_pos(
-        &mut self,
-        body_pos: Position<'a>,
-        extended_pos_of_ex_vars: &ExtendedPositions<'a>,
-    );
-    fn add_special_edges_for_rule(&mut self, rule: &'a Rule, variable_body: &Variable);
+pub trait AcyclicityGraphCycle<N>: AcyclicityGraphCycleInternal<N>
+where
+    N: NodeTrait,
+{
+    fn cycles(&self) -> HashSet<BTreeSet<N>>;
+    fn is_cyclic(&self) -> bool;
 }
 
-impl<'a> WeaklyAcyclicityGraphBuilder<'a> for WeaklyAcyclicityGraph<'a> {
-    fn add_common_edges_for_var(&mut self, rule: &'a Rule, variable_body: &Variable) {
-        let body_ex_pos_of_var: ExtendedPositions =
-            variable_body.get_extended_positions_in_positive_body(rule);
-        let head_ex_pos_of_var: ExtendedPositions =
-            variable_body.get_extended_positions_in_head(rule);
-        body_ex_pos_of_var
-            .into_iter()
-            .for_each(|body_pos| self.add_common_edges_for_pos(body_pos, &head_ex_pos_of_var));
+impl<N, E> AcyclicityGraphCycle<N> for DiGraphMap<N, E>
+where
+    N: NodeTrait,
+{
+    fn cycles(&self) -> HashSet<BTreeSet<N>> {
+        self.cycles_internal()
     }
 
-    fn add_common_edges_for_pos(
-        &mut self,
-        body_pos: Position<'a>,
-        head_ex_pos_of_var: &ExtendedPositions<'a>,
-    ) {
-        head_ex_pos_of_var.iter().for_each(|head_pos| {
-            self.add_edge(
-                body_pos,
-                *head_pos,
-                WeaklyAcyclicityGraphEdgeType::CommonEdge,
-            );
-        })
-    }
-
-    fn add_edges_for_rule(&mut self, rule: &'a Rule) {
-        let positive_variables: HashSet<&Variable> = rule.positive_variables();
-        positive_variables.iter().for_each(|variable_body| {
-            self.add_common_edges_for_var(rule, variable_body);
-            self.add_special_edges_for_rule(rule, variable_body);
-        });
-    }
-
-    fn add_special_edges_for_pos(
-        &mut self,
-        body_pos: Position<'a>,
-        extended_pos_of_ex_vars: &ExtendedPositions<'a>,
-    ) {
-        extended_pos_of_ex_vars.iter().for_each(|ex_pos| {
-            self.add_edge(
-                body_pos,
-                *ex_pos,
-                WeaklyAcyclicityGraphEdgeType::SpecialEdge,
-            );
-        })
-    }
-
-    fn add_special_edges_for_rule(&mut self, rule: &'a Rule, variable_body: &Variable) {
-        let body_ex_pos_of_var: ExtendedPositions =
-            variable_body.get_extended_positions_in_positive_body(rule);
-        let extended_pos_of_ex_vars: ExtendedPositions =
-            rule.extended_positions_of_existential_variables();
-        body_ex_pos_of_var.into_iter().for_each(|body_pos| {
-            self.add_special_edges_for_pos(body_pos, &extended_pos_of_ex_vars);
-        })
-    }
-}
-
-trait JointlyAcyclicityGraphBuilder<'a>: AcyclicityGraphBuilder<'a> {
-    fn add_edges_for_attacked_var(
-        &mut self,
-        attacked_var: &Variable,
-        rule: &Rule,
-        ex_vars_of_rule: &HashSet<&'a Variable>,
-        attacked_pos_by_vars: &HashMap<&'a Variable, Positions>,
-    );
-    fn add_edges_for_attacking_var(
-        &mut self,
-        attacking_var: &'a Variable,
-        ex_vars_of_rule: &HashSet<&'a Variable>,
-    );
-    fn add_edges_for_rule(
-        &mut self,
-        rule: &'a Rule,
-        attacked_pos_by_vars: &HashMap<&'a Variable, Positions>,
-    );
-}
-
-impl<'a> JointlyAcyclicityGraphBuilder<'a> for JointlyAcyclicityGraph<'a> {
-    fn add_edges_for_attacked_var(
-        &mut self,
-        attacked_var: &Variable,
-        rule: &Rule,
-        ex_vars_of_rule: &HashSet<&'a Variable>,
-        attacked_pos_by_vars: &HashMap<&'a Variable, Positions>,
-    ) {
-        attacked_pos_by_vars
-            .keys()
-            .filter(|attacking_var| {
-                attacked_var.is_attacked_by_variable(attacking_var, rule, attacked_pos_by_vars)
-            })
-            .for_each(|attacking_var| {
-                self.add_edges_for_attacking_var(attacking_var, ex_vars_of_rule);
-            });
-    }
-
-    fn add_edges_for_attacking_var(
-        &mut self,
-        attacking_var: &'a Variable,
-        ex_vars_of_rule: &HashSet<&'a Variable>,
-    ) {
-        ex_vars_of_rule.iter().for_each(|ex_var| {
-            self.add_edge(attacking_var, ex_var, ());
-        })
-    }
-
-    fn add_edges_for_rule(
-        &mut self,
-        rule: &'a Rule,
-        attacked_pos_by_vars: &HashMap<&'a Variable, Positions>,
-    ) {
-        let ex_vars_of_rule: HashSet<&Variable> = rule.existential_variables();
-        let attacked_positive_vars: HashSet<&Variable> =
-            rule.attacked_universal_variables(attacked_pos_by_vars);
-        attacked_positive_vars.iter().for_each(|var| {
-            self.add_edges_for_attacked_var(var, rule, &ex_vars_of_rule, attacked_pos_by_vars);
-        })
-    }
-}
-
-trait AcyclicityGraphConstructor<'a> {
-    fn weakly_acyclicity_graph(&'a self) -> WeaklyAcyclicityGraph<'a>;
-    fn jointly_acyclicity_graph(&'a self) -> JointlyAcyclicityGraph<'a>;
-}
-
-impl<'a> AcyclicityGraphConstructor<'a> for RuleSet {
-    fn weakly_acyclicity_graph(&'a self) -> WeaklyAcyclicityGraph<'a> {
-        WeaklyAcyclicityGraph::build_graph(self)
-    }
-
-    fn jointly_acyclicity_graph(&'a self) -> JointlyAcyclicityGraph<'a> {
-        JointlyAcyclicityGraph::build_graph(self)
+    fn is_cyclic(&self) -> bool {
+        self.is_cyclic_internal()
     }
 }
