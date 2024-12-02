@@ -73,8 +73,8 @@ pub trait DvDict: Debug + ByteSized {
     /// borrow checker even if self is never accessed directly within the method. Returning a function pointer
     /// replaces the native dynamic dispatch without requiring `&self` to be present.
     ///
-    /// The default implementation of this method returns a pointer to [add_datavalue_with_parent],
-    /// which simply calls [DvDict::add_datavalue] after retrieving the identified dictionary from the parent.
+    /// The default implementation of this method returns a pointer to a function that
+    /// simply calls [DvDict::add_datavalue] after retrieving the identified dictionary from the parent.
     /// There is no major performance penalty in this double indirection since [MetaDvDictionary] can cache the
     /// function pointer, and would have to retrieve the sub-dictionary anyway to call it.
     fn add_datavalue_with_parent_fn(
@@ -100,8 +100,8 @@ pub trait DvDict: Debug + ByteSized {
     /// borrow checker even if self is never accessed directly within the method. Returning a function pointer
     /// replaces the native dynamic dispatch without requiring `&self` to be present.
     ///
-    /// The default implementation of this method returns a pointer to [datavalue_to_id_with_parent],
-    /// which simply calls [DvDict::datavalue_to_id] after retrieving the identified dictionary from the parent.
+    /// The default implementation of this method returns a pointer to a function that
+    /// simply calls [DvDict::datavalue_to_id] after retrieving the identified dictionary from the parent.
     /// There is no major performance penalty in this double indirection since [MetaDvDictionary] can cache the
     /// function pointer, and would have to retrieve the sub-dictionary anyway to call it.
     fn datavalue_to_id_with_parent_fn(
@@ -120,8 +120,8 @@ pub trait DvDict: Debug + ByteSized {
     /// borrow checker even if self is never accessed directly within the method. Returning a function pointer
     /// replaces the native dynamic dispatch without requiring `&self` to be present.
     ///
-    /// The default implementation of this method returns a pointer to [id_to_datavalue_with_parent],
-    /// which simply calls [DvDict::id_to_datavalue] after retrieving the identified dictionary from the parent.
+    /// The default implementation of this method returns a pointer to a function that
+    /// simply calls [DvDict::id_to_datavalue] after retrieving the identified dictionary from the parent.
     /// There is no major performance penalty in this double indirection since [MetaDvDictionary] can cache the
     /// function pointer, and would have to retrieve the sub-dictionary anyway to call it.
     fn id_to_datavalue_with_parent_fn(
