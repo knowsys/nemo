@@ -47,7 +47,7 @@ impl<C: DvPairConverter> Default for RankedPairBasedDvDictionary<C> {
     }
 }
 
-impl<C: DvPairConverter> DvDict for RankedPairBasedDvDictionary<C> {
+impl<C: DvPairConverter + 'static> DvDict for RankedPairBasedDvDictionary<C> {
     fn add_datavalue(&mut self, dv: AnyDataValue) -> AddResult {
         if let Some((frequent, rare)) = C::dict_pair(&dv) {
             self.string_pair_dict
@@ -110,9 +110,17 @@ impl<C: DvPairConverter> DvDict for RankedPairBasedDvDictionary<C> {
     fn has_marked(&self) -> bool {
         self.string_pair_dict.has_marked()
     }
+
+    fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
+        self
+    }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
 }
 
-impl<C: DvPairConverter> ByteSized for RankedPairBasedDvDictionary<C> {
+impl<C: DvPairConverter + 'static> ByteSized for RankedPairBasedDvDictionary<C> {
     fn size_bytes(&self) -> u64 {
         let size = self.string_pair_dict.size_bytes();
         log::debug!(
