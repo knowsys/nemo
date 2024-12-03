@@ -39,7 +39,8 @@ use crate::{
     parse_component,
     parser::ast::ProgramAST,
     rule_model::{
-        error::ValidationErrorBuilder, origin::Origin, translation::ASTProgramTranslation,
+        error::ValidationErrorBuilder, origin::Origin, substitution::Substitution,
+        translation::ASTProgramTranslation,
     },
 };
 
@@ -162,6 +163,18 @@ impl Term {
             Term::Map(term) => Term::Map(term.reduce()),
             Term::Tuple(term) => Term::Tuple(term.reduce()),
         }
+    }
+
+    /// Reduce (potential) constant expressions
+    /// contained while replacing terms according to the provided substition
+    /// and return a copy of the resulting reduced [Term]
+    pub fn reduce_substitution(&self, substitution: &Substitution) -> Term {
+        // TODO: A more efficient implementation would propagate the substituion
+        // into the subterms and reduce grounded subterms
+        let mut cloned = self.clone();
+        substitution.apply(&mut cloned);
+
+        cloned.reduce()
     }
 }
 

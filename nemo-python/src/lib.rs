@@ -13,7 +13,7 @@ use nemo::{
     rule_model::{
         components::{fact::Fact, tag::Tag, term::primitive::Primitive, ProgramComponent},
         error::ValidationErrorBuilder,
-        term_map::PrimitiveTermMap,
+        substitution::Substitution,
     },
 };
 
@@ -269,7 +269,7 @@ impl NemoTrace {
     }
 }
 
-fn assignement_to_dict(assignment: &PrimitiveTermMap, py: Python) -> PyResult<PyObject> {
+fn assignement_to_dict(assignment: &Substitution, py: Python) -> PyResult<PyObject> {
     let dict = PyDict::new_bound(py);
     for (variable, term) in assignment {
         if let Primitive::Ground(ground) = term {
