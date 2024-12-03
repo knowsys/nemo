@@ -44,6 +44,33 @@ impl AddResult {
     }
 }
 
+/// Trait that supports the conversion of types into mutable and immutable [std::any::Any].
+///
+/// This could be used anywhere, but currently is only reauired for dictoinaries, so we keep
+/// the definition here for now.
+pub trait AsAny {
+    /// Returns a mutable object that implements this trait as a [std::any::Any]. Dynamic
+    /// trait objects cannot be used as [std::any::Any], but concrete implementations
+    /// can provide a (dynamic) method that accomplishes this. This is a pattern that
+    /// can then be used for casting the dynamic object into a concrete type.
+    fn as_any_mut(&mut self) -> &mut dyn std::any::Any;
+    /// Returns an immutable object that implements this trait as a [std::any::Any]. Dynamic
+    /// trait objects cannot be used as [std::any::Any], but concrete implementations
+    /// can provide a (dynamic) method that accomplishes this. This is a pattern that
+    /// can then be used for casting the dynamic object into a concrete type.
+    fn as_any(&self) -> &dyn std::any::Any;
+}
+
+impl<T: 'static> AsAny for T {
+    fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
+        self
+    }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+}
+
 /// A [DvDict] represents a dictionary for datavalues, i.e., a bijective (invertible) mapping from
 /// [crate::datavalues::DataValue]s to numeric ids (`usize`).
 ///
@@ -53,7 +80,7 @@ impl AddResult {
 ///
 /// The id values are provided when the dictionary is used, whereas the ids are newly
 /// assigned by the dictionary itself.
-pub trait DvDict: Debug + ByteSized {
+pub trait DvDict: Debug + ByteSized + AsAny {
     /// Adds a new [AnyDataValue] to the dictionary. If the value is not known yet, it will
     /// be assigned a new id. Unsupported datavalues can also be rejected, which specialized
     /// dictionary implementations might do.
@@ -177,16 +204,4 @@ pub trait DvDict: Debug + ByteSized {
 
     /// Returns true if the dictionary contains any marked elements (see [DvDict::mark_dv]).
     fn has_marked(&self) -> bool;
-
-    /// Returns a mutable object that implements this trait as a [std::any::Any]. Dynamic
-    /// trait objects cannot be used as [std::any::Any], but concrete implementations
-    /// can provide a (dynamic) method that accomplishes this. This is a pattern that
-    /// can then be used for casting the dynamic object into a concrete type.
-    fn as_any_mut(&mut self) -> &mut dyn std::any::Any;
-
-    /// Returns an unmutable object that implements this trait as a [std::any::Any]. Dynamic
-    /// trait objects cannot be used as [std::any::Any], but concrete implementations
-    /// can provide a (dynamic) method that accomplishes this. This is a pattern that
-    /// can then be used for casting the dynamic object into a concrete type.
-    fn as_any(&self) -> &dyn std::any::Any;
 }
