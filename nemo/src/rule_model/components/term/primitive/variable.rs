@@ -171,3 +171,21 @@ impl ProgramComponent for Variable {
         ProgramComponentKind::Variable
     }
 }
+
+#[cfg(test)]
+mod test {
+    use crate::rule_model::components::ProgramComponent;
+
+    use super::Variable;
+
+    #[test]
+    fn parse_variable() {
+        let universal = Variable::parse("?x").unwrap();
+        let existential = Variable::parse("!v").unwrap();
+        let anonymous = Variable::parse("_").unwrap();
+
+        assert_eq!(Variable::universal("x"), universal);
+        assert_eq!(Variable::existential("v"), existential);
+        assert_eq!(Variable::anonymous(), anonymous);
+    }
+}

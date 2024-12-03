@@ -31,7 +31,13 @@ use tuple::Tuple;
 use value_type::ValueType;
 
 use crate::{
+    chase_model::translation::ProgramChaseTranslation,
+    execution::{
+        planning::operations::operation::operation_term_to_function_tree,
+        rule_execution::VariableTranslation,
+    },
     parse_component,
+    parser::ast::ProgramAST,
     rule_model::{
         error::ValidationErrorBuilder, origin::Origin, translation::ASTProgramTranslation,
     },
@@ -130,6 +136,31 @@ impl Term {
             Term::Map(term) => Box::new(term.key_value().flat_map(|(key, value)| vec![key, value])),
             Term::Operation(term) => Box::new(term.arguments()),
             Term::Tuple(term) => Box::new(term.arguments()),
+        }
+    }
+
+    /// Return whether this term is ground,
+    /// i.e. whether it does not contain any variables.
+    pub fn is_ground(&self) -> bool {
+        match self {
+            Term::Primitive(term) => term.is_ground(),
+            Term::Aggregate(term) => term.is_ground(),
+            Term::FunctionTerm(term) => term.is_gound(),
+            Term::Map(term) => term.is_gound(),
+            Term::Operation(term) => term.is_gound(),
+            Term::Tuple(term) => term.is_gound(),
+        }
+    }
+
+    /// Reduce (potential) constant expressions contained and return a copy of the resulting [Term].
+    pub fn reduce(&self) -> Term {
+        match self {
+            Term::Operation(operation) => operation.reduce(),
+            Term::Primitive(_) => self.clone(),
+            Term::Aggregate(term) => Term::Aggregate(term.reduce()),
+            Term::FunctionTerm(term) => Term::FunctionTerm(term.reduce()),
+            Term::Map(term) => Term::Map(term.reduce()),
+            Term::Tuple(term) => Term::Tuple(term.reduce()),
         }
     }
 }
@@ -250,7 +281,7 @@ impl ProgramComponent for Term {
     {
         parse_component!(
             string,
-            crate::parser::ast::expression::Expression::parse_complex,
+            crate::parser::ast::expression::Expression::parse,
             ASTProgramTranslation::build_inner_term
         )
     }
@@ -351,5 +382,34 @@ impl IterablePrimitives for Term {
             Term::Operation(term) => term.primitive_terms_mut(),
             Term::Tuple(term) => term.primitive_terms_mut(),
         }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use crate::rule_model::components::ProgramComponent;
+
+    use super::Term;
+
+    #[test]
+    fn term_reduce_ground() {
+        let constant = Term::parse("2 * (3 + 7)").unwrap();
+        let term = Term::from(tuple!(5, constant));
+
+        let reduced = term.reduce();
+        let expected_term = Term::from(tuple!(5, 20));
+
+        assert_eq!(reduced, expected_term);
+    }
+
+    #[test]
+    fn term_reduce_nonground() {
+        let expression = Term::parse("?x * (3 + 7)").unwrap();
+        let term = Term::from(tuple!(5, expression));
+
+        let reduced = term.reduce();
+        let expected_term = Term::parse("(5, ?x * 10)").unwrap();
+
+        assert_eq!(reduced, expected_term);
     }
 }
