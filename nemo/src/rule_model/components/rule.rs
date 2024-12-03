@@ -2,6 +2,8 @@
 
 use std::{collections::HashSet, fmt::Display, hash::Hash};
 
+use nemo_physical::datavalues::DataValue;
+
 use crate::{
     parse_component,
     parser::ast::ProgramAST,
@@ -11,6 +13,7 @@ use crate::{
             ValidationErrorBuilder,
         },
         origin::Origin,
+        substitution::Substitution,
         translation::ASTProgramTranslation,
     },
 };
@@ -39,6 +42,8 @@ pub struct Rule {
 
     /// Name of the rule
     name: Option<String>,
+    /// How an instantiated version of this rule should be displayed
+    display: Option<Term>,
 
     /// Head of the rule
     head: Vec<Atom>,
@@ -57,6 +62,7 @@ impl Rule {
         Self {
             origin: Origin::Created,
             name: None,
+            display: None,
             head,
             body,
         }
@@ -66,6 +72,38 @@ impl Rule {
     pub fn set_name(mut self, name: &str) -> Self {
         self.name = Some(name.to_string());
         self
+    }
+
+    /// Set how an instantiated version of the rule should be displayed.
+    pub fn set_display(mut self, display: Term) -> Self {
+        self.display = Some(display);
+        self
+    }
+
+    /// Return a string representation of the rule instantiated with the given [Substitution].
+    /// This will either return
+    ///     * The content of the display attribute for this rule
+    ///     * The name of the rule
+    ///     * a canonical string representation of the rule (i.e. [Display] representation)
+    /// whichever is the first defined in this list.
+    pub fn display_instantiated(&self, substitution: &Substitution) -> String {
+        if let Some(mut display) = self.display.clone() {
+            substitution.apply(&mut display);
+            if let Term::Primitive(Primitive::Ground(ground)) = display.reduce() {
+                if let Some(result) = ground.value().to_plain_string() {
+                    return result;
+                }
+            }
+        }
+
+        if let Some(name) = &self.name {
+            return name.clone();
+        }
+
+        let mut rule_instantiated = self.clone();
+        substitution.apply(&mut rule_instantiated);
+
+        rule_instantiated.to_string()
     }
 
     /// Return a reference to the body of the rule.
@@ -352,6 +390,22 @@ impl ProgramComponent for Rule {
             .flat_map(|atom| atom.variables())
             .any(|variable| variable.is_existential());
 
+        if let Some(display) = &self.display {
+            display.validate(builder)?;
+
+            for variable in display.variables() {
+                if !safe_variables.contains(variable) {
+                    builder.report_error(
+                        *variable.origin(),
+                        ValidationErrorKind::AttributeRuleUnsafe {
+                            variable: variable.to_string(),
+                        },
+                    );
+                    return None;
+                }
+            }
+        }
+
         for atom in self.head() {
             atom.validate(builder)?;
 
@@ -520,6 +574,8 @@ pub struct RuleBuilder {
 
     /// Name of the rule
     name: Option<String>,
+    /// How an instantiated version of this rule should be displayed
+    display: Option<Term>,
 
     /// Head of the rule
     head: Vec<Atom>,
@@ -529,8 +585,14 @@ pub struct RuleBuilder {
 
 impl RuleBuilder {
     /// Set the name of the built rule.
-    pub fn name(mut self, name: &str) -> Self {
+    pub fn name_mut(&mut self, name: &str) -> &mut Self {
         self.name = Some(name.to_string());
+        self
+    }
+
+    /// Set the display property of the built rule.
+    pub fn display_mut(&mut self, display: Term) -> &mut Self {
+        self.display = Some(display);
         self
     }
 
@@ -602,11 +664,16 @@ impl RuleBuilder {
 
     /// Finish building and return a [Rule].
     pub fn finalize(self) -> Rule {
-        let rule = Rule::new(self.head, self.body).set_origin(self.origin);
+        let mut rule = Rule::new(self.head, self.body).set_origin(self.origin);
 
-        match &self.name {
-            Some(name) => rule.set_name(name),
-            None => rule,
+        if let Some(name) = &self.name {
+            rule = rule.set_name(name);
         }
+
+        if let Some(display) = self.display {
+            rule = rule.set_display(display);
+        }
+
+        rule
     }
 }

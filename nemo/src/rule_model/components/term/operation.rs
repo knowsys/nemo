@@ -115,9 +115,11 @@ impl Operation {
             &HashMap::default(),
             None,
         );
-        let result = stack_program.evaluate_data(&[]).expect("term is ground");
 
-        Term::from(GroundTerm::new(result))
+        match stack_program.evaluate_data(&[]) {
+            Some(result) => Term::from(GroundTerm::new(result)),
+            None => Term::Operation(self.clone()),
+        }
     }
 }
 
