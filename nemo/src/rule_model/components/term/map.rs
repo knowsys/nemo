@@ -57,6 +57,18 @@ impl Map {
         }
     }
 
+    /// Create a new [Map] with a given (optional) [Tag].
+    pub fn new_tagged<Pairs: IntoIterator<Item = (Term, Term)>>(
+        tag: Option<Tag>,
+        map: Pairs,
+    ) -> Self {
+        Self {
+            origin: Origin::Created,
+            tag,
+            map: map.into_iter().collect(),
+        }
+    }
+
     /// Create a new empty [Map].
     pub fn empty(name: &str) -> Self {
         Self {
@@ -98,6 +110,25 @@ impl Map {
     /// Return whether this map is empty.
     pub fn is_empty(&self) -> bool {
         self.len() == 0
+    }
+
+    /// Return whether this term is ground,
+    /// i.e. if it does not contain any variables.
+    pub fn is_gound(&self) -> bool {
+        self.key_value()
+            .all(|(key, value)| key.is_ground() && value.is_ground())
+    }
+
+    /// Reduce the [Term]s in each key-value pair returning a copy.
+    pub fn reduce(&self) -> Self {
+        Self {
+            origin: self.origin,
+            tag: self.tag.clone(),
+            map: self
+                .key_value()
+                .map(|(key, value)| (key.reduce(), value.reduce()))
+                .collect(),
+        }
     }
 }
 
@@ -215,5 +246,28 @@ impl IterablePrimitives for Map {
                 key.primitive_terms_mut().chain(value.primitive_terms_mut())
             }),
         )
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use crate::rule_model::components::{
+        term::{primitive::variable::Variable, Term},
+        ProgramComponent,
+    };
+
+    use super::Map;
+
+    #[test]
+    fn parse_map() {
+        let map = Map::parse("m { ?x = 5 }").unwrap();
+
+        assert_eq!(
+            Map::new(
+                "m",
+                vec![(Term::from(Variable::universal("x")), Term::from(5)),]
+            ),
+            map
+        );
     }
 }
