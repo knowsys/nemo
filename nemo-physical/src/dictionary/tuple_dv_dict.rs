@@ -165,30 +165,61 @@ impl ByteSized for TupleDvDict {
     }
 }
 
+/// Helper function that pushes a byte representation of the given `usize` value to
+/// the given vecto of `bytes`, using either 32bit or 64bit encoding, depending on size.
+/// The function returns the type byte `type32` or `type64` to indicate which case occurred.
+/// Optionally, this type byte can also be pushed in front of the value, controlled by setting
+/// `push_type` to `true`.
+///
+/// # Panics
+/// If the `usize` id does not fit into 64bit.
+#[inline(always)]
+fn push_usize_id_to_bytes(
+    id: usize,
+    bytes: &mut Vec<u8>,
+    type32: u8,
+    type64: u8,
+    push_type: bool,
+) -> u8 {
+    if let Ok(i32id) = u32::try_from(id) {
+        if push_type {
+            bytes.push(type32);
+        }
+        bytes.extend_from_slice(&i32id.to_be_bytes());
+        type32
+    } else if let Ok(i64id) = u64::try_from(id) {
+        if push_type {
+            bytes.push(type64);
+        }
+        bytes.extend_from_slice(&i64id.to_be_bytes());
+        type64
+    } else {
+        panic!("no support for platforms with more than 64bit")
+    }
+}
+
 /// Create a pair of type bytes and content bytes to encode the given tuple data value.
 /// Missing sub-values are added to the dictionary in the process.
 ///
 /// For the schema used in this conversion, see the documentation of [TupleDvDict::dict].
 ///
 /// TODO: This function is very similar to [tuple_bytes]. Maybe consider (efficient) options
-/// for code sharing.
+/// for code sharing. However, putting large parts of code into macros is not very helpful either,
+/// since it leads to less readable code.
 fn tuple_bytes_mut(parent_dict: &mut MetaDvDictionary, dv: AnyDataValue) -> (Vec<u8>, Vec<u8>) {
-    let mut tuple_type: Vec<u8> = Vec::default(); // maybe define a low capacity here
-    let mut tuple_content: Vec<u8> = Vec::default(); // maybe define a low capacity here
+    let mut tuple_type: Vec<u8> = Vec::with_capacity(8); // space for a short label and 4 distinct types
+    let mut tuple_content: Vec<u8> = Vec::with_capacity(16); // space for 4 short values
 
     // write label id, if any
     if let Some(label) = dv.label() {
         let label_id = parent_dict.add_datavalue(label.clone().into()).value();
-
-        if let Ok(i32id) = u32::try_from(label_id) {
-            tuple_type.push(TUPLE_TYPE_LABELID32);
-            tuple_type.extend_from_slice(&i32id.to_be_bytes());
-        } else if let Ok(i64id) = u64::try_from(label_id) {
-            tuple_type.push(TUPLE_TYPE_LABELID64);
-            tuple_type.extend_from_slice(&i64id.to_be_bytes());
-        } else {
-            panic!("Nemo does not support platforms with more than 64bit.");
-        }
+        push_usize_id_to_bytes(
+            label_id,
+            &mut tuple_type,
+            TUPLE_TYPE_LABELID32,
+            TUPLE_TYPE_LABELID64,
+            true,
+        );
     }
 
     // process parameters to write type and content bytes
@@ -205,16 +236,13 @@ fn tuple_bytes_mut(parent_dict: &mut MetaDvDictionary, dv: AnyDataValue) -> (Vec
             | ValueDomain::Tuple
             | ValueDomain::Map => {
                 let term_id = parent_dict.add_datavalue(dvi.clone()).value();
-
-                if let Ok(i32id) = u32::try_from(term_id) {
-                    cur_type = TUPLE_TYPE_DICTID32;
-                    tuple_content.extend_from_slice(&i32id.to_be_bytes());
-                } else if let Ok(i64id) = u64::try_from(term_id) {
-                    cur_type = TUPLE_TYPE_DICTID64;
-                    tuple_content.extend_from_slice(&i64id.to_be_bytes());
-                } else {
-                    panic!("Nemo does not support platforms with more than 64bit.");
-                }
+                cur_type = push_usize_id_to_bytes(
+                    term_id,
+                    &mut tuple_content,
+                    TUPLE_TYPE_DICTID32,
+                    TUPLE_TYPE_DICTID64,
+                    false,
+                );
             }
             ValueDomain::Float => {
                 cur_type = TUPLE_TYPE_F32;
@@ -246,16 +274,13 @@ fn tuple_bytes_mut(parent_dict: &mut MetaDvDictionary, dv: AnyDataValue) -> (Vec
             }
             ValueDomain::Null => {
                 let null_id = dvi.null_id_unchecked();
-
-                if let Ok(i32id) = u32::try_from(null_id) {
-                    cur_type = TUPLE_TYPE_NULLID32;
-                    tuple_content.extend_from_slice(&i32id.to_be_bytes());
-                } else if let Ok(i64id) = u64::try_from(null_id) {
-                    cur_type = TUPLE_TYPE_NULLID64;
-                    tuple_content.extend_from_slice(&i64id.to_be_bytes());
-                } else {
-                    panic!("Nemo does not support platforms with more than 64bit.");
-                }
+                cur_type = push_usize_id_to_bytes(
+                    null_id,
+                    &mut tuple_content,
+                    TUPLE_TYPE_NULLID32,
+                    TUPLE_TYPE_NULLID64,
+                    false,
+                );
             }
         }
         tuple_type.push(cur_type);
@@ -275,23 +300,22 @@ fn tuple_bytes_mut(parent_dict: &mut MetaDvDictionary, dv: AnyDataValue) -> (Vec
 /// For the schema used in this conversion, see the documentation of [TupleDvDict::dict].
 ///
 /// TODO: This function is very similar to [tuple_bytes_mut]. Maybe consider (efficient) options
-/// for code sharing.
+/// for code sharing. However, putting large parts of code into macros is not very helpful either,
+/// since it leads to less readable code.
 fn tuple_bytes(parent_dict: &MetaDvDictionary, dv: &AnyDataValue) -> Option<(Vec<u8>, Vec<u8>)> {
-    let mut tuple_type: Vec<u8> = Vec::default(); // maybe define a low capacity here
-    let mut tuple_content: Vec<u8> = Vec::default(); // maybe define a low capacity here
+    let mut tuple_type: Vec<u8> = Vec::with_capacity(8); // space for a short label and 4 distinct types
+    let mut tuple_content: Vec<u8> = Vec::with_capacity(16); // space for 4 short values
 
     // write label id, if any
     if let Some(label) = dv.label() {
         if let Some(label_id) = parent_dict.datavalue_to_id(&label.clone().into()) {
-            if let Ok(i32id) = u32::try_from(label_id) {
-                tuple_type.push(TUPLE_TYPE_LABELID32);
-                tuple_type.extend_from_slice(&i32id.to_be_bytes());
-            } else if let Ok(i64id) = u64::try_from(label_id) {
-                tuple_type.push(TUPLE_TYPE_LABELID64);
-                tuple_type.extend_from_slice(&i64id.to_be_bytes());
-            } else {
-                panic!("Nemo does not support platforms with more than 64bit.");
-            }
+            push_usize_id_to_bytes(
+                label_id,
+                &mut tuple_type,
+                TUPLE_TYPE_LABELID32,
+                TUPLE_TYPE_LABELID64,
+                true,
+            );
         } else {
             return None;
         }
@@ -311,15 +335,13 @@ fn tuple_bytes(parent_dict: &MetaDvDictionary, dv: &AnyDataValue) -> Option<(Vec
             | ValueDomain::Tuple
             | ValueDomain::Map => {
                 if let Some(term_id) = parent_dict.datavalue_to_id(dvi) {
-                    if let Ok(i32id) = u32::try_from(term_id) {
-                        cur_type = TUPLE_TYPE_DICTID32;
-                        tuple_content.extend_from_slice(&i32id.to_be_bytes());
-                    } else if let Ok(i64id) = u64::try_from(term_id) {
-                        cur_type = TUPLE_TYPE_DICTID64;
-                        tuple_content.extend_from_slice(&i64id.to_be_bytes());
-                    } else {
-                        panic!("Nemo does not support platforms with more than 64bit.");
-                    }
+                    cur_type = push_usize_id_to_bytes(
+                        term_id,
+                        &mut tuple_content,
+                        TUPLE_TYPE_DICTID32,
+                        TUPLE_TYPE_DICTID64,
+                        false,
+                    );
                 } else {
                     return None;
                 }
@@ -354,16 +376,13 @@ fn tuple_bytes(parent_dict: &MetaDvDictionary, dv: &AnyDataValue) -> Option<(Vec
             }
             ValueDomain::Null => {
                 let null_id = dvi.null_id_unchecked();
-
-                if let Ok(i32id) = u32::try_from(null_id) {
-                    cur_type = TUPLE_TYPE_NULLID32;
-                    tuple_content.extend_from_slice(&i32id.to_be_bytes());
-                } else if let Ok(i64id) = u64::try_from(null_id) {
-                    cur_type = TUPLE_TYPE_NULLID64;
-                    tuple_content.extend_from_slice(&i64id.to_be_bytes());
-                } else {
-                    panic!("Nemo does not support platforms with more than 64bit.");
-                }
+                cur_type = push_usize_id_to_bytes(
+                    null_id,
+                    &mut tuple_content,
+                    TUPLE_TYPE_NULLID32,
+                    TUPLE_TYPE_NULLID64,
+                    false,
+                );
             }
         }
         tuple_type.push(cur_type);
@@ -378,6 +397,11 @@ fn tuple_bytes(parent_dict: &MetaDvDictionary, dv: &AnyDataValue) -> Option<(Vec
     Some((tuple_type, tuple_content))
 }
 
+/// Adds a tuple value to the dictionary. Subvalues that are used inside the tuple are
+/// added to the dictionary recursively, if necessary. The same applies to the label, if any.
+///
+/// Following the general callback scheme of [DvDict::add_datavalue_with_parent_fn], the
+/// function fetches the "self" tuple dict from its parent based on the given dictionary id.
 fn add_tuple_datavalue_with_parent(
     parent_dict: &mut MetaDvDictionary,
     dict_id: usize,
@@ -393,6 +417,12 @@ fn add_tuple_datavalue_with_parent(
     }
 }
 
+/// Converts a tuple value to a dictionary id, if that tuple is known to the dictionary.
+/// Identifiers of subvalues that are used inside the tuple resolved recursively, if necessary.
+/// The same applies to the label, if any.
+///
+/// Following the general callback scheme of [DvDict::datavalue_to_id_with_parent_fn], the
+/// function fetches the "self" tuple dict from its parent based on the given dictionary id.
 fn tuple_datavalue_to_id_with_parent(
     parent_dict: &MetaDvDictionary,
     dict_id: usize,
@@ -408,6 +438,17 @@ fn tuple_datavalue_to_id_with_parent(
     }
 }
 
+/// Converts a dictionary id to a tuple value, if that id is known to the tuple value dictionary.
+/// Datavalues of subvalues that are used inside the recovered recursively, if necessary. It is
+/// an error if any of the subvalues used in the tuple do not have a dictionary entry.
+///
+/// Following the general callback scheme of [DvDict::datavalue_to_id_with_parent_fn], the
+/// function fetches the "self" tuple dict from its parent based on the given dictionary id.
+///
+/// # Panics
+/// If the label or any of the dictinary-managed subvalues of this tuple cannot be found in the
+/// dictionary. Also, the function will panic if the given `dict_id` is not affiliated with a
+/// [TupleDvDict] in the given `parent_dict`.
 fn id_to_tuple_datavalue_with_parent(
     parent_dict: &MetaDvDictionary,
     dict_id: usize,
@@ -480,7 +521,11 @@ fn id_to_tuple_datavalue_with_parent(
                 get_value_bytes!(8, pos_content, tuple_content, value_bytes);
                 let id = u64::from_be_bytes(value_bytes);
                 if let Ok(u_id) = usize::try_from(id) {
-                    values.push(parent_dict.id_to_datavalue(u_id)?); // maybe fail harder here if None is returned?
+                    values.push(
+                        parent_dict
+                            .id_to_datavalue(u_id)
+                            .expect("value used within tuple not found in dictionary"),
+                    );
                 } else {
                     panic!("failed to convert u64 to usize; dictionary surpasses the capabilities of this platform");
                 }
@@ -489,7 +534,11 @@ fn id_to_tuple_datavalue_with_parent(
                 get_value_bytes!(4, pos_content, tuple_content, value_bytes);
                 let id = u32::from_be_bytes(value_bytes);
                 if let Ok(u_id) = usize::try_from(id) {
-                    values.push(parent_dict.id_to_datavalue(u_id)?); // maybe fail harder here if None is returned?
+                    values.push(
+                        parent_dict
+                            .id_to_datavalue(u_id)
+                            .expect("value used within tuple not found in dictionary"),
+                    );
                 } else {
                     panic!("failed to convert u32 to usize; platforms with less that 32bits are not supported");
                 }
