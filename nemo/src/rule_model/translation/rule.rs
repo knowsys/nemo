@@ -1,5 +1,7 @@
 //! This module contains functions for creating a [Rule] from the corresponding ast node.
 
+use nemo_physical::datavalues::DataValue;
+
 use crate::{
     parser::ast::{self, ProgramAST},
     rule_model::{
@@ -8,14 +10,14 @@ use crate::{
             literal::Literal,
             rule::{Rule, RuleBuilder},
             tag::Tag,
-            term::Term,
+            term::{primitive::Primitive, Term},
             ProgramComponent,
         },
         error::{translation_error::TranslationErrorKind, TranslationError},
     },
 };
 
-use super::ASTProgramTranslation;
+use super::{attribute::KnownAttributes, ASTProgramTranslation};
 
 impl<'a> ASTProgramTranslation<'a> {
     /// Create a [Rule] from the corresponding AST node.
@@ -24,6 +26,21 @@ impl<'a> ASTProgramTranslation<'a> {
         rule: &'a ast::rule::Rule<'a>,
     ) -> Result<Rule, TranslationError> {
         let mut rule_builder = RuleBuilder::default().origin(self.register_node(rule));
+
+        let expected_attributes = vec![KnownAttributes::Name, KnownAttributes::Display];
+        let attributes = self.process_attributes(rule.attributes(), &expected_attributes)?;
+
+        if let Some(rule_name) = attributes.get(&KnownAttributes::Name) {
+            if let Term::Primitive(Primitive::Ground(ground)) = &rule_name[0] {
+                if let Some(name) = ground.value().to_plain_string() {
+                    rule_builder.name_mut(&name);
+                }
+            }
+        }
+
+        if let Some(rule_display) = attributes.get(&KnownAttributes::Display) {
+            rule_builder.display_mut(rule_display[0].clone());
+        }
 
         for expression in rule.head() {
             rule_builder.add_head_atom_mut(self.build_head_atom(expression)?);
