@@ -180,7 +180,7 @@ impl<'a> TrieScanPruneState<'a> {
         assert!(self.external_current_layer < self.input_trie_scan.arity() - 1);
         assert!(self
             .highest_peeked_layer
-            .map_or(true, |layer| layer > self.external_current_layer));
+            .is_none_or(|layer| layer > self.external_current_layer));
 
         self.external_current_layer += 1;
     }
@@ -284,7 +284,7 @@ impl<'a> TrieScanPruneState<'a> {
     ) -> bool {
         // Cant you just check whether the input trie layer is lower than the external layer?
         // TODO: Make prettier
-        self.highest_peeked_layer.map_or(false, |p| {
+        self.highest_peeked_layer.is_some_and(|p| {
             index >= p
                 && if let Some(storage_type) = storage_type_opt {
                     if let Some(&input_type) =

@@ -613,9 +613,10 @@ impl DataValue for AnyDataValue {
             fn to_null(&self) -> Option<NullDataValue>;
             fn to_null_unchecked(&self) -> NullDataValue;
             fn tuple_element(&self, index: usize) -> Option<&AnyDataValue>;
+            fn label(&self) -> Option<&IriDataValue>;
             fn length(&self) -> Option<usize>;
             fn len_unchecked(&self) -> usize;
-            fn tuple_element_unchecked(&self, _index: usize) -> &AnyDataValue;
+            fn tuple_element_unchecked(&self, index: usize) -> &AnyDataValue;
         }
     }
 }
@@ -836,6 +837,17 @@ impl From<TupleDataValue> for AnyDataValue {
 impl From<MapDataValue> for AnyDataValue {
     fn from(value: MapDataValue) -> Self {
         AnyDataValue(AnyDataValueEnum::Map(value))
+    }
+}
+
+impl TryFrom<AnyDataValue> for IriDataValue {
+    type Error = &'static str;
+
+    fn try_from(value: AnyDataValue) -> Result<Self, Self::Error> {
+        match value.0 {
+            AnyDataValueEnum::Iri(idv) => Ok(idv),
+            _ => Err("cannot convert this data value to IriDataValue"),
+        }
     }
 }
 
