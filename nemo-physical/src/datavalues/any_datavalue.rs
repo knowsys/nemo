@@ -840,11 +840,13 @@ impl From<MapDataValue> for AnyDataValue {
     }
 }
 
-impl From<AnyDataValue> for IriDataValue {
-    fn from(value: AnyDataValue) -> Self {
+impl TryFrom<AnyDataValue> for IriDataValue {
+    type Error = &'static str;
+
+    fn try_from(value: AnyDataValue) -> Result<Self, Self::Error> {
         match value.0 {
-            AnyDataValueEnum::Iri(idv) => idv,
-            _ => panic!("cannot convert this data value to IriDataValue"),
+            AnyDataValueEnum::Iri(idv) => Ok(idv),
+            _ => Err("cannot convert this data value to IriDataValue"),
         }
     }
 }

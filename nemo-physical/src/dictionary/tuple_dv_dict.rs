@@ -482,7 +482,7 @@ fn id_to_tuple_datavalue_with_parent(
         if let Ok(label_id) = usize::try_from(u32::from_be_bytes(label_bytes)) {
             label = Some(parent_dict.id_to_datavalue(label_id).expect(
             "failed to find specified label of a tuple value; dictionaries seem to be corrupted",
-        ).into());
+        ).try_into().expect("label recovered from dictionary is not an IRI; this is a bug"));
         } else {
             panic!(
                 "failed to convert u32 to usize; platforms with less than 32bit are not supported"
@@ -494,7 +494,7 @@ fn id_to_tuple_datavalue_with_parent(
         if let Ok(label_id) = usize::try_from(u64::from_be_bytes(label_bytes)) {
             label = Some(parent_dict.id_to_datavalue(label_id).expect(
             "failed to find specified label of a tuple value; dictionaries seem to be corrupted",
-        ).into());
+        ).try_into().expect("label recovered from dictionary is not an IRI; this is a bug"));
         } else {
             panic!(
                 "failed to convert u64 to usize; dictionary surpasses the capabilities of this platform"
