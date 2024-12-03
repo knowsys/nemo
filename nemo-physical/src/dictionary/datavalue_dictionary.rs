@@ -80,7 +80,11 @@ pub trait DvDict: Debug + ByteSized {
     fn add_datavalue_with_parent_fn(
         &self,
     ) -> fn(&mut MetaDvDictionary, dict_id: usize, dv: AnyDataValue) -> AddResult {
-        add_datavalue_with_parent
+        |parent_dict, dict_id, dv| {
+            parent_dict
+                .sub_dictionary_mut_unchecked(dict_id)
+                .add_datavalue(dv)
+        }
     }
 
     /// Creates a fresh null [AnyDataValue] and assigns an id to it. Both the new null and
@@ -107,7 +111,11 @@ pub trait DvDict: Debug + ByteSized {
     fn datavalue_to_id_with_parent_fn(
         &self,
     ) -> fn(&MetaDvDictionary, dict_id: usize, dv: &AnyDataValue) -> Option<usize> {
-        datavalue_to_id_with_parent
+        |parent_dict, dict_id, dv| {
+            parent_dict
+                .sub_dictionary_unchecked(dict_id)
+                .datavalue_to_id(dv)
+        }
     }
 
     /// Returns the [AnyDataValue] associated with the `id`, or None if the `id` is not associated with any datavalue.
@@ -127,7 +135,11 @@ pub trait DvDict: Debug + ByteSized {
     fn id_to_datavalue_with_parent_fn(
         &self,
     ) -> fn(&MetaDvDictionary, dict_id: usize, id: usize) -> Option<AnyDataValue> {
-        id_to_datavalue_with_parent
+        |parent_dict, dict_id, id| {
+            parent_dict
+                .sub_dictionary_unchecked(dict_id)
+                .id_to_datavalue(id)
+        }
     }
 
     /// Returns the number of values in the dictionary. Databalues that were merely marked are not counted,
@@ -177,40 +189,4 @@ pub trait DvDict: Debug + ByteSized {
     /// can provide a (dynamic) method that accomplishes this. This is a pattern that
     /// can then be used for casting the dynamic object into a concrete type.
     fn as_any(&self) -> &dyn std::any::Any;
-}
-
-/// Default implementation for [DvDict::add_datavalue_with_parent_fn]. The function simply
-/// fetches the [DvDict] and calls the local [DvDict::add_datavalue].
-fn add_datavalue_with_parent(
-    parent_dict: &mut MetaDvDictionary,
-    dict_id: usize,
-    dv: AnyDataValue,
-) -> AddResult {
-    parent_dict
-        .sub_dictionary_mut_unchecked(dict_id)
-        .add_datavalue(dv)
-}
-
-/// Default implementation for [DvDict::datavalue_to_id_with_parent_fn]. The function simply
-/// fetches the [DvDict] and calls the local [DvDict::datavalue_to_id].
-fn datavalue_to_id_with_parent(
-    parent_dict: &MetaDvDictionary,
-    dict_id: usize,
-    dv: &AnyDataValue,
-) -> Option<usize> {
-    parent_dict
-        .sub_dictionary_unchecked(dict_id)
-        .datavalue_to_id(dv)
-}
-
-/// Default implementation for [DvDict::id_to_datavalue_with_parent_fn]. The function simply
-/// fetches the [DvDict] and calls the local [DvDict::id_to_datavalue].
-fn id_to_datavalue_with_parent(
-    parent_dict: &MetaDvDictionary,
-    dict_id: usize,
-    id: usize,
-) -> Option<AnyDataValue> {
-    parent_dict
-        .sub_dictionary_unchecked(dict_id)
-        .id_to_datavalue(id)
 }
