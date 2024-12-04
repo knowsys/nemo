@@ -324,17 +324,6 @@ mod test {
         assert_eq!(Permutation::from_map(map).last_mapped(), None);
     }
 
-    // #[test]
-    // fn test_is_valid() {
-    //     let map = HashMap::<usize, usize>::from([(7, 8), (8, 7), (6, 8)]);
-    //     let perm = Permutation { map };
-    //     assert!(!perm.is_valid());
-
-    //     let map = HashMap::<usize, usize>::from([(7, 8)]);
-    //     let perm = Permutation { map };
-    //     assert!(!perm.is_valid());
-    // }
-
     fn sort_cycles(mut cycles: Vec<Vec<usize>>) -> Vec<Vec<usize>> {
         for cycle in &mut cycles {
             cycle.sort();
