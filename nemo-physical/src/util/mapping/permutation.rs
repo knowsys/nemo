@@ -4,6 +4,7 @@ use std::{
     collections::HashMap,
     fmt::Display,
     hash::{Hash, Hasher},
+    iter::repeat,
 };
 
 use super::traits::NatMapping;
@@ -11,31 +12,49 @@ use super::traits::NatMapping;
 /// Represents a permutation on the set of natural numbers.
 #[derive(Debug, Default, Eq, Clone)]
 pub struct Permutation {
-    // permutation(i) = j <=> indeces[i] = j
-    indeces: Box<[usize]>,
+    idx_to_val: Box<[usize]>,
+    val_to_idx: Box<[usize]>,
+}
+
+fn invert(input: &[usize]) -> Box<[usize]> {
+    let mut result: Box<[usize]> = repeat(0).take(input.len()).collect();
+
+    for (k, &v) in input.iter().enumerate() {
+        result[v] = k;
+    }
+
+    result
 }
 
 impl Permutation {
     /// Return an instance of the function from a vector representation where the input `vec[i]` is mapped to `i`.
-    pub fn from_vector(vec: Vec<usize>) -> Self {
-        (Self {
-            indeces: vec.into(),
-        })
-        .invert()
-    }
-
-    /// Returns a permutation where i is mapped to vec[i]
-    fn trimmed(mut vec: Vec<usize>) -> Self {
-        while let Some(&last) = vec.last() {
-            if last == vec.len() - 1 {
-                vec.pop().unwrap();
+    pub fn from_vector(mut vec: Vec<usize>) -> Self {
+        while let Some(last) = vec.last() {
+            if *last == vec.len() - 1 {
+                _ = vec.pop();
             } else {
                 break;
             }
         }
 
         Self {
-            indeces: vec.into(),
+            idx_to_val: invert(&vec),
+            val_to_idx: vec.into(),
+        }
+    }
+
+    fn from_idx_to_val(mut input: Vec<usize>) -> Self {
+        while let Some(last) = input.last() {
+            if *last == input.len() - 1 {
+                _ = input.pop();
+            } else {
+                break;
+            }
+        }
+
+        Self {
+            val_to_idx: invert(&input),
+            idx_to_val: input.into(),
         }
     }
 
@@ -51,7 +70,7 @@ impl Permutation {
             vec[k] = v;
         }
 
-        Self::trimmed(vec)
+        Self::from_idx_to_val(vec)
     }
 
     /// Return a [Permutation] that when applied to the given slice of values would put them in ascending order.
@@ -64,7 +83,7 @@ impl Permutation {
 
     /// Return the largest input value that is not mapped to itself.
     pub(crate) fn last_mapped(&self) -> Option<usize> {
-        for (i, &v) in self.indeces.iter().enumerate().rev() {
+        for (i, &v) in self.idx_to_val.iter().enumerate().rev() {
             if i != v {
                 return Some(i);
             }
@@ -77,7 +96,7 @@ impl Permutation {
     /// A cycle is a list of inputs such that the (i+1)th results from applying the permutation to the ith element.
     /// and the first can be obtained by applying it to the last.
     fn find_cycles(&self) -> Vec<Vec<usize>> {
-        let mut tmp: Vec<Option<usize>> = self.indeces.iter().cloned().map(Some).collect();
+        let mut tmp: Vec<Option<usize>> = self.idx_to_val.iter().cloned().map(Some).collect();
         let mut cycles = Vec::new();
 
         for i in 0..tmp.len() {
@@ -106,7 +125,7 @@ impl Permutation {
     /// Return a vector represenation of the permutation.
     /// where everything is opposite of what you expect.
     fn vector_minimal(&self) -> Vec<usize> {
-        self.invert().indeces.into()
+        self.val_to_idx.to_vec()
     }
 
     /// Derive a [Permutation] that would transform a vector of elements into another.
@@ -129,47 +148,19 @@ impl Permutation {
         Self::from_map(map)
     }
 
-    /// Compute a [Permutation] that when chained to this [Permutation]
-    /// would result in the given target [Permutation].
-    #[allow(dead_code)]
-    #[cfg(unused)]
-    pub(crate) fn permute_into(&self, target: &Self) -> Self {
-        let max_key_source = self.map.keys().max().cloned().unwrap_or(0);
-        let max_key_target = target.map.keys().max().cloned().unwrap_or(0);
-        let max_key = max_key_source.max(max_key_target);
-
-        let mut result_map = HashMap::new();
-
-        for input in 0..max_key {
-            let source_output = self.get(input);
-            let target_output = target.get(input);
-
-            result_map.insert(source_output, target_output);
-        }
-
-        Self::from_map(result_map)
-    }
-
     /// Return a new [Permutation] that is the inverse of this.
     pub(crate) fn invert(&self) -> Self {
-        let mut vec = Vec::with_capacity(self.indeces.len());
-
-        for (k, &v) in self.indeces.iter().enumerate() {
-            for i in vec.len()..=v {
-                vec.push(i);
-            }
-
-            vec[v] = k;
+        Self {
+            val_to_idx: self.idx_to_val.clone(),
+            idx_to_val: self.val_to_idx.clone(),
         }
-
-        Self::trimmed(vec)
     }
 
     /// Apply this permutation to a slice of things.
     pub(crate) fn permute<T: Clone>(&self, vec: &[T]) -> Vec<T> {
         let mut result: Vec<T> = vec.to_vec();
 
-        for (input, &value) in self.indeces.iter().enumerate() {
+        for (input, &value) in self.idx_to_val.iter().enumerate() {
             result[value] = vec[input].clone();
         }
 
@@ -178,7 +169,7 @@ impl Permutation {
 
     /// Return the value of the function for a given input.
     pub(crate) fn get(&self, input: usize) -> usize {
-        *self.indeces.get(input).unwrap_or(&input)
+        *self.idx_to_val.get(input).unwrap_or(&input)
     }
 }
 
@@ -188,15 +179,15 @@ impl NatMapping for Permutation {
     }
 
     fn chain_permutation(&self, permutation: &Permutation) -> Self {
-        let indeces = (0..std::cmp::max(self.indeces.len(), permutation.indeces.len()))
+        let indeces = (0..std::cmp::max(self.idx_to_val.len(), permutation.idx_to_val.len()))
             .map(|i| permutation.get(self.get(i)))
             .collect();
 
-        Self::trimmed(indeces)
+        Self::from_idx_to_val(indeces)
     }
 
     fn is_identity(&self) -> bool {
-        self.indeces.iter().enumerate().all(|(i, &v)| i == v)
+        self.idx_to_val.iter().enumerate().all(|(i, &v)| i == v)
     }
 }
 
