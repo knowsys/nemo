@@ -125,6 +125,19 @@ pub mod expression {
         /// Closing delimiter for argument list
         pub const CLOSE: &str = ")";
     }
+
+    /// Syntax for format strings
+    pub mod format_string {
+        /// Opening part of a format string
+        pub const OPEN: &str = "f\"";
+        /// Closing part of a format string
+        pub const CLOSE: &str = "\"";
+
+        /// Marker of the start of an expression
+        pub const EXPRESSION_START: &str = "{";
+        /// Marker of the end of an expression
+        pub const EXPRESSION_END: &str = "}";
+    }
 }
 
 pub mod comment {

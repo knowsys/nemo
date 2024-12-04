@@ -10,7 +10,11 @@ use crate::{
             literal::Literal,
             rule::{Rule, RuleBuilder},
             tag::Tag,
-            term::{primitive::Primitive, Term},
+            term::{
+                operation::{operation_kind::OperationKind, Operation},
+                primitive::Primitive,
+                Term,
+            },
             ProgramComponent,
         },
         error::{translation_error::TranslationErrorKind, TranslationError},
@@ -181,7 +185,38 @@ impl<'a> ASTProgramTranslation<'a> {
             ast::expression::Expression::Parenthesized(parenthesized) => {
                 self.build_inner_term(parenthesized.expression())
             }
+            ast::expression::Expression::FormatString(format_string) => {
+                self.build_format_string(format_string).map(Term::from)
+            }
         }?
         .set_origin(self.register_node(expression)))
+    }
+
+    /// Construct a [Operation] from a given
+    /// [ast::expression::complex::fstring::FormatString]
+    /// by converting it into a string concatenation.
+    fn build_format_string(
+        &mut self,
+        format_string: &'a ast::expression::complex::fstring::FormatString,
+    ) -> Result<Operation, TranslationError> {
+        let mut subterms = Vec::new();
+
+        for element in format_string.elements() {
+            let term = match element {
+                ast::expression::complex::fstring::FormatStringElement::String(token) => {
+                    Term::from(token.to_string())
+                }
+                ast::expression::complex::fstring::FormatStringElement::Expression(expression) => {
+                    let inner_term = self.build_inner_term(expression)?;
+                    let string_conversion =
+                        Operation::new(OperationKind::LexicalValue, vec![inner_term]);
+                    Term::from(string_conversion)
+                }
+            };
+
+            subterms.push(term);
+        }
+
+        Ok(Operation::new(OperationKind::StringConcatenation, subterms))
     }
 }
