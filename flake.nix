@@ -3,7 +3,6 @@ rec {
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-24.11";
-    nixpkgs-unstable.url = "github:NixOS/nixpkgs/nixos-unstable";
 
     rust-overlay.url = "github:oxalica/rust-overlay";
     rust-overlay.inputs = {
@@ -25,9 +24,6 @@ rec {
 
       channels.nixpkgs.overlaysBuilder = channels: [
         rust-overlay.overlays.default
-        (final: prev: {
-          inherit (channels.nixpkgs-unstable) wasm-bindgen-cli;
-        })
       ];
 
       overlays.default =
