@@ -1,68 +1,20 @@
 use crate::rule_model::components::{rule::Rule, term::primitive::variable::Variable};
-use crate::static_checks::acyclicity_graphs::{JointlyAcyclicityGraph, WeaklyAcyclicityGraph};
+use crate::static_checks::acyclicity_graphs::{
+    AcyclicityGraphCycle, Cycle, JointlyAcyclicityGraph, WeaklyAcyclicityGraph,
+};
 use crate::static_checks::collection_traits::InsertAllRet;
 use crate::static_checks::positions::{ExtendedPositions, Position, Positions};
 use crate::static_checks::rule_set::RuleSet;
 
 use petgraph::algo::is_cyclic_directed;
 use petgraph::graphmap::{DiGraphMap, NodeTrait};
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::collections::{HashMap, HashSet};
 
 #[derive(Clone)]
 pub enum WeaklyAcyclicityGraphEdgeType {
-    CommonEdge,
-    SpecialEdge,
-}
-
-pub(crate) trait AcyclicityGraphCycleInternal<N>
-where
-    N: NodeTrait,
-{
-    fn cycles_internal(&self) -> HashSet<BTreeSet<N>>;
-    fn cycles_rec(
-        &self,
-        neighbor: N,
-        visited_nodes: &mut BTreeSet<N>,
-        cycles: &mut HashSet<BTreeSet<N>>,
-    );
-    fn cycles_with_start(&self, node: N) -> HashSet<BTreeSet<N>>;
-    fn is_cyclic_internal(&self) -> bool;
-}
-
-impl<N, E> AcyclicityGraphCycleInternal<N> for DiGraphMap<N, E>
-where
-    N: NodeTrait,
-{
-    fn cycles_internal(&self) -> HashSet<BTreeSet<N>> {
-        self.nodes()
-            .fold(HashSet::<BTreeSet<N>>::new(), |cycles, node| {
-                let cycles_with_start: HashSet<BTreeSet<N>> = self.cycles_with_start(node);
-                cycles.insert_all_ret(&cycles_with_start)
-            })
-    }
-
-    fn cycles_rec(
-        &self,
-        neighbor: N,
-        visited_nodes: &mut BTreeSet<N>,
-        cycles: &mut HashSet<BTreeSet<N>>,
-    ) {
-        todo!("IMPLEMENT");
-        // TODO: IMPLEMENT
-    }
-
-    fn cycles_with_start(&self, node: N) -> HashSet<BTreeSet<N>> {
-        let mut cycles: HashSet<BTreeSet<N>> = HashSet::<BTreeSet<N>>::new();
-        let mut visited_nodes: BTreeSet<N> = BTreeSet::from([node]);
-        self.neighbors(node).for_each(|neighbor| {
-            self.cycles_rec(neighbor, &mut visited_nodes, &mut cycles);
-        });
-        cycles
-    }
-
-    fn is_cyclic_internal(&self) -> bool {
-        is_cyclic_directed(self)
-    }
+    Common,
+    CommonAndSpecial,
+    Special,
 }
 
 pub(crate) trait AcyclicityGraphBuilderInternal<'a> {
@@ -180,13 +132,14 @@ impl<'a> JointlyAcyclicityGraphBuilderInternal<'a> for JointlyAcyclicityGraph<'a
 }
 
 trait WeaklyAcyclicityGraphBuilderInternal<'a>: AcyclicityGraphBuilderInternal<'a> {
-    fn add_common_edges_for_var(&mut self, rule: &'a Rule, variable_body: &Variable);
     fn add_common_edges_for_pos(
         &mut self,
         body_pos: Position<'a>,
         head_ex_pos_of_var: &ExtendedPositions<'a>,
     );
+    fn add_common_edges_for_rule(&mut self, rule: &'a Rule, variable_body: &Variable);
     fn add_edges_for_rule(&mut self, rule: &'a Rule);
+    fn add_special_edge(&mut self, body_pos: Position<'a>, existential_pos: Position<'a>);
     fn add_special_edges_for_pos(
         &mut self,
         body_pos: Position<'a>,
@@ -196,7 +149,17 @@ trait WeaklyAcyclicityGraphBuilderInternal<'a>: AcyclicityGraphBuilderInternal<'
 }
 
 impl<'a> WeaklyAcyclicityGraphBuilderInternal<'a> for WeaklyAcyclicityGraph<'a> {
-    fn add_common_edges_for_var(&mut self, rule: &'a Rule, variable_body: &Variable) {
+    fn add_common_edges_for_pos(
+        &mut self,
+        body_pos: Position<'a>,
+        head_ex_pos_of_var: &ExtendedPositions<'a>,
+    ) {
+        head_ex_pos_of_var.iter().for_each(|head_pos| {
+            self.add_edge(body_pos, *head_pos, WeaklyAcyclicityGraphEdgeType::Common);
+        })
+    }
+
+    fn add_common_edges_for_rule(&mut self, rule: &'a Rule, variable_body: &Variable) {
         let body_ex_pos_of_var: ExtendedPositions =
             variable_body.get_extended_positions_in_positive_body(rule);
         let head_ex_pos_of_var: ExtendedPositions =
@@ -206,26 +169,28 @@ impl<'a> WeaklyAcyclicityGraphBuilderInternal<'a> for WeaklyAcyclicityGraph<'a> 
             .for_each(|body_pos| self.add_common_edges_for_pos(body_pos, &head_ex_pos_of_var));
     }
 
-    fn add_common_edges_for_pos(
-        &mut self,
-        body_pos: Position<'a>,
-        head_ex_pos_of_var: &ExtendedPositions<'a>,
-    ) {
-        head_ex_pos_of_var.iter().for_each(|head_pos| {
-            self.add_edge(
-                body_pos,
-                *head_pos,
-                WeaklyAcyclicityGraphEdgeType::CommonEdge,
-            );
-        })
-    }
-
     fn add_edges_for_rule(&mut self, rule: &'a Rule) {
         let positive_variables: HashSet<&Variable> = rule.positive_variables();
         positive_variables.iter().for_each(|variable_body| {
-            self.add_common_edges_for_var(rule, variable_body);
+            self.add_common_edges_for_rule(rule, variable_body);
             self.add_special_edges_for_rule(rule, variable_body);
         });
+    }
+
+    fn add_special_edge(&mut self, body_pos: Position<'a>, existential_pos: Position<'a>) {
+        if self.contains_edge(body_pos, existential_pos) {
+            self.add_edge(
+                body_pos,
+                existential_pos,
+                WeaklyAcyclicityGraphEdgeType::CommonAndSpecial,
+            );
+        } else {
+            self.add_edge(
+                body_pos,
+                existential_pos,
+                WeaklyAcyclicityGraphEdgeType::Special,
+            );
+        }
     }
 
     fn add_special_edges_for_pos(
@@ -233,12 +198,8 @@ impl<'a> WeaklyAcyclicityGraphBuilderInternal<'a> for WeaklyAcyclicityGraph<'a> 
         body_pos: Position<'a>,
         extended_pos_of_ex_vars: &ExtendedPositions<'a>,
     ) {
-        extended_pos_of_ex_vars.iter().for_each(|ex_pos| {
-            self.add_edge(
-                body_pos,
-                *ex_pos,
-                WeaklyAcyclicityGraphEdgeType::SpecialEdge,
-            );
+        extended_pos_of_ex_vars.iter().for_each(|existential_pos| {
+            self.add_special_edge(body_pos, *existential_pos);
         })
     }
 
@@ -250,5 +211,175 @@ impl<'a> WeaklyAcyclicityGraphBuilderInternal<'a> for WeaklyAcyclicityGraph<'a> 
         body_ex_pos_of_var.into_iter().for_each(|body_pos| {
             self.add_special_edges_for_pos(body_pos, &extended_pos_of_ex_vars);
         })
+    }
+}
+
+pub(crate) trait AcyclicityGraphCycleInternal<N> {
+    fn cycles_internal(&self) -> HashSet<Cycle<N>>;
+    fn cycles_rec(&self, neighbor: &N, cycle: &mut Cycle<N>, cycles: &mut HashSet<Cycle<N>>);
+    fn cycles_with_start(&self, node: &N) -> HashSet<Cycle<N>>;
+    fn is_cyclic_internal(&self) -> bool;
+    fn recursion_stops(
+        &self,
+        neighbor: &N,
+        cycle: &Cycle<N>,
+        cycles: &mut HashSet<Cycle<N>>,
+    ) -> bool;
+    fn recursion_with_node(&self, node: &N, cycle: &mut Cycle<N>, cycles: &mut HashSet<Cycle<N>>);
+}
+
+impl<N, E> AcyclicityGraphCycleInternal<N> for DiGraphMap<N, E>
+where
+    N: NodeTrait,
+{
+    fn cycles_internal(&self) -> HashSet<Cycle<N>> {
+        let cycles: HashSet<Cycle<N>> =
+            self.nodes()
+                .fold(HashSet::<Cycle<N>>::new(), |cycles, node| {
+                    let cycles_with_start: HashSet<Cycle<N>> = self.cycles_with_start(&node);
+                    cycles.insert_all_take_ret(cycles_with_start)
+                });
+        cycles.filter_permutations_ret()
+    }
+
+    fn cycles_rec(&self, neighbor: &N, cycle: &mut Cycle<N>, cycles: &mut HashSet<Cycle<N>>) {
+        if self.recursion_stops(neighbor, cycle, cycles) {
+            return;
+        }
+        self.recursion_with_node(neighbor, cycle, cycles);
+    }
+
+    fn cycles_with_start(&self, node: &N) -> HashSet<Cycle<N>> {
+        let mut cycles: HashSet<Cycle<N>> = HashSet::<Cycle<N>>::new();
+        let mut cycle: Cycle<N> = Cycle::<N>::new();
+        self.recursion_with_node(node, &mut cycle, &mut cycles);
+        cycles
+    }
+
+    fn is_cyclic_internal(&self) -> bool {
+        is_cyclic_directed(self)
+    }
+
+    fn recursion_stops(
+        &self,
+        neighbor: &N,
+        cycle: &Cycle<N>,
+        cycles: &mut HashSet<Cycle<N>>,
+    ) -> bool {
+        if !cycle.contains(neighbor) {
+            return false;
+        }
+        let starting_node: &N = cycle.first().unwrap();
+        if neighbor == starting_node {
+            let cycle_clone: Cycle<N> = cycle.clone();
+            cycles.insert(cycle_clone);
+        }
+        true
+    }
+
+    fn recursion_with_node(&self, node: &N, cycle: &mut Cycle<N>, cycles: &mut HashSet<Cycle<N>>) {
+        self.neighbors(*node).for_each(|neighbor| {
+            cycle.push(*node);
+            self.cycles_rec(&neighbor, cycle, cycles);
+            cycle.pop();
+        });
+    }
+}
+
+pub(crate) trait WeaklyAcyclicityGraphCycleInternal<N>: AcyclicityGraphCycle<N> {
+    fn contains_cycle_with_special_edge_internal(&self) -> bool;
+    fn cycle_contains_special_edge(&self, cycle: &Cycle<N>) -> bool;
+    fn match_edge(&self, node: &N, next_node: &N) -> bool;
+}
+
+impl<'a> WeaklyAcyclicityGraphCycleInternal<Position<'a>> for WeaklyAcyclicityGraph<'a> {
+    fn contains_cycle_with_special_edge_internal(&self) -> bool {
+        let cycles: HashSet<Cycle<Position<'a>>> = self.cycles();
+        cycles
+            .iter()
+            .any(|cycle| self.cycle_contains_special_edge(cycle))
+    }
+
+    fn cycle_contains_special_edge(&self, cycle: &Cycle<Position<'a>>) -> bool {
+        let cycle_size: usize = cycle.len();
+        cycle.iter().enumerate().any(|(i, pos)| {
+            let j: usize = (i + 1) % cycle_size;
+            let next_pos: &Position<'a> = cycle.get(j).unwrap();
+            self.match_edge(pos, next_pos)
+        })
+    }
+
+    fn match_edge(&self, node: &Position<'a>, next_node: &Position<'a>) -> bool {
+        match self.edge_weight(*node, *next_node).unwrap() {
+            WeaklyAcyclicityGraphEdgeType::Common => false,
+            WeaklyAcyclicityGraphEdgeType::CommonAndSpecial => true,
+            WeaklyAcyclicityGraphEdgeType::Special => true,
+        }
+    }
+}
+
+trait PermutationEq<N> {
+    fn permutation_eq(&self, other: &Cycle<N>) -> bool;
+}
+
+impl<N> PermutationEq<N> for Cycle<N>
+where
+    N: NodeTrait,
+{
+    fn permutation_eq(&self, other: &Cycle<N>) -> bool {
+        if self.different_size(other) {
+            return false;
+        }
+        let cycle_size: usize = self.len();
+        (0..cycle_size).any(|offset| {
+            self.iter().enumerate().all(|(j, node_self)| {
+                let node_other: &N = other.get(j + offset).unwrap();
+                node_self == node_other
+            })
+        })
+    }
+}
+
+trait DifferentSize<N> {
+    fn different_size(&self, other: &Cycle<N>) -> bool;
+}
+
+impl<N> DifferentSize<N> for Cycle<N>
+where
+    N: NodeTrait,
+{
+    fn different_size(&self, other: &Cycle<N>) -> bool {
+        let self_length: usize = self.len();
+        let other_length: usize = other.len();
+        self_length != other_length
+    }
+}
+
+trait FilterPermutations {
+    fn filter_permutations(&mut self);
+    fn filter_permutations_ret(self) -> Self;
+}
+
+impl<N> FilterPermutations for HashSet<Cycle<N>>
+where
+    N: NodeTrait,
+{
+    fn filter_permutations(&mut self) {
+        let self_clone: HashSet<Cycle<N>> = self.clone();
+        self_clone.iter().for_each(|cycle1| {
+            self_clone
+                .iter()
+                .filter(|cycle2| cycle1 != *cycle2)
+                .for_each(|cycle2| {
+                    if cycle1.permutation_eq(cycle2) {
+                        self.remove(cycle2);
+                    }
+                })
+        })
+    }
+
+    fn filter_permutations_ret(mut self) -> Self {
+        self.filter_permutations();
+        self
     }
 }

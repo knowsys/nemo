@@ -1,6 +1,8 @@
 use crate::rule_model::components::term::primitive::variable::Variable;
 use crate::static_checks::acyclicity_graph_constructor::AcyclicityGraphConstructor;
-use crate::static_checks::acyclicity_graphs::{AcyclicityGraphCycle, JointlyAcyclicityGraph};
+use crate::static_checks::acyclicity_graphs::{
+    AcyclicityGraphCycle, JointlyAcyclicityGraph, WeaklyAcyclicityGraph, WeaklyAcyclicityGraphCycle,
+};
 use crate::static_checks::{
     positions::Positions, rule_properties::RuleProperties, rule_set::RuleSet,
 };
@@ -105,13 +107,13 @@ impl RulesPropertiesInternal for RuleSet {
     }
 
     fn is_weakly_acyclic_internal(&self) -> bool {
-        todo!("IMPLEMENT");
-        // TODO: IMPLEMENT
+        let we_ac_graph: WeaklyAcyclicityGraph = self.weakly_acyclicity_graph();
+        !we_ac_graph.contains_cycle_with_special_edge()
     }
 
     fn is_jointly_acyclic_internal(&self) -> bool {
-        let jo_ex_graph: JointlyAcyclicityGraph = self.jointly_acyclicity_graph();
-        !jo_ex_graph.is_cyclic()
+        let jo_ac_graph: JointlyAcyclicityGraph = self.jointly_acyclicity_graph();
+        !jo_ac_graph.is_cyclic()
     }
 
     fn is_glut_guarded_internal(&self) -> bool {
