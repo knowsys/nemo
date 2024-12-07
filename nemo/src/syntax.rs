@@ -388,9 +388,9 @@ pub mod import_export {
         /// The file extension used for CSV files
         pub(crate) const EXTENSION_CSV: &str = "csv";
         /// The file extension used for TSV files
-        pub(crate) const EXTENSION_TSV: &str = "csv";
+        pub(crate) const EXTENSION_TSV: &str = "tsv";
         /// The file extension used for DSV files
-        pub(crate) const EXTENSION_DSV: &str = "csv";
+        pub(crate) const EXTENSION_DSV: &str = "dsv";
         /// The file extension used for Ntriples files
         pub(crate) const EXTENSION_RDF_NTRIPLES: &str = "nt";
         /// The file extension used for NQuads files
