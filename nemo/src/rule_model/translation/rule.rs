@@ -1,5 +1,7 @@
 //! This module contains functions for creating a [Rule] from the corresponding ast node.
 
+use nemo_physical::datavalues::DataValue;
+
 use crate::{
     parser::ast::{self, ProgramAST},
     rule_model::{
@@ -8,14 +10,18 @@ use crate::{
             literal::Literal,
             rule::{Rule, RuleBuilder},
             tag::Tag,
-            term::Term,
+            term::{
+                operation::{operation_kind::OperationKind, Operation},
+                primitive::Primitive,
+                Term,
+            },
             ProgramComponent,
         },
         error::{translation_error::TranslationErrorKind, TranslationError},
     },
 };
 
-use super::ASTProgramTranslation;
+use super::{attribute::KnownAttributes, ASTProgramTranslation};
 
 impl<'a> ASTProgramTranslation<'a> {
     /// Create a [Rule] from the corresponding AST node.
@@ -24,6 +30,21 @@ impl<'a> ASTProgramTranslation<'a> {
         rule: &'a ast::rule::Rule<'a>,
     ) -> Result<Rule, TranslationError> {
         let mut rule_builder = RuleBuilder::default().origin(self.register_node(rule));
+
+        let expected_attributes = vec![KnownAttributes::Name, KnownAttributes::Display];
+        let attributes = self.process_attributes(rule.attributes(), &expected_attributes)?;
+
+        if let Some(rule_name) = attributes.get(&KnownAttributes::Name) {
+            if let Term::Primitive(Primitive::Ground(ground)) = &rule_name[0] {
+                if let Some(name) = ground.value().to_plain_string() {
+                    rule_builder.name_mut(&name);
+                }
+            }
+        }
+
+        if let Some(rule_display) = attributes.get(&KnownAttributes::Display) {
+            rule_builder.display_mut(rule_display[0].clone());
+        }
 
         for expression in rule.head() {
             rule_builder.add_head_atom_mut(self.build_head_atom(expression)?);
@@ -164,7 +185,38 @@ impl<'a> ASTProgramTranslation<'a> {
             ast::expression::Expression::Parenthesized(parenthesized) => {
                 self.build_inner_term(parenthesized.expression())
             }
+            ast::expression::Expression::FormatString(format_string) => {
+                self.build_format_string(format_string).map(Term::from)
+            }
         }?
         .set_origin(self.register_node(expression)))
+    }
+
+    /// Construct a [Operation] from a given
+    /// [ast::expression::complex::fstring::FormatString]
+    /// by converting it into a string concatenation.
+    fn build_format_string(
+        &mut self,
+        format_string: &'a ast::expression::complex::fstring::FormatString,
+    ) -> Result<Operation, TranslationError> {
+        let mut subterms = Vec::new();
+
+        for element in format_string.elements() {
+            let term = match element {
+                ast::expression::complex::fstring::FormatStringElement::String(token) => {
+                    Term::from(token.to_string())
+                }
+                ast::expression::complex::fstring::FormatStringElement::Expression(expression) => {
+                    let inner_term = self.build_inner_term(expression)?;
+                    let string_conversion =
+                        Operation::new(OperationKind::LexicalValue, vec![inner_term]);
+                    Term::from(string_conversion)
+                }
+            };
+
+            subterms.push(term);
+        }
+
+        Ok(Operation::new(OperationKind::StringConcatenation, subterms))
     }
 }

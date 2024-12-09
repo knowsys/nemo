@@ -22,6 +22,6 @@ impl<'a> ASTProgramTranslation<'a> {
             subterms.push(self.build_inner_term(expression)?);
         }
 
-        Ok(self.register_component(FunctionTerm::new(tag, subterms), function))
+        Ok(self.register_component(FunctionTerm::new_tag(tag, subterms), function))
     }
 }

@@ -11,7 +11,7 @@ use crate::{
 };
 
 /// Helper function to translate a [OperationTerm] into a [FunctionTree].
-pub(super) fn operation_term_to_function_tree(
+pub(crate) fn operation_term_to_function_tree(
     translation: &VariableTranslation,
     operation_term: &OperationTerm,
 ) -> FunctionTree<OperationColumnMarker> {
@@ -56,7 +56,7 @@ macro_rules! unary {
 }
 
 /// Helper function to translate a [Operation] into a [FunctionTree].
-pub(super) fn operation_to_function_tree(
+pub(crate) fn operation_to_function_tree(
     translation: &VariableTranslation,
     operation: &Operation,
 ) -> FunctionTree<OperationColumnMarker> {

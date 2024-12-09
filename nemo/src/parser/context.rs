@@ -25,6 +25,9 @@ pub enum ParserContext {
     /// String
     #[assoc(name = "string")]
     String,
+    /// Format String
+    #[assoc(name = "format-string")]
+    FormatString,
     /// Iri
     #[assoc(name = "iri")]
     Iri,

@@ -72,6 +72,10 @@ result(stringstarts_false, ?R) :- strings(_, ?B), ?R = STRSTARTS(?B, "Hell").
 result(stringends_true, ?R) :- strings(?A, _), ?R = STRENDS(?A, "ello").
 result(stringends_false, ?R) :- strings(_, ?B), ?R = STRENDS(?B, "ello").
 
+% F-string literal
+result(fstring_basic, ?R) :- strings(?A, ?B), ?R = f"{?A} and {?B}". 
+result(fstring_arithmetic, ?R) :- strings(?A, ?B), ?R = f"len*10={STRLEN(?A) * 10}".
+
 % Numeric arithmetic
 result(calculation, ?R) :- doubles(?A, ?B, ?C), ?R = POW((?A + ?B + ?C) / 2E0, 3E0) * LOG(16E0, 4E0) + SIN(?C + 0.023599E0) * SQRT(16E0). 
 result(remainder, ?R) :- integers(_, ?A, ?B), ?R = REM(?B, ?A).
