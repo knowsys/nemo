@@ -177,6 +177,10 @@ impl Operation {
             OperationKind::NumericDivision => "/",
             OperationKind::Equal => "=",
             OperationKind::Unequals => "!=",
+            OperationKind::NumericGreaterthan => ">",
+            OperationKind::NumericGreaterthaneq => ">=",
+            OperationKind::NumericLessthan => "<",
+            OperationKind::NumericLessthaneq => "<=",
             _ => return None,
         })
     }

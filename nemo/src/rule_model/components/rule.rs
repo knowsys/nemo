@@ -83,7 +83,6 @@ impl Rule {
     /// Return a string representation of the rule instantiated with the given [Substitution].
     /// This will either return
     ///     * The content of the display attribute for this rule
-    ///     * The name of the rule
     ///     * a canonical string representation of the rule (i.e. [Display] representation)
     /// whichever is the first defined in this list.
     pub fn display_instantiated(&self, substitution: &Substitution) -> String {
@@ -96,14 +95,15 @@ impl Rule {
             }
         }
 
+        let mut rule_name_prefix = String::from("");
         if let Some(name) = &self.name {
-            return name.clone();
+            rule_name_prefix = format!("{}: ", name.clone());
         }
 
         let mut rule_instantiated = self.clone();
         substitution.apply(&mut rule_instantiated);
 
-        rule_instantiated.to_string()
+        format!("{}{}", rule_name_prefix, rule_instantiated)
     }
 
     /// Return a reference to the body of the rule.
