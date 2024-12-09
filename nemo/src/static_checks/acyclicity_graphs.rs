@@ -7,7 +7,6 @@ use crate::static_checks::{positions::Position, rule_set::RuleSet};
 
 use petgraph::graphmap::{DiGraphMap, NodeTrait};
 use std::collections::HashSet;
-use std::slice::Iter;
 
 mod acyclicity_graphs_internal;
 
@@ -31,48 +30,12 @@ impl<'a> AcyclicityGraphBuilder<'a> for WeaklyAcyclicityGraph<'a> {
     }
 }
 
-#[derive(Clone, Eq, Hash, PartialEq)]
-pub struct Cycle<N>(Vec<N>);
+type Cycle<N> = Vec<N>;
 
-impl<N> Cycle<N>
-where
-    N: NodeTrait,
-{
-    fn contains(&self, node: &N) -> bool {
-        self.0.contains(node)
-    }
-
-    fn first(&self) -> Option<&N> {
-        self.0.first()
-    }
-
-    fn get(&self, i: usize) -> Option<&N> {
-        self.0.get(i)
-    }
-
-    fn iter(&self) -> Iter<N> {
-        self.0.iter()
-    }
-
-    fn len(&self) -> usize {
-        self.0.len()
-    }
-
-    fn new() -> Self {
-        Cycle(Vec::<N>::new())
-    }
-
-    fn pop(&mut self) -> Option<N> {
-        self.0.pop()
-    }
-
-    fn push(&mut self, node: N) {
-        self.0.push(node)
-    }
-}
+type Cycles<N> = HashSet<Cycle<N>>;
 
 pub trait AcyclicityGraphCycle<N>: AcyclicityGraphCycleInternal<N> {
-    fn cycles(&self) -> HashSet<Cycle<N>>;
+    fn cycles(&self) -> Cycles<N>;
     fn is_cyclic(&self) -> bool;
 }
 
@@ -80,7 +43,7 @@ impl<N, E> AcyclicityGraphCycle<N> for DiGraphMap<N, E>
 where
     N: NodeTrait,
 {
-    fn cycles(&self) -> HashSet<Cycle<N>> {
+    fn cycles(&self) -> Cycles<N> {
         self.cycles_internal()
     }
 
