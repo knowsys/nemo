@@ -50,7 +50,7 @@ impl Hint {
         Self::similar("operation", target, options)
     }
 
-    /// Checks whether a similar string exists within [KnownAttribute]
+    /// Checks whether a similar string exists within the known attributes
     /// and returns the most similar one, if it meets the threshold.
     pub fn similar_attribute(target: impl AsRef<str>) -> Option<Self> {
         let options = KnownAttributes::iter().map(|kind| kind.name());
