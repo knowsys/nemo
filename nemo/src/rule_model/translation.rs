@@ -1,5 +1,6 @@
 //! This module defines [ASTProgramTranslation].
 
+pub(crate) mod attribute;
 pub(crate) mod basic;
 pub(crate) mod complex;
 pub(crate) mod directive;
