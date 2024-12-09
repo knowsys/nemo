@@ -7,5 +7,5 @@ pub mod components;
 pub mod error;
 pub mod origin;
 pub mod program;
-pub mod term_map;
+pub mod substitution;
 pub mod translation;
