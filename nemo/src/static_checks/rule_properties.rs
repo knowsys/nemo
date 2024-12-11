@@ -2,7 +2,7 @@ use crate::rule_model::components::{rule::Rule, term::primitive::variable::Varia
 use crate::static_checks::positions::Positions;
 use crate::static_checks::rule_properties::rule_properties_internal::RulePropertiesInternal;
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 mod rule_properties_internal;
 
@@ -24,8 +24,11 @@ pub trait RuleProperties: RulePropertiesInternal {
         attacked_pos_by_vars: &HashMap<&Variable, Positions>,
     ) -> bool;
     fn is_weakly_sticky(&self) -> bool;
-    fn is_glut_guarded(&self) -> bool;
-    fn is_glut_frontier_guarded(&self) -> bool;
+    fn is_glut_guarded(&self, attacked_pos_by_cycle_vars: &HashMap<&Variable, Positions>) -> bool;
+    fn is_glut_frontier_guarded(
+        &self,
+        attacked_pos_by_cycle_vars: &HashMap<&Variable, Positions>,
+    ) -> bool;
     fn is_shy(&self, attacked_pos_by_vars: &HashMap<&Variable, Positions>) -> bool;
     fn is_mfa(&self) -> bool;
     fn is_dmfa(&self) -> bool;
@@ -92,12 +95,15 @@ impl RuleProperties for Rule {
         self.is_weakly_sticky_internal()
     }
 
-    fn is_glut_guarded(&self) -> bool {
-        self.is_glut_guarded_internal()
+    fn is_glut_guarded(&self, attacked_pos_by_cycle_vars: &HashMap<&Variable, Positions>) -> bool {
+        self.is_glut_guarded_internal(attacked_pos_by_cycle_vars)
     }
 
-    fn is_glut_frontier_guarded(&self) -> bool {
-        self.is_glut_frontier_guarded_internal()
+    fn is_glut_frontier_guarded(
+        &self,
+        attacked_pos_by_cycle_vars: &HashMap<&Variable, Positions>,
+    ) -> bool {
+        self.is_glut_frontier_guarded_internal(attacked_pos_by_cycle_vars)
     }
 
     fn is_shy(&self, attacked_pos_by_vars: &HashMap<&Variable, Positions>) -> bool {

@@ -1,3 +1,4 @@
+use crate::rule_model::components::term::primitive::variable::Variable;
 use crate::static_checks::acyclicity_graphs::acyclicity_graphs_internal::private::{
     AcyclicityGraphBuilderInternalPrivate, AcyclicityGraphCycleInternalPrivate,
     WeaklyAcyclicityGraphCycleInternalPrivate,
@@ -68,6 +69,21 @@ where
     }
 }
 
+pub(crate) trait JointlyAcyclicityGraphCycleInternal<N>: AcyclicityGraphCycle<N> {
+    fn variables_in_cycles_internal(&self) -> HashSet<N>;
+}
+
+impl<'a> JointlyAcyclicityGraphCycleInternal<&'a Variable> for JointlyAcyclicityGraph<'a> {
+    fn variables_in_cycles_internal(&self) -> HashSet<&'a Variable> {
+        let cycles: Cycles<&'a Variable> = self.cycles();
+        cycles
+            .iter()
+            .fold(HashSet::<&Variable>::new(), |vars_in_cycles, cycle| {
+                vars_in_cycles.insert_all_ret(cycle)
+            })
+    }
+}
+
 pub(crate) trait WeaklyAcyclicityGraphCycleInternal<N>:
     AcyclicityGraphCycle<N> + WeaklyAcyclicityGraphCycleInternalPrivate<N>
 {
@@ -103,7 +119,7 @@ mod private {
     impl<'a> AcyclicityGraphBuilderInternalPrivate<'a> for JointlyAcyclicityGraph<'a> {
         fn add_edges(&mut self, rule_set: &'a RuleSet) {
             let attacked_pos_by_vars: HashMap<&Variable, Positions> =
-                rule_set.attacked_positions_by_variables();
+                rule_set.attacked_positions_by_existential_variables();
             rule_set.iter().for_each(|rule| {
                 self.add_edges_for_rule(rule, &attacked_pos_by_vars);
             })

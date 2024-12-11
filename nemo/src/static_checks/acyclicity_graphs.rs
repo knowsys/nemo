@@ -1,7 +1,8 @@
 use crate::rule_model::components::term::primitive::variable::Variable;
 use crate::static_checks::acyclicity_graphs::acyclicity_graphs_internal::{
     AcyclicityGraphBuilderInternal, AcyclicityGraphCycleInternal,
-    WeaklyAcyclicityGraphCycleInternal, WeaklyAcyclicityGraphEdgeType,
+    JointlyAcyclicityGraphCycleInternal, WeaklyAcyclicityGraphCycleInternal,
+    WeaklyAcyclicityGraphEdgeType,
 };
 use crate::static_checks::{positions::Position, rule_set::RuleSet};
 
@@ -49,6 +50,16 @@ where
 
     fn is_cyclic(&self) -> bool {
         self.is_cyclic_internal()
+    }
+}
+
+pub trait JointlyAcyclicityGraphCycle<N>: JointlyAcyclicityGraphCycleInternal<N> {
+    fn variables_in_cycles(&self) -> HashSet<N>;
+}
+
+impl<'a> JointlyAcyclicityGraphCycle<&'a Variable> for JointlyAcyclicityGraph<'a> {
+    fn variables_in_cycles(&self) -> HashSet<&'a Variable> {
+        self.variables_in_cycles_internal()
     }
 }
 

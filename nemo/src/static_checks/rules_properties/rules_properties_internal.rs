@@ -1,13 +1,14 @@
 use crate::rule_model::components::term::primitive::variable::Variable;
 use crate::static_checks::acyclicity_graph_constructor::AcyclicityGraphConstructor;
 use crate::static_checks::acyclicity_graphs::{
-    AcyclicityGraphCycle, JointlyAcyclicityGraph, WeaklyAcyclicityGraph, WeaklyAcyclicityGraphCycle,
+    AcyclicityGraphCycle, JointlyAcyclicityGraph, JointlyAcyclicityGraphCycle,
+    WeaklyAcyclicityGraph, WeaklyAcyclicityGraphCycle,
 };
 use crate::static_checks::{
     positions::Positions, rule_properties::RuleProperties, rule_set::RuleSet,
 };
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 pub trait RulesPropertiesInternal {
     fn is_joinless_internal(&self) -> bool;
@@ -94,14 +95,14 @@ impl RulesPropertiesInternal for RuleSet {
 
     fn is_jointly_guarded_internal(&self) -> bool {
         let attacked_pos_by_vars: HashMap<&Variable, Positions> =
-            self.attacked_positions_by_variables();
+            self.attacked_positions_by_existential_variables();
         self.iter()
             .all(|rule| rule.is_jointly_guarded(&attacked_pos_by_vars))
     }
 
     fn is_jointly_frontier_guarded_internal(&self) -> bool {
         let attacked_pos_by_vars: HashMap<&Variable, Positions> =
-            self.attacked_positions_by_variables();
+            self.attacked_positions_by_existential_variables();
         self.iter()
             .all(|rule| rule.is_jointly_frontier_guarded(&attacked_pos_by_vars))
     }
@@ -117,18 +118,22 @@ impl RulesPropertiesInternal for RuleSet {
     }
 
     fn is_glut_guarded_internal(&self) -> bool {
-        todo!("IMPLEMENT");
-        // TODO: IMPLEMENT
+        let attacked_pos_by_cycle_vars: HashMap<&Variable, Positions> =
+            self.attacked_positions_by_cycle_variables();
+        self.iter()
+            .all(|rule| rule.is_glut_guarded(&attacked_pos_by_cycle_vars))
     }
 
     fn is_glut_frontier_guarded_internal(&self) -> bool {
-        todo!("IMPLEMENT");
-        // TODO: IMPLEMENT
+        let attacked_pos_by_cycle_vars: HashMap<&Variable, Positions> =
+            self.attacked_positions_by_cycle_variables();
+        self.iter()
+            .all(|rule| rule.is_glut_frontier_guarded(&attacked_pos_by_cycle_vars))
     }
 
     fn is_shy_internal(&self) -> bool {
         let attacked_pos_by_vars: HashMap<&Variable, Positions> =
-            self.attacked_positions_by_variables();
+            self.attacked_positions_by_existential_variables();
         self.iter().all(|rule| rule.is_shy(&attacked_pos_by_vars))
     }
 

@@ -26,8 +26,14 @@ pub(crate) trait RulePropertiesInternal {
         attacked_pos_by_vars: &HashMap<&Variable, Positions>,
     ) -> bool;
     fn is_weakly_sticky_internal(&self) -> bool;
-    fn is_glut_guarded_internal(&self) -> bool;
-    fn is_glut_frontier_guarded_internal(&self) -> bool;
+    fn is_glut_guarded_internal(
+        &self,
+        attacked_pos_by_cycle_vars: &HashMap<&Variable, Positions>,
+    ) -> bool;
+    fn is_glut_frontier_guarded_internal(
+        &self,
+        attacked_pos_by_cycle_vars: &HashMap<&Variable, Positions>,
+    ) -> bool;
     fn is_shy_internal(&self, attacked_pos_by_vars: &HashMap<&Variable, Positions>) -> bool;
     fn is_mfa_internal(&self) -> bool;
     fn is_dmfa_internal(&self) -> bool;
@@ -115,14 +121,22 @@ impl RulePropertiesInternal for Rule {
         // TODO: IMPLEMENT
     }
 
-    fn is_glut_guarded_internal(&self) -> bool {
-        todo!("IMPLEMENT");
-        // TODO: IMPLEMENT
+    fn is_glut_guarded_internal(
+        &self,
+        attacked_pos_by_cycle_vars: &HashMap<&Variable, Positions>,
+    ) -> bool {
+        let attacked_universal_glut_variables: HashSet<&Variable> =
+            self.attacked_universal_glut_variables(attacked_pos_by_cycle_vars);
+        self.is_guarded_for_variables(attacked_universal_glut_variables)
     }
 
-    fn is_glut_frontier_guarded_internal(&self) -> bool {
-        todo!("IMPLEMENT");
-        // TODO: IMPLEMENT
+    fn is_glut_frontier_guarded_internal(
+        &self,
+        attacked_pos_by_cycle_vars: &HashMap<&Variable, Positions>,
+    ) -> bool {
+        let attacked_frontier_glut_variables: HashSet<&Variable> =
+            self.attacked_frontier_glut_variables(attacked_pos_by_cycle_vars);
+        self.is_guarded_for_variables(attacked_frontier_glut_variables)
     }
 
     // TODO: SHORTEN FUNCTION
@@ -226,11 +240,28 @@ impl Rule {
             .collect()
     }
 
+    fn attacked_frontier_glut_variables(
+        &self,
+        attacked_pos_by_cycle_vars: &HashMap<&Variable, Positions>,
+    ) -> HashSet<&Variable> {
+        let frontier_variables: HashSet<&Variable> = self.frontier_variables();
+        self.attacked_variables(frontier_variables, attacked_pos_by_cycle_vars)
+    }
+
+    fn attacked_universal_glut_variables(
+        &self,
+        attacked_pos_by_cycle_vars: &HashMap<&Variable, Positions>,
+    ) -> HashSet<&Variable> {
+        let universal_variables: HashSet<&Variable> = self.positive_variables();
+        self.attacked_variables(universal_variables, attacked_pos_by_cycle_vars)
+    }
+
     fn attacked_frontier_variables(
         &self,
         attacked_pos_by_vars: &HashMap<&Variable, Positions>,
     ) -> HashSet<&Variable> {
-        self.attacked_variables(self.frontier_variables(), attacked_pos_by_vars)
+        let frontier_variables: HashSet<&Variable> = self.frontier_variables();
+        self.attacked_variables(frontier_variables, attacked_pos_by_vars)
     }
 
     /// Returns the attacked universal variables of the rule.
@@ -238,7 +269,8 @@ impl Rule {
         &self,
         attacked_pos_by_vars: &HashMap<&Variable, Positions>,
     ) -> HashSet<&Variable> {
-        self.attacked_variables(self.positive_variables(), attacked_pos_by_vars)
+        let universal_variables: HashSet<&Variable> = self.positive_variables();
+        self.attacked_variables(universal_variables, attacked_pos_by_vars)
     }
 
     fn attacked_variables<'a>(

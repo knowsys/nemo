@@ -1,6 +1,7 @@
 use crate::rule_model::components::{rule::Rule, term::primitive::variable::Variable};
+use crate::static_checks::acyclicity_graph_constructor::AcyclicityGraphConstructor;
 use crate::static_checks::acyclicity_graphs::{
-    AcyclicityGraphBuilder, JointlyAcyclicityGraph, WeaklyAcyclicityGraph,
+    JointlyAcyclicityGraph, JointlyAcyclicityGraphCycle,
 };
 use crate::static_checks::positions::{ExtendedPositions, Positions};
 
@@ -32,12 +33,10 @@ impl<'a> RuleSet {
         })
     }
 
-    fn attacked_positions_by_var_in_rule(
-        &'a self,
-        variable: &Variable,
-        rule: &'a Rule,
-    ) -> Positions<'a> {
-        let mut attacked_positions: Positions = self.initial_attacked_positions(variable, rule);
+    fn attacked_positions_by_var(&'a self, variable: &Variable) -> Positions<'a> {
+        // let mut attacked_positions: Positions =
+        //     self.initial_attacked_positions(variable , rule);
+        let mut attacked_positions: Positions = self.initial_attacked_positions(variable);
         let mut new_found_attacked_positions: Positions = attacked_positions.clone();
         while !new_found_attacked_positions.is_empty() {
             new_found_attacked_positions = self.new_attacked_positions(&attacked_positions);
@@ -46,15 +45,33 @@ impl<'a> RuleSet {
         attacked_positions
     }
 
-    pub fn attacked_positions_by_variables(&self) -> HashMap<&Variable, Positions> {
-        self.iter()
-            .flat_map(|rule| {
-                rule.existential_variables()
-                    .iter()
-                    .map(|var| (*var, self.attacked_positions_by_var_in_rule(var, rule)))
-                    .collect::<HashMap<&Variable, Positions>>()
-            })
-            .collect()
+    pub fn attacked_positions_by_existential_variables(&self) -> HashMap<&Variable, Positions> {
+        let existential_variables: HashSet<&Variable> = self.existential_variables();
+        self.attacked_positions_by_variables(&existential_variables)
+    }
+
+    pub fn attacked_positions_by_cycle_variables(&self) -> HashMap<&Variable, Positions> {
+        let jo_ac_graph: JointlyAcyclicityGraph = self.jointly_acyclicity_graph();
+        let cycle_variables: HashSet<&Variable> = jo_ac_graph.variables_in_cycles();
+        self.attacked_positions_by_variables(&cycle_variables)
+    }
+
+    fn attacked_positions_by_variables(
+        &'a self,
+        variables: &HashSet<&'a Variable>,
+    ) -> HashMap<&'a Variable, Positions<'a>> {
+        variables
+            .iter()
+            .map(|var| (*var, self.attacked_positions_by_var(var)))
+            .collect::<HashMap<&Variable, Positions>>()
+        // self.iter()
+        //     .flat_map(|rule| {
+        //         rule.existential_variables()
+        //             .iter()
+        //             .map(|var| (*var, self.attacked_positions_by_var_in_rule(var, rule)))
+        //             .collect::<HashMap<&Variable, Positions>>()
+        //     })
+        //     .collect()
     }
 
     pub fn build_and_check_marking(&self) -> Option<Positions> {
@@ -119,8 +136,11 @@ impl<'a> RuleSet {
             })
     }
 
-    fn initial_attacked_positions(&self, variable: &Variable, rule: &'a Rule) -> Positions<'a> {
-        variable.get_positions_in_head(rule)
+    fn initial_attacked_positions(&'a self, variable: &Variable) -> Positions<'a> {
+        self.iter().fold(Positions::new(), |initial_pos, rule| {
+            let initial_pos_of_rule: Positions = variable.get_positions_in_head(rule);
+            initial_pos.union(initial_pos_of_rule)
+        })
     }
 
     pub fn iter(&self) -> std::slice::Iter<Rule> {
