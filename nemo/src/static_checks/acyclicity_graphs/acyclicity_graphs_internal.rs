@@ -6,7 +6,7 @@ use crate::static_checks::acyclicity_graphs::acyclicity_graphs_internal::private
 use crate::static_checks::acyclicity_graphs::{
     AcyclicityGraphCycle, Cycle, Cycles, JointlyAcyclicityGraph, WeaklyAcyclicityGraph,
 };
-use crate::static_checks::collection_traits::InsertAllRet;
+use crate::static_checks::collection_traits::InsertAll;
 use crate::static_checks::positions::Position;
 use crate::static_checks::rule_set::RuleSet;
 

@@ -1,14 +1,13 @@
 use crate::rule_model::components::term::primitive::variable::Variable;
 use crate::static_checks::acyclicity_graph_constructor::AcyclicityGraphConstructor;
 use crate::static_checks::acyclicity_graphs::{
-    AcyclicityGraphCycle, JointlyAcyclicityGraph, JointlyAcyclicityGraphCycle,
-    WeaklyAcyclicityGraph, WeaklyAcyclicityGraphCycle,
+    AcyclicityGraphCycle, JointlyAcyclicityGraph, WeaklyAcyclicityGraph, WeaklyAcyclicityGraphCycle,
 };
 use crate::static_checks::{
     positions::Positions, rule_properties::RuleProperties, rule_set::RuleSet,
 };
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 pub trait RulesPropertiesInternal {
     fn is_joinless_internal(&self) -> bool;

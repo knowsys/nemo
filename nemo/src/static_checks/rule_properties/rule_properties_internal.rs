@@ -2,7 +2,10 @@ use crate::rule_model::components::{
     atom::Atom, literal::Literal, rule::Rule, tag::Tag, term::primitive::variable::Variable,
     IterablePrimitives, IterableVariables,
 };
-use crate::static_checks::positions::{ExtendedPositions, Positions};
+use crate::static_checks::collection_traits::InsertAll;
+use crate::static_checks::positions::{
+    Disjoint, ExtendedPositions, FromPositions, Positions, Superset,
+};
 
 use std::collections::{HashMap, HashSet};
 
@@ -199,7 +202,7 @@ impl Rule {
                 atom.predicate_ref(),
                 (0..atom.len()).collect(),
             )]));
-            all_pos.union(positions)
+            all_pos.insert_all_take_ret(positions)
         })
     }
 
@@ -217,7 +220,7 @@ impl Rule {
     pub fn all_positive_positions(&self) -> Positions {
         let all_positive_body_positions: Positions = self.all_positions_of_positive_body();
         let all_head_positions: Positions = self.all_positions_of_head();
-        all_positive_body_positions.union(all_head_positions)
+        all_positive_body_positions.insert_all_take_ret(all_head_positions)
     }
 
     fn affected_frontier_variables(&self, affected_positions: &Positions) -> HashSet<&Variable> {
@@ -301,7 +304,7 @@ impl Rule {
             })
             .fold(Positions::new(), |new_aff_pos_in_rule, var| {
                 let pos_of_var_in_head: Positions = var.get_positions_in_head(self);
-                new_aff_pos_in_rule.union(pos_of_var_in_head)
+                new_aff_pos_in_rule.insert_all_take_ret(pos_of_var_in_head)
             })
     }
 
@@ -316,7 +319,7 @@ impl Rule {
             .filter(|var| var.is_attacked_by_positions_in_rule(self, currently_attacked_positions))
             .fold(Positions::new(), |new_att_pos_in_rule, var| {
                 let pos_of_var_in_head: Positions = var.get_positions_in_head(self);
-                new_att_pos_in_rule.union(pos_of_var_in_head)
+                new_att_pos_in_rule.insert_all_take_ret(pos_of_var_in_head)
             })
     }
 
@@ -342,7 +345,7 @@ impl Rule {
                     return None;
                 }
                 let pos_of_var_in_head: Positions = var.get_positions_in_head(self);
-                Some(new_mar_pos_in_rule.union(pos_of_var_in_head))
+                Some(new_mar_pos_in_rule.insert_all_take_ret(pos_of_var_in_head))
             })
     }
 
@@ -397,14 +400,14 @@ impl Rule {
             .iter()
             .fold(Positions::new(), |pos_of_join_vars, var| {
                 let pos_of_var_in_body: Positions = var.get_positions_in_positive_body(self);
-                pos_of_join_vars.union(pos_of_var_in_body)
+                pos_of_join_vars.insert_all_take_ret(pos_of_var_in_body)
             })
     }
 
     /// Returns the extended positions of all existential variables in the rule.
     pub fn extended_positions_of_existential_variables(&self) -> ExtendedPositions {
         let pos_of_ex_vars: Positions = self.positions_of_existential_variables();
-        ExtendedPositions::from(pos_of_ex_vars)
+        ExtendedPositions::from_positions(pos_of_ex_vars)
     }
 
     /// Returns the positions of all existential variables in the rule.
@@ -415,7 +418,7 @@ impl Rule {
             .iter()
             .fold(Positions::new(), |pos_of_ex_vars, var| {
                 let pos_of_var_in_head: Positions = var.get_positions_in_head(self);
-                pos_of_ex_vars.union(pos_of_var_in_head)
+                pos_of_ex_vars.insert_all_take_ret(pos_of_var_in_head)
             })
     }
 
@@ -461,13 +464,13 @@ impl Variable {
         rule: &'a Rule,
     ) -> ExtendedPositions<'a> {
         let body_pos_of_var: Positions = self.get_positions_in_positive_body(rule);
-        ExtendedPositions::from(body_pos_of_var)
+        ExtendedPositions::from_positions(body_pos_of_var)
     }
 
     /// Returns the extended positions of the variable in the head.
     pub fn get_extended_positions_in_head<'a>(&self, rule: &'a Rule) -> ExtendedPositions<'a> {
         let head_pos_of_var: Positions = self.get_positions_in_head(rule);
-        ExtendedPositions::from(head_pos_of_var)
+        ExtendedPositions::from_positions(head_pos_of_var)
     }
 
     /// Returns the positions of the variable in the positive body.
@@ -504,7 +507,7 @@ impl Variable {
             .iter()
             .fold(Positions::new(), |positions_in_atoms, atom| {
                 let positions_in_atom: Positions = self.get_positions_in_atom(atom);
-                positions_in_atoms.union(positions_in_atom)
+                positions_in_atoms.insert_all_take_ret(positions_in_atom)
             })
     }
 
