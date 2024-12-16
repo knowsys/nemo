@@ -288,7 +288,7 @@ impl ProgramChaseTranslation {
 
                         terms.push(Primitive::Variable(new_variable));
                     }
-                    _ => unreachable!("invalid program: rule head contains complex terms"),
+                    _ => unimplemented!("complex terms in rule heads are not yet supported"),
                 }
             }
 

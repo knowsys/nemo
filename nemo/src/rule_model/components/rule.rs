@@ -149,7 +149,6 @@ impl Rule {
     }
 
     /// Check if
-    ///     * are no complex terms occurring in the head
     ///     * an aggregate occurs at most once
     ///     * there is no aggregation over a group-by variable
     fn validate_term_head(
@@ -157,13 +156,6 @@ impl Rule {
         term: &Term,
         group_by_variable: &HashSet<&Variable>,
     ) -> Option<bool> {
-        if term.is_map() || term.is_tuple() || term.is_function() {
-            builder
-                .report_error(*term.origin(), ValidationErrorKind::UnsupportedComplexTerm)
-                .add_hint_option(Self::hint_term_operation(term));
-            return None;
-        }
-
         let mut first_aggregate = if let Term::Aggregate(aggregate) = term {
             if let Term::Primitive(Primitive::Variable(aggregate_variable)) =
                 aggregate.aggregate_term()
@@ -205,7 +197,6 @@ impl Rule {
     /// Check if
     ///     * body does not contain any existential variables
     ///     * body does not contain aggregation
-    ///     * body does not contain any complex term
     ///     * used operations do not use anonymous variables
     ///     * operations only use safe variables
     fn validate_term_body(
@@ -244,13 +235,6 @@ impl Rule {
                     return None;
                 }
             }
-        }
-
-        if term.is_map() || term.is_tuple() || term.is_function() {
-            builder
-                .report_error(*term.origin(), ValidationErrorKind::UnsupportedComplexTerm)
-                .add_hint_option(Self::hint_term_operation(term));
-            return None;
         }
 
         for subterm in term.arguments() {

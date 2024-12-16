@@ -61,7 +61,7 @@ impl ProgramChaseTranslation {
                 new_variable
             }
             Term::Aggregate(_) => unreachable!("invalid program: Recursive aggregates not allowed"),
-            _ => unreachable!("invalid program: complex terms not allowed"),
+            _ => unimplemented!("complex terms in aggregates are not yet supported"),
         };
         let distinct_variables = aggregate.distinct().cloned().collect();
 
