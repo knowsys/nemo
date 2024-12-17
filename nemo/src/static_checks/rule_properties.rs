@@ -1,8 +1,6 @@
-use crate::rule_model::components::{rule::Rule, term::primitive::variable::Variable};
-use crate::static_checks::positions::Positions;
+use crate::rule_model::components::rule::Rule;
+use crate::static_checks::positions::{Positions, PositionsByVariables};
 use crate::static_checks::rule_properties::rule_properties_internal::RulePropertiesInternal;
-
-use std::collections::{HashMap, HashSet};
 
 mod rule_properties_internal;
 
@@ -18,18 +16,15 @@ pub trait RuleProperties: RulePropertiesInternal {
     fn is_frontier_guarded(&self) -> bool;
     fn is_weakly_guarded(&self, affected_positions: &Positions) -> bool;
     fn is_weakly_frontier_guarded(&self, affected_positions: &Positions) -> bool;
-    fn is_jointly_guarded(&self, attacked_pos_by_vars: &HashMap<&Variable, Positions>) -> bool;
+    fn is_jointly_guarded(&self, attacked_pos_by_existential_vars: &PositionsByVariables) -> bool;
     fn is_jointly_frontier_guarded(
         &self,
-        attacked_pos_by_vars: &HashMap<&Variable, Positions>,
+        attacked_pos_by_existential_vars: &PositionsByVariables,
     ) -> bool;
     fn is_weakly_sticky(&self) -> bool;
-    fn is_glut_guarded(&self, attacked_pos_by_cycle_vars: &HashMap<&Variable, Positions>) -> bool;
-    fn is_glut_frontier_guarded(
-        &self,
-        attacked_pos_by_cycle_vars: &HashMap<&Variable, Positions>,
-    ) -> bool;
-    fn is_shy(&self, attacked_pos_by_vars: &HashMap<&Variable, Positions>) -> bool;
+    fn is_glut_guarded(&self, attacked_pos_by_cycle_vars: &PositionsByVariables) -> bool;
+    fn is_glut_frontier_guarded(&self, attacked_pos_by_cycle_vars: &PositionsByVariables) -> bool;
+    fn is_shy(&self, attacked_pos_by_existential_vars: &PositionsByVariables) -> bool;
     fn is_mfa(&self) -> bool;
     fn is_dmfa(&self) -> bool;
     fn is_rmfa(&self) -> bool;
@@ -80,34 +75,31 @@ impl RuleProperties for Rule {
         self.is_weakly_frontier_guarded_internal(affected_positions)
     }
 
-    fn is_jointly_guarded(&self, attacked_pos_by_vars: &HashMap<&Variable, Positions>) -> bool {
-        self.is_jointly_guarded_internal(attacked_pos_by_vars)
+    fn is_jointly_guarded(&self, attacked_pos_by_existential_vars: &PositionsByVariables) -> bool {
+        self.is_jointly_guarded_internal(attacked_pos_by_existential_vars)
     }
 
     fn is_jointly_frontier_guarded(
         &self,
-        attacked_pos_by_vars: &HashMap<&Variable, Positions>,
+        attacked_pos_by_existential_vars: &PositionsByVariables,
     ) -> bool {
-        self.is_jointly_frontier_guarded_internal(attacked_pos_by_vars)
+        self.is_jointly_frontier_guarded_internal(attacked_pos_by_existential_vars)
     }
 
     fn is_weakly_sticky(&self) -> bool {
         self.is_weakly_sticky_internal()
     }
 
-    fn is_glut_guarded(&self, attacked_pos_by_cycle_vars: &HashMap<&Variable, Positions>) -> bool {
+    fn is_glut_guarded(&self, attacked_pos_by_cycle_vars: &PositionsByVariables) -> bool {
         self.is_glut_guarded_internal(attacked_pos_by_cycle_vars)
     }
 
-    fn is_glut_frontier_guarded(
-        &self,
-        attacked_pos_by_cycle_vars: &HashMap<&Variable, Positions>,
-    ) -> bool {
+    fn is_glut_frontier_guarded(&self, attacked_pos_by_cycle_vars: &PositionsByVariables) -> bool {
         self.is_glut_frontier_guarded_internal(attacked_pos_by_cycle_vars)
     }
 
-    fn is_shy(&self, attacked_pos_by_vars: &HashMap<&Variable, Positions>) -> bool {
-        self.is_shy_internal(attacked_pos_by_vars)
+    fn is_shy(&self, attacked_pos_by_existential_vars: &PositionsByVariables) -> bool {
+        self.is_shy_internal(attacked_pos_by_existential_vars)
     }
 
     fn is_mfa(&self) -> bool {

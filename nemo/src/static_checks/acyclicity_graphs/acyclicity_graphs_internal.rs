@@ -105,8 +105,13 @@ mod private {
     use crate::static_checks::acyclicity_graphs::{
         Cycle, Cycles, JointlyAcyclicityGraph, WeaklyAcyclicityGraph,
     };
-    use crate::static_checks::positions::{ExtendedPositions, Position, Positions};
+    use crate::static_checks::positions::{
+        ExtendedPositions, Position, Positions, PositionsByVariables,
+    };
     use crate::static_checks::rule_set::RuleSet;
+    use crate::static_checks::rule_set::{
+        AllPositivePositions, ExistentialVariables, SpecialPositions,
+    };
 
     use petgraph::graphmap::{DiGraphMap, NodeTrait};
     use std::collections::{HashMap, HashSet};
@@ -118,10 +123,10 @@ mod private {
 
     impl<'a> AcyclicityGraphBuilderInternalPrivate<'a> for JointlyAcyclicityGraph<'a> {
         fn add_edges(&mut self, rule_set: &'a RuleSet) {
-            let attacked_pos_by_vars: HashMap<&Variable, Positions> =
+            let attacked_pos_by_existential_vars: PositionsByVariables =
                 rule_set.attacked_positions_by_existential_variables();
             rule_set.iter().for_each(|rule| {
-                self.add_edges_for_rule(rule, &attacked_pos_by_vars);
+                self.add_edges_for_rule(rule, &attacked_pos_by_existential_vars);
             })
         }
 
@@ -154,7 +159,7 @@ mod private {
             attacked_var: &Variable,
             rule: &Rule,
             ex_vars_of_rule: &HashSet<&'a Variable>,
-            attacked_pos_by_vars: &HashMap<&'a Variable, Positions>,
+            attacked_pos_by_vars: &PositionsByVariables<'a, '_>,
         );
         fn add_edges_for_attacking_var(
             &mut self,
@@ -174,7 +179,7 @@ mod private {
             attacked_var: &Variable,
             rule: &Rule,
             ex_vars_of_rule: &HashSet<&'a Variable>,
-            attacked_pos_by_vars: &HashMap<&'a Variable, Positions>,
+            attacked_pos_by_vars: &PositionsByVariables<'a, '_>,
         ) {
             attacked_pos_by_vars
                 .keys()
@@ -199,7 +204,7 @@ mod private {
         fn add_edges_for_rule(
             &mut self,
             rule: &'a Rule,
-            attacked_pos_by_vars: &HashMap<&'a Variable, Positions>,
+            attacked_pos_by_vars: &PositionsByVariables<'a, '_>,
         ) {
             let ex_vars_of_rule: HashSet<&Variable> = rule.existential_variables();
             let attacked_positive_vars: HashSet<&Variable> =
