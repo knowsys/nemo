@@ -76,7 +76,7 @@ mod private {
         ) -> Positions<'a>;
         fn conclude_attacked_positions(
             &'a self,
-            last_iteration_positions: &Positions<'a>,
+            currently_attacked_positions: &Positions<'a>,
         ) -> Positions<'a>;
         fn conclude_marked_positions(
             &'a self,
