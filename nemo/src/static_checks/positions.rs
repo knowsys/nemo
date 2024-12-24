@@ -1,7 +1,13 @@
 use crate::rule_model::components::{tag::Tag, term::primitive::variable::Variable};
+use crate::static_checks::collection_traits::{Disjoint, InsertAll, RemoveAll, Superset};
+use crate::static_checks::positions::positions_internal::{
+    AttackedPositionsBuilderInternal, SpecialPositionsBuilderInternal,
+};
+use crate::static_checks::rule_set::RuleSet;
+
 use std::collections::{HashMap, HashSet};
 
-use super::collection_traits::InsertAll;
+mod positions_internal;
 
 pub type Index = usize;
 
@@ -14,6 +20,17 @@ pub type PositionsByVariables<'a, 'b> = HashMap<&'a Variable, Positions<'b>>;
 pub type Position<'a> = (&'a Tag, Index);
 
 pub type ExtendedPositions<'a> = HashSet<Position<'a>>;
+
+pub type AffectedPositions<'a> = Positions<'a>;
+
+pub type AttackedPositions<'a, 'b> = PositionsByVariables<'a, 'b>;
+
+pub type MarkedPositions<'a> = Option<Positions<'a>>;
+
+pub enum AttackingVariables {
+    Cycle,
+    Existential,
+}
 
 pub trait FromPositions<'a> {
     fn from_positions(positions: Positions<'a>) -> Self;
@@ -31,8 +48,33 @@ impl<'a> FromPositions<'a> for ExtendedPositions<'a> {
     }
 }
 
-pub trait Disjoint {
-    fn is_disjoint(&self, other: &Self) -> bool;
+pub trait SpecialPositionsBuilder<'a>: SpecialPositionsBuilderInternal<'a> {
+    fn build_positions(rule_set: &'a RuleSet) -> Self;
+}
+
+impl<'a> SpecialPositionsBuilder<'a> for AffectedPositions<'a> {
+    fn build_positions(rule_set: &'a RuleSet) -> AffectedPositions<'a> {
+        AffectedPositions::build_positions_internal(rule_set)
+    }
+}
+
+impl<'a> SpecialPositionsBuilder<'a> for MarkedPositions<'a> {
+    fn build_positions(rule_set: &'a RuleSet) -> MarkedPositions<'a> {
+        MarkedPositions::build_positions_internal(rule_set)
+    }
+}
+
+pub trait AttackedPositionsBuilder<'a>: AttackedPositionsBuilderInternal<'a> {
+    fn build_positions(att_vars: AttackingVariables, rule_set: &'a RuleSet) -> Self;
+}
+
+impl<'a> AttackedPositionsBuilder<'a> for AttackedPositions<'a, 'a> {
+    fn build_positions(
+        att_vars: AttackingVariables,
+        rule_set: &'a RuleSet,
+    ) -> AttackedPositions<'a, 'a> {
+        AttackedPositions::build_positions_internal(att_vars, rule_set)
+    }
 }
 
 impl<'a> Disjoint for Positions<'a> {
@@ -47,8 +89,64 @@ impl<'a> Disjoint for Positions<'a> {
     }
 }
 
-pub trait Superset {
-    fn is_superset(&self, other: &Self) -> bool;
+impl<'a> InsertAll<Positions<'a>, (&'a Tag, Indices)> for Positions<'a> {
+    fn insert_all(&mut self, other: &Positions<'a>) {
+        other.iter().for_each(|(pred, other_indices)| {
+            if !self.contains_key(pred) {
+                self.insert(pred, Indices::new());
+            }
+            let unioned_indices: &mut Indices = self.get_mut(pred).unwrap();
+            unioned_indices.insert_all(other_indices);
+        })
+    }
+
+    fn insert_all_ret(mut self, other: &Positions<'a>) -> Positions<'a> {
+        self.insert_all(other);
+        self
+    }
+
+    fn insert_all_take(&mut self, other: Positions<'a>) {
+        other.into_iter().for_each(|(pred, other_indices)| {
+            if !self.contains_key(pred) {
+                self.insert(pred, Indices::new());
+            }
+            let unioned_indices: &mut Indices = self.get_mut(pred).unwrap();
+            unioned_indices.insert_all_take(other_indices);
+        })
+    }
+
+    fn insert_all_take_ret(mut self, other: Positions<'a>) -> Positions<'a> {
+        self.insert_all_take(other);
+        self
+    }
+}
+
+impl<'a> RemoveAll<Positions<'a>, (&'a Tag, Indices)> for Positions<'a> {
+    fn remove_all(&mut self, other: &Positions<'a>) {
+        other.iter().for_each(|(pred, other_indices)| {
+            if let Some(differenced_indices) = self.get_mut(pred) {
+                differenced_indices.remove_all(other_indices);
+            }
+        })
+    }
+
+    fn remove_all_ret(mut self, other: &Positions<'a>) -> Positions<'a> {
+        self.remove_all(other);
+        self
+    }
+
+    fn remove_all_take(&mut self, other: Positions<'a>) {
+        other.into_iter().for_each(|(pred, other_indices)| {
+            if let Some(differenced_indices) = self.get_mut(pred) {
+                differenced_indices.remove_all_take(other_indices);
+            }
+        })
+    }
+
+    fn remove_all_take_ret(mut self, other: Positions<'a>) -> Positions<'a> {
+        self.remove_all_take(other);
+        self
+    }
 }
 
 impl<'a> Superset for Positions<'a> {

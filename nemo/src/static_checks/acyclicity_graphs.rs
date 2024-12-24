@@ -20,13 +20,13 @@ pub trait AcyclicityGraphBuilder<'a>: AcyclicityGraphBuilderInternal<'a> {
 }
 
 impl<'a> AcyclicityGraphBuilder<'a> for JointlyAcyclicityGraph<'a> {
-    fn build_graph(rule_set: &'a RuleSet) -> Self {
+    fn build_graph(rule_set: &'a RuleSet) -> JointlyAcyclicityGraph<'a> {
         JointlyAcyclicityGraph::build_graph_internal(rule_set)
     }
 }
 
 impl<'a> AcyclicityGraphBuilder<'a> for WeaklyAcyclicityGraph<'a> {
-    fn build_graph(rule_set: &'a RuleSet) -> Self {
+    fn build_graph(rule_set: &'a RuleSet) -> WeaklyAcyclicityGraph<'a> {
         WeaklyAcyclicityGraph::build_graph_internal(rule_set)
     }
 }

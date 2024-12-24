@@ -1,38 +1,37 @@
 use crate::rule_model::components::{rule::Rule, term::primitive::variable::Variable};
 use crate::static_checks::collection_traits::InsertAll;
 use crate::static_checks::positions::{
-    ExtendedPositions, FromPositions, Positions, PositionsByVariables,
+    AffectedPositions, AttackedPositions, AttackedPositionsBuilder, AttackingVariables,
+    ExtendedPositions, FromPositions, MarkedPositions, Positions, PositionsByVariables,
+    SpecialPositionsBuilder,
 };
-use crate::static_checks::rule_set::rule_set_internal::SpecialPositionsInternal;
 
 use std::collections::HashSet;
 
-mod rule_set_internal;
-
 pub type RuleSet = Vec<Rule>;
 
-pub trait SpecialPositions<'a>: SpecialPositionsInternal<'a> {
-    fn affected_positions(&'a self) -> Positions<'a>;
-    fn attacked_positions_by_cycle_variables(&'a self) -> PositionsByVariables<'a, 'a>;
-    fn attacked_positions_by_existential_variables(&'a self) -> PositionsByVariables<'a, 'a>;
-    fn build_and_check_marking(&'a self) -> Option<Positions<'a>>;
+pub trait SpecialPositionsConstructor {
+    fn affected_positions(&self) -> AffectedPositions;
+    fn attacked_positions_by_cycle_variables(&self) -> AttackedPositions;
+    fn attacked_positions_by_existential_variables(&self) -> AttackedPositions;
+    fn build_and_check_marking(&self) -> MarkedPositions;
 }
 
-impl<'a> SpecialPositions<'a> for RuleSet {
-    fn affected_positions(&'a self) -> Positions<'a> {
-        self.affected_positions_internal()
+impl SpecialPositionsConstructor for RuleSet {
+    fn affected_positions(&self) -> AffectedPositions {
+        AffectedPositions::build_positions(self)
     }
 
-    fn attacked_positions_by_cycle_variables(&'a self) -> PositionsByVariables<'a, 'a> {
-        self.attacked_positions_by_cycle_variables_internal()
+    fn attacked_positions_by_cycle_variables(&self) -> AttackedPositions {
+        AttackedPositions::build_positions(AttackingVariables::Cycle, self)
     }
 
-    fn attacked_positions_by_existential_variables(&'a self) -> PositionsByVariables<'a, 'a> {
-        self.attacked_positions_by_existential_variables_internal()
+    fn attacked_positions_by_existential_variables(&self) -> AttackedPositions {
+        AttackedPositions::build_positions(AttackingVariables::Existential, self)
     }
 
-    fn build_and_check_marking(&'a self) -> Option<Positions<'a>> {
-        self.build_and_check_marking_internal()
+    fn build_and_check_marking(&self) -> MarkedPositions {
+        MarkedPositions::build_positions(self)
     }
 }
 

@@ -3,7 +3,7 @@ use crate::static_checks::acyclicity_graphs::{
     AcyclicityGraphCycle, JointlyAcyclicityGraph, WeaklyAcyclicityGraph, WeaklyAcyclicityGraphCycle,
 };
 use crate::static_checks::positions::PositionsByVariables;
-use crate::static_checks::rule_set::{RuleSet, SpecialPositions};
+use crate::static_checks::rule_set::{RuleSet, SpecialPositionsConstructor};
 use crate::static_checks::{positions::Positions, rule_properties::RuleProperties};
 
 pub trait RulesPropertiesInternal {

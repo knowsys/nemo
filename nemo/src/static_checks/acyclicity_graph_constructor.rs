@@ -9,11 +9,11 @@ pub trait AcyclicityGraphConstructor<'a> {
 }
 
 impl<'a> AcyclicityGraphConstructor<'a> for RuleSet {
-    fn weakly_acyclicity_graph(&'a self) -> WeaklyAcyclicityGraph<'a> {
-        WeaklyAcyclicityGraph::build_graph(self)
-    }
-
     fn jointly_acyclicity_graph(&'a self) -> JointlyAcyclicityGraph<'a> {
         JointlyAcyclicityGraph::build_graph(self)
+    }
+
+    fn weakly_acyclicity_graph(&'a self) -> WeaklyAcyclicityGraph<'a> {
+        WeaklyAcyclicityGraph::build_graph(self)
     }
 }

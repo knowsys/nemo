@@ -2,10 +2,8 @@ use crate::rule_model::components::{
     atom::Atom, literal::Literal, rule::Rule, tag::Tag, term::primitive::variable::Variable,
     IterablePrimitives, IterableVariables,
 };
-use crate::static_checks::collection_traits::InsertAll;
-use crate::static_checks::positions::{
-    Disjoint, ExtendedPositions, FromPositions, Positions, Superset,
-};
+use crate::static_checks::collection_traits::{Disjoint, InsertAll, Superset};
+use crate::static_checks::positions::{ExtendedPositions, FromPositions, Positions};
 
 use std::collections::{HashMap, HashSet};
 
@@ -198,10 +196,8 @@ impl RulePropertiesInternal for Rule {
 impl Rule {
     fn all_positions_of_atoms<'a>(&self, atoms: &[&'a Atom]) -> Positions<'a> {
         atoms.iter().fold(Positions::new(), |all_pos, atom| {
-            let positions: Positions = Positions::from(HashMap::from([(
-                atom.predicate_ref(),
-                (0..atom.len()).collect(),
-            )]));
+            let positions: Positions =
+                HashMap::from([(atom.predicate_ref(), (0..atom.len()).collect())]);
             all_pos.insert_all_take_ret(positions)
         })
     }

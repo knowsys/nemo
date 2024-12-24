@@ -28,7 +28,7 @@ pub(crate) trait AcyclicityGraphBuilderInternal<'a>:
 }
 
 impl<'a> AcyclicityGraphBuilderInternal<'a> for JointlyAcyclicityGraph<'a> {
-    fn build_graph_internal(rule_set: &'a RuleSet) -> Self {
+    fn build_graph_internal(rule_set: &'a RuleSet) -> JointlyAcyclicityGraph<'a> {
         let mut jo_ac_graph: JointlyAcyclicityGraph = JointlyAcyclicityGraph::new();
         jo_ac_graph.add_nodes(rule_set);
         jo_ac_graph.add_edges(rule_set);
@@ -37,7 +37,7 @@ impl<'a> AcyclicityGraphBuilderInternal<'a> for JointlyAcyclicityGraph<'a> {
 }
 
 impl<'a> AcyclicityGraphBuilderInternal<'a> for WeaklyAcyclicityGraph<'a> {
-    fn build_graph_internal(rule_set: &'a RuleSet) -> Self {
+    fn build_graph_internal(rule_set: &'a RuleSet) -> WeaklyAcyclicityGraph<'a> {
         let mut we_ac_graph: WeaklyAcyclicityGraph = WeaklyAcyclicityGraph::new();
         we_ac_graph.add_nodes(rule_set);
         we_ac_graph.add_edges(rule_set);
@@ -110,7 +110,7 @@ mod private {
     };
     use crate::static_checks::rule_set::RuleSet;
     use crate::static_checks::rule_set::{
-        AllPositivePositions, ExistentialVariables, SpecialPositions,
+        AllPositivePositions, ExistentialVariables, SpecialPositionsConstructor,
     };
 
     use petgraph::graphmap::{DiGraphMap, NodeTrait};
