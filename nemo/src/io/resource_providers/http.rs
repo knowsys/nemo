@@ -52,6 +52,18 @@ impl HttpResourceProvider {
                 .parse()
                 .map_err(|err: InvalidHeaderValue| ReadingError::ExternalError(err.into()))?,
         );
+        headers.insert(
+            reqwest::header::USER_AGENT,
+            format!(
+                "{}/{} ({})",
+                option_env!("CARGO_PKG_NAME").unwrap_or("Nemo"),
+                option_env!("CARGO_PKG_VERSION").unwrap_or("unknown-version"),
+                option_env!("CARGO_PKG_HOMEPAGE")
+                    .unwrap_or("https://iccl.inf.tu-dresden.de/web/Nemo/en")
+            )
+            .parse()
+            .map_err(|err: InvalidHeaderValue| ReadingError::ExternalError(err.into()))?,
+        );
         let client = reqwest::Client::builder()
             .default_headers(headers)
             .build()?;
