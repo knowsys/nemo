@@ -1,6 +1,7 @@
 use std::io::{BufRead, BufReader, Read};
 
 use nemo_physical::{error::ReadingError, resource::Resource};
+use reqwest::header::InvalidHeaderValue;
 
 use crate::rule_model::components::import_export::compression::CompressionFormat;
 
@@ -43,8 +44,18 @@ impl Read for HttpResource {
 }
 
 impl HttpResourceProvider {
-    async fn get(url: &Resource) -> Result<HttpResource, ReadingError> {
-        let response = reqwest::get(url).await?;
+    async fn get(url: &Resource, media_type: &str) -> Result<HttpResource, ReadingError> {
+        let mut headers = reqwest::header::HeaderMap::new();
+        headers.insert(
+            reqwest::header::ACCEPT,
+            media_type
+                .parse()
+                .map_err(|err: InvalidHeaderValue| ReadingError::ExternalError(err.into()))?,
+        );
+        let client = reqwest::Client::builder()
+            .default_headers(headers)
+            .build()?;
+        let response = client.get(url).send().await?;
         // we're expecting potentially compressed data, don't try to
         // do any character set guessing, as `response.text()` would do.
         let content = response.bytes().await?;
@@ -61,6 +72,7 @@ impl ResourceProvider for HttpResourceProvider {
         &self,
         resource: &Resource,
         compression: CompressionFormat,
+        media_type: &str,
     ) -> Result<Option<Box<dyn BufRead>>, ReadingError> {
         if !is_iri(resource) {
             return Ok(None);
@@ -78,7 +90,7 @@ impl ResourceProvider for HttpResourceProvider {
                 error: e,
                 filename: resource.clone(),
             })?;
-        let response = rt.block_on(Self::get(resource))?;
+        let response = rt.block_on(Self::get(resource, media_type))?;
         if let Some(reader) = compression.try_decompression(BufReader::new(response)) {
             Ok(Some(reader))
         } else {
