@@ -239,6 +239,10 @@ pub mod builtin {
         pub(crate) const UCASE: &str = "UCASE";
         /// Replace characters in strings with their lower case version
         pub(crate) const LCASE: &str = "LCASE";
+        /// Return URI-encoded (percent-encoded) version of string
+        pub(crate) const URIENCODE: &str = "URIENCODE";
+        /// Return URI-decoded (percent-decoded) version of string
+        pub(crate) const URIDECODE: &str = "URIDECODE";
         /// Round a value to the nearest integer
         pub(crate) const ROUND: &str = "ROUND";
         /// Round up to the nearest integer

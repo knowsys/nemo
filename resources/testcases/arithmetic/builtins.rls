@@ -7,6 +7,7 @@ integers(1, 2, 3).
 tagged("test"@en).
 iri(constant).
 null(!V) :- iri(?X).
+@import uri_strings :- csv{resource="sources/uri_strings.csv"}.
 
 % Datatype check
 result(isString, ?R) :- strings(?A, _), ?R = isString(?A).
@@ -71,6 +72,8 @@ result(stringstarts_true, ?R) :- strings(?A, _), ?R = STRSTARTS(?A, "Hell").
 result(stringstarts_false, ?R) :- strings(_, ?B), ?R = STRSTARTS(?B, "Hell").
 result(stringends_true, ?R) :- strings(?A, _), ?R = STRENDS(?A, "ello").
 result(stringends_false, ?R) :- strings(_, ?B), ?R = STRENDS(?B, "ello").
+result(uriencode, ?R) :- uri_strings(?A, _), ?R = URIENCODE(?A).
+result(uridecode, ?R) :- uri_strings(_, ?A), ?R = URIDECODE(?A).
 
 % F-string literal
 result(fstring_basic, ?R) :- strings(?A, ?B), ?R = f"{?A} and {?B}". 

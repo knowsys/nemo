@@ -311,6 +311,16 @@ pub enum OperationKind {
     #[assoc(num_arguments = OperationNumArguments::Unary)]
     #[assoc(return_type = ValueType::String)]
     StringUppercase,
+    /// String percent-encoded for URIs
+    #[assoc(name = function::URIENCODE)]
+    #[assoc(num_arguments = OperationNumArguments::Unary)]
+    #[assoc(return_type = ValueType::String)]
+    StringUriEncode,
+    /// String percent-decoded for URIs
+    #[assoc(name = function::URIDECODE)]
+    #[assoc(num_arguments = OperationNumArguments::Unary)]
+    #[assoc(return_type = ValueType::String)]
+    StringUriDecode,
     /// Bitwise and operation
     #[assoc(name = function::BITAND)]
     #[assoc(num_arguments = OperationNumArguments::Arbitrary)]
