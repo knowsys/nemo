@@ -63,6 +63,7 @@ where
     }
 }
 
+#[allow(dead_code)]
 pub trait RemoveAll<C, T> {
     fn remove_all(&mut self, other: &C);
     fn remove_all_ret(self, other: &C) -> Self;

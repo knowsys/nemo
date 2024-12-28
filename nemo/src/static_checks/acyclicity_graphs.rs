@@ -4,7 +4,8 @@ use crate::static_checks::acyclicity_graphs::acyclicity_graphs_internal::{
     JointlyAcyclicityGraphCycleInternal, WeaklyAcyclicityGraphCycleInternal,
     WeaklyAcyclicityGraphEdgeType,
 };
-use crate::static_checks::{positions::Position, rule_set::RuleSet};
+use crate::static_checks::positions::Position;
+use crate::static_checks::rule_set::{RuleSet, Variables};
 
 use petgraph::graphmap::{DiGraphMap, NodeTrait};
 use std::collections::HashSet;
@@ -58,7 +59,7 @@ pub trait JointlyAcyclicityGraphCycle<N>: JointlyAcyclicityGraphCycleInternal<N>
 }
 
 impl<'a> JointlyAcyclicityGraphCycle<&'a Variable> for JointlyAcyclicityGraph<'a> {
-    fn variables_in_cycles(&self) -> HashSet<&'a Variable> {
+    fn variables_in_cycles(&self) -> Variables<'a> {
         self.variables_in_cycles_internal()
     }
 }

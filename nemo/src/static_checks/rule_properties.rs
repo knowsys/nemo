@@ -4,7 +4,7 @@ use crate::static_checks::rule_properties::rule_properties_internal::RulePropert
 
 mod rule_properties_internal;
 
-#[warn(dead_code)]
+#[allow(dead_code)]
 pub trait RuleProperties: RulePropertiesInternal {
     fn is_joinless(&self) -> bool;
     fn is_linear(&self) -> bool;

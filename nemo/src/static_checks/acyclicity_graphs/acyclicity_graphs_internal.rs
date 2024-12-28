@@ -8,7 +8,7 @@ use crate::static_checks::acyclicity_graphs::{
 };
 use crate::static_checks::collection_traits::InsertAll;
 use crate::static_checks::positions::Position;
-use crate::static_checks::rule_set::RuleSet;
+use crate::static_checks::rule_set::{RuleSet, Variables};
 
 use petgraph::algo::is_cyclic_directed;
 use petgraph::graphmap::{DiGraphMap, NodeTrait};
@@ -74,11 +74,11 @@ pub(crate) trait JointlyAcyclicityGraphCycleInternal<N>: AcyclicityGraphCycle<N>
 }
 
 impl<'a> JointlyAcyclicityGraphCycleInternal<&'a Variable> for JointlyAcyclicityGraph<'a> {
-    fn variables_in_cycles_internal(&self) -> HashSet<&'a Variable> {
+    fn variables_in_cycles_internal(&self) -> Variables<'a> {
         let cycles: Cycles<&'a Variable> = self.cycles();
         cycles
             .iter()
-            .fold(HashSet::<&Variable>::new(), |vars_in_cycles, cycle| {
+            .fold(Variables::new(), |vars_in_cycles, cycle| {
                 vars_in_cycles.insert_all_ret(cycle)
             })
     }
@@ -108,13 +108,14 @@ mod private {
     use crate::static_checks::positions::{
         ExtendedPositions, Position, Positions, PositionsByVariables,
     };
-    use crate::static_checks::rule_set::RuleSet;
     use crate::static_checks::rule_set::{
-        AllPositivePositions, ExistentialVariables, SpecialPositionsConstructor,
+        AllPositivePositions, Attacked, AttackedVariables, ExistentialVariables,
+        ExistentialVariablesPositions, RulePositions, RuleSet, SpecialPositionsConstructor,
+        Variables,
     };
 
     use petgraph::graphmap::{DiGraphMap, NodeTrait};
-    use std::collections::{HashMap, HashSet};
+    use std::collections::HashMap;
 
     pub(crate) trait AcyclicityGraphBuilderInternalPrivate<'a> {
         fn add_nodes(&mut self, rule_set: &'a RuleSet);
@@ -131,7 +132,7 @@ mod private {
         }
 
         fn add_nodes(&mut self, rule_set: &'a RuleSet) {
-            let existential_variables: HashSet<&Variable> = rule_set.existential_variables();
+            let existential_variables: Variables = rule_set.existential_variables();
             existential_variables.iter().for_each(|var| {
                 self.add_node(var);
             })
@@ -158,13 +159,13 @@ mod private {
             &mut self,
             attacked_var: &Variable,
             rule: &Rule,
-            ex_vars_of_rule: &HashSet<&'a Variable>,
+            ex_vars_of_rule: &Variables<'a>,
             attacked_pos_by_vars: &PositionsByVariables<'a, '_>,
         );
         fn add_edges_for_attacking_var(
             &mut self,
             attacking_var: &'a Variable,
-            ex_vars_of_rule: &HashSet<&'a Variable>,
+            ex_vars_of_rule: &Variables<'a>,
         );
         fn add_edges_for_rule(
             &mut self,
@@ -178,7 +179,7 @@ mod private {
             &mut self,
             attacked_var: &Variable,
             rule: &Rule,
-            ex_vars_of_rule: &HashSet<&'a Variable>,
+            ex_vars_of_rule: &Variables<'a>,
             attacked_pos_by_vars: &PositionsByVariables<'a, '_>,
         ) {
             attacked_pos_by_vars
@@ -194,7 +195,7 @@ mod private {
         fn add_edges_for_attacking_var(
             &mut self,
             attacking_var: &'a Variable,
-            ex_vars_of_rule: &HashSet<&'a Variable>,
+            ex_vars_of_rule: &Variables<'a>,
         ) {
             ex_vars_of_rule.iter().for_each(|ex_var| {
                 self.add_edge(attacking_var, ex_var, ());
@@ -206,8 +207,8 @@ mod private {
             rule: &'a Rule,
             attacked_pos_by_vars: &PositionsByVariables<'a, '_>,
         ) {
-            let ex_vars_of_rule: HashSet<&Variable> = rule.existential_variables();
-            let attacked_positive_vars: HashSet<&Variable> =
+            let ex_vars_of_rule: Variables = rule.existential_variables();
+            let attacked_positive_vars: Variables =
                 rule.attacked_universal_variables(attacked_pos_by_vars);
             attacked_positive_vars.iter().for_each(|var| {
                 self.add_edges_for_attacked_var(var, rule, &ex_vars_of_rule, attacked_pos_by_vars);
@@ -245,16 +246,16 @@ mod private {
 
         fn add_common_edges_for_rule(&mut self, rule: &'a Rule, variable_body: &Variable) {
             let body_ex_pos_of_var: ExtendedPositions =
-                variable_body.get_extended_positions_in_positive_body(rule);
+                variable_body.extended_positions_in_positive_body(rule);
             let head_ex_pos_of_var: ExtendedPositions =
-                variable_body.get_extended_positions_in_head(rule);
+                variable_body.extended_positions_in_head(rule);
             body_ex_pos_of_var
                 .into_iter()
                 .for_each(|body_pos| self.add_common_edges_for_pos(body_pos, &head_ex_pos_of_var));
         }
 
         fn add_edges_for_rule(&mut self, rule: &'a Rule) {
-            let positive_variables: HashSet<&Variable> = rule.positive_variables();
+            let positive_variables: Variables = rule.positive_variables();
             positive_variables.iter().for_each(|variable_body| {
                 self.add_common_edges_for_rule(rule, variable_body);
                 self.add_special_edges_for_rule(rule, variable_body);
@@ -288,7 +289,7 @@ mod private {
 
         fn add_special_edges_for_rule(&mut self, rule: &'a Rule, variable_body: &Variable) {
             let body_ex_pos_of_var: ExtendedPositions =
-                variable_body.get_extended_positions_in_positive_body(rule);
+                variable_body.extended_positions_in_positive_body(rule);
             let extended_pos_of_ex_vars: ExtendedPositions =
                 rule.extended_positions_of_existential_variables();
             body_ex_pos_of_var.into_iter().for_each(|body_pos| {

@@ -4,6 +4,7 @@ use self::rules_properties_internal::RulesPropertiesInternal;
 
 mod rules_properties_internal;
 
+#[allow(dead_code)]
 pub trait RulesProperties: RulesPropertiesInternal {
     fn is_joinless(&self) -> bool;
     fn is_linear(&self) -> bool;
