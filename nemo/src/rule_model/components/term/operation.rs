@@ -91,13 +91,13 @@ impl Operation {
 
     /// Return whether this term is ground,
     /// i.e. if it does not contain any variables.
-    pub fn is_gound(&self) -> bool {
+    pub fn is_ground(&self) -> bool {
         self.subterms.iter().all(Term::is_ground)
     }
 
     /// Reduce constant expressions returning a copy of the reduced [Term].
     pub fn reduce(&self) -> Term {
-        if !self.is_gound() {
+        if !self.is_ground() {
             return Term::Operation(Self {
                 origin: self.origin,
                 kind: self.kind,

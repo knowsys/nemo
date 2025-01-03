@@ -27,6 +27,7 @@ use crate::{
     rule_model::{
         error::{hint::Hint, validation_error::ValidationErrorKind, ValidationErrorBuilder},
         origin::Origin,
+        substitution::Substitution,
         translation::ASTProgramTranslation,
     },
 };
@@ -206,7 +207,27 @@ impl ImportExportDirective {
                     ));
             }
 
-            if attribute.value_type() != value.kind() {
+            if let ProgramComponentKind::OneOf(types) = attribute.value_type() {
+                if types.iter().any(|&typ| typ == value.kind()) {
+                    continue;
+                }
+
+                builder.report_error(
+                    *value.origin(),
+                    ValidationErrorKind::ImportExportAttributeValueType {
+                        parameter: attribute.name().to_string(),
+                        given: value.kind().name().to_string(),
+                        expected: format!(
+                            "one of {}",
+                            types
+                                .iter()
+                                .map(|typ| typ.name())
+                                .intersperse(", ")
+                                .collect::<String>()
+                        ),
+                    },
+                );
+            } else if attribute.value_type() != value.kind() {
                 builder.report_error(
                     *value.origin(),
                     ValidationErrorKind::ImportExportAttributeValueType {
@@ -367,12 +388,20 @@ pub struct ImportDirective(pub(crate) ImportExportDirective);
 
 impl ImportDirective {
     /// Create a new [ImportDirective].
-    pub fn new(predicate: Tag, format: FileFormat, attributes: Map) -> Self {
+    pub fn new(
+        predicate: Tag,
+        format: FileFormat,
+        attributes: Map,
+        bindings: Substitution,
+    ) -> Self {
+        let mut attributes = attributes;
+        bindings.apply(&mut attributes);
+
         Self(ImportExportDirective {
             origin: Origin::default(),
             predicate,
             format,
-            attributes,
+            attributes: attributes.reduce(),
         })
     }
 
@@ -454,12 +483,20 @@ pub struct ExportDirective(pub(crate) ImportExportDirective);
 
 impl ExportDirective {
     /// Create a new [ExportDirective].
-    pub fn new(predicate: Tag, format: FileFormat, attributes: Map) -> Self {
+    pub fn new(
+        predicate: Tag,
+        format: FileFormat,
+        attributes: Map,
+        bindings: Substitution,
+    ) -> Self {
+        let mut attributes = attributes;
+        bindings.apply(&mut attributes);
+
         Self(ImportExportDirective {
             origin: Origin::default(),
             predicate,
             format,
-            attributes,
+            attributes: attributes.reduce(),
         })
     }
 

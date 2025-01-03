@@ -95,6 +95,9 @@ pub enum ProgramComponentKind {
     /// Program
     #[assoc(name = "program")]
     Program,
+    /// One of the given kinds:
+    #[assoc(name = "oneof")]
+    OneOf(&'static [ProgramComponentKind]),
 }
 
 /// Trait implemented by objects that are part of the logical rule model of the nemo language.

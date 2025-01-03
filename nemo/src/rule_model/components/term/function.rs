@@ -103,7 +103,7 @@ impl FunctionTerm {
 
     /// Return whether this term is ground,
     /// i.e. if it does not contain any variables.
-    pub fn is_gound(&self) -> bool {
+    pub fn is_ground(&self) -> bool {
         self.terms.iter().all(Term::is_ground)
     }
 

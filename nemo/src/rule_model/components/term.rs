@@ -146,10 +146,10 @@ impl Term {
         match self {
             Term::Primitive(term) => term.is_ground(),
             Term::Aggregate(term) => term.is_ground(),
-            Term::FunctionTerm(term) => term.is_gound(),
-            Term::Map(term) => term.is_gound(),
-            Term::Operation(term) => term.is_gound(),
-            Term::Tuple(term) => term.is_gound(),
+            Term::FunctionTerm(term) => term.is_ground(),
+            Term::Map(term) => term.is_ground(),
+            Term::Operation(term) => term.is_ground(),
+            Term::Tuple(term) => term.is_ground(),
         }
     }
 

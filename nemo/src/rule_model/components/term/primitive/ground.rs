@@ -22,7 +22,7 @@ use super::Primitive;
 
 /// Primitive ground term
 ///
-/// Represents a basic, indivisble constant value like integers, or strings.
+/// Represents a basic, indivisible constant value like integers, or strings.
 /// Such terms are the atomic values used in the construction of more complex expressions.
 #[derive(Debug, Clone, Eq)]
 pub struct GroundTerm {

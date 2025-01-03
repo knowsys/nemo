@@ -1,11 +1,14 @@
 //! This module defines the [Export] directive.
 
-use nom::sequence::tuple;
+use nom::{
+    combinator::opt,
+    sequence::{delimited, preceded, tuple},
+};
 
 use crate::parser::{
     ast::{
-        comment::wsoc::WSoC, expression::complex::map::Map, tag::structure::StructureTag,
-        token::Token, ProgramAST,
+        comment::wsoc::WSoC, expression::complex::map::Map, guard::Guard, sequence::Sequence,
+        tag::structure::StructureTag, token::Token, ProgramAST,
     },
     context::{context, ParserContext},
     input::ParserInput,
@@ -23,6 +26,8 @@ pub struct Export<'a> {
     predicate: StructureTag<'a>,
     /// Map of instructions
     instructions: Map<'a>,
+    /// Additional variable bindings
+    guards: Option<Sequence<'a, Guard<'a>>>,
 }
 
 impl<'a> Export<'a> {
@@ -36,7 +41,13 @@ impl<'a> Export<'a> {
         &self.instructions
     }
 
-    pub fn parse_body(input: ParserInput<'a>) -> ParserResult<'a, (StructureTag<'a>, Map<'a>)> {
+    pub fn guards(&self) -> &Option<Sequence<Guard>> {
+        &self.guards
+    }
+
+    pub fn parse_body(
+        input: ParserInput<'a>,
+    ) -> ParserResult<'a, (StructureTag<'a>, Map<'a>, Option<Sequence<'a, Guard<'a>>>)> {
         context(
             ParserContext::ExportBody,
             tuple((
@@ -45,9 +56,15 @@ impl<'a> Export<'a> {
                 Token::export_assignment,
                 WSoC::parse,
                 Map::parse,
+                opt(preceded(
+                    delimited(WSoC::parse, Token::seq_sep, WSoC::parse),
+                    Sequence::<Guard>::parse,
+                )),
             )),
         )(input)
-        .map(|(rest, (predicate, _, _, _, instructions))| (rest, (predicate, instructions)))
+        .map(|(rest, (predicate, _, _, _, instructions, guards))| {
+            (rest, (predicate, instructions, guards))
+        })
     }
 }
 
@@ -77,7 +94,7 @@ impl<'a> ProgramAST<'a> for Export<'a> {
                 Self::parse_body,
             )),
         )(input)
-        .map(|(rest, (_, _, _, (predicate, instructions)))| {
+        .map(|(rest, (_, _, _, (predicate, instructions, guards)))| {
             let rest_span = rest.span;
 
             (
@@ -86,6 +103,7 @@ impl<'a> ProgramAST<'a> for Export<'a> {
                     span: input_span.until_rest(&rest_span),
                     predicate,
                     instructions,
+                    guards,
                 },
             )
         })

@@ -16,7 +16,7 @@ pub enum ImportExportAttribute {
     /// Location of the file
     #[assoc(name = attribute::RESOURCE)]
     #[assoc(from_name = attribute::RESOURCE)]
-    #[assoc(value_type = ProgramComponentKind::PlainString)]
+    #[assoc(value_type = ProgramComponentKind::OneOf(&[ProgramComponentKind::PlainString, ProgramComponentKind::Operation]))]
     Resource,
     /// Data types of the input relations
     #[assoc(name = attribute::FORMAT)]
