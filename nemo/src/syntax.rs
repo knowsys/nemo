@@ -129,9 +129,14 @@ pub mod expression {
     /// Syntax for format strings
     pub mod format_string {
         /// Opening part of a format string
-        pub const OPEN: &str = "f\"";
+        pub const OPEN: &str = r#"f""#;
         /// Closing part of a format string
-        pub const CLOSE: &str = "\"";
+        pub const CLOSE: &str = r#"""#;
+
+        /// Opening part of a multi-line format string
+        pub const MULTILINE_OPEN: &str = r#"f""""#;
+        /// Closing part of a multi-line format string
+        pub const MULTILINE_CLOSE: &str = r#"""""#;
 
         /// Marker of the start of an expression
         pub const EXPRESSION_START: &str = "{";

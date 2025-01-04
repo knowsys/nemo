@@ -40,11 +40,18 @@ impl<'a> StringLiteral<'a> {
 
     /// Parse the main part of the string.
     pub fn parse_string(input: ParserInput<'a>) -> ParserResult<'a, Token<'a>> {
-        delimited(
-            Token::quote,
-            alt((Token::string, Token::empty)),
-            Token::quote,
-        )(input)
+        alt((
+            delimited(
+                Token::triple_quote,
+                alt((Token::multiline_string, Token::empty)),
+                Token::triple_quote,
+            ),
+            delimited(
+                Token::quote,
+                alt((Token::string, Token::empty)),
+                Token::quote,
+            ),
+        ))(input)
     }
 
     /// Parse the language tag of the string.

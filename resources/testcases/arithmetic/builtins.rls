@@ -76,7 +76,10 @@ result(uriencode, ?R) :- uri_strings(?A, _), ?R = URIENCODE(?A).
 result(uridecode, ?R) :- uri_strings(_, ?A), ?R = URIDECODE(?A).
 
 % F-string literal
-result(fstring_basic, ?R) :- strings(?A, ?B), ?R = f"{?A} and {?B}". 
+result(fstring_basic, ?R) :- strings(?A, ?B), ?R = f"{?A} and {?B}".
+result(fstring_multiline, ?R) :- strings(?A, ?B), ?M = f"""{?A}
+and
+{?B}""", ?R = CONCAT(SUBSTR(?M, 1, 5), " ", SUBSTR(?M, 7, 3), " ", SUBSTR(?M, 11)).
 result(fstring_arithmetic, ?R) :- strings(?A, ?B), ?R = f"len*10={STRLEN(?A) * 10}".
 
 % Numeric arithmetic
