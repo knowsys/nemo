@@ -149,7 +149,7 @@ impl<'a> ASTProgramTranslation<'a> {
             }
         }
 
-        Ok(Substitution::new(result.into_iter()))
+        Ok(Substitution::new(result))
     }
 
     /// Given a [ast::directive::import::Import], build an [ImportDirective].

@@ -4,6 +4,7 @@ mod token_type;
 
 use nemo::rule_model::translation::ProgramErrorReport;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::fmt::Write;
 use std::vec;
 use strum::IntoEnumIterator;
 
@@ -149,11 +150,10 @@ impl Backend {
                         .note()
                         .map(|n| format!("\nNote: {n}"))
                         .unwrap_or("".to_string()),
-                    error
-                        .hints()
-                        .iter()
-                        .map(|h| format!("\nHint: {h}"))
-                        .collect::<String>(),
+                    error.hints().iter().fold(String::new(), |mut acc, h| {
+                        let _ = write!(acc, "\nHint: {h}");
+                        acc
+                    })
                 );
 
                 if let Some(set) = errors_by_posision.get_mut(&range) {
@@ -607,11 +607,11 @@ fn node_path_deepest_identifier<'a>(
         }
     }
 
-    return info.map(|info| IdentifiedNode {
+    info.map(|info| IdentifiedNode {
         node: info.node,
         identifier: info.identifier,
         scoping_node: *node_path.first().unwrap(),
-    });
+    })
 }
 
 /// Finds all children of the given node (potentially the node itself) that match the identifier

@@ -22,6 +22,7 @@ use super::{
     ProgramAST,
 };
 
+#[allow(clippy::large_enum_variant)]
 /// Types of [Statement]s
 #[derive(Debug)]
 pub enum StatementKind<'a> {
