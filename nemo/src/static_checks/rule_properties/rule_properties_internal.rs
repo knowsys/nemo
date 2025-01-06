@@ -22,7 +22,6 @@ pub(crate) trait RulePropertiesInternal {
         &self,
         attacked_pos_by_vars: &PositionsByVariables,
     ) -> bool;
-    fn is_weakly_sticky_internal(&self) -> bool;
     fn is_glut_guarded_internal(&self, attacked_pos_by_cycle_vars: &PositionsByVariables) -> bool;
     fn is_glut_frontier_guarded_internal(
         &self,
@@ -105,11 +104,6 @@ impl RulePropertiesInternal for Rule {
         let attacked_frontier_variables: Variables =
             self.attacked_frontier_variables(attacked_pos_by_vars);
         self.is_guarded_for_variables(attacked_frontier_variables)
-    }
-
-    fn is_weakly_sticky_internal(&self) -> bool {
-        todo!("IMPLEMENT");
-        // TODO: IMPLEMENT
     }
 
     fn is_glut_guarded_internal(&self, attacked_pos_by_cycle_vars: &PositionsByVariables) -> bool {

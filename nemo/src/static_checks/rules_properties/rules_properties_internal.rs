@@ -53,8 +53,7 @@ impl RulesPropertiesInternal for RuleSet {
     }
 
     fn is_weakly_sticky_internal(&self) -> bool {
-        todo!("IMPLEMENT");
-        // TODO: IMPLEMENT
+        self.build_and_check_weakly_marking().is_some()
     }
 
     fn is_domain_restricted_internal(&self) -> bool {

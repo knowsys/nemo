@@ -6,8 +6,8 @@ use crate::rule_model::components::{
 };
 use crate::static_checks::collection_traits::{Disjoint, InsertAll, Superset};
 use crate::static_checks::positions::{
-    AttackedPositionsBuilder, AttackingVariables, ExtendedPositions, FromPositions, Positions,
-    PositionsByVariables, SpecialPositionsBuilder,
+    AffectedPositionsBuilder, AttackedPositionsBuilder, AttackingType, ExtendedPositions,
+    FromPositions, MarkedPositionsBuilder, MarkingType, Positions, PositionsByVariables,
 };
 
 use std::collections::HashSet;
@@ -64,20 +64,33 @@ impl<'a> AffectedVariables<'a> for Rule {
 }
 
 pub trait AtomPositionsAppearance {
-    fn appears_at_positions_in_atom(&self, positions: &Positions, atom: &Atom) -> bool;
-    fn appears_at_positions_in_atoms(&self, positions: &Positions, atoms: &[&Atom]) -> bool;
+    fn appears_at_some_positions_in_atom(&self, positions: &Positions, atom: &Atom) -> bool;
+    fn appears_at_some_positions_in_atoms(&self, positions: &Positions, atoms: &[&Atom]) -> bool;
+    fn appears_only_at_positions_in_atom(&self, positions: &Positions, atom: &Atom) -> bool;
+    fn appears_only_at_positions_in_atoms(&self, positions: &Positions, atoms: &[&Atom]) -> bool;
 }
 
 impl AtomPositionsAppearance for Variable {
-    fn appears_at_positions_in_atom(&self, positions: &Positions, atom: &Atom) -> bool {
+    fn appears_at_some_positions_in_atom(&self, positions: &Positions, atom: &Atom) -> bool {
         let positions_in_atom: Positions = self.positions_in_atom(atom);
         !positions_in_atom.is_disjoint(positions)
     }
 
-    fn appears_at_positions_in_atoms(&self, positions: &Positions, atoms: &[&Atom]) -> bool {
+    fn appears_at_some_positions_in_atoms(&self, positions: &Positions, atoms: &[&Atom]) -> bool {
         atoms
             .iter()
-            .any(|atom| self.appears_at_positions_in_atom(positions, atom))
+            .any(|atom| self.appears_at_some_positions_in_atom(positions, atom))
+    }
+
+    fn appears_only_at_positions_in_atom(&self, positions: &Positions, atom: &Atom) -> bool {
+        let positions_in_atom: Positions = self.positions_in_atom(atom);
+        positions.is_superset(&positions_in_atom)
+    }
+
+    fn appears_only_at_positions_in_atoms(&self, positions: &Positions, atoms: &[&Atom]) -> bool {
+        atoms
+            .iter()
+            .all(|atom| self.appears_only_at_positions_in_atom(positions, atom))
     }
 }
 
@@ -369,21 +382,21 @@ pub trait JoinVariablesPositions {
     fn positions_of_join_variables(&self) -> Positions;
 }
 
-impl JoinVariablesPositions for Rule {
-    fn extended_positions_of_join_variables(&self) -> ExtendedPositions {
-        let pos_of_join_vars: Positions = self.positions_of_join_variables();
-        ExtendedPositions::from_positions(pos_of_join_vars)
-    }
-
-    fn positions_of_join_variables(&self) -> Positions {
-        self.join_variables()
-            .iter()
-            .fold(Positions::new(), |pos_of_join_vars, var| {
-                let pos_of_var_in_body: Positions = var.positions_in_positive_body(self);
-                pos_of_join_vars.insert_all_take_ret(pos_of_var_in_body)
-            })
-    }
-}
+// impl JoinVariablesPositions for Rule {
+//     fn extended_positions_of_join_variables(&self) -> ExtendedPositions {
+//         let pos_of_join_vars: Positions = self.positions_of_join_variables();
+//         ExtendedPositions::from_positions(pos_of_join_vars)
+//     }
+//
+//     fn positions_of_join_variables(&self) -> Positions {
+//         self.join_variables()
+//             .iter()
+//             .fold(Positions::new(), |pos_of_join_vars, var| {
+//                 let pos_of_var_in_body: Positions = var.positions_in_positive_body(self);
+//                 pos_of_join_vars.insert_all_take_ret(pos_of_var_in_body)
+//             })
+//     }
+// }
 
 pub trait FrontierVariablePairs {
     fn frontier_variable_pairs(&self) -> VariablePairs;
@@ -454,6 +467,7 @@ pub trait SpecialPositionsConstructor {
     fn attacked_positions_by_cycle_variables(&self) -> PositionsByVariables;
     fn attacked_positions_by_existential_variables(&self) -> PositionsByVariables;
     fn build_and_check_marking(&self) -> Option<Positions>;
+    fn build_and_check_weakly_marking(&self) -> Option<Positions>;
 }
 
 impl SpecialPositionsConstructor for RuleSet {
@@ -462,15 +476,19 @@ impl SpecialPositionsConstructor for RuleSet {
     }
 
     fn attacked_positions_by_cycle_variables(&self) -> PositionsByVariables {
-        PositionsByVariables::build_positions(AttackingVariables::Cycle, self)
+        PositionsByVariables::build_positions(AttackingType::Cycle, self)
     }
 
     fn attacked_positions_by_existential_variables(&self) -> PositionsByVariables {
-        PositionsByVariables::build_positions(AttackingVariables::Existential, self)
+        PositionsByVariables::build_positions(AttackingType::Existential, self)
     }
 
     fn build_and_check_marking(&self) -> Option<Positions> {
-        Option::<Positions>::build_positions(self)
+        Option::<Positions>::build_positions(MarkingType::Common, self)
+    }
+
+    fn build_and_check_weakly_marking(&self) -> Option<Positions> {
+        Option::<Positions>::build_positions(MarkingType::Weakly, self)
     }
 }
 

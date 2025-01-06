@@ -88,6 +88,7 @@ pub(crate) trait WeaklyAcyclicityGraphCycleInternal<N>:
     AcyclicityGraphCycle<N> + WeaklyAcyclicityGraphCycleInternalPrivate<N>
 {
     fn contains_cycle_with_special_edge_internal(&self) -> bool;
+    fn cycles_containing_special_edges_internal(&self) -> Cycles<N>;
 }
 
 impl<'a> WeaklyAcyclicityGraphCycleInternal<Position<'a>> for WeaklyAcyclicityGraph<'a> {
@@ -96,6 +97,15 @@ impl<'a> WeaklyAcyclicityGraphCycleInternal<Position<'a>> for WeaklyAcyclicityGr
         cycles
             .iter()
             .any(|cycle| self.cycle_contains_special_edge(cycle))
+    }
+
+    fn cycles_containing_special_edges_internal(&self) -> Cycles<Position<'a>> {
+        let cycles: Cycles<Position<'a>> = self.cycles();
+        cycles
+            .iter()
+            .filter(|cycle| self.cycle_contains_special_edge(cycle))
+            .cloned()
+            .collect()
     }
 }
 

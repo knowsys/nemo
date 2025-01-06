@@ -4,7 +4,7 @@ use crate::static_checks::acyclicity_graphs::acyclicity_graphs_internal::{
     JointlyAcyclicityGraphCycleInternal, WeaklyAcyclicityGraphCycleInternal,
     WeaklyAcyclicityGraphEdgeType,
 };
-use crate::static_checks::positions::Position;
+use crate::static_checks::positions::{Position, Positions};
 use crate::static_checks::rule_set::{RuleSet, Variables};
 
 use petgraph::graphmap::{DiGraphMap, NodeTrait};
@@ -66,10 +66,26 @@ impl<'a> JointlyAcyclicityGraphCycle<&'a Variable> for JointlyAcyclicityGraph<'a
 
 pub trait WeaklyAcyclicityGraphCycle<N>: WeaklyAcyclicityGraphCycleInternal<N> {
     fn contains_cycle_with_special_edge(&self) -> bool;
+    fn cycles_containing_special_edges(&self) -> Cycles<N>;
 }
 
 impl<'a> WeaklyAcyclicityGraphCycle<Position<'a>> for WeaklyAcyclicityGraph<'a> {
     fn contains_cycle_with_special_edge(&self) -> bool {
         self.contains_cycle_with_special_edge_internal()
+    }
+
+    fn cycles_containing_special_edges(&self) -> Cycles<Position<'a>> {
+        self.cycles_containing_special_edges_internal()
+    }
+}
+
+pub trait InfiniteRankPositions {
+    fn infinite_rank_positions(&self) -> Positions;
+}
+
+impl<'a> InfiniteRankPositions for WeaklyAcyclicityGraph<'a> {
+    fn infinite_rank_positions(&self) -> Positions {
+        todo!("IMPLEMENT");
+        // TODO: IMPLEMENT
     }
 }

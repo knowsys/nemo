@@ -1,7 +1,8 @@
 use crate::rule_model::components::{tag::Tag, term::primitive::variable::Variable};
 use crate::static_checks::collection_traits::{Disjoint, InsertAll, RemoveAll, Superset};
 use crate::static_checks::positions::positions_internal::{
-    AttackedPositionsBuilderInternal, SpecialPositionsBuilderInternal,
+    AffectedPositionsBuilderInternal, AttackedPositionsBuilderInternal,
+    MarkedPositionsBuilderInternal,
 };
 use crate::static_checks::rule_set::RuleSet;
 
@@ -21,9 +22,14 @@ pub type Position<'a> = (&'a Tag, Index);
 
 pub type ExtendedPositions<'a> = HashSet<Position<'a>>;
 
-pub enum AttackingVariables {
+pub enum AttackingType {
     Cycle,
     Existential,
+}
+
+pub enum MarkingType {
+    Common,
+    Weakly,
 }
 
 pub trait FromPositions<'a> {
@@ -42,32 +48,36 @@ impl<'a> FromPositions<'a> for ExtendedPositions<'a> {
     }
 }
 
-pub trait SpecialPositionsBuilder<'a>: SpecialPositionsBuilderInternal<'a> {
+pub trait AffectedPositionsBuilder<'a>: AffectedPositionsBuilderInternal<'a> {
     fn build_positions(rule_set: &'a RuleSet) -> Self;
 }
 
-impl<'a> SpecialPositionsBuilder<'a> for Positions<'a> {
+impl<'a> AffectedPositionsBuilder<'a> for Positions<'a> {
     fn build_positions(rule_set: &'a RuleSet) -> Positions<'a> {
         Positions::build_positions_internal(rule_set)
     }
 }
 
-impl<'a> SpecialPositionsBuilder<'a> for Option<Positions<'a>> {
-    fn build_positions(rule_set: &'a RuleSet) -> Option<Positions<'a>> {
-        Option::<Positions>::build_positions_internal(rule_set)
+pub trait MarkedPositionsBuilder<'a>: MarkedPositionsBuilderInternal<'a> {
+    fn build_positions(mar_type: MarkingType, rule_set: &'a RuleSet) -> Self;
+}
+
+impl<'a> MarkedPositionsBuilder<'a> for Option<Positions<'a>> {
+    fn build_positions(mar_type: MarkingType, rule_set: &'a RuleSet) -> Option<Positions<'a>> {
+        Option::<Positions>::build_positions_internal(mar_type, rule_set)
     }
 }
 
 pub trait AttackedPositionsBuilder<'a>: AttackedPositionsBuilderInternal<'a> {
-    fn build_positions(att_vars: AttackingVariables, rule_set: &'a RuleSet) -> Self;
+    fn build_positions(att_type: AttackingType, rule_set: &'a RuleSet) -> Self;
 }
 
 impl<'a> AttackedPositionsBuilder<'a> for PositionsByVariables<'a, 'a> {
     fn build_positions(
-        att_vars: AttackingVariables,
+        att_type: AttackingType,
         rule_set: &'a RuleSet,
     ) -> PositionsByVariables<'a, 'a> {
-        PositionsByVariables::build_positions_internal(att_vars, rule_set)
+        PositionsByVariables::build_positions_internal(att_type, rule_set)
     }
 }
 

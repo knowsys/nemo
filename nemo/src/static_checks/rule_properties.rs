@@ -21,7 +21,6 @@ pub trait RuleProperties: RulePropertiesInternal {
         &self,
         attacked_pos_by_existential_vars: &PositionsByVariables,
     ) -> bool;
-    fn is_weakly_sticky(&self) -> bool;
     fn is_glut_guarded(&self, attacked_pos_by_cycle_vars: &PositionsByVariables) -> bool;
     fn is_glut_frontier_guarded(&self, attacked_pos_by_cycle_vars: &PositionsByVariables) -> bool;
     fn is_shy(&self, attacked_pos_by_existential_vars: &PositionsByVariables) -> bool;
@@ -84,10 +83,6 @@ impl RuleProperties for Rule {
         attacked_pos_by_existential_vars: &PositionsByVariables,
     ) -> bool {
         self.is_jointly_frontier_guarded_internal(attacked_pos_by_existential_vars)
-    }
-
-    fn is_weakly_sticky(&self) -> bool {
-        self.is_weakly_sticky_internal()
     }
 
     fn is_glut_guarded(&self, attacked_pos_by_cycle_vars: &PositionsByVariables) -> bool {
