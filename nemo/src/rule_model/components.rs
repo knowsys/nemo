@@ -9,7 +9,6 @@ pub mod fact;
 pub mod import_export;
 pub mod literal;
 pub mod output;
-pub mod parse;
 pub mod rule;
 pub mod tag;
 pub mod term;

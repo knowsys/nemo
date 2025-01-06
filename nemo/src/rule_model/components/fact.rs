@@ -8,7 +8,9 @@ use crate::{
         ChaseComponent,
     },
     rule_model::{
-        error::{validation_error::ValidationErrorKind, ValidationErrorBuilder},
+        error::{
+            validation_error::ValidationErrorKind, ComponentParseError, ValidationErrorBuilder,
+        },
         origin::Origin,
         translation::{literal::HeadAtom, TranslationComponent},
     },
@@ -16,7 +18,6 @@ use crate::{
 
 use super::{
     atom::Atom,
-    parse::ComponentParseError,
     tag::Tag,
     term::{primitive::Primitive, Term},
     IterablePrimitives, IterableVariables, ProgramComponent, ProgramComponentKind,

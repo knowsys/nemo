@@ -10,10 +10,8 @@ use nemo_physical::datavalues::AnyDataValue;
 use variable::{existential::ExistentialVariable, universal::UniversalVariable, Variable};
 
 use crate::rule_model::{
-    components::{
-        parse::ComponentParseError, IterableVariables, ProgramComponent, ProgramComponentKind,
-    },
-    error::ValidationErrorBuilder,
+    components::{IterableVariables, ProgramComponent, ProgramComponentKind},
+    error::{ComponentParseError, ValidationErrorBuilder},
     origin::Origin,
     translation::TranslationComponent,
 };

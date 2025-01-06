@@ -170,10 +170,8 @@ impl ProgramComponent for GroundTerm {
 #[cfg(test)]
 mod test {
     use crate::rule_model::{
-        components::{
-            parse::ComponentParseError,
-            term::{primitive::Primitive, Term},
-        },
+        components::term::{primitive::Primitive, Term},
+        error::ComponentParseError,
         translation::TranslationComponent,
     };
 

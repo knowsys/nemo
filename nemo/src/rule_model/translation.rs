@@ -25,10 +25,10 @@ use crate::{
 };
 
 use super::{
-    components::{fact::Fact, parse::ComponentParseError, rule::Rule, ProgramComponent},
+    components::{fact::Fact, rule::Rule, ProgramComponent},
     error::{
-        translation_error::TranslationErrorKind, ProgramError, TranslationError,
-        ValidationErrorBuilder,
+        translation_error::TranslationErrorKind, ComponentParseError, ProgramError,
+        TranslationError, ValidationErrorBuilder,
     },
     program::Program,
 };

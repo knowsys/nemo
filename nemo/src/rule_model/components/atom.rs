@@ -3,14 +3,13 @@
 use std::{fmt::Display, hash::Hash};
 
 use crate::rule_model::{
-    error::{validation_error::ValidationErrorKind, ValidationErrorBuilder},
+    error::{validation_error::ValidationErrorKind, ComponentParseError, ValidationErrorBuilder},
     origin::Origin,
     translation::TranslationComponent,
 };
 
 use super::{
     literal::Literal,
-    parse::ComponentParseError,
     tag::Tag,
     term::{
         primitive::{variable::Variable, Primitive},

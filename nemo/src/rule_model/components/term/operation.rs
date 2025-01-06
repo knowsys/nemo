@@ -314,10 +314,8 @@ impl IterablePrimitives for Operation {
 #[cfg(test)]
 mod test {
     use crate::rule_model::{
-        components::{
-            parse::ComponentParseError,
-            term::{operation::operation_kind::OperationKind, Term},
-        },
+        components::term::{operation::operation_kind::OperationKind, Term},
+        error::ComponentParseError,
         translation::TranslationComponent,
     };
 
