@@ -6,9 +6,8 @@ use crate::rule_model::components::{
 };
 use crate::static_checks::collection_traits::{Disjoint, InsertAll, Superset};
 use crate::static_checks::positions::{
-    AffectedPositions, AttackedPositions, AttackedPositionsBuilder, AttackingVariables,
-    ExtendedPositions, FromPositions, MarkedPositions, Positions, PositionsByVariables,
-    SpecialPositionsBuilder,
+    AttackedPositionsBuilder, AttackingVariables, ExtendedPositions, FromPositions, Positions,
+    PositionsByVariables, SpecialPositionsBuilder,
 };
 
 use std::collections::HashSet;
@@ -22,11 +21,11 @@ pub type VariablePair<'a> = [&'a Variable; 2];
 pub type VariablePairs<'a> = HashSet<VariablePair<'a>>;
 
 pub trait Affected {
-    fn is_affected(&self, rule: &Rule, affected_positions: &AffectedPositions) -> bool;
+    fn is_affected(&self, rule: &Rule, affected_positions: &Positions) -> bool;
 }
 
 impl Affected for Variable {
-    fn is_affected(&self, rule: &Rule, affected_positions: &AffectedPositions) -> bool {
+    fn is_affected(&self, rule: &Rule, affected_positions: &Positions) -> bool {
         let positions_of_variable_in_body: Positions = self.positions_in_positive_body(rule);
         affected_positions.is_superset(&positions_of_variable_in_body)
     }
@@ -124,7 +123,7 @@ impl AtomRefs for Atom {
 }
 
 pub trait Attacked {
-    fn is_attacked(&self, rule: &Rule, attacked_pos_by_vars: &AttackedPositions) -> bool;
+    fn is_attacked(&self, rule: &Rule, attacked_pos_by_vars: &PositionsByVariables) -> bool;
     fn is_attacked_by_positions_in_rule(
         &self,
         rule: &Rule,
@@ -139,7 +138,7 @@ pub trait Attacked {
 }
 
 impl Attacked for Variable {
-    fn is_attacked(&self, rule: &Rule, attacked_pos_by_vars: &AttackedPositions) -> bool {
+    fn is_attacked(&self, rule: &Rule, attacked_pos_by_vars: &PositionsByVariables) -> bool {
         let positions_of_variable_in_body: Positions = self.positions_in_positive_body(rule);
         attacked_pos_by_vars
             .values()
@@ -451,27 +450,27 @@ impl RuleRefs for Rule {
 }
 
 pub trait SpecialPositionsConstructor {
-    fn affected_positions(&self) -> AffectedPositions;
-    fn attacked_positions_by_cycle_variables(&self) -> AttackedPositions;
-    fn attacked_positions_by_existential_variables(&self) -> AttackedPositions;
-    fn build_and_check_marking(&self) -> MarkedPositions;
+    fn affected_positions(&self) -> Positions;
+    fn attacked_positions_by_cycle_variables(&self) -> PositionsByVariables;
+    fn attacked_positions_by_existential_variables(&self) -> PositionsByVariables;
+    fn build_and_check_marking(&self) -> Option<Positions>;
 }
 
 impl SpecialPositionsConstructor for RuleSet {
-    fn affected_positions(&self) -> AffectedPositions {
-        AffectedPositions::build_positions(self)
+    fn affected_positions(&self) -> Positions {
+        Positions::build_positions(self)
     }
 
-    fn attacked_positions_by_cycle_variables(&self) -> AttackedPositions {
-        AttackedPositions::build_positions(AttackingVariables::Cycle, self)
+    fn attacked_positions_by_cycle_variables(&self) -> PositionsByVariables {
+        PositionsByVariables::build_positions(AttackingVariables::Cycle, self)
     }
 
-    fn attacked_positions_by_existential_variables(&self) -> AttackedPositions {
-        AttackedPositions::build_positions(AttackingVariables::Existential, self)
+    fn attacked_positions_by_existential_variables(&self) -> PositionsByVariables {
+        PositionsByVariables::build_positions(AttackingVariables::Existential, self)
     }
 
-    fn build_and_check_marking(&self) -> MarkedPositions {
-        MarkedPositions::build_positions(self)
+    fn build_and_check_marking(&self) -> Option<Positions> {
+        Option::<Positions>::build_positions(self)
     }
 }
 

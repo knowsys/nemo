@@ -2,10 +2,10 @@ use crate::static_checks::collection_traits::InsertAll;
 use crate::static_checks::positions::positions_internal::private::{
     AttackedPositionsBuilderInternalPrivate, SpecialPositionsBuilderInternalPrivate,
 };
-use crate::static_checks::positions::{
-    AffectedPositions, AttackedPositions, AttackingVariables, MarkedPositions, Positions,
-};
+use crate::static_checks::positions::{AttackingVariables, Positions};
 use crate::static_checks::rule_set::{RuleSet, Variables};
+
+use super::PositionsByVariables;
 
 pub(crate) trait SpecialPositionsBuilderInternal<'a>:
     SpecialPositionsBuilderInternalPrivate<'a>
@@ -13,12 +13,12 @@ pub(crate) trait SpecialPositionsBuilderInternal<'a>:
     fn build_positions_internal(rule_set: &'a RuleSet) -> Self;
 }
 
-impl<'a> SpecialPositionsBuilderInternal<'a> for AffectedPositions<'a> {
-    fn build_positions_internal(rule_set: &'a RuleSet) -> AffectedPositions<'a> {
-        let mut affected_positions: Positions<'a> = AffectedPositions::initial_positions(rule_set);
+impl<'a> SpecialPositionsBuilderInternal<'a> for Positions<'a> {
+    fn build_positions_internal(rule_set: &'a RuleSet) -> Positions<'a> {
+        let mut affected_positions: Positions<'a> = Positions::initial_positions(rule_set);
         let mut new_found_affected_positions: Positions<'a> = affected_positions.clone();
         while !new_found_affected_positions.is_empty() {
-            new_found_affected_positions = AffectedPositions::new_positions(
+            new_found_affected_positions = Positions::new_positions(
                 rule_set,
                 new_found_affected_positions,
                 &affected_positions,
@@ -29,13 +29,13 @@ impl<'a> SpecialPositionsBuilderInternal<'a> for AffectedPositions<'a> {
     }
 }
 
-impl<'a> SpecialPositionsBuilderInternal<'a> for MarkedPositions<'a> {
-    fn build_positions_internal(rule_set: &'a RuleSet) -> MarkedPositions<'a> {
-        let mut marking: Positions = MarkedPositions::initial_positions(rule_set).unwrap();
+impl<'a> SpecialPositionsBuilderInternal<'a> for Option<Positions<'a>> {
+    fn build_positions_internal(rule_set: &'a RuleSet) -> Option<Positions<'a>> {
+        let mut marking: Positions = Option::<Positions>::initial_positions(rule_set).unwrap();
         let mut new_found_marked_positions: Positions = marking.clone();
         while !new_found_marked_positions.is_empty() {
             new_found_marked_positions =
-                MarkedPositions::new_positions(rule_set, new_found_marked_positions, &marking)?;
+                Option::<Positions>::new_positions(rule_set, new_found_marked_positions, &marking)?;
             marking.insert_all(&new_found_marked_positions);
         }
         Some(marking)
@@ -48,22 +48,22 @@ pub(crate) trait AttackedPositionsBuilderInternal<'a>:
     fn build_positions_internal(att_vars: AttackingVariables, rule_set: &'a RuleSet) -> Self;
 }
 
-impl<'a> AttackedPositionsBuilderInternal<'a> for AttackedPositions<'a, 'a> {
+impl<'a> AttackedPositionsBuilderInternal<'a> for PositionsByVariables<'a, 'a> {
     fn build_positions_internal(
         att_vars: AttackingVariables,
         rule_set: &'a RuleSet,
-    ) -> AttackedPositions<'a, 'a> {
+    ) -> PositionsByVariables<'a, 'a> {
         let att_variables: Variables =
-            AttackedPositions::match_attacking_variables(att_vars, rule_set);
+            PositionsByVariables::match_attacking_variables(att_vars, rule_set);
         att_variables
             .iter()
             .map(|var| {
                 (
                     *var,
-                    AttackedPositions::attacked_positions_by_var(rule_set, var),
+                    PositionsByVariables::attacked_positions_by_var(rule_set, var),
                 )
             })
-            .collect::<AttackedPositions<'a, 'a>>()
+            .collect::<PositionsByVariables<'a, 'a>>()
     }
 }
 
@@ -76,9 +76,7 @@ mod private {
         JointlyAcyclicityGraph, JointlyAcyclicityGraphCycle,
     };
     use crate::static_checks::collection_traits::{InsertAll, RemoveAll};
-    use crate::static_checks::positions::{
-        AffectedPositions, AttackedPositions, AttackingVariables, MarkedPositions, Positions,
-    };
+    use crate::static_checks::positions::{AttackingVariables, Positions, PositionsByVariables};
     use crate::static_checks::rule_set::{
         AtomPositionsAppearance, AtomRefs, Attacked, ExistentialVariables,
         ExistentialVariablesPositions, JoinVariablesPositions, RulePositions, RuleRefs, RuleSet,
@@ -98,7 +96,7 @@ mod private {
         ) -> Self;
     }
 
-    impl<'a> SpecialPositionsBuilderInternalPrivate<'a> for AffectedPositions<'a> {
+    impl<'a> SpecialPositionsBuilderInternalPrivate<'a> for Positions<'a> {
         fn initial_positions(rule_set: &'a RuleSet) -> Positions<'a> {
             rule_set
                 .iter()
@@ -127,16 +125,16 @@ mod private {
             currently_positions: &Positions<'a>,
         ) -> Positions<'a> {
             let new_found_affected_positions: Positions<'a> =
-                AffectedPositions::conclude_positions(rule_set, last_iteration_positions);
+                Positions::conclude_positions(rule_set, last_iteration_positions);
             new_found_affected_positions.remove_all_ret(currently_positions)
         }
     }
 
-    impl<'a> SpecialPositionsBuilderInternalPrivate<'a> for MarkedPositions<'a> {
+    impl<'a> SpecialPositionsBuilderInternalPrivate<'a> for Option<Positions<'a>> {
         fn conclude_positions(
             rule_set: &'a RuleSet,
             last_iteration_positions: Positions<'a>,
-        ) -> MarkedPositions<'a> {
+        ) -> Option<Positions<'a>> {
             rule_set
                 .iter()
                 .try_fold(Positions::new(), |new_found_marked_positions, rule| {
@@ -146,7 +144,7 @@ mod private {
                 })
         }
 
-        fn initial_positions(rule_set: &'a RuleSet) -> MarkedPositions<'a> {
+        fn initial_positions(rule_set: &'a RuleSet) -> Option<Positions<'a>> {
             Some(
                 rule_set
                     .iter()
@@ -161,9 +159,9 @@ mod private {
             rule_set: &'a RuleSet,
             last_iteration_positions: Positions<'a>,
             current_positions: &Positions<'a>,
-        ) -> MarkedPositions<'a> {
+        ) -> Option<Positions<'a>> {
             let new_found_marked_positions: Positions =
-                MarkedPositions::conclude_positions(rule_set, last_iteration_positions)?;
+                Option::<Positions>::conclude_positions(rule_set, last_iteration_positions)?;
             Some(new_found_marked_positions.remove_all_ret(current_positions))
         }
     }
@@ -184,7 +182,7 @@ mod private {
             -> Positions<'a>;
     }
 
-    impl<'a> AttackedPositionsBuilderInternalPrivate<'a> for AttackedPositions<'a, 'a> {
+    impl<'a> AttackedPositionsBuilderInternalPrivate<'a> for PositionsByVariables<'a, 'a> {
         fn attacked_positions_by_var(
             rule_set: &'a RuleSet,
             variable: &'a Variable,
@@ -192,11 +190,11 @@ mod private {
             // let mut attacked_positions: Positions =
             //     self.initial_attacked_positions(variable , rule);
             let mut attacked_positions: Positions =
-                AttackedPositions::initial_positions(rule_set, variable);
+                PositionsByVariables::initial_positions(rule_set, variable);
             let mut new_found_attacked_positions: Positions = attacked_positions.clone();
             while !new_found_attacked_positions.is_empty() {
                 new_found_attacked_positions =
-                    AttackedPositions::new_positions(rule_set, &attacked_positions);
+                    PositionsByVariables::new_positions(rule_set, &attacked_positions);
                 attacked_positions.insert_all(&new_found_attacked_positions);
             }
             attacked_positions
@@ -240,16 +238,13 @@ mod private {
             currently_attacked_postions: &Positions<'a>,
         ) -> Positions<'a> {
             let new_found_attacked_positions: Positions =
-                AttackedPositions::conclude_positions(rule_set, currently_attacked_postions);
+                PositionsByVariables::conclude_positions(rule_set, currently_attacked_postions);
             new_found_attacked_positions.remove_all_ret(currently_attacked_postions)
         }
     }
 
     trait ConcludeAffectedPositions {
-        fn conclude_affected_positions(
-            &self,
-            last_iteration_positions: &Positions,
-        ) -> AffectedPositions;
+        fn conclude_affected_positions(&self, last_iteration_positions: &Positions) -> Positions;
     }
 
     impl ConcludeAffectedPositions for Rule {
@@ -298,7 +293,7 @@ mod private {
         fn conclude_marked_positions(
             &self,
             last_iteration_positions: &Positions,
-        ) -> MarkedPositions;
+        ) -> Option<Positions>;
     }
 
     impl ConcludeMarkedPositions for Rule {

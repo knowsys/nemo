@@ -21,12 +21,6 @@ pub type Position<'a> = (&'a Tag, Index);
 
 pub type ExtendedPositions<'a> = HashSet<Position<'a>>;
 
-pub type AffectedPositions<'a> = Positions<'a>;
-
-pub type AttackedPositions<'a, 'b> = PositionsByVariables<'a, 'b>;
-
-pub type MarkedPositions<'a> = Option<Positions<'a>>;
-
 pub enum AttackingVariables {
     Cycle,
     Existential,
@@ -52,15 +46,15 @@ pub trait SpecialPositionsBuilder<'a>: SpecialPositionsBuilderInternal<'a> {
     fn build_positions(rule_set: &'a RuleSet) -> Self;
 }
 
-impl<'a> SpecialPositionsBuilder<'a> for AffectedPositions<'a> {
-    fn build_positions(rule_set: &'a RuleSet) -> AffectedPositions<'a> {
-        AffectedPositions::build_positions_internal(rule_set)
+impl<'a> SpecialPositionsBuilder<'a> for Positions<'a> {
+    fn build_positions(rule_set: &'a RuleSet) -> Positions<'a> {
+        Positions::build_positions_internal(rule_set)
     }
 }
 
-impl<'a> SpecialPositionsBuilder<'a> for MarkedPositions<'a> {
-    fn build_positions(rule_set: &'a RuleSet) -> MarkedPositions<'a> {
-        MarkedPositions::build_positions_internal(rule_set)
+impl<'a> SpecialPositionsBuilder<'a> for Option<Positions<'a>> {
+    fn build_positions(rule_set: &'a RuleSet) -> Option<Positions<'a>> {
+        Option::<Positions>::build_positions_internal(rule_set)
     }
 }
 
@@ -68,12 +62,12 @@ pub trait AttackedPositionsBuilder<'a>: AttackedPositionsBuilderInternal<'a> {
     fn build_positions(att_vars: AttackingVariables, rule_set: &'a RuleSet) -> Self;
 }
 
-impl<'a> AttackedPositionsBuilder<'a> for AttackedPositions<'a, 'a> {
+impl<'a> AttackedPositionsBuilder<'a> for PositionsByVariables<'a, 'a> {
     fn build_positions(
         att_vars: AttackingVariables,
         rule_set: &'a RuleSet,
-    ) -> AttackedPositions<'a, 'a> {
-        AttackedPositions::build_positions_internal(att_vars, rule_set)
+    ) -> PositionsByVariables<'a, 'a> {
+        PositionsByVariables::build_positions_internal(att_vars, rule_set)
     }
 }
 
