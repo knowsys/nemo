@@ -42,7 +42,7 @@ impl<'a> Import<'a> {
     }
 
     /// Return the variable bindings.
-    pub fn guards(&self) -> &Option<Sequence<Guard>> {
+    pub fn guards(&self) -> &Option<Sequence<'a, Guard<'a>>> {
         &self.guards
     }
 

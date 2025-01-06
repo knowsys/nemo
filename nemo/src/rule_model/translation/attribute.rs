@@ -23,7 +23,7 @@ use crate::{
     },
 };
 
-use super::ASTProgramTranslation;
+use super::{ASTProgramTranslation, TranslationComponent};
 
 /// All recognized [Attribute][crate::parser::ast::attribute::Attribute]s
 #[derive(Assoc, EnumIter, Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
@@ -43,104 +43,100 @@ pub(crate) enum KnownAttributes {
     Display,
 }
 
-impl<'a> ASTProgramTranslation<'a> {
-    /// Evaluates a list of attributes, checking for errors,
-    /// and returns a map from an attribute to a list of parameters.
-    pub(crate) fn process_attributes(
-        &mut self,
-        attributes: impl Iterator<Item = &'a ast::attribute::Attribute<'a>>,
-        expected: &[KnownAttributes],
-    ) -> Result<HashMap<KnownAttributes, Vec<Term>>, TranslationError> {
-        let mut result = HashMap::new();
-        let mut previous_attributes = HashMap::<KnownAttributes, Span<'a>>::new();
+/// Evaluates a list of attributes, checking for errors,
+/// and returns a map from an attribute to a list of parameters.
+pub(crate) fn process_attributes<'a, 'b>(
+    translation: &mut ASTProgramTranslation<'a, 'b>,
+    attributes: impl Iterator<Item = &'b ast::attribute::Attribute<'a>>,
+    expected: &[KnownAttributes],
+) -> Result<HashMap<KnownAttributes, Vec<Term>>, TranslationError> {
+    let mut result = HashMap::new();
+    let mut previous_attributes = HashMap::<KnownAttributes, Span<'a>>::new();
 
-        for attribute in attributes {
-            let tag = attribute.content().tag();
-            let name = tag.to_string();
+    for attribute in attributes {
+        let tag = attribute.content().tag();
+        let name = tag.to_string();
 
-            if let Some(attribute_kind) = KnownAttributes::from_name(&name) {
-                if !expected.contains(&attribute_kind) {
-                    return Err(TranslationError::new(
-                        tag.span(),
-                        TranslationErrorKind::AttributeUnexpected(name.clone()),
-                    ));
-                }
+        let Some(attribute_kind) = KnownAttributes::from_name(&name) else {
+            let mut error = TranslationError::new(
+                tag.span(),
+                TranslationErrorKind::AttributeUnknown(name.clone()),
+            );
+            error.add_hint_option(Hint::similar_attribute(&name));
 
-                if let Some(previous_span) = previous_attributes.get(&attribute_kind) {
-                    let error = TranslationError::new(
-                        attribute.span(),
-                        TranslationErrorKind::AttributeRedefined,
-                    )
+            return Err(error);
+        };
+
+        if !expected.contains(&attribute_kind) {
+            return Err(TranslationError::new(
+                tag.span(),
+                TranslationErrorKind::AttributeUnexpected(name.clone()),
+            ));
+        }
+
+        if let Some(previous_span) = previous_attributes.get(&attribute_kind) {
+            let error =
+                TranslationError::new(attribute.span(), TranslationErrorKind::AttributeRedefined)
                     .add_label(
                         ComplexErrorLabelKind::Information,
                         previous_span.range(),
                         Info::FirstDefinition,
                     );
 
-                    return Err(error);
-                }
+            return Err(error);
+        }
 
-                let mut terms = Vec::<Term>::new();
+        let mut terms = Vec::<Term>::new();
 
-                let count_expected = attribute_kind.schema().len();
-                let count_found = attribute.content().expressions().count();
-                if count_found != count_expected {
+        let count_expected = attribute_kind.schema().len();
+        let count_found = attribute.content().expressions().count();
+        if count_found != count_expected {
+            return Err(TranslationError::new(
+                attribute.span(),
+                TranslationErrorKind::AttributeInvalidParameterCount {
+                    expected: count_expected,
+                    found: count_found,
+                },
+            ));
+        }
+
+        for (expression, schema) in attribute
+            .content()
+            .expressions()
+            .zip(attribute_kind.schema())
+        {
+            let term = Term::build_component(translation, expression)?;
+
+            if let Some(expected_component) = schema.0 {
+                if term.kind() != expected_component {
                     return Err(TranslationError::new(
-                        attribute.span(),
-                        TranslationErrorKind::AttributeInvalidParameterCount {
-                            expected: count_expected,
-                            found: count_found,
+                        expression.span(),
+                        TranslationErrorKind::AttributeParameterWrongComponent {
+                            expected: expected_component.name().to_string(),
+                            found: term.kind().name().to_string(),
                         },
                     ));
                 }
-
-                for (expression, schema) in attribute
-                    .content()
-                    .expressions()
-                    .zip(attribute_kind.schema())
-                {
-                    let term = self.build_inner_term(expression)?;
-
-                    if let Some(expected_component) = schema.0 {
-                        if term.kind() != expected_component {
-                            return Err(TranslationError::new(
-                                expression.span(),
-                                TranslationErrorKind::AttributeParameterWrongComponent {
-                                    expected: expected_component.name().to_string(),
-                                    found: term.kind().name().to_string(),
-                                },
-                            ));
-                        }
-                    }
-
-                    if let Some(expected_type) = schema.1 {
-                        if term.value_type() != expected_type {
-                            return Err(TranslationError::new(
-                                expression.span(),
-                                TranslationErrorKind::AttributeParameterWrongType {
-                                    expected: expected_type.name().to_string(),
-                                    found: term.value_type().name().to_string(),
-                                },
-                            ));
-                        }
-                    }
-
-                    terms.push(term);
-                }
-
-                result.insert(attribute_kind, terms);
-                previous_attributes.insert(attribute_kind, attribute.span());
-            } else {
-                let mut error = TranslationError::new(
-                    tag.span(),
-                    TranslationErrorKind::AttributeUnknown(name.clone()),
-                );
-                error.add_hint_option(Hint::similar_attribute(&name));
-
-                return Err(error);
             }
+
+            if let Some(expected_type) = schema.1 {
+                if term.value_type() != expected_type {
+                    return Err(TranslationError::new(
+                        expression.span(),
+                        TranslationErrorKind::AttributeParameterWrongType {
+                            expected: expected_type.name().to_string(),
+                            found: term.value_type().name().to_string(),
+                        },
+                    ));
+                }
+            }
+
+            terms.push(term);
         }
 
-        Ok(result)
+        result.insert(attribute_kind, terms);
+        previous_attributes.insert(attribute_kind, attribute.span());
     }
+
+    Ok(result)
 }

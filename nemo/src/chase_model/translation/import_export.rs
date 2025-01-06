@@ -131,13 +131,12 @@ impl ProgramChaseTranslation {
     ) -> Option<DsvValueFormats> {
         let term = attributes.get(&ImportExportAttribute::Format)?;
 
-        if let Term::Tuple(tuple) = term {
-            Some(
+        match term {
+            Term::Tuple(tuple) => Some(
                 DsvValueFormats::from_tuple(tuple)
                     .expect("invalid program: format attributed malformed in dsv import/export"),
-            )
-        } else {
-            unreachable!("invalid program: format attributed malformed in dsv import/export")
+            ),
+            _ => panic!("invalid program: format attributed malformed in dsv import/export"),
         }
     }
 

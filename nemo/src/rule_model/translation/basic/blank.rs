@@ -5,16 +5,27 @@ use nemo_physical::datavalues::AnyDataValue;
 
 use crate::parser::ast;
 
+use crate::rule_model::translation::TranslationComponent;
 use crate::rule_model::{error::TranslationError, translation::ASTProgramTranslation};
 
-impl<'a> ASTProgramTranslation<'a> {
-    /// Create a boolean term from the corresponding AST node.
-    pub(crate) fn build_blank(
-        &mut self,
-        blank: &'a ast::expression::basic::blank::Blank,
-    ) -> Result<AnyDataValue, TranslationError> {
-        let blank_string = format!("{}/{}", self.input_label, blank.name());
+#[derive(Debug, Clone)]
+pub(crate) struct BlankLiteral(AnyDataValue);
 
-        Ok(AnyDataValue::new_iri(blank_string))
+impl BlankLiteral {
+    pub(crate) fn into_inner(self) -> AnyDataValue {
+        self.0
+    }
+}
+
+impl TranslationComponent for BlankLiteral {
+    type Ast<'a> = ast::expression::basic::blank::Blank<'a>;
+
+    fn build_component<'a, 'b>(
+        translation: &mut ASTProgramTranslation<'a, 'b>,
+        blank: &'b Self::Ast<'a>,
+    ) -> Result<Self, TranslationError> {
+        let blank_string = format!("{}/{}", translation.input_label, blank.name());
+
+        Ok(BlankLiteral(AnyDataValue::new_iri(blank_string)))
     }
 }

@@ -22,18 +22,14 @@ use crate::{
         rdf::value_format::RdfValueFormat,
         Direction,
     },
-    parse_component,
-    parser::ast::ProgramAST,
     rule_model::{
         error::{hint::Hint, validation_error::ValidationErrorKind, ValidationErrorBuilder},
         origin::Origin,
         substitution::Substitution,
-        translation::ASTProgramTranslation,
     },
 };
 
 use super::{
-    parse::ComponentParseError,
     tag::Tag,
     term::{map::Map, primitive::Primitive, Term},
     ProgramComponent, ProgramComponentKind,
@@ -284,11 +280,9 @@ impl ImportExportDirective {
                     return Err(());
                 }
             }
-
-            Ok(())
-        } else {
-            unreachable!("value should be of correct type")
         }
+
+        Ok(())
     }
 
     /// Validate the format attribute for dsv
@@ -442,17 +436,6 @@ impl Display for ImportDirective {
 }
 
 impl ProgramComponent for ImportDirective {
-    fn parse(string: &str) -> Result<Self, ComponentParseError>
-    where
-        Self: Sized,
-    {
-        parse_component!(
-            string,
-            crate::parser::ast::directive::import::Import::parse,
-            ASTProgramTranslation::build_import
-        )
-    }
-
     fn origin(&self) -> &Origin {
         &self.0.origin
     }
@@ -537,17 +520,6 @@ impl Display for ExportDirective {
 }
 
 impl ProgramComponent for ExportDirective {
-    fn parse(string: &str) -> Result<Self, ComponentParseError>
-    where
-        Self: Sized,
-    {
-        parse_component!(
-            string,
-            crate::parser::ast::directive::export::Export::parse,
-            ASTProgramTranslation::build_export
-        )
-    }
-
     fn origin(&self) -> &Origin {
         &self.0.origin
     }

@@ -7,8 +7,11 @@ use std::io::BufRead;
 use nemo_physical::datasources::table_providers::TableProvider;
 use reader::JsonReader;
 
-use crate::rule_model::components::import_export::{
-    compression::CompressionFormat, file_formats::FileFormat,
+use crate::{
+    rule_model::components::import_export::{
+        compression::CompressionFormat, file_formats::FileFormat,
+    },
+    syntax::import_export::file_format,
 };
 
 use super::{ImportExportHandler, ImportExportResource, TableWriter};
@@ -25,10 +28,6 @@ impl JsonHandler {
 }
 
 impl ImportExportHandler for JsonHandler {
-    fn file_format(&self) -> FileFormat {
-        FileFormat::JSON
-    }
-
     fn reader(
         &self,
         read: Box<dyn BufRead>,
@@ -48,7 +47,7 @@ impl ImportExportHandler for JsonHandler {
     }
 
     fn file_extension(&self) -> String {
-        self.file_format().extension().to_string()
+        file_format::JSON.to_owned()
     }
 
     fn compression_format(&self) -> CompressionFormat {
@@ -57,5 +56,9 @@ impl ImportExportHandler for JsonHandler {
 
     fn import_export_resource(&self) -> &ImportExportResource {
         &self.resource
+    }
+
+    fn file_format(&self) -> FileFormat {
+        FileFormat::JSON
     }
 }

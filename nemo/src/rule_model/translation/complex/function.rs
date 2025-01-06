@@ -3,25 +3,28 @@
 
 use crate::rule_model::components::tag::Tag;
 use crate::rule_model::components::term::function::FunctionTerm;
+use crate::rule_model::components::term::Term;
+use crate::rule_model::translation::TranslationComponent;
 use crate::{
     parser::ast::{self},
     rule_model::{error::TranslationError, translation::ASTProgramTranslation},
 };
 
-impl<'a> ASTProgramTranslation<'a> {
-    /// Create a function term from the corresponding AST node.
-    pub(crate) fn build_function(
-        &mut self,
-        function: &'a ast::expression::complex::atom::Atom,
-    ) -> Result<FunctionTerm, TranslationError> {
-        let tag = Tag::from(self.resolve_tag(function.tag())?)
-            .set_origin(self.register_node(function.tag()));
+impl TranslationComponent for FunctionTerm {
+    type Ast<'a> = ast::expression::complex::atom::Atom<'a>;
+
+    fn build_component<'a, 'b>(
+        translation: &mut ASTProgramTranslation<'a, 'b>,
+        function: &'b Self::Ast<'a>,
+    ) -> Result<Self, TranslationError> {
+        let tag = Tag::from(translation.resolve_tag(function.tag())?)
+            .set_origin(translation.register_node(function.tag()));
 
         let mut subterms = Vec::new();
         for expression in function.expressions() {
-            subterms.push(self.build_inner_term(expression)?);
+            subterms.push(Term::build_component(translation, expression)?);
         }
 
-        Ok(self.register_component(FunctionTerm::new_tag(tag, subterms), function))
+        Ok(translation.register_component(FunctionTerm::new_tag(tag, subterms), function))
     }
 }

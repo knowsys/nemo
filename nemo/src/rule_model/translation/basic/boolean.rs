@@ -5,19 +5,30 @@ use nemo_physical::datavalues::AnyDataValue;
 
 use crate::parser::ast;
 
+use crate::rule_model::translation::TranslationComponent;
 use crate::rule_model::{error::TranslationError, translation::ASTProgramTranslation};
 
-impl<'a> ASTProgramTranslation<'a> {
-    /// Create a boolean term from the corresponding AST node.
-    pub(crate) fn build_boolean(
-        &mut self,
-        boolean: &'a ast::expression::basic::boolean::Boolean,
-    ) -> Result<AnyDataValue, TranslationError> {
+#[derive(Debug, Clone)]
+pub(crate) struct BooleanLiteral(AnyDataValue);
+
+impl BooleanLiteral {
+    pub(crate) fn into_inner(self) -> AnyDataValue {
+        self.0
+    }
+}
+
+impl TranslationComponent for BooleanLiteral {
+    type Ast<'a> = ast::expression::basic::boolean::Boolean<'a>;
+
+    fn build_component<'a, 'b>(
+        _translation: &mut ASTProgramTranslation<'a, 'b>,
+        boolean: &'b Self::Ast<'a>,
+    ) -> Result<Self, TranslationError> {
         let truth = match boolean.value() {
             ast::expression::basic::boolean::BooleanValue::False => false,
             ast::expression::basic::boolean::BooleanValue::True => true,
         };
 
-        Ok(AnyDataValue::new_boolean(truth))
+        Ok(BooleanLiteral(AnyDataValue::new_boolean(truth)))
     }
 }

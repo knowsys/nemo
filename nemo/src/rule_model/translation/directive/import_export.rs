@@ -5,10 +5,7 @@ use std::path::Path;
 use strum::IntoEnumIterator;
 
 use crate::{
-    parser::{
-        ast::{self, ProgramAST},
-        span::Span,
-    },
+    parser::ast::{self, ProgramAST},
     rule_model::{
         components::{
             import_export::{
@@ -17,198 +14,218 @@ use crate::{
                 ExportDirective, ImportDirective,
             },
             tag::Tag,
+            term::{map::Map, primitive::Primitive},
             IterablePrimitives, ProgramComponent,
         },
         error::{translation_error::TranslationErrorKind, TranslationError},
         substitution::Substitution,
-        translation::ASTProgramTranslation,
+        translation::{
+            complex::infix::InfixOperation, ASTProgramTranslation, TranslationComponent,
+        },
     },
     syntax::import_export::file_format::RDF_UNSPECIFIED,
 };
 
-impl<'a> ASTProgramTranslation<'a> {
-    /// Find the extension given for this import/export statement.
-    fn import_export_extension(
-        map: &'a ast::expression::complex::map::Map,
-    ) -> Option<(String, &'a ast::expression::Expression<'a>)> {
-        for (key, value) in map.key_value() {
-            if let ast::expression::Expression::Constant(constant) = key {
-                if &constant.tag().to_string() == "resource" {
-                    if let ast::expression::Expression::String(string) = value {
-                        let (_, path) = CompressionFormat::from_resource(&string.content());
+fn import_export_extension<'a, 'b>(
+    map: &'b ast::expression::complex::map::Map<'a>,
+) -> Option<(String, &'b ast::expression::Expression<'a>)> {
+    for (key, value) in map.key_value() {
+        let ast::expression::Expression::Constant(constant) = key else {
+            continue;
+        };
 
-                        return Some((
-                            Path::new(&path)
-                                .extension()?
-                                .to_owned()
-                                .into_string()
-                                .ok()?,
-                            value,
-                        ));
-                    }
-                }
-            }
+        if &constant.tag().to_string() != "resource" {
+            continue;
         }
 
-        None
+        let ast::expression::Expression::String(literal) = value else {
+            continue;
+        };
+
+        let (_, path) = CompressionFormat::from_resource(&literal.content());
+
+        return Some((
+            Path::new(&path)
+                .extension()?
+                .to_owned()
+                .into_string()
+                .ok()?,
+            value,
+        ));
     }
 
-    /// Find the [FileFormat] associated in the given import/export map.
-    fn import_export_format(
-        &self,
-        map: &'a ast::expression::complex::map::Map,
-    ) -> Result<FileFormat, TranslationError> {
-        if let Some(structure_tag) = map.tag() {
-            let format_tag = structure_tag.to_string();
+    None
+}
 
-            if format_tag.to_ascii_lowercase() == RDF_UNSPECIFIED {
-                let extension = Self::import_export_extension(map);
+/// Find the [FileFormat] associated in the given import/export map.
+fn import_export_format<'a, 'b>(
+    map: &'b ast::expression::complex::map::Map<'a>,
+) -> Result<FileFormat, TranslationError> {
+    let Some(structure_tag) = map.tag() else {
+        return Err(TranslationError::new(
+            map.span().beginning(),
+            TranslationErrorKind::FileFormatMissing,
+        ));
+    };
 
-                if let Some((extension, origin)) = extension {
-                    for &rdf_format in FILE_FORMATS_RDF {
-                        if extension.eq_ignore_ascii_case(rdf_format.extension()) {
-                            return Ok(rdf_format);
-                        }
-                    }
+    let format_tag = structure_tag.to_string();
 
-                    Err(TranslationError::new(
-                        origin.span(),
-                        TranslationErrorKind::RdfUnspecifiedUnknownExtension(extension),
-                    ))
-                } else {
-                    Err(TranslationError::new(
-                        map.span().beginning(),
-                        TranslationErrorKind::RdfUnspecifiedMissingExtension,
-                    ))
-                }
-            } else {
-                for format in FileFormat::iter() {
-                    if format_tag.eq_ignore_ascii_case(format.name()) {
-                        return Ok(format);
-                    }
-                }
+    if format_tag.to_ascii_lowercase() == RDF_UNSPECIFIED {
+        let extension = import_export_extension(map);
 
-                Err(TranslationError::new(
-                    structure_tag.span(),
-                    TranslationErrorKind::FileFormatUnknown(structure_tag.to_string()),
-                ))
-            }
-        } else {
-            Err(TranslationError::new(
+        let Some((extension, origin)) = extension else {
+            return Err(TranslationError::new(
                 map.span().beginning(),
-                TranslationErrorKind::FileFormatMissing,
-            ))
-        }
-    }
+                TranslationErrorKind::RdfUnspecifiedMissingExtension,
+            ));
+        };
 
-    fn import_export_bindings(
-        &mut self,
-        guards: &'a Option<ast::sequence::Sequence<'a, ast::guard::Guard<'a>>>,
-        span: Span,
-    ) -> Result<Substitution, TranslationError> {
-        let mut result = Vec::new();
-
-        if let Some(guards) = guards {
-            for guard in guards {
-                if let ast::guard::Guard::Infix(infix) = guard {
-                    let operation = self.build_infix(infix)?;
-
-                    if let Some((left, right)) = operation.variable_assignment() {
-                        let right = right.reduce();
-                        let terms = right.primitive_terms().collect::<Vec<_>>();
-
-                        if !right.is_ground() || terms.len() != 1 {
-                            return Err(TranslationError::new(
-                                span,
-                                TranslationErrorKind::NonGroundTerm {
-                                    found: right.kind().name().to_string(),
-                                },
-                            ));
-                        }
-
-                        result.push((
-                            left.clone(),
-                            (*terms.first().expect("is not empty")).clone(),
-                        ));
-                    } else {
-                        return Err(TranslationError::new(
-                            span,
-                            TranslationErrorKind::NonAssignment {
-                                found: operation.operation_kind().to_string(),
-                            },
-                        ));
-                    }
-                } else {
-                    return Err(TranslationError::new(
-                        span,
-                        TranslationErrorKind::NonAssignment {
-                            found: "expression".to_string(),
-                        },
-                    ));
-                }
+        for &rdf_format in FILE_FORMATS_RDF {
+            if extension.eq_ignore_ascii_case(rdf_format.extension()) {
+                return Ok(rdf_format);
             }
         }
 
-        Ok(Substitution::new(result))
+        Err(TranslationError::new(
+            origin.span(),
+            TranslationErrorKind::RdfUnspecifiedUnknownExtension(extension),
+        ))
+    } else {
+        for format in FileFormat::iter() {
+            if format_tag.eq_ignore_ascii_case(format.name()) {
+                return Ok(format);
+            }
+        }
+
+        Err(TranslationError::new(
+            structure_tag.span(),
+            TranslationErrorKind::FileFormatUnknown(structure_tag.to_string()),
+        ))
+    }
+}
+
+/// Handle a import ast node.
+pub fn handle_import<'a, 'b>(
+    translation: &mut ASTProgramTranslation<'a, 'b>,
+    import: &'b ast::directive::import::Import<'a>,
+) -> Result<(), TranslationError> {
+    let import_directive = ImportDirective::build_component(translation, import)?;
+    let _ = import_directive.validate(&mut translation.validation_error_builder);
+
+    translation.program_builder.add_import(import_directive);
+
+    Ok(())
+}
+
+/// Handle a export ast node.
+pub fn handle_export<'a, 'b>(
+    translation: &mut ASTProgramTranslation<'a, 'b>,
+    export: &'b ast::directive::export::Export<'a>,
+) -> Result<(), TranslationError> {
+    let export_directive = ExportDirective::build_component(translation, export)?;
+    let _ = export_directive.validate(&mut translation.validation_error_builder);
+
+    translation.program_builder.add_export(export_directive);
+
+    Ok(())
+}
+
+fn process_import_export_substitution<'a, 'b>(
+    translation: &mut ASTProgramTranslation<'a, 'b>,
+    guards: impl Iterator<Item = &'b ast::guard::Guard<'a>>,
+) -> Result<Substitution, TranslationError> {
+    let mut result = Vec::new();
+
+    for guard in guards {
+        let ast::guard::Guard::Infix(infix) = guard else {
+            return Err(TranslationError::new(
+                guard.span(),
+                TranslationErrorKind::NonAssignment {
+                    found: "expression".to_string(),
+                },
+            ));
+        };
+
+        let operation = InfixOperation::build_component(translation, &infix)?.into_inner();
+
+        let Some((left, right)) = operation.variable_assignment() else {
+            return Err(TranslationError::new(
+                guard.span(),
+                TranslationErrorKind::NonAssignment {
+                    found: operation.operation_kind().to_string(),
+                },
+            ));
+        };
+
+        let right = right.reduce();
+        let terms = right.primitive_terms().collect::<Vec<_>>();
+
+        if !right.is_ground() || terms.len() != 1 {
+            return Err(TranslationError::new(
+                infix.pair().1.span(),
+                TranslationErrorKind::NonGroundTerm {
+                    found: right.kind().name().to_string(),
+                },
+            ));
+        }
+
+        result.push((
+            left.clone(),
+            (*terms.first().expect("is not empty")).clone(),
+        ));
     }
 
-    /// Given a [ast::directive::import::Import], build an [ImportDirective].
-    pub fn build_import(
-        &mut self,
-        import: &'a ast::directive::import::Import,
-    ) -> Result<ImportDirective, TranslationError> {
-        let predicate = Tag::new(self.resolve_tag(import.predicate())?)
-            .set_origin(self.register_node(import.predicate()));
-        let attributes = self.build_map(import.instructions())?;
-        let file_format = self.import_export_format(import.instructions())?;
-        let bindings = self.import_export_bindings(import.guards(), import.span())?;
+    Ok(Substitution::new(result))
+}
 
-        Ok(self.register_component(
-            ImportDirective::new(predicate, file_format, attributes, bindings),
+impl TranslationComponent for ImportDirective {
+    type Ast<'a> = ast::directive::import::Import<'a>;
+
+    fn build_component<'a, 'b>(
+        translation: &mut ASTProgramTranslation<'a, 'b>,
+        import: &'b Self::Ast<'a>,
+    ) -> Result<Self, TranslationError> {
+        let predicate = Tag::new(translation.resolve_tag(import.predicate())?)
+            .set_origin(translation.register_node(import.predicate()));
+        let attributes = Map::build_component(translation, import.instructions())?;
+        let file_format = import_export_format(import.instructions())?;
+
+        let substitution = if let Some(guards) = import.guards() {
+            process_import_export_substitution(translation, guards.iter())?
+        } else {
+            let iter: [(Primitive, Primitive); 0] = [];
+            Substitution::new(iter)
+        };
+
+        Ok(translation.register_component(
+            ImportDirective::new(predicate, file_format, attributes, substitution),
             import,
         ))
     }
+}
 
-    /// Handle a import ast node.
-    pub fn handle_import(
-        &mut self,
-        import: &'a ast::directive::import::Import,
-    ) -> Result<(), TranslationError> {
-        let import_directive = self.build_import(import)?;
-        let _ = import_directive.validate(&mut self.validation_error_builder);
+impl TranslationComponent for ExportDirective {
+    type Ast<'a> = ast::directive::export::Export<'a>;
 
-        self.program_builder.add_import(import_directive);
+    fn build_component<'a, 'b>(
+        translation: &mut ASTProgramTranslation<'a, 'b>,
+        export: &'b Self::Ast<'a>,
+    ) -> Result<Self, TranslationError> {
+        let predicate = Tag::new(translation.resolve_tag(export.predicate())?)
+            .set_origin(translation.register_node(export.predicate()));
+        let attributes = Map::build_component(translation, export.instructions())?;
+        let file_format = import_export_format(export.instructions())?;
 
-        Ok(())
-    }
+        let substitution = if let Some(guards) = export.guards() {
+            process_import_export_substitution(translation, guards.iter())?
+        } else {
+            let iter: [(Primitive, Primitive); 0] = [];
+            Substitution::new(iter)
+        };
 
-    /// Given a [ast::directive::export::Export], builds a [ExportDirective].
-    pub fn build_export(
-        &mut self,
-        export: &'a ast::directive::export::Export,
-    ) -> Result<ExportDirective, TranslationError> {
-        let predicate = Tag::new(self.resolve_tag(export.predicate())?)
-            .set_origin(self.register_node(export.predicate()));
-        let attributes = self.build_map(export.instructions())?;
-        let file_format = self.import_export_format(export.instructions())?;
-        let bindings = self.import_export_bindings(export.guards(), export.span())?;
-
-        Ok(self.register_component(
-            ExportDirective::new(predicate, file_format, attributes, bindings),
+        Ok(translation.register_component(
+            ExportDirective::new(predicate, file_format, attributes, substitution),
             export,
         ))
-    }
-
-    /// Handle a export ast node.
-    pub fn handle_export(
-        &mut self,
-        export: &'a ast::directive::export::Export,
-    ) -> Result<(), TranslationError> {
-        let export_directive = self.build_export(export)?;
-        let _ = export_directive.validate(&mut self.validation_error_builder);
-
-        self.program_builder.add_export(export_directive);
-
-        Ok(())
     }
 }

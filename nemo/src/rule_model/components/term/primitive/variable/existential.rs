@@ -2,18 +2,13 @@
 
 use std::{fmt::Display, hash::Hash};
 
-use crate::{
-    parse_component,
-    parser::ast::ProgramAST,
-    rule_model::{
-        components::{parse::ComponentParseError, ProgramComponent, ProgramComponentKind},
-        error::{validation_error::ValidationErrorKind, ValidationErrorBuilder},
-        origin::Origin,
-        translation::ASTProgramTranslation,
-    },
+use crate::rule_model::{
+    components::{ProgramComponent, ProgramComponentKind},
+    error::{validation_error::ValidationErrorKind, ValidationErrorBuilder},
+    origin::Origin,
 };
 
-use super::{Variable, VariableName};
+use super::VariableName;
 
 /// Existentially quantified variable
 ///
@@ -72,23 +67,6 @@ impl Hash for ExistentialVariable {
 }
 
 impl ProgramComponent for ExistentialVariable {
-    fn parse(string: &str) -> Result<Self, ComponentParseError>
-    where
-        Self: Sized,
-    {
-        let variable = parse_component!(
-            string,
-            crate::parser::ast::expression::basic::variable::Variable::parse,
-            ASTProgramTranslation::build_variable
-        )?;
-
-        if let Variable::Existential(existential) = variable {
-            return Ok(existential);
-        }
-
-        Err(ComponentParseError::ParseError)
-    }
-
     fn origin(&self) -> &Origin {
         &self.origin
     }
