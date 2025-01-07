@@ -58,7 +58,7 @@ impl<'a> Boolean<'a> {
 const CONTEXT: ParserContext = ParserContext::Boolean;
 
 impl<'a> ProgramAST<'a> for Boolean<'a> {
-    fn children(&self) -> Vec<&dyn ProgramAST> {
+    fn children(&self) -> Vec<&dyn ProgramAST<'a>> {
         Vec::default()
     }
 

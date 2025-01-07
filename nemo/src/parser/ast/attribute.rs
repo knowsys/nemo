@@ -31,7 +31,7 @@ impl<'a> Attribute<'a> {
 const CONTEXT: ParserContext = ParserContext::Attribute;
 
 impl<'a> ProgramAST<'a> for Attribute<'a> {
-    fn children(&self) -> Vec<&dyn ProgramAST> {
+    fn children(&self) -> Vec<&dyn ProgramAST<'a>> {
         vec![self.content()]
     }
 

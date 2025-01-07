@@ -47,7 +47,7 @@ impl<'a> Map<'a> {
 const CONTEXT: ParserContext = ParserContext::Map;
 
 impl<'a> ProgramAST<'a> for Map<'a> {
-    fn children(&self) -> Vec<&dyn ProgramAST> {
+    fn children(&self) -> Vec<&dyn ProgramAST<'a>> {
         let mut result: Vec<&dyn ProgramAST> = vec![];
 
         if let Some(tag) = &self.tag {

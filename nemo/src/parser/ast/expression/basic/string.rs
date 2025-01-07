@@ -63,7 +63,7 @@ impl<'a> StringLiteral<'a> {
 const CONTEXT: ParserContext = ParserContext::String;
 
 impl<'a> ProgramAST<'a> for StringLiteral<'a> {
-    fn children(&self) -> Vec<&dyn ProgramAST> {
+    fn children(&self) -> Vec<&dyn ProgramAST<'a>> {
         Vec::default()
     }
 

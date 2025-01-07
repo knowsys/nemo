@@ -60,7 +60,7 @@ impl<'a> Declare<'a> {
 const CONTEXT: ParserContext = ParserContext::Declare;
 
 impl<'a> ProgramAST<'a> for Declare<'a> {
-    fn children(&self) -> Vec<&dyn ProgramAST> {
+    fn children(&self) -> Vec<&dyn ProgramAST<'a>> {
         let mut result = Vec::<&dyn ProgramAST>::new();
         result.push(&self.predicate);
 

@@ -36,7 +36,7 @@ impl OperationTag<'_> {
 const CONTEXT: ParserContext = ParserContext::OperationTag;
 
 impl<'a> ProgramAST<'a> for OperationTag<'a> {
-    fn children(&self) -> Vec<&dyn ProgramAST> {
+    fn children(&self) -> Vec<&dyn ProgramAST<'a>> {
         Vec::default()
     }
 

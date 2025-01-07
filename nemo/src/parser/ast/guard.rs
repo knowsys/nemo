@@ -31,7 +31,7 @@ impl Guard<'_> {
 const CONTEXT: ParserContext = ParserContext::Guard;
 
 impl<'a> ProgramAST<'a> for Guard<'a> {
-    fn children(&'a self) -> Vec<&'a dyn ProgramAST<'a>> {
+    fn children(&self) -> Vec<&dyn ProgramAST<'a>> {
         match self {
             Guard::Expression(expression) => expression.children(),
             Guard::Infix(infix) => infix.children(),

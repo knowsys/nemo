@@ -92,7 +92,7 @@ impl<'a> InfixExpression<'a> {
 const CONTEXT: ParserContext = ParserContext::Infix;
 
 impl<'a> ProgramAST<'a> for InfixExpression<'a> {
-    fn children(&self) -> Vec<&dyn ProgramAST> {
+    fn children(&self) -> Vec<&dyn ProgramAST<'a>> {
         vec![&*self.left, &*self.right]
     }
 

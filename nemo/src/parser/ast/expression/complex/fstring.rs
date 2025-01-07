@@ -66,7 +66,7 @@ impl<'a> FormatString<'a> {
 const CONTEXT: ParserContext = ParserContext::FormatString;
 
 impl<'a> ProgramAST<'a> for FormatString<'a> {
-    fn children(&self) -> Vec<&dyn ProgramAST> {
+    fn children(&self) -> Vec<&dyn ProgramAST<'a>> {
         let mut result = Vec::<&dyn ProgramAST>::new();
 
         for element in &self.elements {

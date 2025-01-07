@@ -98,7 +98,7 @@ impl<'a, T: ProgramAST<'a> + 'a> Sequence<'a, T> {
 }
 
 impl<'a, T: std::fmt::Debug + Sync + ProgramAST<'a>> ProgramAST<'a> for Sequence<'a, T> {
-    fn children(&'a self) -> Vec<&'a dyn ProgramAST<'a>> {
+    fn children(&self) -> Vec<&dyn ProgramAST<'a>> {
         let mut vec: Vec<&dyn ProgramAST> = Vec::new();
         for elem in &self.elements {
             vec.push(elem);

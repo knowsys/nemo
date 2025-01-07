@@ -35,7 +35,7 @@ impl LineComment<'_> {
 }
 
 impl<'a> ProgramAST<'a> for LineComment<'a> {
-    fn children(&self) -> Vec<&dyn ProgramAST> {
+    fn children(&self) -> Vec<&dyn ProgramAST<'a>> {
         Vec::default()
     }
 
