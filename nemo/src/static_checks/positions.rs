@@ -1,14 +1,18 @@
-use crate::rule_model::components::{tag::Tag, term::primitive::variable::Variable};
-use crate::static_checks::collection_traits::{Disjoint, InsertAll, RemoveAll, Superset};
-use crate::static_checks::positions::positions_internal::{
-    AffectedPositionsBuilderInternal, AttackedPositionsBuilderInternal,
-    MarkedPositionsBuilderInternal,
+use crate::rule_model::components::{
+    atom::Atom, rule::Rule, tag::Tag, term::primitive::variable::Variable,
 };
-use crate::static_checks::rule_set::RuleSet;
+use crate::static_checks::acyclicity_graph_constructor::AcyclicityGraphConstructor;
+use crate::static_checks::acyclicity_graphs::{
+    InfiniteRankPositions, JointlyAcyclicityGraph, JointlyAcyclicityGraphCycle,
+    WeaklyAcyclicityGraph,
+};
+use crate::static_checks::collection_traits::{Disjoint, InsertAll, RemoveAll, Superset};
+use crate::static_checks::rule_set::{
+    AtomPositionsAppearance, AtomRefs, Attacked, ExistentialVariables,
+    ExistentialVariablesPositions, JoinVariables, RulePositions, RuleRefs, RuleSet, Variables,
+};
 
 use std::collections::{HashMap, HashSet};
-
-mod positions_internal;
 
 pub type Index = usize;
 
@@ -48,27 +52,96 @@ impl<'a> FromPositions<'a> for ExtendedPositions<'a> {
     }
 }
 
-pub trait AffectedPositionsBuilder<'a>: AffectedPositionsBuilderInternal<'a> {
+pub trait AffectedPositionsBuilder<'a> {
     fn build_positions(rule_set: &'a RuleSet) -> Self;
 }
 
 impl<'a> AffectedPositionsBuilder<'a> for Positions<'a> {
     fn build_positions(rule_set: &'a RuleSet) -> Positions<'a> {
-        Positions::build_positions_internal(rule_set)
+        let mut affected_positions: Positions<'a> = Positions::initial_affected_positions(rule_set);
+        let mut new_found_affected_positions: Positions<'a> = affected_positions.clone();
+        while !new_found_affected_positions.is_empty() {
+            new_found_affected_positions = Positions::new_affected_positions(
+                rule_set,
+                new_found_affected_positions,
+                &affected_positions,
+            );
+            affected_positions.insert_all(&new_found_affected_positions);
+        }
+        affected_positions
     }
 }
 
-pub trait MarkedPositionsBuilder<'a>: MarkedPositionsBuilderInternal<'a> {
-    fn build_positions(mar_type: MarkingType, rule_set: &'a RuleSet) -> Self;
+trait AffectedPositionsBuilderPrivate<'a> {
+    fn conclude_affected_positions(
+        rule_set: &'a RuleSet,
+        last_iteration_positions: Positions<'a>,
+    ) -> Positions<'a>;
+    fn initial_affected_positions(rule_set: &'a RuleSet) -> Positions<'a>;
+    fn new_affected_positions(
+        rule_set: &'a RuleSet,
+        last_iteration_positions: Positions<'a>,
+        currently_affected_positions: &Positions<'a>,
+    ) -> Positions<'a>;
 }
 
-impl<'a> MarkedPositionsBuilder<'a> for Option<Positions<'a>> {
-    fn build_positions(mar_type: MarkingType, rule_set: &'a RuleSet) -> Option<Positions<'a>> {
-        Option::<Positions>::build_positions_internal(mar_type, rule_set)
+impl<'a> AffectedPositionsBuilderPrivate<'a> for Positions<'a> {
+    fn initial_affected_positions(rule_set: &'a RuleSet) -> Positions<'a> {
+        rule_set
+            .iter()
+            .fold(Positions::new(), |initial_affected_positions, rule| {
+                let pos_of_ex_vars: Positions = rule.positions_of_existential_variables();
+                initial_affected_positions.insert_all_take_ret(pos_of_ex_vars)
+            })
+    }
+
+    fn conclude_affected_positions(
+        rule_set: &'a RuleSet,
+        last_iteration_positions: Positions<'a>,
+    ) -> Positions<'a> {
+        rule_set
+            .iter()
+            .fold(Positions::new(), |new_found_affected_positions, rule| {
+                let new_aff_pos_in_rule: Positions =
+                    rule.conclude_affected_positions(&last_iteration_positions);
+                new_found_affected_positions.insert_all_take_ret(new_aff_pos_in_rule)
+            })
+    }
+
+    fn new_affected_positions(
+        rule_set: &'a RuleSet,
+        last_iteration_positions: Positions<'a>,
+        currently_positions: &Positions<'a>,
+    ) -> Positions<'a> {
+        let new_found_affected_positions: Positions<'a> =
+            Positions::conclude_affected_positions(rule_set, last_iteration_positions);
+        new_found_affected_positions.remove_all_ret(currently_positions)
     }
 }
 
-pub trait AttackedPositionsBuilder<'a>: AttackedPositionsBuilderInternal<'a> {
+trait AffectedPositionsBuilderRulePrivate {
+    fn conclude_affected_positions(&self, last_iteration_positions: &Positions) -> Positions;
+}
+
+impl AffectedPositionsBuilderRulePrivate for Rule {
+    fn conclude_affected_positions(&self, last_iteration_positions: &Positions) -> Positions {
+        self.positive_variables()
+            .iter()
+            .filter(|var| {
+                let positive_body_atoms: Vec<&Atom> = self.body_positive_refs();
+                var.appears_at_some_positions_in_atoms(
+                    last_iteration_positions,
+                    &positive_body_atoms,
+                )
+            })
+            .fold(Positions::new(), |new_aff_pos_in_rule, var| {
+                let pos_of_var_in_head: Positions = var.positions_in_head(self);
+                new_aff_pos_in_rule.insert_all_take_ret(pos_of_var_in_head)
+            })
+    }
+}
+
+pub trait AttackedPositionsBuilder<'a> {
     fn build_positions(att_type: AttackingType, rule_set: &'a RuleSet) -> Self;
 }
 
@@ -77,7 +150,278 @@ impl<'a> AttackedPositionsBuilder<'a> for PositionsByVariables<'a, 'a> {
         att_type: AttackingType,
         rule_set: &'a RuleSet,
     ) -> PositionsByVariables<'a, 'a> {
-        PositionsByVariables::build_positions_internal(att_type, rule_set)
+        let att_variables: Variables =
+            PositionsByVariables::match_attacking_variables(att_type, rule_set);
+        att_variables
+            .iter()
+            .map(|var| {
+                (
+                    *var,
+                    PositionsByVariables::attacked_positions_by_var(rule_set, var),
+                )
+            })
+            .collect::<PositionsByVariables<'a, 'a>>()
+    }
+}
+
+trait AttackedPositionsBuilderPrivate<'a> {
+    fn attacked_positions_by_var(rule_set: &'a RuleSet, variable: &'a Variable) -> Positions<'a>;
+    fn conclude_positions(
+        rule_set: &'a RuleSet,
+        currently_attacked_positions: &Positions<'a>,
+    ) -> Positions<'a>;
+    fn initial_positions(rule_set: &'a RuleSet, variable: &'a Variable) -> Positions<'a>;
+    fn match_attacking_variables(att_type: AttackingType, rule_set: &RuleSet) -> Variables;
+    fn new_positions(rule_set: &'a RuleSet, current_positions: &Positions<'a>) -> Positions<'a>;
+}
+
+trait AttackedPositionsBuilderRulePrivate {
+    fn conclude_attacked_positions(&self, currently_attacked_positions: &Positions) -> Positions;
+}
+
+impl AttackedPositionsBuilderRulePrivate for Rule {
+    fn conclude_attacked_positions(&self, currently_attacked_positions: &Positions) -> Positions {
+        self.positive_variables()
+            .iter()
+            .filter(|var| var.is_attacked_by_positions_in_rule(self, currently_attacked_positions))
+            .fold(Positions::new(), |new_att_pos_in_rule, var| {
+                let pos_of_var_in_head: Positions = var.positions_in_head(self);
+                new_att_pos_in_rule.insert_all_take_ret(pos_of_var_in_head)
+            })
+    }
+}
+
+impl<'a> AttackedPositionsBuilderPrivate<'a> for PositionsByVariables<'a, 'a> {
+    fn attacked_positions_by_var(rule_set: &'a RuleSet, variable: &'a Variable) -> Positions<'a> {
+        // let mut attacked_positions: Positions =
+        //     self.initial_attacked_positions(variable , rule);
+        let mut attacked_positions: Positions =
+            PositionsByVariables::initial_positions(rule_set, variable);
+        let mut new_found_attacked_positions: Positions = attacked_positions.clone();
+        while !new_found_attacked_positions.is_empty() {
+            new_found_attacked_positions =
+                PositionsByVariables::new_positions(rule_set, &attacked_positions);
+            attacked_positions.insert_all(&new_found_attacked_positions);
+        }
+        attacked_positions
+    }
+
+    fn conclude_positions(
+        rule_set: &'a RuleSet,
+        current_positions: &Positions<'a>,
+    ) -> Positions<'a> {
+        rule_set
+            .iter()
+            .fold(Positions::new(), |new_found_attacked_positions, rule| {
+                let new_att_pos_in_rule: Positions =
+                    rule.conclude_attacked_positions(current_positions);
+                new_found_attacked_positions.insert_all_take_ret(new_att_pos_in_rule)
+            })
+    }
+
+    fn initial_positions(rule_set: &'a RuleSet, variable: &'a Variable) -> Positions<'a> {
+        rule_set.iter().fold(Positions::new(), |initial_pos, rule| {
+            let initial_pos_of_rule: Positions = variable.positions_in_head(rule);
+            initial_pos.insert_all_take_ret(initial_pos_of_rule)
+        })
+    }
+
+    fn match_attacking_variables(att_type: AttackingType, rule_set: &RuleSet) -> Variables {
+        match att_type {
+            AttackingType::Cycle => {
+                let jo_ac_graph: JointlyAcyclicityGraph = rule_set.jointly_acyclicity_graph();
+                jo_ac_graph.variables_in_cycles()
+            }
+            AttackingType::Existential => rule_set.existential_variables(),
+        }
+    }
+
+    fn new_positions(
+        rule_set: &'a RuleSet,
+        currently_attacked_postions: &Positions<'a>,
+    ) -> Positions<'a> {
+        let new_found_attacked_positions: Positions =
+            PositionsByVariables::conclude_positions(rule_set, currently_attacked_postions);
+        new_found_attacked_positions.remove_all_ret(currently_attacked_postions)
+    }
+}
+
+pub trait MarkedPositionsBuilder<'a> {
+    fn build_positions(mar_type: MarkingType, rule_set: &'a RuleSet) -> Self;
+}
+
+impl<'a> MarkedPositionsBuilder<'a> for Option<Positions<'a>> {
+    fn build_positions(mar_type: MarkingType, rule_set: &'a RuleSet) -> Option<Positions<'a>> {
+        let mut marking: Positions =
+            Option::<Positions>::match_initial_marked_positions(mar_type, rule_set)?;
+        let mut new_found_marked_positions: Positions = marking.clone();
+        while !new_found_marked_positions.is_empty() {
+            new_found_marked_positions = Option::<Positions>::new_marked_positions(
+                rule_set,
+                new_found_marked_positions,
+                &marking,
+            )?;
+            marking.insert_all(&new_found_marked_positions);
+        }
+        Some(marking)
+    }
+}
+
+trait MarkedPositionsBuilderPrivate<'a> {
+    fn conclude_marked_positions(
+        rule_set: &'a RuleSet,
+        last_iteration_positions: Positions<'a>,
+    ) -> Option<Positions<'a>>;
+    fn initial_marked_positions(rule_set: &'a RuleSet) -> Option<Positions<'a>>;
+    fn initial_weakly_marked_positions(rule_set: &'a RuleSet) -> Option<Positions<'a>>;
+    fn match_initial_marked_positions(
+        mar_type: MarkingType,
+        rule_set: &'a RuleSet,
+    ) -> Option<Positions<'a>>;
+    fn new_marked_positions(
+        rule_set: &'a RuleSet,
+        last_iteration_positions: Positions<'a>,
+        currently_affected_positions: &Positions<'a>,
+    ) -> Option<Positions<'a>>;
+}
+
+impl<'a> MarkedPositionsBuilderPrivate<'a> for Option<Positions<'a>> {
+    fn conclude_marked_positions(
+        rule_set: &'a RuleSet,
+        last_iteration_positions: Positions<'a>,
+    ) -> Option<Positions<'a>> {
+        rule_set
+            .iter()
+            .try_fold(Positions::new(), |new_found_marked_positions, rule| {
+                let new_mar_pos_in_rule: Positions =
+                    rule.conclude_marked_positions(&last_iteration_positions)?;
+                Some(new_found_marked_positions.insert_all_take_ret(new_mar_pos_in_rule))
+            })
+    }
+
+    fn initial_marked_positions(rule_set: &'a RuleSet) -> Option<Positions<'a>> {
+        // rule_set
+        //     .iter()
+        //     .fold(Positions::new(), |initial_marked_positions, rule| {
+        //         let pos_of_join_vars: Positions = rule.positions_of_join_variables();
+        //         initial_marked_positions.insert_all_take_ret(pos_of_join_vars)
+        //     })
+        rule_set
+            .iter()
+            .try_fold(Positions::new(), |init_mar_pos, rule| {
+                let init_mar_pos_of_rule: Positions = rule.initial_marked_positions()?;
+                Some(init_mar_pos.insert_all_take_ret(init_mar_pos_of_rule))
+            })
+    }
+
+    fn initial_weakly_marked_positions(rule_set: &'a RuleSet) -> Option<Positions<'a>> {
+        let we_ac_graph: WeaklyAcyclicityGraph = rule_set.weakly_acyclicity_graph();
+        let infinite_rank_positions: Positions = we_ac_graph.infinite_rank_positions();
+        rule_set
+            .iter()
+            .try_fold(Positions::new(), |init_we_mar_pos, rule| {
+                let init_we_mar_pos_of_rule: Positions =
+                    rule.initial_weakly_marked_positions(&infinite_rank_positions)?;
+                Some(init_we_mar_pos.insert_all_take_ret(init_we_mar_pos_of_rule))
+            })
+    }
+
+    fn match_initial_marked_positions(
+        mar_type: MarkingType,
+        rule_set: &'a RuleSet,
+    ) -> Option<Positions<'a>> {
+        match mar_type {
+            MarkingType::Common => Option::<Positions>::initial_marked_positions(rule_set),
+            MarkingType::Weakly => Option::<Positions>::initial_weakly_marked_positions(rule_set),
+        }
+    }
+
+    fn new_marked_positions(
+        rule_set: &'a RuleSet,
+        last_iteration_positions: Positions<'a>,
+        current_positions: &Positions<'a>,
+    ) -> Option<Positions<'a>> {
+        let new_found_marked_positions: Positions =
+            Option::<Positions>::conclude_marked_positions(rule_set, last_iteration_positions)?;
+        Some(new_found_marked_positions.remove_all_ret(current_positions))
+    }
+}
+
+trait RuleMarkedPositionsBuilderPrivate {
+    fn conclude_marked_positions(&self, last_iteration_positions: &Positions) -> Option<Positions>;
+    fn initial_marked_positions(&self) -> Option<Positions>;
+    fn initial_weakly_marked_positions(
+        &self,
+        infinite_rank_positions: &Positions,
+    ) -> Option<Positions>;
+}
+
+impl RuleMarkedPositionsBuilderPrivate for Rule {
+    fn conclude_marked_positions(&self, last_iteration_positions: &Positions) -> Option<Positions> {
+        self.positive_variables()
+            .iter()
+            .filter(|var| {
+                let positive_body_atoms: Vec<&Atom> = self.body_positive_refs();
+                var.appears_at_some_positions_in_atoms(
+                    last_iteration_positions,
+                    &positive_body_atoms,
+                )
+            })
+            .try_fold(Positions::new(), |new_mar_pos_in_rule, var| {
+                if self
+                    .head()
+                    .iter()
+                    .any(|atom| !atom.variables_refs().contains(var))
+                {
+                    return None;
+                }
+                let pos_of_var_in_head: Positions = var.positions_in_head(self);
+                Some(new_mar_pos_in_rule.insert_all_take_ret(pos_of_var_in_head))
+            })
+    }
+
+    fn initial_marked_positions(&self) -> Option<Positions> {
+        let join_vars: Variables = self.join_variables();
+        join_vars
+            .iter()
+            .try_fold(Positions::new(), |new_mar_pos_in_rule, var| {
+                if self
+                    .head()
+                    .iter()
+                    .any(|atom| !atom.variables_refs().contains(var))
+                {
+                    return None;
+                }
+                let pos_of_var_in_head: Positions = var.positions_in_head(self);
+                Some(new_mar_pos_in_rule.insert_all_take_ret(pos_of_var_in_head))
+            })
+    }
+
+    fn initial_weakly_marked_positions(
+        &self,
+        infinite_rank_positions: &Positions,
+    ) -> Option<Positions> {
+        let join_vars: Variables = self.join_variables();
+        join_vars
+            .iter()
+            .filter(|var| {
+                let positive_body_atoms: Vec<&Atom> = self.body_positive_refs();
+                var.appears_only_at_positions_in_atoms(
+                    infinite_rank_positions,
+                    &positive_body_atoms,
+                )
+            })
+            .try_fold(Positions::new(), |new_we_mar_pos_in_rule, var| {
+                if self
+                    .head()
+                    .iter()
+                    .any(|atom| !atom.variables_refs().contains(var))
+                {
+                    return None;
+                }
+                let pos_of_var_in_head: Positions = var.positions_in_head(self);
+                Some(new_we_mar_pos_in_rule.insert_all_take_ret(pos_of_var_in_head))
+            })
     }
 }
 
