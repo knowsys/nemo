@@ -120,10 +120,10 @@ pub enum TranslationErrorKind {
     #[assoc(code = 124)]
     AttributeParameterWrongComponent { expected: String, found: String },
     /// Non-variable-assignment in directive
-    #[error("Expected a variable assignment, found {found}")]
+    #[error("expected a variable assignment, found {found}")]
     #[assoc(code = 125)]
     NonAssignment { found: String },
-    #[error("Expected a ground term, found {found}")]
+    #[error("expected a ground term, found {found}")]
     #[assoc(code = 126)]
     NonGroundTerm { found: String },
 
