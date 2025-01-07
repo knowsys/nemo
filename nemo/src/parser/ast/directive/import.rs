@@ -118,9 +118,15 @@ impl<'a> ProgramAST<'a> for Import<'a> {
 #[cfg(test)]
 mod test {
     use nom::combinator::all_consuming;
+    use std::assert_matches::assert_matches;
 
     use crate::parser::{
-        ast::{directive::import::Import, ProgramAST},
+        ast::{
+            directive::import::Import,
+            expression::{complex::infix::InfixExpressionKind, Expression},
+            guard::Guard,
+            ProgramAST,
+        },
         input::ParserInput,
         ParserState,
     };
@@ -143,9 +149,47 @@ mod test {
                 expected,
                 (
                     result.1.predicate().to_string(),
-                    result.1.instructions().tag().unwrap().to_string()
+                    result.1.instructions().tag().unwrap().to_string(),
                 )
             );
+        }
+    }
+
+    #[test]
+    fn parse_import_with_guards() {
+        let parser_input = ParserInput::new(
+            r#"@import predicate :- csv { resource = f"{?x}.{?y}" }, ?x = "test", ?y = "csv""#,
+            ParserState::default(),
+        );
+        let result = all_consuming(Import::parse)(parser_input);
+
+        assert!(result.is_ok());
+
+        let (_, result) = result.unwrap();
+
+        assert_eq!(result.predicate().to_string(), "predicate".to_string());
+        assert_eq!(
+            result.instructions().tag().unwrap().to_string(),
+            "csv".to_string()
+        );
+
+        assert!(result.guards().is_some());
+
+        if let Some(sequence) = result.guards() {
+            let guards = sequence.iter().collect::<Vec<_>>();
+            assert_eq!(guards.len(), 2);
+
+            for guard in guards {
+                assert_matches!(guard, Guard::Infix(_));
+
+                if let Guard::Infix(infix) = guard {
+                    assert_eq!(infix.kind(), InfixExpressionKind::Equality);
+                    let (left, right) = infix.pair();
+
+                    assert_matches!(left, Expression::Variable(_));
+                    assert_matches!(right, Expression::String(_));
+                }
+            }
         }
     }
 }
