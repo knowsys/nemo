@@ -60,3 +60,5 @@ max,"""2""^^<http://www.w3.org/2001/XMLSchema#double>"
 bitand,0
 bitor,3
 bitxor,0
+fstring_basic,"""Hello and World"""
+fstring_arithmetic,"""len*10=50"""

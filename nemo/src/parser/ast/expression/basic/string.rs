@@ -2,6 +2,7 @@
 #![allow(missing_docs)]
 
 use nom::{
+    branch::alt,
     combinator::opt,
     sequence::{delimited, pair},
 };
@@ -39,7 +40,11 @@ impl<'a> StringLiteral<'a> {
 
     /// Parse the main part of the string.
     pub fn parse_string(input: ParserInput<'a>) -> ParserResult<'a, Token<'a>> {
-        delimited(Token::quote, Token::string, Token::quote)(input)
+        delimited(
+            Token::quote,
+            alt((Token::string, Token::empty)),
+            Token::quote,
+        )(input)
     }
 
     /// Parse the language tag of the string.

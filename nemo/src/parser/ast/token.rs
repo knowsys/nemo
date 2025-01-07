@@ -24,7 +24,7 @@ use crate::{
         self, comment,
         datavalues::{self, boolean, iri, map, string, tuple, RDF_DATATYPE_INDICATOR},
         directive,
-        expression::{aggregate, atom, operation, variable},
+        expression::{aggregate, atom, format_string, operation, variable},
         operator, rule,
     },
 };
@@ -150,6 +150,18 @@ pub enum TokenKind {
     /// Quote
     #[assoc(name = "\"")]
     Quote,
+    /// Format string open
+    #[assoc(name = format_string::OPEN)]
+    FormatStringOpen,
+    /// Format string close
+    #[assoc(name = format_string::CLOSE)]
+    FormatStringClose,
+    /// Format string open
+    #[assoc(name = format_string::EXPRESSION_START)]
+    FormatStringExpressionStart,
+    /// Format string close
+    #[assoc(name = format_string::EXPRESSION_END)]
+    FormatStringExpressionEnd,
     /// Blank node prefix
     #[assoc(name = "_:")]
     BlankNodePrefix,
@@ -177,6 +189,9 @@ pub enum TokenKind {
     /// String
     #[assoc(name = "string")]
     String,
+    /// String
+    #[assoc(name = "format-string")]
+    FormatString,
     /// Token marking language tag
     #[assoc(name = string::LANG_TAG)]
     LangTagIndicator,
@@ -343,23 +358,36 @@ impl<'a> Token<'a> {
         })
     }
 
-    /// Parse [TokenKind::String].
-    pub fn string(input: ParserInput<'a>) -> ParserResult<'a, Token<'a>> {
-        let input_span = input.span;
-        // NOTE: Optional for empty string, because `is_not` fails on "\""
-        opt(is_not("\""))(input).map(|(rest, result)| {
+    /// Parse arbitrary characters excluding the ones given as a paramater.
+    fn parse_character_sequence(
+        input: ParserInput<'a>,
+        exclude: &str,
+    ) -> ParserResult<'a, Token<'a>> {
+        is_not(exclude)(input).map(|(rest, result)| {
             (
                 rest.clone(),
                 Token {
-                    span: if let Some(result) = result {
-                        result.span
-                    } else {
-                        input_span.until_rest(&rest.span)
-                    },
+                    span: result.span,
                     kind: TokenKind::String,
                 },
             )
         })
+    }
+
+    /// Parse [TokenKind::String].
+    pub fn string(input: ParserInput<'a>) -> ParserResult<'a, Token<'a>> {
+        Self::parse_character_sequence(input, "\"")
+    }
+
+    /// Parse [TokenKind::FormatString].
+    pub fn fstring(input: ParserInput<'a>) -> ParserResult<'a, Token<'a>> {
+        let excluded = format!(
+            "\"{}{}",
+            format_string::EXPRESSION_START,
+            format_string::EXPRESSION_END
+        );
+
+        Self::parse_character_sequence(input, &excluded)
     }
 
     /// Parse [TokenKind::Digits].
@@ -605,6 +633,13 @@ impl<'a> Token<'a> {
     string_token!(doc_comment, TokenKind::DocComment);
     string_token!(toplevel_comment, TokenKind::TopLevelComment);
     string_token!(quote, TokenKind::Quote);
+    string_token!(fstring_open, TokenKind::FormatStringOpen);
+    string_token!(fstring_close, TokenKind::FormatStringClose);
+    string_token!(
+        fstring_expression_start,
+        TokenKind::FormatStringExpressionStart
+    );
+    string_token!(fstring_expression_end, TokenKind::FormatStringExpressionEnd);
     string_token!(blank_node_prefix, TokenKind::BlankNodePrefix);
     string_token!(exponent_lower, TokenKind::ExponentLower);
     string_token!(exponent_upper, TokenKind::ExponentUpper);
