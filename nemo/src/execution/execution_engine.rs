@@ -28,7 +28,7 @@ use crate::{
             term::primitive::{ground::GroundTerm, variable::Variable, Primitive},
         },
         program::Program,
-        term_map::PrimitiveTermMap,
+        substitution::Substitution,
     },
     table_manager::{MemoryUsage, SubtableExecutionPlan, TableManager},
 };
@@ -452,9 +452,9 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
 
                 let rule_application = TraceRuleApplication::new(
                     rule_index,
-                    PrimitiveTermMap::new(variable_assignment.into_iter().map(
-                        |(variable, value)| (Primitive::from(variable), Primitive::from(value)),
-                    )),
+                    Substitution::new(variable_assignment.into_iter().map(|(variable, value)| {
+                        (Primitive::from(variable), Primitive::from(value))
+                    })),
                     head_index,
                 );
 

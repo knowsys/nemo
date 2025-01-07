@@ -193,3 +193,19 @@ impl ProgramComponent for GroundTerm {
         }
     }
 }
+
+#[cfg(test)]
+mod test {
+    use crate::rule_model::components::ProgramComponent;
+
+    use super::GroundTerm;
+
+    #[test]
+    fn parse_ground_term() {
+        let integer = GroundTerm::parse("2").unwrap();
+        let string = GroundTerm::parse("\"abc\"").unwrap();
+
+        assert_eq!(GroundTerm::from(2), integer);
+        assert_eq!(GroundTerm::from("abc"), string);
+    }
+}

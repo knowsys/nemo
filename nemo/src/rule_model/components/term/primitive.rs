@@ -126,7 +126,7 @@ impl ProgramComponent for Primitive {
     {
         let term = parse_component!(
             string,
-            crate::parser::ast::expression::Expression::parse_complex,
+            crate::parser::ast::expression::Expression::parse_basic,
             ASTProgramTranslation::build_inner_term
         )?;
 
@@ -191,5 +191,21 @@ impl IterableVariables for Primitive {
             }
             .into_iter(),
         )
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use crate::rule_model::components::{term::primitive::variable::Variable, ProgramComponent};
+
+    use super::Primitive;
+
+    #[test]
+    fn parse_primitive() {
+        let variable = Primitive::parse("?x").unwrap();
+        let ground = Primitive::parse("2").unwrap();
+
+        assert_eq!(Primitive::from(Variable::universal("x")), variable);
+        assert_eq!(Primitive::from(2), ground);
     }
 }

@@ -15,7 +15,7 @@ use crate::{
     rule_model::{
         components::{fact::Fact, rule::Rule},
         program::Program,
-        term_map::PrimitiveTermMap,
+        substitution::Substitution,
     },
 };
 
@@ -49,14 +49,14 @@ pub(crate) struct TraceRuleApplication {
     /// Index of the rule that was applied
     rule_index: RuleIndex,
     /// Variable assignment used during the rule application
-    assignment: PrimitiveTermMap,
+    assignment: Substitution,
     /// Index of the head atom which produced the fact under consideration
     _position: usize,
 }
 
 impl TraceRuleApplication {
     /// Create new [TraceRuleApplication].
-    pub fn new(rule_index: RuleIndex, assignment: PrimitiveTermMap, _position: usize) -> Self {
+    pub fn new(rule_index: RuleIndex, assignment: Substitution, _position: usize) -> Self {
         Self {
             rule_index,
             assignment,
@@ -201,7 +201,7 @@ pub struct TraceTreeRuleApplication {
     /// Rule that was applied
     pub rule: Rule,
     /// Variable assignment used during the rule application
-    pub assignment: PrimitiveTermMap,
+    pub assignment: Substitution,
     /// Index of the head atom which produced the fact under consideration
     _position: usize,
 }
@@ -562,7 +562,7 @@ mod test {
                 ProgramComponent,
             },
             program::ProgramBuilder,
-            term_map::PrimitiveTermMap,
+            substitution::Substitution,
         },
     };
 
@@ -579,7 +579,7 @@ mod test {
                 )
             });
 
-            PrimitiveTermMap::new(terms)
+            Substitution::new(terms)
         }};
     }
 

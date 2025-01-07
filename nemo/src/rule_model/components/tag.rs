@@ -40,6 +40,11 @@ impl Tag {
         self.origin = origin;
         self
     }
+
+    /// Return the name of [Tag].
+    pub fn name(&self) -> &str {
+        &self.tag
+    }
 }
 
 impl Display for Tag {

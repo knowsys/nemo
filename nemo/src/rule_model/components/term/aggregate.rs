@@ -160,6 +160,21 @@ impl Aggregate {
     pub fn distinct(&self) -> impl Iterator<Item = &Variable> {
         self.distinct.iter()
     }
+
+    /// Return whether the aggregate expression is ground.
+    pub fn is_ground(&self) -> bool {
+        self.aggregate.is_ground()
+    }
+
+    /// Reduce the [Term] in the aggregate expression returning a copy.
+    pub fn reduce(&self) -> Self {
+        Self {
+            origin: self.origin,
+            kind: self.kind,
+            aggregate: Box::new(self.aggregate.reduce()),
+            distinct: self.distinct.clone(),
+        }
+    }
 }
 
 impl Display for Aggregate {
@@ -317,5 +332,29 @@ impl IterablePrimitives for Aggregate {
 
     fn primitive_terms_mut<'a>(&'a mut self) -> Box<dyn Iterator<Item = &'a mut Primitive> + 'a> {
         self.aggregate.primitive_terms_mut()
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use crate::rule_model::components::{
+        term::{aggregate::AggregateKind, primitive::variable::Variable, Term},
+        ProgramComponent,
+    };
+
+    use super::Aggregate;
+
+    #[test]
+    fn parse_aggregate() {
+        let aggregate = Aggregate::parse("#sum(?x, ?y)").unwrap();
+
+        assert_eq!(
+            Aggregate::new(
+                AggregateKind::SumOfNumbers,
+                Term::from(Variable::universal("x")),
+                vec![Variable::universal("y")]
+            ),
+            aggregate
+        );
     }
 }

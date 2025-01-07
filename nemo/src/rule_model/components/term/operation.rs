@@ -2,7 +2,7 @@
 
 pub mod operation_kind;
 
-use std::{fmt::Display, hash::Hash};
+use std::{collections::HashMap, fmt::Display, hash::Hash};
 
 use operation_kind::OperationKind;
 
@@ -21,9 +21,10 @@ use crate::{
 };
 
 use super::{
-    primitive::{variable::Variable, Primitive},
+    operation_term_to_function_tree,
+    primitive::{ground::GroundTerm, variable::Variable, Primitive},
     value_type::ValueType,
-    Term,
+    ProgramChaseTranslation, Term, VariableTranslation,
 };
 
 /// Operation
@@ -86,6 +87,37 @@ impl Operation {
         }
 
         None
+    }
+
+    /// Return whether this term is ground,
+    /// i.e. if it does not contain any variables.
+    pub fn is_gound(&self) -> bool {
+        self.subterms.iter().all(Term::is_ground)
+    }
+
+    /// Reduce constant expressions returning a copy of the reduced [Term].
+    pub fn reduce(&self) -> Term {
+        if !self.is_gound() {
+            return Term::Operation(Self {
+                origin: self.origin,
+                kind: self.kind,
+                subterms: self.subterms.iter().map(Term::reduce).collect(),
+            });
+        }
+
+        let chase_operation_term = ProgramChaseTranslation::build_operation_term(self);
+
+        let empty_translation = VariableTranslation::new();
+        let function_tree =
+            operation_term_to_function_tree(&empty_translation, &chase_operation_term);
+        let stack_program = nemo_physical::function::evaluation::StackProgram::from_function_tree(
+            &function_tree,
+            &HashMap::default(),
+            None,
+        );
+        let result = stack_program.evaluate_data(&[]).expect("term is ground");
+
+        Term::from(GroundTerm::new(result))
     }
 }
 
@@ -213,6 +245,13 @@ impl ProgramComponent for Operation {
             crate::parser::ast::expression::complex::operation::Operation::parse,
             ASTProgramTranslation::build_operation
         )
+        .or_else(|_| {
+            parse_component!(
+                string,
+                crate::parser::ast::expression::complex::arithmetic::Arithmetic::parse,
+                ASTProgramTranslation::build_arithmetic
+            )
+        })
     }
 
     fn origin(&self) -> &Origin {
@@ -280,5 +319,28 @@ impl IterablePrimitives for Operation {
                 .iter_mut()
                 .flat_map(|term| term.primitive_terms_mut()),
         )
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use crate::rule_model::components::{
+        term::{operation::operation_kind::OperationKind, Term},
+        ProgramComponent,
+    };
+
+    use super::Operation;
+
+    #[test]
+    fn parse_operation() {
+        let operaton = Operation::parse("2 * 5").unwrap();
+
+        assert_eq!(
+            Operation::new(
+                OperationKind::NumericProduct,
+                vec![Term::from(2), Term::from(5)]
+            ),
+            operaton
+        );
     }
 }
