@@ -3,8 +3,7 @@ use crate::rule_model::components::{
 };
 use crate::static_checks::acyclicity_graph_constructor::AcyclicityGraphConstructor;
 use crate::static_checks::acyclicity_graphs::{
-    InfiniteRankPositions, JointlyAcyclicityGraph, JointlyAcyclicityGraphCycle,
-    WeaklyAcyclicityGraph,
+    InfiniteRankPositions, JointAcyclicityGraph, JointAcyclicityGraphCycle, WeakAcyclicityGraph,
 };
 use crate::static_checks::collection_traits::{Disjoint, InsertAll, RemoveAll, Superset};
 use crate::static_checks::rule_set::{
@@ -229,7 +228,7 @@ impl<'a> AttackedPositionsBuilderPrivate<'a> for PositionsByVariables<'a, 'a> {
     fn match_attacking_variables(att_type: AttackingType, rule_set: &RuleSet) -> Variables {
         match att_type {
             AttackingType::Cycle => {
-                let jo_ac_graph: JointlyAcyclicityGraph = rule_set.jointly_acyclicity_graph();
+                let jo_ac_graph: JointAcyclicityGraph = rule_set.joint_acyclicity_graph();
                 jo_ac_graph.variables_in_cycles()
             }
             AttackingType::Existential => rule_set.existential_variables(),
@@ -315,7 +314,7 @@ impl<'a> MarkedPositionsBuilderPrivate<'a> for Option<Positions<'a>> {
     }
 
     fn initial_weakly_marked_positions(rule_set: &'a RuleSet) -> Option<Positions<'a>> {
-        let we_ac_graph: WeaklyAcyclicityGraph = rule_set.weakly_acyclicity_graph();
+        let we_ac_graph: WeakAcyclicityGraph = rule_set.weak_acyclicity_graph();
         let infinite_rank_positions: Positions = we_ac_graph.infinite_rank_positions();
         rule_set
             .iter()

@@ -1,6 +1,3 @@
-use self::private::{
-    AllPositivePositionsRulePrivate, FrontierVariablesPrivate, JoinVariablePrivate,
-};
 use crate::rule_model::components::{
     atom::Atom, rule::Rule, term::primitive::variable::Variable, IterableVariables,
 };
@@ -10,7 +7,7 @@ use crate::static_checks::positions::{
     FromPositions, MarkedPositionsBuilder, MarkingType, Positions, PositionsByVariables,
 };
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 pub type RuleSet = Vec<Rule>;
 
@@ -284,6 +281,32 @@ impl<'a> AllPositivePositions<'a> for Rule {
     }
 }
 
+trait AllPositivePositionsRulePrivate<'a> {
+    fn all_positions_of_atoms(&self, atoms: &[&'a Atom]) -> Positions<'a>;
+    fn all_positions_of_head(&'a self) -> Positions<'a>;
+    fn all_positions_of_positive_body(&'a self) -> Positions<'a>;
+}
+
+impl<'a> AllPositivePositionsRulePrivate<'a> for Rule {
+    fn all_positions_of_atoms(&self, atoms: &[&'a Atom]) -> Positions<'a> {
+        atoms.iter().fold(Positions::new(), |all_pos, atom| {
+            let positions: Positions =
+                HashMap::from([(atom.predicate_ref(), (0..atom.len()).collect())]);
+            all_pos.insert_all_take_ret(positions)
+        })
+    }
+
+    fn all_positions_of_head(&'a self) -> Positions<'a> {
+        let head_atoms: Vec<&Atom> = self.head_refs();
+        self.all_positions_of_atoms(&head_atoms)
+    }
+
+    fn all_positions_of_positive_body(&'a self) -> Positions<'a> {
+        let positive_body_atoms: Vec<&Atom> = self.body_positive_refs();
+        self.all_positions_of_atoms(&positive_body_atoms)
+    }
+}
+
 pub trait ExistentialVariables {
     fn existential_variables(&self) -> Variables;
 }
@@ -334,7 +357,7 @@ impl ExistentialVariablesPositions for Rule {
     }
 }
 
-pub trait FrontierVariables: FrontierVariablesPrivate {
+pub trait FrontierVariables {
     fn frontier_variables(&self) -> Variables;
 }
 
@@ -346,6 +369,22 @@ impl FrontierVariables for Rule {
             .intersection(&universal_head_variables)
             .copied()
             .collect()
+    }
+}
+
+trait FrontierVariablesPrivate {
+    fn universal_head_variables(&self) -> Variables;
+}
+
+impl FrontierVariablesPrivate for Rule {
+    fn universal_head_variables(&self) -> Variables {
+        self.head().iter().fold(
+            Variables::new(),
+            |universal_head_variables: Variables, atom| {
+                let un_vars_of_atom: Variables = atom.universal_variables();
+                universal_head_variables.insert_all_take_ret(un_vars_of_atom)
+            },
+        )
     }
 }
 
@@ -373,6 +412,25 @@ impl JoinVariables for Rule {
             .filter(|var| var.is_join_variable(self))
             .copied()
             .collect()
+    }
+}
+
+trait JoinVariablePrivate {
+    fn is_join_variable(&self, rule: &Rule) -> bool;
+}
+
+impl JoinVariablePrivate for Variable {
+    fn is_join_variable(&self, rule: &Rule) -> bool {
+        let mut count: usize = 0;
+        rule.variables().any(|var| {
+            if var == self {
+                count += 1;
+            }
+            if 2 == count {
+                return true;
+            }
+            false
+        })
     }
 }
 
@@ -499,77 +557,5 @@ pub trait UniversalVariables {
 impl UniversalVariables for Atom {
     fn universal_variables(&self) -> Variables {
         self.variables().filter(|var| var.is_universal()).collect()
-    }
-}
-
-mod private {
-    use super::{RuleRefs, UniversalVariables, Variables};
-    use crate::rule_model::components::{
-        atom::Atom, rule::Rule, term::primitive::variable::Variable, IterableVariables,
-    };
-    use crate::static_checks::collection_traits::InsertAll;
-    use crate::static_checks::positions::Positions;
-
-    use std::collections::HashMap;
-
-    pub(crate) trait AllPositivePositionsRulePrivate<'a> {
-        fn all_positions_of_atoms(&self, atoms: &[&'a Atom]) -> Positions<'a>;
-        fn all_positions_of_head(&'a self) -> Positions<'a>;
-        fn all_positions_of_positive_body(&'a self) -> Positions<'a>;
-    }
-
-    impl<'a> AllPositivePositionsRulePrivate<'a> for Rule {
-        fn all_positions_of_atoms(&self, atoms: &[&'a Atom]) -> Positions<'a> {
-            atoms.iter().fold(Positions::new(), |all_pos, atom| {
-                let positions: Positions =
-                    HashMap::from([(atom.predicate_ref(), (0..atom.len()).collect())]);
-                all_pos.insert_all_take_ret(positions)
-            })
-        }
-
-        fn all_positions_of_head(&'a self) -> Positions<'a> {
-            let head_atoms: Vec<&Atom> = self.head_refs();
-            self.all_positions_of_atoms(&head_atoms)
-        }
-
-        fn all_positions_of_positive_body(&'a self) -> Positions<'a> {
-            let positive_body_atoms: Vec<&Atom> = self.body_positive_refs();
-            self.all_positions_of_atoms(&positive_body_atoms)
-        }
-    }
-
-    pub(crate) trait FrontierVariablesPrivate {
-        fn universal_head_variables(&self) -> Variables;
-    }
-
-    impl FrontierVariablesPrivate for Rule {
-        fn universal_head_variables(&self) -> Variables {
-            self.head().iter().fold(
-                Variables::new(),
-                |universal_head_variables: Variables, atom| {
-                    let un_vars_of_atom: Variables = atom.universal_variables();
-                    universal_head_variables.insert_all_take_ret(un_vars_of_atom)
-                },
-            )
-        }
-    }
-
-    pub(crate) trait JoinVariablePrivate {
-        fn is_join_variable(&self, rule: &Rule) -> bool;
-    }
-
-    impl JoinVariablePrivate for Variable {
-        fn is_join_variable(&self, rule: &Rule) -> bool {
-            let mut count: usize = 0;
-            rule.variables().any(|var| {
-                if var == self {
-                    count += 1;
-                }
-                if 2 == count {
-                    return true;
-                }
-                false
-            })
-        }
     }
 }

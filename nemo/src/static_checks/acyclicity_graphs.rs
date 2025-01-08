@@ -13,16 +13,16 @@ use std::collections::HashSet;
 
 use std::collections::HashMap;
 
-pub type JointlyAcyclicityGraph<'a> = DiGraphMap<&'a Variable, ()>;
+pub type JointAcyclicityGraph<'a> = DiGraphMap<&'a Variable, ()>;
 
-pub type WeaklyAcyclicityGraph<'a> = DiGraphMap<Position<'a>, WeaklyAcyclicityGraphEdgeType>;
+pub type WeakAcyclicityGraph<'a> = DiGraphMap<Position<'a>, WeakAcyclicityGraphEdgeType>;
 
 type Cycle<N> = Vec<N>;
 
 type Cycles<N> = HashSet<Cycle<N>>;
 
 #[derive(Clone)]
-pub enum WeaklyAcyclicityGraphEdgeType {
+pub enum WeakAcyclicityGraphEdgeType {
     Common,
     CommonAndSpecial,
     Special,
@@ -32,18 +32,18 @@ pub trait AcyclicityGraphBuilder<'a> {
     fn build_graph(rule_set: &'a RuleSet) -> Self;
 }
 
-impl<'a> AcyclicityGraphBuilder<'a> for JointlyAcyclicityGraph<'a> {
-    fn build_graph(rule_set: &'a RuleSet) -> JointlyAcyclicityGraph<'a> {
-        let mut jo_ac_graph: JointlyAcyclicityGraph = JointlyAcyclicityGraph::new();
+impl<'a> AcyclicityGraphBuilder<'a> for JointAcyclicityGraph<'a> {
+    fn build_graph(rule_set: &'a RuleSet) -> JointAcyclicityGraph<'a> {
+        let mut jo_ac_graph: JointAcyclicityGraph = JointAcyclicityGraph::new();
         jo_ac_graph.add_nodes(rule_set);
         jo_ac_graph.add_edges(rule_set);
         jo_ac_graph
     }
 }
 
-impl<'a> AcyclicityGraphBuilder<'a> for WeaklyAcyclicityGraph<'a> {
-    fn build_graph(rule_set: &'a RuleSet) -> WeaklyAcyclicityGraph<'a> {
-        let mut we_ac_graph: WeaklyAcyclicityGraph = WeaklyAcyclicityGraph::new();
+impl<'a> AcyclicityGraphBuilder<'a> for WeakAcyclicityGraph<'a> {
+    fn build_graph(rule_set: &'a RuleSet) -> WeakAcyclicityGraph<'a> {
+        let mut we_ac_graph: WeakAcyclicityGraph = WeakAcyclicityGraph::new();
         we_ac_graph.add_nodes(rule_set);
         we_ac_graph.add_edges(rule_set);
         we_ac_graph
@@ -55,7 +55,7 @@ trait AcyclicityGraphBuilderPrivate<'a> {
     fn add_edges(&mut self, rule_set: &'a RuleSet);
 }
 
-impl<'a> AcyclicityGraphBuilderPrivate<'a> for JointlyAcyclicityGraph<'a> {
+impl<'a> AcyclicityGraphBuilderPrivate<'a> for JointAcyclicityGraph<'a> {
     fn add_edges(&mut self, rule_set: &'a RuleSet) {
         let attacked_pos_by_existential_vars: PositionsByVariables =
             rule_set.attacked_positions_by_existential_variables();
@@ -72,7 +72,7 @@ impl<'a> AcyclicityGraphBuilderPrivate<'a> for JointlyAcyclicityGraph<'a> {
     }
 }
 
-impl<'a> AcyclicityGraphBuilderPrivate<'a> for WeaklyAcyclicityGraph<'a> {
+impl<'a> AcyclicityGraphBuilderPrivate<'a> for WeakAcyclicityGraph<'a> {
     fn add_edges(&mut self, rule_set: &'a RuleSet) {
         rule_set.iter().for_each(|rule| {
             self.add_edges_for_rule(rule);
@@ -155,7 +155,7 @@ where
     }
 }
 
-trait JointlyAcyclicityGraphBuilderPrivate<'a> {
+trait JointAcyclicityGraphBuilderPrivate<'a> {
     fn add_edges_for_attacked_var(
         &mut self,
         attacked_var: &Variable,
@@ -175,7 +175,7 @@ trait JointlyAcyclicityGraphBuilderPrivate<'a> {
     );
 }
 
-impl<'a> JointlyAcyclicityGraphBuilderPrivate<'a> for JointlyAcyclicityGraph<'a> {
+impl<'a> JointAcyclicityGraphBuilderPrivate<'a> for JointAcyclicityGraph<'a> {
     fn add_edges_for_attacked_var(
         &mut self,
         attacked_var: &Variable,
@@ -217,11 +217,11 @@ impl<'a> JointlyAcyclicityGraphBuilderPrivate<'a> for JointlyAcyclicityGraph<'a>
     }
 }
 
-pub trait JointlyAcyclicityGraphCycle<N>: AcyclicityGraphCycle<N> {
+pub trait JointAcyclicityGraphCycle<N>: AcyclicityGraphCycle<N> {
     fn variables_in_cycles(&self) -> HashSet<N>;
 }
 
-impl<'a> JointlyAcyclicityGraphCycle<&'a Variable> for JointlyAcyclicityGraph<'a> {
+impl<'a> JointAcyclicityGraphCycle<&'a Variable> for JointAcyclicityGraph<'a> {
     fn variables_in_cycles(&self) -> Variables<'a> {
         let cycles: Cycles<&'a Variable> = self.cycles();
         cycles
@@ -232,7 +232,7 @@ impl<'a> JointlyAcyclicityGraphCycle<&'a Variable> for JointlyAcyclicityGraph<'a
     }
 }
 
-trait WeaklyAcyclicityGraphBuilderPrivate<'a> {
+trait WeakAcyclicityGraphBuilderPrivate<'a> {
     fn add_common_edges_for_pos(
         &mut self,
         body_pos: Position<'a>,
@@ -249,14 +249,14 @@ trait WeaklyAcyclicityGraphBuilderPrivate<'a> {
     fn add_special_edges_for_rule(&mut self, rule: &'a Rule, variable_body: &Variable);
 }
 
-impl<'a> WeaklyAcyclicityGraphBuilderPrivate<'a> for WeaklyAcyclicityGraph<'a> {
+impl<'a> WeakAcyclicityGraphBuilderPrivate<'a> for WeakAcyclicityGraph<'a> {
     fn add_common_edges_for_pos(
         &mut self,
         body_pos: Position<'a>,
         head_ex_pos_of_var: &ExtendedPositions<'a>,
     ) {
         head_ex_pos_of_var.iter().for_each(|head_pos| {
-            self.add_edge(body_pos, *head_pos, WeaklyAcyclicityGraphEdgeType::Common);
+            self.add_edge(body_pos, *head_pos, WeakAcyclicityGraphEdgeType::Common);
         })
     }
 
@@ -282,12 +282,12 @@ impl<'a> WeaklyAcyclicityGraphBuilderPrivate<'a> for WeaklyAcyclicityGraph<'a> {
             true => self.add_edge(
                 body_pos,
                 existential_pos,
-                WeaklyAcyclicityGraphEdgeType::CommonAndSpecial,
+                WeakAcyclicityGraphEdgeType::CommonAndSpecial,
             ),
             false => self.add_edge(
                 body_pos,
                 existential_pos,
-                WeaklyAcyclicityGraphEdgeType::Special,
+                WeakAcyclicityGraphEdgeType::Special,
             ),
         };
     }
@@ -313,12 +313,12 @@ impl<'a> WeaklyAcyclicityGraphBuilderPrivate<'a> for WeaklyAcyclicityGraph<'a> {
     }
 }
 
-pub trait WeaklyAcyclicityGraphCycle<N>: AcyclicityGraphCycle<N> {
+pub trait WeakAcyclicityGraphCycle<N>: AcyclicityGraphCycle<N> {
     fn contains_cycle_with_special_edge(&self) -> bool;
     fn cycles_containing_special_edges(&self) -> Cycles<N>;
 }
 
-impl<'a> WeaklyAcyclicityGraphCycle<Position<'a>> for WeaklyAcyclicityGraph<'a> {
+impl<'a> WeakAcyclicityGraphCycle<Position<'a>> for WeakAcyclicityGraph<'a> {
     fn contains_cycle_with_special_edge(&self) -> bool {
         let cycles: Cycles<Position<'a>> = self.cycles();
         cycles
@@ -336,12 +336,12 @@ impl<'a> WeaklyAcyclicityGraphCycle<Position<'a>> for WeaklyAcyclicityGraph<'a> 
     }
 }
 
-trait WeaklyAcyclicityGraphCyclePrivate<N> {
+trait WeakAcyclicityGraphCyclePrivate<N> {
     fn cycle_contains_special_edge(&self, cycle: &Cycle<N>) -> bool;
     fn edge_is_special(&self, node: &N, next_node: &N) -> bool;
 }
 
-impl<'a> WeaklyAcyclicityGraphCyclePrivate<Position<'a>> for WeaklyAcyclicityGraph<'a> {
+impl<'a> WeakAcyclicityGraphCyclePrivate<Position<'a>> for WeakAcyclicityGraph<'a> {
     fn cycle_contains_special_edge(&self, cycle: &Cycle<Position<'a>>) -> bool {
         let cycle_size: usize = cycle.len();
         cycle.iter().enumerate().any(|(i, pos)| {
@@ -353,9 +353,9 @@ impl<'a> WeaklyAcyclicityGraphCyclePrivate<Position<'a>> for WeaklyAcyclicityGra
 
     fn edge_is_special(&self, node: &Position<'a>, next_node: &Position<'a>) -> bool {
         match self.edge_weight(*node, *next_node).unwrap() {
-            WeaklyAcyclicityGraphEdgeType::Common => false,
-            WeaklyAcyclicityGraphEdgeType::CommonAndSpecial => true,
-            WeaklyAcyclicityGraphEdgeType::Special => true,
+            WeakAcyclicityGraphEdgeType::Common => false,
+            WeakAcyclicityGraphEdgeType::CommonAndSpecial => true,
+            WeakAcyclicityGraphEdgeType::Special => true,
         }
     }
 }
@@ -364,7 +364,7 @@ pub trait InfiniteRankPositions {
     fn infinite_rank_positions(&self) -> Positions;
 }
 
-impl InfiniteRankPositions for WeaklyAcyclicityGraph<'_> {
+impl InfiniteRankPositions for WeakAcyclicityGraph<'_> {
     fn infinite_rank_positions(&self) -> Positions {
         todo!("IMPLEMENT");
         // TODO: IMPLEMENT
