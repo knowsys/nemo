@@ -4,6 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "nmo-python"
+dynamic = ["version"]
 requires-python = ">=3.7"
 classifiers = [
     "Programming Language :: Rust",
