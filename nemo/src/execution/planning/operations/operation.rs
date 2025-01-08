@@ -126,6 +126,8 @@ pub(crate) fn operation_to_function_tree(
         OperationKind::StringReverse => unary!(string_reverse, sub),
         OperationKind::StringLowercase => unary!(string_lowercase, sub),
         OperationKind::StringUppercase => unary!(string_uppercase, sub),
+        OperationKind::StringUriEncode => unary!(string_uriencode, sub),
+        OperationKind::StringUriDecode => unary!(string_uridecode, sub),
         OperationKind::LexicalValue => unary!(lexical_value, sub),
         OperationKind::NumericSum => FunctionTree::numeric_sum(sub),
         OperationKind::NumericProduct => FunctionTree::numeric_product(sub),

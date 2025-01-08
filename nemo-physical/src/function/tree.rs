@@ -25,7 +25,8 @@ use super::{
         string::{
             StringAfter, StringBefore, StringCompare, StringConcatenation, StringContains,
             StringEnds, StringLength, StringLowercase, StringRegex, StringReverse, StringStarts,
-            StringSubstring, StringSubstringLength, StringUppercase,
+            StringSubstring, StringSubstringLength, StringUppercase, StringUriDecode,
+            StringUriEncode,
         },
         BinaryFunctionEnum, NaryFunctionEnum, TernaryFunctionEnum, UnaryFunctionEnum,
     },
@@ -727,6 +728,28 @@ where
     pub fn string_uppercase(sub: Self) -> Self {
         Self::Unary(
             UnaryFunctionEnum::StringUppercase(StringUppercase),
+            Box::new(sub),
+        )
+    }
+
+    /// Create a tree node representing the URI encoding of a string.
+    ///
+    /// This evaluates to a percent-encoded version of the string
+    /// that results from evaluating `sub`.
+    pub fn string_uriencode(sub: Self) -> Self {
+        Self::Unary(
+            UnaryFunctionEnum::StringUriEncode(StringUriEncode),
+            Box::new(sub),
+        )
+    }
+
+    /// Create a tree node representing the URI decoding of a string.
+    ///
+    /// This evaluates to a percent-decoded version of the string
+    /// that results from evaluating `sub`.
+    pub fn string_uridecode(sub: Self) -> Self {
+        Self::Unary(
+            UnaryFunctionEnum::StringUriDecode(StringUriDecode),
             Box::new(sub),
         )
     }

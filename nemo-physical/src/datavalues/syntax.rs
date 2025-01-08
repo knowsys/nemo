@@ -44,6 +44,11 @@ pub mod iri {
 pub mod string {
     /// Language tag indicator after strings
     pub const LANG_TAG: &str = "@";
+
+    /// Quote to delimit string literals
+    pub const QUOTE: &str = r#"""#;
+    /// Triple quotes to delimit multi-line strings
+    pub const TRIPLE_QUOTE: &str = r#"""""#;
 }
 
 /// RDF datatype indicator

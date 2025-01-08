@@ -168,6 +168,7 @@ impl ResourceProvider for BlobResourceProvider {
         &self,
         resource: &Resource,
         compression: CompressionFormat,
+        _media_type: &str,
     ) -> Result<Option<Box<dyn std::io::BufRead>>, nemo_physical::error::ReadingError> {
         if let Some(blob) = self.blobs.get(resource) {
             let array_buffer: js_sys::ArrayBuffer = self

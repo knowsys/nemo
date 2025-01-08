@@ -93,7 +93,7 @@ impl DatabaseInstance {
         &self
             .table_infos
             .get(&id)
-            .expect("No table with id {id} exists.")
+            .unwrap_or_else(|| panic!("No table with the id {id} exists."))
             .name
     }
 
@@ -104,7 +104,7 @@ impl DatabaseInstance {
     pub fn table_arity(&self, id: PermanentTableId) -> usize {
         self.table_infos
             .get(&id)
-            .expect("No table with id {id} exists.")
+            .unwrap_or_else(|| panic!("No table with the id {id} exists."))
             .arity
     }
 
@@ -146,7 +146,7 @@ impl DatabaseInstance {
         let storage_id = self
             .reference_manager
             .trie_id(&self.dictionary, id, ColumnOrder::default())
-            .expect("No table with id {id} exists.");
+            .unwrap_or_else(|err| panic!("No table with the id {id} exists: {err}"));
         let trie = self.reference_manager.trie(storage_id);
 
         Ok(trie.row_iterator().map(|values| {
@@ -168,7 +168,7 @@ impl DatabaseInstance {
         let storage_id = self
             .reference_manager
             .trie_id(&self.dictionary, id, ColumnOrder::default())
-            .expect("No table with id {id} exists.");
+            .unwrap_or_else(|err| panic!("No table with the id {id} exists: {err}"));
         let trie = self.reference_manager.trie(storage_id);
 
         let dictionary: &Dict = &self.dictionary();

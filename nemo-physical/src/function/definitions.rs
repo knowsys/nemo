@@ -35,7 +35,7 @@ use self::{
     string::{
         StringAfter, StringBefore, StringCompare, StringConcatenation, StringContains, StringEnds,
         StringLength, StringLowercase, StringRegex, StringReverse, StringStarts, StringSubstring,
-        StringSubstringLength, StringUppercase,
+        StringSubstringLength, StringUppercase, StringUriDecode, StringUriEncode,
     },
 };
 
@@ -155,6 +155,8 @@ pub enum UnaryFunctionEnum {
     StringReverse(StringReverse),
     StringLowercase(StringLowercase),
     StringUppercase(StringUppercase),
+    StringUriEncode(StringUriEncode),
+    StringUriDecode(StringUriDecode),
 }
 
 impl UnaryFunction for UnaryFunctionEnum {
@@ -188,6 +190,8 @@ impl UnaryFunction for UnaryFunctionEnum {
             Self::StringReverse(function) => function,
             Self::StringLowercase(function) => function,
             Self::StringUppercase(function) => function,
+            Self::StringUriEncode(function) => function,
+            Self::StringUriDecode(function) => function,
         } {
             fn evaluate(&self, parameter: AnyDataValue) -> Option<AnyDataValue>;
             fn type_propagation(&self) -> FunctionTypePropagation;

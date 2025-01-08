@@ -51,6 +51,16 @@ impl<'a> FormatString<'a> {
             map(Self::parse_expression, FormatStringElement::Expression),
         ))(input)
     }
+
+    /// Parse a multi-line [FormatStringElement] by parsing either a string or an expression element.
+    fn parse_multiline_element(
+        input: ParserInput<'a>,
+    ) -> ParserResult<'a, FormatStringElement<'a>> {
+        alt((
+            map(Token::multiline_fstring, FormatStringElement::String),
+            map(Self::parse_expression, FormatStringElement::Expression),
+        ))(input)
+    }
 }
 
 const CONTEXT: ParserContext = ParserContext::FormatString;
@@ -81,11 +91,18 @@ impl<'a> ProgramAST<'a> for FormatString<'a> {
 
         context(
             CONTEXT,
-            delimited(
-                Token::fstring_open,
-                many0(Self::parse_element),
-                Token::fstring_close,
-            ),
+            alt((
+                delimited(
+                    Token::fstring_multiline_open,
+                    many0(Self::parse_multiline_element),
+                    Token::fstring_multiline_close,
+                ),
+                delimited(
+                    Token::fstring_open,
+                    many0(Self::parse_element),
+                    Token::fstring_close,
+                ),
+            )),
         )(input)
         .map(|(rest, elements)| {
             let rest_span = rest.span;
@@ -118,11 +135,12 @@ mod test {
     #[test]
     fn parse_format_string() {
         let test = vec![
-            ("f\"\"", 0),
-            ("f\"string\"", 1),
-            ("f\"{?x + 1}\"", 1),
-            ("f\"result: {?x + 1}\"", 2),
-            ("f\"{?x} + {?y} = {?x + ?y}\"", 5),
+            (r#"f"""#, 0),
+            (r#"f"string""#, 1),
+            (r#"f"""string""""#, 1),
+            (r#"f"{?x + 1}""#, 1),
+            (r#"f"result: {?x + 1}""#, 2),
+            (r#"f"{?x} + {?y} = {?x + ?y}""#, 5),
         ];
 
         for (input, expected) in test {

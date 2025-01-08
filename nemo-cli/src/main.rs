@@ -48,7 +48,12 @@ use nemo::{
 };
 
 fn default_export(predicate: Tag) -> ExportDirective {
-    ExportDirective::new(predicate, FileFormat::CSV, Map::empty_unnamed())
+    ExportDirective::new(
+        predicate,
+        FileFormat::CSV,
+        Map::empty_unnamed(),
+        Default::default(),
+    )
 }
 
 /// Set exports according to command-line parameter.

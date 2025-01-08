@@ -5,7 +5,10 @@ use std::path::Path;
 use strum::IntoEnumIterator;
 
 use crate::{
-    parser::ast::{self, ProgramAST},
+    parser::{
+        ast::{self, ProgramAST},
+        span::Span,
+    },
     rule_model::{
         components::{
             import_export::{
@@ -14,9 +17,10 @@ use crate::{
                 ExportDirective, ImportDirective,
             },
             tag::Tag,
-            ProgramComponent,
+            IterablePrimitives, ProgramComponent,
         },
         error::{translation_error::TranslationErrorKind, TranslationError},
+        substitution::Substitution,
         translation::ASTProgramTranslation,
     },
     syntax::import_export::file_format::RDF_UNSPECIFIED,
@@ -97,6 +101,57 @@ impl<'a> ASTProgramTranslation<'a> {
         }
     }
 
+    fn import_export_bindings(
+        &mut self,
+        guards: &'a Option<ast::sequence::Sequence<'a, ast::guard::Guard<'a>>>,
+        span: Span,
+    ) -> Result<Substitution, TranslationError> {
+        let mut result = Vec::new();
+
+        if let Some(guards) = guards {
+            for guard in guards {
+                if let ast::guard::Guard::Infix(infix) = guard {
+                    let operation = self.build_infix(infix)?;
+
+                    if let Some((left, right)) = operation.variable_assignment() {
+                        let right = right.reduce();
+                        let terms = right.primitive_terms().collect::<Vec<_>>();
+
+                        if !right.is_ground() || terms.len() != 1 {
+                            return Err(TranslationError::new(
+                                span,
+                                TranslationErrorKind::NonGroundTerm {
+                                    found: right.kind().name().to_string(),
+                                },
+                            ));
+                        }
+
+                        result.push((
+                            left.clone(),
+                            (*terms.first().expect("is not empty")).clone(),
+                        ));
+                    } else {
+                        return Err(TranslationError::new(
+                            span,
+                            TranslationErrorKind::NonAssignment {
+                                found: operation.operation_kind().to_string(),
+                            },
+                        ));
+                    }
+                } else {
+                    return Err(TranslationError::new(
+                        span,
+                        TranslationErrorKind::NonAssignment {
+                            found: "expression".to_string(),
+                        },
+                    ));
+                }
+            }
+        }
+
+        Ok(Substitution::new(result))
+    }
+
     /// Given a [ast::directive::import::Import], build an [ImportDirective].
     pub fn build_import(
         &mut self,
@@ -106,9 +161,10 @@ impl<'a> ASTProgramTranslation<'a> {
             .set_origin(self.register_node(import.predicate()));
         let attributes = self.build_map(import.instructions())?;
         let file_format = self.import_export_format(import.instructions())?;
+        let bindings = self.import_export_bindings(import.guards(), import.span())?;
 
         Ok(self.register_component(
-            ImportDirective::new(predicate, file_format, attributes),
+            ImportDirective::new(predicate, file_format, attributes, bindings),
             import,
         ))
     }
@@ -135,9 +191,10 @@ impl<'a> ASTProgramTranslation<'a> {
             .set_origin(self.register_node(export.predicate()));
         let attributes = self.build_map(export.instructions())?;
         let file_format = self.import_export_format(export.instructions())?;
+        let bindings = self.import_export_bindings(export.guards(), export.span())?;
 
         Ok(self.register_component(
-            ExportDirective::new(predicate, file_format, attributes),
+            ExportDirective::new(predicate, file_format, attributes, bindings),
             export,
         ))
     }

@@ -40,6 +40,7 @@ pub trait ResourceProvider: std::fmt::Debug {
         &self,
         resource: &Resource,
         compression: CompressionFormat,
+        media_type: &str,
     ) -> Result<Option<Box<dyn BufRead>>, ReadingError>;
 }
 
@@ -76,9 +77,12 @@ impl ResourceProviders {
         &self,
         resource: &Resource,
         compression: CompressionFormat,
+        media_type: &str,
     ) -> Result<Box<dyn BufRead>, ReadingError> {
         for resource_provider in self.0.iter() {
-            if let Some(reader) = resource_provider.open_resource(resource, compression)? {
+            if let Some(reader) =
+                resource_provider.open_resource(resource, compression, media_type)?
+            {
                 return Ok(reader);
             }
         }

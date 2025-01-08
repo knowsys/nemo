@@ -129,9 +129,14 @@ pub mod expression {
     /// Syntax for format strings
     pub mod format_string {
         /// Opening part of a format string
-        pub const OPEN: &str = "f\"";
+        pub const OPEN: &str = r#"f""#;
         /// Closing part of a format string
-        pub const CLOSE: &str = "\"";
+        pub const CLOSE: &str = r#"""#;
+
+        /// Opening part of a multi-line format string
+        pub const MULTILINE_OPEN: &str = r#"f""""#;
+        /// Closing part of a multi-line format string
+        pub const MULTILINE_CLOSE: &str = r#"""""#;
 
         /// Marker of the start of an expression
         pub const EXPRESSION_START: &str = "{";
@@ -239,6 +244,10 @@ pub mod builtin {
         pub(crate) const UCASE: &str = "UCASE";
         /// Replace characters in strings with their lower case version
         pub(crate) const LCASE: &str = "LCASE";
+        /// Return URI-encoded (percent-encoded) version of string
+        pub(crate) const URIENCODE: &str = "URIENCODE";
+        /// Return URI-decoded (percent-decoded) version of string
+        pub(crate) const URIDECODE: &str = "URIDECODE";
         /// Round a value to the nearest integer
         pub(crate) const ROUND: &str = "ROUND";
         /// Round up to the nearest integer
@@ -416,5 +425,25 @@ pub mod import_export {
         pub(crate) const EXTENSION_RDF_XML: &str = "rdf";
         /// The file extension used for json files
         pub(crate) const EXTENSION_JSON: &str = "json";
+
+        // media types
+        /// The media type used for CSV resources
+        pub(crate) const MEDIA_TYPE_CSV: &str = "text/csv";
+        /// The media type used for TSV resources
+        pub(crate) const MEDIA_TYPE_TSV: &str = "text/tab-separated-values";
+        /// The media type used for DSV resources
+        pub(crate) const MEDIA_TYPE_DSV: &str = "text";
+        /// The media type used for Ntriples resources
+        pub(crate) const MEDIA_TYPE_RDF_NTRIPLES: &str = "application/n-triples";
+        /// The media type used for NQuads resources
+        pub(crate) const MEDIA_TYPE_RDF_NQUADS: &str = "application/n-quads";
+        /// The media type used for Turtle resources
+        pub(crate) const MEDIA_TYPE_RDF_TURTLE: &str = "text/turtle";
+        /// The media type used for TriG resources
+        pub(crate) const MEDIA_TYPE_RDF_TRIG: &str = "application/trig";
+        /// The media type used for RDF/XML resources
+        pub(crate) const MEDIA_TYPE_RDF_XML: &str = "application/rdf+xml";
+        /// The media type used for json resources
+        pub(crate) const MEDIA_TYPE_JSON: &str = "application/json";
     }
 }

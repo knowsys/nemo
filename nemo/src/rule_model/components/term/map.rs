@@ -114,7 +114,7 @@ impl Map {
 
     /// Return whether this term is ground,
     /// i.e. if it does not contain any variables.
-    pub fn is_gound(&self) -> bool {
+    pub fn is_ground(&self) -> bool {
         self.key_value()
             .all(|(key, value)| key.is_ground() && value.is_ground())
     }
