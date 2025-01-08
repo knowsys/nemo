@@ -104,33 +104,7 @@ fn import_export_format(
     }
 }
 
-/// Handle a import ast node.
-pub fn handle_import<'a, 'b>(
-    translation: &mut ASTProgramTranslation<'a, 'b>,
-    import: &'b ast::directive::import::Import<'a>,
-) -> Result<(), TranslationError> {
-    let import_directive = ImportDirective::build_component(translation, import)?;
-    let _ = import_directive.validate(&mut translation.validation_error_builder);
-
-    translation.program_builder.add_import(import_directive);
-
-    Ok(())
-}
-
-/// Handle a export ast node.
-pub fn handle_export<'a, 'b>(
-    translation: &mut ASTProgramTranslation<'a, 'b>,
-    export: &'b ast::directive::export::Export<'a>,
-) -> Result<(), TranslationError> {
-    let export_directive = ExportDirective::build_component(translation, export)?;
-    let _ = export_directive.validate(&mut translation.validation_error_builder);
-
-    translation.program_builder.add_export(export_directive);
-
-    Ok(())
-}
-
-fn process_import_export_substitution<'a, 'b>(
+fn import_export_bindings<'a, 'b>(
     translation: &mut ASTProgramTranslation<'a, 'b>,
     guards: impl Iterator<Item = &'b ast::guard::Guard<'a>>,
 ) -> Result<Substitution, TranslationError> {
@@ -191,7 +165,7 @@ impl TranslationComponent for ImportDirective {
         let file_format = import_export_format(import.instructions())?;
 
         let substitution = if let Some(guards) = import.guards() {
-            process_import_export_substitution(translation, guards.iter())?
+            import_export_bindings(translation, guards.iter())?
         } else {
             let iter: [(Primitive, Primitive); 0] = [];
             Substitution::new(iter)
@@ -202,6 +176,19 @@ impl TranslationComponent for ImportDirective {
             import,
         ))
     }
+}
+
+/// Handle a import ast node.
+pub fn handle_import<'a, 'b>(
+    translation: &mut ASTProgramTranslation<'a, 'b>,
+    import: &'b ast::directive::import::Import<'a>,
+) -> Result<(), TranslationError> {
+    let import_directive = ImportDirective::build_component(translation, import)?;
+    let _ = import_directive.validate(&mut translation.validation_error_builder);
+
+    translation.program_builder.add_import(import_directive);
+
+    Ok(())
 }
 
 impl TranslationComponent for ExportDirective {
@@ -217,7 +204,7 @@ impl TranslationComponent for ExportDirective {
         let file_format = import_export_format(export.instructions())?;
 
         let substitution = if let Some(guards) = export.guards() {
-            process_import_export_substitution(translation, guards.iter())?
+            import_export_bindings(translation, guards.iter())?
         } else {
             let iter: [(Primitive, Primitive); 0] = [];
             Substitution::new(iter)
@@ -228,4 +215,17 @@ impl TranslationComponent for ExportDirective {
             export,
         ))
     }
+}
+
+/// Handle a export ast node.
+pub fn handle_export<'a, 'b>(
+    translation: &mut ASTProgramTranslation<'a, 'b>,
+    export: &'b ast::directive::export::Export<'a>,
+) -> Result<(), TranslationError> {
+    let export_directive = ExportDirective::build_component(translation, export)?;
+    let _ = export_directive.validate(&mut translation.validation_error_builder);
+
+    translation.program_builder.add_export(export_directive);
+
+    Ok(())
 }
