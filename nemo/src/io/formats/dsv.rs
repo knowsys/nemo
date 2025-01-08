@@ -16,7 +16,6 @@ use crate::{
     rule_model::components::import_export::{
         compression::CompressionFormat, file_formats::FileFormat,
     },
-    syntax::import_export::file_format,
 };
 
 use super::{Direction, ImportExportHandler, ImportExportResource, TableWriter};
@@ -63,6 +62,14 @@ impl DsvHandler {
 }
 
 impl ImportExportHandler for DsvHandler {
+    fn file_format(&self) -> FileFormat {
+        match self.delimiter {
+            b',' => FileFormat::CSV,
+            b'\t' => FileFormat::TSV,
+            _ => FileFormat::DSV,
+        }
+    }
+
     fn reader(&self, read: Box<dyn BufRead>) -> Result<Box<dyn TableProvider>, Error> {
         Ok(Box::new(DsvReader::new(
             read,
@@ -87,11 +94,7 @@ impl ImportExportHandler for DsvHandler {
     }
 
     fn file_extension(&self) -> String {
-        match self.delimiter {
-            b',' => file_format::CSV.to_owned(),
-            b'\t' => file_format::TSV.to_owned(),
-            _ => file_format::DSV.to_owned(),
-        }
+        self.file_format().extension().to_string()
     }
 
     fn compression_format(&self) -> CompressionFormat {
@@ -100,9 +103,5 @@ impl ImportExportHandler for DsvHandler {
 
     fn import_export_resource(&self) -> &ImportExportResource {
         &self.resource
-    }
-
-    fn file_format(&self) -> FileFormat {
-        FileFormat::DSV
     }
 }

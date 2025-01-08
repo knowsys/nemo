@@ -99,6 +99,10 @@ impl RdfHandler {
 }
 
 impl ImportExportHandler for RdfHandler {
+    fn file_format(&self) -> FileFormat {
+        self.variant.file_format()
+    }
+
     fn reader(&self, read: Box<dyn BufRead>) -> Result<Box<dyn TableProvider>, Error> {
         Ok(Box::new(RdfReader::new(
             read,
@@ -123,7 +127,7 @@ impl ImportExportHandler for RdfHandler {
     }
 
     fn file_extension(&self) -> String {
-        self.variant.file_format().extension().to_string()
+        self.file_format().extension().to_string()
     }
 
     fn compression_format(&self) -> CompressionFormat {
@@ -132,9 +136,5 @@ impl ImportExportHandler for RdfHandler {
 
     fn import_export_resource(&self) -> &ImportExportResource {
         &self.resource
-    }
-
-    fn file_format(&self) -> FileFormat {
-        self.variant.file_format()
     }
 }
