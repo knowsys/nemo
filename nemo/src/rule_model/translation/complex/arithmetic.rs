@@ -2,6 +2,7 @@
 //! from the corresponding ast node.
 
 use crate::{
+    newtype_wrapper,
     parser::ast::{self},
     rule_model::{
         components::term::{
@@ -14,12 +15,7 @@ use crate::{
 };
 
 pub(crate) struct ArithmeticOperation(Operation);
-
-impl ArithmeticOperation {
-    pub(crate) fn into_inner(self) -> Operation {
-        self.0
-    }
-}
+newtype_wrapper!(ArithmeticOperation: Operation);
 
 impl TranslationComponent for ArithmeticOperation {
     type Ast<'a> = ast::expression::complex::arithmetic::Arithmetic<'a>;

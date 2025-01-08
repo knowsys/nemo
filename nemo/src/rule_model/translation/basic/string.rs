@@ -3,18 +3,14 @@
 
 use nemo_physical::datavalues::AnyDataValue;
 
+use crate::newtype_wrapper;
 use crate::parser::ast;
 
 use crate::rule_model::translation::TranslationComponent;
 use crate::rule_model::{error::TranslationError, translation::ASTProgramTranslation};
 
 pub(crate) struct StringLiteral(AnyDataValue);
-
-impl StringLiteral {
-    pub(crate) fn into_inner(self) -> AnyDataValue {
-        self.0
-    }
-}
+newtype_wrapper!(StringLiteral: AnyDataValue);
 
 impl TranslationComponent for StringLiteral {
     type Ast<'a> = ast::expression::basic::string::StringLiteral<'a>;

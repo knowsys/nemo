@@ -3,6 +3,7 @@
 
 use nemo_physical::datavalues::AnyDataValue;
 
+use crate::newtype_wrapper;
 use crate::parser::ast;
 
 use crate::rule_model::translation::TranslationComponent;
@@ -10,12 +11,7 @@ use crate::rule_model::{error::TranslationError, translation::ASTProgramTranslat
 
 #[derive(Debug, Clone)]
 pub(crate) struct BlankLiteral(AnyDataValue);
-
-impl BlankLiteral {
-    pub(crate) fn into_inner(self) -> AnyDataValue {
-        self.0
-    }
-}
+newtype_wrapper!(BlankLiteral: AnyDataValue);
 
 impl TranslationComponent for BlankLiteral {
     type Ast<'a> = ast::expression::basic::blank::Blank<'a>;

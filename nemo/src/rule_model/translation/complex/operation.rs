@@ -2,6 +2,7 @@
 //! from the corresponding ast node.
 
 use crate::{
+    newtype_wrapper,
     parser::ast::{self},
     rule_model::{
         components::term::{operation::Operation, Term},
@@ -11,12 +12,7 @@ use crate::{
 };
 
 pub(crate) struct FunctionLikeOperation(Operation);
-
-impl FunctionLikeOperation {
-    pub(crate) fn into_inner(self) -> Operation {
-        self.0
-    }
-}
+newtype_wrapper!(FunctionLikeOperation: Operation);
 
 impl TranslationComponent for FunctionLikeOperation {
     type Ast<'a> = ast::expression::complex::operation::Operation<'a>;

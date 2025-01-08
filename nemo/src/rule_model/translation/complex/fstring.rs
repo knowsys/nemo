@@ -1,4 +1,5 @@
 use crate::{
+    newtype_wrapper,
     parser::ast::{self},
     rule_model::{
         components::term::{
@@ -10,12 +11,7 @@ use crate::{
 };
 
 pub(crate) struct FormatStringLiteral(Operation);
-
-impl FormatStringLiteral {
-    pub(crate) fn into_inner(self) -> Operation {
-        self.0
-    }
-}
+newtype_wrapper!(FormatStringLiteral: Operation);
 
 impl TranslationComponent for FormatStringLiteral {
     type Ast<'a> = ast::expression::complex::fstring::FormatString<'a>;

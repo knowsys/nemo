@@ -318,3 +318,21 @@ pub(crate) trait TranslationComponent: Sized {
         }
     }
 }
+
+/// Implements conversions commonly used when defining newtype wrappers
+#[macro_export]
+macro_rules! newtype_wrapper {
+    ($wrapper:ty: $inner:ty) => {
+        impl From<$wrapper> for $inner {
+            fn from(value: $wrapper) -> $inner {
+                value.0
+            }
+        }
+
+        impl $wrapper {
+            pub fn into_inner(self) -> $inner {
+                self.0
+            }
+        }
+    };
+}

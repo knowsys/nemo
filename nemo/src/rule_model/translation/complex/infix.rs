@@ -2,6 +2,7 @@
 //! from an infix ast node.
 
 use crate::{
+    newtype_wrapper,
     parser::ast::{self},
     rule_model::{
         components::term::{
@@ -14,12 +15,7 @@ use crate::{
 };
 
 pub(crate) struct InfixOperation(Operation);
-
-impl InfixOperation {
-    pub(crate) fn into_inner(self) -> Operation {
-        self.0
-    }
-}
+newtype_wrapper!(InfixOperation: Operation);
 
 impl TranslationComponent for InfixOperation {
     type Ast<'a> = ast::expression::complex::infix::InfixExpression<'a>;

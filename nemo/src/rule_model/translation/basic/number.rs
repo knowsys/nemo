@@ -3,6 +3,7 @@
 
 use nemo_physical::datavalues::AnyDataValue;
 
+use crate::newtype_wrapper;
 use crate::parser::ast;
 
 use crate::parser::ast::expression::basic::number::NumberTypeMarker;
@@ -10,12 +11,7 @@ use crate::rule_model::translation::TranslationComponent;
 use crate::rule_model::{error::TranslationError, translation::ASTProgramTranslation};
 
 pub(crate) struct NumberLiteral(AnyDataValue);
-
-impl NumberLiteral {
-    pub(crate) fn into_inner(self) -> AnyDataValue {
-        self.0
-    }
-}
+newtype_wrapper!(NumberLiteral: AnyDataValue);
 
 impl TranslationComponent for NumberLiteral {
     type Ast<'a> = ast::expression::basic::number::Number<'a>;
