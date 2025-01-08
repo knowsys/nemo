@@ -51,8 +51,8 @@ pub fn handle_use_directive<'a, 'b>(
     }
 }
 
-fn handle_unknown_directive<'a, 'b>(
-    directive: &'b ast::directive::unknown::UnknownDirective,
+fn handle_unknown_directive(
+    directive: &ast::directive::unknown::UnknownDirective,
 ) -> Result<(), TranslationError> {
     Err(TranslationError::new(
         directive.name_token().span(),

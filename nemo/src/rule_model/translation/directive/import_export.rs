@@ -58,8 +58,8 @@ fn import_export_extension<'a, 'b>(
 }
 
 /// Find the [FileFormat] associated in the given import/export map.
-fn import_export_format<'a, 'b>(
-    map: &'b ast::expression::complex::map::Map<'a>,
+fn import_export_format(
+    map: &ast::expression::complex::map::Map<'_>,
 ) -> Result<FileFormat, TranslationError> {
     let Some(structure_tag) = map.tag() else {
         return Err(TranslationError::new(
@@ -146,7 +146,7 @@ fn process_import_export_substitution<'a, 'b>(
             ));
         };
 
-        let operation = InfixOperation::build_component(translation, &infix)?.into_inner();
+        let operation = InfixOperation::build_component(translation, infix)?.into_inner();
 
         let Some((left, right)) = operation.variable_assignment() else {
             return Err(TranslationError::new(
