@@ -45,7 +45,7 @@ pub struct ASTProgramTranslation<'a, 'b> {
     /// Mapping of [Origin] to [ProgramAST] nodes
     origin_map: HashMap<Origin, &'b dyn ProgramAST<'a>>,
 
-    /// Prefix mapping — 1025
+    /// Prefix mapping
     prefix_mapping: HashMap<String, (String, &'b ast::directive::prefix::Prefix<'a>)>,
     /// Base
     base: Option<(String, &'b ast::directive::base::Base<'a>)>,
