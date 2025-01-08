@@ -112,7 +112,7 @@ impl<'a> Expression<'a> {
 const CONTEXT: ParserContext = ParserContext::Expression;
 
 impl<'a> ProgramAST<'a> for Expression<'a> {
-    fn children(&self) -> Vec<&dyn ProgramAST> {
+    fn children(&self) -> Vec<&dyn ProgramAST<'a>> {
         vec![match self {
             Expression::Aggregation(expression) => expression,
             Expression::Arithmetic(expression) => expression,

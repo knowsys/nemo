@@ -45,7 +45,7 @@ impl<'a> Operation<'a> {
 const CONTEXT: ParserContext = ParserContext::Operation;
 
 impl<'a> ProgramAST<'a> for Operation<'a> {
-    fn children(&self) -> Vec<&dyn ProgramAST> {
+    fn children(&self) -> Vec<&dyn ProgramAST<'a>> {
         let mut result = Vec::<&dyn ProgramAST>::new();
         result.push(&self.tag);
 

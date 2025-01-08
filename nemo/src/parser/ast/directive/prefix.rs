@@ -57,7 +57,7 @@ impl<'a> Prefix<'a> {
 const CONTEXT: ParserContext = ParserContext::Prefix;
 
 impl<'a> ProgramAST<'a> for Prefix<'a> {
-    fn children(&self) -> Vec<&dyn ProgramAST> {
+    fn children(&self) -> Vec<&dyn ProgramAST<'a>> {
         vec![&self.iri]
     }
 

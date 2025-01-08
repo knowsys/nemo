@@ -31,7 +31,7 @@ impl Iri<'_> {
 const CONTEXT: ParserContext = ParserContext::Iri;
 
 impl<'a> ProgramAST<'a> for Iri<'a> {
-    fn children(&self) -> Vec<&dyn ProgramAST> {
+    fn children(&self) -> Vec<&dyn ProgramAST<'a>> {
         Vec::default()
     }
 

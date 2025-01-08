@@ -71,7 +71,7 @@ impl<'a> Export<'a> {
 const CONTEXT: ParserContext = ParserContext::Export;
 
 impl<'a> ProgramAST<'a> for Export<'a> {
-    fn children(&self) -> Vec<&dyn ProgramAST> {
+    fn children(&self) -> Vec<&dyn ProgramAST<'a>> {
         vec![&self.predicate, &self.instructions]
     }
 

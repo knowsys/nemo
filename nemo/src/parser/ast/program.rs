@@ -58,7 +58,7 @@ impl<'a> Program<'a> {
 const CONTEXT: ParserContext = ParserContext::Program;
 
 impl<'a> ProgramAST<'a> for Program<'a> {
-    fn children(&self) -> Vec<&dyn ProgramAST> {
+    fn children(&self) -> Vec<&dyn ProgramAST<'a>> {
         let mut result = Vec::<&dyn ProgramAST>::new();
 
         if let Some(comment) = self.comment() {

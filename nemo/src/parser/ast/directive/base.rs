@@ -34,7 +34,7 @@ impl<'a> Base<'a> {
 const CONTEXT: ParserContext = ParserContext::Base;
 
 impl<'a> ProgramAST<'a> for Base<'a> {
-    fn children(&self) -> Vec<&dyn ProgramAST> {
+    fn children(&self) -> Vec<&dyn ProgramAST<'a>> {
         vec![&self.iri]
     }
 

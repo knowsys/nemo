@@ -38,7 +38,7 @@ impl DocComment<'_> {
 const CONTEXT: ParserContext = ParserContext::DocComment;
 
 impl<'a> ProgramAST<'a> for DocComment<'a> {
-    fn children(&self) -> Vec<&dyn ProgramAST> {
+    fn children(&self) -> Vec<&dyn ProgramAST<'a>> {
         Vec::default()
     }
 

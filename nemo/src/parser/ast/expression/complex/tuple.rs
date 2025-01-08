@@ -32,7 +32,7 @@ impl<'a> Tuple<'a> {
 const CONTEXT: ParserContext = ParserContext::Tuple;
 
 impl<'a> ProgramAST<'a> for Tuple<'a> {
-    fn children(&self) -> Vec<&dyn ProgramAST> {
+    fn children(&self) -> Vec<&dyn ProgramAST<'a>> {
         let mut result = Vec::<&dyn ProgramAST>::new();
 
         for expression in &self.expressions {

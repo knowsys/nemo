@@ -78,7 +78,7 @@ impl<'a> Variable<'a> {
 const CONTEXT: ParserContext = ParserContext::Variable;
 
 impl<'a> ProgramAST<'a> for Variable<'a> {
-    fn children(&self) -> Vec<&dyn ProgramAST> {
+    fn children(&self) -> Vec<&dyn ProgramAST<'a>> {
         Vec::default()
     }
 

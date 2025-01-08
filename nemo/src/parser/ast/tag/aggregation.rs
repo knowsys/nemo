@@ -41,7 +41,7 @@ impl AggregationTag<'_> {
 const CONTEXT: ParserContext = ParserContext::AggregationTag;
 
 impl<'a> ProgramAST<'a> for AggregationTag<'a> {
-    fn children(&self) -> Vec<&dyn ProgramAST> {
+    fn children(&self) -> Vec<&dyn ProgramAST<'a>> {
         Vec::default()
     }
 

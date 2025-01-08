@@ -72,7 +72,7 @@ impl<'a> Import<'a> {
 const CONTEXT: ParserContext = ParserContext::Import;
 
 impl<'a> ProgramAST<'a> for Import<'a> {
-    fn children(&self) -> Vec<&dyn ProgramAST> {
+    fn children(&self) -> Vec<&dyn ProgramAST<'a>> {
         vec![&self.predicate, &self.instructions]
     }
 

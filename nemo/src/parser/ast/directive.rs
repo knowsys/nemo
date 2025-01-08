@@ -100,7 +100,7 @@ impl Directive<'_> {
 const CONTEXT: ParserContext = ParserContext::Directive;
 
 impl<'a> ProgramAST<'a> for Directive<'a> {
-    fn children(&self) -> Vec<&dyn ProgramAST> {
+    fn children(&self) -> Vec<&dyn ProgramAST<'a>> {
         vec![match self {
             Directive::Base(directive) => directive,
             Directive::Declare(directive) => directive,

@@ -44,7 +44,7 @@ impl<'a> RdfLiteral<'a> {
 const CONTEXT: ParserContext = ParserContext::RdfLiteral;
 
 impl<'a> ProgramAST<'a> for RdfLiteral<'a> {
-    fn children(&self) -> Vec<&dyn ProgramAST> {
+    fn children(&self) -> Vec<&dyn ProgramAST<'a>> {
         Vec::default()
     }
 
