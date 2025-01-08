@@ -59,3 +59,20 @@ impl ImportExportHandler for JsonHandler {
         &self.resource
     }
 }
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn format_metadata() {
+        let handler = JsonHandler::new(ImportExportResource::from_string("dummy.json".to_string()));
+
+        assert_eq!(FileFormat::JSON.extension(), handler.file_extension());
+        assert_eq!(
+            FileFormat::JSON.media_type(),
+            handler.file_format().media_type()
+        );
+        assert_eq!(FileFormat::JSON.arity(), Some(handler.predicate_arity()));
+    }
+}

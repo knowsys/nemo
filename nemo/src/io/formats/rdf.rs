@@ -14,6 +14,7 @@ use nemo_physical::datasources::table_providers::TableProvider;
 
 use oxiri::Iri;
 use reader::RdfReader;
+use strum_macros::VariantArray;
 use value_format::RdfValueFormats;
 use writer::RdfWriter;
 
@@ -27,7 +28,7 @@ use crate::{
 use super::{Direction, ImportExportHandler, ImportExportResource, TableWriter};
 
 /// The different supported variants of the RDF format.
-#[derive(Assoc, Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Assoc, Debug, Clone, Copy, PartialEq, Eq, VariantArray)]
 #[func(pub fn file_format(&self) -> FileFormat)]
 pub enum RdfVariant {
     /// RDF 1.1 N-Triples
@@ -136,5 +137,31 @@ impl ImportExportHandler for RdfHandler {
 
     fn import_export_resource(&self) -> &ImportExportResource {
         &self.resource
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use strum::VariantArray;
+
+    #[test]
+    fn format_metadata() {
+        for variant in RdfVariant::VARIANTS {
+            let format = variant.file_format();
+            let handler = RdfHandler::new(
+                ImportExportResource::from_string(format!("dummy.{}", format.extension())),
+                None,
+                *variant,
+                RdfValueFormats::default(format.arity().unwrap()),
+                None,
+                CompressionFormat::None,
+                Direction::Import,
+            );
+
+            assert_eq!(format.extension(), handler.file_extension());
+            assert_eq!(format.media_type(), handler.file_format().media_type());
+            assert_eq!(format.arity(), Some(handler.predicate_arity()));
+        }
     }
 }
