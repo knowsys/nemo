@@ -351,6 +351,9 @@ impl AnyDataValue {
         let mut sign_plus = true;
         let mut is_zero = true;
         let mut has_nonzero_fraction = false;
+
+        let mut saw_digit = false;
+
         for char in lexical_value.bytes() {
             match char {
                 b'-' => {
@@ -370,6 +373,7 @@ impl AnyDataValue {
                     }
                 }
                 b'1'..=b'9' => {
+                    saw_digit = true;
                     trimmed_value.push(char::from(char));
                     in_leading_zeros = false;
                     is_zero = false;
@@ -379,6 +383,7 @@ impl AnyDataValue {
                     }
                 }
                 b'0' => {
+                    saw_digit = true;
                     before_sign = false;
                     if !in_leading_zeros {
                         trimmed_value.push('0');
@@ -401,6 +406,12 @@ impl AnyDataValue {
                 }
             }
         }
+
+        // If we didn't see any digits then this is not a decimal
+        if !saw_digit {
+            return Self::decimal_parse_error(lexical_value, decimal_type);
+        }
+
         // finally remove trailing zeros, and possibly also "."
         if in_fraction {
             trimmed_value.truncate(len_at_trailing_zeros);
