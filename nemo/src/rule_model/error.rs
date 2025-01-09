@@ -20,6 +20,25 @@ use crate::parser::span::{CharacterRange, Span};
 
 use super::origin::Origin;
 
+/// An error, which may stem either from parsing a component
+/// or from translating that object into the rule model
+#[derive(Debug)]
+pub enum ComponentParseError {
+    /// Parse Error
+    ParseError,
+    /// Translation Error
+    TranslationError(TranslationError),
+}
+
+impl Display for ComponentParseError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ComponentParseError::ParseError => f.write_str("error while parsing string"),
+            ComponentParseError::TranslationError(error) => error.fmt(f),
+        }
+    }
+}
+
 /// Types of [ComplexError]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ComplexErrorKind {

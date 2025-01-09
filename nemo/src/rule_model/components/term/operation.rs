@@ -7,24 +7,24 @@ use std::{collections::HashMap, fmt::Display, hash::Hash};
 use operation_kind::OperationKind;
 
 use crate::{
-    parse_component,
-    parser::ast::ProgramAST,
+    chase_model::translation::ProgramChaseTranslation,
+    execution::{
+        planning::operations::operation::operation_term_to_function_tree,
+        rule_execution::VariableTranslation,
+    },
     rule_model::{
         components::{
-            parse::ComponentParseError, IterablePrimitives, IterableVariables, ProgramComponent,
-            ProgramComponentKind,
+            IterablePrimitives, IterableVariables, ProgramComponent, ProgramComponentKind,
         },
         error::{validation_error::ValidationErrorKind, ValidationErrorBuilder},
         origin::Origin,
-        translation::ASTProgramTranslation,
     },
 };
 
 use super::{
-    operation_term_to_function_tree,
     primitive::{ground::GroundTerm, variable::Variable, Primitive},
     value_type::ValueType,
-    ProgramChaseTranslation, Term, VariableTranslation,
+    Term,
 };
 
 /// Operation
@@ -110,6 +110,7 @@ impl Operation {
         let empty_translation = VariableTranslation::new();
         let function_tree =
             operation_term_to_function_tree(&empty_translation, &chase_operation_term);
+
         let stack_program = nemo_physical::function::evaluation::StackProgram::from_function_tree(
             &function_tree,
             &HashMap::default(),
@@ -242,24 +243,6 @@ impl Hash for Operation {
 }
 
 impl ProgramComponent for Operation {
-    fn parse(string: &str) -> Result<Self, ComponentParseError>
-    where
-        Self: Sized,
-    {
-        parse_component!(
-            string,
-            crate::parser::ast::expression::complex::operation::Operation::parse,
-            ASTProgramTranslation::build_operation
-        )
-        .or_else(|_| {
-            parse_component!(
-                string,
-                crate::parser::ast::expression::complex::arithmetic::Arithmetic::parse,
-                ASTProgramTranslation::build_arithmetic
-            )
-        })
-    }
-
     fn origin(&self) -> &Origin {
         &self.origin
     }
@@ -330,12 +313,23 @@ impl IterablePrimitives for Operation {
 
 #[cfg(test)]
 mod test {
-    use crate::rule_model::components::{
-        term::{operation::operation_kind::OperationKind, Term},
-        ProgramComponent,
+    use crate::rule_model::{
+        components::term::{operation::operation_kind::OperationKind, Term},
+        error::ComponentParseError,
+        translation::TranslationComponent,
     };
 
     use super::Operation;
+
+    impl Operation {
+        fn parse(input: &str) -> Result<Operation, ComponentParseError> {
+            let Term::Operation(op) = Term::parse(input)? else {
+                return Err(ComponentParseError::ParseError);
+            };
+
+            Ok(op)
+        }
+    }
 
     #[test]
     fn parse_operation() {

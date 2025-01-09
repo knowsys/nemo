@@ -2,18 +2,12 @@
 
 use std::{fmt::Display, hash::Hash};
 
-use crate::{
-    parse_component,
-    parser::ast::ProgramAST,
-    rule_model::{
-        components::{
-            parse::ComponentParseError, tag::Tag, IterablePrimitives, IterableVariables,
-            ProgramComponent, ProgramComponentKind,
-        },
-        error::{validation_error::ValidationErrorKind, ValidationErrorBuilder},
-        origin::Origin,
-        translation::ASTProgramTranslation,
+use crate::rule_model::{
+    components::{
+        tag::Tag, IterablePrimitives, IterableVariables, ProgramComponent, ProgramComponentKind,
     },
+    error::{validation_error::ValidationErrorKind, ValidationErrorBuilder},
+    origin::Origin,
 };
 
 use super::{
@@ -157,17 +151,6 @@ impl Hash for FunctionTerm {
 }
 
 impl ProgramComponent for FunctionTerm {
-    fn parse(string: &str) -> Result<Self, ComponentParseError>
-    where
-        Self: Sized,
-    {
-        parse_component!(
-            string,
-            crate::parser::ast::expression::complex::atom::Atom::parse,
-            ASTProgramTranslation::build_function
-        )
-    }
-
     fn origin(&self) -> &Origin {
         &self.origin
     }
@@ -233,9 +216,12 @@ impl IterablePrimitives for FunctionTerm {
 
 #[cfg(test)]
 mod test {
-    use crate::rule_model::components::{
-        term::{function::FunctionTerm, primitive::variable::Variable, Term},
-        IterableVariables, ProgramComponent,
+    use crate::rule_model::{
+        components::{
+            term::{function::FunctionTerm, primitive::variable::Variable, Term},
+            IterableVariables,
+        },
+        translation::TranslationComponent,
     };
 
     #[test]

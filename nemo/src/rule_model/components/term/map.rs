@@ -2,18 +2,12 @@
 
 use std::{fmt::Display, hash::Hash};
 
-use crate::{
-    parse_component,
-    parser::ast::ProgramAST,
-    rule_model::{
-        components::{
-            parse::ComponentParseError, tag::Tag, IterablePrimitives, IterableVariables,
-            ProgramComponent, ProgramComponentKind,
-        },
-        error::ValidationErrorBuilder,
-        origin::Origin,
-        translation::ASTProgramTranslation,
+use crate::rule_model::{
+    components::{
+        tag::Tag, IterablePrimitives, IterableVariables, ProgramComponent, ProgramComponentKind,
     },
+    error::ValidationErrorBuilder,
+    origin::Origin,
 };
 
 use super::{
@@ -173,17 +167,6 @@ impl Hash for Map {
 }
 
 impl ProgramComponent for Map {
-    fn parse(string: &str) -> Result<Self, ComponentParseError>
-    where
-        Self: Sized,
-    {
-        parse_component!(
-            string,
-            crate::parser::ast::expression::complex::map::Map::parse,
-            ASTProgramTranslation::build_map
-        )
-    }
-
     fn origin(&self) -> &Origin {
         &self.origin
     }
@@ -251,9 +234,9 @@ impl IterablePrimitives for Map {
 
 #[cfg(test)]
 mod test {
-    use crate::rule_model::components::{
-        term::{primitive::variable::Variable, Term},
-        ProgramComponent,
+    use crate::rule_model::{
+        components::term::{primitive::variable::Variable, Term},
+        translation::TranslationComponent,
     };
 
     use super::Map;

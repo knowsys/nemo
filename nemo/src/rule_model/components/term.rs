@@ -30,21 +30,11 @@ use primitive::{
 use tuple::Tuple;
 use value_type::ValueType;
 
-use crate::{
-    chase_model::translation::ProgramChaseTranslation,
-    execution::{
-        planning::operations::operation::operation_term_to_function_tree,
-        rule_execution::VariableTranslation,
-    },
-    parse_component,
-    parser::ast::ProgramAST,
-    rule_model::{
-        error::ValidationErrorBuilder, origin::Origin, substitution::Substitution,
-        translation::ASTProgramTranslation,
-    },
+use crate::rule_model::{
+    error::ValidationErrorBuilder, origin::Origin, substitution::Substitution,
 };
 
-use super::{parse::ComponentParseError, IterablePrimitives, IterableVariables, ProgramComponent};
+use super::{IterablePrimitives, IterableVariables, ProgramComponent};
 
 /// Term
 ///
@@ -288,17 +278,6 @@ impl Display for Term {
 }
 
 impl ProgramComponent for Term {
-    fn parse(string: &str) -> Result<Self, ComponentParseError>
-    where
-        Self: Sized,
-    {
-        parse_component!(
-            string,
-            crate::parser::ast::expression::Expression::parse,
-            ASTProgramTranslation::build_inner_term
-        )
-    }
-
     fn origin(&self) -> &Origin {
         match self {
             Term::Primitive(primitive) => primitive.origin(),
@@ -400,7 +379,7 @@ impl IterablePrimitives for Term {
 
 #[cfg(test)]
 mod test {
-    use crate::rule_model::components::ProgramComponent;
+    use crate::rule_model::translation::TranslationComponent;
 
     use super::Term;
 

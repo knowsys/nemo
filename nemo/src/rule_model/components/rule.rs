@@ -4,24 +4,18 @@ use std::{collections::HashSet, fmt::Display, hash::Hash};
 
 use nemo_physical::datavalues::DataValue;
 
-use crate::{
-    parse_component,
-    parser::ast::ProgramAST,
-    rule_model::{
-        error::{
-            hint::Hint, info::Info, validation_error::ValidationErrorKind, ComplexErrorLabelKind,
-            ValidationErrorBuilder,
-        },
-        origin::Origin,
-        substitution::Substitution,
-        translation::ASTProgramTranslation,
+use crate::rule_model::{
+    error::{
+        hint::Hint, info::Info, validation_error::ValidationErrorKind, ComplexErrorLabelKind,
+        ValidationErrorBuilder,
     },
+    origin::Origin,
+    substitution::Substitution,
 };
 
 use super::{
     atom::Atom,
     literal::Literal,
-    parse::ComponentParseError,
     term::{
         operation::Operation,
         primitive::{variable::Variable, Primitive},
@@ -348,17 +342,6 @@ impl Hash for Rule {
 }
 
 impl ProgramComponent for Rule {
-    fn parse(string: &str) -> Result<Self, ComponentParseError>
-    where
-        Self: Sized,
-    {
-        parse_component!(
-            string,
-            crate::parser::ast::rule::Rule::parse,
-            ASTProgramTranslation::build_rule
-        )
-    }
-
     fn origin(&self) -> &Origin {
         &self.origin
     }

@@ -9,16 +9,11 @@ use ground::GroundTerm;
 use nemo_physical::datavalues::AnyDataValue;
 use variable::{existential::ExistentialVariable, universal::UniversalVariable, Variable};
 
-use crate::{
-    parse_component,
-    rule_model::{
-        components::{
-            parse::ComponentParseError, IterableVariables, ProgramComponent, ProgramComponentKind,
-        },
-        error::ValidationErrorBuilder,
-        origin::Origin,
-        translation::ASTProgramTranslation,
-    },
+use crate::rule_model::{
+    components::{IterableVariables, ProgramComponent, ProgramComponentKind},
+    error::{ComponentParseError, ValidationErrorBuilder},
+    origin::Origin,
+    translation::TranslationComponent,
 };
 
 use super::{value_type::ValueType, Term};
@@ -36,6 +31,15 @@ pub enum Primitive {
 }
 
 impl Primitive {
+    /// Parse a primitive term from a [`str`] reference.
+    pub fn parse(input: &str) -> Result<Self, ComponentParseError> {
+        let Term::Primitive(term) = Term::parse(input)? else {
+            return Err(ComponentParseError::ParseError);
+        };
+
+        Ok(term)
+    }
+
     /// Return `true` when this term is not a variable and `false` otherwise.
     pub fn is_ground(&self) -> bool {
         matches!(self, Self::Ground(_))
@@ -120,23 +124,6 @@ impl Display for Primitive {
 }
 
 impl ProgramComponent for Primitive {
-    fn parse(string: &str) -> Result<Self, ComponentParseError>
-    where
-        Self: Sized,
-    {
-        let term = parse_component!(
-            string,
-            crate::parser::ast::expression::Expression::parse_basic,
-            ASTProgramTranslation::build_inner_term
-        )?;
-
-        if let Term::Primitive(primitive) = term {
-            return Ok(primitive);
-        }
-
-        Err(ComponentParseError::ParseError)
-    }
-
     fn origin(&self) -> &Origin {
         match self {
             Self::Variable(variable) => variable.origin(),
@@ -196,7 +183,7 @@ impl IterableVariables for Primitive {
 
 #[cfg(test)]
 mod test {
-    use crate::rule_model::components::{term::primitive::variable::Variable, ProgramComponent};
+    use crate::rule_model::components::term::primitive::variable::Variable;
 
     use super::Primitive;
 

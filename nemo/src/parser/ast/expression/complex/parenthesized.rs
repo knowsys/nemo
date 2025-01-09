@@ -29,7 +29,7 @@ impl<'a> ParenthesizedExpression<'a> {
     }
 
     /// Return the underlying expression.
-    pub fn expression(&self) -> &Expression {
+    pub fn expression(&self) -> &Expression<'a> {
         &self.expression
     }
 }

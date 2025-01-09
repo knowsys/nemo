@@ -552,10 +552,10 @@ mod test {
                 atom::Atom,
                 rule::Rule,
                 term::primitive::{variable::Variable, Primitive},
-                ProgramComponent,
             },
             program::ProgramBuilder,
             substitution::Substitution,
+            translation::TranslationComponent,
         },
     };
 

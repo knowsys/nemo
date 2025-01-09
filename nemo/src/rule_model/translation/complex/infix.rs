@@ -2,20 +2,28 @@
 //! from an infix ast node.
 
 use crate::{
+    newtype_wrapper,
     parser::ast::{self},
     rule_model::{
-        components::term::operation::{operation_kind::OperationKind, Operation},
+        components::term::{
+            operation::{operation_kind::OperationKind, Operation},
+            Term,
+        },
         error::TranslationError,
-        translation::ASTProgramTranslation,
+        translation::{ASTProgramTranslation, TranslationComponent},
     },
 };
 
-impl<'a> ASTProgramTranslation<'a> {
-    /// Create an [Operation] from an infix AST node.
-    pub(crate) fn build_infix(
-        &mut self,
-        infix: &'a ast::expression::complex::infix::InfixExpression,
-    ) -> Result<Operation, TranslationError> {
+pub(crate) struct InfixOperation(Operation);
+newtype_wrapper!(InfixOperation: Operation);
+
+impl TranslationComponent for InfixOperation {
+    type Ast<'a> = ast::expression::complex::infix::InfixExpression<'a>;
+
+    fn build_component<'a, 'b>(
+        translation: &mut ASTProgramTranslation<'a, 'b>,
+        infix: &'b Self::Ast<'a>,
+    ) -> Result<Self, TranslationError> {
         let kind = match infix.kind() {
             ast::expression::complex::infix::InfixExpressionKind::Equality => OperationKind::Equal,
             ast::expression::complex::infix::InfixExpressionKind::Inequality => {
@@ -37,8 +45,13 @@ impl<'a> ASTProgramTranslation<'a> {
 
         let (left, right) = infix.pair();
 
-        let subterms = vec![self.build_inner_term(left)?, self.build_inner_term(right)?];
+        let subterms = vec![
+            Term::build_component(translation, left)?,
+            Term::build_component(translation, right)?,
+        ];
 
-        Ok(self.register_component(Operation::new(kind, subterms), infix))
+        Ok(InfixOperation(
+            translation.register_component(Operation::new(kind, subterms), infix),
+        ))
     }
 }

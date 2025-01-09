@@ -18,13 +18,14 @@ use nemo::{
         resource_providers::{ResourceProvider, ResourceProviders},
         ImportManager,
     },
-    rule_model::components::{
-        fact::Fact,
-        import_export::{attributes::ImportExportAttribute, compression::CompressionFormat},
-        parse::ComponentParseError,
-        tag::Tag,
-        term::{primitive::Primitive, Term},
-        ProgramComponent,
+    rule_model::{
+        components::{
+            fact::Fact,
+            import_export::{attributes::ImportExportAttribute, compression::CompressionFormat},
+            tag::Tag,
+            term::{primitive::Primitive, Term},
+        },
+        error::ComponentParseError,
     },
 };
 
