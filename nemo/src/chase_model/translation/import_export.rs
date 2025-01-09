@@ -191,6 +191,13 @@ impl ProgramChaseTranslation {
         ))
     }
 
+    /// Read the ignore_headers option from the attributes.
+    fn read_ignore_headers(attributes: &HashMap<ImportExportAttribute, Term>) -> Option<bool> {
+        attributes
+            .get(&ImportExportAttribute::IgnoreHeaders)
+            .and_then(ImportExportDirective::boolean_value)
+    }
+
     /// Build a [DsvHandler].
     fn build_dsv_handler(
         direction: Direction,
@@ -220,12 +227,15 @@ impl ProgramChaseTranslation {
             compression_format = format;
         }
 
+        let ignore_headers = Self::read_ignore_headers(attributes).unwrap_or_default();
+
         Box::new(DsvHandler::new(
             delimiter,
             resource,
             value_formats,
             limit,
             compression_format,
+            ignore_headers,
             direction,
         ))
     }

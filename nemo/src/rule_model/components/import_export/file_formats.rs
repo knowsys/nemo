@@ -39,6 +39,7 @@ pub enum FileFormat {
         (ImportExportAttribute::Format, AttributeRequirement::Optional),
         (ImportExportAttribute::Limit, AttributeRequirement::Optional),
         (ImportExportAttribute::Compression, AttributeRequirement::Optional),
+        (ImportExportAttribute::IgnoreHeaders, AttributeRequirement::Optional),
     ]))]
     CSV,
     /// Delimiter-separated values
@@ -52,6 +53,7 @@ pub enum FileFormat {
         (ImportExportAttribute::Format, AttributeRequirement::Optional),
         (ImportExportAttribute::Limit, AttributeRequirement::Optional),
         (ImportExportAttribute::Compression, AttributeRequirement::Optional),
+        (ImportExportAttribute::IgnoreHeaders, AttributeRequirement::Optional),
     ]))]
     DSV,
     /// Tab-separated values
@@ -64,6 +66,7 @@ pub enum FileFormat {
         (ImportExportAttribute::Format, AttributeRequirement::Optional),
         (ImportExportAttribute::Limit, AttributeRequirement::Optional),
         (ImportExportAttribute::Compression, AttributeRequirement::Optional),
+        (ImportExportAttribute::IgnoreHeaders, AttributeRequirement::Optional),
     ]))]
     TSV,
     /// JSON objects
