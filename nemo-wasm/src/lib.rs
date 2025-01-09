@@ -365,6 +365,7 @@ impl NemoEngine {
             DsvValueFormats::default(arity),
             None,
             CompressionFormat::None,
+            false,
             Direction::Export,
         ));
         let export_manager: ExportManager = Default::default();

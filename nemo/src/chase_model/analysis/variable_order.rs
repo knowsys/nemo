@@ -970,6 +970,7 @@ mod test {
             DsvValueFormats::default(arity),
             None,
             CompressionFormat::None,
+            false,
             Direction::Import,
         );
 
