@@ -105,3 +105,30 @@ impl ImportExportHandler for DsvHandler {
         &self.resource
     }
 }
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn format_metadata() {
+        for (format, delimiter) in &[
+            (FileFormat::DSV, b';'),
+            (FileFormat::CSV, b','),
+            (FileFormat::TSV, b'\t'),
+        ] {
+            let handler = DsvHandler::new(
+                *delimiter,
+                ImportExportResource::from_string(format!("dummy.{}", format.extension())),
+                DsvValueFormats::default(3),
+                None,
+                CompressionFormat::None,
+                Direction::Import,
+            );
+
+            assert_eq!(format.extension(), handler.file_extension());
+            assert_eq!(format.media_type(), handler.file_format().media_type());
+            assert_eq!(3, handler.predicate_arity());
+        }
+    }
+}
