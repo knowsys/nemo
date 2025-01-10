@@ -4,7 +4,7 @@ use std::{convert::Infallible, fmt::Display};
 
 use thiserror::Error;
 
-use crate::{datatypes::FloatIsNaN, resource::Resource};
+use crate::resource::Resource;
 
 /// Trait that can be used by external libraries extending Nemo to communicate a error during reading
 pub trait ExternalReadingError: Display + std::fmt::Debug {}
@@ -17,8 +17,8 @@ pub enum ReadingError {
     #[error(transparent)]
     ExternalError(#[from] Box<dyn std::error::Error>),
     /// Error from trying to use a floating point number that is NaN
-    #[error(transparent)]
-    FloatIsNaN(#[from] FloatIsNaN),
+    #[error("floating point values must be finite and not NaN")]
+    InvalidFloat,
     /// Error occurred during parsing of Int values
     #[error(transparent)]
     ParseInt(#[from] std::num::ParseIntError),

@@ -1,18 +1,27 @@
-use super::run_length_encodable::FloatingStep;
-use super::{FloatIsNaN, FloorToUsize, RunLengthEncodable};
-use crate::error::Error;
-use crate::function::definitions::numeric::traits::{CheckedPow, CheckedSquareRoot};
-use num::traits::CheckedNeg;
-use num::{Bounded, CheckedAdd, CheckedDiv, CheckedMul, CheckedSub, FromPrimitive, One, Zero};
-use std::cmp::Ordering;
-use std::fmt;
-use std::iter::{Product, Sum};
-use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Rem, Sub, SubAssign};
+//! This module defines a wrapper type [Float] for [f32] that excludes NaN and infinity.
+
+use std::{
+    cmp::Ordering,
+    fmt,
+    iter::{Product, Sum},
+    ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Rem, Sub, SubAssign},
+};
+
+use num::{
+    traits::CheckedNeg, Bounded, CheckedAdd, CheckedDiv, CheckedMul, CheckedSub, FromPrimitive,
+    One, Zero,
+};
+
+use super::{run_length_encodable::FloatingStep, FloorToUsize, RunLengthEncodable};
+use crate::{
+    error::{Error, ReadingError},
+    function::definitions::numeric::traits::{CheckedPow, CheckedSquareRoot},
+};
 
 #[cfg(test)]
 use quickcheck::{Arbitrary, Gen};
 
-/// Wrapper for [f32`] that does not allow [`f32::NAN] values.
+/// Wrapper for [f32] that does not allow [f32::NAN] values.
 #[derive(Copy, Clone, Debug, PartialEq, Default)]
 pub struct Float(f32);
 
@@ -20,22 +29,22 @@ impl Float {
     /// Wraps the given [f32]-`value` as a value over [Float].
     ///
     /// # Errors
-    /// The given `value` is [f32::NAN].
+    /// Returns an error if `value` is [f32::NAN] or infinite.
     pub fn new(value: f32) -> Result<Self, Error> {
-        if value.is_nan() {
-            return Err(Error::ReadingError(FloatIsNaN.into()));
+        if !value.is_finite() {
+            return Err(ReadingError::InvalidFloat.into());
         }
 
         Ok(Float(value))
     }
 
-    /// Wraps the given [f32]-`value`, that is a number, as a value over [Float].
+    /// Wraps the given [f32]-`value` as a value over [Float].
     ///
     /// # Panics
-    /// The given `value` is [f32::NAN].
+    /// Panics if `value` is [f32::NAN] or not finite.
     pub fn from_number(value: f32) -> Self {
-        if value.is_nan() {
-            panic!("The provided value is not a number (NaN)!")
+        if !value.is_finite() {
+            panic!("floating point values must be finite")
         }
 
         Float(value)
@@ -43,7 +52,7 @@ impl Float {
 
     /// Computes the absolute value.
     pub(crate) fn abs(self) -> Self {
-        Float::new(self.0.abs()).expect("Taking the absolute value cannot result in NaN")
+        Float::new(self.0.abs()).expect("operation returned in invalid float")
     }
 
     /// Returns the logarithm of the number with respect to an arbitrary base.
@@ -53,33 +62,33 @@ impl Float {
 
     /// Computes the sine of a number (in radians).
     pub(crate) fn sin(self) -> Self {
-        Float::new(self.0.sin()).expect("Operation does not result in NaN")
+        Float::new(self.0.sin()).expect("operation returned in invalid float")
     }
 
     /// Computes the cosine of a number (in radians).
     pub(crate) fn cos(self) -> Self {
-        Float::new(self.0.cos()).expect("Operation does not result in NaN")
+        Float::new(self.0.cos()).expect("operation returned in invalid float")
     }
 
     /// Computes the tangent of a number (in radians).
     pub(crate) fn tan(self) -> Self {
-        Float::new(self.0.tan()).expect("Operation does not result in NaN")
+        Float::new(self.0.tan()).expect("operation returned in invalid float")
     }
 
     /// Returns the nearest integer to `self`.
     /// If a value is half-way between two integers, round away from 0.0.
     pub(crate) fn round(self) -> Self {
-        Float::new(self.0.round()).expect("Operation does not result in NaN")
+        Float::new(self.0.round()).expect("operation returned in invalid float")
     }
 
     /// Returns the smallest integer greater than or equal to `self`.
     pub(crate) fn ceil(self) -> Self {
-        Float::new(self.0.ceil()).expect("Operation does not result in NaN")
+        Float::new(self.0.ceil()).expect("operation returned in invalid float")
     }
 
     /// Returns the largest integer less than or equal to `self`.
     pub(crate) fn floor(self) -> Self {
-        Float::new(self.0.floor()).expect("Operation does not result in NaN")
+        Float::new(self.0.floor()).expect("operation returned in invalid float")
     }
 }
 
@@ -95,7 +104,7 @@ impl Ord for Float {
     fn cmp(&self, other: &Self) -> Ordering {
         self.0
             .partial_cmp(&other.0)
-            .expect("Comparison can only fail on NaN values which have been forbidden in this type")
+            .expect("comparison can only fail on NaN values which have been forbidden in this type")
     }
 }
 
@@ -293,7 +302,7 @@ impl Bounded for Float {
 impl Arbitrary for Float {
     fn arbitrary(g: &mut Gen) -> Self {
         let mut value = f32::arbitrary(g);
-        while value.is_nan() {
+        while !value.is_finite() {
             value = f32::arbitrary(g);
         }
 
