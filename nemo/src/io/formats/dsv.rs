@@ -36,6 +36,8 @@ pub struct DsvHandler {
     limit: Option<u64>,
     /// Compression format to be used
     compression_format: CompressionFormat,
+    /// Whether to ignore headers
+    ignore_headers: bool,
     /// Direction of the operation.
     _direction: Direction,
 }
@@ -48,6 +50,7 @@ impl DsvHandler {
         value_formats: DsvValueFormats,
         limit: Option<u64>,
         compression_format: CompressionFormat,
+        ignore_headers: bool,
         _direction: Direction,
     ) -> Self {
         Self {
@@ -56,6 +59,7 @@ impl DsvHandler {
             value_formats,
             limit,
             compression_format,
+            ignore_headers,
             _direction,
         }
     }
@@ -77,6 +81,7 @@ impl ImportExportHandler for DsvHandler {
             self.value_formats.clone(),
             None,
             self.limit,
+            self.ignore_headers,
         )))
     }
 
@@ -123,6 +128,7 @@ mod test {
                 DsvValueFormats::default(3),
                 None,
                 CompressionFormat::None,
+                false,
                 Direction::Import,
             );
 

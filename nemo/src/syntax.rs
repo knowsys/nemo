@@ -380,6 +380,8 @@ pub mod import_export {
         pub const VALUE_COMPRESSION_NONE: &str = "none";
         /// The name of the compression format that means "no compression".
         pub const VALUE_COMPRESSION_GZIP: &str = "gzip";
+        /// Name of the attribute for ignoring DSV headers in import/export directives.
+        pub const IGNORE_HEADERS: &str = "ignore_headers";
     }
 
     pub mod file_format {

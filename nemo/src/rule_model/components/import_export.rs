@@ -55,7 +55,7 @@ pub(crate) struct ImportExportDirective {
 impl ImportExportDirective {
     /// For a given [Term] return its contents as a plain string.
     ///
-    /// This returns a value if the term is am iri and
+    /// This returns a value if the term is an iri and
     /// returns `None` otherwise.
     pub fn plain_value(term: &Term) -> Option<String> {
         if let Term::Primitive(Primitive::Ground(any_value)) = term {
@@ -84,6 +84,18 @@ impl ImportExportDirective {
     pub fn integer_value(term: &Term) -> Option<i64> {
         if let Term::Primitive(Primitive::Ground(any_value)) = term {
             return any_value.value().to_i64();
+        }
+
+        None
+    }
+
+    /// For a given [Term] return its contents as an boolean.
+    ///
+    /// This returns a value if the term is an boolean and
+    /// returns `None` otherwise.
+    pub fn boolean_value(term: &Term) -> Option<bool> {
+        if let Term::Primitive(Primitive::Ground(any_value)) = term {
+            return any_value.value().to_boolean();
         }
 
         None
@@ -253,6 +265,7 @@ impl ImportExportDirective {
                 ImportExportAttribute::Limit => Self::validate_limit(value, builder),
                 ImportExportAttribute::Base => Ok(()),
                 ImportExportAttribute::Resource => Ok(()),
+                &ImportExportAttribute::IgnoreHeaders => Ok(()),
             };
         }
 
