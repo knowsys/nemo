@@ -1,0 +1,6 @@
+%! This test case is based on https://github.com/knowsys/nemo/issues/581.
+%! A crash was caused by code responsible for parsing csv-values into any
+%! when parsing values like "+" or "-".
+
+@import sign :- csv { resource="../sources/sign.csv", format=(any,)} .
+@export sign :- csv {}.
