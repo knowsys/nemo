@@ -200,7 +200,7 @@ impl UnaryFunction for CastingIntoDouble {
 
 /// Casting of a string value into an IRI
 ///
-/// Returns am IRI with the same content as the given string.
+/// Returns an IRI with the same content as the given string.
 ///
 /// Returns `None` when called on values other than plain strings.
 #[derive(Debug, Copy, Clone)]
