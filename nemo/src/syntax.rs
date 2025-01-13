@@ -264,6 +264,8 @@ pub mod builtin {
         pub(crate) const DOUBLE: &str = "DOUBLE";
         /// Convert the value to a 32bit floating point number
         pub(crate) const FLOAT: &str = "FLOAT";
+        /// Convert a plain string into an IRI
+        pub(crate) const IRI: &str = "IRI";
         /// Compute the logarithm of the numerical value
         pub(crate) const LOGARITHM: &str = "LOG";
         /// Raise the numerical value to a power
@@ -307,7 +309,7 @@ pub mod builtin {
         /// Compute the quotient of two numeric values
         pub(crate) const DIVISION: &str = "DIVISION";
         /// Compute the multiplicative inverse of a numeric value
-        pub(crate) const INVERSE: &str = "INVERSE";
+        pub(crate) const INVERTSIGN: &str = "INVERTSIGN";
         /// Compute the logical and between boolean values
         pub(crate) const AND: &str = "AND";
         /// Compute the logical or between boolean values

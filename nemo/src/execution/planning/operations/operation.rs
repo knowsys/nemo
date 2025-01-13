@@ -103,6 +103,7 @@ pub(crate) fn operation_to_function_tree(
         OperationKind::CastToDouble => unary!(casting_to_double, sub),
         OperationKind::CastToFloat => unary!(casting_to_float, sub),
         OperationKind::CastToInteger => unary!(casting_to_integer64, sub),
+        OperationKind::CastToIRI => unary!(casting_to_iri, sub),
         OperationKind::CanonicalString => unary!(canonical_string, sub),
         OperationKind::CheckIsInteger => unary!(check_is_integer, sub),
         OperationKind::CheckIsFloat => unary!(check_is_float, sub),
