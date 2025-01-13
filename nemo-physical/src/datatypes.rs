@@ -12,9 +12,6 @@ pub use double::Double;
 /// Module for defining [Float]
 pub mod float;
 pub use float::Float;
-/// Module for defining [FloatIsNaN]
-pub(crate) mod float_is_nan;
-pub(crate) use float_is_nan::FloatIsNaN;
 /// Module for defining [Ring]
 pub(crate) mod ring;
 pub(crate) use ring::Ring;
