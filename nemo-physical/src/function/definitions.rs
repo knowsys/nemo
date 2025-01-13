@@ -8,6 +8,7 @@ pub(crate) mod language;
 pub(crate) mod numeric;
 pub(crate) mod string;
 
+use casting::CastingIntoIri;
 use delegate::delegate;
 
 use crate::{
@@ -132,6 +133,7 @@ pub enum UnaryFunctionEnum {
     CastingIntoInteger64(CastingIntoInteger64),
     CastingIntoDouble(CastingIntoDouble),
     CastingIntoFloat(CastingIntoFloat),
+    CastingIntoIri(CastingIntoIri),
     CheckIsDouble(CheckIsDouble),
     CheckIsFloat(CheckIsFloat),
     CheckIsInteger(CheckIsInteger),
@@ -167,6 +169,7 @@ impl UnaryFunction for UnaryFunctionEnum {
             Self::CastingIntoInteger64(function) => function,
             Self::CastingIntoFloat(function) => function,
             Self::CastingIntoDouble(function) => function,
+            Self::CastingIntoIri(function) => function,
             Self::CheckIsDouble(function) => function,
             Self::CheckIsFloat(function) => function,
             Self::CheckIsInteger(function) => function,

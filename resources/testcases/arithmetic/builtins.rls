@@ -5,8 +5,8 @@ strings("Hello", "World").
 doubles(2.0E0, 1.5E0, 0.5E0).
 integers(1, 2, 3).
 tagged("test"@en).
-iri(constant).
-null(!V) :- iri(?X).
+constant(constant).
+null(!V) :- constant(?X).
 @import uri_strings :- csv{resource="sources/uri_strings.csv"}.
 
 % Datatype check
@@ -15,7 +15,7 @@ result(isint, ?R) :- integers(?A, _, _), ?R = isInteger(?A).
 result(isfloat, ?R) :- doubles(?A, _, _), ?R = isFloat(?A).
 result(isdouble, ?R) :- doubles(?A, _, _), ?R = isDouble(?A).
 result(isnumeric, ?R) :- integers(?A, _, _), ?R = isNumeric(?A).
-result(isiri, ?R) :- iri(?A), ?R = isIri(?A).
+result(isiri, ?R) :- constant(?A), ?R = isIri(?A).
 result(isnull, ?R) :- null(?A), ?R = isNull(?A).
 
 % String representation
@@ -31,17 +31,19 @@ result(fullstring, ?R) :- tagged(?A), ?R = fullStr(?A).
 % Get language tag
 result(tag, ?R) :- tagged(?L), ?R = LANG(?L).
 
-% Numeric casts
+% Casts
 cast(3.0).
 cast(4.2).
 cast(5).
 cast(test).
 cast("2023"^^xsd:gYear).
 cast("40").
+cast("https://example.org").
 
 result(int, ?R) :- cast(?A), ?R = INT(?A).
 result(float, ?R) :- cast(?A), ?R = FLOAT(?A).
 result(double, ?R) :- cast(?A), ?R = DOUBLE(?A).
+result(iri, ?R) :- cast(?A), ?R = IRI(?A).
 
 % Cast within numeric operations
 

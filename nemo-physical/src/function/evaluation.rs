@@ -873,6 +873,9 @@ mod test {
 
         let tree_to_double = Function::casting_to_double(Function::constant(any_int(4)));
         evaluate_expect(&tree_to_double, Some(any_double(4.0)));
+
+        let tree_to_iri = Function::casting_to_iri(Function::constant(any_string("test")));
+        evaluate_expect(&tree_to_iri, Some(any_iri("test")));
     }
 
     #[test]

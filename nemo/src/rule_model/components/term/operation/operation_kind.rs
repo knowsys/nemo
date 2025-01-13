@@ -196,6 +196,11 @@ pub enum OperationKind {
     #[assoc(num_arguments = OperationNumArguments::Unary)]
     #[assoc(return_type = ValueType::Number)]
     CastToInteger,
+    /// Cast to IRI
+    #[assoc(name = function::IRI)]
+    #[assoc(num_arguments = OperationNumArguments::Unary)]
+    #[assoc(return_type = ValueType::Constant)]
+    CastToIRI,
     /// Canonical string representation of a value
     #[assoc(name = function::FULLSTR)]
     #[assoc(num_arguments = OperationNumArguments::Unary)]
@@ -267,7 +272,7 @@ pub enum OperationKind {
     #[assoc(return_type = ValueType::Number)]
     NumericFloor,
     /// Additive inverse of a numeric value
-    #[assoc(name = function::INVERSE)]
+    #[assoc(name = function::INVERTSIGN)]
     #[assoc(num_arguments = OperationNumArguments::Unary)]
     #[assoc(return_type = ValueType::Number)]
     NumericNegation,

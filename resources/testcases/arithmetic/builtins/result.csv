@@ -26,6 +26,9 @@ double,"""4.2""^^<http://www.w3.org/2001/XMLSchema#double>"
 double,"""5""^^<http://www.w3.org/2001/XMLSchema#double>"
 double,"""40""^^<http://www.w3.org/2001/XMLSchema#double>"
 double,"""2023""^^<http://www.w3.org/2001/XMLSchema#double>"
+iri,https://example.org
+iri,40
+iri,test
 mixedsum,"""6.5""^^<http://www.w3.org/2001/XMLSchema#double>"
 round,5
 round,"""3""^^<http://www.w3.org/2001/XMLSchema#double>"
