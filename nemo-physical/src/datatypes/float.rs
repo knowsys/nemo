@@ -21,7 +21,7 @@ use crate::{
 #[cfg(test)]
 use quickcheck::{Arbitrary, Gen};
 
-/// Wrapper for [f32] that does not allow [f32::NAN] values.
+/// Wrapper for [f32] that excludes [f32::NAN] and infinite values
 #[derive(Copy, Clone, Debug, PartialEq, Default)]
 pub struct Float(f32);
 
@@ -30,9 +30,9 @@ impl Float {
     ///
     /// # Errors
     /// Returns an error if `value` is [f32::NAN] or infinite.
-    pub fn new(value: f32) -> Result<Self, Error> {
+    pub fn new(value: f32) -> Result<Self, ReadingError> {
         if !value.is_finite() {
-            return Err(ReadingError::InvalidFloat.into());
+            return Err(ReadingError::InvalidFloat);
         }
 
         Ok(Float(value))
@@ -52,7 +52,7 @@ impl Float {
 
     /// Computes the absolute value.
     pub(crate) fn abs(self) -> Self {
-        Float::new(self.0.abs()).expect("operation returned in invalid float")
+        Float::new(self.0.abs()).expect("operation returns valid float")
     }
 
     /// Returns the logarithm of the number with respect to an arbitrary base.
@@ -62,33 +62,33 @@ impl Float {
 
     /// Computes the sine of a number (in radians).
     pub(crate) fn sin(self) -> Self {
-        Float::new(self.0.sin()).expect("operation returned in invalid float")
+        Float::new(self.0.sin()).expect("operation returns valid float")
     }
 
     /// Computes the cosine of a number (in radians).
     pub(crate) fn cos(self) -> Self {
-        Float::new(self.0.cos()).expect("operation returned in invalid float")
+        Float::new(self.0.cos()).expect("operation returns valid float")
     }
 
     /// Computes the tangent of a number (in radians).
     pub(crate) fn tan(self) -> Self {
-        Float::new(self.0.tan()).expect("operation returned in invalid float")
+        Float::new(self.0.tan()).expect("operation returns valid float")
     }
 
     /// Returns the nearest integer to `self`.
     /// If a value is half-way between two integers, round away from 0.0.
     pub(crate) fn round(self) -> Self {
-        Float::new(self.0.round()).expect("operation returned in invalid float")
+        Float::new(self.0.round()).expect("operation returns valid float")
     }
 
     /// Returns the smallest integer greater than or equal to `self`.
     pub(crate) fn ceil(self) -> Self {
-        Float::new(self.0.ceil()).expect("operation returned in invalid float")
+        Float::new(self.0.ceil()).expect("operation returns valid float")
     }
 
     /// Returns the largest integer less than or equal to `self`.
     pub(crate) fn floor(self) -> Self {
-        Float::new(self.0.floor()).expect("operation returned in invalid float")
+        Float::new(self.0.floor()).expect("operation returns valid float")
     }
 }
 
@@ -179,7 +179,7 @@ impl fmt::Display for Float {
 }
 
 impl TryFrom<f32> for Float {
-    type Error = Error;
+    type Error = ReadingError;
 
     fn try_from(value: f32) -> Result<Self, Self::Error> {
         Self::new(value)
@@ -196,9 +196,9 @@ impl TryFrom<usize> for Float {
     type Error = Error;
 
     fn try_from(value: usize) -> Result<Self, Self::Error> {
-        f32::from_usize(value)
-            .ok_or(Error::UsizeToFloatingPointValue(value))
-            .and_then(Float::new)
+        let res = f32::from_usize(value).ok_or(Error::UsizeToFloatingPointValue(value))?;
+
+        Ok(Float::new(res)?)
     }
 }
 
