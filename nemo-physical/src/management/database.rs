@@ -392,6 +392,15 @@ impl DatabaseInstance {
 
                 (trie, vec![])
             }
+            ExecutionTreeNode::Update { generator, subnode } => {
+                let mut trie = self
+                    .evaluate_tree_leaf(storage, subnode)
+                    .map(|scan| Trie::from_partial_trie_scan(scan, tree.cut_layers))
+                    .unwrap_or(Trie::empty(0));
+                generator.apply_operation(vec![], &mut trie);
+
+                (trie, vec![])
+            }
         }
     }
 
@@ -530,6 +539,7 @@ impl DatabaseInstance {
                         ExecutionTreeNode::ProjectReorder { generator, subnode } => self
                             .evaluate_tree_leaf(&temporary_storage, subnode)
                             .and_then(|scan| generator.apply_operation_first(scan)),
+                        ExecutionTreeNode::Update { generator, subnode } => todo!(),
                     }?;
 
                     let row_datavalue = row_storage

@@ -38,6 +38,10 @@ impl Float {
         Ok(Float(value))
     }
 
+    pub fn new_unchecked(value: f32) -> Self {
+        Self(value)
+    }
+
     /// Wraps the given [f32]-`value` as a value over [Float].
     ///
     /// # Panics

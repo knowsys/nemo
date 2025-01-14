@@ -8,6 +8,7 @@ use crate::{
     management::execution_plan::{ColumnOrder, ExecutionResult},
     tabular::operations::{
         projectreorder::{GeneratorProjectReorder, ProjectReordering},
+        update::GeneratorUpdate,
         OperationGeneratorEnum,
     },
 };
@@ -42,6 +43,10 @@ pub(crate) enum ExecutionTreeNode {
     Operation(ExecutionTreeOperation),
     ProjectReorder {
         generator: GeneratorProjectReorder,
+        subnode: ExecutionTreeLeaf,
+    },
+    Update {
+        generator: GeneratorUpdate,
         subnode: ExecutionTreeLeaf,
     },
 }
@@ -129,6 +134,7 @@ impl ExecutionTree {
 
                 ascii_tree::Tree::Node(format!("{generator:?}"), vec![subnode_tree])
             }
+            ExecutionTreeNode::Update { generator, subnode } => todo!(),
         };
 
         let top_level_name = match &self.result {

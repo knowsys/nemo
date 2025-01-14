@@ -10,7 +10,10 @@ use crate::{
 };
 
 use super::{
-    column::{rle::ColumnScanRle, vector::ColumnScanVector},
+    column::{
+        rle::ColumnScanRle,
+        vector::{ColumnScanVector, ColumnScanVectorMut},
+    },
     operations::{
         constant::ColumnScanConstant, filter::ColumnScanFilter,
         filter_constant::ColumnScanFilterConstant, filter_equal::ColumnScanFilterEqual,
@@ -482,5 +485,112 @@ impl<'a> ColumnScanT<'a> {
         self.scan_i64.constant_set(None);
         self.scan_float.constant_set(None);
         self.scan_double.constant_set(None);
+    }
+}
+
+/// Contains a [ColumnScanVectorMut] for every used [super::super::datatypes::storage_type_name::StorageTypeName]
+#[derive(Debug)]
+pub(crate) struct ColumnScanTMut<'a> {
+    /// Case [StorageTypeName::Id32][super::super::datatypes::storage_type_name::StorageTypeName]
+    pub scan_id32: ColumnScanVectorMut<'a, u32>,
+    /// Case [StorageTypeName::Id64][super::super::datatypes::storage_type_name::StorageTypeName]
+    pub scan_id64: ColumnScanVectorMut<'a, u64>,
+    /// Case [StorageTypeName::Int64][super::super::datatypes::storage_type_name::StorageTypeName]
+    pub scan_i64: ColumnScanVectorMut<'a, i64>,
+    /// Case [StorageTypeName::Float][super::super::datatypes::storage_type_name::StorageTypeName]
+    pub scan_float: ColumnScanVectorMut<'a, Float>,
+    /// Case [StorageTypeName::Double][super::super::datatypes::storage_type_name::StorageTypeName]
+    pub scan_double: ColumnScanVectorMut<'a, Double>,
+}
+
+impl<'a> ColumnScanTMut<'a> {
+    /// Create a new [ColumnScanT].
+    pub(crate) fn new(
+        scan_id32: ColumnScanVectorMut<'a, u32>,
+        scan_id64: ColumnScanVectorMut<'a, u64>,
+        scan_i64: ColumnScanVectorMut<'a, i64>,
+        scan_float: ColumnScanVectorMut<'a, Float>,
+        scan_double: ColumnScanVectorMut<'a, Double>,
+    ) -> Self {
+        Self {
+            scan_id32,
+            scan_id64,
+            scan_i64,
+            scan_float,
+            scan_double,
+        }
+    }
+
+    /// Advance the [ColumnScanVectorMut] of the given [StorageTypeName] to the next value
+    /// and return it.
+    ///
+    /// Returns `None` if there is no such value.
+    pub(crate) fn next(&mut self, storage_type: StorageTypeName) {
+        match storage_type {
+            StorageTypeName::Id32 => self.scan_id32.next(),
+            StorageTypeName::Id64 => self.scan_id64.next(),
+            StorageTypeName::Int64 => self.scan_i64.next(),
+            StorageTypeName::Float => self.scan_float.next(),
+            StorageTypeName::Double => self.scan_double.next(),
+        }
+    }
+
+    /// Return the current value of a scan of the given [StorageTypeName].
+    pub(crate) fn current(&self, storage_type: StorageTypeName) -> Option<StorageValueT> {
+        match storage_type {
+            StorageTypeName::Id32 => self.scan_id32.current().cloned().map(StorageValueT::Id32),
+            StorageTypeName::Id64 => self.scan_id64.current().cloned().map(StorageValueT::Id64),
+            StorageTypeName::Int64 => self.scan_i64.current().cloned().map(StorageValueT::Int64),
+            StorageTypeName::Float => self.scan_float.current().cloned().map(StorageValueT::Float),
+            StorageTypeName::Double => self
+                .scan_double
+                .current()
+                .cloned()
+                .map(StorageValueT::Double),
+        }
+    }
+
+    pub(crate) fn set_deleted(&mut self, storage_type: StorageTypeName) {
+        match storage_type {
+            StorageTypeName::Id32 => self.scan_id32.delete(),
+            StorageTypeName::Id64 => self.scan_id64.delete(),
+            StorageTypeName::Int64 => self.scan_i64.delete(),
+            StorageTypeName::Float => self.scan_float.delete(),
+            StorageTypeName::Double => self.scan_double.delete(),
+        }
+    }
+
+    /// Return the current position of a scan of the given [StorageTypeName].
+    pub(crate) fn pos(&mut self, storage_type: StorageTypeName) -> Option<usize> {
+        match storage_type {
+            StorageTypeName::Id32 => self.scan_id32.pos(),
+            StorageTypeName::Id64 => self.scan_id64.pos(),
+            StorageTypeName::Int64 => self.scan_i64.pos(),
+            StorageTypeName::Float => self.scan_float.pos(),
+            StorageTypeName::Double => self.scan_double.pos(),
+        }
+    }
+
+    /// Return a scan of the given [StorageTypeName] to its initial state.
+    pub(crate) fn reset(&mut self, storage_type: StorageTypeName) {
+        match storage_type {
+            StorageTypeName::Id32 => self.scan_id32.reset(),
+            StorageTypeName::Id64 => self.scan_id64.reset(),
+            StorageTypeName::Int64 => self.scan_i64.reset(),
+            StorageTypeName::Float => self.scan_float.reset(),
+            StorageTypeName::Double => self.scan_double.reset(),
+        }
+    }
+
+    /// Restricts the iterator of the given [StorageTypeName] to the given `interval`.
+    /// Resets the iterator just before the start of the interval.
+    pub(crate) fn narrow(&mut self, storage_type: StorageTypeName, interval: Range<usize>) {
+        match storage_type {
+            StorageTypeName::Id32 => self.scan_id32.narrow(interval),
+            StorageTypeName::Id64 => self.scan_id64.narrow(interval),
+            StorageTypeName::Int64 => self.scan_i64.narrow(interval),
+            StorageTypeName::Float => self.scan_float.narrow(interval),
+            StorageTypeName::Double => self.scan_double.narrow(interval),
+        }
     }
 }

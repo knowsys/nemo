@@ -10,6 +10,7 @@ pub(crate) mod prune;
 pub(crate) mod subtract;
 pub(crate) mod trim;
 pub(crate) mod union;
+pub(crate) mod update;
 
 pub use filter::Filter;
 pub use filter::Filters;

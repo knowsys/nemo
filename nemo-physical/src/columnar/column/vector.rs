@@ -1,12 +1,16 @@
 //! This module defines [ColumnVector] and [ColumnScanVector].
 
 use std::{
+    cell::UnsafeCell,
     fmt::Debug,
     mem::size_of,
     ops::{Index, Range},
 };
 
-use crate::{columnar::columnscan::ColumnScan, management::bytesized::ByteSized};
+use crate::{
+    columnar::columnscan::ColumnScan, datatypes::column_data_type::DeletedValue,
+    management::bytesized::ByteSized,
+};
 
 use super::Column;
 
@@ -24,9 +28,13 @@ impl<T: Debug + Copy + Ord> ColumnVector<T> {
 
         ColumnVector { data }
     }
+
+    pub(crate) fn iter_mut(&self) -> ColumnScanVectorMut<T> {
+        ColumnScanVectorMut::new(&self.data)
+    }
 }
 
-impl<'a, T: 'a + Debug + Copy + Ord> Column<'a, T> for ColumnVector<T> {
+impl<'a, T: 'a + Debug + Copy + Ord + DeletedValue> Column<'a, T> for ColumnVector<T> {
     type Scan = ColumnScanVector<'a, T>;
 
     fn len(&self) -> usize {
@@ -67,7 +75,7 @@ pub(crate) struct ColumnScanVector<'a, T> {
 
 impl<'a, T> ColumnScanVector<'a, T>
 where
-    T: 'a + Debug + Copy + Ord,
+    T: 'a + Debug + Copy + Ord + DeletedValue,
 {
     /// Defines the lower limit of elements in the interval where a binary search is used instead of a vector-scan
     const SEEK_BINARY_SEARCH: usize = 10;
@@ -91,20 +99,29 @@ where
 
 impl<'a, T> Iterator for ColumnScanVector<'a, T>
 where
-    T: 'a + Debug + Copy + Ord,
+    T: 'a + Debug + Copy + Ord + DeletedValue,
 {
     type Item = T;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let pos = self.pos.map_or_else(|| self.interval.start, |pos| pos + 1);
-        self.pos = Some(pos);
-        (pos < self.interval.end).then(|| self.column.get(pos))
+        loop {
+            let pos = self.pos.map_or_else(|| self.interval.start, |pos| pos + 1);
+            self.pos = Some(pos);
+            if pos >= self.interval.end {
+                return None;
+            }
+
+            let current_element = self.column.get(pos);
+            if current_element != T::deleted_value() {
+                return Some(current_element);
+            }
+        }
     }
 }
 
 impl<'a, T> ColumnScan for ColumnScanVector<'a, T>
 where
-    T: 'a + Debug + Copy + Ord,
+    T: 'a + Debug + Copy + Ord + DeletedValue,
 {
     fn seek(&mut self, value: T) -> Option<T> {
         if self.interval.end == 0 {
@@ -173,6 +190,87 @@ where
         self.validate_interval();
     }
 }
+
+/// Mutable iterator over a [ColumnScanVector]
+#[derive(Debug)]
+pub(crate) struct ColumnScanVectorMut<'a, T> {
+    /// The referenced column
+    column: &'a [UnsafeCell<T>],
+    /// Current position
+    pos: Option<usize>,
+    /// Range that is currently active within the column
+    interval: Range<usize>,
+}
+
+impl<'a, T> ColumnScanVectorMut<'a, T> {
+    pub(crate) fn new(column: &'a [T]) -> Self {
+        let column_len = column.len();
+        let slice = unsafe {
+            let ptr: *const [T] = column;
+            &*(ptr as *const [UnsafeCell<T>])
+        };
+
+        Self {
+            column: slice,
+            pos: None,
+            interval: 0..column_len,
+        }
+    }
+
+    pub(crate) fn current(&self) -> Option<&T> {
+        unsafe { self.column.get(self.pos?).map(|cell| &*cell.get()) }
+    }
+
+    pub(crate) fn current_mut(&self) -> Option<&mut T> {
+        unsafe { self.column.get(self.pos?).map(|cell| &mut *cell.get()) }
+    }
+
+    pub(crate) fn reset(&mut self) {
+        self.pos = None;
+    }
+
+    pub(crate) fn pos(&self) -> Option<usize> {
+        self.pos
+    }
+
+    pub(crate) fn narrow(&mut self, interval: Range<usize>) {
+        self.interval = interval;
+        self.pos = None;
+    }
+
+    pub(crate) fn next(&mut self) {
+        let pos = self.pos.map_or_else(|| self.interval.start, |pos| pos + 1);
+        self.pos = Some(pos);
+    }
+}
+
+impl<'a, T: DeletedValue> ColumnScanVectorMut<'a, T> {
+    pub(crate) fn delete(&mut self) {
+        if let Some(current) = self.current_mut() {
+            *current = T::deleted_value();
+        }
+    }
+}
+
+// impl<'a, T: Debug + Copy + Ord> Iterator for ColumnScanVectorMut<'a, T> {
+//     type Item = &'a mut T;
+
+//     fn next(&mut self) -> Option<Self::Item> {
+//         let pos = self.pos.map_or_else(|| self.interval.start, |pos| pos + 1);
+//         self.pos = Some(pos);
+//         if pos < self.interval.end {
+//             // https://users.rust-lang.org/t/how-to-implement-a-safe-mutable-iterator-for-vec-t/33297/5
+//             self.column.take().and_then(|v| {
+//                 let (head, tail) = v.split_first_mut()?;
+//                 self.column = Some(tail);
+//                 Some(head)
+//             })
+//         } else {
+//             self.pos = None;
+//             None
+//         }
+//     }
+// }
 
 #[cfg(test)]
 mod test {

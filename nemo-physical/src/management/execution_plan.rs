@@ -21,6 +21,7 @@ use crate::{
         projectreorder::GeneratorProjectReorder,
         subtract::GeneratorSubtract,
         union::GeneratorUnion,
+        update::GeneratorUpdate,
         OperationGeneratorEnum, OperationTable,
     },
     util::mapping::{permutation::Permutation, traits::NatMapping},
@@ -135,7 +136,8 @@ impl ExecutionNodeRef {
             | ExecutionOperation::Filter(subnode, _)
             | ExecutionOperation::Function(subnode, _)
             | ExecutionOperation::Null(subnode)
-            | ExecutionOperation::Aggregate(subnode, _) => vec![subnode.clone()],
+            | ExecutionOperation::Aggregate(subnode, _)
+            | ExecutionOperation::Update(subnode) => vec![subnode.clone()],
         }
     }
 }
@@ -173,6 +175,8 @@ pub(crate) enum ExecutionOperation {
     Null(ExecutionNodeRef),
     /// Perform aggregate operation
     Aggregate(ExecutionNodeRef, AggregateAssignment),
+    /// Update
+    Update(ExecutionNodeRef),
 }
 
 /// Declares whether the resulting table form executing a plan should be kept temporarily or permamently
@@ -364,6 +368,15 @@ impl ExecutionPlan {
         subnode: ExecutionNodeRef,
     ) -> ExecutionNodeRef {
         let new_operation = ExecutionOperation::Null(subnode);
+        self.push_and_return_reference(new_operation, marked_columns)
+    }
+
+    pub fn update(
+        &mut self,
+        marked_columns: OperationTable,
+        subnode: ExecutionNodeRef,
+    ) -> ExecutionNodeRef {
+        let new_operation = ExecutionOperation::Update(subnode);
         self.push_and_return_reference(new_operation, marked_columns)
     }
 }
@@ -803,6 +816,31 @@ impl ExecutionPlan {
                     )),
                     subnodes: vec![subtree],
                 })
+            }
+            ExecutionOperation::Update(subnode) => {
+                let marker_subnode = subnode.markers_cloned();
+                let subtree: ExecutionTreeLeaf = if let ExecutionTreeOperation::Leaf(leaf) =
+                    Self::execution_node(
+                        root_node_id,
+                        subnode.clone(),
+                        ColumnOrder::default(),
+                        output_nodes,
+                        computed_trees,
+                        computed_trees_map,
+                        loaded_tables,
+                    )
+                    .operation()
+                    .expect("No sub node should be a project")
+                {
+                    leaf
+                } else {
+                    unreachable!("Subnode of a update must be a load instruction");
+                };
+
+                ExecutionTreeNode::Update {
+                    generator: GeneratorUpdate::default(),
+                    subnode: subtree,
+                }
             }
         }
     }

@@ -21,6 +21,8 @@ use crate::{
 
 use self::interval_lookup::{IntervalLookup, IntervalLookupBuilderT, IntervalLookupT};
 
+use super::{column::vector::ColumnScanVectorMut, columnscan::ColumnScanTMut};
+
 #[derive(Debug, Clone)]
 pub(crate) struct IntervalColumn<T, LookupMethod>
 where
@@ -68,6 +70,10 @@ where
         let interval_end = self.intervals.get(interval_index + 1);
 
         Some(interval_start..interval_end)
+    }
+
+    pub(crate) fn iter_mut(&self) -> ColumnScanVectorMut<T> {
+        self.data.iter_mut()
     }
 }
 
@@ -156,6 +162,17 @@ where
             scan_i64: ColumnScanCell::new(self.column_int64.iter()),
             scan_float: ColumnScanCell::new(self.column_float.iter()),
             scan_double: ColumnScanCell::new(self.column_double.iter()),
+        }
+    }
+
+    /// Create a [ColumnScanTMut] from iterators of the internal columns.
+    pub(crate) fn iter_mut(&self) -> ColumnScanTMut {
+        ColumnScanTMut {
+            scan_id32: self.column_id32.iter_mut(),
+            scan_id64: self.column_id64.iter_mut(),
+            scan_i64: self.column_int64.iter_mut(),
+            scan_float: self.column_float.iter_mut(),
+            scan_double: self.column_double.iter_mut(),
         }
     }
 

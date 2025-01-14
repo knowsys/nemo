@@ -39,6 +39,10 @@ impl Double {
         Ok(Self(value))
     }
 
+    pub fn new_unchecked(value: f64) -> Self {
+        Self(value)
+    }
+
     /// Wraps the given [f64]-`value` as a value over [Double].
     ///
     /// # Panics

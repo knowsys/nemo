@@ -7,7 +7,7 @@ use streaming_iterator::StreamingIterator;
 
 use crate::{
     columnar::{
-        columnscan::ColumnScanT,
+        columnscan::{ColumnScanT, ColumnScanTMut},
         intervalcolumn::{
             interval_lookup::lookup_column::IntervalLookupColumn, IntervalColumnT,
             IntervalColumnTBuilderMatrix, IntervalColumnTBuilderTriescan,
@@ -83,6 +83,17 @@ impl Trie {
             .collect::<Vec<_>>();
 
         TrieScanGeneric::new(self, column_scans)
+    }
+
+    /// Return a [TrieScanGenericMut] over this trie.
+    pub(crate) fn partial_iterator_mut<'a>(&'a self) -> TrieScanGenericMut<'a> {
+        let column_scans = self
+            .columns
+            .iter()
+            .map(|column| UnsafeCell::new(column.iter_mut()))
+            .collect::<Vec<_>>();
+
+        TrieScanGenericMut::new(self, column_scans)
     }
 
     /// Return a [TrieScan] over this trie.
@@ -609,6 +620,96 @@ impl<'a> PartialTrieScan<'a> for TrieScanGeneric<'a> {
 
     fn current_layer(&self) -> Option<usize> {
         self.path_types.len().checked_sub(1)
+    }
+}
+
+/// Implementation of [PartialTrieScan] for a [Trie]
+#[derive(Debug)]
+pub(crate) struct TrieScanGenericMut<'a> {
+    /// Underlying [Trie] over which we are iterating
+    trie: &'a Trie,
+
+    /// Path of [StorageTypeName] indicating the the types of the current (partial) row
+    path_types: Vec<StorageTypeName>,
+
+    /// [ColumnScanT] for each layer in the [PartialTrieScan]
+    column_scans: Vec<UnsafeCell<ColumnScanTMut<'a>>>,
+}
+
+impl<'a> TrieScanGenericMut<'a> {
+    /// Construct a new [TrieScanGeneric].
+    pub(crate) fn new(trie: &'a Trie, column_scans: Vec<UnsafeCell<ColumnScanTMut<'a>>>) -> Self {
+        Self {
+            trie,
+            path_types: Vec::with_capacity(column_scans.len()),
+            column_scans,
+        }
+    }
+
+    pub(crate) fn up(&mut self) {
+        debug_assert!(
+            !self.path_types.is_empty(),
+            "Attempted to go up in the starting position"
+        );
+
+        self.path_types.pop();
+    }
+
+    pub(crate) fn down(&mut self, next_type: StorageTypeName) {
+        match self.path_types.last() {
+            None => {
+                self.column_scans[0].get_mut().reset(next_type);
+            }
+            Some(&previous_type) => {
+                let next_layer = self.path_types.len();
+                let previous_layer = next_layer - 1;
+
+                let current_index = self.column_scans[previous_layer]
+                    .get_mut()
+                    .pos(previous_type)
+                    .expect(
+                        "Calling TrieScanGeneric::down is only allowed when currently pointing at an element.",
+                    );
+
+                let next_interval = self.trie.columns[next_layer]
+                    .interval_bounds(previous_type, current_index, next_type)
+                    .unwrap_or(0..0);
+
+                self.column_scans[next_layer]
+                    .get_mut()
+                    .narrow(next_type, next_interval);
+            }
+        }
+
+        self.path_types.push(next_type);
+    }
+
+    pub(crate) fn arity(&self) -> usize {
+        self.trie.arity()
+    }
+
+    pub(crate) fn scan<'b>(&'b self, layer: usize) -> &'b UnsafeCell<ColumnScanTMut<'a>> {
+        &self.column_scans[layer]
+    }
+
+    pub(crate) fn possible_types(&self, layer: usize) -> StorageTypeBitSet {
+        let mut result = BitSet::default();
+
+        for (index, storage_type) in STORAFE_TYPES.iter().enumerate() {
+            if !self.trie.is_empty_layer(layer, *storage_type) {
+                result.set(index, true);
+            }
+        }
+
+        StorageTypeBitSet::from(result)
+    }
+
+    pub(crate) fn current_layer(&self) -> Option<usize> {
+        self.path_types.len().checked_sub(1)
+    }
+
+    pub(crate) fn current_scan<'b>(&'b self) -> Option<&'b UnsafeCell<ColumnScanTMut<'a>>> {
+        Some(self.scan(self.current_layer()?))
     }
 }
 

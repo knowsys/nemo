@@ -6,3 +6,4 @@ pub(crate) mod triescan;
 
 pub(crate) mod buffer;
 pub(crate) mod rowscan;
+pub(crate) mod rowscan_mut;

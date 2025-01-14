@@ -109,6 +109,8 @@ impl HeadStrategy for DatalogStrategy {
                 .plan_mut()
                 .subtract(new_tables_union, vec![old_table_union]);
 
+            // let update_node = current_plan.plan_mut().update(marked_columns, subnode)
+
             current_plan.add_permanent_table(
                 remove_duplicate_node,
                 "Duplicate Elimination (Datalog)",
