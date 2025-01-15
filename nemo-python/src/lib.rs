@@ -288,7 +288,12 @@ fn trace_to_dict<'py>(trace: &ExecutionTraceTree, py: Python<'py>) -> PyResult<B
     match &trace {
         ExecutionTraceTree::Fact(fact) => result.set_item("fact", fact.to_string())?,
         ExecutionTraceTree::Rule(rule_application, subtraces) => {
-            result.set_item("rule", rule_application.rule.to_string())?;
+            result.set_item(
+                "rule",
+                rule_application
+                    .rule
+                    .display_instantiated(&rule_application.assignment),
+            )?;
             result.set_item(
                 "assignment",
                 assignement_to_dict(&rule_application.assignment, py)?,
