@@ -25,7 +25,7 @@ pub struct ExportManager {
     /// If `true`, then writing operations will not be performed. The object can still be used for validation etc.
     disable_write: bool,
     /// Compression format to be used.
-    compression_format: CompressionFormat,
+    default_compression_format: CompressionFormat,
 }
 
 impl ExportManager {
@@ -45,7 +45,7 @@ impl ExportManager {
     /// Define if gzip compression should be the default
     /// choice.
     pub fn compress(mut self, compress: bool) -> Self {
-        self.compression_format = if compress {
+        self.default_compression_format = if compress {
             CompressionFormat::GZip
         } else {
             CompressionFormat::None
@@ -95,6 +95,18 @@ impl ExportManager {
         }
     }
 
+    /// Returns the compression format for an export handler,
+    /// or the default compression format if the handler does not specify compression.
+    fn compression_format(&self, export_handler: &dyn ImportExportHandler) -> CompressionFormat {
+        let their_compression_format = export_handler.compression_format();
+
+        if matches!(their_compression_format, CompressionFormat::None) {
+            self.default_compression_format
+        } else {
+            their_compression_format
+        }
+    }
+
     /// Create a writer based on an export handler. The predicate is used to
     /// obtain a default file name if needed.
     ///
@@ -116,8 +128,7 @@ impl ExportManager {
                 create_dir_all(parent)?;
             }
 
-            export_handler
-                .compression_format()
+            self.compression_format(export_handler)
                 .file_writer(output_path, Self::open_options(self.overwrite))
         }
     }
@@ -146,8 +157,8 @@ impl ExportManager {
         let file_name = sanitise_with_options(&file_name_unsafe, &sanitize_options);
         pred_path.push(file_name);
 
-        pred_path = export_handler
-            .compression_format()
+        pred_path = self
+            .compression_format(export_handler)
             .path_with_extension(pred_path);
         pred_path
     }
