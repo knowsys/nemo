@@ -55,6 +55,8 @@ bytecount = "0.6.8"
 colored = "2"
 
 [dev-dependencies]
+assert_cmd = "2.0"
+dir-test = "0.2.1"
 env_logger = "*"
 assert_fs = "1.0"
 test-log = "0.2"
