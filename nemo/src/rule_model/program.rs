@@ -5,7 +5,8 @@ use std::{
     fmt::Write,
 };
 
-use crate::{io::format_builder::ImportExportBuilder, rule_model::components::tag::Tag};
+use crate::io::format_builder::ImportExportBuilder;
+use nemo_physical::util::hook::FilterHook;
 
 use super::{
     components::{
@@ -14,6 +15,7 @@ use super::{
         literal::Literal,
         output::Output,
         rule::Rule,
+        tag::Tag,
         ProgramComponent,
     },
     error::{
@@ -45,6 +47,9 @@ pub struct Program {
     import_builders: Vec<ImportExportBuilder>,
     /// Builders for export handlers (filled upon validation)
     export_builders: Vec<ImportExportBuilder>,
+
+    /// Hook
+    hook: Option<FilterHook>,
 }
 
 impl std::fmt::Debug for Program {
@@ -229,6 +234,16 @@ impl Program {
                 entry.insert((arity, origin));
             }
         }
+    }
+
+    /// Return filter associated with this program, if it exists.
+    pub fn hook(&self) -> Option<FilterHook> {
+        self.hook.clone()
+    }
+
+    /// Set a filter that is applied to each derivation.
+    pub fn set_hook(&mut self, hook: FilterHook) {
+        self.hook = Some(hook)
     }
 
     /// Validate the global program properties without validating

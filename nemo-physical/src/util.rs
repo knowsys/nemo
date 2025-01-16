@@ -1,5 +1,6 @@
 //! This module collects miscellaneous functionality.
 
+pub mod hook;
 pub mod mapping;
 
 pub(crate) mod bitset;

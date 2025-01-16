@@ -15,6 +15,7 @@ use crate::{
     tabular::operations::{
         aggregate::{AggregateAssignment, GeneratorAggregate},
         filter::{Filters, GeneratorFilter},
+        filter_hook::GeneratorFilterHook,
         function::{FunctionAssignment, GeneratorFunction},
         join::GeneratorJoin,
         null::GeneratorNull,
@@ -23,7 +24,10 @@ use crate::{
         union::GeneratorUnion,
         OperationGeneratorEnum, OperationTable,
     },
-    util::mapping::{permutation::Permutation, traits::NatMapping},
+    util::{
+        hook::FilterHook,
+        mapping::{permutation::Permutation, traits::NatMapping},
+    },
 };
 
 use super::{
@@ -135,6 +139,7 @@ impl ExecutionNodeRef {
             | ExecutionOperation::Filter(subnode, _)
             | ExecutionOperation::Function(subnode, _)
             | ExecutionOperation::Null(subnode)
+            | ExecutionOperation::FilterHook(subnode, _, _)
             | ExecutionOperation::Aggregate(subnode, _) => vec![subnode.clone()],
         }
     }
@@ -169,6 +174,8 @@ pub(crate) enum ExecutionOperation {
     Filter(ExecutionNodeRef, Filters),
     /// Introduce new columns by applying a function to the columns of the table represented by the subnode
     Function(ExecutionNodeRef, FunctionAssignment),
+    /// Apply a custom filter to the table
+    FilterHook(ExecutionNodeRef, String, FilterHook),
     /// Append columns with fresh nulls to the table represented by the subnode
     Null(ExecutionNodeRef),
     /// Perform aggregate operation
@@ -328,6 +335,18 @@ impl ExecutionPlan {
     pub fn filter(&mut self, subnode: ExecutionNodeRef, filters: Filters) -> ExecutionNodeRef {
         let marked_columns = subnode.markers_cloned();
         let new_operation = ExecutionOperation::Filter(subnode, filters);
+        self.push_and_return_reference(new_operation, marked_columns)
+    }
+
+    /// Return an [ExecutionNodeRef] for restricing a column to a certain value.
+    pub fn filter_hook(
+        &mut self,
+        subnode: ExecutionNodeRef,
+        string: String,
+        filter: FilterHook,
+    ) -> ExecutionNodeRef {
+        let marked_columns = subnode.markers_cloned();
+        let new_operation = ExecutionOperation::FilterHook(subnode, string, filter);
         self.push_and_return_reference(new_operation, marked_columns)
     }
 
@@ -800,6 +819,28 @@ impl ExecutionPlan {
                     generator: OperationGeneratorEnum::Null(GeneratorNull::new(
                         node_markers,
                         subnode.markers_cloned(),
+                    )),
+                    subnodes: vec![subtree],
+                })
+            }
+            ExecutionOperation::FilterHook(subnode, string, filter) => {
+                let subtree = Self::execution_node(
+                    root_node_id,
+                    subnode.clone(),
+                    order.clone(),
+                    output_nodes,
+                    computed_trees,
+                    computed_trees_map,
+                    loaded_tables,
+                )
+                .operation()
+                .expect("No sub node should be a project");
+
+                ExecutionTreeNode::Operation(ExecutionTreeOperation::Node {
+                    generator: OperationGeneratorEnum::FilterHook(GeneratorFilterHook::new(
+                        string.clone(),
+                        filter.clone(),
+                        order.clone(),
                     )),
                     subnodes: vec![subtree],
                 })

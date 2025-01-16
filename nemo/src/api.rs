@@ -117,6 +117,10 @@ pub fn output_predicates(engine: &Engine) -> Vec<Tag> {
 #[cfg(test)]
 mod test {
     use assert_fs::TempDir;
+    use nemo_physical::{
+        datavalues::{AnyDataValue, DataValue},
+        util::hook::FilterHook,
+    };
 
     use super::*;
 
@@ -137,5 +141,48 @@ mod test {
         let _temp_dir = TempDir::new().unwrap();
         // Disabled:
         // write(temp_dir.to_str().unwrap().to_string(), &mut engine, results).unwrap();
+    }
+
+    #[cfg_attr(miri, ignore)]
+    #[test]
+    fn hook() {
+        let rules = "a(1, 3). a(1, 4). a(1, 5). b(?x, ?y) :- a(?x, ?y).";
+
+        let program_ast = Parser::initialize(&rules, String::default())
+            .parse()
+            .map_err(|_| Error::ProgramParseError)
+            .unwrap();
+        let mut program = ASTProgramTranslation::initialize(&rules, String::default())
+            .translate(&program_ast)
+            .map_err(|_| Error::ProgramParseError)
+            .unwrap();
+
+        let filter = FilterHook::from(|string: &str, values: &[AnyDataValue]| {
+            ((values[0].to_i64_unchecked() + values[1].to_i64_unchecked()) % 2 == 0)
+                && string == "b"
+        });
+
+        program.set_hook(filter.clone());
+
+        let mut engine =
+            ExecutionEngine::initialize(program, ImportManager::new(ResourceProviders::default()))
+                .unwrap();
+        super::reason(&mut engine).unwrap();
+
+        let results = engine
+            .predicate_rows(&Tag::new(String::from("b")))
+            .unwrap()
+            .unwrap()
+            .map(|values| {
+                values
+                    .into_iter()
+                    .map(|value| value.to_i64_unchecked())
+                    .collect::<Vec<_>>()
+            })
+            .collect::<Vec<_>>();
+
+        let expected = vec![vec![1, 3], vec![1, 5]];
+
+        assert_eq!(results, expected);
     }
 }

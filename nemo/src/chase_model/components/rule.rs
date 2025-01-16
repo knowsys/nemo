@@ -1,5 +1,7 @@
 //! This module defines [ChaseRule].
 
+use nemo_physical::util::hook::FilterHook;
+
 use crate::rule_model::{
     components::{
         term::primitive::{variable::Variable, Primitive},
@@ -72,6 +74,8 @@ pub struct ChaseRule {
     aggregation: ChaseRuleAggregation,
     /// Head of the rule
     head: ChaseRuleHead,
+    /// External filter function applied to the result of this rule
+    hook: Option<FilterHook>,
 }
 
 impl ChaseRule {
@@ -141,6 +145,11 @@ impl ChaseRule {
     pub(crate) fn aggregate_head_index(&self) -> Option<usize> {
         self.head.aggregate_head_index
     }
+
+    /// Return the filter hook.
+    pub(crate) fn filter_hook(&self) -> Option<FilterHook> {
+        self.hook.clone()
+    }
 }
 
 impl ChaseRule {
@@ -196,6 +205,11 @@ impl ChaseRule {
     /// Add a new atom to the head of the rule.
     pub(crate) fn add_head_atom(&mut self, atom: PrimitiveAtom) {
         self.head.atoms.push(atom)
+    }
+
+    /// Set an external filter.
+    pub(crate) fn set_hook(&mut self, hook: Option<FilterHook>) {
+        self.hook = hook;
     }
 }
 

@@ -2,6 +2,7 @@
 
 pub mod aggregate;
 pub(crate) mod filter;
+pub(crate) mod filter_hook;
 pub(crate) mod function;
 pub(crate) mod join;
 pub(crate) mod null;
@@ -13,6 +14,7 @@ pub(crate) mod union;
 
 pub use filter::Filter;
 pub use filter::Filters;
+use filter_hook::GeneratorFilterHook;
 pub use function::FunctionAssignment;
 
 use std::{
@@ -291,6 +293,8 @@ pub(crate) enum OperationGeneratorEnum {
     Filter(GeneratorFilter),
     /// Function
     Function(GeneratorFunction),
+    /// Filter Hook
+    FilterHook(GeneratorFilterHook),
     /// Null
     Null(GeneratorNull),
 }
@@ -304,6 +308,7 @@ impl OperationGenerator for OperationGeneratorEnum {
             Self::Subtract(generator) => generator,
             Self::Filter(generator) => generator,
             Self::Function(generator) => generator,
+            Self::FilterHook(generator) => generator,
             Self::Null(generator) => generator,
         } {
             #[allow(late_bound_lifetime_arguments)]
@@ -325,6 +330,7 @@ impl Debug for OperationGeneratorEnum {
             Self::Subtract(generator) => f.write_fmt(format_args!("Subtract ({generator:?})")),
             Self::Filter(generator) => f.write_fmt(format_args!("Filter ({generator:?})")),
             Self::Function(generator) => f.write_fmt(format_args!("Function ({generator:?})")),
+            Self::FilterHook(generator) => f.write_fmt(format_args!("FilterHook ({generator:?})")),
             Self::Null(generator) => f.write_fmt(format_args!("Null ({generator:?})")),
         }
     }
