@@ -69,6 +69,23 @@ impl NemoError {
 }
 
 #[wasm_bindgen]
+pub struct NemoResource {
+    accept: String,
+    url: String,
+}
+
+#[wasm_bindgen]
+impl NemoResource {
+    pub fn accept(&self) -> String {
+        self.accept.clone()
+    }
+
+    pub fn url(&self) -> String {
+        self.url.clone()
+    }
+}
+
+#[wasm_bindgen]
 impl NemoProgram {
     #[wasm_bindgen(constructor)]
     pub fn new(input: &str) -> Result<NemoProgram, NemoError> {
@@ -95,16 +112,20 @@ impl NemoProgram {
     /// just make sure that things validate upon creation, and make sure that problems
     /// are detected early.
     #[wasm_bindgen(js_name = "getResourcesUsedInImports")]
-    pub fn resources_used_in_imports(&self) -> Set {
-        let js_set = Set::new(&JsValue::undefined());
+    pub fn resources_used_in_imports(&self) -> Vec<NemoResource> {
+        let mut result: Vec<NemoResource> = vec![];
 
         for directive in self.0.imports() {
+            let format = directive.file_format().media_type();
             if let Some(resource) = directive.attributes().get(&ImportExportAttribute::Resource) {
-                js_set.add(&JsValue::from(resource.to_string()));
+                result.push(NemoResource {
+                    accept: format.to_string(),
+                    url: resource.to_string(),
+                });
             }
         }
 
-        js_set
+        result
     }
 
     // If there are no outputs, marks all predicates as outputs.
