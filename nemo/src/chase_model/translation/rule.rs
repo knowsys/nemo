@@ -40,6 +40,8 @@ impl ProgramChaseTranslation {
     ) -> ChaseRule {
         let mut result = ChaseRule::default();
 
+        result.set_hook(self.hook.clone());
+
         let variable_assignments = Self::variables_assignments(rule);
         Self::apply_variable_assignment(rule, &variable_assignments);
 

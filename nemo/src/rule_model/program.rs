@@ -5,6 +5,8 @@ use std::{
     fmt::Write,
 };
 
+use nemo_physical::util::hook::FilterHook;
+
 use crate::rule_model::components::tag::Tag;
 
 use super::{
@@ -39,6 +41,8 @@ pub struct Program {
     facts: Vec<Fact>,
     /// Outputs
     outputs: Vec<Output>,
+    /// Hook
+    hook: Option<FilterHook>,
 }
 
 impl Program {
@@ -206,6 +210,16 @@ impl Program {
                 entry.insert((arity, origin));
             }
         }
+    }
+
+    /// Return filter associated with this program, if it exists.
+    pub fn hook(&self) -> Option<FilterHook> {
+        self.hook.clone()
+    }
+
+    /// Set a filter that is applied to each derivation.
+    pub fn set_hook(&mut self, hook: FilterHook) {
+        self.hook = Some(hook)
     }
 
     /// Validate the global program properties without validating
