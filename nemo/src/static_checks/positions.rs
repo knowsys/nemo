@@ -51,6 +51,24 @@ impl<'a> FromPositions<'a> for ExtendedPositions<'a> {
     }
 }
 
+pub trait FromPositionSet<'a> {
+    fn from_position_set(position_set: HashSet<Position<'a>>) -> Self;
+}
+
+impl<'a> FromPositionSet<'a> for Positions<'a> {
+    fn from_position_set(position_set: HashSet<Position<'a>>) -> Self {
+        position_set
+            .into_iter()
+            .fold(Positions::new(), |mut positions, (tag, index)| {
+                if !positions.contains_key(tag) {
+                    positions.insert(tag, HashSet::<usize>::new());
+                }
+                positions.get_mut(tag).unwrap().insert(index);
+                positions
+            })
+    }
+}
+
 pub trait AffectedPositionsBuilder<'a> {
     fn build_positions(rule_set: &'a RuleSet) -> Self;
 }
