@@ -202,7 +202,7 @@ mod test {
             ("{a=1,b=POW(1, 2)}", ParserContext::Map),
             ("12", ParserContext::Number),
             ("~test(1)", ParserContext::Negation),
-            ("0x12", ParserContext::EncodedNumber),
+            ("0o1", ParserContext::EncodedNumber),
             ("substr(\"string\", 1+?x)", ParserContext::Operation),
             ("(int)", ParserContext::ParenthesizedExpression),
             (
@@ -219,10 +219,13 @@ mod test {
         for (input, expect) in test {
             let parser_input = ParserInput::new(input, ParserState::default());
             let result = all_consuming(Expression::parse)(parser_input);
-
+            println!("input {}", input);
+            println!("result {:?}", result);
             assert!(result.is_ok());
 
             let result = result.unwrap();
+            
+            println!("type {:?}", result.1.context_type());
             assert_eq!(result.1.context_type(), expect);
         }
     }
