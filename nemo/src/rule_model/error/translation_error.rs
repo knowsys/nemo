@@ -95,6 +95,37 @@ pub enum TranslationErrorKind {
     #[assoc(note = "rdf imports/exports must have file extension nt, nq, ttl, trig, or rdf.")]
     #[assoc(code = 118)]
     RdfUnspecifiedUnknownExtension(String),
+    /// Unkown attribute
+    #[error("unknown attribute: `{0}`")]
+    #[assoc(code = 119)]
+    AttributeUnknown(String),
+    /// Unexpected attribute
+    #[error("unexpected attribute: `{0}`")]
+    #[assoc(code = 120)]
+    AttributeUnexpected(String),
+    /// Attributed defined multiple times
+    #[error("")]
+    #[assoc(code = 121)]
+    AttributeRedefined,
+    /// Attribute contains wrong number of parameters
+    #[error("attribute expected {expected} parameters, found {found}")]
+    #[assoc(code = 122)]
+    AttributeInvalidParameterCount { expected: usize, found: usize },
+    /// Invalid attribute parameter: Wrong type
+    #[error("attribute parameter of type {found}, expected {expected}")]
+    #[assoc(code = 123)]
+    AttributeParameterWrongType { expected: String, found: String },
+    /// Invalid attribute parameter: Wrong component
+    #[error("attribute parameter is {found}, expected {expected}")]
+    #[assoc(code = 124)]
+    AttributeParameterWrongComponent { expected: String, found: String },
+    /// Non-variable-assignment in directive
+    #[error("expected a variable assignment, found {found}")]
+    #[assoc(code = 125)]
+    NonAssignment { found: String },
+    #[error("expected a ground term, found {found}")]
+    #[assoc(code = 126)]
+    NonGroundTerm { found: String },
 
     /// Unsupported: Declare statements
     #[error(r#"declare statements are currently unsupported"#)]

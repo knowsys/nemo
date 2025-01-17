@@ -39,7 +39,7 @@ jobs:
         with:
           components: clippy
           rust-version: nightly
-      - run: cargo clippy --all-targets --verbose
+      - run: cargo clippy --all-targets --workspace --verbose
 
   rustfmt:
     name: Verify code formatting

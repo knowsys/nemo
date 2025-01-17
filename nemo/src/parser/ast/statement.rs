@@ -22,6 +22,7 @@ use super::{
     ProgramAST,
 };
 
+#[allow(clippy::large_enum_variant)]
 /// Types of [Statement]s
 #[derive(Debug)]
 pub enum StatementKind<'a> {
@@ -87,7 +88,7 @@ impl<'a> Statement<'a> {
 const CONTEXT: ParserContext = ParserContext::Statement;
 
 impl<'a> ProgramAST<'a> for Statement<'a> {
-    fn children(&self) -> Vec<&dyn ProgramAST> {
+    fn children(&self) -> Vec<&dyn ProgramAST<'a>> {
         match &self.kind {
             StatementKind::Fact(statement) => vec![statement],
             StatementKind::Rule(statement) => vec![statement],

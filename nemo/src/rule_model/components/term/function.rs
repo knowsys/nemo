@@ -2,18 +2,12 @@
 
 use std::{fmt::Display, hash::Hash};
 
-use crate::{
-    parse_component,
-    parser::ast::ProgramAST,
-    rule_model::{
-        components::{
-            parse::ComponentParseError, tag::Tag, IterablePrimitives, IterableVariables,
-            ProgramComponent, ProgramComponentKind,
-        },
-        error::{validation_error::ValidationErrorKind, ValidationErrorBuilder},
-        origin::Origin,
-        translation::ASTProgramTranslation,
+use crate::rule_model::{
+    components::{
+        tag::Tag, IterablePrimitives, IterableVariables, ProgramComponent, ProgramComponentKind,
     },
+    error::{validation_error::ValidationErrorKind, ValidationErrorBuilder},
+    origin::Origin,
 };
 
 use super::{
@@ -51,7 +45,7 @@ macro_rules! function {
             let mut terms = Vec::new();
             term_list!(terms; $($tt)*);
             $crate::rule_model::components::term::function::FunctionTerm::new(
-                $crate::rule_model::components::tag::Tag::from($name), terms
+                $name, terms
             )
         }
     }};
@@ -59,7 +53,16 @@ macro_rules! function {
 
 impl FunctionTerm {
     /// Create a new [FunctionTerm].
-    pub fn new<Terms: IntoIterator<Item = Term>>(tag: Tag, subterms: Terms) -> Self {
+    pub fn new<Terms: IntoIterator<Item = Term>>(name: &str, subterms: Terms) -> Self {
+        Self {
+            origin: Origin::Created,
+            tag: Tag::new(name.to_string()),
+            terms: subterms.into_iter().collect(),
+        }
+    }
+
+    /// Create a new [FunctionTerm] with a [Tag].
+    pub(crate) fn new_tag<Terms: IntoIterator<Item = Term>>(tag: Tag, subterms: Terms) -> Self {
         Self {
             origin: Origin::Created,
             tag,
@@ -90,6 +93,21 @@ impl FunctionTerm {
     /// Return the [Tag] of the function term.
     pub fn tag(&self) -> &Tag {
         &self.tag
+    }
+
+    /// Return whether this term is ground,
+    /// i.e. if it does not contain any variables.
+    pub fn is_ground(&self) -> bool {
+        self.terms.iter().all(Term::is_ground)
+    }
+
+    /// Reduce each sub [Term] in the function returning a copy.
+    pub fn reduce(&self) -> Self {
+        Self {
+            origin: self.origin,
+            tag: self.tag.clone(),
+            terms: self.terms.iter().map(Term::reduce).collect(),
+        }
     }
 }
 
@@ -133,17 +151,6 @@ impl Hash for FunctionTerm {
 }
 
 impl ProgramComponent for FunctionTerm {
-    fn parse(string: &str) -> Result<Self, ComponentParseError>
-    where
-        Self: Sized,
-    {
-        parse_component!(
-            string,
-            crate::parser::ast::expression::complex::atom::Atom::parse,
-            ASTProgramTranslation::build_function
-        )
-    }
-
     fn origin(&self) -> &Origin {
         &self.origin
     }
@@ -209,7 +216,13 @@ impl IterablePrimitives for FunctionTerm {
 
 #[cfg(test)]
 mod test {
-    use crate::rule_model::components::{term::primitive::variable::Variable, IterableVariables};
+    use crate::rule_model::{
+        components::{
+            term::{function::FunctionTerm, primitive::variable::Variable, Term},
+            IterableVariables,
+        },
+        translation::TranslationComponent,
+    };
 
     #[test]
     fn function_basic() {
@@ -224,6 +237,23 @@ mod test {
                 Variable::existential("e"),
                 Variable::universal("v")
             ]
+        );
+    }
+
+    #[test]
+    fn parse_function() {
+        let function = FunctionTerm::parse("f(?x, 2, ?y)").unwrap();
+
+        assert_eq!(
+            FunctionTerm::new(
+                "f",
+                vec![
+                    Term::from(Variable::universal("x")),
+                    Term::from(2),
+                    Term::from(Variable::universal("y"))
+                ]
+            ),
+            function
         );
     }
 }

@@ -458,6 +458,53 @@ impl UnaryFunction for StringLowercase {
     }
 }
 
+/// URI encoding (percent encoding) of a string
+///
+/// Returns the percent-encoded version of the provided string.
+///
+/// Returns `None` if the provided argument is not a string.
+#[derive(Debug, Copy, Clone)]
+pub struct StringUriEncode;
+impl UnaryFunction for StringUriEncode {
+    fn evaluate(&self, parameter: AnyDataValue) -> Option<AnyDataValue> {
+        parameter
+            .to_plain_string()
+            .map(|string| AnyDataValue::new_plain_string(urlencoding::encode(&string).to_string()))
+    }
+
+    fn type_propagation(&self) -> FunctionTypePropagation {
+        FunctionTypePropagation::KnownOutput(
+            StorageTypeName::Id32
+                .bitset()
+                .union(StorageTypeName::Id64.bitset()),
+        )
+    }
+}
+
+/// URI encoding (percent encoding) of a string
+///
+/// Returns the percent-encoded version of the provided string.
+///
+/// Returns `None` if the provided argument is not a string.
+#[derive(Debug, Copy, Clone)]
+pub struct StringUriDecode;
+impl UnaryFunction for StringUriDecode {
+    fn evaluate(&self, parameter: AnyDataValue) -> Option<AnyDataValue> {
+        let string = parameter.to_plain_string()?;
+        let decoded = urlencoding::decode(&string).ok()?;
+
+        Some(AnyDataValue::new_plain_string(decoded.to_string()))
+    }
+
+    fn type_propagation(&self) -> FunctionTypePropagation {
+        FunctionTypePropagation::KnownOutput(
+            StorageTypeName::Id32
+                .bitset()
+                .union(StorageTypeName::Id64.bitset()),
+        )
+    }
+}
+
 /// Substring with Length
 ///
 /// Expects a string value as the first parameter

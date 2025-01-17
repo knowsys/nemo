@@ -4,25 +4,15 @@ use std::{fmt::Display, hash::Hash};
 
 use nemo_physical::datavalues::{AnyDataValue, DataValue, IriDataValue, ValueDomain};
 
-use crate::{
-    parse_component,
-    rule_model::{
-        components::{
-            parse::ComponentParseError,
-            term::{value_type::ValueType, Term},
-            ProgramComponent, ProgramComponentKind,
-        },
-        error::ValidationErrorBuilder,
-        origin::Origin,
-        translation::ASTProgramTranslation,
-    },
+use crate::rule_model::{
+    components::{term::value_type::ValueType, ProgramComponent, ProgramComponentKind},
+    error::ValidationErrorBuilder,
+    origin::Origin,
 };
-
-use super::Primitive;
 
 /// Primitive ground term
 ///
-/// Represents a basic, indivisble constant value like integers, or strings.
+/// Represents a basic, indivisible constant value like integers, or strings.
 /// Such terms are the atomic values used in the construction of more complex expressions.
 #[derive(Debug, Clone, Eq)]
 pub struct GroundTerm {
@@ -136,23 +126,6 @@ impl Hash for GroundTerm {
 }
 
 impl ProgramComponent for GroundTerm {
-    fn parse(string: &str) -> Result<Self, ComponentParseError>
-    where
-        Self: Sized,
-    {
-        let term = parse_component!(
-            string,
-            crate::parser::ast::expression::Expression::parse_basic,
-            ASTProgramTranslation::build_inner_term
-        )?;
-
-        if let Term::Primitive(Primitive::Ground(ground)) = term {
-            return Ok(ground);
-        }
-
-        Err(ComponentParseError::ParseError)
-    }
-
     fn origin(&self) -> &Origin {
         &self.origin
     }
@@ -191,5 +164,40 @@ impl ProgramComponent for GroundTerm {
             ValueDomain::Null => ProgramComponentKind::Null,
             ValueDomain::Other => ProgramComponentKind::Other,
         }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use crate::rule_model::{
+        components::term::{primitive::Primitive, Term},
+        error::ComponentParseError,
+        translation::TranslationComponent,
+    };
+
+    use super::GroundTerm;
+
+    impl GroundTerm {
+        fn parse(input: &str) -> Result<Self, ComponentParseError>
+        where
+            Self: Sized,
+        {
+            let term = Term::parse(input)?;
+
+            if let Term::Primitive(Primitive::Ground(ground)) = term {
+                return Ok(ground);
+            }
+
+            Err(ComponentParseError::ParseError)
+        }
+    }
+
+    #[test]
+    fn parse_ground_term() {
+        let integer = GroundTerm::parse("2").unwrap();
+        let string = GroundTerm::parse("\"abc\"").unwrap();
+
+        assert_eq!(GroundTerm::from(2), integer);
+        assert_eq!(GroundTerm::from("abc"), string);
     }
 }

@@ -248,7 +248,7 @@ impl<'a> Arithmetic<'a> {
 const CONTEXT: ParserContext = ParserContext::Arithmetic;
 
 impl<'a> ProgramAST<'a> for Arithmetic<'a> {
-    fn children(&self) -> Vec<&dyn ProgramAST> {
+    fn children(&self) -> Vec<&dyn ProgramAST<'a>> {
         vec![&*self.left, &*self.right]
     }
 

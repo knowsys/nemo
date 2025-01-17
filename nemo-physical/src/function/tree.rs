@@ -7,7 +7,7 @@ use crate::datavalues::AnyDataValue;
 use super::{
     definitions::{
         boolean::{BooleanConjunction, BooleanDisjunction, BooleanNegation},
-        casting::{CastingIntoDouble, CastingIntoFloat, CastingIntoInteger64},
+        casting::{CastingIntoDouble, CastingIntoFloat, CastingIntoInteger64, CastingIntoIri},
         checktype::{
             CheckIsDouble, CheckIsFloat, CheckIsInteger, CheckIsIri, CheckIsNull, CheckIsNumeric,
             CheckIsString,
@@ -25,7 +25,8 @@ use super::{
         string::{
             StringAfter, StringBefore, StringCompare, StringConcatenation, StringContains,
             StringEnds, StringLength, StringLowercase, StringRegex, StringReverse, StringStarts,
-            StringSubstring, StringSubstringLength, StringUppercase,
+            StringSubstring, StringSubstringLength, StringUppercase, StringUriDecode,
+            StringUriEncode,
         },
         BinaryFunctionEnum, NaryFunctionEnum, TernaryFunctionEnum, UnaryFunctionEnum,
     },
@@ -369,6 +370,16 @@ where
     pub fn casting_to_double(sub: Self) -> Self {
         Self::Unary(
             UnaryFunctionEnum::CastingIntoDouble(CastingIntoDouble),
+            Box::new(sub),
+        )
+    }
+
+    /// Create a tree node representing casting a plain string value into an IRI.
+    ///
+    /// This evaluates to an IRI with the same content as `sub`.
+    pub fn casting_to_iri(sub: Self) -> Self {
+        Self::Unary(
+            UnaryFunctionEnum::CastingIntoIri(CastingIntoIri),
             Box::new(sub),
         )
     }
@@ -727,6 +738,28 @@ where
     pub fn string_uppercase(sub: Self) -> Self {
         Self::Unary(
             UnaryFunctionEnum::StringUppercase(StringUppercase),
+            Box::new(sub),
+        )
+    }
+
+    /// Create a tree node representing the URI encoding of a string.
+    ///
+    /// This evaluates to a percent-encoded version of the string
+    /// that results from evaluating `sub`.
+    pub fn string_uriencode(sub: Self) -> Self {
+        Self::Unary(
+            UnaryFunctionEnum::StringUriEncode(StringUriEncode),
+            Box::new(sub),
+        )
+    }
+
+    /// Create a tree node representing the URI decoding of a string.
+    ///
+    /// This evaluates to a percent-decoded version of the string
+    /// that results from evaluating `sub`.
+    pub fn string_uridecode(sub: Self) -> Self {
+        Self::Unary(
+            UnaryFunctionEnum::StringUriDecode(StringUriDecode),
             Box::new(sub),
         )
     }

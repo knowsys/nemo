@@ -22,17 +22,14 @@ use crate::{
         rdf::value_format::RdfValueFormat,
         Direction,
     },
-    parse_component,
-    parser::ast::ProgramAST,
     rule_model::{
         error::{hint::Hint, validation_error::ValidationErrorKind, ValidationErrorBuilder},
         origin::Origin,
-        translation::ASTProgramTranslation,
+        substitution::Substitution,
     },
 };
 
 use super::{
-    parse::ComponentParseError,
     tag::Tag,
     term::{map::Map, primitive::Primitive, Term},
     ProgramComponent, ProgramComponentKind,
@@ -58,7 +55,7 @@ pub(crate) struct ImportExportDirective {
 impl ImportExportDirective {
     /// For a given [Term] return its contents as a plain string.
     ///
-    /// This returns a value if the term is am iri and
+    /// This returns a value if the term is an iri and
     /// returns `None` otherwise.
     pub fn plain_value(term: &Term) -> Option<String> {
         if let Term::Primitive(Primitive::Ground(any_value)) = term {
@@ -87,6 +84,18 @@ impl ImportExportDirective {
     pub fn integer_value(term: &Term) -> Option<i64> {
         if let Term::Primitive(Primitive::Ground(any_value)) = term {
             return any_value.value().to_i64();
+        }
+
+        None
+    }
+
+    /// For a given [Term] return its contents as an boolean.
+    ///
+    /// This returns a value if the term is an boolean and
+    /// returns `None` otherwise.
+    pub fn boolean_value(term: &Term) -> Option<bool> {
+        if let Term::Primitive(Primitive::Ground(any_value)) = term {
+            return any_value.value().to_boolean();
         }
 
         None
@@ -206,7 +215,27 @@ impl ImportExportDirective {
                     ));
             }
 
-            if attribute.value_type() != value.kind() {
+            if let ProgramComponentKind::OneOf(types) = attribute.value_type() {
+                if types.iter().any(|&typ| typ == value.kind()) {
+                    continue;
+                }
+
+                builder.report_error(
+                    *value.origin(),
+                    ValidationErrorKind::ImportExportAttributeValueType {
+                        parameter: attribute.name().to_string(),
+                        given: value.kind().name().to_string(),
+                        expected: format!(
+                            "one of {}",
+                            types
+                                .iter()
+                                .map(|typ| typ.name())
+                                .intersperse(", ")
+                                .collect::<String>()
+                        ),
+                    },
+                );
+            } else if attribute.value_type() != value.kind() {
                 builder.report_error(
                     *value.origin(),
                     ValidationErrorKind::ImportExportAttributeValueType {
@@ -236,6 +265,7 @@ impl ImportExportDirective {
                 ImportExportAttribute::Limit => Self::validate_limit(value, builder),
                 ImportExportAttribute::Base => Ok(()),
                 ImportExportAttribute::Resource => Ok(()),
+                &ImportExportAttribute::IgnoreHeaders => Ok(()),
             };
         }
 
@@ -263,11 +293,9 @@ impl ImportExportDirective {
                     return Err(());
                 }
             }
-
-            Ok(())
-        } else {
-            unreachable!("value should be of correct type")
         }
+
+        Ok(())
     }
 
     /// Validate the format attribute for dsv
@@ -367,12 +395,20 @@ pub struct ImportDirective(pub(crate) ImportExportDirective);
 
 impl ImportDirective {
     /// Create a new [ImportDirective].
-    pub fn new(predicate: Tag, format: FileFormat, attributes: Map) -> Self {
+    pub fn new(
+        predicate: Tag,
+        format: FileFormat,
+        attributes: Map,
+        bindings: Substitution,
+    ) -> Self {
+        let mut attributes = attributes;
+        bindings.apply(&mut attributes);
+
         Self(ImportExportDirective {
             origin: Origin::default(),
             predicate,
             format,
-            attributes,
+            attributes: attributes.reduce(),
         })
     }
 
@@ -413,17 +449,6 @@ impl Display for ImportDirective {
 }
 
 impl ProgramComponent for ImportDirective {
-    fn parse(string: &str) -> Result<Self, ComponentParseError>
-    where
-        Self: Sized,
-    {
-        parse_component!(
-            string,
-            crate::parser::ast::directive::import::Import::parse,
-            ASTProgramTranslation::build_import
-        )
-    }
-
     fn origin(&self) -> &Origin {
         &self.0.origin
     }
@@ -454,12 +479,20 @@ pub struct ExportDirective(pub(crate) ImportExportDirective);
 
 impl ExportDirective {
     /// Create a new [ExportDirective].
-    pub fn new(predicate: Tag, format: FileFormat, attributes: Map) -> Self {
+    pub fn new(
+        predicate: Tag,
+        format: FileFormat,
+        attributes: Map,
+        bindings: Substitution,
+    ) -> Self {
+        let mut attributes = attributes;
+        bindings.apply(&mut attributes);
+
         Self(ImportExportDirective {
             origin: Origin::default(),
             predicate,
             format,
-            attributes,
+            attributes: attributes.reduce(),
         })
     }
 
@@ -500,17 +533,6 @@ impl Display for ExportDirective {
 }
 
 impl ProgramComponent for ExportDirective {
-    fn parse(string: &str) -> Result<Self, ComponentParseError>
-    where
-        Self: Sized,
-    {
-        parse_component!(
-            string,
-            crate::parser::ast::directive::export::Export::parse,
-            ASTProgramTranslation::build_export
-        )
-    }
-
     fn origin(&self) -> &Origin {
         &self.0.origin
     }

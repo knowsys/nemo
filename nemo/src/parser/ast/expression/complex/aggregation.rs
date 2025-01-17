@@ -59,7 +59,7 @@ impl<'a> Aggregation<'a> {
 const CONTEXT: ParserContext = ParserContext::Aggregation;
 
 impl<'a> ProgramAST<'a> for Aggregation<'a> {
-    fn children(&self) -> Vec<&dyn ProgramAST> {
+    fn children(&self) -> Vec<&dyn ProgramAST<'a>> {
         let mut result: Vec<&dyn ProgramAST> = vec![];
         result.push(&self.tag);
         result.push(&*self.aggregate);

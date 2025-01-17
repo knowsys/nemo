@@ -3,6 +3,7 @@
 pub mod aggregation;
 pub mod arithmetic;
 pub mod atom;
+pub mod fstring;
 pub mod infix;
 pub mod map;
 pub mod negation;

@@ -8,8 +8,8 @@ use basic::{
     string::StringLiteral, variable::Variable,
 };
 use complex::{
-    aggregation::Aggregation, arithmetic::Arithmetic, atom::Atom, map::Map, negation::Negation,
-    operation::Operation, parenthesized::ParenthesizedExpression, tuple::Tuple,
+    aggregation::Aggregation, arithmetic::Arithmetic, atom::Atom, fstring::FormatString, map::Map,
+    negation::Negation, operation::Operation, parenthesized::ParenthesizedExpression, tuple::Tuple,
 };
 use nom::{branch::alt, combinator::map};
 
@@ -37,6 +37,8 @@ pub enum Expression<'a> {
     Boolean(Boolean<'a>),
     /// Constant
     Constant(Constant<'a>),
+    /// Format String
+    FormatString(FormatString<'a>),
     /// Map
     Map(Map<'a>),
     /// Negation
@@ -67,6 +69,7 @@ impl<'a> Expression<'a> {
             Expression::Blank(expression) => expression.context(),
             Expression::Boolean(expression) => expression.context(),
             Expression::Constant(expression) => expression.context(),
+            Expression::FormatString(expression) => expression.context(),
             Expression::Map(expression) => expression.context(),
             Expression::Number(expression) => expression.context(),
             Expression::Negation(expression) => expression.context(),
@@ -101,6 +104,7 @@ impl<'a> Expression<'a> {
             map(Map::parse, Self::Map),
             map(Negation::parse, Self::Negation),
             map(Tuple::parse, Self::Tuple),
+            map(FormatString::parse, Self::FormatString),
         ))(input)
     }
 }
@@ -108,7 +112,7 @@ impl<'a> Expression<'a> {
 const CONTEXT: ParserContext = ParserContext::Expression;
 
 impl<'a> ProgramAST<'a> for Expression<'a> {
-    fn children(&self) -> Vec<&dyn ProgramAST> {
+    fn children(&self) -> Vec<&dyn ProgramAST<'a>> {
         vec![match self {
             Expression::Aggregation(expression) => expression,
             Expression::Arithmetic(expression) => expression,
@@ -116,6 +120,7 @@ impl<'a> ProgramAST<'a> for Expression<'a> {
             Expression::Blank(expression) => expression,
             Expression::Boolean(expression) => expression,
             Expression::Constant(expression) => expression,
+            Expression::FormatString(expression) => expression,
             Expression::Map(expression) => expression,
             Expression::Number(expression) => expression,
             Expression::Negation(expression) => expression,
@@ -136,6 +141,7 @@ impl<'a> ProgramAST<'a> for Expression<'a> {
             Expression::Blank(expression) => expression.span(),
             Expression::Boolean(expression) => expression.span(),
             Expression::Constant(expression) => expression.span(),
+            Expression::FormatString(expression) => expression.span(),
             Expression::Map(expression) => expression.span(),
             Expression::Number(expression) => expression.span(),
             Expression::Negation(expression) => expression.span(),
@@ -201,6 +207,7 @@ mod test {
             ("\"\"", ParserContext::String),
             ("(1,)", ParserContext::Tuple),
             ("?variable", ParserContext::Variable),
+            ("f\"{?x + ?y}\"", ParserContext::FormatString),
         ];
 
         for (input, expect) in test {

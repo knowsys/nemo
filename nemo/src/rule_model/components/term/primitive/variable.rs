@@ -5,15 +5,8 @@ use std::fmt::Display;
 use existential::ExistentialVariable;
 use universal::UniversalVariable;
 
-use crate::{
-    parse_component,
-    parser::ast::ProgramAST,
-    rule_model::{
-        components::{parse::ComponentParseError, ProgramComponentKind},
-        error::ValidationErrorBuilder,
-        origin::Origin,
-        translation::ASTProgramTranslation,
-    },
+use crate::rule_model::{
+    components::ProgramComponentKind, error::ValidationErrorBuilder, origin::Origin,
 };
 
 use super::ProgramComponent;
@@ -129,17 +122,6 @@ impl Display for Variable {
 }
 
 impl ProgramComponent for Variable {
-    fn parse(string: &str) -> Result<Self, ComponentParseError>
-    where
-        Self: Sized,
-    {
-        parse_component!(
-            string,
-            crate::parser::ast::expression::basic::variable::Variable::parse,
-            ASTProgramTranslation::build_variable
-        )
-    }
-
     fn origin(&self) -> &Origin {
         match self {
             Variable::Universal(variable) => variable.origin(),
@@ -169,5 +151,23 @@ impl ProgramComponent for Variable {
 
     fn kind(&self) -> ProgramComponentKind {
         ProgramComponentKind::Variable
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use crate::rule_model::translation::TranslationComponent;
+
+    use super::Variable;
+
+    #[test]
+    fn parse_variable() {
+        let universal = Variable::parse("?x").unwrap();
+        let existential = Variable::parse("!v").unwrap();
+        let anonymous = Variable::parse("_").unwrap();
+
+        assert_eq!(Variable::universal("x"), universal);
+        assert_eq!(Variable::existential("v"), existential);
+        assert_eq!(Variable::anonymous(), anonymous);
     }
 }

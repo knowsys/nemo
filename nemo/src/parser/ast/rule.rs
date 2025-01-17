@@ -52,7 +52,7 @@ impl<'a> Rule<'a> {
 const CONTEXT: ParserContext = ParserContext::Rule;
 
 impl<'a> ProgramAST<'a> for Rule<'a> {
-    fn children(&self) -> Vec<&dyn ProgramAST> {
+    fn children(&self) -> Vec<&dyn ProgramAST<'a>> {
         let mut result = Vec::<&dyn ProgramAST>::new();
 
         for expression in self.head().chain(self.body()) {

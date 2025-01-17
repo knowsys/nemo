@@ -1,0 +1,9 @@
+@import noIgnore :- csv{resource="sources/headers.csv"} .
+@import doIgnore :- csv{resource="sources/headers.csv", ignore_headers=true} .
+
+% the test harness only exports IDB predicates, so pass the data onwards
+withHeaders(?X, ?Y) :- noIgnore(?X, ?Y) .
+noHeaders(?X, ?Y) :- doIgnore(?X, ?Y) .
+
+@export withHeaders :- csv{} .
+@export noHeaders :- csv{} .

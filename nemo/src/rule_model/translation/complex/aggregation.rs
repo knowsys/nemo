@@ -4,18 +4,19 @@
 use crate::{
     parser::ast::{self, ProgramAST},
     rule_model::{
-        components::term::aggregate::Aggregate,
+        components::term::{aggregate::Aggregate, primitive::variable::Variable, Term},
         error::{translation_error::TranslationErrorKind, TranslationError},
-        translation::ASTProgramTranslation,
+        translation::{ASTProgramTranslation, TranslationComponent},
     },
 };
 
-impl<'a> ASTProgramTranslation<'a> {
-    /// Create an aggregation term from the corresponding AST node.
-    pub(crate) fn build_aggregation(
-        &mut self,
-        aggregation: &'a ast::expression::complex::aggregation::Aggregation,
-    ) -> Result<Aggregate, TranslationError> {
+impl TranslationComponent for Aggregate {
+    type Ast<'a> = ast::expression::complex::aggregation::Aggregation<'a>;
+
+    fn build_component<'a, 'b>(
+        translation: &mut ASTProgramTranslation<'a, 'b>,
+        aggregation: &'b Self::Ast<'a>,
+    ) -> Result<Self, TranslationError> {
         let kind = if let Some(kind) = aggregation.kind() {
             kind
         } else {
@@ -25,11 +26,11 @@ impl<'a> ASTProgramTranslation<'a> {
             ));
         };
 
-        let aggregate = self.build_inner_term(aggregation.aggregate())?;
+        let aggregate = Term::build_component(translation, aggregation.aggregate())?;
         let mut distinct = Vec::new();
         for expression in aggregation.distinct() {
             if let ast::expression::Expression::Variable(variable) = expression {
-                distinct.push(self.build_variable(variable)?);
+                distinct.push(Variable::build_component(translation, variable)?);
             } else {
                 return Err(TranslationError::new(
                     expression.span(),
@@ -40,6 +41,6 @@ impl<'a> ASTProgramTranslation<'a> {
             }
         }
 
-        Ok(self.register_component(Aggregate::new(kind, aggregate, distinct), aggregation))
+        Ok(translation.register_component(Aggregate::new(kind, aggregate, distinct), aggregation))
     }
 }

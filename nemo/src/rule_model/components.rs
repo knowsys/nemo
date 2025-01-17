@@ -9,7 +9,6 @@ pub mod fact;
 pub mod import_export;
 pub mod literal;
 pub mod output;
-pub mod parse;
 pub mod rule;
 pub mod tag;
 pub mod term;
@@ -17,13 +16,12 @@ pub mod term;
 use std::fmt::{Debug, Display};
 
 use enum_assoc::Assoc;
-use parse::ComponentParseError;
 use term::primitive::{variable::Variable, Primitive};
 
 use super::{error::ValidationErrorBuilder, origin::Origin};
 
 /// Types of [ProgramComponent]s
-#[derive(Assoc, Debug, Copy, Clone, Eq, PartialEq)]
+#[derive(Assoc, Debug, Copy, Clone, Eq, PartialEq, Hash)]
 #[func(pub fn name(&self) -> &'static str)]
 pub enum ProgramComponentKind {
     /// Variable
@@ -95,33 +93,27 @@ pub enum ProgramComponentKind {
     /// Program
     #[assoc(name = "program")]
     Program,
+    /// One of the given kinds:
+    #[assoc(name = "oneof")]
+    OneOf(&'static [ProgramComponentKind]),
 }
 
 /// Trait implemented by objects that are part of the logical rule model of the nemo language.
-pub trait ProgramComponent: Debug + Display {
+pub trait ProgramComponent: Debug + Display + Sized {
     /// Return the [ProgramComponentKind] of this component.
     fn kind(&self) -> ProgramComponentKind;
-
-    /// Construct this object from a string.
-    fn parse(string: &str) -> Result<Self, ComponentParseError>
-    where
-        Self: Sized;
 
     /// Return the [Origin] of this component.
     fn origin(&self) -> &Origin;
 
     /// Set the [Origin] of this component.
-    fn set_origin(self, origin: Origin) -> Self
-    where
-        Self: Sized;
+    fn set_origin(self, origin: Origin) -> Self;
 
     /// Validate this component.
     ///
     /// Errors will be appended to the given [ValidationErrorBuilder].
     /// Returns `Some(())` if successful and `None` otherwise.
-    fn validate(&self, builder: &mut ValidationErrorBuilder) -> Option<()>
-    where
-        Self: Sized;
+    fn validate(&self, builder: &mut ValidationErrorBuilder) -> Option<()>;
 }
 
 /// Trait implemented by program components that allow iterating over [Variable]s

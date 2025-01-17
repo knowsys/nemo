@@ -1,9 +1,10 @@
 //! Module for representing a permutation on natural numbers
 
 use std::{
-    collections::{HashMap, HashSet},
+    collections::HashMap,
     fmt::Display,
     hash::{Hash, Hasher},
+    iter::repeat,
 };
 
 use super::traits::NatMapping;
@@ -11,122 +12,120 @@ use super::traits::NatMapping;
 /// Represents a permutation on the set of natural numbers.
 #[derive(Debug, Default, Eq, Clone)]
 pub struct Permutation {
-    // The function represented by this object will map `i` to `map.get(i)`.
-    // All inputs that are not keys in this map are implicitly mapped to themselves.
-    // This allows us to have a canonical representation such that we can easily check for equality
-    map: HashMap<usize, usize>,
+    idx_to_val: Box<[usize]>,
+    val_to_idx: Box<[usize]>,
+}
+
+fn invert(input: &[usize]) -> Box<[usize]> {
+    let mut result: Box<[usize]> = repeat(0).take(input.len()).collect();
+
+    for (k, &v) in input.iter().enumerate() {
+        result[v] = k;
+    }
+
+    result
 }
 
 impl Permutation {
     /// Return an instance of the function from a vector representation where the input `vec[i]` is mapped to `i`.
-    pub fn from_vector(vec: Vec<usize>) -> Self {
-        let mut map = HashMap::<usize, usize>::new();
-
-        for (value, input) in vec.into_iter().enumerate() {
-            if input == value {
-                // Values that map to themselves will be represented implicitly
-                continue;
+    pub fn from_vector(mut vec: Vec<usize>) -> Self {
+        while let Some(last) = vec.last() {
+            if *last == vec.len() - 1 {
+                _ = vec.pop();
+            } else {
+                break;
             }
-
-            map.insert(input, value);
         }
 
-        let result = Self { map };
-        debug_assert!(result.is_valid());
+        Self {
+            idx_to_val: invert(&vec),
+            val_to_idx: vec.into(),
+        }
+    }
 
-        result
+    fn from_idx_to_val(mut input: Vec<usize>) -> Self {
+        while let Some(last) = input.last() {
+            if *last == input.len() - 1 {
+                _ = input.pop();
+            } else {
+                break;
+            }
+        }
+
+        Self {
+            val_to_idx: invert(&input),
+            idx_to_val: input.into(),
+        }
     }
 
     /// Return an instance of the function from a hash map representation where the input `i` is mapped to `map.get(i)`.
-    pub fn from_map(mut map: HashMap<usize, usize>) -> Self {
-        // Values that map to themselves will not be stored explicitly
-        map.retain(|i, v| *i != *v);
+    pub fn from_map(map: HashMap<usize, usize>) -> Self {
+        let mut vec = Vec::with_capacity(map.len());
 
-        let result = Self { map };
-        debug_assert!(result.is_valid());
+        for (k, v) in map {
+            for i in vec.len()..=k {
+                vec.push(i);
+            }
 
-        result
+            vec[k] = v;
+        }
+
+        Self::from_idx_to_val(vec)
     }
 
     /// Return a [Permutation] that when applied to the given slice of values would put them in ascending order.
     pub fn from_unsorted<T: Ord>(values: &[T]) -> Self {
-        let mut result: Vec<usize> = (0..values.len()).collect();
-        result.sort_by(|&a, &b| values[a].cmp(&values[b]));
+        let mut indeces: Vec<usize> = (0..values.len()).collect();
+        indeces.sort_by(|&a, &b| values[a].cmp(&values[b]));
 
-        Self::from_vector(result)
+        Self::from_vector(indeces)
     }
 
     /// Return the largest input value that is not mapped to itself.
     pub(crate) fn last_mapped(&self) -> Option<usize> {
-        self.map.keys().max().copied()
-    }
-
-    /// In order for the internal representation to be a valid permutation we need to check
-    /// that no two inputs map to the same value.
-    fn is_valid(&self) -> bool {
-        let mut values = HashSet::<usize>::new();
-
-        for value in self.map.values() {
-            // Value has been explicitly mapped twice
-            if !values.insert(*value) {
-                return false;
-            }
-
-            // Value has been implicitly mapped twice
-            if !self.map.contains_key(value) {
-                return false;
+        for (i, &v) in self.idx_to_val.iter().enumerate().rev() {
+            if i != v {
+                return Some(i);
             }
         }
 
-        true
+        None
     }
 
     /// Return a list of all cycles of length greater than 1.
     /// A cycle is a list of inputs such that the (i+1)th results from applying the permutation to the ith element.
     /// and the first can be obtained by applying it to the last.
     fn find_cycles(&self) -> Vec<Vec<usize>> {
-        let mut result = Vec::<Vec<usize>>::new();
+        let mut tmp: Vec<Option<usize>> = self.idx_to_val.iter().cloned().map(Some).collect();
+        let mut cycles = Vec::new();
 
-        let mut input_set: HashSet<usize> = self.map.keys().cloned().collect();
-        while let Some(start) = input_set.iter().next().cloned() {
-            let mut current_cycle = Vec::<usize>::new();
-            current_cycle.push(start);
+        for i in 0..tmp.len() {
+            let mut curr = match tmp[i] {
+                None => continue,
+                Some(c) if c == i => continue,
+                Some(c) => c,
+            };
 
-            input_set.remove(&start);
+            let mut cycle = Vec::new();
+            cycle.push(i);
 
-            let mut current_value = start;
-            loop {
-                let next_value = self.get(current_value);
-                input_set.remove(&next_value);
-
-                current_value = next_value;
-
-                if current_value == start {
-                    break;
-                }
-
-                current_cycle.push(current_value);
+            while curr != i {
+                cycle.push(curr);
+                curr = tmp[curr]
+                    .take()
+                    .expect("should be populated if this is a permutation");
             }
 
-            result.push(current_cycle);
+            cycles.push(cycle)
         }
 
-        result
+        cycles
     }
 
     /// Return a vector represenation of the permutation.
+    /// where everything is opposite of what you expect.
     fn vector_minimal(&self) -> Vec<usize> {
-        let mut result = Vec::<usize>::new();
-
-        for (&input, &value) in &self.map {
-            for new_index in result.len()..=value {
-                result.push(new_index);
-            }
-
-            result[value] = input;
-        }
-
-        result
+        self.val_to_idx.to_vec()
     }
 
     /// Derive a [Permutation] that would transform a vector of elements into another.
@@ -149,42 +148,20 @@ impl Permutation {
         Self::from_map(map)
     }
 
-    /// Compute a [Permutation] that when chained to this [Permutation]
-    /// would result in the given target [Permutation].
-    #[allow(dead_code)]
-    pub(crate) fn permute_into(&self, target: &Self) -> Self {
-        let max_key_source = self.map.keys().max().cloned().unwrap_or(0);
-        let max_key_target = target.map.keys().max().cloned().unwrap_or(0);
-        let max_key = max_key_source.max(max_key_target);
-
-        let mut result_map = HashMap::new();
-
-        for input in 0..max_key {
-            let source_output = self.get(input);
-            let target_output = target.get(input);
-
-            result_map.insert(source_output, target_output);
-        }
-
-        Self::from_map(result_map)
-    }
-
     /// Return a new [Permutation] that is the inverse of this.
     pub(crate) fn invert(&self) -> Self {
-        let mut map = HashMap::<usize, usize>::new();
-
-        for (input, value) in &self.map {
-            map.insert(*value, *input);
+        Self {
+            val_to_idx: self.idx_to_val.clone(),
+            idx_to_val: self.val_to_idx.clone(),
         }
-
-        Self { map }
     }
 
     /// Apply this permutation to a slice of things.
     pub(crate) fn permute<T: Clone>(&self, vec: &[T]) -> Vec<T> {
         let mut result: Vec<T> = vec.to_vec();
-        for (input, value) in self.map.iter() {
-            result[*value] = vec[*input].clone();
+
+        for (input, &value) in self.idx_to_val.iter().enumerate() {
+            result[value] = vec[input].clone();
         }
 
         result
@@ -192,41 +169,25 @@ impl Permutation {
 
     /// Return the value of the function for a given input.
     pub(crate) fn get(&self, input: usize) -> usize {
-        self.get_partial(input)
-            .expect("Permutations map each value")
+        *self.idx_to_val.get(input).unwrap_or(&input)
     }
 }
 
 impl NatMapping for Permutation {
     fn get_partial(&self, input: usize) -> Option<usize> {
-        Some(*self.map.get(&input).unwrap_or(&input))
+        Some(self.get(input))
     }
 
     fn chain_permutation(&self, permutation: &Permutation) -> Self {
-        let mut result_map = HashMap::<usize, usize>::new();
+        let indeces = (0..std::cmp::max(self.idx_to_val.len(), permutation.idx_to_val.len()))
+            .map(|i| permutation.get(self.get(i)))
+            .collect();
 
-        for (input, value) in &self.map {
-            let chained_value = permutation.get(*value);
-            if chained_value == *input {
-                continue;
-            }
-
-            result_map.insert(*input, chained_value);
-        }
-
-        for (input, value) in &permutation.map {
-            if self.map.contains_key(input) {
-                continue;
-            }
-
-            result_map.insert(*input, *value);
-        }
-
-        Self { map: result_map }
+        Self::from_idx_to_val(indeces)
     }
 
     fn is_identity(&self) -> bool {
-        self.map.is_empty()
+        self.idx_to_val.iter().enumerate().all(|(i, &v)| i == v)
     }
 }
 
@@ -361,17 +322,6 @@ mod test {
 
         let map = HashMap::<usize, usize>::from([(8, 8), (7, 7), (10, 10), (100, 100)]);
         assert_eq!(Permutation::from_map(map).last_mapped(), None);
-    }
-
-    #[test]
-    fn test_is_valid() {
-        let map = HashMap::<usize, usize>::from([(7, 8), (8, 7), (6, 8)]);
-        let perm = Permutation { map };
-        assert!(!perm.is_valid());
-
-        let map = HashMap::<usize, usize>::from([(7, 8)]);
-        let perm = Permutation { map };
-        assert!(!perm.is_valid());
     }
 
     fn sort_cycles(mut cycles: Vec<Vec<usize>>) -> Vec<Vec<usize>> {

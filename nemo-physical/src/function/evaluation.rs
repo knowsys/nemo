@@ -52,7 +52,7 @@ pub(crate) enum StackOperation {
 
 /// Representation of a [FunctionTree] as a stack program
 #[derive(Debug, Clone)]
-pub(crate) struct StackProgram {
+pub struct StackProgram {
     /// Maximmum size of the stack
     size: usize,
     /// List of instructions
@@ -115,7 +115,7 @@ impl StackProgram {
     }
 
     /// Construct a [StackProgram] from [FunctionTree].
-    pub(crate) fn from_function_tree<ReferenceType: Hash + Eq + Debug + Clone>(
+    pub fn from_function_tree<ReferenceType: Hash + Eq + Debug + Clone>(
         tree: &FunctionTree<ReferenceType>,
         reference_map: &HashMap<ReferenceType, usize>,
         this: Option<ReferenceType>,
@@ -263,7 +263,7 @@ impl StackProgram {
     ///
     /// # Panics
     /// Panics if the [StackProgram] is not valid.
-    pub(crate) fn evaluate_data(&self, referenced_values: &[AnyDataValue]) -> Option<AnyDataValue> {
+    pub fn evaluate_data(&self, referenced_values: &[AnyDataValue]) -> Option<AnyDataValue> {
         self.evaluate(referenced_values, None)
     }
 
@@ -274,7 +274,7 @@ impl StackProgram {
     ///
     /// # Panics
     /// Panics if the [StackProgram] is not valid.
-    pub(crate) fn evaluate_bool(
+    pub fn evaluate_bool(
         &self,
         referenced_values: &[AnyDataValue],
         this: Option<AnyDataValue>,
@@ -873,6 +873,9 @@ mod test {
 
         let tree_to_double = Function::casting_to_double(Function::constant(any_int(4)));
         evaluate_expect(&tree_to_double, Some(any_double(4.0)));
+
+        let tree_to_iri = Function::casting_to_iri(Function::constant(any_string("test")));
+        evaluate_expect(&tree_to_iri, Some(any_iri("test")));
     }
 
     #[test]

@@ -2,20 +2,28 @@
 //! from the corresponding ast node.
 
 use crate::{
+    newtype_wrapper,
     parser::ast::{self},
     rule_model::{
-        components::term::operation::{operation_kind::OperationKind, Operation},
+        components::term::{
+            operation::{operation_kind::OperationKind, Operation},
+            Term,
+        },
         error::TranslationError,
-        translation::ASTProgramTranslation,
+        translation::{ASTProgramTranslation, TranslationComponent},
     },
 };
 
-impl<'a> ASTProgramTranslation<'a> {
-    /// Create a arithmetic term from the corresponding AST node.
-    pub(crate) fn build_arithmetic(
-        &mut self,
-        arithmetic: &'a ast::expression::complex::arithmetic::Arithmetic,
-    ) -> Result<Operation, TranslationError> {
+pub(crate) struct ArithmeticOperation(Operation);
+newtype_wrapper!(ArithmeticOperation: Operation);
+
+impl TranslationComponent for ArithmeticOperation {
+    type Ast<'a> = ast::expression::complex::arithmetic::Arithmetic<'a>;
+
+    fn build_component<'a, 'b>(
+        translation: &mut ASTProgramTranslation<'a, 'b>,
+        arithmetic: &'b ast::expression::complex::arithmetic::Arithmetic<'a>,
+    ) -> Result<Self, TranslationError> {
         let kind = match arithmetic.kind() {
             ast::expression::complex::arithmetic::ArithmeticOperation::Addition => {
                 OperationKind::NumericSum
@@ -32,10 +40,13 @@ impl<'a> ASTProgramTranslation<'a> {
         };
 
         let subterms = vec![
-            self.build_inner_term(arithmetic.left())?,
-            self.build_inner_term(arithmetic.right())?,
+            Term::build_component(translation, arithmetic.left())?,
+            Term::build_component(translation, arithmetic.right())?,
         ];
 
-        Ok(self.register_component(Operation::new(kind, subterms), arithmetic))
+        Ok(ArithmeticOperation(translation.register_component(
+            Operation::new(kind, subterms),
+            arithmetic,
+        )))
     }
 }

@@ -35,7 +35,7 @@ impl ClosedComment<'_> {
 }
 
 impl<'a> ProgramAST<'a> for ClosedComment<'a> {
-    fn children(&self) -> Vec<&dyn ProgramAST> {
+    fn children(&self) -> Vec<&dyn ProgramAST<'a>> {
         Vec::default()
     }
 

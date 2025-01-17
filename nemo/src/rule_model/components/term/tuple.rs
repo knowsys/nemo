@@ -2,18 +2,10 @@
 
 use std::{fmt::Display, hash::Hash};
 
-use crate::{
-    parse_component,
-    parser::ast::ProgramAST,
-    rule_model::{
-        components::{
-            parse::ComponentParseError, IterablePrimitives, IterableVariables, ProgramComponent,
-            ProgramComponentKind,
-        },
-        error::ValidationErrorBuilder,
-        origin::Origin,
-        translation::ASTProgramTranslation,
-    },
+use crate::rule_model::{
+    components::{IterablePrimitives, IterableVariables, ProgramComponent, ProgramComponentKind},
+    error::ValidationErrorBuilder,
+    origin::Origin,
 };
 
 use super::{
@@ -69,6 +61,20 @@ impl Tuple {
     pub fn arguments(&self) -> impl Iterator<Item = &Term> {
         self.terms.iter()
     }
+
+    /// Return whether this term is ground,
+    /// i.e. if it does not contain any variables.
+    pub fn is_ground(&self) -> bool {
+        self.terms.iter().all(Term::is_ground)
+    }
+
+    /// Reduce each sub [Term] in the tuple returning a copy.
+    pub fn reduce(&self) -> Self {
+        Self {
+            origin: self.origin,
+            terms: self.terms.iter().map(Term::reduce).collect(),
+        }
+    }
 }
 
 impl Display for Tuple {
@@ -106,17 +112,6 @@ impl PartialOrd for Tuple {
 }
 
 impl ProgramComponent for Tuple {
-    fn parse(string: &str) -> Result<Self, ComponentParseError>
-    where
-        Self: Sized,
-    {
-        parse_component!(
-            string,
-            crate::parser::ast::expression::complex::tuple::Tuple::parse,
-            ASTProgramTranslation::build_tuple
-        )
-    }
-
     fn origin(&self) -> &Origin {
         &self.origin
     }
@@ -171,7 +166,13 @@ impl IterablePrimitives for Tuple {
 
 #[cfg(test)]
 mod test {
-    use crate::rule_model::components::{term::primitive::variable::Variable, IterableVariables};
+    use crate::rule_model::{
+        components::{
+            term::{primitive::variable::Variable, tuple::Tuple, Term},
+            IterableVariables,
+        },
+        translation::TranslationComponent,
+    };
 
     #[test]
     fn tuple_basic() {
@@ -186,6 +187,16 @@ mod test {
                 Variable::existential("e"),
                 Variable::universal("v")
             ]
+        );
+    }
+
+    #[test]
+    fn parse_tuple() {
+        let tuple = Tuple::parse("(?x, 2)").unwrap();
+
+        assert_eq!(
+            Tuple::new(vec![Term::from(Variable::universal("x")), Term::from(2)]),
+            tuple
         );
     }
 }

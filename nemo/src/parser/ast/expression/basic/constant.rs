@@ -28,7 +28,7 @@ impl<'a> Constant<'a> {
 const CONTEXT: ParserContext = ParserContext::Constant;
 
 impl<'a> ProgramAST<'a> for Constant<'a> {
-    fn children(&self) -> Vec<&dyn ProgramAST> {
+    fn children(&self) -> Vec<&dyn ProgramAST<'a>> {
         Vec::default()
     }
 

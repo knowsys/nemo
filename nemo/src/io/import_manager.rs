@@ -31,6 +31,7 @@ impl ImportManager {
         let reader = self.resource_providers.open_resource(
             &handler.resource().expect("checked when making handler"),
             handler.compression_format(),
+            handler.file_format().media_type(),
         )?;
 
         handler.reader(reader)

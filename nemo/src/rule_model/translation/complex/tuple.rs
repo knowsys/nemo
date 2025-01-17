@@ -4,21 +4,24 @@
 use crate::{
     parser::ast,
     rule_model::{
-        components::term::tuple::Tuple, error::TranslationError, translation::ASTProgramTranslation,
+        components::term::{tuple::Tuple, Term},
+        error::TranslationError,
+        translation::{ASTProgramTranslation, TranslationComponent},
     },
 };
 
-impl<'a> ASTProgramTranslation<'a> {
-    /// Create a tuple term from the corresponding AST node.
-    pub(crate) fn build_tuple(
-        &mut self,
-        tuple: &'a ast::expression::complex::tuple::Tuple,
-    ) -> Result<Tuple, TranslationError> {
+impl TranslationComponent for Tuple {
+    type Ast<'a> = ast::expression::complex::tuple::Tuple<'a>;
+
+    fn build_component<'a, 'b>(
+        translation: &mut ASTProgramTranslation<'a, 'b>,
+        tuple: &'b Self::Ast<'a>,
+    ) -> Result<Self, TranslationError> {
         let mut subterms = Vec::new();
         for expression in tuple.expressions() {
-            subterms.push(self.build_inner_term(expression)?);
+            subterms.push(Term::build_component(translation, expression)?);
         }
 
-        Ok(self.register_component(Tuple::new(subterms), tuple))
+        Ok(translation.register_component(Tuple::new(subterms), tuple))
     }
 }

@@ -2,18 +2,12 @@
 
 use std::{fmt::Display, hash::Hash};
 
-use crate::{
-    parse_component,
-    parser::ast::ProgramAST,
-    rule_model::{
-        components::{
-            parse::ComponentParseError, tag::Tag, IterablePrimitives, IterableVariables,
-            ProgramComponent, ProgramComponentKind,
-        },
-        error::ValidationErrorBuilder,
-        origin::Origin,
-        translation::ASTProgramTranslation,
+use crate::rule_model::{
+    components::{
+        tag::Tag, IterablePrimitives, IterableVariables, ProgramComponent, ProgramComponentKind,
     },
+    error::ValidationErrorBuilder,
+    origin::Origin,
 };
 
 use super::{
@@ -53,6 +47,18 @@ impl Map {
         Self {
             origin: Origin::Created,
             tag: None,
+            map: map.into_iter().collect(),
+        }
+    }
+
+    /// Create a new [Map] with a given (optional) [Tag].
+    pub fn new_tagged<Pairs: IntoIterator<Item = (Term, Term)>>(
+        tag: Option<Tag>,
+        map: Pairs,
+    ) -> Self {
+        Self {
+            origin: Origin::Created,
+            tag,
             map: map.into_iter().collect(),
         }
     }
@@ -99,6 +105,25 @@ impl Map {
     pub fn is_empty(&self) -> bool {
         self.len() == 0
     }
+
+    /// Return whether this term is ground,
+    /// i.e. if it does not contain any variables.
+    pub fn is_ground(&self) -> bool {
+        self.key_value()
+            .all(|(key, value)| key.is_ground() && value.is_ground())
+    }
+
+    /// Reduce the [Term]s in each key-value pair returning a copy.
+    pub fn reduce(&self) -> Self {
+        Self {
+            origin: self.origin,
+            tag: self.tag.clone(),
+            map: self
+                .key_value()
+                .map(|(key, value)| (key.reduce(), value.reduce()))
+                .collect(),
+        }
+    }
 }
 
 impl Display for Map {
@@ -142,17 +167,6 @@ impl Hash for Map {
 }
 
 impl ProgramComponent for Map {
-    fn parse(string: &str) -> Result<Self, ComponentParseError>
-    where
-        Self: Sized,
-    {
-        parse_component!(
-            string,
-            crate::parser::ast::expression::complex::map::Map::parse,
-            ASTProgramTranslation::build_map
-        )
-    }
-
     fn origin(&self) -> &Origin {
         &self.origin
     }
@@ -215,5 +229,28 @@ impl IterablePrimitives for Map {
                 key.primitive_terms_mut().chain(value.primitive_terms_mut())
             }),
         )
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use crate::rule_model::{
+        components::term::{primitive::variable::Variable, Term},
+        translation::TranslationComponent,
+    };
+
+    use super::Map;
+
+    #[test]
+    fn parse_map() {
+        let map = Map::parse("m { ?x = 5 }").unwrap();
+
+        assert_eq!(
+            Map::new(
+                "m",
+                vec![(Term::from(Variable::universal("x")), Term::from(5)),]
+            ),
+            map
+        );
     }
 }

@@ -2,15 +2,10 @@
 
 use std::{fmt::Display, hash::Hash};
 
-use crate::{
-    parse_component,
-    parser::ast::ProgramAST,
-    rule_model::{error::ValidationErrorBuilder, translation::ASTProgramTranslation},
-};
+use crate::rule_model::error::ValidationErrorBuilder;
 
 use super::{
     atom::Atom,
-    parse::ComponentParseError,
     term::{
         operation::Operation,
         primitive::{variable::Variable, Primitive},
@@ -56,17 +51,6 @@ impl Display for Literal {
 }
 
 impl ProgramComponent for Literal {
-    fn parse(string: &str) -> Result<Self, ComponentParseError>
-    where
-        Self: Sized,
-    {
-        parse_component!(
-            string,
-            crate::parser::ast::guard::Guard::parse,
-            ASTProgramTranslation::build_body_literal
-        )
-    }
-
     fn origin(&self) -> &crate::rule_model::origin::Origin {
         match self {
             Literal::Positive(positive) => positive.origin(),
