@@ -1,7 +1,7 @@
 use crate::rule_model::components::{rule::Rule, term::primitive::variable::Variable};
-use crate::static_checks::collection_traits::InsertAll;
+use crate::static_checks::collection_traits::{InsertAll, RemoveAll};
 use crate::static_checks::positions::{
-    ExtendedPositions, Position, Positions, PositionsByVariables,
+    ExtendedPositions, FromPositionSet, Position, Positions, PositionsByVariables,
 };
 use crate::static_checks::rule_set::{
     AllPositivePositions, Attacked, AttackedVariables, ExistentialVariables,
@@ -88,14 +88,22 @@ impl<'a> AcyclicityGraphBuilderPrivate<'a> for WeakAcyclicityGraph<'a> {
 }
 
 pub trait AcyclicityGraphCycle<N> {
+    fn all_nodes(&self) -> HashSet<N>;
     fn cycles(&self) -> Cycles<N>;
+    fn cycles_into_nodes(&self, cycles: Cycles<N>) -> HashSet<N>;
     fn is_cyclic(&self) -> bool;
+    fn reachable_nodes_of_node(&self, node: &N) -> HashSet<N>;
+    fn represantatives_of_cycles(&self, cycles: &Cycles<N>) -> HashSet<N>;
 }
 
 impl<N, E> AcyclicityGraphCycle<N> for DiGraphMap<N, E>
 where
     N: NodeTrait,
 {
+    fn all_nodes(&self) -> HashSet<N> {
+        self.nodes().collect()
+    }
+
     fn cycles(&self) -> Cycles<N> {
         let cycles: Cycles<N> = self.nodes().fold(Cycles::<N>::new(), |cycles, node| {
             let cycles_with_start: Cycles<N> = self.cycles_with_start(&node);
@@ -104,12 +112,40 @@ where
         cycles.filter_permutations_ret()
     }
 
+    fn cycles_into_nodes(&self, cycles: Cycles<N>) -> HashSet<N> {
+        cycles
+            .into_iter()
+            .fold(HashSet::<N>::new(), |nodes, cycle| {
+                nodes.insert_all_take_ret(cycle)
+            })
+    }
+
     fn is_cyclic(&self) -> bool {
         is_cyclic_directed(self)
+    }
+
+    fn reachable_nodes_of_node(&self, node: &N) -> HashSet<N> {
+        let mut rea_nodes: HashSet<N> = HashSet::from([*node]);
+        let mut new_found_rea_nodes: HashSet<N> = rea_nodes.clone();
+        while !new_found_rea_nodes.is_empty() {
+            let new_con_rea_nodes: HashSet<N> = self.conclude_reachable_nodes(new_found_rea_nodes);
+            new_found_rea_nodes = new_con_rea_nodes.remove_all_ret(&rea_nodes);
+            rea_nodes.insert_all(&new_found_rea_nodes);
+        }
+        rea_nodes
+    }
+
+    fn represantatives_of_cycles(&self, cycles: &Cycles<N>) -> HashSet<N> {
+        cycles.iter().fold(HashSet::<N>::new(), |mut reprs, cycle| {
+            let repr_of_cycle: N = *cycle.first().unwrap();
+            reprs.insert(repr_of_cycle);
+            reprs
+        })
     }
 }
 
 trait AcyclicityGraphCyclePrivate<N> {
+    fn conclude_reachable_nodes(&self, nodes: HashSet<N>) -> HashSet<N>;
     fn cycles_rec(&self, neighbor: &N, cycle: &mut Cycle<N>, cycles: &mut Cycles<N>);
     fn cycles_with_start(&self, node: &N) -> Cycles<N>;
     fn recursion_stops(&self, neighbor: &N, cycle: &Cycle<N>, cycles: &mut Cycles<N>) -> bool;
@@ -120,6 +156,15 @@ impl<N, E> AcyclicityGraphCyclePrivate<N> for DiGraphMap<N, E>
 where
     N: NodeTrait,
 {
+    fn conclude_reachable_nodes(&self, nodes: HashSet<N>) -> HashSet<N> {
+        nodes
+            .into_iter()
+            .fold(HashSet::<N>::new(), |neighbors, node| {
+                let neighbors_of_node: HashSet<N> = self.neighbors(node).collect();
+                neighbors.insert_all_take_ret(neighbors_of_node)
+            })
+    }
+
     fn cycles_rec(&self, neighbor: &N, cycle: &mut Cycle<N>, cycles: &mut Cycles<N>) {
         if self.recursion_stops(neighbor, cycle, cycles) {
             return;
@@ -366,8 +411,20 @@ pub trait InfiniteRankPositions {
 
 impl InfiniteRankPositions for WeakAcyclicityGraph<'_> {
     fn infinite_rank_positions(&self) -> Positions {
-        todo!("IMPLEMENT");
-        // TODO: IMPLEMENT
+        let cycs_con_spe_edge: Cycles<Position> = self.cycles_containing_special_edges();
+        let repr_of_cycles: HashSet<Position> = self.represantatives_of_cycles(&cycs_con_spe_edge);
+        let mut inf_rank_pos_set: HashSet<Position> = self.cycles_into_nodes(cycs_con_spe_edge);
+        let all_nodes: HashSet<Position> = self.all_nodes();
+        let mut unreachable_nodes: HashSet<Position> = all_nodes.remove_all_ret(&inf_rank_pos_set);
+        for pos in repr_of_cycles.iter() {
+            if unreachable_nodes.is_empty() {
+                break;
+            }
+            let rea_nodes_of_node: HashSet<Position> = self.reachable_nodes_of_node(pos);
+            unreachable_nodes.remove_all(&rea_nodes_of_node);
+            inf_rank_pos_set.insert_all_take(rea_nodes_of_node);
+        }
+        Positions::from_position_set(inf_rank_pos_set)
     }
 }
 
