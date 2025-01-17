@@ -15,7 +15,7 @@ use crate::{
     rule_model::{
         components::{fact::Fact, rule::Rule},
         program::Program,
-        term_map::PrimitiveTermMap,
+        substitution::Substitution,
     },
 };
 
@@ -49,14 +49,14 @@ pub(crate) struct TraceRuleApplication {
     /// Index of the rule that was applied
     rule_index: RuleIndex,
     /// Variable assignment used during the rule application
-    assignment: PrimitiveTermMap,
+    assignment: Substitution,
     /// Index of the head atom which produced the fact under consideration
     _position: usize,
 }
 
 impl TraceRuleApplication {
     /// Create new [TraceRuleApplication].
-    pub fn new(rule_index: RuleIndex, assignment: PrimitiveTermMap, _position: usize) -> Self {
+    pub fn new(rule_index: RuleIndex, assignment: Substitution, _position: usize) -> Self {
         Self {
             rule_index,
             assignment,
@@ -201,30 +201,23 @@ pub struct TraceTreeRuleApplication {
     /// Rule that was applied
     pub rule: Rule,
     /// Variable assignment used during the rule application
-    pub assignment: PrimitiveTermMap,
+    pub assignment: Substitution,
     /// Index of the head atom which produced the fact under consideration
     _position: usize,
 }
 
 impl TraceTreeRuleApplication {
-    /// Instantiate the given rule with its assignment producing a [Rule] with only ground terms.
-    fn to_instantiated_rule(&self) -> Rule {
-        let mut rule = self.rule.clone();
-        self.assignment.apply(&mut rule);
-
-        rule
-    }
-
     /// Get the [Fact] that was produced by this rule application.
     fn to_derived_atom(&self) -> Fact {
-        let rule = self.to_instantiated_rule();
-        let derived_atom = rule.head()[self._position].clone();
-        Fact::from(derived_atom)
+        let mut fact = self.rule.head()[self._position].clone();
+        self.assignment.apply(&mut fact);
+
+        Fact::from(fact)
     }
 
     /// Get a string representation of the Instantiated rule.
     fn to_instantiated_string(&self) -> String {
-        self.to_instantiated_rule().to_string()
+        self.rule.display_instantiated(&self.assignment)
     }
 }
 
@@ -559,10 +552,10 @@ mod test {
                 atom::Atom,
                 rule::Rule,
                 term::primitive::{variable::Variable, Primitive},
-                ProgramComponent,
             },
             program::ProgramBuilder,
-            term_map::PrimitiveTermMap,
+            substitution::Substitution,
+            translation::TranslationComponent,
         },
     };
 
@@ -579,7 +572,7 @@ mod test {
                 )
             });
 
-            PrimitiveTermMap::new(terms)
+            Substitution::new(terms)
         }};
     }
 

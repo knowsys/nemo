@@ -184,7 +184,7 @@ impl<'a> Number<'a> {
 const CONTEXT: ParserContext = ParserContext::Number;
 
 impl<'a> ProgramAST<'a> for Number<'a> {
-    fn children(&self) -> Vec<&dyn ProgramAST> {
+    fn children(&self) -> Vec<&dyn ProgramAST<'a>> {
         Vec::default()
     }
 

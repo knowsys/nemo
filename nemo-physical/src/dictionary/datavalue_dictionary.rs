@@ -3,6 +3,8 @@
 use crate::{datavalues::AnyDataValue, management::bytesized::ByteSized};
 use std::fmt::Debug;
 
+use super::meta_dv_dict::MetaDvDictionary;
+
 /// Fake id that dictionaries use to indicate that an entry has no id.
 pub const NONEXISTING_ID_MARK: usize = usize::MAX;
 /// Fake id that dictionaries use for marked entries.
@@ -42,6 +44,33 @@ impl AddResult {
     }
 }
 
+/// Trait that supports the conversion of types into mutable and immutable [std::any::Any].
+///
+/// This could be used anywhere, but currently is only reauired for dictoinaries, so we keep
+/// the definition here for now.
+pub trait AsAny {
+    /// Returns a mutable object that implements this trait as a [std::any::Any]. Dynamic
+    /// trait objects cannot be used as [std::any::Any], but concrete implementations
+    /// can provide a (dynamic) method that accomplishes this. This is a pattern that
+    /// can then be used for casting the dynamic object into a concrete type.
+    fn as_any_mut(&mut self) -> &mut dyn std::any::Any;
+    /// Returns an immutable object that implements this trait as a [std::any::Any]. Dynamic
+    /// trait objects cannot be used as [std::any::Any], but concrete implementations
+    /// can provide a (dynamic) method that accomplishes this. This is a pattern that
+    /// can then be used for casting the dynamic object into a concrete type.
+    fn as_any(&self) -> &dyn std::any::Any;
+}
+
+impl<T: 'static> AsAny for T {
+    fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
+        self
+    }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+}
+
 /// A [DvDict] represents a dictionary for datavalues, i.e., a bijective (invertible) mapping from
 /// [crate::datavalues::DataValue]s to numeric ids (`usize`).
 ///
@@ -51,7 +80,7 @@ impl AddResult {
 ///
 /// The id values are provided when the dictionary is used, whereas the ids are newly
 /// assigned by the dictionary itself.
-pub trait DvDict: Debug + ByteSized {
+pub trait DvDict: Debug + ByteSized + AsAny {
     /// Adds a new [AnyDataValue] to the dictionary. If the value is not known yet, it will
     /// be assigned a new id. Unsupported datavalues can also be rejected, which specialized
     /// dictionary implementations might do.
@@ -65,6 +94,26 @@ pub trait DvDict: Debug + ByteSized {
     /// with [KNOWN_ID_MARK].
     fn add_datavalue(&mut self, dv: AnyDataValue) -> AddResult;
 
+    /// Returns a function pointer to a function that takes a (parent) [MetaDvDictionary] and a dictionary id
+    /// that identifies this dictionary rather than `&self`. Mutable access to a parent dictionary is required
+    /// to resolve nested terms recursively, but making this a method (that takes `&self`) would offend the Rust
+    /// borrow checker even if self is never accessed directly within the method. Returning a function pointer
+    /// replaces the native dynamic dispatch without requiring `&self` to be present.
+    ///
+    /// The default implementation of this method returns a pointer to a function that
+    /// simply calls [DvDict::add_datavalue] after retrieving the identified dictionary from the parent.
+    /// There is no major performance penalty in this double indirection since [MetaDvDictionary] can cache the
+    /// function pointer, and would have to retrieve the sub-dictionary anyway to call it.
+    fn add_datavalue_with_parent_fn(
+        &self,
+    ) -> fn(&mut MetaDvDictionary, dict_id: usize, dv: AnyDataValue) -> AddResult {
+        |parent_dict, dict_id, dv| {
+            parent_dict
+                .sub_dictionary_mut_unchecked(dict_id)
+                .add_datavalue(dv)
+        }
+    }
+
     /// Creates a fresh null [AnyDataValue] and assigns an id to it. Both the new null and
     /// the id are returned.
     fn fresh_null(&mut self) -> (AnyDataValue, usize);
@@ -76,9 +125,49 @@ pub trait DvDict: Debug + ByteSized {
     /// For marked datavalues, this returns [KNOWN_ID_MARK] as an id.
     fn datavalue_to_id(&self, dv: &AnyDataValue) -> Option<usize>;
 
+    /// Returns a function pointer to a function that takes a (parent) [MetaDvDictionary] and a dictionary id
+    /// that identifies this dictionary rather than `&self`. Immutable access to a parent dictionary is required
+    /// to handle nested terms recursively, but making this a method (that takes `&self`) would offend the Rust
+    /// borrow checker even if self is never accessed directly within the method. Returning a function pointer
+    /// replaces the native dynamic dispatch without requiring `&self` to be present.
+    ///
+    /// The default implementation of this method returns a pointer to a function that
+    /// simply calls [DvDict::datavalue_to_id] after retrieving the identified dictionary from the parent.
+    /// There is no major performance penalty in this double indirection since [MetaDvDictionary] can cache the
+    /// function pointer, and would have to retrieve the sub-dictionary anyway to call it.
+    fn datavalue_to_id_with_parent_fn(
+        &self,
+    ) -> fn(&MetaDvDictionary, dict_id: usize, dv: &AnyDataValue) -> Option<usize> {
+        |parent_dict, dict_id, dv| {
+            parent_dict
+                .sub_dictionary_unchecked(dict_id)
+                .datavalue_to_id(dv)
+        }
+    }
+
     /// Returns the [AnyDataValue] associated with the `id`, or None if the `id` is not associated with any datavalue.
     /// In particular, this occurs if the datavalue was marked (and has virtual id [KNOWN_ID_MARK]).
     fn id_to_datavalue(&self, id: usize) -> Option<AnyDataValue>;
+
+    /// Returns a function pointer to a function that takes a (parent) [MetaDvDictionary] and a dictionary id
+    /// that identifies this dictionary rather than `&self`. Immutable access to a parent dictionary is required
+    /// to resolve nested terms recursively, but making this a method (that takes `&self`) would offend the Rust
+    /// borrow checker even if self is never accessed directly within the method. Returning a function pointer
+    /// replaces the native dynamic dispatch without requiring `&self` to be present.
+    ///
+    /// The default implementation of this method returns a pointer to a function that
+    /// simply calls [DvDict::id_to_datavalue] after retrieving the identified dictionary from the parent.
+    /// There is no major performance penalty in this double indirection since [MetaDvDictionary] can cache the
+    /// function pointer, and would have to retrieve the sub-dictionary anyway to call it.
+    fn id_to_datavalue_with_parent_fn(
+        &self,
+    ) -> fn(&MetaDvDictionary, dict_id: usize, id: usize) -> Option<AnyDataValue> {
+        |parent_dict, dict_id, id| {
+            parent_dict
+                .sub_dictionary_unchecked(dict_id)
+                .id_to_datavalue(id)
+        }
+    }
 
     /// Returns the number of values in the dictionary. Databalues that were merely marked are not counted,
     /// only those that have a unique id through which they can be retrieved.

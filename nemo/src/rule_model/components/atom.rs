@@ -2,19 +2,14 @@
 
 use std::{fmt::Display, hash::Hash};
 
-use crate::{
-    parse_component,
-    parser::ast::ProgramAST,
-    rule_model::{
-        error::{validation_error::ValidationErrorKind, ValidationErrorBuilder},
-        origin::Origin,
-        translation::ASTProgramTranslation,
-    },
+use crate::rule_model::{
+    error::{validation_error::ValidationErrorKind, ComponentParseError, ValidationErrorBuilder},
+    origin::Origin,
+    translation::TranslationComponent,
 };
 
 use super::{
     literal::Literal,
-    parse::ComponentParseError,
     tag::Tag,
     term::{
         primitive::{variable::Variable, Primitive},
@@ -70,6 +65,14 @@ impl Atom {
             predicate,
             terms: subterms.into_iter().collect(),
         }
+    }
+
+    pub fn parse(input: &str) -> Result<Self, ComponentParseError> {
+        let Literal::Positive(atom) = Literal::parse(input)? else {
+            return Err(ComponentParseError::ParseError);
+        };
+
+        Ok(atom)
     }
 
     /// Return the predicate of this atom.
@@ -129,23 +132,6 @@ impl Hash for Atom {
 }
 
 impl ProgramComponent for Atom {
-    fn parse(string: &str) -> Result<Self, ComponentParseError>
-    where
-        Self: Sized,
-    {
-        let literal = parse_component!(
-            string,
-            crate::parser::ast::guard::Guard::parse,
-            ASTProgramTranslation::build_body_literal
-        )?;
-
-        if let Literal::Positive(atom) = literal {
-            return Ok(atom);
-        }
-
-        Err(ComponentParseError::ParseError)
-    }
-
     fn origin(&self) -> &Origin {
         &self.origin
     }

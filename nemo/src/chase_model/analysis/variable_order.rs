@@ -348,7 +348,7 @@ impl VariableOrderBuilder<'_> {
             let pred = atom.predicate();
             self.required_trie_column_orders
                 .get(&pred)
-                .map_or(false, |orders| !orders.is_empty())
+                .is_some_and(|orders| !orders.is_empty())
                 .then_some(pred)
         });
 
@@ -970,6 +970,7 @@ mod test {
             DsvValueFormats::default(arity),
             None,
             CompressionFormat::None,
+            false,
             Direction::Import,
         );
 

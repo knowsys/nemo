@@ -7,16 +7,19 @@ use enum_assoc::Assoc;
 
 use nom::{
     branch::alt,
-    bytes::complete::{is_a, is_not, tag},
+    bytes::complete::{is_a, is_not, tag, take_until},
     character::complete::{alpha1, alphanumeric1, digit1, multispace1, space0, space1},
     combinator::{map, opt, recognize, verify},
     multi::many0,
     sequence::pair,
+    FindSubstring, InputTake,
 };
+use nom_supreme::error::{BaseErrorKind, Expectation};
 
 use crate::{
     parser::{
         context::{context, ParserContext},
+        error::ParserErrorTree,
         span::Span,
         ParserInput, ParserResult,
     },
@@ -24,7 +27,7 @@ use crate::{
         self, comment,
         datavalues::{self, boolean, iri, map, string, tuple, RDF_DATATYPE_INDICATOR},
         directive,
-        expression::{aggregate, atom, operation, variable},
+        expression::{aggregate, atom, format_string, operation, variable},
         operator, rule,
     },
 };
@@ -33,10 +36,10 @@ use crate::{
 #[derive(Assoc, Debug, Clone, Copy, PartialEq, Eq)]
 #[func(pub fn name(&self) -> &'static str)]
 pub enum TokenKind {
-    /// Opening parenthesis for parenthesised arithmitic terms
+    /// Opening parenthesis for parenthesised arithmetic terms
     #[assoc(name = "(")]
     OpenParenthesis,
-    /// Closing parenthesis for parenthesised arithmitic terms
+    /// Closing parenthesis for parenthesised arithmetic terms
     #[assoc(name = ")")]
     ClosedParenthesis,
     /// Opening delimiter for maps
@@ -148,8 +151,29 @@ pub enum TokenKind {
     #[assoc(name = datavalues::DOT)]
     Dot,
     /// Quote
-    #[assoc(name = "\"")]
+    #[assoc(name = string::QUOTE)]
     Quote,
+    /// Triple Quotes
+    #[assoc(name = string::TRIPLE_QUOTE)]
+    TripleQuote,
+    /// Format string open
+    #[assoc(name = format_string::OPEN)]
+    FormatStringOpen,
+    /// Format string close
+    #[assoc(name = format_string::CLOSE)]
+    FormatStringClose,
+    /// Format string multi-line open
+    #[assoc(name = format_string::MULTILINE_OPEN)]
+    FormatStringMultilineOpen,
+    /// Format string multi-line close
+    #[assoc(name = format_string::MULTILINE_CLOSE)]
+    FormatStringMultilineClose,
+    /// Format string expression open
+    #[assoc(name = format_string::EXPRESSION_START)]
+    FormatStringExpressionStart,
+    /// Format string expression close
+    #[assoc(name = format_string::EXPRESSION_END)]
+    FormatStringExpressionEnd,
     /// Blank node prefix
     #[assoc(name = "_:")]
     BlankNodePrefix,
@@ -177,6 +201,9 @@ pub enum TokenKind {
     /// String
     #[assoc(name = "string")]
     String,
+    /// String
+    #[assoc(name = "format-string")]
+    FormatString,
     /// Token marking language tag
     #[assoc(name = string::LANG_TAG)]
     LangTagIndicator,
@@ -343,23 +370,99 @@ impl<'a> Token<'a> {
         })
     }
 
-    /// Parse [TokenKind::String].
-    pub fn string(input: ParserInput<'a>) -> ParserResult<'a, Token<'a>> {
-        let input_span = input.span;
-        // NOTE: Optional for empty string, because `is_not` fails on "\""
-        opt(is_not("\""))(input).map(|(rest, result)| {
+    /// Parse arbitrary characters excluding the ones given as a paramater.
+    fn parse_character_sequence(
+        input: ParserInput<'a>,
+        exclude: &str,
+    ) -> ParserResult<'a, Token<'a>> {
+        is_not(exclude)(input).map(|(rest, result)| {
             (
                 rest.clone(),
                 Token {
-                    span: if let Some(result) = result {
-                        result.span
-                    } else {
-                        input_span.until_rest(&rest.span)
-                    },
+                    span: result.span,
                     kind: TokenKind::String,
                 },
             )
         })
+    }
+
+    fn parse_character_sequence_until(
+        input: ParserInput<'a>,
+        tag: &str,
+    ) -> ParserResult<'a, Token<'a>> {
+        take_until(tag)(input).map(|(rest, result)| {
+            (
+                rest.clone(),
+                Token {
+                    span: result.span,
+                    kind: TokenKind::String,
+                },
+            )
+        })
+    }
+
+    fn parse_character_sequence_until_one_of(
+        input: ParserInput<'a>,
+        tags: &'static [&'static str],
+    ) -> ParserResult<'a, Token<'a>> {
+        match tags
+            .iter()
+            .filter_map(|tag| input.find_substring(tag))
+            .min()
+        {
+            None => Err(nom::Err::Error(ParserErrorTree::Base {
+                location: input,
+                kind: BaseErrorKind::Expected(Expectation::Tag(tags[0])),
+            })),
+            Some(0) => Err(nom::Err::Error(ParserErrorTree::Base {
+                location: input,
+                kind: BaseErrorKind::Kind(nom::error::ErrorKind::Eof),
+            })),
+            Some(idx @ 1..) => {
+                let (rest, result) = input.take_split(idx);
+                Ok((
+                    rest.clone(),
+                    Token {
+                        span: result.span,
+                        kind: TokenKind::String,
+                    },
+                ))
+            }
+        }
+    }
+
+    /// Parse [TokenKind::String].
+    pub fn string(input: ParserInput<'a>) -> ParserResult<'a, Token<'a>> {
+        Self::parse_character_sequence(input, string::QUOTE)
+    }
+
+    /// Parse a multi-line [TokenKind::String].o
+    pub fn multiline_string(input: ParserInput<'a>) -> ParserResult<'a, Token<'a>> {
+        Self::parse_character_sequence_until(input, string::TRIPLE_QUOTE)
+    }
+
+    /// Parse [TokenKind::FormatString].
+    pub fn fstring(input: ParserInput<'a>) -> ParserResult<'a, Token<'a>> {
+        let excluded = format!(
+            "{}{}{}",
+            format_string::CLOSE,
+            format_string::EXPRESSION_START,
+            format_string::EXPRESSION_END
+        );
+
+        Self::parse_character_sequence(input, &excluded)
+    }
+
+    /// Parse a multi-line [TokenKind::FormatString].
+    pub fn multiline_fstring(input: ParserInput<'a>) -> ParserResult<'a, Token<'a>> {
+        Self::parse_character_sequence_until_one_of(
+            input,
+            &[
+                format_string::MULTILINE_CLOSE,
+                format_string::EXPRESSION_START,
+                format_string::EXPRESSION_END,
+            ],
+        )
     }
 
     /// Parse [TokenKind::Digits].
@@ -605,6 +708,19 @@ impl<'a> Token<'a> {
     string_token!(doc_comment, TokenKind::DocComment);
     string_token!(toplevel_comment, TokenKind::TopLevelComment);
     string_token!(quote, TokenKind::Quote);
+    string_token!(triple_quote, TokenKind::TripleQuote);
+    string_token!(fstring_open, TokenKind::FormatStringOpen);
+    string_token!(fstring_close, TokenKind::FormatStringClose);
+    string_token!(fstring_multiline_open, TokenKind::FormatStringMultilineOpen);
+    string_token!(
+        fstring_multiline_close,
+        TokenKind::FormatStringMultilineClose
+    );
+    string_token!(
+        fstring_expression_start,
+        TokenKind::FormatStringExpressionStart
+    );
+    string_token!(fstring_expression_end, TokenKind::FormatStringExpressionEnd);
     string_token!(blank_node_prefix, TokenKind::BlankNodePrefix);
     string_token!(exponent_lower, TokenKind::ExponentLower);
     string_token!(exponent_upper, TokenKind::ExponentUpper);

@@ -40,7 +40,7 @@ impl<'a> Output<'a> {
 const CONTEXT: ParserContext = ParserContext::Output;
 
 impl<'a> ProgramAST<'a> for Output<'a> {
-    fn children(&self) -> Vec<&dyn ProgramAST> {
+    fn children(&self) -> Vec<&dyn ProgramAST<'a>> {
         vec![&self.predicate]
     }
 

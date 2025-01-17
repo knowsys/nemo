@@ -5,8 +5,9 @@ strings("Hello", "World").
 doubles(2.0E0, 1.5E0, 0.5E0).
 integers(1, 2, 3).
 tagged("test"@en).
-iri(constant).
-null(!V) :- iri(?X).
+constant(constant).
+null(!V) :- constant(?X).
+@import uri_strings :- csv{resource="sources/uri_strings.csv"}.
 
 % Datatype check
 result(isString, ?R) :- strings(?A, _), ?R = isString(?A).
@@ -14,7 +15,7 @@ result(isint, ?R) :- integers(?A, _, _), ?R = isInteger(?A).
 result(isfloat, ?R) :- doubles(?A, _, _), ?R = isFloat(?A).
 result(isdouble, ?R) :- doubles(?A, _, _), ?R = isDouble(?A).
 result(isnumeric, ?R) :- integers(?A, _, _), ?R = isNumeric(?A).
-result(isiri, ?R) :- iri(?A), ?R = isIri(?A).
+result(isiri, ?R) :- constant(?A), ?R = isIri(?A).
 result(isnull, ?R) :- null(?A), ?R = isNull(?A).
 
 % String representation
@@ -30,17 +31,19 @@ result(fullstring, ?R) :- tagged(?A), ?R = fullStr(?A).
 % Get language tag
 result(tag, ?R) :- tagged(?L), ?R = LANG(?L).
 
-% Numeric casts
+% Casts
 cast(3.0).
 cast(4.2).
 cast(5).
 cast(test).
 cast("2023"^^xsd:gYear).
 cast("40").
+cast("https://example.org").
 
 result(int, ?R) :- cast(?A), ?R = INT(?A).
 result(float, ?R) :- cast(?A), ?R = FLOAT(?A).
 result(double, ?R) :- cast(?A), ?R = DOUBLE(?A).
+result(iri, ?R) :- cast(?A), ?R = IRI(?A).
 
 % Cast within numeric operations
 
@@ -71,6 +74,15 @@ result(stringstarts_true, ?R) :- strings(?A, _), ?R = STRSTARTS(?A, "Hell").
 result(stringstarts_false, ?R) :- strings(_, ?B), ?R = STRSTARTS(?B, "Hell").
 result(stringends_true, ?R) :- strings(?A, _), ?R = STRENDS(?A, "ello").
 result(stringends_false, ?R) :- strings(_, ?B), ?R = STRENDS(?B, "ello").
+result(uriencode, ?R) :- uri_strings(?A, _), ?R = URIENCODE(?A).
+result(uridecode, ?R) :- uri_strings(_, ?A), ?R = URIDECODE(?A).
+
+% F-string literal
+result(fstring_basic, ?R) :- strings(?A, ?B), ?R = f"{?A} and {?B}".
+result(fstring_multiline, ?R) :- strings(?A, ?B), ?M = f"""{?A}
+and
+{?B}""", ?R = CONCAT(SUBSTR(?M, 1, 5), " ", SUBSTR(?M, 7, 3), " ", SUBSTR(?M, 11)).
+result(fstring_arithmetic, ?R) :- strings(?A, ?B), ?R = f"len*10={STRLEN(?A) * 10}".
 
 % Numeric arithmetic
 result(calculation, ?R) :- doubles(?A, ?B, ?C), ?R = POW((?A + ?B + ?C) / 2E0, 3E0) * LOG(16E0, 4E0) + SIN(?C + 0.023599E0) * SQRT(16E0). 

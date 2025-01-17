@@ -135,6 +135,10 @@ pub enum ValidationErrorKind {
     #[error(r#"unknown compression format `{format}`"#)]
     #[assoc(code = 226)]
     ImportExportUnknownCompression { format: String },
+    /// Attribute in rule is unsafe
+    #[error(r#"display attribute uses unsafe variable: `{variable}`"#)]
+    #[assoc(code = 227)]
+    AttributeRuleUnsafe { variable: String },
 
     /// Unsupported feature: Multiple aggregates in one rule
     #[error(r#"multiple aggregates in one rule is currently unsupported"#)]

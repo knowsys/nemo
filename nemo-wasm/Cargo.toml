@@ -16,6 +16,9 @@ crate-type = ["cdylib", "rlib"]
 default = ["web_sys_unstable_apis"]
 web_sys_unstable_apis = []
 
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(wasm_bindgen_unstable_test_coverage)'] }
+
 [dependencies]
 console_error_panic_hook = "0.1.7"
 js-sys = "0.3.63"

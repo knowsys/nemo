@@ -3,22 +3,28 @@
 
 use nemo_physical::datavalues::AnyDataValue;
 
+use crate::newtype_wrapper;
 use crate::parser::ast;
 
+use crate::rule_model::translation::TranslationComponent;
 use crate::rule_model::{error::TranslationError, translation::ASTProgramTranslation};
 
-impl<'a> ASTProgramTranslation<'a> {
-    /// Create a string term from the corresponding AST node.
-    pub(crate) fn build_string(
-        &mut self,
-        string: &'a ast::expression::basic::string::StringLiteral,
-    ) -> Result<AnyDataValue, TranslationError> {
+pub(crate) struct StringLiteral(AnyDataValue);
+newtype_wrapper!(StringLiteral: AnyDataValue);
+
+impl TranslationComponent for StringLiteral {
+    type Ast<'a> = ast::expression::basic::string::StringLiteral<'a>;
+
+    fn build_component<'a, 'b>(
+        _translation: &mut ASTProgramTranslation<'a, 'b>,
+        string: &'b Self::Ast<'a>,
+    ) -> Result<Self, TranslationError> {
         let value = if let Some(language_tag) = string.language_tag() {
             AnyDataValue::new_language_tagged_string(string.content(), language_tag)
         } else {
             AnyDataValue::new_plain_string(string.content())
         };
 
-        Ok(value)
+        Ok(StringLiteral(value))
     }
 }

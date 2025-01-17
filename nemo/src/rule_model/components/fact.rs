@@ -7,18 +7,17 @@ use crate::{
         atom::{ground_atom::GroundAtom, ChaseAtom},
         ChaseComponent,
     },
-    parse_component,
-    parser::ast::ProgramAST,
     rule_model::{
-        error::{validation_error::ValidationErrorKind, ValidationErrorBuilder},
+        error::{
+            validation_error::ValidationErrorKind, ComponentParseError, ValidationErrorBuilder,
+        },
         origin::Origin,
-        translation::ASTProgramTranslation,
+        translation::{literal::HeadAtom, TranslationComponent},
     },
 };
 
 use super::{
     atom::Atom,
-    parse::ComponentParseError,
     tag::Tag,
     term::{primitive::Primitive, Term},
     IterablePrimitives, IterableVariables, ProgramComponent, ProgramComponentKind,
@@ -44,6 +43,10 @@ impl Fact {
             predicate: Tag::new(predicate.to_string()),
             terms: subterms.into_iter().collect(),
         }
+    }
+
+    pub fn parse(input: &str) -> Result<Self, ComponentParseError> {
+        Ok(Fact::from(HeadAtom::parse(input)?.into_inner()))
     }
 
     /// Return the predicate associated with this fact.
@@ -102,18 +105,6 @@ impl Hash for Fact {
 }
 
 impl ProgramComponent for Fact {
-    fn parse(string: &str) -> Result<Self, ComponentParseError>
-    where
-        Self: Sized,
-    {
-        parse_component!(
-            string,
-            crate::parser::ast::guard::Guard::parse,
-            ASTProgramTranslation::build_head_atom
-        )
-        .map(Fact::from)
-    }
-
     fn origin(&self) -> &Origin {
         &self.origin
     }

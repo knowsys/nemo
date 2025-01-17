@@ -36,6 +36,8 @@ pub struct DsvHandler {
     limit: Option<u64>,
     /// Compression format to be used
     compression_format: CompressionFormat,
+    /// Whether to ignore headers
+    ignore_headers: bool,
     /// Direction of the operation.
     _direction: Direction,
 }
@@ -48,6 +50,7 @@ impl DsvHandler {
         value_formats: DsvValueFormats,
         limit: Option<u64>,
         compression_format: CompressionFormat,
+        ignore_headers: bool,
         _direction: Direction,
     ) -> Self {
         Self {
@@ -56,6 +59,7 @@ impl DsvHandler {
             value_formats,
             limit,
             compression_format,
+            ignore_headers,
             _direction,
         }
     }
@@ -77,6 +81,7 @@ impl ImportExportHandler for DsvHandler {
             self.value_formats.clone(),
             None,
             self.limit,
+            self.ignore_headers,
         )))
     }
 
@@ -103,5 +108,33 @@ impl ImportExportHandler for DsvHandler {
 
     fn import_export_resource(&self) -> &ImportExportResource {
         &self.resource
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn format_metadata() {
+        for (format, delimiter) in &[
+            (FileFormat::DSV, b';'),
+            (FileFormat::CSV, b','),
+            (FileFormat::TSV, b'\t'),
+        ] {
+            let handler = DsvHandler::new(
+                *delimiter,
+                ImportExportResource::from_string(format!("dummy.{}", format.extension())),
+                DsvValueFormats::default(3),
+                None,
+                CompressionFormat::None,
+                false,
+                Direction::Import,
+            );
+
+            assert_eq!(format.extension(), handler.file_extension());
+            assert_eq!(format.media_type(), handler.file_format().media_type());
+            assert_eq!(3, handler.predicate_arity());
+        }
     }
 }

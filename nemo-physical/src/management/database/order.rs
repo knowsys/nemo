@@ -126,7 +126,7 @@ impl OrderedReferenceManager {
         for &storage_id in self
             .storage_map
             .get(&id)
-            .expect("No table with the id {id} exists.")
+            .unwrap_or_else(|| panic!("No table with the id {id} exists."))
             .values()
         {
             result += self.stored_tables[storage_id].size_bytes();

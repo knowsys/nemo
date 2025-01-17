@@ -30,14 +30,11 @@ use primitive::{
 use tuple::Tuple;
 use value_type::ValueType;
 
-use crate::{
-    parse_component,
-    rule_model::{
-        error::ValidationErrorBuilder, origin::Origin, translation::ASTProgramTranslation,
-    },
+use crate::rule_model::{
+    error::ValidationErrorBuilder, origin::Origin, substitution::Substitution,
 };
 
-use super::{parse::ComponentParseError, IterablePrimitives, IterableVariables, ProgramComponent};
+use super::{IterablePrimitives, IterableVariables, ProgramComponent};
 
 /// Term
 ///
@@ -131,6 +128,43 @@ impl Term {
             Term::Operation(term) => Box::new(term.arguments()),
             Term::Tuple(term) => Box::new(term.arguments()),
         }
+    }
+
+    /// Return whether this term is ground,
+    /// i.e. whether it does not contain any variables.
+    pub fn is_ground(&self) -> bool {
+        match self {
+            Term::Primitive(term) => term.is_ground(),
+            Term::Aggregate(term) => term.is_ground(),
+            Term::FunctionTerm(term) => term.is_ground(),
+            Term::Map(term) => term.is_ground(),
+            Term::Operation(term) => term.is_ground(),
+            Term::Tuple(term) => term.is_ground(),
+        }
+    }
+
+    /// Reduce (potential) constant expressions contained and return a copy of the resulting [Term].
+    pub fn reduce(&self) -> Term {
+        match self {
+            Term::Operation(operation) => operation.reduce(),
+            Term::Primitive(_) => self.clone(),
+            Term::Aggregate(term) => Term::Aggregate(term.reduce()),
+            Term::FunctionTerm(term) => Term::FunctionTerm(term.reduce()),
+            Term::Map(term) => Term::Map(term.reduce()),
+            Term::Tuple(term) => Term::Tuple(term.reduce()),
+        }
+    }
+
+    /// Reduce (potential) constant expressions
+    /// contained while replacing terms according to the provided substition
+    /// and return a copy of the resulting reduced [Term]
+    pub fn reduce_substitution(&self, substitution: &Substitution) -> Term {
+        // TODO: A more efficient implementation would propagate the substituion
+        // into the subterms and reduce grounded subterms
+        let mut cloned = self.clone();
+        substitution.apply(&mut cloned);
+
+        cloned.reduce()
     }
 }
 
@@ -244,17 +278,6 @@ impl Display for Term {
 }
 
 impl ProgramComponent for Term {
-    fn parse(string: &str) -> Result<Self, ComponentParseError>
-    where
-        Self: Sized,
-    {
-        parse_component!(
-            string,
-            crate::parser::ast::expression::Expression::parse_complex,
-            ASTProgramTranslation::build_inner_term
-        )
-    }
-
     fn origin(&self) -> &Origin {
         match self {
             Term::Primitive(primitive) => primitive.origin(),
@@ -351,5 +374,34 @@ impl IterablePrimitives for Term {
             Term::Operation(term) => term.primitive_terms_mut(),
             Term::Tuple(term) => term.primitive_terms_mut(),
         }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use crate::rule_model::translation::TranslationComponent;
+
+    use super::Term;
+
+    #[test]
+    fn term_reduce_ground() {
+        let constant = Term::parse("2 * (3 + 7)").unwrap();
+        let term = Term::from(tuple!(5, constant));
+
+        let reduced = term.reduce();
+        let expected_term = Term::from(tuple!(5, 20));
+
+        assert_eq!(reduced, expected_term);
+    }
+
+    #[test]
+    fn term_reduce_nonground() {
+        let expression = Term::parse("?x * (3 + 7)").unwrap();
+        let term = Term::from(tuple!(5, expression));
+
+        let reduced = term.reduce();
+        let expected_term = Term::parse("(5, ?x * 10)").unwrap();
+
+        assert_eq!(reduced, expected_term);
     }
 }

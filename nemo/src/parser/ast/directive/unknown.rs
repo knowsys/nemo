@@ -79,7 +79,7 @@ impl<'a> UnknownDirective<'a> {
 const CONTEXT: ParserContext = ParserContext::UnknownDirective;
 
 impl<'a> ProgramAST<'a> for UnknownDirective<'a> {
-    fn children(&self) -> Vec<&dyn ProgramAST> {
+    fn children(&self) -> Vec<&dyn ProgramAST<'a>> {
         Vec::default()
     }
 

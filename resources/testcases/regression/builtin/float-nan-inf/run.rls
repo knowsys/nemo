@@ -1,0 +1,11 @@
+%! This test case is based on https://github.com/knowsys/nemo/issues/582.
+%! A crash was caused by not correctly checking for NaN and infinity when
+%! doing computations with floating point numbers.
+
+big(1.7976931348623157E308) .
+small(1.0E-32) .
+small(0.0) .
+
+result(?a / ?b) :- big(?a), small(?b) .
+
+@export result :- csv {} .

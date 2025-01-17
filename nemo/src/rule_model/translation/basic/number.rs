@@ -3,18 +3,24 @@
 
 use nemo_physical::datavalues::AnyDataValue;
 
+use crate::newtype_wrapper;
 use crate::parser::ast;
 
 use crate::parser::ast::expression::basic::number::NumberTypeMarker;
+use crate::rule_model::translation::TranslationComponent;
 use crate::rule_model::{error::TranslationError, translation::ASTProgramTranslation};
 
-impl<'a> ASTProgramTranslation<'a> {
-    /// Create a number term from the corresponding AST node.
-    pub(crate) fn build_number(
-        &mut self,
-        number: &'a ast::expression::basic::number::Number,
-    ) -> Result<AnyDataValue, TranslationError> {
-        Ok(match number.value() {
+pub(crate) struct NumberLiteral(AnyDataValue);
+newtype_wrapper!(NumberLiteral: AnyDataValue);
+
+impl TranslationComponent for NumberLiteral {
+    type Ast<'a> = ast::expression::basic::number::Number<'a>;
+
+    fn build_component<'a, 'b>(
+        _translation: &mut ASTProgramTranslation<'a, 'b>,
+        number: &'b Self::Ast<'a>,
+    ) -> Result<Self, TranslationError> {
+        Ok(NumberLiteral(match number.value() {
             ast::expression::basic::number::NumberValue::Integer(integer) => {
                 AnyDataValue::new_integer_from_i64(integer)
             }
@@ -46,6 +52,6 @@ impl<'a> ASTProgramTranslation<'a> {
 
                 AnyDataValue::new_other(large, String::from(datatype_iri))
             }
-        })
+        }))
     }
 }

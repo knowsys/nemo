@@ -8,6 +8,7 @@ pub(crate) mod language;
 pub(crate) mod numeric;
 pub(crate) mod string;
 
+use casting::CastingIntoIri;
 use delegate::delegate;
 
 use crate::{
@@ -35,7 +36,7 @@ use self::{
     string::{
         StringAfter, StringBefore, StringCompare, StringConcatenation, StringContains, StringEnds,
         StringLength, StringLowercase, StringRegex, StringReverse, StringStarts, StringSubstring,
-        StringSubstringLength, StringUppercase,
+        StringSubstringLength, StringUppercase, StringUriDecode, StringUriEncode,
     },
 };
 
@@ -132,6 +133,7 @@ pub enum UnaryFunctionEnum {
     CastingIntoInteger64(CastingIntoInteger64),
     CastingIntoDouble(CastingIntoDouble),
     CastingIntoFloat(CastingIntoFloat),
+    CastingIntoIri(CastingIntoIri),
     CheckIsDouble(CheckIsDouble),
     CheckIsFloat(CheckIsFloat),
     CheckIsInteger(CheckIsInteger),
@@ -155,6 +157,8 @@ pub enum UnaryFunctionEnum {
     StringReverse(StringReverse),
     StringLowercase(StringLowercase),
     StringUppercase(StringUppercase),
+    StringUriEncode(StringUriEncode),
+    StringUriDecode(StringUriDecode),
 }
 
 impl UnaryFunction for UnaryFunctionEnum {
@@ -165,6 +169,7 @@ impl UnaryFunction for UnaryFunctionEnum {
             Self::CastingIntoInteger64(function) => function,
             Self::CastingIntoFloat(function) => function,
             Self::CastingIntoDouble(function) => function,
+            Self::CastingIntoIri(function) => function,
             Self::CheckIsDouble(function) => function,
             Self::CheckIsFloat(function) => function,
             Self::CheckIsInteger(function) => function,
@@ -188,6 +193,8 @@ impl UnaryFunction for UnaryFunctionEnum {
             Self::StringReverse(function) => function,
             Self::StringLowercase(function) => function,
             Self::StringUppercase(function) => function,
+            Self::StringUriEncode(function) => function,
+            Self::StringUriDecode(function) => function,
         } {
             fn evaluate(&self, parameter: AnyDataValue) -> Option<AnyDataValue>;
             fn type_propagation(&self) -> FunctionTypePropagation;

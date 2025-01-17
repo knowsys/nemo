@@ -4,7 +4,10 @@
 use similar_string::find_best_similarity;
 use strum::IntoEnumIterator;
 
-use crate::rule_model::components::term::operation::operation_kind::OperationKind;
+use crate::rule_model::{
+    components::term::operation::operation_kind::OperationKind,
+    translation::attribute::KnownAttributes,
+};
 
 use super::Hint;
 
@@ -45,5 +48,13 @@ impl Hint {
         let options = OperationKind::iter().map(|kind| kind.name());
 
         Self::similar("operation", target, options)
+    }
+
+    /// Checks whether a similar string exists within the known attributes
+    /// and returns the most similar one, if it meets the threshold.
+    pub fn similar_attribute(target: impl AsRef<str>) -> Option<Self> {
+        let options = KnownAttributes::iter().map(|kind| kind.name());
+
+        Self::similar("attribute", target, options)
     }
 }

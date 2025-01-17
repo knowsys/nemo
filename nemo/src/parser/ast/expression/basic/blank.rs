@@ -35,7 +35,7 @@ impl<'a> Blank<'a> {
 const CONTEXT: ParserContext = ParserContext::Blank;
 
 impl<'a> ProgramAST<'a> for Blank<'a> {
-    fn children(&self) -> Vec<&dyn ProgramAST> {
+    fn children(&self) -> Vec<&dyn ProgramAST<'a>> {
         Vec::default()
     }
 

@@ -60,7 +60,7 @@ impl Display for StructureTag<'_> {
 const CONTEXT: ParserContext = ParserContext::StructureTag;
 
 impl<'a> ProgramAST<'a> for StructureTag<'a> {
-    fn children(&self) -> Vec<&dyn ProgramAST> {
+    fn children(&self) -> Vec<&dyn ProgramAST<'a>> {
         match self.kind() {
             StructureTagKind::Plain(_token) => vec![],
             StructureTagKind::Prefixed { prefix: _, tag: _ } => vec![],

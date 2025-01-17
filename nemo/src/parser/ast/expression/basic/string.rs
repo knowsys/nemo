@@ -2,6 +2,7 @@
 #![allow(missing_docs)]
 
 use nom::{
+    branch::alt,
     combinator::opt,
     sequence::{delimited, pair},
 };
@@ -39,7 +40,18 @@ impl<'a> StringLiteral<'a> {
 
     /// Parse the main part of the string.
     pub fn parse_string(input: ParserInput<'a>) -> ParserResult<'a, Token<'a>> {
-        delimited(Token::quote, Token::string, Token::quote)(input)
+        alt((
+            delimited(
+                Token::triple_quote,
+                alt((Token::multiline_string, Token::empty)),
+                Token::triple_quote,
+            ),
+            delimited(
+                Token::quote,
+                alt((Token::string, Token::empty)),
+                Token::quote,
+            ),
+        ))(input)
     }
 
     /// Parse the language tag of the string.
@@ -51,7 +63,7 @@ impl<'a> StringLiteral<'a> {
 const CONTEXT: ParserContext = ParserContext::String;
 
 impl<'a> ProgramAST<'a> for StringLiteral<'a> {
-    fn children(&self) -> Vec<&dyn ProgramAST> {
+    fn children(&self) -> Vec<&dyn ProgramAST<'a>> {
         Vec::default()
     }
 

@@ -197,3 +197,27 @@ impl UnaryFunction for CastingIntoDouble {
         FunctionTypePropagation::KnownOutput(StorageTypeName::Double.bitset())
     }
 }
+
+/// Casting of a string value into an IRI
+///
+/// Returns an IRI with the same content as the given string.
+///
+/// Returns `None` when called on values other than plain strings.
+#[derive(Debug, Copy, Clone)]
+pub struct CastingIntoIri;
+impl UnaryFunction for CastingIntoIri {
+    fn evaluate(&self, parameter: AnyDataValue) -> Option<AnyDataValue> {
+        parameter
+            .to_plain_string()
+            .or_else(|| parameter.to_iri())
+            .map(AnyDataValue::new_iri)
+    }
+
+    fn type_propagation(&self) -> FunctionTypePropagation {
+        FunctionTypePropagation::KnownOutput(
+            StorageTypeName::Id32
+                .bitset()
+                .union(StorageTypeName::Id64.bitset()),
+        )
+    }
+}

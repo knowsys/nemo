@@ -21,7 +21,7 @@ use colored::Colorize;
 /// Trait implemented by nodes in the abstract syntax tree
 pub trait ProgramAST<'a>: Debug + Sync {
     /// Return all children of this node.
-    fn children(&'a self) -> Vec<&'a dyn ProgramAST<'a>>;
+    fn children(&self) -> Vec<&dyn ProgramAST<'a>>;
 
     /// Return the region of text this node originates from.
     fn span(&self) -> Span<'a>;

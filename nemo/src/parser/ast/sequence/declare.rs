@@ -29,7 +29,7 @@ pub struct NameTypePair<'a> {
 }
 
 impl<'a> ProgramAST<'a> for NameTypePair<'a> {
-    fn children(&'a self) -> Vec<&'a dyn ProgramAST<'a>> {
+    fn children(&self) -> Vec<&dyn ProgramAST<'a>> {
         if let Some(datatype) = &self.datatype {
             vec![&self.name, datatype]
         } else {

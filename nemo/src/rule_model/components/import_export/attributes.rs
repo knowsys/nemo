@@ -16,7 +16,7 @@ pub enum ImportExportAttribute {
     /// Location of the file
     #[assoc(name = attribute::RESOURCE)]
     #[assoc(from_name = attribute::RESOURCE)]
-    #[assoc(value_type = ProgramComponentKind::PlainString)]
+    #[assoc(value_type = ProgramComponentKind::OneOf(&[ProgramComponentKind::PlainString, ProgramComponentKind::Operation]))]
     Resource,
     /// Data types of the input relations
     #[assoc(name = attribute::FORMAT)]
@@ -38,11 +38,16 @@ pub enum ImportExportAttribute {
     #[assoc(from_name = attribute::COMPRESSION)]
     #[assoc(value_type = ProgramComponentKind::PlainString)]
     Compression,
-    /// Limit import/export to first n number of facts
+    /// Limit import/export to first `n` number of facts
     #[assoc(name = attribute::LIMIT)]
     #[assoc(from_name = attribute::LIMIT)]
     #[assoc(value_type = ProgramComponentKind::Integer)]
     Limit,
+    /// Whether to ignore headers (i.e., the first record)
+    #[assoc(name = attribute::IGNORE_HEADERS)]
+    #[assoc(from_name = attribute::IGNORE_HEADERS)]
+    #[assoc(value_type = ProgramComponentKind::Boolean)]
+    IgnoreHeaders,
 }
 
 impl ImportExportAttribute {}

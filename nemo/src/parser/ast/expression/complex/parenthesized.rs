@@ -29,7 +29,7 @@ impl<'a> ParenthesizedExpression<'a> {
     }
 
     /// Return the underlying expression.
-    pub fn expression(&self) -> &Expression {
+    pub fn expression(&self) -> &Expression<'a> {
         &self.expression
     }
 }
@@ -37,7 +37,7 @@ impl<'a> ParenthesizedExpression<'a> {
 const CONTEXT: ParserContext = ParserContext::ParenthesizedExpression;
 
 impl<'a> ProgramAST<'a> for ParenthesizedExpression<'a> {
-    fn children(&'a self) -> Vec<&'a dyn ProgramAST<'a>> {
+    fn children(&self) -> Vec<&dyn ProgramAST<'a>> {
         vec![&*self.expression]
     }
 

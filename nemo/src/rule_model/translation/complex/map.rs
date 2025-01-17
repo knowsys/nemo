@@ -4,29 +4,32 @@
 use crate::{
     parser::ast,
     rule_model::{
-        components::term::map::Map, error::TranslationError, translation::ASTProgramTranslation,
+        components::term::{map::Map, Term},
+        error::TranslationError,
+        translation::{ASTProgramTranslation, TranslationComponent},
     },
 };
 
-impl<'a> ASTProgramTranslation<'a> {
-    /// Create a map term from the corresponding AST node.
-    pub(crate) fn build_map(
-        &mut self,
-        map: &'a ast::expression::complex::map::Map,
-    ) -> Result<Map, TranslationError> {
+impl TranslationComponent for Map {
+    type Ast<'a> = ast::expression::complex::map::Map<'a>;
+
+    fn build_component<'a, 'b>(
+        translation: &mut ASTProgramTranslation<'a, 'b>,
+        map: &'b Self::Ast<'a>,
+    ) -> Result<Self, TranslationError> {
         let mut subterms = Vec::new();
         for (key, value) in map.key_value() {
-            let key = self.build_inner_term(key)?;
-            let value = self.build_inner_term(value)?;
+            let key = Term::build_component(translation, key)?;
+            let value = Term::build_component(translation, value)?;
 
             subterms.push((key, value));
         }
 
         let result = match map.tag() {
-            Some(tag) => Map::new(&self.resolve_tag(tag)?, subterms),
+            Some(tag) => Map::new(&translation.resolve_tag(tag)?, subterms),
             None => Map::new_unnamed(subterms),
         };
 
-        Ok(self.register_component(result, map))
+        Ok(translation.register_component(result, map))
     }
 }

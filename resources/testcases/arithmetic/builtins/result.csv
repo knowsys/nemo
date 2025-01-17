@@ -26,6 +26,9 @@ double,"""4.2""^^<http://www.w3.org/2001/XMLSchema#double>"
 double,"""5""^^<http://www.w3.org/2001/XMLSchema#double>"
 double,"""40""^^<http://www.w3.org/2001/XMLSchema#double>"
 double,"""2023""^^<http://www.w3.org/2001/XMLSchema#double>"
+iri,https://example.org
+iri,40
+iri,test
 mixedsum,"""6.5""^^<http://www.w3.org/2001/XMLSchema#double>"
 round,5
 round,"""3""^^<http://www.w3.org/2001/XMLSchema#double>"
@@ -60,3 +63,7 @@ max,"""2""^^<http://www.w3.org/2001/XMLSchema#double>"
 bitand,0
 bitor,3
 bitxor,0
+fstring_basic,"""Hello and World"""
+fstring_arithmetic,"""len*10=50"""
+fstring_multiline,"""Hello and World"""
+uriencode,"""%3Ffoo%5B%5D%3D%22bar%20quuz%22"""

@@ -30,7 +30,7 @@ impl<'a> Negation<'a> {
 const CONTEXT: ParserContext = ParserContext::Negation;
 
 impl<'a> ProgramAST<'a> for Negation<'a> {
-    fn children(&self) -> Vec<&dyn ProgramAST> {
+    fn children(&self) -> Vec<&dyn ProgramAST<'a>> {
         vec![&*self.expression]
     }
 

@@ -125,6 +125,24 @@ pub mod expression {
         /// Closing delimiter for argument list
         pub const CLOSE: &str = ")";
     }
+
+    /// Syntax for format strings
+    pub mod format_string {
+        /// Opening part of a format string
+        pub const OPEN: &str = r#"f""#;
+        /// Closing part of a format string
+        pub const CLOSE: &str = r#"""#;
+
+        /// Opening part of a multi-line format string
+        pub const MULTILINE_OPEN: &str = r#"f""""#;
+        /// Closing part of a multi-line format string
+        pub const MULTILINE_CLOSE: &str = r#"""""#;
+
+        /// Marker of the start of an expression
+        pub const EXPRESSION_START: &str = "{";
+        /// Marker of the end of an expression
+        pub const EXPRESSION_END: &str = "}";
+    }
 }
 
 pub mod comment {
@@ -226,6 +244,10 @@ pub mod builtin {
         pub(crate) const UCASE: &str = "UCASE";
         /// Replace characters in strings with their lower case version
         pub(crate) const LCASE: &str = "LCASE";
+        /// Return URI-encoded (percent-encoded) version of string
+        pub(crate) const URIENCODE: &str = "URIENCODE";
+        /// Return URI-decoded (percent-decoded) version of string
+        pub(crate) const URIDECODE: &str = "URIDECODE";
         /// Round a value to the nearest integer
         pub(crate) const ROUND: &str = "ROUND";
         /// Round up to the nearest integer
@@ -242,6 +264,8 @@ pub mod builtin {
         pub(crate) const DOUBLE: &str = "DOUBLE";
         /// Convert the value to a 32bit floating point number
         pub(crate) const FLOAT: &str = "FLOAT";
+        /// Convert a plain string into an IRI
+        pub(crate) const IRI: &str = "IRI";
         /// Compute the logarithm of the numerical value
         pub(crate) const LOGARITHM: &str = "LOG";
         /// Raise the numerical value to a power
@@ -285,7 +309,7 @@ pub mod builtin {
         /// Compute the quotient of two numeric values
         pub(crate) const DIVISION: &str = "DIVISION";
         /// Compute the multiplicative inverse of a numeric value
-        pub(crate) const INVERSE: &str = "INVERSE";
+        pub(crate) const INVERTSIGN: &str = "INVERTSIGN";
         /// Compute the logical and between boolean values
         pub(crate) const AND: &str = "AND";
         /// Compute the logical or between boolean values
@@ -358,6 +382,8 @@ pub mod import_export {
         pub const VALUE_COMPRESSION_NONE: &str = "none";
         /// The name of the compression format that means "no compression".
         pub const VALUE_COMPRESSION_GZIP: &str = "gzip";
+        /// Name of the attribute for ignoring DSV headers in import/export directives.
+        pub const IGNORE_HEADERS: &str = "ignore_headers";
     }
 
     pub mod file_format {
@@ -388,9 +414,9 @@ pub mod import_export {
         /// The file extension used for CSV files
         pub(crate) const EXTENSION_CSV: &str = "csv";
         /// The file extension used for TSV files
-        pub(crate) const EXTENSION_TSV: &str = "csv";
+        pub(crate) const EXTENSION_TSV: &str = "tsv";
         /// The file extension used for DSV files
-        pub(crate) const EXTENSION_DSV: &str = "csv";
+        pub(crate) const EXTENSION_DSV: &str = "dsv";
         /// The file extension used for Ntriples files
         pub(crate) const EXTENSION_RDF_NTRIPLES: &str = "nt";
         /// The file extension used for NQuads files
@@ -403,5 +429,25 @@ pub mod import_export {
         pub(crate) const EXTENSION_RDF_XML: &str = "rdf";
         /// The file extension used for json files
         pub(crate) const EXTENSION_JSON: &str = "json";
+
+        // media types
+        /// The media type used for CSV resources
+        pub(crate) const MEDIA_TYPE_CSV: &str = "text/csv";
+        /// The media type used for TSV resources
+        pub(crate) const MEDIA_TYPE_TSV: &str = "text/tab-separated-values";
+        /// The media type used for DSV resources
+        pub(crate) const MEDIA_TYPE_DSV: &str = "text";
+        /// The media type used for Ntriples resources
+        pub(crate) const MEDIA_TYPE_RDF_NTRIPLES: &str = "application/n-triples";
+        /// The media type used for NQuads resources
+        pub(crate) const MEDIA_TYPE_RDF_NQUADS: &str = "application/n-quads";
+        /// The media type used for Turtle resources
+        pub(crate) const MEDIA_TYPE_RDF_TURTLE: &str = "text/turtle";
+        /// The media type used for TriG resources
+        pub(crate) const MEDIA_TYPE_RDF_TRIG: &str = "application/trig";
+        /// The media type used for RDF/XML resources
+        pub(crate) const MEDIA_TYPE_RDF_XML: &str = "application/rdf+xml";
+        /// The media type used for json resources
+        pub(crate) const MEDIA_TYPE_JSON: &str = "application/json";
     }
 }

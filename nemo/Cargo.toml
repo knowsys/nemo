@@ -19,7 +19,6 @@ timing = ["nemo-physical/timing"]
 
 [dependencies]
 nemo-physical = { path = "../nemo-physical", default-features = false }
-macros = { path = "../libs/macros" }
 log = "0.4"
 nom = "7.1.1"
 petgraph = "0.6.3"

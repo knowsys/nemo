@@ -131,7 +131,7 @@ impl<C: DvConverter> Default for StringBasedDvDictionary<C> {
     }
 }
 
-impl<C: DvConverter> DvDict for StringBasedDvDictionary<C> {
+impl<C: DvConverter + 'static> DvDict for StringBasedDvDictionary<C> {
     fn add_datavalue(&mut self, dv: AnyDataValue) -> AddResult {
         if let Some(s) = C::dict_string(&dv) {
             self.string_dict.add_str(s.as_str())
@@ -198,7 +198,7 @@ impl<C: DvConverter> DvDict for StringBasedDvDictionary<C> {
     }
 }
 
-impl<C: DvConverter> ByteSized for StringBasedDvDictionary<C> {
+impl<C: DvConverter + 'static> ByteSized for StringBasedDvDictionary<C> {
     fn size_bytes(&self) -> u64 {
         let size = self.string_dict.size_bytes();
         log::debug!(

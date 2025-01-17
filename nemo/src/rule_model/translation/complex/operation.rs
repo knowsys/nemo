@@ -2,25 +2,34 @@
 //! from the corresponding ast node.
 
 use crate::{
+    newtype_wrapper,
     parser::ast::{self},
     rule_model::{
-        components::term::operation::Operation, error::TranslationError,
-        translation::ASTProgramTranslation,
+        components::term::{operation::Operation, Term},
+        error::TranslationError,
+        translation::{ASTProgramTranslation, TranslationComponent},
     },
 };
 
-impl<'a> ASTProgramTranslation<'a> {
-    /// Create an operation term from the corresponding AST node.
-    pub(crate) fn build_operation(
-        &mut self,
-        operation: &'a ast::expression::complex::operation::Operation,
-    ) -> Result<Operation, TranslationError> {
+pub(crate) struct FunctionLikeOperation(Operation);
+newtype_wrapper!(FunctionLikeOperation: Operation);
+
+impl TranslationComponent for FunctionLikeOperation {
+    type Ast<'a> = ast::expression::complex::operation::Operation<'a>;
+
+    fn build_component<'a, 'b>(
+        translation: &mut ASTProgramTranslation<'a, 'b>,
+        operation: &'b Self::Ast<'a>,
+    ) -> Result<Self, TranslationError> {
         let kind = operation.kind();
         let mut subterms = Vec::new();
         for expression in operation.expressions() {
-            subterms.push(self.build_inner_term(expression)?);
+            subterms.push(Term::build_component(translation, expression)?);
         }
 
-        Ok(self.register_component(Operation::new(kind, subterms), operation))
+        Ok(FunctionLikeOperation(translation.register_component(
+            Operation::new(kind, subterms),
+            operation,
+        )))
     }
 }

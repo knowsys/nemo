@@ -59,6 +59,7 @@ impl ResourceProvider for FileResourceProvider {
         &self,
         resource: &Resource,
         compression: CompressionFormat,
+        _media_type: &str,
     ) -> Result<Option<Box<dyn BufRead>>, ReadingError> {
         // Try to parse as file IRI
         if let Some(path) = self.parse_resource(resource)? {

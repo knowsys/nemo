@@ -13,11 +13,13 @@ use nemo::{
     rule_model::{
         components::{fact::Fact, tag::Tag, term::primitive::Primitive, ProgramComponent},
         error::ValidationErrorBuilder,
-        term_map::PrimitiveTermMap,
+        substitution::Substitution,
     },
 };
 
-use pyo3::{create_exception, exceptions::PyNotImplementedError, prelude::*, types::PyDict};
+use pyo3::{
+    create_exception, exceptions::PyNotImplementedError, prelude::*, types::PyDict, IntoPyObjectExt,
+};
 
 create_exception!(module, NemoError, pyo3::exceptions::PyException);
 
@@ -160,7 +162,7 @@ impl NemoLiteral {
 }
 
 #[pyclass]
-struct NemoResults(Box<dyn Iterator<Item = Vec<AnyDataValue>> + Send>);
+struct NemoResults(Box<dyn Iterator<Item = Vec<AnyDataValue>> + Send + Sync>);
 
 fn datavalue_to_python(py: Python<'_>, v: AnyDataValue) -> PyResult<Bound<PyAny>> {
     match v.value_domain() {
@@ -171,28 +173,23 @@ fn datavalue_to_python(py: Python<'_>, v: AnyDataValue) -> PyResult<Bound<PyAny>
                 language: Some(tag),
                 datatype: RDF_LANG_STRING.to_string(),
             };
-            Ok(Py::new(py, lit)?.to_object(py).into_bound(py))
+            Py::new(py, lit)?.into_bound_py_any(py)
         }
         nemo::datavalues::ValueDomain::PlainString | nemo::datavalues::ValueDomain::Iri => {
-            Ok(v.canonical_string().into_py(py).into_bound(py))
+            v.canonical_string().into_bound_py_any(py)
         }
-        nemo::datavalues::ValueDomain::Double => {
-            Ok(v.to_f64_unchecked().into_py(py).into_bound(py))
-        }
-        nemo::datavalues::ValueDomain::Float => Ok(v.to_f32_unchecked().into_py(py).into_bound(py)),
+        nemo::datavalues::ValueDomain::Double => v.to_f64_unchecked().into_bound_py_any(py),
+        nemo::datavalues::ValueDomain::Float => v.to_f32_unchecked().into_bound_py_any(py),
         nemo::datavalues::ValueDomain::NonNegativeLong
         | nemo::datavalues::ValueDomain::UnsignedInt
         | nemo::datavalues::ValueDomain::NonNegativeInt
         | nemo::datavalues::ValueDomain::Long
-        | nemo::datavalues::ValueDomain::Int => Ok(v.to_i64_unchecked().into_py(py).into_bound(py)),
-        nemo::datavalues::ValueDomain::Boolean => {
-            Ok(v.to_boolean_unchecked().into_py(py).into_bound(py))
-        }
-        nemo::datavalues::ValueDomain::Null => Ok(v
+        | nemo::datavalues::ValueDomain::Int => v.to_i64_unchecked().into_bound_py_any(py),
+        nemo::datavalues::ValueDomain::Boolean => v.to_boolean_unchecked().into_bound_py_any(py),
+        nemo::datavalues::ValueDomain::Null => v
             .to_null_unchecked()
             .canonical_string()
-            .into_py(py)
-            .into_bound(py)),
+            .into_bound_py_any(py),
         nemo::datavalues::ValueDomain::Tuple => todo!("tuples are not supported yet"),
         nemo::datavalues::ValueDomain::Map => todo!("maps are not supported yet"),
         nemo::datavalues::ValueDomain::UnsignedLong | nemo::datavalues::ValueDomain::Other => {
@@ -201,7 +198,7 @@ fn datavalue_to_python(py: Python<'_>, v: AnyDataValue) -> PyResult<Bound<PyAny>
                 language: None,
                 datatype: v.datatype_iri(),
             };
-            Ok(Py::new(py, lit)?.to_object(py).into_bound(py))
+            Py::new(py, lit)?.into_bound_py_any(py)
         }
     }
 }
@@ -255,7 +252,7 @@ impl NemoTrace {
         }
     }
 
-    fn assignement(&self, py: Python<'_>) -> PyResult<Option<PyObject>> {
+    fn assignement<'py>(&self, py: Python<'py>) -> PyResult<Option<Bound<'py, PyDict>>> {
         match &self.0 {
             ExecutionTraceTree::Fact(_) => Ok(None),
             ExecutionTraceTree::Rule(application, _) => {
@@ -264,13 +261,16 @@ impl NemoTrace {
         }
     }
 
-    fn dict(&self, py: Python) -> PyResult<PyObject> {
+    fn dict<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
         trace_to_dict(&self.0, py)
     }
 }
 
-fn assignement_to_dict(assignment: &PrimitiveTermMap, py: Python) -> PyResult<PyObject> {
-    let dict = PyDict::new_bound(py);
+fn assignement_to_dict<'py>(
+    assignment: &Substitution,
+    py: Python<'py>,
+) -> PyResult<Bound<'py, PyDict>> {
+    let dict = PyDict::new(py);
     for (variable, term) in assignment {
         if let Primitive::Ground(ground) = term {
             dict.set_item(
@@ -280,11 +280,11 @@ fn assignement_to_dict(assignment: &PrimitiveTermMap, py: Python) -> PyResult<Py
         }
     }
 
-    Ok(dict.to_object(py))
+    Ok(dict.into_pyobject(py)?)
 }
 
-fn trace_to_dict(trace: &ExecutionTraceTree, py: Python) -> PyResult<PyObject> {
-    let result = PyDict::new_bound(py);
+fn trace_to_dict<'py>(trace: &ExecutionTraceTree, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
+    let result = PyDict::new(py);
     match &trace {
         ExecutionTraceTree::Fact(fact) => result.set_item("fact", fact.to_string())?,
         ExecutionTraceTree::Rule(rule_application, subtraces) => {
@@ -300,7 +300,7 @@ fn trace_to_dict(trace: &ExecutionTraceTree, py: Python) -> PyResult<PyObject> {
             result.set_item("subtraces", subtraces)?;
         }
     };
-    Ok(result.to_object(py))
+    Ok(result.into_pyobject(py)?)
 }
 
 #[pymethods]

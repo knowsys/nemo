@@ -39,7 +39,7 @@ impl ParameterName<'_> {
 const CONTEXT: ParserContext = ParserContext::DataType;
 
 impl<'a> ProgramAST<'a> for ParameterName<'a> {
-    fn children(&self) -> Vec<&dyn ProgramAST> {
+    fn children(&self) -> Vec<&dyn ProgramAST<'a>> {
         Vec::default()
     }
 

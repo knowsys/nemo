@@ -131,13 +131,12 @@ impl ProgramChaseTranslation {
     ) -> Option<DsvValueFormats> {
         let term = attributes.get(&ImportExportAttribute::Format)?;
 
-        if let Term::Tuple(tuple) = term {
-            Some(
+        match term {
+            Term::Tuple(tuple) => Some(
                 DsvValueFormats::from_tuple(tuple)
                     .expect("invalid program: format attributed malformed in dsv import/export"),
-            )
-        } else {
-            unreachable!("invalid program: format attributed malformed in dsv import/export")
+            ),
+            _ => panic!("invalid program: format attributed malformed in dsv import/export"),
         }
     }
 
@@ -192,6 +191,13 @@ impl ProgramChaseTranslation {
         ))
     }
 
+    /// Read the ignore_headers option from the attributes.
+    fn read_ignore_headers(attributes: &HashMap<ImportExportAttribute, Term>) -> Option<bool> {
+        attributes
+            .get(&ImportExportAttribute::IgnoreHeaders)
+            .and_then(ImportExportDirective::boolean_value)
+    }
+
     /// Build a [DsvHandler].
     fn build_dsv_handler(
         direction: Direction,
@@ -221,12 +227,15 @@ impl ProgramChaseTranslation {
             compression_format = format;
         }
 
+        let ignore_headers = Self::read_ignore_headers(attributes).unwrap_or_default();
+
         Box::new(DsvHandler::new(
             delimiter,
             resource,
             value_formats,
             limit,
             compression_format,
+            ignore_headers,
             direction,
         ))
     }
