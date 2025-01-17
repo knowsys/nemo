@@ -4,8 +4,7 @@ pub mod basic;
 pub mod complex;
 
 use basic::{
-    blank::Blank, boolean::Boolean, constant::Constant, number::Number, rdf_literal::RdfLiteral,
-    string::StringLiteral, variable::Variable,
+    blank::Blank, boolean::Boolean, constant::Constant, number::Number, enc_number::EncodedNumber,rdf_literal::RdfLiteral, string::StringLiteral, variable::Variable
 };
 use complex::{
     aggregation::Aggregation, arithmetic::Arithmetic, atom::Atom, fstring::FormatString, map::Map,
@@ -45,6 +44,8 @@ pub enum Expression<'a> {
     Negation(Negation<'a>),
     /// Number
     Number(Number<'a>),
+    /// Encoded number
+    EncodedNumber(EncodedNumber<'a>),
     /// Operation
     Operation(Operation<'a>),
     /// Parenthesized expression
@@ -72,6 +73,7 @@ impl<'a> Expression<'a> {
             Expression::FormatString(expression) => expression.context(),
             Expression::Map(expression) => expression.context(),
             Expression::Number(expression) => expression.context(),
+            Expression::EncodedNumber(expression) => expression.context(),
             Expression::Negation(expression) => expression.context(),
             Expression::Operation(expression) => expression.context(),
             Expression::Parenthesized(expression) => expression.context(),
@@ -89,6 +91,7 @@ impl<'a> Expression<'a> {
             map(Boolean::parse, Self::Boolean),
             map(Constant::parse, Self::Constant),
             map(Number::parse, Self::Number),
+            map(EncodedNumber::parse, Self::EncodedNumber),
             map(RdfLiteral::parse, Self::RdfLiteral),
             map(StringLiteral::parse, Self::String),
             map(Variable::parse, Self::Variable),
@@ -123,6 +126,7 @@ impl<'a> ProgramAST<'a> for Expression<'a> {
             Expression::FormatString(expression) => expression,
             Expression::Map(expression) => expression,
             Expression::Number(expression) => expression,
+            Expression::EncodedNumber(expression) => expression,
             Expression::Negation(expression) => expression,
             Expression::Operation(expression) => expression,
             Expression::Parenthesized(expression) => expression,
@@ -144,6 +148,7 @@ impl<'a> ProgramAST<'a> for Expression<'a> {
             Expression::FormatString(expression) => expression.span(),
             Expression::Map(expression) => expression.span(),
             Expression::Number(expression) => expression.span(),
+            Expression::EncodedNumber(expression) => expression.span(),
             Expression::Negation(expression) => expression.span(),
             Expression::Operation(expression) => expression.span(),
             Expression::Parenthesized(expression) => expression.span(),
@@ -197,6 +202,7 @@ mod test {
             ("{a=1,b=POW(1, 2)}", ParserContext::Map),
             ("12", ParserContext::Number),
             ("~test(1)", ParserContext::Negation),
+            ("0x12", ParserContext::EncodedNumber),
             ("substr(\"string\", 1+?x)", ParserContext::Operation),
             ("(int)", ParserContext::ParenthesizedExpression),
             (

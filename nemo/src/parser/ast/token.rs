@@ -7,8 +7,8 @@ use enum_assoc::Assoc;
 
 use nom::{
     branch::alt,
-    bytes::complete::{is_a, is_not, tag, take_until},
-    character::complete::{alpha1, alphanumeric1, digit1, multispace1, space0, space1},
+    bytes::complete::{is_a, is_not, tag, take_until,take_while1},
+    character::complete::{alpha1, alphanumeric1, digit1, multispace1, space0, space1, oct_digit1, hex_digit1},
     combinator::{map, opt, recognize, verify},
     multi::many0,
     sequence::pair,
@@ -183,6 +183,24 @@ pub enum TokenKind {
     /// Digits
     #[assoc(name = "digits")]
     Digits,
+    /// Binary prefix
+    #[assoc(name = "0b")]
+    BinaryPrefix,
+    /// Binary suffix
+    #[assoc(name = "bin_suffix")]
+    BinarySuffix,
+    /// Octal prefix
+    #[assoc(name = "0o")]
+    OctalPrefix,
+    /// Octal suffix
+    #[assoc(name = "oct_suffix")]
+    OctalSuffix,
+    /// Hexadecimal prefix
+    #[assoc(name = "0x")]
+    HexPrefix,
+    /// Hexadecimal suffix
+    #[assoc(name = "hex_suffix")]
+    HexSuffix,
     /// Exponent (lower case)
     #[assoc(name = "e")]
     ExponentLower,
@@ -311,6 +329,10 @@ macro_rules! string_token {
             )(input)
         }
     };
+}
+
+pub fn is_binary(c: char)-> bool{
+    c == '0' || c == '1'
 }
 
 impl<'a> Token<'a> {
@@ -474,6 +496,52 @@ impl<'a> Token<'a> {
                     Token {
                         span: result.span,
                         kind: TokenKind::Digits,
+                    },
+                )
+            },
+        )
+    }
+
+    /// Parse [TokenKind:BinaryPrefix] 
+    //  Using built-in bin_digit1 requires nom version 8.0.0-alpha2
+    pub fn bin_number(input: ParserInput<'a>) -> ParserResult<'a, Token<'a>> {
+        context(ParserContext::token(TokenKind::BinarySuffix), take_while1(|c| c == '0' || c == '1'))(input).map(
+            |(rest_input, result)| {
+                (
+                    rest_input,
+                    Token {
+                        span: result.span,
+                        kind: TokenKind::BinarySuffix,
+                    },
+                )
+            },
+        )
+    }
+
+    /// Parse [TokenKind:OctalPrefix].
+    pub fn oct_number(input: ParserInput<'a>) -> ParserResult<'a, Token<'a>> {
+        context(ParserContext::token(TokenKind::OctalSuffix), oct_digit1)(input).map(
+            |(rest_input, result)| {
+                (
+                    rest_input,
+                    Token {
+                        span: result.span,
+                        kind: TokenKind::OctalSuffix,
+                    },
+                )
+            },
+        )
+    }
+
+    /// Parse [TokenKindHexNumber].
+    pub fn hex_number(input: ParserInput<'a>) -> ParserResult<'a, Token<'a>> {
+        context(ParserContext::token(TokenKind::HexSuffix), hex_digit1)(input).map(
+            |(rest_input, result)| {
+                (
+                    rest_input,
+                    Token {
+                        span: result.span,
+                        kind: TokenKind::HexSuffix,
                     },
                 )
             },
@@ -722,6 +790,9 @@ impl<'a> Token<'a> {
     );
     string_token!(fstring_expression_end, TokenKind::FormatStringExpressionEnd);
     string_token!(blank_node_prefix, TokenKind::BlankNodePrefix);
+    string_token!(binary_prefix, TokenKind::BinaryPrefix);
+    string_token!(octal_prefix, TokenKind::OctalPrefix);
+    string_token!(hex_prefix, TokenKind::HexPrefix);
     string_token!(exponent_lower, TokenKind::ExponentLower);
     string_token!(exponent_upper, TokenKind::ExponentUpper);
     string_token!(type_marker_double, TokenKind::TypeMarkerDouble);

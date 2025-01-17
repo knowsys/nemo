@@ -54,7 +54,6 @@ enum NumberSign {
 pub struct Number<'a> {
     /// [Span] associated with this node
     span: Span<'a>,
-
     /// Sign of the integer part
     integer_sign: NumberSign,
     /// The integer part of the number
@@ -136,7 +135,6 @@ impl<'a> Number<'a> {
         if let Ok(float) = str::parse::<f32>(&string) {
             return NumberValue::Float(float);
         }
-
         NumberValue::Large(string)
     }
 

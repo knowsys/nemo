@@ -15,7 +15,7 @@ use crate::{
 use super::{
     basic::{
         blank::BlankLiteral, boolean::BooleanLiteral, constant::ConstantLiteral,
-        number::NumberLiteral, rdf::RdfLiteral, string::StringLiteral,
+        number::NumberLiteral,enc_number::EncodedNumberLiteral, rdf::RdfLiteral, string::StringLiteral,
     },
     complex::{
         arithmetic::ArithmeticOperation, fstring::FormatStringLiteral,
@@ -49,6 +49,9 @@ impl TranslationComponent for Term {
             }
             ast::expression::Expression::Number(number) => {
                 Term::from(NumberLiteral::build_component(translation, number)?.into_inner())
+            }
+            ast::expression::Expression::EncodedNumber(enc_number) => {
+                Term::from(EncodedNumberLiteral::build_component(translation, enc_number)?.into_inner())
             }
             ast::expression::Expression::RdfLiteral(rdf_literal) => {
                 Term::from(RdfLiteral::build_component(translation, rdf_literal)?.into_inner())
