@@ -23,9 +23,8 @@ impl TranslationComponent for EncodedNumberLiteral {
             ast::expression::basic::enc_number::NumberValue::Integer(integer) => {
                 AnyDataValue::new_integer_from_i64(integer)
             }
-            // Todo: find out if we need an iri for this case
             ast::expression::basic::enc_number::NumberValue::Large(large) => {
-                AnyDataValue::new_other(large, String::from("xsd:double"))
+                AnyDataValue::new_other(large, String::from("xsd:integer"))
             }
         }))
     }

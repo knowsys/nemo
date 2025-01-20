@@ -16,7 +16,7 @@ use crate::parser::{
     span::Span,
     ParserInput, ParserResult,
 };
-
+use num::{BigInt,Num};
 
 #[derive(Assoc, Debug, Clone, Copy, PartialEq, Eq)]
 #[func(pub fn token(token: &TokenKind) -> Option<Self>)]
@@ -95,11 +95,17 @@ impl<'a> EncodedNumber<'a> {
     pub fn value(&self) -> NumberValue {
         let string = format!("{}{}",self.prefix.print(),self.suffix);
 
+        // Retrieves the base of encoded number based on [Encoding]
         let nr_encoding = self.prefix.radix();
         let span = &self.suffix.span();
         let suffix = span.fragment();
+        
+        // Returns decoded number as <i64> if it is not too big
+        // Otherwise, return string representation of the decoded number 
         if let Ok(integer) = <i64>::from_str_radix(suffix, nr_encoding) {
             return NumberValue::Integer(integer);
+        }else if let Ok(bigint) = <BigInt as Num>::from_str_radix(suffix, nr_encoding) {
+            return NumberValue::Large(bigint.to_string());
         }
         NumberValue::Large(string)
     }
