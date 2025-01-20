@@ -2,10 +2,7 @@
 #![allow(missing_docs)]
 
 use enum_assoc::Assoc;
-use nom::{
-    branch::alt,
-    sequence::preceded,
-};
+use nom::{branch::alt, sequence::preceded};
 
 use crate::parser::{
     ast::{
@@ -16,7 +13,7 @@ use crate::parser::{
     span::Span,
     ParserInput, ParserResult,
 };
-use num::{BigInt,Num};
+use num::{BigInt, Num};
 
 #[derive(Assoc, Debug, Clone, Copy, PartialEq, Eq)]
 #[func(pub fn token(token: &TokenKind) -> Option<Self>)]
@@ -44,7 +41,7 @@ impl Encoding {
 }
 
 #[derive(Debug)]
-pub struct EncodedNumber<'a>{
+pub struct EncodedNumber<'a> {
     /// [Span] associated with this node
     span: Span<'a>,
     /// The prefix of the encoded number
@@ -52,7 +49,6 @@ pub struct EncodedNumber<'a>{
     /// The suffix of the encoded number
     suffix: Token<'a>,
 }
-
 
 /// Value of [EncodedNumber]
 #[derive(Debug)]
@@ -64,52 +60,42 @@ pub enum NumberValue {
 }
 
 impl<'a> EncodedNumber<'a> {
-
     /// Removes the binary prefix (0b) and returns the binary suffix
     fn parse_binary(input: ParserInput<'a>) -> ParserResult<'a, (Encoding, Token<'a>)> {
-        preceded(Token::binary_prefix, Token::bin_number)(input).map(
-            |(remaining, bin_digits)| {
-                (remaining,(Encoding::Binary,bin_digits))
-        })
+        preceded(Token::binary_prefix, Token::bin_number)(input)
+            .map(|(remaining, bin_digits)| (remaining, (Encoding::Binary, bin_digits)))
     }
-
 
     /// Removes the octal prefix (0o) and returns the octal suffix
     fn parse_octal(input: ParserInput<'a>) -> ParserResult<'a, (Encoding, Token<'a>)> {
-        preceded(Token::octal_prefix, Token::oct_number)(input).map(
-            |(remaining, oct_digits)| {
-                (remaining,(Encoding::Octal,oct_digits))
-        })
+        preceded(Token::octal_prefix, Token::oct_number)(input)
+            .map(|(remaining, oct_digits)| (remaining, (Encoding::Octal, oct_digits)))
     }
 
     /// Removes the hex prefix (0x) and returns the hex suffix
     fn parse_hex(input: ParserInput<'a>) -> ParserResult<'a, (Encoding, Token<'a>)> {
-        preceded(Token::hex_prefix, Token::hex_number)(input).map(
-            |(remaining, hex_chars)| {
-                (remaining,(Encoding::Hexadecimal,hex_chars))
-        })
+        preceded(Token::hex_prefix, Token::hex_number)(input)
+            .map(|(remaining, hex_chars)| (remaining, (Encoding::Hexadecimal, hex_chars)))
     }
-
 
     /// Return the value of this number, represented as a [NumberValue].
     pub fn value(&self) -> NumberValue {
-        let string = format!("{}{}",self.prefix.print(),self.suffix);
+        let string = format!("{}{}", self.prefix.print(), self.suffix);
 
         // Retrieves the base of encoded number based on [Encoding]
         let nr_encoding = self.prefix.radix();
         let span = &self.suffix.span();
         let suffix = span.fragment();
-        
+
         // Returns decoded number as <i64> if it is not too big
-        // Otherwise, return string representation of the decoded number 
+        // Otherwise, return string representation of the decoded number
         if let Ok(integer) = <i64>::from_str_radix(suffix, nr_encoding) {
             return NumberValue::Integer(integer);
-        }else if let Ok(bigint) = <BigInt as Num>::from_str_radix(suffix, nr_encoding) {
+        } else if let Ok(bigint) = <BigInt as Num>::from_str_radix(suffix, nr_encoding) {
             return NumberValue::Large(bigint.to_string());
         }
         NumberValue::Large(string)
     }
-
 }
 
 const CONTEXT: ParserContext = ParserContext::EncodedNumber;
@@ -131,26 +117,20 @@ impl<'a> ProgramAST<'a> for EncodedNumber<'a> {
 
         context(
             CONTEXT,
-            alt((
-                Self::parse_binary,
-                Self::parse_octal,
-                Self::parse_hex,
-            )),
+            alt((Self::parse_binary, Self::parse_octal, Self::parse_hex)),
         )(input)
-        .map(
-            |(rest, (prefix,suffix))| {
-                let rest_span = rest.span;
+        .map(|(rest, (prefix, suffix))| {
+            let rest_span = rest.span;
 
-                (
-                    rest,
-                    EncodedNumber {
-                        span: input_span.until_rest(&rest_span),
-                        prefix,
-                        suffix,
-                    },
-                )
-            },
-        )
+            (
+                rest,
+                EncodedNumber {
+                    span: input_span.until_rest(&rest_span),
+                    prefix,
+                    suffix,
+                },
+            )
+        })
     }
 
     fn context(&self) -> ParserContext {
@@ -163,23 +143,26 @@ mod test {
     use nom::combinator::all_consuming;
 
     use crate::parser::{
-        ast::{expression::basic::enc_number::{EncodedNumber,NumberValue}, ProgramAST},
+        ast::{
+            expression::basic::enc_number::{EncodedNumber, NumberValue},
+            ProgramAST,
+        },
         ParserInput, ParserState,
     };
 
     #[test]
     fn parse_numbers() {
         let valid_numbers = vec![
-            ("0x11",17),
-            ("0o11",9),
-            ("0b11",3),
-            ("0xAB2CE",701134),
-            ("0xab2ce",701134),
-            ("0o777",511),
-            ("0b01010101",85),
+            ("0x11", 17),
+            ("0o11", 9),
+            ("0b11", 3),
+            ("0xAB2CE", 701134),
+            ("0xab2ce", 701134),
+            ("0o777", 511),
+            ("0b01010101", 85),
         ];
 
-        let invalid_numbers = vec!["0xG", "0o8", "0b2", "0x","0b", "0o"];
+        let invalid_numbers = vec!["0xG", "0o8", "0b2", "0x", "0b", "0o"];
 
         for (valid, exp_value) in valid_numbers {
             let input = ParserInput::new(valid, ParserState::default());
@@ -187,8 +170,8 @@ mod test {
             assert!(result.is_ok());
 
             if let Ok((_, ast_node)) = result {
-                if let NumberValue::Integer(integer) = ast_node.value(){
-                    assert_eq!(integer,exp_value);
+                if let NumberValue::Integer(integer) = ast_node.value() {
+                    assert_eq!(integer, exp_value);
                 }
             };
         }

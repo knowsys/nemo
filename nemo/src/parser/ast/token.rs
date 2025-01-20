@@ -7,8 +7,10 @@ use enum_assoc::Assoc;
 
 use nom::{
     branch::alt,
-    bytes::complete::{is_a, is_not, tag, take_until,take_while1},
-    character::complete::{alpha1, alphanumeric1, digit1, multispace1, space0, space1, oct_digit1, hex_digit1},
+    bytes::complete::{is_a, is_not, tag, take_until, take_while1},
+    character::complete::{
+        alpha1, alphanumeric1, digit1, hex_digit1, multispace1, oct_digit1, space0, space1,
+    },
     combinator::{map, opt, recognize, verify},
     multi::many0,
     sequence::pair,
@@ -331,7 +333,6 @@ macro_rules! string_token {
     };
 }
 
-
 impl<'a> Token<'a> {
     /// Return the [Span] of this token.
     pub fn span(&self) -> Span<'a> {
@@ -500,22 +501,24 @@ impl<'a> Token<'a> {
     }
 
     //  The built-in bin_digit1 can be used, once nom is updated to version 8.0.0-alpha2
-    /// Parse [TokenKind:BinaryPrefix] 
+    /// Parse binary number consisting of [TokenKind::BinaryPrefix] and [TokenKind::BinarySuffix]
     pub fn bin_number(input: ParserInput<'a>) -> ParserResult<'a, Token<'a>> {
-        context(ParserContext::token(TokenKind::BinarySuffix), take_while1(|c| c == '0' || c == '1'))(input).map(
-            |(rest_input, result)| {
-                (
-                    rest_input,
-                    Token {
-                        span: result.span,
-                        kind: TokenKind::BinarySuffix,
-                    },
-                )
-            },
-        )
+        context(
+            ParserContext::token(TokenKind::BinarySuffix),
+            take_while1(|c| c == '0' || c == '1'),
+        )(input)
+        .map(|(rest_input, result)| {
+            (
+                rest_input,
+                Token {
+                    span: result.span,
+                    kind: TokenKind::BinarySuffix,
+                },
+            )
+        })
     }
 
-    /// Parse [TokenKind:OctalPrefix].
+    /// Parse binary number consisting of [TokenKind::OctalPrefix] and [TokenKind::OctalSuffix]
     pub fn oct_number(input: ParserInput<'a>) -> ParserResult<'a, Token<'a>> {
         context(ParserContext::token(TokenKind::OctalSuffix), oct_digit1)(input).map(
             |(rest_input, result)| {
@@ -530,7 +533,7 @@ impl<'a> Token<'a> {
         )
     }
 
-    /// Parse [TokenKindHexNumber].
+    /// Parse binary number consisting of [TokenKind::HexPrefix] and [TokenKind::HexSuffix]
     pub fn hex_number(input: ParserInput<'a>) -> ParserResult<'a, Token<'a>> {
         context(ParserContext::token(TokenKind::HexSuffix), hex_digit1)(input).map(
             |(rest_input, result)| {

@@ -4,7 +4,8 @@ pub mod basic;
 pub mod complex;
 
 use basic::{
-    blank::Blank, boolean::Boolean, constant::Constant, number::Number, enc_number::EncodedNumber,rdf_literal::RdfLiteral, string::StringLiteral, variable::Variable
+    blank::Blank, boolean::Boolean, constant::Constant, enc_number::EncodedNumber, number::Number,
+    rdf_literal::RdfLiteral, string::StringLiteral, variable::Variable,
 };
 use complex::{
     aggregation::Aggregation, arithmetic::Arithmetic, atom::Atom, fstring::FormatString, map::Map,

@@ -33,15 +33,14 @@ impl UnaryFunction for CastingIntoInteger64 {
             | crate::datavalues::ValueDomain::Iri
             | crate::datavalues::ValueDomain::LanguageTaggedString => None,
             crate::datavalues::ValueDomain::PlainString | crate::datavalues::ValueDomain::Other => {
-
                 let lex_val = parameter.lexical_value();
 
                 // Handle decimal, binary (0b), octal (0o) and hexadecimal (0x) encoded strings
                 let result = match &lex_val[0..2] {
-                    "0b" => {<i64>::from_str_radix(&lex_val[2..],2).ok()?},
-                    "0o" => {<i64>::from_str_radix(&lex_val[2..],8).ok()?},
-                    "0x" => {<i64>::from_str_radix(&lex_val[2..],16).ok()?},
-                    _ => {lex_val.parse::<i64>().ok()?},
+                    "0b" => <i64>::from_str_radix(&lex_val[2..], 2).ok()?,
+                    "0o" => <i64>::from_str_radix(&lex_val[2..], 8).ok()?,
+                    "0x" => <i64>::from_str_radix(&lex_val[2..], 16).ok()?,
+                    _ => lex_val.parse::<i64>().ok()?,
                 };
 
                 Some(AnyDataValue::new_integer_from_i64(result))

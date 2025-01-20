@@ -66,9 +66,10 @@ where
 {
     fn identifier(&self) -> Option<LSPIdentifier> {
         let scope = match self.context() {
-            ParserContext::Number | ParserContext::EncodedNumber | ParserContext::Variable | ParserContext::RdfLiteral => {
-                Some(ParserContext::Rule)
-            }
+            ParserContext::Number
+            | ParserContext::EncodedNumber
+            | ParserContext::Variable
+            | ParserContext::RdfLiteral => Some(ParserContext::Rule),
             ParserContext::Iri
             | ParserContext::Constant
             | ParserContext::String
