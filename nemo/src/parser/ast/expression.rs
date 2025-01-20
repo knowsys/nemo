@@ -219,13 +219,10 @@ mod test {
         for (input, expect) in test {
             let parser_input = ParserInput::new(input, ParserState::default());
             let result = all_consuming(Expression::parse)(parser_input);
-            println!("input {}", input);
-            println!("result {:?}", result);
+
             assert!(result.is_ok());
 
             let result = result.unwrap();
-            
-            println!("type {:?}", result.1.context_type());
             assert_eq!(result.1.context_type(), expect);
         }
     }
