@@ -65,30 +65,28 @@ pub enum NumberValue {
 
 impl<'a> EncodedNumber<'a> {
 
-    /// is_bin_digit, is_oct_digit, is_hex_digit exist already in nom
-    /// this function can be simplified, once nom > 7.1.3 with chraracter::complete::bin_digit1
+    /// Removes the binary prefix (0b) and returns the binary suffix
     fn parse_binary(input: ParserInput<'a>) -> ParserResult<'a, (Encoding, Token<'a>)> {
         preceded(Token::binary_prefix, Token::bin_number)(input).map(
-            |(remaining, digits)| {
-                (remaining,(Encoding::Binary,digits))
+            |(remaining, bin_digits)| {
+                (remaining,(Encoding::Binary,bin_digits))
         })
     }
 
-    /// Todo: Return an Encoding GPT:
-    /// Loesung: digits kommt von Nom direkt und hat den output typ der als input kommt
-    /// alle anderen Funktionen sind custom und returnen Token<'a>
+
+    /// Removes the octal prefix (0o) and returns the octal suffix
     fn parse_octal(input: ParserInput<'a>) -> ParserResult<'a, (Encoding, Token<'a>)> {
         preceded(Token::octal_prefix, Token::oct_number)(input).map(
-            |(remaining, digits)| {
-                (remaining,(Encoding::Octal,digits))
+            |(remaining, oct_digits)| {
+                (remaining,(Encoding::Octal,oct_digits))
         })
     }
 
-
+    /// Removes the hex prefix (0x) and returns the hex suffix
     fn parse_hex(input: ParserInput<'a>) -> ParserResult<'a, (Encoding, Token<'a>)> {
         preceded(Token::hex_prefix, Token::hex_number)(input).map(
-            |(remaining, digits)| {
-                (remaining,(Encoding::Hexadecimal,digits))
+            |(remaining, hex_chars)| {
+                (remaining,(Encoding::Hexadecimal,hex_chars))
         })
     }
 
@@ -182,18 +180,11 @@ mod test {
             let result = all_consuming(EncodedNumber::parse)(input);
             assert!(result.is_ok());
 
-            match result{
-                Ok((_,ast_node)) => {
-                    if let NumberValue::Integer(integer) = ast_node.value() {
-                        assert_eq!(integer,exp_value);
-                    }else{
-                        // should we throw an error if parsed as Large ?
-                    }
+            if let Ok((_, ast_node)) = result {
+                if let NumberValue::Integer(integer) = ast_node.value(){
+                    assert_eq!(integer,exp_value);
                 }
-                ,
-                Err(e) => println!("{}",e),
-            }
-            
+            };
         }
 
         for invalid in invalid_numbers {

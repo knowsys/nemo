@@ -331,9 +331,6 @@ macro_rules! string_token {
     };
 }
 
-pub fn is_binary(c: char)-> bool{
-    c == '0' || c == '1'
-}
 
 impl<'a> Token<'a> {
     /// Return the [Span] of this token.
@@ -502,8 +499,8 @@ impl<'a> Token<'a> {
         )
     }
 
+    //  The built-in bin_digit1 can be used, once nom is updated to version 8.0.0-alpha2
     /// Parse [TokenKind:BinaryPrefix] 
-    //  Using built-in bin_digit1 requires nom version 8.0.0-alpha2
     pub fn bin_number(input: ParserInput<'a>) -> ParserResult<'a, Token<'a>> {
         context(ParserContext::token(TokenKind::BinarySuffix), take_while1(|c| c == '0' || c == '1'))(input).map(
             |(rest_input, result)| {
