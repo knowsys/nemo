@@ -30,6 +30,7 @@ pub fn handle_define_directive<'a, 'b>(
         ast::directive::Directive::Declare(declare) => handle_declare(translation, declare),
         ast::directive::Directive::Export(_)
         | ast::directive::Directive::Import(_)
+        | ast::directive::Directive::Order(_)
         | ast::directive::Directive::Output(_)
         | ast::directive::Directive::Unknown(_) => Ok(()),
     }
@@ -43,6 +44,7 @@ pub fn handle_use_directive<'a, 'b>(
     match directive {
         ast::directive::Directive::Export(export) => handle_export(translation, export),
         ast::directive::Directive::Import(import) => handle_import(translation, import),
+        ast::directive::Directive::Order(order) => handle_order(translation, order),
         ast::directive::Directive::Output(output) => handle_output(translation, output),
         ast::directive::Directive::Unknown(unknown) => handle_unknown_directive(unknown),
         ast::directive::Directive::Base(_)
@@ -86,6 +88,13 @@ fn handle_declare<'a, 'b>(
         declare.span(),
         TranslationErrorKind::UnsupportedDeclare,
     ))
+}
+
+fn handle_order<'a, 'b>(
+    translation: &mut ASTProgramTranslation<'a, 'b>,
+    output: &'b ast::directive::order::Order<'a>,
+) -> Result<(), TranslationError> {
+    Ok(())
 }
 
 fn handle_output<'a, 'b>(

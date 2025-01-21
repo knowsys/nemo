@@ -239,6 +239,9 @@ pub enum TokenKind {
     /// Token for the import directive
     #[assoc(name = directive::IMPORT)]
     ImportDirective,
+    /// Token for the order directive
+    #[assoc(name = directive::ORDER)]
+    OrderDirective,
     /// Token for the output directive
     #[assoc(name = directive::OUTPUT)]
     OutputDirective,
@@ -254,6 +257,12 @@ pub enum TokenKind {
     /// Token for the prefix assignment
     #[assoc(name = directive::PREFIX_ASSIGNMENT)]
     PrefixAssignment,
+    /// Token for the order assignment
+    #[assoc(name = directive::ORDER_ASSIGNMENT)]
+    OrderAssignment,
+    /// Token for the order comparison symbol
+    #[assoc(name = directive::ORDER_COMPARE)]
+    OrderCompare,
     /// Token for separating names from data types
     #[assoc(name = directive::NAME_DATATYPE_SEPARATOR)]
     NameDatatypeSeparator,
@@ -622,6 +631,24 @@ impl<'a> Token<'a> {
             )
         })
     }
+
+    pub fn directive_order(input: ParserInput<'a>) -> ParserResult<'a, Token<'a>> {
+        context(
+            ParserContext::token(TokenKind::OrderDirective),
+            // The reasoning behind using `verify` is the same as in the `directive_base` function.
+            verify(Self::name, |tag| tag.span.fragment() == directive::ORDER),
+        )(input)
+        .map(|(rest, result)| {
+            (
+                rest,
+                Token {
+                    span: result.span,
+                    kind: TokenKind::OrderDirective,
+                },
+            )
+        })
+    }
+
     pub fn directive_prefix(input: ParserInput<'a>) -> ParserResult<'a, Token<'a>> {
         context(
             ParserContext::token(TokenKind::PrefixDirective),
@@ -729,6 +756,8 @@ impl<'a> Token<'a> {
     string_token!(import_assignment, TokenKind::ImportAssignment);
     string_token!(export_assignment, TokenKind::ExportAssignment);
     string_token!(prefix_assignment, TokenKind::PrefixAssignment);
+    string_token!(order_assignment, TokenKind::OrderAssignment);
+    string_token!(order_compare, TokenKind::OrderCompare);
     string_token!(key_value_assignment, TokenKind::KeyValueAssignment);
     string_token!(atom_open, TokenKind::AtomOpen);
     string_token!(atom_close, TokenKind::AtomClose);

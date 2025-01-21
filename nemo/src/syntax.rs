@@ -54,6 +54,15 @@ pub mod directive {
     /// The string used in the keyword for the output directive.
     pub const OUTPUT: &str = "output";
 
+    /// The string used in the keyword for the order directive.
+    pub const ORDER: &str = "order";
+
+    /// Comparison between two ordered predicates
+    pub const ORDER_COMPARE: &str = ">>";
+
+    /// The token used to assign an expression to an ordering.
+    pub const ORDER_ASSIGNMENT: &str = ":-";
+
     /// Syntax elements relating to import/export value formats.
     pub mod value_formats {
         /// The string used to represent the import/export format any

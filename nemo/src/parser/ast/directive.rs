@@ -7,6 +7,7 @@ use enum_assoc::Assoc;
 use export::Export;
 use import::Import;
 use nom::{branch::alt, combinator::map};
+use order::Order;
 use output::Output;
 use prefix::Prefix;
 use strum_macros::EnumIter;
@@ -25,6 +26,7 @@ pub mod base;
 pub mod declare;
 pub mod export;
 pub mod import;
+pub mod order;
 pub mod output;
 pub mod prefix;
 pub mod unknown;
@@ -45,6 +47,9 @@ pub enum DirectiveKind {
     /// Import
     #[assoc(token = TokenKind::ImportDirective)]
     Import,
+    /// Order
+    #[assoc(token = TokenKind::OrderDirective)]
+    Order,
     /// Output
     #[assoc(token = TokenKind::OutputDirective)]
     Output,
@@ -71,6 +76,9 @@ pub enum Directive<'a> {
     /// Import
     #[assoc(kind = DirectiveKind::Import)]
     Import(Import<'a>),
+    /// Order
+    #[assoc(kind = DirectiveKind::Order)]
+    Order(Order<'a>),
     /// Output
     #[assoc(kind = DirectiveKind::Output)]
     Output(Output<'a>),
@@ -90,6 +98,7 @@ impl Directive<'_> {
             Directive::Declare(directive) => directive.context(),
             Directive::Export(directive) => directive.context(),
             Directive::Import(directive) => directive.context(),
+            Directive::Order(directive) => directive.context(),
             Directive::Output(directive) => directive.context(),
             Directive::Prefix(directive) => directive.context(),
             Directive::Unknown(directive) => directive.context(),
@@ -106,6 +115,7 @@ impl<'a> ProgramAST<'a> for Directive<'a> {
             Directive::Declare(directive) => directive,
             Directive::Export(directive) => directive,
             Directive::Import(directive) => directive,
+            Directive::Order(directive) => directive,
             Directive::Output(directive) => directive,
             Directive::Prefix(directive) => directive,
             Directive::Unknown(directive) => directive,
@@ -118,6 +128,7 @@ impl<'a> ProgramAST<'a> for Directive<'a> {
             Directive::Declare(directive) => directive.span(),
             Directive::Export(directive) => directive.span(),
             Directive::Import(directive) => directive.span(),
+            Directive::Order(directive) => directive.span(),
             Directive::Output(directive) => directive.span(),
             Directive::Prefix(directive) => directive.span(),
             Directive::Unknown(directive) => directive.span(),
@@ -135,6 +146,7 @@ impl<'a> ProgramAST<'a> for Directive<'a> {
                 map(Declare::parse, Directive::Declare),
                 map(Export::parse, Directive::Export),
                 map(Import::parse, Directive::Import),
+                map(Order::parse, Directive::Order),
                 map(Output::parse, Directive::Output),
                 map(Prefix::parse, Directive::Prefix),
                 map(UnknownDirective::parse, Directive::Unknown),

@@ -4,8 +4,9 @@
 use std::collections::HashMap;
 
 use nemo_physical::{
+    datavalues::AnyDataValue,
     management::execution_plan::{ColumnOrder, ExecutionNodeRef},
-    tabular::operations::OperationTable,
+    tabular::operations::{Filter, OperationTable},
 };
 
 use crate::{
@@ -109,10 +110,16 @@ impl HeadStrategy for DatalogStrategy {
                 .plan_mut()
                 .subtract(new_tables_union, vec![old_table_union]);
 
+            let update_node = current_plan.plan_mut().update(
+                Filter::constant(AnyDataValue::new_boolean(true)),
+                remove_duplicate_node,
+                vec![],
+            );
+
             // let update_node = current_plan.plan_mut().update(marked_columns, subnode)
 
             current_plan.add_permanent_table(
-                remove_duplicate_node,
+                update_node,
                 "Duplicate Elimination (Datalog)",
                 &head_table_name,
                 SubtableIdentifier::new(predicate.clone(), step),

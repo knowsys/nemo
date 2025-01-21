@@ -70,6 +70,9 @@ pub enum ParserContext {
     /// body of import directive
     #[assoc(name = "import body")]
     ImportBody,
+    /// Order directive
+    #[assoc(name = "order directive")]
+    Order,
     /// Output directive
     #[assoc(name = "output directive")]
     Output,
