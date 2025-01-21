@@ -38,6 +38,7 @@ impl Float {
         Ok(Float(value))
     }
 
+    /// Create a new [Float] from an [f32] without checking for invalid values.
     pub fn new_unchecked(value: f32) -> Self {
         Self(value)
     }

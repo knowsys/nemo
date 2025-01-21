@@ -88,6 +88,17 @@ impl TableStorage {
         }
     }
 
+    /// Return a mutable reference to a [Trie] stored by this object if it is already loaded in memory.
+    ///
+    /// Returns `None` otherwise.
+    pub(crate) fn trie_in_memory_mut(&mut self) -> Option<&mut Trie> {
+        match self {
+            TableStorage::InMemory(trie) => Some(trie),
+            TableStorage::FromSources(_) => None,
+            TableStorage::Empty => None,
+        }
+    }
+
     /// Returns the number of columns for the table associated with this storage object.
     pub(crate) fn arity(&self) -> usize {
         match self {

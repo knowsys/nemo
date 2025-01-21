@@ -47,7 +47,8 @@ pub(crate) enum ExecutionTreeNode {
     },
     Update {
         generator: GeneratorUpdate,
-        subnode: ExecutionTreeLeaf,
+        new: ExecutionTreeOperation,
+        old: Vec<ExecutionTreeLeaf>,
     },
 }
 
@@ -134,7 +135,11 @@ impl ExecutionTree {
 
                 ascii_tree::Tree::Node(format!("{generator:?}"), vec![subnode_tree])
             }
-            ExecutionTreeNode::Update { generator, subnode } => todo!(),
+            ExecutionTreeNode::Update {
+                generator,
+                new,
+                old,
+            } => todo!(),
         };
 
         let top_level_name = match &self.result {

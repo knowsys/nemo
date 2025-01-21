@@ -140,7 +140,7 @@ impl<'a> RowScanMut<'a> {
 
     pub(crate) fn delete_current_row(&mut self) {
         let last_type = self.current_row.row.last().expect("").get_type();
-        let last_index = self.current_row.row.len();
+        let last_index = self.current_row.row.len() - 1;
 
         unsafe { &mut *self.trie_scan.scan(last_index).get() }.set_deleted(last_type);
     }

@@ -39,6 +39,7 @@ impl Double {
         Ok(Self(value))
     }
 
+    /// Create a new [Double] from an [f64] without checking for invalid values.
     pub fn new_unchecked(value: f64) -> Self {
         Self(value)
     }

@@ -318,6 +318,29 @@ impl OrderedReferenceManager {
             .trie_in_memory()
             .expect("This function assumes that the given id corresponds to an in memory trie")
     }
+
+    /// Given a list of [StorageId]s return a mutable reference to a [Trie].
+    ///
+    /// # Panics
+    /// Panics if the table is not available as a trie.
+    /// This can be ensured by obtaining this id from the function `trie_id`.
+    pub(crate) fn tries_mut(&mut self, ids: Vec<StorageId>) -> Vec<&mut Trie> {
+        let mut result = Vec::new();
+        let tries = self.stored_tables.as_mut_ptr();
+
+        for id in ids {
+            unsafe {
+                let storage = &mut *tries.add(id);
+                let trie = storage.trie_in_memory_mut().expect(
+                    "this function assumes that the given id corresponds to an in memory trie",
+                );
+
+                result.push(trie);
+            }
+        }
+
+        result
+    }
 }
 
 impl ByteSized for OrderedReferenceManager {

@@ -22,7 +22,7 @@ use crate::{
         subtract::GeneratorSubtract,
         union::GeneratorUnion,
         update::GeneratorUpdate,
-        OperationGeneratorEnum, OperationTable,
+        Filter, OperationGeneratorEnum, OperationTable,
     },
     util::mapping::{permutation::Permutation, traits::NatMapping},
 };
@@ -132,12 +132,17 @@ impl ExecutionNodeRef {
 
                 result
             }
+            ExecutionOperation::Update(subnode_new, subnodes_old, _) => {
+                let mut result = vec![subnode_new.clone()];
+                result.extend(subnodes_old.iter().cloned());
+
+                result
+            }
             ExecutionOperation::ProjectReorder(subnode)
             | ExecutionOperation::Filter(subnode, _)
             | ExecutionOperation::Function(subnode, _)
             | ExecutionOperation::Null(subnode)
-            | ExecutionOperation::Aggregate(subnode, _)
-            | ExecutionOperation::Update(subnode) => vec![subnode.clone()],
+            | ExecutionOperation::Aggregate(subnode, _) => vec![subnode.clone()],
         }
     }
 }
@@ -176,7 +181,7 @@ pub(crate) enum ExecutionOperation {
     /// Perform aggregate operation
     Aggregate(ExecutionNodeRef, AggregateAssignment),
     /// Update
-    Update(ExecutionNodeRef),
+    Update(ExecutionNodeRef, Vec<ExecutionNodeRef>, Filter),
 }
 
 /// Declares whether the resulting table form executing a plan should be kept temporarily or permamently
@@ -371,12 +376,15 @@ impl ExecutionPlan {
         self.push_and_return_reference(new_operation, marked_columns)
     }
 
+    /// Return an [ExecutionNodeRef] for updating redundant values.
     pub fn update(
         &mut self,
-        marked_columns: OperationTable,
-        subnode: ExecutionNodeRef,
+        filter: Filter,
+        new: ExecutionNodeRef,
+        old: Vec<ExecutionNodeRef>,
     ) -> ExecutionNodeRef {
-        let new_operation = ExecutionOperation::Update(subnode);
+        let marked_columns = new.markers_cloned();
+        let new_operation = ExecutionOperation::Update(new, old, filter);
         self.push_and_return_reference(new_operation, marked_columns)
     }
 }
@@ -817,29 +825,69 @@ impl ExecutionPlan {
                     subnodes: vec![subtree],
                 })
             }
-            ExecutionOperation::Update(subnode) => {
-                let marker_subnode = subnode.markers_cloned();
-                let subtree: ExecutionTreeLeaf = if let ExecutionTreeOperation::Leaf(leaf) =
-                    Self::execution_node(
-                        root_node_id,
-                        subnode.clone(),
-                        ColumnOrder::default(),
-                        output_nodes,
-                        computed_trees,
-                        computed_trees_map,
-                        loaded_tables,
-                    )
-                    .operation()
-                    .expect("No sub node should be a project")
-                {
-                    leaf
-                } else {
-                    unreachable!("Subnode of a update must be a load instruction");
-                };
+            ExecutionOperation::Update(new, old, filter) => {
+                let marker_new = new.markers_cloned();
+                let markers_old = old
+                    .iter()
+                    .map(|node| node.markers_cloned())
+                    .collect::<Vec<_>>();
+
+                // let subtree_new: ExecutionTreeLeaf = if let ExecutionTreeOperation::Leaf(leaf) =
+                //     Self::execution_node(
+                //         root_node_id,
+                //         new.clone(),
+                //         ColumnOrder::default(),
+                //         output_nodes,
+                //         computed_trees,
+                //         computed_trees_map,
+                //         loaded_tables,
+                //     )
+                //     .operation()
+                //     .expect("No sub node should be a project")
+                // {
+                //     leaf
+                // } else {
+                //     unreachable!("Subnode of an update must be a load instruction");
+                // };
+
+                let subtree_new = Self::execution_node(
+                    root_node_id,
+                    new.clone(),
+                    order.clone(),
+                    output_nodes,
+                    computed_trees,
+                    computed_trees_map,
+                    loaded_tables,
+                )
+                .operation()
+                .expect("No sub node should be a project");
+
+                let subtrees_old: Vec<ExecutionTreeLeaf> = old
+                    .into_iter()
+                    .map(|node| {
+                        if let ExecutionTreeOperation::Leaf(leaf) = Self::execution_node(
+                            root_node_id,
+                            node.clone(),
+                            ColumnOrder::default(),
+                            output_nodes,
+                            computed_trees,
+                            computed_trees_map,
+                            loaded_tables,
+                        )
+                        .operation()
+                        .expect("No sub node should be a project")
+                        {
+                            leaf
+                        } else {
+                            unreachable!("Subnode of an update must be a load instruction");
+                        }
+                    })
+                    .collect::<Vec<_>>();
 
                 ExecutionTreeNode::Update {
-                    generator: GeneratorUpdate::default(),
-                    subnode: subtree,
+                    generator: GeneratorUpdate::new(marker_new, markers_old, filter.clone()),
+                    new: subtree_new,
+                    old: subtrees_old,
                 }
             }
         }

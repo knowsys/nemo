@@ -318,6 +318,20 @@ impl DatabaseInstance {
         }
     }
 
+    fn load_tables_mut<'a>(&'a mut self, leafs: &Vec<ExecutionTreeLeaf>) -> Vec<&'a mut Trie> {
+        let ids = leafs
+            .iter()
+            .map(|leaf| match leaf {
+                ExecutionTreeLeaf::LoadTable(load_id) => *load_id,
+                ExecutionTreeLeaf::FetchComputedTable(_computed_id) => {
+                    unimplemented!("cannot provide write access to temporary tables")
+                }
+            })
+            .collect::<Vec<_>>();
+
+        self.reference_manager.tries_mut(ids)
+    }
+
     /// Return a [TrieScanEnum] representing the given [ExecutionTreeOperation] node.
     ///
     /// Returns `None` if a previous computation represented by this node was empty
@@ -392,14 +406,28 @@ impl DatabaseInstance {
 
                 (trie, vec![])
             }
-            ExecutionTreeNode::Update { generator, subnode } => {
-                let mut trie = self
-                    .evaluate_tree_leaf(storage, subnode)
-                    .map(|scan| Trie::from_partial_trie_scan(scan, tree.cut_layers))
-                    .unwrap_or(Trie::empty(0));
-                generator.apply_operation(vec![], &mut trie);
+            ExecutionTreeNode::Update {
+                generator,
+                old,
+                new,
+            } => {
+                let mut new_trie = if let Some(trie_scan) =
+                    self.evaluate_operation(&self.dictionary, storage, new)
+                {
+                    Trie::from_partial_trie_scan(trie_scan, 0)
+                } else {
+                    // TODO: ?
+                    Trie::empty(0)
+                };
 
-                (trie, vec![])
+                // let mut new_trie = self
+                //     .evaluate_tree_leaf(storage, new)
+                //     .map(|scan| Trie::from_partial_trie_scan(scan, tree.cut_layers))
+                //     .unwrap_or(Trie::empty(0));
+                let old_tries = self.load_tables_mut(&old);
+                generator.apply_operation(old_tries, &mut new_trie);
+
+                (new_trie, vec![])
             }
         }
     }
@@ -539,7 +567,11 @@ impl DatabaseInstance {
                         ExecutionTreeNode::ProjectReorder { generator, subnode } => self
                             .evaluate_tree_leaf(&temporary_storage, subnode)
                             .and_then(|scan| generator.apply_operation_first(scan)),
-                        ExecutionTreeNode::Update { generator, subnode } => todo!(),
+                        ExecutionTreeNode::Update {
+                            generator,
+                            old,
+                            new,
+                        } => todo!(),
                     }?;
 
                     let row_datavalue = row_storage
