@@ -79,7 +79,7 @@ pub enum ValidationErrorKind {
     #[assoc(note = "cannot aggregate over a variable that is also a group-by variable")]
     AggregateOverGroupByVariable { variable: String },
     /// Distinct variables in aggregate must be named universal variables
-    #[error(r#"aggregation marks {variable_type} as distinct."#)]
+    #[error(r#"aggregation marks `{variable_type}` as distinct."#)]
     #[assoc(code = 215)]
     #[assoc(note = "distinct variables must be named universal variables")]
     AggregateDistinctNonNamedUniversal { variable_type: String },
@@ -139,6 +139,10 @@ pub enum ValidationErrorKind {
     #[error(r#"display attribute uses unsafe variable: `{variable}`"#)]
     #[assoc(code = 227)]
     AttributeRuleUnsafe { variable: String },
+    /// Aggregation used in fact
+    #[error(r#"aggregates may not be used in facts"#)]
+    #[assoc(code = 228)]
+    FactSubtermAggregate,
 
     /// Unsupported feature: Multiple aggregates in one rule
     #[error(r#"multiple aggregates in one rule is currently unsupported"#)]

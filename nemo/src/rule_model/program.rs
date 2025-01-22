@@ -294,6 +294,8 @@ impl ProgramComponent for Program {
     where
         Self: Sized,
     {
+        println!("validate");
+
         for import in self.imports() {
             let _ = import.validate(builder);
         }
