@@ -1,0 +1,9 @@
+%! This test is related to 
+%! https://github.com/knowsys/nemo/issues/598
+
+%! Previously, operations containing only ground values weren't evaluated
+%! (and not checked during parsing, leading to a crash).
+
+fact(5 * 2, 80 / 4).
+
+@export fact :- csv {}.
