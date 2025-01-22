@@ -341,6 +341,21 @@ pub enum OperationKind {
     #[assoc(num_arguments = OperationNumArguments::Arbitrary)]
     #[assoc(return_type = ValueType::Number)]
     BitXor,
+    /// Perform left arithmetic shift
+    #[assoc(name = function::BITSHL)]
+    #[assoc(num_arguments = OperationNumArguments::Binary)]
+    #[assoc(return_type = ValueType::Number)]
+    BitShl,
+    /// Perform right unsigned (logical) shift
+    #[assoc(name = function::BITSHRU)]
+    #[assoc(num_arguments = OperationNumArguments::Binary)]
+    #[assoc(return_type = ValueType::Number)]
+    BitShru,
+    /// Perform right arithmetic shift
+    #[assoc(name = function::BITSHR)]
+    #[assoc(num_arguments = OperationNumArguments::Binary)]
+    #[assoc(return_type = ValueType::Number)]
+    BitShr,
     /// Conjunction of boolean values
     #[assoc(name = function::AND)]
     #[assoc(num_arguments = OperationNumArguments::Arbitrary)]
