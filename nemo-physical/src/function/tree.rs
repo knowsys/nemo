@@ -838,10 +838,11 @@ where
         }
     }
 
-    /// Create a tree node representing the bitwise aritmetic left shift operation
+    /// Create a tree node representing the bitwise left shift operation
     ///
-    /// Evaluates to an integer resulting from performing the bitwise left shift operation
-    /// on the binary representation of its integer subnodes.
+    /// This evaluates to an integer resulting from performing the bitwise left shift
+    /// The binary representation of the integer subnode 'left' is shifted
+    /// according to the integer value of the subnode 'right'
     pub fn bit_shl(left: Self, right: Self) -> Self {
         Self::Binary {
             function: BinaryFunctionEnum::BitShiftLeft(BitShiftLeft),
@@ -849,7 +850,12 @@ where
             right: Box::new(right),
         }
     }
-    /// Needs documentation
+
+    /// Create a tree node representing the bitwise unsigned right shift operation
+    ///
+    /// Evaluates to an integer resulting from performing the bitwise unsigned right shift
+    /// The binary representation of the integer subnode 'left' is shifted
+    /// according to the integer value of the subnode 'right'
     pub fn bit_shru(left: Self, right: Self) -> Self {
         Self::Binary {
             function: BinaryFunctionEnum::BitShiftRightUnsigned(BitShiftRightUnsigned),
@@ -858,6 +864,11 @@ where
         }
     }
 
+    /// Create a tree node representing the bitwise right shift operation
+    ///
+    /// Evaluates to an integer resulting from performing the bitwise right shift
+    /// The binary representation of the integer subnode 'left' is shifted
+    /// according to the integer value of the subnode 'right'
     pub fn bit_shr(left: Self, right: Self) -> Self {
         Self::Binary {
             function: BinaryFunctionEnum::BitShiftRight(BitShiftRight),

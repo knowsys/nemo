@@ -249,7 +249,8 @@ pub(super) fn numeric_bitwise_shru(value: i64, base: i64) -> Option<AnyDataValue
         value >> base
     } else {
         // Convert value in unsigned to do unsigned right shift
-        (value as u64 >> base) as i64
+        let x = value as u64 >> base;
+        x.try_into().unwrap()
     };
 
     Some(AnyDataValue::new_integer_from_i64(result))

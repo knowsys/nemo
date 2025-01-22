@@ -512,10 +512,10 @@ impl BinaryFunction for BitShiftLeft {
         parameter_second: AnyDataValue,
     ) -> Option<AnyDataValue> {
         if let Some(pair) = NumericPair::from_any_pair_cast(&parameter_first, &parameter_second) {
-            return match pair {
+            match pair {
                 NumericPair::Integer(value, base) => numeric_bitwise_shl(value, base),
                 _ => None,
-            };
+            }
         } else {
             None
         }
@@ -537,10 +537,10 @@ impl BinaryFunction for BitShiftRight {
         parameter_second: AnyDataValue,
     ) -> Option<AnyDataValue> {
         if let Some(pair) = NumericPair::from_any_pair_cast(&parameter_first, &parameter_second) {
-            return match pair {
+            match pair {
                 NumericPair::Integer(value, base) => numeric_bitwise_shr(value, base),
                 _ => None,
-            };
+            }
         } else {
             None
         }
@@ -562,10 +562,10 @@ impl BinaryFunction for BitShiftRightUnsigned {
         parameter_second: AnyDataValue,
     ) -> Option<AnyDataValue> {
         if let Some(pair) = NumericPair::from_any_pair_cast(&parameter_first, &parameter_second) {
-            return match pair {
+            match pair {
                 NumericPair::Integer(value, base) => numeric_bitwise_shru(value, base),
                 _ => None,
-            };
+            }
         } else {
             None
         }
