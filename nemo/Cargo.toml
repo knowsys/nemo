@@ -10,12 +10,9 @@ readme = "README.md"
 repository.workspace = true
 
 [features]
-default = ["timing"]
 # Allows building for web assembly environments
 # Enables the "js" feature of the "getrandom" crate
-# This feature cannot be used together with the "timing" feature, because the "howlong" crate does not support web assembly environments
 js = ["getrandom/js"]
-timing = ["nemo-physical/timing"]
 
 [dependencies]
 nemo-physical = { path = "../nemo-physical", default-features = false }
