@@ -511,15 +511,12 @@ impl BinaryFunction for BitShiftLeft {
         parameter_first: AnyDataValue,
         parameter_second: AnyDataValue,
     ) -> Option<AnyDataValue> {
-        if let Some(pair) = NumericPair::from_any_pair_cast(&parameter_first, &parameter_second) {
-            match pair {
-                NumericPair::Integer(value, base) => numeric_bitwise_shl(value, base),
-                _ => None,
-            }
-        } else {
-            None
+        match NumericPair::from_any_pair_cast(&parameter_first, &parameter_second)? {
+            NumericPair::Integer(value, base) => numeric_bitwise_shl(value, base),
+            _ => None,
         }
     }
+
     fn type_propagation(&self) -> FunctionTypePropagation {
         FunctionTypePropagation::KnownOutput(StorageTypeName::Int64.bitset())
     }
@@ -536,15 +533,12 @@ impl BinaryFunction for BitShiftRight {
         parameter_first: AnyDataValue,
         parameter_second: AnyDataValue,
     ) -> Option<AnyDataValue> {
-        if let Some(pair) = NumericPair::from_any_pair_cast(&parameter_first, &parameter_second) {
-            match pair {
-                NumericPair::Integer(value, base) => numeric_bitwise_shr(value, base),
-                _ => None,
-            }
-        } else {
-            None
+        match NumericPair::from_any_pair_cast(&parameter_first, &parameter_second)? {
+            NumericPair::Integer(value, base) => numeric_bitwise_shr(value, base),
+            _ => None,
         }
     }
+
     fn type_propagation(&self) -> FunctionTypePropagation {
         FunctionTypePropagation::KnownOutput(StorageTypeName::Int64.bitset())
     }
@@ -561,15 +555,12 @@ impl BinaryFunction for BitShiftRightUnsigned {
         parameter_first: AnyDataValue,
         parameter_second: AnyDataValue,
     ) -> Option<AnyDataValue> {
-        if let Some(pair) = NumericPair::from_any_pair_cast(&parameter_first, &parameter_second) {
-            match pair {
-                NumericPair::Integer(value, base) => numeric_bitwise_shru(value, base),
-                _ => None,
-            }
-        } else {
-            None
+        match NumericPair::from_any_pair_cast(&parameter_first, &parameter_second)? {
+            NumericPair::Integer(value, base) => numeric_bitwise_shru(value, base),
+            _ => None,
         }
     }
+
     fn type_propagation(&self) -> FunctionTypePropagation {
         FunctionTypePropagation::KnownOutput(StorageTypeName::Int64.bitset())
     }
