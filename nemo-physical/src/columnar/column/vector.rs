@@ -179,6 +179,7 @@ mod test {
     use crate::columnar::{column::Column, columnscan::ColumnScan};
 
     use super::{ColumnScanVector, ColumnVector};
+    #[cfg(not(miri))]
     use test_log::test;
 
     fn get_test_column() -> ColumnVector<u64> {
