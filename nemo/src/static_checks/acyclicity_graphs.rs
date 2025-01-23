@@ -21,7 +21,7 @@ type Cycle<N> = Vec<N>;
 
 type Cycles<N> = HashSet<Cycle<N>>;
 
-#[derive(Clone)]
+#[derive(Clone, Copy, Debug)]
 pub enum WeakAcyclicityGraphEdgeType {
     Common,
     CommonAndSpecial,

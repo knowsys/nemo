@@ -25,11 +25,13 @@ pub type Position<'a> = (&'a Tag, Index);
 
 pub type ExtendedPositions<'a> = HashSet<Position<'a>>;
 
+#[derive(Clone, Copy, Debug)]
 pub enum AttackingType {
     Cycle,
     Existential,
 }
 
+#[derive(Clone, Copy, Debug)]
 pub enum MarkingType {
     Common,
     Weakly,

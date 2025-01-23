@@ -32,7 +32,7 @@ pub mod execution;
 pub mod rule_model;
 pub mod util;
 
-mod static_checks;
+pub mod static_checks;
 
 pub mod chase_model; // TODO: Make private
 pub(crate) mod table_manager;

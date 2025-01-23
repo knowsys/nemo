@@ -1,0 +1,1 @@
+Goal(nullAryPredicatesAreNotAllowedSoWePutThisConstant) :- A(?X), R(?X, ?Y, ?Z) .
