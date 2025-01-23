@@ -92,6 +92,12 @@ result(remainder, ?R) :- integers(_, ?A, ?B), ?R = REM(?B, ?A).
 boolean("true"^^<http://www.w3.org/2001/XMLSchema#boolean>, "false"^^<http://www.w3.org/2001/XMLSchema#boolean>).
 result(Boolean, ?R) :- boolean(?True, ?False), ?R = STR(OR(AND(?True, ?False, ?True), AND(?True, NOT(?False), NOT(NOT(?True))))).
 
+% Bitwise shift functions
+result(bitshl, ?R) :- integers(?A, ?B, _), ?R = BITSHL(?A, ?B).
+result(bitshr, ?R) :- integers(?A, ?B, _), ?R = BITSHR(?A, ?B).
+result(bitshru, ?R) :- integers(?A, ?B, _), ?C = -1 * ?A, ?R = BITSHRU(?C, ?B).
+result(bitshru, ?R) :- integers(?A, ?B, _), ?R = BITSHRU(-9223372036854775808, 0).
+
 % Nary functions
 result(sum, ?R) :- doubles(?A, ?B, ?C), ?R = SUM(?A, ?B, ?C).
 result(prod, ?R) :- doubles(?A, ?B, ?C), ?R = PRODUCT(?A, ?B, ?C).

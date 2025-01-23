@@ -34,12 +34,13 @@ use self::{
     },
     integer64::{
         numeric_absolute_integer64, numeric_addition_integer64, numeric_bitwise_and,
-        numeric_bitwise_or, numeric_bitwise_xor, numeric_division_integer64,
-        numeric_greaterthan_integer64, numeric_greaterthaneq_integer64, numeric_lessthan_integer64,
-        numeric_lessthaneq_integer64, numeric_logarithm_integer64, numeric_maximum_integer64,
-        numeric_minimum_integer64, numeric_multiplication_integer64, numeric_negation_integer64,
-        numeric_power_integer64, numeric_product_integer64, numeric_remainder_integer64,
-        numeric_squareroot_integer64, numeric_subtraction_integer64, numeric_sum_integer64,
+        numeric_bitwise_or, numeric_bitwise_shl, numeric_bitwise_shr, numeric_bitwise_shru,
+        numeric_bitwise_xor, numeric_division_integer64, numeric_greaterthan_integer64,
+        numeric_greaterthaneq_integer64, numeric_lessthan_integer64, numeric_lessthaneq_integer64,
+        numeric_logarithm_integer64, numeric_maximum_integer64, numeric_minimum_integer64,
+        numeric_multiplication_integer64, numeric_negation_integer64, numeric_power_integer64,
+        numeric_product_integer64, numeric_remainder_integer64, numeric_squareroot_integer64,
+        numeric_subtraction_integer64, numeric_sum_integer64,
     },
 };
 
@@ -491,6 +492,72 @@ impl NaryFunction for BitXor {
             }
         } else {
             None
+        }
+    }
+
+    fn type_propagation(&self) -> FunctionTypePropagation {
+        FunctionTypePropagation::KnownOutput(StorageTypeName::Int64.bitset())
+    }
+}
+
+/// Bitwise Left shift
+///
+/// Returns `None` if the input parameter pair are not integers or no input parameters are given.
+#[derive(Debug, Copy, Clone)]
+pub struct BitShiftLeft;
+impl BinaryFunction for BitShiftLeft {
+    fn evaluate(
+        &self,
+        parameter_first: AnyDataValue,
+        parameter_second: AnyDataValue,
+    ) -> Option<AnyDataValue> {
+        match NumericPair::from_any_pair_cast(&parameter_first, &parameter_second)? {
+            NumericPair::Integer(value, base) => numeric_bitwise_shl(value, base),
+            _ => None,
+        }
+    }
+
+    fn type_propagation(&self) -> FunctionTypePropagation {
+        FunctionTypePropagation::KnownOutput(StorageTypeName::Int64.bitset())
+    }
+}
+
+/// Bitwise arithmetic right shift
+///
+/// Returns `None` if the input parameter pair are not integers or no input parameters are given.
+#[derive(Debug, Copy, Clone)]
+pub struct BitShiftRight;
+impl BinaryFunction for BitShiftRight {
+    fn evaluate(
+        &self,
+        parameter_first: AnyDataValue,
+        parameter_second: AnyDataValue,
+    ) -> Option<AnyDataValue> {
+        match NumericPair::from_any_pair_cast(&parameter_first, &parameter_second)? {
+            NumericPair::Integer(value, base) => numeric_bitwise_shr(value, base),
+            _ => None,
+        }
+    }
+
+    fn type_propagation(&self) -> FunctionTypePropagation {
+        FunctionTypePropagation::KnownOutput(StorageTypeName::Int64.bitset())
+    }
+}
+
+/// Bitwise logical (unsigned) right shift
+///
+/// Returns `None` if the input parameter pair are not integers or no input parameters are given.
+#[derive(Debug, Copy, Clone)]
+pub struct BitShiftRightUnsigned;
+impl BinaryFunction for BitShiftRightUnsigned {
+    fn evaluate(
+        &self,
+        parameter_first: AnyDataValue,
+        parameter_second: AnyDataValue,
+    ) -> Option<AnyDataValue> {
+        match NumericPair::from_any_pair_cast(&parameter_first, &parameter_second)? {
+            NumericPair::Integer(value, base) => numeric_bitwise_shru(value, base),
+            _ => None,
         }
     }
 

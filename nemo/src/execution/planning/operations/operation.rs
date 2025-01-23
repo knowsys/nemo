@@ -85,6 +85,9 @@ pub(crate) fn operation_to_function_tree(
         OperationKind::StringStarts => binary!(string_starts, sub),
         OperationKind::StringEnds => binary!(string_ends, sub),
         OperationKind::StringRegex => binary!(string_regex, sub),
+        OperationKind::BitShl => binary!(bit_shl, sub),
+        OperationKind::BitShru => binary!(bit_shru, sub),
+        OperationKind::BitShr => binary!(bit_shr, sub),
         OperationKind::StringSubstring => {
             if sub.len() == 2 {
                 let start = sub.pop().expect("length must be 2");
