@@ -294,6 +294,12 @@ pub mod builtin {
         pub(crate) const BITOR: &str = "BITOR";
         /// Compute the exclusive or on the bit representation of integer values
         pub(crate) const BITXOR: &str = "BITXOR";
+        /// Compute the arithmetic bit shift left for integer values
+        pub(crate) const BITSHL: &str = "BITSHL";
+        /// Compute the unsigned bit shift right for integer values
+        pub(crate) const BITSHRU: &str = "BITSHRU";
+        /// Compute the arithmetic bit shift right for integer values
+        pub(crate) const BITSHR: &str = "BITSHR";
         /// Compute the maximum of numeric values
         pub(crate) const MAX: &str = "MAX";
         /// Compute the minimum of numeric values

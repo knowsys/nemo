@@ -67,3 +67,7 @@ fstring_basic,"""Hello and World"""
 fstring_arithmetic,"""len*10=50"""
 fstring_multiline,"""Hello and World"""
 uriencode,"""%3Ffoo%5B%5D%3D%22bar%20quuz%22"""
+bitshl,4
+bitshr,0
+bitshru,4611686018427387903
+bitshru,-9223372036854775808

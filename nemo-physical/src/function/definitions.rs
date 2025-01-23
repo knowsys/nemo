@@ -26,9 +26,10 @@ use self::{
     generic::{CanonicalString, Datatype, Equals, LexicalValue, Unequals},
     language::LanguageTag,
     numeric::{
-        BitAnd, BitOr, BitXor, NumericAbsolute, NumericAddition, NumericCeil, NumericCosine,
-        NumericDivision, NumericFloor, NumericGreaterthan, NumericGreaterthaneq, NumericLessthan,
-        NumericLessthaneq, NumericLogarithm, NumericLukasiewicz, NumericMaximum, NumericMinimum,
+        BitAnd, BitOr, BitShiftLeft, BitShiftRight, BitShiftRightUnsigned, BitXor, NumericAbsolute,
+        NumericAddition, NumericCeil, NumericCosine, NumericDivision, NumericFloor,
+        NumericGreaterthan, NumericGreaterthaneq, NumericLessthan, NumericLessthaneq,
+        NumericLogarithm, NumericLukasiewicz, NumericMaximum, NumericMinimum,
         NumericMultiplication, NumericNegation, NumericPower, NumericProduct, NumericRemainder,
         NumericRound, NumericSine, NumericSquareroot, NumericSubtraction, NumericSum,
         NumericTangent,
@@ -242,6 +243,9 @@ pub enum BinaryFunctionEnum {
     StringEnds(StringEnds),
     StringStarts(StringStarts),
     StringSubstring(StringSubstring),
+    BitShiftLeft(BitShiftLeft),
+    BitShiftRight(BitShiftRight),
+    BitShiftRightUnsigned(BitShiftRightUnsigned),
 }
 
 impl BinaryFunction for BinaryFunctionEnum {
@@ -268,6 +272,9 @@ impl BinaryFunction for BinaryFunctionEnum {
             Self::StringEnds(function) => function,
             Self::StringStarts(function) => function,
             Self::StringSubstring(function) => function,
+            Self::BitShiftLeft(function) => function,
+            Self::BitShiftRightUnsigned(function) => function,
+            Self::BitShiftRight(function) => function,
         } {
             fn evaluate(&self, first_parameter: AnyDataValue, second_parameter: AnyDataValue) -> Option<AnyDataValue>;
             fn type_propagation(&self) -> FunctionTypePropagation;
