@@ -15,6 +15,7 @@ use crate::parser::{
 };
 use num::{BigInt, Num};
 
+/// Define a different type for each prefix token
 #[derive(Assoc, Debug, Clone, Copy, PartialEq, Eq)]
 #[func(pub fn token(token: &TokenKind) -> Option<Self>)]
 #[func(pub fn print(&self) -> &'static str)]
@@ -31,6 +32,8 @@ enum Encoding {
 }
 
 impl Encoding {
+
+    /// Returns the base of each encoding type
     pub fn radix(&self) -> u32 {
         match self {
             Encoding::Binary => 2,
@@ -40,6 +43,7 @@ impl Encoding {
     }
 }
 
+/// AST Node representing an encoded number
 #[derive(Debug)]
 pub struct EncodedNumber<'a> {
     /// [Span] associated with this node
@@ -52,7 +56,7 @@ pub struct EncodedNumber<'a> {
 
 /// Value of [EncodedNumber]
 #[derive(Debug)]
-pub enum NumberValue {
+pub enum EncodedNumberValue {
     /// Integer value
     Integer(i64),
     /// Value doesn't fit into the above types
@@ -60,6 +64,7 @@ pub enum NumberValue {
 }
 
 impl<'a> EncodedNumber<'a> {
+    
     /// Removes the binary prefix (0b) and returns the binary suffix
     fn parse_binary(input: ParserInput<'a>) -> ParserResult<'a, (Encoding, Token<'a>)> {
         preceded(Token::binary_prefix, Token::bin_number)(input)
@@ -78,8 +83,8 @@ impl<'a> EncodedNumber<'a> {
             .map(|(remaining, hex_chars)| (remaining, (Encoding::Hexadecimal, hex_chars)))
     }
 
-    /// Return the value of this number, represented as a [NumberValue].
-    pub fn value(&self) -> NumberValue {
+    /// Return the value of this number, represented as an [EncodedNumberValue].
+    pub fn value(&self) -> EncodedNumberValue {
         let string = format!("{}{}", self.prefix.print(), self.suffix);
 
         // Retrieves the base of encoded number based on [Encoding]
@@ -90,11 +95,11 @@ impl<'a> EncodedNumber<'a> {
         // Returns decoded number as <i64> if it is not too big
         // Otherwise, return string representation of the decoded number
         if let Ok(integer) = <i64>::from_str_radix(suffix, nr_encoding) {
-            return NumberValue::Integer(integer);
+            return EncodedNumberValue::Integer(integer);
         } else if let Ok(bigint) = <BigInt as Num>::from_str_radix(suffix, nr_encoding) {
-            return NumberValue::Large(bigint.to_string());
+            return EncodedNumberValue::Large(bigint.to_string());
         }
-        NumberValue::Large(string)
+        EncodedNumberValue::Large(string)
     }
 }
 
@@ -144,7 +149,7 @@ mod test {
 
     use crate::parser::{
         ast::{
-            expression::basic::enc_number::{EncodedNumber, NumberValue},
+            expression::basic::enc_number::{EncodedNumber, EncodedNumberValue},
             ProgramAST,
         },
         ParserInput, ParserState,
@@ -170,7 +175,7 @@ mod test {
             assert!(result.is_ok());
 
             if let Ok((_, ast_node)) = result {
-                if let NumberValue::Integer(integer) = ast_node.value() {
+                if let EncodedNumberValue::Integer(integer) = ast_node.value() {
                     assert_eq!(integer, exp_value);
                 }
             };
