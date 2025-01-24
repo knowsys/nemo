@@ -50,7 +50,7 @@ jobs:
           mkdir -p "$name"
 
           cp {README.md,LICENSE-APACHE,LICENSE-MIT} "$name"
-          if [ "${{ matrix.platform.os-name }}" = "windows-gnu ]; then
+          if [ "${{ matrix.platform.os-name }}" = "windows-gnu" ]; then
             cp "target/${{ matrix.platform.target }}/release/nmo.exe" "$name/"
             asset=$name.zip
             7z a "$asset" "$name"
