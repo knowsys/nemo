@@ -7,7 +7,6 @@ use crate::{
 
 use super::{FunctionTypePropagation, UnaryFunction};
 
-
 /// Casting of values into 64-bit integers
 ///
 /// Returns an integer number representing its input
