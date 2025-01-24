@@ -1,12 +1,13 @@
 //! Code for timing blocks of code
 
 use ascii_tree::{write_tree, Tree};
-#[cfg(feature = "timing")]
-use howlong::*;
+#[cfg(not(target_family = "wasm"))]
+use cpu_time::ProcessTime;
+#[cfg(all(not(test), not(target_family = "wasm")))]
+use cpu_time::ThreadTime;
 use linked_hash_map::LinkedHashMap;
 use once_cell::sync::Lazy;
-#[cfg(not(feature = "timing"))]
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use std::{
     fmt,
     str::FromStr,
@@ -25,22 +26,15 @@ pub struct TimedCodeInfo {
     total_system_time: Duration,
     total_process_time: Duration,
     total_thread_time: Duration,
-    #[cfg(not(feature = "timing"))]
-    start_system: Option<()>,
-    #[cfg(not(feature = "timing"))]
+    start_system: Option<Instant>,
+    #[cfg(not(target_family = "wasm"))]
     #[allow(dead_code)]
-    start_process: Option<()>,
-    #[cfg(not(feature = "timing"))]
+    start_process: Option<ProcessTime>,
     #[allow(dead_code)]
-    start_thread: Option<()>,
-    #[cfg(feature = "timing")]
-    start_system: Option<TimePoint>,
-    #[cfg(feature = "timing")]
-    #[allow(dead_code)]
-    start_process: Option<TimePoint>,
-    #[cfg(feature = "timing")]
-    #[allow(dead_code)]
-    start_thread: Option<TimePoint>,
+    #[cfg(not(target_family = "wasm"))]
+    start_thread: Option<Duration>,
+    #[cfg(target_family = "wasm")]
+    start_thread: Option<wasmtimer::std::Instant>,
     runs: u64,
 }
 
@@ -158,7 +152,7 @@ impl TimedCode {
 
     /// Navigate to a subblock (use forward slash to go multiple layers at once)
     pub fn sub(&mut self, name: &str) -> &mut TimedCode {
-        if cfg!(test) || cfg!(not(feature = "timing")) {
+        if cfg!(test) {
             return self;
         }
 
@@ -179,27 +173,36 @@ impl TimedCode {
     }
 
     /// No-op because time measurement is disabled
-    #[cfg(any(test, not(feature = "timing")))]
+    #[cfg(test)]
     pub fn start(&mut self) {}
 
     /// Start the next measurement
-    #[cfg(all(not(test), feature = "timing"))]
+    #[cfg(all(not(test), not(target_family = "wasm")))]
     pub fn start(&mut self) {
         debug_assert!(self.info.start_thread.is_none());
 
-        self.info.start_system = Some(HighResolutionClock::now());
-        self.info.start_process = Some(ProcessRealCPUClock::now());
-        self.info.start_thread = Some(ThreadClock::now());
+        self.info.start_system = Some(Instant::now());
+        self.info.start_process = Some(ProcessTime::now());
+        self.info.start_thread = Some(ThreadTime::now().as_duration());
+    }
+
+    /// Start the next measurement
+    #[cfg(all(not(test), target_family = "wasm"))]
+    pub fn start(&mut self) {
+        debug_assert!(self.info.start_thread.is_none());
+
+        self.info.start_system = Some(Instant::now());
+        self.info.start_thread = Some(wasmtimer::std::Instant::now());
     }
 
     /// No-op because time measurement is disabled
-    #[cfg(any(test, not(feature = "timing")))]
+    #[cfg(test)]
     pub fn stop(&mut self) -> Duration {
         Duration::ZERO
     }
 
     /// Stop the current measurement and save the times
-    #[cfg(all(not(test), feature = "timing"))]
+    #[cfg(all(not(test), not(target_family = "wasm")))]
     pub fn stop(&mut self) -> Duration {
         debug_assert!(self.info.start_system.is_some());
 
@@ -216,14 +219,39 @@ impl TimedCode {
             .start_thread
             .expect("start() must be called before calling stop()");
 
-        let duration_system = HighResolutionClock::now() - start_system;
-        let duration_process = ProcessRealCPUClock::now() - start_process;
-        let duration_thread = ThreadClock::now() - start_thread;
+        let duration_system = Instant::now() - start_system;
+        let duration_process = ProcessTime::now().duration_since(start_process);
+        let duration_thread = ThreadTime::now().as_duration() - start_thread;
         self.info.total_system_time += duration_system;
         self.info.total_process_time += duration_process;
         self.info.total_thread_time += duration_thread;
         self.info.start_system = None;
         self.info.start_process = None;
+        self.info.start_thread = None;
+        self.info.runs += 1;
+
+        duration_thread
+    }
+
+    /// Stop the current measurement and save the times
+    #[cfg(all(not(test), target_family = "wasm"))]
+    pub fn stop(&mut self) -> Duration {
+        debug_assert!(self.info.start_system.is_some());
+
+        let start_system = self
+            .info
+            .start_system
+            .expect("start() must be called before calling stop()");
+        let start_thread = self
+            .info
+            .start_thread
+            .expect("start() must be called before calling stop()");
+
+        let duration_system = Instant::now() - start_system;
+        let duration_thread = wasmtimer::std::Instant::now() - start_thread;
+        self.info.total_system_time += duration_system;
+        self.info.total_thread_time += duration_thread;
+        self.info.start_system = None;
         self.info.start_thread = None;
         self.info.runs += 1;
 
