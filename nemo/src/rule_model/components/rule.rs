@@ -147,6 +147,24 @@ impl Rule {
         result
     }
 
+    pub fn positive_variables_as_vec(&self) -> Vec<&Variable> {
+        let mut result = Vec::new();
+
+        for literal in &self.body {
+            if let Literal::Positive(atom) = literal {
+                for term in atom.arguments() {
+                    if let Term::Primitive(Primitive::Variable(variable)) = term {
+                        if variable.is_universal() && variable.name().is_some() {
+                            result.push(variable);
+                        }
+                    }
+                }
+            }
+        }
+
+        result
+    }
+
     /// Return a set of "safe" variables.
     ///
     /// A variable is considered safe,

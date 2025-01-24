@@ -364,11 +364,15 @@ pub trait FrontierVariables {
 impl FrontierVariables for Rule {
     fn frontier_variables(&self) -> Variables {
         let positive_body_variables: Variables = self.positive_variables();
+        println!("{:?}", positive_body_variables);
         let universal_head_variables: Variables = self.universal_head_variables();
-        positive_body_variables
+        println!("{:?}", universal_head_variables);
+        let ret_val = positive_body_variables
             .intersection(&universal_head_variables)
             .copied()
-            .collect()
+            .collect();
+        println!("{:?}", ret_val);
+        ret_val
     }
 }
 
@@ -396,6 +400,7 @@ impl GuardedForVariables for Rule {
     fn is_guarded_for_variables(&self, variables: Variables) -> bool {
         self.body_positive_refs().iter().any(|atom| {
             let vars_of_atom: Variables = atom.variables_refs();
+            println!("{:?}", vars_of_atom);
             vars_of_atom == variables
         })
     }
@@ -422,8 +427,8 @@ trait JoinVariablePrivate {
 impl JoinVariablePrivate for Variable {
     fn is_join_variable(&self, rule: &Rule) -> bool {
         let mut count: usize = 0;
-        rule.variables().any(|var| {
-            if var == self {
+        rule.positive_variables_as_vec().iter().any(|var| {
+            if *var == self {
                 count += 1;
             }
             if 2 == count {
