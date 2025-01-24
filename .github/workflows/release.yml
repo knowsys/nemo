@@ -61,7 +61,11 @@ jobs:
             tar czf "$asset" "$name"
             echo ASSET=$asset >> $GITHUB_ENV
           fi
-          sha256sum "$asset" > "$asset.sha256sum"
+          if [ "${{ matrix.platform.runs-on }}" = "macOS-latest" ]; then
+            shasum -a 256 "$asset" > "$asset.sha256sum"
+          else
+            sha256sum "$asset" > "$asset.sha256sum"
+          fi
       - name: Create (draft) release
         uses: softprops/action-gh-release@v2
         with:
