@@ -35,11 +35,6 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
-      - name: Install rust toolchain
-        uses: hecrj/setup-rust-action@v2
-        with:
-          rust-version: ${{ matrix.rust }}
-          targets: ${{ matrix.target }}
       - name: Build release binary
         uses: houseabsolute/actions-rust-cross@v1
         with:
