@@ -518,7 +518,7 @@ impl<'a> Token<'a> {
         })
     }
 
-    /// Parse binary number consisting of [TokenKind::OctalPrefix] and [TokenKind::OctalSuffix]
+    /// Parse octal number consisting of [TokenKind::OctalPrefix] and [TokenKind::OctalSuffix]
     pub fn oct_number(input: ParserInput<'a>) -> ParserResult<'a, Token<'a>> {
         context(ParserContext::token(TokenKind::OctalSuffix), oct_digit1)(input).map(
             |(rest_input, result)| {
@@ -533,7 +533,7 @@ impl<'a> Token<'a> {
         )
     }
 
-    /// Parse binary number consisting of [TokenKind::HexPrefix] and [TokenKind::HexSuffix]
+    /// Parse hexadecimal number consisting of [TokenKind::HexPrefix] and [TokenKind::HexSuffix]
     pub fn hex_number(input: ParserInput<'a>) -> ParserResult<'a, Token<'a>> {
         context(ParserContext::token(TokenKind::HexSuffix), hex_digit1)(input).map(
             |(rest_input, result)| {
