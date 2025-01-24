@@ -97,6 +97,7 @@ mod test {
     use super::*;
     use crate::datatypes::{Double, Float};
     use quickcheck_macros::quickcheck;
+    #[cfg(not(miri))]
     use test_log::test;
 
     fn apply_sort_permutator<T>(data: &[T])
@@ -115,6 +116,7 @@ mod test {
                 .collect::<Vec<_>>()
         );
     }
+
     #[quickcheck]
     #[cfg_attr(miri, ignore)]
     fn sort_from_vec(

@@ -110,6 +110,7 @@ mod test {
 
     use super::ColumnScanConstant;
 
+    #[cfg(not(miri))]
     use test_log::test;
 
     #[test]

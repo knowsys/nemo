@@ -422,6 +422,7 @@ mod test {
     use quickcheck_macros::quickcheck;
     use std::iter::repeat;
     use std::num::NonZeroUsize;
+    #[cfg(not(miri))]
     use test_log::test;
 
     use super::ColumnRle;

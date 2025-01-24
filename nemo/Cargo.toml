@@ -35,7 +35,7 @@ rio_turtle = "0.8.4"
 rio_xml = "0.8.4"
 oxiri = "0.2.2"
 tokio = { version = "1.40.0", features = ["rt"] }
-reqwest = { version = "0.12.2" }
+reqwest = { version = "0.12.2", features = ["gzip", "brotli", "zstd", "deflate"] }
 num = "0.4.0"
 ascii_tree = "0.1.1"
 serde_json = "1.0.108"

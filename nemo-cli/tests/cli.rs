@@ -1,6 +1,7 @@
 use assert_cmd::prelude::*; // Add methods on commands
 use predicates::prelude::*;
 use std::process::Command; // Run programs
+#[cfg(not(miri))]
 use test_log::test;
 
 #[cfg_attr(miri, ignore)]
