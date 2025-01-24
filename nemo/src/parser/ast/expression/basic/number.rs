@@ -136,7 +136,7 @@ impl<'a> Number<'a> {
         if let Ok(float) = str::parse::<f32>(&string) {
             return NumberValue::Float(float);
         }
-        
+
         NumberValue::Large(string)
     }
 

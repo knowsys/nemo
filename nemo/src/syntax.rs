@@ -366,6 +366,17 @@ pub mod datavalues {
     pub const DOT: &str = ".";
 }
 
+pub mod encoding_prefixes {
+    //! This module defines the prefixes for encoded numbers
+
+    /// Reprsents the prefix for binary-encoded unsigned integers
+    pub const BIN: &str = "0b";
+    /// Reprsents the prefix for octal-encoded unsigned integers
+    pub const OCT: &str = "0o";
+    /// Reprsents the prefix for hex-encoded unsigned integers
+    pub const HEX: &str = "0x";
+}
+
 pub mod import_export {
     //! This module defines the import/export configuration options.
 

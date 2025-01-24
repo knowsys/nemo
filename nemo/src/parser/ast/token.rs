@@ -28,9 +28,9 @@ use crate::{
     syntax::{
         self, comment,
         datavalues::{self, boolean, iri, map, string, tuple, RDF_DATATYPE_INDICATOR},
-        directive,
+        directive, encoding_prefixes, 
         expression::{aggregate, atom, format_string, operation, variable},
-        operator, rule,
+        operator, rule, 
     },
 };
 
@@ -185,21 +185,21 @@ pub enum TokenKind {
     /// Digits
     #[assoc(name = "digits")]
     Digits,
-    /// Binary prefix
-    #[assoc(name = "0b")]
+    /// Token preceding a binary encoded number as defined in [BIN](encoding_prefixes::BIN)
+    #[assoc(name = encoding_prefixes::BIN)]
     BinaryPrefix,
+    /// Token preceding an octal encoded number as defined in [OCT](encoding_prefixes::OCT)
+    #[assoc(name = encoding_prefixes::OCT)]
+    OctalPrefix,
+    /// Token preceding a hexadecimal encoded number as defined in [HEX](encoding_prefixes::HEX)
+    #[assoc(name = encoding_prefixes::HEX)]
+    HexPrefix,
     /// Binary suffix
     #[assoc(name = "bin_suffix")]
     BinarySuffix,
-    /// Octal prefix
-    #[assoc(name = "0o")]
-    OctalPrefix,
     /// Octal suffix
     #[assoc(name = "oct_suffix")]
     OctalSuffix,
-    /// Hexadecimal prefix
-    #[assoc(name = "0x")]
-    HexPrefix,
     /// Hexadecimal suffix
     #[assoc(name = "hex_suffix")]
     HexSuffix,

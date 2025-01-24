@@ -13,7 +13,7 @@ use crate::parser::{
     span::Span,
     ParserInput, ParserResult,
 };
-use num::{BigInt, Num};
+use num::{BigInt,Num};
 
 /// Define a different type for each prefix token
 #[derive(Assoc, Debug, Clone, Copy, PartialEq, Eq)]
@@ -32,7 +32,6 @@ enum Encoding {
 }
 
 impl Encoding {
-
     /// Returns the base of each encoding type
     pub fn radix(&self) -> u32 {
         match self {
@@ -48,6 +47,7 @@ impl Encoding {
 pub struct EncodedNumber<'a> {
     /// [Span] associated with this node
     span: Span<'a>,
+
     /// The prefix of the encoded number
     prefix: Encoding,
     /// The suffix of the encoded number
@@ -64,7 +64,6 @@ pub enum EncodedNumberValue {
 }
 
 impl<'a> EncodedNumber<'a> {
-    
     /// Removes the binary prefix (0b) and returns the binary suffix
     fn parse_binary(input: ParserInput<'a>) -> ParserResult<'a, (Encoding, Token<'a>)> {
         preceded(Token::binary_prefix, Token::bin_number)(input)
@@ -96,7 +95,7 @@ impl<'a> EncodedNumber<'a> {
         // Otherwise, return string representation of the decoded number
         if let Ok(integer) = <i64>::from_str_radix(suffix, nr_encoding) {
             return EncodedNumberValue::Integer(integer);
-        } else if let Ok(bigint) = <BigInt as Num>::from_str_radix(suffix, nr_encoding) {
+        } else if let Ok(bigint) = BigInt::from_str_radix(suffix, nr_encoding) {
             return EncodedNumberValue::Large(bigint.to_string());
         }
         EncodedNumberValue::Large(string)

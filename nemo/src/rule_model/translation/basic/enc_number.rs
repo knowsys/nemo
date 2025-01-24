@@ -20,10 +20,10 @@ impl TranslationComponent for EncodedNumberLiteral {
         enc_number: &'b Self::Ast<'a>,
     ) -> Result<Self, TranslationError> {
         Ok(EncodedNumberLiteral(match enc_number.value() {
-            ast::expression::basic::enc_number::NumberValue::Integer(integer) => {
+            ast::expression::basic::enc_number::EncodedNumberValue::Integer(integer) => {
                 AnyDataValue::new_integer_from_i64(integer)
             }
-            ast::expression::basic::enc_number::NumberValue::Large(large) => {
+            ast::expression::basic::enc_number::EncodedNumberValue::Large(large) => {
                 AnyDataValue::new_other(large, String::from("xsd:integer"))
             }
         }))
