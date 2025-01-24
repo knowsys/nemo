@@ -17,7 +17,7 @@ jobs:
 
           - os-name: linux-aarch64
             runs-on: ubuntu-22.04
-            target: aarch64-unknown-linux-musl
+            target: aarch64-unknown-linux-gnu
 
           - os-name: windows-gnu
             runs-on: windows-latest
@@ -50,13 +50,13 @@ jobs:
           mkdir -p "$name"
 
           cp {README.md,LICENSE-APACHE,LICENSE-MIT} "$name"
-          if [ "${{ matrix.os-name }}" = "windows-gnu ]; then
-            cp "target/${{ matrix.target }}/release/nmo.exe" "$name/"
+          if [ "${{ matrix.platform.os-name }}" = "windows-gnu ]; then
+            cp "target/${{ matrix.platform.target }}/release/nmo.exe" "$name/"
             asset=$name.zip
             7z a "$asset" "$name"
             echo ASSET=$asset >> $GITHUB_ENV
           else
-            cp "target/${{ matrix.target }}/release/nmo" "$name/"
+            cp "target/${{ matrix.platform.target }}/release/nmo" "$name/"
             asset=$name.tar.gz
             tar czf "$asset" "$name"
             echo ASSET=$asset >> $GITHUB_ENV
