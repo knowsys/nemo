@@ -10,12 +10,9 @@ readme = "README.md"
 repository.workspace = true
 
 [features]
-default = ["timing"]
 # Allows building for web assembly environments
 # Enables the "js" feature of the "getrandom" crate
-# This feature cannot be used together with the "timing" feature, because the "howlong" crate does not support web assembly environments
 js = ["getrandom/js"]
-timing = ["nemo-physical/timing"]
 
 [dependencies]
 nemo-physical = { path = "../nemo-physical", default-features = false }
@@ -35,7 +32,7 @@ rio_turtle = "0.8.4"
 rio_xml = "0.8.4"
 oxiri = "0.2.2"
 tokio = { version = "1.40.0", features = ["rt"] }
-reqwest = { version = "0.12.2" }
+reqwest = { version = "0.12.2", features = ["gzip", "brotli", "zstd", "deflate"] }
 num = "0.4.0"
 ascii_tree = "0.1.1"
 serde_json = "1.0.108"

@@ -171,6 +171,7 @@ mod test {
         },
         datatypes::{Double, Float},
     };
+    #[cfg(not(miri))]
     use test_log::test;
 
     fn construct_presumable_vector_column() -> ColumnBuilderAdaptive<u32> {

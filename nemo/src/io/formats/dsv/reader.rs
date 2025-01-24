@@ -156,7 +156,7 @@ impl ByteSized for DsvReader {
 mod test {
     use std::cell::RefCell;
 
-    // use quickcheck_macros::quickcheck;
+    #[cfg(not(miri))]
     use test_log::test;
 
     use crate::io::formats::dsv::{

@@ -372,6 +372,7 @@ mod test {
     };
     use oxiri::Iri;
     use rio_turtle::{NTriplesParser, TurtleParser};
+    #[cfg(not(miri))]
     use test_log::test;
 
     use crate::io::formats::rdf::{value_format::RdfValueFormats, RdfVariant};
