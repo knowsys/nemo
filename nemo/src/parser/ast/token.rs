@@ -28,9 +28,9 @@ use crate::{
     syntax::{
         self, comment,
         datavalues::{self, boolean, iri, map, string, tuple, RDF_DATATYPE_INDICATOR},
-        directive, encoding_prefixes, 
+        directive, encoding_prefixes,
         expression::{aggregate, atom, format_string, operation, variable},
-        operator, rule, 
+        operator, rule,
     },
 };
 

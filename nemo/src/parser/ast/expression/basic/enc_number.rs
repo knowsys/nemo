@@ -13,7 +13,7 @@ use crate::parser::{
     span::Span,
     ParserInput, ParserResult,
 };
-use num::{BigInt,Num};
+use num::{BigInt, Num};
 
 /// Define a different type for each prefix token
 #[derive(Assoc, Debug, Clone, Copy, PartialEq, Eq)]
