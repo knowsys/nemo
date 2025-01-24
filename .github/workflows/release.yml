@@ -19,9 +19,9 @@ jobs:
             runs-on: ubuntu-22.04
             target: aarch64-unknown-linux-gnu
 
-          - os-name: windows-gnu
+          - os-name: windows-msvc
             runs-on: windows-latest
-            target: x86_64-pc-windows-gnu
+            target: x86_64-pc-windows-msvc
 
           - os-name: macOS-x86_64
             runs-on: macOS-latest
@@ -50,7 +50,7 @@ jobs:
           mkdir -p "$name"
 
           cp {README.md,LICENSE-APACHE,LICENSE-MIT} "$name"
-          if [ "${{ matrix.platform.os-name }}" = "windows-gnu" ]; then
+          if [ "${{ matrix.platform.runs-on }}" = "windows-latest ]; then
             cp "target/${{ matrix.platform.target }}/release/nmo.exe" "$name/"
             asset=$name.zip
             7z a "$asset" "$name"
