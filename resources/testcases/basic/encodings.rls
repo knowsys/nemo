@@ -1,0 +1,43 @@
+%! This test case check if binary, octal and hexadecimal number can be handled correctly.
+
+
+%% Binary fact test
+
+Bin(0b00).
+Bin(0b101010).
+
+% Biggest number to be converted into i64
+Bin(0b0111111111111111111111111111111111111111111111111111111111111111).
+
+% This number equals 2^63 so it can not fit into i64
+Bin(0b1000000000000000000000000000000000000000000000000000000000000000).
+
+
+%% Octal fact test
+
+Oct(0o00).
+Oct(0o52).
+
+% Biggest number to be converted into i64
+Oct(0o0777777777777777777777).
+
+% This number equals 2^63 so it can not fit into i64
+Oct(0o01000000000000000000000).
+
+
+%% Hexadecimal fact test
+
+Hex(0x00).
+Hex(0x02A).
+
+% Biggest number to be converted into i64
+Hex(0x7FFFFFFFFFFFFFFF).
+
+% This number equals 2^63 so it can not fit into i64
+Hex(0x8000000000000000).
+
+
+
+@export Bin :- tsv{}.
+@export Oct :- tsv{}.
+@export Hex :- tsv{}.

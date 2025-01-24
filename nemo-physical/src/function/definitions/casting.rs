@@ -2,10 +2,11 @@
 
 use crate::{
     datatypes::StorageTypeName,
-    datavalues::{AnyDataValue, DataValue},
+    datavalues::{syntax::encodings, AnyDataValue, DataValue},
 };
 
 use super::{FunctionTypePropagation, UnaryFunction};
+
 
 /// Casting of values into 64-bit integers
 ///
@@ -40,9 +41,9 @@ impl UnaryFunction for CastingIntoInteger64 {
                 let result = {
                     if lex_val.chars().count() >= 3 {
                         match &lex_val[0..2] {
-                            "0b" => <i64>::from_str_radix(&lex_val[2..], 2).ok()?,
-                            "0o" => <i64>::from_str_radix(&lex_val[2..], 8).ok()?,
-                            "0x" => <i64>::from_str_radix(&lex_val[2..], 16).ok()?,
+                            encodings::BIN => <i64>::from_str_radix(&lex_val[2..], 2).ok()?,
+                            encodings::OCT => <i64>::from_str_radix(&lex_val[2..], 8).ok()?,
+                            encodings::HEX => <i64>::from_str_radix(&lex_val[2..], 16).ok()?,
                             _ => lex_val.parse::<i64>().ok()?,
                         }
                     } else {

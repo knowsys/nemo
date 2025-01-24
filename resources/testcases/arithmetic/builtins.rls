@@ -40,6 +40,11 @@ cast("2023"^^xsd:gYear).
 cast("40").
 cast("https://example.org").
 
+% Encodings for decimal numbers 41, 42, 43
+cast("0b101001").
+cast("0o52").
+cast("0x2B").
+
 result(int, ?R) :- cast(?A), ?R = INT(?A).
 result(float, ?R) :- cast(?A), ?R = FLOAT(?A).
 result(double, ?R) :- cast(?A), ?R = DOUBLE(?A).
