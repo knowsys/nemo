@@ -1458,9 +1458,9 @@ dependencies = [
 
 [[package]]
 name = "native-tls"
-version = "0.2.12"
+version = "0.2.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a8614eb2c83d59d1c8cc974dd3f920198647674a0a035e1af1fa58707e317466"
+checksum = "0dab59f8e050d5df8e4dd87d9206fb6f65a483e20ac9fda365ade4fab353196c"
 dependencies = [
  "libc",
  "log",
@@ -1475,7 +1475,7 @@ dependencies = [
 
 [[package]]
 name = "nemo"
-version = "0.7.1-dev"
+version = "0.7.1"
 dependencies = [
  "ariadne",
  "ascii_tree",
@@ -1520,7 +1520,7 @@ dependencies = [
 
 [[package]]
 name = "nemo-cli"
-version = "0.7.1-dev"
+version = "0.7.1"
 dependencies = [
  "ariadne",
  "assert_cmd",
@@ -1539,7 +1539,7 @@ dependencies = [
 
 [[package]]
 name = "nemo-language-server"
-version = "0.7.1-dev"
+version = "0.7.1"
 dependencies = [
  "anyhow",
  "futures",
@@ -1554,7 +1554,7 @@ dependencies = [
 
 [[package]]
 name = "nemo-physical"
-version = "0.7.1-dev"
+version = "0.7.1"
 dependencies = [
  "arbitrary",
  "ascii_tree",
@@ -1586,7 +1586,7 @@ dependencies = [
 
 [[package]]
 name = "nemo-python"
-version = "0.7.1-dev"
+version = "0.7.1"
 dependencies = [
  "nemo",
  "pyo3",
@@ -1594,7 +1594,7 @@ dependencies = [
 
 [[package]]
 name = "nemo-wasm"
-version = "0.7.1-dev"
+version = "0.7.1"
 dependencies = [
  "console_error_panic_hook",
  "futures",
@@ -1766,9 +1766,9 @@ checksum = "1261fe7e33c73b354eab43b1273a57c8f967d0391e80353e51f764ac02cf6775"
 
 [[package]]
 name = "openssl"
-version = "0.10.68"
+version = "0.10.69"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6174bc48f102d208783c2c84bf931bb75927a617866870de8a4ea85597f871f5"
+checksum = "f5e534d133a060a3c19daec1eb3e98ec6f4685978834f2dbadfe2ec215bab64e"
 dependencies = [
  "bitflags 2.8.0",
  "cfg-if",
@@ -1792,9 +1792,9 @@ dependencies = [
 
 [[package]]
 name = "openssl-probe"
-version = "0.1.5"
+version = "0.1.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ff011a302c396a5197692431fc1948019154afc178baf7d8e37367442a4601cf"
+checksum = "d05e27ee213611ffe7d6348b942e8f942b37114c00cc03cec254295a4a17852e"
 
 [[package]]
 name = "openssl-sys"
