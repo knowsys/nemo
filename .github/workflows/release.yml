@@ -58,7 +58,7 @@ jobs:
             echo ASSET=$asset >> $GITHUB_ENV
           else
             cp "target/${{ matrix.platform.target }}/release/nmo" "$name/"
-            cp "target/${{ matrix.platform.target }}/release/nemo-language-server "$name/"
+            cp "target/${{ matrix.platform.target }}/release/nemo-language-server" "$name/"
             asset=$name.tar.gz
             tar czf "$asset" "$name"
             echo ASSET=$asset >> $GITHUB_ENV
