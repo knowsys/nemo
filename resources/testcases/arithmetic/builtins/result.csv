@@ -15,6 +15,12 @@ tag,"""en"""
 int,3
 int,5
 int,40
+int,41
+int,42
+int,43
+iri,0b101001
+iri,0o52
+iri,0x2B
 int,2023
 float,"""3""^^<http://www.w3.org/2001/XMLSchema#float>"
 float,"""4.2""^^<http://www.w3.org/2001/XMLSchema#float>"

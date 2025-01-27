@@ -19,6 +19,9 @@ pub enum ParserContext {
     /// Number
     #[assoc(name = "number")]
     Number,
+    /// Encoded number
+    #[assoc(name = "number")]
+    EncodedNumber,
     /// Variable
     #[assoc(name = "variable")]
     Variable,
