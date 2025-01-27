@@ -5,6 +5,7 @@ default-members = [
     "nemo-cli",
     "nemo-physical",
     "nemo-python",
+    "nemo-language-server",
 ]
 members = [
     "nemo",
