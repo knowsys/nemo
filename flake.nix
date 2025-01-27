@@ -187,6 +187,11 @@ rec {
             src = ./.;
             inherit version meta;
           };
+          nemo-wasm-web = buildWasm "web" {
+            pname = "nemo-wasm";
+            src = ./.;
+            inherit version meta;
+          };
           nemo-wasm = nemo-wasm-bundler;
 
           python3 = pkgs.python3.withPackages (ps: [nemo-python]);
@@ -352,3 +357,4 @@ rec {
 # Local Variables:
 # apheleia-formatter: alejandra
 # End:
+
