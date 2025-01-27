@@ -402,9 +402,11 @@ impl NemoEngine {
         predicate: String,
         row_index: usize,
     ) -> Result<Option<(ExecutionTrace, Vec<TraceFactHandle>)>, NemoError> {
+        let predicate_tag = Tag::from(predicate.clone());
+
         let iter = self
             .engine
-            .predicate_rows(&Tag::from(predicate.clone()))
+            .predicate_rows(&predicate_tag)
             .map_err(WasmOrInternalNemoError::Nemo)
             .map_err(NemoError)?;
 
@@ -413,7 +415,7 @@ impl NemoEngine {
 
         if let Some(terms_to_trace) = terms_to_trace_opt {
             let fact_to_trace = Fact::new(
-                &predicate,
+                predicate_tag,
                 terms_to_trace
                     .into_iter()
                     .map(|term| Term::Primitive(Primitive::from(term))),

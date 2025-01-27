@@ -108,24 +108,29 @@ pub enum TranslationErrorKind {
     #[assoc(code = 121)]
     AttributeRedefined,
     /// Attribute contains wrong number of parameters
-    #[error("attribute expected {expected} parameters, found {found}")]
+    #[error("attribute expected `{expected}` parameters, found `{found}`")]
     #[assoc(code = 122)]
     AttributeInvalidParameterCount { expected: usize, found: usize },
     /// Invalid attribute parameter: Wrong type
-    #[error("attribute parameter of type {found}, expected {expected}")]
+    #[error("attribute parameter of type `{found}`, expected `{expected}`")]
     #[assoc(code = 123)]
     AttributeParameterWrongType { expected: String, found: String },
     /// Invalid attribute parameter: Wrong component
-    #[error("attribute parameter is {found}, expected {expected}")]
+    #[error("attribute parameter is `{found}`, expected `{expected}`")]
     #[assoc(code = 124)]
     AttributeParameterWrongComponent { expected: String, found: String },
     /// Non-variable-assignment in directive
-    #[error("expected a variable assignment, found {found}")]
+    #[error("expected a variable assignment, found `{found}`")]
     #[assoc(code = 125)]
     NonAssignment { found: String },
-    #[error("expected a ground term, found {found}")]
+    /// Expected a ground term in a fact
+    #[error("expected a ground term, found `{found}`")]
     #[assoc(code = 126)]
     NonGroundTerm { found: String },
+    /// Arbitrary expression used in place of a fact
+    #[error("expected a fact, found `{found}`")]
+    #[assoc(code = 126)]
+    ExpressionAsFact { found: String },
 
     /// Unsupported: Declare statements
     #[error(r#"declare statements are currently unsupported"#)]
