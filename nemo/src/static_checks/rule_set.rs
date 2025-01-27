@@ -1,3 +1,4 @@
+use crate::rule_model::components::term::primitive::variable::VariableName;
 use crate::rule_model::components::{
     atom::Atom, rule::Rule, term::primitive::variable::Variable, IterableVariables,
 };
@@ -9,7 +10,13 @@ use crate::static_checks::positions::{
 
 use std::collections::{HashMap, HashSet};
 
+type RuleIndex = usize;
+
 pub type RuleSet = Vec<Rule>;
+
+type RuleIndexVariable<'a> = (RuleIndex, &'a Variable);
+
+type RuleIndexVariables<'a> = HashSet<RuleIndexVariable<'a>>;
 
 pub type Variables<'a> = HashSet<&'a Variable>;
 
@@ -99,8 +106,8 @@ pub trait AtomPositions<'a> {
 impl<'a> AtomPositions<'a> for Variable {
     fn positions_in_atom(&self, atom: &'a Atom) -> Positions<'a> {
         atom.variables()
-            .filter(|var| self == *var)
             .enumerate()
+            .filter(|(_, var)| self == *var)
             .fold(Positions::new(), |mut positions_in_atom, (index, _)| {
                 positions_in_atom
                     .entry(atom.predicate_ref())
@@ -307,6 +314,25 @@ impl<'a> AllPositivePositionsRulePrivate<'a> for Rule {
     }
 }
 
+pub trait ExistentialRuleIndexVariables {
+    fn existential_rule_index_variables(&self) -> RuleIndexVariables;
+}
+
+impl ExistentialRuleIndexVariables for RuleSet {
+    fn existential_rule_index_variables(&self) -> RuleIndexVariables {
+        self.iter()
+            .enumerate()
+            .fold(RuleIndexVariables::new(), |ex_vars, (index, rule)| {
+                let ex_vars_of_rule: Variables = rule.existential_variables();
+                let idx_ex_vars: RuleIndexVariables = ex_vars_of_rule
+                    .into_iter()
+                    .map(|var| (index, var))
+                    .collect();
+                ex_vars.union(&idx_ex_vars).copied().collect()
+            })
+    }
+}
+
 pub trait ExistentialVariables {
     fn existential_variables(&self) -> Variables;
 }
@@ -364,15 +390,11 @@ pub trait FrontierVariables {
 impl FrontierVariables for Rule {
     fn frontier_variables(&self) -> Variables {
         let positive_body_variables: Variables = self.positive_variables();
-        println!("{:?}", positive_body_variables);
         let universal_head_variables: Variables = self.universal_head_variables();
-        println!("{:?}", universal_head_variables);
-        let ret_val = positive_body_variables
+        positive_body_variables
             .intersection(&universal_head_variables)
             .copied()
-            .collect();
-        println!("{:?}", ret_val);
-        ret_val
+            .collect()
     }
 }
 
@@ -398,10 +420,12 @@ pub trait GuardedForVariables {
 
 impl GuardedForVariables for Rule {
     fn is_guarded_for_variables(&self, variables: Variables) -> bool {
+        if variables.is_empty() {
+            return true;
+        }
         self.body_positive_refs().iter().any(|atom| {
             let vars_of_atom: Variables = atom.variables_refs();
-            println!("{:?}", vars_of_atom);
-            vars_of_atom == variables
+            vars_of_atom.is_superset(&variables)
         })
     }
 }

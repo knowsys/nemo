@@ -7,8 +7,9 @@ use crate::static_checks::acyclicity_graphs::{
 };
 use crate::static_checks::collection_traits::{Disjoint, InsertAll, RemoveAll, Superset};
 use crate::static_checks::rule_set::{
-    AtomPositionsAppearance, AtomRefs, Attacked, ExistentialVariables,
-    ExistentialVariablesPositions, JoinVariables, RulePositions, RuleRefs, RuleSet, Variables,
+    AtomPositionsAppearance, AtomRefs, Attacked, ExistentialRuleIndexVariables,
+    ExistentialVariables, ExistentialVariablesPositions, JoinVariables, RulePositions, RuleRefs,
+    RuleSet, Variables,
 };
 
 use std::collections::{HashMap, HashSet};
@@ -140,6 +141,7 @@ impl<'a> AttackedPositionsBuilder<'a> for PositionsByVariables<'a, 'a> {
     ) -> PositionsByVariables<'a, 'a> {
         let att_variables: Variables =
             PositionsByVariables::match_attacking_variables(att_type, rule_set);
+        println!("{:?}", att_variables);
         att_variables
             .iter()
             .map(|var| {
@@ -405,6 +407,9 @@ impl<'a> RemoveAll<Positions<'a>, (&'a Tag, Indices)> for Positions<'a> {
         other.iter().for_each(|(pred, other_indices)| {
             if let Some(differenced_indices) = self.get_mut(pred) {
                 differenced_indices.remove_all(other_indices);
+                if differenced_indices.is_empty() {
+                    self.remove(pred);
+                }
             }
         })
     }
@@ -418,6 +423,9 @@ impl<'a> RemoveAll<Positions<'a>, (&'a Tag, Indices)> for Positions<'a> {
         other.into_iter().for_each(|(pred, other_indices)| {
             if let Some(differenced_indices) = self.get_mut(pred) {
                 differenced_indices.remove_all_take(other_indices);
+                if differenced_indices.is_empty() {
+                    self.remove(pred);
+                }
             }
         })
     }

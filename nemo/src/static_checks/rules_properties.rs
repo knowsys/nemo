@@ -130,6 +130,7 @@ impl RulesProperties for RuleSet {
     fn is_shy(&self) -> bool {
         let attacked_pos_by_existential_vars: PositionsByVariables =
             self.attacked_positions_by_existential_variables();
+        println!("{:?}", attacked_pos_by_existential_vars);
         self.iter()
             .all(|rule| rule.is_shy(&attacked_pos_by_existential_vars))
     }
