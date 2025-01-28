@@ -367,7 +367,7 @@ rec {
           ];
         };
 
-        formatter = channels.nixpkgs.alejandra;
+        formatter = channels.nixpkgs.nixfmt-rfc-style;
       };
     };
 }
