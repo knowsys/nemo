@@ -32,7 +32,16 @@ rec {
           pkgs = self.packages."${final.system}";
           lib = self.channels.nixpkgs."${final.system}";
         in {
-          inherit (pkgs) nemo nemo-python nemo-wasm;
+          inherit
+            (pkgs)
+            nemo
+            nemo-language-server
+            nemo-python
+            nemo-wasm
+            nemo-wasm-web
+            nemo-wasm-bundler
+            nemo-wasm-node
+            ;
 
           nodePackages = lib.makeExtensible (lib.extends pkgs.nodePackages prev.nodePackages);
         };
@@ -296,9 +305,11 @@ rec {
           inherit
             (packages)
             nemo
+            nemo-language-server
             nemo-python
             nemo-wasm
             nemo-wasm-node
+            nemo-wasm-web
             ;
           devShell = devShells.default;
 
@@ -360,7 +371,3 @@ rec {
       };
     };
 }
-# Local Variables:
-# apheleia-formatter: alejandra
-# End:
-
