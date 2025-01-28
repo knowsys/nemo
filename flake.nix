@@ -25,13 +25,17 @@ rec {
         rust-overlay.overlays.default
       ];
 
-      overlays.default = final: prev: let
-        pkgs = self.packages."${final.system}";
-        lib = self.channels.nixpkgs."${final.system}";
-      in {
-        inherit (pkgs) nemo nemo-python nemo-wasm;
+      overlays = {
+        rust-overlay = rust-overlay.overlays.default;
 
-        nodePackages = lib.makeExtensible (lib.extends pkgs.nodePackages prev.nodePackages);
+        default = final: prev: let
+          pkgs = self.packages."${final.system}";
+          lib = self.channels.nixpkgs."${final.system}";
+        in {
+          inherit (pkgs) nemo nemo-python nemo-wasm;
+
+          nodePackages = lib.makeExtensible (lib.extends pkgs.nodePackages prev.nodePackages);
+        };
       };
 
       outputsBuilder = channels: let
@@ -112,6 +116,8 @@ rec {
               '';
             };
         in rec {
+          rust-toolchain = toolchain;
+
           nemo = platform.buildRustPackage {
             pname = "nemo";
             src = ./.;
