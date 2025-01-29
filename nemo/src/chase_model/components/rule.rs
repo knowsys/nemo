@@ -1,7 +1,11 @@
 //! This module defines [ChaseRule].
 
+use std::collections::HashMap;
+
 use crate::rule_model::{
-    components::{term::primitive::variable::Variable, IterablePrimitives, IterableVariables},
+    components::{
+        tag::Tag, term::primitive::variable::Variable, IterablePrimitives, IterableVariables,
+    },
     origin::Origin,
 };
 
@@ -10,6 +14,7 @@ use super::{
     atom::{primitive_atom::PrimitiveAtom, variable_atom::VariableAtom},
     filter::ChaseFilter,
     operation::ChaseOperation,
+    order::ChaseOrder,
     ChaseComponent,
 };
 
@@ -69,6 +74,8 @@ pub struct ChaseRule {
     aggregation: ChaseRuleAggregation,
     /// Head of the rule
     head: ChaseRuleHead,
+    /// Order of head predicates
+    order: HashMap<Tag, ChaseOrder>,
 }
 
 impl ChaseRule {
@@ -138,6 +145,11 @@ impl ChaseRule {
     pub(crate) fn aggregate_head_index(&self) -> Option<usize> {
         self.head.aggregate_head_index
     }
+
+    /// Return the predicate that need updating and their order
+    pub(crate) fn orders(&self) -> &HashMap<Tag, ChaseOrder> {
+        &self.order
+    }
 }
 
 impl ChaseRule {
@@ -193,6 +205,11 @@ impl ChaseRule {
     /// Add a new atom to the head of the rule.
     pub(crate) fn add_head_atom(&mut self, atom: PrimitiveAtom) {
         self.head.atoms.push(atom)
+    }
+
+    /// Add an ordering to a predicate.
+    pub(crate) fn add_order(&mut self, predicate: Tag, order: ChaseOrder) {
+        self.order.insert(predicate, order);
     }
 }
 

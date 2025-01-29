@@ -35,6 +35,11 @@ impl ChaseFilter {
     pub(crate) fn filter(&self) -> &OperationTerm {
         &self.filter
     }
+
+    /// Return the filter that is being applied (owned)
+    pub(crate) fn filter_owned(self) -> OperationTerm {
+        self.filter
+    }
 }
 
 impl ChaseComponent for ChaseFilter {

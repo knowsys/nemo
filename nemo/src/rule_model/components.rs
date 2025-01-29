@@ -8,6 +8,7 @@ pub mod datatype;
 pub mod fact;
 pub mod import_export;
 pub mod literal;
+pub mod order;
 pub mod output;
 pub mod rule;
 pub mod tag;
@@ -63,6 +64,9 @@ pub enum ProgramComponentKind {
     /// Operation
     #[assoc(name = "operation")]
     Operation,
+    /// Order
+    #[assoc(name = "order")]
+    Order,
     /// Function term
     #[assoc(name = "function")]
     FunctionTerm,

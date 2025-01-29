@@ -5,9 +5,9 @@ use std::collections::hash_map::Entry;
 use import_export::{handle_export, handle_import};
 
 use crate::{
-    parser::ast::{self, ProgramAST},
+    parser::ast::{self, expression::Expression, ProgramAST},
     rule_model::{
-        components::tag::Tag,
+        components::{atom::Atom, order::Order, tag::Tag, term::operation::Operation},
         error::{
             info::Info, translation_error::TranslationErrorKind, ComplexErrorLabelKind,
             TranslationError,
@@ -15,7 +15,10 @@ use crate::{
     },
 };
 
-use super::ASTProgramTranslation;
+use super::{
+    complex::{infix::InfixOperation, operation::FunctionLikeOperation},
+    ASTProgramTranslation, TranslationComponent,
+};
 
 pub(crate) mod import_export;
 
@@ -90,10 +93,45 @@ fn handle_declare<'a, 'b>(
     ))
 }
 
+// TODO: This should be a translation component
+fn build_guard<'a, 'b>(
+    translation: &mut ASTProgramTranslation<'a, 'b>,
+    ast: &'b ast::guard::Guard<'a>,
+) -> Result<Operation, TranslationError> {
+    Ok(match ast {
+        ast::guard::Guard::Expression(expression) => {
+            if let Expression::Operation(operation) = expression {
+                Operation::from(FunctionLikeOperation::build_component(
+                    translation,
+                    operation,
+                )?)
+            } else {
+                todo!()
+            }
+        }
+        ast::guard::Guard::Infix(infix_expression) => Operation::from(
+            InfixOperation::build_component(translation, infix_expression)?,
+        ),
+    })
+}
+
 fn handle_order<'a, 'b>(
     translation: &mut ASTProgramTranslation<'a, 'b>,
-    output: &'b ast::directive::order::Order<'a>,
+    order: &'b ast::directive::order::Order<'a>,
 ) -> Result<(), TranslationError> {
+    let tag = Tag::new(translation.resolve_tag(order.atom_left().tag())?);
+    let dominating = Atom::build_component(translation, order.atom_left())?;
+    let dominated = Atom::build_component(translation, order.atom_right())?;
+
+    let condition = order
+        .condition()
+        .map(|condition| build_guard(translation, condition))
+        .collect::<Result<Vec<_>, TranslationError>>()?;
+
+    translation
+        .program_builder
+        .add_order(Order::new(tag, dominating, dominated, condition));
+
     Ok(())
 }
 

@@ -4,15 +4,14 @@
 use std::collections::HashMap;
 
 use nemo_physical::{
-    datavalues::AnyDataValue,
     management::execution_plan::{ColumnOrder, ExecutionNodeRef},
-    tabular::operations::{Filter, OperationTable},
+    tabular::operations::OperationTable,
 };
 
 use crate::{
     chase_model::{
         analysis::program_analysis::RuleAnalysis,
-        components::{atom::ChaseAtom, rule::ChaseRule},
+        components::{atom::ChaseAtom, order::ChaseOrder, rule::ChaseRule},
     },
     execution::{execution_engine::RuleInfo, rule_execution::VariableTranslation},
     rule_model::components::tag::Tag,
@@ -20,7 +19,10 @@ use crate::{
 };
 
 use super::{
-    operations::append::{head_instruction_from_atom, node_head_instruction, HeadInstruction},
+    operations::{
+        append::{head_instruction_from_atom, node_head_instruction, HeadInstruction},
+        operation::operation_term_to_function_tree,
+    },
     HeadStrategy,
 };
 
@@ -28,6 +30,7 @@ use super::{
 #[derive(Debug)]
 pub(crate) struct DatalogStrategy {
     predicate_to_atoms: HashMap<Tag, Vec<(HeadInstruction, bool)>>,
+    predicate_to_update: HashMap<Tag, ChaseOrder>,
 }
 
 impl DatalogStrategy {
@@ -46,7 +49,12 @@ impl DatalogStrategy {
             atoms.push((head_instruction_from_atom(head_atom), is_aggregate_atom));
         }
 
-        Self { predicate_to_atoms }
+        let predicate_to_update = rule.orders().clone();
+
+        Self {
+            predicate_to_atoms,
+            predicate_to_update,
+        }
     }
 }
 
@@ -102,24 +110,28 @@ impl HeadStrategy for DatalogStrategy {
                         .fetch_table(OperationTable::default(), id)
                 })
                 .collect();
-            let old_table_union = current_plan
-                .plan_mut()
-                .union(OperationTable::new_unique(arity), old_table_nodes);
 
-            let remove_duplicate_node = current_plan
-                .plan_mut()
-                .subtract(new_tables_union, vec![old_table_union]);
+            let final_node = if let Some(filter) = self.predicate_to_update.get(predicate) {
+                let filter = operation_term_to_function_tree(variable_translation, filter.filter());
+                current_plan.plan_mut().update(
+                    filter,
+                    new_tables_union, // TODO: What with multihead rules?
+                    old_table_nodes,
+                )
+            } else {
+                let old_table_union = current_plan
+                    .plan_mut()
+                    .union(OperationTable::new_unique(arity), old_table_nodes);
 
-            let update_node = current_plan.plan_mut().update(
-                Filter::constant(AnyDataValue::new_boolean(true)),
-                remove_duplicate_node,
-                vec![],
-            );
+                current_plan
+                    .plan_mut()
+                    .subtract(new_tables_union, vec![old_table_union])
+            };
 
             // let update_node = current_plan.plan_mut().update(marked_columns, subnode)
 
             current_plan.add_permanent_table(
-                update_node,
+                final_node,
                 "Duplicate Elimination (Datalog)",
                 &head_table_name,
                 SubtableIdentifier::new(predicate.clone(), step),

@@ -12,6 +12,7 @@ use super::{
         fact::Fact,
         import_export::{ExportDirective, ImportDirective},
         literal::Literal,
+        order::Order,
         output::Output,
         rule::Rule,
         ProgramComponent, ProgramComponentKind,
@@ -39,6 +40,8 @@ pub struct Program {
     facts: Vec<Fact>,
     /// Outputs
     outputs: Vec<Output>,
+    /// Orders defined on predicates
+    orders: Vec<Order>,
 }
 
 impl Program {
@@ -73,6 +76,11 @@ impl Program {
     /// Return an iterator over all outputs.
     pub fn outputs(&self) -> impl Iterator<Item = &Output> {
         self.outputs.iter()
+    }
+
+    /// Return an iterator over all orders.
+    pub fn orders(&self) -> impl Iterator<Item = &Order> {
+        self.orders.iter()
     }
 
     /// Return the set of all predicates that are defined by import statements.
@@ -314,6 +322,10 @@ impl ProgramComponent for Program {
             let _ = export.validate(builder);
         }
 
+        for order in self.orders() {
+            let _ = order.validate(builder);
+        }
+
         self.validate_global_properties(builder)
     }
 
@@ -385,6 +397,11 @@ impl ProgramBuilder {
     /// Add a [Output].
     pub fn add_output(&mut self, output: Output) {
         self.program.outputs.push(output);
+    }
+
+    /// Add an [Order].
+    pub fn add_order(&mut self, order: Order) {
+        self.program.orders.push(order);
     }
 
     /// Validate the current program.

@@ -5,6 +5,7 @@ pub(crate) mod fact;
 pub(crate) mod filter;
 pub(crate) mod import_export;
 pub(crate) mod operation;
+pub(crate) mod order;
 pub(crate) mod rule;
 
 use std::collections::HashMap;
@@ -14,7 +15,7 @@ use crate::rule_model::{
     program::Program,
 };
 
-use super::components::program::ChaseProgram;
+use super::components::{order::ChaseOrder, program::ChaseProgram};
 
 #[derive(Debug, Default, Clone, Copy)]
 struct FreshVariableGenerator {
@@ -37,6 +38,8 @@ pub(crate) struct ProgramChaseTranslation {
     fresh_variable_generator: FreshVariableGenerator,
     /// Map associating each predicate with its arity
     predicate_arity: HashMap<Tag, usize>,
+    /// Map associating predicates with an update filter
+    predicate_update: HashMap<Tag, ChaseOrder>,
 }
 
 impl ProgramChaseTranslation {
@@ -45,12 +48,19 @@ impl ProgramChaseTranslation {
         Self {
             fresh_variable_generator: FreshVariableGenerator::default(),
             predicate_arity: HashMap::default(),
+            predicate_update: HashMap::default(),
         }
     }
 
     /// Translate a [Program] into a [ChaseProgram].
     pub(crate) fn translate(&mut self, mut program: Program) -> ChaseProgram {
         let mut result = ChaseProgram::default();
+
+        let mut predicate_update = HashMap::<Tag, ChaseOrder>::new();
+        for order in program.orders() {
+            predicate_update.insert(order.predicate().clone(), self.build_order(order));
+        }
+        self.predicate_update = predicate_update;
 
         for fact in program.facts() {
             result.add_fact(self.build_fact(fact));

@@ -11,6 +11,7 @@ pub(crate) mod export;
 pub(crate) mod filter;
 pub(crate) mod import;
 pub(crate) mod operation;
+pub(crate) mod order;
 pub(crate) mod program;
 pub(crate) mod rule;
 pub(crate) mod term;

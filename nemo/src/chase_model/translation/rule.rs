@@ -76,7 +76,20 @@ impl ProgramChaseTranslation {
         // Handle head
         self.handle_head(&mut result, rule.head());
 
+        // Handle orders
+        self.handle_orders(&mut result, rule.head());
+
         result
+    }
+
+    /// Inserts orders into `rule`
+    fn handle_orders(&self, rule: &mut ChaseRule, head: &[Atom]) {
+        for head_atom in head {
+            let predicate = head_atom.predicate();
+            if let Some(order) = self.predicate_update.get(&predicate) {
+                rule.add_order(predicate, order.clone());
+            }
+        }
     }
 
     /// Creates a map assigning variables that are equal to each other.
@@ -125,7 +138,7 @@ impl ProgramChaseTranslation {
     ///
     /// # Panics
     /// Panics if atom contains a structured term or an aggregate.
-    fn build_body_atom(&mut self, atom: &Atom) -> (VariableAtom, Vec<ChaseFilter>) {
+    pub(crate) fn build_body_atom(&mut self, atom: &Atom) -> (VariableAtom, Vec<ChaseFilter>) {
         let origin = *atom.origin();
         let predicate = atom.predicate().clone();
         let mut variables = Vec::new();
