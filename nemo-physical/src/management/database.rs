@@ -318,7 +318,10 @@ impl DatabaseInstance {
         }
     }
 
-    fn load_tables_mut<'a>(&'a mut self, leafs: &Vec<ExecutionTreeLeaf>) -> Vec<&'a mut Trie> {
+    fn load_tables_mut<'a>(
+        &'a mut self,
+        leafs: &Vec<ExecutionTreeLeaf>,
+    ) -> (Vec<&'a mut Trie>, &'a RefCell<Dict>) {
         let ids = leafs
             .iter()
             .map(|leaf| match leaf {
@@ -329,7 +332,7 @@ impl DatabaseInstance {
             })
             .collect::<Vec<_>>();
 
-        self.reference_manager.tries_mut(ids)
+        (self.reference_manager.tries_mut(ids), &self.dictionary)
     }
 
     /// Return a [TrieScanEnum] representing the given [ExecutionTreeOperation] node.
@@ -424,8 +427,8 @@ impl DatabaseInstance {
                 //     .evaluate_tree_leaf(storage, new)
                 //     .map(|scan| Trie::from_partial_trie_scan(scan, tree.cut_layers))
                 //     .unwrap_or(Trie::empty(0));
-                let old_tries = self.load_tables_mut(&old);
-                generator.apply_operation(old_tries, &mut new_trie);
+                let (old_tries, dictionary) = self.load_tables_mut(&old);
+                generator.apply_operation(old_tries, &mut new_trie, dictionary);
 
                 (new_trie, vec![])
             }
