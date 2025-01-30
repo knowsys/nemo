@@ -1,34 +1,45 @@
+//! Functionality that provides methods to build the (JointAcyclicityGraph / WeakAcyclicityGraph) based on
+/// a RuleSet.
 use crate::rule_model::components::{rule::Rule, term::primitive::variable::Variable};
 use crate::static_checks::collection_traits::{InsertAll, RemoveAll};
 use crate::static_checks::positions::{
-    ExtendedPositions, FromPositionSet, Position, Positions, PositionsByVariables,
+    ExtendedPositions, FromPositionSet, Position, Positions, PositionsByRuleIdxVariables,
 };
 use crate::static_checks::rule_set::{
     AllPositivePositions, Attacked, AttackedVariables, ExistentialVariables,
-    ExistentialVariablesPositions, RulePositions, RuleSet, SpecialPositionsConstructor, Variables,
+    ExistentialVariablesPositions, RuleIdxRule, RuleIdxVariable, RuleIdxVariables, RulePositions,
+    RuleSet, SpecialPositionsConstructor, Variables,
 };
 use petgraph::algo::is_cyclic_directed;
 use petgraph::graphmap::{DiGraphMap, NodeTrait};
 use std::collections::HashSet;
 
-use std::collections::HashMap;
+/// Type to declare a JointAcyclicityGraph of some RuleSet.
+pub type JointAcyclicityGraph<'a> = DiGraphMap<RuleIdxVariable<'a>, ()>;
 
-pub type JointAcyclicityGraph<'a> = DiGraphMap<&'a Variable, ()>;
-
+/// Type to declare a WeakAcyclicityGraph of some RuleSet.
 pub type WeakAcyclicityGraph<'a> = DiGraphMap<Position<'a>, WeakAcyclicityGraphEdgeType>;
 
 type Cycle<N> = Vec<N>;
 
 type Cycles<N> = HashSet<Cycle<N>>;
 
+/// Enum to distinguish between (Common / Special / Both) edge between two Position(s) of the
+/// WeakAcyclicityGraph.
 #[derive(Clone, Copy, Debug)]
 pub enum WeakAcyclicityGraphEdgeType {
+    /// There is a common edge between two Position(s) of the WeakAcyclicityGraph.
     Common,
+    /// There is a common and a special edge between two Position(s) of the WeakAcyclicityGraph.
     CommonAndSpecial,
+    /// There is a special edge between two Position(s) of the WeakAcyclicityGraph.
     Special,
 }
 
+/// This Trait provides a method to build the (JointAcyclicityGraph / WeakAcyclicityGraph) of a
+/// RuleSet.
 pub trait AcyclicityGraphBuilder<'a> {
+    /// Builds the (JointAcyclicityGraph / WeakAcyclicityGraph) of a RuleSet.
     fn build_graph(rule_set: &'a RuleSet) -> Self;
 }
 
@@ -57,17 +68,16 @@ trait AcyclicityGraphBuilderPrivate<'a> {
 
 impl<'a> AcyclicityGraphBuilderPrivate<'a> for JointAcyclicityGraph<'a> {
     fn add_edges(&mut self, rule_set: &'a RuleSet) {
-        let attacked_pos_by_existential_vars: PositionsByVariables =
-            rule_set.attacked_positions_by_existential_variables();
-        rule_set.iter().for_each(|rule| {
-            self.add_edges_for_rule(rule, &attacked_pos_by_existential_vars);
+        let attacked_pos_by_ex_rule_idx_vars: PositionsByRuleIdxVariables =
+            rule_set.attacked_positions_by_existential_rule_idx_variables();
+        rule_set.iter().enumerate().for_each(|idx_rule| {
+            self.add_edges_for_rule(idx_rule, &attacked_pos_by_ex_rule_idx_vars);
         })
     }
 
     fn add_nodes(&mut self, rule_set: &'a RuleSet) {
-        let existential_variables: Variables = rule_set.existential_variables();
-        existential_variables.iter().for_each(|var| {
-            self.add_node(var);
+        rule_set.iter().enumerate().for_each(|idx_rule| {
+            self.add_nodes_for_rule(idx_rule);
         })
     }
 }
@@ -87,12 +97,19 @@ impl<'a> AcyclicityGraphBuilderPrivate<'a> for WeakAcyclicityGraph<'a> {
     }
 }
 
+/// This Trait provides methods for a Graph in relation with Cycle(s).
 pub trait AcyclicityGraphCycle<N> {
+    /// Returns all nodes of a Graph.
     fn all_nodes(&self) -> HashSet<N>;
+    /// Returns all Cycles of a Graph.
     fn cycles(&self) -> Cycles<N>;
+    /// Returns all nodes of all Cycles in a Graph.
     fn cycles_into_nodes(&self, cycles: Cycles<N>) -> HashSet<N>;
+    /// Checks if a Graph is cyclic.
     fn is_cyclic(&self) -> bool;
+    /// Returns all reachable nodes of some node in the Graph.
     fn reachable_nodes_of_node(&self, node: &N) -> HashSet<N>;
+    /// Returns a represantative node of every Cycle in some Cycles.
     fn represantatives_of_cycles(&self, cycles: &Cycles<N>) -> HashSet<N>;
 }
 
@@ -205,19 +222,20 @@ trait JointAcyclicityGraphBuilderPrivate<'a> {
         &mut self,
         attacked_var: &Variable,
         rule: &Rule,
-        ex_vars_of_rule: &Variables<'a>,
-        attacked_pos_by_vars: &PositionsByVariables<'a, '_>,
+        ex_rule_idx_vars_of_rule: &RuleIdxVariables<'a>,
+        attacked_pos_by_rule_idx_vars: &PositionsByRuleIdxVariables<'a, '_>,
     );
     fn add_edges_for_attacking_var(
         &mut self,
-        attacking_var: &'a Variable,
-        ex_vars_of_rule: &Variables<'a>,
+        attacking_rule_idx_var: &RuleIdxVariable<'a>,
+        ex_rule_idx_vars_of_rule: &RuleIdxVariables<'a>,
     );
     fn add_edges_for_rule(
         &mut self,
-        rule: &'a Rule,
-        attacked_pos_by_vars: &HashMap<&'a Variable, Positions>,
+        idx_rule: RuleIdxRule<'a>,
+        attacked_pos_by_rule_idx_vars: &PositionsByRuleIdxVariables<'a, '_>,
     );
+    fn add_nodes_for_rule(&mut self, idx_rule: RuleIdxRule<'a>);
 }
 
 impl<'a> JointAcyclicityGraphBuilderPrivate<'a> for JointAcyclicityGraph<'a> {
@@ -225,54 +243,78 @@ impl<'a> JointAcyclicityGraphBuilderPrivate<'a> for JointAcyclicityGraph<'a> {
         &mut self,
         attacked_var: &Variable,
         rule: &Rule,
-        ex_vars_of_rule: &Variables<'a>,
-        attacked_pos_by_vars: &PositionsByVariables<'a, '_>,
+        ex_rule_idx_vars_of_rule: &RuleIdxVariables<'a>,
+        attacked_pos_by_rule_idx_vars: &PositionsByRuleIdxVariables<'a, '_>,
     ) {
-        attacked_pos_by_vars
+        attacked_pos_by_rule_idx_vars
             .keys()
-            .filter(|attacking_var| {
-                attacked_var.is_attacked_by_variable(attacking_var, rule, attacked_pos_by_vars)
+            .filter(|attacking_rule_idx_var| {
+                attacked_var.is_attacked_by_variable(
+                    attacking_rule_idx_var,
+                    rule,
+                    attacked_pos_by_rule_idx_vars,
+                )
             })
-            .for_each(|attacking_var| {
-                self.add_edges_for_attacking_var(attacking_var, ex_vars_of_rule);
+            .for_each(|attacking_rule_idx_var| {
+                self.add_edges_for_attacking_var(attacking_rule_idx_var, ex_rule_idx_vars_of_rule);
             });
     }
 
     fn add_edges_for_attacking_var(
         &mut self,
-        attacking_var: &'a Variable,
-        ex_vars_of_rule: &Variables<'a>,
+        attacking_rule_idx_var: &RuleIdxVariable<'a>,
+        ex_rule_idx_vars_of_rule: &RuleIdxVariables<'a>,
     ) {
-        ex_vars_of_rule.iter().for_each(|ex_var| {
-            self.add_edge(attacking_var, ex_var, ());
+        ex_rule_idx_vars_of_rule.iter().for_each(|ex_rule_idx_var| {
+            self.add_edge(*attacking_rule_idx_var, *ex_rule_idx_var, ());
         })
     }
 
     fn add_edges_for_rule(
         &mut self,
-        rule: &'a Rule,
-        attacked_pos_by_vars: &PositionsByVariables<'a, '_>,
+        r_idx_rule: RuleIdxRule<'a>,
+        attacked_pos_by_rule_idx_vars: &PositionsByRuleIdxVariables<'a, '_>,
     ) {
-        let ex_vars_of_rule: Variables = rule.existential_variables();
-        let attacked_positive_vars: Variables =
-            rule.attacked_universal_variables(attacked_pos_by_vars);
+        // TODO: USE ExistentialRuleIdxVariables INSTEAD OF FOLLOWING 5 LINES OF CODE
+        let ex_vars_of_rule: Variables = r_idx_rule.1.existential_variables();
+        let ex_rule_idx_vars_of_rule: RuleIdxVariables = ex_vars_of_rule
+            .into_iter()
+            .map(|var| (r_idx_rule.0, var))
+            .collect();
+        let attacked_positive_vars: Variables = r_idx_rule
+            .1
+            .attacked_universal_variables(attacked_pos_by_rule_idx_vars);
         attacked_positive_vars.iter().for_each(|var| {
-            self.add_edges_for_attacked_var(var, rule, &ex_vars_of_rule, attacked_pos_by_vars);
+            self.add_edges_for_attacked_var(
+                var,
+                r_idx_rule.1,
+                &ex_rule_idx_vars_of_rule,
+                attacked_pos_by_rule_idx_vars,
+            );
+        })
+    }
+
+    fn add_nodes_for_rule(&mut self, (rule_idx, rule): RuleIdxRule<'a>) {
+        let ex_vars_of_rule: Variables = rule.existential_variables();
+        ex_vars_of_rule.into_iter().for_each(|var| {
+            self.add_node((rule_idx, var));
         })
     }
 }
 
+/// This Trait provides methods for a JointAcyclicityGraph in relation with Cycle(s).
 pub trait JointAcyclicityGraphCycle<N>: AcyclicityGraphCycle<N> {
-    fn variables_in_cycles(&self) -> HashSet<N>;
+    /// Returns all RuleIdxVariable(s) appearing in cycles of the JointAcyclicityGraph.
+    fn rule_idx_variables_in_cycles(&self) -> HashSet<N>;
 }
 
-impl<'a> JointAcyclicityGraphCycle<&'a Variable> for JointAcyclicityGraph<'a> {
-    fn variables_in_cycles(&self) -> Variables<'a> {
-        let cycles: Cycles<&'a Variable> = self.cycles();
+impl<'a> JointAcyclicityGraphCycle<RuleIdxVariable<'a>> for JointAcyclicityGraph<'a> {
+    fn rule_idx_variables_in_cycles(&self) -> RuleIdxVariables<'a> {
+        let cycles: Cycles<RuleIdxVariable<'a>> = self.cycles();
         cycles
             .iter()
-            .fold(Variables::new(), |vars_in_cycles, cycle| {
-                vars_in_cycles.insert_all_ret(cycle)
+            .fold(RuleIdxVariables::new(), |rule_idx_vars_in_cycles, cycle| {
+                rule_idx_vars_in_cycles.insert_all_ret(cycle)
             })
     }
 }
@@ -358,8 +400,11 @@ impl<'a> WeakAcyclicityGraphBuilderPrivate<'a> for WeakAcyclicityGraph<'a> {
     }
 }
 
+/// This Trait provides methods for a WeakAcyclicityGraph in relation with Cycle(s).
 pub trait WeakAcyclicityGraphCycle<N>: AcyclicityGraphCycle<N> {
+    /// Checks if there exists a Cycle in the WeakAcyclicityGraph that contains a special edge.
     fn contains_cycle_with_special_edge(&self) -> bool;
+    /// Returns all Cycles in the WeakAcyclicityGraph that contain a special edge.
     fn cycles_containing_special_edges(&self) -> Cycles<N>;
 }
 
@@ -405,7 +450,9 @@ impl<'a> WeakAcyclicityGraphCyclePrivate<Position<'a>> for WeakAcyclicityGraph<'
     }
 }
 
+/// This Trait provides a method to get the inifinite rank Positions of some WeakAcyclicityGraph.
 pub trait InfiniteRankPositions {
+    /// Builds the infinite rank Positions for some WeakAcyclicityGraph.
     fn infinite_rank_positions(&self) -> Positions;
 }
 
@@ -424,7 +471,7 @@ impl InfiniteRankPositions for WeakAcyclicityGraph<'_> {
             unreachable_nodes.remove_all(&rea_nodes_of_node);
             inf_rank_pos_set.insert_all_take(rea_nodes_of_node);
         }
-        Positions::from_position_set(inf_rank_pos_set)
+        Positions::from_extended_positions(inf_rank_pos_set)
     }
 }
 
@@ -443,7 +490,7 @@ where
         let cycle_size: usize = self.len();
         (0..cycle_size).any(|offset| {
             self.iter().enumerate().all(|(j, node_self)| {
-                let node_other: &N = other.get(j + offset).unwrap();
+                let node_other: &N = other.get((j + offset) % cycle_size).unwrap();
                 node_self == node_other
             })
         })

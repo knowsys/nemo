@@ -1,38 +1,65 @@
+//! Functionality that provides the static checks for a RuleSet.
 use crate::static_checks::acyclicity_graph_constructor::AcyclicityGraphConstructor;
 use crate::static_checks::acyclicity_graphs::{
     AcyclicityGraphCycle, JointAcyclicityGraph, WeakAcyclicityGraph, WeakAcyclicityGraphCycle,
 };
-use crate::static_checks::positions::PositionsByVariables;
+use crate::static_checks::positions::PositionsByRuleIdxVariables;
 use crate::static_checks::rule_set::{RuleSet, SpecialPositionsConstructor};
 use crate::static_checks::{positions::Positions, rule_properties::RuleProperties};
 
-#[allow(dead_code)]
+/// This trait gives some static checks for some ruleset.
 pub trait RulesProperties {
+    /// Determines if the ruleset is joinless.
     fn is_joinless(&self) -> bool;
+    /// Determines if the ruleset is linear.
     fn is_linear(&self) -> bool;
+    /// Determines if the ruleset is guarded.
     fn is_guarded(&self) -> bool;
+    /// Determines if the ruleset is sticky.
     fn is_sticky(&self) -> bool;
+    /// Determines if the ruleset is domain restricted.
     fn is_domain_restricted(&self) -> bool;
+    /// Determines if the ruleset is frontier one.
     fn is_frontier_one(&self) -> bool;
+    /// Determines if the ruleset is datalog.
     fn is_datalog(&self) -> bool;
+    /// Determines if the ruleset is monadic.
     fn is_monadic(&self) -> bool;
+    /// Determines if the ruleset is frontier guarded.
     fn is_frontier_guarded(&self) -> bool;
+    /// Determines if the ruleset is weakly guarded.
     fn is_weakly_guarded(&self) -> bool;
+    /// Determines if the ruleset is weakly fronier guarded.
     fn is_weakly_frontier_guarded(&self) -> bool;
+    /// Determines if the ruleset is jointly guarded.
     fn is_jointly_guarded(&self) -> bool;
+    /// Determines if the ruleset is jointly frontier guarded.
     fn is_jointly_frontier_guarded(&self) -> bool;
+    /// Determines if the ruleset is weakly acyclic.
     fn is_weakly_acyclic(&self) -> bool;
+    /// Determines if the ruleset is jointly acyclic.
     fn is_jointly_acyclic(&self) -> bool;
+    /// Determines if the ruleset is weakly sticky.
     fn is_weakly_sticky(&self) -> bool;
+    /// Determines if the ruleset is glut guarded.
     fn is_glut_guarded(&self) -> bool;
+    /// Determines if the ruleset is glut frontier guarded.
     fn is_glut_frontier_guarded(&self) -> bool;
+    /// Determines if the ruleset is shy.
     fn is_shy(&self) -> bool;
+    /// Determines if the ruleset is mfa.
     fn is_mfa(&self) -> bool;
+    /// Determines if the ruleset is dmfa.
     fn is_dmfa(&self) -> bool;
+    /// Determines if the ruleset is rmfa.
     fn is_rmfa(&self) -> bool;
+    /// Determines if the ruleset is mfc.
     fn is_mfc(&self) -> bool;
+    /// Determines if the ruleset is dmfc.
     fn is_dmfc(&self) -> bool;
+    /// Determines if the ruleset is drpc.
     fn is_drpc(&self) -> bool;
+    /// Determines if the ruleset is rpc.
     fn is_rpc(&self) -> bool;
 }
 
@@ -90,17 +117,17 @@ impl RulesProperties for RuleSet {
     }
 
     fn is_jointly_guarded(&self) -> bool {
-        let attacked_pos_by_existential_vars: PositionsByVariables =
-            self.attacked_positions_by_existential_variables();
+        let attacked_pos_by_ex_rule_idx_vars: PositionsByRuleIdxVariables =
+            self.attacked_positions_by_existential_rule_idx_variables();
         self.iter()
-            .all(|rule| rule.is_jointly_guarded(&attacked_pos_by_existential_vars))
+            .all(|rule| rule.is_jointly_guarded(&attacked_pos_by_ex_rule_idx_vars))
     }
 
     fn is_jointly_frontier_guarded(&self) -> bool {
-        let attacked_pos_by_existential_vars: PositionsByVariables =
-            self.attacked_positions_by_existential_variables();
+        let attacked_pos_by_ex_rule_idx_vars: PositionsByRuleIdxVariables =
+            self.attacked_positions_by_existential_rule_idx_variables();
         self.iter()
-            .all(|rule| rule.is_jointly_frontier_guarded(&attacked_pos_by_existential_vars))
+            .all(|rule| rule.is_jointly_frontier_guarded(&attacked_pos_by_ex_rule_idx_vars))
     }
 
     fn is_weakly_acyclic(&self) -> bool {
@@ -114,25 +141,25 @@ impl RulesProperties for RuleSet {
     }
 
     fn is_glut_guarded(&self) -> bool {
-        let attacked_pos_by_cycle_vars: PositionsByVariables =
-            self.attacked_positions_by_cycle_variables();
+        let attacked_pos_by_cycle_rule_idx_vars: PositionsByRuleIdxVariables =
+            self.attacked_positions_by_cycle_rule_idx_variables();
         self.iter()
-            .all(|rule| rule.is_glut_guarded(&attacked_pos_by_cycle_vars))
+            .all(|rule| rule.is_glut_guarded(&attacked_pos_by_cycle_rule_idx_vars))
     }
 
     fn is_glut_frontier_guarded(&self) -> bool {
-        let attacked_pos_by_cycle_vars: PositionsByVariables =
-            self.attacked_positions_by_cycle_variables();
+        let attacked_pos_by_cycle_rule_idx_vars: PositionsByRuleIdxVariables =
+            self.attacked_positions_by_cycle_rule_idx_variables();
         self.iter()
-            .all(|rule| rule.is_glut_frontier_guarded(&attacked_pos_by_cycle_vars))
+            .all(|rule| rule.is_glut_frontier_guarded(&attacked_pos_by_cycle_rule_idx_vars))
     }
 
     fn is_shy(&self) -> bool {
-        let attacked_pos_by_existential_vars: PositionsByVariables =
-            self.attacked_positions_by_existential_variables();
-        println!("{:?}", attacked_pos_by_existential_vars);
+        let attacked_pos_by_existential_rule_idx_vars: PositionsByRuleIdxVariables =
+            self.attacked_positions_by_existential_rule_idx_variables();
+        println!("{:?}", attacked_pos_by_existential_rule_idx_vars);
         self.iter()
-            .all(|rule| rule.is_shy(&attacked_pos_by_existential_vars))
+            .all(|rule| rule.is_shy(&attacked_pos_by_existential_rule_idx_vars))
     }
 
     fn is_mfa(&self) -> bool {

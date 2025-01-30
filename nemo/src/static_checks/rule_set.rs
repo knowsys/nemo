@@ -1,30 +1,45 @@
-use crate::rule_model::components::term::primitive::variable::VariableName;
+//! Functionality that provides methods in relation with Rule-Types.
 use crate::rule_model::components::{
     atom::Atom, rule::Rule, term::primitive::variable::Variable, IterableVariables,
 };
 use crate::static_checks::collection_traits::{Disjoint, InsertAll, Superset};
 use crate::static_checks::positions::{
     AffectedPositionsBuilder, AttackedPositionsBuilder, AttackingType, ExtendedPositions,
-    FromPositions, MarkedPositionsBuilder, MarkingType, Positions, PositionsByVariables,
+    FromPositions, MarkedPositionsBuilder, MarkingType, Positions, PositionsByRuleIdxVariables,
 };
 
 use std::collections::{HashMap, HashSet};
 
-type RuleIndex = usize;
+/// Type to identify a Rule in some RuleSet.
+pub type RuleIdx = usize;
 
+/// Type to relate an Rule to its index in some RuleSet.
+pub type RuleIdxRule<'a> = (RuleIdx, &'a Rule);
+
+/// Type to relate an (existential) Variable to a Rule. Therefore a type to identificate an
+/// (existential) Variable.
+pub type RuleIdxVariable<'a> = (RuleIdx, &'a Variable);
+
+/// Type to compress a set of RuleIdxVariable(s).
+pub type RuleIdxVariables<'a> = HashSet<RuleIdxVariable<'a>>;
+
+/// Type to compress a set of Rule(s).
 pub type RuleSet = Vec<Rule>;
 
-type RuleIndexVariable<'a> = (RuleIndex, &'a Variable);
-
-type RuleIndexVariables<'a> = HashSet<RuleIndexVariable<'a>>;
-
+/// Type to compress a set of Variable(s).
 pub type Variables<'a> = HashSet<&'a Variable>;
 
+/// Type to relate 2 Variable(s) together.
 pub type VariablePair<'a> = [&'a Variable; 2];
 
+/// Type to compress a set of VariablePair(s).
 pub type VariablePairs<'a> = HashSet<VariablePair<'a>>;
 
+/// This Trait provides a method to check whether a Variable is attacked in some Rule based on the
+/// affected Positions.
 pub trait Affected {
+    /// Checks whether a Variable is attacked in some Rule based on the
+    /// affected Positions.
     fn is_affected(&self, rule: &Rule, affected_positions: &Positions) -> bool;
 }
 
@@ -35,9 +50,14 @@ impl Affected for Variable {
     }
 }
 
+/// This Trait provides methods to get the (frontier / universal (all)) affected Variables of a
+/// Rule.
 pub trait AffectedVariables<'a> {
+    /// Returns the affected frontier Variables of a Rule.
     fn affected_frontier_variables(&self, affected_positions: &Positions) -> Variables;
+    /// Returns the affected universal Variables of a Rule.
     fn affected_universal_variables(&self, affected_positions: &Positions) -> Variables;
+    /// Returns the affected Variables out of some Variables of a Rule.
     fn affected_variables(
         &self,
         variables: Variables<'a>,
@@ -67,10 +87,34 @@ impl<'a> AffectedVariables<'a> for Rule {
     }
 }
 
+/// This Trait gives checks for appearance of some Variable in some Atom(s).
+pub trait AtomAppearance {
+    /// Checks if some Variable appears in some Atom.
+    fn appears_in_atom(&self, atom: &Atom) -> bool;
+    /// Checks if some Variable appears in some Atoms.
+    fn appears_in_atoms(&self, atoms: &[&Atom]) -> bool;
+}
+
+impl AtomAppearance for Variable {
+    fn appears_in_atom(&self, atom: &Atom) -> bool {
+        atom.variables_refs().contains(self)
+    }
+
+    fn appears_in_atoms(&self, atoms: &[&Atom]) -> bool {
+        atoms.iter().any(|atom| self.appears_in_atom(atom))
+    }
+}
+
+/// This Trait gives checks for appearance of some Variable (at some / only at) Positions in some
+/// Atom(s).
 pub trait AtomPositionsAppearance {
+    /// Checks if some Variable appears at some Positions in some Atom.
     fn appears_at_some_positions_in_atom(&self, positions: &Positions, atom: &Atom) -> bool;
+    /// Checks if some Variable appears at some Positions in some Atoms.
     fn appears_at_some_positions_in_atoms(&self, positions: &Positions, atoms: &[&Atom]) -> bool;
+    /// Checks if some Variable appears only at Positions in some Atom.
     fn appears_only_at_positions_in_atom(&self, positions: &Positions, atom: &Atom) -> bool;
+    /// Checks if some Variable appears only at Positions in some Atoms.
     fn appears_only_at_positions_in_atoms(&self, positions: &Positions, atoms: &[&Atom]) -> bool;
 }
 
@@ -98,8 +142,11 @@ impl AtomPositionsAppearance for Variable {
     }
 }
 
+/// This Trait provides methods to get the Positions of a Variable in (Atom / Atom(s)).
 pub trait AtomPositions<'a> {
+    /// Returns the Positions where the Variable appears in the Atom.
     fn positions_in_atom(&self, atom: &'a Atom) -> Positions<'a>;
+    /// Returns the Positions where the Variable appears in the Atom(s).
     fn positions_in_atoms(&self, atoms: &[&'a Atom]) -> Positions<'a>;
 }
 
@@ -129,7 +176,9 @@ impl<'a> AtomPositions<'a> for Variable {
     }
 }
 
+/// This Trait provides a method to get all the Variables of an Atom.
 pub trait AtomRefs {
+    /// Returns all the Variables of an Atom.
     fn variables_refs(&self) -> Variables;
 }
 
@@ -139,25 +188,34 @@ impl AtomRefs for Atom {
     }
 }
 
+/// This Trait provides methods to get the (frontier / universal (all)) attacked Variables of a
+/// Rule.
 pub trait Attacked {
-    fn is_attacked(&self, rule: &Rule, attacked_pos_by_vars: &PositionsByVariables) -> bool;
+    /// Returns the attacked frontier Variables of a Rule.
+    fn is_attacked(&self, rule: &Rule, attacked_pos_by_vars: &PositionsByRuleIdxVariables) -> bool;
+    /// Returns the attacked Variables of a Rule.
     fn is_attacked_by_positions_in_rule(
         &self,
         rule: &Rule,
         attacked_pos_of_var: &Positions,
     ) -> bool;
+    /// Returns the attacked Variables out of some Variables of a Rule.
     fn is_attacked_by_variable(
         &self,
-        attacking_var: &Variable,
+        attacking_rule_idx_var: &RuleIdxVariable,
         rule: &Rule,
-        attacked_pos_by_vars: &PositionsByVariables,
+        attacked_pos_by_rule_idx_vars: &PositionsByRuleIdxVariables,
     ) -> bool;
 }
 
 impl Attacked for Variable {
-    fn is_attacked(&self, rule: &Rule, attacked_pos_by_vars: &PositionsByVariables) -> bool {
+    fn is_attacked(
+        &self,
+        rule: &Rule,
+        attacked_pos_by_rule_idx_vars: &PositionsByRuleIdxVariables,
+    ) -> bool {
         let positions_of_variable_in_body: Positions = self.positions_in_positive_body(rule);
-        attacked_pos_by_vars
+        attacked_pos_by_rule_idx_vars
             .values()
             .any(|att_pos| att_pos.is_superset(&positions_of_variable_in_body))
     }
@@ -173,91 +231,107 @@ impl Attacked for Variable {
 
     fn is_attacked_by_variable(
         &self,
-        attacking_var: &Variable,
+        attacking_rule_idx_var: &RuleIdxVariable,
         rule: &Rule,
-        attacked_pos_by_vars: &PositionsByVariables,
+        attacked_pos_by_rule_idx_vars: &PositionsByRuleIdxVariables,
     ) -> bool {
-        let attacked_pos_by_var: &Positions = attacked_pos_by_vars.get(attacking_var).unwrap();
+        let attacked_pos_by_var: &Positions = attacked_pos_by_rule_idx_vars
+            .get(attacking_rule_idx_var)
+            .unwrap();
         self.is_attacked_by_positions_in_rule(rule, attacked_pos_by_var)
     }
 }
 
+/// This Trait provides methods to get the (frontier / universal (all)) attacked glut Variables of a
+/// Rule.
 pub trait AttackedGlutVariables<'a>: AttackedVariables<'a> {
+    /// Returns the attacked frontier glut Variables of a Rule.
     fn attacked_frontier_glut_variables(
         &self,
-        attacked_pos_by_cycle_vars: &PositionsByVariables,
+        attacked_pos_by_cycle_rule_idx_vars: &PositionsByRuleIdxVariables,
     ) -> Variables;
+    /// Returns the attacked glut Variables of a Rule.
     fn attacked_universal_glut_variables(
         &self,
-        attacked_pos_by_cycle_vars: &PositionsByVariables,
+        attacked_pos_by_cycle_rule_idx_vars: &PositionsByRuleIdxVariables,
     ) -> Variables;
 }
 
 impl AttackedGlutVariables<'_> for Rule {
     fn attacked_frontier_glut_variables(
         &self,
-        attacked_pos_by_cycle_vars: &PositionsByVariables,
+        attacked_pos_by_cycle_rule_idx_vars: &PositionsByRuleIdxVariables,
     ) -> Variables {
         let frontier_variables: Variables = self.frontier_variables();
-        self.attacked_variables(frontier_variables, attacked_pos_by_cycle_vars)
+        self.attacked_variables(frontier_variables, attacked_pos_by_cycle_rule_idx_vars)
     }
 
     fn attacked_universal_glut_variables(
         &self,
-        attacked_pos_by_cycle_vars: &PositionsByVariables,
+        attacked_pos_by_cycle_rule_idx_vars: &PositionsByRuleIdxVariables,
     ) -> Variables {
         let universal_variables: Variables = self.positive_variables();
-        self.attacked_variables(universal_variables, attacked_pos_by_cycle_vars)
+        self.attacked_variables(universal_variables, attacked_pos_by_cycle_rule_idx_vars)
     }
 }
 
+/// This Trait offers methods to get the attacked Variable(s) of some Rule based on the
+/// attacked positions by RuleIdxVariable(s) (PositionsByRuleIdxVariables).
 pub trait AttackedVariables<'a> {
-    fn attacked_frontier_variables(&self, attacked_pos_by_vars: &PositionsByVariables)
-        -> Variables;
+    /// Returns the attacked frontier Variables of some Rule based on the attacked positions by RuleIdxVariable(s) (PositionsByRuleIdxVariables).
+    fn attacked_frontier_variables(
+        &self,
+        attacked_pos_by_vars: &PositionsByRuleIdxVariables,
+    ) -> Variables;
+    /// Returns the attacked Variables of some Rule based on the attacked positions by RuleIdxVariable(s) (PositionsByRuleIdxVariables).
     fn attacked_universal_variables(
         &self,
-        attacked_pos_by_vars: &PositionsByVariables,
+        attacked_pos_by_vars: &PositionsByRuleIdxVariables,
     ) -> Variables;
+    /// Returns the attacked Variables out of some Variables of some Rule based on the attacked positions by RuleIdxVariable(s) (PositionsByRuleIdxVariables).
     fn attacked_variables(
         &self,
         variables: Variables<'a>,
-        attacked_pos_by_vars: &PositionsByVariables,
+        attacked_pos_by_vars: &PositionsByRuleIdxVariables,
     ) -> Variables<'a>;
 }
 
 impl<'a> AttackedVariables<'a> for Rule {
     fn attacked_frontier_variables(
         &self,
-        attacked_pos_by_vars: &PositionsByVariables,
+        attacked_pos_by_rule_idx_vars: &PositionsByRuleIdxVariables,
     ) -> Variables {
         let frontier_variables: Variables = self.frontier_variables();
-        self.attacked_variables(frontier_variables, attacked_pos_by_vars)
+        self.attacked_variables(frontier_variables, attacked_pos_by_rule_idx_vars)
     }
 
     /// Returns the attacked universal variables of the rule.
     fn attacked_universal_variables(
         &self,
-        attacked_pos_by_vars: &PositionsByVariables,
+        attacked_pos_by_rule_idx_vars: &PositionsByRuleIdxVariables,
     ) -> Variables {
         let universal_variables: Variables = self.positive_variables();
-        self.attacked_variables(universal_variables, attacked_pos_by_vars)
+        self.attacked_variables(universal_variables, attacked_pos_by_rule_idx_vars)
     }
 
     fn attacked_variables(
         &self,
         variables: Variables<'a>,
-        attacked_pos_by_vars: &PositionsByVariables,
+        attacked_pos_by_rule_idx_vars: &PositionsByRuleIdxVariables,
     ) -> Variables<'a> {
         variables
             .iter()
-            .filter(|var| var.is_attacked(self, attacked_pos_by_vars))
+            .filter(|var| var.is_attacked(self, attacked_pos_by_rule_idx_vars))
             .copied()
             .collect()
     }
 }
 
+/// This Trait provides methods to get all (ExtendedPositions / Positions) of some type.
 pub trait AllPositivePositions<'a> {
+    /// Returns all ExtenedPositions of some type.
     fn all_positive_extended_positions(&'a self) -> ExtendedPositions<'a>;
+    /// Returns all Positions of some type.
     fn all_positive_positions(&'a self) -> Positions<'a>;
 }
 
@@ -314,17 +388,21 @@ impl<'a> AllPositivePositionsRulePrivate<'a> for Rule {
     }
 }
 
-pub trait ExistentialRuleIndexVariables {
-    fn existential_rule_index_variables(&self) -> RuleIndexVariables;
+/// This Trait provides a method to get all existential RuleIdxVariables of a RuleSet.
+pub trait ExistentialRuleIdxVariables {
+    /// Returns all existential RuleIdxVariables of a RuleSet.
+    fn existential_rule_idx_variables(&self) -> RuleIdxVariables;
 }
 
-impl ExistentialRuleIndexVariables for RuleSet {
-    fn existential_rule_index_variables(&self) -> RuleIndexVariables {
+impl ExistentialRuleIdxVariables for RuleSet {
+    // TODO: USE EXISTENTIALRULEIDXVARIABLES FOR RULEIDXRULE
+    fn existential_rule_idx_variables(&self) -> RuleIdxVariables {
         self.iter()
             .enumerate()
-            .fold(RuleIndexVariables::new(), |ex_vars, (index, rule)| {
+            .fold(RuleIdxVariables::new(), |ex_vars, (index, rule)| {
+                // let idx_ex_vars: RuleIdxVariables = r_idx_rule.existential_rule_idx_variables();
                 let ex_vars_of_rule: Variables = rule.existential_variables();
-                let idx_ex_vars: RuleIndexVariables = ex_vars_of_rule
+                let idx_ex_vars: RuleIdxVariables = ex_vars_of_rule
                     .into_iter()
                     .map(|var| (index, var))
                     .collect();
@@ -333,7 +411,16 @@ impl ExistentialRuleIndexVariables for RuleSet {
     }
 }
 
+// impl<'a> ExistentialRuleIdxVariables for RuleIdxRule<'a> {
+//     fn existential_rule_idx_variables(&self) -> RuleIdxVariables<'a> {
+//         let ex_vars_of_rule: Variables = self.1.existential_variables();
+//         ex_vars_of_rule.iter().map(|var| (self.0, *var)).collect()
+//     }
+// }
+
+/// This Trait provides a method to get all the existential Variables of some type.
 pub trait ExistentialVariables {
+    /// Returns all the existential Variables of some type.
     fn existential_variables(&self) -> Variables;
 }
 
@@ -362,8 +449,12 @@ impl ExistentialVariables for Atom {
     }
 }
 
+/// This Trait provides some methods to get the (ExtendedPositions / Positions) of the existential
+/// Variables of some type.
 pub trait ExistentialVariablesPositions {
+    /// Returns the ExtendedPositions of the existential Variables of some type.
     fn extended_positions_of_existential_variables(&self) -> ExtendedPositions;
+    /// Returns the Positions of the existential Variables of some type.
     fn positions_of_existential_variables(&self) -> Positions;
 }
 
@@ -383,7 +474,9 @@ impl ExistentialVariablesPositions for Rule {
     }
 }
 
+/// This Trait provides a method to get the frontier Variables of a Rule.
 pub trait FrontierVariables {
+    /// Returns the frontier Variables of a Rule.
     fn frontier_variables(&self) -> Variables;
 }
 
@@ -414,7 +507,9 @@ impl FrontierVariablesPrivate for Rule {
     }
 }
 
+/// This Trait provides a method to check whether the Rule is guarded for some Variables.
 pub trait GuardedForVariables {
+    /// Checks whether the Rule is gaurded for some Variables.
     fn is_guarded_for_variables(&self, variables: Variables) -> bool;
 }
 
@@ -430,7 +525,9 @@ impl GuardedForVariables for Rule {
     }
 }
 
+/// This Trait provides a method to get the join Variables of a Rule.
 pub trait JoinVariables {
+    /// Returns the join Variables of a Rule.
     fn join_variables(&self) -> Variables;
 }
 
@@ -463,9 +560,13 @@ impl JoinVariablePrivate for Variable {
     }
 }
 
+/// This Trait provides methods to get the (ExtendedPositions / Positions) of the join Variables of
+/// some Rule.
 #[allow(dead_code)]
 pub trait JoinVariablesPositions {
+    /// Returns the ExtendedPositions of the join Variables of some Rule.
     fn extended_positions_of_join_variables(&self) -> ExtendedPositions;
+    /// Returns the Positions of the join Variables of some Rule.
     fn positions_of_join_variables(&self) -> Positions;
 }
 
@@ -485,7 +586,10 @@ pub trait JoinVariablesPositions {
 //     }
 // }
 
+/// This Trait provides methods to get all pairs of frontier Variables of a Rule excluding the
+/// reflexive pairs.
 pub trait FrontierVariablePairs {
+    /// Returns all pairs of frontier Variables of a Rule excluding the reflexive pairs.
     fn frontier_variable_pairs(&self) -> VariablePairs;
 }
 
@@ -505,10 +609,60 @@ impl FrontierVariablePairs for Rule {
     }
 }
 
+/// This trait gives different checks for appearance of some Variable in some rule.
+pub trait RuleAppearance {
+    /// Checks if some Variable appears at multiple atoms in the positive body of some rule.
+    fn appears_in_multiple_positive_body_atoms(&self, rule: &Rule) -> bool;
+}
+
+impl RuleAppearance for Variable {
+    fn appears_in_multiple_positive_body_atoms(&self, rule: &Rule) -> bool {
+        rule.body_positive_refs()
+            .iter()
+            .filter(|atom| self.appears_in_atom(atom))
+            .count()
+            > 1
+    }
+}
+
+/// This trait gives different checks for appearance of some VariablePair in some rule.
+pub trait RuleAppearancePair {
+    /// Checks if some Variables of a VariablePair appear at different atoms in the positive body
+    /// of some rule.
+    fn appear_in_different_positive_body_atoms(&self, rule: &Rule) -> bool;
+}
+
+impl RuleAppearancePair for VariablePair<'_> {
+    // TODO: REEVALUATE FUNCTION BECAUSE '2 FRONTIER VARIABLE(S) APPEAR IN DIFFERENT ATOM(S)' IS
+    // NOT A CLEAR DEFINITION
+    // TODO: SHORTEN FUNCTION
+    fn appear_in_different_positive_body_atoms(&self, rule: &Rule) -> bool {
+        let found_var1_alone: bool = rule
+            .body_positive_refs()
+            .iter()
+            .filter(|atom| self[0].appears_in_atom(atom) && !self[1].appears_in_atom(atom))
+            .count()
+            > 0;
+        let found_var2_alone: bool = rule
+            .body_positive_refs()
+            .iter()
+            .filter(|atom| !self[0].appears_in_atom(atom) && self[1].appears_in_atom(atom))
+            .count()
+            > 0;
+        found_var1_alone && found_var2_alone
+    }
+}
+
+/// This Trait provides methods to get the (ExtendedPositions / Positions) of a Variable in the (positive body
+/// / head) of a Rule.
 pub trait RulePositions<'a> {
+    /// Returns the ExtendedPositions of a Variable in the head of some Rule.
     fn extended_positions_in_head(&self, rule: &'a Rule) -> ExtendedPositions<'a>;
+    /// Returns the ExtendedPositions of a Variable in the positive body of some Rule.
     fn extended_positions_in_positive_body(&self, rule: &'a Rule) -> ExtendedPositions<'a>;
+    /// Returns the Positions of a Variable in the head of some Rule.
     fn positions_in_head(&self, rule: &'a Rule) -> Positions<'a>;
+    /// Returns the Positions of a Variable in the positive body of some Rule.
     fn positions_in_positive_body(&self, rule: &'a Rule) -> Positions<'a>;
 }
 
@@ -534,8 +688,11 @@ impl<'a> RulePositions<'a> for Variable {
     }
 }
 
+/// This Trait provides methods to get the (positive body / head) Atom(s) as references of a Rule.
 pub trait RuleRefs {
+    /// Returns the positive body Atom(s) as reference(s) of a Rule.
     fn body_positive_refs(&self) -> Vec<&Atom>;
+    /// Returns the head Atom(s) as reference(s) of a Rule.
     fn head_refs(&self) -> Vec<&Atom>;
 }
 
@@ -549,11 +706,20 @@ impl RuleRefs for Rule {
     }
 }
 
+/// This Trait provides methods to get (affected positions (Positions) /
+/// attacked (all existential / cycle existential) positions (PositionsByRuleIdxVariables) /
+/// marked (common / weakly) positions (Option<Positions>)) of a RuleSet.
 pub trait SpecialPositionsConstructor {
+    /// Returns the affected Positions of a RuleSet.
     fn affected_positions(&self) -> Positions;
-    fn attacked_positions_by_cycle_variables(&self) -> PositionsByVariables;
-    fn attacked_positions_by_existential_variables(&self) -> PositionsByVariables;
+    /// Returns the attacked Positions by existential Variables that appear in a Cycle of the
+    /// JointAcyclicityGraph of a RuleSet.
+    fn attacked_positions_by_cycle_rule_idx_variables(&self) -> PositionsByRuleIdxVariables;
+    /// Returns the attacked Positions by all existential Variables of a RuleSet.
+    fn attacked_positions_by_existential_rule_idx_variables(&self) -> PositionsByRuleIdxVariables;
+    /// Returns the common marking of a RuleSet.
     fn build_and_check_marking(&self) -> Option<Positions>;
+    /// Returns the weakly marking of a RuleSet.
     fn build_and_check_weakly_marking(&self) -> Option<Positions>;
 }
 
@@ -562,12 +728,12 @@ impl SpecialPositionsConstructor for RuleSet {
         Positions::build_positions(self)
     }
 
-    fn attacked_positions_by_cycle_variables(&self) -> PositionsByVariables {
-        PositionsByVariables::build_positions(AttackingType::Cycle, self)
+    fn attacked_positions_by_cycle_rule_idx_variables(&self) -> PositionsByRuleIdxVariables {
+        PositionsByRuleIdxVariables::build_positions(AttackingType::Cycle, self)
     }
 
-    fn attacked_positions_by_existential_variables(&self) -> PositionsByVariables {
-        PositionsByVariables::build_positions(AttackingType::Existential, self)
+    fn attacked_positions_by_existential_rule_idx_variables(&self) -> PositionsByRuleIdxVariables {
+        PositionsByRuleIdxVariables::build_positions(AttackingType::Existential, self)
     }
 
     fn build_and_check_marking(&self) -> Option<Positions> {
@@ -579,7 +745,9 @@ impl SpecialPositionsConstructor for RuleSet {
     }
 }
 
+/// This Trait offers a method to get the universal Variables of an Atom.
 pub trait UniversalVariables {
+    /// Returns the universal Variables of an Atom.
     fn universal_variables(&self) -> Variables;
 }
 

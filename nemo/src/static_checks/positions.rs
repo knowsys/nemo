@@ -1,44 +1,59 @@
-use crate::rule_model::components::{
-    atom::Atom, rule::Rule, tag::Tag, term::primitive::variable::Variable,
-};
+//! Functionality that provides methods in relation with Position-Types.
+use crate::rule_model::components::{atom::Atom, rule::Rule, tag::Tag};
 use crate::static_checks::acyclicity_graph_constructor::AcyclicityGraphConstructor;
 use crate::static_checks::acyclicity_graphs::{
     InfiniteRankPositions, JointAcyclicityGraph, JointAcyclicityGraphCycle, WeakAcyclicityGraph,
 };
 use crate::static_checks::collection_traits::{Disjoint, InsertAll, RemoveAll, Superset};
 use crate::static_checks::rule_set::{
-    AtomPositionsAppearance, AtomRefs, Attacked, ExistentialRuleIndexVariables,
-    ExistentialVariables, ExistentialVariablesPositions, JoinVariables, RulePositions, RuleRefs,
-    RuleSet, Variables,
+    AtomPositionsAppearance, AtomRefs, Attacked, ExistentialRuleIdxVariables,
+    ExistentialVariablesPositions, JoinVariables, RuleIdxVariable, RuleIdxVariables, RulePositions,
+    RuleRefs, RuleSet, Variables,
 };
 
 use std::collections::{HashMap, HashSet};
 
+/// Type to represent a position in an Atom.
 pub type Index = usize;
 
+/// Type to compress a set of Indices.
 pub type Indices = HashSet<Index>;
 
+/// Type to map some Atom(s) to some positions in it.
 pub type Positions<'a> = HashMap<&'a Tag, Indices>;
 
-pub type PositionsByVariables<'a, 'b> = HashMap<&'a Variable, Positions<'b>>;
+/// Type to map some RuleIdxVariable(s) to some Positions.
+pub type PositionsByRuleIdxVariables<'a, 'b> = HashMap<RuleIdxVariable<'a>, Positions<'b>>;
 
+/// Type to map some Atom to some position in it.
 pub type Position<'a> = (&'a Tag, Index);
 
+/// Type to compress a set of Position(s).
 pub type ExtendedPositions<'a> = HashSet<Position<'a>>;
 
+/// Enum to distinguish between (all existential variables / existential variables that appear in
+/// cycles in the joint acyclicity graph) to be the attacking variables.
 #[derive(Clone, Copy, Debug)]
 pub enum AttackingType {
+    /// The attacking variables will be all existential variables.
     Cycle,
+    /// The attacking variables will be the existential variables that appear in cycles in the
+    /// joint acyclicity graph.
     Existential,
 }
 
+/// Enum to distinguish between the (common / weakly) marking to be calculated.
 #[derive(Clone, Copy, Debug)]
 pub enum MarkingType {
+    /// The common marking will be calculated.
     Common,
+    /// The weakly marking will be calculated.
     Weakly,
 }
 
+/// This Trait converts Positions to another type.
 pub trait FromPositions<'a> {
+    /// Converts Positions to ExtendedPositions.
     fn from_positions(positions: Positions<'a>) -> Self;
 }
 
@@ -54,13 +69,15 @@ impl<'a> FromPositions<'a> for ExtendedPositions<'a> {
     }
 }
 
+/// This Trait converts ExtendedPositions to another type.
 pub trait FromPositionSet<'a> {
-    fn from_position_set(position_set: HashSet<Position<'a>>) -> Self;
+    /// Converts ExtendedPositions to Positions.
+    fn from_extended_positions(extended_positions: ExtendedPositions<'a>) -> Self;
 }
 
 impl<'a> FromPositionSet<'a> for Positions<'a> {
-    fn from_position_set(position_set: HashSet<Position<'a>>) -> Self {
-        position_set
+    fn from_extended_positions(extended_positions: HashSet<Position<'a>>) -> Self {
+        extended_positions
             .into_iter()
             .fold(Positions::new(), |mut positions, (tag, index)| {
                 if !positions.contains_key(tag) {
@@ -72,7 +89,9 @@ impl<'a> FromPositionSet<'a> for Positions<'a> {
     }
 }
 
+/// This Trait gives all affected positions of some RuleSet.
 pub trait AffectedPositionsBuilder<'a> {
+    /// Builds all affected positions of some RuleSet.
     fn build_positions(rule_set: &'a RuleSet) -> Self;
 }
 
@@ -130,33 +149,35 @@ impl<'a> AffectedPositionsBuilderPrivate<'a> for Rule {
     }
 }
 
+/// This Trait gives all attacked positions ordered by (all existential / existential variables which appear
+/// in cycles of the joint acyclicity graph) (PositionsByRuleIdxVariables) of some RuleSet.
 pub trait AttackedPositionsBuilder<'a> {
+    /// Builds all attacked positions ordered by (all existential / existential variables which appea
+    /// in cycles of the joint acyclicity graph) (PositionsByRuleIdxVariables) of some RuleSet.
     fn build_positions(att_type: AttackingType, rule_set: &'a RuleSet) -> Self;
 }
 
-impl<'a> AttackedPositionsBuilder<'a> for PositionsByVariables<'a, 'a> {
+impl<'a> AttackedPositionsBuilder<'a> for PositionsByRuleIdxVariables<'a, 'a> {
     fn build_positions(
         att_type: AttackingType,
         rule_set: &'a RuleSet,
-    ) -> PositionsByVariables<'a, 'a> {
-        let att_variables: Variables =
-            PositionsByVariables::match_attacking_variables(att_type, rule_set);
-        println!("{:?}", att_variables);
+    ) -> PositionsByRuleIdxVariables<'a, 'a> {
+        let att_variables: RuleIdxVariables = rule_set.match_attacking_variables(att_type);
         att_variables
-            .iter()
-            .map(|var| {
+            .into_iter()
+            .map(|rule_idx_var| {
                 (
-                    *var,
-                    PositionsByVariables::attacked_positions_by_var(rule_set, var),
+                    rule_idx_var,
+                    rule_set.attacked_positions_by_rule_idx_var(&rule_idx_var),
                 )
             })
-            .collect::<PositionsByVariables<'a, 'a>>()
+            .collect()
     }
 }
 
 trait AttackedPositionsBuilderPrivate<'a> {
     fn conclude_attacked_positions(&'a self, cur_att_pos: &Positions<'a>) -> Positions<'a>;
-    fn initial_attacked_positions(&'a self, variable: &'a Variable) -> Positions<'a>;
+    fn initial_attacked_positions(&'a self, rule_idx_var: &RuleIdxVariable<'a>) -> Positions<'a>;
 }
 
 impl<'a> AttackedPositionsBuilderPrivate<'a> for RuleSet {
@@ -169,11 +190,17 @@ impl<'a> AttackedPositionsBuilderPrivate<'a> for RuleSet {
     }
 
     // TODO: INSTEAD OF POSITIONS_IN_HEAD CALL, CALL INIT_ATT_POS OF RULE
-    fn initial_attacked_positions(&'a self, variable: &'a Variable) -> Positions<'a> {
-        self.iter().fold(Positions::new(), |initial_pos, rule| {
-            let initial_pos_of_rule: Positions = variable.positions_in_head(rule);
-            initial_pos.insert_all_take_ret(initial_pos_of_rule)
-        })
+    fn initial_attacked_positions(
+        &'a self,
+        (idx, variable): &RuleIdxVariable<'a>,
+    ) -> Positions<'a> {
+        self.iter()
+            .enumerate()
+            .filter(|(r_idx, _)| r_idx == idx)
+            .fold(Positions::new(), |initial_pos, (_, rule)| {
+                let initial_pos_of_rule: Positions = variable.positions_in_head(rule);
+                initial_pos.insert_all_take_ret(initial_pos_of_rule)
+            })
     }
 }
 
@@ -188,41 +215,51 @@ impl<'a> AttackedPositionsBuilderPrivate<'a> for Rule {
             })
     }
 
-    fn initial_attacked_positions(&'a self, variable: &'a Variable) -> Positions<'a> {
+    fn initial_attacked_positions(&'a self, _rule_idx_var: &RuleIdxVariable<'a>) -> Positions<'a> {
         todo!("IMPLEMENT");
         // TODO: IMPLEMENT
     }
 }
 
 trait AttackedPositionsBuilderPrivateExtended<'a> {
-    fn attacked_positions_by_var(rule_set: &'a RuleSet, variable: &'a Variable) -> Positions<'a>;
-    fn match_attacking_variables(att_type: AttackingType, rule_set: &RuleSet) -> Variables;
+    fn attacked_positions_by_rule_idx_var(
+        &'a self,
+        rule_idx_var: &RuleIdxVariable<'a>,
+    ) -> Positions<'a>;
+    fn match_attacking_variables(&self, att_type: AttackingType) -> RuleIdxVariables;
 }
 
-impl<'a> AttackedPositionsBuilderPrivateExtended<'a> for PositionsByVariables<'a, 'a> {
-    fn attacked_positions_by_var(rule_set: &'a RuleSet, variable: &'a Variable) -> Positions<'a> {
-        let mut att_pos: Positions = rule_set.initial_attacked_positions(variable);
+impl<'a> AttackedPositionsBuilderPrivateExtended<'a> for RuleSet {
+    fn attacked_positions_by_rule_idx_var(
+        &'a self,
+        rule_idx_var: &RuleIdxVariable<'a>,
+    ) -> Positions<'a> {
+        let mut att_pos: Positions = self.initial_attacked_positions(rule_idx_var);
         let mut new_found_att_pos: Positions = att_pos.clone();
         while !new_found_att_pos.is_empty() {
-            let new_con_att_pos: Positions = rule_set.conclude_attacked_positions(&att_pos);
+            let new_con_att_pos: Positions = self.conclude_attacked_positions(&att_pos);
             new_found_att_pos = new_con_att_pos.remove_all_ret(&att_pos);
             att_pos.insert_all(&new_found_att_pos);
         }
         att_pos
     }
 
-    fn match_attacking_variables(att_type: AttackingType, rule_set: &RuleSet) -> Variables {
+    fn match_attacking_variables(&self, att_type: AttackingType) -> RuleIdxVariables {
         match att_type {
             AttackingType::Cycle => {
-                let jo_ac_graph: JointAcyclicityGraph = rule_set.joint_acyclicity_graph();
-                jo_ac_graph.variables_in_cycles()
+                let jo_ac_graph: JointAcyclicityGraph = self.joint_acyclicity_graph();
+                jo_ac_graph.rule_idx_variables_in_cycles()
             }
-            AttackingType::Existential => rule_set.existential_variables(),
+            AttackingType::Existential => self.existential_rule_idx_variables(),
         }
     }
 }
 
+/// This Trait gives all (common / weakly) marked positions or none if these marked positions does
+/// not exist of some RuleSet.
 pub trait MarkedPositionsBuilder<'a> {
+    /// Builds all (common / weakly) marked positions or returns none if these marked positions does
+    /// not exist of some RuleSet.
     fn build_positions(mar_type: MarkingType, rule_set: &'a RuleSet) -> Self;
 }
 
