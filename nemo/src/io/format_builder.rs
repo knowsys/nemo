@@ -66,7 +66,8 @@ pub(crate) trait FormatTag: FromStr<Err = ()> + ToString + Copy + Eq + 'static {
     const VARIANTS: &'static [(Self, &'static str)];
 }
 
-#[macro_export]
+/// Define an enum for format tags (the "predicate-name" in import/export declarations)
+/// that are handled by one particular [`FormatBuilder`]
 macro_rules! format_tag {
     { $vis:vis enum $type_name:ident { $($tag_name:ident => $tag_value:expr,)* } } => {
         #[derive(Assoc, Debug, Copy, Clone, PartialEq, Eq, Hash)]
@@ -100,25 +101,21 @@ macro_rules! format_tag {
     };
 }
 
-#[macro_export]
+pub(crate) use format_tag;
+
+/// Define an enum for the parameters supplied to a [`FormatBuilder`]
 macro_rules! format_parameter {
     { $vis:vis enum $type_name:ident($base_name:ty) {
         $($param_variant:ident(name = $param_name:path, supported_types = $supported_types:expr),)*
     } } => {
         #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+        #[allow(private_interfaces)]
         $vis enum $type_name {
             BaseParamType($base_name),
             $($param_variant),*
         }
 
         impl $type_name {
-            pub(crate) fn name(&self) -> &'static str {
-                match self {
-                    Self::BaseParamType(base) => base.name(),
-                    $(Self::$param_variant => $param_name,)*
-                }
-            }
-
             pub(crate) fn supported_types(&self) -> &'static [ValueType] {
                 match self {
                     Self::BaseParamType(base) => base.supported_types(),
@@ -166,6 +163,8 @@ macro_rules! format_parameter {
     };
 }
 
+pub(crate) use format_parameter;
+
 #[derive(Debug, Copy, Clone, PartialEq, Eq, strum_macros::EnumIter, Hash)]
 enum NoParameters {}
 
@@ -194,7 +193,7 @@ impl FromStr for NoParameters {
 }
 
 format_parameter! {
-    pub(crate) enum StandardParameter(NoParameters) {
+    pub enum StandardParameter(NoParameters) {
         Resource(name = attribute::RESOURCE, supported_types = &[ValueType::String, ValueType::Constant]),
         Compression(name = attribute::COMPRESSION, supported_types = &[ValueType::String]),
     }

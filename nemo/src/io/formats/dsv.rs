@@ -21,9 +21,9 @@ use writer::DsvWriter;
 
 use crate::{
     error::Error,
-    format_parameter, format_tag,
     io::format_builder::{
-        value_type_matches, AnyImportExportBuilder, FormatParameter, Parameters, StandardParameter,
+        format_parameter, format_tag, value_type_matches, AnyImportExportBuilder, FormatParameter,
+        Parameters, StandardParameter,
     },
     rule_model::{
         components::term::value_type::ValueType, error::validation_error::ValidationErrorKind,

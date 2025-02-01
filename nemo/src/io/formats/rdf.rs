@@ -28,12 +28,11 @@ use writer::RdfWriter;
 
 use crate::{
     error::Error,
-    format_parameter, format_tag,
     io::{
         compression_format::CompressionFormat,
         format_builder::{
-            value_type_matches, AnyImportExportBuilder, FormatParameter, Parameters,
-            StandardParameter,
+            format_parameter, format_tag, value_type_matches, AnyImportExportBuilder,
+            FormatParameter, Parameters, StandardParameter,
         },
     },
     rule_model::{
