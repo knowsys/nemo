@@ -7,7 +7,6 @@ use nemo_physical::datavalues::{AnyDataValue, DataValue, DataValueCreationError}
 
 use crate::{
     parser::{ast::token::Token, input::ParserInput, ParserState},
-    rule_model::components::{import_export::ImportExportDirective, term::tuple::Tuple},
     syntax::directive::value_formats,
 };
 
@@ -55,6 +54,21 @@ pub(crate) enum DsvValueFormat {
 #[derive(Debug, Clone)]
 pub struct DsvValueFormats(Vec<DsvValueFormat>);
 
+impl TryFrom<AnyDataValue> for DsvValueFormats {
+    type Error = ();
+
+    fn try_from(value: AnyDataValue) -> Result<Self, Self::Error> {
+        let mut res = Vec::new();
+        let mut idx = 0;
+        while let Some(element) = value.tuple_element(idx) {
+            idx += 1;
+            res.push(DsvValueFormat::from_name(&element.to_string()).ok_or(())?);
+        }
+
+        Ok(Self(res))
+    }
+}
+
 impl DsvValueFormats {
     pub(crate) fn new(formats: Vec<DsvValueFormat>) -> Self {
         Self(formats)
@@ -68,21 +82,12 @@ impl DsvValueFormats {
     /// Create a [DsvValueFormats] from a [Tuple].
     ///
     /// Returns `None` if tuple contains an unknown value.
-    pub(crate) fn from_tuple(tuple: &Tuple) -> Option<Self> {
-        let mut result = Vec::new();
+    pub(crate) fn from_tuple<'a>(tuple: impl Iterator<Item = &'a str>) -> Option<Self> {
+        let formats = tuple
+            .map(DsvValueFormat::from_name)
+            .collect::<Option<_>>()?;
 
-        for value in tuple.arguments() {
-            if let Some(format) = ImportExportDirective::plain_value(value)
-                .and_then(|name| DsvValueFormat::from_name(&name))
-            {
-                result.push(format);
-                continue;
-            }
-
-            return None;
-        }
-
-        Some(Self::new(result))
+        Some(Self::new(formats))
     }
 
     /// Return the arity (ignoring the skipped columns)

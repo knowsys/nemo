@@ -35,25 +35,14 @@ use nemo::{
     meta::timing::{TimedCode, TimedDisplay},
     rule_model::{
         self,
-        components::{
-            fact::Fact,
-            import_export::{file_formats::FileFormat, ExportDirective},
-            tag::Tag,
-            term::map::Map,
-            ProgramComponent,
-        },
+        components::{fact::Fact, import_export::ExportDirective, tag::Tag, ProgramComponent},
         error::ValidationErrorBuilder,
         program::Program,
     },
 };
 
 fn default_export(predicate: Tag) -> ExportDirective {
-    ExportDirective::new(
-        predicate,
-        FileFormat::CSV,
-        Map::empty_unnamed(),
-        Default::default(),
-    )
+    ExportDirective::new_csv(predicate)
 }
 
 /// Set exports according to command-line parameter.
@@ -291,7 +280,7 @@ fn run(mut cli: CliApp) -> Result<(), CliError> {
         ExecutionEngine::initialize(program.clone(), import_manager)?;
 
     for (predicate, handler) in engine.exports() {
-        export_manager.validate(&predicate, &*handler)?;
+        export_manager.validate(&predicate, &handler)?;
     }
 
     TimedCode::instance().sub("Reading & Preprocessing").stop();
@@ -313,7 +302,7 @@ fn run(mut cli: CliApp) -> Result<(), CliError> {
         for (predicate, handler) in engine.exports() {
             stdout_used |= export_manager.export_table(
                 &predicate,
-                &*handler,
+                &handler,
                 engine.predicate_rows(&predicate)?,
             )?;
         }

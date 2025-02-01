@@ -19,6 +19,7 @@ use crate::{
     parser::{
         ast::{self, ProgramAST},
         input::ParserInput,
+        span::Span,
         ParserState,
     },
     rule_model::{origin::Origin, program::ProgramBuilder},
@@ -90,6 +91,10 @@ impl<'a, 'b> ASTProgramTranslation<'a, 'b> {
         node: &'b dyn ProgramAST<'a>,
     ) -> Component {
         component.set_origin(self.register_node(node))
+    }
+
+    pub fn get_span(&self, origin: &Origin) -> Option<Span<'a>> {
+        self.origin_map.get(origin).map(|ast| ast.span())
     }
 }
 

@@ -5,9 +5,7 @@
 use std::cell::RefCell;
 
 use crate::{
-    datasources::tuple_writer::TupleWriter,
-    error::{Error, ReadingError},
-    management::bytesized::ByteSized,
+    datasources::tuple_writer::TupleWriter, error::Error, management::bytesized::ByteSized,
     tabular::trie::Trie,
 };
 
@@ -44,9 +42,7 @@ impl TableStorage {
             log::info!("Loading source {source:?}");
             debug_assert!(source.arity() == arity);
 
-            source
-                .provide_table_data(&mut tuple_writer)
-                .map_err(ReadingError::ExternalError)?;
+            source.provide_table_data(&mut tuple_writer)?;
         }
 
         Ok(Trie::from_tuple_writer(tuple_writer))

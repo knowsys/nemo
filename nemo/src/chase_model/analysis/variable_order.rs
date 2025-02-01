@@ -551,12 +551,11 @@ mod test {
             program::ChaseProgram,
             rule::ChaseRule,
         },
-        io::formats::{
-            dsv::{value_format::DsvValueFormats, DsvHandler},
-            Direction, ImportExportResource,
+        io::{
+            compression_format::CompressionFormat,
+            formats::{dsv::DsvHandler, Import, MockHandler, ResourceSpec},
         },
         rule_model::components::{
-            import_export::compression::CompressionFormat,
             tag::Tag,
             term::primitive::{variable::Variable, Primitive},
         },
@@ -566,7 +565,10 @@ mod test {
 
     use nemo_physical::management::execution_plan::ColumnOrder;
 
-    use std::collections::{HashMap, HashSet};
+    use std::{
+        collections::{HashMap, HashSet},
+        sync::Arc,
+    };
 
     type TestRuleSetWithAdditionalInfo = (Vec<ChaseRule>, Vec<Vec<Variable>>, Vec<(Tag, usize)>);
 
@@ -964,17 +966,14 @@ mod test {
 
     /// Helper function to create source-like imports
     fn csv_import(predicate: Tag, arity: usize) -> ChaseImport {
-        let handler = DsvHandler::new(
-            b',',
-            ImportExportResource::Stdout,
-            DsvValueFormats::default(arity),
-            None,
-            CompressionFormat::None,
-            false,
-            Direction::Import,
+        let handler: Import = Import::new(
+            ResourceSpec::Stdout,
+            Default::default(),
+            arity,
+            Arc::new(MockHandler),
         );
 
-        ChaseImport::new(predicate, Box::new(handler))
+        ChaseImport::new(predicate, handler)
     }
 
     #[test]

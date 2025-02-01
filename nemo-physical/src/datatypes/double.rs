@@ -13,7 +13,7 @@ use num::{
 };
 
 use crate::{
-    error::{Error, ReadingError},
+    error::{Error, ReadingError, ReadingErrorKind},
     function::definitions::numeric::traits::{CheckedPow, CheckedSquareRoot},
 };
 
@@ -33,7 +33,7 @@ impl Double {
     /// Returns an error if `value` is [f32::NAN] or infinite.
     pub fn new(value: f64) -> Result<Self, ReadingError> {
         if !value.is_finite() {
-            return Err(ReadingError::InvalidFloat);
+            return Err(ReadingError::new(ReadingErrorKind::InvalidFloat));
         }
 
         Ok(Self(value))

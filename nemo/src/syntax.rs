@@ -446,6 +446,8 @@ pub mod import_export {
         pub(crate) const EXTENSION_RDF_XML: &str = "rdf";
         /// The file extension used for json files
         pub(crate) const EXTENSION_JSON: &str = "json";
+        /// The file extension used for gzip files
+        pub(crate) const EXTENSION_GZ: &str = "gz";
 
         // media types
         /// The media type used for CSV resources

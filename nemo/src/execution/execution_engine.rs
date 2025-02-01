@@ -14,13 +14,14 @@ use crate::{
         analysis::program_analysis::ProgramAnalysis,
         components::{
             atom::{ground_atom::GroundAtom, ChaseAtom},
+            export::ChaseExport,
             program::ChaseProgram,
         },
         translation::ProgramChaseTranslation,
     },
     error::Error,
     execution::{planning::plan_tracing::TracingStrategy, tracing::trace::TraceDerivation},
-    io::{formats::ImportExportHandler, import_manager::ImportManager},
+    io::{formats::Export, import_manager::ImportManager},
     rule_model::{
         components::{
             fact::Fact,
@@ -278,11 +279,12 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
 
     /// Return a list of all all export predicates and their respective [ImportExportHandler]s,
     /// which can be used for exporting into files.
-    pub fn exports(&self) -> Vec<(Tag, Box<dyn ImportExportHandler>)> {
+    pub fn exports(&self) -> Vec<(Tag, Export)> {
         self.program
             .exports()
             .iter()
-            .map(|export| (export.predicate().clone(), export.handler()))
+            .cloned()
+            .map(ChaseExport::into_predicate_and_handler)
             .collect()
     }
 

@@ -90,9 +90,6 @@ pub enum ProgramComponentKind {
     /// Output
     #[assoc(name = "output")]
     Output,
-    /// Program
-    #[assoc(name = "program")]
-    Program,
     /// One of the given kinds:
     #[assoc(name = "oneof")]
     OneOf(&'static [ProgramComponentKind]),
@@ -100,6 +97,8 @@ pub enum ProgramComponentKind {
 
 /// Trait implemented by objects that are part of the logical rule model of the nemo language.
 pub trait ProgramComponent: Debug + Display + Sized {
+    type ValidationResult = ();
+
     /// Return the [ProgramComponentKind] of this component.
     fn kind(&self) -> ProgramComponentKind;
 
@@ -113,7 +112,7 @@ pub trait ProgramComponent: Debug + Display + Sized {
     ///
     /// Errors will be appended to the given [ValidationErrorBuilder].
     /// Returns `Some(())` if successful and `None` otherwise.
-    fn validate(&self, builder: &mut ValidationErrorBuilder) -> Option<()>;
+    fn validate(&self, builder: &mut ValidationErrorBuilder) -> Option<Self::ValidationResult>;
 }
 
 /// Trait implemented by program components that allow iterating over [Variable]s

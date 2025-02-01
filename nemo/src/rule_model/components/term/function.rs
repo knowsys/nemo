@@ -1,6 +1,6 @@
 //! This module defines [FunctionTerm].
 
-use std::{fmt::Display, hash::Hash};
+use std::{fmt::Display, hash::Hash, vec};
 
 use crate::rule_model::{
     components::{
@@ -124,6 +124,15 @@ impl Display for FunctionTerm {
         }
 
         f.write_str(")")
+    }
+}
+
+impl IntoIterator for FunctionTerm {
+    type Item = Term;
+    type IntoIter = vec::IntoIter<Term>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.terms.into_iter()
     }
 }
 

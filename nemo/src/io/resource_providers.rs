@@ -1,11 +1,12 @@
 //! Resource providers for external resources that can be used in reasoning.
 
-use std::{io::BufRead, path::PathBuf, rc::Rc};
+use std::{io::Read, path::PathBuf, rc::Rc};
 
 // use crate::io::parser::{all_input_consumed, iri::iri};
-use nemo_physical::{error::ReadingError, resource::Resource};
-
-use crate::rule_model::components::import_export::compression::CompressionFormat;
+use nemo_physical::{
+    error::{ReadingError, ReadingErrorKind},
+    resource::Resource,
+};
 
 /// A resource provider for files.
 pub mod file;
@@ -39,9 +40,8 @@ pub trait ResourceProvider: std::fmt::Debug {
     fn open_resource(
         &self,
         resource: &Resource,
-        compression: CompressionFormat,
         media_type: &str,
-    ) -> Result<Option<Box<dyn BufRead>>, ReadingError>;
+    ) -> Result<Option<Box<dyn Read>>, ReadingError>;
 }
 
 /// A list of [ResourceProvider] sorted by decreasing priority.
@@ -76,20 +76,16 @@ impl ResourceProviders {
     pub fn open_resource(
         &self,
         resource: &Resource,
-        compression: CompressionFormat,
         media_type: &str,
-    ) -> Result<Box<dyn BufRead>, ReadingError> {
+    ) -> Result<Box<dyn Read>, ReadingError> {
         for resource_provider in self.0.iter() {
-            if let Some(reader) =
-                resource_provider.open_resource(resource, compression, media_type)?
-            {
+            if let Some(reader) = resource_provider.open_resource(resource, media_type)? {
                 return Ok(reader);
             }
         }
 
-        Err(ReadingError::ResourceNotProvided {
-            resource: resource.clone(),
-        })
+        Err(ReadingError::new(ReadingErrorKind::ResourceNotProvided)
+            .with_resource(resource.clone()))
     }
 }
 

@@ -24,7 +24,7 @@ pub(crate) fn quote_string(s: &str) -> String {
 /// Encloses a string in pointy brackets. No other escaping is done, since we assume that the IRI has already
 /// been processed to be in a suitable form without inner `<` or `>`.
 pub(crate) fn quote_iri(s: &str) -> String {
-    "<".to_owned() + s + ">"
+    format!("<{}>", s)
 }
 
 /// Enum of different value domains that are distinguished in this code.
@@ -60,7 +60,7 @@ pub enum ValueDomain {
     /// This is a superset of [ValueDomain::NonNegativeLong] and its respective subtypes.
     UnsignedLong,
     /// Domain of all signed 64bit integer numbers that are not negative: 0…+9223372036854775807, or 0 … +2^63-1.
-    /// This is a superset of [ValueDomain::Int].
+    /// This is a superset of [ValueDomain::UnsignedInt].
     NonNegativeLong,
     /// Domain of all unsigned 32bit integer numbers: 0…+4294967295, or 0 … +2^32-1.
     /// This is a superset of [ValueDomain::NonNegativeInt].

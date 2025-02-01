@@ -3,6 +3,7 @@
 //! for each supported format.
 
 use enum_assoc::Assoc;
+use nemo_physical::datavalues::{AnyDataValue, DataValue, TupleDataValue};
 
 use crate::{
     rule_model::components::term::{primitive::Primitive, tuple::Tuple, Term},
@@ -34,6 +35,21 @@ pub(crate) enum RdfValueFormat {
 #[derive(Debug, Clone)]
 pub struct RdfValueFormats(Vec<RdfValueFormat>);
 
+impl TryFrom<AnyDataValue> for RdfValueFormats {
+    type Error = ();
+
+    fn try_from(value: AnyDataValue) -> Result<Self, Self::Error> {
+        let mut res = Vec::new();
+        let mut idx = 0;
+        while let Some(element) = value.tuple_element(idx) {
+            idx += 1;
+            res.push(RdfValueFormat::from_name(&element.to_string()).ok_or(())?);
+        }
+
+        Ok(Self(res))
+    }
+}
+
 impl RdfValueFormats {
     pub(crate) fn new(formats: Vec<RdfValueFormat>) -> Self {
         Self(formats)
@@ -42,26 +58,6 @@ impl RdfValueFormats {
     /// Return a list of [RdfValueFormat]s with default entries.
     pub(crate) fn default(arity: usize) -> Self {
         Self((0..arity).map(|_| RdfValueFormat::Anything).collect())
-    }
-
-    /// Create a [DsvValueFormats] from a [Tuple].
-    ///
-    /// Returns `None` if tuple contains an unknown value.
-    pub(crate) fn from_tuple(tuple: &Tuple) -> Option<Self> {
-        let mut result = Vec::new();
-
-        for value in tuple.arguments() {
-            if let Term::Primitive(Primitive::Ground(ground)) = value {
-                if let Some(format) = RdfValueFormat::from_name(&ground.to_string()) {
-                    result.push(format);
-                    continue;
-                }
-            }
-
-            return None;
-        }
-
-        Some(Self::new(result))
     }
 
     /// Return the length of the format tuple.
