@@ -10,16 +10,16 @@ use flate2::Compression;
 use gzip::Gzip;
 use nemo_physical::{error::ReadingError, resource::Resource};
 
-use crate::syntax::import_export::attribute;
+use crate::syntax::import_export::{attribute, file_format};
 
 use enum_assoc::Assoc;
 
-pub mod gzip;
+pub(crate) mod gzip;
 
 /// Compression formats
 #[derive(Assoc, Debug, Copy, Clone, PartialEq, Eq, Default)]
-#[func(pub fn name(&self) -> &'static str)]
-#[func(pub fn from_name(name: &str) -> Option<Self>)]
+#[func(pub(crate) fn name(&self) -> &'static str)]
+#[func(pub(crate) fn from_name(name: &str) -> Option<Self>)]
 #[func(pub(crate) fn extension(&self) -> Option<&str>)]
 #[func(pub(crate) fn media_type_addition(&self) -> Option<&str>)]
 #[func(pub(crate) fn implementation(&self) -> Box<dyn CompressionImpl>)]
@@ -32,7 +32,7 @@ pub enum CompressionFormat {
     /// GZip compression
     #[assoc(name = attribute::VALUE_COMPRESSION_GZIP)]
     #[assoc(from_name = attribute::VALUE_COMPRESSION_GZIP)]
-    #[assoc(extension = ".gz")]
+    #[assoc(extension = file_format::EXTENSION_GZ)]
     #[assoc(media_type_addition = "gzip")]
     #[assoc(implementation = Box::new(Gzip::default()))]
     GZip,

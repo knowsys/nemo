@@ -34,11 +34,6 @@ impl ChaseExport {
         &self.predicate
     }
 
-    /// Return the handler.
-    pub(crate) fn handler(&self) -> &Export {
-        &self.handler
-    }
-
     /// Return the arity of this import.
     pub(crate) fn arity(&self) -> usize {
         self.handler.predicate_arity()

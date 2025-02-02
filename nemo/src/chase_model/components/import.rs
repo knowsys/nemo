@@ -1,7 +1,7 @@
 //! This module defines [ChaseImport].
 
 use crate::{
-    io::formats::{Import, ImportHandler},
+    io::formats::Import,
     rule_model::{components::tag::Tag, origin::Origin},
 };
 

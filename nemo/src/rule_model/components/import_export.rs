@@ -78,11 +78,6 @@ impl ImportExportSpec {
         }
     }
 
-    pub(crate) fn get(&self, key: &str) -> Option<&GroundTerm> {
-        let (_, index) = self.keys.get(key)?;
-        Some(&self.values[*index])
-    }
-
     pub(crate) fn origin(&self) -> &Origin {
         &self.origin
     }

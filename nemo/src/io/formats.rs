@@ -31,6 +31,7 @@ pub trait FileFormatMeta: Debug {
     fn default_extension(&self) -> String;
 }
 
+/// A file format handler, that can read from a [`Read`] providing a [`TableProvider`]
 pub trait ImportHandler: FileFormatMeta {
     /// Obtain a [TableProvider] for this format and the given reader, if supported.
     ///
@@ -38,6 +39,7 @@ pub trait ImportHandler: FileFormatMeta {
     fn reader(&self, read: Box<dyn Read>) -> Result<Box<dyn TableProvider>, Error>;
 }
 
+/// A file format handler, that can write by wrapping a [`Write`] into a [`TableWriter`]
 pub trait ExportHandler: FileFormatMeta {
     /// Obtain a [TableWriter] for this format and the given writer, if supported.
     ///
@@ -73,6 +75,7 @@ impl ResourceSpec {
         }
     }
 
+    /// Will this stream be directed to the standard output
     pub fn is_stdout(&self) -> bool {
         matches!(self, Self::Stdout)
     }
@@ -123,9 +126,11 @@ pub type Import = FileHandler<Arc<dyn ImportHandler + Send + Sync>>;
 /// File handler for exports
 pub type Export = FileHandler<Arc<dyn ExportHandler + Send + Sync>>;
 
+#[cfg(test)]
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct MockHandler;
 
+#[cfg(test)]
 impl FileFormatMeta for MockHandler {
     fn media_type(&self) -> String {
         unimplemented!("MockHandler::media_type is a stub")
@@ -136,12 +141,14 @@ impl FileFormatMeta for MockHandler {
     }
 }
 
+#[cfg(test)]
 impl ImportHandler for MockHandler {
     fn reader(&self, _read: Box<dyn Read>) -> Result<Box<dyn TableProvider>, Error> {
         unimplemented!("MockHandler::reader is a stub")
     }
 }
 
+#[cfg(test)]
 impl ExportHandler for MockHandler {
     fn writer(&self, _writer: Box<dyn Write>) -> Result<Box<dyn TableWriter>, Error> {
         unimplemented!("MockHandler::writer is a stub")
@@ -159,14 +166,17 @@ impl<T: FileFormatMeta + ?Sized + Send + Sync> FileFormatMeta for Arc<T> {
 }
 
 impl<H> FileHandler<H> {
+    /// The resource that will be read from / written to
     pub fn resource_spec(&self) -> &ResourceSpec {
         &self.resource_spec
     }
 
+    /// The compression format that will be applied to this stream
     pub fn compression_format(&self) -> &CompressionFormat {
         &self.compression
     }
 
+    /// Is compression/decompression being applied to this stream
     pub fn is_compressed(&self) -> bool {
         !matches!(self.compression_format(), CompressionFormat::None)
     }

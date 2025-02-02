@@ -551,10 +551,7 @@ mod test {
             program::ChaseProgram,
             rule::ChaseRule,
         },
-        io::{
-            compression_format::CompressionFormat,
-            formats::{dsv::DsvHandler, Import, MockHandler, ResourceSpec},
-        },
+        io::formats::{Import, MockHandler, ResourceSpec},
         rule_model::components::{
             tag::Tag,
             term::primitive::{variable::Variable, Primitive},

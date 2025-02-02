@@ -70,6 +70,7 @@ impl TryFrom<AnyDataValue> for DsvValueFormats {
 }
 
 impl DsvValueFormats {
+    #[cfg(test)]
     pub(crate) fn new(formats: Vec<DsvValueFormat>) -> Self {
         Self(formats)
     }
@@ -77,17 +78,6 @@ impl DsvValueFormats {
     /// Return a list of value formats with default entries.
     pub fn default(arity: usize) -> Self {
         Self((0..arity).map(|_| DsvValueFormat::Anything).collect())
-    }
-
-    /// Create a [DsvValueFormats] from a [Tuple].
-    ///
-    /// Returns `None` if tuple contains an unknown value.
-    pub(crate) fn from_tuple<'a>(tuple: impl Iterator<Item = &'a str>) -> Option<Self> {
-        let formats = tuple
-            .map(DsvValueFormat::from_name)
-            .collect::<Option<_>>()?;
-
-        Some(Self::new(formats))
     }
 
     /// Return the arity (ignoring the skipped columns)
