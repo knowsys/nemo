@@ -13,7 +13,6 @@ use std::{
     sync::Arc,
 };
 
-use enum_assoc::Assoc;
 use nemo_physical::{
     datasources::table_providers::TableProvider,
     datavalues::{AnyDataValue, DataValue},
@@ -36,7 +35,8 @@ use crate::{
         },
     },
     rule_model::{
-        components::term::value_type::ValueType, error::validation_error::ValidationErrorKind,
+        components::{import_export::Direction, term::value_type::ValueType},
+        error::validation_error::ValidationErrorKind,
     },
     syntax::import_export::{attribute, file_format},
 };
@@ -136,7 +136,7 @@ impl ExportHandler for RdfHandler {
 }
 
 format_tag! {
-    pub(crate) enum RdfTag {
+    pub(crate) enum RdfTag(SupportedFormatTag::Rdf) {
         Rdf => file_format::RDF_UNSPECIFIED,
         NTriples => file_format::RDF_NTRIPLES,
         NQuads => file_format::RDF_NQUADS,
@@ -154,10 +154,8 @@ format_parameter! {
     }
 }
 
-impl FormatParameter for RdfParameter {
-    type Tag = RdfTag;
-
-    fn required_for(&self, tag: Self::Tag) -> bool {
+impl FormatParameter<RdfTag> for RdfParameter {
+    fn required_for(&self, tag: RdfTag) -> bool {
         if matches!(tag, RdfTag::Rdf) {
             matches!(
                 self,
@@ -172,7 +170,9 @@ impl FormatParameter for RdfParameter {
         value_type_matches(self, &value, &self.supported_types())?;
 
         match self {
-            RdfParameter::BaseParamType(base) => base.is_value_valid(value),
+            RdfParameter::BaseParamType(base) => {
+                FormatParameter::<RdfTag>::is_value_valid(base, value)
+            }
             RdfParameter::Limit => value
                 .to_u64()
                 .and(Some(()))
@@ -199,7 +199,8 @@ impl FormatBuilder for RdfHandler {
 
     fn new(
         tag: Self::Tag,
-        parameters: &Parameters<RdfParameter>,
+        parameters: &Parameters<RdfHandler>,
+        _direction: Direction,
     ) -> Result<Self, ValidationErrorKind> {
         let variant = match tag {
             RdfTag::Rdf => {

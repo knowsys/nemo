@@ -26,17 +26,17 @@ use crate::{
 use super::{
     compression_format::CompressionFormat,
     formats::{
-        dsv::DsvBuilder, rdf::RdfHandler, Export, ExportHandler, Import, ImportHandler,
-        ResourceSpec,
+        dsv::{DsvBuilder, DsvTag},
+        json::{JsonHandler, JsonTag},
+        rdf::{RdfHandler, RdfTag},
+        Export, ExportHandler, Import, ImportHandler, ResourceSpec,
     },
 };
 
-pub(crate) trait FormatParameter:
+pub(crate) trait FormatParameter<Tag>:
     FromStr<Err = ()> + ToString + IntoEnumIterator + Copy + Eq + Hash
 {
-    type Tag;
-
-    fn required_for(&self, tag: Self::Tag) -> bool;
+    fn required_for(&self, tag: Tag) -> bool;
     fn is_value_valid(&self, value: AnyDataValue) -> Result<(), ValidationErrorKind>;
 }
 
@@ -62,14 +62,19 @@ pub(super) fn value_type_matches(
     )
 }
 
-pub(crate) trait FormatTag: FromStr<Err = ()> + ToString + Copy + Eq + 'static {
+pub(crate) trait FormatTag:
+    FromStr<Err = ()> + ToString + Copy + Eq + 'static + Into<SupportedFormatTag>
+{
     const VARIANTS: &'static [(Self, &'static str)];
 }
 
 /// Define an enum for format tags (the "predicate-name" in import/export declarations)
 /// that are handled by one particular [`FormatBuilder`]
 macro_rules! format_tag {
-    { $vis:vis enum $type_name:ident { $($tag_name:ident => $tag_value:expr,)* } } => {
+    { $vis:vis enum $type_name:ident(SupportedFormatTag::$sup_tag:ident) { $($tag_name:ident => $tag_value:expr,)* } } => {
+        #[allow(unused_imports)]
+        use enum_assoc::Assoc;
+
         #[derive(Assoc, Debug, Copy, Clone, PartialEq, Eq, Hash)]
         #[func(pub fn from_str(input: &str) -> Option<Self>)]
         #[func(pub fn name(&self) -> &'static str)]
@@ -79,6 +84,12 @@ macro_rules! format_tag {
                 #[assoc(name = $tag_value)]
                 $tag_name
             ),*
+        }
+
+        impl From<$type_name> for crate::io::format_builder::SupportedFormatTag {
+            fn from(value: $type_name) -> crate::io::format_builder::SupportedFormatTag {
+                crate::io::format_builder::SupportedFormatTag::$sup_tag(value)
+            }
         }
 
         impl std::str::FromStr for $type_name {
@@ -169,6 +180,8 @@ pub(crate) use format_parameter;
 enum NoParameters {}
 
 impl NoParameters {
+    // NOTE: this method is actually needed for the format_parameter macro to work
+    #[allow(dead_code)]
     fn name(&self) -> &'static str {
         match *self {}
     }
@@ -193,14 +206,18 @@ impl FromStr for NoParameters {
 }
 
 format_parameter! {
-    pub enum StandardParameter(NoParameters) {
+    pub(crate) enum StandardParameter(NoParameters) {
         Resource(name = attribute::RESOURCE, supported_types = &[ValueType::String, ValueType::Constant]),
         Compression(name = attribute::COMPRESSION, supported_types = &[ValueType::String]),
     }
 }
 
-impl StandardParameter {
-    pub(crate) fn is_value_valid(&self, value: AnyDataValue) -> Result<(), ValidationErrorKind> {
+impl<Tag> FormatParameter<Tag> for StandardParameter {
+    fn required_for(&self, _tag: Tag) -> bool {
+        false
+    }
+
+    fn is_value_valid(&self, value: AnyDataValue) -> Result<(), ValidationErrorKind> {
         value_type_matches(self, &value, &self.supported_types())?;
 
         match self {
@@ -219,11 +236,12 @@ impl StandardParameter {
 
 pub(crate) trait FormatBuilder: Sized + Into<AnyImportExportBuilder> {
     type Tag: FormatTag + 'static;
-    type Parameter: FormatParameter<Tag = Self::Tag> + From<StandardParameter> + 'static;
+    type Parameter: FormatParameter<Self::Tag> + From<StandardParameter> + 'static;
 
     fn new(
         tag: Self::Tag,
-        parameters: &Parameters<Self::Parameter>,
+        parameters: &Parameters<Self>,
+        direction: Direction,
     ) -> Result<Self, ValidationErrorKind>;
 
     fn expected_arity(&self) -> Option<usize>;
@@ -236,29 +254,24 @@ pub(crate) trait FormatBuilder: Sized + Into<AnyImportExportBuilder> {
     fn build_export(&self, arity: usize) -> Arc<dyn ExportHandler + Send + Sync + 'static>;
 }
 
-pub(crate) struct Parameters<P>(HashMap<P, AnyDataValue>);
+pub(crate) struct Parameters<B: FormatBuilder>(HashMap<B::Parameter, AnyDataValue>);
 
-impl<P: FormatParameter> Parameters<P> {
-    pub(crate) fn get_required(&self, param: P) -> AnyDataValue {
+impl<B: FormatBuilder> Parameters<B> {
+    pub(crate) fn get_required(&self, param: B::Parameter) -> AnyDataValue {
         self.get_optional(param)
             .expect("presence of required parameters is checked upon validation")
     }
 
-    pub(crate) fn get_optional(&self, param: P) -> Option<AnyDataValue> {
+    pub(crate) fn get_optional(&self, param: B::Parameter) -> Option<AnyDataValue> {
         self.0.get(&param).cloned()
     }
-}
 
-impl<P: FormatParameter + Hash> Parameters<P>
-where
-    P::Tag: FormatTag,
-{
     pub(crate) fn validate(
         spec: ImportExportSpec,
         direction: Direction,
         builder: &mut ValidationErrorBuilder,
     ) -> Option<Self> {
-        let Ok(format_tag) = P::Tag::from_str(spec.format_tag().name()) else {
+        let Ok(format_tag) = B::Tag::from_str(spec.format_tag().name()) else {
             builder.report_error(
                 *spec.format_tag().origin(),
                 ValidationErrorKind::ImportExportFileFormatUnknown(spec.format_tag().name().into()),
@@ -266,14 +279,14 @@ where
             return None;
         };
 
-        let mut required_parameters: HashSet<_> = P::iter()
+        let mut required_parameters: HashSet<_> = B::Parameter::iter()
             .filter(|param| param.required_for(format_tag))
             .collect();
 
         let mut result = HashMap::new();
 
         for (key, value_term) in spec.key_value() {
-            let Ok(parameter) = P::from_str(key.name()) else {
+            let Ok(parameter) = B::Parameter::from_str(key.name()) else {
                 builder
                     .report_error(
                         *key.origin(),
@@ -285,7 +298,7 @@ where
                     .add_hint_option(Hint::similar(
                         "parameter",
                         key.name(),
-                        P::iter().map(|attribute| attribute.to_string()),
+                        B::Parameter::iter().map(|attribute| attribute.to_string()),
                     ));
 
                 return None;
@@ -319,6 +332,8 @@ where
     }
 }
 
+/// Validates parameters for an import/export operation and finally builds the
+/// corresponding handler (i.e. [`ImportHandler`] or [`ExportHandler`])
 #[derive(Clone, Debug)]
 pub struct ImportExportBuilder {
     inner: AnyImportExportBuilder,
@@ -326,9 +341,11 @@ pub struct ImportExportBuilder {
     compression: CompressionFormat,
 }
 
-enum SupportedFormatTag {
-    Dsv(<DsvBuilder as FormatBuilder>::Tag),
-    Rdf(<RdfHandler as FormatBuilder>::Tag),
+#[derive(Clone, Debug)]
+pub(crate) enum SupportedFormatTag {
+    Dsv(DsvTag),
+    Rdf(RdfTag),
+    Json(JsonTag),
 }
 
 impl FromStr for SupportedFormatTag {
@@ -339,6 +356,8 @@ impl FromStr for SupportedFormatTag {
             Ok(Self::Dsv(s.parse().unwrap()))
         } else if RdfHandler::supports_tag(s) {
             Ok(Self::Rdf(s.parse().unwrap()))
+        } else if JsonHandler::supports_tag(s) {
+            Ok(Self::Json(s.parse().unwrap()))
         } else {
             Err(())
         }
@@ -346,13 +365,16 @@ impl FromStr for SupportedFormatTag {
 }
 
 impl ImportExportBuilder {
+    /// Returns the inherent arity of this file format, if applicable
     pub fn expected_arity(&self) -> Option<usize> {
         match &self.inner {
             AnyImportExportBuilder::Dsv(inner) => inner.expected_arity(),
             AnyImportExportBuilder::Rdf(inner) => inner.expected_arity(),
+            AnyImportExportBuilder::Json(inner) => inner.expected_arity(),
         }
     }
 
+    /// The resource as specified in the parameters
     pub fn resource(&self) -> Option<ResourceSpec> {
         self.resource.clone()
     }
@@ -364,7 +386,7 @@ impl ImportExportBuilder {
         builder: &mut ValidationErrorBuilder,
     ) -> Option<ImportExportBuilder> {
         let origin = *spec.origin();
-        let parameters = Parameters::<B::Parameter>::validate(spec, direction, builder)?;
+        let parameters = Parameters::<B>::validate(spec, direction, builder)?;
 
         let resource = parameters
             .get_optional(StandardParameter::Resource.into())
@@ -377,7 +399,7 @@ impl ImportExportBuilder {
             })
             .unwrap_or_default();
 
-        let inner = match B::new(tag, &parameters) {
+        let inner = match B::new(tag, &parameters, direction) {
             Ok(res) => Some(res),
             Err(kind) => {
                 builder.report_error(origin, kind);
@@ -413,13 +435,18 @@ impl ImportExportBuilder {
             SupportedFormatTag::Rdf(tag) => {
                 Self::new_with_tag::<RdfHandler>(tag, spec, direction, error_builder)
             }
+            SupportedFormatTag::Json(tag) => {
+                Self::new_with_tag::<JsonHandler>(tag, spec, direction, error_builder)
+            }
         }
     }
 
+    /// Finalize and create an [`Import`] with the specified parameters
     pub fn build_import(&self, predicate_name: &str, arity: usize) -> Import {
         let handler = match &self.inner {
             AnyImportExportBuilder::Dsv(dsv_builder) => dsv_builder.build_import(arity),
             AnyImportExportBuilder::Rdf(rdf_handler) => rdf_handler.build_import(arity),
+            AnyImportExportBuilder::Json(json_handler) => json_handler.build_import(arity),
         };
 
         let resource_spec = self.resource.clone().unwrap_or({
@@ -435,10 +462,12 @@ impl ImportExportBuilder {
         }
     }
 
+    /// Finalize and create an [`Export`] with the specified parameters
     pub fn build_export(&self, predicate_name: &str, arity: usize) -> Export {
         let handler = match &self.inner {
             AnyImportExportBuilder::Dsv(dsv_builder) => dsv_builder.build_export(arity),
             AnyImportExportBuilder::Rdf(rdf_handler) => rdf_handler.build_export(arity),
+            AnyImportExportBuilder::Json(json_handler) => json_handler.build_export(arity),
         };
 
         let resource_spec = self.resource.clone().unwrap_or({
@@ -456,9 +485,10 @@ impl ImportExportBuilder {
 }
 
 #[derive(Clone)]
-pub(super) enum AnyImportExportBuilder {
+pub(crate) enum AnyImportExportBuilder {
     Dsv(DsvBuilder),
     Rdf(RdfHandler),
+    Json(JsonHandler),
 }
 
 impl Debug for AnyImportExportBuilder {
@@ -466,6 +496,7 @@ impl Debug for AnyImportExportBuilder {
         match self {
             Self::Dsv(_) => f.debug_tuple("Dsv").field(&"...").finish(),
             Self::Rdf(_) => f.debug_tuple("Rdf").field(&"...").finish(),
+            Self::Json(_) => f.debug_tuple("Json").field(&"...").finish(),
         }
     }
 }

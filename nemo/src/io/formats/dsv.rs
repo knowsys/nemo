@@ -9,7 +9,6 @@ use std::{
     sync::Arc,
 };
 
-use enum_assoc::Assoc;
 use nemo_physical::{
     datasources::table_providers::TableProvider,
     datavalues::{AnyDataValue, DataValue},
@@ -26,7 +25,8 @@ use crate::{
         Parameters, StandardParameter,
     },
     rule_model::{
-        components::term::value_type::ValueType, error::validation_error::ValidationErrorKind,
+        components::{import_export::Direction, term::value_type::ValueType},
+        error::validation_error::ValidationErrorKind,
     },
     syntax::import_export::{attribute, file_format},
 };
@@ -126,7 +126,7 @@ enum DsvVariant {
 }
 
 format_tag! {
-    pub(crate) enum DsvTag {
+    pub(crate) enum DsvTag(SupportedFormatTag::Dsv) {
         Dsv => file_format::DSV,
         Tsv => file_format::TSV,
         Csv => file_format::CSV,
@@ -142,10 +142,8 @@ format_parameter! {
     }
 }
 
-impl FormatParameter for DsvParameter {
-    type Tag = DsvTag;
-
-    fn required_for(&self, tag: Self::Tag) -> bool {
+impl FormatParameter<DsvTag> for DsvParameter {
+    fn required_for(&self, tag: DsvTag) -> bool {
         if matches!(tag, DsvTag::Dsv) {
             matches!(self, DsvParameter::Delimiter)
         } else {
@@ -157,7 +155,9 @@ impl FormatParameter for DsvParameter {
         value_type_matches(self, &value, &self.supported_types())?;
 
         match self {
-            DsvParameter::BaseParamType(base) => base.is_value_valid(value),
+            DsvParameter::BaseParamType(base) => {
+                FormatParameter::<DsvTag>::is_value_valid(base, value)
+            }
             DsvParameter::Limit => value
                 .to_u64()
                 .and(Some(()))
@@ -196,7 +196,8 @@ impl FormatBuilder for DsvBuilder {
 
     fn new(
         tag: Self::Tag,
-        parameters: &Parameters<DsvParameter>,
+        parameters: &Parameters<DsvBuilder>,
+        _direction: Direction,
     ) -> Result<Self, ValidationErrorKind> {
         let value_formats = parameters
             .get_optional(DsvParameter::Format)

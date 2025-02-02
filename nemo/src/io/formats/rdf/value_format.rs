@@ -3,12 +3,9 @@
 //! for each supported format.
 
 use enum_assoc::Assoc;
-use nemo_physical::datavalues::{AnyDataValue, DataValue, TupleDataValue};
+use nemo_physical::datavalues::{AnyDataValue, DataValue};
 
-use crate::{
-    rule_model::components::term::{primitive::Primitive, tuple::Tuple, Term},
-    syntax::directive::value_formats,
-};
+use crate::syntax::directive::value_formats;
 
 /// Enum for the value formats that are supported for RDF. In many cases,
 /// RDF defines how formatting should be done, so there is not much to select here.
@@ -51,10 +48,6 @@ impl TryFrom<AnyDataValue> for RdfValueFormats {
 }
 
 impl RdfValueFormats {
-    pub(crate) fn new(formats: Vec<RdfValueFormat>) -> Self {
-        Self(formats)
-    }
-
     /// Return a list of [RdfValueFormat]s with default entries.
     pub(crate) fn default(arity: usize) -> Self {
         Self((0..arity).map(|_| RdfValueFormat::Anything).collect())
