@@ -9,7 +9,7 @@ use crate::{datavalues::DataValueCreationError, resource::Resource};
 /// Trait that can be used by external libraries extending Nemo to communicate a error during reading
 pub trait ExternalReadingError: Display + std::fmt::Debug {}
 
-/// Collection or errors related to reading input tables.
+/// The collection of possible causes for a [`ReadingError`]
 #[allow(variant_size_differences)]
 #[derive(Error, Debug)]
 pub enum ReadingErrorKind {
@@ -57,6 +57,7 @@ pub enum ReadingErrorKind {
     DataValueCreation(#[from] DataValueCreationError),
 }
 
+/// An error that occurred while reading input tables
 #[derive(Debug, Error)]
 pub struct ReadingError {
     kind: ReadingErrorKind,
@@ -65,6 +66,7 @@ pub struct ReadingError {
 }
 
 impl ReadingError {
+    /// Creates a new [`ReadingError`]
     pub fn new(kind: ReadingErrorKind) -> Self {
         ReadingError {
             kind,
@@ -73,15 +75,18 @@ impl ReadingError {
         }
     }
 
+    /// Create a new [`ReadingError`] of kind [`ReadingErrorKind::ExternalError`]
     pub fn new_external(error: Box<dyn std::error::Error>) -> Self {
         Self::new(error.into())
     }
 
+    /// Set the resource which was being read while the error occurred
     pub fn with_resource(mut self, resource: Resource) -> Self {
         self.resource = Some(resource);
         self
     }
 
+    /// Set the predicate which was being processed while the error occurred
     pub fn with_predicate(mut self, predicate: String) -> Self {
         self.predicate = Some(predicate);
         self
@@ -99,7 +104,17 @@ where
 
 impl Display for ReadingError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        todo!()
+        Display::fmt(&self.kind, f)?;
+
+        if let Some(resource) = &self.resource {
+            f.write_fmt(format_args!("\nwhile reading at `{resource}`"))?
+        }
+
+        if let Some(predicate) = &self.predicate {
+            f.write_fmt(format_args!("\nwhile processing table for `{predicate}`"))?
+        }
+
+        Ok(())
     }
 }
 
