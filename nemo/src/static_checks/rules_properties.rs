@@ -1,7 +1,6 @@
 //! Functionality that provides the static checks for a RuleSet.
-use crate::static_checks::acyclicity_graph_constructor::AcyclicityGraphConstructor;
 use crate::static_checks::acyclicity_graphs::{
-    AcyclicityGraphCycle, JointAcyclicityGraph, WeakAcyclicityGraph, WeakAcyclicityGraphCycle,
+    AcyclicityGraphBuilder, AcyclicityGraphCycle, JointAcyclicityGraph, WeakAcyclicityGraph, WeakAcyclicityGraphCycle,
 };
 use crate::static_checks::positions::PositionsByRuleIdxVariables;
 use crate::static_checks::rule_set::{RuleSet, SpecialPositionsConstructor};
@@ -131,12 +130,12 @@ impl RulesProperties for RuleSet {
     }
 
     fn is_weakly_acyclic(&self) -> bool {
-        let we_ac_graph: WeakAcyclicityGraph = self.weak_acyclicity_graph();
+        let we_ac_graph: WeakAcyclicityGraph = WeakAcyclicityGraph::build_graph(&self);
         !we_ac_graph.contains_cycle_with_special_edge()
     }
 
     fn is_jointly_acyclic(&self) -> bool {
-        let jo_ac_graph: JointAcyclicityGraph = self.joint_acyclicity_graph();
+        let jo_ac_graph: JointAcyclicityGraph = JointAcyclicityGraph::build_graph(&self);
         !jo_ac_graph.is_cyclic()
     }
 
