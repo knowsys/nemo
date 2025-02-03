@@ -266,29 +266,3 @@ impl FormatBuilder for RdfHandler {
         Arc::new(self.clone())
     }
 }
-
-#[cfg(legacy)]
-mod test {
-    use super::*;
-    use strum::VariantArray;
-
-    #[test]
-    fn format_metadata() {
-        for variant in RdfVariant::VARIANTS {
-            let format = variant.file_format();
-            let handler = RdfHandler::new(
-                ResourceSpec::from_string(format!("dummy.{}", format.extension())),
-                None,
-                *variant,
-                RdfValueFormats::default(format.arity().unwrap()),
-                None,
-                CompressionFormat::None,
-                Direction::Import,
-            );
-
-            assert_eq!(format.extension(), handler.default_extension());
-            assert_eq!(format.media_type(), handler.file_format().media_type());
-            assert_eq!(format.arity(), Some(handler.predicate_arity()));
-        }
-    }
-}

@@ -260,29 +260,3 @@ impl FormatBuilder for DsvBuilder {
         })
     }
 }
-
-#[cfg(legacy)]
-mod test {
-    use super::*;
-
-    #[test]
-    fn format_metadata() {
-        for (format, delimiter) in &[
-            (FileFormat::DSV, b';'),
-            (FileFormat::CSV, b','),
-            (FileFormat::TSV, b'\t'),
-        ] {
-            let handler = DsvHandler {
-                delimiter: *delimiter,
-                resource: ResourceSpec::from_string(format!("dummy.{}", format.extension())),
-                value_formats: DsvValueFormats::default(3),
-                compression_format: CompressionFormat::None,
-                limit: None,
-            };
-
-            assert_eq!(format.extension(), handler.default_extension());
-            assert_eq!(format.media_type(), handler.media_type());
-            assert_eq!(3, handler.predicate_arity());
-        }
-    }
-}
