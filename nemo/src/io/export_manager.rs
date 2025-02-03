@@ -72,7 +72,7 @@ impl ExportManager {
             return Ok(());
         };
 
-        let path = self.sanitized_path(&resource, !handler.is_compressed());
+        let path = self.sanitized_path(resource, !handler.is_compressed());
 
         let meta_info = path.metadata();
         if let Err(err) = meta_info {

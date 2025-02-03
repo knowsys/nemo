@@ -109,20 +109,20 @@ enum DsvVariant {
     #[assoc(default_extension = &file_format::EXTENSION_CSV)]
     #[assoc(from_delimiter = b',')]
     #[assoc(delimiter = b',')]
-    CSV,
+    Csv,
     /// Tab-separated values
     #[assoc(name = file_format::TSV)]
     #[assoc(media_type = &file_format::MEDIA_TYPE_TSV)]
     #[assoc(default_extension = &file_format::EXTENSION_TSV)]
     #[assoc(from_delimiter = b'\t')]
     #[assoc(delimiter = b'\t')]
-    TSV,
+    Tsv,
     /// Delimiter-separated values
     #[assoc(name = file_format::DSV)]
     #[assoc(media_type = &file_format::MEDIA_TYPE_DSV)]
     #[assoc(default_extension = &file_format::EXTENSION_DSV)]
     #[assoc(from_delimiter = _)]
-    DSV,
+    Dsv,
 }
 
 format_tag! {
@@ -152,7 +152,7 @@ impl FormatParameter<DsvTag> for DsvParameter {
     }
 
     fn is_value_valid(&self, value: AnyDataValue) -> Result<(), ValidationErrorKind> {
-        value_type_matches(self, &value, &self.supported_types())?;
+        value_type_matches(self, &value, self.supported_types())?;
 
         match self {
             DsvParameter::BaseParamType(base) => {

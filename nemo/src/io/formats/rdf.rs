@@ -85,7 +85,7 @@ pub enum RdfVariant {
 
 impl std::fmt::Display for RdfVariant {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&self.name())
+        f.write_str(self.name())
     }
 }
 
@@ -167,7 +167,7 @@ impl FormatParameter<RdfTag> for RdfParameter {
     }
 
     fn is_value_valid(&self, value: AnyDataValue) -> Result<(), ValidationErrorKind> {
-        value_type_matches(self, &value, &self.supported_types())?;
+        value_type_matches(self, &value, self.supported_types())?;
 
         match self {
             RdfParameter::BaseParamType(base) => {

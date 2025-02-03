@@ -157,11 +157,11 @@ impl ExportHandler for MockHandler {
 
 impl<T: FileFormatMeta + ?Sized + Send + Sync> FileFormatMeta for Arc<T> {
     fn media_type(&self) -> String {
-        T::media_type(&self)
+        T::media_type(self)
     }
 
     fn default_extension(&self) -> String {
-        T::default_extension(&self)
+        T::default_extension(self)
     }
 }
 

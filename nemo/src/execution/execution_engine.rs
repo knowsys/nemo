@@ -143,7 +143,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
 
         // Add all the import specifications
         for import in program.imports() {
-            let table_source = input_manager.table_provider_from_handler(&*import.handler())?;
+            let table_source = input_manager.table_provider_from_handler(import.handler())?;
 
             predicate_to_sources
                 .entry(import.predicate().clone())

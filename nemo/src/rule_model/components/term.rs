@@ -320,8 +320,8 @@ impl TryFrom<Term> for GroundTerm {
                     GroundTerm::try_from(reduced)
                 }
             }
-            Term::Aggregate(_) => return Err(value),
-            Term::Primitive(Primitive::Variable(_)) => return Err(value),
+            Term::Aggregate(_) => Err(value),
+            Term::Primitive(Primitive::Variable(_)) => Err(value),
         }
     }
 }

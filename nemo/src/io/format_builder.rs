@@ -218,7 +218,7 @@ impl<Tag> FormatParameter<Tag> for StandardParameter {
     }
 
     fn is_value_valid(&self, value: AnyDataValue) -> Result<(), ValidationErrorKind> {
-        value_type_matches(self, &value, &self.supported_types())?;
+        value_type_matches(self, &value, self.supported_types())?;
 
         match self {
             StandardParameter::BaseParamType(no_parameters) => match *no_parameters {},
@@ -327,7 +327,7 @@ impl<B: FormatBuilder> Parameters<B> {
                 );
             }
 
-            return None;
+            None
         }
     }
 }
@@ -456,7 +456,7 @@ impl ImportExportBuilder {
 
         Import {
             resource_spec,
-            compression: self.compression.clone(),
+            compression: self.compression,
             predicate_arity: arity,
             handler,
         }
@@ -477,7 +477,7 @@ impl ImportExportBuilder {
 
         Export {
             resource_spec,
-            compression: self.compression.clone(),
+            compression: self.compression,
             predicate_arity: arity,
             handler,
         }

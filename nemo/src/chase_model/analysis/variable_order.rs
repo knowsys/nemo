@@ -172,7 +172,7 @@ impl IterationOrder {
                 &(0..(len / 2))
                     .map(|i| i * 2 + 1)
                     .rev()
-                    .chain((0..(len + 1) / 2).map(|i| i * 2))
+                    .chain((0..len.div_ceil(2)).map(|i| i * 2))
                     .collect::<Vec<_>>(),
             ),
         }
