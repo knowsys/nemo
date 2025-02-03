@@ -23,8 +23,6 @@ use super::variable_order::{
     build_preferable_variable_orders, BuilderResultVariants, VariableOrder,
 };
 
-use thiserror::Error;
-
 /// Contains useful information for a (existential) rule
 #[derive(Debug, Clone)]
 pub struct RuleAnalysis {
@@ -67,24 +65,6 @@ impl RuleAnalysis {
     pub(crate) fn existential_aux_rule(&self) -> &ChaseRule {
         &self.existential_aux_rule
     }
-}
-
-/// Errors than can occur during rule analysis
-#[derive(Error, Debug, Clone, PartialEq, Eq)]
-#[allow(clippy::enum_variant_names)]
-pub enum RuleAnalysisError {
-    /// Unsupported feature: Overloading of predicate names by arity/type
-    #[error(
-        "predicate \"{predicate}\" required to have conflicting arities {arity1} and {arity2}"
-    )]
-    UnsupportedFeaturePredicateOverloading {
-        predicate: Tag,
-        arity1: usize,
-        arity2: usize,
-    },
-    /// There is a predicate whose arity could not be determined  
-    #[error("arity of predicate \"{predicate}\" could not be derived")]
-    UnspecifiedPredicateArity { predicate: Tag },
 }
 
 /// Return true if there is a predicate in the positive part of the rule that also appears in the head of the rule.
