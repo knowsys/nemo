@@ -277,7 +277,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         self.analysis.all_predicates.get(predicate).copied()
     }
 
-    /// Return a list of all all export predicates and their respective [ImportExportHandler]s,
+    /// Return a list of all all export predicates and their respective [`Export`]s,
     /// which can be used for exporting into files.
     pub fn exports(&self) -> Vec<(Tag, Export)> {
         self.program

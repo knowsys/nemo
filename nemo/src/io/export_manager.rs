@@ -65,7 +65,7 @@ impl ExportManager {
         self.disable_write
     }
 
-    /// Validates the given [ImportExportHandler].
+    /// Validates the given [ExportHandler].
     /// This also checks whether the specified file could (likely) be written.
     pub fn validate(&self, _predicate: &Tag, handler: &Export) -> Result<(), Error> {
         let ResourceSpec::Resource(resource) = handler.resource_spec() else {
@@ -148,7 +148,7 @@ impl ExportManager {
         }
     }
 
-    /// Export a (possibly empty) table according to the given [ImportExportHandler],
+    /// Export a (possibly empty) table according to the given [ExportHandler],
     /// and direct output into the given writer.
     ///
     /// Nothing is written if writing is disabled.
@@ -175,10 +175,10 @@ impl ExportManager {
         Ok(export_handler.resource_spec().is_stdout())
     }
 
-    /// Export a (possibly empty) table according to the given [ImportExportHandler],
+    /// Export a (possibly empty) table according to the given [ExportHandler],
     /// and directly output into the given writer.
     ///
-    /// This function ignores [ExportManager::disable_write] and [ExportManager::default_compression_format].
+    /// This function ignores `ExportManager::disable_write` and `ExportManager::default_compression_format`.
     pub fn export_table_with_writer<'a>(
         &self,
         writer: Box<dyn Write>,

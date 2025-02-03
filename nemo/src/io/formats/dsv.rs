@@ -33,7 +33,7 @@ use crate::{
 
 use super::{ExportHandler, FileFormatMeta, FormatBuilder, ImportHandler, TableWriter};
 
-/// An [ImportExportHandler] for delimiter-separated values.
+/// Implements [ImportHandler] and [ExportHandler] for delimiter-separated values.
 #[derive(Debug, Clone)]
 pub struct DsvHandler {
     /// The specific delimiter for this format.
