@@ -157,6 +157,11 @@ pub enum ValidationErrorKind {
     #[error(r#"unknown file format: `{0}`"#)]
     #[assoc(code = 231)]
     ImportExportFileFormatUnknown(String),
+    /// Unknown arity
+    #[error(r#"arity of predicate {predicate} is unknown"#)]
+    #[assoc(note = "arity of predicates in import/export statements must be known in advance.")]
+    #[assoc(code = 232)]
+    UnknownArity { predicate: String },
 
     /// Unsupported feature: Multiple aggregates in one rule
     #[error(r#"multiple aggregates in one rule is currently unsupported"#)]

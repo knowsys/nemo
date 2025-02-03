@@ -296,6 +296,30 @@ impl Program {
             }
         }
 
+        for import in &self.imports {
+            if !predicate_arity.contains_key(import.predicate()) {
+                builder.report_error(
+                    *import.predicate().origin(),
+                    ValidationErrorKind::UnknownArity {
+                        predicate: import.predicate().to_string(),
+                    },
+                );
+                return None;
+            }
+        }
+
+        for export in &self.exports {
+            if !predicate_arity.contains_key(export.predicate()) {
+                builder.report_error(
+                    *export.predicate().origin(),
+                    ValidationErrorKind::UnknownArity {
+                        predicate: export.predicate().to_string(),
+                    },
+                );
+                return None;
+            }
+        }
+
         Some(predicate_arity)
     }
 }
