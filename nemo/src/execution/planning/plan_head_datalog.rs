@@ -31,6 +31,8 @@ use super::{
 pub(crate) struct DatalogStrategy {
     predicate_to_atoms: HashMap<Tag, Vec<(HeadInstruction, bool)>>,
     predicate_to_update: HashMap<Tag, ChaseOrder>,
+
+    predicate_to_order_variable_translation: HashMap<Tag, VariableTranslation>,
 }
 
 impl DatalogStrategy {
@@ -51,9 +53,26 @@ impl DatalogStrategy {
 
         let predicate_to_update = rule.orders().clone();
 
+        let mut predicate_to_order_variable_translation =
+            HashMap::<Tag, VariableTranslation>::new();
+        for (predicate, order) in rule.orders() {
+            let mut translation = VariableTranslation::new();
+            for variable in order
+                ._variables_dominating()
+                .iter()
+                .chain(order._variables_dominated().iter())
+                .cloned()
+            {
+                translation.add_marker(variable);
+            }
+
+            predicate_to_order_variable_translation.insert(predicate.clone(), translation);
+        }
+
         Self {
             predicate_to_atoms,
             predicate_to_update,
+            predicate_to_order_variable_translation,
         }
     }
 }
@@ -112,7 +131,13 @@ impl HeadStrategy for DatalogStrategy {
                 .collect();
 
             let final_node = if let Some(filter) = self.predicate_to_update.get(predicate) {
+                let variable_translation = self
+                    .predicate_to_order_variable_translation
+                    .get(predicate)
+                    .expect("");
+
                 let filter = operation_term_to_function_tree(variable_translation, filter.filter());
+
                 current_plan.plan_mut().update(
                     filter,
                     new_tables_union, // TODO: What with multihead rules?

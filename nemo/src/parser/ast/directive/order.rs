@@ -1,6 +1,6 @@
-//! This module defines the [Declare] directive.
+//! This module defines the [Order] directive.
 
-use nom::sequence::{pair, preceded, separated_pair, tuple};
+use nom::sequence::{preceded, separated_pair, tuple};
 
 use crate::parser::{
     ast::{
@@ -46,7 +46,7 @@ impl<'a> Order<'a> {
 
     fn parse_declaration(input: ParserInput<'a>) -> ParserResult<'a, (Atom<'a>, Atom<'a>)> {
         context(
-            ParserContext::Output, // TODO: More specific context
+            ParserContext::Order, // TODO: More specific context
             separated_pair(
                 Atom::parse,
                 tuple((WSoC::parse, Token::order_compare, WSoC::parse)),
@@ -89,7 +89,11 @@ impl<'a> ProgramAST<'a> for Order<'a> {
                     Token::directive_order,
                     WSoC::parse,
                 )),
-                pair(Self::parse_declaration, Sequence::<Guard>::parse),
+                separated_pair(
+                    Self::parse_declaration,
+                    tuple((WSoC::parse, Token::order_assignment, WSoC::parse)),
+                    Sequence::<Guard>::parse,
+                ),
             ),
         )(input)
         .map(|(rest, ((atom_left, atom_right), condition))| {

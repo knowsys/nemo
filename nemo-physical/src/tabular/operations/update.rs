@@ -5,18 +5,12 @@ use std::{
     collections::{HashMap, HashSet},
 };
 
-use streaming_iterator::StreamingIterator;
-
 use crate::{
     datatypes::into_datavalue::IntoDataValue,
     datavalues::AnyDataValue,
-    function::{evaluation::StackProgram, tree::FunctionTree},
+    function::evaluation::StackProgram,
     management::database::Dict,
-    tabular::{
-        rowscan::RowScan,
-        rowscan_mut::RowScanMut,
-        trie::{Trie, TrieScanGenericMut},
-    },
+    tabular::{rowscan::RowScan, rowscan_mut::RowScanMut, trie::Trie},
     util::mapping::permutation::Permutation,
 };
 
@@ -41,11 +35,10 @@ impl GeneratorUpdate {
         let mut reference_map = HashMap::<OperationColumnMarker, usize>::new();
         for (counter, marker) in new.iter().enumerate() {
             reference_map.insert(marker.clone(), counter);
-        }
-        if let Some(table) = old.get(0) {
-            for (counter, marker) in table.iter().enumerate() {
-                reference_map.insert(marker.clone(), new.len() + counter);
-            }
+            reference_map.insert(
+                OperationColumnMarker(marker.0 + new.arity()),
+                counter + new.arity(),
+            );
         }
 
         let mut permutations = Vec::with_capacity(old.len());
@@ -113,7 +106,7 @@ impl GeneratorUpdate {
                 });
 
             let mut row_index: usize = 0;
-            while let Some(row_b) = Iterator::next(&mut new_scan_a) {
+            while let Some(row_b) = Iterator::next(&mut new_scan_b) {
                 current_row
                     .iter_mut()
                     .skip(new.arity())
@@ -132,32 +125,12 @@ impl GeneratorUpdate {
 
         let mut new_scan = RowScanMut::new(new.partial_iterator_mut(), 0);
         let mut row_index: usize = 0;
-        while let Some(row) = Iterator::next(&mut new_scan) {
+        while let Some(_row) = Iterator::next(&mut new_scan) {
             if deleted_rows.contains(&row_index) {
                 new_scan.delete_current_row();
             }
 
             row_index += 1;
         }
-
-        // /// Apply the operation.
-        // pub(crate) fn apply_operation(&self, old: Vec<&mut Trie>, new: &mut Trie) {
-        //     let new_iter = new.partial_iterator_mut();
-        //     let mut new_row_iter = RowScanMut::new(new_iter, 0);
-
-        //     let mut row_index: usize = 0;
-
-        //     loop {
-        //         new_row_iter.advance();
-        //         row_index += 1;
-
-        //         if row_index % 2 == 0 {
-        //             new_row_iter.delete_current_row();
-        //         }
-
-        //         if new_row_iter.get().is_none() {
-        //             return;
-        //         }
-        //     }
     }
 }

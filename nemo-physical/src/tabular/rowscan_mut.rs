@@ -1,15 +1,10 @@
 //! This module defines [RowScanMut].
 
-use std::marker::PhantomData;
-
 use streaming_iterator::StreamingIterator;
 
 use crate::datatypes::{StorageTypeName, StorageValueT};
 
-use super::{
-    trie::{Trie, TrieScanGenericMut},
-    triescan::PartialTrieScan,
-};
+use super::trie::TrieScanGenericMut;
 
 #[derive(Debug)]
 struct TypeIndex {
