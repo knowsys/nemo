@@ -37,7 +37,7 @@ pub enum ReadingError {
     #[error("failed to decompress \"{resource}\" with {decompression_format}")]
     Decompression {
         /// Resource (filename etc.) where the error originated
-        resource: String,
+        resource: Resource,
         /// name of decompression method that was used
         decompression_format: String,
     },
@@ -48,8 +48,11 @@ pub enum ReadingError {
         resource: Resource,
     },
     /// A provided resource is not a valid local file:// URI
-    #[error(r#"resource "{0}" is not a valid local file:// URI"#)]
-    InvalidFileUri(Resource),
+    #[error(r#"resource "{resource}" is not a valid local file:// URI"#)]
+    InvalidFileUri {
+        /// The resource that is not valid
+        resource: Resource
+    },
     /// Error in Reqwest's HTTP handler
     #[error(transparent)]
     HttpTransfer(#[from] reqwest::Error),

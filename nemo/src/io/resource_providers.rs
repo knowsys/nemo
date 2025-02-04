@@ -19,7 +19,11 @@ pub mod http;
 ///
 /// TODO: Revise if deemed necessary.
 fn is_iri(resource: &Resource) -> bool {
-    resource.contains(':')
+    match resource {
+        Resource::Path(path) => path.contains(':'),
+        // TODO: We would expect Iri to be an iri. However is this verified somewhere already?
+        Resource::Iri { iri, .. } => iri.to_string().contains(':')
+    }
 }
 
 /// Allows resolving resources to readers.
@@ -79,13 +83,19 @@ impl ResourceProviders {
         compression: CompressionFormat,
         media_type: &str,
     ) -> Result<Box<dyn BufRead>, ReadingError> {
-        for resource_provider in self.0.iter() {
-            if let Some(reader) =
-                resource_provider.open_resource(resource, compression, media_type)?
-            {
-                return Ok(reader);
-            }
+        let resource_provider = match resource {
+            // TODO: is there a cleaner way to return the Http- or FileResourceProvider ?
+            // Is it possible that the vector is empty?
+            Resource::Iri {..} => &self.0[0],
+            Resource::Path(..) => &self.0[1]
+        };
+        // Call the correct resource_provider 
+        if let Some(reader) =
+            resource_provider.open_resource(resource, compression, media_type)?
+        {
+            return Ok(reader);
         }
+        
 
         Err(ReadingError::ResourceNotProvided {
             resource: resource.clone(),

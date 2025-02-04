@@ -8,8 +8,6 @@ use std::{
 
 use flate2::{bufread::MultiGzDecoder, write::GzEncoder, Compression};
 
-use nemo_physical::resource::Resource;
-
 use crate::{error::Error, rule_model::components::import_export::compression::CompressionFormat};
 
 /// Compression level for gzip output, cf. gzip(1):
@@ -24,13 +22,13 @@ const GZIP_COMPRESSION_LEVEL: Compression = Compression::new(6);
 impl CompressionFormat {
     /// Derive a compression format from the file extension of the given resource,
     /// and return the compression format and the resource string without this extenions.
-    pub fn from_resource(resource: &Resource) -> (CompressionFormat, Resource) {
-        match resource {
-            resource if resource.ends_with(".gz") => (
+    pub fn from_resource(path: &String) -> (CompressionFormat, String) {
+        match path {
+            path if path.ends_with(".gz") => (
                 CompressionFormat::GZip,
-                resource.as_str()[0..resource.len() - 3].to_string(),
+                path.as_str()[0..path.len() - 3].to_string(),
             ),
-            _ => (CompressionFormat::None, resource.to_owned()),
+            _ => (CompressionFormat::None, path.to_owned()),
         }
     }
 

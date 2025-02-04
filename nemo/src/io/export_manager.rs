@@ -10,7 +10,7 @@ use crate::{
     rule_model::components::{import_export::compression::CompressionFormat, tag::Tag},
 };
 
-use nemo_physical::datavalues::AnyDataValue;
+use nemo_physical::{datavalues::AnyDataValue, resource::Resource};
 use sanitise_file_name::{sanitise_with_options, Options};
 
 use super::formats::ImportExportHandler;
@@ -149,7 +149,13 @@ impl ExportManager {
             ..Default::default()
         };
 
-        let file_name_unsafe = export_handler.resource().unwrap_or(format!(
+        let file_name_unsafe = export_handler
+            .resource()
+            .map(|resource| match resource {
+                Resource::Path(path) => path,
+                Resource::Iri {iri,..} => iri.to_string()
+            })
+            .unwrap_or(format!(
             "{}.{}",
             predicate,
             export_handler.file_extension()

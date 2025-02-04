@@ -386,10 +386,14 @@ pub mod import_export {
         // compression
         /// The name of the compression format that means "no compression".
         pub const VALUE_COMPRESSION_NONE: &str = "none";
-        /// The name of the compression format that means "no compression".
+        /// The name of the gzip compression format.
         pub const VALUE_COMPRESSION_GZIP: &str = "gzip";
         /// Name of the attribute for ignoring DSV headers in import/export directives.
         pub const IGNORE_HEADERS: &str = "ignore_headers";
+        /// The SPARQL endpoint for the query
+        pub const ENDPOINT: &str = "endpoint";
+        /// The SPARQL query that is appended to the GET-request.
+        pub const QUERY: &str = "query";
     }
 
     pub mod file_format {
@@ -415,6 +419,8 @@ pub mod import_export {
         pub const RDF_XML: &str = "rdfxml";
         /// The "predicate name" used for the json format in import/export directives.
         pub const JSON: &str = "json";
+        /// The "predicate name" used for the SPARQL format to query an endpoint.
+        pub const SPARQL: &str = "sparql";
 
         // file extensions
         /// The file extension used for CSV files
@@ -455,5 +461,7 @@ pub mod import_export {
         pub(crate) const MEDIA_TYPE_RDF_XML: &str = "application/rdf+xml";
         /// The media type used for json resources
         pub(crate) const MEDIA_TYPE_JSON: &str = "application/json";
+        /// The media type used for sparql queries
+        pub(crate) const MEDIA_TYPE_SPARQL: &str = "text/tab-separated-values";
     }
 }

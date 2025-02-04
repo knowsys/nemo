@@ -135,6 +135,10 @@ pub enum ValidationErrorKind {
     #[error(r#"unknown compression format `{format}`"#)]
     #[assoc(code = 226)]
     ImportExportUnknownCompression { format: String },
+    /// Import/Export: invalid SPARQL query 
+    #[error(r#"invalid sparql query oxigraph error `{oxi_error}`"#)]
+    #[assoc(code = 226)]
+    ImportExportInvalidSparqlQuery {oxi_error: String },
     /// Attribute in rule is unsafe
     #[error(r#"display attribute uses unsafe variable: `{variable}`"#)]
     #[assoc(code = 227)]

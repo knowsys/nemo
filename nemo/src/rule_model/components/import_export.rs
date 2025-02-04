@@ -15,6 +15,8 @@ use attributes::ImportExportAttribute;
 use compression::CompressionFormat;
 use file_formats::{AttributeRequirement, FileFormat};
 use nemo_physical::datavalues::DataValue;
+use spargebra::Query;
+
 
 use crate::{
     io::formats::{
@@ -259,10 +261,14 @@ impl ImportExportDirective {
                     | FileFormat::RDFXML
                     | FileFormat::TriG => Self::validate_attribute_format_rdf(value, builder),
                     FileFormat::JSON => Ok(()),
+                    FileFormat::Sparql => Ok(()),
                 },
                 ImportExportAttribute::Delimiter => Self::validate_delimiter(value, builder),
                 ImportExportAttribute::Compression => Self::validate_compression(value, builder),
                 ImportExportAttribute::Limit => Self::validate_limit(value, builder),
+                ImportExportAttribute::Query => Self::validate_query(value, builder),
+                // TODO: should we verify the correctness of the endpoint somewhere?
+                ImportExportAttribute::Endpoint => Ok(()),
                 ImportExportAttribute::Base => Ok(()),
                 ImportExportAttribute::Resource => Ok(()),
                 &ImportExportAttribute::IgnoreHeaders => Ok(()),
@@ -371,6 +377,22 @@ impl ImportExportDirective {
 
         Ok(())
     }
+
+    /// Parse the query to verify it is valid.
+    fn validate_query(value: &Term, builder: &mut ValidationErrorBuilder) -> Result<(), ()> {
+        if let Some(query) = ImportExportDirective::string_value(value) {
+            if let Err(e) = Query::parse(&query[..], None) {
+                builder.report_error(
+                    *value.origin(),
+                    ValidationErrorKind::ImportExportInvalidSparqlQuery {oxi_error: e.to_string()},
+                );
+                return Err(());
+            }           
+        }
+
+        Ok(())
+    }
+    
 }
 
 impl PartialEq for ImportExportDirective {

@@ -149,6 +149,20 @@ pub enum FileFormat {
     ]))]
     #[assoc(arity = 4)]
     TriG,
+    /// SPARQL 1.1 
+    /// Is sparql a file format?
+    #[assoc(name = file_format::SPARQL)]
+    #[assoc(from_name = file_format::SPARQL)]
+    #[assoc(extension = file_format::EXTENSION_RDF_TRIG)]
+    #[assoc(media_type = file_format::MEDIA_TYPE_SPARQL)]
+    #[assoc(attributes = HashMap::from([
+        (ImportExportAttribute::Endpoint, AttributeRequirement::Required),
+        (ImportExportAttribute::Base, AttributeRequirement::Optional),
+        (ImportExportAttribute::Format, AttributeRequirement::Optional),
+        (ImportExportAttribute::Limit, AttributeRequirement::Optional),
+        (ImportExportAttribute::Query, AttributeRequirement::Required),
+    ]))]
+    Sparql,
 }
 
 /// List of RDF [FileFormat]s

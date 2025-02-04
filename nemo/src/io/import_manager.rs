@@ -21,7 +21,7 @@ impl ImportManager {
     }
 
     /// Constructs a [TableProvider] from the given [ImportExportHandler].
-    /// The expeced arity can reflect additional knowledge of the caller (or might be taken
+    /// The expected arity can reflect additional knowledge of the caller (or might be taken
     /// from the handler, if it has an arity). It is validated if the import directive is
     /// compatible with this assumption.
     pub(crate) fn table_provider_from_handler(

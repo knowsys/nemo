@@ -4,8 +4,8 @@ use nemo_physical::{error::ReadingError, resource::Resource};
 use reqwest::header::InvalidHeaderValue;
 
 use crate::rule_model::components::import_export::compression::CompressionFormat;
-
-use super::{is_iri, ResourceProvider};
+use urlencoding::encode;
+use super::ResourceProvider;
 
 /// Resolves resources using HTTP or HTTPS.
 ///
@@ -17,7 +17,7 @@ pub struct HttpResourceProvider {}
 #[derive(Debug, Clone)]
 pub struct HttpResource {
     /// IRI that this resource was fetched from
-    url: Resource,
+    resource: Resource,
     /// Content of the resource
     content: Vec<u8>,
 }
@@ -25,7 +25,8 @@ pub struct HttpResource {
 impl HttpResource {
     /// Return the IRI this resource was fetched from.
     pub fn url(&self) -> &Resource {
-        &self.url
+        // TODO: should this return the Resource, or just the IRI?
+        &self.resource
     }
 
     /// Return the content of this resource.
@@ -44,7 +45,7 @@ impl Read for HttpResource {
 }
 
 impl HttpResourceProvider {
-    async fn get(url: &Resource, media_type: &str) -> Result<HttpResource, ReadingError> {
+    async fn get(resource: &Resource, url: String, parameters: &Vec<(String, String)>, media_type: &str) -> Result<HttpResource, ReadingError> {
         let mut headers = reqwest::header::HeaderMap::new();
         headers.insert(
             reqwest::header::ACCEPT,
@@ -67,13 +68,30 @@ impl HttpResourceProvider {
         let client = reqwest::Client::builder()
             .default_headers(headers)
             .build()?;
-        let response = client.get(url).send().await?;
+
+        // Find the tuple where the first element is "query"
+        // Only for test cases, we can also have http request without queries!
+        let query = if let Some((_, query_value)) = parameters.iter().find(|(key, _)| key == "query") {
+            query_value.as_str() // Extracts the value from the tuple
+        } else {
+            ""
+        };
+        
+
+        // Unpack parameters 
+        let encoded_query = encode(query);
+        
+        // Concatenate url and encoded query
+        let full_url = format!("{}?query={}", url, encoded_query);
+        println!("full query: {full_url}");
+
+        let response = client.get(full_url).send().await?;
         // we're expecting potentially compressed data, don't try to
         // do any character set guessing, as `response.text()` would do.
         let content = response.bytes().await?;
 
         Ok(HttpResource {
-            url: url.to_string(),
+            resource: resource.clone(),
             content: content.into(),
         })
     }
@@ -86,11 +104,11 @@ impl ResourceProvider for HttpResourceProvider {
         compression: CompressionFormat,
         media_type: &str,
     ) -> Result<Option<Box<dyn BufRead>>, ReadingError> {
-        if !is_iri(resource) {
-            return Ok(None);
-        }
+        // Add error message
+        let Resource::Iri { iri, parameters } = resource else {unreachable!("The type of the resource is known already")};
 
-        if !(resource.starts_with("http:") || resource.starts_with("https:")) {
+        let url = iri.to_string();
+        if !(url.starts_with("http:") || url.starts_with("https:")) {
             // Non-http IRI; resource provider is not responsible
             return Ok(None);
         }
@@ -100,9 +118,9 @@ impl ResourceProvider for HttpResourceProvider {
             .build()
             .map_err(|e| ReadingError::IoReading {
                 error: e,
-                filename: resource.clone(),
+                filename: url.clone(),
             })?;
-        let response = rt.block_on(Self::get(resource, media_type))?;
+        let response = rt.block_on(Self::get(resource, url, parameters, media_type))?;
         if let Some(reader) = compression.try_decompression(BufReader::new(response)) {
             Ok(Some(reader))
         } else {

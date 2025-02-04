@@ -3,11 +3,12 @@
 pub mod dsv;
 pub mod json;
 pub mod rdf;
+pub mod sparql;
 
 use std::io::{BufRead, Write};
 
 use dyn_clone::DynClone;
-
+use oxiri::Iri;
 use nemo_physical::{
     datasources::table_providers::TableProvider, datavalues::AnyDataValue, resource::Resource,
 };
@@ -36,7 +37,16 @@ impl ImportExportResource {
         if string.is_empty() {
             Self::Stdout
         } else {
-            Self::Resource(string)
+            Self::Resource(Resource::Path(string))
+        }
+    }
+
+    /// Convert an endpoint [Iri] and a query [String] to a [ImportExportResource].
+    pub(crate) fn from_query(endpoint: Iri<String>, query: String) -> Self {
+        if endpoint.is_empty() {
+            Self::Stdout
+        } else {
+            Self::Resource(Resource::Iri {iri: endpoint, parameters: vec![(String::from("query"), query)] })
         }
     }
 

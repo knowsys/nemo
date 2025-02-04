@@ -8,6 +8,7 @@ use crate::{
     chase_model::components::{export::ChaseExport, import::ChaseImport, ChaseComponent},
     io::formats::{
         dsv::{value_format::DsvValueFormats, DsvHandler},
+        sparql::SparqlHandler,
         json::JsonHandler,
         rdf::{value_format::RdfValueFormats, RdfHandler, RdfVariant},
         Direction, ImportExportHandler, ImportExportResource,
@@ -95,6 +96,7 @@ impl ProgramChaseTranslation {
                 Self::build_dsv_handler(Direction::Import, Some(b'\t'), arity, &attributes)
             }
             FileFormat::JSON => Self::build_json_handler(&attributes),
+            FileFormat::Sparql => Self::build_sparql_handler(Direction::Import, arity, &attributes),
             FileFormat::NTriples => {
                 Self::build_rdf_handler(direction, RdfVariant::NTriples, arity, &attributes)
             }
@@ -110,6 +112,7 @@ impl ProgramChaseTranslation {
             FileFormat::TriG => {
                 Self::build_rdf_handler(direction, RdfVariant::TriG, arity, &attributes)
             }
+
         }
     }
 
@@ -120,9 +123,32 @@ impl ProgramChaseTranslation {
         attributes
             .get(&ImportExportAttribute::Resource)
             .and_then(ImportExportDirective::string_value)
-            .map(|resource| (CompressionFormat::from_resource(&resource).0, resource))
-            .map(|(format, resource)| (format, ImportExportResource::from_string(resource)))
+            .map(|path| (CompressionFormat::from_resource(&path).0, path))
+            .map(|(format, path)| (format, ImportExportResource::from_string(path)))
             .expect("invalid program: missing resource in import/export")
+    }
+
+    /// Read SPARQL endpoint
+    fn read_endpoint(
+        attributes: &HashMap<ImportExportAttribute, Term>,
+    ) -> Iri<String> {
+        let term = attributes
+            .get(&ImportExportAttribute::Endpoint)
+            .expect("Missing endpoint for sparql query");
+        Iri::parse_unchecked(
+            ImportExportDirective::plain_value(term)
+                .expect("invalid program: base given in the wrong type")
+            )
+    }
+
+    /// Read SPARQL query
+    fn read_query(
+        attributes: &HashMap<ImportExportAttribute, Term>,
+    ) -> String {
+        attributes
+            .get(&ImportExportAttribute::Query)
+            .and_then(&ImportExportDirective::string_value)
+            .expect("No query provided for sparql keyword")
     }
 
     /// Read the [DsvValueFormats] from the attributes.
@@ -197,6 +223,7 @@ impl ProgramChaseTranslation {
             .get(&ImportExportAttribute::IgnoreHeaders)
             .and_then(ImportExportDirective::boolean_value)
     }
+    
 
     /// Build a [DsvHandler].
     fn build_dsv_handler(
@@ -279,5 +306,27 @@ impl ProgramChaseTranslation {
         let (_, resource) = Self::read_resource(attributes);
 
         Box::new(JsonHandler::new(resource))
+    }
+
+     /// Build a [SparqlHandler].
+     fn build_sparql_handler(
+        direction: Direction,
+        arity: Option<usize>,
+        attributes: &HashMap<ImportExportAttribute, Term>,
+    ) -> Box<dyn ImportExportHandler> {
+        let endpoint = Self::read_endpoint(attributes);
+        let query = Self::read_query(attributes);
+
+        let limit = Self::read_limit(attributes);
+        // TODO: do we expect/ allow the format parameter & treat it like dsv?
+        let value_formats = Self::read_dsv_value_formats(attributes)
+            .unwrap_or(DsvValueFormats::default(arity.unwrap_or_default()));
+
+        Box::new(SparqlHandler::new(
+            ImportExportResource::from_query(endpoint, query),
+            limit,
+            value_formats,
+            direction,
+        ))
     }
 }
