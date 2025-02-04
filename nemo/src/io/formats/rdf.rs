@@ -156,14 +156,11 @@ format_parameter! {
 
 impl FormatParameter<RdfTag> for RdfParameter {
     fn required_for(&self, tag: RdfTag) -> bool {
-        if matches!(tag, RdfTag::Rdf) {
-            matches!(
+        matches!(tag, RdfTag::Rdf)
+            && matches!(
                 self,
                 RdfParameter::BaseParamType(StandardParameter::Resource)
             )
-        } else {
-            false
-        }
     }
 
     fn is_value_valid(&self, value: AnyDataValue) -> Result<(), ValidationErrorKind> {
