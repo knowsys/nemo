@@ -1,9 +1,7 @@
 //! Module for defining a trait that can be implemented by code that can provide tabular data,
 //! such as file readers.
 
-use std::error::Error;
-
-use crate::management::bytesized::ByteSized;
+use crate::{error::ReadingError, management::bytesized::ByteSized};
 
 use super::tuple_writer::TupleWriter;
 
@@ -14,7 +12,7 @@ pub trait TableProvider: std::fmt::Debug + ByteSized {
     fn provide_table_data(
         self: Box<Self>,
         tuple_writer: &mut TupleWriter,
-    ) -> Result<(), Box<dyn Error>>;
+    ) -> Result<(), ReadingError>;
 
     /// Return the number of columns of this table.
     fn arity(&self) -> usize;

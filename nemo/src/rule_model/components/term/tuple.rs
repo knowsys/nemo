@@ -164,6 +164,15 @@ impl IterablePrimitives for Tuple {
     }
 }
 
+impl IntoIterator for Tuple {
+    type Item = Term;
+    type IntoIter = std::vec::IntoIter<Term>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.terms.into_iter()
+    }
+}
+
 #[cfg(test)]
 mod test {
     use crate::rule_model::{

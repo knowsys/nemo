@@ -15,13 +15,13 @@ use nemo::{
         ExecutionEngine,
     },
     io::{
+        formats::FileFormatMeta,
         resource_providers::{ResourceProvider, ResourceProviders},
         ImportManager,
     },
     rule_model::{
         components::{
             fact::Fact,
-            import_export::{attributes::ImportExportAttribute, compression::CompressionFormat},
             tag::Tag,
             term::{primitive::Primitive, Term},
         },
@@ -115,9 +115,9 @@ impl NemoProgram {
     pub fn resources_used_in_imports(&self) -> Vec<NemoResource> {
         let mut result: Vec<NemoResource> = vec![];
 
-        for directive in self.0.imports() {
-            let format = directive.file_format().media_type();
-            if let Some(resource) = directive.attributes().get(&ImportExportAttribute::Resource) {
+        for (_, builder) in self.0.imports() {
+            let format: String = builder.build_import("", 0).media_type();
+            if let Some(resource) = builder.resource() {
                 result.push(NemoResource {
                     accept: format.to_string(),
                     url: resource.to_string(),
@@ -173,7 +173,7 @@ impl BlobResourceProvider {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 #[allow(dead_code)]
 struct BlobReadingError(JsValue);
 
@@ -189,32 +189,20 @@ impl ResourceProvider for BlobResourceProvider {
     fn open_resource(
         &self,
         resource: &Resource,
-        compression: CompressionFormat,
         _media_type: &str,
-    ) -> Result<Option<Box<dyn std::io::BufRead>>, nemo_physical::error::ReadingError> {
+    ) -> Result<Option<Box<dyn std::io::Read>>, nemo_physical::error::ReadingError> {
         if let Some(blob) = self.blobs.get(resource) {
             let array_buffer: js_sys::ArrayBuffer = self
                 .file_reader_sync
                 .read_as_array_buffer(blob)
                 .map_err(|js_value| {
-                    ReadingError::ExternalReadingError(Box::new(BlobReadingError(js_value)))
+                    ReadingError::new_external(Box::new(BlobReadingError(js_value)))
                 })?;
 
             let data = Uint8Array::new(&array_buffer).to_vec();
 
             let cursor = Cursor::new(data);
-
-            // Decompress blob
-            // We currently do this in Rust after the Blob has been transferred to the WebAssembly, to reuse Nemo's compression logic.
-            // We could also to this on the JavaScript side, see https://developer.mozilla.org/en-US/docs/Web/API/Compression_Streams_API .
-            if let Some(reader) = compression.try_decompression(cursor) {
-                Ok(Some(reader))
-            } else {
-                Err(ReadingError::Decompression {
-                    resource: resource.to_owned(),
-                    decompression_format: compression.to_string(),
-                })
-            }
+            Ok(Some(Box::new(cursor)))
         } else {
             Ok(None)
         }
@@ -355,13 +343,7 @@ impl NemoEngine {
         predicate: String,
         sync_access_handle: web_sys::FileSystemSyncAccessHandle,
     ) -> Result<(), NemoError> {
-        use nemo::io::{
-            formats::{
-                dsv::{value_format::DsvValueFormats, DsvHandler},
-                Direction, ImportExportHandler, ImportExportResource,
-            },
-            ExportManager,
-        };
+        use nemo::io::{formats::dsv::DsvHandler, ExportManager};
 
         let identifier = Tag::from(predicate.clone());
 
@@ -380,19 +362,11 @@ impl NemoEngine {
 
         let writer = SyncAccessHandleWriter(sync_access_handle);
 
-        let export_handler: Box<dyn ImportExportHandler> = Box::new(DsvHandler::new(
-            b',',
-            ImportExportResource::Stdout,
-            DsvValueFormats::default(arity),
-            None,
-            CompressionFormat::None,
-            false,
-            Direction::Export,
-        ));
+        let export_handler: DsvHandler = DsvHandler::new(b',', arity);
         let export_manager: ExportManager = Default::default();
 
         export_manager
-            .export_table_with_writer(Box::new(writer), &*export_handler, Some(record_iter))
+            .export_table_with_writer(Box::new(writer), &export_handler, Some(record_iter))
             .map_err(WasmOrInternalNemoError::Nemo)
             .map_err(NemoError)
     }

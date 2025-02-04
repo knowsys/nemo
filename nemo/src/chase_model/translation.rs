@@ -64,26 +64,26 @@ impl ProgramChaseTranslation {
             result.add_output_predicate(output.predicate().clone());
         }
 
-        for import in program.imports() {
-            if let Some(arity) = import.expected_arity() {
+        for (directive, import_builder) in program.imports() {
+            if let Some(arity) = import_builder.expected_arity() {
                 self.predicate_arity
-                    .insert(import.predicate().clone(), arity);
+                    .insert(directive.predicate().clone(), arity);
             }
         }
 
-        for export in program.exports() {
-            if let Some(arity) = export.expected_arity() {
+        for (directive, export_builder) in program.exports() {
+            if let Some(arity) = export_builder.expected_arity() {
                 self.predicate_arity
-                    .insert(export.predicate().clone(), arity);
+                    .insert(directive.predicate().clone(), arity);
             }
         }
 
-        for import in program.imports() {
-            result.add_import(self.build_import(import));
+        for (import_directive, import_builder) in program.imports() {
+            result.add_import(self.build_import(import_directive, import_builder));
         }
 
-        for export in program.exports() {
-            result.add_export(self.build_export(export));
+        for (export_directive, export_builder) in program.exports() {
+            result.add_export(self.build_export(export_directive, export_builder));
         }
 
         result

@@ -20,7 +20,7 @@ use std::fmt::{Debug, Display};
 use aggregate::Aggregate;
 use function::FunctionTerm;
 use map::Map;
-use nemo_physical::datavalues::AnyDataValue;
+use nemo_physical::datavalues::{AnyDataValue, IriDataValue, MapDataValue, TupleDataValue};
 use operation::Operation;
 use primitive::{
     ground::GroundTerm,
@@ -261,6 +261,68 @@ impl From<Tuple> for Term {
 impl From<Aggregate> for Term {
     fn from(value: Aggregate) -> Self {
         Self::Aggregate(value)
+    }
+}
+
+impl TryFrom<Term> for GroundTerm {
+    type Error = Term;
+
+    fn try_from(value: Term) -> Result<Self, Self::Error> {
+        match value {
+            Term::Primitive(Primitive::Ground(ground)) => Ok(ground),
+            Term::Map(map) => {
+                let origin = *map.origin();
+                let label = map
+                    .tag()
+                    .map(|tag| IriDataValue::new(tag.name().to_string()));
+
+                let mut buffer = Vec::new();
+                for (key, value) in map.into_iter() {
+                    let key = GroundTerm::try_from(key)?.value();
+                    let value = GroundTerm::try_from(value)?.value();
+                    buffer.push((key, value));
+                }
+
+                let res = AnyDataValue::from(MapDataValue::new(label, buffer));
+                Ok(GroundTerm::new(res).set_origin(origin))
+            }
+            Term::Tuple(tuple) => {
+                let origin = *tuple.origin();
+
+                let mut buffer = Vec::new();
+                for value in tuple.into_iter() {
+                    let value = GroundTerm::try_from(value)?.value();
+                    buffer.push(value);
+                }
+
+                let res = AnyDataValue::from(TupleDataValue::from_iter(buffer));
+                Ok(GroundTerm::new(res).set_origin(origin))
+            }
+            Term::FunctionTerm(function_term) => {
+                let origin = *function_term.origin();
+                let label = IriDataValue::new(function_term.tag().name().to_string());
+
+                let mut buffer = Vec::new();
+                for value in function_term.into_iter() {
+                    let value = GroundTerm::try_from(value)?.value();
+                    buffer.push(value);
+                }
+
+                let res = AnyDataValue::from(TupleDataValue::new(Some(label), buffer));
+                Ok(GroundTerm::new(res).set_origin(origin))
+            }
+            Term::Operation(operation) => {
+                let reduced = operation.reduce();
+
+                if matches!(reduced, Term::Operation(_)) {
+                    Err(reduced)
+                } else {
+                    GroundTerm::try_from(reduced)
+                }
+            }
+            Term::Aggregate(_) => Err(value),
+            Term::Primitive(Primitive::Variable(_)) => Err(value),
+        }
     }
 }
 

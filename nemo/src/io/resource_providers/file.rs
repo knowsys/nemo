@@ -1,13 +1,10 @@
-use std::{
-    fs::File,
-    io::{BufRead, BufReader},
-    path::PathBuf,
+use std::{fs::File, io::Read, path::PathBuf};
+
+use nemo_physical::{
+    error::{ReadingError, ReadingErrorKind},
+    resource::Resource,
 };
-
-use nemo_physical::{error::ReadingError, resource::Resource};
 use path_slash::PathBufExt;
-
-use crate::rule_model::components::import_export::compression::CompressionFormat;
 
 use super::{is_iri, ResourceProvider};
 
@@ -36,7 +33,10 @@ impl FileResourceProvider {
                 let path = resource
                     .strip_prefix("file://localhost")
                     .or_else(|| resource.strip_prefix("file://"))
-                    .ok_or_else(|| ReadingError::InvalidFileUri(resource.to_string()))?;
+                    .ok_or_else(|| {
+                        ReadingError::new(ReadingErrorKind::InvalidFileUri)
+                            .with_resource(resource.clone())
+                    })?;
                 Ok(Some(PathBuf::from_slash(path)))
             } else {
                 // Non-file IRI, file resource provider is not responsible
@@ -58,24 +58,14 @@ impl ResourceProvider for FileResourceProvider {
     fn open_resource(
         &self,
         resource: &Resource,
-        compression: CompressionFormat,
         _media_type: &str,
-    ) -> Result<Option<Box<dyn BufRead>>, ReadingError> {
+    ) -> Result<Option<Box<dyn Read>>, ReadingError> {
         // Try to parse as file IRI
         if let Some(path) = self.parse_resource(resource)? {
-            let file = File::open(&path).map_err(|e| ReadingError::IoReading {
-                error: e,
-                filename: path.to_string_lossy().to_string(),
-            })?;
-            // Opening succeeded. Apply decompression:
-            if let Some(reader) = compression.try_decompression(BufReader::new(file)) {
-                Ok(Some(reader))
-            } else {
-                Err(ReadingError::Decompression {
-                    resource: resource.to_owned(),
-                    decompression_format: compression.to_string(),
-                })
-            }
+            let file = File::open(&path)
+                .map_err(|e| ReadingError::from(e).with_resource(resource.clone()))?;
+
+            Ok(Some(Box::new(file)))
         } else {
             Ok(None)
         }

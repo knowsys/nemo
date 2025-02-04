@@ -232,6 +232,15 @@ impl IterablePrimitives for Map {
     }
 }
 
+impl IntoIterator for Map {
+    type Item = (Term, Term);
+    type IntoIter = std::vec::IntoIter<(Term, Term)>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.map.into_iter()
+    }
+}
+
 #[cfg(test)]
 mod test {
     use crate::rule_model::{

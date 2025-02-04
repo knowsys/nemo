@@ -143,6 +143,25 @@ pub enum ValidationErrorKind {
     #[error(r#"aggregates may not be used in facts"#)]
     #[assoc(code = 228)]
     FactSubtermAggregate,
+    /// RDF unspecified missing extension
+    #[error("no file extension specified")]
+    #[assoc(note = "rdf imports/exports must have file extension nt, nq, ttl, trig, or rdf.")]
+    #[assoc(code = 229)]
+    RdfUnspecifiedMissingExtension,
+    /// RDF unspecified missing extension
+    #[error("`{0}` is not an rdf format")]
+    #[assoc(note = "rdf imports/exports must have file extension nt, nq, ttl, trig, or rdf.")]
+    #[assoc(code = 230)]
+    RdfUnspecifiedUnknownExtension(String),
+    /// Unknown file format
+    #[error(r#"unknown file format: `{0}`"#)]
+    #[assoc(code = 231)]
+    ImportExportFileFormatUnknown(String),
+    /// Unknown arity
+    #[error(r#"arity of predicate {predicate} is unknown"#)]
+    #[assoc(note = "arity of predicates in import/export statements must be known in advance.")]
+    #[assoc(code = 232)]
+    UnknownArity { predicate: String },
 
     /// Unsupported feature: Multiple aggregates in one rule
     #[error(r#"multiple aggregates in one rule is currently unsupported"#)]

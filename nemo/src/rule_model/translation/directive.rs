@@ -2,12 +2,13 @@
 
 use std::collections::hash_map::Entry;
 
-use import_export::{handle_export, handle_import};
-
 use crate::{
     parser::ast::{self, ProgramAST},
     rule_model::{
-        components::tag::Tag,
+        components::{
+            import_export::{ExportDirective, ImportDirective},
+            tag::Tag,
+        },
         error::{
             info::Info, translation_error::TranslationErrorKind, ComplexErrorLabelKind,
             TranslationError,
@@ -15,7 +16,7 @@ use crate::{
     },
 };
 
-use super::ASTProgramTranslation;
+use super::{ASTProgramTranslation, TranslationComponent};
 
 pub(crate) mod import_export;
 
@@ -41,8 +42,16 @@ pub fn handle_use_directive<'a, 'b>(
     directive: &'b ast::directive::Directive<'a>,
 ) -> Result<(), TranslationError> {
     match directive {
-        ast::directive::Directive::Export(export) => handle_export(translation, export),
-        ast::directive::Directive::Import(import) => handle_import(translation, import),
+        ast::directive::Directive::Export(export) => {
+            let export_directive = ExportDirective::build_component(translation, export)?;
+            translation.program_builder.add_export(export_directive);
+            Ok(())
+        }
+        ast::directive::Directive::Import(import) => {
+            let import_directive = ImportDirective::build_component(translation, import)?;
+            translation.program_builder.add_import(import_directive);
+            Ok(())
+        }
         ast::directive::Directive::Output(output) => handle_output(translation, output),
         ast::directive::Directive::Unknown(unknown) => handle_unknown_directive(unknown),
         ast::directive::Directive::Base(_)

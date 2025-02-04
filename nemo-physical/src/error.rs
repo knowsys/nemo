@@ -4,15 +4,15 @@ use std::{convert::Infallible, fmt::Display};
 
 use thiserror::Error;
 
-use crate::resource::Resource;
+use crate::{datavalues::DataValueCreationError, resource::Resource};
 
 /// Trait that can be used by external libraries extending Nemo to communicate a error during reading
 pub trait ExternalReadingError: Display + std::fmt::Debug {}
 
-/// Collection or errors related to reading input tables.
+/// The collection of possible causes for a [`ReadingError`]
 #[allow(variant_size_differences)]
 #[derive(Error, Debug)]
-pub enum ReadingError {
+pub enum ReadingErrorKind {
     /// An external error during reading.
     #[error(transparent)]
     ExternalError(#[from] Box<dyn std::error::Error>),
@@ -26,30 +26,20 @@ pub enum ReadingError {
     #[error(transparent)]
     ParseFloat(#[from] std::num::ParseFloatError),
     /// Errors on reading a file
-    #[error("failed to read \"{filename}\": {error}")]
-    IoReading {
-        /// Contains the wrapped error
-        error: std::io::Error,
-        /// Filename which caused the error
-        filename: String,
-    },
+    #[error("failed to read file: {0}")]
+    IoReading(#[from] std::io::Error),
     /// Decompression error
-    #[error("failed to decompress \"{resource}\" with {decompression_format}")]
+    #[error("failed to decompress with {decompression_format}")]
     Decompression {
-        /// Resource (filename etc.) where the error originated
-        resource: String,
         /// name of decompression method that was used
         decompression_format: String,
     },
     /// Error when a resource could not be provided by any resource provider
-    #[error("resource at \"{resource}\" was not provided by any resource provider")]
-    ResourceNotProvided {
-        /// Resource which was not provided
-        resource: Resource,
-    },
+    #[error("resource was not provided by any resource provider")]
+    ResourceNotProvided,
     /// A provided resource is not a valid local file:// URI
-    #[error(r#"resource "{0}" is not a valid local file:// URI"#)]
-    InvalidFileUri(Resource),
+    #[error(r#"resource is not a valid local file:// URI"#)]
+    InvalidFileUri,
     /// Error in Reqwest's HTTP handler
     #[error(transparent)]
     HttpTransfer(#[from] reqwest::Error),
@@ -62,6 +52,70 @@ pub enum ReadingError {
     /// Reading error caused by a library which extends nemo
     #[error("reading error caused by a external library extending Nemo: {0}")]
     ExternalReadingError(Box<dyn ExternalReadingError>),
+    /// Error during creation of data-values
+    #[error(transparent)]
+    DataValueCreation(#[from] DataValueCreationError),
+}
+
+/// An error that occurred while reading input tables
+#[derive(Debug, Error)]
+pub struct ReadingError {
+    kind: ReadingErrorKind,
+    resource: Option<Resource>,
+    predicate: Option<String>,
+}
+
+impl ReadingError {
+    /// Creates a new [`ReadingError`]
+    pub fn new(kind: ReadingErrorKind) -> Self {
+        ReadingError {
+            kind,
+            resource: None,
+            predicate: None,
+        }
+    }
+
+    /// Create a new [`ReadingError`] of kind [`ReadingErrorKind::ExternalError`]
+    pub fn new_external(error: Box<dyn std::error::Error>) -> Self {
+        Self::new(error.into())
+    }
+
+    /// Set the resource which was being read while the error occurred
+    pub fn with_resource(mut self, resource: Resource) -> Self {
+        self.resource = Some(resource);
+        self
+    }
+
+    /// Set the predicate which was being processed while the error occurred
+    pub fn with_predicate(mut self, predicate: String) -> Self {
+        self.predicate = Some(predicate);
+        self
+    }
+}
+
+impl<T> From<T> for ReadingError
+where
+    ReadingErrorKind: From<T>,
+{
+    fn from(value: T) -> Self {
+        ReadingError::new(ReadingErrorKind::from(value))
+    }
+}
+
+impl Display for ReadingError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        Display::fmt(&self.kind, f)?;
+
+        if let Some(resource) = &self.resource {
+            f.write_fmt(format_args!("\nwhile reading at `{resource}`"))?
+        }
+
+        if let Some(predicate) = &self.predicate {
+            f.write_fmt(format_args!("\nwhile processing table for `{predicate}`"))?
+        }
+
+        Ok(())
+    }
 }
 
 /// Error-Collection for all the possible Errors occurring in this crate

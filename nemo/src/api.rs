@@ -38,10 +38,8 @@ pub type Engine = DefaultExecutionEngine;
 ///
 /// For details see [load_string]
 pub fn load(file: PathBuf) -> Result<Engine, Error> {
-    let input = read_to_string(file.clone()).map_err(|err| ReadingError::IoReading {
-        error: err,
-        filename: file.to_string_lossy().to_string(),
-    })?;
+    let input = read_to_string(file.clone())
+        .map_err(|err| ReadingError::from(err).with_resource(file.to_string_lossy().to_string()))?;
     load_string(input)
 }
 

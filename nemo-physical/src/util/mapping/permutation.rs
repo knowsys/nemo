@@ -4,7 +4,6 @@ use std::{
     collections::HashMap,
     fmt::Display,
     hash::{Hash, Hasher},
-    iter::repeat,
 };
 
 use super::traits::NatMapping;
@@ -17,7 +16,7 @@ pub struct Permutation {
 }
 
 fn invert(input: &[usize]) -> Box<[usize]> {
-    let mut result: Box<[usize]> = repeat(0).take(input.len()).collect();
+    let mut result: Box<[usize]> = std::iter::repeat_n(0, input.len()).collect();
 
     for (k, &v) in input.iter().enumerate() {
         result[v] = k;

@@ -1,7 +1,7 @@
 //! This module defines [ChaseExport].
 
 use crate::{
-    io::formats::ImportExportHandler,
+    io::formats::Export,
     rule_model::{components::tag::Tag, origin::Origin},
 };
 
@@ -16,12 +16,12 @@ pub(crate) struct ChaseExport {
     /// Predicate that will contain the data
     predicate: Tag,
     /// Handler object responsible for exporting data
-    handler: Box<dyn ImportExportHandler>,
+    handler: Export,
 }
 
 impl ChaseExport {
     /// Create a new [ChaseExport].
-    pub(crate) fn new(predicate: Tag, handler: Box<dyn ImportExportHandler>) -> Self {
+    pub(crate) fn new(predicate: Tag, handler: Export) -> Self {
         Self {
             origin: Origin::default(),
             predicate,
@@ -34,14 +34,14 @@ impl ChaseExport {
         &self.predicate
     }
 
-    /// Return the handler.
-    pub(crate) fn handler(&self) -> Box<dyn ImportExportHandler> {
-        self.handler.clone()
-    }
-
     /// Return the arity of this import.
     pub(crate) fn arity(&self) -> usize {
         self.handler.predicate_arity()
+    }
+
+    /// Convert self into pair of predicate `[Tag]` and `[Export]` handler.
+    pub(crate) fn into_predicate_and_handler(self) -> (Tag, Export) {
+        (self.predicate, self.handler)
     }
 }
 

@@ -77,24 +77,10 @@ pub enum TranslationErrorKind {
     #[error(r#"prefix has been redefined"#)]
     #[assoc(code = 114)]
     PrefixRedefinition,
-    /// Unknown file format
-    #[error(r#"unknown file format: `{0}`"#)]
-    #[assoc(code = 115)]
-    FileFormatUnknown(String),
     /// Missing file format
     #[error("missing file format")]
     #[assoc(code = 116)]
     FileFormatMissing,
-    /// RDF unspecified missing extension
-    #[error("no file extension specified")]
-    #[assoc(note = "rdf imports/exports must have file extension nt, nq, ttl, trig, or rdf.")]
-    #[assoc(code = 117)]
-    RdfUnspecifiedMissingExtension,
-    /// RDF unspecified missing extension
-    #[error("`{0}` is not an rdf format")]
-    #[assoc(note = "rdf imports/exports must have file extension nt, nq, ttl, trig, or rdf.")]
-    #[assoc(code = 118)]
-    RdfUnspecifiedUnknownExtension(String),
     /// Unkown attribute
     #[error("unknown attribute: `{0}`")]
     #[assoc(code = 119)]
@@ -104,7 +90,7 @@ pub enum TranslationErrorKind {
     #[assoc(code = 120)]
     AttributeUnexpected(String),
     /// Attributed defined multiple times
-    #[error("")]
+    #[error("attribute defined multiple times")]
     #[assoc(code = 121)]
     AttributeRedefined,
     /// Attribute contains wrong number of parameters
@@ -129,8 +115,20 @@ pub enum TranslationErrorKind {
     NonGroundTerm { found: String },
     /// Arbitrary expression used in place of a fact
     #[error("expected a fact, found `{found}`")]
-    #[assoc(code = 126)]
+    #[assoc(code = 127)]
     ExpressionAsFact { found: String },
+    /// Keys in a map have the wrong type
+    #[error("wrong key type: {key} is of type {found}, but expected {expected}")]
+    #[assoc(code = 128)]
+    KeyWrongType {
+        key: String,
+        found: String,
+        expected: String,
+    },
+    /// parameter in a map is defined twice
+    #[error("parameter {key} is defined multiple times")]
+    #[assoc(code = 129)]
+    MapParameterRedefined { key: String },
 
     /// Unsupported: Declare statements
     #[error(r#"declare statements are currently unsupported"#)]

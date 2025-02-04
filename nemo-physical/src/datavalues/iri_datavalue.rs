@@ -20,7 +20,7 @@ pub struct IriDataValue(String);
 impl IriDataValue {
     /// Constructor. It is currently not checked whether the IRI is valid according to applicable specifications
     /// and standards -- we just treat it like a string.
-    pub(crate) fn new(iri: String) -> Self {
+    pub fn new(iri: String) -> Self {
         IriDataValue(iri)
     }
 

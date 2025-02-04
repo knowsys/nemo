@@ -7,61 +7,91 @@ pub(crate) mod reader;
 pub(crate) mod value_format;
 pub(crate) mod writer;
 
-use std::io::{BufRead, Write};
+use std::{
+    io::{Read, Write},
+    path::Path,
+    sync::Arc,
+};
 
-use enum_assoc::Assoc;
-use nemo_physical::datasources::table_providers::TableProvider;
+use nemo_physical::{
+    datasources::table_providers::TableProvider,
+    datavalues::{AnyDataValue, DataValue},
+};
 
 use oxiri::Iri;
 use reader::RdfReader;
+use strum::VariantArray;
 use strum_macros::VariantArray;
 use value_format::RdfValueFormats;
 use writer::RdfWriter;
 
 use crate::{
     error::Error,
-    rule_model::components::import_export::{
-        compression::CompressionFormat, file_formats::FileFormat,
+    io::{
+        compression_format::CompressionFormat,
+        format_builder::{
+            format_parameter, format_tag, value_type_matches, AnyImportExportBuilder,
+            FormatParameter, Parameters, StandardParameter,
+        },
     },
+    rule_model::{
+        components::{import_export::Direction, term::value_type::ValueType},
+        error::validation_error::ValidationErrorKind,
+    },
+    syntax::import_export::{attribute, file_format},
 };
 
-use super::{Direction, ImportExportHandler, ImportExportResource, TableWriter};
+use super::FileFormatMeta;
+use super::{ExportHandler, FormatBuilder, ImportHandler, TableWriter};
 
 /// The different supported variants of the RDF format.
 #[derive(Assoc, Debug, Clone, Copy, PartialEq, Eq, VariantArray)]
-#[func(pub fn file_format(&self) -> FileFormat)]
+#[func(pub fn media_type(&self) -> &'static str)]
+#[func(pub fn default_extension(&self) -> &'static str)]
+#[func(pub fn arity(&self) -> usize)]
+#[func(pub fn name(&self) -> &'static str)]
 pub enum RdfVariant {
     /// RDF 1.1 N-Triples
-    #[assoc(file_format = FileFormat::NTriples)]
+    #[assoc(media_type = file_format::MEDIA_TYPE_RDF_NTRIPLES)]
+    #[assoc(default_extension = file_format::EXTENSION_RDF_NTRIPLES)]
+    #[assoc(arity = 3)]
+    #[assoc(name = file_format::RDF_NTRIPLES)]
     NTriples,
     /// RDF 1.1 N-Quads
-    #[assoc(file_format = FileFormat::NQuads)]
+    #[assoc(media_type = file_format::MEDIA_TYPE_RDF_NQUADS)]
+    #[assoc(default_extension = file_format::EXTENSION_RDF_NQUADS)]
+    #[assoc(arity = 4)]
+    #[assoc(name = file_format::RDF_NQUADS)]
     NQuads,
     /// RDF 1.1 Turtle
-    #[assoc(file_format = FileFormat::Turtle)]
+    #[assoc(media_type = file_format::MEDIA_TYPE_RDF_TURTLE)]
+    #[assoc(default_extension = file_format::EXTENSION_RDF_TURTLE)]
+    #[assoc(arity = 3)]
+    #[assoc(name = file_format::RDF_TURTLE)]
     Turtle,
     /// RDF 1.1 RDF/XML
-    #[assoc(file_format = FileFormat::RDFXML)]
+    #[assoc(media_type = file_format::MEDIA_TYPE_RDF_XML)]
+    #[assoc(default_extension = file_format::EXTENSION_RDF_XML)]
+    #[assoc(arity = 3)]
+    #[assoc(name = file_format::RDF_XML)]
     RDFXML,
     /// RDF 1.1 TriG
-    #[assoc(file_format = FileFormat::TriG)]
+    #[assoc(media_type = file_format::MEDIA_TYPE_RDF_TRIG)]
+    #[assoc(default_extension = file_format::EXTENSION_RDF_TRIG)]
+    #[assoc(arity = 4)]
+    #[assoc(name = file_format::RDF_TRIG)]
     TriG,
 }
 
 impl std::fmt::Display for RdfVariant {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.file_format().fmt(f)
+        f.write_str(self.name())
     }
 }
 
 /// A handler for RDF formats.
 #[derive(Debug, Clone)]
 pub struct RdfHandler {
-    /// The resource to write to/read from.
-    /// This can be [ImportExportResource::Unspecified] for writing, since one can generate a default file
-    /// name from the exported predicate in this case. This has little chance of
-    /// success for imports, so a concrete value is required there.
-    resource: ImportExportResource,
     /// Base IRI, if given.
     base: Option<Iri<String>>,
     /// The specific RDF format to be used.
@@ -70,41 +100,20 @@ pub struct RdfHandler {
     value_formats: RdfValueFormats,
     /// Maximum number of statements that should be imported/exported.
     limit: Option<u64>,
-    /// Compression format to be used
-    compression_format: CompressionFormat,
-    /// Direction of the operation.
-    _direction: Direction,
 }
 
-impl RdfHandler {
-    /// Create a new [RdfHandler].
-    pub fn new(
-        resource: ImportExportResource,
-        base: Option<Iri<String>>,
-        variant: RdfVariant,
-        value_formats: RdfValueFormats,
-        limit: Option<u64>,
-        compression_format: CompressionFormat,
-        _direction: Direction,
-    ) -> Self {
-        Self {
-            resource,
-            base,
-            variant,
-            value_formats,
-            limit,
-            compression_format,
-            _direction,
-        }
+impl FileFormatMeta for RdfHandler {
+    fn default_extension(&self) -> String {
+        self.variant.default_extension().to_string()
+    }
+
+    fn media_type(&self) -> String {
+        self.variant.media_type().to_string()
     }
 }
 
-impl ImportExportHandler for RdfHandler {
-    fn file_format(&self) -> FileFormat {
-        self.variant.file_format()
-    }
-
-    fn reader(&self, read: Box<dyn BufRead>) -> Result<Box<dyn TableProvider>, Error> {
+impl ImportHandler for RdfHandler {
+    fn reader(&self, read: Box<dyn Read>) -> Result<Box<dyn TableProvider>, Error> {
         Ok(Box::new(RdfReader::new(
             read,
             self.variant,
@@ -113,7 +122,9 @@ impl ImportExportHandler for RdfHandler {
             self.limit,
         )))
     }
+}
 
+impl ExportHandler for RdfHandler {
     fn writer(&self, writer: Box<dyn Write>) -> Result<Box<dyn TableWriter>, Error> {
         Ok(Box::new(RdfWriter::new(
             writer,
@@ -122,46 +133,133 @@ impl ImportExportHandler for RdfHandler {
             self.limit,
         )))
     }
+}
 
-    fn predicate_arity(&self) -> usize {
-        self.value_formats.arity()
-    }
-
-    fn file_extension(&self) -> String {
-        self.file_format().extension().to_string()
-    }
-
-    fn compression_format(&self) -> CompressionFormat {
-        self.compression_format
-    }
-
-    fn import_export_resource(&self) -> &ImportExportResource {
-        &self.resource
+format_tag! {
+    pub(crate) enum RdfTag(SupportedFormatTag::Rdf) {
+        Rdf => file_format::RDF_UNSPECIFIED,
+        NTriples => file_format::RDF_NTRIPLES,
+        NQuads => file_format::RDF_NQUADS,
+        Turtle => file_format::RDF_TURTLE,
+        Trig => file_format::RDF_TRIG,
+        RdfXml => file_format::RDF_XML,
     }
 }
 
-#[cfg(test)]
-mod test {
-    use super::*;
-    use strum::VariantArray;
+format_parameter! {
+    pub(crate) enum RdfParameter(StandardParameter) {
+        Limit(name = attribute::LIMIT, supported_types = &[ValueType::Number]),
+        Base(name = attribute::BASE, supported_types = &[ValueType::Constant]),
+        Format(name = attribute::FORMAT, supported_types = &[ValueType::Tuple]),
+    }
+}
 
-    #[test]
-    fn format_metadata() {
-        for variant in RdfVariant::VARIANTS {
-            let format = variant.file_format();
-            let handler = RdfHandler::new(
-                ImportExportResource::from_string(format!("dummy.{}", format.extension())),
-                None,
-                *variant,
-                RdfValueFormats::default(format.arity().unwrap()),
-                None,
-                CompressionFormat::None,
-                Direction::Import,
-            );
+impl FormatParameter<RdfTag> for RdfParameter {
+    fn required_for(&self, tag: RdfTag) -> bool {
+        matches!(tag, RdfTag::Rdf)
+            && matches!(
+                self,
+                RdfParameter::BaseParamType(StandardParameter::Resource)
+            )
+    }
 
-            assert_eq!(format.extension(), handler.file_extension());
-            assert_eq!(format.media_type(), handler.file_format().media_type());
-            assert_eq!(format.arity(), Some(handler.predicate_arity()));
+    fn is_value_valid(&self, value: AnyDataValue) -> Result<(), ValidationErrorKind> {
+        value_type_matches(self, &value, self.supported_types())?;
+
+        match self {
+            RdfParameter::BaseParamType(base) => {
+                FormatParameter::<RdfTag>::is_value_valid(base, value)
+            }
+            RdfParameter::Limit => value
+                .to_u64()
+                .and(Some(()))
+                .ok_or(ValidationErrorKind::ImportExportLimitNegative),
+            RdfParameter::Base => Ok(()),
+            RdfParameter::Format => RdfValueFormats::try_from(value).and(Ok(())).map_err(|_| {
+                ValidationErrorKind::ImportExportValueFormat {
+                    file_format: "rdf".to_string(),
+                }
+            }),
         }
+    }
+}
+
+impl From<RdfHandler> for AnyImportExportBuilder {
+    fn from(value: RdfHandler) -> Self {
+        Self::Rdf(value)
+    }
+}
+
+impl FormatBuilder for RdfHandler {
+    type Parameter = RdfParameter;
+    type Tag = RdfTag;
+
+    fn new(
+        tag: Self::Tag,
+        parameters: &Parameters<RdfHandler>,
+        _direction: Direction,
+    ) -> Result<Self, ValidationErrorKind> {
+        let variant = match tag {
+            RdfTag::Rdf => {
+                let value = parameters
+                    .get_required(RdfParameter::BaseParamType(StandardParameter::Resource));
+
+                let resource = value.to_plain_string_unchecked();
+                let stripped = CompressionFormat::from_resource(&resource).1;
+
+                let Some(extension) = Path::new(&stripped).extension() else {
+                    return Err(ValidationErrorKind::RdfUnspecifiedMissingExtension);
+                };
+
+                let Some(variant) = RdfVariant::VARIANTS
+                    .iter()
+                    .find(|variant| extension == variant.default_extension())
+                else {
+                    return Err(ValidationErrorKind::RdfUnspecifiedUnknownExtension(
+                        extension.to_string_lossy().into_owned(),
+                    ));
+                };
+
+                *variant
+            }
+            RdfTag::NTriples => RdfVariant::NTriples,
+            RdfTag::NQuads => RdfVariant::NQuads,
+            RdfTag::Turtle => RdfVariant::Turtle,
+            RdfTag::Trig => RdfVariant::TriG,
+            RdfTag::RdfXml => RdfVariant::RDFXML,
+        };
+
+        let base = parameters
+            .get_optional(RdfParameter::Base)
+            .map(|value| Iri::parse_unchecked(value.to_iri_unchecked()));
+
+        let value_formats = match parameters.get_optional(RdfParameter::Format) {
+            Some(value) => RdfValueFormats::try_from(value).unwrap(),
+            None => RdfValueFormats::default(variant.arity()),
+        };
+
+        let limit = parameters
+            .get_optional(RdfParameter::Limit)
+            .as_ref()
+            .map(AnyDataValue::to_u64_unchecked);
+
+        Ok(Self {
+            base,
+            variant,
+            value_formats,
+            limit,
+        })
+    }
+
+    fn expected_arity(&self) -> Option<usize> {
+        Some(self.variant.arity())
+    }
+
+    fn build_import(&self, _arity: usize) -> Arc<dyn ImportHandler + Send + Sync + 'static> {
+        Arc::new(self.clone())
+    }
+
+    fn build_export(&self, _arity: usize) -> Arc<dyn ExportHandler + Send + Sync + 'static> {
+        Arc::new(self.clone())
     }
 }

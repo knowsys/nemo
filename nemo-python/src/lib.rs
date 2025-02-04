@@ -460,7 +460,7 @@ impl NemoEngine {
             .0
             .export_table(
                 &tag,
-                &*export_handler,
+                &export_handler,
                 self.engine.predicate_rows(&tag).py_res()?,
             )
             .py_res()?;

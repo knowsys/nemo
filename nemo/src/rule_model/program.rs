@@ -5,7 +5,7 @@ use std::{
     fmt::Write,
 };
 
-use crate::rule_model::components::tag::Tag;
+use crate::{io::format_builder::ImportExportBuilder, rule_model::components::tag::Tag};
 
 use super::{
     components::{
@@ -14,7 +14,7 @@ use super::{
         literal::Literal,
         output::Output,
         rule::Rule,
-        ProgramComponent, ProgramComponentKind,
+        ProgramComponent,
     },
     error::{
         info::Info, validation_error::ValidationErrorKind, ComplexErrorLabelKind,
@@ -24,7 +24,7 @@ use super::{
 };
 
 /// Representation of a nemo program
-#[derive(Debug, Default, Clone)]
+#[derive(Default, Clone)]
 pub struct Program {
     /// Origin of this component
     origin: Origin,
@@ -39,17 +39,39 @@ pub struct Program {
     facts: Vec<Fact>,
     /// Outputs
     outputs: Vec<Output>,
+    /// Map of all predicate arities (filled upon validation)
+    arities: HashMap<Tag, (usize, Origin)>,
+    /// Builders for import handlers (filled upon validation)
+    import_builders: Vec<ImportExportBuilder>,
+    /// Builders for export handlers (filled upon validation)
+    export_builders: Vec<ImportExportBuilder>,
+}
+
+impl std::fmt::Debug for Program {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Program")
+            .field("origin", &self.origin)
+            .field("imports", &self.imports)
+            .field("exports", &self.exports)
+            .field("rules", &self.rules)
+            .field("facts", &self.facts)
+            .field("outputs", &self.outputs)
+            .field("arities", &self.arities)
+            .finish()
+    }
 }
 
 impl Program {
     /// Return an iterator over all imports.
-    pub fn imports(&self) -> impl Iterator<Item = &ImportDirective> {
-        self.imports.iter()
+    pub fn imports(&self) -> impl Iterator<Item = (&ImportDirective, &ImportExportBuilder)> {
+        debug_assert_eq!(self.imports.len(), self.import_builders.len());
+        self.imports.iter().zip(&self.import_builders)
     }
 
     /// Return an iterator over all exports.
-    pub fn exports(&self) -> impl Iterator<Item = &ExportDirective> {
-        self.exports.iter()
+    pub fn exports(&self) -> impl Iterator<Item = (&ExportDirective, &ImportExportBuilder)> {
+        debug_assert_eq!(self.exports.len(), self.export_builders.len());
+        self.exports.iter().zip(&self.export_builders)
     }
 
     /// Return an iterator over all rules.
@@ -77,7 +99,8 @@ impl Program {
 
     /// Return the set of all predicates that are defined by import statements.
     pub fn import_predicates(&self) -> HashSet<Tag> {
-        self.imports()
+        self.imports
+            .iter()
             .map(|import| import.predicate().clone())
             .collect()
     }
@@ -213,14 +236,14 @@ impl Program {
     pub(crate) fn validate_global_properties(
         &self,
         builder: &mut ValidationErrorBuilder,
-    ) -> Option<()> {
+    ) -> Option<HashMap<Tag, (usize, Origin)>> {
         let mut predicate_arity = HashMap::<Tag, (usize, Origin)>::new();
 
-        for import in self.imports() {
-            let predicate = import.predicate().clone();
-            let origin = *import.origin();
+        for (import_directive, import_builder) in self.imports() {
+            let predicate = import_directive.predicate().clone();
+            let origin = *import_directive.origin();
 
-            if let Some(arity) = import.expected_arity() {
+            if let Some(arity) = import_builder.expected_arity() {
                 Self::validate_arity(&mut predicate_arity, predicate, arity, origin, builder);
             }
         }
@@ -264,67 +287,48 @@ impl Program {
             }
         }
 
-        for export in self.exports() {
-            let predicate = export.predicate().clone();
-            let origin = *export.origin();
+        for (export_directive, export_builder) in self.exports() {
+            let predicate = export_directive.predicate().clone();
+            let origin = *export_directive.origin();
 
-            if let Some(arity) = export.expected_arity() {
+            if let Some(arity) = export_builder.expected_arity() {
                 Self::validate_arity(&mut predicate_arity, predicate, arity, origin, builder);
             }
         }
 
-        Some(())
+        for import in &self.imports {
+            if !predicate_arity.contains_key(import.predicate()) {
+                builder.report_error(
+                    *import.predicate().origin(),
+                    ValidationErrorKind::UnknownArity {
+                        predicate: import.predicate().to_string(),
+                    },
+                );
+                return None;
+            }
+        }
+
+        for export in &self.exports {
+            if !predicate_arity.contains_key(export.predicate()) {
+                builder.report_error(
+                    *export.predicate().origin(),
+                    ValidationErrorKind::UnknownArity {
+                        predicate: export.predicate().to_string(),
+                    },
+                );
+                return None;
+            }
+        }
+
+        Some(predicate_arity)
     }
 }
 
-impl ProgramComponent for Program {
-    fn origin(&self) -> &Origin {
-        &self.origin
-    }
-
-    fn set_origin(mut self, origin: Origin) -> Self
-    where
-        Self: Sized,
-    {
-        self.origin = origin;
-        self
-    }
-
-    fn validate(&self, builder: &mut ValidationErrorBuilder) -> Option<()>
-    where
-        Self: Sized,
-    {
-        for import in self.imports() {
-            let _ = import.validate(builder);
-        }
-
-        for fact in self.facts() {
-            let _ = fact.validate(builder);
-        }
-
-        for rule in self.rules() {
-            let _ = rule.validate(builder);
-        }
-
-        for output in self.outputs() {
-            let _ = output.validate(builder);
-        }
-
-        for export in self.exports() {
-            let _ = export.validate(builder);
-        }
-
-        self.validate_global_properties(builder)
-    }
-
-    fn kind(&self) -> ProgramComponentKind {
-        ProgramComponentKind::Program
-    }
-}
+impl Program {}
 
 impl std::fmt::Display for Program {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        for import in self.imports() {
+        for import in &self.imports {
             import.fmt(f)?;
             f.write_char('\n')?;
         }
@@ -340,12 +344,47 @@ impl std::fmt::Display for Program {
             output.fmt(f)?;
             f.write_char('\n')?;
         }
-        for export in self.exports() {
+        for export in &self.exports {
             export.fmt(f)?;
             f.write_char('\n')?;
         }
 
         Ok(())
+    }
+}
+
+impl Program {
+    fn validate(&mut self, error_builder: &mut ValidationErrorBuilder) -> Option<()>
+    where
+        Self: Sized,
+    {
+        debug_assert!(self.import_builders.is_empty());
+
+        for import in &self.imports {
+            let builder = import.validate(error_builder)?;
+            self.import_builders.push(builder);
+        }
+
+        for fact in self.facts() {
+            let _ = fact.validate(error_builder);
+        }
+
+        for rule in self.rules() {
+            let _ = rule.validate(error_builder);
+        }
+
+        for output in self.outputs() {
+            let _ = output.validate(error_builder);
+        }
+
+        for export in &self.exports {
+            let builder = export.validate(error_builder)?;
+            self.export_builders.push(builder);
+        }
+
+        self.arities = self.validate_global_properties(error_builder)?;
+
+        Some(())
     }
 }
 
@@ -387,8 +426,8 @@ impl ProgramBuilder {
         self.program.outputs.push(output);
     }
 
-    /// Validate the current program.
-    pub fn validate(&self, builder: &mut ValidationErrorBuilder) -> Option<()> {
-        self.program.validate_global_properties(builder)
+    /// Validate the program that is being built
+    pub fn validate(&mut self, error_builder: &mut ValidationErrorBuilder) -> Option<()> {
+        self.program.validate(error_builder)
     }
 }
