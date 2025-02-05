@@ -27,15 +27,8 @@ use crate::io::formats::PROGRESS_NOTIFY_INCREMENT;
 use super::{
     error::RdfFormatError,
     value_format::{RdfValueFormat, RdfValueFormats},
-    RdfVariant,
+    RdfVariant, DEFAULT_GRAPH_IRI,
 };
-
-/// IRI to be used for the default graph used by Nemo when loading RDF data with
-/// named graphs (quads).
-///
-/// SPARQL 1.1 has failed to provide any standard identifier for this purpose.
-/// If future SPARQL or RDF versions are adding this, we could align accordingly.
-const DEFAULT_GRAPH: &str = "tag:nemo:defaultgraph";
 
 /// A [TableProvider] for RDF 1.1 files containing triples.
 pub(super) struct RdfReader {
@@ -157,7 +150,7 @@ impl RdfReader {
         value: Option<GraphName<'_>>,
     ) -> Result<AnyDataValue, RdfFormatError> {
         match value {
-            None => Ok(AnyDataValue::new_iri(DEFAULT_GRAPH.to_string())),
+            None => Ok(AnyDataValue::new_iri(DEFAULT_GRAPH_IRI.to_string())),
             Some(GraphName::NamedNode(nn)) => Ok(Self::datavalue_from_named_node(nn)),
             Some(GraphName::BlankNode(bn)) => {
                 Ok(Self::datavalue_from_blank_node(bnode_map, tuple_writer, bn))
