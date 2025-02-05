@@ -66,50 +66,64 @@ impl GeneratorUpdate {
             .iter()
             .map(|trie| RowScanMut::new(trie.partial_iterator_mut(), 0))
             .collect::<Vec<_>>();
-        let mut new_scan = new.row_iterator();
+        let mut deleted_rows = HashSet::<usize>::new();
         let mut current_row = vec![AnyDataValue::new_boolean(false); new.arity() * 2];
 
-        while let Some(new_row) = new_scan.next() {
-            current_row
-                .iter_mut()
-                .zip(new_row.iter())
-                .for_each(|(current, new)| {
-                    *current = new.into_datavalue(&dictionary.borrow()).expect("...")
-                });
+        {
+            let mut new_scan = new.row_iterator();
 
-            for (mut old_scan, permutation) in old_scans.iter_mut().zip(self.permutations.iter()) {
-                while let Some(old_row) = Iterator::next(&mut old_scan) {
-                    for (row_index, value) in old_row.into_iter().enumerate() {
-                        let value = value.into_datavalue(&dictionary.borrow()).expect("...");
-                        current_row[new.arity() + permutation.get(row_index)] = value;
+            let mut row_index: usize = 0;
+            while let Some(new_row) = new_scan.next() {
+                current_row
+                    .iter_mut()
+                    .zip(new_row.iter())
+                    .for_each(|(current, new)| {
+                        *current = new.into_datavalue(&dictionary.borrow()).expect("...")
+                    });
+
+                for (mut old_scan, permutation) in
+                    old_scans.iter_mut().zip(self.permutations.iter())
+                {
+                    while let Some(old_row) = Iterator::next(&mut old_scan) {
+                        for (column_index, value) in old_row.into_iter().enumerate() {
+                            let value = value.into_datavalue(&dictionary.borrow()).expect("...");
+                            current_row[new.arity() + permutation.get(column_index)] = value;
+                        }
+
+                        let (first_half, second_half) = current_row.split_at(new.arity());
+                        let current_row_reversed = [second_half, first_half].concat();
 
                         if let Some(true) = self.filter.evaluate_bool(&current_row, None) {
                             old_scan.delete_current_row();
                         }
+                        if let Some(true) = self.filter.evaluate_bool(&current_row_reversed, None) {
+                            deleted_rows.insert(row_index);
+                        }
                     }
                 }
+
+                row_index += 1;
             }
         }
 
         // TODO: This is horrible:
 
-        let mut deleted_rows = HashSet::<usize>::new();
         let mut new_scan_a = RowScan::new(new.partial_iterator(), 0);
-        let mut new_scan_b = RowScan::new(new.partial_iterator(), 0);
+        let mut row_index: usize = 0;
 
         while let Some(row_a) = Iterator::next(&mut new_scan_a) {
             current_row
                 .iter_mut()
+                .skip(new.arity())
                 .zip(row_a.iter())
                 .for_each(|(current, new)| {
                     *current = new.into_datavalue(&dictionary.borrow()).expect("...")
                 });
 
-            let mut row_index: usize = 0;
+            let mut new_scan_b = RowScan::new(new.partial_iterator(), 0);
             while let Some(row_b) = Iterator::next(&mut new_scan_b) {
                 current_row
                     .iter_mut()
-                    .skip(new.arity())
                     .zip(row_b.iter())
                     .for_each(|(current, new)| {
                         *current = new.into_datavalue(&dictionary.borrow()).expect("...")
@@ -117,10 +131,11 @@ impl GeneratorUpdate {
 
                 if let Some(true) = self.filter.evaluate_bool(&current_row, None) {
                     deleted_rows.insert(row_index);
+                    break;
                 }
-
-                row_index += 1;
             }
+
+            row_index += 1;
         }
 
         let mut new_scan = RowScanMut::new(new.partial_iterator_mut(), 0);
@@ -131,6 +146,11 @@ impl GeneratorUpdate {
             }
 
             row_index += 1;
+        }
+
+        let arity = new.arity();
+        if row_index == deleted_rows.len() {
+            *new = Trie::empty(arity);
         }
     }
 }

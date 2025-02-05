@@ -130,6 +130,14 @@ impl HeadStrategy for DatalogStrategy {
                 })
                 .collect();
 
+            let old_table_union = current_plan
+                .plan_mut()
+                .union(OperationTable::new_unique(arity), old_table_nodes.clone());
+
+            let subtraction_node = current_plan
+                .plan_mut()
+                .subtract(new_tables_union, vec![old_table_union]);
+
             let final_node = if let Some(filter) = self.predicate_to_update.get(predicate) {
                 let variable_translation = self
                     .predicate_to_order_variable_translation
@@ -140,17 +148,11 @@ impl HeadStrategy for DatalogStrategy {
 
                 current_plan.plan_mut().update(
                     filter,
-                    new_tables_union, // TODO: What with multihead rules?
+                    subtraction_node, // TODO: What with multihead rules?
                     old_table_nodes,
                 )
             } else {
-                let old_table_union = current_plan
-                    .plan_mut()
-                    .union(OperationTable::new_unique(arity), old_table_nodes);
-
-                current_plan
-                    .plan_mut()
-                    .subtract(new_tables_union, vec![old_table_union])
+                subtraction_node
             };
 
             // let update_node = current_plan.plan_mut().update(marked_columns, subnode)

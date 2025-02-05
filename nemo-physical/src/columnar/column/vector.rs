@@ -20,7 +20,7 @@ pub(crate) struct ColumnVector<T> {
     data: Vec<T>,
 }
 
-impl<T: Debug + Copy + Ord> ColumnVector<T> {
+impl<T: Debug + Copy + Ord + DeletedValue> ColumnVector<T> {
     /// Constructs a new ColumnVector from a vector of the suitable type.
     pub(crate) fn new(data: Vec<T>) -> ColumnVector<T> {
         let mut data = data;
@@ -202,7 +202,10 @@ pub(crate) struct ColumnScanVectorMut<'a, T> {
     interval: Range<usize>,
 }
 
-impl<'a, T> ColumnScanVectorMut<'a, T> {
+impl<'a, T> ColumnScanVectorMut<'a, T>
+where
+    T: 'a + Debug + Copy + Ord + DeletedValue,
+{
     pub(crate) fn new(column: &'a [T]) -> Self {
         let column_len = column.len();
         let slice = unsafe {
@@ -218,11 +221,19 @@ impl<'a, T> ColumnScanVectorMut<'a, T> {
     }
 
     pub(crate) fn current(&self) -> Option<&T> {
-        unsafe { self.column.get(self.pos?).map(|cell| &*cell.get()) }
+        let cell = self
+            .pos
+            .and_then(|pos| (pos < self.interval.end).then(|| &self.column[pos]))?;
+
+        Some(unsafe { &*cell.get() })
     }
 
     pub(crate) fn current_mut(&self) -> Option<&mut T> {
-        unsafe { self.column.get(self.pos?).map(|cell| &mut *cell.get()) }
+        let cell = self
+            .pos
+            .and_then(|pos| (pos < self.interval.end).then(|| &self.column[pos]))?;
+
+        Some(unsafe { &mut *cell.get() })
     }
 
     pub(crate) fn reset(&mut self) {
@@ -239,12 +250,25 @@ impl<'a, T> ColumnScanVectorMut<'a, T> {
     }
 
     pub(crate) fn next(&mut self) {
-        let pos = self.pos.map_or_else(|| self.interval.start, |pos| pos + 1);
-        self.pos = Some(pos);
+        loop {
+            let pos = self.pos.map_or_else(|| self.interval.start, |pos| pos + 1);
+            self.pos = Some(pos);
+            if pos >= self.interval.end {
+                return;
+            }
+
+            let current_element = unsafe { *&*self.column[pos].get() };
+            if current_element != T::deleted_value() {
+                return;
+            }
+        }
     }
 }
 
-impl<'a, T: DeletedValue> ColumnScanVectorMut<'a, T> {
+impl<'a, T> ColumnScanVectorMut<'a, T>
+where
+    T: Debug + Copy + Ord + DeletedValue,
+{
     pub(crate) fn delete(&mut self) {
         if let Some(current) = self.current_mut() {
             *current = T::deleted_value();

@@ -84,13 +84,13 @@ impl DeletedValue for i32 {
 
 impl DeletedValue for Float {
     fn deleted_value() -> Self {
-        Float::new_unchecked(f32::NAN)
+        Float::new_unchecked(f32::INFINITY)
     }
 }
 
 impl DeletedValue for Double {
     fn deleted_value() -> Self {
-        Double::new_unchecked(f64::NAN)
+        Double::new_unchecked(f64::INFINITY)
     }
 }
 

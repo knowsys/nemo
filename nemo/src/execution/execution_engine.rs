@@ -188,7 +188,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         let updated_predicates =
             execution.execute(&mut self.table_manager, current_info, self.current_step)?;
 
-        current_info.step_last_applied = self.current_step;
+        current_info.step_last_applied = 0; // self.current_step;
 
         let rule_duration = TimedCode::instance().sub(&timing_string).stop();
         log::info!("Rule duration: {} ms", rule_duration.as_millis());

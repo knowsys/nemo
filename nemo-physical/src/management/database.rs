@@ -320,12 +320,13 @@ impl DatabaseInstance {
 
     fn load_tables_mut<'a>(
         &'a mut self,
+        storage: &'a TemporaryStorage,
         leafs: &Vec<ExecutionTreeLeaf>,
     ) -> (Vec<&'a mut Trie>, &'a RefCell<Dict>) {
         let ids = leafs
             .iter()
             .map(|leaf| match leaf {
-                ExecutionTreeLeaf::LoadTable(load_id) => *load_id,
+                ExecutionTreeLeaf::LoadTable(load_id) => storage.loaded_tables[*load_id],
                 ExecutionTreeLeaf::FetchComputedTable(_computed_id) => {
                     unimplemented!("cannot provide write access to temporary tables")
                 }
@@ -427,7 +428,8 @@ impl DatabaseInstance {
                 //     .evaluate_tree_leaf(storage, new)
                 //     .map(|scan| Trie::from_partial_trie_scan(scan, tree.cut_layers))
                 //     .unwrap_or(Trie::empty(0));
-                let (old_tries, dictionary) = self.load_tables_mut(&old);
+
+                let (old_tries, dictionary) = self.load_tables_mut(storage, &old);
                 generator.apply_operation(old_tries, &mut new_trie, dictionary);
 
                 (new_trie, vec![])

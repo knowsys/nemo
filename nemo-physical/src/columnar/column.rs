@@ -10,7 +10,7 @@ use std::{fmt::Debug, mem::size_of};
 use vector::ColumnScanVectorMut;
 
 use crate::{
-    datatypes::{ColumnDataType, RunLengthEncodable},
+    datatypes::{column_data_type::DeletedValue, ColumnDataType, RunLengthEncodable},
     generate_forwarder,
     management::bytesized::ByteSized,
 };
@@ -88,7 +88,7 @@ impl<T: RunLengthEncodable> ByteSized for ColumnEnum<T> {
     }
 }
 
-impl<T: RunLengthEncodable + Debug + Ord + Copy> ColumnEnum<T> {
+impl<T: RunLengthEncodable + Debug + Ord + Copy + DeletedValue> ColumnEnum<T> {
     pub(crate) fn iter_mut(&self) -> ColumnScanVectorMut<T> {
         match self {
             ColumnEnum::ColumnVector(column_vector) => column_vector.iter_mut(),
