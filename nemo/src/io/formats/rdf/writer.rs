@@ -16,7 +16,7 @@ use crate::{
 
 use super::{
     value_format::{RdfValueFormat, RdfValueFormats},
-    RdfVariant,
+    RdfVariant, DEFAULT_GRAPH_IRI,
 };
 
 /// Private struct to record the type of an RDF term that
@@ -31,13 +31,43 @@ enum RdfTermType {
     SimpleStringLiteral,
 }
 
+#[derive(Debug, Default)]
+enum QuadGraphName {
+    #[default]
+    DefaultGraph,
+    NamedNode(String),
+    BlankNode(String),
+}
+
+#[derive(Debug)]
+struct InvalidGraphNameError;
+
+impl TryFrom<&AnyDataValue> for QuadGraphName {
+    type Error = InvalidGraphNameError;
+
+    fn try_from(value: &AnyDataValue) -> Result<Self, Self::Error> {
+        match value.value_domain() {
+            ValueDomain::Iri => {
+                let iri = value.to_iri_unchecked();
+
+                if iri == DEFAULT_GRAPH_IRI {
+                    Ok(Self::DefaultGraph)
+                } else {
+                    Ok(Self::NamedNode(iri))
+                }
+            }
+            ValueDomain::Null => Ok(Self::BlankNode(value.lexical_value())),
+            _ => Err(InvalidGraphNameError),
+        }
+    }
+}
+
 /// Struct to store information of one quad (or triple) for export.
 /// This is necessary since all RIO RDF term implementations use `&str`
 /// pointers internally, that must be owned elsewhere.
 #[derive(Debug, Default)]
 struct QuadBuffer {
-    graph_name_is_blank: bool,
-    graph_name: String,
+    graph_name: QuadGraphName,
     subject_is_blank: bool,
     subject: String,
     predicate: String,
@@ -88,15 +118,15 @@ impl<'a> QuadBuffer {
         }
     }
 
-    fn graph_name(&'a self) -> GraphName<'a> {
-        if self.graph_name_is_blank {
-            GraphName::BlankNode(BlankNode {
-                id: self.graph_name.as_str(),
-            })
-        } else {
-            GraphName::NamedNode(NamedNode {
-                iri: self.graph_name.as_str(),
-            })
+    fn graph_name(&'a self) -> Option<GraphName<'a>> {
+        match &self.graph_name {
+            QuadGraphName::DefaultGraph => None,
+            QuadGraphName::NamedNode(iri) => {
+                Some(GraphName::NamedNode(NamedNode { iri: iri.as_str() }))
+            }
+            QuadGraphName::BlankNode(id) => {
+                Some(GraphName::BlankNode(BlankNode { id: id.as_str() }))
+            }
         }
     }
 
@@ -170,20 +200,13 @@ impl<'a> QuadBuffer {
         true
     }
 
-    fn set_graph_name_from_datavalue(&mut self, datavalue: &AnyDataValue) -> bool {
-        match datavalue.value_domain() {
-            ValueDomain::Iri => {
-                self.graph_name = datavalue.to_iri_unchecked();
-                self.graph_name_is_blank = false;
-                true
-            }
-            ValueDomain::Null => {
-                self.graph_name = datavalue.lexical_value();
-                self.graph_name_is_blank = true;
-                true
-            }
-            _ => false,
-        }
+    fn set_graph_name_from_datavalue(
+        &mut self,
+        datavalue: &AnyDataValue,
+    ) -> Result<(), InvalidGraphNameError> {
+        self.graph_name = QuadGraphName::try_from(datavalue)?;
+
+        Ok(())
     }
 }
 
@@ -318,14 +341,17 @@ impl RdfWriter {
             if !buffer.set_object_from_datavalue(&record[o_pos]) {
                 continue;
             }
-            if !buffer.set_graph_name_from_datavalue(&record[g_pos]) {
+            if buffer
+                .set_graph_name_from_datavalue(&record[g_pos])
+                .is_err()
+            {
                 continue;
             }
             if let Err(e) = formatter.format(&Quad {
                 subject: buffer.subject(),
                 predicate: buffer.predicate(),
                 object: buffer.object(),
-                graph_name: Some(buffer.graph_name()),
+                graph_name: buffer.graph_name(),
             }) {
                 log::debug!("failed to write quad: {e}");
                 drop_count += 1;

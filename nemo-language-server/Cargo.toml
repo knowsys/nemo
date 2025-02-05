@@ -8,7 +8,6 @@ homepage.workspace = true
 license.workspace = true
 readme = "README.md"
 repository.workspace = true
-default-run = "nemo-language-server"
 
 [[bin]]
 name = "nemo-language-server"

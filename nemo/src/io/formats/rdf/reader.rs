@@ -27,15 +27,8 @@ use crate::io::formats::PROGRESS_NOTIFY_INCREMENT;
 use super::{
     error::RdfFormatError,
     value_format::{RdfValueFormat, RdfValueFormats},
-    RdfVariant,
+    RdfVariant, DEFAULT_GRAPH_IRI,
 };
-
-/// IRI to be used for the default graph used by Nemo when loading RDF data with
-/// named graphs (quads).
-///
-/// SPARQL 1.1 has failed to provide any standard identifier for this purpose.
-/// If future SPARQL or RDF versions are adding this, we could align accordingly.
-const DEFAULT_GRAPH: &str = "tag:nemo:defaultgraph";
 
 /// A [TableProvider] for RDF 1.1 files containing triples.
 pub(super) struct RdfReader {
@@ -157,7 +150,7 @@ impl RdfReader {
         value: Option<GraphName<'_>>,
     ) -> Result<AnyDataValue, RdfFormatError> {
         match value {
-            None => Ok(AnyDataValue::new_iri(DEFAULT_GRAPH.to_string())),
+            None => Ok(AnyDataValue::new_iri(DEFAULT_GRAPH_IRI.to_string())),
             Some(GraphName::NamedNode(nn)) => Ok(Self::datavalue_from_named_node(nn)),
             Some(GraphName::BlankNode(bn)) => {
                 Ok(Self::datavalue_from_blank_node(bnode_map, tuple_writer, bn))
@@ -368,7 +361,7 @@ impl ByteSized for RdfReader {
 
 #[cfg(test)]
 mod test {
-    use super::{RdfReader, DEFAULT_GRAPH};
+    use super::{RdfReader, DEFAULT_GRAPH_IRI};
     use std::cell::RefCell;
 
     use nemo_physical::{
@@ -454,7 +447,7 @@ mod test {
         let dict = RefCell::new(Dict::default());
         let mut tuple_writer = TupleWriter::new(&dict, 3);
         let mut null_map = NullMap::default();
-        let graph_dv = AnyDataValue::new_iri(DEFAULT_GRAPH.to_string());
+        let graph_dv = AnyDataValue::new_iri(DEFAULT_GRAPH_IRI.to_string());
 
         // check that we use our own default graph IRI
         assert_eq!(
@@ -463,115 +456,10 @@ mod test {
         );
         // check that our default graph is a valid IRI in the first place
         assert_eq!(
-            Iri::parse(DEFAULT_GRAPH.to_string()).unwrap().to_string(),
-            DEFAULT_GRAPH.to_string()
+            Iri::parse(DEFAULT_GRAPH_IRI.to_string())
+                .unwrap()
+                .to_string(),
+            DEFAULT_GRAPH_IRI.to_string()
         );
     }
-
-    // #[test]
-    // fn example_1() {
-    //     macro_rules! parse_example_with_rdf_parser {
-    //         ($data:tt, $make_parser:expr) => {
-    //             let $data = r#"<http://one.example/subject1> <http://one.example/predicate1> <http://one.example/object1> . # comments here
-    //                   # or on a line by themselves
-    //                   _:subject1 <http://an.example/predicate1> "object1" .
-    //                   _:subject2 <http://an.example/predicate2> "object2" .
-    //                   "#.as_bytes();
-
-    //             let dict = RefCell::new(Dict::default());
-    //             let mut builders = vec![
-    //                 PhysicalBuilderProxyEnum::String(PhysicalStringColumnBuilderProxy::new(&dict)),
-    //                 PhysicalBuilderProxyEnum::String(PhysicalStringColumnBuilderProxy::new(&dict)),
-    //                 PhysicalBuilderProxyEnum::String(PhysicalStringColumnBuilderProxy::new(&dict)),
-    //             ];
-    //             let reader = RDFReader::new(ResourceProviders::empty(), String::new(), None, vec![PrimitiveType::Any, PrimitiveType::Any, PrimitiveType::Any]);
-
-    //             let result = reader.read_triples_with_parser(&mut builders, $make_parser);
-    //             assert!(result.is_ok());
-
-    //             let columns = builders
-    //                 .into_iter()
-    //                 .map(|builder| match builder {
-    //                     PhysicalBuilderProxyEnum::String(b) => b.finalize(),
-    //                     _ => unreachable!("only string columns here"),
-    //                 })
-    //                 .collect::<Vec<_>>();
-
-    //             log::debug!("columns: {columns:?}");
-    //             let triples = (0..=2)
-    //                 .map(|idx| {
-    //                     columns
-    //                         .iter()
-    //                         .map(|column| {
-    //                             column
-    //                                 .get(idx)
-    //                                 .and_then(|value| value.try_into().ok())
-    //                                 .and_then(|u64: u64| usize::try_from(u64).ok())
-    //                                 .and_then(|usize| dict.borrow_mut().get(usize))
-    //                                 .unwrap()
-    //                         })
-    //                         .map(PhysicalString::from)
-    //                         .collect::<Vec<_>>()
-    //                 })
-    //                 .collect::<Vec<_>>();
-    //             log::debug!("triple: {triples:?}");
-    //             for (value, expected) in PrimitiveType::Any.serialize_output(DataValueIteratorT::String(Box::new(triples[0].iter().cloned()))).zip(vec!["http://one.example/subject1", "http://one.example/predicate1", "http://one.example/object1"]) {
-    //                 assert_eq!(value, expected);
-    //             }
-    //             for (value, expected) in PrimitiveType::Any.serialize_output(DataValueIteratorT::String(Box::new(triples[1].iter().cloned()))).zip(vec!["_:subject1", "http://an.example/predicate1", r#""object1""#]) {
-    //                 assert_eq!(value, expected);
-    //             }
-    //             for (value, expected) in PrimitiveType::Any.serialize_output(DataValueIteratorT::String(Box::new(triples[2].iter().cloned()))).zip(vec!["_:subject2", "http://an.example/predicate2", r#""object2""#]) {
-    //                 assert_eq!(value, expected);
-    //             }
-    //         };
-    //     }
-
-    //     parse_example_with_rdf_parser!(reader, || NTriplesParser::new(reader));
-    //     parse_example_with_rdf_parser!(reader, || TurtleParser::new(reader, None));
-    // }
-
-    // #[test]
-    // fn rollback() {
-    //     let data = r#"<http://example.org/> <http://example.org/> <http://example.org/> .
-    //                       malformed <http://example.org/> <http://example.org/>
-    //                       <http://example.org/> malformed <http://example.org/> .
-    //                       <http://example.org/> <http://example.org/> malformed .
-    //                       <http://example.org/> <http://example.org/> "123"^^<http://www.w3.org/2001/XMLSchema#integer> .
-    //                       <http://example.org/> <http://example.org/> "123.45"^^<http://www.w3.org/2001/XMLSchema#integer> .
-    //                       <http://example.org/> <http://example.org/> "123.45"^^<http://www.w3.org/2001/XMLSchema#decimal> .
-    //                       <http://example.org/> <http://example.org/> "123.45a"^^<http://www.w3.org/2001/XMLSchema#decimal> .
-    //                       <https://example.org/> <https://example.org/> <https://example.org/> .
-    //                   "#
-    //     .as_bytes();
-
-    //     let dict = RefCell::new(Dict::default());
-    //     let mut builders = vec![
-    //         PhysicalBuilderProxyEnum::String(PhysicalStringColumnBuilderProxy::new(&dict)),
-    //         PhysicalBuilderProxyEnum::String(PhysicalStringColumnBuilderProxy::new(&dict)),
-    //         PhysicalBuilderProxyEnum::String(PhysicalStringColumnBuilderProxy::new(&dict)),
-    //     ];
-    //     let reader = RDFReader::new(
-    //         ResourceProviders::empty(),
-    //         String::new(),
-    //         None,
-    //         vec![PrimitiveType::Any, PrimitiveType::Any, PrimitiveType::Any],
-    //     );
-
-    //     let result = reader.read_triples_with_parser(&mut builders, || NTriplesParser::new(data));
-    //     assert!(result.is_ok());
-
-    //     let columns = builders
-    //         .into_iter()
-    //         .map(|builder| match builder {
-    //             PhysicalBuilderProxyEnum::String(b) => b.finalize(),
-    //             _ => unreachable!("only string columns here"),
-    //         })
-    //         .collect::<Vec<_>>();
-
-    //     assert_eq!(columns.len(), 3);
-    //     assert_eq!(columns[0].len(), 4);
-    //     assert_eq!(columns[1].len(), 4);
-    //     assert_eq!(columns[2].len(), 4);
-    // }
 }
