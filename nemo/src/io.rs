@@ -4,6 +4,7 @@
 
 pub mod compression_format;
 pub mod export_manager;
+pub mod format_builder;
 pub mod formats;
 pub mod import_manager;
 pub mod resource_providers;

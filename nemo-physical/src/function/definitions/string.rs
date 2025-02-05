@@ -328,7 +328,7 @@ impl BinaryFunction for StringSubstring {
     }
 }
 
-const REGEX_CACHE_SIZE: NonZero<usize> = unsafe { NonZero::new_unchecked(32) };
+const REGEX_CACHE_SIZE: NonZero<usize> = NonZero::new(32).unwrap();
 static REGEX_CACHE: OnceCell<Mutex<lru::LruCache<String, regex::Regex>>> = OnceCell::new();
 
 /// Regex string matching

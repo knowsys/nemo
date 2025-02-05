@@ -41,8 +41,8 @@ impl<'a> Export<'a> {
         &self.instructions
     }
 
-    pub fn guards(&self) -> &Option<Sequence<'a, Guard<'a>>> {
-        &self.guards
+    pub fn guards(&self) -> Option<&Sequence<'a, Guard<'a>>> {
+        self.guards.as_ref()
     }
 
     pub fn parse_body(

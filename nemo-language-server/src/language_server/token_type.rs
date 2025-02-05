@@ -11,6 +11,7 @@ pub(super) enum TokenType {
     String,
     Function,
     Number,
+    EncodedNumber,
     Bool,
     Property,
     Operator,
@@ -31,6 +32,7 @@ impl TokenType {
             | ParserContext::String => Some(TokenType::String),
             ParserContext::StructureTag => Some(TokenType::Function),
             ParserContext::Number => Some(TokenType::Number),
+            ParserContext::EncodedNumber => Some(TokenType::EncodedNumber),
             ParserContext::Boolean => Some(TokenType::Bool),
             ParserContext::Negation
             | ParserContext::AggregationTag
@@ -54,6 +56,7 @@ impl TokenType {
             Self::String => SemanticTokenType::STRING,
             Self::Function => SemanticTokenType::FUNCTION,
             Self::Number => SemanticTokenType::NUMBER,
+            Self::EncodedNumber => SemanticTokenType::NUMBER,
             Self::Bool => SemanticTokenType::new("bool"),
             Self::Property => SemanticTokenType::PROPERTY,
             Self::Operator => SemanticTokenType::OPERATOR,

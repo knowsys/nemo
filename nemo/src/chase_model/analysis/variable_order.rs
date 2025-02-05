@@ -172,7 +172,7 @@ impl IterationOrder {
                 &(0..(len / 2))
                     .map(|i| i * 2 + 1)
                     .rev()
-                    .chain((0..(len + 1) / 2).map(|i| i * 2))
+                    .chain((0..len.div_ceil(2)).map(|i| i * 2))
                     .collect::<Vec<_>>(),
             ),
         }
@@ -551,12 +551,8 @@ mod test {
             program::ChaseProgram,
             rule::ChaseRule,
         },
-        io::formats::{
-            dsv::{value_format::DsvValueFormats, DsvHandler},
-            Direction, ImportExportResource,
-        },
+        io::formats::{Import, MockHandler, ResourceSpec},
         rule_model::components::{
-            import_export::compression::CompressionFormat,
             tag::Tag,
             term::primitive::{variable::Variable, Primitive},
         },
@@ -566,7 +562,10 @@ mod test {
 
     use nemo_physical::management::execution_plan::ColumnOrder;
 
-    use std::collections::{HashMap, HashSet};
+    use std::{
+        collections::{HashMap, HashSet},
+        sync::Arc,
+    };
 
     type TestRuleSetWithAdditionalInfo = (Vec<ChaseRule>, Vec<Vec<Variable>>, Vec<(Tag, usize)>);
 
@@ -964,17 +963,14 @@ mod test {
 
     /// Helper function to create source-like imports
     fn csv_import(predicate: Tag, arity: usize) -> ChaseImport {
-        let handler = DsvHandler::new(
-            b',',
-            ImportExportResource::Stdout,
-            DsvValueFormats::default(arity),
-            None,
-            CompressionFormat::None,
-            false,
-            Direction::Import,
+        let handler: Import = Import::new(
+            ResourceSpec::Stdout,
+            Default::default(),
+            arity,
+            Arc::new(MockHandler),
         );
 
-        ChaseImport::new(predicate, Box::new(handler))
+        ChaseImport::new(predicate, handler)
     }
 
     #[test]

@@ -3,13 +3,36 @@ rec {
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-24.11";
+    utils.url = "github:gytis-ivaskevicius/flake-utils-plus";
 
-    rust-overlay.url = "github:oxalica/rust-overlay";
-    rust-overlay.inputs = {
-      nixpkgs.follows = "nixpkgs";
+    rust-overlay = {
+      url = "github:oxalica/rust-overlay";
+      inputs.nixpkgs.follows = "nixpkgs";
     };
 
-    utils.url = "github:gytis-ivaskevicius/flake-utils-plus";
+    dream2nix = {
+      url = "github:nix-community/dream2nix";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
+    nemo-vscode-extension = {
+      url = "github:knowsys/nemo-vscode-extension";
+      inputs = {
+        nixpkgs.follows = "nixpkgs";
+        utils.follows = "utils";
+        dream2nix.follows = "dream2nix";
+      };
+    };
+
+    nemo-web = {
+      url = "github:knowsys/nemo-web";
+      inputs = {
+        nixpkgs.follows = "nixpkgs";
+        utils.follows = "utils";
+        dream2nix.follows = "dream2nix";
+        nemo.follows = "nemo-vscode-extension/nemo";
+      };
+    };
   };
 
   outputs =
@@ -26,17 +49,34 @@ rec {
         rust-overlay.overlays.default
       ];
 
-      overlays.default =
-        final: prev:
-        let
-          pkgs = self.packages."${final.system}";
-          lib = self.channels.nixpkgs."${final.system}";
-        in
-        {
-          inherit (pkgs) nemo nemo-python nemo-wasm;
+      overlays = {
+        rust-overlay = rust-overlay.overlays.default;
 
-          nodePackages = lib.makeExtensible (lib.extends pkgs.nodePackages prev.nodePackages);
-        };
+        default =
+          final: prev:
+          let
+            pkgs = self.packages."${final.system}";
+            lib = self.channels.nixpkgs."${final.system}";
+          in
+          {
+            inherit (pkgs)
+              nemo
+              nemo-language-server
+              nemo-python
+              nemo-wasm
+              nemo-wasm-web
+              nemo-wasm-bundler
+              nemo-wasm-node
+              nemo-web
+              nemo-vscode-extension
+              ;
+
+            nodePackages = lib.makeExtensible (lib.extends pkgs.nodePackages prev.nodePackages);
+          };
+
+        nemo-vscode-extension = inputs.nemo-vscode-extension.overlays.default;
+        nemo-web = inputs.nemo-web.overlays.default;
+      };
 
       outputsBuilder =
         channels:
@@ -122,6 +162,8 @@ rec {
                 };
             in
             rec {
+              rust-toolchain = toolchain;
+
               nemo = platform.buildRustPackage {
                 pname = "nemo";
                 src = ./.;
@@ -140,6 +182,26 @@ rec {
                     cargoCheckHook
                   ]);
                 buildAndTestSubdir = "nemo-cli";
+              };
+
+              nemo-language-server = platform.buildRustPackage {
+                pname = "nemo-language-server";
+                src = ./.;
+                meta = meta // {
+                  mainProgram = "nemo-language-server";
+                };
+                inherit version;
+
+                cargoLock.lockFile = ./Cargo.lock;
+
+                buildInputs = defaultBuildInputs;
+                nativeBuildInputs =
+                  defaultNativeBuildInputs
+                  ++ (with platform; [
+                    cargoBuildHook
+                    cargoCheckHook
+                  ]);
+                buildAndTestSubdir = "nemo-language-server";
               };
 
               nemo-python = pkgs.python3Packages.buildPythonPackage {
@@ -173,6 +235,11 @@ rec {
                 src = ./.;
                 inherit version meta;
               };
+              nemo-wasm-web = buildWasm "web" {
+                pname = "nemo-wasm";
+                src = ./.;
+                inherit version meta;
+              };
               nemo-wasm = nemo-wasm-bundler;
 
               python3 = pkgs.python3.withPackages (ps: [ nemo-python ]);
@@ -182,55 +249,104 @@ rec {
                 NODE_PATH=${nemo-wasm-node}/lib/node_modules''${NODE_PATH:+":$NODE_PATH"} ${pkgs.nodejs}/bin/node $@
               '';
 
+              nemo-vscode-extension-vsix =
+                (inputs.nemo-vscode-extension.packages.${pkgs.system}.nemo-vscode-extension-vsix.extendModules {
+                  modules = [
+                    {
+                      deps = {
+                        inherit nemo-wasm-web;
+                      };
+                    }
+                  ];
+                }).config.public;
+
+              nemo-vscode-extension =
+                inputs.nemo-vscode-extension.packages.${pkgs.system}.nemo-vscode-extension.overrideAttrs
+                  (old: {
+                    src = "${nemo-vscode-extension-vsix}/nemo-${old.version}.vsix";
+                  });
+
+              nemo-web =
+                (inputs.nemo-web.packages.${pkgs.system}.nemo-web.extendModules {
+                  modules = [
+                    {
+                      deps = {
+                        inherit nemo-wasm-web nemo-wasm-bundler nemo-vscode-extension-vsix;
+                      };
+                    }
+                  ];
+                }).config.public;
+
               default = nemo;
             };
 
-          apps.ci-checks = utils.lib.mkApp {
-            drv = pkgs.writeShellApplication {
-              name = "nemo-run-ci-checks";
+          apps = {
+            nemo-web = utils.lib.mkApp {
+              drv = pkgs.writeShellApplication {
+                name = "nemo-web-preview";
 
-              runtimeInputs = pkgs.lib.concatLists [
-                defaultBuildInputs
-                defaultNativeBuildInputs
-                [
-                  pkgs.python3
-                  pkgs.python3Packages.pycodestyle
-                  pkgs.maturin
-                  pkgs.wasm-pack
-                  pkgs.wasm-bindgen-cli
-                ]
-              ];
+                runtimeInputs = [
+                  pkgs.nodejs
+                ];
 
-              text = ''
-                export RUSTFLAGS"=-Dwarnings"
-                export RUSTDOCFLAGS="-Dwarnings"
+                text = ''
+                  cd "$(mktemp --directory)"
+                  cp -R ${self.packages.${pkgs.system}.nemo-web}/lib/node_modules/nemo-web/* .
+                  mkdir wrapper
+                  ln -s ../node_modules/vite/bin/vite.js wrapper/vite
+                  export PATH="''${PATH}:wrapper"
+                  npm run preview
+                '';
+              };
+            };
 
-                if [[ ! -f "flake.nix" || ! -f "Cargo.toml" || ! -f "rust-toolchain.toml" ]]; then
-                  echo "This should be run from the top-level of the nemo source tree."
-                  exit 1
-                fi
+            ci-checks = utils.lib.mkApp {
+              drv = pkgs.writeShellApplication {
+                name = "nemo-run-ci-checks";
 
-                cargo test
-                cargo clippy --all-targets
-                cargo fmt --all -- --check
-                cargo doc --workspace
+                runtimeInputs = pkgs.lib.concatLists [
+                  defaultBuildInputs
+                  defaultNativeBuildInputs
+                  [
+                    pkgs.python3
+                    pkgs.python3Packages.pycodestyle
+                    pkgs.maturin
+                    pkgs.wasm-pack
+                    pkgs.wasm-bindgen-cli
+                  ]
+                ];
 
-                pushd nemo-python
-                  pycodestyle .
-                  VENV="$(mktemp -d)"
-                  python3 -m venv "''${VENV}"
-                  # shellcheck disable=SC1091
-                  . "''${VENV}"/bin/activate
-                  maturin develop
-                  python3 -m unittest discover tests -v
-                  deactivate
-                  rm -rf "''${VENV}"
-                popd
+                text = ''
+                  export RUSTFLAGS"=-Dwarnings"
+                  export RUSTDOCFLAGS="-Dwarnings"
 
-                HOME=$TMPDIR wasm-pack build --weak-refs --mode=no-install nemo-wasm
+                  if [[ ! -f "flake.nix" || ! -f "Cargo.toml" || ! -f "rust-toolchain.toml" ]]; then
+                    echo "This should be run from the top-level of the nemo source tree."
+                    exit 1
+                  fi
 
-                cargo miri test
-              '';
+                  cargo test
+                  cargo clippy --all-targets
+                  cargo fmt --all -- --check
+                  cargo doc --workspace
+
+                  pushd nemo-python
+                    pycodestyle .
+                    VENV="$(mktemp -d)"
+                    python3 -m venv "''${VENV}"
+                    # shellcheck disable=SC1091
+                    . "''${VENV}"/bin/activate
+                    maturin develop
+                    python3 -m unittest discover tests -v
+                    deactivate
+                    rm -rf "''${VENV}"
+                  popd
+
+                  HOME=$TMPDIR wasm-pack build --weak-refs --mode=no-install nemo-wasm
+
+                  cargo miri test
+                '';
+              };
             };
           };
 
@@ -270,12 +386,16 @@ rec {
                 );
               runCargo = name: runCargo' name { };
             in
-            rec {
+            {
               inherit (packages)
                 nemo
+                nemo-language-server
                 nemo-python
                 nemo-wasm
                 nemo-wasm-node
+                nemo-wasm-web
+                nemo-web
+                nemo-vscode-extension
                 ;
               devShell = devShells.default;
 
@@ -333,10 +453,7 @@ rec {
             ];
           };
 
-          formatter = channels.nixpkgs.alejandra;
+          formatter = channels.nixpkgs.nixfmt-rfc-style;
         };
     };
 }
-# Local Variables:
-# apheleia-formatter: alejandra
-# End:

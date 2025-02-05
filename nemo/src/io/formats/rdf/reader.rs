@@ -5,9 +5,14 @@ use nemo_physical::{
     datasources::{table_providers::TableProvider, tuple_writer::TupleWriter},
     datavalues::{AnyDataValue, DataValueCreationError},
     dictionary::string_map::NullMap,
+    error::ReadingError,
     management::bytesized::ByteSized,
 };
-use std::{cell::Cell, io::BufRead, mem::size_of};
+use std::{
+    cell::Cell,
+    io::{BufReader, Read},
+    mem::size_of,
+};
 
 use oxiri::Iri;
 use rio_api::{
@@ -35,7 +40,7 @@ const DEFAULT_GRAPH: &str = "tag:nemo:defaultgraph";
 /// A [TableProvider] for RDF 1.1 files containing triples.
 pub(super) struct RdfReader {
     /// Buffer from which content is read
-    read: Box<dyn BufRead>,
+    read: Box<dyn Read>,
     /// RDF format
     variant: RdfVariant,
     /// Base url, if given
@@ -56,7 +61,7 @@ pub(super) struct RdfReader {
 impl RdfReader {
     /// Create a new [RdfReader].
     pub(super) fn new(
-        read: Box<dyn BufRead>,
+        read: Box<dyn Read>,
         variant: RdfVariant,
         base: Option<Iri<String>>,
         value_formats: RdfValueFormats,
@@ -164,8 +169,8 @@ impl RdfReader {
     fn read_triples_with_parser<Parser>(
         mut self,
         tuple_writer: &mut TupleWriter,
-        make_parser: impl Fn(Box<dyn BufRead>) -> Parser,
-    ) -> Result<(), Box<dyn std::error::Error>>
+        make_parser: impl Fn(BufReader<Box<dyn Read>>) -> Parser,
+    ) -> Result<(), ReadingError>
     where
         Parser: TriplesParser,
     {
@@ -219,7 +224,7 @@ impl RdfReader {
             Ok::<_, Box<dyn std::error::Error>>(())
         };
 
-        let mut parser = make_parser(self.read);
+        let mut parser = make_parser(BufReader::new(self.read));
 
         while !parser.is_end() {
             if let Err(e) = parser.parse_step(&mut on_triple) {
@@ -239,8 +244,8 @@ impl RdfReader {
     fn read_quads_with_parser<Parser>(
         mut self,
         tuple_writer: &mut TupleWriter,
-        make_parser: impl Fn(Box<dyn BufRead>) -> Parser,
-    ) -> Result<(), Box<dyn std::error::Error>>
+        make_parser: impl Fn(BufReader<Box<dyn Read>>) -> Parser,
+    ) -> Result<(), ReadingError>
     where
         Parser: QuadsParser,
     {
@@ -299,7 +304,7 @@ impl RdfReader {
             Ok::<_, Box<dyn std::error::Error>>(())
         };
 
-        let mut parser = make_parser(self.read);
+        let mut parser = make_parser(BufReader::new(self.read));
 
         while !parser.is_end() {
             if let Err(e) = parser.parse_step(&mut on_quad) {
@@ -320,7 +325,7 @@ impl TableProvider for RdfReader {
     fn provide_table_data(
         self: Box<Self>,
         tuple_writer: &mut TupleWriter,
-    ) -> Result<(), Box<dyn std::error::Error>> {
+    ) -> Result<(), ReadingError> {
         let base_iri = self.base.clone();
 
         match self.variant {

@@ -7,12 +7,17 @@ use cpu_time::ProcessTime;
 use cpu_time::ThreadTime;
 use linked_hash_map::LinkedHashMap;
 use once_cell::sync::Lazy;
-use std::time::{Duration, Instant};
+#[cfg(not(target_family = "wasm"))]
+use std::time::Instant;
 use std::{
+    cmp::Reverse,
     fmt,
     str::FromStr,
     sync::{Mutex, MutexGuard},
+    time::Duration,
 };
+#[cfg(target_family = "wasm")]
+use wasmtimer::std::Instant;
 
 /// Global instance of the [TimedCode]
 static TIMECODE_INSTANCE: Lazy<Mutex<TimedCode>> = Lazy::new(|| {
@@ -33,8 +38,6 @@ pub struct TimedCodeInfo {
     #[allow(dead_code)]
     #[cfg(not(target_family = "wasm"))]
     start_thread: Option<Duration>,
-    #[cfg(target_family = "wasm")]
-    start_thread: Option<wasmtimer::std::Instant>,
     runs: u64,
 }
 
@@ -189,10 +192,9 @@ impl TimedCode {
     /// Start the next measurement
     #[cfg(all(not(test), target_family = "wasm"))]
     pub fn start(&mut self) {
-        debug_assert!(self.info.start_thread.is_none());
+        debug_assert!(self.info.start_system.is_none());
 
         self.info.start_system = Some(Instant::now());
-        self.info.start_thread = Some(wasmtimer::std::Instant::now());
     }
 
     /// No-op because time measurement is disabled
@@ -242,20 +244,13 @@ impl TimedCode {
             .info
             .start_system
             .expect("start() must be called before calling stop()");
-        let start_thread = self
-            .info
-            .start_thread
-            .expect("start() must be called before calling stop()");
 
         let duration_system = Instant::now() - start_system;
-        let duration_thread = wasmtimer::std::Instant::now() - start_thread;
         self.info.total_system_time += duration_system;
-        self.info.total_thread_time += duration_thread;
         self.info.start_system = None;
-        self.info.start_thread = None;
         self.info.runs += 1;
 
-        duration_thread
+        duration_system
     }
 
     fn apply_display_option<'a>(
@@ -264,15 +259,23 @@ impl TimedCode {
     ) -> Vec<(&'a String, &'a TimedCode)> {
         let mut blocks: Vec<(&'a String, &'a TimedCode)> = code.subblocks.iter().collect();
 
+        fn name<'a>(entry: &(&'a String, &TimedCode)) -> &'a String {
+            entry.0
+        }
+
+        #[cfg(not(target_family = "wasm"))]
+        fn longest_time(entry: &(&String, &TimedCode)) -> Reverse<Duration> {
+            Reverse(entry.1.info.total_thread_time)
+        }
+        #[cfg(target_family = "wasm")]
+        fn longest_time(entry: &(&String, &TimedCode)) -> Reverse<Duration> {
+            Reverse(entry.1.info.total_system_time)
+        }
+
         match option.sorting {
             TimedSorting::Default => {}
-            TimedSorting::Alphabetical => blocks.sort_by(|a, b| a.0.partial_cmp(b.0).unwrap()),
-            TimedSorting::LongestThreadTime => blocks.sort_by(|a, b| {
-                b.1.info
-                    .total_thread_time
-                    .partial_cmp(&a.1.info.total_thread_time)
-                    .unwrap()
-            }),
+            TimedSorting::Alphabetical => blocks.sort_by_key(name),
+            TimedSorting::LongestThreadTime => blocks.sort_by_key(longest_time),
         };
 
         if option.num_elements > 0 {

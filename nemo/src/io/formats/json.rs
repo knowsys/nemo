@@ -2,77 +2,79 @@
 
 pub(crate) mod reader;
 
-use std::io::BufRead;
+use std::{io::Read, sync::Arc};
 
 use nemo_physical::datasources::table_providers::TableProvider;
 use reader::JsonReader;
 
-use crate::rule_model::components::import_export::{
-    compression::CompressionFormat, file_formats::FileFormat,
+use crate::{
+    io::format_builder::{
+        format_tag, AnyImportExportBuilder, FormatBuilder, Parameters, StandardParameter,
+    },
+    rule_model::{
+        components::import_export::Direction, error::validation_error::ValidationErrorKind,
+    },
+    syntax::import_export::file_format,
 };
 
-use super::{ImportExportHandler, ImportExportResource, TableWriter};
+use super::{FileFormatMeta, ImportHandler};
 
 #[derive(Debug, Clone)]
-pub(crate) struct JsonHandler {
-    resource: ImportExportResource,
-}
+pub(crate) struct JsonHandler;
 
-impl JsonHandler {
-    pub fn new(resource: ImportExportResource) -> Self {
-        Self { resource }
+impl FileFormatMeta for JsonHandler {
+    fn default_extension(&self) -> String {
+        file_format::EXTENSION_JSON.to_string()
+    }
+
+    fn media_type(&self) -> String {
+        file_format::MEDIA_TYPE_JSON.to_string()
     }
 }
 
-impl ImportExportHandler for JsonHandler {
-    fn file_format(&self) -> FileFormat {
-        FileFormat::JSON
-    }
-
-    fn reader(
-        &self,
-        read: Box<dyn BufRead>,
-    ) -> Result<Box<dyn TableProvider>, crate::error::Error> {
-        Ok(Box::new(JsonReader::new(read)))
-    }
-
-    fn writer(
-        &self,
-        _writer: Box<dyn std::io::prelude::Write>,
-    ) -> Result<Box<dyn TableWriter>, crate::error::Error> {
-        unimplemented!("writing json is currently not supported")
-    }
-
-    fn predicate_arity(&self) -> usize {
-        3
-    }
-
-    fn file_extension(&self) -> String {
-        self.file_format().extension().to_string()
-    }
-
-    fn compression_format(&self) -> CompressionFormat {
-        CompressionFormat::None
-    }
-
-    fn import_export_resource(&self) -> &ImportExportResource {
-        &self.resource
+impl ImportHandler for JsonHandler {
+    fn reader(&self, read: Box<dyn Read>) -> Result<Box<dyn TableProvider>, crate::error::Error> {
+        Ok(Box::new(JsonReader(read)))
     }
 }
 
-#[cfg(test)]
-mod test {
-    use super::*;
+format_tag! {
+    pub(crate) enum JsonTag(SupportedFormatTag::Json) {
+        Json => file_format::JSON,
+    }
+}
 
-    #[test]
-    fn format_metadata() {
-        let handler = JsonHandler::new(ImportExportResource::from_string("dummy.json".to_string()));
+impl From<JsonHandler> for AnyImportExportBuilder {
+    fn from(value: JsonHandler) -> Self {
+        AnyImportExportBuilder::Json(value)
+    }
+}
 
-        assert_eq!(FileFormat::JSON.extension(), handler.file_extension());
-        assert_eq!(
-            FileFormat::JSON.media_type(),
-            handler.file_format().media_type()
-        );
-        assert_eq!(FileFormat::JSON.arity(), Some(handler.predicate_arity()));
+impl FormatBuilder for JsonHandler {
+    type Tag = JsonTag;
+    type Parameter = StandardParameter;
+
+    fn new(
+        _tag: Self::Tag,
+        _parameters: &Parameters<Self>,
+        direction: Direction,
+    ) -> Result<Self, ValidationErrorKind> {
+        if matches!(direction, Direction::Export) {
+            return Err(ValidationErrorKind::UnsupportedJsonExport);
+        }
+
+        Ok(Self)
+    }
+
+    fn expected_arity(&self) -> Option<usize> {
+        Some(3)
+    }
+
+    fn build_import(&self, _arity: usize) -> Arc<dyn ImportHandler + Send + Sync + 'static> {
+        Arc::new(Self)
+    }
+
+    fn build_export(&self, _arity: usize) -> Arc<dyn super::ExportHandler + Send + Sync + 'static> {
+        unimplemented!("json export is currently not supported")
     }
 }

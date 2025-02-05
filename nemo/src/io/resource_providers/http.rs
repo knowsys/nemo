@@ -1,11 +1,12 @@
-use std::io::{BufRead, BufReader, Read};
+use std::io::Read;
 
-use nemo_physical::{error::ReadingError, resource::{Resource, Parameters}};
+use nemo_physical::{
+    error::{ReadingError, ReadingErrorKind},
+    resource::Resource,
+};
 use reqwest::header::InvalidHeaderValue;
 
-use crate::rule_model::components::import_export::compression::CompressionFormat;
-use urlencoding::encode;
-use super::ResourceProvider;
+use super::{is_iri, ResourceProvider};
 
 /// Resolves resources using HTTP or HTTPS.
 ///
@@ -49,9 +50,10 @@ impl HttpResourceProvider {
         let mut headers = reqwest::header::HeaderMap::new();
         headers.insert(
             reqwest::header::ACCEPT,
-            media_type
-                .parse()
-                .map_err(|err: InvalidHeaderValue| ReadingError::ExternalError(err.into()))?,
+            media_type.parse().map_err(|err: InvalidHeaderValue| {
+                ReadingError::new(ReadingErrorKind::ExternalError(err.into()))
+                    .with_resource(url.clone())
+            })?,
         );
         headers.insert(
             reqwest::header::USER_AGENT,
@@ -63,30 +65,25 @@ impl HttpResourceProvider {
                     .unwrap_or("https://iccl.inf.tu-dresden.de/web/Nemo/en")
             )
             .parse()
-            .map_err(|err: InvalidHeaderValue| ReadingError::ExternalError(err.into()))?,
+            .map_err(|err: InvalidHeaderValue| {
+                ReadingError::new(ReadingErrorKind::ExternalError(err.into()))
+                    .with_resource(url.clone())
+            })?,
         );
+
+        let err_mapping =
+            |err: reqwest::Error| ReadingError::new(err.into()).with_resource(url.clone());
+
         let client = reqwest::Client::builder()
             .default_headers(headers)
-            .build()?;
+            .build()
+            .map_err(err_mapping)?;
 
-        // Unpack parameters 
-        let encoded_query = if let Some(q) = parameters.query.as_ref() {
-            encode(q.as_str()) // Extracts the value from the tuple
-        } else {
-            encode("")
-        };
-        
+        let response = client.get(url).send().await.map_err(err_mapping)?;
 
-
-        
-        // Concatenate url and encoded query
-        let full_url = format!("{}?query={}", url, encoded_query);
-        println!("full query: {full_url}");
-
-        let response = client.get(full_url).send().await?;
         // we're expecting potentially compressed data, don't try to
         // do any character set guessing, as `response.text()` would do.
-        let content = response.bytes().await?;
+        let content = response.bytes().await.map_err(err_mapping)?;
 
         Ok(HttpResource {
             resource: resource.clone(),
@@ -99,11 +96,11 @@ impl ResourceProvider for HttpResourceProvider {
     fn open_resource(
         &self,
         resource: &Resource,
-        compression: CompressionFormat,
         media_type: &str,
-    ) -> Result<Option<Box<dyn BufRead>>, ReadingError> {
-        // Add error message
-        let Resource::Iri { iri, parameters } = resource else {unreachable!("The type of the resource is known already")};
+    ) -> Result<Option<Box<dyn Read>>, ReadingError> {
+        if !is_iri(resource) {
+            return Ok(None);
+        }
 
         let url = iri.to_string();
         if !(url.starts_with("http:") || url.starts_with("https:")) {
@@ -114,18 +111,9 @@ impl ResourceProvider for HttpResourceProvider {
         let rt = tokio::runtime::Builder::new_current_thread()
             .enable_all()
             .build()
-            .map_err(|e| ReadingError::IoReading {
-                error: e,
-                filename: url.clone(),
-            })?;
-        let response = rt.block_on(Self::get(resource, url, parameters, media_type))?;
-        if let Some(reader) = compression.try_decompression(BufReader::new(response)) {
-            Ok(Some(reader))
-        } else {
-            Err(ReadingError::Decompression {
-                resource: resource.to_owned(),
-                decompression_format: compression.to_string(),
-            })
-        }
+            .map_err(|e| ReadingError::from(e).with_resource(resource.clone()))?;
+
+        let response = rt.block_on(Self::get(resource, media_type))?;
+        Ok(Some(Box::new(response)))
     }
 }

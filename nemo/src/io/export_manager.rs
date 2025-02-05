@@ -5,15 +5,15 @@ use std::{
     path::PathBuf,
 };
 
-use crate::{
-    error::Error,
-    rule_model::components::{import_export::compression::CompressionFormat, tag::Tag},
-};
+use crate::{error::Error, rule_model::components::tag::Tag};
 
 use nemo_physical::{datavalues::AnyDataValue, resource::Resource};
 use sanitise_file_name::{sanitise_with_options, Options};
 
-use super::formats::ImportExportHandler;
+use super::{
+    compression_format::CompressionFormat,
+    formats::{Export, ExportHandler, ResourceSpec},
+};
 
 /// Main object for exporting data to files.
 #[derive(Debug, Default)]
@@ -24,7 +24,7 @@ pub struct ExportManager {
     overwrite: bool,
     /// If `true`, then writing operations will not be performed. The object can still be used for validation etc.
     disable_write: bool,
-    /// Compression format to be used.
+    /// Compression format to be used by default.
     default_compression_format: CompressionFormat,
 }
 
@@ -65,18 +65,14 @@ impl ExportManager {
         self.disable_write
     }
 
-    /// Validates the given [ImportExportHandler].
+    /// Validates the given [ExportHandler].
     /// This also checks whether the specified file could (likely) be written.
-    pub fn validate(
-        &self,
-        predicate: &Tag,
-        handler: &dyn ImportExportHandler,
-    ) -> Result<(), Error> {
-        if handler.resource_is_stdout() {
+    pub fn validate(&self, _predicate: &Tag, handler: &Export) -> Result<(), Error> {
+        let ResourceSpec::Resource(resource) = handler.resource_spec() else {
             return Ok(());
-        }
+        };
 
-        let path = self.output_file_path(predicate, handler);
+        let path = self.sanitized_path(resource, !handler.is_compressed());
 
         let meta_info = path.metadata();
         if let Err(err) = meta_info {
@@ -95,53 +91,11 @@ impl ExportManager {
         }
     }
 
-    /// Returns the compression format for an export handler,
-    /// or the default compression format if the handler does not specify compression.
-    fn compression_format(&self, export_handler: &dyn ImportExportHandler) -> CompressionFormat {
-        let their_compression_format = export_handler.compression_format();
-
-        if matches!(their_compression_format, CompressionFormat::None) {
-            self.default_compression_format
-        } else {
-            their_compression_format
-        }
-    }
-
-    /// Create a writer based on an export handler. The predicate is used to
-    /// obtain a default file name if needed.
-    ///
-    /// This function may already create directories, and should not be used if
-    /// [ExportManager::disable_write] is `true`.
-    fn writer(
-        &self,
-        export_handler: &dyn ImportExportHandler,
-        predicate: &Tag,
-    ) -> Result<Box<dyn Write>, Error> {
-        if export_handler.resource_is_stdout() {
-            Ok(Box::new(std::io::stdout().lock()))
-        } else {
-            let output_path = self.output_file_path(predicate, export_handler);
-
-            log::info!("Exporting predicate \"{}\" to {output_path:?}", predicate);
-
-            if let Some(parent) = output_path.parent() {
-                create_dir_all(parent)?;
-            }
-
-            self.compression_format(export_handler)
-                .file_writer(output_path, Self::open_options(self.overwrite))
-        }
-    }
-
-    /// Get the output file name for the given [ImportExportHandler].
+    /// Get the output file path for the given (unsanitized) file name.
     ///
     /// This is a complete path (based on our base path),
     /// which includes all extensions.
-    fn output_file_path(
-        &self,
-        predicate: &Tag,
-        export_handler: &dyn ImportExportHandler,
-    ) -> PathBuf {
+    fn sanitized_path(&self, file_name_unsafe: &str, add_compression: bool) -> PathBuf {
         let mut pred_path = self.base_path.to_path_buf();
 
         let sanitize_options = Options::<Option<char>> {
@@ -149,27 +103,52 @@ impl ExportManager {
             ..Default::default()
         };
 
-        let file_name_unsafe = export_handler
-            .resource()
-            .map(|resource| match resource {
-                Resource::Path(path) => path,
-                Resource::Iri {iri,..} => iri.to_string()
-            })
-            .unwrap_or(format!(
-            "{}.{}",
-            predicate,
-            export_handler.file_extension()
-        ));
-        let file_name = sanitise_with_options(&file_name_unsafe, &sanitize_options);
+        let file_name = sanitise_with_options(file_name_unsafe, &sanitize_options);
+
         pred_path.push(file_name);
 
-        pred_path = self
-            .compression_format(export_handler)
-            .path_with_extension(pred_path);
+        if add_compression {
+            if let Some(ext) = self.default_compression_format.extension() {
+                pred_path.add_extension(ext);
+            }
+        }
+
         pred_path
     }
 
-    /// Export a (possibly empty) table according to the given [ImportExportHandler],
+    /// Create a writer based on an export handler. The predicate is used to
+    /// obtain a default file name if needed.
+    ///
+    /// This function may already create directories, and should not be used if
+    /// [ExportManager::disable_write] is `true`.
+    fn writer(&self, export_handler: &Export, predicate: &Tag) -> Result<Box<dyn Write>, Error> {
+        let writer: Box<dyn Write> = match export_handler.resource_spec() {
+            ResourceSpec::Resource(file_name_unsafe) => {
+                let output_path =
+                    self.sanitized_path(file_name_unsafe, !export_handler.is_compressed());
+
+                log::info!("Exporting predicate \"{}\" to {output_path:?}", predicate);
+
+                if let Some(parent) = output_path.parent() {
+                    create_dir_all(parent)?;
+                }
+
+                Box::new(Self::open_options(self.overwrite).open(output_path)?)
+            }
+            ResourceSpec::Stdout => Box::new(std::io::stdout().lock()),
+        };
+
+        if !export_handler.is_compressed() {
+            Ok(self
+                .default_compression_format
+                .implementation()
+                .compress(writer))
+        } else {
+            Ok(writer)
+        }
+    }
+
+    /// Export a (possibly empty) table according to the given [ExportHandler],
     /// and direct output into the given writer.
     ///
     /// Nothing is written if writing is disabled.
@@ -179,7 +158,7 @@ impl ExportManager {
     pub fn export_table<'a>(
         &self,
         predicate: &Tag,
-        export_handler: &dyn ImportExportHandler,
+        export_handler: &Export,
         table: Option<impl Iterator<Item = Vec<AnyDataValue>> + 'a>,
     ) -> Result<bool, Error> {
         if self.disable_write {
@@ -193,17 +172,17 @@ impl ExportManager {
             table_writer.export_table_data(Box::new(table))?;
         }
 
-        Ok(export_handler.resource_is_stdout())
+        Ok(export_handler.resource_spec().is_stdout())
     }
 
-    /// Export a (possibly empty) table according to the given [ImportExportHandler],
+    /// Export a (possibly empty) table according to the given [ExportHandler],
     /// and directly output into the given writer.
     ///
-    /// This function ignores [ExportManager::disable_write].
+    /// This function ignores `ExportManager::disable_write` and `ExportManager::default_compression_format`.
     pub fn export_table_with_writer<'a>(
         &self,
         writer: Box<dyn Write>,
-        export_handler: &dyn ImportExportHandler,
+        export_handler: &impl ExportHandler,
         table: Option<impl Iterator<Item = Vec<AnyDataValue>> + 'a>,
     ) -> Result<(), Error> {
         if let Some(table) = table {

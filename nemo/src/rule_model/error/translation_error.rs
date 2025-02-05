@@ -77,24 +77,10 @@ pub enum TranslationErrorKind {
     #[error(r#"prefix has been redefined"#)]
     #[assoc(code = 114)]
     PrefixRedefinition,
-    /// Unknown file format
-    #[error(r#"unknown file format: `{0}`"#)]
-    #[assoc(code = 115)]
-    FileFormatUnknown(String),
     /// Missing file format
     #[error("missing file format")]
     #[assoc(code = 116)]
     FileFormatMissing,
-    /// RDF unspecified missing extension
-    #[error("no file extension specified")]
-    #[assoc(note = "rdf imports/exports must have file extension nt, nq, ttl, trig, or rdf.")]
-    #[assoc(code = 117)]
-    RdfUnspecifiedMissingExtension,
-    /// RDF unspecified missing extension
-    #[error("`{0}` is not an rdf format")]
-    #[assoc(note = "rdf imports/exports must have file extension nt, nq, ttl, trig, or rdf.")]
-    #[assoc(code = 118)]
-    RdfUnspecifiedUnknownExtension(String),
     /// Unkown attribute
     #[error("unknown attribute: `{0}`")]
     #[assoc(code = 119)]
@@ -104,28 +90,45 @@ pub enum TranslationErrorKind {
     #[assoc(code = 120)]
     AttributeUnexpected(String),
     /// Attributed defined multiple times
-    #[error("")]
+    #[error("attribute defined multiple times")]
     #[assoc(code = 121)]
     AttributeRedefined,
     /// Attribute contains wrong number of parameters
-    #[error("attribute expected {expected} parameters, found {found}")]
+    #[error("attribute expected `{expected}` parameters, found `{found}`")]
     #[assoc(code = 122)]
     AttributeInvalidParameterCount { expected: usize, found: usize },
     /// Invalid attribute parameter: Wrong type
-    #[error("attribute parameter of type {found}, expected {expected}")]
+    #[error("attribute parameter of type `{found}`, expected `{expected}`")]
     #[assoc(code = 123)]
     AttributeParameterWrongType { expected: String, found: String },
     /// Invalid attribute parameter: Wrong component
-    #[error("attribute parameter is {found}, expected {expected}")]
+    #[error("attribute parameter is `{found}`, expected `{expected}`")]
     #[assoc(code = 124)]
     AttributeParameterWrongComponent { expected: String, found: String },
     /// Non-variable-assignment in directive
-    #[error("expected a variable assignment, found {found}")]
+    #[error("expected a variable assignment, found `{found}`")]
     #[assoc(code = 125)]
     NonAssignment { found: String },
-    #[error("expected a ground term, found {found}")]
+    /// Expected a ground term in a fact
+    #[error("expected a ground term, found `{found}`")]
     #[assoc(code = 126)]
     NonGroundTerm { found: String },
+    /// Arbitrary expression used in place of a fact
+    #[error("expected a fact, found `{found}`")]
+    #[assoc(code = 127)]
+    ExpressionAsFact { found: String },
+    /// Keys in a map have the wrong type
+    #[error("wrong key type: {key} is of type {found}, but expected {expected}")]
+    #[assoc(code = 128)]
+    KeyWrongType {
+        key: String,
+        found: String,
+        expected: String,
+    },
+    /// parameter in a map is defined twice
+    #[error("parameter {key} is defined multiple times")]
+    #[assoc(code = 129)]
+    MapParameterRedefined { key: String },
 
     /// Unsupported: Declare statements
     #[error(r#"declare statements are currently unsupported"#)]

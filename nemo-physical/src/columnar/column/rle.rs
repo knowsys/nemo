@@ -420,7 +420,6 @@ mod test {
     use crate::columnar::columnscan::ColumnScan;
     use crate::datatypes::{Double, Float, RunLengthEncodable};
     use quickcheck_macros::quickcheck;
-    use std::iter::repeat;
     use std::num::NonZeroUsize;
     #[cfg(not(miri))]
     use test_log::test;
@@ -458,7 +457,7 @@ mod test {
     }
 
     fn get_control_data_with_inc_zero() -> Vec<u8> {
-        repeat(1).take(1000000).collect()
+        std::iter::repeat_n(1, 1000000).collect()
     }
 
     fn get_test_column_with_inc_zero() -> ColumnRle<u8> {

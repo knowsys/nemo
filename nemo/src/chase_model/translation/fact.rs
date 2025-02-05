@@ -26,7 +26,9 @@ impl ProgramChaseTranslation {
         let mut terms = Vec::new();
 
         for term in fact.subterms() {
-            if let Term::Primitive(Primitive::Ground(value)) = term {
+            let reduced = term.reduce();
+
+            if let Term::Primitive(Primitive::Ground(value)) = reduced {
                 terms.push(value.clone());
             } else {
                 unreachable!("invalid program: fact contains non-primitive values")

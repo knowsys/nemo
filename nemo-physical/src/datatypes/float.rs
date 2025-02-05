@@ -12,14 +12,15 @@ use num::{
     One, Zero,
 };
 
-use super::{run_length_encodable::FloatingStep, FloorToUsize, RunLengthEncodable};
+#[cfg(test)]
+use quickcheck::{Arbitrary, Gen};
+
 use crate::{
-    error::{Error, ReadingError},
+    error::{Error, ReadingError, ReadingErrorKind},
     function::definitions::numeric::traits::{CheckedPow, CheckedSquareRoot},
 };
 
-#[cfg(test)]
-use quickcheck::{Arbitrary, Gen};
+use super::{run_length_encodable::FloatingStep, FloorToUsize, RunLengthEncodable};
 
 /// Wrapper for [f32] that excludes [f32::NAN] and infinite values
 #[derive(Copy, Clone, Debug, PartialEq, Default)]
@@ -32,7 +33,7 @@ impl Float {
     /// Returns an error if `value` is [f32::NAN] or infinite.
     pub fn new(value: f32) -> Result<Self, ReadingError> {
         if !value.is_finite() {
-            return Err(ReadingError::InvalidFloat);
+            return Err(ReadingError::new(ReadingErrorKind::InvalidFloat));
         }
 
         Ok(Float(value))

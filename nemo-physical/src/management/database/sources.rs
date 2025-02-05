@@ -1,10 +1,11 @@
 //! This module defines possible sources of tables to be stored as [Trie][crate::tabular::trie::Trie]s.
 
-use std::{error::Error, mem::size_of};
+use std::mem::size_of;
 
 use crate::{
     datasources::{table_providers::TableProvider, tuple_writer::TupleWriter},
     datavalues::AnyDataValue,
+    error::ReadingError,
     management::bytesized::ByteSized,
 };
 
@@ -43,7 +44,7 @@ impl TableProvider for SimpleTable {
     fn provide_table_data(
         self: Box<Self>,
         tuple_writer: &mut TupleWriter,
-    ) -> Result<(), Box<dyn Error>> {
+    ) -> Result<(), ReadingError> {
         self.write_tuples(tuple_writer);
         Ok(())
     }

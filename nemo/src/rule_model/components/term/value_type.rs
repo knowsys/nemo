@@ -2,8 +2,10 @@
 #![allow(missing_docs)]
 
 use enum_assoc::Assoc;
+use nemo_physical::datavalues::ValueDomain;
 
-/// Potential value types of terms
+/// Potential value types of terms.
+/// A coarser, more user-friendly version of [`ValueDomain`]
 #[derive(Assoc, Debug, Clone, Copy, PartialEq, Eq)]
 #[func(pub fn name(&self) -> &'static str)]
 pub enum ValueType {
@@ -40,4 +42,27 @@ pub enum ValueType {
     /// Any
     #[assoc(name = "any")]
     Any,
+}
+
+impl From<ValueDomain> for ValueType {
+    fn from(value: ValueDomain) -> Self {
+        match value {
+            ValueDomain::Float
+            | ValueDomain::Double
+            | ValueDomain::UnsignedLong
+            | ValueDomain::NonNegativeLong
+            | ValueDomain::UnsignedInt
+            | ValueDomain::NonNegativeInt
+            | ValueDomain::Long
+            | ValueDomain::Int => ValueType::Number,
+            ValueDomain::PlainString => ValueType::String,
+            ValueDomain::LanguageTaggedString => ValueType::LanguageString,
+            ValueDomain::Iri => ValueType::Constant,
+            ValueDomain::Tuple => ValueType::Tuple,
+            ValueDomain::Map => ValueType::Map,
+            ValueDomain::Boolean => ValueType::Boolean,
+            ValueDomain::Null => ValueType::Null,
+            ValueDomain::Other => ValueType::Other,
+        }
+    }
 }

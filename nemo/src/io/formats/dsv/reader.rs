@@ -4,6 +4,7 @@ use std::io::BufRead;
 use std::mem::size_of;
 
 use csv::{Reader, ReaderBuilder};
+use nemo_physical::error::ReadingError;
 use nemo_physical::management::bytesized::ByteSized;
 
 use nemo_physical::datasources::{table_providers::TableProvider, tuple_writer::TupleWriter};
@@ -20,9 +21,9 @@ use super::value_format::{DataValueParserFunction, DsvValueFormat, DsvValueForma
 ///
 /// Parsing of individual values can be done in several ways (DSV does not specify a data model at this level),
 /// as defined by [DsvValueFormat].
-pub(super) struct DsvReader {
+pub(super) struct DsvReader<T> {
     /// Buffer from which content is read
-    read: Box<dyn BufRead>,
+    read: T,
 
     /// Delimiter used to separate values in the file
     delimiter: u8,
@@ -37,10 +38,10 @@ pub(super) struct DsvReader {
     ignore_headers: bool,
 }
 
-impl DsvReader {
+impl<T: BufRead> DsvReader<T> {
     /// Instantiate a [DsvReader] for a given delimiter
     pub(super) fn new(
-        read: Box<dyn BufRead>,
+        read: T,
         delimiter: u8,
         value_formats: DsvValueFormats,
         escape: Option<u8>,
@@ -58,7 +59,7 @@ impl DsvReader {
     }
 
     /// Create a low-level reader for parsing the DSV format.
-    fn reader(self) -> Reader<Box<dyn BufRead>> {
+    fn reader(self) -> Reader<T> {
         ReaderBuilder::new()
             .delimiter(self.delimiter)
             .escape(self.escape)
@@ -69,7 +70,7 @@ impl DsvReader {
 
     /// Actually reads the data from the file, using the given parsers to convert strings to [AnyDataValue]s.
     /// If a field cannot be read or parsed, the line will be ignored
-    fn read(self, tuple_writer: &mut TupleWriter) -> Result<(), Box<dyn std::error::Error>> {
+    fn read(self, tuple_writer: &mut TupleWriter) -> Result<(), ReadingError> {
         log::info!("Starting data import");
 
         let parsers: Vec<DataValueParserFunction> = self
@@ -122,11 +123,11 @@ impl DsvReader {
     }
 }
 
-impl TableProvider for DsvReader {
+impl<T: BufRead> TableProvider for DsvReader<T> {
     fn provide_table_data(
         self: Box<Self>,
         tuple_writer: &mut TupleWriter,
-    ) -> Result<(), Box<dyn std::error::Error>> {
+    ) -> Result<(), ReadingError> {
         self.read(tuple_writer)
     }
 
@@ -135,7 +136,7 @@ impl TableProvider for DsvReader {
     }
 }
 
-impl std::fmt::Debug for DsvReader {
+impl<T> std::fmt::Debug for DsvReader<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("DsvReader")
             .field("read", &"<unspecified std::io::Read>")
@@ -146,7 +147,7 @@ impl std::fmt::Debug for DsvReader {
     }
 }
 
-impl ByteSized for DsvReader {
+impl<T> ByteSized for DsvReader<T> {
     fn size_bytes(&self) -> u64 {
         size_of::<Self>() as u64
     }

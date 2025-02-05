@@ -366,6 +366,17 @@ pub mod datavalues {
     pub const DOT: &str = ".";
 }
 
+pub mod encoding_prefixes {
+    //! This module defines the prefixes for encoded numbers
+
+    /// Reprsents the prefix for binary-encoded unsigned integers
+    pub const BIN: &str = "0b";
+    /// Reprsents the prefix for octal-encoded unsigned integers
+    pub const OCT: &str = "0o";
+    /// Reprsents the prefix for hex-encoded unsigned integers
+    pub const HEX: &str = "0x";
+}
+
 pub mod import_export {
     //! This module defines the import/export configuration options.
 
@@ -441,6 +452,8 @@ pub mod import_export {
         pub(crate) const EXTENSION_RDF_XML: &str = "rdf";
         /// The file extension used for json files
         pub(crate) const EXTENSION_JSON: &str = "json";
+        /// The file extension used for gzip files
+        pub(crate) const EXTENSION_GZ: &str = "gz";
 
         // media types
         /// The media type used for CSV resources

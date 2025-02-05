@@ -4,6 +4,7 @@ pub(crate) mod attribute;
 pub(crate) mod basic;
 pub(crate) mod complex;
 pub(crate) mod directive;
+pub(crate) mod fact;
 pub(crate) mod literal;
 pub(crate) mod rule;
 mod term;
@@ -12,7 +13,6 @@ use std::{collections::HashMap, ops::Range};
 
 use ariadne::{Report, ReportKind, Source};
 use directive::{handle_define_directive, handle_use_directive};
-use literal::HeadAtom;
 use nom::InputLength;
 
 use crate::{
@@ -210,8 +210,8 @@ impl<'a, 'b> ASTProgramTranslation<'a, 'b> {
         for statement in ast.statements() {
             match statement.kind() {
                 ast::statement::StatementKind::Fact(fact) => {
-                    match HeadAtom::build_component(&mut self, fact) {
-                        Ok(atom) => self.program_builder.add_fact(Fact::from(atom.into_inner())),
+                    match Fact::build_component(&mut self, fact) {
+                        Ok(fact) => self.program_builder.add_fact(fact),
                         Err(error) => self.errors.push(ProgramError::TranslationError(error)),
                     }
                 }
