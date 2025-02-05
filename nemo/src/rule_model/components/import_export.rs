@@ -61,7 +61,11 @@ impl ImportExportDirective {
     /// returns `None` otherwise.
     pub fn plain_value(term: &Term) -> Option<String> {
         if let Term::Primitive(Primitive::Ground(any_value)) = term {
-            return any_value.value().to_iri();
+            // TODO: reformulate
+            //return any_value.value().to_iri();
+            let x = any_value.value().to_iri();
+            println!("term {:?} | value {:?} | iri-value {:?}",term,any_value, x);
+            return x;
         }
 
         None

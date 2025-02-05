@@ -21,7 +21,7 @@ pub mod http;
 fn is_iri(resource: &Resource) -> bool {
     match resource {
         Resource::Path(path) => path.contains(':'),
-        // TODO: We would expect Iri to be an iri. However is this verified somewhere already?
+        // TODO: We would expect Resource::Iri to be an iri. However is this verified somewhere already?
         Resource::Iri { iri, .. } => iri.to_string().contains(':')
     }
 }

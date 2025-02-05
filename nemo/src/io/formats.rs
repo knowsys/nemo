@@ -10,7 +10,7 @@ use std::io::{BufRead, Write};
 use dyn_clone::DynClone;
 use oxiri::Iri;
 use nemo_physical::{
-    datasources::table_providers::TableProvider, datavalues::AnyDataValue, resource::Resource,
+    datasources::table_providers::TableProvider, datavalues::AnyDataValue, resource::{Parameters, Resource},
 };
 
 use crate::{
@@ -41,12 +41,18 @@ impl ImportExportResource {
         }
     }
 
-    /// Convert an endpoint [Iri] and a query [String] to a [ImportExportResource].
-    pub(crate) fn from_query(endpoint: Iri<String>, query: String) -> Self {
-        if endpoint.is_empty() {
-            Self::Stdout
-        } else {
-            Self::Resource(Resource::Iri {iri: endpoint, parameters: vec![(String::from("query"), query)] })
+    /// Convert a [Iri] to a [ImportExportResource]
+    pub(crate) fn from_iri(iri: Iri<String>) -> Self {
+        let string = iri.to_string();
+        match string {
+            string if string.is_empty() => Self::Stdout,
+            string if string.starts_with("http:") || string.starts_with("https:") 
+                => Self::Resource(Resource::Iri { iri: iri, parameters: Parameters::default()}),
+            string if string.starts_with("file://")
+                => Self::Resource(Resource::Path (string)),
+
+            // TODO: In this case the Iri start neither with http/https nor with file:// -> not sure what to do then
+            _ => Self::Resource(Resource::Path(string))
         }
     }
 

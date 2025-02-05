@@ -1,6 +1,6 @@
 use std::io::{BufRead, BufReader, Read};
 
-use nemo_physical::{error::ReadingError, resource::Resource};
+use nemo_physical::{error::ReadingError, resource::{Resource, Parameters}};
 use reqwest::header::InvalidHeaderValue;
 
 use crate::rule_model::components::import_export::compression::CompressionFormat;
@@ -45,7 +45,7 @@ impl Read for HttpResource {
 }
 
 impl HttpResourceProvider {
-    async fn get(resource: &Resource, url: String, parameters: &Vec<(String, String)>, media_type: &str) -> Result<HttpResource, ReadingError> {
+    async fn get(resource: &Resource, url: String, parameters: &Parameters, media_type: &str) -> Result<HttpResource, ReadingError> {
         let mut headers = reqwest::header::HeaderMap::new();
         headers.insert(
             reqwest::header::ACCEPT,
@@ -69,17 +69,15 @@ impl HttpResourceProvider {
             .default_headers(headers)
             .build()?;
 
-        // Find the tuple where the first element is "query"
-        // Only for test cases, we can also have http request without queries!
-        let query = if let Some((_, query_value)) = parameters.iter().find(|(key, _)| key == "query") {
-            query_value.as_str() // Extracts the value from the tuple
+        // Unpack parameters 
+        let encoded_query = if let Some(q) = parameters.query.as_ref() {
+            encode(q.as_str()) // Extracts the value from the tuple
         } else {
-            ""
+            encode("")
         };
         
 
-        // Unpack parameters 
-        let encoded_query = encode(query);
+
         
         // Concatenate url and encoded query
         let full_url = format!("{}?query={}", url, encoded_query);

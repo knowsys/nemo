@@ -2,6 +2,7 @@
 
 use std::collections::HashMap;
 
+use nemo_physical::resource::{self, Resource};
 use oxiri::Iri;
 
 use crate::{
@@ -116,35 +117,49 @@ impl ProgramChaseTranslation {
         }
     }
 
-    /// Read resource attribute and check compression.
+    /// Read resource attribute and check com`pression.
     fn read_resource(
         attributes: &HashMap<ImportExportAttribute, Term>,
     ) -> (CompressionFormat, ImportExportResource) {
         attributes
-            .get(&ImportExportAttribute::Resource)
-            .and_then(ImportExportDirective::string_value)
-            .map(|path| (CompressionFormat::from_resource(&path).0, path))
-            .map(|(format, path)| (format, ImportExportResource::from_string(path)))
-            .expect("invalid program: missing resource in import/export")
+        .get(&ImportExportAttribute::Resource)
+        .and_then(|term| {
+            if let Some(iri_string) = ImportExportDirective::plain_value(term) {
+                println!("Entereed IRI- section {}", iri_string);
+                let format = CompressionFormat::from_resource(&iri_string).0;
+                let iri = Iri::parse_unchecked(iri_string); 
+                // Analyse the iri and return either Resource::Path or Resource::Iri
+                Some((format, ImportExportResource::from_iri(iri)))
+            }
+            else if let Some(string) = ImportExportDirective::string_value(term) {
+                let format = CompressionFormat::from_resource(&string).0;
+                // returns a Resource::Path, since string is no valid Iri
+                Some((format, ImportExportResource::from_string(string)))
+            } else { 
+                None
+            }})
+        .expect("invalid program: missing or invalid resource in import/export")
     }
 
     /// Read SPARQL endpoint
     fn read_endpoint(
         attributes: &HashMap<ImportExportAttribute, Term>,
-    ) -> Iri<String> {
+    ) -> ImportExportResource {
         let term = attributes
             .get(&ImportExportAttribute::Endpoint)
             .expect("Missing endpoint for sparql query");
-        Iri::parse_unchecked(
+        let iri = Iri::parse_unchecked(
             ImportExportDirective::plain_value(term)
                 .expect("invalid program: base given in the wrong type")
-            )
+            );
+        ImportExportResource::from_iri(iri)
     }
 
     /// Read SPARQL query
-    fn read_query(
+    fn read_parameters(
         attributes: &HashMap<ImportExportAttribute, Term>,
     ) -> String {
+        // TODO: 
         attributes
             .get(&ImportExportAttribute::Query)
             .and_then(&ImportExportDirective::string_value)
@@ -314,16 +329,20 @@ impl ProgramChaseTranslation {
         arity: Option<usize>,
         attributes: &HashMap<ImportExportAttribute, Term>,
     ) -> Box<dyn ImportExportHandler> {
-        let endpoint = Self::read_endpoint(attributes);
-        let query = Self::read_query(attributes);
-
+        // Make resource mutable to add Parameters to it
+        let mut resource = Self::read_endpoint(attributes);
+        let query = Self::read_parameters(attributes);
+        // Unpack arguments as Parameters 
+        if let ImportExportResource::Resource(resource) = &mut resource {
+            resource.add_parameter("query",query);
+        }
+        
         let limit = Self::read_limit(attributes);
-        // TODO: do we expect/ allow the format parameter & treat it like dsv?
         let value_formats = Self::read_dsv_value_formats(attributes)
             .unwrap_or(DsvValueFormats::default(arity.unwrap_or_default()));
 
         Box::new(SparqlHandler::new(
-            ImportExportResource::from_query(endpoint, query),
+            resource,
             limit,
             value_formats,
             direction,

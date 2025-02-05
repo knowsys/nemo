@@ -12,6 +12,11 @@ use core::fmt;
 ///
 
 use oxiri::Iri;
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct Parameters {
+    pub query: Option<String>,
+    // header
+}
 
 /// Define two Resource types that are used for Import and Export
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -25,9 +30,26 @@ pub enum Resource {
         /// A collection of parameters that are passed considered in the http-request
         /// Each tuple consists of a keyword & the value e.g. ("query", "SELECT ...")
         /// Currently query is the onliest keyword allowed
-        parameters : Vec<(String,String)>
+        parameters : Parameters,
     }
     
+}
+
+impl Resource {
+    /// Add parameters to an existing resource
+    pub fn add_parameter(&mut self, name: &str, parameter: String) -> Option<()> {
+        match self {
+            Resource::Path(..)=> None,
+            Resource::Iri { parameters, .. } => {
+                match name {
+                    "query" => {parameters.query = Some(parameter);
+                    Some(())
+                },
+                    _ => None
+                }
+            }
+        }
+    }
 }
 
 /// Implement Display for Resource enum
