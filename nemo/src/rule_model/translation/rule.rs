@@ -9,7 +9,6 @@ use crate::{
             literal::Literal,
             rule::{Rule, RuleBuilder},
             term::{primitive::Primitive, Term},
-            ProgramComponent,
         },
         error::TranslationError,
     },
@@ -57,7 +56,6 @@ impl TranslationComponent for Rule {
 
         let rule = rule_builder.finalize();
 
-        let _ = rule.validate(&mut translation.validation_error_builder);
         Ok(rule)
     }
 }
