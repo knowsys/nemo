@@ -3,7 +3,7 @@
 use crate::{
     parser::ast::{self, ProgramAST},
     rule_model::{
-        components::{fact::Fact, tag::Tag, term::Term, ProgramComponent},
+        components::{fact::Fact, tag::Tag, term::Term},
         error::{translation_error::TranslationErrorKind, TranslationError},
     },
 };
@@ -35,8 +35,6 @@ impl TranslationComponent for Fact {
                     },
                 ));
             };
-
-        let _ = fact.validate(&mut translation.validation_error_builder);
 
         Ok(fact)
     }
