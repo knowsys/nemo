@@ -80,6 +80,10 @@ impl Atom {
         self.predicate.clone()
     }
 
+    pub fn predicate_ref(&self) -> &Tag {
+        &self.predicate
+    }
+
     /// Return an iterator over the arguments of this atom.
     pub fn arguments(&self) -> impl Iterator<Item = &Term> {
         self.terms.iter()

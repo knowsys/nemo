@@ -1,0 +1,1 @@
+A(!V), B(!Vprime), E(?X, ?Y) :- A(?X), B(?X), A(?Y), B(?Y) .

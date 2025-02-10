@@ -1491,10 +1491,12 @@ version = "0.7.2-dev"
 dependencies = [
  "ariadne",
  "ascii_tree",
+ "assert_cmd",
  "assert_fs",
  "bytecount",
  "colored",
  "csv",
+ "dir-test",
  "dyn-clone",
  "enum-assoc",
  "env_logger 0.11.6",
