@@ -474,7 +474,5 @@ pub mod import_export {
         pub(crate) const MEDIA_TYPE_RDF_XML: &str = "application/rdf+xml";
         /// The media type used for json resources
         pub(crate) const MEDIA_TYPE_JSON: &str = "application/json";
-        /// The media type used for sparql queries
-        pub(crate) const MEDIA_TYPE_SPARQL: &str = "text/tab-separated-values";
     }
 }

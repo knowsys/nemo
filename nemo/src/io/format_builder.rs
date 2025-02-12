@@ -29,6 +29,7 @@ use super::{
         dsv::{DsvBuilder, DsvTag},
         json::{JsonHandler, JsonTag},
         rdf::{RdfHandler, RdfTag},
+        sparql::{SparqlBuilder, SparqlTag},
         Export, ExportHandler, Import, ImportHandler, ResourceSpec,
     },
 };
@@ -242,7 +243,7 @@ pub(crate) trait FormatBuilder: Sized + Into<AnyImportExportBuilder> {
         tag: Self::Tag,
         parameters: &Parameters<Self>,
         direction: Direction,
-    ) -> Result<Self, ValidationErrorKind>;
+    ) -> Result<(Self, Option<ResourceSpec>), ValidationErrorKind>;
 
     fn expected_arity(&self) -> Option<usize>;
 
@@ -254,6 +255,7 @@ pub(crate) trait FormatBuilder: Sized + Into<AnyImportExportBuilder> {
     fn build_export(&self, arity: usize) -> Arc<dyn ExportHandler + Send + Sync + 'static>;
 }
 
+#[derive(Debug)]
 pub(crate) struct Parameters<B: FormatBuilder>(HashMap<B::Parameter, AnyDataValue>);
 
 impl<B: FormatBuilder> Parameters<B> {
@@ -346,6 +348,7 @@ pub(crate) enum SupportedFormatTag {
     Dsv(DsvTag),
     Rdf(RdfTag),
     Json(JsonTag),
+    Sparql(SparqlTag),
 }
 
 impl FromStr for SupportedFormatTag {
@@ -358,6 +361,8 @@ impl FromStr for SupportedFormatTag {
             Ok(Self::Rdf(s.parse().unwrap()))
         } else if JsonHandler::supports_tag(s) {
             Ok(Self::Json(s.parse().unwrap()))
+        } else if SparqlBuilder::supports_tag(s) {
+            Ok(Self::Sparql(s.parse().unwrap()))
         } else {
             Err(())
         }
@@ -371,6 +376,7 @@ impl ImportExportBuilder {
             AnyImportExportBuilder::Dsv(inner) => inner.expected_arity(),
             AnyImportExportBuilder::Rdf(inner) => inner.expected_arity(),
             AnyImportExportBuilder::Json(inner) => inner.expected_arity(),
+            AnyImportExportBuilder::Sparql(inner) => inner.expected_arity(),
         }
     }
 
@@ -388,9 +394,27 @@ impl ImportExportBuilder {
         let origin = *spec.origin();
         let parameters = Parameters::<B>::validate(spec, direction, builder)?;
 
-        let resource = parameters
+        // Convert resource from type String or Iri into a ResourceSpec
+        let resource: Option<ResourceSpec> = parameters
             .get_optional(StandardParameter::Resource.into())
-            .map(|resource| ResourceSpec::from_string(resource.to_plain_string_unchecked()));
+            .and_then(|path| {
+                path.to_plain_string()
+                    .or_else(|| path.to_iri())
+                    .and_then(|string| {
+                        match ResourceSpec::parse_string(string) {
+                            Ok(resource) => Some(resource), // Success: return Some(ResourceSpec)
+                            Err(kind) => {
+                                // Report the error and return None
+                                println!(
+                                    "throw error, resource not correct: {:?} {:?}",
+                                    origin, kind
+                                );
+                                builder.report_error(origin, kind);
+                                None
+                            }
+                        }
+                    })
+            });
 
         let compression = parameters
             .get_optional(StandardParameter::Compression.into())
@@ -399,7 +423,7 @@ impl ImportExportBuilder {
             })
             .unwrap_or_default();
 
-        let inner = match B::new(tag, &parameters, direction) {
+        let (inner, new_res) = match B::new(tag, &parameters, direction) {
             Ok(res) => Some(res),
             Err(kind) => {
                 builder.report_error(origin, kind);
@@ -407,11 +431,20 @@ impl ImportExportBuilder {
             }
         }?;
 
-        Some(ImportExportBuilder {
-            inner: inner.into(),
-            resource,
-            compression,
-        })
+        // Use the [ResourceSpec] from the Builder if available
+        if new_res.is_some() {
+            Some(ImportExportBuilder {
+                inner: inner.into(),
+                resource: new_res,
+                compression,
+            })
+        } else {
+            Some(ImportExportBuilder {
+                inner: inner.into(),
+                resource,
+                compression,
+            })
+        }
     }
 
     pub(crate) fn new(
@@ -438,6 +471,9 @@ impl ImportExportBuilder {
             SupportedFormatTag::Json(tag) => {
                 Self::new_with_tag::<JsonHandler>(tag, spec, direction, error_builder)
             }
+            SupportedFormatTag::Sparql(tag) => {
+                Self::new_with_tag::<SparqlBuilder>(tag, spec, direction, error_builder)
+            }
         }
     }
 
@@ -447,6 +483,7 @@ impl ImportExportBuilder {
             AnyImportExportBuilder::Dsv(dsv_builder) => dsv_builder.build_import(arity),
             AnyImportExportBuilder::Rdf(rdf_handler) => rdf_handler.build_import(arity),
             AnyImportExportBuilder::Json(json_handler) => json_handler.build_import(arity),
+            AnyImportExportBuilder::Sparql(sparql_builder) => sparql_builder.build_import(arity),
         };
 
         let resource_spec = self.resource.clone().unwrap_or({
@@ -468,6 +505,7 @@ impl ImportExportBuilder {
             AnyImportExportBuilder::Dsv(dsv_builder) => dsv_builder.build_export(arity),
             AnyImportExportBuilder::Rdf(rdf_handler) => rdf_handler.build_export(arity),
             AnyImportExportBuilder::Json(json_handler) => json_handler.build_export(arity),
+            AnyImportExportBuilder::Sparql(sparql_builder) => sparql_builder.build_export(arity),
         };
 
         let resource_spec = self.resource.clone().unwrap_or({
@@ -489,6 +527,7 @@ pub(crate) enum AnyImportExportBuilder {
     Dsv(DsvBuilder),
     Rdf(RdfHandler),
     Json(JsonHandler),
+    Sparql(SparqlBuilder),
 }
 
 impl Debug for AnyImportExportBuilder {
@@ -497,6 +536,7 @@ impl Debug for AnyImportExportBuilder {
             Self::Dsv(_) => f.debug_tuple("Dsv").field(&"...").finish(),
             Self::Rdf(_) => f.debug_tuple("Rdf").field(&"...").finish(),
             Self::Json(_) => f.debug_tuple("Json").field(&"...").finish(),
+            Self::Sparql(_) => f.debug_tuple("Sparql").field(&"...").finish(),
         }
     }
 }

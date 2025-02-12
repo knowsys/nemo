@@ -8,7 +8,7 @@ use std::{
 use flate2::Compression;
 
 use gzip::Gzip;
-use nemo_physical::{error::ReadingError, resource::Resource};
+use nemo_physical::error::ReadingError;
 
 use crate::syntax::import_export::{attribute, file_format};
 

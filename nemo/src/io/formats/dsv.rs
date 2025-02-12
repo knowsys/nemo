@@ -31,19 +31,21 @@ use crate::{
     syntax::import_export::{attribute, file_format},
 };
 
-use super::{ExportHandler, FileFormatMeta, FormatBuilder, ImportHandler, TableWriter};
+use super::{
+    ExportHandler, FileFormatMeta, FormatBuilder, ImportHandler, ResourceSpec, TableWriter,
+};
 
 /// Implements [ImportHandler] and [ExportHandler] for delimiter-separated values.
 #[derive(Debug, Clone)]
-pub struct DsvHandler {
+pub(crate) struct DsvHandler {
     /// The specific delimiter for this format.
-    delimiter: u8,
+    pub delimiter: u8,
     /// The list of value formats to be used for importing/exporting data.
-    value_formats: DsvValueFormats,
+    pub value_formats: DsvValueFormats,
     /// Maximum number of statements that should be imported/exported.
-    limit: Option<u64>,
+    pub limit: Option<u64>,
     /// Whether to ignore headers
-    ignore_headers: bool,
+    pub ignore_headers: bool,
 }
 
 impl DsvHandler {
@@ -198,7 +200,7 @@ impl FormatBuilder for DsvBuilder {
         tag: Self::Tag,
         parameters: &Parameters<DsvBuilder>,
         _direction: Direction,
-    ) -> Result<Self, ValidationErrorKind> {
+    ) -> Result<(Self, Option<ResourceSpec>), ValidationErrorKind> {
         let value_formats = parameters
             .get_optional(DsvParameter::Format)
             .map(|value| DsvValueFormats::try_from(value).unwrap());
@@ -224,12 +226,15 @@ impl FormatBuilder for DsvBuilder {
             .map(AnyDataValue::to_boolean_unchecked)
             .unwrap_or(false);
 
-        Ok(Self {
-            delimiter,
-            value_formats,
-            limit,
-            ignore_headers,
-        })
+        Ok((
+            Self {
+                delimiter,
+                value_formats,
+                limit,
+                ignore_headers,
+            },
+            None,
+        ))
     }
 
     fn expected_arity(&self) -> Option<usize> {

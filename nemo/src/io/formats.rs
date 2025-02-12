@@ -6,6 +6,7 @@ pub mod rdf;
 pub mod sparql;
 
 use core::fmt;
+use oxiri::Iri;
 use std::{
     fmt::Debug,
     io::{Read, Write},
@@ -13,10 +14,13 @@ use std::{
 };
 
 use nemo_physical::{
-    datasources::table_providers::TableProvider, datavalues::AnyDataValue, resource::{Parameters, Resource},
+    datasources::table_providers::TableProvider,
+    datavalues::AnyDataValue,
+    resource::{HttpParameters, Resource},
 };
 
 use crate::error::Error;
+use crate::rule_model::error::validation_error::ValidationErrorKind;
 
 use super::{compression_format::CompressionFormat, format_builder::FormatBuilder};
 
@@ -58,7 +62,7 @@ pub enum ResourceSpec {
 }
 
 impl ResourceSpec {
-    /// Convert a [String] to a [ImportExportResource].
+    /// Convert a simple [String] into a [ResourceSpec]
     pub(crate) fn from_string(string: String) -> Self {
         if string.is_empty() {
             Self::Stdout
@@ -67,19 +71,37 @@ impl ResourceSpec {
         }
     }
 
-    /// Convert a [Iri] to a [ImportExportResource]
-    pub(crate) fn from_iri(iri: Iri<String>) -> Self {
-        let string = iri.to_string();
+    /// Parse and valiate [String] to a [ResourceSpec].
+    pub(crate) fn parse_string(string: String) -> Result<Self, ValidationErrorKind> {
         match string {
-            string if string.is_empty() => Self::Stdout,
-            string if string.starts_with("http:") || string.starts_with("https:") 
-                => Self::Resource(Resource::Iri { iri: iri, parameters: Parameters::default()}),
-            string if string.starts_with("file://")
-                => Self::Resource(Resource::Path (string)),
+            // Convert the web-resource into a valid Iri
+            string if string.starts_with("http:") || string.starts_with("https:") => {
+                Iri::parse(string)
+                    .map(|iri| {
+                        Self::Resource(Resource::Iri {
+                            iri,
+                            parameters: HttpParameters::default(),
+                        })
+                    })
+                    .map_err(|_| ValidationErrorKind::ImportExportInvalidIri)
+            }
 
-            // TODO: In this case the Iri start neither with http/https nor with file:// -> not sure what to do then
-            _ => Self::Resource(Resource::Path(string))
+            // Strip a local iri of the prefix
+            string if string.starts_with("file://") => string
+                .strip_prefix("file://localhost")
+                .or_else(|| string.strip_prefix("file://"))
+                .map(|short_path| Self::Resource(Resource::Path(String::from(short_path))))
+                .ok_or(ValidationErrorKind::ImportExportInvalidIri),
+            _ => Ok(Self::from_string(string)),
         }
+    }
+
+    /// Convert a [String] to a [ResourceSpec].
+    pub(crate) fn from_endpoint(endpoint: Iri<String>, query: String) -> Self {
+        Self::Resource(Resource::Iri {
+            iri: endpoint,
+            parameters: HttpParameters { query: Some(query) },
+        })
     }
 
     /// Retrieve the contained resource, if any.
@@ -100,7 +122,7 @@ impl ResourceSpec {
 impl fmt::Display for ResourceSpec {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            ResourceSpec::Resource(r) => f.write_str(r),
+            ResourceSpec::Resource(resource) => f.write_str(resource.to_string().as_str()),
             ResourceSpec::Stdout => f.write_str("stdout"),
         }
     }

@@ -17,7 +17,7 @@ use crate::{
     syntax::import_export::file_format,
 };
 
-use super::{FileFormatMeta, ImportHandler};
+use super::{FileFormatMeta, ImportHandler, ResourceSpec};
 
 #[derive(Debug, Clone)]
 pub(crate) struct JsonHandler;
@@ -58,12 +58,12 @@ impl FormatBuilder for JsonHandler {
         _tag: Self::Tag,
         _parameters: &Parameters<Self>,
         direction: Direction,
-    ) -> Result<Self, ValidationErrorKind> {
+    ) -> Result<(Self, Option<ResourceSpec>), ValidationErrorKind> {
         if matches!(direction, Direction::Export) {
             return Err(ValidationErrorKind::UnsupportedJsonExport);
         }
 
-        Ok(Self)
+        Ok((Self, None))
     }
 
     fn expected_arity(&self) -> Option<usize> {

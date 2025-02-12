@@ -135,36 +135,40 @@ pub enum ValidationErrorKind {
     #[error(r#"unknown compression format `{format}`"#)]
     #[assoc(code = 226)]
     ImportExportUnknownCompression { format: String },
-    /// Import/Export: invalid SPARQL query 
-    #[error(r#"invalid sparql query oxigraph error `{oxi_error}`"#)]
-    #[assoc(code = 226)]
-    ImportExportInvalidSparqlQuery {oxi_error: String },
+    /// Import/Export: invalid SPARQL endpoint
+    #[error(r#"resource or endpoint is no valid Iri "#)]
+    #[assoc(code = 227)]
+    ImportExportInvalidIri,
+    /// Import/Export: invalid SPARQL query
+    #[error(r#"invalid sparql query, oxigraph/spargebra error `{oxi_error}`"#)]
+    #[assoc(code = 228)]
+    ImportExportInvalidSparqlQuery { oxi_error: String },
     /// Attribute in rule is unsafe
     #[error(r#"display attribute uses unsafe variable: `{variable}`"#)]
-    #[assoc(code = 227)]
+    #[assoc(code = 229)]
     AttributeRuleUnsafe { variable: String },
     /// Aggregation used in fact
     #[error(r#"aggregates may not be used in facts"#)]
-    #[assoc(code = 228)]
+    #[assoc(code = 230)]
     FactSubtermAggregate,
     /// RDF unspecified missing extension
     #[error("no file extension specified")]
     #[assoc(note = "rdf imports/exports must have file extension nt, nq, ttl, trig, or rdf.")]
-    #[assoc(code = 229)]
+    #[assoc(code = 231)]
     RdfUnspecifiedMissingExtension,
     /// RDF unspecified missing extension
     #[error("`{0}` is not an rdf format")]
     #[assoc(note = "rdf imports/exports must have file extension nt, nq, ttl, trig, or rdf.")]
-    #[assoc(code = 230)]
+    #[assoc(code = 232)]
     RdfUnspecifiedUnknownExtension(String),
     /// Unknown file format
     #[error(r#"unknown file format: `{0}`"#)]
-    #[assoc(code = 231)]
+    #[assoc(code = 233)]
     ImportExportFileFormatUnknown(String),
     /// Unknown arity
     #[error(r#"arity of predicate {predicate} is unknown"#)]
     #[assoc(note = "arity of predicates in import/export statements must be known in advance.")]
-    #[assoc(code = 232)]
+    #[assoc(code = 234)]
     UnknownArity { predicate: String },
 
     /// Unsupported feature: Multiple aggregates in one rule

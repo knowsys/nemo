@@ -48,13 +48,12 @@ pub enum ImportExportAttribute {
     #[assoc(from_name = attribute::IGNORE_HEADERS)]
     #[assoc(value_type = ProgramComponentKind::Boolean)]
     IgnoreHeaders,
-    /// URL endpoint for sparql queries
+    /// URL endpoint for SPARQL queries
     #[assoc(name = attribute::ENDPOINT)]
     #[assoc(from_name = attribute::ENDPOINT)]
     #[assoc(value_type = ProgramComponentKind::Iri)]
     Endpoint,
-    /// GET-parameters for http request
-    /// TODO: Isnt this rather an enumeration of strings?
+    /// The query that is evaluated by the endpoint
     #[assoc(name = attribute::QUERY)]
     #[assoc(from_name = attribute::QUERY)]
     #[assoc(value_type = ProgramComponentKind::PlainString)]

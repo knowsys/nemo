@@ -26,7 +26,9 @@ impl FileResourceProvider {
 impl FileResourceProvider {
     fn parse_resource(&self, resource: &Resource) -> Result<Option<PathBuf>, ReadingError> {
         // Add error message or is the block ok?
-        let Resource::Path(res_path) = resource else {unreachable!("resource should always be a Path here")};
+        let Resource::Path(res_path) = resource else {
+            unreachable!("resource should always be a Path here")
+        };
         if is_iri(resource) {
             if res_path.starts_with("file://") {
                 // File URI. We only support local files, i.e., URIs
@@ -34,7 +36,7 @@ impl FileResourceProvider {
 
                 let path: &str = res_path
                     .strip_prefix("file://localhost")
-                    .or_else(|| resource.strip_prefix("file://"))
+                    .or_else(|| res_path.strip_prefix("file://"))
                     .ok_or_else(|| {
                         ReadingError::new(ReadingErrorKind::InvalidFileUri)
                             .with_resource(resource.clone())

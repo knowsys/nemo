@@ -153,7 +153,7 @@ pub enum FileFormat {
     /// Is sparql a file format?
     #[assoc(name = file_format::SPARQL)]
     #[assoc(from_name = file_format::SPARQL)]
-    #[assoc(extension = file_format::EXTENSION_RDF_TRIG)]
+    #[assoc(extension = file_format::EXTENSION_TSV)]
     #[assoc(media_type = file_format::MEDIA_TYPE_SPARQL)]
     #[assoc(attributes = HashMap::from([
         (ImportExportAttribute::Endpoint, AttributeRequirement::Required),

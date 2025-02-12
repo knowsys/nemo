@@ -1,12 +1,15 @@
 use std::io::Read;
 
+use super::ResourceProvider;
 use nemo_physical::{
     error::{ReadingError, ReadingErrorKind},
-    resource::Resource,
+    resource::{HttpParameters, Resource},
 };
 use reqwest::header::InvalidHeaderValue;
+use urlencoding::encode;
 
-use super::{is_iri, ResourceProvider};
+/// A char limit to decide if a request should be send via GET or POST
+const HTTP_GET_CHAR_LIMIT: usize = 2000;
 
 /// Resolves resources using HTTP or HTTPS.
 ///
@@ -46,13 +49,18 @@ impl Read for HttpResource {
 }
 
 impl HttpResourceProvider {
-    async fn get(resource: &Resource, url: String, parameters: &Parameters, media_type: &str) -> Result<HttpResource, ReadingError> {
+    async fn get(
+        resource: &Resource,
+        url: String,
+        parameters: &HttpParameters,
+        media_type: &str,
+    ) -> Result<HttpResource, ReadingError> {
         let mut headers = reqwest::header::HeaderMap::new();
         headers.insert(
             reqwest::header::ACCEPT,
             media_type.parse().map_err(|err: InvalidHeaderValue| {
                 ReadingError::new(ReadingErrorKind::ExternalError(err.into()))
-                    .with_resource(url.clone())
+                    .with_resource(resource.clone())
             })?,
         );
         headers.insert(
@@ -67,19 +75,58 @@ impl HttpResourceProvider {
             .parse()
             .map_err(|err: InvalidHeaderValue| {
                 ReadingError::new(ReadingErrorKind::ExternalError(err.into()))
-                    .with_resource(url.clone())
+                    .with_resource(resource.clone())
             })?,
         );
 
+        headers.insert(
+            reqwest::header::CONTENT_TYPE,
+            reqwest::header::HeaderValue::from_static("application/x-www-form-urlencoded"),
+        );
+
         let err_mapping =
-            |err: reqwest::Error| ReadingError::new(err.into()).with_resource(url.clone());
+            |err: reqwest::Error| ReadingError::new(err.into()).with_resource(resource.clone());
 
         let client = reqwest::Client::builder()
             .default_headers(headers)
             .build()
             .map_err(err_mapping)?;
 
-        let response = client.get(url).send().await.map_err(err_mapping)?;
+        let mut full_url: String = url;
+
+        // Dynamically decide to use GET or POST request, based on the number of characters
+        // Unpack parameters
+        let response = if let Some(query) = parameters.query.as_ref() {
+            let enc_query = encode(query);
+
+            if full_url.len() + query.len() > HTTP_GET_CHAR_LIMIT {
+                log::debug!("Make POST-request to endpoint {full_url}");
+
+                // Make POST request, as some browsers have limitations for GET-requests
+                let body = format!("query={}", enc_query);
+                client
+                    .post(full_url)
+                    .body(body)
+                    .send()
+                    .await
+                    .map_err(err_mapping)?
+            } else {
+                log::debug!("Make GET-request to endpoint {full_url}");
+                // Append the encoded query to URL
+                full_url.push_str("?query=");
+                full_url.push_str(&enc_query);
+                client.get(full_url).send().await.map_err(err_mapping)?
+            }
+        } else {
+            // Dont append any parameters to URL
+            log::debug!("Make GET-request to endpoint {full_url}");
+            client.get(full_url).send().await.map_err(err_mapping)?
+        };
+
+        // Validate status code for timeouts and other errors
+        if let Err(err) = response.error_for_status_ref() {
+            return Err(err_mapping(err));
+        }
 
         // we're expecting potentially compressed data, don't try to
         // do any character set guessing, as `response.text()` would do.
@@ -98,11 +145,13 @@ impl ResourceProvider for HttpResourceProvider {
         resource: &Resource,
         media_type: &str,
     ) -> Result<Option<Box<dyn Read>>, ReadingError> {
-        if !is_iri(resource) {
-            return Ok(None);
-        }
+        // Add error message
+        let Resource::Iri { iri, parameters } = resource else {
+            unreachable!("The type of the resource is known already")
+        };
 
         let url = iri.to_string();
+        // Not needed this is checked already in
         if !(url.starts_with("http:") || url.starts_with("https:")) {
             // Non-http IRI; resource provider is not responsible
             return Ok(None);
@@ -113,7 +162,7 @@ impl ResourceProvider for HttpResourceProvider {
             .build()
             .map_err(|e| ReadingError::from(e).with_resource(resource.clone()))?;
 
-        let response = rt.block_on(Self::get(resource, media_type))?;
+        let response = rt.block_on(Self::get(resource, url, parameters, media_type))?;
         Ok(Some(Box::new(response)))
     }
 }
