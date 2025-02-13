@@ -1,7 +1,7 @@
 //! This modules defines the [Resource] type, which is part of the public interface of this crate.
 //!
 
-use core::fmt;
+use std::fmt;
 
 /// Resource that can be referenced in source declarations in Nemo programs
 /// Resources are resolved using `nemo::io::resource_providers::ResourceProviders`

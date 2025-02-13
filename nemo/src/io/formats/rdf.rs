@@ -42,7 +42,7 @@ use crate::{
 };
 
 use super::FileFormatMeta;
-use super::{ExportHandler, FormatBuilder, ImportHandler, ResourceSpec, TableWriter};
+use super::{ExportHandler, FormatBuilder, ImportHandler, TableWriter};
 
 /// The different supported variants of the RDF format.
 #[derive(Assoc, Debug, Clone, Copy, PartialEq, Eq, VariantArray)]
@@ -198,7 +198,7 @@ impl FormatBuilder for RdfHandler {
         tag: Self::Tag,
         parameters: &Parameters<RdfHandler>,
         _direction: Direction,
-    ) -> Result<(Self, Option<ResourceSpec>), ValidationErrorKind> {
+    ) -> Result<Self, ValidationErrorKind> {
         let variant = match tag {
             RdfTag::Rdf => {
                 let value = parameters
@@ -243,15 +243,12 @@ impl FormatBuilder for RdfHandler {
             .as_ref()
             .map(AnyDataValue::to_u64_unchecked);
 
-        Ok((
-            Self {
-                base,
-                variant,
-                value_formats,
-                limit,
-            },
-            None,
-        ))
+        Ok(Self {
+            base,
+            variant,
+            value_formats,
+            limit,
+        })
     }
 
     fn expected_arity(&self) -> Option<usize> {

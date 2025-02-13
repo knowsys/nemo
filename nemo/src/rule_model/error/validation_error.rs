@@ -135,41 +135,41 @@ pub enum ValidationErrorKind {
     #[error(r#"unknown compression format `{format}`"#)]
     #[assoc(code = 226)]
     ImportExportUnknownCompression { format: String },
-    /// Import/Export: invalid SPARQL endpoint
-    #[error(r#"resource or endpoint is no valid Iri "#)]
-    #[assoc(code = 227)]
-    ImportExportInvalidIri,
-    /// Import/Export: invalid SPARQL query
-    #[error(r#"invalid sparql query, oxigraph/spargebra error `{oxi_error}`"#)]
-    #[assoc(code = 228)]
-    ImportExportInvalidSparqlQuery { oxi_error: String },
     /// Attribute in rule is unsafe
     #[error(r#"display attribute uses unsafe variable: `{variable}`"#)]
-    #[assoc(code = 229)]
+    #[assoc(code = 227)]
     AttributeRuleUnsafe { variable: String },
     /// Aggregation used in fact
     #[error(r#"aggregates may not be used in facts"#)]
-    #[assoc(code = 230)]
+    #[assoc(code = 228)]
     FactSubtermAggregate,
     /// RDF unspecified missing extension
     #[error("no file extension specified")]
     #[assoc(note = "rdf imports/exports must have file extension nt, nq, ttl, trig, or rdf.")]
-    #[assoc(code = 231)]
+    #[assoc(code = 229)]
     RdfUnspecifiedMissingExtension,
     /// RDF unspecified missing extension
     #[error("`{0}` is not an rdf format")]
     #[assoc(note = "rdf imports/exports must have file extension nt, nq, ttl, trig, or rdf.")]
-    #[assoc(code = 232)]
+    #[assoc(code = 230)]
     RdfUnspecifiedUnknownExtension(String),
     /// Unknown file format
     #[error(r#"unknown file format: `{0}`"#)]
-    #[assoc(code = 233)]
+    #[assoc(code = 231)]
     ImportExportFileFormatUnknown(String),
     /// Unknown arity
     #[error(r#"arity of predicate {predicate} is unknown"#)]
     #[assoc(note = "arity of predicates in import/export statements must be known in advance.")]
-    #[assoc(code = 234)]
+    #[assoc(code = 232)]
     UnknownArity { predicate: String },
+    /// Import/Export: invalid SPARQL endpoint
+    #[error(r#"resource or endpoint is no valid Iri "#)]
+    #[assoc(code = 233)]
+    ImportExportInvalidIri,
+    /// Import/Export: invalid SPARQL query
+    #[error(r#"invalid Sparql query resulting in oxigraph-parser error: `{oxi_error}`"#)]
+    #[assoc(code = 234)]
+    ImportExportInvalidSparqlQuery { oxi_error: String },
 
     /// Unsupported feature: Multiple aggregates in one rule
     #[error(r#"multiple aggregates in one rule is currently unsupported"#)]

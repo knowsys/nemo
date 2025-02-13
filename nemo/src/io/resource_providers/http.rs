@@ -3,7 +3,7 @@ use std::io::Read;
 use super::ResourceProvider;
 use nemo_physical::{
     error::{ReadingError, ReadingErrorKind},
-    resource::{HttpParameters, Resource},
+    resource::Resource,
 };
 use reqwest::header::InvalidHeaderValue;
 use urlencoding::encode;
@@ -49,12 +49,7 @@ impl Read for HttpResource {
 }
 
 impl HttpResourceProvider {
-    async fn get(
-        resource: &Resource,
-        url: String,
-        parameters: &HttpParameters,
-        media_type: &str,
-    ) -> Result<HttpResource, ReadingError> {
+    async fn get(resource: &Resource, media_type: &str) -> Result<HttpResource, ReadingError> {
         let mut headers = reqwest::header::HeaderMap::new();
         headers.insert(
             reqwest::header::ACCEPT,
@@ -92,7 +87,10 @@ impl HttpResourceProvider {
             .build()
             .map_err(err_mapping)?;
 
-        let mut full_url: String = url;
+        let Resource::Iri { iri, parameters } = resource else {
+            unreachable!("The type of the resource is known already")
+        };
+        let mut full_url: String = iri.to_string();
 
         // Dynamically decide to use GET or POST request, based on the number of characters
         // Unpack parameters
@@ -146,7 +144,7 @@ impl ResourceProvider for HttpResourceProvider {
         media_type: &str,
     ) -> Result<Option<Box<dyn Read>>, ReadingError> {
         // Add error message
-        let Resource::Iri { iri, parameters } = resource else {
+        let Resource::Iri { iri, .. } = resource else {
             unreachable!("The type of the resource is known already")
         };
 
@@ -162,7 +160,7 @@ impl ResourceProvider for HttpResourceProvider {
             .build()
             .map_err(|e| ReadingError::from(e).with_resource(resource.clone()))?;
 
-        let response = rt.block_on(Self::get(resource, url, parameters, media_type))?;
+        let response = rt.block_on(Self::get(resource, media_type))?;
         Ok(Some(Box::new(response)))
     }
 }

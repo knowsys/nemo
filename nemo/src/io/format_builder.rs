@@ -243,14 +243,16 @@ pub(crate) trait FormatBuilder: Sized + Into<AnyImportExportBuilder> {
         tag: Self::Tag,
         parameters: &Parameters<Self>,
         direction: Direction,
-    ) -> Result<(Self, Option<ResourceSpec>), ValidationErrorKind>;
+    ) -> Result<Self, ValidationErrorKind>;
 
     fn expected_arity(&self) -> Option<usize>;
 
     fn supports_tag(tag: &str) -> bool {
         Self::Tag::from_str(tag).is_ok()
     }
-
+    fn override_resource_spec(&self, _direction: Direction) -> Option<ResourceSpec> {
+        None
+    }
     fn build_import(&self, arity: usize) -> Arc<dyn ImportHandler + Send + Sync + 'static>;
     fn build_export(&self, arity: usize) -> Arc<dyn ExportHandler + Send + Sync + 'static>;
 }
@@ -405,10 +407,6 @@ impl ImportExportBuilder {
                             Ok(resource) => Some(resource), // Success: return Some(ResourceSpec)
                             Err(kind) => {
                                 // Report the error and return None
-                                println!(
-                                    "throw error, resource not correct: {:?} {:?}",
-                                    origin, kind
-                                );
                                 builder.report_error(origin, kind);
                                 None
                             }
@@ -423,7 +421,7 @@ impl ImportExportBuilder {
             })
             .unwrap_or_default();
 
-        let (inner, new_res) = match B::new(tag, &parameters, direction) {
+        let inner = match B::new(tag, &parameters, direction) {
             Ok(res) => Some(res),
             Err(kind) => {
                 builder.report_error(origin, kind);
@@ -431,20 +429,14 @@ impl ImportExportBuilder {
             }
         }?;
 
+        let new_resource = inner.override_resource_spec(direction);
+
         // Use the [ResourceSpec] from the Builder if available
-        if new_res.is_some() {
-            Some(ImportExportBuilder {
-                inner: inner.into(),
-                resource: new_res,
-                compression,
-            })
-        } else {
-            Some(ImportExportBuilder {
-                inner: inner.into(),
-                resource,
-                compression,
-            })
-        }
+        Some(ImportExportBuilder {
+            inner: inner.into(),
+            resource: new_resource.or(resource),
+            compression,
+        })
     }
 
     pub(crate) fn new(

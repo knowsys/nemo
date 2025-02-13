@@ -31,9 +31,7 @@ use crate::{
     syntax::import_export::{attribute, file_format},
 };
 
-use super::{
-    ExportHandler, FileFormatMeta, FormatBuilder, ImportHandler, ResourceSpec, TableWriter,
-};
+use super::{ExportHandler, FileFormatMeta, FormatBuilder, ImportHandler, TableWriter};
 
 /// Implements [ImportHandler] and [ExportHandler] for delimiter-separated values.
 #[derive(Debug, Clone)]
@@ -200,10 +198,10 @@ impl FormatBuilder for DsvBuilder {
         tag: Self::Tag,
         parameters: &Parameters<DsvBuilder>,
         _direction: Direction,
-    ) -> Result<(Self, Option<ResourceSpec>), ValidationErrorKind> {
+    ) -> Result<Self, ValidationErrorKind> {
         let value_formats = parameters
             .get_optional(DsvParameter::Format)
-            .map(|value| DsvValueFormats::try_from(value).unwrap());
+            .map(|value| DsvValueFormats::try_from(value).expect("value formats have already been validated"));
 
         let limit = parameters
             .get_optional(DsvParameter::Limit)
@@ -226,15 +224,12 @@ impl FormatBuilder for DsvBuilder {
             .map(AnyDataValue::to_boolean_unchecked)
             .unwrap_or(false);
 
-        Ok((
-            Self {
-                delimiter,
-                value_formats,
-                limit,
-                ignore_headers,
-            },
-            None,
-        ))
+        Ok(Self {
+            delimiter,
+            value_formats,
+            limit,
+            ignore_headers,
+        })
     }
 
     fn expected_arity(&self) -> Option<usize> {

@@ -150,7 +150,6 @@ pub enum FileFormat {
     #[assoc(arity = 4)]
     TriG,
     /// SPARQL 1.1 
-    /// Is sparql a file format?
     #[assoc(name = file_format::SPARQL)]
     #[assoc(from_name = file_format::SPARQL)]
     #[assoc(extension = file_format::EXTENSION_TSV)]
