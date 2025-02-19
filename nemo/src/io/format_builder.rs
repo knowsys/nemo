@@ -8,7 +8,10 @@ use std::{
     sync::Arc,
 };
 
-use nemo_physical::datavalues::{AnyDataValue, DataValue};
+use nemo_physical::{
+    datavalues::{AnyDataValue, DataValue},
+    resource::{HttpParamType, ResourceBuilder, ResourceValidationErrorKind},
+};
 use strum::IntoEnumIterator;
 
 use crate::{
@@ -210,6 +213,10 @@ format_parameter! {
     pub(crate) enum StandardParameter(NoParameters) {
         Resource(name = attribute::RESOURCE, supported_types = &[ValueType::String, ValueType::Constant]),
         Compression(name = attribute::COMPRESSION, supported_types = &[ValueType::String]),
+        //HttpHeader(name = attribute::HTTP_HEADERS, supported_types= &[ValueType::String]),
+        //HttpHeader(name = attribute::HTTP_GET, supported_types= &[ValueType::String]),
+        //HttpHeader(name = attribute::HTTP_FRAGMENT, supported_types= &[ValueType::String]),
+        //HttpHeader(name = attribute::HTTP_POST, supported_types= &[ValueType::String]),
     }
 }
 
@@ -250,9 +257,11 @@ pub(crate) trait FormatBuilder: Sized + Into<AnyImportExportBuilder> {
     fn supports_tag(tag: &str) -> bool {
         Self::Tag::from_str(tag).is_ok()
     }
-    fn override_resource_spec(&self, _direction: Direction) -> Option<ResourceSpec> {
+
+    fn override_resource_builder(&self, _direction: Direction) -> Option<ResourceBuilder> {
         None
     }
+
     fn build_import(&self, arity: usize) -> Arc<dyn ImportHandler + Send + Sync + 'static>;
     fn build_export(&self, arity: usize) -> Arc<dyn ExportHandler + Send + Sync + 'static>;
 }
@@ -397,21 +406,17 @@ impl ImportExportBuilder {
         let parameters = Parameters::<B>::validate(spec, direction, builder)?;
 
         // Convert resource from type String or Iri into a ResourceSpec
-        let resource: Option<ResourceSpec> = parameters
+        // TODO: Propagate ResourceBuilder Error upwards
+        let resource_builder = parameters
             .get_optional(StandardParameter::Resource.into())
-            .and_then(|path| {
-                path.to_plain_string()
-                    .or_else(|| path.to_iri())
-                    .and_then(|string| {
-                        match ResourceSpec::parse_string(string) {
-                            Ok(resource) => Some(resource), // Success: return Some(ResourceSpec)
-                            Err(kind) => {
-                                // Report the error and return None
-                                builder.report_error(origin, kind);
-                                None
-                            }
-                        }
+            .and_then(|value| {
+                ResourceBuilder::try_from(value)
+                    .map_err(|err| {
+                        // Error conversion should work since ResourceValidationErrorKind is registered in ValidataionErrorKind
+                        builder.report_error(origin, err.into());
+                        None::<ResourceBuilder>
                     })
+                    .ok()
             });
 
         let compression = parameters
@@ -429,12 +434,25 @@ impl ImportExportBuilder {
             }
         }?;
 
-        let new_resource = inner.override_resource_spec(direction);
+        let resource_builder = inner
+            .override_resource_builder(direction)
+            .or(resource_builder);
 
-        // Use the [ResourceSpec] from the Builder if available
+        let resource_spec = match resource_builder {
+            Some(mut rb) => {
+                if rb.has_iri() {
+                    // TODO: read Header, Get, Fragment & POST and add them to rb
+                }
+                Some(ResourceSpec::Resource(rb.finalize()))
+            }
+            None => None,
+        };
+
+        // Build the ResourceSpec only, once Resource is finished
+
         Some(ImportExportBuilder {
             inner: inner.into(),
-            resource: new_resource.or(resource),
+            resource: resource_spec,
             compression,
         })
     }

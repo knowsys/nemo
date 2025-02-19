@@ -5,11 +5,7 @@ use nemo_physical::{
     error::{ReadingError, ReadingErrorKind},
     resource::Resource,
 };
-use reqwest::header::InvalidHeaderValue;
-use urlencoding::encode;
-
-/// A char limit to decide if a request should be send via GET or POST
-const HTTP_GET_CHAR_LIMIT: usize = 2000;
+use reqwest::header::{HeaderName, HeaderValue, InvalidHeaderName, InvalidHeaderValue};
 
 /// Resolves resources using HTTP or HTTPS.
 ///
@@ -49,7 +45,7 @@ impl Read for HttpResource {
 }
 
 impl HttpResourceProvider {
-    async fn get(resource: &Resource, media_type: &str) -> Result<HttpResource, ReadingError> {
+    async fn fetch(resource: &Resource, media_type: &str) -> Result<HttpResource, ReadingError> {
         let mut headers = reqwest::header::HeaderMap::new();
         headers.insert(
             reqwest::header::ACCEPT,
@@ -74,10 +70,24 @@ impl HttpResourceProvider {
             })?,
         );
 
-        headers.insert(
-            reqwest::header::CONTENT_TYPE,
-            reqwest::header::HeaderValue::from_static("application/x-www-form-urlencoded"),
-        );
+        // Unpack custom headers from resource
+        if let Some(custom_headers) = resource.headers() {
+            for (key, value) in custom_headers {
+                headers.insert(
+                    key.parse::<HeaderName>()
+                        .map_err(|err: InvalidHeaderName| {
+                            ReadingError::new(ReadingErrorKind::ExternalError(err.into()))
+                                .with_resource(resource.clone())
+                        })?,
+                    value
+                        .parse::<HeaderValue>()
+                        .map_err(|err: InvalidHeaderValue| {
+                            ReadingError::new(ReadingErrorKind::ExternalError(err.into()))
+                                .with_resource(resource.clone())
+                        })?,
+                );
+            }
+        }
 
         let err_mapping =
             |err: reqwest::Error| ReadingError::new(err.into()).with_resource(resource.clone());
@@ -87,38 +97,32 @@ impl HttpResourceProvider {
             .build()
             .map_err(err_mapping)?;
 
-        let Resource::Iri { iri, parameters } = resource else {
-            unreachable!("The type of the resource is known already")
-        };
-        let mut full_url: String = iri.to_string();
+        let full_url = resource.as_string();
 
-        // Dynamically decide to use GET or POST request, based on the number of characters
-        // Unpack parameters
-        let response = if let Some(query) = parameters.query.as_ref() {
-            let enc_query = encode(query);
+        let response = {
+            // Collect Body-Parameters into one string
+            if let Some(body) = resource.body() {
+                // TODO: Verify if RequestBuilder::form() can handle the body correctly
+                //let body_string = body
+                //    .iter()
+                //    .map(|(key, value)| format!("{}={}", key, value))
+                //    .collect::<Vec<String>>()
+                //    .join("&");
 
-            if full_url.len() + query.len() > HTTP_GET_CHAR_LIMIT {
+                // Make POST-Request
                 log::debug!("Make POST-request to endpoint {full_url}");
 
-                // Make POST request, as some browsers have limitations for GET-requests
-                let body = format!("query={}", enc_query);
                 client
                     .post(full_url)
-                    .body(body)
+                    .form(body)
                     .send()
                     .await
                     .map_err(err_mapping)?
             } else {
+                // Make GET-Request
                 log::debug!("Make GET-request to endpoint {full_url}");
-                // Append the encoded query to URL
-                full_url.push_str("?query=");
-                full_url.push_str(&enc_query);
                 client.get(full_url).send().await.map_err(err_mapping)?
             }
-        } else {
-            // Dont append any parameters to URL
-            log::debug!("Make GET-request to endpoint {full_url}");
-            client.get(full_url).send().await.map_err(err_mapping)?
         };
 
         // Validate status code for timeouts and other errors
@@ -144,23 +148,15 @@ impl ResourceProvider for HttpResourceProvider {
         media_type: &str,
     ) -> Result<Option<Box<dyn Read>>, ReadingError> {
         // Add error message
-        let Resource::Iri { iri, .. } = resource else {
-            unreachable!("The type of the resource is known already")
-        };
-
-        let url = iri.to_string();
-        // Not needed this is checked already in
-        if !(url.starts_with("http:") || url.starts_with("https:")) {
-            // Non-http IRI; resource provider is not responsible
-            return Ok(None);
-        }
 
         let rt = tokio::runtime::Builder::new_current_thread()
             .enable_all()
             .build()
             .map_err(|e| ReadingError::from(e).with_resource(resource.clone()))?;
 
-        let response = rt.block_on(Self::get(resource, media_type))?;
+        // Verify if resource has a non-empty body
+        let response = rt.block_on(Self::fetch(resource, media_type))?;
+
         Ok(Some(Box::new(response)))
     }
 }

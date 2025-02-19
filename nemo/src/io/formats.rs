@@ -8,6 +8,7 @@ pub mod sparql;
 use core::fmt;
 use oxiri::Iri;
 use std::{
+    any::Any,
     fmt::Debug,
     io::{Read, Write},
     sync::Arc,
@@ -15,7 +16,7 @@ use std::{
 
 use nemo_physical::{
     datasources::table_providers::TableProvider,
-    datavalues::AnyDataValue,
+    datavalues::{AnyDataValue, DataValue},
     resource::{HttpParameters, Resource},
 };
 
@@ -69,39 +70,6 @@ impl ResourceSpec {
         } else {
             Self::Resource(Resource::Path(string))
         }
-    }
-
-    /// Parse and valiate [String] to a [ResourceSpec].
-    pub(crate) fn parse_string(string: String) -> Result<Self, ValidationErrorKind> {
-        match string {
-            // Convert the web-resource into a valid Iri
-            string if string.starts_with("http:") || string.starts_with("https:") => {
-                Iri::parse(string)
-                    .map(|iri| {
-                        Self::Resource(Resource::Iri {
-                            iri,
-                            parameters: HttpParameters::default(),
-                        })
-                    })
-                    .map_err(|_| ValidationErrorKind::ImportExportInvalidIri)
-            }
-
-            // Strip a local iri of the prefix
-            string if string.starts_with("file://") => string
-                .strip_prefix("file://localhost")
-                .or_else(|| string.strip_prefix("file://"))
-                .map(|short_path| Self::Resource(Resource::Path(String::from(short_path))))
-                .ok_or(ValidationErrorKind::ImportExportInvalidIri),
-            _ => Ok(Self::from_string(string)),
-        }
-    }
-
-    /// Convert a [String] to a [ResourceSpec].
-    pub(crate) fn from_endpoint(endpoint: Iri<String>, query: String) -> Self {
-        Self::Resource(Resource::Iri {
-            iri: endpoint,
-            parameters: HttpParameters { query: Some(query) },
-        })
     }
 
     /// Retrieve the contained resource, if any.

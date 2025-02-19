@@ -16,6 +16,7 @@ use std::{
 use nemo_physical::{
     datasources::table_providers::TableProvider,
     datavalues::{AnyDataValue, DataValue},
+    resource::{Resource, ResourceBuilder},
 };
 
 use oxiri::Iri;
@@ -204,7 +205,9 @@ impl FormatBuilder for RdfHandler {
                 let value = parameters
                     .get_required(RdfParameter::BaseParamType(StandardParameter::Resource));
 
-                let resource = value.to_plain_string_unchecked();
+                // Use functionality of ResourceBuilder to read the Resource parameter
+                // and create a dummy resource
+                let resource = ResourceBuilder::try_from(value)?.finalize();
                 let stripped = CompressionFormat::from_resource(&resource).1;
 
                 let Some(extension) = Path::new(&stripped).extension() else {

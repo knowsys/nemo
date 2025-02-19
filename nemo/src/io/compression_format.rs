@@ -8,7 +8,7 @@ use std::{
 use flate2::Compression;
 
 use gzip::Gzip;
-use nemo_physical::error::ReadingError;
+use nemo_physical::{error::ReadingError, resource::Resource};
 
 use crate::syntax::import_export::{attribute, file_format};
 
@@ -56,13 +56,16 @@ const GZIP_COMPRESSION_LEVEL: Compression = Compression::new(6);
 impl CompressionFormat {
     /// Derive a compression format from the file extension of the given resource,
     /// and return the compression format and the resource string without this extenions.
-    pub fn from_resource(string: &String) -> (CompressionFormat, String) {
-        match string {
-            string if string.ends_with(".gz") => (
+    pub fn from_resource(resource: &Resource) -> (CompressionFormat, String) {
+        let extension = resource.file_extension().unwrap_or("");
+
+        if extension == ".gz" {
+            (
                 CompressionFormat::GZip,
-                string.as_str()[0..string.len() - 3].to_string(),
-            ),
-            _ => (CompressionFormat::None, string.to_owned()),
+                resource.strip_file_extension_unchecked(".gz").to_string(), //string.as_str()[0..string.len() - 3].to_string(),
+            )
+        } else {
+            (CompressionFormat::None, resource.as_string())
         }
     }
 }

@@ -199,9 +199,9 @@ impl FormatBuilder for DsvBuilder {
         parameters: &Parameters<DsvBuilder>,
         _direction: Direction,
     ) -> Result<Self, ValidationErrorKind> {
-        let value_formats = parameters
-            .get_optional(DsvParameter::Format)
-            .map(|value| DsvValueFormats::try_from(value).expect("value formats have already been validated"));
+        let value_formats = parameters.get_optional(DsvParameter::Format).map(|value| {
+            DsvValueFormats::try_from(value).expect("value formats have already been validated")
+        });
 
         let limit = parameters
             .get_optional(DsvParameter::Limit)
