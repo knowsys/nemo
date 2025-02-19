@@ -56,13 +56,16 @@ const GZIP_COMPRESSION_LEVEL: Compression = Compression::new(6);
 impl CompressionFormat {
     /// Derive a compression format from the file extension of the given resource,
     /// and return the compression format and the resource string without this extenions.
-    pub fn from_resource(resource: &Resource) -> (CompressionFormat, Resource) {
-        match resource {
-            resource if resource.ends_with(".gz") => (
+    pub fn from_resource(resource: &Resource) -> (CompressionFormat, String) {
+        let extension = resource.file_extension().unwrap_or("");
+
+        if extension == ".gz" {
+            (
                 CompressionFormat::GZip,
-                resource.as_str()[0..resource.len() - 3].to_string(),
-            ),
-            _ => (CompressionFormat::None, resource.to_owned()),
+                resource.strip_file_extension_unchecked(".gz").to_string(), //string.as_str()[0..string.len() - 3].to_string(),
+            )
+        } else {
+            (CompressionFormat::None, resource.as_string())
         }
     }
 }

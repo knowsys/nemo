@@ -397,10 +397,22 @@ pub mod import_export {
         // compression
         /// The name of the compression format that means "no compression".
         pub const VALUE_COMPRESSION_NONE: &str = "none";
-        /// The name of the compression format that means "no compression".
+        /// The name of the gzip compression format.
         pub const VALUE_COMPRESSION_GZIP: &str = "gzip";
         /// Name of the attribute for ignoring DSV headers in import/export directives.
         pub const IGNORE_HEADERS: &str = "ignore_headers";
+        /// The SPARQL endpoint for the query
+        pub const ENDPOINT: &str = "endpoint";
+        /// The SPARQL query that send to the endpoint.
+        pub const QUERY: &str = "query";
+        /// Name of Parameters that are passed as HTTP-headers.
+        pub const HTTP_HEADERS: &str = "http_headers";
+        /// Name of Parameters that are appended to a web IRI.
+        pub const HTTP_GET: &str = "http_get_parameters";
+        /// Name of the attribute that is appended to the web IRI.
+        pub const HTTP_FRAGMENT: &str = "http_fragment";
+        /// Name of Parameters that are send in the body of a POST request.
+        pub const HTTP_POST: &str = "http_post_parameters";
     }
 
     pub mod file_format {
@@ -426,6 +438,8 @@ pub mod import_export {
         pub const RDF_XML: &str = "rdfxml";
         /// The "predicate name" used for the json format in import/export directives.
         pub const JSON: &str = "json";
+        /// The "predicate name" used for the SPARQL format to query an endpoint.
+        pub const SPARQL: &str = "sparql";
 
         // file extensions
         /// The file extension used for CSV files

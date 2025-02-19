@@ -8,7 +8,10 @@ use std::{
     sync::Arc,
 };
 
-use nemo_physical::datavalues::{AnyDataValue, DataValue};
+use nemo_physical::{
+    datavalues::{AnyDataValue, DataValue},
+    resource::{HttpParamType, ResourceBuilder, ResourceValidationErrorKind},
+};
 use strum::IntoEnumIterator;
 
 use crate::{
@@ -29,6 +32,7 @@ use super::{
         dsv::{DsvBuilder, DsvTag},
         json::{JsonHandler, JsonTag},
         rdf::{RdfHandler, RdfTag},
+        sparql::{SparqlBuilder, SparqlTag},
         Export, ExportHandler, Import, ImportHandler, ResourceSpec,
     },
 };
@@ -209,6 +213,10 @@ format_parameter! {
     pub(crate) enum StandardParameter(NoParameters) {
         Resource(name = attribute::RESOURCE, supported_types = &[ValueType::String, ValueType::Constant]),
         Compression(name = attribute::COMPRESSION, supported_types = &[ValueType::String]),
+        //HttpHeader(name = attribute::HTTP_HEADERS, supported_types= &[ValueType::String]),
+        //HttpHeader(name = attribute::HTTP_GET, supported_types= &[ValueType::String]),
+        //HttpHeader(name = attribute::HTTP_FRAGMENT, supported_types= &[ValueType::String]),
+        //HttpHeader(name = attribute::HTTP_POST, supported_types= &[ValueType::String]),
     }
 }
 
@@ -250,10 +258,15 @@ pub(crate) trait FormatBuilder: Sized + Into<AnyImportExportBuilder> {
         Self::Tag::from_str(tag).is_ok()
     }
 
+    fn override_resource_builder(&self, _direction: Direction) -> Option<ResourceBuilder> {
+        None
+    }
+
     fn build_import(&self, arity: usize) -> Arc<dyn ImportHandler + Send + Sync + 'static>;
     fn build_export(&self, arity: usize) -> Arc<dyn ExportHandler + Send + Sync + 'static>;
 }
 
+#[derive(Debug)]
 pub(crate) struct Parameters<B: FormatBuilder>(HashMap<B::Parameter, AnyDataValue>);
 
 impl<B: FormatBuilder> Parameters<B> {
@@ -346,6 +359,7 @@ pub(crate) enum SupportedFormatTag {
     Dsv(DsvTag),
     Rdf(RdfTag),
     Json(JsonTag),
+    Sparql(SparqlTag),
 }
 
 impl FromStr for SupportedFormatTag {
@@ -358,6 +372,8 @@ impl FromStr for SupportedFormatTag {
             Ok(Self::Rdf(s.parse().unwrap()))
         } else if JsonHandler::supports_tag(s) {
             Ok(Self::Json(s.parse().unwrap()))
+        } else if SparqlBuilder::supports_tag(s) {
+            Ok(Self::Sparql(s.parse().unwrap()))
         } else {
             Err(())
         }
@@ -371,6 +387,7 @@ impl ImportExportBuilder {
             AnyImportExportBuilder::Dsv(inner) => inner.expected_arity(),
             AnyImportExportBuilder::Rdf(inner) => inner.expected_arity(),
             AnyImportExportBuilder::Json(inner) => inner.expected_arity(),
+            AnyImportExportBuilder::Sparql(inner) => inner.expected_arity(),
         }
     }
 
@@ -388,9 +405,19 @@ impl ImportExportBuilder {
         let origin = *spec.origin();
         let parameters = Parameters::<B>::validate(spec, direction, builder)?;
 
-        let resource = parameters
+        // Convert resource from type String or Iri into a ResourceSpec
+        // TODO: Propagate ResourceBuilder Error upwards
+        let resource_builder = parameters
             .get_optional(StandardParameter::Resource.into())
-            .map(|resource| ResourceSpec::from_string(resource.to_plain_string_unchecked()));
+            .and_then(|value| {
+                ResourceBuilder::try_from(value)
+                    .map_err(|err| {
+                        // Error conversion should work since ResourceValidationErrorKind is registered in ValidataionErrorKind
+                        builder.report_error(origin, err.into());
+                        None::<ResourceBuilder>
+                    })
+                    .ok()
+            });
 
         let compression = parameters
             .get_optional(StandardParameter::Compression.into())
@@ -407,9 +434,25 @@ impl ImportExportBuilder {
             }
         }?;
 
+        let resource_builder = inner
+            .override_resource_builder(direction)
+            .or(resource_builder);
+
+        let resource_spec = match resource_builder {
+            Some(mut rb) => {
+                if rb.has_iri() {
+                    // TODO: read Header, Get, Fragment & POST and add them to rb
+                }
+                Some(ResourceSpec::Resource(rb.finalize()))
+            }
+            None => None,
+        };
+
+        // Build the ResourceSpec only, once Resource is finished
+
         Some(ImportExportBuilder {
             inner: inner.into(),
-            resource,
+            resource: resource_spec,
             compression,
         })
     }
@@ -438,6 +481,9 @@ impl ImportExportBuilder {
             SupportedFormatTag::Json(tag) => {
                 Self::new_with_tag::<JsonHandler>(tag, spec, direction, error_builder)
             }
+            SupportedFormatTag::Sparql(tag) => {
+                Self::new_with_tag::<SparqlBuilder>(tag, spec, direction, error_builder)
+            }
         }
     }
 
@@ -447,6 +493,7 @@ impl ImportExportBuilder {
             AnyImportExportBuilder::Dsv(dsv_builder) => dsv_builder.build_import(arity),
             AnyImportExportBuilder::Rdf(rdf_handler) => rdf_handler.build_import(arity),
             AnyImportExportBuilder::Json(json_handler) => json_handler.build_import(arity),
+            AnyImportExportBuilder::Sparql(sparql_builder) => sparql_builder.build_import(arity),
         };
 
         let resource_spec = self.resource.clone().unwrap_or({
@@ -468,6 +515,7 @@ impl ImportExportBuilder {
             AnyImportExportBuilder::Dsv(dsv_builder) => dsv_builder.build_export(arity),
             AnyImportExportBuilder::Rdf(rdf_handler) => rdf_handler.build_export(arity),
             AnyImportExportBuilder::Json(json_handler) => json_handler.build_export(arity),
+            AnyImportExportBuilder::Sparql(sparql_builder) => sparql_builder.build_export(arity),
         };
 
         let resource_spec = self.resource.clone().unwrap_or({
@@ -489,6 +537,7 @@ pub(crate) enum AnyImportExportBuilder {
     Dsv(DsvBuilder),
     Rdf(RdfHandler),
     Json(JsonHandler),
+    Sparql(SparqlBuilder),
 }
 
 impl Debug for AnyImportExportBuilder {
@@ -497,6 +546,7 @@ impl Debug for AnyImportExportBuilder {
             Self::Dsv(_) => f.debug_tuple("Dsv").field(&"...").finish(),
             Self::Rdf(_) => f.debug_tuple("Rdf").field(&"...").finish(),
             Self::Json(_) => f.debug_tuple("Json").field(&"...").finish(),
+            Self::Sparql(_) => f.debug_tuple("Sparql").field(&"...").finish(),
         }
     }
 }

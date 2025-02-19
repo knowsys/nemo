@@ -3,19 +3,25 @@
 pub mod dsv;
 pub mod json;
 pub mod rdf;
+pub mod sparql;
 
 use core::fmt;
+use oxiri::Iri;
 use std::{
+    any::Any,
     fmt::Debug,
     io::{Read, Write},
     sync::Arc,
 };
 
 use nemo_physical::{
-    datasources::table_providers::TableProvider, datavalues::AnyDataValue, resource::Resource,
+    datasources::table_providers::TableProvider,
+    datavalues::{AnyDataValue, DataValue},
+    resource::{HttpParameters, Resource},
 };
 
 use crate::error::Error;
+use crate::rule_model::error::validation_error::ValidationErrorKind;
 
 use super::{compression_format::CompressionFormat, format_builder::FormatBuilder};
 
@@ -57,12 +63,12 @@ pub enum ResourceSpec {
 }
 
 impl ResourceSpec {
-    /// Convert a [String] to a [ImportExportResource].
+    /// Convert a simple [String] into a [ResourceSpec]
     pub(crate) fn from_string(string: String) -> Self {
         if string.is_empty() {
             Self::Stdout
         } else {
-            Self::Resource(string)
+            Self::Resource(Resource::Path(string))
         }
     }
 
@@ -84,7 +90,7 @@ impl ResourceSpec {
 impl fmt::Display for ResourceSpec {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            ResourceSpec::Resource(r) => f.write_str(r),
+            ResourceSpec::Resource(resource) => f.write_str(resource.to_string().as_str()),
             ResourceSpec::Stdout => f.write_str("stdout"),
         }
     }

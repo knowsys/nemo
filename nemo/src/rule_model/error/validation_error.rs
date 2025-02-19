@@ -2,6 +2,7 @@
 #![allow(missing_docs)]
 
 use enum_assoc::Assoc;
+use nemo_physical::resource::ResourceValidationErrorKind;
 use thiserror::Error;
 
 use crate::rule_model::components::term::primitive::variable::Variable;
@@ -162,6 +163,18 @@ pub enum ValidationErrorKind {
     #[assoc(note = "arity of predicates in import/export statements must be known in advance.")]
     #[assoc(code = 232)]
     UnknownArity { predicate: String },
+    /// Import/Export: invalid SPARQL endpoint
+    #[error(r#"resource or endpoint is no valid Iri "#)]
+    #[assoc(code = 233)]
+    ImportExportInvalidIri,
+    /// Import/Export: invalid SPARQL query
+    #[assoc(code = 234)]
+    #[error(r#"invalid Sparql query resulting in oxigraph-parser error: `{oxi_error}`"#)]
+    ImportExportInvalidSparqlQuery { oxi_error: String },
+    ///
+    #[assoc(code = 235)]
+    #[error(transparent)]
+    ResourceValidationError(#[from] ResourceValidationErrorKind),
 
     /// Unsupported feature: Multiple aggregates in one rule
     #[error(r#"multiple aggregates in one rule is currently unsupported"#)]
