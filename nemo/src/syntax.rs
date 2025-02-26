@@ -322,6 +322,8 @@ pub mod builtin {
         pub(crate) const OR: &str = "OR";
         /// Compute the concatenation of string values
         pub(crate) const CONCAT: &str = "CONCAT";
+        /// Compute the Levenshtein distance of two strings
+        pub(crate) const LEVENSHTEIN: &str = "LEVENSHTEIN";
     }
 
     /// This module contains all strings of the supported builtin aggregates.

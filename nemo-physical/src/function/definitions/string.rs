@@ -1,5 +1,6 @@
 //! This module defines functions on string.
 
+use levenshtein::levenshtein;
 use once_cell::sync::OnceCell;
 use std::{cmp::Ordering, num::NonZero, sync::Mutex};
 use unicode_segmentation::UnicodeSegmentation;
@@ -367,6 +368,23 @@ impl BinaryFunction for StringRegex {
                 .bitset()
                 .union(StorageTypeName::Id64.bitset()),
         )
+    }
+}
+
+#[derive(Debug, Copy, Clone)]
+pub struct StringLevenshtein;
+impl BinaryFunction for StringLevenshtein {
+    fn evaluate(
+        &self,
+        parameter_first: AnyDataValue,
+        parameter_second: AnyDataValue,
+    ) -> Option<AnyDataValue> {
+        string_pair_from_any(parameter_first, parameter_second)
+            .map(|(from, to)| AnyDataValue::new_integer_from_u64(levenshtein(&from, &to) as u64))
+    }
+
+    fn type_propagation(&self) -> FunctionTypePropagation {
+        FunctionTypePropagation::KnownOutput(StorageTypeName::Int64.bitset())
     }
 }
 
