@@ -371,6 +371,14 @@ impl BinaryFunction for StringRegex {
     }
 }
 
+/// Levenshtein distance between two strings
+///
+/// Returns the Levenshtein distance (i.e., the minimal number of
+/// insertions, deletions, or character substitutions required to
+/// change one argument into the other) between the two given strings
+/// as a number from the integer value space.
+///
+/// Return `None` if the the provided arguments are not both strings.
 #[derive(Debug, Copy, Clone)]
 pub struct StringLevenshtein;
 impl BinaryFunction for StringLevenshtein {
