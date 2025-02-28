@@ -82,16 +82,10 @@ impl ResourceProviders {
         resource: &Resource,
         media_type: &str,
     ) -> Result<Box<dyn Read>, ReadingError> {
-        let resource_provider = match resource {
-            // TODO: is there a cleaner way to return the Http- or FileResourceProvider ?
-            // TODO: actually we dont need a vector with 2 ResourceProviders, we know which one to use
-            // Is it possible that the vector is empty?
-            Resource::Iri { .. } => &self.0[0],
-            Resource::Path(..) => &self.0[1],
-        };
-        // Call the correct resource_provider
-        if let Some(reader) = resource_provider.open_resource(resource, media_type)? {
-            return Ok(reader);
+        for resource_provider in self.0.iter() {
+            if let Some(reader) = resource_provider.open_resource(resource, media_type)? {
+                return Ok(reader);
+            }
         }
 
         Err(ReadingError::new(ReadingErrorKind::ResourceNotProvided)

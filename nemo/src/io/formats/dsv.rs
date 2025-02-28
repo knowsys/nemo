@@ -35,15 +35,15 @@ use super::{ExportHandler, FileFormatMeta, FormatBuilder, ImportHandler, TableWr
 
 /// Implements [ImportHandler] and [ExportHandler] for delimiter-separated values.
 #[derive(Debug, Clone)]
-pub(crate) struct DsvHandler {
+pub struct DsvHandler {
     /// The specific delimiter for this format.
-    pub delimiter: u8,
+    delimiter: u8,
     /// The list of value formats to be used for importing/exporting data.
-    pub value_formats: DsvValueFormats,
+    value_formats: DsvValueFormats,
     /// Maximum number of statements that should be imported/exported.
-    pub limit: Option<u64>,
+    limit: Option<u64>,
     /// Whether to ignore headers
-    pub ignore_headers: bool,
+    ignore_headers: bool,
 }
 
 impl DsvHandler {
@@ -54,6 +54,20 @@ impl DsvHandler {
             value_formats: DsvValueFormats::default(arity),
             limit: None,
             ignore_headers: false,
+        }
+    }
+
+    pub(crate) fn with_value_formats(
+        delimiter: u8,
+        value_formats: DsvValueFormats,
+        limit: Option<u64>,
+        ignore_headers: bool,
+    ) -> Self {
+        DsvHandler {
+            delimiter,
+            value_formats,
+            limit,
+            ignore_headers,
         }
     }
 }

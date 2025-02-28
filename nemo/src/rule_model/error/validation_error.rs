@@ -169,7 +169,7 @@ pub enum ValidationErrorKind {
     ImportExportInvalidIri,
     /// Import/Export: invalid SPARQL query
     #[assoc(code = 234)]
-    #[error(r#"invalid Sparql query resulting in oxigraph-parser error: `{oxi_error}`"#)]
+    #[error(r#""invalid SPARQL query: `{oxi_error}`"#)]
     ImportExportInvalidSparqlQuery { oxi_error: String },
     ///
     #[assoc(code = 235)]

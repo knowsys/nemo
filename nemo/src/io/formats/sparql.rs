@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use nemo_physical::{
     datavalues::{AnyDataValue, DataValue},
-    resource::{HttpParamType, ResourceBuilder},
+    resource::ResourceBuilder,
 };
 use oxiri::Iri;
 
@@ -21,7 +21,7 @@ use crate::{
     syntax::import_export::{attribute, file_format},
 };
 
-use super::{ExportHandler, FormatBuilder, ImportHandler, ResourceSpec};
+use super::{ExportHandler, FormatBuilder, ImportHandler};
 
 use crate::io::formats::dsv::{value_format::DsvValueFormats, DsvHandler};
 
@@ -120,7 +120,6 @@ impl FormatBuilder for SparqlBuilder {
 
         let query = Query::parse(query.as_str(), None).expect("query has already been validated");
 
-        // Create and return a new ResourceSpec to replace the existing ResourceSpec
         Ok(Self {
             value_formats,
             endpoint,
@@ -128,18 +127,20 @@ impl FormatBuilder for SparqlBuilder {
         })
     }
 
+    /// Create a new [ResourceBuilder] based on the already verified endpoint
     fn override_resource_builder(&self, direction: Direction) -> Option<ResourceBuilder> {
-        if matches!(direction, Direction::Export) {
-            None
-        } else {
-            let mut resource_builder = ResourceBuilder::from_valid_iri(self.endpoint.clone());
-            let query = self.query.to_string();
-            if query.len() > HTTP_GET_CHAR_LIMIT {
-                resource_builder.parameter_mut(HttpParamType::Post, String::from("query"), query);
-            } else {
-                resource_builder.parameter_mut(HttpParamType::Get, String::from("query"), query);
+        match direction {
+            Direction::Import => {
+                let mut resource_builder = ResourceBuilder::from(self.endpoint.clone());
+                let query = self.query.to_string();
+                if query.len() > HTTP_GET_CHAR_LIMIT {
+                    resource_builder.post_mut(String::from("query"), query);
+                } else {
+                    resource_builder.get_mut(String::from("query"), query);
+                }
+                Some(resource_builder)
             }
-            Some(resource_builder)
+            _ => None,
         }
     }
 
@@ -155,15 +156,14 @@ impl FormatBuilder for SparqlBuilder {
     }
 
     fn build_import(&self, arity: usize) -> Arc<dyn ImportHandler + Send + Sync + 'static> {
-        Arc::new(DsvHandler {
-            delimiter: b'\t',
-            value_formats: self
-                .value_formats
+        Arc::new(DsvHandler::with_value_formats(
+            b'\t',
+            self.value_formats
                 .clone()
                 .unwrap_or(DsvValueFormats::default(arity)),
-            limit: None,
-            ignore_headers: true,
-        })
+            None,
+            true,
+        ))
     }
 
     fn build_export(&self, _arity: usize) -> Arc<dyn ExportHandler + Send + Sync + 'static> {

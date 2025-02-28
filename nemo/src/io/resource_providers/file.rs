@@ -29,6 +29,7 @@ impl FileResourceProvider {
         let Resource::Path(path) = resource else {
             unreachable!("resource should always be a Path here")
         };
+        
         if is_iri(resource) {
             if path.starts_with("file://") {
                 // File URI. We only support local files, i.e., URIs
@@ -64,11 +65,14 @@ impl ResourceProvider for FileResourceProvider {
         resource: &Resource,
         _media_type: &str,
     ) -> Result<Option<Box<dyn Read>>, ReadingError> {
-        // Try to parse as file IRI
-        if let Some(path) = self.parse_resource(resource)? {
-            let file = File::open(&path)
+        // Early return if Resource is not a local path
+        if let Some(path) = resource.as_path(){
+            let new_path = self.base_path
+                    .as_ref()
+                    .map(|bp| bp.join(path))
+                    .unwrap_or(path.into());
+            let file = File::open(&new_path)
                 .map_err(|e| ReadingError::from(e).with_resource(resource.clone()))?;
-
             Ok(Some(Box::new(file)))
         } else {
             Ok(None)

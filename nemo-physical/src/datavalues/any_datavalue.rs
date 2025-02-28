@@ -623,12 +623,13 @@ impl DataValue for AnyDataValue {
             fn to_boolean_unchecked(&self) -> bool;
             fn to_null(&self) -> Option<NullDataValue>;
             fn to_null_unchecked(&self) -> NullDataValue;
-            fn tuple_element(&self, index: usize) -> Option<&AnyDataValue>;
             fn label(&self) -> Option<&IriDataValue>;
             fn length(&self) -> Option<usize>;
             fn len_unchecked(&self) -> usize;
             fn tuple_element_unchecked(&self, index: usize) -> &AnyDataValue;
-        }
+            fn map_keys(&self) -> Option<Box<dyn Iterator<Item = &AnyDataValue> + '_>>;
+            fn map_element_unchecked(&self, key: &AnyDataValue) -> &AnyDataValue;
+            }
     }
 }
 

@@ -403,16 +403,16 @@ pub mod import_export {
         pub const IGNORE_HEADERS: &str = "ignore_headers";
         /// The SPARQL endpoint for the query
         pub const ENDPOINT: &str = "endpoint";
-        /// The SPARQL query that send to the endpoint.
+        /// The SPARQL query that is send to the endpoint.
         pub const QUERY: &str = "query";
         /// Name of Parameters that are passed as HTTP-headers.
         pub const HTTP_HEADERS: &str = "http_headers";
         /// Name of Parameters that are appended to a web IRI.
-        pub const HTTP_GET: &str = "http_get_parameters";
+        pub const HTTP_GET_PARAMETERS: &str = "http_get_parameters";
         /// Name of the attribute that is appended to the web IRI.
         pub const HTTP_FRAGMENT: &str = "http_fragment";
         /// Name of Parameters that are send in the body of a POST request.
-        pub const HTTP_POST: &str = "http_post_parameters";
+        pub const HTTP_POST_PARAMETERS: &str = "http_post_parameters";
     }
 
     pub mod file_format {

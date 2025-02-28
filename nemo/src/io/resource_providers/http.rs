@@ -1,11 +1,12 @@
-use std::io::Read;
-
 use super::ResourceProvider;
+use log::debug;
 use nemo_physical::{
     error::{ReadingError, ReadingErrorKind},
     resource::Resource,
 };
 use reqwest::header::{HeaderName, HeaderValue, InvalidHeaderName, InvalidHeaderValue};
+use std::io::Read;
+
 
 /// Resolves resources using HTTP or HTTPS.
 ///
@@ -24,9 +25,8 @@ pub struct HttpResource {
 
 impl HttpResource {
     /// Return the IRI this resource was fetched from.
-    pub fn url(&self) -> &Resource {
-        // TODO: should this return the Resource, or just the IRI?
-        &self.resource
+    pub fn url(&self) -> String {
+        self.resource.as_string_encoded()
     }
 
     /// Return the content of this resource.
@@ -71,22 +71,22 @@ impl HttpResourceProvider {
         );
 
         // Unpack custom headers from resource
-        if let Some(custom_headers) = resource.headers() {
-            for (key, value) in custom_headers {
-                headers.insert(
-                    key.parse::<HeaderName>()
-                        .map_err(|err: InvalidHeaderName| {
-                            ReadingError::new(ReadingErrorKind::ExternalError(err.into()))
-                                .with_resource(resource.clone())
-                        })?,
-                    value
-                        .parse::<HeaderValue>()
-                        .map_err(|err: InvalidHeaderValue| {
-                            ReadingError::new(ReadingErrorKind::ExternalError(err.into()))
-                                .with_resource(resource.clone())
-                        })?,
-                );
-            }
+        for (key, value) in resource.header_parameters() {
+            // TODO: remove later
+            debug!("insert header pair: {},{}", key, value);
+            headers.insert(
+                key.parse::<HeaderName>()
+                    .map_err(|err: InvalidHeaderName| {
+                        ReadingError::new(ReadingErrorKind::ExternalError(err.into()))
+                            .with_resource(resource.clone())
+                    })?,
+                value
+                    .parse::<HeaderValue>()
+                    .map_err(|err: InvalidHeaderValue| {
+                        ReadingError::new(ReadingErrorKind::ExternalError(err.into()))
+                            .with_resource(resource.clone())
+                    })?,
+            );
         }
 
         let err_mapping =
@@ -97,24 +97,23 @@ impl HttpResourceProvider {
             .build()
             .map_err(err_mapping)?;
 
-        let full_url = resource.as_string();
+        let full_url = resource.as_string_encoded();
 
         let response = {
             // Collect Body-Parameters into one string
-            if let Some(body) = resource.body() {
-                // TODO: Verify if RequestBuilder::form() can handle the body correctly
-                //let body_string = body
-                //    .iter()
-                //    .map(|(key, value)| format!("{}={}", key, value))
-                //    .collect::<Vec<String>>()
-                //    .join("&");
-
+            if resource.has_post_parameters() {
                 // Make POST-Request
                 log::debug!("Make POST-request to endpoint {full_url}");
+                // TODO: currently it is not possible to pass the return value of post_parameters to  client.form()
+                // let x = SerializableIterator(resource.post_parameters());
 
                 client
                     .post(full_url)
-                    .form(body)
+                    .form(
+                        &resource
+                            .post_parameters()
+                            .collect::<Vec<&(String, String)>>(),
+                    )
                     .send()
                     .await
                     .map_err(err_mapping)?
@@ -147,7 +146,11 @@ impl ResourceProvider for HttpResourceProvider {
         resource: &Resource,
         media_type: &str,
     ) -> Result<Option<Box<dyn Read>>, ReadingError> {
-        // Add error message
+        
+        // Early return if Resource does not contain an Iri
+        if !resource.as_iri().is_some(){
+            return Ok(None);
+        }
 
         let rt = tokio::runtime::Builder::new_current_thread()
             .enable_all()

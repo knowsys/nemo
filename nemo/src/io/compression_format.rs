@@ -57,12 +57,10 @@ impl CompressionFormat {
     /// Derive a compression format from the file extension of the given resource,
     /// and return the compression format and the resource string without this extenions.
     pub fn from_resource(resource: &Resource) -> (CompressionFormat, String) {
-        let extension = resource.file_extension().unwrap_or("");
-
-        if extension == ".gz" {
+        if resource.file_extension() == Some(".gz") {
             (
                 CompressionFormat::GZip,
-                resource.strip_file_extension_unchecked(".gz").to_string(), //string.as_str()[0..string.len() - 3].to_string(),
+                resource.strip_file_extension_unchecked(".gz").to_string(),
             )
         } else {
             (CompressionFormat::None, resource.as_string())

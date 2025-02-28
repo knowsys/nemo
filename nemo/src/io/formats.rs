@@ -6,22 +6,17 @@ pub mod rdf;
 pub mod sparql;
 
 use core::fmt;
-use oxiri::Iri;
 use std::{
-    any::Any,
     fmt::Debug,
     io::{Read, Write},
     sync::Arc,
 };
 
 use nemo_physical::{
-    datasources::table_providers::TableProvider,
-    datavalues::{AnyDataValue, DataValue},
-    resource::{HttpParameters, Resource},
+    datasources::table_providers::TableProvider, datavalues::AnyDataValue, resource::Resource,
 };
 
 use crate::error::Error;
-use crate::rule_model::error::validation_error::ValidationErrorKind;
 
 use super::{compression_format::CompressionFormat, format_builder::FormatBuilder};
 
@@ -90,7 +85,7 @@ impl ResourceSpec {
 impl fmt::Display for ResourceSpec {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            ResourceSpec::Resource(resource) => f.write_str(resource.to_string().as_str()),
+            ResourceSpec::Resource(resource) => write!(f, "{}", resource),
             ResourceSpec::Stdout => f.write_str("stdout"),
         }
     }

@@ -10,7 +10,7 @@ use std::{
 
 use nemo_physical::{
     datavalues::{AnyDataValue, DataValue},
-    resource::{HttpParamType, ResourceBuilder, ResourceValidationErrorKind},
+    resource::{ResourceBuilder, ResourceValidationErrorKind},
 };
 use strum::IntoEnumIterator;
 
@@ -213,10 +213,10 @@ format_parameter! {
     pub(crate) enum StandardParameter(NoParameters) {
         Resource(name = attribute::RESOURCE, supported_types = &[ValueType::String, ValueType::Constant]),
         Compression(name = attribute::COMPRESSION, supported_types = &[ValueType::String]),
-        //HttpHeader(name = attribute::HTTP_HEADERS, supported_types= &[ValueType::String]),
-        //HttpHeader(name = attribute::HTTP_GET, supported_types= &[ValueType::String]),
-        //HttpHeader(name = attribute::HTTP_FRAGMENT, supported_types= &[ValueType::String]),
-        //HttpHeader(name = attribute::HTTP_POST, supported_types= &[ValueType::String]),
+        HttpHeaders(name = attribute::HTTP_HEADERS, supported_types= &[ValueType::Map]),
+        HttpGetParameters(name = attribute::HTTP_GET_PARAMETERS, supported_types= &[ValueType::Map]),
+        HttpFragment(name = attribute::HTTP_FRAGMENT, supported_types= &[ValueType::Map]),
+        HttpPostParameters(name = attribute::HTTP_POST_PARAMETERS, supported_types= &[ValueType::Map]),
     }
 }
 
@@ -237,6 +237,17 @@ impl<Tag> FormatParameter<Tag> for StandardParameter {
                     .ok_or(ValidationErrorKind::ImportExportUnknownCompression {
                         format: value.to_string(),
                     })
+            }
+            StandardParameter::HttpHeaders => ResourceBuilder::validate_header(value)
+                .map_err(|err: ResourceValidationErrorKind| err.into()),
+            StandardParameter::HttpGetParameters => {
+                ResourceBuilder::validate_post_get_parameter(value)
+                    .map_err(|err: ResourceValidationErrorKind| err.into())
+            }
+            StandardParameter::HttpFragment => Ok(()),
+            StandardParameter::HttpPostParameters => {
+                ResourceBuilder::validate_post_get_parameter(value)
+                    .map_err(|err: ResourceValidationErrorKind| err.into())
             }
         }
     }
@@ -405,18 +416,15 @@ impl ImportExportBuilder {
         let origin = *spec.origin();
         let parameters = Parameters::<B>::validate(spec, direction, builder)?;
 
-        // Convert resource from type String or Iri into a ResourceSpec
-        // TODO: Propagate ResourceBuilder Error upwards
+        // Create a ResourceBuilder from a resource
         let resource_builder = parameters
             .get_optional(StandardParameter::Resource.into())
             .and_then(|value| {
-                ResourceBuilder::try_from(value)
-                    .map_err(|err| {
-                        // Error conversion should work since ResourceValidationErrorKind is registered in ValidataionErrorKind
-                        builder.report_error(origin, err.into());
-                        None::<ResourceBuilder>
-                    })
-                    .ok()
+                Some(
+                    ResourceBuilder::try_from(value)
+                        .map_err(|err| builder.report_error(origin, err.into()))
+                        .ok()?,
+                )
             });
 
         let compression = parameters
@@ -438,17 +446,43 @@ impl ImportExportBuilder {
             .override_resource_builder(direction)
             .or(resource_builder);
 
-        let resource_spec = match resource_builder {
-            Some(mut rb) => {
-                if rb.has_iri() {
-                    // TODO: read Header, Get, Fragment & POST and add them to rb
+        // Unpack the Http-Parameters and add them to the ResourceBuilder
+        let resource = {
+            if let Some(mut rb) = resource_builder {
+                let get_iterator = parameters
+                    .get_optional(StandardParameter::HttpGetParameters.into())
+                    .and_then(|value| Some(ResourceBuilder::unpack_post_get_parameter(value)));
+
+                if let Some(iter) = get_iterator {
+                    for (key, value) in iter {
+                        rb.get_mut(key, value);
+                    }
                 }
-                Some(ResourceSpec::Resource(rb.finalize()))
+
+                if let Some(fragment) = parameters
+                    .get_optional(StandardParameter::HttpFragment.into())
+                    .and_then(|value| Some(value.lexical_value()))
+                {
+                    rb.fragment_mut(fragment)
+                        .map_err(|err| builder.report_error(origin, err.into()))
+                        .ok()?;
+                }
+
+                // Report a possible ResourceValidationErrorKind and propagate possible errors upwards
+                let x = rb
+                    .finalize()
+                    .map_err(|err: ResourceValidationErrorKind| {
+                        builder.report_error(origin, err.into())
+                    })
+                    .ok();
+                Some(x?)
+            } else {
+                None
             }
-            None => None,
         };
 
-        // Build the ResourceSpec only, once Resource is finished
+        // Build the Resource and ResourceSpec once ResourceBuilder collected all information
+        let resource_spec = resource.map(|resource| ResourceSpec::Resource(resource));
 
         Some(ImportExportBuilder {
             inner: inner.into(),

@@ -1,10 +1,7 @@
 //! This modules defines the [Resource] type, which is part of the public interface of this crate.
 //!
 
-use std::fmt;
-use urlencoding::encode;
-
-use super::datavalues::{AnyDataValue, DataValue};
+use super::datavalues::{AnyDataValue, DataValue, ValueDomain};
 /// Resource that can be referenced in source declarations in Nemo programs
 /// Resources are resolved using `nemo::io::resource_providers::ResourceProviders`
 ///
@@ -13,137 +10,167 @@ use super::datavalues::{AnyDataValue, DataValue};
 /// resolved by code in `nemo`.
 ///
 use oxiri::Iri;
+use std::collections::HashSet;
+use std::{fmt, iter};
 use thiserror::Error;
+use urlencoding::encode;
 
 /// Type of error that is returned when parsing of Iri fails
-#[derive(Copy, Clone, Debug, Error)]
+#[derive(Clone, Debug, Error)]
 pub enum ResourceValidationErrorKind {
     /// Parsing error for Iri
     #[error("Invalid IRI format")]
     ImportExportInvalidIri,
-    /// Error for wrong attribute type
-    #[error("Invalid attribute type")]
-    ImportExportAttributeValueType,
-}
-
-/// Represents different types of HTTP parameters
-#[derive(Debug, Clone, Copy)]
-pub enum HttpParamType {
-    /// Type of parameters that are passed as headers in web-request
-    Headers,
-    /// Type of parameters that are merged into the Iri of the web-request
-    Get,
-    /// Type of parameter that is appended at the Iri of the web-request
-    Fragment,
-    /// Type of parameters that are passed in the body of a POST-request
-    Post,
+    /// Http-Parameters have wrong type
+    #[error("Invalid Http-parameter: {0}")]
+    ImportExportInvalidHttpParameter(String),
+    /// Error when Http-Parameters are provided for a local resource
+    #[error("Unexpected Http-parameter for local resource")]
+    ImportExportUnexpectedHttpParameter,
+    /// Same Header-key is supplied several times
+    #[error("http_header_parameters contains duplicate key: {0}")]
+    ImportExportDuplicateHttpHeader(String),
+    /// Fragment is supplied several times
+    #[error("http_fragment is supplied several times")]
+    ImportExportDuplicateFragment,
+    /// The resource is parsed into an Iri but has unexpected scheme 
+    #[error("Iri-scheme is invalid: {0}")]
+    ImportExportUnknownIriScheme (String),
 }
 
 /// Define a series of Parameters that can be passed to the HTTP-Request
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, serde::Serialize)]
+#[serde(tag = "type")]
 pub struct HttpParameters {
     /// Specifies additional headers for a GET/ POST-request
-    pub headers: Option<Vec<(String, String)>>,
+    pub headers: Vec<(String, String)>,
     /// Contains all parameters that are added to the Iri
-    pub get: Option<Vec<(String, String)>>,
+    pub get_parameters: Vec<(String, String)>,
     /// Specifies a fragment (#) that is appended to the Iri after the get-parameters
     pub fragment: Option<String>,
     /// Contains parameters that are send in the body of a POST-request
-    pub post: Option<Vec<(String, String)>>,
+    pub post_parameters: Vec<(String, String)>,
 }
 
 /// Define two Resource types that are used for Import and Export
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Resource {
     /// Specify location for a local source or target
-    Path(String),
+    Path(PathBuf),
     /// Specify location for a web source or target
     Iri {
         /// Contains the endpoint / http address for a request in the form of an Iri
         iri: Iri<String>,
         /// A collection of parameters that are passed considered in the http-request
-        /// Each tuple consists of a keyword & the value e.g. ("query", "SELECT ...")
-        /// Currently query is the onliest keyword allowed
         parameters: HttpParameters,
     },
 }
 
 impl Resource {
-    /// Create a new [Rule].
-    pub fn new(
-        path: Option<String>,
-        iri: Option<Iri<String>>,
-        headers: Option<Vec<(String, String)>>,
-        get: Option<Vec<(String, String)>>,
-        fragment: Option<String>,
-        post: Option<Vec<(String, String)>>,
-    ) -> Self {
-        if let Some(path) = path {
-            Self::Path(path)
-        } else if let Some(iri) = iri {
-            Self::Iri {
-                iri: (iri),
-                parameters: (HttpParameters {
-                    headers,
-                    get,
-                    fragment,
-                    post,
-                }),
-            }
-        } else {
-            panic!("Neither path nor iri specified for building a Resource");
-        }
-    }
-
     /// Returns the local path of a resource, possibly stripped
-    pub fn path() -> Option<String> {
-        todo!()
+    pub fn location(&self) -> String {
+        match self {
+            Self::Iri { iri, .. } => iri.to_string(),
+            Self::Path(path) => path.clone(),
+        }
     }
 
-    /// Construct a full Iri that possibly contains the GET- and Fragment Parameter
-    pub fn as_string(&self) -> String {
+    /// Return local path of a resource
+    pub fn as_path(&self) -> Option<&String> {
         match self {
-            Self::Iri { iri, parameters } => {
-                let mut uri = iri.to_string();
-
-                // Construct the full URL with query and fragment
-                let get = &parameters.get;
-                // If Get parameter are not empty append them ENCODED into the Iri
-                if let Some(get) = get {
-                    if !get.is_empty() {
-                        uri.push('?');
-                        uri.push_str(
-                            &get.iter()
-                                .map(|(key, value)| format!("{}={}", encode(key), encode(value)))
-                                .collect::<Vec<String>>()
-                                .join("&"),
-                        );
-                    }
-                };
-
-                if let Some(fragment) = &parameters.fragment {
-                    uri.push_str(&format!("#{}", fragment));
-                }
-
-                uri
-            }
-            Self::Path(path) => path.clone(), //format!("file://{}", path)
+            Self::Iri { .. } => None,
+            Self::Path(path) => Some(path),
         }
+    }
+
+    /// Return iri of a resource
+    pub fn as_iri(&self) -> Option<&Iri<String>> {
+        match self {
+            Self::Iri { iri, .. } => Some(iri),
+            Self::Path(..) => None,
+        }
+    }
+
+    /// Returns the full iri including non-encoded Get-Parameter and Fragment
+    pub fn as_string(&self) -> String {
+        self.internal_as_string(false)
+    }
+
+    /// Returns the full iri including encoded Get-Parameters and Fragment
+    pub fn as_string_encoded(&self) -> String {
+        self.internal_as_string(true)
+    }
+
+    /// Constructs the full Iri and possibly encode the GET-Parameter
+    pub fn internal_as_string(&self, encode_get: bool) -> String {
+        let mut get_parameters = String::new();
+        let mut is_first = true;
+
+        for (key, value) in self.get_parameters() {
+            if is_first {
+                get_parameters.push('?');
+                is_first = false;
+            } else {
+                get_parameters.push('&');
+            }
+            // TODO: could also be replaced with an inline function
+            if encode_get {
+                get_parameters.push_str(&format!("{}={}", encode(key), encode(value)));
+            } else {
+                get_parameters.push_str(&format!("{}={}", key, value));
+            }
+        }
+
+        // Construct the full URL with query and fragment
+        let fragment = {
+            if let Some(fragment) = self.fragment() {
+                format!("#{}", fragment)
+            } else {
+                String::new()
+            }
+        };
+        let uri = format!("{}{}{}", self.location(), get_parameters, fragment);
+
+        uri
     }
 
     /// Return the headers if resource is of variant [Resource::Iri]
-    pub fn headers(&self) -> Option<&Vec<(String, String)>> {
+    pub fn header_parameters(&self) -> Box<dyn Iterator<Item = &(String, String)> + '_> {
         match self {
-            Self::Iri { parameters, .. } => parameters.headers.as_ref(),
+            Self::Iri { parameters, .. } => Box::new(parameters.headers.iter()),
+            Self::Path(..) => Box::new(iter::empty()),
+        }
+    }
+
+    /// Return the get parameter of HttpParameters
+    pub fn get_parameters(&self) -> Box<dyn Iterator<Item = &(String, String)> + '_> {
+        match self {
+            Self::Iri { parameters, .. } => Box::new(parameters.get_parameters.iter()),
+            Self::Path(..) => Box::new(iter::empty()),
+        }
+    }
+
+    /// Return the fragment parameter of HttpParameters
+    pub fn fragment(&self) -> Option<&String> {
+        match self {
+            Self::Iri { parameters, .. } => parameters.fragment.as_ref(),
             Self::Path(..) => None,
         }
     }
 
     /// Return the body parameter of HttpParameters
-    pub fn body(&self) -> Option<&Vec<(String, String)>> {
+    pub fn post_parameters(&self) -> Box<dyn Iterator<Item = &(String, String)> + '_> {
         match self {
-            Self::Iri { parameters, .. } => parameters.post.as_ref(),
-            Self::Path(..) => None,
+            Self::Iri { parameters, .. } => Box::new(parameters.post_parameters.iter()),
+            Self::Path(..) => Box::new(iter::empty()),
+        }
+    }
+
+    /// Check if resource has non-empty POST parameters
+    pub fn has_post_parameters(&self) -> bool {
+        match self {
+            Self::Iri { parameters, .. } => !parameters.post_parameters.is_empty(),
+            Self::Path(..) => false,
         }
     }
 
@@ -160,8 +187,8 @@ impl Resource {
         match self {
             Self::Path(path) => path
                 .strip_suffix(suffix)
-                .expect("suffix should ve verified"),
-            Self::Iri { iri, .. } => iri.strip_suffix(suffix).expect("suffix should ve verified"),
+                .expect("suffix should be verified"),
+            Self::Iri { iri, .. } => iri.strip_suffix(suffix).expect("suffix should be verified"),
         }
     }
 }
@@ -169,89 +196,248 @@ impl Resource {
 /// Implement Display for Resource enum
 impl fmt::Display for Resource {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Resource::Path(p) => write!(f, "{}", p),
-            Resource::Iri { iri, parameters } => write!(f, "{} {:?}", iri, parameters),
-        }
+        write!(f, "{}", self.as_string())
     }
+}
+
+/// Provide path for local resource or iri for web-resource
+#[derive(Debug)]
+pub enum ResourceLocation {
+    /// Local path to a resource
+    Path(String),
+    /// An Iri for a web-resource
+    Iri(Iri<String>),
 }
 
 /// Builder for a WebResource
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct ResourceBuilder {
-    path: Option<String>,
-    iri: Option<Iri<String>>,
-    headers: Option<Vec<(String, String)>>,
-    get: Option<Vec<(String, String)>>,
+    location: ResourceLocation,
+    headers: Vec<(String, String)>,
+    get_parameters: Vec<(String, String)>,
     fragment: Option<String>,
-    post: Option<Vec<(String, String)>>,
+    post_parameters: Vec<(String, String)>,
 }
 
 impl ResourceBuilder {
-
     /// Strips a local iri of its prefix
-    pub fn strip_local_iri(string: String) -> String {
-        // Could be possibly also handled via the Oxiri/schema
-        string
-            .strip_prefix("file://localhost")
-            .or_else(|| string.strip_prefix("file://"))
-            .map(String::from)
-            .expect("It was already checked, that string contains at least file://")
-    }
-
-    /// Parses a string into a valid Iri
-    pub fn to_web_iri(string: String) -> Result<Iri<String>, ResourceValidationErrorKind> {
-        Iri::parse(string)
-            .map_err(|_| ResourceValidationErrorKind::ImportExportInvalidIri)
-    }
-
-    /// Create a new [ResourceBuilder] from a web-Iri
-    pub fn from_valid_iri(iri: Iri<String>) -> Self {
-        Self {
-            iri: Some(iri),
-            ..Default::default()
-        }
+    pub fn strip_local_iri(iri: Iri<String>) -> String {
+        iri.authority().unwrap_or_default().to_string() + iri.path()
     }
 
     /// Verify if [ResourceBuilder] contains a valid web-Iri
-    pub fn has_iri(&self) -> bool {
-        self.iri.is_some()
+    pub fn has_web_iri(&self) -> bool {
+        matches!(self.location, ResourceLocation::Iri(..))
+    }
+
+    /// Validate key-value pairs of HttpHeaders
+    pub fn validate_header(map: AnyDataValue) -> Result<(), ResourceValidationErrorKind> {
+        if let Some(keys) = map.map_keys() {
+            let mut key_names = HashSet::new();
+            for key in keys {
+                // Validate ValueDomain of key
+                if !matches!(
+                    key.value_domain(),
+                    ValueDomain::PlainString | ValueDomain::Int | ValueDomain::Iri
+                ) {
+                    return Err(
+                        ResourceValidationErrorKind::ImportExportInvalidHttpParameter(format!(
+                            "key of http-parameter has wrong type: {:?}",
+                            key.value_domain()
+                        )),
+                    );
+                }
+                let key_name: String = key.lexical_value();
+                // Check if key is a duplicate
+                if !key_names.insert(key_name.clone()) {
+                    return Err(
+                        ResourceValidationErrorKind::ImportExportDuplicateHttpHeader(key_name),
+                    );
+                }
+
+                let value = map.map_element_unchecked(key);
+                // Validate ValueDomain of each value
+                if !matches!(
+                    value.value_domain(),
+                    ValueDomain::PlainString | ValueDomain::Int | ValueDomain::Iri
+                ) {
+                    return Err(
+                        ResourceValidationErrorKind::ImportExportInvalidHttpParameter(format!(
+                            "element has wrong type: {:?}",
+                            value.value_domain()
+                        )),
+                    );
+                }
+            }
+            Ok(())
+        } else {
+            // Return Ok, if the parameter was empty
+            Ok(())
+        }
+    }
+
+    /// Validate GET- or POST-Parameter with type [ValueDomain::Map]
+    /// Each value is expected to be a tuple containing elemtents of type [ValueDomain::PlainString], [ValueDomain::Int] or [ValueDomain::Iri]
+    pub fn validate_post_get_parameter(
+        map: AnyDataValue,
+    ) -> Result<(), ResourceValidationErrorKind> {
+        // Expect each value as a tuple (of values), where each element can be converted into a string
+        if let Some(keys) = map.map_keys() {
+            for key in keys {
+                // Validate ValueDomain of key
+                if !matches!(
+                    key.value_domain(),
+                    ValueDomain::PlainString | ValueDomain::Int | ValueDomain::Iri
+                ) {
+                    return Err(
+                        ResourceValidationErrorKind::ImportExportInvalidHttpParameter(format!(
+                            "key of http-parameter has wrong type: {:?}",
+                            key.value_domain()
+                        )),
+                    );
+                }
+                let tuple = map.map_element_unchecked(key);
+
+                // Validate ValueDomain of expected tuple
+                if !matches!(tuple.value_domain(), ValueDomain::Tuple) {
+                    return Err(
+                        ResourceValidationErrorKind::ImportExportInvalidHttpParameter(format!(
+                            "value of http-parameter is not a tuple: {:?}",
+                            tuple.value_domain()
+                        )),
+                    );
+                }
+
+                let mut idx = 0;
+                while let Some(element) = tuple.tuple_element(idx) {
+                    idx += 1;
+                    // Validate ValueDomain of each element in tuple
+                    if !matches!(
+                        element.value_domain(),
+                        ValueDomain::PlainString | ValueDomain::Int | ValueDomain::Iri
+                    ) {
+                        return Err(
+                            ResourceValidationErrorKind::ImportExportInvalidHttpParameter(format!(
+                                "element in tuple has wrong type: {:?}",
+                                element.value_domain()
+                            )),
+                        );
+                    }
+                }
+            }
+            Ok(())
+        } else {
+            // Return Ok, if the parameter was empty
+            Ok(())
+        }
+    }
+
+    /// Flatten each parameter-map into a key-value vector
+    pub fn unpack_post_get_parameter(map: AnyDataValue) -> impl Iterator<Item = (String, String)> {
+        // Expect each value as a tuple (of values), where each element can be converted into a string
+        let keys = map.map_keys();
+
+        let mut vec: Vec<(String, String)> = Vec::new();
+        if let Some(keys_iter) = keys {
+            for key in keys_iter {
+                // Use the key here
+                let value = map.map_element_unchecked(key);
+                let mut idx = 0;
+                while let Some(element) = value.tuple_element(idx) {
+                    idx += 1;
+                    let element = element.lexical_value();
+                    let k = key.lexical_value();
+
+                    println!("key: {:?}, value: {:?}", k, element);
+                    vec.push((k, element));
+                }
+            }
+        }
+        vec.into_iter()
+    }
+
+    /// Add key-value pair to HeaderParameter
+    pub fn header_mut(&mut self, key: String, value: String) -> &Self {
+        self.headers.push((key, value));
+        self
+    }
+
+    /// Add key-value pair to GetParameter
+    pub fn get_mut(&mut self, key: String, value: String) -> &Self {
+        self.get_parameters.push((key, value));
+        self
     }
 
     /// Register key-value pairs of parameters to the respec
-    pub fn parameter_mut(
+    pub fn fragment_mut(
         &mut self,
-        parameter_type: HttpParamType,
-        key: String,
         value: String,
-    ) -> &mut Self {
-        match parameter_type {
-            HttpParamType::Headers => {
-                self.headers.get_or_insert_with(Vec::new).push((key, value));
-            }
-            HttpParamType::Get => {
-                self.get.get_or_insert_with(Vec::new).push((key, value));
-            }
-            HttpParamType::Fragment => {
-                self.fragment = Some(value);
-            }
-            HttpParamType::Post => {
-                self.post.get_or_insert_with(Vec::new).push((key, value));
-            }
+    ) -> Result<&mut Self, ResourceValidationErrorKind> {
+        if self.fragment.is_some() {
+            // TODO: is it ok to panic here, since it means that internally our code is not correct and should handle user input better
+            return Err(ResourceValidationErrorKind::ImportExportDuplicateFragment);
+        } else {
+            self.fragment = Some(value);
         }
+        Ok(self)
+    }
+
+    /// Add key-value pair to PostParameter
+    pub fn post_mut(&mut self, key: String, value: String) -> &Self {
+        self.post_parameters.push((key, value));
         self
     }
 
     /// Builds a [Resource] with type [Resource::Iri] or [Resource::Path] that contains all registered parameters
-    pub fn finalize(self) -> Resource {
-        Resource::new(
-            self.path,
-            self.iri,
-            self.headers,
-            self.get,
-            self.fragment,
-            self.post,
-        )
+    pub fn finalize(self) -> Result<Resource, ResourceValidationErrorKind> {
+        match self.location {
+            ResourceLocation::Path(path) => {
+                if self.headers.is_empty()
+                    && self.get_parameters.is_empty()
+                    && self.fragment.is_none()
+                    && self.post_parameters.is_empty()
+                {
+                    Ok(Resource::Path(path))
+                } else {
+                    Err(ResourceValidationErrorKind::ImportExportUnexpectedHttpParameter)
+                }
+            }
+            ResourceLocation::Iri(iri) => Ok(Resource::Iri {
+                iri: (iri),
+                parameters: (HttpParameters {
+                    headers: self.headers,
+                    get_parameters: self.get_parameters,
+                    fragment: self.fragment,
+                    post_parameters: self.post_parameters,
+                }),
+            }),
+        }
+    }
+}
+
+impl From<String> for ResourceBuilder {
+    /// Create a new [ResourceBuilder] from a local path
+    fn from(path: String) -> Self {
+        Self {
+            location: ResourceLocation::Path(path),
+            headers: Vec::new(),
+            get_parameters: Vec::new(),
+            fragment: None,
+            post_parameters: Vec::new(),
+        }
+    }
+}
+
+impl From<Iri<String>> for ResourceBuilder {
+    /// Create a new [ResourceBuilder] from a web-Iri
+    fn from(iri: Iri<String>) -> Self {
+        Self {
+            location: ResourceLocation::Iri(iri),
+            headers: Vec::new(),
+            get_parameters: Vec::new(),
+            fragment: None,
+            post_parameters: Vec::new(),
+        }
     }
 }
 
@@ -259,28 +445,32 @@ impl TryFrom<AnyDataValue> for ResourceBuilder {
     type Error = ResourceValidationErrorKind;
 
     fn try_from(value: AnyDataValue) -> Result<Self, Self::Error> {
-        let mut resource_builder = Self::default();
-        let string = if let Some(s) = value.to_plain_string() {
-            s
-        } else if let Some(s) = value.to_iri() {
-            s
-        } else {
-            // Is it even possible that the type is incorrect, since this is verified beforehand?
-            return Err(ResourceValidationErrorKind::ImportExportAttributeValueType);
-        };
-
-        match string {
-            string if string.starts_with("http:") || string.starts_with("https:") => {
-                resource_builder.iri = Some(Self::to_web_iri(string)?);
-            }
-            // Strip a local iri of the prefix
-            string if string.starts_with("file://") => {
-                resource_builder.path = Some(Self::strip_local_iri(string));
-            }
-            _ => {
-                resource_builder.path = Some(string);
-            }
+        let string = value.to_plain_string().or_else(|| value.to_iri()).ok_or(
+            ResourceValidationErrorKind::ImportExportInvalidHttpParameter(String::from(
+                "Resource or Endpoint",
+            )),
+        )?;
+        match Iri::parse(string.to_owned()){
+            Ok(iri) => {
+                let scheme = iri.scheme();
+                match scheme {
+                    "http:" | "https:" => {Ok(Self::from(iri))},
+                    "file://" => {Ok(Self::from(Self::strip_local_iri(iri)))},
+                    _ => Err(ResourceValidationErrorKind::ImportExportUnknownIriScheme(String::from(scheme)))
+                    }
+                },
+            Err(_err) => Ok(Self::from(string))
         }
-        Ok(resource_builder)
     }
+        //match string {
+        //    string if string.starts_with("http:") || string.starts_with("https:") => {
+        //        Ok(Self::from(Self::to_web_iri(string)?))
+        //    }
+        //    // Strip a local iri of the prefix
+        //    string if string.starts_with("file://") => {
+        //        Ok(Self::from(Self::strip_local_iri(string)?))
+        //    }
+        //    _ => Ok(Self::from(string)),
+        //}
 }
+
