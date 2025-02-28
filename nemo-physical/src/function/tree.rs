@@ -25,9 +25,9 @@ use super::{
         },
         string::{
             StringAfter, StringBefore, StringCompare, StringConcatenation, StringContains,
-            StringEnds, StringLength, StringLowercase, StringRegex, StringReverse, StringStarts,
-            StringSubstring, StringSubstringLength, StringUppercase, StringUriDecode,
-            StringUriEncode,
+            StringEnds, StringLength, StringLevenshtein, StringLowercase, StringRegex,
+            StringReverse, StringStarts, StringSubstring, StringSubstringLength, StringUppercase,
+            StringUriDecode, StringUriEncode,
         },
         BinaryFunctionEnum, NaryFunctionEnum, TernaryFunctionEnum, UnaryFunctionEnum,
     },
@@ -790,6 +790,19 @@ where
             first: Box::new(string),
             second: Box::new(start),
             third: Box::new(length),
+        }
+    }
+
+    /// Create a tree node representing a computation of the
+    /// Levenshtein distance between two strings.
+    ///
+    /// Evaluates to an integer giving the Levenshtein (edit) distance
+    /// between the `from` and `to` strings
+    pub fn string_levenshtein(from: Self, to: Self) -> Self {
+        Self::Binary {
+            function: BinaryFunctionEnum::StringLevenshtein(StringLevenshtein),
+            left: Box::new(from),
+            right: Box::new(to),
         }
     }
 

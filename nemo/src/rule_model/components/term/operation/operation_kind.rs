@@ -176,6 +176,11 @@ pub enum OperationKind {
     #[assoc(num_arguments = OperationNumArguments::Binary)]
     #[assoc(return_type = ValueType::Boolean)]
     StringEnds,
+    /// Levenshtein distance
+    #[assoc(name = function::LEVENSHTEIN)]
+    #[assoc(num_arguments = OperationNumArguments::Binary)]
+    #[assoc(return_type = ValueType::Number)]
+    StringLevenshtein,
     /// Boolean negation
     #[assoc(name = function::NOT)]
     #[assoc(num_arguments = OperationNumArguments::Unary)]
