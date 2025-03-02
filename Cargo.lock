@@ -1513,6 +1513,8 @@ dependencies = [
  "nom-supreme",
  "num",
  "oxiri",
+ "oxrdf",
+ "oxrdfio",
  "path-slash",
  "petgraph",
  "petgraph-graphml",
@@ -1849,6 +1851,56 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "54b4ed3a7192fa19f5f48f99871f2755047fabefd7f222f12a1df1773796a102"
 
 [[package]]
+name = "oxrdf"
+version = "0.2.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a04761319ef84de1f59782f189d072cbfc3a9a40c4e8bded8667202fbd35b02a"
+dependencies = [
+ "oxilangtag",
+ "oxiri",
+ "rand",
+ "thiserror",
+]
+
+[[package]]
+name = "oxrdfio"
+version = "0.1.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fbba2471aa835e4a2da42d55f2890f8009a1823f13cec804f736d1d208ffa6e6"
+dependencies = [
+ "oxrdf",
+ "oxrdfxml",
+ "oxttl",
+ "thiserror",
+]
+
+[[package]]
+name = "oxrdfxml"
+version = "0.1.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "331a12ee89216c1a3f2034da23dd95ec5a58a9e310ab3f0a645b1205d9f09284"
+dependencies = [
+ "oxilangtag",
+ "oxiri",
+ "oxrdf",
+ "quick-xml 0.37.2",
+ "thiserror",
+]
+
+[[package]]
+name = "oxttl"
+version = "0.1.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "95f4ef0353adab7940e72776962093df2e063b2f6781534b60d6136cfcad662c"
+dependencies = [
+ "memchr",
+ "oxilangtag",
+ "oxiri",
+ "oxrdf",
+ "thiserror",
+]
+
+[[package]]
 name = "parking_lot"
 version = "0.12.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2068,6 +2120,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "quick-xml"
+version = "0.37.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "165859e9e55f79d67b96c5d96f4e88b6f2695a1972849c15a6a3f5c59fc2c003"
+dependencies = [
+ "memchr",
+]
+
+[[package]]
 name = "quickcheck"
 version = "1.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2281,7 +2342,7 @@ checksum = "abd3384ae785ed3b0159607adc08adef580a28e277fbfa375c42d162e9da93b1"
 dependencies = [
  "oxilangtag",
  "oxiri",
- "quick-xml",
+ "quick-xml 0.36.2",
  "rio_api",
 ]
 

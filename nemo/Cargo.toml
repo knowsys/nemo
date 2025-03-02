@@ -49,6 +49,8 @@ strum_macros = "0.26.4"
 similar-string = "1.4.3"
 bytecount = "0.6.8"
 colored = "2"
+oxrdfio = "0.1.6"
+oxrdf = "0.2.4"
 
 [dev-dependencies]
 env_logger = "*"
