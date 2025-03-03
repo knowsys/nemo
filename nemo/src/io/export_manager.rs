@@ -72,7 +72,7 @@ impl ExportManager {
             return Ok(());
         };
 
-        let path = self.sanitized_path(resource.clone(), !handler.is_compressed());
+        let path = self.sanitized_path(resource, !handler.is_compressed());
 
         let meta_info = path.metadata();
         if let Err(err) = meta_info {
@@ -95,7 +95,7 @@ impl ExportManager {
     ///
     /// This is a complete path (based on our base path),
     /// which includes all extensions.
-    fn sanitized_path(&self, resource: Resource, add_compression: bool) -> PathBuf {
+    fn sanitized_path(&self, resource: &Resource, add_compression: bool) -> PathBuf {
         let mut pred_path = self.base_path.to_path_buf();
 
         let sanitize_options = Options::<Option<char>> {
@@ -103,9 +103,9 @@ impl ExportManager {
             ..Default::default()
         };
 
-        let file_name_unsafe = resource.to_string();
+        let file_name_unsanitized = resource.as_string();
 
-        let file_name = sanitise_with_options(&file_name_unsafe, &sanitize_options);
+        let file_name = sanitise_with_options(&file_name_unsanitized, &sanitize_options);
 
         pred_path.push(file_name);
 
@@ -126,8 +126,7 @@ impl ExportManager {
     fn writer(&self, export_handler: &Export, predicate: &Tag) -> Result<Box<dyn Write>, Error> {
         let writer: Box<dyn Write> = match export_handler.resource_spec() {
             ResourceSpec::Resource(resource) => {
-                let output_path: PathBuf =
-                    self.sanitized_path(resource.clone(), !export_handler.is_compressed());
+                let output_path = self.sanitized_path(resource, !export_handler.is_compressed());
 
                 log::info!("Exporting predicate \"{}\" to {output_path:?}", predicate);
 

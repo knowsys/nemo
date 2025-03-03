@@ -39,9 +39,8 @@ pub type Engine = DefaultExecutionEngine;
 ///
 /// For details see [load_string]
 pub fn load(file: PathBuf) -> Result<Engine, Error> {
-    let input = read_to_string(file.clone()).map_err(|err| {
-        ReadingError::from(err).with_resource(Resource::Path(file.to_string_lossy().to_string()))
-    })?;
+    let input = read_to_string(file.clone())
+        .map_err(|err| ReadingError::from(err).with_resource(Resource::Path(file)))?;
     load_string(input)
 }
 

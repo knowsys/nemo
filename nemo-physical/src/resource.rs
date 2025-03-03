@@ -2,6 +2,7 @@
 //!
 
 use super::datavalues::{AnyDataValue, DataValue, ValueDomain};
+use log::debug;
 /// Resource that can be referenced in source declarations in Nemo programs
 /// Resources are resolved using `nemo::io::resource_providers::ResourceProviders`
 ///
@@ -10,14 +11,19 @@ use super::datavalues::{AnyDataValue, DataValue, ValueDomain};
 /// resolved by code in `nemo`.
 ///
 use oxiri::Iri;
+use path_slash::PathBufExt;
 use std::collections::HashSet;
-use std::{fmt, iter};
+use std::{fmt, iter, path::PathBuf};
+
 use thiserror::Error;
 use urlencoding::encode;
 
 /// Type of error that is returned when parsing of Iri fails
 #[derive(Clone, Debug, Error)]
 pub enum ResourceValidationErrorKind {
+    /// Resource is not a valid path
+    #[error("Invalid Path")]
+    ImportExportInvalidPath,
     /// Parsing error for Iri
     #[error("Invalid IRI format")]
     ImportExportInvalidIri,
@@ -33,14 +39,13 @@ pub enum ResourceValidationErrorKind {
     /// Fragment is supplied several times
     #[error("http_fragment is supplied several times")]
     ImportExportDuplicateFragment,
-    /// The resource is parsed into an Iri but has unexpected scheme 
+    /// The resource is parsed into an Iri but has unexpected scheme
     #[error("Iri-scheme is invalid: {0}")]
-    ImportExportUnknownIriScheme (String),
+    ImportExportUnknownIriScheme(String),
 }
 
 /// Define a series of Parameters that can be passed to the HTTP-Request
-#[derive(Debug, Clone, PartialEq, Eq, Default, serde::Serialize)]
-#[serde(tag = "type")]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct HttpParameters {
     /// Specifies additional headers for a GET/ POST-request
     pub headers: Vec<(String, String)>,
@@ -68,41 +73,46 @@ pub enum Resource {
 
 impl Resource {
     /// Returns the local path of a resource, possibly stripped
-    pub fn location(&self) -> String {
-        match self {
-            Self::Iri { iri, .. } => iri.to_string(),
-            Self::Path(path) => path.clone(),
+    pub fn as_string(&self) -> String {
+        if self.is_path() {
+            self.as_path().to_string_lossy().to_string()
+        } else if self.is_iri() {
+            self.as_iri()
+        } else {
+            panic!("Resource is neither path nor Iri.")
         }
     }
 
+    /// Return if resource is an Iri
+    pub fn is_iri(&self) -> bool {
+        matches!(self, Self::Iri { .. })
+    }
+
+    /// Return if resource is a path
+    pub fn is_path(&self) -> bool {
+        matches!(self, Self::Path(..))
+    }
+
     /// Return local path of a resource
-    pub fn as_path(&self) -> Option<&String> {
+    pub fn as_path(&self) -> &PathBuf {
         match self {
-            Self::Iri { .. } => None,
-            Self::Path(path) => Some(path),
+            Self::Iri { .. } => panic!("Resource no local path"),
+            Self::Path(path) => path,
         }
     }
 
     /// Return iri of a resource
-    pub fn as_iri(&self) -> Option<&Iri<String>> {
-        match self {
-            Self::Iri { iri, .. } => Some(iri),
-            Self::Path(..) => None,
-        }
+    pub fn as_iri(&self) -> String {
+        Self::internal_as_iri(self, false)
     }
 
-    /// Returns the full iri including non-encoded Get-Parameter and Fragment
-    pub fn as_string(&self) -> String {
-        self.internal_as_string(false)
-    }
-
-    /// Returns the full iri including encoded Get-Parameters and Fragment
-    pub fn as_string_encoded(&self) -> String {
-        self.internal_as_string(true)
+    /// Return iri of a resource
+    pub fn as_iri_encoded(&self) -> String {
+        Self::internal_as_iri(self, true)
     }
 
     /// Constructs the full Iri and possibly encode the GET-Parameter
-    pub fn internal_as_string(&self, encode_get: bool) -> String {
+    pub fn internal_as_iri(&self, encode_get: bool) -> String {
         let mut get_parameters = String::new();
         let mut is_first = true;
 
@@ -129,9 +139,11 @@ impl Resource {
                 String::new()
             }
         };
-        let uri = format!("{}{}{}", self.location(), get_parameters, fragment);
-
-        uri
+        if let Self::Iri { iri, .. } = self {
+            format!("{}{}{}", iri, get_parameters, fragment)
+        } else {
+            panic!("Resource is a path not Iri")
+        }
     }
 
     /// Return the headers if resource is of variant [Resource::Iri]
@@ -177,18 +189,19 @@ impl Resource {
     /// Returns the file extension of a path or Iri, based on the last '.'
     pub fn file_extension(&self) -> Option<&str> {
         match self {
-            Self::Path(path) => path.rfind('.').map(|index| &path[index..]),
-            Self::Iri { iri, .. } => iri.authority()?.rfind('.').map(|index| &iri[index..]),
+            Self::Path(path) => path.extension().and_then(|ext| ext.to_str()),
+            Self::Iri { iri, .. } => iri.path().rfind('.').map(|index| &iri[index..]),
         }
     }
 
     /// Remove a certain file extension from the resource
-    pub fn strip_file_extension_unchecked(&self, suffix: &str) -> &str {
+    pub fn strip_file_extension_unchecked(&self, suffix: &str) -> String {
         match self {
-            Self::Path(path) => path
+            Self::Path(path) => path.with_extension("").to_string_lossy().to_string(),
+            Self::Iri { iri, .. } => iri
                 .strip_suffix(suffix)
-                .expect("suffix should be verified"),
-            Self::Iri { iri, .. } => iri.strip_suffix(suffix).expect("suffix should be verified"),
+                .map(String::from)
+                .expect("It should be verified that the suffix exists"),
         }
     }
 }
@@ -204,7 +217,7 @@ impl fmt::Display for Resource {
 #[derive(Debug)]
 pub enum ResourceLocation {
     /// Local path to a resource
-    Path(String),
+    Path(PathBuf),
     /// An Iri for a web-resource
     Iri(Iri<String>),
 }
@@ -220,9 +233,12 @@ pub struct ResourceBuilder {
 }
 
 impl ResourceBuilder {
-    /// Strips a local iri of its prefix
-    pub fn strip_local_iri(iri: Iri<String>) -> String {
-        iri.authority().unwrap_or_default().to_string() + iri.path()
+    /// Returns the path of a local iri
+    pub fn strip_local_iri(iri: Iri<String>) -> Result<String, ResourceValidationErrorKind> {
+        match iri.authority() {
+            None | Some("") | Some("localhost") => Ok(String::from(iri.path())),
+            _ => Err(ResourceValidationErrorKind::ImportExportInvalidIri),
+        }
     }
 
     /// Verify if [ResourceBuilder] contains a valid web-Iri
@@ -332,24 +348,35 @@ impl ResourceBuilder {
         }
     }
 
+    /// Convert Header-Parameter into a key-value vector
+    pub fn unpack_header_parameter(map: AnyDataValue) -> impl Iterator<Item = (String, String)> {
+        // Expect a map of key-value pairs
+        let keys = map.map_keys();
+
+        let mut vec: Vec<(String, String)> = Vec::new();
+        if let Some(keys_iter) = keys {
+            for key in keys_iter {
+                let element = map.map_element_unchecked(key);
+                vec.push((key.lexical_value(), element.lexical_value()));
+            }
+        }
+        vec.into_iter()
+    }
+
     /// Flatten each parameter-map into a key-value vector
-    pub fn unpack_post_get_parameter(map: AnyDataValue) -> impl Iterator<Item = (String, String)> {
+    pub fn unpack_get_post_parameter(map: AnyDataValue) -> impl Iterator<Item = (String, String)> {
         // Expect each value as a tuple (of values), where each element can be converted into a string
         let keys = map.map_keys();
 
         let mut vec: Vec<(String, String)> = Vec::new();
         if let Some(keys_iter) = keys {
             for key in keys_iter {
-                // Use the key here
                 let value = map.map_element_unchecked(key);
                 let mut idx = 0;
+                // Unpack inner tuple
                 while let Some(element) = value.tuple_element(idx) {
                     idx += 1;
-                    let element = element.lexical_value();
-                    let k = key.lexical_value();
-
-                    println!("key: {:?}, value: {:?}", k, element);
-                    vec.push((k, element));
+                    vec.push((key.lexical_value(), element.lexical_value()));
                 }
             }
         }
@@ -368,13 +395,12 @@ impl ResourceBuilder {
         self
     }
 
-    /// Register key-value pairs of parameters to the respec
+    /// Add fragment to HttpParameter
     pub fn fragment_mut(
         &mut self,
         value: String,
     ) -> Result<&mut Self, ResourceValidationErrorKind> {
         if self.fragment.is_some() {
-            // TODO: is it ok to panic here, since it means that internally our code is not correct and should handle user input better
             return Err(ResourceValidationErrorKind::ImportExportDuplicateFragment);
         } else {
             self.fragment = Some(value);
@@ -419,7 +445,7 @@ impl From<String> for ResourceBuilder {
     /// Create a new [ResourceBuilder] from a local path
     fn from(path: String) -> Self {
         Self {
-            location: ResourceLocation::Path(path),
+            location: ResourceLocation::Path(PathBuf::from_slash(path)),
             headers: Vec::new(),
             get_parameters: Vec::new(),
             fragment: None,
@@ -450,27 +476,29 @@ impl TryFrom<AnyDataValue> for ResourceBuilder {
                 "Resource or Endpoint",
             )),
         )?;
-        match Iri::parse(string.to_owned()){
+        match Iri::parse(string.to_owned()) {
             Ok(iri) => {
                 let scheme = iri.scheme();
+                debug!("scheme:{}", scheme);
                 match scheme {
-                    "http:" | "https:" => {Ok(Self::from(iri))},
-                    "file://" => {Ok(Self::from(Self::strip_local_iri(iri)))},
-                    _ => Err(ResourceValidationErrorKind::ImportExportUnknownIriScheme(String::from(scheme)))
-                    }
-                },
-            Err(_err) => Ok(Self::from(string))
+                    "http" | "https" => Ok(Self::from(iri)),
+                    "file" => Ok(Self::from(Self::strip_local_iri(iri)?)),
+                    _ => Err(ResourceValidationErrorKind::ImportExportUnknownIriScheme(
+                        String::from(scheme),
+                    )),
+                }
+            }
+            Err(_err) => Ok(Self::from(string)),
         }
     }
-        //match string {
-        //    string if string.starts_with("http:") || string.starts_with("https:") => {
-        //        Ok(Self::from(Self::to_web_iri(string)?))
-        //    }
-        //    // Strip a local iri of the prefix
-        //    string if string.starts_with("file://") => {
-        //        Ok(Self::from(Self::strip_local_iri(string)?))
-        //    }
-        //    _ => Ok(Self::from(string)),
-        //}
+    //match string {
+    //    string if string.starts_with("http:") || string.starts_with("https:") => {
+    //        Ok(Self::from(Self::to_web_iri(string)?))
+    //    }
+    //    // Strip a local iri of the prefix
+    //    string if string.starts_with("file://") => {
+    //        Ok(Self::from(Self::strip_local_iri(string)?))
+    //    }
+    //    _ => Ok(Self::from(string)),
+    //}
 }
-

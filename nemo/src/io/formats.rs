@@ -9,6 +9,7 @@ use core::fmt;
 use std::{
     fmt::Debug,
     io::{Read, Write},
+    path::PathBuf,
     sync::Arc,
 };
 
@@ -63,7 +64,7 @@ impl ResourceSpec {
         if string.is_empty() {
             Self::Stdout
         } else {
-            Self::Resource(Resource::Path(string))
+            Self::Resource(Resource::Path(PathBuf::from(string)))
         }
     }
 

@@ -171,11 +171,10 @@ pub enum ValidationErrorKind {
     #[assoc(code = 234)]
     #[error(r#""invalid SPARQL query: `{oxi_error}`"#)]
     ImportExportInvalidSparqlQuery { oxi_error: String },
-    ///
+    /// Import/Export: Validation error in ResourceBuilder
     #[assoc(code = 235)]
     #[error(transparent)]
     ResourceValidationError(#[from] ResourceValidationErrorKind),
-
     /// Unsupported feature: Multiple aggregates in one rule
     #[error(r#"multiple aggregates in one rule is currently unsupported"#)]
     #[assoc(code = 999)]

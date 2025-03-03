@@ -420,11 +420,10 @@ impl ImportExportBuilder {
         let resource_builder = parameters
             .get_optional(StandardParameter::Resource.into())
             .and_then(|value| {
-                Some(
-                    ResourceBuilder::try_from(value)
-                        .map_err(|err| builder.report_error(origin, err.into()))
-                        .ok()?,
-                )
+                let resource = ResourceBuilder::try_from(value)
+                    .map_err(|err| builder.report_error(origin, err.into()))
+                    .ok()?;
+                Some(resource)
             });
 
         let compression = parameters
@@ -446,43 +445,67 @@ impl ImportExportBuilder {
             .override_resource_builder(direction)
             .or(resource_builder);
 
-        // Unpack the Http-Parameters and add them to the ResourceBuilder
         let resource = {
             if let Some(mut rb) = resource_builder {
-                let get_iterator = parameters
+                // Unpack Http-Parameters and add them to the ResourceBuilder
+                // Header-Parameters
+                let headers = parameters
                     .get_optional(StandardParameter::HttpGetParameters.into())
-                    .and_then(|value| Some(ResourceBuilder::unpack_post_get_parameter(value)));
+                    .map(ResourceBuilder::unpack_header_parameter);
 
-                if let Some(iter) = get_iterator {
+                if let Some(iter) = headers {
+                    for (key, value) in iter {
+                        rb.header_mut(key, value);
+                    }
+                }
+
+                // GET-Parameters
+                let get_parameters = parameters
+                    .get_optional(StandardParameter::HttpGetParameters.into())
+                    .map(ResourceBuilder::unpack_get_post_parameter);
+
+                if let Some(iter) = get_parameters {
                     for (key, value) in iter {
                         rb.get_mut(key, value);
                     }
                 }
 
+                // POST-Parameters
+                let post_parameters = parameters
+                    .get_optional(StandardParameter::HttpGetParameters.into())
+                    .map(ResourceBuilder::unpack_get_post_parameter);
+
+                if let Some(iter) = post_parameters {
+                    for (key, value) in iter {
+                        rb.post_mut(key, value);
+                    }
+                }
+
+                // Fragment
                 if let Some(fragment) = parameters
                     .get_optional(StandardParameter::HttpFragment.into())
-                    .and_then(|value| Some(value.lexical_value()))
+                    .map(|value| value.lexical_value())
                 {
                     rb.fragment_mut(fragment)
                         .map_err(|err| builder.report_error(origin, err.into()))
                         .ok()?;
                 }
 
-                // Report a possible ResourceValidationErrorKind and propagate possible errors upwards
-                let x = rb
+                // Report a possible ResourceValidationErrorKind and propagate possible failure upwards
+                let resource = rb
                     .finalize()
                     .map_err(|err: ResourceValidationErrorKind| {
                         builder.report_error(origin, err.into())
                     })
-                    .ok();
-                Some(x?)
+                    .ok()?;
+                Some(resource)
             } else {
                 None
             }
         };
 
         // Build the Resource and ResourceSpec once ResourceBuilder collected all information
-        let resource_spec = resource.map(|resource| ResourceSpec::Resource(resource));
+        let resource_spec = resource.map(ResourceSpec::Resource);
 
         Some(ImportExportBuilder {
             inner: inner.into(),

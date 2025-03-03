@@ -1,12 +1,10 @@
 use super::ResourceProvider;
-use log::debug;
 use nemo_physical::{
     error::{ReadingError, ReadingErrorKind},
     resource::Resource,
 };
 use reqwest::header::{HeaderName, HeaderValue, InvalidHeaderName, InvalidHeaderValue};
 use std::io::Read;
-
 
 /// Resolves resources using HTTP or HTTPS.
 ///
@@ -26,7 +24,7 @@ pub struct HttpResource {
 impl HttpResource {
     /// Return the IRI this resource was fetched from.
     pub fn url(&self) -> String {
-        self.resource.as_string_encoded()
+        self.resource.as_iri_encoded()
     }
 
     /// Return the content of this resource.
@@ -72,8 +70,6 @@ impl HttpResourceProvider {
 
         // Unpack custom headers from resource
         for (key, value) in resource.header_parameters() {
-            // TODO: remove later
-            debug!("insert header pair: {},{}", key, value);
             headers.insert(
                 key.parse::<HeaderName>()
                     .map_err(|err: InvalidHeaderName| {
@@ -97,16 +93,12 @@ impl HttpResourceProvider {
             .build()
             .map_err(err_mapping)?;
 
-        let full_url = resource.as_string_encoded();
+        let full_url = resource.as_iri_encoded();
 
         let response = {
             // Collect Body-Parameters into one string
             if resource.has_post_parameters() {
                 // Make POST-Request
-                log::debug!("Make POST-request to endpoint {full_url}");
-                // TODO: currently it is not possible to pass the return value of post_parameters to  client.form()
-                // let x = SerializableIterator(resource.post_parameters());
-
                 client
                     .post(full_url)
                     .form(
@@ -119,15 +111,12 @@ impl HttpResourceProvider {
                     .map_err(err_mapping)?
             } else {
                 // Make GET-Request
-                log::debug!("Make GET-request to endpoint {full_url}");
                 client.get(full_url).send().await.map_err(err_mapping)?
             }
         };
 
         // Validate status code for timeouts and other errors
-        if let Err(err) = response.error_for_status_ref() {
-            return Err(err_mapping(err));
-        }
+        response.error_for_status_ref()?;
 
         // we're expecting potentially compressed data, don't try to
         // do any character set guessing, as `response.text()` would do.
@@ -146,9 +135,8 @@ impl ResourceProvider for HttpResourceProvider {
         resource: &Resource,
         media_type: &str,
     ) -> Result<Option<Box<dyn Read>>, ReadingError> {
-        
         // Early return if Resource does not contain an Iri
-        if !resource.as_iri().is_some(){
+        if !resource.is_iri() {
             return Ok(None);
         }
 

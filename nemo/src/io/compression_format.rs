@@ -60,7 +60,7 @@ impl CompressionFormat {
         if resource.file_extension() == Some(".gz") {
             (
                 CompressionFormat::GZip,
-                resource.strip_file_extension_unchecked(".gz").to_string(),
+                resource.strip_file_extension_unchecked(".gz"),
             )
         } else {
             (CompressionFormat::None, resource.as_string())

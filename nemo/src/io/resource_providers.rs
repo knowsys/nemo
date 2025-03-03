@@ -13,20 +13,6 @@ pub mod file;
 /// A resource provider for HTTP(s) requests.
 pub mod http;
 
-/// Helper function that determines whether resource has the form of an iri.
-///
-/// For now, we don't validate the exact requirements but simply check
-/// whether the string contains a `:`.
-///
-/// TODO: Revise if deemed necessary.
-fn is_iri(resource: &Resource) -> bool {
-    match resource {
-        Resource::Path(path) => path.contains(':'),
-        // TODO: We would expect Resource::Iri to be an iri. However is this verified somewhere already?
-        Resource::Iri { iri, .. } => iri.to_string().contains(':'),
-    }
-}
-
 /// Allows resolving resources to readers.
 ///
 /// This allows specifying how to resolve a resource independent of how the
