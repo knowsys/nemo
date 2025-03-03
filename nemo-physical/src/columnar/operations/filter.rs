@@ -7,14 +7,14 @@ use crate::{
     datavalues::AnyDataValue,
     function::evaluation::StackProgram,
     management::database::Dict,
-    storagevalues::ColumnDataType,
+    storagevalues::storagevalue::StorageValue,
 };
 
 /// [ColumnScan], which filters values of a "value" scan based on a [StackProgram]
 #[derive(Debug)]
 pub(crate) struct ColumnScanFilter<'a, T>
 where
-    T: 'a + ColumnDataType,
+    T: 'a + StorageValue,
 {
     /// Current scan whose values are being filtered
     value_scan: &'a ColumnScanCell<'a, T>,
@@ -33,7 +33,7 @@ where
 
 impl<'a, T> ColumnScanFilter<'a, T>
 where
-    T: 'a + ColumnDataType,
+    T: 'a + StorageValue,
 {
     /// Create a new [ColumnScanFilter].
     pub(crate) fn new(
@@ -55,8 +55,7 @@ where
     /// and return the result as a boolean.
     /// Returns `None` if the filter could not have been evaluated.
     fn check_value(&self, value: T) -> Option<bool> {
-        let datavalue = value
-            .into_datavalue(&self.dictionary.borrow())
+        let datavalue = AnyDataValue::new_from_storage_value(value, &self.dictionary.borrow())
             .expect("It is assumed that all id already in columns are present in the dictionary.");
         let referenced = &self.referenced_values.borrow();
 
@@ -83,7 +82,7 @@ where
 
 impl<'a, T> Iterator for ColumnScanFilter<'a, T>
 where
-    T: 'a + ColumnDataType,
+    T: 'a + StorageValue,
 {
     type Item = T;
 
@@ -95,7 +94,7 @@ where
 
 impl<'a, T> ColumnScan for ColumnScanFilter<'a, T>
 where
-    T: 'a + ColumnDataType,
+    T: 'a + StorageValue,
 {
     fn seek(&mut self, value: T) -> Option<T> {
         let seeked_value = self.value_scan.seek(value)?;

@@ -7,7 +7,11 @@ use delegate::delegate;
 use crate::{
     dictionary::{AddResult, DvDict},
     management::database::Dict,
-    storagevalues::{Double, Float, StorageValueT},
+    storagevalues::{
+        double::Double,
+        float::Float,
+        storagevalue::{StorageValue, StorageValueT},
+    },
 };
 
 use super::{
@@ -138,9 +142,18 @@ impl AnyDataValue {
         )))
     }
 
+    /// Construct a datavalue from its physical representation as a [StorageValue], using
+    /// the given dictionary to resolve IDs.
+    pub(crate) fn new_from_storage_value<T: StorageValue>(
+        value: T,
+        dict: &Dict,
+    ) -> Result<Self, DataValueCreationError> {
+        Self::new_from_storage_value_t(value.into(), dict)
+    }
+
     /// Construct a datavalue from its physical representation as a [StorageValueT], using
     /// the given dictionary to resolve IDs.
-    pub(crate) fn new_from_storage_value(
+    pub(crate) fn new_from_storage_value_t(
         sv: StorageValueT,
         dict: &Dict,
     ) -> Result<AnyDataValue, DataValueCreationError> {
@@ -485,9 +498,11 @@ impl AnyDataValue {
                 let dictionary_id = dictionary.datavalue_to_id(self)?;
                 Self::usize_to_storage_value_t(dictionary_id)
             }
-            ValueDomain::Float => StorageValueT::Float(Float::from_number(self.to_f32_unchecked())),
+            ValueDomain::Float => {
+                StorageValueT::Float(Float::new_unchecked(self.to_f32_unchecked()))
+            }
             ValueDomain::Double => {
-                StorageValueT::Double(Double::from_number(self.to_f64_unchecked()))
+                StorageValueT::Double(Double::new_unchecked(self.to_f64_unchecked()))
             }
             ValueDomain::NonNegativeLong
             | ValueDomain::UnsignedInt
@@ -541,9 +556,11 @@ impl AnyDataValue {
                     .expect("cannot create specific nulls: value must be known to the dictionary");
                 Self::usize_to_storage_value_t(dictionary_id)
             }
-            ValueDomain::Float => StorageValueT::Float(Float::from_number(self.to_f32_unchecked())),
+            ValueDomain::Float => {
+                StorageValueT::Float(Float::new_unchecked(self.to_f32_unchecked()))
+            }
             ValueDomain::Double => {
-                StorageValueT::Double(Double::from_number(self.to_f64_unchecked()))
+                StorageValueT::Double(Double::new_unchecked(self.to_f64_unchecked()))
             }
             ValueDomain::NonNegativeLong
             | ValueDomain::UnsignedInt

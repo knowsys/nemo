@@ -153,7 +153,7 @@ impl DatabaseInstance {
             values
                 .into_iter()
                 .map(|value| {
-                    AnyDataValue::new_from_storage_value(value, &self.dictionary())
+                    AnyDataValue::new_from_storage_value_t(value, &self.dictionary())
                         .expect("Values from tries should be sound.")
                 })
                 .collect()
@@ -535,8 +535,11 @@ impl DatabaseInstance {
                     let row_datavalue = row_storage
                         .into_iter()
                         .map(|value| {
-                            AnyDataValue::new_from_storage_value(value, self.dictionary().borrow())
-                                .ok()
+                            AnyDataValue::new_from_storage_value_t(
+                                value,
+                                self.dictionary().borrow(),
+                            )
+                            .ok()
                         })
                         .collect::<Option<Vec<_>>>()?;
 
@@ -563,7 +566,7 @@ mod test {
             database::id::{PermanentTableId, TableId},
             execution_plan::ColumnOrder,
         },
-        storagevalues::StorageValueT,
+        storagevalues::storagevalue::StorageValueT,
         tabular::trie::Trie,
     };
 

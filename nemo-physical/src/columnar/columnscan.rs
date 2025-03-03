@@ -6,7 +6,12 @@ use std::{cell::UnsafeCell, fmt::Debug, ops::Range};
 
 use crate::{
     generate_forwarder,
-    storagevalues::{ColumnDataType, Double, Float, StorageTypeName, StorageValueT},
+    storagevalues::{
+        double::Double,
+        float::Float,
+        storagetype::StorageType,
+        storagevalue::{StorageValue, StorageValueT},
+    },
 };
 
 use super::{
@@ -52,7 +57,7 @@ pub trait ColumnScan: Debug + Iterator {
 #[derive(Debug)]
 pub(crate) enum ColumnScanEnum<'a, T>
 where
-    T: 'a + ColumnDataType,
+    T: 'a + StorageValue,
 {
     /// Case ColumnScanVector
     Vector(ColumnScanVector<'a, T>),
@@ -84,7 +89,7 @@ where
 
 impl<'a, T> From<ColumnScanVector<'a, T>> for ColumnScanEnum<'a, T>
 where
-    T: 'a + ColumnDataType,
+    T: 'a + StorageValue,
 {
     fn from(cs: ColumnScanVector<'a, T>) -> Self {
         Self::Vector(cs)
@@ -93,7 +98,7 @@ where
 
 impl<'a, T> From<ColumnScanRle<'a, T>> for ColumnScanEnum<'a, T>
 where
-    T: 'a + ColumnDataType,
+    T: 'a + StorageValue,
 {
     fn from(cs: ColumnScanRle<'a, T>) -> Self {
         Self::Rle(cs)
@@ -102,7 +107,7 @@ where
 
 impl<T> From<ColumnScanConstant<T>> for ColumnScanEnum<'_, T>
 where
-    T: ColumnDataType,
+    T: StorageValue,
 {
     fn from(cs: ColumnScanConstant<T>) -> Self {
         Self::Constant(cs)
@@ -111,7 +116,7 @@ where
 
 impl<'a, T> From<ColumnScanFilter<'a, T>> for ColumnScanEnum<'a, T>
 where
-    T: 'a + ColumnDataType,
+    T: 'a + StorageValue,
 {
     fn from(cs: ColumnScanFilter<'a, T>) -> Self {
         Self::Filter(cs)
@@ -120,7 +125,7 @@ where
 
 impl<'a, T> From<ColumnScanFilterConstant<'a, T>> for ColumnScanEnum<'a, T>
 where
-    T: 'a + ColumnDataType,
+    T: 'a + StorageValue,
 {
     fn from(cs: ColumnScanFilterConstant<'a, T>) -> Self {
         Self::FilterConstant(cs)
@@ -129,7 +134,7 @@ where
 
 impl<'a, T> From<ColumnScanFilterEqual<'a, T>> for ColumnScanEnum<'a, T>
 where
-    T: 'a + ColumnDataType,
+    T: 'a + StorageValue,
 {
     fn from(cs: ColumnScanFilterEqual<'a, T>) -> Self {
         Self::FilterEqual(cs)
@@ -138,7 +143,7 @@ where
 
 impl<'a, T> From<ColumnScanFilterInterval<'a, T>> for ColumnScanEnum<'a, T>
 where
-    T: 'a + ColumnDataType,
+    T: 'a + StorageValue,
 {
     fn from(cs: ColumnScanFilterInterval<'a, T>) -> Self {
         Self::FilterInterval(cs)
@@ -147,7 +152,7 @@ where
 
 impl<'a, T> From<ColumnScanJoin<'a, T>> for ColumnScanEnum<'a, T>
 where
-    T: 'a + ColumnDataType,
+    T: 'a + StorageValue,
 {
     fn from(cs: ColumnScanJoin<'a, T>) -> Self {
         Self::Join(cs)
@@ -156,7 +161,7 @@ where
 
 impl<'a, T> From<ColumnScanPass<'a, T>> for ColumnScanEnum<'a, T>
 where
-    T: 'a + ColumnDataType,
+    T: 'a + StorageValue,
 {
     fn from(cs: ColumnScanPass<'a, T>) -> Self {
         Self::Pass(cs)
@@ -165,7 +170,7 @@ where
 
 impl<'a, T> From<ColumnScanPrune<'a, T>> for ColumnScanEnum<'a, T>
 where
-    T: 'a + ColumnDataType,
+    T: 'a + StorageValue,
 {
     fn from(cs: ColumnScanPrune<'a, T>) -> Self {
         Self::Prune(cs)
@@ -174,7 +179,7 @@ where
 
 impl<'a, T> From<ColumnScanSubtract<'a, T>> for ColumnScanEnum<'a, T>
 where
-    T: 'a + ColumnDataType,
+    T: 'a + StorageValue,
 {
     fn from(cs: ColumnScanSubtract<'a, T>) -> Self {
         Self::Subtract(cs)
@@ -183,7 +188,7 @@ where
 
 impl<'a, T> From<ColumnScanUnion<'a, T>> for ColumnScanEnum<'a, T>
 where
-    T: 'a + ColumnDataType,
+    T: 'a + StorageValue,
 {
     fn from(cs: ColumnScanUnion<'a, T>) -> Self {
         Self::Union(cs)
@@ -194,7 +199,7 @@ where
 /// available on the whole [ColumnScanEnum]
 impl<'a, T> ColumnScanEnum<'a, T>
 where
-    T: 'a + ColumnDataType,
+    T: 'a + StorageValue,
 {
     /// Assumes that column scan is a [ColumnScanConstant].
     ///
@@ -229,7 +234,7 @@ generate_forwarder!(forward_to_columnscan;
 
 impl<'a, T> Iterator for ColumnScanEnum<'a, T>
 where
-    T: 'a + ColumnDataType,
+    T: 'a + StorageValue,
 {
     type Item = T;
 
@@ -240,7 +245,7 @@ where
 
 impl<'a, T> ColumnScan for ColumnScanEnum<'a, T>
 where
-    T: 'a + ColumnDataType,
+    T: 'a + StorageValue,
 {
     fn seek(&mut self, value: Self::Item) -> Option<Self::Item> {
         forward_to_columnscan!(self, seek(value))
@@ -267,11 +272,11 @@ where
 #[repr(transparent)]
 pub(crate) struct ColumnScanCell<'a, T>(pub UnsafeCell<ColumnScanEnum<'a, T>>)
 where
-    T: 'a + ColumnDataType;
+    T: 'a + StorageValue;
 
 impl<T> Debug for ColumnScanCell<'_, T>
 where
-    T: ColumnDataType,
+    T: StorageValue,
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let rcs = unsafe { &*self.0.get() };
@@ -281,7 +286,7 @@ where
 
 impl<'a, T> ColumnScanCell<'a, T>
 where
-    T: 'a + ColumnDataType,
+    T: 'a + StorageValue,
 {
     /// Construct a new `ColumnScanCell` from the given [ColumnScanEnum].
     pub(crate) fn new(cs: ColumnScanEnum<'a, T>) -> Self {
@@ -336,25 +341,25 @@ where
 impl<'a, S, T> From<S> for ColumnScanCell<'a, T>
 where
     S: Into<ColumnScanEnum<'a, T>>,
-    T: 'a + ColumnDataType,
+    T: 'a + StorageValue,
 {
     fn from(cs: S) -> Self {
         Self(UnsafeCell::new(cs.into()))
     }
 }
 
-/// Contains a [ColumnScan] for every used [super::super::storagevalues::storage_type_name::StorageTypeName]
+/// Contains a [ColumnScan] for every used [super::super::storagevalues::storagetype_name::StorageType]
 #[derive(Debug)]
 pub(crate) struct ColumnScanT<'a> {
-    /// Case [StorageTypeName::Id32][super::super::storagevalues::storage_type_name::StorageTypeName]
+    /// Case [StorageType::Id32][super::super::storagevalues::storagetype_name::StorageType]
     pub scan_id32: ColumnScanCell<'a, u32>,
-    /// Case [StorageTypeName::Id64][super::super::storagevalues::storage_type_name::StorageTypeName]
+    /// Case [StorageType::Id64][super::super::storagevalues::storagetype_name::StorageType]
     pub scan_id64: ColumnScanCell<'a, u64>,
-    /// Case [StorageTypeName::Int64][super::super::storagevalues::storage_type_name::StorageTypeName]
+    /// Case [StorageType::Int64][super::super::storagevalues::storagetype_name::StorageType]
     pub scan_i64: ColumnScanCell<'a, i64>,
-    /// Case [StorageTypeName::Float][super::super::storagevalues::storage_type_name::StorageTypeName]
+    /// Case [StorageType::Float][super::super::storagevalues::storagetype_name::StorageType]
     pub scan_float: ColumnScanCell<'a, Float>,
-    /// Case [StorageTypeName::Double][super::super::storagevalues::storage_type_name::StorageTypeName]
+    /// Case [StorageType::Double][super::super::storagevalues::storagetype_name::StorageType]
     pub scan_double: ColumnScanCell<'a, Double>,
 }
 
@@ -391,62 +396,62 @@ impl<'a> ColumnScanT<'a> {
         }
     }
 
-    /// Advance the [ColumnScan] of the given [StorageTypeName] to the next value
+    /// Advance the [ColumnScan] of the given [StorageType] to the next value
     /// and return it.
     ///
     /// Returns `None` if there is no such value.
-    pub(crate) fn next(&mut self, storage_type: StorageTypeName) -> Option<StorageValueT> {
+    pub(crate) fn next(&mut self, storage_type: StorageType) -> Option<StorageValueT> {
         match storage_type {
-            StorageTypeName::Id32 => self.scan_id32.next().map(StorageValueT::Id32),
-            StorageTypeName::Id64 => self.scan_id64.next().map(StorageValueT::Id64),
-            StorageTypeName::Int64 => self.scan_i64.next().map(StorageValueT::Int64),
-            StorageTypeName::Float => self.scan_float.next().map(StorageValueT::Float),
-            StorageTypeName::Double => self.scan_double.next().map(StorageValueT::Double),
+            StorageType::Id32 => self.scan_id32.next().map(StorageValueT::Id32),
+            StorageType::Id64 => self.scan_id64.next().map(StorageValueT::Id64),
+            StorageType::Int64 => self.scan_i64.next().map(StorageValueT::Int64),
+            StorageType::Float => self.scan_float.next().map(StorageValueT::Float),
+            StorageType::Double => self.scan_double.next().map(StorageValueT::Double),
         }
     }
 
-    /// Return the current value of a scan of the given [StorageTypeName].
-    pub(crate) fn current(&self, storage_type: StorageTypeName) -> Option<StorageValueT> {
+    /// Return the current value of a scan of the given [StorageType].
+    pub(crate) fn current(&self, storage_type: StorageType) -> Option<StorageValueT> {
         match storage_type {
-            StorageTypeName::Id32 => self.scan_id32.current().map(StorageValueT::Id32),
-            StorageTypeName::Id64 => self.scan_id64.current().map(StorageValueT::Id64),
-            StorageTypeName::Int64 => self.scan_i64.current().map(StorageValueT::Int64),
-            StorageTypeName::Float => self.scan_float.current().map(StorageValueT::Float),
-            StorageTypeName::Double => self.scan_double.current().map(StorageValueT::Double),
+            StorageType::Id32 => self.scan_id32.current().map(StorageValueT::Id32),
+            StorageType::Id64 => self.scan_id64.current().map(StorageValueT::Id64),
+            StorageType::Int64 => self.scan_i64.current().map(StorageValueT::Int64),
+            StorageType::Float => self.scan_float.current().map(StorageValueT::Float),
+            StorageType::Double => self.scan_double.current().map(StorageValueT::Double),
         }
     }
 
-    /// Return the current position of a scan of the given [StorageTypeName].
-    pub(crate) fn pos(&mut self, storage_type: StorageTypeName) -> Option<usize> {
+    /// Return the current position of a scan of the given [StorageType].
+    pub(crate) fn pos(&mut self, storage_type: StorageType) -> Option<usize> {
         match storage_type {
-            StorageTypeName::Id32 => self.scan_id32.pos(),
-            StorageTypeName::Id64 => self.scan_id64.pos(),
-            StorageTypeName::Int64 => self.scan_i64.pos(),
-            StorageTypeName::Float => self.scan_float.pos(),
-            StorageTypeName::Double => self.scan_double.pos(),
+            StorageType::Id32 => self.scan_id32.pos(),
+            StorageType::Id64 => self.scan_id64.pos(),
+            StorageType::Int64 => self.scan_i64.pos(),
+            StorageType::Float => self.scan_float.pos(),
+            StorageType::Double => self.scan_double.pos(),
         }
     }
 
-    /// Return a scan of the given [StorageTypeName] to its initial state.
-    pub(crate) fn reset(&mut self, storage_type: StorageTypeName) {
+    /// Return a scan of the given [StorageType] to its initial state.
+    pub(crate) fn reset(&mut self, storage_type: StorageType) {
         match storage_type {
-            StorageTypeName::Id32 => self.scan_id32.reset(),
-            StorageTypeName::Id64 => self.scan_id64.reset(),
-            StorageTypeName::Int64 => self.scan_i64.reset(),
-            StorageTypeName::Float => self.scan_float.reset(),
-            StorageTypeName::Double => self.scan_double.reset(),
+            StorageType::Id32 => self.scan_id32.reset(),
+            StorageType::Id64 => self.scan_id64.reset(),
+            StorageType::Int64 => self.scan_i64.reset(),
+            StorageType::Float => self.scan_float.reset(),
+            StorageType::Double => self.scan_double.reset(),
         }
     }
 
-    /// Restricts the iterator of the given [StorageTypeName] to the given `interval`.
+    /// Restricts the iterator of the given [StorageType] to the given `interval`.
     /// Resets the iterator just before the start of the interval.
-    pub(crate) fn narrow(&mut self, storage_type: StorageTypeName, interval: Range<usize>) {
+    pub(crate) fn narrow(&mut self, storage_type: StorageType, interval: Range<usize>) {
         match storage_type {
-            StorageTypeName::Id32 => self.scan_id32.narrow(interval),
-            StorageTypeName::Id64 => self.scan_id64.narrow(interval),
-            StorageTypeName::Int64 => self.scan_i64.narrow(interval),
-            StorageTypeName::Float => self.scan_float.narrow(interval),
-            StorageTypeName::Double => self.scan_double.narrow(interval),
+            StorageType::Id32 => self.scan_id32.narrow(interval),
+            StorageType::Id64 => self.scan_id64.narrow(interval),
+            StorageType::Int64 => self.scan_i64.narrow(interval),
+            StorageType::Float => self.scan_float.narrow(interval),
+            StorageType::Double => self.scan_double.narrow(interval),
         }
     }
 
@@ -464,13 +469,13 @@ impl<'a> ColumnScanT<'a> {
 
     /// Assumes that column scan is a [ColumnScanConstant].
     /// Set its value to `None`.
-    pub(crate) fn constant_set_none(&mut self, storage_type: StorageTypeName) {
+    pub(crate) fn constant_set_none(&mut self, storage_type: StorageType) {
         match storage_type {
-            StorageTypeName::Id32 => self.scan_id32.constant_set(None),
-            StorageTypeName::Id64 => self.scan_id64.constant_set(None),
-            StorageTypeName::Int64 => self.scan_i64.constant_set(None),
-            StorageTypeName::Float => self.scan_float.constant_set(None),
-            StorageTypeName::Double => self.scan_double.constant_set(None),
+            StorageType::Id32 => self.scan_id32.constant_set(None),
+            StorageType::Id64 => self.scan_id64.constant_set(None),
+            StorageType::Int64 => self.scan_i64.constant_set(None),
+            StorageType::Float => self.scan_float.constant_set(None),
+            StorageType::Double => self.scan_double.constant_set(None),
         }
     }
 

@@ -4,16 +4,13 @@ use std::cmp::Ordering;
 
 use crate::{
     columnar::columnscan::{ColumnScan, ColumnScanCell},
-    storagevalues::ColumnDataType,
+    storagevalues::storagevalue::StorageValue,
 };
 
 /// [ColumnScanFilterInterval] does only return values within a certain interval
 /// Therefore, it can be only in of three states.
 #[derive(Debug)]
-enum ColumnScanState<T>
-where
-    T: ColumnDataType,
-{
+enum ColumnScanState<T> {
     /// [ColumnScanFilterInterval]'s value is lower than the lower bound of the interval
     Before,
     /// [ColumnScanFilterInterval]'s value is within the interval, in particular not passed the upper bound stored here
@@ -31,20 +28,14 @@ pub(crate) enum BoundaryType {
 
 /// Constant interval bound
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct IntervalBoundConstant<T>
-where
-    T: ColumnDataType,
-{
+pub(crate) struct IntervalBoundConstant<T> {
     /// Whether the value is included or excluded in this bound
     boundary_type: BoundaryType,
     /// The value
     value: T,
 }
 
-impl<T> IntervalBoundConstant<T>
-where
-    T: ColumnDataType,
-{
+impl<T> IntervalBoundConstant<T> {
     /// Create a new inclusive [IntervalBoundConstant].
     #[allow(dead_code)]
     pub(crate) fn inclusive(value: T) -> Self {
@@ -66,7 +57,7 @@ where
 
 impl<T> PartialOrd for IntervalBoundConstant<T>
 where
-    T: ColumnDataType,
+    T: Eq + Ord,
 {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
@@ -75,7 +66,7 @@ where
 
 impl<T> Ord for IntervalBoundConstant<T>
 where
-    T: ColumnDataType,
+    T: Eq + Ord,
 {
     fn cmp(&self, other: &Self) -> Ordering {
         match self.value.cmp(&other.value) {
@@ -122,7 +113,7 @@ impl IntervalBoundVariable {
 #[derive(Debug)]
 pub(crate) struct ColumnScanFilterInterval<'a, T>
 where
-    T: 'a + ColumnDataType,
+    T: 'a + StorageValue,
 {
     /// [ColumnScan] that provides the output values for this scan
     value_scan: &'a ColumnScanCell<'a, T>,
@@ -146,7 +137,7 @@ where
 
 impl<'a, T> ColumnScanFilterInterval<'a, T>
 where
-    T: 'a + ColumnDataType,
+    T: 'a + StorageValue,
 {
     /// Create a new [ColumnScanFilterInterval].
     #[allow(dead_code)]
@@ -239,7 +230,7 @@ where
 
 impl<'a, T> Iterator for ColumnScanFilterInterval<'a, T>
 where
-    T: 'a + ColumnDataType,
+    T: 'a + StorageValue,
 {
     type Item = T;
 
@@ -277,7 +268,7 @@ where
 
 impl<'a, T> ColumnScan for ColumnScanFilterInterval<'a, T>
 where
-    T: 'a + ColumnDataType,
+    T: 'a + StorageValue,
 {
     fn seek(&mut self, value: Self::Item) -> Option<Self::Item> {
         match &self.current_state {

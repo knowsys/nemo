@@ -4,9 +4,9 @@
 
 use std::fmt::Debug;
 
-use crate::{
-    columnar::column::{vector::ColumnVector, Column, ColumnEnum},
-    storagevalues::{ColumnDataType, RunLengthEncodable},
+use crate::columnar::{
+    column::{vector::ColumnVector, Column, ColumnEnum},
+    columntype::ColumnType,
 };
 
 use super::{rle::ColumnBuilderRle, ColumnBuilder};
@@ -38,7 +38,7 @@ impl Default for TargetMinLengthForRleElements {
 }
 
 #[derive(Debug, PartialEq)]
-enum ColumnBuilderType<T: RunLengthEncodable> {
+enum ColumnBuilderType<T: ColumnType> {
     // by default we start building an rle column to evaluate memory consumption
     // for at least ColumnImplDecisionThreshold many elements
     ColumnRle(ColumnBuilderRle<T>),
@@ -48,7 +48,7 @@ enum ColumnBuilderType<T: RunLengthEncodable> {
 
 impl<T> Default for ColumnBuilderType<T>
 where
-    T: ColumnDataType + Default,
+    T: ColumnType,
 {
     fn default() -> Self {
         Self::ColumnRle(ColumnBuilderRle::new())
@@ -60,7 +60,7 @@ where
 #[derive(Debug, Default, PartialEq)]
 pub(crate) struct ColumnBuilderAdaptive<T>
 where
-    T: ColumnDataType,
+    T: ColumnType,
 {
     builder: ColumnBuilderType<T>,
     decision_threshold: ColumnImplDecisionThreshold,
@@ -69,7 +69,7 @@ where
 
 impl<T> ColumnBuilderAdaptive<T>
 where
-    T: ColumnDataType + Default,
+    T: ColumnType,
 {
     /// Constructor.
     pub(crate) fn _new(
@@ -106,7 +106,7 @@ where
 
 impl<'a, T> ColumnBuilder<'a, T> for ColumnBuilderAdaptive<T>
 where
-    T: 'a + ColumnDataType + Default,
+    T: 'a + ColumnType,
 {
     type Col = ColumnEnum<T>;
 
@@ -147,7 +147,7 @@ where
 
 impl<A> FromIterator<A> for ColumnBuilderAdaptive<A>
 where
-    A: ColumnDataType + Default,
+    A: ColumnType,
 {
     fn from_iter<T>(iter: T) -> Self
     where
@@ -169,7 +169,7 @@ mod test {
             column::{Column, ColumnEnum},
             columnbuilder::ColumnBuilder,
         },
-        storagevalues::{Double, Float},
+        storagevalues::{double::Double, float::Float},
     };
     #[cfg(not(miri))]
     use test_log::test;
@@ -284,32 +284,32 @@ mod test {
     #[test]
     fn test_build_float_column() {
         let mut acb = ColumnBuilderAdaptive::<Float>::default();
-        acb.add(Float::from_number(1.0));
-        acb.add(Float::from_number(2.0));
-        acb.add(Float::from_number(3.0));
-        acb.add(Float::from_number(4.0));
+        acb.add(Float::new_unchecked(1.0));
+        acb.add(Float::new_unchecked(2.0));
+        acb.add(Float::new_unchecked(3.0));
+        acb.add(Float::new_unchecked(4.0));
 
         let col = acb.finalize();
         assert_eq!(col.len(), 4);
-        assert_eq!(col.get(0), Float::from_number(1.0));
-        assert_eq!(col.get(1), Float::from_number(2.0));
-        assert_eq!(col.get(2), Float::from_number(3.0));
-        assert_eq!(col.get(3), Float::from_number(4.0));
+        assert_eq!(col.get(0), Float::new_unchecked(1.0));
+        assert_eq!(col.get(1), Float::new_unchecked(2.0));
+        assert_eq!(col.get(2), Float::new_unchecked(3.0));
+        assert_eq!(col.get(3), Float::new_unchecked(4.0));
     }
 
     #[test]
     fn test_build_double_column() {
         let mut acb = ColumnBuilderAdaptive::<Double>::default();
-        acb.add(Double::from_number(1.0));
-        acb.add(Double::from_number(2.0));
-        acb.add(Double::from_number(3.0));
-        acb.add(Double::from_number(4.0));
+        acb.add(Double::new_unchecked(1.0));
+        acb.add(Double::new_unchecked(2.0));
+        acb.add(Double::new_unchecked(3.0));
+        acb.add(Double::new_unchecked(4.0));
 
         let col = acb.finalize();
         assert_eq!(col.len(), 4);
-        assert_eq!(col.get(0), Double::from_number(1.0));
-        assert_eq!(col.get(1), Double::from_number(2.0));
-        assert_eq!(col.get(2), Double::from_number(3.0));
-        assert_eq!(col.get(3), Double::from_number(4.0));
+        assert_eq!(col.get(0), Double::new_unchecked(1.0));
+        assert_eq!(col.get(1), Double::new_unchecked(2.0));
+        assert_eq!(col.get(2), Double::new_unchecked(3.0));
+        assert_eq!(col.get(3), Double::new_unchecked(4.0));
     }
 }

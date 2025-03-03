@@ -2,7 +2,7 @@
 
 use crate::{
     columnar::columnscan::ColumnScanT,
-    storagevalues::{StorageTypeName, StorageValueT},
+    storagevalues::{storagetype::StorageType, storagevalue::StorageValueT},
     tabular::triescan::{PartialTrieScan, TrieScan, TrieScanEnum},
 };
 
@@ -11,7 +11,7 @@ use crate::{
 pub(crate) struct TrieScanTrim<'a> {
     trie_scan: TrieScanEnum<'a>,
 
-    possible_types: Vec<Vec<StorageTypeName>>,
+    possible_types: Vec<Vec<StorageType>>,
     type_indices: Vec<usize>,
 
     empty: bool,
@@ -160,7 +160,7 @@ mod test {
 
     use crate::{
         management::database::Dict,
-        storagevalues::StorageValueT,
+        storagevalues::storagevalue::StorageValueT,
         tabular::{
             operations::join::test::generate_join_scan,
             triescan::{TrieScan, TrieScanEnum},

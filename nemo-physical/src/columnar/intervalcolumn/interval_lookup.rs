@@ -5,7 +5,7 @@ pub(crate) mod lookup_column;
 
 use std::fmt::Debug;
 
-use crate::{management::bytesized::ByteSized, storagevalues::StorageTypeName};
+use crate::{management::bytesized::ByteSized, storagevalues::storagetype::StorageType};
 /// Trait for looking up interval bounds in [IntervalColumn][super::super::intervalcolumn::IntervalColumn]
 pub(crate) trait IntervalLookup: Debug + Clone + ByteSized {
     /// [IntervalLookupBuilder] type for building objects that implement this trait
@@ -40,17 +40,13 @@ where
     /// associated with the successors of that value.
     ///
     /// Returns `None` if the value has no successor in this interval column.
-    pub(crate) fn interval_index(
-        &self,
-        storage_type: StorageTypeName,
-        index: usize,
-    ) -> Option<usize> {
+    pub(crate) fn interval_index(&self, storage_type: StorageType, index: usize) -> Option<usize> {
         match storage_type {
-            StorageTypeName::Id32 => self.lookup_id32.interval_index(index),
-            StorageTypeName::Id64 => self.lookup_id64.interval_index(index),
-            StorageTypeName::Int64 => self.lookup_int64.interval_index(index),
-            StorageTypeName::Float => self.lookup_float.interval_index(index),
-            StorageTypeName::Double => self.lookup_double.interval_index(index),
+            StorageType::Id32 => self.lookup_id32.interval_index(index),
+            StorageType::Id64 => self.lookup_id64.interval_index(index),
+            StorageType::Int64 => self.lookup_int64.interval_index(index),
+            StorageType::Float => self.lookup_float.interval_index(index),
+            StorageType::Double => self.lookup_double.interval_index(index),
         }
     }
 }
@@ -114,23 +110,23 @@ impl<LookupMethod> IntervalLookupBuilderT<LookupMethod>
 where
     LookupMethod: IntervalLookup,
 {
-    pub(crate) fn add_interval(&mut self, storage_type: StorageTypeName, interval_index: usize) {
+    pub(crate) fn add_interval(&mut self, storage_type: StorageType, interval_index: usize) {
         match storage_type {
-            StorageTypeName::Id32 => self.builder_id32.add_interval(interval_index),
-            StorageTypeName::Id64 => self.builder_id64.add_interval(interval_index),
-            StorageTypeName::Int64 => self.builder_int64.add_interval(interval_index),
-            StorageTypeName::Float => self.builder_float.add_interval(interval_index),
-            StorageTypeName::Double => self.builder_double.add_interval(interval_index),
+            StorageType::Id32 => self.builder_id32.add_interval(interval_index),
+            StorageType::Id64 => self.builder_id64.add_interval(interval_index),
+            StorageType::Int64 => self.builder_int64.add_interval(interval_index),
+            StorageType::Float => self.builder_float.add_interval(interval_index),
+            StorageType::Double => self.builder_double.add_interval(interval_index),
         }
     }
 
-    pub(crate) fn add_empty(&mut self, storage_type: StorageTypeName) {
+    pub(crate) fn add_empty(&mut self, storage_type: StorageType) {
         match storage_type {
-            StorageTypeName::Id32 => self.builder_id32.add_empty(),
-            StorageTypeName::Id64 => self.builder_id64.add_empty(),
-            StorageTypeName::Int64 => self.builder_int64.add_empty(),
-            StorageTypeName::Float => self.builder_float.add_empty(),
-            StorageTypeName::Double => self.builder_double.add_empty(),
+            StorageType::Id32 => self.builder_id32.add_empty(),
+            StorageType::Id64 => self.builder_id64.add_empty(),
+            StorageType::Int64 => self.builder_int64.add_empty(),
+            StorageType::Float => self.builder_float.add_empty(),
+            StorageType::Double => self.builder_double.add_empty(),
         }
     }
 

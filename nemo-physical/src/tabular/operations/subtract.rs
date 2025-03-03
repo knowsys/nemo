@@ -11,7 +11,11 @@ use crate::{
         operations::subtract::ColumnScanSubtract,
     },
     management::database::Dict,
-    storagevalues::{storage_type_name::StorageTypeBitSet, Double, Float, StorageTypeName},
+    storagevalues::{
+        double::Double,
+        float::Float,
+        storagetype::{StorageType, StorageTypeBitSet},
+    },
     tabular::triescan::{PartialTrieScan, TrieScanEnum},
 };
 
@@ -207,7 +211,7 @@ impl<'a> PartialTrieScan<'a> for TrieScanSubtract<'a> {
         self.trie_main.up();
     }
 
-    fn down(&mut self, next_type: StorageTypeName) {
+    fn down(&mut self, next_type: StorageType) {
         let next_layer = self.current_layer().map_or(0, |layer| layer + 1);
 
         debug_assert!(next_layer < self.arity());
@@ -253,7 +257,7 @@ mod test {
 
     use crate::{
         dictionary::meta_dv_dict::MetaDvDictionary,
-        storagevalues::{StorageTypeName, StorageValueT},
+        storagevalues::{storagetype::StorageType, storagevalue::StorageValueT},
         tabular::{
             operations::{OperationGenerator, OperationTableGenerator},
             triescan::TrieScanEnum,
@@ -290,7 +294,7 @@ mod test {
 
         trie_dfs(
             &mut subtract_scan,
-            &[StorageTypeName::Id32],
+            &[StorageType::Id32],
             &[
                 StorageValueT::Id32(1), // x = 8
                 StorageValueT::Id32(3),
@@ -350,7 +354,7 @@ mod test {
 
         trie_dfs(
             &mut subtract_scan,
-            &[StorageTypeName::Id32],
+            &[StorageType::Id32],
             &[
                 StorageValueT::Id32(4), // x = 4
                 StorageValueT::Id32(1),
@@ -431,7 +435,7 @@ mod test {
 
         trie_dfs(
             &mut subtract_scan,
-            &[StorageTypeName::Id32],
+            &[StorageType::Id32],
             &[
                 StorageValueT::Id32(2), // x = 2
                 StorageValueT::Id32(0), // y = 0
@@ -479,7 +483,7 @@ mod test {
 
         trie_dfs(
             &mut subtract_scan,
-            &[StorageTypeName::Id32],
+            &[StorageType::Id32],
             &[
                 StorageValueT::Id32(4), // x = 4
                 StorageValueT::Id32(2), // y = 2
@@ -516,7 +520,7 @@ mod test {
 
         trie_dfs(
             &mut subtract_scan,
-            &[StorageTypeName::Id32],
+            &[StorageType::Id32],
             &[
                 StorageValueT::Id32(4), // x = 4
                 StorageValueT::Id32(0), // y = 0

@@ -1,6 +1,6 @@
 //! Computes the sum of all input values.
 
-use crate::storagevalues::{Double, Float, StorageValueT};
+use crate::storagevalues::{double::Double, float::Float, storagevalue::StorageValueT};
 
 use super::processor::{AggregateGroupProcessor, AggregateProcessor};
 use num::{CheckedAdd, Zero};
@@ -96,7 +96,7 @@ impl AggregateGroupProcessor for SumAggregateGroupProcessor {
             // Lossy conversion
             if let Some(current_sum_i64) = self.current_sum_i64 {
                 overall_sum = overall_sum
-                    .checked_add(&Double::from_number(
+                    .checked_add(&Double::new_unchecked(
                         Into::<i64>::into(current_sum_i64) as f64
                     ))
                     .expect("overflow in sum aggregate operation");
@@ -104,7 +104,7 @@ impl AggregateGroupProcessor for SumAggregateGroupProcessor {
 
             if let Some(current_sum_f32) = self.current_sum_f32 {
                 overall_sum = overall_sum
-                    .checked_add(&Double::from_number(
+                    .checked_add(&Double::new_unchecked(
                         Into::<f32>::into(current_sum_f32) as f64
                     ))
                     .expect("overflow in sum aggregate operation");

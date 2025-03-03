@@ -1,34 +1,36 @@
 //! This module defines [ColumnScanPrune].
 
-use crate::columnar::columnscan::{ColumnScan, ColumnScanCell};
-use crate::storagevalues::{ColumnDataType, StorageTypeName};
-use crate::tabular::operations::prune::{SharedTrieScanPruneState, TrieScanPruneState};
-use std::fmt::Debug;
 use std::ops::Range;
+
+use crate::{
+    columnar::columnscan::{ColumnScan, ColumnScanCell},
+    storagevalues::{storagetype::StorageType, storagevalue::StorageValue},
+    tabular::operations::prune::{SharedTrieScanPruneState, TrieScanPruneState},
+};
 
 /// Forwards calls to this column though it's [SharedTrieScanPruneState] to the input trie.
 /// See `TrieScanPrune` for more information.
 #[derive(Debug)]
 pub(crate) struct ColumnScanPrune<'a, T>
 where
-    T: 'a + ColumnDataType,
+    T: 'a + StorageValue,
 {
     state: SharedTrieScanPruneState<'a>,
     /// Index this column scan corresponds to in the input trie
     column_scan_index: usize,
-    column_scan_type: StorageTypeName,
+    column_scan_type: StorageType,
     reference_scan: &'a ColumnScanCell<'a, T>,
 }
 
 impl<'a, T> ColumnScanPrune<'a, T>
 where
-    T: 'a + ColumnDataType,
+    T: 'a + StorageValue,
 {
     /// Constructs a new column scan. This should not be called directly, but only by `TrieScanPrune`
     pub(crate) fn new(
         state: SharedTrieScanPruneState<'a>,
         column_scan_index: usize,
-        column_scan_type: StorageTypeName,
+        column_scan_type: StorageType,
         reference_scan: &'a ColumnScanCell<'a, T>,
     ) -> Self {
         Self {
@@ -48,7 +50,7 @@ where
 
 impl<'a, T> Iterator for ColumnScanPrune<'a, T>
 where
-    T: 'a + ColumnDataType,
+    T: 'a + StorageValue,
 {
     type Item = T;
 
@@ -70,7 +72,7 @@ where
 
 impl<'a, T> ColumnScan for ColumnScanPrune<'a, T>
 where
-    T: 'a + ColumnDataType,
+    T: 'a + StorageValue,
 {
     fn seek(&mut self, minimum_value: T) -> Option<T> {
         let current_layer = self.column_scan_index;

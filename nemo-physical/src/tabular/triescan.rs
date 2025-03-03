@@ -7,7 +7,10 @@ use delegate::delegate;
 
 use crate::{
     columnar::columnscan::ColumnScanT,
-    storagevalues::{storage_type_name::StorageTypeBitSet, StorageTypeName, StorageValueT},
+    storagevalues::{
+        storagetype::{StorageType, StorageTypeBitSet},
+        storagevalue::StorageValueT,
+    },
 };
 
 use super::{
@@ -34,7 +37,7 @@ pub(crate) trait PartialTrieScan<'a>: Debug {
     /// # Panics
     /// May panic if this method is called while being on the lowest layer
     /// or if this method is called while the iterator of the current layer does not point to any element.
-    fn down(&mut self, storage_type: StorageTypeName);
+    fn down(&mut self, storage_type: StorageType);
 
     /// Return a list of possible types for a given layer.
     fn possible_types(&self, layer: usize) -> StorageTypeBitSet;
@@ -96,7 +99,7 @@ impl<'a> PartialTrieScan<'a> for TrieScanEnum<'a> {
             Self::Union(scan) => scan,
         } {
             fn up(&mut self);
-            fn down(&mut self, storage_type: StorageTypeName);
+            fn down(&mut self, storage_type: StorageType);
             fn possible_types(&self, layer: usize) -> StorageTypeBitSet;
             fn arity(&self) -> usize;
             fn current_layer(&self) -> Option<usize>;

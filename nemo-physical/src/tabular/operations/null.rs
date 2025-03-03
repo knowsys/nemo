@@ -10,7 +10,10 @@ use crate::{
     datavalues::ValueDomain,
     dictionary::DvDict,
     management::database::Dict,
-    storagevalues::{storage_type_name::StorageTypeBitSet, StorageTypeName, StorageValueT},
+    storagevalues::{
+        storagetype::{StorageType, StorageTypeBitSet},
+        storagevalue::StorageValueT,
+    },
     tabular::triescan::{PartialTrieScan, TrieScanEnum},
 };
 
@@ -182,14 +185,14 @@ impl<'a> PartialTrieScan<'a> for TrieScanNull<'a> {
             .checked_sub(1);
     }
 
-    fn down(&mut self, next_type: StorageTypeName) {
+    fn down(&mut self, next_type: StorageType) {
         let next_layer = self.current_layer.map_or(0, |layer| layer + 1);
 
         debug_assert!(next_layer < self.arity());
 
         if next_layer < self.trie_scan.arity() {
             self.trie_scan.down(next_type);
-        } else if next_type == StorageTypeName::Id32 {
+        } else if next_type == StorageType::Id32 {
             // Generation of the new null always happens when entering the Id32 type.
             // When the resulting null-id doesn't fit in 32bit, we write it in the Id64 column
 
@@ -210,10 +213,10 @@ impl<'a> PartialTrieScan<'a> for TrieScanNull<'a> {
 
             self.column_scans[next_layer]
                 .get_mut()
-                .constant_set_none(StorageTypeName::Id32);
+                .constant_set_none(StorageType::Id32);
             self.column_scans[next_layer]
                 .get_mut()
-                .constant_set_none(StorageTypeName::Id64);
+                .constant_set_none(StorageType::Id64);
 
             self.column_scans[next_layer]
                 .get_mut()
@@ -253,7 +256,7 @@ mod test {
         datavalues::{AnyDataValue, DataValue, ValueDomain},
         dictionary::DvDict,
         management::database::Dict,
-        storagevalues::{into_datavalue::IntoDataValue, StorageValueT},
+        storagevalues::storagevalue::StorageValueT,
         tabular::{
             operations::{OperationGenerator, OperationTableGenerator},
             rowscan::RowScan,
@@ -305,7 +308,9 @@ mod test {
         let result = RowScan::new(null_scan, 0)
             .map(|row| {
                 row.into_iter()
-                    .map(|value| value.into_datavalue(&dictionary.borrow()).unwrap())
+                    .map(|value| {
+                        AnyDataValue::new_from_storage_value_t(value, &dictionary.borrow()).unwrap()
+                    })
                     .collect::<Vec<_>>()
             })
             .collect::<Vec<_>>();
@@ -357,7 +362,9 @@ mod test {
         let result = RowScan::new(null_scan, 0)
             .map(|row| {
                 row.into_iter()
-                    .map(|value| value.into_datavalue(&dictionary.borrow()).unwrap())
+                    .map(|value| {
+                        AnyDataValue::new_from_storage_value_t(value, &dictionary.borrow()).unwrap()
+                    })
                     .collect::<Vec<_>>()
             })
             .collect::<Vec<_>>();

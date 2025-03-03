@@ -2,7 +2,7 @@
 
 use crate::{
     datavalues::{AnyDataValue, DataValue},
-    storagevalues::StorageTypeName,
+    storagevalues::storagetype::StorageType,
 };
 
 use super::{FunctionTypePropagation, UnaryFunction};
@@ -24,9 +24,7 @@ impl UnaryFunction for CheckIsInteger {
     fn type_propagation(&self) -> FunctionTypePropagation {
         // TODO: This is playing it save, one should probably give booleans a special status
         FunctionTypePropagation::KnownOutput(
-            StorageTypeName::Id32
-                .bitset()
-                .union(StorageTypeName::Id64.bitset()),
+            StorageType::Id32.bitset().union(StorageType::Id64.bitset()),
         )
     }
 }
@@ -48,9 +46,7 @@ impl UnaryFunction for CheckIsFloat {
     fn type_propagation(&self) -> FunctionTypePropagation {
         // TODO: This is playing it save, one should probably give booleans a special status
         FunctionTypePropagation::KnownOutput(
-            StorageTypeName::Id32
-                .bitset()
-                .union(StorageTypeName::Id64.bitset()),
+            StorageType::Id32.bitset().union(StorageType::Id64.bitset()),
         )
     }
 }
@@ -72,9 +68,7 @@ impl UnaryFunction for CheckIsDouble {
     fn type_propagation(&self) -> FunctionTypePropagation {
         // TODO: This is playing it save, one should probably give booleans a special status
         FunctionTypePropagation::KnownOutput(
-            StorageTypeName::Id32
-                .bitset()
-                .union(StorageTypeName::Id64.bitset()),
+            StorageType::Id32.bitset().union(StorageType::Id64.bitset()),
         )
     }
 }
@@ -99,9 +93,7 @@ impl UnaryFunction for CheckIsNumeric {
     fn type_propagation(&self) -> FunctionTypePropagation {
         // TODO: This is playing it save, one should probably give booleans a special status
         FunctionTypePropagation::KnownOutput(
-            StorageTypeName::Id32
-                .bitset()
-                .union(StorageTypeName::Id64.bitset()),
+            StorageType::Id32.bitset().union(StorageType::Id64.bitset()),
         )
     }
 }
@@ -123,9 +115,7 @@ impl UnaryFunction for CheckIsNull {
     fn type_propagation(&self) -> FunctionTypePropagation {
         // TODO: This is playing it save, one should probably give booleans a special status
         FunctionTypePropagation::KnownOutput(
-            StorageTypeName::Id32
-                .bitset()
-                .union(StorageTypeName::Id64.bitset()),
+            StorageType::Id32.bitset().union(StorageType::Id64.bitset()),
         )
     }
 }
@@ -147,9 +137,7 @@ impl UnaryFunction for CheckIsIri {
     fn type_propagation(&self) -> FunctionTypePropagation {
         // TODO: This is playing it save, one should probably give booleans a special status
         FunctionTypePropagation::KnownOutput(
-            StorageTypeName::Id32
-                .bitset()
-                .union(StorageTypeName::Id64.bitset()),
+            StorageType::Id32.bitset().union(StorageType::Id64.bitset()),
         )
     }
 }
@@ -171,9 +159,7 @@ impl UnaryFunction for CheckIsString {
     fn type_propagation(&self) -> FunctionTypePropagation {
         // TODO: This is playing it save, one should probably give booleans a special status
         FunctionTypePropagation::KnownOutput(
-            StorageTypeName::Id32
-                .bitset()
-                .union(StorageTypeName::Id64.bitset()),
+            StorageType::Id32.bitset().union(StorageType::Id64.bitset()),
         )
     }
 }

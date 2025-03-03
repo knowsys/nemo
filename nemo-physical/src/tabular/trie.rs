@@ -16,8 +16,8 @@ use crate::{
     datasources::tuple_writer::TupleWriter,
     management::bytesized::ByteSized,
     storagevalues::{
-        storage_type_name::{StorageTypeBitSet, STORAFE_TYPES},
-        StorageTypeName, StorageValueT,
+        storagetype::{StorageType, StorageTypeBitSet, STORAGE_TYPES},
+        storagevalue::StorageValueT,
     },
     tabular::{buffer::tuple_buffer::TupleBuffer, rowscan::RowScan},
     util::bitset::BitSet,
@@ -69,8 +69,8 @@ impl Trie {
         self.num_rows() == 0
     }
 
-    /// Returns whether a column of a particular [StorageTypeName] contains no data values.
-    pub(crate) fn is_empty_layer(&self, layer: usize, storage_type: StorageTypeName) -> bool {
+    /// Returns whether a column of a particular [StorageType] contains no data values.
+    pub(crate) fn is_empty_layer(&self, layer: usize, storage_type: StorageType) -> bool {
         self.columns[layer].is_empty_typed(storage_type)
     }
 
@@ -105,7 +105,7 @@ impl Trie {
         let mut trie_scan = self.partial_iterator();
 
         for value in row.iter() {
-            trie_scan.down(value.get_type());
+            trie_scan.down(value.storage_type());
             let column_scan = unsafe {
                 &mut *trie_scan
                     .current_scan()
@@ -158,10 +158,10 @@ impl Trie {
             let last_column = column_index == buffer.column_number() - 1;
 
             let mut current_tuple_intervals = Vec::<usize>::new();
-            let mut current_tuple_types = Vec::<StorageTypeName>::new();
+            let mut current_tuple_types = Vec::<StorageType>::new();
 
             let mut predecessor_index = 0;
-            let mut current_type = StorageTypeName::Id32; // Initial value chosen arbitratily
+            let mut current_type = StorageType::Id32; // Initial value chosen arbitratily
 
             for (tuple_index, value) in buffer.get_column(column_index).enumerate() {
                 if last_tuple_intervals.get(predecessor_index) == Some(&tuple_index) {
@@ -171,7 +171,7 @@ impl Trie {
                     predecessor_index += 1;
                 }
 
-                let value_type = value.get_type();
+                let value_type = value.storage_type();
                 let new_value = current_builder.add_value(value);
 
                 if new_value && tuple_index > 0 && !last_column {
@@ -244,12 +244,12 @@ impl Trie {
             change: _,
         }) = StreamingIterator::next(&mut rowscan)
         {
-            let mut last_type: Option<StorageTypeName> = None;
+            let mut last_type: Option<StorageType> = None;
             for &current_value in first_row {
                 let mut new_builder =
                     IntervalColumnTBuilderTriescan::<IntervalLookupMethod>::new(last_type);
 
-                last_type = Some(current_value.get_type());
+                last_type = Some(current_value.storage_type());
                 new_builder.add_value(current_value);
 
                 intervalcolumn_builders.push(new_builder);
@@ -263,7 +263,7 @@ impl Trie {
             change: changed_layers,
         }) = StreamingIterator::next(&mut rowscan)
         {
-            let mut last_type = StorageTypeName::Id32;
+            let mut last_type = StorageType::Id32;
 
             for ((layer, current_builder), current_value) in intervalcolumn_builders
                 .iter_mut()
@@ -271,7 +271,7 @@ impl Trie {
                 .zip(current_row)
                 .skip(*changed_layers)
             {
-                let current_type = current_value.get_type();
+                let current_type = current_value.storage_type();
 
                 if layer != *changed_layers {
                     current_builder.finish_interval(last_type);
@@ -316,13 +316,13 @@ impl Trie {
         if let Some(first_layer) = trie_scan.advance_on_layer(num_columns - 1) {
             debug_assert!(first_layer == 0);
 
-            let mut last_type: Option<StorageTypeName> = None;
+            let mut last_type: Option<StorageType> = None;
             for layer in 0..num_columns {
                 let mut new_builder =
                     IntervalColumnTBuilderTriescan::<IntervalLookupMethod>::new(last_type);
                 let current_value = trie_scan.current_value(layer);
 
-                last_type = Some(current_value.get_type());
+                last_type = Some(current_value.storage_type());
                 new_builder.add_value(current_value);
 
                 intervalcolumn_builders.push(new_builder);
@@ -332,7 +332,7 @@ impl Trie {
         }
 
         while let Some(changed_layer) = trie_scan.advance_on_layer(num_columns - 1) {
-            let mut last_type = StorageTypeName::Id32;
+            let mut last_type = StorageType::Id32;
 
             for (layer, current_builder) in intervalcolumn_builders
                 .iter_mut()
@@ -340,7 +340,7 @@ impl Trie {
                 .skip(changed_layer)
             {
                 let current_value = trie_scan.current_value(layer);
-                let current_type = current_value.get_type();
+                let current_type = current_value.storage_type();
 
                 if layer != changed_layer {
                     current_builder.finish_interval(last_type);
@@ -437,12 +437,12 @@ impl Trie {
         }) = StreamingIterator::next(&mut rowscan)
         {
             if keep_original {
-                let mut last_type: Option<StorageTypeName> = None;
+                let mut last_type: Option<StorageType> = None;
                 for &current_value in first_row {
                     let mut new_builder =
                         IntervalColumnTBuilderTriescan::<IntervalLookupMethod>::new(last_type);
 
-                    last_type = Some(current_value.get_type());
+                    last_type = Some(current_value.storage_type());
                     new_builder.add_value(current_value);
 
                     intervalcolumn_builders.push(new_builder);
@@ -466,7 +466,7 @@ impl Trie {
             change: changed_layers,
         }) = StreamingIterator::next(&mut rowscan)
         {
-            let mut last_type = StorageTypeName::Id32;
+            let mut last_type = StorageType::Id32;
 
             for ((layer, current_builder), current_value) in intervalcolumn_builders
                 .iter_mut()
@@ -474,7 +474,7 @@ impl Trie {
                 .zip(current_row)
                 .skip(*changed_layers)
             {
-                let current_type = current_value.get_type();
+                let current_type = current_value.storage_type();
 
                 if layer != *changed_layers {
                     current_builder.finish_interval(last_type);
@@ -530,8 +530,8 @@ pub(crate) struct TrieScanGeneric<'a> {
     /// Underlying [Trie] over which we are iterating
     trie: &'a Trie,
 
-    /// Path of [StorageTypeName] indicating the the types of the current (partial) row
-    path_types: Vec<StorageTypeName>,
+    /// Path of [StorageType] indicating the the types of the current (partial) row
+    path_types: Vec<StorageType>,
 
     /// [ColumnScanT] for each layer in the [PartialTrieScan]
     column_scans: Vec<UnsafeCell<ColumnScanT<'a>>>,
@@ -558,7 +558,7 @@ impl<'a> PartialTrieScan<'a> for TrieScanGeneric<'a> {
         self.path_types.pop();
     }
 
-    fn down(&mut self, next_type: StorageTypeName) {
+    fn down(&mut self, next_type: StorageType) {
         match self.path_types.last() {
             None => {
                 self.column_scans[0].get_mut().reset(next_type);
@@ -598,7 +598,7 @@ impl<'a> PartialTrieScan<'a> for TrieScanGeneric<'a> {
     fn possible_types(&self, layer: usize) -> StorageTypeBitSet {
         let mut result = BitSet::default();
 
-        for (index, storage_type) in STORAFE_TYPES.iter().enumerate() {
+        for (index, storage_type) in STORAGE_TYPES.iter().enumerate() {
             if !self.trie.is_empty_layer(layer, *storage_type) {
                 result.set(index, true);
             }
@@ -615,7 +615,7 @@ impl<'a> PartialTrieScan<'a> for TrieScanGeneric<'a> {
 #[cfg(test)]
 mod test {
     use crate::{
-        storagevalues::{Float, StorageTypeName, StorageValueT},
+        storagevalues::{float::Float, storagetype::StorageType, storagevalue::StorageValueT},
         tabular::triescan::{PartialTrieScan, TrieScanEnum},
     };
 
@@ -623,7 +623,7 @@ mod test {
 
     fn current_layer_next(
         scan: &mut TrieScanGeneric,
-        storage_type: StorageTypeName,
+        storage_type: StorageType,
     ) -> Option<StorageValueT> {
         let current_layer_scan = unsafe { &mut *scan.current_scan()?.get() };
         current_layer_scan.next(storage_type)
@@ -662,61 +662,61 @@ mod test {
         let trie = Trie::from_rows(table);
         let mut scan = trie.partial_iterator();
 
-        scan.down(StorageTypeName::Id32);
+        scan.down(StorageType::Id32);
         assert_eq!(
-            current_layer_next(&mut scan, StorageTypeName::Id32),
+            current_layer_next(&mut scan, StorageType::Id32),
             Some(StorageValueT::Id32(0))
         );
-        scan.down(StorageTypeName::Id32);
-        assert_eq!(current_layer_next(&mut scan, StorageTypeName::Id32), None);
+        scan.down(StorageType::Id32);
+        assert_eq!(current_layer_next(&mut scan, StorageType::Id32), None);
         scan.up();
-        scan.down(StorageTypeName::Id64);
-        assert_eq!(current_layer_next(&mut scan, StorageTypeName::Id32), None);
+        scan.down(StorageType::Id64);
+        assert_eq!(current_layer_next(&mut scan, StorageType::Id32), None);
         scan.up();
-        scan.down(StorageTypeName::Int64);
+        scan.down(StorageType::Int64);
         assert_eq!(
-            current_layer_next(&mut scan, StorageTypeName::Int64),
+            current_layer_next(&mut scan, StorageType::Int64),
             Some(StorageValueT::Int64(-2))
         );
-        scan.down(StorageTypeName::Float);
+        scan.down(StorageType::Float);
         assert_eq!(
-            current_layer_next(&mut scan, StorageTypeName::Float),
+            current_layer_next(&mut scan, StorageType::Float),
             Some(StorageValueT::Float(Float::new(1.2).unwrap()))
         );
         scan.up();
         assert_eq!(
-            current_layer_next(&mut scan, StorageTypeName::Int64),
+            current_layer_next(&mut scan, StorageType::Int64),
             Some(StorageValueT::Int64(-1))
         );
-        scan.down(StorageTypeName::Id32);
+        scan.down(StorageType::Id32);
         assert_eq!(
-            current_layer_next(&mut scan, StorageTypeName::Id32),
+            current_layer_next(&mut scan, StorageType::Id32),
             Some(StorageValueT::Id32(20))
         );
         assert_eq!(
-            current_layer_next(&mut scan, StorageTypeName::Id32),
+            current_layer_next(&mut scan, StorageType::Id32),
             Some(StorageValueT::Id32(32))
         );
         scan.up();
         scan.up();
         scan.up();
-        scan.down(StorageTypeName::Int64);
+        scan.down(StorageType::Int64);
         assert_eq!(
-            current_layer_next(&mut scan, StorageTypeName::Int64),
+            current_layer_next(&mut scan, StorageType::Int64),
             Some(StorageValueT::Int64(6))
         );
-        scan.down(StorageTypeName::Id32);
+        scan.down(StorageType::Id32);
         assert_eq!(
-            current_layer_next(&mut scan, StorageTypeName::Id32),
+            current_layer_next(&mut scan, StorageType::Id32),
             Some(StorageValueT::Id32(100))
         );
-        scan.down(StorageTypeName::Id32);
+        scan.down(StorageType::Id32);
         assert_eq!(
-            current_layer_next(&mut scan, StorageTypeName::Id32),
+            current_layer_next(&mut scan, StorageType::Id32),
             Some(StorageValueT::Id32(101))
         );
         assert_eq!(
-            current_layer_next(&mut scan, StorageTypeName::Id32),
+            current_layer_next(&mut scan, StorageType::Id32),
             Some(StorageValueT::Id32(102))
         );
     }
@@ -734,27 +734,27 @@ mod test {
         let trie = Trie::from_rows(rows);
         let mut scan = trie.partial_iterator();
 
-        scan.down(StorageTypeName::Id32);
+        scan.down(StorageType::Id32);
         assert_eq!(
-            current_layer_next(&mut scan, StorageTypeName::Id32),
+            current_layer_next(&mut scan, StorageType::Id32),
             Some(StorageValueT::Id32(0))
         );
         scan.up();
-        scan.down(StorageTypeName::Int64);
+        scan.down(StorageType::Int64);
         assert_eq!(
-            current_layer_next(&mut scan, StorageTypeName::Int64),
+            current_layer_next(&mut scan, StorageType::Int64),
             Some(StorageValueT::Int64(0))
         );
         assert_eq!(
-            current_layer_next(&mut scan, StorageTypeName::Int64),
+            current_layer_next(&mut scan, StorageType::Int64),
             Some(StorageValueT::Int64(1))
         );
         assert_eq!(
-            current_layer_next(&mut scan, StorageTypeName::Int64),
+            current_layer_next(&mut scan, StorageType::Int64),
             Some(StorageValueT::Int64(2))
         );
         assert_eq!(
-            current_layer_next(&mut scan, StorageTypeName::Int64),
+            current_layer_next(&mut scan, StorageType::Int64),
             Some(StorageValueT::Int64(3))
         );
     }

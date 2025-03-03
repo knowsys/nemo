@@ -3,9 +3,12 @@
 use std::{fmt::Debug, mem::size_of, num::NonZeroUsize, ops::Range};
 
 use crate::{
-    columnar::{columnbuilder::rle::RleElement, columnscan::ColumnScan},
+    columnar::{
+        columnbuilder::rle::RleElement,
+        columnscan::ColumnScan,
+        columntype::{rle::RunLengthEncodable, ColumnType},
+    },
     management::bytesized::ByteSized,
-    storagevalues::{ColumnDataType, RunLengthEncodable},
 };
 
 use super::Column;
@@ -20,7 +23,7 @@ pub(crate) struct ColumnRle<T: RunLengthEncodable> {
 
 impl<T> ColumnRle<T>
 where
-    T: ColumnDataType + Default,
+    T: ColumnType,
 {
     /// Constructs a new ColumnRle from a vector of RleElements.
     pub(crate) fn from_rle_elements(elements: Vec<RleElement<T>>) -> ColumnRle<T> {
@@ -66,7 +69,7 @@ where
 
 impl<T> ColumnRle<T>
 where
-    T: ColumnDataType,
+    T: ColumnType,
 {
     fn get_element_and_increment_index_from_global_index(&self, index: usize) -> (usize, usize) {
         let element_index = if index == 0 {
@@ -104,7 +107,7 @@ where
 
 impl<'a, T> Column<'a, T> for ColumnRle<T>
 where
-    T: 'a + ColumnDataType,
+    T: 'a + ColumnType,
 {
     type Scan = ColumnScanRle<'a, T>;
 
@@ -156,7 +159,7 @@ pub(crate) struct ColumnScanRle<'a, T: RunLengthEncodable> {
 
 impl<'a, T> ColumnScanRle<'a, T>
 where
-    T: ColumnDataType,
+    T: ColumnType,
 {
     /// Constructor for ColumnScanRle
     pub(crate) fn new(column: &'a ColumnRle<T>) -> ColumnScanRle<'a, T> {
@@ -218,7 +221,7 @@ where
 
 impl<T> Iterator for ColumnScanRle<'_, T>
 where
-    T: ColumnDataType,
+    T: ColumnType,
 {
     type Item = T;
 
@@ -257,7 +260,7 @@ where
 
 impl<T> ColumnScan for ColumnScanRle<'_, T>
 where
-    T: ColumnDataType,
+    T: ColumnType,
 {
     /// Find the next value that is at least as large as the given value,
     /// advance the iterator to this position, and return the value.
@@ -416,13 +419,15 @@ where
 
 #[cfg(test)]
 mod test {
-    use crate::columnar::column::Column;
-    use crate::columnar::columnscan::ColumnScan;
-    use crate::storagevalues::{Double, Float, RunLengthEncodable};
     use quickcheck_macros::quickcheck;
     use std::num::NonZeroUsize;
     #[cfg(not(miri))]
     use test_log::test;
+
+    use crate::{
+        columnar::{column::Column, columnscan::ColumnScan, columntype::rle::RunLengthEncodable},
+        storagevalues::{double::Double, float::Float},
+    };
 
     use super::ColumnRle;
 

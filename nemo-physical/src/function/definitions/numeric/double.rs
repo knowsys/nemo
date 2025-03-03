@@ -4,7 +4,7 @@ use num::{traits::CheckedNeg, CheckedAdd, CheckedDiv, CheckedMul, CheckedSub};
 
 use crate::{
     datavalues::{AnyDataValue, DoubleDataValue},
-    storagevalues::Double,
+    storagevalues::double::Double,
 };
 
 use super::traits::{CheckedPow, CheckedSquareRoot};
@@ -187,7 +187,7 @@ pub(super) fn numeric_floor_double(parameter: Double) -> Option<AnyDataValue> {
 /// Returns `None` if the result (or a intermediate result) is not representable as a 64-bit float.
 /// Returns the floating point number zero if no parameters are given.
 pub(super) fn numeric_sum_double(parameters: &[Double]) -> Option<AnyDataValue> {
-    let mut sum = Double::from_number(0.0);
+    let mut sum = Double::new_unchecked(0.0);
 
     for parameter in parameters {
         sum = sum.checked_add(parameter)?;
@@ -201,7 +201,7 @@ pub(super) fn numeric_sum_double(parameters: &[Double]) -> Option<AnyDataValue> 
 /// Returns `None` if the result (or a intermediate result) is not representable as a 64-bit float.
 /// Returns the floating point number one if no parameters are given.
 pub(super) fn numeric_product_double(parameters: &[Double]) -> Option<AnyDataValue> {
-    let mut product = Double::from_number(1.0);
+    let mut product = Double::new_unchecked(1.0);
 
     for parameter in parameters {
         product = product.checked_mul(parameter)?;
@@ -237,13 +237,13 @@ pub(super) fn numeric_tnorm_lukasiewicz_double(parameters: &[Double]) -> Option<
         return None;
     }
 
-    let mut sum = Double::from_number(0.0);
+    let mut sum = Double::new_unchecked(0.0);
 
     for parameter in parameters {
         sum = sum.checked_add(parameter)?;
     }
 
-    let result = Double::from_number(0.0)
+    let result = Double::new_unchecked(0.0)
         .max(sum.checked_sub(&Double::try_from(parameters.len() - 1).ok()?)?);
 
     some_datavalue_from_double(result)

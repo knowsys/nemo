@@ -11,7 +11,11 @@ use crate::{
         operations::join::ColumnScanJoin,
     },
     management::database::Dict,
-    storagevalues::{storage_type_name::StorageTypeBitSet, Double, Float, StorageTypeName},
+    storagevalues::{
+        double::Double,
+        float::Float,
+        storagetype::{StorageType, StorageTypeBitSet},
+    },
     tabular::{
         operations::OperationColumnMarker,
         triescan::{PartialTrieScan, TrieScanEnum},
@@ -206,7 +210,7 @@ pub(crate) struct TrieScanJoin<'a> {
     /// Current layer of this [PartialTrieScan]
     current_layer: Option<usize>,
 
-    /// For each output layer contains the possible [StorageTypeName]
+    /// For each output layer contains the possible [StorageType]
     possible_types: Vec<StorageTypeBitSet>,
 
     /// For each layer in the resulting trie, contains a [ColumnScanT],
@@ -238,7 +242,7 @@ impl<'a> PartialTrieScan<'a> for TrieScanJoin<'a> {
         self.current_layer = previous_layer.checked_sub(1);
     }
 
-    fn down(&mut self, next_type: StorageTypeName) {
+    fn down(&mut self, next_type: StorageType) {
         let next_layer = self.current_layer.map_or(0, |layer| layer + 1);
         debug_assert!(next_layer < self.arity());
 
@@ -277,7 +281,7 @@ pub(crate) mod test {
     use crate::{
         dictionary::meta_dv_dict::MetaDvDictionary,
         management::database::Dict,
-        storagevalues::{StorageTypeName, StorageValueT},
+        storagevalues::{storagetype::StorageType, storagevalue::StorageValueT},
         tabular::{
             operations::{OperationGenerator, OperationTable, OperationTableGenerator},
             triescan::TrieScanEnum,
@@ -337,7 +341,7 @@ pub(crate) mod test {
 
         trie_dfs(
             &mut join_scan,
-            &[StorageTypeName::Id32],
+            &[StorageType::Id32],
             &[
                 StorageValueT::Id32(1),
                 StorageValueT::Id32(2),
@@ -383,7 +387,7 @@ pub(crate) mod test {
 
         trie_dfs(
             &mut join_scan,
-            &[StorageTypeName::Id32],
+            &[StorageType::Id32],
             &[
                 StorageValueT::Id32(1),
                 StorageValueT::Id32(2),
@@ -446,7 +450,7 @@ pub(crate) mod test {
 
         trie_dfs(
             &mut join_scan,
-            &[StorageTypeName::Id32],
+            &[StorageType::Id32],
             &[
                 StorageValueT::Id32(1), // x = 1
                 StorageValueT::Id32(2),
@@ -553,7 +557,7 @@ pub(crate) mod test {
 
         trie_dfs(
             &mut join_scan,
-            &[StorageTypeName::Id32],
+            &[StorageType::Id32],
             &[
                 StorageValueT::Id32(1), // x = 1
                 StorageValueT::Id32(4), // y = 4
@@ -657,7 +661,7 @@ pub(crate) mod test {
 
         trie_dfs(
             &mut join_scan,
-            &[StorageTypeName::Id32],
+            &[StorageType::Id32],
             &[
                 StorageValueT::Id32(2), // x = 1
                 StorageValueT::Id32(2), // y = 2

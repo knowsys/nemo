@@ -14,7 +14,7 @@ use string::StringLevenshtein;
 
 use crate::{
     datavalues::AnyDataValue,
-    storagevalues::{storage_type_name::StorageTypeBitSet, StorageTypeName},
+    storagevalues::storagetype::{StorageType, StorageTypeBitSet},
 };
 
 use self::{
@@ -81,15 +81,15 @@ impl FunctionTypePropagation {
                 let first_type = &input[0];
 
                 for input_type in input {
-                    if !input_type.contains(&StorageTypeName::Int64) {
+                    if !input_type.contains(&StorageType::Int64) {
                         contains_int = false;
                     }
 
-                    if !input_type.contains(&StorageTypeName::Float) {
+                    if !input_type.contains(&StorageType::Float) {
                         contains_float = false;
                     }
 
-                    if !input_type.contains(&StorageTypeName::Double) {
+                    if !input_type.contains(&StorageType::Double) {
                         contains_double = false;
                     }
 
@@ -100,13 +100,13 @@ impl FunctionTypePropagation {
 
                 let mut result_type = StorageTypeBitSet::empty();
                 if contains_int {
-                    result_type = result_type.union(StorageTypeName::Int64.bitset());
+                    result_type = result_type.union(StorageType::Int64.bitset());
                 }
                 if contains_float {
-                    result_type = result_type.union(StorageTypeName::Float.bitset());
+                    result_type = result_type.union(StorageType::Float.bitset());
                 }
                 if mixing || contains_double {
-                    result_type = result_type.union(StorageTypeName::Double.bitset());
+                    result_type = result_type.union(StorageType::Double.bitset());
                 }
 
                 result_type

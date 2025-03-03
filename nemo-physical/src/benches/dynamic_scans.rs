@@ -11,7 +11,10 @@ mod test {
             columnscan::{ColumnScanEnum, ColumnScanT},
             operations::constant::ColumnScanConstant,
         },
-        storagevalues::{storage_type_name::NUM_STORAGETYPES, StorageTypeName, StorageValueT},
+        storagevalues::{
+            storagetype::{StorageType, NUM_STORAGE_TYPES},
+            storagevalue::StorageValueT,
+        },
     };
 
     fn vector() -> Vec<u64> {
@@ -74,7 +77,7 @@ mod test {
             ));
 
             let mut sum: u64 = 0;
-            let storage_types = black_box(vec![StorageTypeName::Id64, StorageTypeName::Int64]);
+            let storage_types = black_box(vec![StorageType::Id64, StorageType::Int64]);
             let current_type = black_box(vec![0]);
 
             while let Some(value) = scan.next(black_box(storage_types[current_type[0]])) {
@@ -90,13 +93,13 @@ mod test {
     }
 
     struct PossibleTypes {
-        storage_types: [Option<StorageTypeName>; NUM_STORAGETYPES],
+        storage_types: [Option<StorageType>; NUM_STORAGE_TYPES],
         current_type: usize,
     }
 
     impl PossibleTypes {
-        fn new(input_types: &[StorageTypeName]) -> Self {
-            let mut storage_types = [None; NUM_STORAGETYPES];
+        fn new(input_types: &[StorageType]) -> Self {
+            let mut storage_types = [None; NUM_STORAGE_TYPES];
 
             for (index, storage_type) in input_types.iter().enumerate() {
                 storage_types[index] = Some(*storage_type);
@@ -108,7 +111,7 @@ mod test {
             }
         }
 
-        fn current_type(&self) -> StorageTypeName {
+        fn current_type(&self) -> StorageType {
             self.storage_types[self.current_type].unwrap()
         }
 
@@ -133,8 +136,8 @@ mod test {
 
             let mut sum: u64 = 0;
             let mut possible_types = black_box(vec![black_box(PossibleTypes::new(&[
-                StorageTypeName::Id32,
-                StorageTypeName::Id64,
+                StorageType::Id32,
+                StorageType::Id64,
             ]))]);
             possible_types[0].inc_type();
 

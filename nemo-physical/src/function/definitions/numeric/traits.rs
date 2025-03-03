@@ -1,9 +1,7 @@
 //! This module defines operations that need to be implemented on number types
 //! in order for them to be used in all the supported arithmetic expressions
 
-use num::{
-    integer::Roots, traits::CheckedNeg, CheckedAdd, CheckedDiv, CheckedMul, CheckedSub, One, Zero,
-};
+use num::integer::Roots;
 
 /// Trait for a type that allows a square root operation
 pub trait CheckedSquareRoot {
@@ -182,38 +180,4 @@ impl CheckedPow for f64 {
 
         Some(result)
     }
-}
-
-/// Specifies the traits that need to be implemented by a type
-/// so that can be used to evaluate all the supported arithmetic expressions
-pub trait ArithmeticOperations:
-    Copy
-    + PartialEq
-    + PartialOrd
-    + Zero
-    + One
-    + CheckedSub
-    + CheckedAdd
-    + CheckedMul
-    + CheckedDiv
-    + CheckedPow
-    + CheckedSquareRoot
-    + CheckedNeg
-{
-}
-
-impl<T> ArithmeticOperations for T where
-    T: Copy
-        + PartialEq
-        + PartialOrd
-        + Zero
-        + One
-        + CheckedSub
-        + CheckedAdd
-        + CheckedMul
-        + CheckedDiv
-        + CheckedSquareRoot
-        + CheckedPow
-        + CheckedNeg
-{
 }

@@ -6,7 +6,7 @@ use crate::{
     datavalues::{AnyDataValue, DataValue},
     error::Error,
     function::tree::FunctionLeaf,
-    storagevalues::storage_type_name::StorageTypeBitSet,
+    storagevalues::storagetype::StorageTypeBitSet,
 };
 
 use super::{

@@ -3,7 +3,10 @@
 use std::cmp::Ordering;
 
 use crate::storagevalues::{
-    storage_type_name::NUM_STORAGETYPES, Double, Float, StorageTypeName, StorageValueT,
+    double::Double,
+    float::Float,
+    storagetype::{StorageType, NUM_STORAGE_TYPES},
+    storagevalue::StorageValueT,
 };
 
 use super::sorted_tuple_buffer::SortedTupleBuffer;
@@ -55,17 +58,17 @@ impl TypedTableStorage {
     /// Add empty columns of the appropriate types.
     pub(crate) fn initialize_new_subtable(
         &mut self,
-        storage_types: &[StorageTypeName],
+        storage_types: &[StorageType],
     ) -> TypedTableRecord {
         let mut storage_indices = Vec::<usize>::with_capacity(storage_types.len());
 
         for storage_type in storage_types {
             let column_index = match storage_type {
-                StorageTypeName::Id32 => Self::add_new_column(&mut self.columns_id32),
-                StorageTypeName::Id64 => Self::add_new_column(&mut self.columns_id64),
-                StorageTypeName::Int64 => Self::add_new_column(&mut self.columns_i64),
-                StorageTypeName::Float => Self::add_new_column(&mut self.columns_float),
-                StorageTypeName::Double => Self::add_new_column(&mut self.columns_double),
+                StorageType::Id32 => Self::add_new_column(&mut self.columns_id32),
+                StorageType::Id64 => Self::add_new_column(&mut self.columns_id64),
+                StorageType::Int64 => Self::add_new_column(&mut self.columns_i64),
+                StorageType::Float => Self::add_new_column(&mut self.columns_float),
+                StorageType::Double => Self::add_new_column(&mut self.columns_double),
             };
 
             storage_indices.push(column_index);
@@ -81,20 +84,16 @@ impl TypedTableStorage {
     /// Return the stored value in from a given type, id and tuple index.
     fn stored_value(
         &self,
-        storage_type: StorageTypeName,
+        storage_type: StorageType,
         column_id: usize,
         local_index: usize,
     ) -> StorageValueT {
         match storage_type {
-            StorageTypeName::Id32 => StorageValueT::Id32(self.columns_id32[column_id][local_index]),
-            StorageTypeName::Id64 => StorageValueT::Id64(self.columns_id64[column_id][local_index]),
-            StorageTypeName::Int64 => {
-                StorageValueT::Int64(self.columns_i64[column_id][local_index])
-            }
-            StorageTypeName::Float => {
-                StorageValueT::Float(self.columns_float[column_id][local_index])
-            }
-            StorageTypeName::Double => {
+            StorageType::Id32 => StorageValueT::Id32(self.columns_id32[column_id][local_index]),
+            StorageType::Id64 => StorageValueT::Id64(self.columns_id64[column_id][local_index]),
+            StorageType::Int64 => StorageValueT::Int64(self.columns_i64[column_id][local_index]),
+            StorageType::Float => StorageValueT::Float(self.columns_float[column_id][local_index]),
+            StorageType::Double => {
                 StorageValueT::Double(self.columns_double[column_id][local_index])
             }
         }
@@ -103,36 +102,36 @@ impl TypedTableStorage {
     /// Compare two stored values of the same type-
     pub(crate) fn compare_stored_values(
         &self,
-        storage_type: StorageTypeName,
+        storage_type: StorageType,
         column_id_first: usize,
         column_id_second: usize,
         local_index_first: usize,
         local_index_second: usize,
     ) -> Ordering {
         match storage_type {
-            StorageTypeName::Id32 => self.columns_id32[column_id_first][local_index_first]
+            StorageType::Id32 => self.columns_id32[column_id_first][local_index_first]
                 .cmp(&self.columns_id32[column_id_second][local_index_second]),
-            StorageTypeName::Id64 => self.columns_id64[column_id_first][local_index_first]
+            StorageType::Id64 => self.columns_id64[column_id_first][local_index_first]
                 .cmp(&self.columns_id64[column_id_second][local_index_second]),
-            StorageTypeName::Int64 => self.columns_i64[column_id_first][local_index_first]
+            StorageType::Int64 => self.columns_i64[column_id_first][local_index_first]
                 .cmp(&self.columns_i64[column_id_second][local_index_second]),
-            StorageTypeName::Float => self.columns_float[column_id_first][local_index_first]
+            StorageType::Float => self.columns_float[column_id_first][local_index_first]
                 .cmp(&self.columns_float[column_id_second][local_index_second]),
-            StorageTypeName::Double => self.columns_double[column_id_first][local_index_first]
+            StorageType::Double => self.columns_double[column_id_first][local_index_first]
                 .cmp(&self.columns_double[column_id_second][local_index_second]),
         }
     }
 }
 
-/// Object for associating a series of [StorageTypeName]s to a specific subtable
+/// Object for associating a series of [StorageType]s to a specific subtable
 #[derive(Debug)]
 struct TypedTableLookup {
-    /// A linearlized trie data structure to find the subtable id for a given list of [StorageTypeName]s
+    /// A linearlized trie data structure to find the subtable id for a given list of [StorageType]s
     ///
-    /// Each type in [StorageTypeName] is assigned a number between 0 and [NUM_STORAGETYPES] by `Self::storage_type_number`.
-    /// This vector represents a tree with branching degree of [NUM_STORAGETYPES] but can be partial: a slice of length [NUM_STORAGETYPES]
+    /// Each type in [StorageType] is assigned a number between 0 and [NUM_STORAGE_TYPES] by `Self::storage_type_number`.
+    /// This vector represents a tree with branching degree of [NUM_STORAGE_TYPES] but can be partial: a slice of length [NUM_STORAGE_TYPES]
     /// can encode one inner node in the tree, where the usizes refer to the offset of the child node of the tree
-    /// for each [StorageTypeName], or (on the last level) to the subtable id of a  [TypedTableRecord].
+    /// for each [StorageType], or (on the last level) to the subtable id of a  [TypedTableRecord].
     /// In each case, a value of `Self::NO_SUCCESSOR` indicates that no child node/no table has been alocated yet
     /// for this type combination or partial path.
     lookup_trie: Vec<usize>,
@@ -143,18 +142,18 @@ impl TypedTableLookup {
 
     /// Create a new [TypedTableLookup].
     pub(crate) fn new() -> Self {
-        let lookup_trie = vec![Self::NO_SUCCESSOR; NUM_STORAGETYPES];
+        let lookup_trie = vec![Self::NO_SUCCESSOR; NUM_STORAGE_TYPES];
 
         Self { lookup_trie }
     }
 
-    /// Return the subtable id corresponding to the provided series of [StorageTypeName]s.
+    /// Return the subtable id corresponding to the provided series of [StorageType]s.
     /// If no subtable for the combination of types exist, then it will be given a new subtable id,
     /// which will be the same as the parameter `num_subtables`, which is the number of subtables
     /// before this function call.
     pub(crate) fn subtable_id(
         &mut self,
-        storage_types: &[StorageTypeName],
+        storage_types: &[StorageType],
         num_subtables: usize,
     ) -> Option<usize> {
         let mut lookup_trie_block: usize = 0;
@@ -180,7 +179,7 @@ impl TypedTableLookup {
 
     fn add_new_lookup_trie_(
         &mut self,
-        missing_storage_types: &[StorageTypeName],
+        missing_storage_types: &[StorageType],
         current_block: usize,
         new_id: usize,
     ) {
@@ -190,7 +189,7 @@ impl TypedTableLookup {
         // Add empty trie node slots for all remaining levels.
         // Note that the block we ended up on before calling this function has already been allocated.
         self.lookup_trie.resize(
-            self.lookup_trie.len() + (missing_storage_types.len() - 1) * NUM_STORAGETYPES,
+            self.lookup_trie.len() + (missing_storage_types.len() - 1) * NUM_STORAGE_TYPES,
             Self::NO_SUCCESSOR,
         );
 
@@ -203,7 +202,7 @@ impl TypedTableLookup {
                 self.lookup_trie[current_block + storage_type.order()] = next_block;
 
                 current_block = next_block;
-                next_block += NUM_STORAGETYPES;
+                next_block += NUM_STORAGE_TYPES;
             }
 
             // In the last layer add a pointer to the new id
@@ -216,7 +215,7 @@ impl TypedTableLookup {
 #[derive(Debug)]
 pub(super) struct TypedTableRecord {
     /// For each column, contains its data type
-    pub(super) storage_types: Vec<StorageTypeName>,
+    pub(super) storage_types: Vec<StorageType>,
     /// For each column, contains an index into the `column_*` members of [TypedTableStorage]
     pub(super) storage_indices: Vec<usize>,
 
@@ -229,13 +228,13 @@ pub(super) struct TypedTableRecord {
 pub(crate) struct TupleBuffer {
     /// Conceptionally, one may imagine the table represented by the [TupleBuffer]
     /// to be split into several subtables that only contain rows with certain fixed types.
-    /// E.g. one subtable might contain tuples of type ([StorageTypeName::Id32], [StorageTypeName::Int64])
-    /// and another ([StorageTypeName::Id64], [StorageTypeName::Id64]).
+    /// E.g. one subtable might contain tuples of type ([StorageType::Id32], [StorageType::Int64])
+    /// and another ([StorageType::Id64], [StorageType::Id64]).
     /// Each entry in this vector represents one such subtable.
     /// Its index in this vector is then its subtable id.
     typed_subtables: Vec<TypedTableRecord>,
 
-    /// Maps a series of [StorageTypeName] to a subtable id in `typed_subtables`
+    /// Maps a series of [StorageType] to a subtable id in `typed_subtables`
     table_lookup: TypedTableLookup,
     /// Stores the contents of the subtables in `typed_subtables`
     table_storage: TypedTableStorage,
@@ -243,7 +242,7 @@ pub(crate) struct TupleBuffer {
     /// Current tuple
     current_tuple: Box<[StorageValueT]>,
     /// T ypes of the current tuple
-    current_tuple_types: Box<[StorageTypeName]>,
+    current_tuple_types: Box<[StorageType]>,
     /// Column Index of the currently written tuple
     current_tuple_index: usize,
 }
@@ -256,7 +255,7 @@ impl TupleBuffer {
             table_lookup: TypedTableLookup::new(),
             table_storage: TypedTableStorage::default(),
             current_tuple: vec![StorageValueT::Id32(0); column_number].into_boxed_slice(), // Picked arbitrarily
-            current_tuple_types: vec![StorageTypeName::Id32; column_number].into_boxed_slice(), // Picked arbitrarily
+            current_tuple_types: vec![StorageType::Id32; column_number].into_boxed_slice(), // Picked arbitrarily
             current_tuple_index: 0,
         }
     }
@@ -290,7 +289,7 @@ impl TupleBuffer {
     /// When the value for the last column was provided, the tuple is committed to the buffer.
     /// Alternatively, a partially built tuple can be abandonded by calling `drop_current_tuple`.
     pub(crate) fn add_tuple_value(&mut self, value: StorageValueT) {
-        self.current_tuple_types[self.current_tuple_index] = value.get_type();
+        self.current_tuple_types[self.current_tuple_index] = value.storage_type();
         self.current_tuple[self.current_tuple_index] = value;
         self.current_tuple_index += 1;
 
@@ -362,7 +361,7 @@ impl TupleBuffer {
     /// Compare two stored values of the same type-
     pub(super) fn compare_stored_values(
         &self,
-        storage_type: StorageTypeName,
+        storage_type: StorageType,
         column_id_first: usize,
         column_id_second: usize,
         local_index_first: usize,
@@ -380,7 +379,9 @@ impl TupleBuffer {
 
 #[cfg(test)]
 mod test {
-    use crate::{storagevalues::StorageValueT, tabular::buffer::tuple_buffer::TupleBuffer};
+    use crate::{
+        storagevalues::storagevalue::StorageValueT, tabular::buffer::tuple_buffer::TupleBuffer,
+    };
 
     #[test]
     fn tuple_buffer_internals() {

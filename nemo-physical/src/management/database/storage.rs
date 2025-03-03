@@ -126,7 +126,7 @@ mod test {
     use crate::{
         datavalues::AnyDataValue,
         management::database::{sources::SimpleTable, Dict},
-        storagevalues::{Float, StorageValueT},
+        storagevalues::{float::Float, storagevalue::StorageValueT},
     };
 
     use super::TableStorage;

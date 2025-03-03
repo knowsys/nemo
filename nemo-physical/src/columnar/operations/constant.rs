@@ -1,8 +1,8 @@
 //! This module defines [ColumnScanConstant].
 
-use std::{fmt::Debug, ops::Range};
+use std::ops::Range;
 
-use crate::{columnar::columnscan::ColumnScan, storagevalues::ColumnDataType};
+use crate::columnar::{columnscan::ColumnScan, columntype::ColumnType};
 
 /// [ColumnScanConstant] returns exactly one value.
 /// Therefore, it can be only in of three states.
@@ -20,7 +20,7 @@ enum ColumnScanState {
 #[derive(Debug)]
 pub(crate) struct ColumnScanConstant<T>
 where
-    T: ColumnDataType,
+    T: ColumnType,
 {
     /// The value that is always returned
     constant: Option<T>,
@@ -28,9 +28,10 @@ where
     /// Current [ColumnScanState] of this scan
     state: ColumnScanState,
 }
+
 impl<T> ColumnScanConstant<T>
 where
-    T: ColumnDataType,
+    T: ColumnType,
 {
     /// Constructs a new [ColumnScanConstant].
     pub(crate) fn new(constant: Option<T>) -> Self {
@@ -48,7 +49,7 @@ where
 
 impl<T> Iterator for ColumnScanConstant<T>
 where
-    T: ColumnDataType,
+    T: ColumnType,
 {
     type Item = T;
 
@@ -69,7 +70,7 @@ where
 
 impl<T> ColumnScan for ColumnScanConstant<T>
 where
-    T: ColumnDataType,
+    T: ColumnType,
 {
     fn seek(&mut self, value: T) -> Option<T> {
         if value > self.constant? {

@@ -1,6 +1,6 @@
 //! Computes the minimum of all input values.
 
-use crate::storagevalues::StorageValueT;
+use crate::storagevalues::storagevalue::StorageValueT;
 
 use super::processor::{AggregateGroupProcessor, AggregateProcessor};
 

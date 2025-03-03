@@ -4,14 +4,14 @@ use std::{cell::UnsafeCell, fmt::Debug, ops::Range, rc::Rc};
 
 use crate::{
     columnar::columnscan::{ColumnScan, ColumnScanCell},
-    storagevalues::ColumnDataType,
+    storagevalues::storagevalue::StorageValue,
 };
 
 /// [ColumnScan] representing the union of its sub scans
 #[derive(Debug)]
 pub(crate) struct ColumnScanUnion<'a, T>
 where
-    T: 'a + ColumnDataType,
+    T: 'a + StorageValue,
 {
     /// Sub scans of which the union is computed
     column_scans: Vec<&'a ColumnScanCell<'a, T>>,
@@ -32,7 +32,7 @@ where
 
 impl<'a, T> ColumnScanUnion<'a, T>
 where
-    T: 'a + ColumnDataType,
+    T: 'a + StorageValue,
 {
     /// Constructs a new [ColumnScanUnion].
     pub(crate) fn new(
@@ -51,7 +51,7 @@ where
 
 impl<'a, T> Iterator for ColumnScanUnion<'a, T>
 where
-    T: 'a + ColumnDataType,
+    T: 'a + StorageValue,
 {
     type Item = T;
 
@@ -93,7 +93,7 @@ where
 
 impl<'a, T: Ord + Copy + Debug + PartialOrd> ColumnScan for ColumnScanUnion<'a, T>
 where
-    T: 'a + ColumnDataType,
+    T: 'a + StorageValue,
 {
     fn seek(&mut self, value: T) -> Option<T> {
         let active_scans: &Vec<usize> = unsafe { &*self.active_scans.get() };

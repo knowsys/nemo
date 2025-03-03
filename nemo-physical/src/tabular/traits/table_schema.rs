@@ -4,7 +4,7 @@ use std::{
 };
 
 use crate::{
-    datatypes::{DataTypeName, StorageTypeName},
+    datatypes::{DataTypeName, StorageType},
     tabular::operations::triescan_project::ProjectReordering,
     util::mapping::permutation::Permutation,
 };
@@ -93,7 +93,7 @@ impl TableSchema {
     }
 
     /// return fitting storage types for schema
-    pub(crate) fn get_storage_types(&self) -> Vec<StorageTypeName> {
+    pub(crate) fn get_storage_types(&self) -> Vec<StorageType> {
         self.iter()
             .map(DataTypeName::to_storage_type_name)
             .collect()

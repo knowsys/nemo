@@ -2,7 +2,7 @@
 
 use std::cmp::Ordering;
 
-use crate::storagevalues::StorageValueT;
+use crate::storagevalues::storagevalue::StorageValueT;
 
 use super::tuple_buffer::TupleBuffer;
 
@@ -141,7 +141,7 @@ impl SortedTupleBuffer {
 #[cfg(test)]
 mod test {
     use crate::{
-        storagevalues::{Double, Float, StorageValueT},
+        storagevalues::{double::Double, float::Float, storagevalue::StorageValueT},
         tabular::buffer::tuple_buffer::TupleBuffer,
     };
 

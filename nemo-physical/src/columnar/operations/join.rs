@@ -1,7 +1,7 @@
 //! This module defines [ColumnScanJoin].
 
 use crate::columnar::columnscan::{ColumnScan, ColumnScanCell};
-use crate::storagevalues::ColumnDataType;
+use crate::storagevalues::storagevalue::StorageValue;
 
 use std::fmt::Debug;
 use std::ops::Range;
@@ -10,7 +10,7 @@ use std::ops::Range;
 #[derive(Debug)]
 pub(crate) struct ColumnScanJoin<'a, T>
 where
-    T: 'a + ColumnDataType,
+    T: 'a + StorageValue,
 {
     /// List of subiterators to be joined
     column_scans: Vec<&'a ColumnScanCell<'a, T>>,
@@ -24,7 +24,7 @@ where
 
 impl<'a, T> ColumnScanJoin<'a, T>
 where
-    T: 'a + ColumnDataType,
+    T: 'a + StorageValue,
 {
     /// Constructs a new [ColumnScanJoin].
     pub(crate) fn new(column_scans: Vec<&'a ColumnScanCell<'a, T>>) -> Self {
@@ -38,7 +38,7 @@ where
 
 impl<'a, T> ColumnScanJoin<'a, T>
 where
-    T: 'a + ColumnDataType,
+    T: 'a + StorageValue,
 {
     /// Sets each sub scan to the currently largest value until
     /// either all sub scans point to the same value
@@ -76,7 +76,7 @@ where
 
 impl<'a, T> Iterator for ColumnScanJoin<'a, T>
 where
-    T: 'a + ColumnDataType,
+    T: 'a + StorageValue,
 {
     type Item = T;
 
@@ -94,7 +94,7 @@ where
 
 impl<'a, T> ColumnScan for ColumnScanJoin<'a, T>
 where
-    T: 'a + ColumnDataType,
+    T: 'a + StorageValue,
 {
     fn seek(&mut self, value: T) -> Option<T> {
         self.current_value =

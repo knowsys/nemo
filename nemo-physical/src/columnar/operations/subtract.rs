@@ -1,9 +1,11 @@
-use std::cell::RefCell;
-use std::rc::Rc;
-use std::{fmt::Debug, ops::Range};
+//! This module defines [ColumnScanSubtract].
 
-use crate::columnar::columnscan::{ColumnScan, ColumnScanCell};
-use crate::storagevalues::ColumnDataType;
+use std::{cell::RefCell, ops::Range, rc::Rc};
+
+use crate::{
+    columnar::columnscan::{ColumnScan, ColumnScanCell},
+    storagevalues::storagevalue::StorageValue,
+};
 
 /// [ColumnScan] that consists of two types of subscans:
 ///  * a main column scan
@@ -14,7 +16,7 @@ use crate::storagevalues::ColumnDataType;
 #[derive(Debug)]
 pub(crate) struct ColumnScanSubtract<'a, T>
 where
-    T: 'a + ColumnDataType,
+    T: 'a + StorageValue,
 {
     /// The value of this sub scan determines the value of the whole scan
     scan_main: &'a ColumnScanCell<'a, T>,
@@ -41,7 +43,7 @@ where
 
 impl<'a, T> ColumnScanSubtract<'a, T>
 where
-    T: 'a + ColumnDataType,
+    T: 'a + StorageValue,
 {
     /// Constructs a new [ColumnScanSubtract].
     pub(crate) fn new(
@@ -123,7 +125,7 @@ where
 
 impl<'a, T> Iterator for ColumnScanSubtract<'a, T>
 where
-    T: 'a + ColumnDataType,
+    T: 'a + StorageValue,
 {
     type Item = T;
 
@@ -137,9 +139,9 @@ where
     }
 }
 
-impl<'a, T: Ord + Copy + Debug> ColumnScan for ColumnScanSubtract<'a, T>
+impl<'a, T: Ord + Copy> ColumnScan for ColumnScanSubtract<'a, T>
 where
-    T: 'a + ColumnDataType,
+    T: 'a + StorageValue,
 {
     fn seek(&mut self, value: T) -> Option<T> {
         self.current_value = self

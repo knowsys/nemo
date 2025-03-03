@@ -17,8 +17,6 @@ use crate::{
     function::definitions::numeric::traits::{CheckedPow, CheckedSquareRoot},
 };
 
-use super::{run_length_encodable::FloatingStep, FloorToUsize, RunLengthEncodable};
-
 #[cfg(test)]
 use quickcheck::{Arbitrary, Gen};
 
@@ -43,12 +41,10 @@ impl Double {
     ///
     /// # Panics
     /// Panics if `value` is [f64::NAN] or not finite.
-    pub fn from_number(value: f64) -> Self {
-        if !value.is_finite() {
-            panic!("floating point values must be finite")
-        }
+    pub fn new_unchecked(value: f64) -> Self {
+        debug_assert!(value.is_finite());
 
-        Self(value)
+        Double(value)
     }
 
     /// Computes the absolute value.
@@ -206,7 +202,7 @@ impl TryFrom<usize> for Double {
 
 impl Zero for Double {
     fn zero() -> Self {
-        Double::from_number(f64::zero())
+        Double::new_unchecked(f64::zero())
     }
 
     fn is_zero(&self) -> bool {
@@ -216,7 +212,7 @@ impl Zero for Double {
 
 impl One for Double {
     fn one() -> Self {
-        Double::from_number(f64::one())
+        Double::new_unchecked(f64::one())
     }
 
     fn is_one(&self) -> bool {
@@ -229,7 +225,7 @@ impl Sum for Double {
     where
         I: Iterator<Item = Self>,
     {
-        Double::from_number(iter.map(|f| f.0).sum())
+        Double::new_unchecked(iter.map(|f| f.0).sum())
     }
 }
 
@@ -238,7 +234,7 @@ impl Product for Double {
     where
         I: Iterator<Item = Self>,
     {
-        Double::from_number(iter.map(|f| f.0).product())
+        Double::new_unchecked(iter.map(|f| f.0).product())
     }
 }
 
@@ -284,12 +280,6 @@ impl CheckedNeg for Double {
     }
 }
 
-impl FloorToUsize for Double {
-    fn floor_to_usize(self) -> Option<usize> {
-        usize::from_f64(self.0.floor())
-    }
-}
-
 impl Bounded for Double {
     fn min_value() -> Self {
         Self(f64::MIN)
@@ -308,26 +298,6 @@ impl Arbitrary for Double {
             value = f64::arbitrary(g);
         }
 
-        Self::from_number(value)
-    }
-}
-
-impl RunLengthEncodable for Double {
-    type Step = FloatingStep;
-
-    fn diff_step(a: Self, b: Self) -> Option<Self::Step> {
-        if a == b {
-            Some(FloatingStep {})
-        } else {
-            None
-        }
-    }
-
-    fn get_step_increment(_: Self::Step) -> Option<Self> {
-        Some(Self::zero())
-    }
-
-    fn offset(self, _: Self::Step, _: usize) -> Self {
-        self
+        Self::new_unchecked(value)
     }
 }

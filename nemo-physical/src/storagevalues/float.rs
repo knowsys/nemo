@@ -20,8 +20,6 @@ use crate::{
     function::definitions::numeric::traits::{CheckedPow, CheckedSquareRoot},
 };
 
-use super::{run_length_encodable::FloatingStep, FloorToUsize, RunLengthEncodable};
-
 /// Wrapper for [f32] that excludes [f32::NAN] and infinite values
 #[derive(Copy, Clone, Debug, PartialEq, Default)]
 pub struct Float(f32);
@@ -43,10 +41,8 @@ impl Float {
     ///
     /// # Panics
     /// Panics if `value` is [f32::NAN] or not finite.
-    pub fn from_number(value: f32) -> Self {
-        if !value.is_finite() {
-            panic!("floating point values must be finite")
-        }
+    pub fn new_unchecked(value: f32) -> Self {
+        debug_assert!(value.is_finite());
 
         Float(value)
     }
@@ -205,7 +201,7 @@ impl TryFrom<usize> for Float {
 
 impl Zero for Float {
     fn zero() -> Self {
-        Float::from_number(f32::zero())
+        Float::new_unchecked(f32::zero())
     }
 
     fn is_zero(&self) -> bool {
@@ -215,7 +211,7 @@ impl Zero for Float {
 
 impl One for Float {
     fn one() -> Self {
-        Float::from_number(f32::one())
+        Float::new_unchecked(f32::one())
     }
 
     fn is_one(&self) -> bool {
@@ -228,7 +224,7 @@ impl Sum for Float {
     where
         I: Iterator<Item = Self>,
     {
-        Float::from_number(iter.map(|f| f.0).sum())
+        Float::new_unchecked(iter.map(|f| f.0).sum())
     }
 }
 
@@ -237,7 +233,7 @@ impl Product for Float {
     where
         I: Iterator<Item = Self>,
     {
-        Float::from_number(iter.map(|f| f.0).product())
+        Float::new_unchecked(iter.map(|f| f.0).product())
     }
 }
 
@@ -283,12 +279,6 @@ impl CheckedPow for Float {
     }
 }
 
-impl FloorToUsize for Float {
-    fn floor_to_usize(self) -> Option<usize> {
-        usize::from_f32(self.0.floor())
-    }
-}
-
 impl Bounded for Float {
     fn min_value() -> Self {
         Self(f32::MIN)
@@ -296,26 +286,6 @@ impl Bounded for Float {
 
     fn max_value() -> Self {
         Self(f32::MAX)
-    }
-}
-
-impl RunLengthEncodable for Float {
-    type Step = FloatingStep;
-
-    fn diff_step(a: Self, b: Self) -> Option<Self::Step> {
-        if a == b {
-            Some(FloatingStep {})
-        } else {
-            None
-        }
-    }
-
-    fn get_step_increment(_: Self::Step) -> Option<Self> {
-        Some(Self::zero())
-    }
-
-    fn offset(self, _: Self::Step, _: usize) -> Self {
-        self
     }
 }
 
@@ -327,6 +297,6 @@ impl Arbitrary for Float {
             value = f32::arbitrary(g);
         }
 
-        Self::from_number(value)
+        Self::new_unchecked(value)
     }
 }

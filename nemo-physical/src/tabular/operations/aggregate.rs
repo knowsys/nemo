@@ -12,7 +12,10 @@ use crate::{
     },
     columnar::columnscan::ColumnScanT,
     management::database::Dict,
-    storagevalues::{storage_type_name::StorageTypeBitSet, StorageTypeName, StorageValueT},
+    storagevalues::{
+        storagetype::{StorageType, StorageTypeBitSet},
+        storagevalue::StorageValueT,
+    },
     tabular::triescan::{PartialTrieScan, TrieScan, TrieScanEnum},
 };
 
@@ -344,7 +347,7 @@ impl<'a> PartialTrieScan<'a> for TrieScanAggregateWrapper<'a> {
         panic!("TrieScanAggregateWrapper::up cannot be called");
     }
 
-    fn down(&mut self, _storage_type: StorageTypeName) {
+    fn down(&mut self, _storage_type: StorageType) {
         panic!("TrieScanAggregateWrapper::down cannot be called");
     }
 
@@ -384,7 +387,7 @@ impl<'a> From<TrieScanAggregate<TrieScanPrune<'a>>> for TrieScanAggregateWrapper
 mod test {
     use super::{AggregationInstructions, TrieScanAggregate};
     use crate::aggregates::operation::AggregateOperation;
-    use crate::storagevalues::StorageTypeName;
+    use crate::storagevalues::storagetype::StorageType;
     use crate::tabular::operations::prune::TrieScanPrune;
     use crate::tabular::trie::Trie;
     use crate::tabular::triescan::TrieScanEnum;
@@ -397,7 +400,7 @@ mod test {
     fn aggregate_and_materialize(
         input_trie: &Trie,
         aggregation_instructions: AggregationInstructions,
-        _aggregated_column_storage_type: StorageTypeName,
+        _aggregated_column_storage_type: StorageType,
     ) -> Trie {
         let trie_scan_prune = trie_scan_prune_from_trie(input_trie);
 
@@ -447,7 +450,7 @@ mod test {
                     aggregated_column_index: 2,
                     last_distinct_column_index: 2,
                 },
-                StorageTypeName::Int64
+                StorageType::Int64
             ),
             trie_int64(vec![&[i64::MAX],])
         ));
@@ -461,7 +464,7 @@ mod test {
                     aggregated_column_index: 2,
                     last_distinct_column_index: 2,
                 },
-                StorageTypeName::Int64
+                StorageType::Int64
             ),
             trie_int64(vec![
                 &[i64::MIN, i64::MIN],
@@ -481,7 +484,7 @@ mod test {
                     aggregated_column_index: 2,
                     last_distinct_column_index: 2,
                 },
-                StorageTypeName::Int64
+                StorageType::Int64
             ),
             trie_int64(vec![
                 &[i64::MIN, i64::MIN, i64::MIN],
@@ -503,7 +506,7 @@ mod test {
                     aggregated_column_index: 0,
                     last_distinct_column_index: 0,
                 },
-                StorageTypeName::Int64
+                StorageType::Int64
             ),
             trie_int64(vec![&[5],])
         ));
@@ -517,7 +520,7 @@ mod test {
                     aggregated_column_index: 1,
                     last_distinct_column_index: 1,
                 },
-                StorageTypeName::Int64
+                StorageType::Int64
             ),
             trie_int64(vec![
                 &[i64::MIN, i64::MIN],

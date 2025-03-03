@@ -1,14 +1,30 @@
+//! This module defines the trait [RunLengthEncodable],
+//! which should be implemented by all types that can be stored
+//! within an [crate::columnar::column::rle::ColumnRle].
+
 use std::{
     fmt::Debug,
-    ops::{Add, Sub},
+    ops::{Add, Div, Mul, Sub},
 };
 
 use num::Zero;
 
-use crate::management::bytesized::ByteSized;
+use crate::{
+    management::bytesized::ByteSized,
+    storagevalues::{double::Double, float::Float},
+};
+
+use super::floor_to_usize::FloorToUsize;
 
 /// Data, which can be run length compressed with increments of [RunLengthEncodable::Step]
-pub(crate) trait RunLengthEncodable: Zero {
+pub(crate) trait RunLengthEncodable:
+    Zero
+    + FloorToUsize
+    + Add<Output = Self>
+    + Sub<Output = Self>
+    + Mul<Output = Self>
+    + Div<Output = Self>
+{
     /// Increment / Decrement values in run length encoded elements
     type Step: Debug + Copy + Eq + ByteSized;
 
@@ -55,7 +71,7 @@ impl IntStep {
 
     fn offset_signed<T>(t: T, inc: Self, times: usize) -> T
     where
-        T: Add<T, Output = T> + From<i16> + TryFrom<usize> + std::ops::Mul<T, Output = T>,
+        T: Add<T, Output = T> + From<i16> + TryFrom<usize> + Mul<T, Output = T>,
         <T as TryFrom<usize>>::Error: Debug,
     {
         t + T::from(inc.0) * T::try_from(times).expect("step multiplication overflow")
@@ -203,6 +219,46 @@ impl RunLengthEncodable for i8 {
         let times =
             i8::try_from(times).expect("rle-element should not be greater than value range");
         self + inc.0 * times
+    }
+}
+
+impl RunLengthEncodable for Float {
+    type Step = FloatingStep;
+
+    fn diff_step(a: Self, b: Self) -> Option<Self::Step> {
+        if a == b {
+            Some(FloatingStep {})
+        } else {
+            None
+        }
+    }
+
+    fn get_step_increment(_: Self::Step) -> Option<Self> {
+        Some(Self::zero())
+    }
+
+    fn offset(self, _: Self::Step, _: usize) -> Self {
+        self
+    }
+}
+
+impl RunLengthEncodable for Double {
+    type Step = FloatingStep;
+
+    fn diff_step(a: Self, b: Self) -> Option<Self::Step> {
+        if a == b {
+            Some(FloatingStep {})
+        } else {
+            None
+        }
+    }
+
+    fn get_step_increment(_: Self::Step) -> Option<Self> {
+        Some(Self::zero())
+    }
+
+    fn offset(self, _: Self::Step, _: usize) -> Self {
+        self
     }
 }
 

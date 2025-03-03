@@ -5,7 +5,7 @@ pub(crate) mod test {
     use hashbrown::HashMap;
 
     use crate::{
-        storagevalues::{StorageTypeName, StorageValueT},
+        storagevalues::{storagetype::StorageType, storagevalue::StorageValueT},
         tabular::{trie::Trie, triescan::PartialTrieScan},
     };
 
@@ -40,7 +40,7 @@ pub(crate) mod test {
     /// Return the current value of the [PartialTrieScan].
     pub(crate) fn partial_scan_current<'a, Scan: PartialTrieScan<'a>>(
         scan: &Scan,
-        storage_type: StorageTypeName,
+        storage_type: StorageType,
     ) -> Option<StorageValueT> {
         let column_scan = unsafe { &mut *scan.current_scan()?.get() };
 
@@ -50,7 +50,7 @@ pub(crate) mod test {
     /// Return the current value of the [PartialTrieScan] at some given layer.
     pub(crate) fn partial_scan_current_at_layer<'a, Scan: PartialTrieScan<'a>>(
         scan: &Scan,
-        storage_type: StorageTypeName,
+        storage_type: StorageType,
         layer: usize,
     ) -> Option<StorageValueT> {
         let column_scan = unsafe { &mut *scan.scan(layer).get() };
@@ -61,7 +61,7 @@ pub(crate) mod test {
     /// Move to the next value on the current layer of the [PartialTrieScan].
     pub(crate) fn partial_scan_next<'a, Scan: PartialTrieScan<'a>>(
         scan: &Scan,
-        storage_type: StorageTypeName,
+        storage_type: StorageType,
     ) -> Option<StorageValueT> {
         let column_scan = unsafe { &mut *scan.current_scan()?.get() };
 
@@ -84,10 +84,10 @@ pub(crate) mod test {
     /// and compare the results to a list of expected result.
     pub(crate) fn trie_dfs<'a, Scan: PartialTrieScan<'a>>(
         scan: &mut Scan,
-        types: &[StorageTypeName],
+        types: &[StorageType],
         expected: &[StorageValueT],
     ) {
-        let mut next_type_map = HashMap::<StorageTypeName, StorageTypeName>::new();
+        let mut next_type_map = HashMap::<StorageType, StorageType>::new();
         for adjacent_types in types.windows(2) {
             next_type_map.insert(adjacent_types[0], adjacent_types[1]);
         }

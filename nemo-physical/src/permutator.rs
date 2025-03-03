@@ -8,7 +8,7 @@ use crate::{
         column::{Column, ColumnEnum},
         columnbuilder::ColumnBuilder,
     },
-    storagevalues::ColumnDataType,
+    storagevalues::storagevalue::StorageValue,
 };
 use std::fmt::Debug;
 
@@ -71,7 +71,7 @@ impl Permutator {
         mut cb: U,
     ) -> Result<ColumnEnum<T>, Error>
     where
-        T: 'a + ColumnDataType,
+        T: 'a + StorageValue,
         U: ColumnBuilder<'a, T, Col = ColumnEnum<T>>,
     {
         if column.len() < (self.sort_vec.len() + self.offset) {
@@ -95,7 +95,7 @@ impl Permutator {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::storagevalues::{Double, Float};
+    use crate::storagevalues::{double::Double, float::Float};
     use quickcheck_macros::quickcheck;
     #[cfg(not(miri))]
     use test_log::test;

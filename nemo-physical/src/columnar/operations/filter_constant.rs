@@ -2,7 +2,7 @@
 
 use crate::{
     columnar::columnscan::{ColumnScan, ColumnScanCell},
-    storagevalues::ColumnDataType,
+    storagevalues::storagevalue::StorageValue,
 };
 
 /// [ColumnScanFilterConstant] does only return up to one value.
@@ -21,7 +21,7 @@ enum ColumnScanState {
 #[derive(Debug)]
 pub(crate) struct ColumnScanFilterConstant<'a, T>
 where
-    T: 'a + ColumnDataType,
+    T: StorageValue,
 {
     /// [ColumnScan] that provides the output values for this scan
     value_scan: &'a ColumnScanCell<'a, T>,
@@ -35,7 +35,7 @@ where
 
 impl<'a, T> ColumnScanFilterConstant<'a, T>
 where
-    T: 'a + ColumnDataType,
+    T: StorageValue,
 {
     /// Create a new [ColumnScanFilterConstant].
     pub(crate) fn new(value_scan: &'a ColumnScanCell<'a, T>, constant: T) -> Self {
@@ -49,7 +49,7 @@ where
 
 impl<'a, T> Iterator for ColumnScanFilterConstant<'a, T>
 where
-    T: 'a + ColumnDataType + Eq,
+    T: 'a + StorageValue,
 {
     type Item = T;
 
@@ -79,7 +79,7 @@ where
 
 impl<'a, T> ColumnScan for ColumnScanFilterConstant<'a, T>
 where
-    T: 'a + ColumnDataType,
+    T: 'a + StorageValue,
 {
     fn seek(&mut self, value: Self::Item) -> Option<Self::Item> {
         if value > self.constant {

@@ -82,7 +82,7 @@ mod test {
         datavalues::AnyDataValue,
         dictionary::{meta_dv_dict::MetaDvDictionary, DvDict},
         management::database::Dict,
-        storagevalues::{Float, StorageValueT},
+        storagevalues::{float::Float, storagevalue::StorageValueT},
     };
 
     #[test]

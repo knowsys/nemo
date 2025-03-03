@@ -11,7 +11,11 @@ use crate::{
         operations::union::ColumnScanUnion,
     },
     management::database::Dict,
-    storagevalues::{storage_type_name::StorageTypeBitSet, Double, Float, StorageTypeName},
+    storagevalues::{
+        double::Double,
+        float::Float,
+        storagetype::{StorageType, StorageTypeBitSet},
+    },
     tabular::triescan::{PartialTrieScan, TrieScanEnum},
 };
 
@@ -142,7 +146,7 @@ impl<'a> PartialTrieScan<'a> for TrieScanUnion<'a> {
             .checked_sub(1);
     }
 
-    fn down(&mut self, next_type: StorageTypeName) {
+    fn down(&mut self, next_type: StorageType) {
         let next_layer = self.current_layer.map_or(0, |layer| layer + 1);
         let active_scans = unsafe { &*self.active_scans[next_layer].get() };
 
@@ -181,7 +185,7 @@ mod test {
 
     use crate::{
         dictionary::meta_dv_dict::MetaDvDictionary,
-        storagevalues::{StorageTypeName, StorageValueT},
+        storagevalues::{storagetype::StorageType, storagevalue::StorageValueT},
         tabular::{
             operations::{join::GeneratorJoin, OperationGenerator, OperationTableGenerator},
             triescan::TrieScanEnum,
@@ -213,7 +217,7 @@ mod test {
 
         trie_dfs(
             &mut union_scan,
-            &[StorageTypeName::Id32],
+            &[StorageType::Id32],
             &[
                 StorageValueT::Id32(1), // x = 1
                 StorageValueT::Id32(1),
@@ -272,7 +276,7 @@ mod test {
 
         trie_dfs(
             &mut union_scan,
-            &[StorageTypeName::Id32],
+            &[StorageType::Id32],
             &[
                 StorageValueT::Id32(1), // x = 1
                 StorageValueT::Id32(2),
@@ -321,7 +325,7 @@ mod test {
 
         trie_dfs(
             &mut union_scan,
-            &[StorageTypeName::Id32],
+            &[StorageType::Id32],
             &[
                 StorageValueT::Id32(1), // x = 1
                 StorageValueT::Id32(4),
@@ -354,7 +358,7 @@ mod test {
 
         trie_dfs(
             &mut union_scan,
-            &[StorageTypeName::Id32],
+            &[StorageType::Id32],
             &[
                 StorageValueT::Id32(1), // x = 1
                 StorageValueT::Id32(3),
@@ -408,7 +412,7 @@ mod test {
 
         trie_dfs(
             &mut union_scan,
-            &[StorageTypeName::Id32],
+            &[StorageType::Id32],
             &[
                 StorageValueT::Id32(1), // x = 1
                 StorageValueT::Id32(4),

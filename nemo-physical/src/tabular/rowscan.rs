@@ -4,7 +4,7 @@ use std::marker::PhantomData;
 
 use streaming_iterator::StreamingIterator;
 
-use crate::storagevalues::{StorageTypeName, StorageValueT};
+use crate::storagevalues::{storagetype::StorageType, storagevalue::StorageValueT};
 
 use super::triescan::PartialTrieScan;
 
@@ -14,19 +14,19 @@ struct TypeIndex {
     used: usize,
 }
 
-/// Stores the possible [StorageTypeName] for each layer,
+/// Stores the possible [StorageType] for each layer,
 /// and which of those are currently in use
 #[derive(Debug)]
 struct PossibleTypes {
     /// All possible storage types
-    storage_types: Vec<StorageTypeName>,
+    storage_types: Vec<StorageType>,
     /// For each layer, contains a [TypeIndex]
     used_types: Vec<TypeIndex>,
 }
 
 impl PossibleTypes {
-    pub fn new(input_types: Vec<Vec<StorageTypeName>>) -> Self {
-        let mut storage_types = Vec::<StorageTypeName>::new();
+    pub fn new(input_types: Vec<Vec<StorageType>>) -> Self {
+        let mut storage_types = Vec::<StorageType>::new();
         let mut used_types = Vec::<TypeIndex>::new();
 
         for types_layer in input_types {
@@ -60,7 +60,7 @@ impl PossibleTypes {
         }
     }
 
-    pub fn next_type(&mut self, layer: usize) -> Option<StorageTypeName> {
+    pub fn next_type(&mut self, layer: usize) -> Option<StorageType> {
         let next_index = self.used_types[layer].used + 1;
 
         if next_index == self.used_types[layer + 1].start {
@@ -72,14 +72,14 @@ impl PossibleTypes {
         }
     }
 
-    pub fn first_type(&mut self, layer: usize) -> StorageTypeName {
+    pub fn first_type(&mut self, layer: usize) -> StorageType {
         let start = self.used_types[layer].start;
 
         self.used_types[layer].used = start;
         self.storage_types[start]
     }
 
-    pub fn current_type(&self, layer: usize) -> StorageTypeName {
+    pub fn current_type(&self, layer: usize) -> StorageType {
         self.storage_types[self.used_types[layer].used]
     }
 }
@@ -107,7 +107,7 @@ pub(crate) struct RowScan<'a, Scan: PartialTrieScan<'a>> {
 
     /// Whether it can be known a priori that this will return no rows
     empty: bool,
-    /// For each layer, holds the possible [StorageTypeName]s of that column in `trie_scan`
+    /// For each layer, holds the possible [StorageType]s of that column in `trie_scan`
     possible_types: PossibleTypes,
 
     /// The current row
@@ -139,12 +139,12 @@ impl<'a, Scan: PartialTrieScan<'a>> RowScan<'a, Scan> {
         }
     }
 
-    /// Advance the column scan of the current layer for the given [StorageTypeName]
+    /// Advance the column scan of the current layer for the given [StorageType]
     /// to the next value.
     ///
     /// # Panics
     /// Panics if `self.trie_scan` is not at some layer.
-    fn column_scan_next(&mut self, storage_type: StorageTypeName) -> Option<StorageValueT> {
+    fn column_scan_next(&mut self, storage_type: StorageType) -> Option<StorageValueT> {
         unsafe {
             &mut *self
                 .trie_scan
@@ -159,7 +159,7 @@ impl<'a, Scan: PartialTrieScan<'a>> RowScan<'a, Scan> {
     ///
     /// # Panics
     /// Panics if there is no value at the given loaction
-    fn column_scan_current(&self, layer: usize, storage_type: StorageTypeName) -> StorageValueT {
+    fn column_scan_current(&self, layer: usize, storage_type: StorageType) -> StorageValueT {
         unsafe { &mut *self.trie_scan.scan(layer).get() }
             .current(storage_type)
             .expect("Function assumes that columnscan points to some value")
@@ -247,7 +247,7 @@ mod test {
 
     use crate::{
         management::database::Dict,
-        storagevalues::StorageValueT,
+        storagevalues::storagevalue::StorageValueT,
         tabular::{
             operations::{union::GeneratorUnion, OperationGenerator},
             trie::Trie,

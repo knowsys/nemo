@@ -2,7 +2,7 @@
 
 use crate::{
     datavalues::{syntax::encodings, AnyDataValue, DataValue},
-    storagevalues::StorageTypeName,
+    storagevalues::storagetype::StorageType,
 };
 
 use super::{FunctionTypePropagation, UnaryFunction};
@@ -89,7 +89,7 @@ impl UnaryFunction for CastingIntoInteger64 {
     }
 
     fn type_propagation(&self) -> FunctionTypePropagation {
-        FunctionTypePropagation::KnownOutput(StorageTypeName::Int64.bitset())
+        FunctionTypePropagation::KnownOutput(StorageType::Int64.bitset())
     }
 }
 
@@ -149,7 +149,7 @@ impl UnaryFunction for CastingIntoFloat {
     }
 
     fn type_propagation(&self) -> FunctionTypePropagation {
-        FunctionTypePropagation::KnownOutput(StorageTypeName::Float.bitset())
+        FunctionTypePropagation::KnownOutput(StorageType::Float.bitset())
     }
 }
 
@@ -209,7 +209,7 @@ impl UnaryFunction for CastingIntoDouble {
     }
 
     fn type_propagation(&self) -> FunctionTypePropagation {
-        FunctionTypePropagation::KnownOutput(StorageTypeName::Double.bitset())
+        FunctionTypePropagation::KnownOutput(StorageType::Double.bitset())
     }
 }
 
@@ -230,9 +230,7 @@ impl UnaryFunction for CastingIntoIri {
 
     fn type_propagation(&self) -> FunctionTypePropagation {
         FunctionTypePropagation::KnownOutput(
-            StorageTypeName::Id32
-                .bitset()
-                .union(StorageTypeName::Id64.bitset()),
+            StorageType::Id32.bitset().union(StorageType::Id64.bitset()),
         )
     }
 }

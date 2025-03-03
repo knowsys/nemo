@@ -21,8 +21,8 @@ use crate::{
     },
     management::database::Dict,
     storagevalues::{
-        into_datavalue::IntoDataValue, storage_type_name::StorageTypeBitSet, StorageTypeName,
-        StorageValueT,
+        storagetype::{StorageType, StorageTypeBitSet},
+        storagevalue::StorageValueT,
     },
     tabular::triescan::{PartialTrieScan, TrieScanEnum},
 };
@@ -259,8 +259,8 @@ pub(crate) struct TrieScanFilter<'a> {
     input_indices: Vec<bool>,
     /// Values that will be used as input for evaluating
     input_values: Rc<RefCell<Vec<AnyDataValue>>>,
-    /// Path of [StorageTypeName] indicating the the types of the current (partial) row
-    path_types: Vec<StorageTypeName>,
+    /// Path of [StorageType] indicating the the types of the current (partial) row
+    path_types: Vec<StorageType>,
 
     /// For each layer in the resulting trie contains a [ColumnScanT]
     /// evaluating the union of the underlying columns of the input trie.
@@ -283,7 +283,7 @@ impl<'a> PartialTrieScan<'a> for TrieScanFilter<'a> {
         self.path_types.pop();
     }
 
-    fn down(&mut self, next_type: StorageTypeName) {
+    fn down(&mut self, next_type: StorageType) {
         let previous_layer = self.current_layer();
         let previous_type = self.path_types.last();
 
@@ -293,8 +293,13 @@ impl<'a> PartialTrieScan<'a> for TrieScanFilter<'a> {
             if self.input_indices[previous_layer] {
                 // This value will be used in some future layer as an input to a function,
                 // so we translate it to an AnyDataValue and store it in `self.input_values`.
-                let column_value = self.column_scans[previous_layer].get_mut().current(*previous_type).expect("It is only allowed to call down while the previous scan points to some value.").into_datavalue(&self.dictionary.borrow()).expect("All ids occuring in a column must be known to the dictionary");
-                self.input_values.borrow_mut().push(column_value);
+                let column_value_t = self.column_scans[previous_layer].get_mut().current(*previous_type).expect("It is only allowed to call down while the previous scan points to some value.");
+                let column_value_any = AnyDataValue::new_from_storage_value_t(
+                    column_value_t,
+                    &self.dictionary.borrow(),
+                )
+                .expect("All ids occuring in a column must be known to the dictionary");
+                self.input_values.borrow_mut().push(column_value_any);
             }
         }
 
@@ -327,7 +332,7 @@ mod test {
     use crate::{
         datavalues::AnyDataValue,
         dictionary::meta_dv_dict::MetaDvDictionary,
-        storagevalues::{StorageTypeName, StorageValueT},
+        storagevalues::{storagetype::StorageType, storagevalue::StorageValueT},
         tabular::{
             operations::{OperationGenerator, OperationTableGenerator},
             triescan::TrieScanEnum,
@@ -378,7 +383,7 @@ mod test {
 
         trie_dfs(
             &mut filter_scan,
-            &[StorageTypeName::Int64],
+            &[StorageType::Int64],
             &[
                 StorageValueT::Int64(1), // x = 1
                 StorageValueT::Int64(4), // y = 4
@@ -431,7 +436,7 @@ mod test {
 
         trie_dfs(
             &mut filter_scan,
-            &[StorageTypeName::Int64],
+            &[StorageType::Int64],
             &[
                 StorageValueT::Int64(1), // x = 1
                 StorageValueT::Int64(4), // y = 4
@@ -470,7 +475,7 @@ mod test {
 
         trie_dfs(
             &mut filter_scan,
-            &[StorageTypeName::Int64],
+            &[StorageType::Int64],
             &[
                 StorageValueT::Int64(1), // x = 1
                 StorageValueT::Int64(5), // x = 5
@@ -508,7 +513,7 @@ mod test {
 
         trie_dfs(
             &mut filter_scan,
-            &[StorageTypeName::Int64],
+            &[StorageType::Int64],
             &[
                 StorageValueT::Int64(1), // x = 1
                 StorageValueT::Int64(5), // y = 5
@@ -559,7 +564,7 @@ mod test {
 
         trie_dfs(
             &mut filter_scan,
-            &[StorageTypeName::Int64],
+            &[StorageType::Int64],
             &[
                 StorageValueT::Int64(7),  // x = 7
                 StorageValueT::Int64(8),  // y = 8
@@ -611,7 +616,7 @@ mod test {
 
         trie_dfs(
             &mut filter_scan,
-            &[StorageTypeName::Int64],
+            &[StorageType::Int64],
             &[
                 StorageValueT::Int64(2), // x = 7
                 StorageValueT::Int64(5), // y = 5

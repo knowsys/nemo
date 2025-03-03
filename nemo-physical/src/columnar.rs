@@ -5,5 +5,6 @@
 pub(crate) mod column;
 pub(crate) mod columnbuilder;
 pub(crate) mod columnscan;
+pub(crate) mod columntype;
 pub(crate) mod intervalcolumn;
 pub(crate) mod operations;

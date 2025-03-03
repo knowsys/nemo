@@ -2,7 +2,7 @@
 
 use crate::{
     datavalues::{AnyDataValue, DataValue},
-    storagevalues::StorageTypeName,
+    storagevalues::storagetype::StorageType,
 };
 
 use super::{BinaryFunction, FunctionTypePropagation, UnaryFunction};
@@ -29,9 +29,7 @@ impl BinaryFunction for Equals {
     fn type_propagation(&self) -> FunctionTypePropagation {
         // TODO: This is playing it save, one should probably give booleans a special status
         FunctionTypePropagation::KnownOutput(
-            StorageTypeName::Id32
-                .bitset()
-                .union(StorageTypeName::Id64.bitset()),
+            StorageType::Id32.bitset().union(StorageType::Id64.bitset()),
         )
     }
 }
@@ -58,9 +56,7 @@ impl BinaryFunction for Unequals {
     fn type_propagation(&self) -> FunctionTypePropagation {
         // TODO: This is playing it save, one should probably give booleans a special status
         FunctionTypePropagation::KnownOutput(
-            StorageTypeName::Id32
-                .bitset()
-                .union(StorageTypeName::Id64.bitset()),
+            StorageType::Id32.bitset().union(StorageType::Id64.bitset()),
         )
     }
 }
@@ -77,9 +73,7 @@ impl UnaryFunction for CanonicalString {
 
     fn type_propagation(&self) -> FunctionTypePropagation {
         FunctionTypePropagation::KnownOutput(
-            StorageTypeName::Id32
-                .bitset()
-                .union(StorageTypeName::Id64.bitset()),
+            StorageType::Id32.bitset().union(StorageType::Id64.bitset()),
         )
     }
 }
@@ -105,9 +99,7 @@ impl UnaryFunction for LexicalValue {
 
     fn type_propagation(&self) -> FunctionTypePropagation {
         FunctionTypePropagation::KnownOutput(
-            StorageTypeName::Id32
-                .bitset()
-                .union(StorageTypeName::Id64.bitset()),
+            StorageType::Id32.bitset().union(StorageType::Id64.bitset()),
         )
     }
 }
@@ -124,9 +116,7 @@ impl UnaryFunction for Datatype {
 
     fn type_propagation(&self) -> FunctionTypePropagation {
         FunctionTypePropagation::KnownOutput(
-            StorageTypeName::Id32
-                .bitset()
-                .union(StorageTypeName::Id64.bitset()),
+            StorageType::Id32.bitset().union(StorageType::Id64.bitset()),
         )
     }
 }

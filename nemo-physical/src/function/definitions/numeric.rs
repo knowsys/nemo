@@ -8,7 +8,7 @@ pub mod traits;
 
 use crate::{
     datavalues::{AnyDataValue, DataValue, ValueDomain},
-    storagevalues::{Double, Float, StorageTypeName},
+    storagevalues::{double::Double, float::Float, storagetype::StorageType},
 };
 
 use self::{
@@ -66,10 +66,10 @@ impl NumericValue {
             | ValueDomain::LanguageTaggedString
             | ValueDomain::Other
             | ValueDomain::Iri => None,
-            ValueDomain::Float => Some(NumericValue::Float(Float::from_number(
+            ValueDomain::Float => Some(NumericValue::Float(Float::new_unchecked(
                 value.to_f32_unchecked(),
             ))),
-            ValueDomain::Double => Some(NumericValue::Double(Double::from_number(
+            ValueDomain::Double => Some(NumericValue::Double(Double::new_unchecked(
                 value.to_f64_unchecked(),
             ))),
             ValueDomain::UnsignedLong => None, // numeric, but cannot represented in NumericValue
@@ -444,7 +444,7 @@ impl NaryFunction for BitAnd {
     }
 
     fn type_propagation(&self) -> FunctionTypePropagation {
-        FunctionTypePropagation::KnownOutput(StorageTypeName::Int64.bitset())
+        FunctionTypePropagation::KnownOutput(StorageType::Int64.bitset())
     }
 }
 
@@ -470,7 +470,7 @@ impl NaryFunction for BitOr {
     }
 
     fn type_propagation(&self) -> FunctionTypePropagation {
-        FunctionTypePropagation::KnownOutput(StorageTypeName::Int64.bitset())
+        FunctionTypePropagation::KnownOutput(StorageType::Int64.bitset())
     }
 }
 
@@ -496,7 +496,7 @@ impl NaryFunction for BitXor {
     }
 
     fn type_propagation(&self) -> FunctionTypePropagation {
-        FunctionTypePropagation::KnownOutput(StorageTypeName::Int64.bitset())
+        FunctionTypePropagation::KnownOutput(StorageType::Int64.bitset())
     }
 }
 
@@ -518,7 +518,7 @@ impl BinaryFunction for BitShiftLeft {
     }
 
     fn type_propagation(&self) -> FunctionTypePropagation {
-        FunctionTypePropagation::KnownOutput(StorageTypeName::Int64.bitset())
+        FunctionTypePropagation::KnownOutput(StorageType::Int64.bitset())
     }
 }
 
@@ -540,7 +540,7 @@ impl BinaryFunction for BitShiftRight {
     }
 
     fn type_propagation(&self) -> FunctionTypePropagation {
-        FunctionTypePropagation::KnownOutput(StorageTypeName::Int64.bitset())
+        FunctionTypePropagation::KnownOutput(StorageType::Int64.bitset())
     }
 }
 
@@ -562,7 +562,7 @@ impl BinaryFunction for BitShiftRightUnsigned {
     }
 
     fn type_propagation(&self) -> FunctionTypePropagation {
-        FunctionTypePropagation::KnownOutput(StorageTypeName::Int64.bitset())
+        FunctionTypePropagation::KnownOutput(StorageType::Int64.bitset())
     }
 }
 
@@ -917,9 +917,7 @@ impl BinaryFunction for NumericLessthan {
     fn type_propagation(&self) -> FunctionTypePropagation {
         // TODO: This is playing it save, one should probably give booleans a special status
         FunctionTypePropagation::KnownOutput(
-            StorageTypeName::Id32
-                .bitset()
-                .union(StorageTypeName::Id64.bitset()),
+            StorageType::Id32.bitset().union(StorageType::Id64.bitset()),
         )
     }
 }
@@ -953,9 +951,7 @@ impl BinaryFunction for NumericLessthaneq {
     fn type_propagation(&self) -> FunctionTypePropagation {
         // TODO: This is playing it save, one should probably give booleans a special status
         FunctionTypePropagation::KnownOutput(
-            StorageTypeName::Id32
-                .bitset()
-                .union(StorageTypeName::Id64.bitset()),
+            StorageType::Id32.bitset().union(StorageType::Id64.bitset()),
         )
     }
 }
@@ -989,9 +985,7 @@ impl BinaryFunction for NumericGreaterthan {
     fn type_propagation(&self) -> FunctionTypePropagation {
         // TODO: This is playing it save, one should probably give booleans a special status
         FunctionTypePropagation::KnownOutput(
-            StorageTypeName::Id32
-                .bitset()
-                .union(StorageTypeName::Id64.bitset()),
+            StorageType::Id32.bitset().union(StorageType::Id64.bitset()),
         )
     }
 }
@@ -1027,9 +1021,7 @@ impl BinaryFunction for NumericGreaterthaneq {
     fn type_propagation(&self) -> FunctionTypePropagation {
         // TODO: This is playing it save, one should probably give booleans a special status
         FunctionTypePropagation::KnownOutput(
-            StorageTypeName::Id32
-                .bitset()
-                .union(StorageTypeName::Id64.bitset()),
+            StorageType::Id32.bitset().union(StorageType::Id64.bitset()),
         )
     }
 }

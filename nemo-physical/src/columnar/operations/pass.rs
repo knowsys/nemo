@@ -1,20 +1,23 @@
 //! This module defines [ColumnScanPass].
 
-use crate::columnar::columnscan::{ColumnScan, ColumnScanCell};
-use crate::storagevalues::ColumnDataType;
 use std::{fmt::Debug, ops::Range};
+
+use crate::{
+    columnar::columnscan::{ColumnScan, ColumnScanCell},
+    storagevalues::storagevalue::StorageValue,
+};
 
 /// Dummy Iterator that defers everything to its sub iterator
 #[derive(Debug)]
 pub(crate) struct ColumnScanPass<'a, T>
 where
-    T: 'a + ColumnDataType,
+    T: 'a + StorageValue,
 {
     reference_scan: &'a ColumnScanCell<'a, T>,
 }
 impl<'a, T> ColumnScanPass<'a, T>
 where
-    T: 'a + ColumnDataType,
+    T: 'a + StorageValue,
 {
     /// Constructs a new [ColumnScanPass].
     pub(crate) fn new(reference_scan: &'a ColumnScanCell<'a, T>) -> ColumnScanPass<'a, T> {
@@ -24,7 +27,7 @@ where
 
 impl<'a, T> Iterator for ColumnScanPass<'a, T>
 where
-    T: 'a + ColumnDataType + PartialOrd + Eq,
+    T: 'a + StorageValue,
 {
     type Item = T;
 
@@ -35,7 +38,7 @@ where
 
 impl<'a, T> ColumnScan for ColumnScanPass<'a, T>
 where
-    T: 'a + ColumnDataType + PartialOrd + Eq,
+    T: 'a + StorageValue,
 {
     fn seek(&mut self, value: T) -> Option<T> {
         self.reference_scan.seek(value)

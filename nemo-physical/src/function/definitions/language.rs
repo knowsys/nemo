@@ -2,7 +2,7 @@
 
 use crate::{
     datavalues::{AnyDataValue, DataValue},
-    storagevalues::StorageTypeName,
+    storagevalues::storagetype::StorageType,
 };
 
 use super::{FunctionTypePropagation, UnaryFunction};
@@ -22,9 +22,7 @@ impl UnaryFunction for LanguageTag {
 
     fn type_propagation(&self) -> FunctionTypePropagation {
         FunctionTypePropagation::KnownOutput(
-            StorageTypeName::Id32
-                .bitset()
-                .union(StorageTypeName::Id64.bitset()),
+            StorageType::Id32.bitset().union(StorageType::Id64.bitset()),
         )
     }
 }

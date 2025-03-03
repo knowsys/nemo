@@ -2,9 +2,9 @@
 
 use std::num::NonZeroUsize;
 
-use crate::{
-    columnar::column::rle::ColumnRle,
-    storagevalues::{ColumnDataType, RunLengthEncodable},
+use crate::columnar::{
+    column::rle::ColumnRle,
+    columntype::{rle::RunLengthEncodable, ColumnType},
 };
 
 use super::ColumnBuilder;
@@ -31,7 +31,7 @@ pub(crate) struct ColumnBuilderRle<T: RunLengthEncodable> {
 
 impl<T> ColumnBuilderRle<T>
 where
-    T: ColumnDataType + Default,
+    T: ColumnType,
 {
     /// Constructor.
     pub(crate) fn new() -> ColumnBuilderRle<T> {
@@ -45,7 +45,7 @@ where
 
 impl<T> ColumnBuilderRle<T>
 where
-    T: ColumnDataType + Default,
+    T: ColumnType,
 {
     /// Get the average length of RleElements to get a feeling for how much memory the encoding will take.
     pub(crate) fn avg_length_of_rle_elements(&self) -> usize {
@@ -64,7 +64,7 @@ where
 
 impl<'a, T> ColumnBuilder<'a, T> for ColumnBuilderRle<T>
 where
-    T: 'a + ColumnDataType + Default,
+    T: 'a + ColumnType,
 {
     type Col = ColumnRle<T>;
 

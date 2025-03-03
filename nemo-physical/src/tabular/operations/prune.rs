@@ -8,7 +8,8 @@ use crate::{
         operations::prune::ColumnScanPrune,
     },
     storagevalues::{
-        storage_type_name::StorageTypeBitSet, ColumnDataType, StorageTypeName, StorageValueT,
+        storagetype::{StorageType, StorageTypeBitSet},
+        storagevalue::{StorageValue, StorageValueT},
     },
     tabular::triescan::{PartialTrieScan, TrieScan, TrieScanEnum},
 };
@@ -70,7 +71,7 @@ impl<'a> TrieScanPrune<'a> {
                     ColumnScanEnum::Prune(ColumnScanPrune::new(
                         Rc::clone(&state),
                         layer,
-                        StorageTypeName::$variant,
+                        StorageType::$variant,
                         input_scan,
                     ))
                 }};
@@ -113,7 +114,7 @@ pub(crate) struct TrieScanPruneState<'a> {
     /// Trie scan which is being pruned
     input_trie_scan: TrieScanEnum<'a>,
     /// Possible types in each layer of the `input_trie_scan`
-    possible_types: Vec<Vec<StorageTypeName>>,
+    possible_types: Vec<Vec<StorageType>>,
 
     /// Whether the first `external_down()` has been made (to go to layer `0`)
     initialized: bool,
@@ -132,8 +133,8 @@ pub(crate) struct TrieScanPruneState<'a> {
     /// Layer on which an outside consumer would believe this trie scan to be
     /// TODO: Maybe move to the `TrieScanPrune` itself, if we do not want to use this for validating the trie is on the correct layer in `ColumnScanPrune`
     external_current_layer: usize,
-    /// Path of [StorageTypeName] indicating the the types of the current (partial) row
-    external_path_types: Vec<StorageTypeName>,
+    /// Path of [StorageType] indicating the the types of the current (partial) row
+    external_path_types: Vec<StorageType>,
 }
 
 impl<'a> TrieScanPruneState<'a> {
@@ -166,7 +167,7 @@ impl<'a> TrieScanPruneState<'a> {
     }
 
     /// Increments the `external_current_layer`
-    pub(crate) fn external_down(&mut self, storage_type: StorageTypeName) {
+    pub(crate) fn external_down(&mut self, storage_type: StorageType) {
         self.external_path_types.push(storage_type);
 
         if !self.initialized {
@@ -216,7 +217,7 @@ impl<'a> TrieScanPruneState<'a> {
         self.input_trie_scan_current_type.push(0);
     }
 
-    fn go_to_next_type(&mut self) -> Option<StorageTypeName> {
+    fn go_to_next_type(&mut self) -> Option<StorageType> {
         let current_type_index =
             &mut self.input_trie_scan_current_type[self.input_trie_scan_current_layer];
         *current_type_index += 1;
@@ -280,7 +281,7 @@ impl<'a> TrieScanPruneState<'a> {
     pub(crate) fn is_column_peeked(
         &self,
         index: usize,
-        storage_type_opt: Option<StorageTypeName>,
+        storage_type_opt: Option<StorageType>,
     ) -> bool {
         // Cant you just check whether the input trie layer is lower than the external layer?
         // TODO: Make prettier
@@ -362,7 +363,7 @@ impl<'a> TrieScanPruneState<'a> {
     /// Same as `advance_on_layer()`, but calls `seek()` at the target layer to find advance to the next relevant tuple more efficiently.
     ///
     /// Currently, this function does not support returning the uppermost changed layer. This can be implemented in the future.
-    pub(crate) fn advance_on_layer_with_seek<T: ColumnDataType>(
+    pub(crate) fn advance_on_layer_with_seek<T: StorageValue>(
         &mut self,
         _target_layer: usize,
         _allow_advancements_above_target_layer: bool,
@@ -473,7 +474,7 @@ impl<'a> TrieScanPruneState<'a> {
     pub(crate) fn advance_on_layer(
         &mut self,
         target_layer: usize,
-        stay_in_type: Option<StorageTypeName>,
+        stay_in_type: Option<StorageType>,
     ) -> Option<usize> {
         debug_assert!(self.initialized);
         //????
@@ -582,7 +583,7 @@ impl TrieScanPrune<'_> {
     pub(crate) fn advance_on_layer(
         &mut self,
         target_layer: usize,
-        stay_in_type: Option<StorageTypeName>,
+        stay_in_type: Option<StorageType>,
     ) -> Option<usize> {
         unsafe {
             assert!((*self.state.get()).initialized);
@@ -616,7 +617,7 @@ impl<'a> PartialTrieScan<'a> for TrieScanPrune<'a> {
         }
     }
 
-    fn down(&mut self, next_type: StorageTypeName) {
+    fn down(&mut self, next_type: StorageType) {
         unsafe {
             (*self.state.get()).external_down(next_type);
         }
@@ -673,7 +674,7 @@ mod test {
         datavalues::AnyDataValue,
         dictionary::meta_dv_dict::MetaDvDictionary,
         management::database::Dict,
-        storagevalues::{StorageTypeName, StorageValueT},
+        storagevalues::{storagetype::StorageType, storagevalue::StorageValueT},
         tabular::{
             operations::{
                 filter::{Filter, GeneratorFilter},
@@ -765,7 +766,7 @@ mod test {
 
         trie_dfs(
             &mut scan,
-            &[StorageTypeName::Id32],
+            &[StorageType::Id32],
             &[
                 StorageValueT::Id32(1),  // x = 1
                 StorageValueT::Id32(2),  // y = 2
@@ -791,7 +792,7 @@ mod test {
 
         trie_dfs(
             &mut scan,
-            &[StorageTypeName::Int64],
+            &[StorageType::Int64],
             &[
                 StorageValueT::Int64(1), // x = 1
                 StorageValueT::Int64(4), // y = 4
@@ -815,7 +816,7 @@ mod test {
         // Equality on lowest layer changed to 99 to prevent any matches and create trie scan without materialized tuples
         let mut scan = create_example_trie_scan(&dictionary, &trie, 4, 99);
 
-        trie_dfs(&mut scan, &[StorageTypeName::Int64], &[]);
+        trie_dfs(&mut scan, &[StorageType::Int64], &[]);
     }
 
     #[test]
@@ -835,10 +836,10 @@ mod test {
         let mut scan = create_example_trie_scan(&dictionary, &trie, 4, 7);
 
         let low = scan.arity() - 1;
-        let ty = StorageTypeName::Int64;
+        let ty = StorageType::Int64;
 
         // Initialize trie
-        scan.down(StorageTypeName::Int64);
+        scan.down(StorageType::Int64);
         assert_eq!(partial_scan_current_at_layer(&scan, ty, low), None);
 
         assert_eq!(scan.advance_on_layer(low, None), Some(0));
@@ -861,10 +862,10 @@ mod test {
         let mut scan = TrieScanPrune::new(scan);
 
         let low = scan.arity() - 1;
-        let ty = StorageTypeName::Int64;
+        let ty = StorageType::Int64;
 
         // Initialize trie
-        scan.down(StorageTypeName::Int64);
+        scan.down(StorageType::Int64);
         assert_eq!(partial_scan_current_at_layer(&scan, ty, low), None);
 
         assert_eq!(scan.advance_on_layer(low, None), Some(0));
@@ -901,7 +902,7 @@ mod test {
         let scan = TrieScanEnum::Generic(trie.partial_iterator());
         let mut scan = TrieScanPrune::new(scan);
 
-        let ty = StorageTypeName::Int64;
+        let ty = StorageType::Int64;
 
         // Initialize trie
         scan.down(ty);
@@ -965,7 +966,7 @@ mod test {
         let scan = TrieScanEnum::Generic(trie.partial_iterator());
         let mut scan = TrieScanPrune::new(scan);
 
-        let ty = StorageTypeName::Int64;
+        let ty = StorageType::Int64;
 
         // Initialize trie
         scan.down(ty);
@@ -1008,7 +1009,7 @@ mod test {
         let scan = TrieScanEnum::Generic(trie.partial_iterator());
         let mut scan = TrieScanPrune::new(scan);
 
-        let ty = StorageTypeName::Int64;
+        let ty = StorageType::Int64;
 
         // Initialize trie
         scan.down(ty);

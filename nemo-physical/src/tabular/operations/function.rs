@@ -16,7 +16,7 @@ use crate::{
         tree::{FunctionTree, SpecialCaseFunction},
     },
     management::database::Dict,
-    storagevalues::{storage_type_name::StorageTypeBitSet, StorageTypeName},
+    storagevalues::storagetype::{StorageType, StorageTypeBitSet},
     tabular::triescan::{PartialTrieScan, TrieScanEnum},
 };
 
@@ -295,8 +295,8 @@ pub(crate) struct TrieScanFunction<'a> {
     /// For each output layer, stores which are the possible types.
     possible_types: Vec<StorageTypeBitSet>,
 
-    /// Path of [StorageTypeName] indicating the the types of the current (partial) row
-    path_types: Vec<StorageTypeName>,
+    /// Path of [StorageType] indicating the the types of the current (partial) row
+    path_types: Vec<StorageType>,
 
     /// For each layer in the resulting trie contains a [ColumnScanT]
     /// evaluating the functions on columns of the input trie
@@ -325,7 +325,7 @@ impl<'a> PartialTrieScan<'a> for TrieScanFunction<'a> {
         self.path_types.pop();
     }
 
-    fn down(&mut self, next_type: StorageTypeName) {
+    fn down(&mut self, next_type: StorageType) {
         let next_layer = self.path_types.len();
 
         if let Some((current_layer, current_type)) =
@@ -340,8 +340,11 @@ impl<'a> PartialTrieScan<'a> for TrieScanFunction<'a> {
                     .expect("Down may only be called on existing values.");
 
                 self.input_values.push(
-                    AnyDataValue::new_from_storage_value(current_value, &self.dictionary.borrow())
-                        .expect("Value should be known to the dictionary"),
+                    AnyDataValue::new_from_storage_value_t(
+                        current_value,
+                        &self.dictionary.borrow(),
+                    )
+                    .expect("Value should be known to the dictionary"),
                 );
 
                 for (program, output_layer) in defined_programs {
@@ -413,7 +416,7 @@ mod test {
         dictionary::DvDict,
         function::tree::FunctionTree,
         management::database::Dict,
-        storagevalues::{into_datavalue::IntoDataValue, StorageTypeName, StorageValueT},
+        storagevalues::{storagetype::StorageType, storagevalue::StorageValueT},
         tabular::{
             operations::{OperationGenerator, OperationTableGenerator},
             rowscan::RowScan,
@@ -479,13 +482,13 @@ mod test {
         for layer in 0..function_scan.arity() {
             assert_eq!(
                 function_scan.possible_types(layer),
-                StorageTypeName::Int64.bitset()
+                StorageType::Int64.bitset()
             );
         }
 
         trie_dfs(
             &mut function_scan,
-            &[StorageTypeName::Int64],
+            &[StorageType::Int64],
             &[
                 StorageValueT::Int64(2), // a = 2
                 StorageValueT::Int64(1), // x = 1
@@ -572,13 +575,13 @@ mod test {
         for layer in 0..function_scan.arity() {
             assert_eq!(
                 function_scan.possible_types(layer),
-                StorageTypeName::Int64.bitset()
+                StorageType::Int64.bitset()
             );
         }
 
         trie_dfs(
             &mut function_scan,
-            &[StorageTypeName::Int64],
+            &[StorageType::Int64],
             &[
                 StorageValueT::Int64(1),  // x = 1
                 StorageValueT::Int64(1),  // a = 1
@@ -654,13 +657,13 @@ mod test {
         for layer in 0..function_scan.arity() {
             assert_eq!(
                 function_scan.possible_types(layer),
-                StorageTypeName::Int64.bitset()
+                StorageType::Int64.bitset()
             );
         }
 
         trie_dfs(
             &mut function_scan,
-            &[StorageTypeName::Int64],
+            &[StorageType::Int64],
             &[
                 StorageValueT::Int64(1),  // x = 1
                 StorageValueT::Int64(3),  // y = 3
@@ -739,30 +742,24 @@ mod test {
             .generate(vec![Some(trie_scan)], &dictionary)
             .unwrap();
 
-        assert_eq!(
-            function_scan.possible_types(0),
-            StorageTypeName::Id32.bitset(),
-        );
+        assert_eq!(function_scan.possible_types(0), StorageType::Id32.bitset(),);
         assert_eq!(
             function_scan.possible_types(1),
-            StorageTypeName::Id32
+            StorageType::Id32
                 .bitset()
-                .union(StorageTypeName::Int64.bitset()),
+                .union(StorageType::Int64.bitset()),
         );
-        assert_eq!(
-            function_scan.possible_types(2),
-            StorageTypeName::Id32.bitset(),
-        );
+        assert_eq!(function_scan.possible_types(2), StorageType::Id32.bitset(),);
         assert_eq!(
             function_scan.possible_types(3),
-            StorageTypeName::Id32
+            StorageType::Id32
                 .bitset()
-                .union(StorageTypeName::Int64.bitset()),
+                .union(StorageType::Int64.bitset()),
         );
 
         trie_dfs(
             &mut function_scan,
-            &[StorageTypeName::Id32, StorageTypeName::Int64],
+            &[StorageType::Id32, StorageType::Int64],
             &[
                 StorageValueT::Id32(a),    // x = "a"
                 StorageValueT::Id32(foo1), // y = "foo1"
@@ -830,25 +827,19 @@ mod test {
             .generate(vec![Some(trie_scan)], &dictionary)
             .unwrap();
 
-        assert_eq!(
-            function_scan.possible_types(0),
-            StorageTypeName::Int64.bitset(),
-        );
-        assert_eq!(
-            function_scan.possible_types(1),
-            StorageTypeName::Id32.bitset(),
-        );
+        assert_eq!(function_scan.possible_types(0), StorageType::Int64.bitset(),);
+        assert_eq!(function_scan.possible_types(1), StorageType::Id32.bitset(),);
         assert_eq!(
             function_scan.possible_types(2),
-            StorageTypeName::Id32
-                .bitset()
-                .union(StorageTypeName::Id64.bitset()),
+            StorageType::Id32.bitset().union(StorageType::Id64.bitset()),
         );
 
         let result = RowScan::new(function_scan, 0)
             .map(|row| {
                 row.into_iter()
-                    .map(|value| value.into_datavalue(&dictionary.borrow()).unwrap())
+                    .map(|value| {
+                        AnyDataValue::new_from_storage_value_t(value, &dictionary.borrow()).unwrap()
+                    })
                     .collect::<Vec<_>>()
             })
             .collect::<Vec<_>>();
@@ -912,7 +903,9 @@ mod test {
         let result = RowScan::new(function_scan, 0)
             .map(|row| {
                 row.into_iter()
-                    .map(|value| value.into_datavalue(&dictionary.borrow()).unwrap())
+                    .map(|value| {
+                        AnyDataValue::new_from_storage_value_t(value, &dictionary.borrow()).unwrap()
+                    })
                     .collect::<Vec<_>>()
             })
             .collect::<Vec<_>>();
@@ -972,7 +965,9 @@ mod test {
         let result = RowScan::new(function_scan, 0)
             .map(|row| {
                 row.into_iter()
-                    .map(|value| value.into_datavalue(&dictionary.borrow()).unwrap())
+                    .map(|value| {
+                        AnyDataValue::new_from_storage_value_t(value, &dictionary.borrow()).unwrap()
+                    })
                     .collect::<Vec<_>>()
             })
             .collect::<Vec<_>>();

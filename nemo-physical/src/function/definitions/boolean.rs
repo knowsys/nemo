@@ -2,7 +2,7 @@
 
 use crate::{
     datavalues::{AnyDataValue, DataValue},
-    storagevalues::StorageTypeName,
+    storagevalues::storagetype::StorageType,
 };
 
 use super::{FunctionTypePropagation, NaryFunction, UnaryFunction};
@@ -40,9 +40,7 @@ impl NaryFunction for BooleanConjunction {
     fn type_propagation(&self) -> FunctionTypePropagation {
         // TODO: This is playing it save, one should probably give booleans a special status
         FunctionTypePropagation::KnownOutput(
-            StorageTypeName::Id32
-                .bitset()
-                .union(StorageTypeName::Id64.bitset()),
+            StorageType::Id32.bitset().union(StorageType::Id64.bitset()),
         )
     }
 }
@@ -68,9 +66,7 @@ impl NaryFunction for BooleanDisjunction {
     fn type_propagation(&self) -> FunctionTypePropagation {
         // TODO: This is playing it save, one should probably give booleans a special status
         FunctionTypePropagation::KnownOutput(
-            StorageTypeName::Id32
-                .bitset()
-                .union(StorageTypeName::Id64.bitset()),
+            StorageType::Id32.bitset().union(StorageType::Id64.bitset()),
         )
     }
 }
@@ -93,9 +89,7 @@ impl UnaryFunction for BooleanNegation {
     fn type_propagation(&self) -> FunctionTypePropagation {
         // TODO: This is playing it save, one should probably give booleans a special status
         FunctionTypePropagation::KnownOutput(
-            StorageTypeName::Id32
-                .bitset()
-                .union(StorageTypeName::Id64.bitset()),
+            StorageType::Id32.bitset().union(StorageType::Id64.bitset()),
         )
     }
 }

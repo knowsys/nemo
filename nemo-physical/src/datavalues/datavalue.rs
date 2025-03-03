@@ -6,7 +6,7 @@ use std::{
     hash::Hash,
 };
 
-use crate::storagevalues::{storage_type_name::StorageTypeBitSet, StorageTypeName};
+use crate::storagevalues::storagetype::{StorageType, StorageTypeBitSet};
 
 use super::{AnyDataValue, IriDataValue, NullDataValue};
 
@@ -129,9 +129,9 @@ impl ValueDomain {
             | ValueDomain::UnsignedLong
             | ValueDomain::NonNegativeLong
             | ValueDomain::UnsignedInt
-            | ValueDomain::NonNegativeInt => StorageTypeName::Int64.bitset(),
-            ValueDomain::Float => StorageTypeName::Float.bitset(),
-            ValueDomain::Double => StorageTypeName::Double.bitset(),
+            | ValueDomain::NonNegativeInt => StorageType::Int64.bitset(),
+            ValueDomain::Float => StorageType::Float.bitset(),
+            ValueDomain::Double => StorageType::Double.bitset(),
             ValueDomain::PlainString
             | ValueDomain::LanguageTaggedString
             | ValueDomain::Iri
@@ -139,9 +139,7 @@ impl ValueDomain {
             | ValueDomain::Null
             | ValueDomain::Map
             | ValueDomain::Boolean
-            | ValueDomain::Other => StorageTypeName::Id32
-                .bitset()
-                .union(StorageTypeName::Id64.bitset()),
+            | ValueDomain::Other => StorageType::Id32.bitset().union(StorageType::Id64.bitset()),
         }
     }
 

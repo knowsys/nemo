@@ -7,7 +7,7 @@ use unicode_segmentation::UnicodeSegmentation;
 
 use crate::{
     datavalues::{AnyDataValue, DataValue},
-    storagevalues::StorageTypeName,
+    storagevalues::storagetype::StorageType,
 };
 
 use super::{
@@ -81,7 +81,7 @@ impl BinaryFunction for StringCompare {
     }
 
     fn type_propagation(&self) -> FunctionTypePropagation {
-        FunctionTypePropagation::KnownOutput(StorageTypeName::Int64.bitset())
+        FunctionTypePropagation::KnownOutput(StorageType::Int64.bitset())
     }
 }
 
@@ -103,9 +103,9 @@ impl NaryFunction for StringConcatenation {
 
     fn type_propagation(&self) -> FunctionTypePropagation {
         FunctionTypePropagation::KnownOutput(
-            StorageTypeName::Id32
+            StorageType::Id32
                 .bitset()
-                .union(StorageTypeName::Id64.bitset()),
+                .union(StorageType::Id64.bitset()),
         )
     }
 }
@@ -134,9 +134,9 @@ impl BinaryFunction for StringContains {
     fn type_propagation(&self) -> FunctionTypePropagation {
         // TODO: This is playing it save, one should probably give booleans a special status
         FunctionTypePropagation::KnownOutput(
-            StorageTypeName::Id32
+            StorageType::Id32
                 .bitset()
-                .union(StorageTypeName::Id64.bitset()),
+                .union(StorageType::Id64.bitset()),
         )
     }
 }
@@ -172,9 +172,9 @@ impl BinaryFunction for StringStarts {
     fn type_propagation(&self) -> FunctionTypePropagation {
         // TODO: This is playing it save, one should probably give booleans a special status
         FunctionTypePropagation::KnownOutput(
-            StorageTypeName::Id32
+            StorageType::Id32
                 .bitset()
-                .union(StorageTypeName::Id64.bitset()),
+                .union(StorageType::Id64.bitset()),
         )
     }
 }
@@ -211,9 +211,9 @@ impl BinaryFunction for StringEnds {
     fn type_propagation(&self) -> FunctionTypePropagation {
         // TODO: This is playing it save, one should probably give booleans a special status
         FunctionTypePropagation::KnownOutput(
-            StorageTypeName::Id32
+            StorageType::Id32
                 .bitset()
-                .union(StorageTypeName::Id64.bitset()),
+                .union(StorageType::Id64.bitset()),
         )
     }
 }
@@ -247,9 +247,9 @@ impl BinaryFunction for StringBefore {
 
     fn type_propagation(&self) -> FunctionTypePropagation {
         FunctionTypePropagation::KnownOutput(
-            StorageTypeName::Id32
+            StorageType::Id32
                 .bitset()
-                .union(StorageTypeName::Id64.bitset()),
+                .union(StorageType::Id64.bitset()),
         )
     }
 }
@@ -283,9 +283,9 @@ impl BinaryFunction for StringAfter {
 
     fn type_propagation(&self) -> FunctionTypePropagation {
         FunctionTypePropagation::KnownOutput(
-            StorageTypeName::Id32
+            StorageType::Id32
                 .bitset()
-                .union(StorageTypeName::Id64.bitset()),
+                .union(StorageType::Id64.bitset()),
         )
     }
 }
@@ -322,9 +322,9 @@ impl BinaryFunction for StringSubstring {
 
     fn type_propagation(&self) -> FunctionTypePropagation {
         FunctionTypePropagation::KnownOutput(
-            StorageTypeName::Id32
+            StorageType::Id32
                 .bitset()
-                .union(StorageTypeName::Id64.bitset()),
+                .union(StorageType::Id64.bitset()),
         )
     }
 }
@@ -364,9 +364,9 @@ impl BinaryFunction for StringRegex {
 
     fn type_propagation(&self) -> FunctionTypePropagation {
         FunctionTypePropagation::KnownOutput(
-            StorageTypeName::Id32
+            StorageType::Id32
                 .bitset()
-                .union(StorageTypeName::Id64.bitset()),
+                .union(StorageType::Id64.bitset()),
         )
     }
 }
@@ -392,7 +392,7 @@ impl BinaryFunction for StringLevenshtein {
     }
 
     fn type_propagation(&self) -> FunctionTypePropagation {
-        FunctionTypePropagation::KnownOutput(StorageTypeName::Int64.bitset())
+        FunctionTypePropagation::KnownOutput(StorageType::Int64.bitset())
     }
 }
 
@@ -411,7 +411,7 @@ impl UnaryFunction for StringLength {
     }
 
     fn type_propagation(&self) -> FunctionTypePropagation {
-        FunctionTypePropagation::KnownOutput(StorageTypeName::Int64.bitset())
+        FunctionTypePropagation::KnownOutput(StorageType::Int64.bitset())
     }
 }
 
@@ -431,9 +431,9 @@ impl UnaryFunction for StringReverse {
 
     fn type_propagation(&self) -> FunctionTypePropagation {
         FunctionTypePropagation::KnownOutput(
-            StorageTypeName::Id32
+            StorageType::Id32
                 .bitset()
-                .union(StorageTypeName::Id64.bitset()),
+                .union(StorageType::Id64.bitset()),
         )
     }
 }
@@ -454,9 +454,9 @@ impl UnaryFunction for StringUppercase {
 
     fn type_propagation(&self) -> FunctionTypePropagation {
         FunctionTypePropagation::KnownOutput(
-            StorageTypeName::Id32
+            StorageType::Id32
                 .bitset()
-                .union(StorageTypeName::Id64.bitset()),
+                .union(StorageType::Id64.bitset()),
         )
     }
 }
@@ -477,9 +477,9 @@ impl UnaryFunction for StringLowercase {
 
     fn type_propagation(&self) -> FunctionTypePropagation {
         FunctionTypePropagation::KnownOutput(
-            StorageTypeName::Id32
+            StorageType::Id32
                 .bitset()
-                .union(StorageTypeName::Id64.bitset()),
+                .union(StorageType::Id64.bitset()),
         )
     }
 }
@@ -500,9 +500,9 @@ impl UnaryFunction for StringUriEncode {
 
     fn type_propagation(&self) -> FunctionTypePropagation {
         FunctionTypePropagation::KnownOutput(
-            StorageTypeName::Id32
+            StorageType::Id32
                 .bitset()
-                .union(StorageTypeName::Id64.bitset()),
+                .union(StorageType::Id64.bitset()),
         )
     }
 }
@@ -524,9 +524,9 @@ impl UnaryFunction for StringUriDecode {
 
     fn type_propagation(&self) -> FunctionTypePropagation {
         FunctionTypePropagation::KnownOutput(
-            StorageTypeName::Id32
+            StorageType::Id32
                 .bitset()
-                .union(StorageTypeName::Id64.bitset()),
+                .union(StorageType::Id64.bitset()),
         )
     }
 }
@@ -573,9 +573,9 @@ impl TernaryFunction for StringSubstringLength {
 
     fn type_propagation(&self) -> FunctionTypePropagation {
         FunctionTypePropagation::KnownOutput(
-            StorageTypeName::Id32
+            StorageType::Id32
                 .bitset()
-                .union(StorageTypeName::Id64.bitset()),
+                .union(StorageType::Id64.bitset()),
         )
     }
 }
