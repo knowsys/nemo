@@ -38,6 +38,8 @@ unicode-segmentation = "1.11.0"
 urlencoding = "2.1.3"
 oxiri = "0.2.2"
 path-slash = "0.2.1"
+levenshtein = "1.0.5"
+
 
 [dev-dependencies]
 arbitrary = { version = "1", features = ["derive"] }

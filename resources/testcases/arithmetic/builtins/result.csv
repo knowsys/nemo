@@ -48,6 +48,12 @@ concat,"""Hello World"""
 compare,-10
 contains,"""true""^^<http://www.w3.org/2001/XMLSchema#boolean>"
 regex,"""true""^^<http://www.w3.org/2001/XMLSchema#boolean>"
+levenshtein_id,0
+levenshtein_ab,4
+levenshtein_ba,4
+levenshtein_ac,3
+levenshtein_bc,2
+levenshtein_ar,4
 stringreverse,"""olleH"""
 subString,"""ello"""
 subStringLength,"""ell"""

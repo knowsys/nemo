@@ -85,6 +85,7 @@ pub(crate) fn operation_to_function_tree(
         OperationKind::StringStarts => binary!(string_starts, sub),
         OperationKind::StringEnds => binary!(string_ends, sub),
         OperationKind::StringRegex => binary!(string_regex, sub),
+        OperationKind::StringLevenshtein => binary!(string_levenshtein, sub),
         OperationKind::BitShl => binary!(bit_shl, sub),
         OperationKind::BitShru => binary!(bit_shru, sub),
         OperationKind::BitShr => binary!(bit_shr, sub),

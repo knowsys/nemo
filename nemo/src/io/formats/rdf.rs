@@ -45,6 +45,13 @@ use crate::{
 use super::FileFormatMeta;
 use super::{ExportHandler, FormatBuilder, ImportHandler, TableWriter};
 
+/// IRI to be used for the default graph used by Nemo when loading RDF data with
+/// named graphs (quads).
+///
+/// SPARQL 1.1 has failed to provide any standard identifier for this purpose.
+/// If future SPARQL or RDF versions are adding this, we could align accordingly.
+const DEFAULT_GRAPH_IRI: &str = "tag:nemo:defaultgraph";
+
 /// The different supported variants of the RDF format.
 #[derive(Assoc, Debug, Clone, Copy, PartialEq, Eq, VariantArray)]
 #[func(pub fn media_type(&self) -> &'static str)]

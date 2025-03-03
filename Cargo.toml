@@ -1,7 +1,7 @@
 [workspace]
 resolver = "2"
 default-members = [
-       "nemo",
+    "nemo",
     "nemo-cli",
     "nemo-physical",
     "nemo-python",

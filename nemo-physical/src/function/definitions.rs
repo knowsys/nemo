@@ -10,6 +10,7 @@ pub(crate) mod string;
 
 use casting::CastingIntoIri;
 use delegate::delegate;
+use string::StringLevenshtein;
 
 use crate::{
     datatypes::{storage_type_name::StorageTypeBitSet, StorageTypeName},
@@ -240,6 +241,7 @@ pub enum BinaryFunctionEnum {
     StringCompare(StringCompare),
     StringContains(StringContains),
     StringRegex(StringRegex),
+    StringLevenshtein(StringLevenshtein),
     StringEnds(StringEnds),
     StringStarts(StringStarts),
     StringSubstring(StringSubstring),
@@ -269,6 +271,7 @@ impl BinaryFunction for BinaryFunctionEnum {
             Self::StringCompare(function) => function,
             Self::StringContains(function) => function,
             Self::StringRegex(function) => function,
+            Self::StringLevenshtein(function) => function,
             Self::StringEnds(function) => function,
             Self::StringStarts(function) => function,
             Self::StringSubstring(function) => function,
