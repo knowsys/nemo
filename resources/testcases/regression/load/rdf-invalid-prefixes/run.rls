@@ -1,0 +1,5 @@
+@import source :- turtle { resource = "../sources/invalid-prefixes.ttl" } .
+
+out(?X, ?Y, ?Z) :- source(?X, ?Y, ?Z) .
+
+@export out :- csv {} .
