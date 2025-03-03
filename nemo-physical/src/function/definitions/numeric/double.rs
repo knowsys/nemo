@@ -3,8 +3,8 @@
 use num::{traits::CheckedNeg, CheckedAdd, CheckedDiv, CheckedMul, CheckedSub};
 
 use crate::{
-    datatypes::Double,
     datavalues::{AnyDataValue, DoubleDataValue},
+    storagevalues::Double,
 };
 
 use super::traits::{CheckedPow, CheckedSquareRoot};

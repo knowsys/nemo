@@ -5,8 +5,8 @@ use std::collections::HashMap;
 use streaming_iterator::StreamingIterator;
 
 use crate::{
-    datatypes::StorageValueT,
     management::execution_plan::ColumnOrder,
+    storagevalues::StorageValueT,
     tabular::{
         buffer::tuple_buffer::TupleBuffer,
         rowscan::{Row, RowScan},
@@ -146,7 +146,7 @@ impl GeneratorProjectReorder {
 #[cfg(test)]
 mod test {
     use crate::{
-        datatypes::StorageValueT,
+        storagevalues::StorageValueT,
         tabular::{operations::OperationTableGenerator, trie::Trie},
         util::test_util::test::trie_id32,
     };

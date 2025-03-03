@@ -4,8 +4,8 @@ use std::{fmt::Debug, mem::size_of, num::NonZeroUsize, ops::Range};
 
 use crate::{
     columnar::{columnbuilder::rle::RleElement, columnscan::ColumnScan},
-    datatypes::{ColumnDataType, RunLengthEncodable},
     management::bytesized::ByteSized,
+    storagevalues::{ColumnDataType, RunLengthEncodable},
 };
 
 use super::Column;
@@ -418,7 +418,7 @@ where
 mod test {
     use crate::columnar::column::Column;
     use crate::columnar::columnscan::ColumnScan;
-    use crate::datatypes::{Double, Float, RunLengthEncodable};
+    use crate::storagevalues::{Double, Float, RunLengthEncodable};
     use quickcheck_macros::quickcheck;
     use std::num::NonZeroUsize;
     #[cfg(not(miri))]

@@ -2,7 +2,7 @@
 
 use crate::{
     columnar::columnscan::ColumnScanT,
-    datatypes::{StorageTypeName, StorageValueT},
+    storagevalues::{StorageTypeName, StorageValueT},
     tabular::triescan::{PartialTrieScan, TrieScan, TrieScanEnum},
 };
 
@@ -159,8 +159,8 @@ mod test {
     use std::cell::RefCell;
 
     use crate::{
-        datatypes::StorageValueT,
         management::database::Dict,
+        storagevalues::StorageValueT,
         tabular::{
             operations::join::test::generate_join_scan,
             triescan::{TrieScan, TrieScanEnum},

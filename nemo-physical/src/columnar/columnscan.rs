@@ -5,8 +5,8 @@
 use std::{cell::UnsafeCell, fmt::Debug, ops::Range};
 
 use crate::{
-    datatypes::{ColumnDataType, Double, Float, StorageTypeName, StorageValueT},
     generate_forwarder,
+    storagevalues::{ColumnDataType, Double, Float, StorageTypeName, StorageValueT},
 };
 
 use super::{
@@ -343,18 +343,18 @@ where
     }
 }
 
-/// Contains a [ColumnScan] for every used [super::super::datatypes::storage_type_name::StorageTypeName]
+/// Contains a [ColumnScan] for every used [super::super::storagevalues::storage_type_name::StorageTypeName]
 #[derive(Debug)]
 pub(crate) struct ColumnScanT<'a> {
-    /// Case [StorageTypeName::Id32][super::super::datatypes::storage_type_name::StorageTypeName]
+    /// Case [StorageTypeName::Id32][super::super::storagevalues::storage_type_name::StorageTypeName]
     pub scan_id32: ColumnScanCell<'a, u32>,
-    /// Case [StorageTypeName::Id64][super::super::datatypes::storage_type_name::StorageTypeName]
+    /// Case [StorageTypeName::Id64][super::super::storagevalues::storage_type_name::StorageTypeName]
     pub scan_id64: ColumnScanCell<'a, u64>,
-    /// Case [StorageTypeName::Int64][super::super::datatypes::storage_type_name::StorageTypeName]
+    /// Case [StorageTypeName::Int64][super::super::storagevalues::storage_type_name::StorageTypeName]
     pub scan_i64: ColumnScanCell<'a, i64>,
-    /// Case [StorageTypeName::Float][super::super::datatypes::storage_type_name::StorageTypeName]
+    /// Case [StorageTypeName::Float][super::super::storagevalues::storage_type_name::StorageTypeName]
     pub scan_float: ColumnScanCell<'a, Float>,
-    /// Case [StorageTypeName::Double][super::super::datatypes::storage_type_name::StorageTypeName]
+    /// Case [StorageTypeName::Double][super::super::storagevalues::storage_type_name::StorageTypeName]
     pub scan_double: ColumnScanCell<'a, Double>,
 }
 

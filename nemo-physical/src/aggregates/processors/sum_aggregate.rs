@@ -1,6 +1,6 @@
 //! Computes the sum of all input values.
 
-use crate::datatypes::{Double, Float, StorageValueT};
+use crate::storagevalues::{Double, Float, StorageValueT};
 
 use super::processor::{AggregateGroupProcessor, AggregateProcessor};
 use num::{CheckedAdd, Zero};

@@ -2,7 +2,7 @@
 
 use std::{fmt::Debug, ops::Range};
 
-use crate::{columnar::columnscan::ColumnScan, datatypes::ColumnDataType};
+use crate::{columnar::columnscan::ColumnScan, storagevalues::ColumnDataType};
 
 /// [ColumnScanConstant] returns exactly one value.
 /// Therefore, it can be only in of three states.

@@ -14,16 +14,16 @@ use crate::{
             filter_constant::ColumnScanFilterConstant, pass::ColumnScanPass,
         },
     },
-    datatypes::{
-        into_datavalue::IntoDataValue, storage_type_name::StorageTypeBitSet, StorageTypeName,
-        StorageValueT,
-    },
     datavalues::AnyDataValue,
     function::{
         evaluation::StackProgram,
         tree::{FunctionTree, SpecialCaseFilter},
     },
     management::database::Dict,
+    storagevalues::{
+        into_datavalue::IntoDataValue, storage_type_name::StorageTypeBitSet, StorageTypeName,
+        StorageValueT,
+    },
     tabular::triescan::{PartialTrieScan, TrieScanEnum},
 };
 
@@ -325,9 +325,9 @@ mod test {
     use std::cell::RefCell;
 
     use crate::{
-        datatypes::{StorageTypeName, StorageValueT},
         datavalues::AnyDataValue,
         dictionary::meta_dv_dict::MetaDvDictionary,
+        storagevalues::{StorageTypeName, StorageValueT},
         tabular::{
             operations::{OperationGenerator, OperationTableGenerator},
             triescan::TrieScanEnum,

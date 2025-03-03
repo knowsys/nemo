@@ -2,7 +2,7 @@
 
 use crate::{
     columnar::columnscan::{ColumnScan, ColumnScanCell},
-    datatypes::ColumnDataType,
+    storagevalues::ColumnDataType,
 };
 
 /// [ColumnScanFilterConstant] does only return up to one value.

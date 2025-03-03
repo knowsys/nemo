@@ -11,8 +11,8 @@ use crate::{
         processors::processor::{AggregateGroupProcessor, AggregateProcessor},
     },
     columnar::columnscan::ColumnScanT,
-    datatypes::{storage_type_name::StorageTypeBitSet, StorageTypeName, StorageValueT},
     management::database::Dict,
+    storagevalues::{storage_type_name::StorageTypeBitSet, StorageTypeName, StorageValueT},
     tabular::triescan::{PartialTrieScan, TrieScan, TrieScanEnum},
 };
 
@@ -384,7 +384,7 @@ impl<'a> From<TrieScanAggregate<TrieScanPrune<'a>>> for TrieScanAggregateWrapper
 mod test {
     use super::{AggregationInstructions, TrieScanAggregate};
     use crate::aggregates::operation::AggregateOperation;
-    use crate::datatypes::StorageTypeName;
+    use crate::storagevalues::StorageTypeName;
     use crate::tabular::operations::prune::TrieScanPrune;
     use crate::tabular::trie::Trie;
     use crate::tabular::triescan::TrieScanEnum;

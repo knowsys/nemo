@@ -7,10 +7,10 @@ use crate::{
         columnscan::{ColumnScanEnum, ColumnScanT},
         operations::{constant::ColumnScanConstant, pass::ColumnScanPass},
     },
-    datatypes::{storage_type_name::StorageTypeBitSet, StorageTypeName, StorageValueT},
     datavalues::ValueDomain,
     dictionary::DvDict,
     management::database::Dict,
+    storagevalues::{storage_type_name::StorageTypeBitSet, StorageTypeName, StorageValueT},
     tabular::triescan::{PartialTrieScan, TrieScanEnum},
 };
 
@@ -250,10 +250,10 @@ mod test {
     use std::cell::RefCell;
 
     use crate::{
-        datatypes::{into_datavalue::IntoDataValue, StorageValueT},
         datavalues::{AnyDataValue, DataValue, ValueDomain},
         dictionary::DvDict,
         management::database::Dict,
+        storagevalues::{into_datavalue::IntoDataValue, StorageValueT},
         tabular::{
             operations::{OperationGenerator, OperationTableGenerator},
             rowscan::RowScan,

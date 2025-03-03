@@ -4,10 +4,10 @@ use std::{cell::RefCell, ops::Range, rc::Rc};
 
 use crate::{
     columnar::columnscan::{ColumnScan, ColumnScanCell},
-    datatypes::ColumnDataType,
     datavalues::AnyDataValue,
     function::evaluation::StackProgram,
     management::database::Dict,
+    storagevalues::ColumnDataType,
 };
 
 /// [ColumnScan], which filters values of a "value" scan based on a [StackProgram]

@@ -1,8 +1,8 @@
 //! This module defines functions that are relevant for all data types.
 
 use crate::{
-    datatypes::StorageTypeName,
     datavalues::{AnyDataValue, DataValue},
+    storagevalues::StorageTypeName,
 };
 
 use super::{BinaryFunction, FunctionTypePropagation, UnaryFunction};

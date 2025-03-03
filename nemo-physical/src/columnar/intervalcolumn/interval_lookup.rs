@@ -5,7 +5,7 @@ pub(crate) mod lookup_column;
 
 use std::fmt::Debug;
 
-use crate::{datatypes::StorageTypeName, management::bytesized::ByteSized};
+use crate::{management::bytesized::ByteSized, storagevalues::StorageTypeName};
 /// Trait for looking up interval bounds in [IntervalColumn][super::super::intervalcolumn::IntervalColumn]
 pub(crate) trait IntervalLookup: Debug + Clone + ByteSized {
     /// [IntervalLookupBuilder] type for building objects that implement this trait

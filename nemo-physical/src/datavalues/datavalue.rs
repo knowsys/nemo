@@ -6,7 +6,7 @@ use std::{
     hash::Hash,
 };
 
-use crate::datatypes::{storage_type_name::StorageTypeBitSet, StorageTypeName};
+use crate::storagevalues::{storage_type_name::StorageTypeBitSet, StorageTypeName};
 
 use super::{AnyDataValue, IriDataValue, NullDataValue};
 

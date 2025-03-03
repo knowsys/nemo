@@ -8,7 +8,7 @@ use crate::{
         column::{Column, ColumnEnum},
         columnbuilder::ColumnBuilder,
     },
-    datatypes::ColumnDataType,
+    storagevalues::ColumnDataType,
 };
 use std::fmt::Debug;
 
@@ -95,7 +95,7 @@ impl Permutator {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::datatypes::{Double, Float};
+    use crate::storagevalues::{Double, Float};
     use quickcheck_macros::quickcheck;
     #[cfg(not(miri))]
     use test_log::test;

@@ -1,7 +1,7 @@
 //! This module defines [ColumnScanJoin].
 
 use crate::columnar::columnscan::{ColumnScan, ColumnScanCell};
-use crate::datatypes::ColumnDataType;
+use crate::storagevalues::ColumnDataType;
 
 use std::fmt::Debug;
 use std::ops::Range;

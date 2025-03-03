@@ -2,7 +2,7 @@
 
 use std::cmp::Ordering;
 
-use crate::datatypes::{
+use crate::storagevalues::{
     storage_type_name::NUM_STORAGETYPES, Double, Float, StorageTypeName, StorageValueT,
 };
 
@@ -380,7 +380,7 @@ impl TupleBuffer {
 
 #[cfg(test)]
 mod test {
-    use crate::{datatypes::StorageValueT, tabular::buffer::tuple_buffer::TupleBuffer};
+    use crate::{storagevalues::StorageValueT, tabular::buffer::tuple_buffer::TupleBuffer};
 
     #[test]
     fn tuple_buffer_internals() {

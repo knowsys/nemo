@@ -1,8 +1,8 @@
 //! This module defines functions on string.
 
 use crate::{
-    datatypes::StorageTypeName,
     datavalues::{syntax::encodings, AnyDataValue, DataValue},
+    storagevalues::StorageTypeName,
 };
 
 use super::{FunctionTypePropagation, UnaryFunction};

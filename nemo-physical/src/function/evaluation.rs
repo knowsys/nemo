@@ -3,10 +3,10 @@
 use std::{collections::HashMap, fmt::Debug, hash::Hash};
 
 use crate::{
-    datatypes::storage_type_name::StorageTypeBitSet,
     datavalues::{AnyDataValue, DataValue},
     error::Error,
     function::tree::FunctionLeaf,
+    storagevalues::storage_type_name::StorageTypeBitSet,
 };
 
 use super::{

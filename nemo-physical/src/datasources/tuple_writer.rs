@@ -79,10 +79,10 @@ mod test {
 
     use crate::{
         datasources::tuple_writer::TupleWriter,
-        datatypes::{Float, StorageValueT},
         datavalues::AnyDataValue,
         dictionary::{meta_dv_dict::MetaDvDictionary, DvDict},
         management::database::Dict,
+        storagevalues::{Float, StorageValueT},
     };
 
     #[test]

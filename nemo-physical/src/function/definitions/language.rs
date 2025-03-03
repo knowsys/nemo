@@ -1,8 +1,8 @@
 //! This module defines functions relating to language tagged strings
 
 use crate::{
-    datatypes::StorageTypeName,
     datavalues::{AnyDataValue, DataValue},
+    storagevalues::StorageTypeName,
 };
 
 use super::{FunctionTypePropagation, UnaryFunction};

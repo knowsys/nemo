@@ -7,7 +7,7 @@ use delegate::delegate;
 
 use crate::{
     columnar::columnscan::ColumnScanT,
-    datatypes::{storage_type_name::StorageTypeBitSet, StorageTypeName, StorageValueT},
+    storagevalues::{storage_type_name::StorageTypeBitSet, StorageTypeName, StorageValueT},
 };
 
 use super::{

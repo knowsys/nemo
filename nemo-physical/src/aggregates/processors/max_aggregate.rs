@@ -1,6 +1,6 @@
 //! Computes the maximum of all input values.
 
-use crate::datatypes::StorageValueT;
+use crate::storagevalues::StorageValueT;
 
 use super::processor::{AggregateGroupProcessor, AggregateProcessor};
 

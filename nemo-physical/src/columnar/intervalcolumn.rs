@@ -15,8 +15,8 @@ use crate::{
         columnbuilder::{adaptive::ColumnBuilderAdaptive, ColumnBuilder},
         columnscan::{ColumnScanCell, ColumnScanEnum, ColumnScanT},
     },
-    datatypes::{ColumnDataType, Double, Float, StorageTypeName, StorageValueT},
     management::bytesized::ByteSized,
+    storagevalues::{ColumnDataType, Double, Float, StorageTypeName, StorageValueT},
 };
 
 use self::interval_lookup::{IntervalLookup, IntervalLookupBuilderT, IntervalLookupT};
@@ -458,7 +458,7 @@ where
 mod test {
     use crate::{
         columnar::{column::Column, intervalcolumn::IntervalColumnTBuilderTriescan},
-        datatypes::{Float, StorageTypeName, StorageValueT},
+        storagevalues::{Float, StorageTypeName, StorageValueT},
     };
 
     use super::{

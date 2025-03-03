@@ -3,8 +3,8 @@ use std::fmt::Debug;
 use num::{Bounded, CheckedMul};
 
 use crate::{
-    datatypes::into_datavalue::IntoDataValue,
     function::definitions::numeric::traits::ArithmeticOperations,
+    storagevalues::into_datavalue::IntoDataValue,
 };
 
 use super::{Field, FloorToUsize, RunLengthEncodable};
@@ -16,8 +16,8 @@ pub(crate) trait ColumnDataType:
     + Ord
     + TryFrom<usize>
     + FloorToUsize
-    + Field
     + CheckedMul
+    + Field
     + Bounded
     + RunLengthEncodable
     + ArithmeticOperations
@@ -31,8 +31,8 @@ impl<T> ColumnDataType for T where
         + Ord
         + TryFrom<usize>
         + FloorToUsize
-        + Field
         + CheckedMul
+        + Field
         + Bounded
         + RunLengthEncodable
         + ArithmeticOperations

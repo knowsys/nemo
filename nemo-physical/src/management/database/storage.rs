@@ -124,9 +124,9 @@ mod test {
     use std::cell::RefCell;
 
     use crate::{
-        datatypes::{Float, StorageValueT},
         datavalues::AnyDataValue,
         management::database::{sources::SimpleTable, Dict},
+        storagevalues::{Float, StorageValueT},
     };
 
     use super::TableStorage;

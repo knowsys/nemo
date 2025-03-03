@@ -1,6 +1,6 @@
 //! Traits for implementing new aggregate operations
 
-use crate::datatypes::StorageValueT;
+use crate::storagevalues::StorageValueT;
 
 use super::{
     count_aggregate::CountAggregateProcessor, max_aggregate::MaxAggregateProcessor,

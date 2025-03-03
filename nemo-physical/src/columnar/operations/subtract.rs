@@ -3,7 +3,7 @@ use std::rc::Rc;
 use std::{fmt::Debug, ops::Range};
 
 use crate::columnar::columnscan::{ColumnScan, ColumnScanCell};
-use crate::datatypes::ColumnDataType;
+use crate::storagevalues::ColumnDataType;
 
 /// [ColumnScan] that consists of two types of subscans:
 ///  * a main column scan

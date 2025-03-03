@@ -11,7 +11,7 @@ mod test {
             columnscan::{ColumnScanEnum, ColumnScanT},
             operations::constant::ColumnScanConstant,
         },
-        datatypes::{storage_type_name::NUM_STORAGETYPES, StorageTypeName, StorageValueT},
+        storagevalues::{storage_type_name::NUM_STORAGETYPES, StorageTypeName, StorageValueT},
     };
 
     fn vector() -> Vec<u64> {

@@ -558,12 +558,12 @@ impl ByteSized for DatabaseInstance {
 #[cfg(test)]
 mod test {
     use crate::{
-        datatypes::StorageValueT,
         management::{
             bytesized::ByteSized,
             database::id::{PermanentTableId, TableId},
             execution_plan::ColumnOrder,
         },
+        storagevalues::StorageValueT,
         tabular::trie::Trie,
     };
 

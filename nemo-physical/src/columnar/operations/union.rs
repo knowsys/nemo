@@ -4,7 +4,7 @@ use std::{cell::UnsafeCell, fmt::Debug, ops::Range, rc::Rc};
 
 use crate::{
     columnar::columnscan::{ColumnScan, ColumnScanCell},
-    datatypes::ColumnDataType,
+    storagevalues::ColumnDataType,
 };
 
 /// [ColumnScan] representing the union of its sub scans

@@ -1,8 +1,8 @@
 //! This module defines functions that check for a data type of a value.
 
 use crate::{
-    datatypes::StorageTypeName,
     datavalues::{AnyDataValue, DataValue},
+    storagevalues::StorageTypeName,
 };
 
 use super::{FunctionTypePropagation, UnaryFunction};

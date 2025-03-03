@@ -10,8 +10,8 @@ use crate::{
         columnscan::{ColumnScanCell, ColumnScanEnum, ColumnScanT},
         operations::subtract::ColumnScanSubtract,
     },
-    datatypes::{storage_type_name::StorageTypeBitSet, Double, Float, StorageTypeName},
     management::database::Dict,
+    storagevalues::{storage_type_name::StorageTypeBitSet, Double, Float, StorageTypeName},
     tabular::triescan::{PartialTrieScan, TrieScanEnum},
 };
 
@@ -252,8 +252,8 @@ mod test {
     use std::cell::RefCell;
 
     use crate::{
-        datatypes::{StorageTypeName, StorageValueT},
         dictionary::meta_dv_dict::MetaDvDictionary,
+        storagevalues::{StorageTypeName, StorageValueT},
         tabular::{
             operations::{OperationGenerator, OperationTableGenerator},
             triescan::TrieScanEnum,

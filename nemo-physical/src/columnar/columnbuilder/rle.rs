@@ -4,7 +4,7 @@ use std::num::NonZeroUsize;
 
 use crate::{
     columnar::column::rle::ColumnRle,
-    datatypes::{ColumnDataType, RunLengthEncodable},
+    storagevalues::{ColumnDataType, RunLengthEncodable},
 };
 
 use super::ColumnBuilder;

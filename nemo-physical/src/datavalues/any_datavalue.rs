@@ -5,9 +5,9 @@ use std::{num::IntErrorKind, str::FromStr};
 use delegate::delegate;
 
 use crate::{
-    datatypes::{Double, Float, StorageValueT},
     dictionary::{AddResult, DvDict},
     management::database::Dict,
+    storagevalues::{Double, Float, StorageValueT},
 };
 
 use super::{

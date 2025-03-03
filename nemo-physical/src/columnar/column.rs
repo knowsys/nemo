@@ -8,9 +8,9 @@ pub(crate) mod vector;
 use std::{fmt::Debug, mem::size_of};
 
 use crate::{
-    datatypes::{ColumnDataType, RunLengthEncodable},
     generate_forwarder,
     management::bytesized::ByteSized,
+    storagevalues::{ColumnDataType, RunLengthEncodable},
 };
 
 use self::{rle::ColumnRle, vector::ColumnVector};

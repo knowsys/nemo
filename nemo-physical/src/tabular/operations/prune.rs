@@ -7,7 +7,7 @@ use crate::{
         columnscan::{ColumnScanCell, ColumnScanEnum, ColumnScanT},
         operations::prune::ColumnScanPrune,
     },
-    datatypes::{
+    storagevalues::{
         storage_type_name::StorageTypeBitSet, ColumnDataType, StorageTypeName, StorageValueT,
     },
     tabular::triescan::{PartialTrieScan, TrieScan, TrieScanEnum},
@@ -670,10 +670,10 @@ mod test {
     use std::cell::RefCell;
 
     use crate::{
-        datatypes::{StorageTypeName, StorageValueT},
         datavalues::AnyDataValue,
         dictionary::meta_dv_dict::MetaDvDictionary,
         management::database::Dict,
+        storagevalues::{StorageTypeName, StorageValueT},
         tabular::{
             operations::{
                 filter::{Filter, GeneratorFilter},

@@ -299,18 +299,6 @@ impl Bounded for Float {
     }
 }
 
-#[cfg(test)]
-impl Arbitrary for Float {
-    fn arbitrary(g: &mut Gen) -> Self {
-        let mut value = f32::arbitrary(g);
-        while !value.is_finite() {
-            value = f32::arbitrary(g);
-        }
-
-        Self::from_number(value)
-    }
-}
-
 impl RunLengthEncodable for Float {
     type Step = FloatingStep;
 
@@ -328,5 +316,17 @@ impl RunLengthEncodable for Float {
 
     fn offset(self, _: Self::Step, _: usize) -> Self {
         self
+    }
+}
+
+#[cfg(test)]
+impl Arbitrary for Float {
+    fn arbitrary(g: &mut Gen) -> Self {
+        let mut value = f32::arbitrary(g);
+        while !value.is_finite() {
+            value = f32::arbitrary(g);
+        }
+
+        Self::from_number(value)
     }
 }

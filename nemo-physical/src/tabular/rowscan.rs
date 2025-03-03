@@ -4,7 +4,7 @@ use std::marker::PhantomData;
 
 use streaming_iterator::StreamingIterator;
 
-use crate::datatypes::{StorageTypeName, StorageValueT};
+use crate::storagevalues::{StorageTypeName, StorageValueT};
 
 use super::triescan::PartialTrieScan;
 
@@ -246,8 +246,8 @@ mod test {
     use std::cell::RefCell;
 
     use crate::{
-        datatypes::StorageValueT,
         management::database::Dict,
+        storagevalues::StorageValueT,
         tabular::{
             operations::{union::GeneratorUnion, OperationGenerator},
             trie::Trie,

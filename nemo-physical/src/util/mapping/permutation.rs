@@ -239,7 +239,7 @@ impl PartialEq for Permutation {
 mod test {
     use std::collections::HashMap;
 
-    use crate::{datatypes::Float, util::mapping::traits::NatMapping};
+    use crate::{storagevalues::Float, util::mapping::traits::NatMapping};
 
     use super::Permutation;
 

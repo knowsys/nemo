@@ -6,8 +6,8 @@ use std::{cmp::Ordering, num::NonZero, sync::Mutex};
 use unicode_segmentation::UnicodeSegmentation;
 
 use crate::{
-    datatypes::StorageTypeName,
     datavalues::{AnyDataValue, DataValue},
+    storagevalues::StorageTypeName,
 };
 
 use super::{

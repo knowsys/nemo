@@ -14,11 +14,11 @@ use crate::{
         },
     },
     datasources::tuple_writer::TupleWriter,
-    datatypes::{
+    management::bytesized::ByteSized,
+    storagevalues::{
         storage_type_name::{StorageTypeBitSet, STORAFE_TYPES},
         StorageTypeName, StorageValueT,
     },
-    management::bytesized::ByteSized,
     tabular::{buffer::tuple_buffer::TupleBuffer, rowscan::RowScan},
     util::bitset::BitSet,
 };
@@ -615,7 +615,7 @@ impl<'a> PartialTrieScan<'a> for TrieScanGeneric<'a> {
 #[cfg(test)]
 mod test {
     use crate::{
-        datatypes::{Float, StorageTypeName, StorageValueT},
+        storagevalues::{Float, StorageTypeName, StorageValueT},
         tabular::triescan::{PartialTrieScan, TrieScanEnum},
     };
 

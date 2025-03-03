@@ -1,7 +1,7 @@
 //! This module defines [ColumnScanPass].
 
 use crate::columnar::columnscan::{ColumnScan, ColumnScanCell};
-use crate::datatypes::ColumnDataType;
+use crate::storagevalues::ColumnDataType;
 use std::{fmt::Debug, ops::Range};
 
 /// Dummy Iterator that defers everything to its sub iterator

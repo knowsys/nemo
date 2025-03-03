@@ -29,7 +29,6 @@ pub(crate) mod columnar;
 
 pub mod aggregates;
 pub mod datasources;
-pub mod datatypes;
 pub mod datavalues;
 pub mod dictionary;
 pub mod error;
@@ -38,5 +37,6 @@ pub mod management;
 pub mod meta;
 pub mod permutator;
 pub mod resource;
+pub mod storagevalues;
 pub mod tabular;
 pub mod util;

@@ -5,7 +5,7 @@ pub(crate) mod test {
     use hashbrown::HashMap;
 
     use crate::{
-        datatypes::{StorageTypeName, StorageValueT},
+        storagevalues::{StorageTypeName, StorageValueT},
         tabular::{trie::Trie, triescan::PartialTrieScan},
     };
 

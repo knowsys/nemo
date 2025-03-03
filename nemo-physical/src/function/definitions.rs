@@ -13,8 +13,8 @@ use delegate::delegate;
 use string::StringLevenshtein;
 
 use crate::{
-    datatypes::{storage_type_name::StorageTypeBitSet, StorageTypeName},
     datavalues::AnyDataValue,
+    storagevalues::{storage_type_name::StorageTypeBitSet, StorageTypeName},
 };
 
 use self::{

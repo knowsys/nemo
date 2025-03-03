@@ -1,6 +1,6 @@
 //! Count the input values. Always returns an [i64], independent of the input value type.
 
-use crate::datatypes::StorageValueT;
+use crate::storagevalues::StorageValueT;
 
 use super::processor::{AggregateGroupProcessor, AggregateProcessor};
 

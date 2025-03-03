@@ -7,8 +7,8 @@ mod integer64;
 pub mod traits;
 
 use crate::{
-    datatypes::{Double, Float, StorageTypeName},
     datavalues::{AnyDataValue, DataValue, ValueDomain},
+    storagevalues::{Double, Float, StorageTypeName},
 };
 
 use self::{

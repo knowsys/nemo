@@ -1,7 +1,7 @@
 //! This module defines [ColumnScanPrune].
 
 use crate::columnar::columnscan::{ColumnScan, ColumnScanCell};
-use crate::datatypes::{ColumnDataType, StorageTypeName};
+use crate::storagevalues::{ColumnDataType, StorageTypeName};
 use crate::tabular::operations::prune::{SharedTrieScanPruneState, TrieScanPruneState};
 use std::fmt::Debug;
 use std::ops::Range;

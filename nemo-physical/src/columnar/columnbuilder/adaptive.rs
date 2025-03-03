@@ -6,7 +6,7 @@ use std::fmt::Debug;
 
 use crate::{
     columnar::column::{vector::ColumnVector, Column, ColumnEnum},
-    datatypes::{ColumnDataType, RunLengthEncodable},
+    storagevalues::{ColumnDataType, RunLengthEncodable},
 };
 
 use super::{rle::ColumnBuilderRle, ColumnBuilder};
@@ -169,7 +169,7 @@ mod test {
             column::{Column, ColumnEnum},
             columnbuilder::ColumnBuilder,
         },
-        datatypes::{Double, Float},
+        storagevalues::{Double, Float},
     };
     #[cfg(not(miri))]
     use test_log::test;

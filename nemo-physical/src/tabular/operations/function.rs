@@ -10,13 +10,13 @@ use crate::{
         columnscan::{ColumnScanEnum, ColumnScanT},
         operations::{constant::ColumnScanConstant, pass::ColumnScanPass},
     },
-    datatypes::{storage_type_name::StorageTypeBitSet, StorageTypeName},
     datavalues::{AnyDataValue, DataValue},
     function::{
         evaluation::StackProgram,
         tree::{FunctionTree, SpecialCaseFunction},
     },
     management::database::Dict,
+    storagevalues::{storage_type_name::StorageTypeBitSet, StorageTypeName},
     tabular::triescan::{PartialTrieScan, TrieScanEnum},
 };
 
@@ -409,11 +409,11 @@ mod test {
     use std::cell::RefCell;
 
     use crate::{
-        datatypes::{into_datavalue::IntoDataValue, StorageTypeName, StorageValueT},
         datavalues::AnyDataValue,
         dictionary::DvDict,
         function::tree::FunctionTree,
         management::database::Dict,
+        storagevalues::{into_datavalue::IntoDataValue, StorageTypeName, StorageValueT},
         tabular::{
             operations::{OperationGenerator, OperationTableGenerator},
             rowscan::RowScan,

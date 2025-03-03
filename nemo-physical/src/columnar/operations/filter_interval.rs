@@ -4,7 +4,7 @@ use std::cmp::Ordering;
 
 use crate::{
     columnar::columnscan::{ColumnScan, ColumnScanCell},
-    datatypes::ColumnDataType,
+    storagevalues::ColumnDataType,
 };
 
 /// [ColumnScanFilterInterval] does only return values within a certain interval

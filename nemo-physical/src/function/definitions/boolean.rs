@@ -1,8 +1,8 @@
 //! This module defines operations on boolean values
 
 use crate::{
-    datatypes::StorageTypeName,
     datavalues::{AnyDataValue, DataValue},
+    storagevalues::StorageTypeName,
 };
 
 use super::{FunctionTypePropagation, NaryFunction, UnaryFunction};
