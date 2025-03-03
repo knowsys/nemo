@@ -1522,9 +1522,6 @@ dependencies = [
  "quickcheck_macros",
  "rand",
  "reqwest",
- "rio_api",
- "rio_turtle",
- "rio_xml",
  "sanitise-file-name",
  "serde",
  "serde_json",
@@ -1883,7 +1880,7 @@ dependencies = [
  "oxilangtag",
  "oxiri",
  "oxrdf",
- "quick-xml 0.37.2",
+ "quick-xml",
  "thiserror",
 ]
 
@@ -2112,15 +2109,6 @@ dependencies = [
 
 [[package]]
 name = "quick-xml"
-version = "0.36.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f7649a7b4df05aed9ea7ec6f628c67c9953a43869b8bc50929569b2999d443fe"
-dependencies = [
- "memchr",
-]
-
-[[package]]
-name = "quick-xml"
 version = "0.37.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "165859e9e55f79d67b96c5d96f4e88b6f2695a1972849c15a6a3f5c59fc2c003"
@@ -2315,35 +2303,6 @@ dependencies = [
  "libc",
  "untrusted",
  "windows-sys 0.52.0",
-]
-
-[[package]]
-name = "rio_api"
-version = "0.8.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "61d0c76ddf8b00cbb4d2c5932d067d49245c2f1f651809bde3cf265033ddb1af"
-
-[[package]]
-name = "rio_turtle"
-version = "0.8.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d6f351b77353c7c896f0cd5ced2a25a7e95b5360cb68d1d7c16682ee096d7f40"
-dependencies = [
- "oxilangtag",
- "oxiri",
- "rio_api",
-]
-
-[[package]]
-name = "rio_xml"
-version = "0.8.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "abd3384ae785ed3b0159607adc08adef580a28e277fbfa375c42d162e9da93b1"
-dependencies = [
- "oxilangtag",
- "oxiri",
- "quick-xml 0.36.2",
- "rio_api",
 ]
 
 [[package]]
