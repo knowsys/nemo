@@ -1,0 +1,83 @@
+//! This module defines all supported functions.
+
+pub(crate) mod boolean;
+pub(crate) mod casting;
+pub(crate) mod checktype;
+pub(crate) mod generic;
+pub(crate) mod language;
+pub(crate) mod numeric;
+pub(crate) mod string;
+
+pub(crate) trait Operable {}
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub(crate) enum Functions {
+    BooleanNegation,
+    CanonicalString,
+    CastingIntoInteger64,
+    CastingIntoDouble,
+    CastingIntoFloat,
+    CastingIntoIri,
+    CheckIsDouble,
+    CheckIsFloat,
+    CheckIsInteger,
+    CheckIsIri,
+    CheckIsNull,
+    CheckIsNumeric,
+    CheckIsString,
+    Datatype,
+    LanguageTag,
+    LexicalValue,
+    NumericAbsolute,
+    NumericCeil,
+    NumericCosine,
+    NumericFloor,
+    NumericNegation,
+    NumericRound,
+    NumericSine,
+    NumericSquareroot,
+    NumericTangent,
+    StringLength,
+    StringReverse,
+    StringLowercase,
+    StringUppercase,
+    StringUriEncode,
+    StringUriDecode,
+    Equals,
+    Unequals,
+    NumericAddition,
+    NumericSubtraction,
+    NumericMultiplication,
+    NumericDivision,
+    NumericLogarithm,
+    NumericPower,
+    NumericRemainder,
+    NumericLessthan,
+    NumericLessthaneq,
+    NumericGreaterthan,
+    NumericGreaterthaneq,
+    StringAfter,
+    StringBefore,
+    StringCompare,
+    StringContains,
+    StringRegex,
+    StringLevenshtein,
+    StringEnds,
+    StringStarts,
+    StringSubstring,
+    BitShiftLeft,
+    BitShiftRight,
+    BitShiftRightUnsigned,
+    StringSubstringLength,
+    BitAnd,
+    BitOr,
+    BitXor,
+    BooleanConjunction,
+    BooleanDisjunction,
+    NumericMaximum,
+    NumericMinimum,
+    NumericLukasiewicz,
+    NumericSum,
+    NumericProduct,
+    StringConcatenation,
+}

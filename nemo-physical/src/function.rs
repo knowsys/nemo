@@ -5,3 +5,4 @@ pub mod evaluation;
 pub mod tree;
 
 pub(crate) mod definitions;
+pub(crate) mod new_definitions;
