@@ -3,11 +3,13 @@
 pub mod dsv;
 pub mod json;
 pub mod rdf;
+pub mod sparql;
 
 use core::fmt;
 use std::{
     fmt::Debug,
     io::{Read, Write},
+    path::PathBuf,
     sync::Arc,
 };
 
@@ -57,12 +59,12 @@ pub enum ResourceSpec {
 }
 
 impl ResourceSpec {
-    /// Convert a [String] to a [ImportExportResource].
+    /// Convert a simple [String] into a [ResourceSpec]
     pub(crate) fn from_string(string: String) -> Self {
         if string.is_empty() {
             Self::Stdout
         } else {
-            Self::Resource(string)
+            Self::Resource(Resource::Path(PathBuf::from(string)))
         }
     }
 
@@ -84,7 +86,7 @@ impl ResourceSpec {
 impl fmt::Display for ResourceSpec {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            ResourceSpec::Resource(r) => f.write_str(r),
+            ResourceSpec::Resource(resource) => write!(f, "{}", resource),
             ResourceSpec::Stdout => f.write_str("stdout"),
         }
     }

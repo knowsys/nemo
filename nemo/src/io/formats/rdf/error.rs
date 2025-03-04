@@ -26,5 +26,5 @@ pub enum RdfFormatError {
     RioXml(#[from] rio_xml::RdfXmlError),
     /// Unable to determine RDF format.
     #[error("could not determine which RDF parser to use for resource {0}")]
-    UnknownRdfFormat(Resource),
+    UnknownRdfFormat(Box<Resource>),
 }

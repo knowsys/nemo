@@ -61,7 +61,7 @@ pub enum ReadingErrorKind {
 #[derive(Debug, Error)]
 pub struct ReadingError {
     kind: ReadingErrorKind,
-    resource: Option<Resource>,
+    resource: Option<Box<Resource>>,
     predicate: Option<String>,
 }
 
@@ -82,7 +82,7 @@ impl ReadingError {
 
     /// Set the resource which was being read while the error occurred
     pub fn with_resource(mut self, resource: Resource) -> Self {
-        self.resource = Some(resource);
+        self.resource = Some(Box::new(resource));
         self
     }
 
