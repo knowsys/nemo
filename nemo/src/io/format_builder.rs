@@ -455,7 +455,9 @@ impl ImportExportBuilder {
 
                 if let Some(iter) = headers {
                     for (key, value) in iter {
-                        rb.header_mut(key, value);
+                        rb.header_mut(key, value)
+                            .map_err(|err| builder.report_error(origin, err.into()))
+                            .ok()?;
                     }
                 }
 

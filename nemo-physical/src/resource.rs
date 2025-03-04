@@ -384,9 +384,17 @@ impl ResourceBuilder {
     }
 
     /// Add key-value pair to HeaderParameter
-    pub fn header_mut(&mut self, key: String, value: String) -> &Self {
-        self.headers.push((key, value));
-        self
+    pub fn header_mut(
+        &mut self,
+        key: String,
+        value: String,
+    ) -> Result<&mut Self, ResourceValidationErrorKind> {
+        if self.headers.iter().any(|(k, _)| k == &key) {
+            Err(ResourceValidationErrorKind::ImportExportDuplicateHttpHeader(key))
+        } else {
+            self.headers.push((key, value));
+            Ok(self)
+        }
     }
 
     /// Add key-value pair to GetParameter
@@ -491,14 +499,4 @@ impl TryFrom<AnyDataValue> for ResourceBuilder {
             Err(_err) => Ok(Self::from(string)),
         }
     }
-    //match string {
-    //    string if string.starts_with("http:") || string.starts_with("https:") => {
-    //        Ok(Self::from(Self::to_web_iri(string)?))
-    //    }
-    //    // Strip a local iri of the prefix
-    //    string if string.starts_with("file://") => {
-    //        Ok(Self::from(Self::strip_local_iri(string)?))
-    //    }
-    //    _ => Ok(Self::from(string)),
-    //}
 }
