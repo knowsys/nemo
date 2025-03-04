@@ -49,6 +49,7 @@ jobs:
       - uses: hecrj/setup-rust-action@v2
         with:
           components: rustfmt
+          rust-version: nightly
       - run: cargo fmt --all -- --check
 
   doc:
