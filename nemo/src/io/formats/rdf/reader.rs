@@ -170,7 +170,10 @@ impl RdfReader {
         let stop_limit = self.limit.unwrap_or(u64::MAX);
         let triple_count = Cell::new(0);
 
-        let mut on_triple = |triple: Quad| {
+        // [RdfParser] always returns quads, but we ignore the graph
+        // name here (since it will always be
+        // [GraphName::DefaultGraph]).
+        let mut on_quad = |quad: Quad| {
             // This is needed since a parser might process several RDF statements
             // before giving us a chance to stop in the outer loop.
             if triple_count.get() == stop_limit {
@@ -178,20 +181,17 @@ impl RdfReader {
             }
 
             if !skip[0] {
-                let subject = Self::datavalue_from_subject(
-                    &mut self.bnode_map,
-                    tuple_writer,
-                    triple.subject,
-                )?;
+                let subject =
+                    Self::datavalue_from_subject(&mut self.bnode_map, tuple_writer, quad.subject)?;
                 tuple_writer.add_tuple_value(subject);
             }
             if !skip[1] {
-                let predicate = Self::datavalue_from_named_node(triple.predicate);
+                let predicate = Self::datavalue_from_named_node(quad.predicate);
                 tuple_writer.add_tuple_value(predicate);
             }
             if !skip[2] {
                 let object =
-                    Self::datavalue_from_term(&mut self.bnode_map, tuple_writer, triple.object)?;
+                    Self::datavalue_from_term(&mut self.bnode_map, tuple_writer, quad.object)?;
                 tuple_writer.add_tuple_value(object);
             }
 
@@ -203,10 +203,10 @@ impl RdfReader {
             Ok::<_, Box<dyn std::error::Error>>(())
         };
 
-        for triple in parser.for_reader(self.read) {
-            match triple {
+        for quad in parser.for_reader(self.read) {
+            match quad {
                 Ok(triple) => {
-                    if let Err(e) = on_triple(triple) {
+                    if let Err(e) = on_quad(triple) {
                         log::info!("Ignoring malformed RDF: {e}");
                     }
                 }
