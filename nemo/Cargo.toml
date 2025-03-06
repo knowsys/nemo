@@ -27,9 +27,6 @@ flate2 = "1"
 sanitise-file-name = "1.0.0"
 getrandom = { version = "0.2.9", default-features = false }
 path-slash = "0.2.1"
-rio_api = "0.8.4"
-rio_turtle = "0.8.4"
-rio_xml = "0.8.4"
 oxiri = "0.2.2"
 tokio = { version = "1.40.0", features = ["rt"] }
 reqwest = { version = "0.12.2", features = ["gzip", "brotli", "zstd", "deflate"] }
@@ -49,6 +46,8 @@ strum_macros = "0.26.4"
 similar-string = "1.4.3"
 bytecount = "0.6.8"
 colored = "2"
+oxrdfio = "0.1.6"
+oxrdf = "0.2.4"
 
 [dev-dependencies]
 env_logger = "*"

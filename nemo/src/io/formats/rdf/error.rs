@@ -18,13 +18,6 @@ pub enum RdfFormatError {
     /// Error of encountering RDF* features in data
     #[error("RDF* terms are not supported")]
     RdfStarUnsupported,
-    /// Error in Rio's Turtle parser
-    #[error(transparent)]
-    RioTurtle(#[from] rio_turtle::TurtleError),
-    /// Error in Rio's RDF/XML parser
-    #[error(transparent)]
-    RioXml(#[from] rio_xml::RdfXmlError),
-    /// Unable to determine RDF format.
     #[error("could not determine which RDF parser to use for resource {0}")]
     UnknownRdfFormat(Resource),
 }
