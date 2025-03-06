@@ -1,8 +1,6 @@
 //! Functionality that provides methods in relation with Position-Types.
 use crate::rule_model::components::{atom::Atom, rule::Rule, tag::Tag};
-use crate::static_checks::acyclicity_graphs::{
-    AcyclicityGraphBuilder, InfiniteRankPositions, JointAcyclicityGraph, JointAcyclicityGraphCycle, WeakAcyclicityGraph,
-};
+use crate::static_checks::acyclicity_graphs::{JointAcyclicityGraph, WeakAcyclicityGraph};
 use crate::static_checks::collection_traits::{Disjoint, InsertAll, RemoveAll, Superset};
 use crate::static_checks::rule_set::{
     AtomPositionsAppearance, AtomRefs, Attacked, ExistentialRuleIdxVariables,
@@ -246,8 +244,8 @@ impl<'a> AttackedPositionsBuilderPrivateExtended<'a> for RuleSet {
     fn match_attacking_variables(&self, att_type: AttackingType) -> RuleIdxVariables {
         match att_type {
             AttackingType::Cycle => {
-                let jo_ac_graph = JointAcyclicityGraph::build_graph(&self);
-                jo_ac_graph.rule_idx_variables_in_cycles()
+                let jo_ac_graph = JointAcyclicityGraph::new(self);
+                jo_ac_graph.all_nodes_of_cycles()
             }
             AttackingType::Existential => self.existential_rule_idx_variables(),
         }
@@ -304,7 +302,7 @@ impl<'a> MarkedPositionsBuilderPrivate<'a> for RuleSet {
         &'a self,
         _inf_rank_pos: &Positions,
     ) -> Option<Positions<'a>> {
-        let we_ac_graph: WeakAcyclicityGraph = WeakAcyclicityGraph::build_graph(&self);
+        let we_ac_graph: WeakAcyclicityGraph = WeakAcyclicityGraph::new(self);
         let inf_rank_pos: Positions = we_ac_graph.infinite_rank_positions();
         self.iter()
             .try_fold(Positions::new(), |init_we_mar_pos, rule| {
