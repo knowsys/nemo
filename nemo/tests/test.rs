@@ -429,7 +429,7 @@ fn run_until_rule_model(rule_file: PathBuf) -> Result<RuleSet, Box<dyn std::erro
 
     // override_exports(&mut program, cli.output.export_setting);
     // log::info!("Rules parsed");
-    let rule_set: RuleSet = program.rules().cloned().collect();
+    let rule_set: RuleSet = RuleSet(program.rules().cloned().collect());
     Ok(rule_set)
 }
 

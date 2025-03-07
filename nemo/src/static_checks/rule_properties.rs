@@ -1,11 +1,14 @@
 //! Functionality that provides the static checks for a Rule.
-use crate::rule_model::components::{rule::Rule, IterablePrimitives};
+use crate::rule_model::components::{
+    rule::Rule, term::primitive::variable::Variable, IterablePrimitives,
+};
 use crate::static_checks::positions::{Positions, PositionsByRuleIdxVariables};
 use crate::static_checks::rule_set::{
     AffectedVariables, Attacked, AttackedGlutVariables, AttackedVariables, ExistentialVariables,
-    FrontierVariablePairs, FrontierVariables, GuardedForVariables, JoinVariables, RuleAppearance,
-    RuleAppearancePair, UniversalVariables, Variables,
+    FrontierVariables, JoinVariables, VariablePair,
 };
+
+use std::collections::HashSet;
 
 /// This trait gives some static checks for some rule.
 pub trait RuleProperties {
@@ -70,14 +73,14 @@ impl RuleProperties for Rule {
     }
 
     fn is_guarded(&self) -> bool {
-        let positive_variables: Variables = self.positive_variables();
+        let positive_variables: HashSet<&Variable> = self.positive_variables();
         self.is_guarded_for_variables(positive_variables)
     }
 
     fn is_domain_restricted(&self) -> bool {
-        let positive_body_variables: Variables = self.positive_variables();
+        let positive_body_variables: HashSet<&Variable> = self.positive_variables();
         self.head().iter().all(|atom| {
-            let universal_variables_of_atom: Variables = atom.universal_variables();
+            let universal_variables_of_atom: HashSet<&Variable> = atom.universal_variables();
             universal_variables_of_atom.is_empty()
                 || universal_variables_of_atom == positive_body_variables
         })
@@ -98,18 +101,18 @@ impl RuleProperties for Rule {
     }
 
     fn is_frontier_guarded(&self) -> bool {
-        let frontier_variables: Variables = self.frontier_variables();
+        let frontier_variables: HashSet<&Variable> = self.frontier_variables();
         self.is_guarded_for_variables(frontier_variables)
     }
 
     fn is_weakly_guarded(&self, affected_positions: &Positions) -> bool {
-        let affected_universal_variables: Variables =
+        let affected_universal_variables: HashSet<&Variable> =
             self.affected_universal_variables(affected_positions);
         self.is_guarded_for_variables(affected_universal_variables)
     }
 
     fn is_weakly_frontier_guarded(&self, affected_positions: &Positions) -> bool {
-        let affected_frontier_variables: Variables =
+        let affected_frontier_variables: HashSet<&Variable> =
             self.affected_frontier_variables(affected_positions);
         self.is_guarded_for_variables(affected_frontier_variables)
     }
@@ -118,7 +121,7 @@ impl RuleProperties for Rule {
         &self,
         attacked_pos_by_rule_idx_vars: &PositionsByRuleIdxVariables,
     ) -> bool {
-        let attacked_universal_variables: Variables =
+        let attacked_universal_variables: HashSet<&Variable> =
             self.attacked_universal_variables(attacked_pos_by_rule_idx_vars);
         self.is_guarded_for_variables(attacked_universal_variables)
     }
@@ -127,7 +130,7 @@ impl RuleProperties for Rule {
         &self,
         attacked_pos_by_rule_idx_vars: &PositionsByRuleIdxVariables,
     ) -> bool {
-        let attacked_frontier_variables: Variables =
+        let attacked_frontier_variables: HashSet<&Variable> =
             self.attacked_frontier_variables(attacked_pos_by_rule_idx_vars);
         self.is_guarded_for_variables(attacked_frontier_variables)
     }
@@ -136,7 +139,7 @@ impl RuleProperties for Rule {
         &self,
         attacked_pos_by_cycle_rule_idx_vars: &PositionsByRuleIdxVariables,
     ) -> bool {
-        let attacked_universal_glut_variables: Variables =
+        let attacked_universal_glut_variables: HashSet<&Variable> =
             self.attacked_universal_glut_variables(attacked_pos_by_cycle_rule_idx_vars);
         self.is_guarded_for_variables(attacked_universal_glut_variables)
     }
@@ -145,7 +148,7 @@ impl RuleProperties for Rule {
         &self,
         attacked_pos_by_cycle_rule_idx_vars: &PositionsByRuleIdxVariables,
     ) -> bool {
-        let attacked_frontier_glut_variables: Variables =
+        let attacked_frontier_glut_variables: HashSet<&Variable> =
             self.attacked_frontier_glut_variables(attacked_pos_by_cycle_rule_idx_vars);
         self.is_guarded_for_variables(attacked_frontier_glut_variables)
     }
@@ -160,7 +163,7 @@ impl RuleProperties for Rule {
                 .frontier_variable_pairs()
                 .iter()
                 .filter(|var_pair| var_pair.appear_in_different_positive_body_atoms(self))
-                .all(|[var1, var2]| {
+                .all(|VariablePair([var1, var2])| {
                     attacked_pos_by_rule_idx_vars.values().all(|ex_var_pos| {
                         !var1.is_attacked_by_positions_in_rule(self, ex_var_pos)
                             || !var2.is_attacked_by_positions_in_rule(self, ex_var_pos)

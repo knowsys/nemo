@@ -6,17 +6,14 @@ use crate::static_checks::positions::{
     ExtendedPositions, FromPositionSet, Position, Positions, PositionsByRuleIdxVariables,
 };
 use crate::static_checks::rule_set::{
-    AllPositivePositions, Attacked, AttackedVariables, ExistentialVariables,
-    ExistentialVariablesPositions, RuleIdxRule, RuleIdxVariable, RuleIdxVariables, RulePositions,
-    RuleSet, SpecialPositionsConstructor, Variables,
+    AllPositivePositions, Attacked, AttackedVariables, ExistentialVariables, RuleIdxRule,
+    RuleIdxVariable, RulePositions, RuleSet, SpecialPositionsConstructor,
 };
 use petgraph::algo::is_cyclic_directed;
 use petgraph::graphmap::{DiGraphMap, NodeTrait};
 use std::collections::HashSet;
 
 type Cycle<N> = Vec<N>;
-
-type Cycles<N> = HashSet<Vec<N>>;
 
 /// Enum to distinguish between (Common / Special) edge between two Position(s) of the
 /// WeakAcyclicityGraph.
@@ -47,7 +44,7 @@ impl<'a> JointAcyclicityGraph<'a> {
 impl<'a> JointAcyclicityGraph<'a> {
     /// Returns all nodes of a Graph that appear in a Cycle.
     pub fn all_nodes_of_cycles(&self) -> HashSet<RuleIdxVariable<'a>> {
-        let cycles: Cycles<RuleIdxVariable> = self.cycles();
+        let cycles: HashSet<Cycle<RuleIdxVariable>> = self.cycles();
         self.cycles_into_nodes(cycles)
     }
 
@@ -66,13 +63,13 @@ impl<'a> JointAcyclicityGraphBuilder<'a> {
     fn add_edges(&mut self, rule_set: &'a RuleSet) {
         let attacked_pos_by_ex_rule_idx_vars: PositionsByRuleIdxVariables =
             rule_set.attacked_positions_by_existential_rule_idx_variables();
-        rule_set.iter().enumerate().for_each(|idx_rule| {
+        rule_set.0.iter().enumerate().for_each(|idx_rule| {
             self.add_edges_for_rule(idx_rule, &attacked_pos_by_ex_rule_idx_vars);
         })
     }
 
     fn add_nodes(&mut self, rule_set: &'a RuleSet) {
-        rule_set.iter().enumerate().for_each(|idx_rule| {
+        rule_set.0.iter().enumerate().for_each(|idx_rule| {
             self.add_nodes_for_rule(idx_rule);
         })
     }
@@ -92,7 +89,7 @@ impl<'a> JointAcyclicityGraphBuilder<'a> {
         &mut self,
         attacked_var: &Variable,
         rule: &Rule,
-        ex_rule_idx_vars_of_rule: &RuleIdxVariables<'a>,
+        ex_rule_idx_vars_of_rule: &HashSet<RuleIdxVariable<'a>>,
         attacked_pos_by_rule_idx_vars: &PositionsByRuleIdxVariables<'a, '_>,
     ) {
         attacked_pos_by_rule_idx_vars
@@ -112,7 +109,7 @@ impl<'a> JointAcyclicityGraphBuilder<'a> {
     fn add_edges_for_attacking_var(
         &mut self,
         attacking_rule_idx_var: &RuleIdxVariable<'a>,
-        ex_rule_idx_vars_of_rule: &RuleIdxVariables<'a>,
+        ex_rule_idx_vars_of_rule: &HashSet<RuleIdxVariable<'a>>,
     ) {
         ex_rule_idx_vars_of_rule.iter().for_each(|ex_rule_idx_var| {
             self.0
@@ -126,12 +123,12 @@ impl<'a> JointAcyclicityGraphBuilder<'a> {
         attacked_pos_by_rule_idx_vars: &PositionsByRuleIdxVariables<'a, '_>,
     ) {
         // TODO: USE ExistentialRuleIdxVariables INSTEAD OF FOLLOWING 5 LINES OF CODE
-        let ex_vars_of_rule: Variables = r_idx_rule.1.existential_variables();
-        let ex_rule_idx_vars_of_rule: RuleIdxVariables = ex_vars_of_rule
+        let ex_vars_of_rule: HashSet<&Variable> = r_idx_rule.1.existential_variables();
+        let ex_rule_idx_vars_of_rule: HashSet<RuleIdxVariable> = ex_vars_of_rule
             .into_iter()
             .map(|var| (r_idx_rule.0, var))
             .collect();
-        let attacked_positive_vars: Variables = r_idx_rule
+        let attacked_positive_vars: HashSet<&Variable> = r_idx_rule
             .1
             .attacked_universal_variables(attacked_pos_by_rule_idx_vars);
         // let attacked_positive_r_idx_vars: RuleIdxVariables = attacked_positive_vars
@@ -175,7 +172,7 @@ impl<'a> JointAcyclicityGraphBuilder<'a> {
     // }
 
     fn add_nodes_for_rule(&mut self, (rule_idx, rule): RuleIdxRule<'a>) {
-        let ex_vars_of_rule: Variables = rule.existential_variables();
+        let ex_vars_of_rule: HashSet<&Variable> = rule.existential_variables();
         ex_vars_of_rule.into_iter().for_each(|var| {
             self.0.add_node((rule_idx, var));
         })
@@ -201,7 +198,7 @@ impl<'a> WeakAcyclicityGraph<'a> {
 impl<'a> WeakAcyclicityGraph<'a> {
     /// Checks if there exists a Cycle in the WeakAcyclicityGraph that contains a special edge.
     pub fn contains_cycle_with_special_edge(&self) -> bool {
-        let cycles: Cycles<Position<'a>> = self.cycles();
+        let cycles: HashSet<Cycle<Position<'a>>> = self.cycles();
         cycles
             .iter()
             .any(|cycle| self.cycle_contains_special_edge(cycle))
@@ -217,8 +214,8 @@ impl<'a> WeakAcyclicityGraph<'a> {
     }
 
     /// Returns all Cycles in the WeakAcyclicityGraph that contain a special edge.
-    fn cycles_containing_special_edges(&self) -> Cycles<Position<'a>> {
-        let cycles: Cycles<Position<'a>> = self.cycles();
+    fn cycles_containing_special_edges(&self) -> HashSet<Cycle<Position<'a>>> {
+        let cycles: HashSet<Cycle<Position<'a>>> = self.cycles();
         let special_edge_cycles = cycles
             .iter()
             .filter(|cycle| self.cycle_contains_special_edge(cycle))
@@ -253,7 +250,7 @@ impl<'a> WeakAcyclicityGraph<'a> {
 
     /// Builds the infinite rank Positions for some WeakAcyclicityGraph.
     pub fn infinite_rank_positions(&self) -> Positions {
-        let cycs_con_spe_edge: Cycles<Position> = self.cycles_containing_special_edges();
+        let cycs_con_spe_edge: HashSet<Cycle<Position>> = self.cycles_containing_special_edges();
         let repr_of_cycles: HashSet<Position> = self.represantatives_of_cycles(&cycs_con_spe_edge);
         let mut inf_rank_pos_set: HashSet<Position> = self.cycles_into_nodes(cycs_con_spe_edge);
         let all_nodes: HashSet<Position> = self.all_nodes();
@@ -283,7 +280,10 @@ impl<'a> WeakAcyclicityGraph<'a> {
     }
 
     /// Returns a represantative node of every Cycle in some Cycles.
-    fn represantatives_of_cycles(&self, cycles: &Cycles<Position<'a>>) -> HashSet<Position<'a>> {
+    fn represantatives_of_cycles(
+        &self,
+        cycles: &HashSet<Cycle<Position<'a>>>,
+    ) -> HashSet<Position<'a>> {
         cycles
             .iter()
             .fold(HashSet::<Position>::new(), |mut reprs, cycle| {
@@ -300,7 +300,7 @@ struct WeakAcyclicityGraphBuilder<'a>(DiGraphMap<Position<'a>, WeakAcyclicityGra
 /// This Impl-Block contains the main methods to Build the WeakAcyclicityGraph.
 impl<'a> WeakAcyclicityGraphBuilder<'a> {
     fn add_edges(&mut self, rule_set: &'a RuleSet) {
-        rule_set.iter().for_each(|rule| {
+        rule_set.0.iter().for_each(|rule| {
             self.add_edges_for_rule(rule);
         });
     }
@@ -334,6 +334,8 @@ impl<'a> WeakAcyclicityGraphBuilder<'a> {
         })
     }
 
+    // FIXME: I THINK USING VARIABLE_BODY FOR THE HEAD POSITIONS IS WRONG. IT SHOULD BE A
+    // GENERALISED VARIABLE
     fn add_common_edges_for_rule(&mut self, rule: &'a Rule, variable_body: &Variable) {
         let body_ex_pos_of_var: ExtendedPositions =
             variable_body.extended_positions_in_positive_body(rule);
@@ -344,7 +346,7 @@ impl<'a> WeakAcyclicityGraphBuilder<'a> {
     }
 
     fn add_edges_for_rule(&mut self, rule: &'a Rule) {
-        let positive_variables: Variables = rule.positive_variables();
+        let positive_variables: HashSet<&Variable> = rule.positive_variables();
         positive_variables.iter().for_each(|variable_body| {
             self.add_common_edges_for_rule(rule, variable_body);
             self.add_special_edges_for_rule(rule, variable_body);
@@ -386,18 +388,18 @@ where
     N: NodeTrait,
 {
     /// Returns all Cycles of a Graph.
-    fn cycles(&self) -> Cycles<N>;
+    fn cycles(&self) -> HashSet<Cycle<N>>;
     /// Returns all nodes of all Cycles in a Graph.
-    fn cycles_into_nodes(&self, cycles: Cycles<N>) -> HashSet<N>;
+    fn cycles_into_nodes(&self, cycles: HashSet<Cycle<N>>) -> HashSet<N>;
 }
 
 impl<N, E> AcyclicityGraphMethods<N> for DiGraphMap<N, E>
 where
     N: NodeTrait,
 {
-    fn cycles(&self) -> Cycles<N> {
-        let mut cycles: Cycles<N> = Cycles::<N>::new();
-        let mut sorted_cycles: Cycles<N> = Cycles::<N>::new();
+    fn cycles(&self) -> HashSet<Cycle<N>> {
+        let mut cycles: HashSet<Cycle<N>> = HashSet::<Cycle<N>>::new();
+        let mut sorted_cycles: HashSet<Cycle<N>> = HashSet::<Cycle<N>>::new();
         let mut used_nodes: HashSet<N> = HashSet::<N>::new();
         let mut reused_cycle: Cycle<N> = Cycle::<N>::new();
         for node in self.nodes() {
@@ -415,7 +417,7 @@ where
         cycles
     }
 
-    fn cycles_into_nodes(&self, cycles: Cycles<N>) -> HashSet<N> {
+    fn cycles_into_nodes(&self, cycles: HashSet<Cycle<N>>) -> HashSet<N> {
         cycles
             .into_iter()
             .fold(HashSet::<N>::new(), |nodes, cycle| {
@@ -425,29 +427,29 @@ where
 }
 
 impl<'a> AcyclicityGraphMethods<RuleIdxVariable<'a>> for JointAcyclicityGraph<'a> {
-    fn cycles(&self) -> Cycles<RuleIdxVariable<'a>> {
+    fn cycles(&self) -> HashSet<Cycle<RuleIdxVariable<'a>>> {
         self.0.cycles()
     }
 
     fn cycles_into_nodes(
         &self,
-        cycles: Cycles<RuleIdxVariable<'a>>,
+        cycles: HashSet<Cycle<RuleIdxVariable<'a>>>,
     ) -> HashSet<RuleIdxVariable<'a>> {
         self.0.cycles_into_nodes(cycles)
     }
 }
 
 impl<'a> AcyclicityGraphMethods<Position<'a>> for WeakAcyclicityGraph<'a> {
-    fn cycles(&self) -> Cycles<Position<'a>> {
+    fn cycles(&self) -> HashSet<Cycle<Position<'a>>> {
         self.0.cycles()
     }
 
-    fn cycles_into_nodes(&self, cycles: Cycles<Position<'a>>) -> HashSet<Position<'a>> {
+    fn cycles_into_nodes(&self, cycles: HashSet<Cycle<Position<'a>>>) -> HashSet<Position<'a>> {
         self.0.cycles_into_nodes(cycles)
     }
 }
 
-trait AcyclicityGraphCyclePrivate<N>
+trait AcyclicityGraphMethodsPrivate<N>
 where
     N: NodeTrait,
 {
@@ -456,19 +458,19 @@ where
         node: &N,
         reused_cycle: &mut Cycle<N>,
         used_nodes: &mut HashSet<N>,
-        cycles: &mut Cycles<N>,
-        sorted_cycles: &mut Cycles<N>,
+        cycles: &mut HashSet<Cycle<N>>,
+        sorted_cycles: &mut HashSet<Cycle<N>>,
     );
     fn recursion_stops(
         &self,
         node: &N,
         reused_cycle: &mut Cycle<N>,
-        cycles: &mut Cycles<N>,
-        sorted_cycles: &mut Cycles<N>,
+        cycles: &mut HashSet<Cycle<N>>,
+        sorted_cycles: &mut HashSet<Cycle<N>>,
     ) -> bool;
 }
 
-impl<N, E> AcyclicityGraphCyclePrivate<N> for DiGraphMap<N, E>
+impl<N, E> AcyclicityGraphMethodsPrivate<N> for DiGraphMap<N, E>
 where
     N: NodeTrait,
 {
@@ -477,8 +479,8 @@ where
         node: &N,
         reused_cycle: &mut Cycle<N>,
         used_nodes: &mut HashSet<N>,
-        cycles: &mut Cycles<N>,
-        sorted_cycles: &mut Cycles<N>,
+        cycles: &mut HashSet<Cycle<N>>,
+        sorted_cycles: &mut HashSet<Cycle<N>>,
     ) {
         if self.recursion_stops(node, reused_cycle, cycles, sorted_cycles) {
             return;
@@ -495,8 +497,8 @@ where
         &self,
         node: &N,
         reused_cycle: &mut Cycle<N>,
-        cycles: &mut Cycles<N>,
-        sorted_cycles: &mut Cycles<N>,
+        cycles: &mut HashSet<Cycle<N>>,
+        sorted_cycles: &mut HashSet<Cycle<N>>,
     ) -> bool {
         if !reused_cycle.contains(node) {
             return false;

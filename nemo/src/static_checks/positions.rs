@@ -1,11 +1,12 @@
 //! Functionality that provides methods in relation with Position-Types.
-use crate::rule_model::components::{atom::Atom, rule::Rule, tag::Tag};
+use crate::rule_model::components::{
+    atom::Atom, rule::Rule, tag::Tag, term::primitive::variable::Variable,
+};
 use crate::static_checks::acyclicity_graphs::{JointAcyclicityGraph, WeakAcyclicityGraph};
 use crate::static_checks::collection_traits::{Disjoint, InsertAll, RemoveAll, Superset};
 use crate::static_checks::rule_set::{
-    AtomPositionsAppearance, AtomRefs, Attacked, ExistentialRuleIdxVariables,
-    ExistentialVariablesPositions, JoinVariables, RuleIdxVariable, RuleIdxVariables, RulePositions,
-    RuleRefs, RuleSet, Variables,
+    AtomPositionsAppearance, AtomRefs, Attacked, ExistentialRuleIdxVariables, JoinVariables,
+    RuleIdxVariable, RulePositions, RuleSet,
 };
 
 use std::collections::{HashMap, HashSet};
@@ -113,17 +114,20 @@ trait AffectedPositionsBuilderPrivate<'a> {
 
 impl<'a> AffectedPositionsBuilderPrivate<'a> for RuleSet {
     fn initial_affected_positions(&'a self) -> Positions<'a> {
-        self.iter().fold(Positions::new(), |init_aff_pos, rule| {
+        self.0.iter().fold(Positions::new(), |init_aff_pos, rule| {
             let pos_of_ex_vars: Positions = rule.initial_affected_positions();
             init_aff_pos.insert_all_take_ret(pos_of_ex_vars)
         })
     }
 
     fn conclude_affected_positions(&'a self, last_it_pos: &Positions<'a>) -> Positions<'a> {
-        self.iter().fold(Positions::new(), |new_con_aff_pos, rule| {
-            let new_con_aff_pos_in_rule: Positions = rule.conclude_affected_positions(last_it_pos);
-            new_con_aff_pos.insert_all_take_ret(new_con_aff_pos_in_rule)
-        })
+        self.0
+            .iter()
+            .fold(Positions::new(), |new_con_aff_pos, rule| {
+                let new_con_aff_pos_in_rule: Positions =
+                    rule.conclude_affected_positions(last_it_pos);
+                new_con_aff_pos.insert_all_take_ret(new_con_aff_pos_in_rule)
+            })
     }
 }
 
@@ -159,7 +163,7 @@ impl<'a> AttackedPositionsBuilder<'a> for PositionsByRuleIdxVariables<'a, 'a> {
         att_type: AttackingType,
         rule_set: &'a RuleSet,
     ) -> PositionsByRuleIdxVariables<'a, 'a> {
-        let att_variables: RuleIdxVariables = rule_set.match_attacking_variables(att_type);
+        let att_variables: HashSet<RuleIdxVariable> = rule_set.match_attacking_variables(att_type);
         att_variables
             .into_iter()
             .map(|rule_idx_var| {
@@ -179,7 +183,8 @@ trait AttackedPositionsBuilderPrivate<'a> {
 
 impl<'a> AttackedPositionsBuilderPrivate<'a> for RuleSet {
     fn conclude_attacked_positions(&'a self, cur_att_pos: &Positions<'a>) -> Positions<'a> {
-        self.iter()
+        self.0
+            .iter()
             .fold(Positions::new(), |new_found_attacked_positions, rule| {
                 let new_att_pos_in_rule: Positions = rule.conclude_attacked_positions(cur_att_pos);
                 new_found_attacked_positions.insert_all_take_ret(new_att_pos_in_rule)
@@ -191,7 +196,8 @@ impl<'a> AttackedPositionsBuilderPrivate<'a> for RuleSet {
         &'a self,
         (idx, variable): &RuleIdxVariable<'a>,
     ) -> Positions<'a> {
-        self.iter()
+        self.0
+            .iter()
             .enumerate()
             .filter(|(r_idx, _)| r_idx == idx)
             .fold(Positions::new(), |initial_pos, (_, rule)| {
@@ -223,7 +229,7 @@ trait AttackedPositionsBuilderPrivateExtended<'a> {
         &'a self,
         rule_idx_var: &RuleIdxVariable<'a>,
     ) -> Positions<'a>;
-    fn match_attacking_variables(&self, att_type: AttackingType) -> RuleIdxVariables;
+    fn match_attacking_variables(&self, att_type: AttackingType) -> HashSet<RuleIdxVariable>;
 }
 
 impl<'a> AttackedPositionsBuilderPrivateExtended<'a> for RuleSet {
@@ -241,7 +247,7 @@ impl<'a> AttackedPositionsBuilderPrivateExtended<'a> for RuleSet {
         att_pos
     }
 
-    fn match_attacking_variables(&self, att_type: AttackingType) -> RuleIdxVariables {
+    fn match_attacking_variables(&self, att_type: AttackingType) -> HashSet<RuleIdxVariable> {
         match att_type {
             AttackingType::Cycle => {
                 let jo_ac_graph = JointAcyclicityGraph::new(self);
@@ -283,7 +289,8 @@ trait MarkedPositionsBuilderPrivate<'a> {
 
 impl<'a> MarkedPositionsBuilderPrivate<'a> for RuleSet {
     fn conclude_marked_positions(&'a self, last_it_pos: &Positions<'a>) -> Option<Positions<'a>> {
-        self.iter()
+        self.0
+            .iter()
             .try_fold(Positions::new(), |new_con_mar_pos, rule| {
                 let new_mar_pos_in_rule: Positions = rule.conclude_marked_positions(last_it_pos)?;
                 Some(new_con_mar_pos.insert_all_take_ret(new_mar_pos_in_rule))
@@ -291,7 +298,8 @@ impl<'a> MarkedPositionsBuilderPrivate<'a> for RuleSet {
     }
 
     fn initial_marked_positions(&'a self) -> Option<Positions<'a>> {
-        self.iter()
+        self.0
+            .iter()
             .try_fold(Positions::new(), |init_mar_pos, rule| {
                 let init_mar_pos_of_rule: Positions = rule.initial_marked_positions()?;
                 Some(init_mar_pos.insert_all_take_ret(init_mar_pos_of_rule))
@@ -304,7 +312,8 @@ impl<'a> MarkedPositionsBuilderPrivate<'a> for RuleSet {
     ) -> Option<Positions<'a>> {
         let we_ac_graph: WeakAcyclicityGraph = WeakAcyclicityGraph::new(self);
         let inf_rank_pos: Positions = we_ac_graph.infinite_rank_positions();
-        self.iter()
+        self.0
+            .iter()
             .try_fold(Positions::new(), |init_we_mar_pos, rule| {
                 let init_we_mar_pos_of_rule: Positions =
                     rule.initial_weakly_marked_positions(&inf_rank_pos)?;
@@ -335,7 +344,7 @@ impl<'a> MarkedPositionsBuilderPrivate<'a> for Rule {
     }
 
     fn initial_marked_positions(&'a self) -> Option<Positions<'a>> {
-        let join_vars: Variables = self.join_variables();
+        let join_vars: HashSet<&Variable> = self.join_variables();
         join_vars
             .iter()
             .try_fold(Positions::new(), |new_mar_pos_in_rule, var| {
@@ -355,7 +364,7 @@ impl<'a> MarkedPositionsBuilderPrivate<'a> for Rule {
         &'a self,
         infinite_rank_positions: &Positions,
     ) -> Option<Positions<'a>> {
-        let join_vars: Variables = self.join_variables();
+        let join_vars: HashSet<&Variable> = self.join_variables();
         join_vars
             .iter()
             .filter(|var| {

@@ -62,15 +62,15 @@ pub trait RulesProperties {
 
 impl RulesProperties for RuleSet {
     fn is_joinless(&self) -> bool {
-        self.iter().all(|rule| rule.is_joinless())
+        self.0.iter().all(|rule| rule.is_joinless())
     }
 
     fn is_linear(&self) -> bool {
-        self.iter().all(|rule| rule.is_linear())
+        self.0.iter().all(|rule| rule.is_linear())
     }
 
     fn is_guarded(&self) -> bool {
-        self.iter().all(|rule| rule.is_guarded())
+        self.0.iter().all(|rule| rule.is_guarded())
     }
 
     fn is_sticky(&self) -> bool {
@@ -82,48 +82,52 @@ impl RulesProperties for RuleSet {
     }
 
     fn is_domain_restricted(&self) -> bool {
-        self.iter().all(|rule| rule.is_domain_restricted())
+        self.0.iter().all(|rule| rule.is_domain_restricted())
     }
 
     fn is_frontier_one(&self) -> bool {
-        self.iter().all(|rule| rule.is_frontier_one())
+        self.0.iter().all(|rule| rule.is_frontier_one())
     }
 
     fn is_datalog(&self) -> bool {
-        self.iter().all(|rule| rule.is_datalog())
+        self.0.iter().all(|rule| rule.is_datalog())
     }
 
     fn is_monadic(&self) -> bool {
-        self.iter().all(|rule| rule.is_monadic())
+        self.0.iter().all(|rule| rule.is_monadic())
     }
 
     fn is_frontier_guarded(&self) -> bool {
-        self.iter().all(|rule| rule.is_frontier_guarded())
+        self.0.iter().all(|rule| rule.is_frontier_guarded())
     }
 
     fn is_weakly_guarded(&self) -> bool {
         let affected_positions: Positions = self.affected_positions();
-        self.iter()
+        self.0
+            .iter()
             .all(|rule| rule.is_weakly_guarded(&affected_positions))
     }
 
     fn is_weakly_frontier_guarded(&self) -> bool {
         let affected_positions: Positions = self.affected_positions();
-        self.iter()
+        self.0
+            .iter()
             .all(|rule| rule.is_weakly_frontier_guarded(&affected_positions))
     }
 
     fn is_jointly_guarded(&self) -> bool {
         let attacked_pos_by_ex_rule_idx_vars: PositionsByRuleIdxVariables =
             self.attacked_positions_by_existential_rule_idx_variables();
-        self.iter()
+        self.0
+            .iter()
             .all(|rule| rule.is_jointly_guarded(&attacked_pos_by_ex_rule_idx_vars))
     }
 
     fn is_jointly_frontier_guarded(&self) -> bool {
         let attacked_pos_by_ex_rule_idx_vars: PositionsByRuleIdxVariables =
             self.attacked_positions_by_existential_rule_idx_variables();
-        self.iter()
+        self.0
+            .iter()
             .all(|rule| rule.is_jointly_frontier_guarded(&attacked_pos_by_ex_rule_idx_vars))
     }
 
@@ -140,21 +144,24 @@ impl RulesProperties for RuleSet {
     fn is_glut_guarded(&self) -> bool {
         let attacked_pos_by_cycle_rule_idx_vars: PositionsByRuleIdxVariables =
             self.attacked_positions_by_cycle_rule_idx_variables();
-        self.iter()
+        self.0
+            .iter()
             .all(|rule| rule.is_glut_guarded(&attacked_pos_by_cycle_rule_idx_vars))
     }
 
     fn is_glut_frontier_guarded(&self) -> bool {
         let attacked_pos_by_cycle_rule_idx_vars: PositionsByRuleIdxVariables =
             self.attacked_positions_by_cycle_rule_idx_variables();
-        self.iter()
+        self.0
+            .iter()
             .all(|rule| rule.is_glut_frontier_guarded(&attacked_pos_by_cycle_rule_idx_vars))
     }
 
     fn is_shy(&self) -> bool {
         let attacked_pos_by_existential_rule_idx_vars: PositionsByRuleIdxVariables =
             self.attacked_positions_by_existential_rule_idx_variables();
-        self.iter()
+        self.0
+            .iter()
             .all(|rule| rule.is_shy(&attacked_pos_by_existential_rule_idx_vars))
     }
 
