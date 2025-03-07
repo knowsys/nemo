@@ -53,7 +53,7 @@ impl Float {
     }
 
     /// Returns the logarithm of the number with respect to an arbitrary base.
-    pub(crate) fn log(self, base: Self) -> Option<Self> {
+    pub(crate) fn checked_log(self, base: Self) -> Option<Self> {
         Float::new(self.0.log(base.0)).ok()
     }
 
@@ -86,6 +86,11 @@ impl Float {
     /// Returns the largest integer less than or equal to `self`.
     pub(crate) fn floor(self) -> Self {
         Float::new(self.0.floor()).expect("operation returns valid float")
+    }
+
+    /// Return the remainder when dividing one [Float] with another
+    pub(crate) fn checked_rem(self, other: Self) -> Option<Self> {
+        Self::new(self.0.rem(other.0)).ok()
     }
 }
 
@@ -152,14 +157,6 @@ impl Div for Float {
 
     fn div(self, rhs: Self) -> Self::Output {
         Float(self.0.div(rhs.0))
-    }
-}
-
-impl Rem for Float {
-    type Output = Float;
-
-    fn rem(self, rhs: Self) -> Self::Output {
-        Float(self.0.rem(rhs.0))
     }
 }
 

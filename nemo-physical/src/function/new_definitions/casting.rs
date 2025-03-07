@@ -1,5 +1,7 @@
 //! This module defines all supported casting functions.
 
+use crate::storagevalues::{double::Double, float::Float};
+
 pub(crate) mod any;
 pub(crate) mod storage_t;
 
@@ -85,3 +87,8 @@ pub(crate) trait OperableCasting {
         None
     }
 }
+
+// Use default implementation for all storage values
+impl OperableCasting for i64 {}
+impl OperableCasting for Float {}
+impl OperableCasting for Double {}

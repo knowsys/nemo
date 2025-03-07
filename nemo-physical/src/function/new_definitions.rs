@@ -1,5 +1,13 @@
 //! This module defines all supported functions.
 
+use boolean::OperableBoolean;
+use casting::OperableCasting;
+use checktype::OperableCheckType;
+use generic::OperableGeneric;
+use language::OperableLanguage;
+use numeric::OperableNumeric;
+use string::OperableString;
+
 pub(crate) mod boolean;
 pub(crate) mod casting;
 pub(crate) mod checktype;
@@ -8,7 +16,27 @@ pub(crate) mod language;
 pub(crate) mod numeric;
 pub(crate) mod string;
 
-pub(crate) trait Operable {}
+pub(crate) trait Operable:
+    OperableBoolean
+    + OperableCasting
+    + OperableCheckType
+    + OperableGeneric
+    + OperableNumeric
+    + OperableLanguage
+    + OperableString
+{
+}
+
+impl<T> Operable for T where
+    T: OperableBoolean
+        + OperableCasting
+        + OperableCheckType
+        + OperableGeneric
+        + OperableNumeric
+        + OperableLanguage
+        + OperableString
+{
+}
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub(crate) enum Functions {

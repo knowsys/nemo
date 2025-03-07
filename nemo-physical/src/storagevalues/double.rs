@@ -53,7 +53,7 @@ impl Double {
     }
 
     /// Returns the logarithm of the number with respect to an arbitrary base.
-    pub(crate) fn log(self, base: Self) -> Option<Self> {
+    pub(crate) fn checked_log(self, base: Self) -> Option<Self> {
         Double::new(self.0.log(base.0)).ok()
     }
 
@@ -87,6 +87,11 @@ impl Double {
     /// Returns the largest integer less than or equal to `self`.
     pub(crate) fn floor(self) -> Self {
         Double::new(self.0.floor()).expect("operation returns valid float")
+    }
+
+    /// Return the remainder when dividing one [Double] with another
+    pub(crate) fn checked_rem(self, other: Self) -> Option<Self> {
+        Self::new(self.0.rem(other.0)).ok()
     }
 }
 
@@ -159,14 +164,6 @@ impl Div for Double {
 impl DivAssign for Double {
     fn div_assign(&mut self, rhs: Self) {
         self.0.div_assign(rhs.0)
-    }
-}
-
-impl Rem for Double {
-    type Output = Double;
-
-    fn rem(self, rhs: Self) -> Self::Output {
-        Double(self.0.rem(rhs.0))
     }
 }
 

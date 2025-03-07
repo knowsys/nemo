@@ -75,7 +75,7 @@ pub(super) fn numeric_squareroot_float(parameter: Float) -> Option<AnyDataValue>
 
 /// Logarithm of a 32-bit floating point number given some base
 pub(super) fn numeric_logarithm_float(value: Float, base: Float) -> Option<AnyDataValue> {
-    some_datavalue_from_float(value.log(base)?)
+    some_datavalue_from_float(value.checked_log(base)?)
 }
 
 /// Sine of 32-bit floating point number
@@ -115,7 +115,7 @@ pub(super) fn numeric_remainder_float(
         return None;
     }
 
-    some_datavalue_from_float(parameter_first % parameter_second)
+    some_datavalue_from_float(parameter_first.checked_rem(parameter_second)?)
 }
 
 /// Less than comparison between 32-bit floating point numbers
@@ -243,8 +243,8 @@ pub(super) fn numeric_tnorm_lukasiewicz_float(parameters: &[Float]) -> Option<An
         sum = sum.checked_add(parameter)?;
     }
 
-    let result =
-        Float::new_unchecked(0.0).max(sum.checked_sub(&Float::try_from(parameters.len() - 1).ok()?)?);
+    let result = Float::new_unchecked(0.0)
+        .max(sum.checked_sub(&Float::try_from(parameters.len() - 1).ok()?)?);
 
     some_datavalue_from_float(result)
 }

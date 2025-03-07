@@ -1,5 +1,11 @@
 //! This module defines all supported numeric functions.
 
+pub(crate) mod any;
+pub(crate) mod double;
+pub(crate) mod float;
+pub(crate) mod integer;
+pub(crate) mod storage_t;
+
 /// Trait for types on which numeric operations are defines
 pub(crate) trait OperableNumeric {
     /// Addition of two numbers
@@ -105,7 +111,7 @@ pub(crate) trait OperableNumeric {
     ///
     /// Returns `None` if the input parameter is not a numeric value space.
     #[allow(unused)]
-    fn numeric_absolute(first: Self, second: Self) -> Option<Self>
+    fn numeric_absolute(parameter: Self) -> Option<Self>
     where
         Self: Sized,
     {
@@ -287,7 +293,7 @@ pub(crate) trait OperableNumeric {
     /// Returns `None` if the result (or an intermediate result) cannot be represented
     /// within the range of the numeric value type.
     #[allow(unused)]
-    fn numeric_sum(parameter: &[Self]) -> Option<Self>
+    fn numeric_sum(parameters: &[Self]) -> Option<Self>
     where
         Self: Sized,
     {
@@ -303,7 +309,7 @@ pub(crate) trait OperableNumeric {
     /// Returns `None` if the result (or an intermediate result) cannot be represented
     /// within the range of the numeric value type.
     #[allow(unused)]
-    fn numeric_product(parameter: &[Self]) -> Option<Self>
+    fn numeric_product(parameters: &[Self]) -> Option<Self>
     where
         Self: Sized,
     {
@@ -317,7 +323,7 @@ pub(crate) trait OperableNumeric {
     /// Returns `None` if the input parameters are not numeric
     /// or no input parameters are given.
     #[allow(unused)]
-    fn numeric_minimum(parameter: &[Self]) -> Option<Self>
+    fn numeric_minimum(parameters: &[Self]) -> Option<Self>
     where
         Self: Sized,
     {
@@ -331,7 +337,7 @@ pub(crate) trait OperableNumeric {
     /// Returns `None` if the input parameters are not numeric
     /// or no input parameters are given.
     #[allow(unused)]
-    fn numeric_maximum(parameter: &[Self]) -> Option<Self>
+    fn numeric_maximum(parameters: &[Self]) -> Option<Self>
     where
         Self: Sized,
     {
@@ -346,7 +352,7 @@ pub(crate) trait OperableNumeric {
     /// or no input parameters are given.
     /// Returns `None` if the input parameters are not of a floating point type.
     #[allow(unused)]
-    fn numeric_lukasiewicz(parameter: &[Self]) -> Option<Self>
+    fn numeric_lukasiewicz(parameters: &[Self]) -> Option<Self>
     where
         Self: Sized,
     {
@@ -360,7 +366,7 @@ pub(crate) trait OperableNumeric {
     ///
     /// Returns `None` if the input parameters are not integers or no input parameters are given.
     #[allow(unused)]
-    fn numeric_bit_add(parameter: &[Self]) -> Option<Self>
+    fn numeric_bit_and(parameters: &[Self]) -> Option<Self>
     where
         Self: Sized,
     {
@@ -375,7 +381,7 @@ pub(crate) trait OperableNumeric {
     /// Returns the zero from the integer value space if no parameters are given.
     /// Returns `None` if the input parameters are not integers or no input parameters are given.
     #[allow(unused)]
-    fn numeric_bit_or(parameter: &[Self]) -> Option<Self>
+    fn numeric_bit_or(parameters: &[Self]) -> Option<Self>
     where
         Self: Sized,
     {
@@ -390,7 +396,7 @@ pub(crate) trait OperableNumeric {
     /// Returns zero from the integer value space if no parameters are given.
     /// Returns `None` if the input parameters are not integers or no input parameters are given.
     #[allow(unused)]
-    fn numeric_bit_xor(parameter: &[Self]) -> Option<Self>
+    fn numeric_bit_xor(parameters: &[Self]) -> Option<Self>
     where
         Self: Sized,
     {
@@ -401,7 +407,7 @@ pub(crate) trait OperableNumeric {
     ///
     /// Returns `None` if the input parameter pair are not integers.
     #[allow(unused)]
-    fn numeric_bit_shift_left(parameter: &[Self]) -> Option<Self>
+    fn numeric_bit_shift_left(first: Self, second: Self) -> Option<Self>
     where
         Self: Sized,
     {
@@ -412,7 +418,7 @@ pub(crate) trait OperableNumeric {
     ///
     /// Returns `None` if the input parameter pair are not integers.
     #[allow(unused)]
-    fn numeric_bit_shift_right(parameter: &[Self]) -> Option<Self>
+    fn numeric_bit_shift_right(first: Self, second: Self) -> Option<Self>
     where
         Self: Sized,
     {
@@ -423,7 +429,7 @@ pub(crate) trait OperableNumeric {
     ///
     /// Returns `None` if the input parameter pair are not integers or no input parameters are given.
     #[allow(unused)]
-    fn numeric_bit_shift_right_unsigned(parameter: &[Self]) -> Option<Self>
+    fn numeric_bit_shift_right_unsigned(first: Self, second: Self) -> Option<Self>
     where
         Self: Sized,
     {

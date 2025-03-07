@@ -75,7 +75,7 @@ pub(super) fn numeric_squareroot_double(parameter: Double) -> Option<AnyDataValu
 
 /// Logarithm of a 64-bit floating point number given some base
 pub(super) fn numeric_logarithm_double(value: Double, base: Double) -> Option<AnyDataValue> {
-    some_datavalue_from_double(value.log(base)?)
+    some_datavalue_from_double(value.checked_log(base)?)
 }
 
 /// Sine of 64-bit floating point number
@@ -115,7 +115,7 @@ pub(super) fn numeric_remainder_double(
         return None;
     }
 
-    some_datavalue_from_double(parameter_first % parameter_second)
+    some_datavalue_from_double(parameter_first.checked_rem(parameter_second)?)
 }
 
 /// Less than comparison between 64-bit floating point numbers
