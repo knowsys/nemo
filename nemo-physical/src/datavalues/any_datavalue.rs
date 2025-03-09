@@ -85,6 +85,12 @@ enum AnyDataValueEnum {
 #[derive(Debug, Clone)]
 pub struct AnyDataValue(AnyDataValueEnum);
 
+impl Default for AnyDataValue {
+    fn default() -> Self {
+        AnyDataValue::new_boolean(false)
+    }
+}
+
 impl AnyDataValue {
     /// Construct a datavalue that represents the given number.
     pub fn new_integer_from_i64(value: i64) -> Self {

@@ -1,8 +1,10 @@
 //! This module defines all supported functions relating to strings.
 
+use levenshtein::levenshtein;
 use once_cell::sync::OnceCell;
-use std::{cmp::Ordering, num::NonZero, sync::Mutex};
 use unicode_segmentation::UnicodeSegmentation;
+
+use std::{cmp::Ordering, num::NonZero, sync::Mutex};
 
 use crate::{
     datavalues::{AnyDataValue, DataValue},
@@ -17,7 +19,7 @@ pub(crate) trait OperableString {
     /// Evaluates to 0 from the integer value space if both strings are equal.
     /// Evaluates to 1 from the integer value space if the second string is alphabetically larger than the first.
     #[allow(unused)]
-    fn string_comapre(first: Self, second: Self) -> Option<Self>
+    fn string_compare(first: Self, second: Self) -> Option<Self>
     where
         Self: Sized,
     {
@@ -48,6 +50,22 @@ pub(crate) trait OperableString {
     /// Returns `None` if either parameter is not a string.
     #[allow(unused)]
     fn string_contains(first: Self, second: Self) -> Option<Self>
+    where
+        Self: Sized,
+    {
+        None
+    }
+
+    /// Levenshtein distance between two strings
+    ///
+    /// Returns the Levenshtein distance (i.e., the minimal number of
+    /// insertions, deletions, or character substitutions required to
+    /// change one argument into the other) between the two given strings
+    /// as a number from the integer value space.
+    ///
+    /// Return `None` if the the provided arguments are not both strings.
+    #[allow(unused)]
+    fn string_levenshtein(first: Self, second: Self) -> Option<Self>
     where
         Self: Sized,
     {
@@ -288,7 +306,7 @@ const REGEX_CACHE_SIZE: NonZero<usize> = NonZero::new(32).unwrap();
 static REGEX_CACHE: OnceCell<Mutex<lru::LruCache<String, regex::Regex>>> = OnceCell::new();
 
 impl OperableString for AnyDataValue {
-    fn string_comapre(first: Self, second: Self) -> Option<Self>
+    fn string_compare(first: Self, second: Self) -> Option<Self>
     where
         Self: Sized,
     {
@@ -316,6 +334,14 @@ impl OperableString for AnyDataValue {
         string_pair_from_any(first, second).map(|(first_string, second_string)| {
             AnyDataValue::new_boolean(unicode_find(&first_string, &second_string).is_some())
         })
+    }
+
+    fn string_levenshtein(first: Self, second: Self) -> Option<Self>
+    where
+        Self: Sized,
+    {
+        string_pair_from_any(first, second)
+            .map(|(from, to)| AnyDataValue::new_integer_from_u64(levenshtein(&from, &to) as u64))
     }
 
     fn string_starts(first: Self, second: Self) -> Option<Self>

@@ -1,9 +1,12 @@
 //! This module defines all supported boolean functions.
 
-use crate::datavalues::{AnyDataValue, DataValue};
+use crate::{
+    datavalues::{AnyDataValue, DataValue},
+    storagevalues::{double::Double, float::Float},
+};
 
 /// Trait for types on which boolean operations are defined
-pub(crate) trait OperableBoolean {
+pub(crate) trait OperableBoolean: PartialEq {
     /// Boolean conjunction
     ///
     /// Return `true` if all of its inputs are `true`.
@@ -15,7 +18,17 @@ pub(crate) trait OperableBoolean {
     where
         Self: Sized,
     {
-        None
+        let mut result = Self::boolean_true();
+        for parameter in parameters {
+            if !Self::is_boolean(parameter) {
+                return None;
+            }
+
+            if *parameter != Self::boolean_true() {
+                result = Self::boolean_false();
+            }
+        }
+        Some(result)
     }
 
     /// Boolean disjunction
@@ -29,7 +42,17 @@ pub(crate) trait OperableBoolean {
     where
         Self: Sized,
     {
-        None
+        let mut result = Self::boolean_false();
+        for parameter in parameters {
+            if !Self::is_boolean(parameter) {
+                return None;
+            }
+
+            if *parameter != Self::boolean_true() {
+                result = Self::boolean_false();
+            }
+        }
+        Some(result)
     }
 
     /// Boolean negation
@@ -43,8 +66,25 @@ pub(crate) trait OperableBoolean {
     where
         Self: Sized,
     {
-        None
+        if !Self::is_boolean(&parameter) {
+            return None;
+        }
+
+        if parameter == Self::boolean_true() {
+            Some(Self::boolean_false())
+        } else {
+            Some(Self::boolean_true())
+        }
     }
+
+    /// Value representing `true` for this data type
+    fn boolean_true() -> Self;
+
+    /// Value representing `false` for this data type
+    fn boolean_false() -> Self;
+
+    /// Check if value is a boolean.
+    fn is_boolean(value: &Self) -> bool;
 }
 
 impl OperableBoolean for AnyDataValue {
@@ -85,5 +125,59 @@ impl OperableBoolean for AnyDataValue {
         parameter
             .to_boolean()
             .map(|value| AnyDataValue::new_boolean(!value))
+    }
+
+    fn boolean_true() -> Self {
+        AnyDataValue::new_boolean(true)
+    }
+
+    fn boolean_false() -> Self {
+        AnyDataValue::new_boolean(false)
+    }
+
+    fn is_boolean(value: &Self) -> bool {
+        value.to_boolean().is_some()
+    }
+}
+
+impl OperableBoolean for i64 {
+    fn boolean_true() -> Self {
+        1
+    }
+
+    fn boolean_false() -> Self {
+        0
+    }
+
+    fn is_boolean(_value: &Self) -> bool {
+        true
+    }
+}
+
+impl OperableBoolean for Float {
+    fn boolean_true() -> Self {
+        Float::new_unchecked(1.0)
+    }
+
+    fn boolean_false() -> Self {
+        Float::new_unchecked(0.0)
+    }
+
+    fn is_boolean(_value: &Self) -> bool {
+        true
+    }
+}
+
+impl OperableBoolean for Double {
+    fn boolean_true() -> Self {
+        Double::new_unchecked(1.0)
+    }
+
+    fn boolean_false() -> Self {
+        Double::new_unchecked(0.0)
+    }
+
+    fn is_boolean(_value: &Self) -> bool {
+        true
     }
 }
