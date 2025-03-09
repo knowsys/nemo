@@ -33,13 +33,6 @@ where
     /// # Panics
     /// When every slot is taken
     pub fn push(&mut self, value: T) {
-        println!(
-            "Push {:?} to stack (new pointer: {}, len: {})",
-            value,
-            self.pointer + 1,
-            self.stack.len(),
-        );
-
         self.stack[self.pointer] = value;
         self.pointer += 1;
     }
@@ -66,12 +59,6 @@ where
     /// # Panics
     /// When called on an empty stack
     pub fn top_mut(&mut self) -> &mut T {
-        println!(
-            "Access element at {}: {:?}",
-            self.pointer - 1,
-            self.stack[self.pointer - 1]
-        );
-
         &mut self.stack[self.pointer - 1]
     }
 
@@ -81,12 +68,6 @@ where
     /// # Panics
     /// When called on an empty stack
     pub fn unary(&mut self, _placeholder: usize) -> T {
-        println!(
-            "Unary at {}: {:?}",
-            self.pointer - 1,
-            self.stack[self.pointer - 1]
-        );
-
         self.stack[self.pointer - 1].clone()
     }
 
@@ -97,15 +78,6 @@ where
     /// When called on a stack with less than two elements.
     pub fn binary(&mut self, _placeholder: usize) -> (T, T) {
         self.pointer -= 1;
-
-        println!(
-            "Binary at ({}, {}): ({:?}, {:?}); new pointer: {}",
-            self.pointer - 1,
-            self.pointer,
-            self.stack[self.pointer - 1],
-            self.stack[self.pointer],
-            self.pointer
-        );
 
         (
             self.stack[self.pointer - 1].clone(),
@@ -121,17 +93,6 @@ where
     pub fn ternary(&mut self, _placeholder: usize) -> (T, T, T) {
         self.pointer -= 2;
 
-        println!(
-            "Ternary at ({}, {}, {}): ({:?}, {:?}, {:?}), new pointer: {}",
-            self.pointer - 1,
-            self.pointer,
-            self.pointer + 1,
-            self.stack[self.pointer - 1],
-            self.stack[self.pointer],
-            self.stack[self.pointer + 1],
-            self.pointer
-        );
-
         (
             self.stack[self.pointer - 1].clone(),
             self.stack[self.pointer].clone(),
@@ -146,20 +107,11 @@ where
         self.pointer -= amount;
         self.pointer += 1;
 
-        println!(
-            "Nary at {}..{}, new pointer: {}",
-            (self.pointer - 1),
-            end,
-            self.pointer,
-        );
-
         &self.stack[(self.pointer - 1)..end]
     }
 
     /// Delete all elements from the stack.
     pub fn reset(&mut self) {
-        println!("Reset\n");
-
         self.pointer = 0;
     }
 }

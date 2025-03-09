@@ -122,8 +122,6 @@ where
         self.stack.reset();
 
         for (operation, parameter) in self.operations.iter().zip(self.operation_parameters.iter()) {
-            println!("operation: {:?}, param: {}", operation, parameter);
-
             match_function!(operation, self.stack, self.constants, *parameter);
         }
 
