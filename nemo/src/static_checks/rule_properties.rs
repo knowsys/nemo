@@ -4,8 +4,7 @@ use crate::rule_model::components::{
 };
 use crate::static_checks::positions::{Positions, PositionsByRuleIdxVariables};
 use crate::static_checks::rule_set::{
-    AffectedVariables, Attacked, AttackedGlutVariables, AttackedVariables, ExistentialVariables,
-    FrontierVariables, JoinVariables, VariablePair,
+    ExistentialVariables, FrontierVariables, JoinVariables, VariablePair,
 };
 
 use std::collections::HashSet;

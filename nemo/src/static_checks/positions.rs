@@ -5,8 +5,7 @@ use crate::rule_model::components::{
 use crate::static_checks::acyclicity_graphs::{JointAcyclicityGraph, WeakAcyclicityGraph};
 use crate::static_checks::collection_traits::{Disjoint, InsertAll, RemoveAll, Superset};
 use crate::static_checks::rule_set::{
-    AtomPositionsAppearance, AtomRefs, Attacked, ExistentialRuleIdxVariables, JoinVariables,
-    RuleIdxVariable, RulePositions, RuleSet,
+    ExistentialRuleIdxVariables, JoinVariables, RuleIdxVariable, RuleSet,
 };
 
 use std::collections::{HashMap, HashSet};

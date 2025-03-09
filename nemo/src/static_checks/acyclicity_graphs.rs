@@ -6,8 +6,8 @@ use crate::static_checks::positions::{
     ExtendedPositions, FromPositionSet, Position, Positions, PositionsByRuleIdxVariables,
 };
 use crate::static_checks::rule_set::{
-    AllPositivePositions, Attacked, AttackedVariables, ExistentialVariables, RuleIdxRule,
-    RuleIdxVariable, RulePositions, RuleSet, SpecialPositionsConstructor,
+    AllPositivePositions, ExistentialVariables, RuleIdxRule, RuleIdxVariable, RuleSet,
+    SpecialPositionsConstructor,
 };
 use petgraph::algo::is_cyclic_directed;
 use petgraph::graphmap::{DiGraphMap, NodeTrait};
