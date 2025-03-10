@@ -3,22 +3,36 @@ use crate::rule_model::components::{
     atom::Atom, rule::Rule, term::primitive::variable::Variable, IterableVariables,
 };
 use crate::static_checks::collection_traits::{Disjoint, InsertAll, Superset};
-use crate::static_checks::positions::{Position, Positions, PositionsByRuleIdxVariables};
+use crate::static_checks::positions::{Position, Positions, PositionsByRuleAndVariables};
 
 use std::collections::{HashMap, HashSet};
 
 /// Type to identify a Rule in some RuleSet.
-type RuleIdx = usize;
+// type RuleIdx = usize;
 
 // TODO: NEEDED?
 /// Type to relate an Rule to its index in some RuleSet.
-pub type RuleIdxRule<'a> = (RuleIdx, &'a Rule);
+// pub type RuleIdxRule<'a> = (RuleIdx, &'a Rule);
 
 // TODO: RATHER RULEVARIABLE AS TYPE -> WOULD MAKE SOME THINGS SIMPLER?
 /// Type to relate an (existential) Variable to a Rule. Therefore a type to identificate an
 /// (existential) Variable.
-pub type RuleIdxVariable<'a> = (RuleIdx, &'a Variable);
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub struct RuleAndVariable<'a>(pub &'a Rule, pub &'a Variable);
 
+impl<'a> Ord for RuleAndVariable<'a> {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.1.cmp(other.1)
+    }
+}
+
+impl<'a> PartialOrd for RuleAndVariable<'a> {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        self.1.partial_cmp(other.1)
+    }
+}
+
+// TODO: USE A REFERENCE TO RULE
 /// Type to wrap a 'set' (Vec) of Rule(s).
 #[derive(Debug)]
 pub struct RuleSet(pub Vec<Rule>);
@@ -63,37 +77,33 @@ impl<'a> AllPositivePositions<'a> for Rule {
     }
 }
 
-// NOTE: KEEP IT IF RULEIDXRULE DOES NOT GET ELIMINATED?
-/// This Trait provides a method to get all existential RuleIdxVariables of a RuleSet.
-pub trait ExistentialRuleIdxVariables {
-    /// Returns all existential RuleIdxVariables of a RuleSet.
-    fn existential_rule_idx_variables(&self) -> HashSet<RuleIdxVariable>;
+// NOTE: KEEP IT?
+/// This Trait provides a method to get all existential variables combined with its rule of a RuleSet.
+pub trait ExistentialRuleAndVariables {
+    /// Returns all existential variables combined with its rule of a RuleSet.
+    fn existential_ruleandvariables(&self) -> HashSet<RuleAndVariable>;
 }
 
-impl ExistentialRuleIdxVariables for RuleSet {
-    // TODO: USE EXISTENTIALRULEIDXVARIABLES FOR RULEIDXRULE
-    fn existential_rule_idx_variables(&self) -> HashSet<RuleIdxVariable> {
-        self.0.iter().enumerate().fold(
-            HashSet::<RuleIdxVariable>::new(),
-            |ex_vars, (index, rule)| {
-                // let idx_ex_vars: RuleIdxVariables = r_idx_rule.existential_rule_idx_variables();
-                let ex_vars_of_rule: HashSet<&Variable> = rule.existential_variables();
-                let idx_ex_vars: HashSet<RuleIdxVariable> = ex_vars_of_rule
-                    .into_iter()
-                    .map(|var| (index, var))
-                    .collect();
-                ex_vars.union(&idx_ex_vars).copied().collect()
-            },
-        )
+impl ExistentialRuleAndVariables for RuleSet {
+    fn existential_ruleandvariables(&self) -> HashSet<RuleAndVariable> {
+        self.0
+            .iter()
+            .fold(HashSet::<RuleAndVariable>::new(), |ex_vars, rule| {
+                let ex_ruleandvars: HashSet<RuleAndVariable> = rule.existential_ruleandvariables();
+                ex_vars.union(&ex_ruleandvars).copied().collect()
+            })
     }
 }
 
-// impl<'a> ExistentialRuleIdxVariables for RuleIdxRule<'a> {
-//     fn existential_rule_idx_variables(&self) -> RuleIdxVariables<'a> {
-//         let ex_vars_of_rule: Variables = self.1.existential_variables();
-//         ex_vars_of_rule.iter().map(|var| (self.0, *var)).collect()
-//     }
-// }
+impl<'a> ExistentialRuleAndVariables for Rule {
+    fn existential_ruleandvariables(&self) -> HashSet<RuleAndVariable> {
+        let ex_vars_of_rule: HashSet<&Variable> = self.existential_variables();
+        ex_vars_of_rule
+            .into_iter()
+            .map(|var| RuleAndVariable(self, var))
+            .collect()
+    }
+}
 
 // NOTE: KEEP?
 /// This Trait provides a method to get all the existential Variables of some type.
@@ -225,13 +235,24 @@ impl Rule {
 
     /// Returns the Positions of the existential Variables of a rule.
     pub fn positions_of_existential_variables(&self) -> Positions {
-        self.existential_variables()
-            .iter()
-            .fold(Positions::new(), |pos_of_ex_vars, var| {
-                let pos_of_var_in_head: Positions = var.positions_in_head(self);
-                pos_of_ex_vars.insert_all_take_ret(pos_of_var_in_head)
-            })
+        self.existential_ruleandvariables().into_iter().fold(
+            Positions::new(),
+            |pos_of_ex_var, ruleandvar| {
+                let pos_of_ex_var_in_head: Positions = ruleandvar.positions_in_head();
+                pos_of_ex_var.insert_all_take_ret(pos_of_ex_var_in_head)
+            },
+        )
     }
+
+    // pub fn positions_of_existential_variables(&self) -> Positions {
+    //     self.existential_variables()
+    //         .iter()
+    //         .map(|var| RuleAndVariable(self, var))
+    //         .fold(Positions::new(), |pos_of_ex_vars, ruleandvar| {
+    //             let pos_of_var_in_head: Positions = ruleandvar.positions_in_head();
+    //             pos_of_ex_vars.insert_all_take_ret(pos_of_var_in_head)
+    //         })
+    // }
 }
 
 /// This Impl-Block contains methods for a rule to get its frontier variable pairs.
@@ -307,7 +328,7 @@ impl<'a> Rule {
     ) -> HashSet<&'a Variable> {
         variables
             .iter()
-            .filter(|var| var.is_affected(self, affected_positions))
+            .filter(|var| RuleAndVariable(self, var).is_affected(affected_positions))
             .copied()
             .collect()
     }
@@ -319,30 +340,30 @@ impl<'a> Rule {
     /// Returns the attacked frontier Variables of some Rule based on the attacked positions by RuleIdxVariable(s) (PositionsByRuleIdxVariables).
     pub fn attacked_frontier_variables(
         &self,
-        attacked_pos_by_rule_idx_vars: &PositionsByRuleIdxVariables,
+        attacked_pos_by_ruleandvars: &PositionsByRuleAndVariables,
     ) -> HashSet<&Variable> {
         let frontier_variables: HashSet<&Variable> = self.frontier_variables();
-        self.attacked_variables(frontier_variables, attacked_pos_by_rule_idx_vars)
+        self.attacked_variables(frontier_variables, attacked_pos_by_ruleandvars)
     }
 
     /// Returns the attacked Variables of some Rule based on the attacked positions by RuleIdxVariable(s) (PositionsByRuleIdxVariables).
     pub fn attacked_universal_variables(
         &self,
-        attacked_pos_by_rule_idx_vars: &PositionsByRuleIdxVariables,
+        attacked_pos_by_ruleandvars: &PositionsByRuleAndVariables,
     ) -> HashSet<&Variable> {
         let universal_variables: HashSet<&Variable> = self.positive_variables();
-        self.attacked_variables(universal_variables, attacked_pos_by_rule_idx_vars)
+        self.attacked_variables(universal_variables, attacked_pos_by_ruleandvars)
     }
 
     /// Returns the attacked Variables out of some Variables of some Rule based on the attacked positions by RuleIdxVariable(s) (PositionsByRuleIdxVariables).
     fn attacked_variables(
         &self,
         variables: HashSet<&'a Variable>,
-        attacked_pos_by_rule_idx_vars: &PositionsByRuleIdxVariables,
+        attacked_pos_by_ruleandvars: &PositionsByRuleAndVariables,
     ) -> HashSet<&'a Variable> {
         variables
             .iter()
-            .filter(|var| var.is_attacked(self, attacked_pos_by_rule_idx_vars))
+            .filter(|var| RuleAndVariable(self, var).is_attacked(attacked_pos_by_ruleandvars))
             .copied()
             .collect()
     }
@@ -354,22 +375,23 @@ impl Rule {
     /// Returns the attacked frontier glut Variables of a Rule.
     pub fn attacked_frontier_glut_variables(
         &self,
-        attacked_pos_by_cycle_rule_idx_vars: &PositionsByRuleIdxVariables,
+        attacked_pos_by_cycle_ruleandvars: &PositionsByRuleAndVariables,
     ) -> HashSet<&Variable> {
         let frontier_variables: HashSet<&Variable> = self.frontier_variables();
-        self.attacked_variables(frontier_variables, attacked_pos_by_cycle_rule_idx_vars)
+        self.attacked_variables(frontier_variables, attacked_pos_by_cycle_ruleandvars)
     }
 
     /// Returns the attacked glut Variables of a Rule.
     pub fn attacked_universal_glut_variables(
         &self,
-        attacked_pos_by_cycle_rule_idx_vars: &PositionsByRuleIdxVariables,
+        attacked_pos_by_cycle_ruleandvars: &PositionsByRuleAndVariables,
     ) -> HashSet<&Variable> {
         let universal_variables: HashSet<&Variable> = self.positive_variables();
-        self.attacked_variables(universal_variables, attacked_pos_by_cycle_rule_idx_vars)
+        self.attacked_variables(universal_variables, attacked_pos_by_cycle_ruleandvars)
     }
 }
 
+// TODO: MAYBE CHANGE TO RULEANDVARIABLE
 /// This Impl-Block contains methods for a variable to determine if it appears in a special way in
 /// a rule.
 impl Variable {
@@ -392,29 +414,29 @@ impl Variable {
 }
 
 /// This Impl-Block contains methods for a variable to get its positions in some part of a rule.
-impl<'a> Variable {
+impl<'a> RuleAndVariable<'a> {
     /// Returns the HashSet<Position> of a Variable in the head of some Rule.
-    pub fn extended_positions_in_positive_body(&self, rule: &'a Rule) -> HashSet<Position<'a>> {
-        let body_pos_of_var: Positions = self.positions_in_positive_body(rule);
+    pub fn extended_positions_in_positive_body(self) -> HashSet<Position<'a>> {
+        let body_pos_of_var: Positions = self.positions_in_positive_body();
         HashSet::<Position>::from(body_pos_of_var)
     }
 
     /// Returns the HashSet<Position> of a Variable in the positive body of some Rule.
-    pub fn extended_positions_in_head(&self, rule: &'a Rule) -> HashSet<Position<'a>> {
-        let head_pos_of_var: Positions = self.positions_in_head(rule);
+    pub fn extended_positions_in_head(self) -> HashSet<Position<'a>> {
+        let head_pos_of_var: Positions = self.positions_in_head();
         HashSet::<Position>::from(head_pos_of_var)
     }
 
     /// Returns the Positions of a Variable in the head of some Rule.
-    fn positions_in_positive_body(&self, rule: &'a Rule) -> Positions<'a> {
-        let positive_body_atoms: Vec<&Atom> = rule.body_positive_refs();
-        self.positions_in_atoms(&positive_body_atoms)
+    fn positions_in_positive_body(self) -> Positions<'a> {
+        let positive_body_atoms: Vec<&Atom> = self.0.body_positive_refs();
+        self.1.positions_in_atoms(&positive_body_atoms)
     }
 
     /// Returns the Positions of a Variable in the positive body of some Rule.
-    pub fn positions_in_head(&self, rule: &'a Rule) -> Positions<'a> {
-        let head_atoms: Vec<&Atom> = rule.head_refs();
-        self.positions_in_atoms(&head_atoms)
+    pub fn positions_in_head(self) -> Positions<'a> {
+        let head_atoms: Vec<&Atom> = self.0.head_refs();
+        self.1.positions_in_atoms(&head_atoms)
     }
 }
 
@@ -488,55 +510,47 @@ impl Variable {
 
 /// This Impl-Block contains methods for a variable to check if it is attacked with different input
 /// parameters.
-impl Variable {
+impl RuleAndVariable<'_> {
     /// Returns the attacked frontier Variables of a Rule.
-    pub fn is_attacked(
-        &self,
-        rule: &Rule,
-        attacked_pos_by_rule_idx_vars: &PositionsByRuleIdxVariables,
-    ) -> bool {
-        let positions_of_variable_in_body: Positions = self.positions_in_positive_body(rule);
-        attacked_pos_by_rule_idx_vars
+    pub fn is_attacked(&self, attacked_pos_by_ruleandvars: &PositionsByRuleAndVariables) -> bool {
+        let positions_of_variable_in_body: Positions = self.positions_in_positive_body();
+        attacked_pos_by_ruleandvars
             .0
             .values()
             .any(|att_pos| att_pos.is_superset(&positions_of_variable_in_body))
     }
 
     /// Returns the attacked Variables of a Rule.
-    pub fn is_attacked_by_positions_in_rule(
-        &self,
-        rule: &Rule,
-        attacked_pos_of_var: &Positions,
-    ) -> bool {
-        let positions_of_variable_in_body: Positions = self.positions_in_positive_body(rule);
-        attacked_pos_of_var.is_superset(&positions_of_variable_in_body)
+    pub fn is_attacked_by_positions(&self, attacked_pos_of_ruleandvar: &Positions) -> bool {
+        let positions_of_variable_in_body: Positions = self.positions_in_positive_body();
+        attacked_pos_of_ruleandvar.is_superset(&positions_of_variable_in_body)
     }
 
     /// Returns the attacked Variables out of some Variables of a Rule.
-    pub fn is_attacked_by_variable(
+    pub fn is_attacked_by_ruleandvariable(
         &self,
-        attacking_rule_idx_var: &RuleIdxVariable,
-        rule: &Rule,
-        attacked_pos_by_rule_idx_vars: &PositionsByRuleIdxVariables,
+        attacking_ruleandvar: &RuleAndVariable,
+        attacked_pos_by_ruleandvars: &PositionsByRuleAndVariables,
     ) -> bool {
-        let attacked_pos_by_var: &Positions = attacked_pos_by_rule_idx_vars
+        let attacked_pos_of_ruleandvar: &Positions = attacked_pos_by_ruleandvars
             .0
-            .get(attacking_rule_idx_var)
+            .get(attacking_ruleandvar)
             .unwrap();
-        self.is_attacked_by_positions_in_rule(rule, attacked_pos_by_var)
+        self.is_attacked_by_positions(attacked_pos_of_ruleandvar)
     }
 }
 
 /// This Impl-Block contains a method for a variable to check if it is affected.
-impl Variable {
+impl RuleAndVariable<'_> {
     /// Checks whether a Variable is attacked in some Rule based on the
     /// affected Positions.
-    fn is_affected(&self, rule: &Rule, affected_positions: &Positions) -> bool {
-        let positions_of_variable_in_body: Positions = self.positions_in_positive_body(rule);
+    fn is_affected(&self, affected_positions: &Positions) -> bool {
+        let positions_of_variable_in_body: Positions = self.positions_in_positive_body();
         affected_positions.is_superset(&positions_of_variable_in_body)
     }
 }
 
+// TODO: MAYBE CHANGE TO RULEANDVARIABLE
 /// Thisk Impl-Block contains methods for a variable to check its appearance in an atom or some
 /// atoms.
 impl Variable {

@@ -5,7 +5,7 @@ use crate::rule_model::components::{
 use crate::static_checks::acyclicity_graphs::{JointAcyclicityGraph, WeakAcyclicityGraph};
 use crate::static_checks::collection_traits::{Disjoint, InsertAll, RemoveAll, Superset};
 use crate::static_checks::rule_set::{
-    ExistentialRuleIdxVariables, JoinVariables, RuleIdxVariable, RuleSet,
+    ExistentialRuleAndVariables, JoinVariables, RuleAndVariable, RuleSet,
 };
 
 use std::collections::{HashMap, HashSet};
@@ -19,7 +19,7 @@ pub struct Positions<'a>(pub HashMap<&'a Tag, HashSet<Index>>);
 
 /// Type to map some RuleIdxVariable(s) to some Positions.
 #[derive(Debug)]
-pub struct PositionsByRuleIdxVariables<'a, 'b>(pub HashMap<RuleIdxVariable<'a>, Positions<'b>>);
+pub struct PositionsByRuleAndVariables<'a>(pub HashMap<RuleAndVariable<'a>, Positions<'a>>);
 
 /// Type to map some Atom to some position in it.
 pub type Position<'a> = (&'a Tag, Index);
@@ -99,9 +99,9 @@ impl RuleSet {
 
     /// Builds all attacked positions ordered by (all existential / existential variables which appea
     /// in cycles of the joint acyclicity graph) (PositionsByRuleIdxVariables) of some RuleSet.
-    fn attacked_positions(&self, att_type: AttackingType) -> PositionsByRuleIdxVariables {
-        let att_variables: HashSet<RuleIdxVariable> = self.match_attacking_variables(att_type);
-        let att_pos_by_vars_unwraped: HashMap<RuleIdxVariable, Positions> = att_variables
+    fn attacked_positions(&self, att_type: AttackingType) -> PositionsByRuleAndVariables {
+        let att_variables: HashSet<RuleAndVariable> = self.match_attacking_variables(att_type);
+        let att_pos_by_vars_unwraped: HashMap<RuleAndVariable, Positions> = att_variables
             .into_iter()
             .map(|rule_idx_var| {
                 (
@@ -110,19 +110,19 @@ impl RuleSet {
                 )
             })
             .collect();
-        PositionsByRuleIdxVariables(att_pos_by_vars_unwraped)
+        PositionsByRuleAndVariables(att_pos_by_vars_unwraped)
     }
 
     /// Builds and Returns the attacked Positions by existential Variables that appear in a Cycle of the
     /// JointAcyclicityGraph of a RuleSet.
-    pub fn attacked_positions_by_cycle_rule_idx_variables(&self) -> PositionsByRuleIdxVariables {
+    pub fn attacked_positions_by_cycle_ruleandvariables(&self) -> PositionsByRuleAndVariables {
         self.attacked_positions(AttackingType::Cycle)
     }
 
     /// Builds and Returns the attacked Positions by all existential Variables of a RuleSet.
-    pub fn attacked_positions_by_existential_rule_idx_variables(
+    pub fn attacked_positions_by_existential_ruleandvariables(
         &self,
-    ) -> PositionsByRuleIdxVariables {
+    ) -> PositionsByRuleAndVariables {
         self.attacked_positions(AttackingType::Existential)
     }
 
@@ -172,6 +172,7 @@ impl<'a> AffectedPositionsBuilderPrivate<'a> for RuleSet {
     }
 }
 
+// NOTE: MAYBE IMPLEMENT FOR RULEANDVARIABLE
 impl<'a> AffectedPositionsBuilderPrivate<'a> for Rule {
     fn initial_affected_positions(&'a self) -> Positions<'a> {
         self.positions_of_existential_variables()
@@ -185,7 +186,7 @@ impl<'a> AffectedPositionsBuilderPrivate<'a> for Rule {
                 var.appears_at_some_positions_in_atoms(last_it_pos, &positive_body_atoms)
             })
             .fold(Positions::new(), |new_aff_pos_in_rule, var| {
-                let pos_of_var_in_head: Positions = var.positions_in_head(self);
+                let pos_of_var_in_head: Positions = RuleAndVariable(self, var).positions_in_head();
                 new_aff_pos_in_rule.insert_all_take_ret(pos_of_var_in_head)
             })
     }
@@ -193,7 +194,7 @@ impl<'a> AffectedPositionsBuilderPrivate<'a> for Rule {
 
 trait AttackedPositionsBuilderPrivate<'a> {
     fn conclude_attacked_positions(&'a self, cur_att_pos: &Positions<'a>) -> Positions<'a>;
-    fn initial_attacked_positions(&'a self, rule_idx_var: &RuleIdxVariable<'a>) -> Positions<'a>;
+    fn initial_attacked_positions(&'a self, ruleandvar: &RuleAndVariable<'a>) -> Positions<'a>;
 }
 
 impl<'a> AttackedPositionsBuilderPrivate<'a> for RuleSet {
@@ -207,33 +208,31 @@ impl<'a> AttackedPositionsBuilderPrivate<'a> for RuleSet {
     }
 
     // TODO: INSTEAD OF POSITIONS_IN_HEAD CALL, CALL INIT_ATT_POS OF RULE
-    fn initial_attacked_positions(
-        &'a self,
-        (idx, variable): &RuleIdxVariable<'a>,
-    ) -> Positions<'a> {
-        self.0
-            .iter()
-            .enumerate()
-            .filter(|(r_idx, _)| r_idx == idx)
-            .fold(Positions::new(), |initial_pos, (_, rule)| {
-                let initial_pos_of_rule: Positions = variable.positions_in_head(rule);
+    fn initial_attacked_positions(&'a self, ruleandvar: &RuleAndVariable<'a>) -> Positions<'a> {
+        self.0.iter().filter(|rule| *rule == ruleandvar.0).fold(
+            Positions::new(),
+            |initial_pos, _| {
+                let initial_pos_of_rule: Positions = ruleandvar.positions_in_head();
                 initial_pos.insert_all_take_ret(initial_pos_of_rule)
-            })
+            },
+        )
     }
 }
 
+// NOTE: MAYBE IMPLEMENT FOR RULEANDVARIABLE
 impl<'a> AttackedPositionsBuilderPrivate<'a> for Rule {
     fn conclude_attacked_positions(&self, cur_att_pos: &Positions) -> Positions {
         self.positive_variables()
             .iter()
-            .filter(|var| var.is_attacked_by_positions_in_rule(self, cur_att_pos))
-            .fold(Positions::new(), |new_att_pos_in_rule, var| {
-                let pos_of_var_in_head: Positions = var.positions_in_head(self);
+            .map(|var| RuleAndVariable(self, var))
+            .filter(|ruleandvar| ruleandvar.is_attacked_by_positions(cur_att_pos))
+            .fold(Positions::new(), |new_att_pos_in_rule, ruleandvar| {
+                let pos_of_var_in_head: Positions = ruleandvar.positions_in_head();
                 new_att_pos_in_rule.insert_all_take_ret(pos_of_var_in_head)
             })
     }
 
-    fn initial_attacked_positions(&'a self, _rule_idx_var: &RuleIdxVariable<'a>) -> Positions<'a> {
+    fn initial_attacked_positions(&'a self, _ruleandvar: &RuleAndVariable<'a>) -> Positions<'a> {
         todo!("IMPLEMENT");
         // TODO: IMPLEMENT
     }
@@ -242,17 +241,17 @@ impl<'a> AttackedPositionsBuilderPrivate<'a> for Rule {
 trait AttackedPositionsBuilderPrivateExtended<'a> {
     fn attacked_positions_by_rule_idx_var(
         &'a self,
-        rule_idx_var: &RuleIdxVariable<'a>,
+        ruleandvar: &RuleAndVariable<'a>,
     ) -> Positions<'a>;
-    fn match_attacking_variables(&self, att_type: AttackingType) -> HashSet<RuleIdxVariable>;
+    fn match_attacking_variables(&self, att_type: AttackingType) -> HashSet<RuleAndVariable>;
 }
 
 impl<'a> AttackedPositionsBuilderPrivateExtended<'a> for RuleSet {
     fn attacked_positions_by_rule_idx_var(
         &'a self,
-        rule_idx_var: &RuleIdxVariable<'a>,
+        ruleandvar: &RuleAndVariable<'a>,
     ) -> Positions<'a> {
-        let mut att_pos: Positions = self.initial_attacked_positions(rule_idx_var);
+        let mut att_pos: Positions = self.initial_attacked_positions(ruleandvar);
         let mut new_found_att_pos: Positions = att_pos.clone();
         while !new_found_att_pos.0.is_empty() {
             let new_con_att_pos: Positions = self.conclude_attacked_positions(&att_pos);
@@ -262,13 +261,13 @@ impl<'a> AttackedPositionsBuilderPrivateExtended<'a> for RuleSet {
         att_pos
     }
 
-    fn match_attacking_variables(&self, att_type: AttackingType) -> HashSet<RuleIdxVariable> {
+    fn match_attacking_variables(&self, att_type: AttackingType) -> HashSet<RuleAndVariable> {
         match att_type {
             AttackingType::Cycle => {
                 let jo_ac_graph = JointAcyclicityGraph::new(self);
                 jo_ac_graph.all_nodes_of_cycles()
             }
-            AttackingType::Existential => self.existential_rule_idx_variables(),
+            AttackingType::Existential => self.existential_ruleandvariables(),
         }
     }
 }
@@ -315,6 +314,7 @@ impl<'a> MarkedPositionsBuilderPrivate<'a> for RuleSet {
     }
 }
 
+// NOTE: MAYBE IMPLEMENT FOR RULEANDVARIABLE
 impl<'a> MarkedPositionsBuilderPrivate<'a> for Rule {
     fn conclude_marked_positions(&'a self, last_it_pos: &Positions<'a>) -> Option<Positions<'a>> {
         self.positive_variables()
@@ -331,7 +331,7 @@ impl<'a> MarkedPositionsBuilderPrivate<'a> for Rule {
                 {
                     return None;
                 }
-                let pos_of_var_in_head: Positions = var.positions_in_head(self);
+                let pos_of_var_in_head: Positions = RuleAndVariable(self, var).positions_in_head();
                 Some(new_mar_pos_in_rule.insert_all_take_ret(pos_of_var_in_head))
             })
     }
@@ -348,7 +348,7 @@ impl<'a> MarkedPositionsBuilderPrivate<'a> for Rule {
                 {
                     return None;
                 }
-                let pos_of_var_in_head: Positions = var.positions_in_head(self);
+                let pos_of_var_in_head: Positions = RuleAndVariable(self, var).positions_in_head();
                 Some(new_mar_pos_in_rule.insert_all_take_ret(pos_of_var_in_head))
             })
     }
@@ -375,7 +375,7 @@ impl<'a> MarkedPositionsBuilderPrivate<'a> for Rule {
                 {
                     return None;
                 }
-                let pos_of_var_in_head: Positions = var.positions_in_head(self);
+                let pos_of_var_in_head: Positions = RuleAndVariable(self, var).positions_in_head();
                 Some(new_we_mar_pos_in_rule.insert_all_take_ret(pos_of_var_in_head))
             })
     }

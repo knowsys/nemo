@@ -2,9 +2,9 @@
 use crate::rule_model::components::{
     rule::Rule, term::primitive::variable::Variable, IterablePrimitives,
 };
-use crate::static_checks::positions::{Positions, PositionsByRuleIdxVariables};
+use crate::static_checks::positions::{Positions, PositionsByRuleAndVariables};
 use crate::static_checks::rule_set::{
-    ExistentialVariables, FrontierVariables, JoinVariables, VariablePair,
+    ExistentialVariables, FrontierVariables, JoinVariables, RuleAndVariable, VariablePair,
 };
 
 use std::collections::HashSet;
@@ -32,27 +32,25 @@ pub trait RuleProperties {
     /// Determines if the rule is weakly frontier guarded.
     fn is_weakly_frontier_guarded(&self, affected_positions: &Positions) -> bool;
     /// Determines if the rule is jointly guarded.
-    fn is_jointly_guarded(
-        &self,
-        attacked_pos_by_rule_idx_vars: &PositionsByRuleIdxVariables,
-    ) -> bool;
+    fn is_jointly_guarded(&self, attacked_pos_by_ruleandvars: &PositionsByRuleAndVariables)
+        -> bool;
     /// Determines if the rule is jointly frontier guarded.
     fn is_jointly_frontier_guarded(
         &self,
-        attacked_pos_by_rule_idx_vars: &PositionsByRuleIdxVariables,
+        attacked_pos_by_ruleandvars: &PositionsByRuleAndVariables,
     ) -> bool;
     /// Determines if the rule is glut guarded.
     fn is_glut_guarded(
         &self,
-        attacked_pos_by_cycle_rule_idx_vars: &PositionsByRuleIdxVariables,
+        attacked_pos_by_cycle_ruleandvars: &PositionsByRuleAndVariables,
     ) -> bool;
     /// Determines if the rule is glut frontier guarded.
     fn is_glut_frontier_guarded(
         &self,
-        attacked_pos_by_cycle_rule_idx_vars: &PositionsByRuleIdxVariables,
+        attacked_pos_by_cycle_ruleandvars: &PositionsByRuleAndVariables,
     ) -> bool;
     /// Determines if the rule is shy.
-    fn is_shy(&self, attacked_pos_by_vars: &PositionsByRuleIdxVariables) -> bool;
+    fn is_shy(&self, attacked_pos_by_vars: &PositionsByRuleAndVariables) -> bool;
     // fn is_mfa(&self) -> bool;
     // fn is_dmfa(&self) -> bool;
     // fn is_rmfa(&self) -> bool;
@@ -118,54 +116,54 @@ impl RuleProperties for Rule {
 
     fn is_jointly_guarded(
         &self,
-        attacked_pos_by_rule_idx_vars: &PositionsByRuleIdxVariables,
+        attacked_pos_by_ruleandvars: &PositionsByRuleAndVariables,
     ) -> bool {
         let attacked_universal_variables: HashSet<&Variable> =
-            self.attacked_universal_variables(attacked_pos_by_rule_idx_vars);
+            self.attacked_universal_variables(attacked_pos_by_ruleandvars);
         self.is_guarded_for_variables(attacked_universal_variables)
     }
 
     fn is_jointly_frontier_guarded(
         &self,
-        attacked_pos_by_rule_idx_vars: &PositionsByRuleIdxVariables,
+        attacked_pos_by_ruleandvars: &PositionsByRuleAndVariables,
     ) -> bool {
         let attacked_frontier_variables: HashSet<&Variable> =
-            self.attacked_frontier_variables(attacked_pos_by_rule_idx_vars);
+            self.attacked_frontier_variables(attacked_pos_by_ruleandvars);
         self.is_guarded_for_variables(attacked_frontier_variables)
     }
 
     fn is_glut_guarded(
         &self,
-        attacked_pos_by_cycle_rule_idx_vars: &PositionsByRuleIdxVariables,
+        attacked_pos_by_cycle_ruleandvars: &PositionsByRuleAndVariables,
     ) -> bool {
         let attacked_universal_glut_variables: HashSet<&Variable> =
-            self.attacked_universal_glut_variables(attacked_pos_by_cycle_rule_idx_vars);
+            self.attacked_universal_glut_variables(attacked_pos_by_cycle_ruleandvars);
         self.is_guarded_for_variables(attacked_universal_glut_variables)
     }
 
     fn is_glut_frontier_guarded(
         &self,
-        attacked_pos_by_cycle_rule_idx_vars: &PositionsByRuleIdxVariables,
+        attacked_pos_by_cycle_ruleandvars: &PositionsByRuleAndVariables,
     ) -> bool {
         let attacked_frontier_glut_variables: HashSet<&Variable> =
-            self.attacked_frontier_glut_variables(attacked_pos_by_cycle_rule_idx_vars);
+            self.attacked_frontier_glut_variables(attacked_pos_by_cycle_ruleandvars);
         self.is_guarded_for_variables(attacked_frontier_glut_variables)
     }
 
     // TODO: SHORTEN FUNCTION
-    fn is_shy(&self, attacked_pos_by_rule_idx_vars: &PositionsByRuleIdxVariables) -> bool {
+    fn is_shy(&self, attacked_pos_by_ruleandvars: &PositionsByRuleAndVariables) -> bool {
         self.join_variables()
             .iter()
             .filter(|var| var.appears_in_multiple_positive_body_atoms(self))
-            .all(|var| !var.is_attacked(self, attacked_pos_by_rule_idx_vars))
+            .all(|var| !RuleAndVariable(self, var).is_attacked(attacked_pos_by_ruleandvars))
             && self
                 .frontier_variable_pairs()
                 .iter()
                 .filter(|var_pair| var_pair.appear_in_different_positive_body_atoms(self))
                 .all(|VariablePair([var1, var2])| {
-                    attacked_pos_by_rule_idx_vars.0.values().all(|ex_var_pos| {
-                        !var1.is_attacked_by_positions_in_rule(self, ex_var_pos)
-                            || !var2.is_attacked_by_positions_in_rule(self, ex_var_pos)
+                    attacked_pos_by_ruleandvars.0.values().all(|ex_var_pos| {
+                        !RuleAndVariable(self, var1).is_attacked_by_positions(ex_var_pos)
+                            || !RuleAndVariable(self, var2).is_attacked_by_positions(ex_var_pos)
                     })
                 })
     }

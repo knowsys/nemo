@@ -2,13 +2,15 @@
 /// a RuleSet.
 use crate::rule_model::components::{rule::Rule, term::primitive::variable::Variable};
 use crate::static_checks::collection_traits::{InsertAll, RemoveAll};
-use crate::static_checks::positions::{Position, Positions, PositionsByRuleIdxVariables};
+use crate::static_checks::positions::{Position, Positions, PositionsByRuleAndVariables};
 use crate::static_checks::rule_set::{
-    AllPositivePositions, ExistentialVariables, RuleIdxRule, RuleIdxVariable, RuleSet,
+    AllPositivePositions, ExistentialVariables, RuleAndVariable, RuleSet,
 };
 use petgraph::algo::is_cyclic_directed;
 use petgraph::graphmap::{DiGraphMap, NodeTrait};
 use std::collections::HashSet;
+
+use super::rule_set::ExistentialRuleAndVariables;
 
 type Cycle<N> = Vec<N>;
 
@@ -24,7 +26,7 @@ pub enum WeakAcyclicityGraphEdgeType {
 
 /// Type to declare a JointAcyclicityGraph of some RuleSet.
 #[derive(Debug)]
-pub struct JointAcyclicityGraph<'a>(DiGraphMap<RuleIdxVariable<'a>, ()>);
+pub struct JointAcyclicityGraph<'a>(DiGraphMap<RuleAndVariable<'a>, ()>);
 
 /// This Impl-Block contains the function for creating the JointAcyclicityGraph.
 impl<'a> JointAcyclicityGraph<'a> {
@@ -40,8 +42,8 @@ impl<'a> JointAcyclicityGraph<'a> {
 
 impl<'a> JointAcyclicityGraph<'a> {
     /// Returns all nodes of a Graph that appear in a Cycle.
-    pub fn all_nodes_of_cycles(&self) -> HashSet<RuleIdxVariable<'a>> {
-        let cycles: HashSet<Cycle<RuleIdxVariable>> = self.cycles();
+    pub fn all_nodes_of_cycles(&self) -> HashSet<RuleAndVariable<'a>> {
+        let cycles: HashSet<Cycle<RuleAndVariable>> = self.cycles();
         self.cycles_into_nodes(cycles)
     }
 
@@ -53,21 +55,21 @@ impl<'a> JointAcyclicityGraph<'a> {
 
 /// This struct declares a JointAcyclicityGraph of a RuleSet.
 #[derive(Debug)]
-struct JointAcyclicityGraphBuilder<'a>(DiGraphMap<RuleIdxVariable<'a>, ()>);
+struct JointAcyclicityGraphBuilder<'a>(DiGraphMap<RuleAndVariable<'a>, ()>);
 
 /// This Impl-Block contains the main methods to Build the JointAcyclicityGraph.
 impl<'a> JointAcyclicityGraphBuilder<'a> {
     fn add_edges(&mut self, rule_set: &'a RuleSet) {
-        let attacked_pos_by_ex_rule_idx_vars: PositionsByRuleIdxVariables =
-            rule_set.attacked_positions_by_existential_rule_idx_variables();
-        rule_set.0.iter().enumerate().for_each(|idx_rule| {
-            self.add_edges_for_rule(idx_rule, &attacked_pos_by_ex_rule_idx_vars);
+        let attacked_pos_by_ex_ruleandvars: PositionsByRuleAndVariables =
+            rule_set.attacked_positions_by_existential_ruleandvariables();
+        rule_set.0.iter().for_each(|rule| {
+            self.add_edges_for_rule(rule, &attacked_pos_by_ex_ruleandvars);
         })
     }
 
     fn add_nodes(&mut self, rule_set: &'a RuleSet) {
-        rule_set.0.iter().enumerate().for_each(|idx_rule| {
-            self.add_nodes_for_rule(idx_rule);
+        rule_set.0.iter().for_each(|rule| {
+            self.add_nodes_for_rule(rule);
         })
     }
 
@@ -84,95 +86,55 @@ impl<'a> JointAcyclicityGraphBuilder<'a> {
 impl<'a> JointAcyclicityGraphBuilder<'a> {
     fn add_edges_for_attacked_var(
         &mut self,
-        attacked_var: &Variable,
-        rule: &Rule,
-        ex_rule_idx_vars_of_rule: &HashSet<RuleIdxVariable<'a>>,
-        attacked_pos_by_rule_idx_vars: &PositionsByRuleIdxVariables<'a, '_>,
+        attacked_ruleandvar: RuleAndVariable,
+        ex_ruleandvars: &HashSet<RuleAndVariable<'a>>,
+        attacked_pos_by_ruleandvars: &PositionsByRuleAndVariables<'a>,
     ) {
-        attacked_pos_by_rule_idx_vars
+        attacked_pos_by_ruleandvars
             .0
             .keys()
-            .filter(|attacking_rule_idx_var| {
-                attacked_var.is_attacked_by_variable(
-                    attacking_rule_idx_var,
-                    rule,
-                    attacked_pos_by_rule_idx_vars,
+            .filter(|attacking_ruleandvar| {
+                attacked_ruleandvar.is_attacked_by_ruleandvariable(
+                    attacking_ruleandvar,
+                    attacked_pos_by_ruleandvars,
                 )
             })
-            .for_each(|attacking_rule_idx_var| {
-                self.add_edges_for_attacking_var(attacking_rule_idx_var, ex_rule_idx_vars_of_rule);
+            .for_each(|attacking_ruleandvar| {
+                self.add_edges_for_attacking_var(attacking_ruleandvar, ex_ruleandvars);
             });
     }
 
     fn add_edges_for_attacking_var(
         &mut self,
-        attacking_rule_idx_var: &RuleIdxVariable<'a>,
-        ex_rule_idx_vars_of_rule: &HashSet<RuleIdxVariable<'a>>,
+        attacking_ruleandvar: &RuleAndVariable<'a>,
+        ex_ruleandvars: &HashSet<RuleAndVariable<'a>>,
     ) {
-        ex_rule_idx_vars_of_rule.iter().for_each(|ex_rule_idx_var| {
-            self.0
-                .add_edge(*attacking_rule_idx_var, *ex_rule_idx_var, ());
+        ex_ruleandvars.iter().for_each(|ex_rule_idx_var| {
+            self.0.add_edge(*attacking_ruleandvar, *ex_rule_idx_var, ());
         })
     }
 
     fn add_edges_for_rule(
         &mut self,
-        r_idx_rule: RuleIdxRule<'a>,
-        attacked_pos_by_rule_idx_vars: &PositionsByRuleIdxVariables<'a, '_>,
+        rule: &'a Rule,
+        attacked_pos_by_ruleandvars: &PositionsByRuleAndVariables<'a>,
     ) {
-        // TODO: USE ExistentialRuleIdxVariables INSTEAD OF FOLLOWING 5 LINES OF CODE
-        let ex_vars_of_rule: HashSet<&Variable> = r_idx_rule.1.existential_variables();
-        let ex_rule_idx_vars_of_rule: HashSet<RuleIdxVariable> = ex_vars_of_rule
-            .into_iter()
-            .map(|var| (r_idx_rule.0, var))
-            .collect();
-        let attacked_positive_vars: HashSet<&Variable> = r_idx_rule
-            .1
-            .attacked_universal_variables(attacked_pos_by_rule_idx_vars);
-        // let attacked_positive_r_idx_vars: RuleIdxVariables = attacked_positive_vars
-        //     .into_iter()
-        //     .map(|var| (r_idx_rule.0, var))
-        //     .collect();
+        let ex_ruleandvars: HashSet<RuleAndVariable> = rule.existential_ruleandvariables();
+        let attacked_positive_vars: HashSet<&Variable> =
+            rule.attacked_universal_variables(attacked_pos_by_ruleandvars);
         attacked_positive_vars.iter().for_each(|var| {
             self.add_edges_for_attacked_var(
-                var,
-                r_idx_rule.1,
-                &ex_rule_idx_vars_of_rule,
-                attacked_pos_by_rule_idx_vars,
+                RuleAndVariable(rule, var),
+                &ex_ruleandvars,
+                attacked_pos_by_ruleandvars,
             );
         })
-        // attacked_pos_by_rule_idx_vars
-        //     .keys()
-        //     .for_each(|attacking_rule_idx_var| {
-        //         let attacked_pos_by_var = attacked_pos_by_rule_idx_vars
-        //             .get(attacking_rule_idx_var)
-        //             .unwrap();
-        //         self.add_edges_for_attacking_var(
-        //             attacking_rule_idx_var,
-        //             attacked_pos_by_var,
-        //             r_idx_rule.1,
-        //             &attacked_positive_r_idx_vars,
-        //         );
-        //     })
     }
 
-    // fn add_edges_for_attacking_var(
-    //     &mut self,
-    //     attacking_rule_idx_var: &RuleIdxVariable,
-    //     attacked_pos_of_var: &Positions,
-    //     rule: &Rule,
-    //     attacked_positive_r_idx_vars: &RuleIdxVariables,
-    // ) {
-    //     attacked_positive_r_idx_vars
-    //         .iter()
-    //         .filter(|(_, var)| var.is_attacked_by_positions_in_rule(rule, attacked_pos_of_var))
-    //         .for_each(|(_, var)| {})
-    // }
-
-    fn add_nodes_for_rule(&mut self, (rule_idx, rule): RuleIdxRule<'a>) {
-        let ex_vars_of_rule: HashSet<&Variable> = rule.existential_variables();
-        ex_vars_of_rule.into_iter().for_each(|var| {
-            self.0.add_node((rule_idx, var));
+    fn add_nodes_for_rule(&mut self, rule: &'a Rule) {
+        let ex_ruleandvars: HashSet<RuleAndVariable> = rule.existential_ruleandvariables();
+        ex_ruleandvars.into_iter().for_each(|ruleandvar| {
+            self.0.add_node(ruleandvar);
         })
     }
 }
@@ -214,7 +176,7 @@ impl<'a> WeakAcyclicityGraph<'a> {
     /// Returns all Cycles in the WeakAcyclicityGraph that contain a special edge.
     fn cycles_containing_special_edges(&self) -> HashSet<Cycle<Position<'a>>> {
         let cycles: HashSet<Cycle<Position<'a>>> = self.cycles();
-        let special_edge_cycles = cycles
+        let special_edge_cycles: HashSet<Cycle<Position<'a>>> = cycles
             .iter()
             .filter(|cycle| self.cycle_contains_special_edge(cycle))
             .cloned()
@@ -223,10 +185,10 @@ impl<'a> WeakAcyclicityGraph<'a> {
     }
 
     fn edge_is_special(&self, node: &Position<'a>, next_node: &Position<'a>) -> bool {
-        match self.0.edge_weight(*node, *next_node).unwrap() {
-            WeakAcyclicityGraphEdgeType::Common => false,
-            WeakAcyclicityGraphEdgeType::Special => true,
-        }
+        matches!(
+            self.0.edge_weight(*node, *next_node).unwrap(),
+            WeakAcyclicityGraphEdgeType::Special
+        )
     }
 }
 
@@ -334,10 +296,10 @@ impl<'a> WeakAcyclicityGraphBuilder<'a> {
 
     // FIXME: I THINK USING VARIABLE_BODY FOR THE HEAD POSITIONS IS WRONG. IT SHOULD BE A
     // GENERALISED VARIABLE
-    fn add_common_edges_for_rule(&mut self, rule: &'a Rule, variable_body: &Variable) {
+    fn add_common_edges_for_ruleandbodyvariable(&mut self, ruleandvar: RuleAndVariable<'a>) {
         let body_ex_pos_of_var: HashSet<Position> =
-            variable_body.extended_positions_in_positive_body(rule);
-        let head_ex_pos_of_var: HashSet<Position> = variable_body.extended_positions_in_head(rule);
+            ruleandvar.extended_positions_in_positive_body();
+        let head_ex_pos_of_var: HashSet<Position> = ruleandvar.extended_positions_in_head();
         body_ex_pos_of_var
             .into_iter()
             .for_each(|body_pos| self.add_common_edges_for_pos(body_pos, &head_ex_pos_of_var));
@@ -345,9 +307,10 @@ impl<'a> WeakAcyclicityGraphBuilder<'a> {
 
     fn add_edges_for_rule(&mut self, rule: &'a Rule) {
         let positive_variables: HashSet<&Variable> = rule.positive_variables();
-        positive_variables.iter().for_each(|variable_body| {
-            self.add_common_edges_for_rule(rule, variable_body);
-            self.add_special_edges_for_rule(rule, variable_body);
+        positive_variables.iter().for_each(|body_var| {
+            let ruleandbodyvar: RuleAndVariable = RuleAndVariable(rule, body_var);
+            self.add_common_edges_for_ruleandbodyvariable(ruleandbodyvar);
+            self.add_special_edges_for_ruleandbodyvariable(ruleandbodyvar);
         });
     }
 
@@ -369,11 +332,11 @@ impl<'a> WeakAcyclicityGraphBuilder<'a> {
         })
     }
 
-    fn add_special_edges_for_rule(&mut self, rule: &'a Rule, variable_body: &Variable) {
+    fn add_special_edges_for_ruleandbodyvariable(&mut self, ruleandvar: RuleAndVariable<'a>) {
         let body_ex_pos_of_var: HashSet<Position> =
-            variable_body.extended_positions_in_positive_body(rule);
+            ruleandvar.extended_positions_in_positive_body();
         let extended_pos_of_ex_vars: HashSet<Position> =
-            rule.extended_positions_of_existential_variables();
+            ruleandvar.0.extended_positions_of_existential_variables();
         body_ex_pos_of_var.into_iter().for_each(|body_pos| {
             self.add_special_edges_for_pos(body_pos, &extended_pos_of_ex_vars);
         })
@@ -424,15 +387,15 @@ where
     }
 }
 
-impl<'a> AcyclicityGraphMethods<RuleIdxVariable<'a>> for JointAcyclicityGraph<'a> {
-    fn cycles(&self) -> HashSet<Cycle<RuleIdxVariable<'a>>> {
+impl<'a> AcyclicityGraphMethods<RuleAndVariable<'a>> for JointAcyclicityGraph<'a> {
+    fn cycles(&self) -> HashSet<Cycle<RuleAndVariable<'a>>> {
         self.0.cycles()
     }
 
     fn cycles_into_nodes(
         &self,
-        cycles: HashSet<Cycle<RuleIdxVariable<'a>>>,
-    ) -> HashSet<RuleIdxVariable<'a>> {
+        cycles: HashSet<Cycle<RuleAndVariable<'a>>>,
+    ) -> HashSet<RuleAndVariable<'a>> {
         self.0.cycles_into_nodes(cycles)
     }
 }
