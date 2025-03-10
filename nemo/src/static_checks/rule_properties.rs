@@ -163,7 +163,7 @@ impl RuleProperties for Rule {
                 .iter()
                 .filter(|var_pair| var_pair.appear_in_different_positive_body_atoms(self))
                 .all(|VariablePair([var1, var2])| {
-                    attacked_pos_by_rule_idx_vars.values().all(|ex_var_pos| {
+                    attacked_pos_by_rule_idx_vars.0.values().all(|ex_var_pos| {
                         !var1.is_attacked_by_positions_in_rule(self, ex_var_pos)
                             || !var2.is_attacked_by_positions_in_rule(self, ex_var_pos)
                     })

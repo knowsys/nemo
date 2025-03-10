@@ -1,7 +1,7 @@
 //! Functionality that provides the static checks for a RuleSet.
 use crate::static_checks::acyclicity_graphs::{JointAcyclicityGraph, WeakAcyclicityGraph};
 use crate::static_checks::positions::PositionsByRuleIdxVariables;
-use crate::static_checks::rule_set::{RuleSet, SpecialPositionsConstructor};
+use crate::static_checks::rule_set::RuleSet;
 use crate::static_checks::{positions::Positions, rule_properties::RuleProperties};
 
 /// This trait gives some static checks for some ruleset.

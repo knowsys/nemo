@@ -2,12 +2,9 @@
 /// a RuleSet.
 use crate::rule_model::components::{rule::Rule, term::primitive::variable::Variable};
 use crate::static_checks::collection_traits::{InsertAll, RemoveAll};
-use crate::static_checks::positions::{
-    ExtendedPositions, FromPositionSet, Position, Positions, PositionsByRuleIdxVariables,
-};
+use crate::static_checks::positions::{Position, Positions, PositionsByRuleIdxVariables};
 use crate::static_checks::rule_set::{
     AllPositivePositions, ExistentialVariables, RuleIdxRule, RuleIdxVariable, RuleSet,
-    SpecialPositionsConstructor,
 };
 use petgraph::algo::is_cyclic_directed;
 use petgraph::graphmap::{DiGraphMap, NodeTrait};
@@ -93,6 +90,7 @@ impl<'a> JointAcyclicityGraphBuilder<'a> {
         attacked_pos_by_rule_idx_vars: &PositionsByRuleIdxVariables<'a, '_>,
     ) {
         attacked_pos_by_rule_idx_vars
+            .0
             .keys()
             .filter(|attacking_rule_idx_var| {
                 attacked_var.is_attacked_by_variable(
@@ -263,7 +261,7 @@ impl<'a> WeakAcyclicityGraph<'a> {
             unreachable_nodes.remove_all(&rea_nodes_of_node);
             inf_rank_pos_set.insert_all_take(rea_nodes_of_node);
         }
-        Positions::from_extended_positions(inf_rank_pos_set)
+        Positions::from(inf_rank_pos_set)
     }
 
     /// Returns all reachable nodes of some node in the Graph.
@@ -306,7 +304,7 @@ impl<'a> WeakAcyclicityGraphBuilder<'a> {
     }
 
     fn add_nodes(&mut self, rule_set: &'a RuleSet) {
-        let all_positive_ex_pos: ExtendedPositions = rule_set.all_positive_extended_positions();
+        let all_positive_ex_pos: HashSet<Position> = rule_set.all_positive_extended_positions();
         all_positive_ex_pos.into_iter().for_each(|pos| {
             self.0.add_node(pos);
         });
@@ -326,7 +324,7 @@ impl<'a> WeakAcyclicityGraphBuilder<'a> {
     fn add_common_edges_for_pos(
         &mut self,
         body_pos: Position<'a>,
-        head_ex_pos_of_var: &ExtendedPositions<'a>,
+        head_ex_pos_of_var: &HashSet<Position<'a>>,
     ) {
         head_ex_pos_of_var.iter().for_each(|head_pos| {
             self.0
@@ -337,9 +335,9 @@ impl<'a> WeakAcyclicityGraphBuilder<'a> {
     // FIXME: I THINK USING VARIABLE_BODY FOR THE HEAD POSITIONS IS WRONG. IT SHOULD BE A
     // GENERALISED VARIABLE
     fn add_common_edges_for_rule(&mut self, rule: &'a Rule, variable_body: &Variable) {
-        let body_ex_pos_of_var: ExtendedPositions =
+        let body_ex_pos_of_var: HashSet<Position> =
             variable_body.extended_positions_in_positive_body(rule);
-        let head_ex_pos_of_var: ExtendedPositions = variable_body.extended_positions_in_head(rule);
+        let head_ex_pos_of_var: HashSet<Position> = variable_body.extended_positions_in_head(rule);
         body_ex_pos_of_var
             .into_iter()
             .for_each(|body_pos| self.add_common_edges_for_pos(body_pos, &head_ex_pos_of_var));
@@ -364,7 +362,7 @@ impl<'a> WeakAcyclicityGraphBuilder<'a> {
     fn add_special_edges_for_pos(
         &mut self,
         body_pos: Position<'a>,
-        extended_pos_of_ex_vars: &ExtendedPositions<'a>,
+        extended_pos_of_ex_vars: &HashSet<Position<'a>>,
     ) {
         extended_pos_of_ex_vars.iter().for_each(|existential_pos| {
             self.add_special_edge(body_pos, *existential_pos);
@@ -372,9 +370,9 @@ impl<'a> WeakAcyclicityGraphBuilder<'a> {
     }
 
     fn add_special_edges_for_rule(&mut self, rule: &'a Rule, variable_body: &Variable) {
-        let body_ex_pos_of_var: ExtendedPositions =
+        let body_ex_pos_of_var: HashSet<Position> =
             variable_body.extended_positions_in_positive_body(rule);
-        let extended_pos_of_ex_vars: ExtendedPositions =
+        let extended_pos_of_ex_vars: HashSet<Position> =
             rule.extended_positions_of_existential_variables();
         body_ex_pos_of_var.into_iter().for_each(|body_pos| {
             self.add_special_edges_for_pos(body_pos, &extended_pos_of_ex_vars);

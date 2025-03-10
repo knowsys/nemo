@@ -13,20 +13,16 @@ use std::collections::{HashMap, HashSet};
 /// Type to represent a position in an Atom.
 pub type Index = usize;
 
-/// Type to compress a set of Indices.
-pub type Indices = HashSet<Index>;
-
 /// Type to map some Atom(s) to some positions in it.
-pub type Positions<'a> = HashMap<&'a Tag, Indices>;
+#[derive(Clone, Debug, Default)]
+pub struct Positions<'a>(pub HashMap<&'a Tag, HashSet<Index>>);
 
 /// Type to map some RuleIdxVariable(s) to some Positions.
-pub type PositionsByRuleIdxVariables<'a, 'b> = HashMap<RuleIdxVariable<'a>, Positions<'b>>;
+#[derive(Debug)]
+pub struct PositionsByRuleIdxVariables<'a, 'b>(pub HashMap<RuleIdxVariable<'a>, Positions<'b>>);
 
 /// Type to map some Atom to some position in it.
 pub type Position<'a> = (&'a Tag, Index);
-
-/// Type to compress a set of Position(s).
-pub type ExtendedPositions<'a> = HashSet<Position<'a>>;
 
 /// Enum to distinguish between (all existential variables / existential variables that appear in
 /// cycles in the joint acyclicity graph) to be the attacking variables.
@@ -48,61 +44,107 @@ pub enum MarkingType {
     Weakly,
 }
 
-/// This Trait converts Positions to another type.
-pub trait FromPositions<'a> {
+impl<'a> From<Positions<'a>> for HashSet<Position<'a>> {
     /// Converts Positions to ExtendedPositions.
-    fn from_positions(positions: Positions<'a>) -> Self;
-}
-
-impl<'a> FromPositions<'a> for ExtendedPositions<'a> {
-    fn from_positions(positions: Positions<'a>) -> ExtendedPositions<'a> {
-        positions
+    fn from(value: Positions<'a>) -> Self {
+        value
+            .0
             .into_iter()
-            .fold(ExtendedPositions::new(), |ex_pos, (pred, indices)| {
-                let pred_pos: ExtendedPositions =
+            .fold(HashSet::<Position>::new(), |ex_pos, (pred, indices)| {
+                let pred_pos: HashSet<Position> =
                     indices.into_iter().map(|index| (pred, index)).collect();
                 ex_pos.insert_all_take_ret(pred_pos)
             })
     }
 }
 
-/// This Trait converts ExtendedPositions to another type.
-pub trait FromPositionSet<'a> {
-    /// Converts ExtendedPositions to Positions.
-    fn from_extended_positions(extended_positions: ExtendedPositions<'a>) -> Self;
-}
-
-impl<'a> FromPositionSet<'a> for Positions<'a> {
-    fn from_extended_positions(extended_positions: HashSet<Position<'a>>) -> Self {
-        extended_positions
+impl<'a> From<HashSet<Position<'a>>> for Positions<'a> {
+    /// Converts a set of positions to Positions.
+    fn from(value: HashSet<Position<'a>>) -> Self {
+        value
             .into_iter()
             .fold(Positions::new(), |mut positions, (tag, index)| {
-                if !positions.contains_key(tag) {
-                    positions.insert(tag, HashSet::<usize>::new());
+                if !positions.0.contains_key(tag) {
+                    positions.0.insert(tag, HashSet::<usize>::new());
                 }
-                positions.get_mut(tag).unwrap().insert(index);
+                positions.0.get_mut(tag).unwrap().insert(index);
                 positions
             })
     }
 }
 
-/// This Trait gives all affected positions of some RuleSet.
-pub trait AffectedPositionsBuilder<'a> {
-    /// Builds all affected positions of some RuleSet.
-    fn build_positions(rule_set: &'a RuleSet) -> Self;
+/// This Impl-Block contains a method to create new positions.
+impl Positions<'_> {
+    /// Creates new positions.
+    pub fn new() -> Self {
+        Self(HashMap::<&Tag, HashSet<Index>>::new())
+    }
 }
 
-impl<'a> AffectedPositionsBuilder<'a> for Positions<'a> {
-    fn build_positions(rule_set: &'a RuleSet) -> Positions<'a> {
-        let mut aff_pos: Positions<'a> = rule_set.initial_affected_positions();
-        let mut new_found_aff_pos: Positions<'a> = aff_pos.clone();
-        while !new_found_aff_pos.is_empty() {
-            let new_con_aff_pos: Positions<'a> =
-                rule_set.conclude_affected_positions(&new_found_aff_pos);
+/// This Impl-Block provides methods to get (affected positions (Positions) /
+/// attacked (all existential / cycle existential) positions (PositionsByRuleIdxVariables) /
+/// marked (common / weakly) positions (Option<Positions>)) of a RuleSet.
+impl RuleSet {
+    /// Builds and Returns the affected Positions of a RuleSet.
+    pub fn affected_positions(&self) -> Positions {
+        let mut aff_pos: Positions = self.initial_affected_positions();
+        let mut new_found_aff_pos: Positions = aff_pos.clone();
+        while !new_found_aff_pos.0.is_empty() {
+            let new_con_aff_pos: Positions = self.conclude_affected_positions(&new_found_aff_pos);
             new_found_aff_pos = new_con_aff_pos.remove_all_ret(&aff_pos);
             aff_pos.insert_all(&new_found_aff_pos);
         }
         aff_pos
+    }
+
+    /// Builds all attacked positions ordered by (all existential / existential variables which appea
+    /// in cycles of the joint acyclicity graph) (PositionsByRuleIdxVariables) of some RuleSet.
+    fn attacked_positions(&self, att_type: AttackingType) -> PositionsByRuleIdxVariables {
+        let att_variables: HashSet<RuleIdxVariable> = self.match_attacking_variables(att_type);
+        let att_pos_by_vars_unwraped: HashMap<RuleIdxVariable, Positions> = att_variables
+            .into_iter()
+            .map(|rule_idx_var| {
+                (
+                    rule_idx_var,
+                    self.attacked_positions_by_rule_idx_var(&rule_idx_var),
+                )
+            })
+            .collect();
+        PositionsByRuleIdxVariables(att_pos_by_vars_unwraped)
+    }
+
+    /// Builds and Returns the attacked Positions by existential Variables that appear in a Cycle of the
+    /// JointAcyclicityGraph of a RuleSet.
+    pub fn attacked_positions_by_cycle_rule_idx_variables(&self) -> PositionsByRuleIdxVariables {
+        self.attacked_positions(AttackingType::Cycle)
+    }
+
+    /// Builds and Returns the attacked Positions by all existential Variables of a RuleSet.
+    pub fn attacked_positions_by_existential_rule_idx_variables(
+        &self,
+    ) -> PositionsByRuleIdxVariables {
+        self.attacked_positions(AttackingType::Existential)
+    }
+
+    /// Returns the common marking of a RuleSet.
+    pub fn build_and_check_marking(&self) -> Option<Positions> {
+        self.marking(MarkingType::Common)
+    }
+
+    /// Returns the weakly marking of a RuleSet.
+    pub fn build_and_check_weakly_marking(&self) -> Option<Positions> {
+        self.marking(MarkingType::Weakly)
+    }
+
+    fn marking(&self, mar_type: MarkingType) -> Option<Positions> {
+        let mut mar_pos: Positions = self.match_initial_marked_positions(mar_type)?;
+        let mut new_found_mar_pos: Positions = mar_pos.clone();
+        while !new_found_mar_pos.0.is_empty() {
+            let new_con_mar_pos: Positions = self.conclude_marked_positions(&new_found_mar_pos)?;
+            new_found_mar_pos = new_con_mar_pos.remove_all_ret(&mar_pos);
+            mar_pos.insert_all(&new_found_mar_pos);
+        }
+        Some(mar_pos)
     }
 }
 
@@ -146,32 +188,6 @@ impl<'a> AffectedPositionsBuilderPrivate<'a> for Rule {
                 let pos_of_var_in_head: Positions = var.positions_in_head(self);
                 new_aff_pos_in_rule.insert_all_take_ret(pos_of_var_in_head)
             })
-    }
-}
-
-/// This Trait gives all attacked positions ordered by (all existential / existential variables which appear
-/// in cycles of the joint acyclicity graph) (PositionsByRuleIdxVariables) of some RuleSet.
-pub trait AttackedPositionsBuilder<'a> {
-    /// Builds all attacked positions ordered by (all existential / existential variables which appea
-    /// in cycles of the joint acyclicity graph) (PositionsByRuleIdxVariables) of some RuleSet.
-    fn build_positions(att_type: AttackingType, rule_set: &'a RuleSet) -> Self;
-}
-
-impl<'a> AttackedPositionsBuilder<'a> for PositionsByRuleIdxVariables<'a, 'a> {
-    fn build_positions(
-        att_type: AttackingType,
-        rule_set: &'a RuleSet,
-    ) -> PositionsByRuleIdxVariables<'a, 'a> {
-        let att_variables: HashSet<RuleIdxVariable> = rule_set.match_attacking_variables(att_type);
-        att_variables
-            .into_iter()
-            .map(|rule_idx_var| {
-                (
-                    rule_idx_var,
-                    rule_set.attacked_positions_by_rule_idx_var(&rule_idx_var),
-                )
-            })
-            .collect()
     }
 }
 
@@ -238,7 +254,7 @@ impl<'a> AttackedPositionsBuilderPrivateExtended<'a> for RuleSet {
     ) -> Positions<'a> {
         let mut att_pos: Positions = self.initial_attacked_positions(rule_idx_var);
         let mut new_found_att_pos: Positions = att_pos.clone();
-        while !new_found_att_pos.is_empty() {
+        while !new_found_att_pos.0.is_empty() {
             let new_con_att_pos: Positions = self.conclude_attacked_positions(&att_pos);
             new_found_att_pos = new_con_att_pos.remove_all_ret(&att_pos);
             att_pos.insert_all(&new_found_att_pos);
@@ -254,28 +270,6 @@ impl<'a> AttackedPositionsBuilderPrivateExtended<'a> for RuleSet {
             }
             AttackingType::Existential => self.existential_rule_idx_variables(),
         }
-    }
-}
-
-/// This Trait gives all (common / weakly) marked positions or none if these marked positions does
-/// not exist of some RuleSet.
-pub trait MarkedPositionsBuilder<'a> {
-    /// Builds all (common / weakly) marked positions or returns none if these marked positions does
-    /// not exist of some RuleSet.
-    fn build_positions(mar_type: MarkingType, rule_set: &'a RuleSet) -> Self;
-}
-
-impl<'a> MarkedPositionsBuilder<'a> for Option<Positions<'a>> {
-    fn build_positions(mar_type: MarkingType, rule_set: &'a RuleSet) -> Option<Positions<'a>> {
-        let mut mar_pos: Positions = rule_set.match_initial_marked_positions(mar_type)?;
-        let mut new_found_mar_pos: Positions = mar_pos.clone();
-        while !new_found_mar_pos.is_empty() {
-            let new_con_mar_pos: Positions =
-                rule_set.conclude_marked_positions(&new_found_mar_pos)?;
-            new_found_mar_pos = new_con_mar_pos.remove_all_ret(&mar_pos);
-            mar_pos.insert_all(&new_found_mar_pos);
-        }
-        Some(mar_pos)
     }
 }
 
@@ -395,30 +389,30 @@ impl<'a> MarkedPositionsBuilderPrivateExtended<'a> for RuleSet {
     fn match_initial_marked_positions(&'a self, mar_type: MarkingType) -> Option<Positions<'a>> {
         match mar_type {
             MarkingType::Common => self.initial_marked_positions(),
-            MarkingType::Weakly => self.initial_weakly_marked_positions(&Positions::default()),
+            MarkingType::Weakly => self.initial_weakly_marked_positions(&Positions::new()),
         }
     }
 }
 
 impl<'a> Disjoint for Positions<'a> {
     fn is_disjoint(&self, other: &Positions<'a>) -> bool {
-        self.keys().all(|pred| {
-            !other.contains_key(pred) || {
-                let self_indices: &Indices = self.get(pred).unwrap();
-                let other_indices: &Indices = other.get(pred).unwrap();
+        self.0.keys().all(|pred| {
+            !other.0.contains_key(pred) || {
+                let self_indices: &HashSet<Index> = self.0.get(pred).unwrap();
+                let other_indices: &HashSet<Index> = other.0.get(pred).unwrap();
                 self_indices.is_disjoint(other_indices)
             }
         })
     }
 }
 
-impl<'a> InsertAll<Positions<'a>, (&'a Tag, Indices)> for Positions<'a> {
+impl<'a> InsertAll<Positions<'a>, (&'a Tag, HashSet<Index>)> for Positions<'a> {
     fn insert_all(&mut self, other: &Positions<'a>) {
-        other.iter().for_each(|(pred, other_indices)| {
-            if !self.contains_key(pred) {
-                self.insert(pred, Indices::new());
+        other.0.iter().for_each(|(pred, other_indices)| {
+            if !self.0.contains_key(pred) {
+                self.0.insert(pred, HashSet::<Index>::new());
             }
-            let unioned_indices: &mut Indices = self.get_mut(pred).unwrap();
+            let unioned_indices: &mut HashSet<Index> = self.0.get_mut(pred).unwrap();
             unioned_indices.insert_all(other_indices);
         })
     }
@@ -429,11 +423,11 @@ impl<'a> InsertAll<Positions<'a>, (&'a Tag, Indices)> for Positions<'a> {
     }
 
     fn insert_all_take(&mut self, other: Positions<'a>) {
-        other.into_iter().for_each(|(pred, other_indices)| {
-            if !self.contains_key(pred) {
-                self.insert(pred, Indices::new());
+        other.0.into_iter().for_each(|(pred, other_indices)| {
+            if !self.0.contains_key(pred) {
+                self.0.insert(pred, HashSet::<Index>::new());
             }
-            let unioned_indices: &mut Indices = self.get_mut(pred).unwrap();
+            let unioned_indices: &mut HashSet<Index> = self.0.get_mut(pred).unwrap();
             unioned_indices.insert_all_take(other_indices);
         })
     }
@@ -444,13 +438,13 @@ impl<'a> InsertAll<Positions<'a>, (&'a Tag, Indices)> for Positions<'a> {
     }
 }
 
-impl<'a> RemoveAll<Positions<'a>, (&'a Tag, Indices)> for Positions<'a> {
+impl<'a> RemoveAll<Positions<'a>, (&'a Tag, HashSet<Index>)> for Positions<'a> {
     fn remove_all(&mut self, other: &Positions<'a>) {
-        other.iter().for_each(|(pred, other_indices)| {
-            if let Some(differenced_indices) = self.get_mut(pred) {
+        other.0.iter().for_each(|(pred, other_indices)| {
+            if let Some(differenced_indices) = self.0.get_mut(pred) {
                 differenced_indices.remove_all(other_indices);
                 if differenced_indices.is_empty() {
-                    self.remove(pred);
+                    self.0.remove(pred);
                 }
             }
         })
@@ -462,11 +456,11 @@ impl<'a> RemoveAll<Positions<'a>, (&'a Tag, Indices)> for Positions<'a> {
     }
 
     fn remove_all_take(&mut self, other: Positions<'a>) {
-        other.into_iter().for_each(|(pred, other_indices)| {
-            if let Some(differenced_indices) = self.get_mut(pred) {
+        other.0.into_iter().for_each(|(pred, other_indices)| {
+            if let Some(differenced_indices) = self.0.get_mut(pred) {
                 differenced_indices.remove_all_take(other_indices);
                 if differenced_indices.is_empty() {
-                    self.remove(pred);
+                    self.0.remove(pred);
                 }
             }
         })
@@ -480,10 +474,10 @@ impl<'a> RemoveAll<Positions<'a>, (&'a Tag, Indices)> for Positions<'a> {
 
 impl<'a> Superset for Positions<'a> {
     fn is_superset(&self, other: &Positions<'a>) -> bool {
-        other.keys().all(|pred| {
-            self.contains_key(pred) && {
-                let self_indices: &Indices = self.get(pred).unwrap();
-                let other_indices: &Indices = other.get(pred).unwrap();
+        other.0.keys().all(|pred| {
+            self.0.contains_key(pred) && {
+                let self_indices: &HashSet<Index> = self.0.get(pred).unwrap();
+                let other_indices: &HashSet<Index> = other.0.get(pred).unwrap();
                 self_indices.is_superset(other_indices)
             }
         })

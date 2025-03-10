@@ -3,10 +3,7 @@ use crate::rule_model::components::{
     atom::Atom, rule::Rule, term::primitive::variable::Variable, IterableVariables,
 };
 use crate::static_checks::collection_traits::{Disjoint, InsertAll, Superset};
-use crate::static_checks::positions::{
-    AffectedPositionsBuilder, AttackedPositionsBuilder, AttackingType, ExtendedPositions,
-    FromPositions, MarkedPositionsBuilder, MarkingType, Positions, PositionsByRuleIdxVariables,
-};
+use crate::static_checks::positions::{Position, Positions, PositionsByRuleIdxVariables};
 
 use std::collections::{HashMap, HashSet};
 
@@ -31,18 +28,18 @@ pub struct RuleSet(pub Vec<Rule>);
 pub struct VariablePair<'a>(pub [&'a Variable; 2]);
 
 // NOTE: KEEP?
-/// This Trait provides methods to get all (ExtendedPositions / Positions) of some type.
+/// This Trait provides methods to get all (HashSet<Position> / Positions) of some type.
 pub trait AllPositivePositions<'a> {
-    /// Returns all ExtenedPositions of some type.
-    fn all_positive_extended_positions(&'a self) -> ExtendedPositions<'a>;
+    /// Returns all HashSet<Position> of some type.
+    fn all_positive_extended_positions(&'a self) -> HashSet<Position<'a>>;
     /// Returns all Positions of some type.
     fn all_positive_positions(&'a self) -> Positions<'a>;
 }
 
 impl<'a> AllPositivePositions<'a> for RuleSet {
-    fn all_positive_extended_positions(&'a self) -> ExtendedPositions<'a> {
+    fn all_positive_extended_positions(&'a self) -> HashSet<Position<'a>> {
         let all_positive_positions: Positions = self.all_positive_positions();
-        ExtendedPositions::from_positions(all_positive_positions)
+        HashSet::<Position>::from(all_positive_positions)
     }
 
     fn all_positive_positions(&'a self) -> Positions<'a> {
@@ -54,9 +51,9 @@ impl<'a> AllPositivePositions<'a> for RuleSet {
 }
 
 impl<'a> AllPositivePositions<'a> for Rule {
-    fn all_positive_extended_positions(&'a self) -> ExtendedPositions<'a> {
+    fn all_positive_extended_positions(&'a self) -> HashSet<Position<'a>> {
         let all_positive_positions: Positions = self.all_positive_positions();
-        ExtendedPositions::from_positions(all_positive_positions)
+        HashSet::<Position>::from(all_positive_positions)
     }
 
     fn all_positive_positions(&'a self) -> Positions<'a> {
@@ -166,46 +163,6 @@ impl JoinVariables for Rule {
     }
 }
 
-// NOTE: KEEP?
-/// This Trait provides methods to get (affected positions (Positions) /
-/// attacked (all existential / cycle existential) positions (PositionsByRuleIdxVariables) /
-/// marked (common / weakly) positions (Option<Positions>)) of a RuleSet.
-pub trait SpecialPositionsConstructor {
-    /// Returns the affected Positions of a RuleSet.
-    fn affected_positions(&self) -> Positions;
-    /// Returns the attacked Positions by existential Variables that appear in a Cycle of the
-    /// JointAcyclicityGraph of a RuleSet.
-    fn attacked_positions_by_cycle_rule_idx_variables(&self) -> PositionsByRuleIdxVariables;
-    /// Returns the attacked Positions by all existential Variables of a RuleSet.
-    fn attacked_positions_by_existential_rule_idx_variables(&self) -> PositionsByRuleIdxVariables;
-    /// Returns the common marking of a RuleSet.
-    fn build_and_check_marking(&self) -> Option<Positions>;
-    /// Returns the weakly marking of a RuleSet.
-    fn build_and_check_weakly_marking(&self) -> Option<Positions>;
-}
-
-impl SpecialPositionsConstructor for RuleSet {
-    fn affected_positions(&self) -> Positions {
-        Positions::build_positions(self)
-    }
-
-    fn attacked_positions_by_cycle_rule_idx_variables(&self) -> PositionsByRuleIdxVariables {
-        PositionsByRuleIdxVariables::build_positions(AttackingType::Cycle, self)
-    }
-
-    fn attacked_positions_by_existential_rule_idx_variables(&self) -> PositionsByRuleIdxVariables {
-        PositionsByRuleIdxVariables::build_positions(AttackingType::Existential, self)
-    }
-
-    fn build_and_check_marking(&self) -> Option<Positions> {
-        Option::<Positions>::build_positions(MarkingType::Common, self)
-    }
-
-    fn build_and_check_weakly_marking(&self) -> Option<Positions> {
-        Option::<Positions>::build_positions(MarkingType::Weakly, self)
-    }
-}
-
 /// This Impl-Block contains a method for an atom to get its universal variables.
 impl Atom {
     /// This method returns the universal Variables of an Atom.
@@ -238,8 +195,10 @@ impl Rule {
 impl<'a> Rule {
     fn all_positions_of_atoms(&self, atoms: &[&'a Atom]) -> Positions<'a> {
         atoms.iter().fold(Positions::new(), |all_pos, atom| {
-            let positions: Positions =
-                HashMap::from([(atom.predicate_ref(), (0..atom.len()).collect())]);
+            let positions: Positions = Positions(HashMap::from([(
+                atom.predicate_ref(),
+                (0..atom.len()).collect(),
+            )]));
             all_pos.insert_all_take_ret(positions)
         })
     }
@@ -258,10 +217,10 @@ impl<'a> Rule {
 /// This Impl-Block contains methods for a rule to get the (extended / normal) positions of its
 /// existential variables.
 impl Rule {
-    /// Returns the ExtendedPositions of the existential Variables of the rule.
-    pub fn extended_positions_of_existential_variables(&self) -> ExtendedPositions {
+    /// Returns the HashSet<Position> of the existential Variables of the rule.
+    pub fn extended_positions_of_existential_variables(&self) -> HashSet<Position> {
         let pos_of_ex_vars: Positions = self.positions_of_existential_variables();
-        ExtendedPositions::from_positions(pos_of_ex_vars)
+        HashSet::<Position>::from(pos_of_ex_vars)
     }
 
     /// Returns the Positions of the existential Variables of a rule.
@@ -434,16 +393,16 @@ impl Variable {
 
 /// This Impl-Block contains methods for a variable to get its positions in some part of a rule.
 impl<'a> Variable {
-    /// Returns the ExtendedPositions of a Variable in the head of some Rule.
-    pub fn extended_positions_in_positive_body(&self, rule: &'a Rule) -> ExtendedPositions<'a> {
+    /// Returns the HashSet<Position> of a Variable in the head of some Rule.
+    pub fn extended_positions_in_positive_body(&self, rule: &'a Rule) -> HashSet<Position<'a>> {
         let body_pos_of_var: Positions = self.positions_in_positive_body(rule);
-        ExtendedPositions::from_positions(body_pos_of_var)
+        HashSet::<Position>::from(body_pos_of_var)
     }
 
-    /// Returns the ExtendedPositions of a Variable in the positive body of some Rule.
-    pub fn extended_positions_in_head(&self, rule: &'a Rule) -> ExtendedPositions<'a> {
+    /// Returns the HashSet<Position> of a Variable in the positive body of some Rule.
+    pub fn extended_positions_in_head(&self, rule: &'a Rule) -> HashSet<Position<'a>> {
         let head_pos_of_var: Positions = self.positions_in_head(rule);
-        ExtendedPositions::from_positions(head_pos_of_var)
+        HashSet::<Position>::from(head_pos_of_var)
     }
 
     /// Returns the Positions of a Variable in the head of some Rule.
@@ -468,6 +427,7 @@ impl<'a> Variable {
             .filter(|(_, var)| self == *var)
             .fold(Positions::new(), |mut positions_in_atom, (index, _)| {
                 positions_in_atom
+                    .0
                     .entry(atom.predicate_ref())
                     .and_modify(|indeces| {
                         indeces.insert(index);
@@ -537,6 +497,7 @@ impl Variable {
     ) -> bool {
         let positions_of_variable_in_body: Positions = self.positions_in_positive_body(rule);
         attacked_pos_by_rule_idx_vars
+            .0
             .values()
             .any(|att_pos| att_pos.is_superset(&positions_of_variable_in_body))
     }
@@ -559,6 +520,7 @@ impl Variable {
         attacked_pos_by_rule_idx_vars: &PositionsByRuleIdxVariables,
     ) -> bool {
         let attacked_pos_by_var: &Positions = attacked_pos_by_rule_idx_vars
+            .0
             .get(attacking_rule_idx_var)
             .unwrap();
         self.is_attacked_by_positions_in_rule(rule, attacked_pos_by_var)
