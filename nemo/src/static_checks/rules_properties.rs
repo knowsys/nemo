@@ -116,19 +116,19 @@ impl RulesProperties for RuleSet {
     }
 
     fn is_jointly_guarded(&self) -> bool {
-        let attacked_pos_by_ex_ruleandvars: PositionsByRuleAndVariables =
-            self.attacked_positions_by_existential_ruleandvariables();
+        let attacked_pos_by_ex_rule_and_vars: PositionsByRuleAndVariables =
+            self.attacked_positions_by_existential_rule_and_variables();
         self.0
             .iter()
-            .all(|rule| rule.is_jointly_guarded(&attacked_pos_by_ex_ruleandvars))
+            .all(|rule| rule.is_jointly_guarded(&attacked_pos_by_ex_rule_and_vars))
     }
 
     fn is_jointly_frontier_guarded(&self) -> bool {
-        let attacked_pos_by_ex_ruleandvars: PositionsByRuleAndVariables =
-            self.attacked_positions_by_existential_ruleandvariables();
+        let attacked_pos_by_ex_rule_and_vars: PositionsByRuleAndVariables =
+            self.attacked_positions_by_existential_rule_and_variables();
         self.0
             .iter()
-            .all(|rule| rule.is_jointly_frontier_guarded(&attacked_pos_by_ex_ruleandvars))
+            .all(|rule| rule.is_jointly_frontier_guarded(&attacked_pos_by_ex_rule_and_vars))
     }
 
     fn is_weakly_acyclic(&self) -> bool {
@@ -142,27 +142,27 @@ impl RulesProperties for RuleSet {
     }
 
     fn is_glut_guarded(&self) -> bool {
-        let attacked_pos_by_cycle_ruleandvars: PositionsByRuleAndVariables =
-            self.attacked_positions_by_cycle_ruleandvariables();
+        let attacked_pos_by_cycle_rule_and_vars: PositionsByRuleAndVariables =
+            self.attacked_positions_by_cycle_rule_and_variables();
         self.0
             .iter()
-            .all(|rule| rule.is_glut_guarded(&attacked_pos_by_cycle_ruleandvars))
+            .all(|rule| rule.is_glut_guarded(&attacked_pos_by_cycle_rule_and_vars))
     }
 
     fn is_glut_frontier_guarded(&self) -> bool {
-        let attacked_pos_by_cycle_ruleandvars: PositionsByRuleAndVariables =
-            self.attacked_positions_by_cycle_ruleandvariables();
+        let attacked_pos_by_cycle_rule_and_vars: PositionsByRuleAndVariables =
+            self.attacked_positions_by_cycle_rule_and_variables();
         self.0
             .iter()
-            .all(|rule| rule.is_glut_frontier_guarded(&attacked_pos_by_cycle_ruleandvars))
+            .all(|rule| rule.is_glut_frontier_guarded(&attacked_pos_by_cycle_rule_and_vars))
     }
 
     fn is_shy(&self) -> bool {
-        let attacked_pos_by_existential_ruleandvars: PositionsByRuleAndVariables =
-            self.attacked_positions_by_existential_ruleandvariables();
+        let attacked_pos_by_existential_rule_and_vars: PositionsByRuleAndVariables =
+            self.attacked_positions_by_existential_rule_and_variables();
         self.0
             .iter()
-            .all(|rule| rule.is_shy(&attacked_pos_by_existential_ruleandvars))
+            .all(|rule| rule.is_shy(&attacked_pos_by_existential_rule_and_vars))
     }
 
     fn is_mfa(&self) -> bool {

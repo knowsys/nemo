@@ -3,9 +3,7 @@
 use crate::rule_model::components::{rule::Rule, term::primitive::variable::Variable};
 use crate::static_checks::collection_traits::{InsertAll, RemoveAll};
 use crate::static_checks::positions::{Position, Positions, PositionsByRuleAndVariables};
-use crate::static_checks::rule_set::{
-    AllPositivePositions, ExistentialVariables, RuleAndVariable, RuleSet,
-};
+use crate::static_checks::rule_set::{AllPositivePositions, RuleAndVariable, RuleSet};
 use petgraph::algo::is_cyclic_directed;
 use petgraph::graphmap::{DiGraphMap, NodeTrait};
 use std::collections::HashSet;
@@ -60,17 +58,18 @@ struct JointAcyclicityGraphBuilder<'a>(DiGraphMap<RuleAndVariable<'a>, ()>);
 /// This Impl-Block contains the main methods to Build the JointAcyclicityGraph.
 impl<'a> JointAcyclicityGraphBuilder<'a> {
     fn add_edges(&mut self, rule_set: &'a RuleSet) {
-        let attacked_pos_by_ex_ruleandvars: PositionsByRuleAndVariables =
-            rule_set.attacked_positions_by_existential_ruleandvariables();
+        let attacked_pos_by_ex_rule_and_vars: PositionsByRuleAndVariables =
+            rule_set.attacked_positions_by_existential_rule_and_variables();
         rule_set.0.iter().for_each(|rule| {
-            self.add_edges_for_rule(rule, &attacked_pos_by_ex_ruleandvars);
+            self.add_edges_for_rule(rule, &attacked_pos_by_ex_rule_and_vars);
         })
     }
 
     fn add_nodes(&mut self, rule_set: &'a RuleSet) {
-        rule_set.0.iter().for_each(|rule| {
-            self.add_nodes_for_rule(rule);
-        })
+        let ex_rule_and_vars: HashSet<RuleAndVariable> = rule_set.existential_rule_and_variables();
+        ex_rule_and_vars.into_iter().for_each(|ex_rule_and_var| {
+            self.0.add_node(ex_rule_and_var);
+        });
     }
 
     fn finalize(self) -> JointAcyclicityGraph<'a> {
@@ -84,57 +83,29 @@ impl<'a> JointAcyclicityGraphBuilder<'a> {
 
 /// This Impl-Block contains help methods to Build the JointAcyclicityGraph.
 impl<'a> JointAcyclicityGraphBuilder<'a> {
-    fn add_edges_for_attacked_var(
-        &mut self,
-        attacked_ruleandvar: RuleAndVariable,
-        ex_ruleandvars: &HashSet<RuleAndVariable<'a>>,
-        attacked_pos_by_ruleandvars: &PositionsByRuleAndVariables<'a>,
-    ) {
-        attacked_pos_by_ruleandvars
-            .0
-            .keys()
-            .filter(|attacking_ruleandvar| {
-                attacked_ruleandvar.is_attacked_by_ruleandvariable(
-                    attacking_ruleandvar,
-                    attacked_pos_by_ruleandvars,
-                )
-            })
-            .for_each(|attacking_ruleandvar| {
-                self.add_edges_for_attacking_var(attacking_ruleandvar, ex_ruleandvars);
-            });
-    }
-
-    fn add_edges_for_attacking_var(
-        &mut self,
-        attacking_ruleandvar: &RuleAndVariable<'a>,
-        ex_ruleandvars: &HashSet<RuleAndVariable<'a>>,
-    ) {
-        ex_ruleandvars.iter().for_each(|ex_rule_idx_var| {
-            self.0.add_edge(*attacking_ruleandvar, *ex_rule_idx_var, ());
-        })
-    }
-
     fn add_edges_for_rule(
         &mut self,
         rule: &'a Rule,
-        attacked_pos_by_ruleandvars: &PositionsByRuleAndVariables<'a>,
+        attacked_pos_by_rule_and_vars: &PositionsByRuleAndVariables<'a>,
     ) {
-        let ex_ruleandvars: HashSet<RuleAndVariable> = rule.existential_ruleandvariables();
-        let attacked_positive_vars: HashSet<&Variable> =
-            rule.attacked_universal_variables(attacked_pos_by_ruleandvars);
-        attacked_positive_vars.iter().for_each(|var| {
-            self.add_edges_for_attacked_var(
-                RuleAndVariable(rule, var),
-                &ex_ruleandvars,
-                attacked_pos_by_ruleandvars,
-            );
-        })
-    }
-
-    fn add_nodes_for_rule(&mut self, rule: &'a Rule) {
-        let ex_ruleandvars: HashSet<RuleAndVariable> = rule.existential_ruleandvariables();
-        ex_ruleandvars.into_iter().for_each(|ruleandvar| {
-            self.0.add_node(ruleandvar);
+        let ex_rule_and_vars: HashSet<RuleAndVariable> = rule.existential_rule_and_variables();
+        let positive_variables: HashSet<&Variable> = rule.positive_variables();
+        positive_variables.iter().for_each(|var| {
+            let rule_and_body_var: RuleAndVariable = RuleAndVariable(rule, var);
+            attacked_pos_by_rule_and_vars
+                .0
+                .keys()
+                .for_each(|attacking_rule_and_var| {
+                    if rule_and_body_var.is_attacked_by_rule_and_variable(
+                        attacking_rule_and_var,
+                        attacked_pos_by_rule_and_vars,
+                    ) {
+                        ex_rule_and_vars.iter().for_each(|ex_rule_and_var| {
+                            self.0
+                                .add_edge(*attacking_rule_and_var, *ex_rule_and_var, ());
+                        })
+                    }
+                })
         })
     }
 }
@@ -266,7 +237,7 @@ impl<'a> WeakAcyclicityGraphBuilder<'a> {
     }
 
     fn add_nodes(&mut self, rule_set: &'a RuleSet) {
-        let all_positive_ex_pos: HashSet<Position> = rule_set.all_positive_extended_positions();
+        let all_positive_ex_pos: HashSet<Position> = rule_set.all_positive_positions_as_set();
         all_positive_ex_pos.into_iter().for_each(|pos| {
             self.0.add_node(pos);
         });
@@ -283,63 +254,40 @@ impl<'a> WeakAcyclicityGraphBuilder<'a> {
 
 /// This Impl-Block contains help methods to Build the WeakAcyclicityGraph.
 impl<'a> WeakAcyclicityGraphBuilder<'a> {
-    fn add_common_edges_for_pos(
+    fn add_common_edges_for_rule_and_body_positions(
         &mut self,
-        body_pos: Position<'a>,
-        head_ex_pos_of_var: &HashSet<Position<'a>>,
+        rule: &'a Rule,
+        all_pos_of_positive_body_set: &HashSet<Position<'a>>,
     ) {
-        head_ex_pos_of_var.iter().for_each(|head_pos| {
-            self.0
-                .add_edge(body_pos, *head_pos, WeakAcyclicityGraphEdgeType::Common);
-        })
-    }
-
-    // FIXME: I THINK USING VARIABLE_BODY FOR THE HEAD POSITIONS IS WRONG. IT SHOULD BE A
-    // GENERALISED VARIABLE
-    fn add_common_edges_for_ruleandbodyvariable(&mut self, ruleandvar: RuleAndVariable<'a>) {
-        let body_ex_pos_of_var: HashSet<Position> =
-            ruleandvar.extended_positions_in_positive_body();
-        let head_ex_pos_of_var: HashSet<Position> = ruleandvar.extended_positions_in_head();
-        body_ex_pos_of_var
-            .into_iter()
-            .for_each(|body_pos| self.add_common_edges_for_pos(body_pos, &head_ex_pos_of_var));
-    }
-
-    fn add_edges_for_rule(&mut self, rule: &'a Rule) {
-        let positive_variables: HashSet<&Variable> = rule.positive_variables();
-        positive_variables.iter().for_each(|body_var| {
-            let ruleandbodyvar: RuleAndVariable = RuleAndVariable(rule, body_var);
-            self.add_common_edges_for_ruleandbodyvariable(ruleandbodyvar);
-            self.add_special_edges_for_ruleandbodyvariable(ruleandbodyvar);
+        let all_pos_of_head_set: HashSet<Position> = rule.all_positions_of_head_as_set();
+        all_pos_of_positive_body_set.iter().for_each(|body_pos| {
+            all_pos_of_head_set.iter().for_each(|head_pos| {
+                self.0
+                    .add_edge(*body_pos, *head_pos, WeakAcyclicityGraphEdgeType::Common);
+            })
         });
     }
 
-    fn add_special_edge(&mut self, body_pos: Position<'a>, existential_pos: Position<'a>) {
-        self.0.add_edge(
-            body_pos,
-            existential_pos,
-            WeakAcyclicityGraphEdgeType::Special,
-        );
+    fn add_edges_for_rule(&mut self, rule: &'a Rule) {
+        let all_pos_of_positive_body_set: HashSet<Position> =
+            rule.all_positions_of_positive_body_as_set();
+        self.add_common_edges_for_rule_and_body_positions(rule, &all_pos_of_positive_body_set);
+        self.add_special_edges_for_rule_and_body_positions(rule, &all_pos_of_positive_body_set);
     }
 
-    fn add_special_edges_for_pos(
+    fn add_special_edges_for_rule_and_body_positions(
         &mut self,
-        body_pos: Position<'a>,
-        extended_pos_of_ex_vars: &HashSet<Position<'a>>,
+        rule: &'a Rule,
+        all_pos_of_positive_body_set: &HashSet<Position<'a>>,
     ) {
-        extended_pos_of_ex_vars.iter().for_each(|existential_pos| {
-            self.add_special_edge(body_pos, *existential_pos);
-        })
-    }
-
-    fn add_special_edges_for_ruleandbodyvariable(&mut self, ruleandvar: RuleAndVariable<'a>) {
-        let body_ex_pos_of_var: HashSet<Position> =
-            ruleandvar.extended_positions_in_positive_body();
-        let extended_pos_of_ex_vars: HashSet<Position> =
-            ruleandvar.0.extended_positions_of_existential_variables();
-        body_ex_pos_of_var.into_iter().for_each(|body_pos| {
-            self.add_special_edges_for_pos(body_pos, &extended_pos_of_ex_vars);
-        })
+        let pos_of_ex_vars_set: HashSet<Position> =
+            rule.positions_of_existential_variables_as_set();
+        all_pos_of_positive_body_set.iter().for_each(|body_pos| {
+            pos_of_ex_vars_set.iter().for_each(|ex_pos| {
+                self.0
+                    .add_edge(*body_pos, *ex_pos, WeakAcyclicityGraphEdgeType::Special);
+            })
+        });
     }
 }
 
