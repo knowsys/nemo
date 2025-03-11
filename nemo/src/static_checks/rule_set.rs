@@ -12,15 +12,15 @@ use std::collections::{HashMap, HashSet};
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub struct RuleAndVariable<'a>(pub &'a Rule, pub &'a Variable);
 
-impl<'a> Ord for RuleAndVariable<'a> {
+impl Ord for RuleAndVariable<'_> {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
         self.1.cmp(other.1)
     }
 }
 
-impl<'a> PartialOrd for RuleAndVariable<'a> {
+impl PartialOrd for RuleAndVariable<'_> {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        self.1.partial_cmp(other.1)
+        Some(self.1.cmp(other.1))
     }
 }
 
@@ -70,6 +70,7 @@ impl<'a> AllPositivePositions<'a> for Rule {
 }
 
 // NOTE: KEEP IT?
+// NOTE: MAYBE ADD METHOD TO GET AN ITERATOR OVER THE EXISTENTIAL RULE AND VARIABLES
 /// This Trait provides a method to get all existential variables combined with its rule of a RuleSet.
 pub trait ExistentialRuleAndVariables {
     /// Returns all existential variables combined with its rule of a RuleSet.
@@ -88,7 +89,7 @@ impl ExistentialRuleAndVariables for RuleSet {
     }
 }
 
-impl<'a> ExistentialRuleAndVariables for Rule {
+impl ExistentialRuleAndVariables for Rule {
     fn existential_rule_and_variables(&self) -> HashSet<RuleAndVariable> {
         let ex_vars_of_rule: HashSet<&Variable> = self.existential_variables();
         ex_vars_of_rule
@@ -99,6 +100,7 @@ impl<'a> ExistentialRuleAndVariables for Rule {
 }
 
 // NOTE: KEEP?
+// NOTE: MAYBE ADD METHOD TO GET AN ITERATOR OVER THE EXISTENTIAL VARIABLES
 /// This Trait provides a method to get all the existential Variables of some type.
 pub trait ExistentialVariables {
     /// Returns all the existential Variables of some type.
@@ -128,40 +130,6 @@ impl ExistentialVariables for Atom {
     fn existential_variables(&self) -> HashSet<&Variable> {
         self.variables()
             .filter(|var| var.is_existential())
-            .collect()
-    }
-}
-
-/// This Trait provides a method to get the frontier Variables of a Rule.
-pub trait FrontierVariables {
-    /// Returns the frontier Variables of a Rule.
-    fn frontier_variables(&self) -> HashSet<&Variable>;
-}
-
-impl FrontierVariables for Rule {
-    fn frontier_variables(&self) -> HashSet<&Variable> {
-        let positive_body_variables: HashSet<&Variable> = self.positive_variables();
-        let universal_head_variables: HashSet<&Variable> = self.universal_head_variables();
-        positive_body_variables
-            .intersection(&universal_head_variables)
-            .copied()
-            .collect()
-    }
-}
-
-/// This Trait provides a method to get the join Variables of a Rule.
-pub trait JoinVariables {
-    /// Returns the join Variables of a Rule.
-    fn join_variables(&self) -> HashSet<&Variable>;
-}
-
-impl JoinVariables for Rule {
-    fn join_variables(&self) -> HashSet<&Variable> {
-        let positive_variables: Vec<&Variable> = self.positive_variables_as_vec();
-        positive_variables
-            .iter()
-            .filter(|var| positive_variables.iter().filter(|var1| var1 == var).count() > 1)
-            .copied()
             .collect()
     }
 }
@@ -389,6 +357,34 @@ impl Rule {
     }
 }
 
+// NOTE: MAYBE IMPLEMENT A METHOD TO GET AN ITERATOR OVER THE JOIN VARIABLES
+/// This Impl-Block contains methods for a rule to get its join variables.
+impl Rule {
+    /// Returns the join Variables of a Rule.
+    pub fn join_variables(&self) -> HashSet<&Variable> {
+        let positive_vars: Vec<&Variable> = self.positive_variables_iter().collect();
+        positive_vars
+            .iter()
+            .filter(|var| positive_vars.iter().filter(|var1| var1 == var).count() > 1)
+            .copied()
+            .collect()
+    }
+}
+
+// NOTE: MAYBE IMPLEMENT A METHOD TO GET AN ITERATOR OVER THE FRONTIER VARIABLES
+/// This Impl-Block contains methods for a rule to get its frontier variables.
+impl Rule {
+    /// Returns the frontier Variables of a Rule.
+    pub fn frontier_variables(&self) -> HashSet<&Variable> {
+        let positive_body_variables: HashSet<&Variable> = self.positive_variables();
+        let universal_head_variables: HashSet<&Variable> = self.universal_head_variables();
+        positive_body_variables
+            .intersection(&universal_head_variables)
+            .copied()
+            .collect()
+    }
+}
+
 /// This Impl-Block contains methods for a variable to check if it is attacked with different input
 /// parameters.
 impl RuleAndVariable<'_> {
@@ -555,11 +551,6 @@ impl Variable {
     /// Checks if some Variable appears in some Atom.
     fn appears_in_atom(&self, atom: &Atom) -> bool {
         atom.variables_refs().contains(self)
-    }
-
-    /// Checks if some Variable appears in some Atoms.
-    fn appears_in_atoms(&self, atoms: &[&Atom]) -> bool {
-        atoms.iter().any(|atom| self.appears_in_atom(atom))
     }
 }
 
