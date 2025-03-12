@@ -166,9 +166,21 @@ mod test {
                 "%%% A fact\n%%% with a multiline doc comment. \n a(1, 2) .",
                 ParserContext::Guard,
             ),
+            (
+                "%%% A fact\n%%% with a multiline doc comment. \n#[external(?x)] \n a(1, ?x) .",
+                ParserContext::Guard,
+            ),
+            (
+                "%%% A rule \n#[name(\"test\")] \n a(1, 2) :- b(2, 1) .",
+                ParserContext::Rule,
+            ),
             ("%%% A rule \n a(1, 2) :- b(2, 1) .", ParserContext::Rule),
             (
                 "%%% A directive \n   \t@declare a(_: int, _: int) .",
+                ParserContext::Directive,
+            ),
+            (
+                "#[external(?x)] \n @export test :- csv{resource = ?x}.",
                 ParserContext::Directive,
             ),
             (

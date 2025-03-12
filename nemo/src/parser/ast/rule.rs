@@ -100,7 +100,7 @@ mod test {
         let test = vec![
             ("a(?x, ?y) :- b(?x, ?y)", (1, 1)),
             ("a(?x,?y), d(1), c(1) :- b(?x, ?y), c(1, 2)", (3, 2)),
-            ("#[name(\"test\")]\nresult(?x) :- test(?x)", (1, 1)),
+            ("result(?x) :- test(?x)", (1, 1)),
         ];
 
         for (input, expected) in test {
