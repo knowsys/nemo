@@ -1,7 +1,9 @@
 //! Contains structures and functionality for the binary
 use std::path::PathBuf;
 
-use nemo::{error::Error, io::ExportManager};
+use nemo::{
+    error::Error, io::ExportManager, rule_model::components::term::primitive::ground::GroundTerm,
+};
 
 /// Default export directory.
 const DEFAULT_OUTPUT_DIRECTORY: &str = "results";
@@ -152,4 +154,49 @@ pub(crate) struct CliApp {
     /// Arguments related to logging
     #[command(flatten)]
     pub(crate) logging: LoggingArgs,
+    /// Set parameters in the rule file
+    #[arg(long = "param")]
+    pub(crate) parameters: Vec<ParamKeyValue>,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct ParamKeyValue {
+    pub(crate) key: String,
+    pub(crate) value: GroundTerm,
+}
+
+impl clap::builder::ValueParserFactory for ParamKeyValue {
+    type Parser = ParamKeyValueParser;
+
+    fn value_parser() -> Self::Parser {
+        ParamKeyValueParser
+    }
+}
+
+#[derive(Clone, Copy)]
+pub(crate) struct ParamKeyValueParser;
+impl clap::builder::TypedValueParser for ParamKeyValueParser {
+    type Value = ParamKeyValue;
+
+    fn parse_ref(
+        &self,
+        cmd: &clap::Command,
+        arg: Option<&clap::Arg>,
+        value: &std::ffi::OsStr,
+    ) -> Result<Self::Value, clap::Error> {
+        let inner = clap::builder::StringValueParser::new();
+        let val = inner.parse_ref(cmd, arg, value)?;
+        let Some((key, value)) = val.split_once('=') else {
+            return Err(clap::Error::new(clap::error::ErrorKind::InvalidValue));
+        };
+
+        let Ok(value) = GroundTerm::parse(&value) else {
+            todo!()
+        };
+
+        Ok(ParamKeyValue {
+            key: key.into(),
+            value,
+        })
+    }
 }

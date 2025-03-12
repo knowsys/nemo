@@ -25,7 +25,7 @@ use std::fs::{read_to_string, File};
 use clap::Parser;
 use colored::Colorize;
 
-use cli::{CliApp, Exporting, Reporting};
+use cli::{CliApp, Exporting, ParamKeyValue, Reporting};
 
 use error::CliError;
 use nemo::{
@@ -254,12 +254,16 @@ fn run(mut cli: CliApp) -> Result<(), CliError> {
         }
     };
 
-    let mut program = match rule_model::translation::ASTProgramTranslation::initialize(
+    let mut translation = rule_model::translation::ASTProgramTranslation::initialize(
         &program_content,
         program_filename.clone(),
-    )
-    .translate(&program_ast)
-    {
+    );
+
+    for ParamKeyValue { key, value } in cli.parameters.drain(..) {
+        translation.add_parameter(key, value);
+    }
+
+    let mut program = match translation.translate(&program_ast) {
         Ok(program) => program,
         Err(report) => {
             report.eprint()?;

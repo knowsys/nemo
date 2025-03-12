@@ -3,7 +3,8 @@
 use nom::{
     branch::alt,
     combinator::{map, opt},
-    sequence::{delimited, pair},
+    multi::many0,
+    sequence::{delimited, pair, tuple},
 };
 
 use crate::parser::{
@@ -14,6 +15,7 @@ use crate::parser::{
 };
 
 use super::{
+    attribute::Attribute,
     comment::{doc::DocComment, wsoc::WSoC},
     directive::Directive,
     guard::Guard,
@@ -70,6 +72,8 @@ pub struct Statement<'a> {
     pub(crate) comment: Option<DocComment<'a>>,
     /// The statement
     pub(crate) kind: StatementKind<'a>,
+    /// Attributes associated with this statement
+    pub(crate) attributes: Vec<Attribute<'a>>,
 }
 
 impl<'a> Statement<'a> {
@@ -82,6 +86,11 @@ impl<'a> Statement<'a> {
     /// Return the [StatementKind].
     pub fn kind(&self) -> &StatementKind<'a> {
         &self.kind
+    }
+
+    /// Return the attributes attached to this statement
+    pub fn attributes(&self) -> &[Attribute<'a>] {
+        &self.attributes
     }
 }
 
@@ -109,16 +118,17 @@ impl<'a> ProgramAST<'a> for Statement<'a> {
 
         context(
             CONTEXT,
-            pair(
+            tuple((
                 opt(DocComment::parse),
+                many0(Attribute::parse),
                 delimited(
                     WSoC::parse,
                     StatementKind::parse,
                     pair(WSoC::parse, Token::dot),
                 ),
-            ),
+            )),
         )(input)
-        .map(|(rest, (comment, statement))| {
+        .map(|(rest, (comment, attributes, statement))| {
             let rest_span = rest.span;
 
             (
@@ -126,6 +136,7 @@ impl<'a> ProgramAST<'a> for Statement<'a> {
                 Self {
                     span: input_span.until_rest(&rest_span),
                     comment,
+                    attributes,
                     kind: statement,
                 },
             )

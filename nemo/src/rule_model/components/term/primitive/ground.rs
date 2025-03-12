@@ -5,9 +5,13 @@ use std::{fmt::Display, hash::Hash};
 use nemo_physical::datavalues::{AnyDataValue, DataValue, IriDataValue, ValueDomain};
 
 use crate::rule_model::{
-    components::{term::value_type::ValueType, ProgramComponent, ProgramComponentKind},
-    error::ValidationErrorBuilder,
+    components::{
+        term::{value_type::ValueType, Term},
+        ProgramComponent, ProgramComponentKind,
+    },
+    error::{ComponentParseError, ValidationErrorBuilder},
     origin::Origin,
+    translation::TranslationComponent,
 };
 
 /// Primitive ground term
@@ -150,30 +154,19 @@ impl ProgramComponent for GroundTerm {
     }
 }
 
+impl GroundTerm {
+    pub fn parse(input: &str) -> Result<Self, ComponentParseError>
+    where
+        Self: Sized,
+    {
+        let term = Term::parse(input)?;
+        GroundTerm::try_from(term).map_err(|_| ComponentParseError::ParseError)
+    }
+}
+
 #[cfg(test)]
 mod test {
-    use crate::rule_model::{
-        components::term::{primitive::Primitive, Term},
-        error::ComponentParseError,
-        translation::TranslationComponent,
-    };
-
     use super::GroundTerm;
-
-    impl GroundTerm {
-        fn parse(input: &str) -> Result<Self, ComponentParseError>
-        where
-            Self: Sized,
-        {
-            let term = Term::parse(input)?;
-
-            if let Term::Primitive(Primitive::Ground(ground)) = term {
-                return Ok(ground);
-            }
-
-            Err(ComponentParseError::ParseError)
-        }
-    }
 
     #[test]
     fn parse_ground_term() {

@@ -12,6 +12,7 @@ mod term;
 use std::{collections::HashMap, ops::Range};
 
 use ariadne::{Report, ReportKind, Source};
+use attribute::{process_attributes, Bag, KnownAttributes};
 use directive::{handle_define_directive, handle_use_directive};
 use nom::InputLength;
 
@@ -25,7 +26,19 @@ use crate::{
 };
 
 use super::{
-    components::{fact::Fact, rule::Rule, ProgramComponent},
+    components::{
+        fact::Fact,
+        rule::Rule,
+        term::{
+            primitive::{
+                ground::GroundTerm,
+                variable::{universal::UniversalVariable, Variable},
+                Primitive,
+            },
+            Term,
+        },
+        ProgramComponent,
+    },
     error::{
         translation_error::TranslationErrorKind, ComponentParseError, ProgramError,
         TranslationError, ValidationErrorBuilder,
@@ -35,7 +48,7 @@ use super::{
 
 /// Object for handling the translation of the ast representation
 /// of a nemo program into its logical representation
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct ASTProgramTranslation<'a, 'b> {
     /// Original input string
     input: &'a str,
@@ -54,6 +67,10 @@ pub struct ASTProgramTranslation<'a, 'b> {
     program_builder: ProgramBuilder,
     /// Builder for validation errors
     validation_error_builder: ValidationErrorBuilder,
+    /// Parameter expansions supplied externally (e.g. via the --param cli option)
+    external_parameters: HashMap<String, GroundTerm>,
+    /// Attributes for the statement currently being translated
+    statement_attributes: Bag<KnownAttributes, Vec<Term>>,
 
     /// Errors
     errors: Vec<ProgramError>,
@@ -65,13 +82,13 @@ impl<'a, 'b> ASTProgramTranslation<'a, 'b> {
         Self {
             input,
             input_label,
-            origin_map: HashMap::new(),
-            prefix_mapping: HashMap::new(),
-            base: None,
-            validation_error_builder: ValidationErrorBuilder::default(),
-            errors: Vec::default(),
-            program_builder: ProgramBuilder::default(),
+            ..Default::default()
         }
+    }
+
+    /// Add a value for an external parameter, that will be expanded during translation
+    pub fn add_parameter(&mut self, key: String, value: GroundTerm) {
+        self.external_parameters.insert(key, value);
     }
 
     /// Register a [ProgramAST] so that it can be associated with and later referenced by
@@ -192,6 +209,47 @@ impl std::fmt::Display for ProgramErrorReport<'_, '_> {
 }
 
 impl<'a, 'b> ASTProgramTranslation<'a, 'b> {
+    fn process_attributes(&mut self, statement: &'b ast::statement::Statement<'a>) {
+        let expected_attributes = match statement.kind() {
+            ast::statement::StatementKind::Fact(_) => &[KnownAttributes::External],
+            ast::statement::StatementKind::Rule(_) => Rule::EXPECTED_ATTRIBUTES,
+            ast::statement::StatementKind::Directive(_) => &[KnownAttributes::External],
+            ast::statement::StatementKind::Error(_) => &[],
+        };
+
+        match process_attributes(self, statement.attributes().iter(), &expected_attributes) {
+            Ok(attributes) => self.statement_attributes = attributes,
+            Err(error) => self.errors.push(ProgramError::TranslationError(error)),
+        }
+    }
+
+    pub(crate) fn external_variables(
+        &self,
+    ) -> impl Iterator<Item = (&UniversalVariable, &GroundTerm)> + use<'a, '_> {
+        self.statement_attributes
+            .get(KnownAttributes::External)
+            .iter()
+            .map(|external_term| {
+                let Term::Primitive(Primitive::Variable(variable)) = &external_term[0] else {
+                    unreachable!("checked in process_attributes()")
+                };
+
+                let Variable::Universal(variable) = variable else {
+                    todo!()
+                };
+
+                let Some(variable_name) = variable.name() else {
+                    todo!()
+                };
+
+                let Some(expansion) = self.external_parameters.get(&variable_name) else {
+                    todo!()
+                };
+
+                (variable, expansion)
+            })
+    }
+
     /// Translate the given [ProgramAST] into a [Program].
     pub fn translate(
         mut self,
@@ -208,6 +266,8 @@ impl<'a, 'b> ASTProgramTranslation<'a, 'b> {
 
         // Now handle facts and rules
         for statement in ast.statements() {
+            self.process_attributes(statement);
+
             match statement.kind() {
                 ast::statement::StatementKind::Fact(fact) => {
                     match Fact::build_component(&mut self, fact) {
@@ -232,6 +292,8 @@ impl<'a, 'b> ASTProgramTranslation<'a, 'b> {
                     todo!("Should faulty statements get ignored?")
                 }
             }
+
+            self.statement_attributes.clear();
         }
 
         let _ = self
@@ -255,6 +317,10 @@ impl<'a, 'b> ASTProgramTranslation<'a, 'b> {
                 origin_map: self.origin_map,
             })
         }
+    }
+
+    pub(crate) fn statement_attributes(&self) -> &Bag<KnownAttributes, Vec<Term>> {
+        &self.statement_attributes
     }
 
     /// Recreate the name from a [ast::tag::structure::StructureTag]

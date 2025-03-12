@@ -71,16 +71,22 @@ fn import_export_spec<'a, 'b>(
     instructions: &'b ast::expression::complex::map::Map<'a>,
     guards: Option<&'b ast::sequence::Sequence<'a, ast::guard::Guard<'a>>>,
 ) -> Result<ImportExportSpec, TranslationError> {
-    let mut attributes = Map::build_component(translation, instructions)?;
+    let mut spec = Map::build_component(translation, instructions)?;
 
-    if let Some(guards) = guards {
-        let substitution = import_export_bindings(translation, guards.iter())?;
-        substitution.apply(&mut attributes);
+    let mut substitution = if let Some(guards) = guards {
+        import_export_bindings(translation, guards.iter())?
+    } else {
+        Substitution::default()
+    };
+
+    for (variable, expansion) in translation.external_variables() {
+        substitution.insert(variable.clone(), expansion.clone());
     }
 
-    attributes = attributes.reduce();
+    substitution.apply(&mut spec);
+    spec = spec.reduce();
 
-    let Some(format_tag) = attributes.tag() else {
+    let Some(format_tag) = spec.tag() else {
         let span = instructions.span().beginning();
         return Err(TranslationError::new(
             span,
@@ -88,9 +94,9 @@ fn import_export_spec<'a, 'b>(
         ));
     };
 
-    let mut result = ImportExportSpec::new(*attributes.origin(), format_tag);
+    let mut result = ImportExportSpec::new(*spec.origin(), format_tag);
 
-    for (key, value) in attributes.key_value() {
+    for (key, value) in spec.key_value() {
         let Term::Primitive(Primitive::Ground(key_term)) = key else {
             let span = translation
                 .origin_map
@@ -164,6 +170,7 @@ fn import_export_spec<'a, 'b>(
         }
     }
 
+    log::trace!("Import/Export spec {result}");
     Ok(result)
 }
 

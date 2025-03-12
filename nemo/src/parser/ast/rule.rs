@@ -1,9 +1,6 @@
 //! This module defines [Rule].
 
-use nom::{
-    multi::many0,
-    sequence::{separated_pair, tuple},
-};
+use nom::sequence::{separated_pair, tuple};
 
 use crate::parser::{
     context::{context, ParserContext},
@@ -12,19 +9,13 @@ use crate::parser::{
     ParserResult,
 };
 
-use super::{
-    attribute::Attribute, comment::wsoc::WSoC, guard::Guard, sequence::Sequence, token::Token,
-    ProgramAST,
-};
+use super::{comment::wsoc::WSoC, guard::Guard, sequence::Sequence, token::Token, ProgramAST};
 
 /// A rule describing a logical implication
 #[derive(Debug)]
 pub struct Rule<'a> {
     /// [Span] associated with this node
     span: Span<'a>,
-
-    /// Attributes attached to this rule
-    attributes: Vec<Attribute<'a>>,
 
     /// Head of the rule
     head: Sequence<'a, Guard<'a>>,
@@ -41,11 +32,6 @@ impl<'a> Rule<'a> {
     /// Return an iterator of the [Guard]s contained in the body.
     pub fn body(&self) -> impl Iterator<Item = &Guard<'a>> {
         self.body.iter()
-    }
-
-    /// Return an iterator over the [Attribute]s attached to this rule.
-    pub fn attributes(&self) -> impl Iterator<Item = &Attribute<'a>> {
-        self.attributes.iter()
     }
 }
 
@@ -74,23 +60,19 @@ impl<'a> ProgramAST<'a> for Rule<'a> {
 
         context(
             CONTEXT,
-            tuple((
-                many0(Attribute::parse),
-                (separated_pair(
-                    Sequence::<Guard>::parse,
-                    tuple((WSoC::parse, Token::rule_arrow, WSoC::parse)),
-                    Sequence::<Guard>::parse,
-                )),
-            )),
+            separated_pair(
+                Sequence::<Guard>::parse,
+                tuple((WSoC::parse, Token::rule_arrow, WSoC::parse)),
+                Sequence::<Guard>::parse,
+            ),
         )(input)
-        .map(|(rest, (attributes, (head, body)))| {
+        .map(|(rest, (head, body))| {
             let rest_span = rest.span;
 
             (
                 rest,
                 Self {
                     span: input_span.until_rest(&rest_span),
-                    attributes,
                     head,
                     body,
                 },
