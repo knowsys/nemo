@@ -120,6 +120,7 @@ impl<'a> ProgramAST<'a> for Statement<'a> {
             CONTEXT,
             tuple((
                 opt(DocComment::parse),
+                WSoC::parse,
                 many0(Attribute::parse),
                 delimited(
                     WSoC::parse,
@@ -128,7 +129,7 @@ impl<'a> ProgramAST<'a> for Statement<'a> {
                 ),
             )),
         )(input)
-        .map(|(rest, (comment, attributes, statement))| {
+        .map(|(rest, (comment, _, attributes, statement))| {
             let rest_span = rest.span;
 
             (
@@ -167,7 +168,7 @@ mod test {
                 ParserContext::Guard,
             ),
             (
-                "%%% A fact\n%%% with a multiline doc comment. \n#[external(?x)] \n a(1, ?x) .",
+                "%%% A fact\n%%% with a multiline doc comment. \n #[external(?x)] \n a(1, ?x) .",
                 ParserContext::Guard,
             ),
             (
