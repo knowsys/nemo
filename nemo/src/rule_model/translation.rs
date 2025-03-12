@@ -225,7 +225,8 @@ impl<'a, 'b> ASTProgramTranslation<'a, 'b> {
 
     pub(crate) fn external_variables(
         &self,
-    ) -> impl Iterator<Item = (&UniversalVariable, &GroundTerm)> + use<'a, '_> {
+    ) -> impl Iterator<Item = Result<(&UniversalVariable, &GroundTerm), TranslationError>> + use<'a, '_>
+    {
         self.statement_attributes
             .get(KnownAttributes::External)
             .iter()
@@ -234,19 +235,34 @@ impl<'a, 'b> ASTProgramTranslation<'a, 'b> {
                     unreachable!("checked in process_attributes()")
                 };
 
+                let span = self
+                    .origin_map
+                    .get(variable.origin())
+                    .map(|ast| ast.span())
+                    .expect("should be part of the origin map");
+
                 let Variable::Universal(variable) = variable else {
-                    todo!()
+                    return Err(TranslationError::new(
+                        span,
+                        TranslationErrorKind::ExternalVariableAttribute,
+                    ));
                 };
 
                 let Some(variable_name) = variable.name() else {
-                    todo!()
+                    return Err(TranslationError::new(
+                        span,
+                        TranslationErrorKind::ExternalVariableAttribute,
+                    ));
                 };
 
                 let Some(expansion) = self.external_parameters.get(&variable_name) else {
-                    todo!()
+                    return Err(TranslationError::new(
+                        span,
+                        TranslationErrorKind::MissingExternalVariable,
+                    ));
                 };
 
-                (variable, expansion)
+                Ok((variable, expansion))
             })
     }
 

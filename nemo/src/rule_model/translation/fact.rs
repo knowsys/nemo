@@ -20,7 +20,8 @@ impl TranslationComponent for Fact {
     ) -> Result<Self, TranslationError> {
         let mut substitution = Substitution::default();
 
-        for (variable, expansion) in translation.external_variables() {
+        for binding in translation.external_variables() {
+            let (variable, expansion) = binding?;
             substitution.insert(variable.clone(), expansion.clone());
         }
 

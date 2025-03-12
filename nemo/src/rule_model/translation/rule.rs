@@ -49,7 +49,8 @@ impl TranslationComponent for Rule {
             rule_builder.display_mut(rule_display[0].clone());
         }
 
-        for (variable, expansion) in translation.external_variables() {
+        for binding in translation.external_variables() {
+            let (variable, expansion) = binding?;
             rule_builder.add_external_variable(variable.clone(), expansion.clone());
         }
 
