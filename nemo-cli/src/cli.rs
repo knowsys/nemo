@@ -190,7 +190,7 @@ impl clap::builder::TypedValueParser for ParamKeyValueParser {
             return Err(clap::Error::new(clap::error::ErrorKind::InvalidValue));
         };
 
-        let Ok(value) = GroundTerm::parse(&value) else {
+        let Ok(value) = GroundTerm::parse(value) else {
             todo!()
         };
 

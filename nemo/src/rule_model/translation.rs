@@ -217,7 +217,7 @@ impl<'a, 'b> ASTProgramTranslation<'a, 'b> {
             ast::statement::StatementKind::Error(_) => &[],
         };
 
-        match process_attributes(self, statement.attributes().iter(), &expected_attributes) {
+        match process_attributes(self, statement.attributes().iter(), expected_attributes) {
             Ok(attributes) => self.statement_attributes = attributes,
             Err(error) => self.errors.push(ProgramError::TranslationError(error)),
         }
