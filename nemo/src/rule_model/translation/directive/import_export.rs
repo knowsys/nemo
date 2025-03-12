@@ -73,11 +73,10 @@ fn import_export_spec<'a, 'b>(
 ) -> Result<ImportExportSpec, TranslationError> {
     let mut spec = Map::build_component(translation, instructions)?;
 
-    let mut substitution = if let Some(guards) = guards {
-        import_export_bindings(translation, guards.iter())?
-    } else {
-        Substitution::default()
-    };
+    let mut substitution = guards
+        .map(|guards| import_export_bindings(translation, guards.iter()))
+        .transpose()?
+        .unwrap_or_default();
 
     for binding in translation.external_variables() {
         let (variable, expansion) = binding?;

@@ -305,7 +305,9 @@ impl<'a, 'b> ASTProgramTranslation<'a, 'b> {
                     }
                 }
                 ast::statement::StatementKind::Error(_token) => {
-                    todo!("Should faulty statements get ignored?")
+                    unreachable!(
+                        "Faulty statement should result in a parser error and not be propagated."
+                    )
                 }
             }
 

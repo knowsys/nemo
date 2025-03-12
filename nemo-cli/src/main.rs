@@ -259,6 +259,7 @@ fn run(mut cli: CliApp) -> Result<(), CliError> {
         program_filename.clone(),
     );
 
+    // do not move out of cli.parameters, since cli is needed in call to handle_tracing
     for ParamKeyValue { key, value } in cli.parameters.drain(..) {
         translation.add_parameter(key, value);
     }

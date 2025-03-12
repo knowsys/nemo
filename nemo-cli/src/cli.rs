@@ -187,11 +187,11 @@ impl clap::builder::TypedValueParser for ParamKeyValueParser {
         let inner = clap::builder::StringValueParser::new();
         let val = inner.parse_ref(cmd, arg, value)?;
         let Some((key, value)) = val.split_once('=') else {
-            return Err(clap::Error::new(clap::error::ErrorKind::InvalidValue));
+            return Err(clap::Error::new(clap::error::ErrorKind::InvalidValue).with_cmd(cmd));
         };
 
         let Ok(value) = GroundTerm::parse(value) else {
-            todo!()
+            return Err(clap::Error::new(clap::error::ErrorKind::InvalidValue).with_cmd(cmd));
         };
 
         Ok(ParamKeyValue {

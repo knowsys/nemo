@@ -134,7 +134,8 @@ pub enum TranslationErrorKind {
     #[assoc(code = 130)]
     ExternalVariableAttribute,
     /// missing external variable
-    #[error("external variable was not supplied")]
+    #[error("external variable is undefined")]
+    #[assoc(note = "consider using the `--param` cli option")]
     #[assoc(code = 131)]
     MissingExternalVariable,
 
