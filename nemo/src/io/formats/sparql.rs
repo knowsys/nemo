@@ -134,9 +134,13 @@ impl FormatBuilder for SparqlBuilder {
                 let mut resource_builder = ResourceBuilder::try_from(self.endpoint.clone()).ok()?;
                 let query = self.query.to_string();
                 if query.len() > HTTP_GET_CHAR_LIMIT {
-                    resource_builder.add_post_parameter(String::from("query"), query);
+                    resource_builder
+                        .add_post_parameter(String::from("query"), query)
+                        .ok()?;
                 } else {
-                    resource_builder.add_get_parameter(String::from("query"), query);
+                    resource_builder
+                        .add_get_parameter(String::from("query"), query)
+                        .ok()?;
                 }
                 Some(resource_builder)
             }

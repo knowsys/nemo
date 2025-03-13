@@ -2,6 +2,7 @@
 //!
 
 use super::datavalues::{AnyDataValue, DataValue, ValueDomain};
+use log::debug;
 /// Resource that can be referenced in source declarations in Nemo programs
 /// Resources are resolved using `nemo::io::resource_providers::ResourceProviders`
 ///
@@ -15,7 +16,6 @@ use serde;
 use std::collections::HashSet;
 use std::{fmt, iter, path::PathBuf};
 use thiserror::Error;
-
 
 /// Type of error that is returned when parsing of Iri fails
 #[derive(Clone, Debug, Error)]
@@ -103,7 +103,7 @@ impl Resource {
         }
     }
 
-    /// Return the headers if resource is of variant [Resource::Iri]
+    /// Return the headers if resource is of variant [Resource::Http]
     pub fn headers(&self) -> Box<dyn Iterator<Item = &(String, String)> + '_> {
         match self {
             Self::Http { parameters, .. } => Box::new(parameters.headers.iter()),
@@ -157,12 +157,16 @@ impl Resource {
             Self::Http { iri, .. } => {
                 if let Some(path) = iri.path().strip_suffix(&format!("'.'{suffix}")) {
                     *iri = Iri::parse_unchecked(format!(
-                        "{}//{}{}?{}#{}",
+                        "{}://{}{}{}{}",
                         iri.scheme(),
                         iri.authority().unwrap_or_default(),
                         path,
-                        iri.query().unwrap_or_default(),
-                        iri.fragment().unwrap_or_default()
+                        iri.query()
+                            .map(|query| format!("?{}", query))
+                            .unwrap_or_default(),
+                        iri.fragment()
+                            .map(|fragment| format!("#{}", fragment))
+                            .unwrap_or_default()
                     ));
                 }
             }
@@ -207,142 +211,105 @@ impl ResourceBuilder {
     /// Returns the path of a local iri
     fn strip_local_iri(iri: Iri<String>) -> Result<String, ResourceValidationErrorKind> {
         match iri.authority() {
-            None | Some("") | Some("localhost") => Ok(format!("{}?{}",iri.path())),
+            None | Some("") | Some("localhost") => Ok(format!(
+                "{}{}{}",
+                iri.path(),
+                iri.query()
+                    .map(|query| format!("?{}", query))
+                    .unwrap_or_default(),
+                iri.fragment()
+                    .map(|query| format!("#{}", query))
+                    .unwrap_or_default()
+            )),
             _ => Err(ResourceValidationErrorKind::InvalidIri),
         }
     }
 
-    
     /// Validate key-value pairs of HttpHeaders
-    pub fn validate_headers(map: AnyDataValue) -> Result<(), ResourceValidationErrorKind> {
-        if let Some(keys) = map.map_keys() {
-            let mut key_names = HashSet::new();
-            for key in keys {
-                if !matches!(
-                    key.value_domain(),
-                    ValueDomain::PlainString | ValueDomain::Int | ValueDomain::Iri
-                ) {
-                    return Err(ResourceValidationErrorKind::HttpParameterNotInValueDomain {
-                        expected: vec![
-                            ValueDomain::PlainString,
-                            ValueDomain::Int,
-                            ValueDomain::Iri,
-                        ],
-                        given: key.value_domain(),
-                    });
-                }
-                let key_name: String = key.lexical_value();
-                if !key_names.insert(key_name.clone()) {
-                    return Err(ResourceValidationErrorKind::DuplicateHttpHeader(key_name));
-                }
-
-                let value = map.map_element_unchecked(key);
-                if !matches!(
-                    value.value_domain(),
-                    ValueDomain::PlainString | ValueDomain::Int | ValueDomain::Iri
-                ) {
-                    return Err(ResourceValidationErrorKind::HttpParameterNotInValueDomain {
-                        expected: vec![
-                            ValueDomain::PlainString,
-                            ValueDomain::Int,
-                            ValueDomain::Iri,
-                        ],
-                        given: key.value_domain(),
-                    });
-                }
-            }
+    pub fn validate_headers(headers: AnyDataValue) -> Result<(), ResourceValidationErrorKind> {
+        let mut builder = TryInto::<Self>::try_into(String::from("http://foo.org"))?;
+        let vec = builder.unpack_headers(headers)?;
+        // … assert that headers is a Map
+        for (key, value) in vec {
+            builder.add_header(key, value)?;
         }
         Ok(())
-
     }
 
     /// Validate GET- or POST-Parameter with type [ValueDomain::Map]
     /// Each value is expected to be a tuple containing elemtents of type [ValueDomain::PlainString], [ValueDomain::Int] or [ValueDomain::Iri]
-    pub fn validate_http_parameters(map: AnyDataValue) -> Result<(), ResourceValidationErrorKind> {
-        // Expect each value as a tuple of values
-        if let Some(keys) = map.map_keys() {
-            for key in keys {
-                if !matches!(
-                    key.value_domain(),
-                    ValueDomain::PlainString | ValueDomain::Int | ValueDomain::Iri
-                ) {
-                    return Err(ResourceValidationErrorKind::HttpParameterNotInValueDomain {
-                        expected: vec![
-                            ValueDomain::PlainString,
-                            ValueDomain::Int,
-                            ValueDomain::Iri,
-                        ],
-                        given: key.value_domain(),
-                    });
-                }
-                let tuple = map.map_element_unchecked(key);
-
-                if !matches!(tuple.value_domain(), ValueDomain::Tuple) {
-                    return Err(ResourceValidationErrorKind::HttpParameterNotInValueDomain {
-                        expected: vec![ValueDomain::Tuple],
-                        given: key.value_domain(),
-                    });
-                }
-
-                for idx in 0..tuple.len_unchecked() {
-                    let element = tuple.tuple_element_unchecked(idx);
-                    if !matches!(
-                        element.value_domain(),
-                        ValueDomain::PlainString | ValueDomain::Int | ValueDomain::Iri
-                    ) {
-                        return Err(ResourceValidationErrorKind::HttpParameterNotInValueDomain {
-                            expected: vec![
-                                ValueDomain::PlainString,
-                                ValueDomain::Int,
-                                ValueDomain::Iri,
-                            ],
-                            given: key.value_domain(),
-                        });
-                    }
-                }
-            }
+    pub fn validate_http_parameters(
+        parameters: AnyDataValue,
+    ) -> Result<(), ResourceValidationErrorKind> {
+        let mut builder = TryInto::<Self>::try_into(String::from("http://foo.org"))?;
+        let vec = builder.unpack_http_parameters(parameters)?;
+        // … assert that headers is a Map
+        for (key, value) in vec {
+            // GET parameter and POST parameter have the same validation process so calling either add_get_parameter or add_post_parameter works for validation
+            builder.add_get_parameter(key, value)?;
         }
         Ok(())
     }
 
     /// Convert headers into a key-value iterator
-    fn unpack_headers(self, map: AnyDataValue) -> impl Iterator<Item = (String, String)> {
-        // Expect a map where each value is a
+    pub fn unpack_headers(
+        &self,
+        map: AnyDataValue,
+    ) -> Result<impl Iterator<Item = (String, String)>, ResourceValidationErrorKind> {
+        // Expects a map
         let keys = map.map_keys();
         let result = keys
             .into_iter()
             .flat_map(|keys| {
                 keys.map(|key| {
-                    (
-                        key.lexical_value(),
-                        map.map_element_unchecked(key).lexical_value(),
-                    )
+                    Ok((
+                        self.as_lexical_value(key)?,
+                        self.as_lexical_value(map.map_element_unchecked(key))?,
+                    ))
                 })
             })
-            .collect::<Vec<_>>();
-        result.into_iter()
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(result.into_iter())
     }
 
     /// Flatten HTTP parameters into a key-value vector
-    pub fn unpack_http_parameters(map: AnyDataValue) -> impl Iterator<Item = (String, String)> {
+    pub fn unpack_http_parameters(
+        &self,
+        parameters: AnyDataValue,
+    ) -> Result<impl Iterator<Item = (String, String)>, ResourceValidationErrorKind> {
         // Expect a map where each value is a tuple
-        let keys = map.map_keys();
+        let keys = parameters.map_keys();
 
-        let mut vec: Vec<(String, String)> = Vec::new();
-        if let Some(keys_iter) = keys {
-            for key in keys_iter {
-                let tuple = map.map_element_unchecked(key);
-                for idx in 0..tuple.len_unchecked() {
-                    let element = tuple.tuple_element_unchecked(idx);
-                    vec.push((key.lexical_value(), element.lexical_value()));
-                }
-            }
-        }
-        vec.into_iter()
+        let result = keys
+            .into_iter()
+            .flat_map(|keys| {
+                keys.flat_map(|key| {
+                    let tuple = parameters.map_element_unchecked(key);
+                    (0..tuple.len_unchecked()).map(|idx| {
+                        let element = tuple.tuple_element_unchecked(idx);
+                        Ok((self.as_lexical_value(key)?, self.as_lexical_value(element)?))
+                    })
+                })
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(result.into_iter())
     }
 
-    
-
+    /// Try to convert a single HTTP parameter value into  a [String]
+    fn as_lexical_value(
+        &self,
+        value: &AnyDataValue,
+    ) -> Result<String, ResourceValidationErrorKind> {
+        match value.value_domain() {
+            ValueDomain::PlainString | ValueDomain::Int | ValueDomain::Iri => {
+                Ok(value.lexical_value())
+            }
+            _ => Err(ResourceValidationErrorKind::HttpParameterNotInValueDomain {
+                expected: vec![ValueDomain::PlainString, ValueDomain::Int, ValueDomain::Iri],
+                given: value.value_domain(),
+            }),
+        }
+    }
 
     /// Add HTTP header
     pub fn add_header(
@@ -416,6 +383,7 @@ impl ResourceBuilder {
 
     /// Build a [Resource] with the given parameters
     pub fn finalize(self) -> Resource {
+        debug!("Created resource: {:?}", self.resource);
         self.resource
     }
 }
@@ -432,18 +400,24 @@ impl TryFrom<Iri<String>> for ResourceBuilder {
                     resource: Resource::Path(PathBuf::from_slash(path)),
                     header_names: HashSet::new(),
                 })
-            },
+            }
             "http" | "https" => {
                 let fragment = iri.fragment().map(String::from);
                 let get_parameters = serde_urlencoded::from_str::<Vec<(String, String)>>(
-                    iri.query().unwrap_or_default()
-                ).map_err(|_| ResourceValidationErrorKind::InvalidIri)?;
-                
+                    iri.query().unwrap_or_default(),
+                )
+                .map_err(|_| ResourceValidationErrorKind::InvalidIri)?;
+
                 Ok(Self {
                     resource: Resource::Http {
-                        iri: Iri::parse_unchecked(format!("{}{}",iri.authority().unwrap_or_default(), iri.path())),
+                        iri: Iri::parse_unchecked(format!(
+                            "{}://{}{}",
+                            iri.scheme(),
+                            iri.authority().unwrap_or_default(),
+                            iri.path()
+                        )),
                         parameters: HttpParameters {
-                            headers : Vec::new(),
+                            headers: Vec::new(),
                             get_parameters,
                             fragment,
                             post_parameters: Vec::new(),
@@ -451,11 +425,11 @@ impl TryFrom<Iri<String>> for ResourceBuilder {
                     },
                     header_names: HashSet::new(),
                 })
-            },
+            }
             _ => Err(ResourceValidationErrorKind::UnsupportedIriScheme(
                 String::from(iri.scheme()),
             )),
-        }       
+        }
     }
 }
 

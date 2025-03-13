@@ -52,9 +52,9 @@ pub enum Error {
     /// Error related to the creation of data values
     #[error(transparent)]
     DataValueCreationError(#[from] DataValueCreationError),
-    /// Resource is not a path 
+    /// Resource is not a path
     #[error("Expected resource to be a path")]
-    ExpectedResourcePath
+    ExpectedResourcePath,
 }
 
 impl From<ReadingError> for Error {

@@ -9,7 +9,6 @@ pub(crate) mod writer;
 
 use std::{
     io::{Read, Write},
-    path::Path,
     sync::Arc,
 };
 

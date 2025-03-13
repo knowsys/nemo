@@ -102,7 +102,7 @@ impl ExportManager {
             url_safe: true,
             ..Default::default()
         };
-        if !resource.is_path(){
+        if !resource.is_path() {
             return Err(Error::ExpectedResourcePath);
         }
         let file_name_unsanitized = resource.to_string();

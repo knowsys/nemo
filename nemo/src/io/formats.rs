@@ -9,12 +9,13 @@ use core::fmt;
 use std::{
     fmt::Debug,
     io::{Read, Write},
-    path::PathBuf,
     sync::Arc,
 };
 
 use nemo_physical::{
-    datasources::table_providers::TableProvider, datavalues::AnyDataValue, resource::{Resource, ResourceBuilder},
+    datasources::table_providers::TableProvider,
+    datavalues::AnyDataValue,
+    resource::{Resource, ResourceBuilder},
 };
 
 use crate::error::Error;
@@ -59,20 +60,16 @@ pub enum ResourceSpec {
 }
 
 impl ResourceSpec {
-    /// Convert a simple [String] into a [ResourceSpec]
-    pub(crate) fn from_string(string: String) -> Self {
-        if string.is_empty() {
-            Self::Stdout
-        } else {
-            Self::Resource(ResourceBuilder::try_from(string).expect("Internally created string is not valid").finalize())
-        }
-    }
-
+    /// Create a default [ResourceSpec]
     pub(crate) fn default_resource(predicate_name: &str, meta: &dyn FileFormatMeta) -> Self {
         if predicate_name.is_empty() {
             Self::Stdout
         } else {
-            Self::Resource(ResourceBuilder::try_from(format!("{predicate_name}.{}", meta.default_extension())).expect("default name is valid").finalize())
+            Self::Resource(
+                ResourceBuilder::try_from(format!("{predicate_name}.{}", meta.default_extension()))
+                    .expect("default name is valid")
+                    .finalize(),
+            )
         }
     }
 

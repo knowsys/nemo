@@ -451,7 +451,10 @@ impl ImportExportBuilder {
                     .get_optional(StandardParameter::HttpHeaders.into())
                     .map(|headers| rb.unpack_headers(headers))
                 {
-                    for (key, value) in headers {
+                    for (key, value) in headers
+                        .map_err(|err| builder.report_error(origin, err.into()))
+                        .ok()?
+                    {
                         rb.add_header(key, value)
                             .map_err(|err| builder.report_error(origin, err.into()))
                             .ok()?;
@@ -460,9 +463,12 @@ impl ImportExportBuilder {
 
                 if let Some(get_parameters) = parameters
                     .get_optional(StandardParameter::HttpGetParameters.into())
-                    .map(ResourceBuilder::unpack_http_parameters)
+                    .map(|get_parameters| rb.unpack_http_parameters(get_parameters))
                 {
-                    for (key, value) in get_parameters {
+                    for (key, value) in get_parameters
+                        .map_err(|err| builder.report_error(origin, err.into()))
+                        .ok()?
+                    {
                         rb.add_get_parameter(key, value)
                             .map_err(|err| builder.report_error(origin, err.into()))
                             .ok()?;
@@ -471,9 +477,12 @@ impl ImportExportBuilder {
 
                 if let Some(post_parameters) = parameters
                     .get_optional(StandardParameter::HttpPostParameters.into())
-                    .map(ResourceBuilder::unpack_http_parameters)
+                    .map(|post_parameters| rb.unpack_http_parameters(post_parameters))
                 {
-                    for (key, value) in post_parameters {
+                    for (key, value) in post_parameters
+                        .map_err(|err| builder.report_error(origin, err.into()))
+                        .ok()?
+                    {
                         rb.add_post_parameter(key, value)
                             .map_err(|err| builder.report_error(origin, err.into()))
                             .ok()?;
@@ -542,9 +551,13 @@ impl ImportExportBuilder {
             AnyImportExportBuilder::Sparql(sparql_builder) => sparql_builder.build_import(arity),
         };
 
-        let resource_spec = self.resource.clone().unwrap_or({
-            ResourceSpec::default_resource(predicate_name, handler.as_ref())
-        });
+        let resource_spec = self
+            .resource
+            .clone()
+            .unwrap_or(ResourceSpec::default_resource(
+                predicate_name,
+                handler.as_ref(),
+            ));
 
         Import {
             resource_spec,
@@ -563,9 +576,13 @@ impl ImportExportBuilder {
             AnyImportExportBuilder::Sparql(sparql_builder) => sparql_builder.build_export(arity),
         };
 
-        let resource_spec = self.resource.clone().unwrap_or({
-            ResourceSpec::default_resource(predicate_name, handler.as_ref())
-        });
+        let resource_spec = self
+            .resource
+            .clone()
+            .unwrap_or(ResourceSpec::default_resource(
+                predicate_name,
+                handler.as_ref(),
+            ));
 
         Export {
             resource_spec,
