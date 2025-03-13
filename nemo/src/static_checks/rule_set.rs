@@ -413,25 +413,25 @@ impl RuleAndVariable<'_> {
 
 /// This Impl-Block contains methods for a variable to get its positions in some part of a rule.
 impl<'a> RuleAndVariable<'a> {
-    /// Returns the HashSet<Position> of a Variable in the head of some Rule.
+    /// Returns the positions of a variable in the head of some rule as a set.
     pub fn positions_in_positive_body_as_set(self) -> HashSet<Position<'a>> {
         let body_pos_of_var: Positions = self.positions_in_positive_body();
         HashSet::<Position>::from(body_pos_of_var)
     }
 
-    /// Returns the HashSet<Position> of a Variable in the positive body of some Rule.
+    /// Returns the positions of a variable in the positive body of a rule as a set.
     pub fn positions_in_head_as_set(self) -> HashSet<Position<'a>> {
         let head_pos_of_var: Positions = self.positions_in_head();
         HashSet::<Position>::from(head_pos_of_var)
     }
 
-    /// Returns the Positions of a Variable in the head of some Rule.
+    /// Returns the positions of a variable in the head of a rule.
     fn positions_in_positive_body(self) -> Positions<'a> {
         let positive_body_atoms: Vec<&Atom> = self.0.body_positive_refs();
         self.1.positions_in_atoms(&positive_body_atoms)
     }
 
-    /// Returns the Positions of a Variable in the positive body of some Rule.
+    /// Returns the positions of a variable in the positive body of a rule.
     pub fn positions_in_head(self) -> Positions<'a> {
         let head_atoms: Vec<&Atom> = self.0.head_refs();
         self.1.positions_in_atoms(&head_atoms)
@@ -487,13 +487,13 @@ impl<'a> Variable {
 /// This Impl-Block contains methods for a variable to check its appearance on positions of an atom
 /// or some atoms.
 impl Variable {
-    /// Checks if some Variable appears at some Positions in some Atom.
+    /// Checks if a variable appears at some positions in an atom.
     fn appears_at_some_positions_in_atom(&self, positions: &Positions, atom: &Atom) -> bool {
         let positions_in_atom: Positions = self.positions_in_atom(atom);
         !positions_in_atom.is_disjoint(positions)
     }
 
-    /// Checks if some Variable appears at some Positions in some Atoms.
+    /// Checks if a variable appears at some positions in some atoms.
     pub fn appears_at_some_positions_in_atoms(
         &self,
         positions: &Positions,
@@ -504,13 +504,13 @@ impl Variable {
             .any(|atom| self.appears_at_some_positions_in_atom(positions, atom))
     }
 
-    /// Checks if some Variable appears only at Positions in some Atom.
+    /// Checks if a variable appears only at positions in an atom.
     fn appears_only_at_positions_in_atom(&self, positions: &Positions, atom: &Atom) -> bool {
         let positions_in_atom: Positions = self.positions_in_atom(atom);
         positions.is_superset(&positions_in_atom)
     }
 
-    /// Checks if some Variable appears only at Positions in some Atoms.
+    /// Checks if a variable appears only at positions in some atoms.
     pub fn appears_only_at_positions_in_atoms(
         &self,
         positions: &Positions,
@@ -525,7 +525,7 @@ impl Variable {
 /// Thisk Impl-Block contains methods for a variable to check its appearance in an atom or some
 /// atoms.
 impl Variable {
-    /// Checks if some Variable appears in some Atom.
+    /// Checks if a variable appears in an atom.
     fn appears_in_atom(&self, atom: &Atom) -> bool {
         atom.variables_refs().contains(self)
     }

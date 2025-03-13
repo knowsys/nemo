@@ -3,9 +3,7 @@ use crate::rule_model::components::{
     rule::Rule, term::primitive::variable::Variable, IterablePrimitives,
 };
 use crate::static_checks::positions::{Positions, PositionsByRuleAndVariables};
-use crate::static_checks::rule_set::{
-     RuleAndVariable, RuleAndVariablePair,
-};
+use crate::static_checks::rule_set::{RuleAndVariable, RuleAndVariablePair};
 
 use std::collections::HashSet;
 
@@ -154,25 +152,23 @@ impl RuleProperties for Rule {
 
     // TODO: SHORTEN FUNCTION
     fn is_shy(&self, attacked_pos_by_rule_and_vars: &PositionsByRuleAndVariables) -> bool {
-        let join_vars_in_multiple_body_atoms_are_not_attacked: bool = 
-        self.join_variables()
+        let join_vars_in_multiple_body_atoms_are_not_attacked: bool = self
+            .join_variables()
             .iter()
             .filter(|var| RuleAndVariable(self, var).appears_in_multiple_positive_body_atoms())
             .all(|var| !RuleAndVariable(self, var).is_attacked(attacked_pos_by_rule_and_vars));
-        let frontier_vars_that_appear_in_different_body_atoms_are_not_attacked_by_the_same_variable: bool = 
-            self
-                .frontier_rule_and_variable_pairs()
-                .iter()
-                .filter(|rule_and_var_pair| {
-                    rule_and_var_pair.appear_in_different_positive_body_atoms()
+        let frontier_vars_that_appear_in_diff_body_atoms_are_not_att_by_same_var: bool = self
+            .frontier_rule_and_variable_pairs()
+            .iter()
+            .filter(|rule_and_var_pair| rule_and_var_pair.appear_in_different_positive_body_atoms())
+            .all(|RuleAndVariablePair([rule_and_var_1, rule_and_var_2])| {
+                attacked_pos_by_rule_and_vars.0.values().all(|ex_var_pos| {
+                    !rule_and_var_1.is_attacked_by_positions(ex_var_pos)
+                        || !rule_and_var_2.is_attacked_by_positions(ex_var_pos)
                 })
-                .all(|RuleAndVariablePair([rule_and_var_1, rule_and_var_2])| {
-                    attacked_pos_by_rule_and_vars.0.values().all(|ex_var_pos| {
-                        !rule_and_var_1.is_attacked_by_positions(ex_var_pos)
-                            || !rule_and_var_2.is_attacked_by_positions(ex_var_pos)
-                    })
-                });
-        join_vars_in_multiple_body_atoms_are_not_attacked && frontier_vars_that_appear_in_different_body_atoms_are_not_attacked_by_the_same_variable
+            });
+        join_vars_in_multiple_body_atoms_are_not_attacked
+            && frontier_vars_that_appear_in_diff_body_atoms_are_not_att_by_same_var
     }
 
     // fn is_mfa(&self) -> bool {

@@ -2,8 +2,6 @@
 use nemo::static_checks::rule_set::RuleSet;
 use nemo::static_checks::rules_properties::RulesProperties;
 
-use std::io::{Error, ErrorKind};
-
 use std::{assert_eq, fs::read_to_string, path::PathBuf, str::FromStr};
 
 use dir_test::{dir_test, Fixture};
@@ -381,54 +379,18 @@ impl<'a> TestCase<'a> {
 }
 
 fn run_until_rule_model(rule_file: PathBuf) -> Result<RuleSet, Box<dyn std::error::Error>> {
-    // TimedCode::instance().start();
-    // TimedCode::instance().sub("Reading & Preprocessing").start();
-
     log::info!("Parsing rules ...");
-
-    // if cli.rules.len() > 1 {
-    //     return Err(CliError::MultipleFilesNotImplemented);
-    // }
-
-    // let program_file = cli.rules.pop().ok_or(CliError::NoInput)?;
     let program_filename = rule_file.to_string_lossy().to_string();
     let program_content = read_to_string(rule_file.clone())?;
-    //     .map_err(|err| CliError::IoReading {
-    //     error: err,
-    //     filename: program_filename.clone(),
-    // })?;
-
-    let program_ast = match nemo::parser::Parser::initialize(
-        &program_content,
-        program_filename.clone(),
-    )
-    .parse()
-    {
-        Ok(program) => program,
-        Err((_program, report)) => {
-            report.eprint()?;
-            return Err(Box::new(Error::new(ErrorKind::Other, "error1")));
-        }
-    };
-
-    let program = match nemo::rule_model::translation::ASTProgramTranslation::initialize(
+    let program_ast = nemo::parser::Parser::initialize(&program_content, program_filename.clone())
+        .parse()
+        .expect("Error while parsing");
+    let program = nemo::rule_model::translation::ASTProgramTranslation::initialize(
         &program_content,
         program_filename.clone(),
     )
     .translate(&program_ast)
-    {
-        Ok(program) => program,
-        Err(report) => {
-            report.eprint()?;
-            return Err(Box::new(Error::new(ErrorKind::Other, "error2")));
-            // return Err(CliError::ProgramParsing {
-            //     filename: program_filename,
-            // });
-        }
-    };
-
-    // override_exports(&mut program, cli.output.export_setting);
-    // log::info!("Rules parsed");
+    .expect("Error while translating");
     let rule_set: RuleSet = RuleSet(program.rules().cloned().collect());
     Ok(rule_set)
 }

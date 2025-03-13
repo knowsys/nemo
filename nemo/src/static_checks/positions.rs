@@ -79,9 +79,9 @@ impl Positions<'_> {
     }
 }
 
-/// This Impl-Block provides methods to get (affected positions (Positions) /
-/// attacked (all existential / cycle existential) positions (PositionsByRuleIdxVariables) /
-/// marked (common / weakly) positions (Option<Positions>)) of a RuleSet.
+/// This Impl-Block provides methods to get (affected positions |
+/// attacked (all existential | cycle existential) positions |
+/// marked (sticky | weakly-sticky) positions ) of a RuleSet.
 impl RuleSet {
     /// Builds and Returns the affected Positions of a RuleSet.
     pub fn affected_positions(&self) -> Positions {
