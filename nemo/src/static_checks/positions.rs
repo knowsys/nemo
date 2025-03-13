@@ -36,10 +36,10 @@ pub enum AttackingType {
 /// Enum to distinguish between the (common / weakly) marking to be calculated.
 #[derive(Clone, Copy, Debug)]
 pub enum MarkingType {
-    /// The common marking will be calculated.
-    Common,
-    /// The weakly marking will be calculated.
-    Weakly,
+    /// The marking for the sticky-check will be calculated.
+    Sticky,
+    /// The marking for the weakly-sticky-check will be calculated.
+    WeaklySticky,
 }
 
 impl<'a> From<Positions<'a>> for HashSet<Position<'a>> {
@@ -99,16 +99,16 @@ impl RuleSet {
     /// in cycles of the joint acyclicity graph) (PositionsByRuleIdxVariables) of some RuleSet.
     fn attacked_positions(&self, att_type: AttackingType) -> PositionsByRuleAndVariables {
         let att_variables: HashSet<RuleAndVariable> = self.match_attacking_variables(att_type);
-        let att_pos_by_vars_unwraped: HashMap<RuleAndVariable, Positions> = att_variables
+        let att_pos_by_rule_and_vars_unwrapped: HashMap<RuleAndVariable, Positions> = att_variables
             .into_iter()
-            .map(|rule_idx_var| {
+            .map(|rule_and_var| {
                 (
-                    rule_idx_var,
-                    self.attacked_positions_by_rule_idx_var(&rule_idx_var),
+                    rule_and_var,
+                    self.attacked_positions_by_rule_and_var(&rule_and_var),
                 )
             })
             .collect();
-        PositionsByRuleAndVariables(att_pos_by_vars_unwraped)
+        PositionsByRuleAndVariables(att_pos_by_rule_and_vars_unwrapped)
     }
 
     /// Builds and Returns the attacked Positions by existential Variables that appear in a Cycle of the
@@ -124,14 +124,14 @@ impl RuleSet {
         self.attacked_positions(AttackingType::Existential)
     }
 
-    /// Returns the common marking of a RuleSet.
-    pub fn build_and_check_marking(&self) -> Option<Positions> {
-        self.marking(MarkingType::Common)
+    /// Returns the marking for the sticky-check of a RuleSet.
+    pub fn build_and_check_sticky_marking(&self) -> Option<Positions> {
+        self.marking(MarkingType::Sticky)
     }
 
-    /// Returns the weakly marking of a RuleSet.
-    pub fn build_and_check_weakly_marking(&self) -> Option<Positions> {
-        self.marking(MarkingType::Weakly)
+    /// Returns the marking for the weakly-sticky-check of a RuleSet.
+    pub fn build_and_check_weakly_sticky_marking(&self) -> Option<Positions> {
+        self.marking(MarkingType::WeaklySticky)
     }
 
     fn marking(&self, mar_type: MarkingType) -> Option<Positions> {
@@ -146,12 +146,12 @@ impl RuleSet {
     }
 }
 
-trait AffectedPositionsBuilderPrivate<'a> {
+trait AffectedPositionsInference<'a> {
     fn conclude_affected_positions(&'a self, last_it_pos: &Positions<'a>) -> Positions<'a>;
     fn initial_affected_positions(&'a self) -> Positions<'a>;
 }
 
-impl<'a> AffectedPositionsBuilderPrivate<'a> for RuleSet {
+impl<'a> AffectedPositionsInference<'a> for RuleSet {
     fn initial_affected_positions(&'a self) -> Positions<'a> {
         self.0.iter().fold(Positions::new(), |init_aff_pos, rule| {
             let pos_of_ex_vars: Positions = rule.initial_affected_positions();
@@ -170,7 +170,7 @@ impl<'a> AffectedPositionsBuilderPrivate<'a> for RuleSet {
     }
 }
 
-impl<'a> AffectedPositionsBuilderPrivate<'a> for Rule {
+impl<'a> AffectedPositionsInference<'a> for Rule {
     fn initial_affected_positions(&'a self) -> Positions<'a> {
         self.positions_of_existential_variables()
     }
@@ -189,12 +189,12 @@ impl<'a> AffectedPositionsBuilderPrivate<'a> for Rule {
     }
 }
 
-trait AttackedPositionsBuilderPrivate<'a> {
+trait AttackedPositionsInference<'a> {
     fn conclude_attacked_positions(&'a self, cur_att_pos: &Positions<'a>) -> Positions<'a>;
     fn initial_attacked_positions(&'a self, rule_and_var: &RuleAndVariable<'a>) -> Positions<'a>;
 }
 
-impl<'a> AttackedPositionsBuilderPrivate<'a> for RuleSet {
+impl<'a> AttackedPositionsInference<'a> for RuleSet {
     fn conclude_attacked_positions(&'a self, cur_att_pos: &Positions<'a>) -> Positions<'a> {
         self.0
             .iter()
@@ -216,7 +216,7 @@ impl<'a> AttackedPositionsBuilderPrivate<'a> for RuleSet {
     }
 }
 
-impl<'a> AttackedPositionsBuilderPrivate<'a> for Rule {
+impl<'a> AttackedPositionsInference<'a> for Rule {
     fn conclude_attacked_positions(&self, cur_att_pos: &Positions) -> Positions {
         self.positive_variables()
             .iter()
@@ -234,16 +234,16 @@ impl<'a> AttackedPositionsBuilderPrivate<'a> for Rule {
     }
 }
 
-trait AttackedPositionsBuilderPrivateExtended<'a> {
-    fn attacked_positions_by_rule_idx_var(
+trait AttackedPositionsBuilderInferenceExtended<'a> {
+    fn attacked_positions_by_rule_and_var(
         &'a self,
         rule_and_var: &RuleAndVariable<'a>,
     ) -> Positions<'a>;
     fn match_attacking_variables(&self, att_type: AttackingType) -> HashSet<RuleAndVariable>;
 }
 
-impl<'a> AttackedPositionsBuilderPrivateExtended<'a> for RuleSet {
-    fn attacked_positions_by_rule_idx_var(
+impl<'a> AttackedPositionsBuilderInferenceExtended<'a> for RuleSet {
+    fn attacked_positions_by_rule_and_var(
         &'a self,
         rule_and_var: &RuleAndVariable<'a>,
     ) -> Positions<'a> {
@@ -268,14 +268,14 @@ impl<'a> AttackedPositionsBuilderPrivateExtended<'a> for RuleSet {
     }
 }
 
-trait MarkedPositionsBuilderPrivate<'a> {
+trait MarkedPositionsInference<'a> {
     fn conclude_marked_positions(&'a self, last_it_pos: &Positions<'a>) -> Option<Positions<'a>>;
     fn initial_marked_positions(&'a self) -> Option<Positions<'a>>;
     fn initial_weakly_marked_positions(&'a self, inf_rank_pos: &Positions)
         -> Option<Positions<'a>>;
 }
 
-impl<'a> MarkedPositionsBuilderPrivate<'a> for RuleSet {
+impl<'a> MarkedPositionsInference<'a> for RuleSet {
     fn conclude_marked_positions(&'a self, last_it_pos: &Positions<'a>) -> Option<Positions<'a>> {
         self.0
             .iter()
@@ -310,7 +310,7 @@ impl<'a> MarkedPositionsBuilderPrivate<'a> for RuleSet {
     }
 }
 
-impl<'a> MarkedPositionsBuilderPrivate<'a> for Rule {
+impl<'a> MarkedPositionsInference<'a> for Rule {
     fn conclude_marked_positions(&'a self, last_it_pos: &Positions<'a>) -> Option<Positions<'a>> {
         self.positive_variables()
             .iter()
@@ -376,15 +376,15 @@ impl<'a> MarkedPositionsBuilderPrivate<'a> for Rule {
     }
 }
 
-trait MarkedPositionsBuilderPrivateExtended<'a> {
+trait MarkedPositionsInferenceExtended<'a> {
     fn match_initial_marked_positions(&'a self, mar_type: MarkingType) -> Option<Positions<'a>>;
 }
 
-impl<'a> MarkedPositionsBuilderPrivateExtended<'a> for RuleSet {
+impl<'a> MarkedPositionsInferenceExtended<'a> for RuleSet {
     fn match_initial_marked_positions(&'a self, mar_type: MarkingType) -> Option<Positions<'a>> {
         match mar_type {
-            MarkingType::Common => self.initial_marked_positions(),
-            MarkingType::Weakly => self.initial_weakly_marked_positions(&Positions::new()),
+            MarkingType::Sticky => self.initial_marked_positions(),
+            MarkingType::WeaklySticky => self.initial_weakly_marked_positions(&Positions::new()),
         }
     }
 }

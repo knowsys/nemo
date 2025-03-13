@@ -74,11 +74,11 @@ impl RulesProperties for RuleSet {
     }
 
     fn is_sticky(&self) -> bool {
-        self.build_and_check_marking().is_some()
+        self.build_and_check_sticky_marking().is_some()
     }
 
     fn is_weakly_sticky(&self) -> bool {
-        self.build_and_check_weakly_marking().is_some()
+        self.build_and_check_weakly_sticky_marking().is_some()
     }
 
     fn is_domain_restricted(&self) -> bool {
