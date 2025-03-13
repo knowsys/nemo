@@ -3,12 +3,10 @@
 use crate::rule_model::components::{rule::Rule, term::primitive::variable::Variable};
 use crate::static_checks::collection_traits::{InsertAll, RemoveAll};
 use crate::static_checks::positions::{Position, Positions, PositionsByRuleAndVariables};
-use crate::static_checks::rule_set::{AllPositivePositions, RuleAndVariable, RuleSet};
+use crate::static_checks::rule_set::{RuleAndVariable, RuleSet};
 use petgraph::algo::is_cyclic_directed;
 use petgraph::graphmap::{DiGraphMap, NodeTrait};
 use std::collections::HashSet;
-
-use super::rule_set::ExistentialRuleAndVariables;
 
 type Cycle<N> = Vec<N>;
 

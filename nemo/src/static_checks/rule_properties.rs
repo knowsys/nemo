@@ -4,7 +4,7 @@ use crate::rule_model::components::{
 };
 use crate::static_checks::positions::{Positions, PositionsByRuleAndVariables};
 use crate::static_checks::rule_set::{
-    ExistentialVariables, RuleAndVariable, RuleAndVariablePair,
+     RuleAndVariable, RuleAndVariablePair,
 };
 
 use std::collections::HashSet;

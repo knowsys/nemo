@@ -33,107 +33,6 @@ pub struct RuleSet(pub Vec<Rule>);
 #[derive(Debug, Eq, Hash, PartialEq)]
 pub struct RuleAndVariablePair<'a>(pub [RuleAndVariable<'a>; 2]);
 
-// NOTE: KEEP?
-/// This Trait provides methods to get all (HashSet<Position> / Positions) of some type.
-pub trait AllPositivePositions<'a> {
-    /// Returns all HashSet<Position> of some type.
-    fn all_positive_positions_as_set(&'a self) -> HashSet<Position<'a>>;
-    /// Returns all Positions of some type.
-    fn all_positive_positions(&'a self) -> Positions<'a>;
-}
-
-impl<'a> AllPositivePositions<'a> for RuleSet {
-    fn all_positive_positions_as_set(&'a self) -> HashSet<Position<'a>> {
-        let all_positive_positions: Positions = self.all_positive_positions();
-        HashSet::<Position>::from(all_positive_positions)
-    }
-
-    fn all_positive_positions(&'a self) -> Positions<'a> {
-        self.0.iter().fold(Positions::new(), |all_pos, rule| {
-            let all_pos_of_rule: Positions = rule.all_positive_positions();
-            all_pos.insert_all_take_ret(all_pos_of_rule)
-        })
-    }
-}
-
-impl<'a> AllPositivePositions<'a> for Rule {
-    fn all_positive_positions_as_set(&'a self) -> HashSet<Position<'a>> {
-        let all_positive_positions: Positions = self.all_positive_positions();
-        HashSet::<Position>::from(all_positive_positions)
-    }
-
-    fn all_positive_positions(&'a self) -> Positions<'a> {
-        let all_positive_body_positions: Positions = self.all_positions_of_positive_body();
-        let all_head_positions: Positions = self.all_positions_of_head();
-        all_positive_body_positions.insert_all_take_ret(all_head_positions)
-    }
-}
-
-// NOTE: KEEP IT?
-// NOTE: MAYBE ADD METHOD TO GET AN ITERATOR OVER THE EXISTENTIAL RULE AND VARIABLES
-/// This Trait provides a method to get all existential variables combined with its rule of a RuleSet.
-pub trait ExistentialRuleAndVariables {
-    /// Returns all existential variables combined with its rule of a RuleSet.
-    fn existential_rule_and_variables(&self) -> HashSet<RuleAndVariable>;
-}
-
-impl ExistentialRuleAndVariables for RuleSet {
-    fn existential_rule_and_variables(&self) -> HashSet<RuleAndVariable> {
-        self.0
-            .iter()
-            .fold(HashSet::<RuleAndVariable>::new(), |ex_vars, rule| {
-                let ex_rule_and_vars: HashSet<RuleAndVariable> =
-                    rule.existential_rule_and_variables();
-                ex_vars.union(&ex_rule_and_vars).copied().collect()
-            })
-    }
-}
-
-impl ExistentialRuleAndVariables for Rule {
-    fn existential_rule_and_variables(&self) -> HashSet<RuleAndVariable> {
-        let ex_vars_of_rule: HashSet<&Variable> = self.existential_variables();
-        ex_vars_of_rule
-            .into_iter()
-            .map(|var| RuleAndVariable(self, var))
-            .collect()
-    }
-}
-
-// NOTE: KEEP?
-// NOTE: MAYBE ADD METHOD TO GET AN ITERATOR OVER THE EXISTENTIAL VARIABLES
-/// This Trait provides a method to get all the existential Variables of some type.
-pub trait ExistentialVariables {
-    /// Returns all the existential Variables of some type.
-    fn existential_variables(&self) -> HashSet<&Variable>;
-}
-
-impl ExistentialVariables for RuleSet {
-    fn existential_variables(&self) -> HashSet<&Variable> {
-        self.0
-            .iter()
-            .fold(HashSet::<&Variable>::new(), |ex_vars, rule| {
-                let ex_vars_of_rule: HashSet<&Variable> = rule.existential_variables();
-                ex_vars.union(&ex_vars_of_rule).copied().collect()
-            })
-    }
-}
-
-impl ExistentialVariables for Rule {
-    fn existential_variables(&self) -> HashSet<&Variable> {
-        self.variables()
-            .filter(|var| var.is_existential())
-            .collect()
-    }
-}
-
-impl ExistentialVariables for Atom {
-    fn existential_variables(&self) -> HashSet<&Variable> {
-        self.variables()
-            .filter(|var| var.is_existential())
-            .collect()
-    }
-}
-
 /// This Impl-Block contains a method for an atom to get its universal variables.
 impl Atom {
     /// This method returns the universal Variables of an Atom.
@@ -147,6 +46,29 @@ impl Atom {
     /// Returns all the Variables of an Atom.
     pub fn variables_refs(&self) -> HashSet<&Variable> {
         self.variables().collect()
+    }
+}
+
+/// This Impl-Block contains a method for a rule to get its existential variables.
+impl Rule {
+    /// Returns all the existential Variables of a rule.
+    pub fn existential_variables(&self) -> HashSet<&Variable> {
+        self.variables()
+            .filter(|var| var.is_existential())
+            .collect()
+    }
+}
+
+/// This Impl-Block contains a method for a rule to get its existential variables combined with the
+/// rule.
+impl Rule {
+    /// Returns all existential variables combined with its rule of a rule.
+    pub fn existential_rule_and_variables(&self) -> HashSet<RuleAndVariable> {
+        let ex_vars_of_rule: HashSet<&Variable> = self.existential_variables();
+        ex_vars_of_rule
+            .into_iter()
+            .map(|var| RuleAndVariable(self, var))
+            .collect()
     }
 }
 
@@ -194,6 +116,13 @@ impl<'a> Rule {
     pub fn all_positions_of_positive_body_as_set(&'a self) -> HashSet<Position<'a>> {
         let all_pos_of_positive_body: Positions<'a> = self.all_positions_of_positive_body();
         HashSet::<Position>::from(all_pos_of_positive_body)
+    }
+
+    /// Returns all Positions of a rule.
+    fn all_positive_literal_positions(&'a self) -> Positions<'a> {
+        let all_positive_body_positions: Positions = self.all_positions_of_positive_body();
+        let all_head_positions: Positions = self.all_positions_of_head();
+        all_positive_body_positions.insert_all_take_ret(all_head_positions)
     }
 }
 
@@ -385,6 +314,38 @@ impl Rule {
     }
 }
 
+/// This Trait provides methods to get all positions (set | compressed) of a rule.
+impl<'a> RuleSet {
+    /// Returns all positions of a ruleset as a set.
+    pub fn all_positive_positions_as_set(&'a self) -> HashSet<Position<'a>> {
+        let all_positive_positions: Positions = self.all_positive_positions();
+        HashSet::<Position>::from(all_positive_positions)
+    }
+
+    /// Returns all positios of a ruleset.
+    fn all_positive_positions(&'a self) -> Positions<'a> {
+        self.0.iter().fold(Positions::new(), |all_pos, rule| {
+            let all_pos_of_rule: Positions = rule.all_positive_literal_positions();
+            all_pos.insert_all_take_ret(all_pos_of_rule)
+        })
+    }
+}
+
+/// This Impl-Block contains a method for a ruleset to get its existential variables combined with the
+/// rule it occurs in.
+impl RuleSet {
+    /// Returns all existential variables combined with its rule of a ruleset.
+    pub fn existential_rule_and_variables(&self) -> HashSet<RuleAndVariable> {
+        self.0
+            .iter()
+            .fold(HashSet::<RuleAndVariable>::new(), |ex_vars, rule| {
+                let ex_rule_and_vars: HashSet<RuleAndVariable> =
+                    rule.existential_rule_and_variables();
+                ex_vars.union(&ex_rule_and_vars).copied().collect()
+            })
+    }
+}
+
 /// This Impl-Block contains methods for a variable to check if it is attacked with different input
 /// parameters.
 impl RuleAndVariable<'_> {
@@ -477,6 +438,22 @@ impl<'a> RuleAndVariable<'a> {
     }
 }
 
+/// This Impl-Block contains a method for a variable pair to check if its variables appear in
+/// different positive body atoms of a rule.
+impl RuleAndVariablePair<'_> {
+    // TODO: REEVALUATE FUNCTION BECAUSE '2 FRONTIER VARIABLE(S) APPEAR IN DIFFERENT ATOM(S)' IS
+    // NOT A CLEAR DEFINITION
+    /// Checks if some Variables of a VariablePair appear at different atoms in the positive body
+    /// of some rule.
+    pub fn appear_in_different_positive_body_atoms(&self) -> bool {
+        let found_var1_alone: bool =
+            self.0[0].appears_without_other_in_positive_body_atom(&self.0[1]);
+        let found_var2_alone: bool =
+            self.0[1].appears_without_other_in_positive_body_atom(&self.0[0]);
+        found_var1_alone && found_var2_alone
+    }
+}
+
 /// This Impl-Block contains methods for a variable to get its positions in an atom or some atoms.
 impl<'a> Variable {
     /// Returns the Positions where the Variable appears in the Atom.
@@ -551,21 +528,5 @@ impl Variable {
     /// Checks if some Variable appears in some Atom.
     fn appears_in_atom(&self, atom: &Atom) -> bool {
         atom.variables_refs().contains(self)
-    }
-}
-
-/// This Impl-Block contains a method for a variable pair to check if its variables appear in
-/// different positive body atoms of a rule.
-impl RuleAndVariablePair<'_> {
-    // TODO: REEVALUATE FUNCTION BECAUSE '2 FRONTIER VARIABLE(S) APPEAR IN DIFFERENT ATOM(S)' IS
-    // NOT A CLEAR DEFINITION
-    /// Checks if some Variables of a VariablePair appear at different atoms in the positive body
-    /// of some rule.
-    pub fn appear_in_different_positive_body_atoms(&self) -> bool {
-        let found_var1_alone: bool =
-            self.0[0].appears_without_other_in_positive_body_atom(&self.0[1]);
-        let found_var2_alone: bool =
-            self.0[1].appears_without_other_in_positive_body_atom(&self.0[0]);
-        found_var1_alone && found_var2_alone
     }
 }
