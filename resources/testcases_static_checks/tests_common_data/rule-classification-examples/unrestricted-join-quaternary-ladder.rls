@@ -1,0 +1,2 @@
+F(?Yprime, ?X, ?Yprime, !Xprime) :- F(?X, ?Y, ?X, ?Yprime) . 
+
