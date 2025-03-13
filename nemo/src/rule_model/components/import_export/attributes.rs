@@ -53,7 +53,7 @@ pub enum ImportExportAttribute {
     #[assoc(from_name = attribute::ENDPOINT)]
     #[assoc(value_type = ProgramComponentKind::Iri)]
     Endpoint,
-    /// The query send to the endpoint
+    /// The query sent to the endpoint
     #[assoc(name = attribute::QUERY)]
     #[assoc(from_name = attribute::QUERY)]
     #[assoc(value_type = ProgramComponentKind::PlainString)]
@@ -63,12 +63,12 @@ pub enum ImportExportAttribute {
     #[assoc(from_name = attribute::HTTP_GET_PARAMETERS)]
     #[assoc(value_type = ProgramComponentKind::PlainString)]
     HttpGetParameters,
-    /// The parameters send in the body of a POST-request
+    /// The parameters sent in the body of a POST-request
     #[assoc(name = attribute::HTTP_POST_PARAMETERS)]
     #[assoc(from_name = attribute::HTTP_POST_PARAMETERS)]
     #[assoc(value_type = ProgramComponentKind::PlainString)]
     HttpPostParameters,
-    /// The parameters send as additional headers in a web-request
+    /// The parameters sent as additional headers in a web-request
     #[assoc(name = attribute::HTTP_HEADERS)]
     #[assoc(from_name = attribute::HTTP_HEADERS)]
     #[assoc(value_type = ProgramComponentKind::PlainString)]

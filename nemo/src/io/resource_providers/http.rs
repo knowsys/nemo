@@ -24,7 +24,7 @@ pub struct HttpResource {
 impl HttpResource {
     /// Return the IRI this resource was fetched from.
     pub fn url(&self) -> String {
-        self.resource.as_iri_encoded()
+        self.resource.to_string()
     }
 
     /// Return the content of this resource.
@@ -69,7 +69,7 @@ impl HttpResourceProvider {
         );
 
         // Unpack custom headers from resource
-        for (key, value) in resource.header_parameters() {
+        for (key, value) in resource.headers() {
             headers.insert(
                 key.parse::<HeaderName>()
                     .map_err(|err: InvalidHeaderName| {
@@ -93,7 +93,7 @@ impl HttpResourceProvider {
             .build()
             .map_err(err_mapping)?;
 
-        let full_url = resource.as_iri_encoded();
+        let full_url = resource.to_string();
 
         let response = {
             // Collect Body-Parameters into one string
@@ -135,8 +135,8 @@ impl ResourceProvider for HttpResourceProvider {
         resource: &Resource,
         media_type: &str,
     ) -> Result<Option<Box<dyn Read>>, ReadingError> {
-        // Early return if Resource does not contain an Iri
-        if !resource.is_iri() {
+        if !resource.is_http() {
+            // We cannot handle this resource
             return Ok(None);
         }
 
@@ -145,7 +145,6 @@ impl ResourceProvider for HttpResourceProvider {
             .build()
             .map_err(|e| ReadingError::from(e).with_resource(resource.clone()))?;
 
-        // Verify if resource has a non-empty body
         let response = rt.block_on(Self::fetch(resource, media_type))?;
 
         Ok(Some(Box::new(response)))

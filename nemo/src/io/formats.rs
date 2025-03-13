@@ -14,7 +14,7 @@ use std::{
 };
 
 use nemo_physical::{
-    datasources::table_providers::TableProvider, datavalues::AnyDataValue, resource::Resource,
+    datasources::table_providers::TableProvider, datavalues::AnyDataValue, resource::{Resource, ResourceBuilder},
 };
 
 use crate::error::Error;
@@ -64,7 +64,15 @@ impl ResourceSpec {
         if string.is_empty() {
             Self::Stdout
         } else {
-            Self::Resource(Resource::Path(PathBuf::from(string)))
+            Self::Resource(ResourceBuilder::try_from(string).expect("Internally created string is not valid").finalize())
+        }
+    }
+
+    pub(crate) fn default_resource(predicate_name: &str, meta: &dyn FileFormatMeta) -> Self {
+        if predicate_name.is_empty() {
+            Self::Stdout
+        } else {
+            Self::Resource(ResourceBuilder::try_from(format!("{predicate_name}.{}", meta.default_extension())).expect("default name is valid").finalize())
         }
     }
 

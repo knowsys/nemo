@@ -37,9 +37,6 @@ pub enum ReadingErrorKind {
     /// Error when a resource could not be provided by any resource provider
     #[error("resource was not provided by any resource provider")]
     ResourceNotProvided,
-    /// A provided resource is not a valid local file:// URI
-    #[error(r#"resource is not a valid local file:// URI"#)]
-    InvalidFileUri,
     /// Error in Reqwest's HTTP handler
     #[error(transparent)]
     HttpTransfer(#[from] reqwest::Error),

@@ -63,16 +63,16 @@ impl FormatParameter<SparqlTag> for SparqlParameter {
             }),
             SparqlParameter::Endpoint => value
                 .to_iri()
-                .ok_or(ValidationErrorKind::ImportExportInvalidIri)
+                .ok_or(ValidationErrorKind::InvalidIri)
                 .and_then(|iri| {
                     Iri::parse(iri)
                         .map(|_| ())
-                        .map_err(|_| ValidationErrorKind::ImportExportInvalidIri)
+                        .map_err(|_| ValidationErrorKind::InvalidIri)
                 }),
             SparqlParameter::Query => {
                 Query::parse(value.to_plain_string_unchecked().as_str(), None)
                     .and(Ok(()))
-                    .map_err(|e| ValidationErrorKind::ImportExportInvalidSparqlQuery {
+                    .map_err(|e| ValidationErrorKind::InvalidSparqlQuery {
                         oxi_error: e.to_string(),
                     })
             }
@@ -131,12 +131,12 @@ impl FormatBuilder for SparqlBuilder {
     fn override_resource_builder(&self, direction: Direction) -> Option<ResourceBuilder> {
         match direction {
             Direction::Import => {
-                let mut resource_builder = ResourceBuilder::from(self.endpoint.clone());
+                let mut resource_builder = ResourceBuilder::try_from(self.endpoint.clone()).ok()?;
                 let query = self.query.to_string();
                 if query.len() > HTTP_GET_CHAR_LIMIT {
-                    resource_builder.post_mut(String::from("query"), query);
+                    resource_builder.add_post_parameter(String::from("query"), query);
                 } else {
-                    resource_builder.get_mut(String::from("query"), query);
+                    resource_builder.add_get_parameter(String::from("query"), query);
                 }
                 Some(resource_builder)
             }

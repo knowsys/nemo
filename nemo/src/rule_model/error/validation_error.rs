@@ -163,15 +163,15 @@ pub enum ValidationErrorKind {
     #[assoc(note = "arity of predicates in import/export statements must be known in advance.")]
     #[assoc(code = 232)]
     UnknownArity { predicate: String },
-    /// Import/Export: invalid SPARQL endpoint
-    #[error(r#"resource or endpoint is no valid Iri "#)]
+    /// Invalid IRI
+    #[error(r#"resource or endpoint is not a valid IRI"#)]
     #[assoc(code = 233)]
-    ImportExportInvalidIri,
-    /// Import/Export: invalid SPARQL query
+    InvalidIri,
+    /// Invalid SPARQL query
     #[assoc(code = 234)]
-    #[error(r#""invalid SPARQL query: `{oxi_error}`"#)]
-    ImportExportInvalidSparqlQuery { oxi_error: String },
-    /// Import/Export: Validation error in ResourceBuilder
+    #[error(r#"invalid SPARQL query: {oxi_error}"#)]
+    InvalidSparqlQuery { oxi_error: String },
+    /// Error during resource validation
     #[assoc(code = 235)]
     #[error(transparent)]
     ResourceValidationError(#[from] ResourceValidationErrorKind),

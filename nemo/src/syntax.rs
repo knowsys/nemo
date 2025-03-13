@@ -405,15 +405,15 @@ pub mod import_export {
         pub const IGNORE_HEADERS: &str = "ignore_headers";
         /// The SPARQL endpoint for the query
         pub const ENDPOINT: &str = "endpoint";
-        /// The SPARQL query that is send to the endpoint.
+        /// The SPARQL query that is sent to the endpoint.
         pub const QUERY: &str = "query";
-        /// Name of Parameters that are passed as HTTP-headers.
+        /// Format parameter name for HTTP headers.
         pub const HTTP_HEADERS: &str = "http_headers";
-        /// Name of Parameters that are appended to a web IRI.
+        /// Format attribute name for IRI query parameters.
         pub const HTTP_GET_PARAMETERS: &str = "http_get_parameters";
-        /// Name of the attribute that is appended to the web IRI.
-        pub const HTTP_FRAGMENT: &str = "http_fragment";
-        /// Name of Parameters that are send in the body of a POST request.
+        /// Format attribute name for IRI fragment.
+        pub const IRI_FRAGMENT: &str = "iri_fragment";
+        /// Format parameter name for HTTP POST parameters.
         pub const HTTP_POST_PARAMETERS: &str = "http_post_parameters";
     }
 
@@ -440,7 +440,7 @@ pub mod import_export {
         pub const RDF_XML: &str = "rdfxml";
         /// The "predicate name" used for the json format in import/export directives.
         pub const JSON: &str = "json";
-        /// The "predicate name" used for the SPARQL format to query an endpoint.
+        /// The "predicate name" used for the SPARQL format in import/export directives.
         pub const SPARQL: &str = "sparql";
 
         // file extensions

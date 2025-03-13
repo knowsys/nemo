@@ -26,7 +26,6 @@ thiserror = "2.0"
 flate2 = "1"
 sanitise-file-name = "1.0.0"
 getrandom = { version = "0.2.9", default-features = false }
-path-slash = "0.2.1"
 rio_api = "0.8.4"
 rio_turtle = "0.8.4"
 rio_xml = "0.8.4"
