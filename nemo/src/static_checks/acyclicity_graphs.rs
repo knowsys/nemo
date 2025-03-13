@@ -132,15 +132,15 @@ impl<'a> WeakAcyclicityGraph<'a> {
         let cycles: HashSet<Cycle<Position<'a>>> = self.cycles();
         cycles
             .iter()
-            .any(|cycle| self.cycle_contains_special_edge(cycle))
+            .any(|cycle| self.contains_special_edge_in_cycle(cycle))
     }
 
-    fn cycle_contains_special_edge(&self, cycle: &Cycle<Position<'a>>) -> bool {
+    fn contains_special_edge_in_cycle(&self, cycle: &Cycle<Position<'a>>) -> bool {
         let cycle_size: usize = cycle.len();
         cycle.iter().enumerate().any(|(i, pos)| {
             let j: usize = (i + 1) % cycle_size;
             let next_pos: &Position<'a> = cycle.get(j).unwrap();
-            self.edge_is_special(pos, next_pos)
+            self.is_edge_special(pos, next_pos)
         })
     }
 
@@ -149,13 +149,13 @@ impl<'a> WeakAcyclicityGraph<'a> {
         let cycles: HashSet<Cycle<Position<'a>>> = self.cycles();
         let special_edge_cycles: HashSet<Cycle<Position<'a>>> = cycles
             .iter()
-            .filter(|cycle| self.cycle_contains_special_edge(cycle))
+            .filter(|cycle| self.contains_special_edge_in_cycle(cycle))
             .cloned()
             .collect();
         special_edge_cycles
     }
 
-    fn edge_is_special(&self, node: &Position<'a>, next_node: &Position<'a>) -> bool {
+    fn is_edge_special(&self, node: &Position<'a>, next_node: &Position<'a>) -> bool {
         matches!(
             self.0.edge_weight(*node, *next_node).unwrap(),
             WeakAcyclicityGraphEdgeType::Special
