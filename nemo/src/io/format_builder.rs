@@ -445,65 +445,53 @@ impl ImportExportBuilder {
             .override_resource_builder(direction)
             .or(resource_builder);
 
-        let resource = {
-            if let Some(mut rb) = resource_builder {
-                if let Some(headers) = parameters
+        let resource = resource_builder
+            .map(|mut rb| {
+                parameters
                     .get_optional(StandardParameter::HttpHeaders.into())
-                    .map(|headers| rb.unpack_headers(headers))
-                {
-                    for (key, value) in headers
-                        .map_err(|err| builder.report_error(origin, err.into()))
-                        .ok()?
-                    {
-                        rb.add_header(key, value)
-                            .map_err(|err| builder.report_error(origin, err.into()))
-                            .ok()?;
-                    }
-                }
+                    .map(|headers| {
+                        rb.unpack_headers(headers).map(|mut headers| {
+                            headers
+                                .try_for_each(|(key, value)| rb.add_header(key, value).map(|_| ()))
+                        })
+                    })
+                    .transpose()?;
 
-                if let Some(get_parameters) = parameters
+                parameters
                     .get_optional(StandardParameter::HttpGetParameters.into())
-                    .map(|get_parameters| rb.unpack_http_parameters(get_parameters))
-                {
-                    for (key, value) in get_parameters
-                        .map_err(|err| builder.report_error(origin, err.into()))
-                        .ok()?
-                    {
-                        rb.add_get_parameter(key, value)
-                            .map_err(|err| builder.report_error(origin, err.into()))
-                            .ok()?;
-                    }
-                }
+                    .map(|parameters| {
+                        rb.unpack_http_parameters(parameters).map(|mut parameters| {
+                            parameters.try_for_each(|(key, value)| {
+                                rb.add_get_parameter(key, value).map(|_| ())
+                            })
+                        })
+                    })
+                    .transpose()?;
 
-                if let Some(post_parameters) = parameters
+                parameters
                     .get_optional(StandardParameter::HttpPostParameters.into())
-                    .map(|post_parameters| rb.unpack_http_parameters(post_parameters))
-                {
-                    for (key, value) in post_parameters
-                        .map_err(|err| builder.report_error(origin, err.into()))
-                        .ok()?
-                    {
-                        rb.add_post_parameter(key, value)
-                            .map_err(|err| builder.report_error(origin, err.into()))
-                            .ok()?;
-                    }
-                }
+                    .map(|parameters| {
+                        rb.unpack_http_parameters(parameters).map(|mut parameters| {
+                            parameters.try_for_each(|(key, value)| {
+                                rb.add_post_parameter(key, value).map(|_| ())
+                            })
+                        })
+                    })
+                    .transpose()?;
 
-                if let Some(fragment) = parameters
+                parameters
                     .get_optional(StandardParameter::IriFragment.into())
-                    .map(|value| value.to_plain_string_unchecked())
-                {
-                    rb.set_fragment(fragment)
-                        .map_err(|err| builder.report_error(origin, err.into()))
-                        .ok()?;
-                }
+                    .map(|fragment| {
+                        rb.set_fragment(fragment.to_plain_string_unchecked())
+                            .map(|_| ())
+                    })
+                    .transpose()?;
 
-                let resource = rb.finalize();
-                Some(resource)
-            } else {
-                None
-            }
-        };
+                Ok(rb.finalize())
+            })
+            .transpose()
+            .map_err(|err: ResourceValidationErrorKind| builder.report_error(origin, err.into()))
+            .ok()?;
 
         Some(ImportExportBuilder {
             inner: inner.into(),

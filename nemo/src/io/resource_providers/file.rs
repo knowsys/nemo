@@ -25,18 +25,18 @@ impl ResourceProvider for FileResourceProvider {
         resource: &Resource,
         _media_type: &str,
     ) -> Result<Option<Box<dyn Read>>, ReadingError> {
-        if resource.is_path() {
-            let path = self
-                .base_path
-                .as_ref()
-                .map(|bp| bp.join(resource.to_string()))
-                .unwrap_or(PathBuf::from(resource.to_string()));
-            let file = File::open(&path)
-                .map_err(|e| ReadingError::from(e).with_resource(resource.clone()))?;
-            Ok(Some(Box::new(file)))
-        } else {
-            // We can not handle this resource
-            Ok(None)
+        if !resource.is_path() {
+            // we can't handle this resource
+            return Ok(None);
         }
+
+        let path = self
+            .base_path
+            .as_ref()
+            .map(|bp| bp.join(resource.to_string()))
+            .unwrap_or(PathBuf::from(resource.to_string()));
+        let file =
+            File::open(&path).map_err(|e| ReadingError::from(e).with_resource(resource.clone()))?;
+        Ok(Some(Box::new(file)))
     }
 }

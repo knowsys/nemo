@@ -68,22 +68,26 @@ impl HttpResourceProvider {
             })?,
         );
 
-        // Unpack custom headers from resource
-        for (key, value) in resource.headers() {
-            headers.insert(
-                key.parse::<HeaderName>()
-                    .map_err(|err: InvalidHeaderName| {
-                        ReadingError::new(ReadingErrorKind::ExternalError(err.into()))
-                            .with_resource(resource.clone())
-                    })?,
-                value
-                    .parse::<HeaderValue>()
-                    .map_err(|err: InvalidHeaderValue| {
-                        ReadingError::new(ReadingErrorKind::ExternalError(err.into()))
-                            .with_resource(resource.clone())
-                    })?,
-            );
-        }
+        // Custom headers from IO
+        let new_headers = resource
+            .headers()
+            .map(|(name, value)| {
+                Ok::<(HeaderName, HeaderValue), ReadingError>((
+                    name.parse::<HeaderName>()
+                        .map_err(|err: InvalidHeaderName| {
+                            ReadingError::new(ReadingErrorKind::ExternalError(err.into()))
+                                .with_resource(resource.clone())
+                        })?,
+                    value
+                        .parse::<HeaderValue>()
+                        .map_err(|err: InvalidHeaderValue| {
+                            ReadingError::new(ReadingErrorKind::ExternalError(err.into()))
+                                .with_resource(resource.clone())
+                        })?,
+                ))
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        headers.extend(new_headers.into_iter());
 
         let err_mapping =
             |err: reqwest::Error| ReadingError::new(err.into()).with_resource(resource.clone());
@@ -95,27 +99,19 @@ impl HttpResourceProvider {
 
         let full_url = resource.to_string();
 
-        let response = {
-            // Collect Body-Parameters into one string
-            if resource.has_post_parameters() {
-                // Make POST-Request
-                client
-                    .post(full_url)
-                    .form(
-                        &resource
-                            .post_parameters()
-                            .collect::<Vec<&(String, String)>>(),
-                    )
-                    .send()
-                    .await
-                    .map_err(err_mapping)?
-            } else {
-                // Make GET-Request
-                client.get(full_url).send().await.map_err(err_mapping)?
-            }
+        let post_parameters = resource
+            .post_parameters()
+            .collect::<Vec<&(String, String)>>();
+        let request_builder = if post_parameters.is_empty() {
+            client.get(full_url)
+        } else {
+            client.post(full_url).form(&post_parameters)
         };
+        let response = request_builder
+            .send()
+            .await
+            .map_err(|err| ReadingError::new(err.into()).with_resource(resource.clone()))?;
 
-        // Validate status code for timeouts and other errors
         response.error_for_status_ref()?;
 
         // we're expecting potentially compressed data, don't try to

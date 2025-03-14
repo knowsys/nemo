@@ -103,7 +103,7 @@ impl Resource {
         }
     }
 
-    /// Return the headers if resource is of variant [Resource::Http]
+    /// Return the headers
     pub fn headers(&self) -> Box<dyn Iterator<Item = &(String, String)> + '_> {
         match self {
             Self::Http { parameters, .. } => Box::new(parameters.headers.iter()),
@@ -133,11 +133,6 @@ impl Resource {
             Self::Http { parameters, .. } => Box::new(parameters.post_parameters.iter()),
             Self::Path(..) => Box::new(iter::empty()),
         }
-    }
-
-    /// Check if resource has non-empty POST parameters
-    pub fn has_post_parameters(&self) -> bool {
-        self.post_parameters().next().is_some()
     }
 
     /// Returns the file extension of a path or IRI based on the last '.'

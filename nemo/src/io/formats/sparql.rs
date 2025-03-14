@@ -63,12 +63,8 @@ impl FormatParameter<SparqlTag> for SparqlParameter {
             }),
             SparqlParameter::Endpoint => value
                 .to_iri()
-                .ok_or(ValidationErrorKind::InvalidIri)
-                .and_then(|iri| {
-                    Iri::parse(iri)
-                        .map(|_| ())
-                        .map_err(|_| ValidationErrorKind::InvalidIri)
-                }),
+                .and(Some(()))
+                .ok_or(ValidationErrorKind::InvalidIri),
             SparqlParameter::Query => {
                 Query::parse(value.to_plain_string_unchecked().as_str(), None)
                     .and(Ok(()))
