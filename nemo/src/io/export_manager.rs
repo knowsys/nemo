@@ -7,7 +7,7 @@ use std::{
 
 use crate::{error::Error, rule_model::components::tag::Tag};
 
-use nemo_physical::datavalues::AnyDataValue;
+use nemo_physical::{datavalues::AnyDataValue, resource::Resource};
 use sanitise_file_name::{sanitise_with_options, Options};
 
 use super::{
@@ -72,7 +72,7 @@ impl ExportManager {
             return Ok(());
         };
 
-        let path = self.sanitized_path(resource, !handler.is_compressed());
+        let path = self.sanitized_path(resource, !handler.is_compressed())?;
 
         let meta_info = path.metadata();
         if let Err(err) = meta_info {
@@ -95,15 +95,19 @@ impl ExportManager {
     ///
     /// This is a complete path (based on our base path),
     /// which includes all extensions.
-    fn sanitized_path(&self, file_name_unsafe: &str, add_compression: bool) -> PathBuf {
+    fn sanitized_path(&self, resource: &Resource, add_compression: bool) -> Result<PathBuf, Error> {
         let mut pred_path = self.base_path.to_path_buf();
 
         let sanitize_options = Options::<Option<char>> {
             url_safe: true,
             ..Default::default()
         };
+        if !resource.is_path() {
+            return Err(Error::ExpectedResourcePath);
+        }
+        let file_name_unsanitized = resource.to_string();
 
-        let file_name = sanitise_with_options(file_name_unsafe, &sanitize_options);
+        let file_name = sanitise_with_options(&file_name_unsanitized, &sanitize_options);
 
         pred_path.push(file_name);
 
@@ -113,7 +117,7 @@ impl ExportManager {
             }
         }
 
-        pred_path
+        Ok(pred_path)
     }
 
     /// Create a writer based on an export handler. The predicate is used to
@@ -123,9 +127,8 @@ impl ExportManager {
     /// [ExportManager::disable_write] is `true`.
     fn writer(&self, export_handler: &Export, predicate: &Tag) -> Result<Box<dyn Write>, Error> {
         let writer: Box<dyn Write> = match export_handler.resource_spec() {
-            ResourceSpec::Resource(file_name_unsafe) => {
-                let output_path =
-                    self.sanitized_path(file_name_unsafe, !export_handler.is_compressed());
+            ResourceSpec::Resource(resource) => {
+                let output_path = self.sanitized_path(resource, !export_handler.is_compressed())?;
 
                 log::info!("Exporting predicate \"{}\" to {output_path:?}", predicate);
 

@@ -8,7 +8,10 @@ use std::{
     sync::Arc,
 };
 
-use nemo_physical::datavalues::{AnyDataValue, DataValue};
+use nemo_physical::{
+    datavalues::{AnyDataValue, DataValue},
+    resource::{ResourceBuilder, ResourceValidationErrorKind},
+};
 use strum::IntoEnumIterator;
 
 use crate::{
@@ -29,6 +32,7 @@ use super::{
         dsv::{DsvBuilder, DsvTag},
         json::{JsonHandler, JsonTag},
         rdf::{RdfHandler, RdfTag},
+        sparql::{SparqlBuilder, SparqlTag},
         Export, ExportHandler, Import, ImportHandler, ResourceSpec,
     },
 };
@@ -209,6 +213,10 @@ format_parameter! {
     pub(crate) enum StandardParameter(NoParameters) {
         Resource(name = attribute::RESOURCE, supported_types = &[ValueType::String, ValueType::Constant]),
         Compression(name = attribute::COMPRESSION, supported_types = &[ValueType::String]),
+        HttpHeaders(name = attribute::HTTP_HEADERS, supported_types= &[ValueType::Map]),
+        HttpGetParameters(name = attribute::HTTP_GET_PARAMETERS, supported_types= &[ValueType::Map]),
+        IriFragment(name = attribute::IRI_FRAGMENT, supported_types= &[ValueType::String]),
+        HttpPostParameters(name = attribute::HTTP_POST_PARAMETERS, supported_types= &[ValueType::Map]),
     }
 }
 
@@ -230,6 +238,17 @@ impl<Tag> FormatParameter<Tag> for StandardParameter {
                         format: value.to_string(),
                     })
             }
+            StandardParameter::HttpHeaders => ResourceBuilder::validate_headers(value)
+                .map_err(|err: ResourceValidationErrorKind| err.into()),
+            StandardParameter::HttpGetParameters => {
+                ResourceBuilder::validate_http_parameters(value)
+                    .map_err(|err: ResourceValidationErrorKind| err.into())
+            }
+            StandardParameter::IriFragment => Ok(()),
+            StandardParameter::HttpPostParameters => {
+                ResourceBuilder::validate_http_parameters(value)
+                    .map_err(|err: ResourceValidationErrorKind| err.into())
+            }
         }
     }
 }
@@ -250,10 +269,15 @@ pub(crate) trait FormatBuilder: Sized + Into<AnyImportExportBuilder> {
         Self::Tag::from_str(tag).is_ok()
     }
 
+    fn override_resource_builder(&self, _direction: Direction) -> Option<ResourceBuilder> {
+        None
+    }
+
     fn build_import(&self, arity: usize) -> Arc<dyn ImportHandler + Send + Sync + 'static>;
     fn build_export(&self, arity: usize) -> Arc<dyn ExportHandler + Send + Sync + 'static>;
 }
 
+#[derive(Debug)]
 pub(crate) struct Parameters<B: FormatBuilder>(HashMap<B::Parameter, AnyDataValue>);
 
 impl<B: FormatBuilder> Parameters<B> {
@@ -346,6 +370,7 @@ pub(crate) enum SupportedFormatTag {
     Dsv(DsvTag),
     Rdf(RdfTag),
     Json(JsonTag),
+    Sparql(SparqlTag),
 }
 
 impl FromStr for SupportedFormatTag {
@@ -358,6 +383,8 @@ impl FromStr for SupportedFormatTag {
             Ok(Self::Rdf(s.parse().unwrap()))
         } else if JsonHandler::supports_tag(s) {
             Ok(Self::Json(s.parse().unwrap()))
+        } else if SparqlBuilder::supports_tag(s) {
+            Ok(Self::Sparql(s.parse().unwrap()))
         } else {
             Err(())
         }
@@ -371,6 +398,7 @@ impl ImportExportBuilder {
             AnyImportExportBuilder::Dsv(inner) => inner.expected_arity(),
             AnyImportExportBuilder::Rdf(inner) => inner.expected_arity(),
             AnyImportExportBuilder::Json(inner) => inner.expected_arity(),
+            AnyImportExportBuilder::Sparql(inner) => inner.expected_arity(),
         }
     }
 
@@ -388,9 +416,15 @@ impl ImportExportBuilder {
         let origin = *spec.origin();
         let parameters = Parameters::<B>::validate(spec, direction, builder)?;
 
-        let resource = parameters
+        // Create a ResourceBuilder from a resource
+        let resource_builder = parameters
             .get_optional(StandardParameter::Resource.into())
-            .map(|resource| ResourceSpec::from_string(resource.to_plain_string_unchecked()));
+            .and_then(|value| {
+                let resource = ResourceBuilder::try_from(value)
+                    .map_err(|err| builder.report_error(origin, err.into()))
+                    .ok()?;
+                Some(resource)
+            });
 
         let compression = parameters
             .get_optional(StandardParameter::Compression.into())
@@ -407,9 +441,61 @@ impl ImportExportBuilder {
             }
         }?;
 
+        let resource_builder = inner
+            .override_resource_builder(direction)
+            .or(resource_builder);
+
+        let resource = resource_builder
+            .map(|mut rb| {
+                parameters
+                    .get_optional(StandardParameter::HttpHeaders.into())
+                    .map(|headers| {
+                        rb.unpack_headers(headers).map(|mut headers| {
+                            headers
+                                .try_for_each(|(key, value)| rb.add_header(key, value).map(|_| ()))
+                        })
+                    })
+                    .transpose()?;
+
+                parameters
+                    .get_optional(StandardParameter::HttpGetParameters.into())
+                    .map(|parameters| {
+                        rb.unpack_http_parameters(parameters).map(|mut parameters| {
+                            parameters.try_for_each(|(key, value)| {
+                                rb.add_get_parameter(key, value).map(|_| ())
+                            })
+                        })
+                    })
+                    .transpose()?;
+
+                parameters
+                    .get_optional(StandardParameter::HttpPostParameters.into())
+                    .map(|parameters| {
+                        rb.unpack_http_parameters(parameters).map(|mut parameters| {
+                            parameters.try_for_each(|(key, value)| {
+                                rb.add_post_parameter(key, value).map(|_| ())
+                            })
+                        })
+                    })
+                    .transpose()?;
+
+                parameters
+                    .get_optional(StandardParameter::IriFragment.into())
+                    .map(|fragment| {
+                        rb.set_fragment(fragment.to_plain_string_unchecked())
+                            .map(|_| ())
+                    })
+                    .transpose()?;
+
+                Ok(rb.finalize())
+            })
+            .transpose()
+            .map_err(|err: ResourceValidationErrorKind| builder.report_error(origin, err.into()))
+            .ok()?;
+
         Some(ImportExportBuilder {
             inner: inner.into(),
-            resource,
+            resource: resource.map(ResourceSpec::Resource),
             compression,
         })
     }
@@ -438,6 +524,9 @@ impl ImportExportBuilder {
             SupportedFormatTag::Json(tag) => {
                 Self::new_with_tag::<JsonHandler>(tag, spec, direction, error_builder)
             }
+            SupportedFormatTag::Sparql(tag) => {
+                Self::new_with_tag::<SparqlBuilder>(tag, spec, direction, error_builder)
+            }
         }
     }
 
@@ -447,12 +536,16 @@ impl ImportExportBuilder {
             AnyImportExportBuilder::Dsv(dsv_builder) => dsv_builder.build_import(arity),
             AnyImportExportBuilder::Rdf(rdf_handler) => rdf_handler.build_import(arity),
             AnyImportExportBuilder::Json(json_handler) => json_handler.build_import(arity),
+            AnyImportExportBuilder::Sparql(sparql_builder) => sparql_builder.build_import(arity),
         };
 
-        let resource_spec = self.resource.clone().unwrap_or({
-            let default_file_name = format!("{}.{}", predicate_name, handler.default_extension());
-            ResourceSpec::from_string(default_file_name)
-        });
+        let resource_spec = self
+            .resource
+            .clone()
+            .unwrap_or(ResourceSpec::default_resource(
+                predicate_name,
+                handler.as_ref(),
+            ));
 
         Import {
             resource_spec,
@@ -468,12 +561,16 @@ impl ImportExportBuilder {
             AnyImportExportBuilder::Dsv(dsv_builder) => dsv_builder.build_export(arity),
             AnyImportExportBuilder::Rdf(rdf_handler) => rdf_handler.build_export(arity),
             AnyImportExportBuilder::Json(json_handler) => json_handler.build_export(arity),
+            AnyImportExportBuilder::Sparql(sparql_builder) => sparql_builder.build_export(arity),
         };
 
-        let resource_spec = self.resource.clone().unwrap_or({
-            let default_file_name = format!("{}.{}", predicate_name, handler.default_extension());
-            ResourceSpec::from_string(default_file_name)
-        });
+        let resource_spec = self
+            .resource
+            .clone()
+            .unwrap_or(ResourceSpec::default_resource(
+                predicate_name,
+                handler.as_ref(),
+            ));
 
         Export {
             resource_spec,
@@ -485,10 +582,12 @@ impl ImportExportBuilder {
 }
 
 #[derive(Clone)]
+#[allow(variant_size_differences)]
 pub(crate) enum AnyImportExportBuilder {
     Dsv(DsvBuilder),
     Rdf(RdfHandler),
     Json(JsonHandler),
+    Sparql(SparqlBuilder),
 }
 
 impl Debug for AnyImportExportBuilder {
@@ -497,6 +596,7 @@ impl Debug for AnyImportExportBuilder {
             Self::Dsv(_) => f.debug_tuple("Dsv").field(&"...").finish(),
             Self::Rdf(_) => f.debug_tuple("Rdf").field(&"...").finish(),
             Self::Json(_) => f.debug_tuple("Json").field(&"...").finish(),
+            Self::Sparql(_) => f.debug_tuple("Sparql").field(&"...").finish(),
         }
     }
 }

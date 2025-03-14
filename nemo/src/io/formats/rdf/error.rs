@@ -19,5 +19,5 @@ pub enum RdfFormatError {
     #[error("RDF* terms are not supported")]
     RdfStarUnsupported,
     #[error("could not determine which RDF parser to use for resource {0}")]
-    UnknownRdfFormat(Resource),
+    UnknownRdfFormat(Box<Resource>),
 }

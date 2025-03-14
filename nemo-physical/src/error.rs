@@ -37,9 +37,6 @@ pub enum ReadingErrorKind {
     /// Error when a resource could not be provided by any resource provider
     #[error("resource was not provided by any resource provider")]
     ResourceNotProvided,
-    /// A provided resource is not a valid local file:// URI
-    #[error(r#"resource is not a valid local file:// URI"#)]
-    InvalidFileUri,
     /// Error in Reqwest's HTTP handler
     #[error(transparent)]
     HttpTransfer(#[from] reqwest::Error),
@@ -61,7 +58,7 @@ pub enum ReadingErrorKind {
 #[derive(Debug, Error)]
 pub struct ReadingError {
     kind: ReadingErrorKind,
-    resource: Option<Resource>,
+    resource: Option<Box<Resource>>,
     predicate: Option<String>,
 }
 
@@ -82,7 +79,7 @@ impl ReadingError {
 
     /// Set the resource which was being read while the error occurred
     pub fn with_resource(mut self, resource: Resource) -> Self {
-        self.resource = Some(resource);
+        self.resource = Some(Box::new(resource));
         self
     }
 
