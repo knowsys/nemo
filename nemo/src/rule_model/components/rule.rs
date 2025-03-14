@@ -17,8 +17,12 @@ use super::{
     atom::Atom,
     literal::Literal,
     term::{
-        operation::Operation,
-        primitive::{variable::Variable, Primitive},
+        operation::{operation_kind::OperationKind, Operation},
+        primitive::{
+            ground::GroundTerm,
+            variable::{universal::UniversalVariable, Variable},
+            Primitive,
+        },
         Term,
     },
     IterablePrimitives, IterableVariables, ProgramComponent, ProgramComponentKind,
@@ -576,6 +580,21 @@ impl RuleBuilder {
     /// Set the display property of the built rule.
     pub fn display_mut(&mut self, display: Term) -> &mut Self {
         self.display = Some(display);
+        self
+    }
+
+    pub fn add_external_variable(
+        &mut self,
+        variable: UniversalVariable,
+        expansion: GroundTerm,
+    ) -> &mut Self {
+        self.add_body_operation_mut(Operation::new(
+            OperationKind::Equal,
+            vec![
+                Term::Primitive(Primitive::Variable(Variable::Universal(variable))),
+                Term::Primitive(Primitive::Ground(expansion)),
+            ],
+        ));
         self
     }
 

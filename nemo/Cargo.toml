@@ -50,6 +50,8 @@ bytecount = "0.6.8"
 colored = "2"
 spargebra = {version ="0.3.4", features = ["rdf-star"] }
 urlencoding = "2.1.3"
+oxrdfio = "0.1.6"
+oxrdf = "0.2.4"
 
 [dev-dependencies]
 env_logger = "*"

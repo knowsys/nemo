@@ -217,10 +217,7 @@ pub struct NemoEngine {
 
 #[cfg(feature = "web_sys_unstable_apis")]
 fn std_io_error_from_js_value(js_value: JsValue, prefix: &str) -> std::io::Error {
-    std::io::Error::new(
-        std::io::ErrorKind::Other,
-        format!("{prefix}: {js_value:#?}"),
-    )
+    std::io::Error::other(format!("{prefix}: {js_value:#?}"))
 }
 
 #[cfg(feature = "web_sys_unstable_apis")]
@@ -240,12 +237,9 @@ impl std::io::Write for SyncAccessHandleWriter {
         // Convert to usize safely
         let converted_bytes_written = bytes_written as usize;
         if converted_bytes_written as f64 != bytes_written {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!(
-                    "Error while converting number of bytes written to usize: {bytes_written:#?}"
-                ),
-            ));
+            return Err(std::io::Error::other(format!(
+                "Error while converting number of bytes written to usize: {bytes_written:#?}"
+            )));
         }
 
         Ok(converted_bytes_written)

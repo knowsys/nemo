@@ -129,6 +129,15 @@ pub enum TranslationErrorKind {
     #[error("parameter {key} is defined multiple times")]
     #[assoc(code = 129)]
     MapParameterRedefined { key: String },
+    /// malformed external variable declaration
+    #[error("external variable must be a single universal variable")]
+    #[assoc(code = 130)]
+    ExternalVariableAttribute,
+    /// missing external variable
+    #[error("external variable is undefined")]
+    #[assoc(note = "consider using the `--param` cli option")]
+    #[assoc(code = 131)]
+    MissingExternalVariable,
 
     /// Unsupported: Declare statements
     #[error(r#"declare statements are currently unsupported"#)]

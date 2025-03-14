@@ -1,4 +1,4 @@
-//! Handler for resources of type RDF (Rsource Description Format).
+//! Handler for resources of type RDF (Resource Description Format).
 
 #![allow(missing_docs)]
 

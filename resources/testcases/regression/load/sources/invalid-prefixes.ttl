@@ -1,0 +1,6 @@
+@prefix : <#>.
+@prefix ont: <>.
+@prefix riskm: <./>.
+@prefix eg: <http://example.org#>
+
+eg:test eg:is 42 .

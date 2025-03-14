@@ -86,6 +86,7 @@ pub(crate) fn recover<'a>(
                     span: token.span(),
                     comment: None,
                     kind: StatementKind::Error(token),
+                    attributes: Default::default(),
                 },
             ))
         }

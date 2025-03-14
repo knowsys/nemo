@@ -1,13 +1,12 @@
 //! The writer for RDF files.
 
+use std::io::{BufWriter, Write};
+
 use nemo_physical::datavalues::{AnyDataValue, DataValue, ValueDomain};
-use rio_api::{
-    formatter::{QuadsFormatter, TriplesFormatter},
-    model::{BlankNode, GraphName, Literal, NamedNode, Quad, Subject, Term, Triple},
+use oxrdf::{
+    BlankNodeRef, GraphNameRef, LiteralRef, NamedNodeRef, QuadRef, SubjectRef, TermRef, TripleRef,
 };
-use rio_turtle::{NQuadsFormatter, NTriplesFormatter, TriGFormatter, TurtleFormatter};
-use rio_xml::RdfXmlFormatter;
-use std::io::Write;
+use oxrdfio::{RdfFormat, RdfSerializer};
 
 use crate::{
     error::Error,
@@ -76,56 +75,48 @@ struct QuadBuffer {
     object_type: RdfTermType,
 }
 impl<'a> QuadBuffer {
-    fn subject(&'a self) -> Subject<'a> {
+    fn subject(&'a self) -> SubjectRef<'a> {
         if self.subject_is_blank {
-            Subject::BlankNode(BlankNode {
-                id: self.subject.as_str(),
-            })
+            SubjectRef::BlankNode(BlankNodeRef::new_unchecked(&self.subject))
         } else {
-            Subject::NamedNode(NamedNode {
-                iri: self.subject.as_str(),
-            })
+            SubjectRef::NamedNode(NamedNodeRef::new_unchecked(&self.subject))
         }
     }
 
-    fn predicate(&'a self) -> NamedNode<'a> {
-        NamedNode {
-            iri: self.predicate.as_str(),
-        }
+    fn predicate(&'a self) -> NamedNodeRef<'a> {
+        NamedNodeRef::new_unchecked(&self.predicate)
     }
 
-    fn object(&'a self) -> Term<'a> {
+    fn object(&'a self) -> TermRef<'a> {
         match self.object_type {
-            RdfTermType::Iri => Term::NamedNode(NamedNode {
-                iri: self.object_part1.as_str(),
-            }),
-            RdfTermType::BNode => Term::BlankNode(BlankNode {
-                id: self.object_part1.as_str(),
-            }),
-            RdfTermType::TypedLiteral => Term::Literal(Literal::Typed {
-                value: self.object_part1.as_str(),
-                datatype: NamedNode {
-                    iri: self.object_part2.as_str(),
-                },
-            }),
-            RdfTermType::LangString => Term::Literal(Literal::LanguageTaggedString {
-                value: self.object_part1.as_str(),
-                language: self.object_part2.as_str(),
-            }),
-            RdfTermType::SimpleStringLiteral => Term::Literal(Literal::Simple {
-                value: self.object_part1.as_str(),
-            }),
+            RdfTermType::Iri => TermRef::NamedNode(NamedNodeRef::new_unchecked(&self.object_part1)),
+            RdfTermType::BNode => {
+                TermRef::BlankNode(BlankNodeRef::new_unchecked(&self.object_part1))
+            }
+            RdfTermType::TypedLiteral => TermRef::Literal(LiteralRef::new_typed_literal(
+                &self.object_part1,
+                NamedNodeRef::new_unchecked(&self.object_part2),
+            )),
+            RdfTermType::LangString => {
+                TermRef::Literal(LiteralRef::new_language_tagged_literal_unchecked(
+                    &self.object_part1,
+                    &self.object_part2,
+                ))
+            }
+            RdfTermType::SimpleStringLiteral => {
+                TermRef::Literal(LiteralRef::new_simple_literal(&self.object_part1))
+            }
         }
     }
 
-    fn graph_name(&'a self) -> Option<GraphName<'a>> {
+    fn graph_name(&'a self) -> GraphNameRef<'a> {
         match &self.graph_name {
-            QuadGraphName::DefaultGraph => None,
+            QuadGraphName::DefaultGraph => GraphNameRef::DefaultGraph,
             QuadGraphName::NamedNode(iri) => {
-                Some(GraphName::NamedNode(NamedNode { iri: iri.as_str() }))
+                GraphNameRef::NamedNode(NamedNodeRef::new_unchecked(iri))
             }
             QuadGraphName::BlankNode(id) => {
-                Some(GraphName::BlankNode(BlankNode { id: id.as_str() }))
+                GraphNameRef::BlankNode(BlankNodeRef::new_unchecked(id))
             }
         }
     }
@@ -208,6 +199,19 @@ impl<'a> QuadBuffer {
 
         Ok(())
     }
+
+    fn triple_ref(&'a self) -> TripleRef<'a> {
+        TripleRef::new(self.subject(), self.predicate(), self.object())
+    }
+
+    fn quad_ref(&'a self) -> QuadRef<'a> {
+        QuadRef::new(
+            self.subject(),
+            self.predicate(),
+            self.object(),
+            self.graph_name(),
+        )
+    }
 }
 
 /// A writer object for writing RDF files.
@@ -233,15 +237,11 @@ impl RdfWriter {
         }
     }
 
-    fn export_triples<'a, Formatter>(
+    fn export_triples<'a>(
         self,
         table: Box<dyn Iterator<Item = Vec<AnyDataValue>> + 'a>,
-        make_formatter: impl Fn(Box<dyn Write>) -> std::io::Result<Formatter>,
-        finish_formatter: impl Fn(Formatter),
-    ) -> Result<(), Error>
-    where
-        Formatter: TriplesFormatter,
-    {
+        serializer: RdfSerializer,
+    ) -> Result<(), Error> {
         log::info!("Starting RDF export (format {})", self.variant);
 
         let mut triple_pos = [0; 3];
@@ -256,7 +256,7 @@ impl RdfWriter {
         assert_eq!(cur, 3); // three triple components found
         let [s_pos, p_pos, o_pos] = triple_pos;
 
-        let mut formatter = make_formatter(self.writer)?;
+        let mut serializer = serializer.for_writer(BufWriter::new(self.writer));
         let mut buffer: QuadBuffer = Default::default();
 
         let stop_limit = self.limit.unwrap_or(u64::MAX);
@@ -269,45 +269,43 @@ impl RdfWriter {
             if !buffer.set_subject_from_datavalue(&record[s_pos]) {
                 continue;
             }
+
             if !buffer.set_predicate_from_datavalue(&record[p_pos]) {
                 continue;
             }
+
             if !buffer.set_object_from_datavalue(&record[o_pos]) {
                 continue;
             }
-            if let Err(e) = formatter.format(&Triple {
-                subject: buffer.subject(),
-                predicate: buffer.predicate(),
-                object: buffer.object(),
-            }) {
+
+            if let Err(e) = serializer.serialize_triple(buffer.triple_ref()) {
                 log::debug!("failed to write triple: {e}");
                 drop_count += 1;
             } else {
                 triple_count += 1;
+
                 if (triple_count % PROGRESS_NOTIFY_INCREMENT) == 0 {
                     log::info!("... processed {triple_count} triples");
                 }
+
                 if triple_count == stop_limit {
                     break;
                 }
             }
         }
-        finish_formatter(formatter);
+
+        serializer.finish()?;
 
         log::info!("Finished export: processed {triple_count} triples (dropped {drop_count})");
 
         Ok(())
     }
 
-    fn export_quads<'a, Formatter>(
+    fn export_quads<'a>(
         self,
         table: Box<dyn Iterator<Item = Vec<AnyDataValue>> + 'a>,
-        make_formatter: impl Fn(Box<dyn Write>) -> std::io::Result<Formatter>,
-        finish_formatter: impl Fn(Formatter),
-    ) -> Result<(), Error>
-    where
-        Formatter: QuadsFormatter,
-    {
+        serializer: RdfSerializer,
+    ) -> Result<(), Error> {
         log::info!("Starting RDF export (format {})", self.variant);
 
         let mut quad_pos = [0; 4];
@@ -322,7 +320,7 @@ impl RdfWriter {
         assert_eq!(cur, 4); // three triple components found
         let [g_pos, s_pos, p_pos, o_pos] = quad_pos;
 
-        let mut formatter = make_formatter(self.writer)?;
+        let mut serializer = serializer.for_writer(BufWriter::new(self.writer));
         let mut buffer: QuadBuffer = Default::default();
 
         let stop_limit = self.limit.unwrap_or(u64::MAX);
@@ -335,37 +333,39 @@ impl RdfWriter {
             if !buffer.set_subject_from_datavalue(&record[s_pos]) {
                 continue;
             }
+
             if !buffer.set_predicate_from_datavalue(&record[p_pos]) {
                 continue;
             }
+
             if !buffer.set_object_from_datavalue(&record[o_pos]) {
                 continue;
             }
+
             if buffer
                 .set_graph_name_from_datavalue(&record[g_pos])
                 .is_err()
             {
                 continue;
             }
-            if let Err(e) = formatter.format(&Quad {
-                subject: buffer.subject(),
-                predicate: buffer.predicate(),
-                object: buffer.object(),
-                graph_name: buffer.graph_name(),
-            }) {
+
+            if let Err(e) = serializer.serialize_quad(buffer.quad_ref()) {
                 log::debug!("failed to write quad: {e}");
                 drop_count += 1;
             } else {
                 quad_count += 1;
+
                 if (quad_count % PROGRESS_NOTIFY_INCREMENT) == 0 {
                     log::info!("... processed {quad_count} triples");
                 }
+
                 if quad_count == stop_limit {
                     break;
                 }
             }
         }
-        finish_formatter(formatter);
+
+        serializer.finish()?;
 
         log::info!("Finished export: processed {quad_count} quads (dropped {drop_count})");
 
@@ -379,37 +379,21 @@ impl TableWriter for RdfWriter {
         table: Box<dyn Iterator<Item = Vec<AnyDataValue>> + 'a>,
     ) -> Result<(), Error> {
         match self.variant {
-            RdfVariant::NTriples => self.export_triples(
-                table,
-                |write| Ok(NTriplesFormatter::new(write)),
-                |f| {
-                    let _ = f.finish();
-                },
-            ),
-            RdfVariant::NQuads => self.export_quads(
-                table,
-                |write| Ok(NQuadsFormatter::new(write)),
-                |f| {
-                    let _ = f.finish();
-                },
-            ),
-            RdfVariant::Turtle => self.export_triples(
-                table,
-                |write| Ok(TurtleFormatter::new(write)),
-                |f| {
-                    let _ = f.finish();
-                },
-            ),
-            RdfVariant::RDFXML => self.export_triples(table, RdfXmlFormatter::new, |f| {
-                let _ = f.finish();
-            }),
-            RdfVariant::TriG => self.export_quads(
-                table,
-                |write| Ok(TriGFormatter::new(write)),
-                |f| {
-                    let _ = f.finish();
-                },
-            ),
+            RdfVariant::NTriples => {
+                self.export_triples(table, RdfSerializer::from_format(RdfFormat::NTriples))
+            }
+            RdfVariant::NQuads => {
+                self.export_quads(table, RdfSerializer::from_format(RdfFormat::NQuads))
+            }
+            RdfVariant::Turtle => {
+                self.export_triples(table, RdfSerializer::from_format(RdfFormat::Turtle))
+            }
+            RdfVariant::RDFXML => {
+                self.export_triples(table, RdfSerializer::from_format(RdfFormat::RdfXml))
+            }
+            RdfVariant::TriG => {
+                self.export_quads(table, RdfSerializer::from_format(RdfFormat::TriG))
+            }
         }
     }
 }

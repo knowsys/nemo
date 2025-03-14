@@ -380,9 +380,11 @@ impl VariableOrderBuilder<'_> {
                     let (idb_count_b, edb_count_b) =
                         self.get_already_present_idb_edb_count_for_rule_in_tries(rule_b);
 
-                    (idb_count_a != idb_count_b)
-                        .then(|| idb_count_a.cmp(&idb_count_b))
-                        .unwrap_or_else(|| edb_count_a.cmp(&edb_count_b))
+                    if idb_count_a != idb_count_b {
+                        idb_count_a.cmp(&idb_count_b)
+                    } else {
+                        edb_count_a.cmp(&edb_count_b)
+                    }
                 })
                 .expect("the remaining rules are never empty here");
 

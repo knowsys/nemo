@@ -31,7 +31,7 @@ impl OperationNumArguments {
             OperationNumArguments::Binary => num_arguments == 2,
             OperationNumArguments::_Ternary => num_arguments == 3,
             OperationNumArguments::Arbitrary => true,
-            OperationNumArguments::Choice(choice) => choice.iter().any(|&num| num == num_arguments),
+            OperationNumArguments::Choice(choice) => choice.contains(&num_arguments),
         }
     }
 }
