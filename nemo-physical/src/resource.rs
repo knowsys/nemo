@@ -95,14 +95,6 @@ impl Resource {
         matches!(self, Self::Path(..))
     }
 
-    /// Return local path of a resource
-    pub fn as_path(&self) -> Option<&PathBuf> {
-        match self {
-            Self::Http { .. } => None,
-            Self::Path(path) => Some(path),
-        }
-    }
-
     /// Return the headers
     pub fn headers(&self) -> Box<dyn Iterator<Item = &(String, String)> + '_> {
         match self {
@@ -170,7 +162,6 @@ impl Resource {
     }
 }
 
-/// Implement Display for Resource enum
 impl fmt::Display for Resource {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -195,7 +186,7 @@ impl fmt::Display for Resource {
     }
 }
 
-/// Builder for a WebResource
+/// Builder collecting parameters into a [Resource]
 #[derive(Debug)]
 pub struct ResourceBuilder {
     resource: Resource,
@@ -220,27 +211,26 @@ impl ResourceBuilder {
         }
     }
 
-    /// Validate key-value pairs of HttpHeaders
+    /// Validate HTTP headers with a dummy [ResourceBuilder]
     pub fn validate_headers(headers: AnyDataValue) -> Result<(), ResourceValidationErrorKind> {
         let mut builder = TryInto::<Self>::try_into(String::from("http://foo.org"))?;
         let vec = builder.unpack_headers(headers)?;
-        // … assert that headers is a Map
+        // Assert that headers is a map
         for (key, value) in vec {
             builder.add_header(key, value)?;
         }
         Ok(())
     }
 
-    /// Validate GET- or POST-Parameter with type [ValueDomain::Map]
-    /// Each value is expected to be a tuple containing elemtents of type [ValueDomain::PlainString], [ValueDomain::Int] or [ValueDomain::Iri]
+    /// Validate HTTP parameters with a dummy [ResourceBuilder]
     pub fn validate_http_parameters(
         parameters: AnyDataValue,
     ) -> Result<(), ResourceValidationErrorKind> {
+        // Assert parameters as map of tuples
         let mut builder = TryInto::<Self>::try_into(String::from("http://foo.org"))?;
         let vec = builder.unpack_http_parameters(parameters)?;
-        // … assert that headers is a Map
         for (key, value) in vec {
-            // GET parameter and POST parameter have the same validation process so calling either add_get_parameter or add_post_parameter works for validation
+            // Since GET and POST parameters have identical requirements add_get_parameter() will work for both types
             builder.add_get_parameter(key, value)?;
         }
         Ok(())
@@ -251,7 +241,6 @@ impl ResourceBuilder {
         &self,
         map: AnyDataValue,
     ) -> Result<impl Iterator<Item = (String, String)>, ResourceValidationErrorKind> {
-        // Expects a map
         let keys = map.map_keys();
         let result = keys
             .into_iter()
@@ -272,7 +261,6 @@ impl ResourceBuilder {
         &self,
         parameters: AnyDataValue,
     ) -> Result<impl Iterator<Item = (String, String)>, ResourceValidationErrorKind> {
-        // Expect a map where each value is a tuple
         let keys = parameters.map_keys();
 
         let result = keys
@@ -290,7 +278,7 @@ impl ResourceBuilder {
         Ok(result.into_iter())
     }
 
-    /// Try to convert a single HTTP parameter value into  a [String]
+    /// Try to convert a single HTTP parameter value into a [String]
     fn as_lexical_value(
         &self,
         value: &AnyDataValue,
@@ -376,7 +364,7 @@ impl ResourceBuilder {
         }
     }
 
-    /// Build a [Resource] with the given parameters
+    /// Build a [Resource] with the collected parameters
     pub fn finalize(self) -> Resource {
         debug!("Created resource: {:?}", self.resource);
         self.resource
@@ -386,7 +374,6 @@ impl ResourceBuilder {
 impl TryFrom<Iri<String>> for ResourceBuilder {
     type Error = ResourceValidationErrorKind;
 
-    /// Create a new [ResourceBuilder] from a web-Iri
     fn try_from(iri: Iri<String>) -> Result<Self, Self::Error> {
         match iri.scheme() {
             "file" => {

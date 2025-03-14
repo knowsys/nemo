@@ -25,7 +25,7 @@ use super::{ExportHandler, FormatBuilder, ImportHandler};
 
 use crate::io::formats::dsv::{value_format::DsvValueFormats, DsvHandler};
 
-/// A char limit to decide if a query should be send via GET or POST
+/// A char limit to decide if a query is send as GET or POST request
 const HTTP_GET_CHAR_LIMIT: usize = 2000;
 
 format_tag! {
@@ -103,7 +103,7 @@ impl FormatBuilder for SparqlBuilder {
                 DsvValueFormats::try_from(value).expect("value formats have already been validated")
             });
 
-        // SPARQL-specific fields
+        // SPARQL specific fields
         let endpoint = Iri::parse_unchecked(
             parameters
                 .get_required(SparqlParameter::Endpoint)
@@ -123,8 +123,12 @@ impl FormatBuilder for SparqlBuilder {
         })
     }
 
-    /// Create a new [ResourceBuilder] based on the already verified endpoint
-    fn override_resource_builder(&self, direction: Direction) -> Option<ResourceBuilder> {
+    /// Create new [ResourceBuilder] from endpoint parameter
+    fn customize_resource_builder(
+        &self,
+        direction: Direction,
+        _builder: Option<ResourceBuilder>,
+    ) -> Option<ResourceBuilder> {
         match direction {
             Direction::Import => {
                 let mut resource_builder = ResourceBuilder::try_from(self.endpoint.clone()).ok()?;

@@ -269,8 +269,12 @@ pub(crate) trait FormatBuilder: Sized + Into<AnyImportExportBuilder> {
         Self::Tag::from_str(tag).is_ok()
     }
 
-    fn override_resource_builder(&self, _direction: Direction) -> Option<ResourceBuilder> {
-        None
+    fn customize_resource_builder(
+        &self,
+        _direction: Direction,
+        builder: Option<ResourceBuilder>,
+    ) -> Option<ResourceBuilder> {
+        builder
     }
 
     fn build_import(&self, arity: usize) -> Arc<dyn ImportHandler + Send + Sync + 'static>;
@@ -416,7 +420,6 @@ impl ImportExportBuilder {
         let origin = *spec.origin();
         let parameters = Parameters::<B>::validate(spec, direction, builder)?;
 
-        // Create a ResourceBuilder from a resource
         let resource_builder = parameters
             .get_optional(StandardParameter::Resource.into())
             .and_then(|value| {
@@ -441,9 +444,7 @@ impl ImportExportBuilder {
             }
         }?;
 
-        let resource_builder = inner
-            .override_resource_builder(direction)
-            .or(resource_builder);
+        let resource_builder = inner.customize_resource_builder(direction, resource_builder);
 
         let resource = resource_builder
             .map(|mut rb| {

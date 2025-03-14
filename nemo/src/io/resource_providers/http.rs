@@ -68,7 +68,6 @@ impl HttpResourceProvider {
             })?,
         );
 
-        // Custom headers from IO
         let new_headers = resource
             .headers()
             .map(|(name, value)| {
