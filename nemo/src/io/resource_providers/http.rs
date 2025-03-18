@@ -1,4 +1,6 @@
 use super::ResourceProvider;
+use crate::rule_model::error::{ComplexError, ComplexErrorKind};
+use log::debug;
 use nemo_physical::{
     error::{ReadingError, ReadingErrorKind},
     resource::Resource,
@@ -97,6 +99,7 @@ impl HttpResourceProvider {
             .map_err(err_mapping)?;
 
         let full_url = resource.to_string();
+        debug!("Make HTTP request: {:?}", full_url);
 
         let post_parameters = resource
             .post_parameters()
@@ -112,6 +115,21 @@ impl HttpResourceProvider {
             .map_err(|err| ReadingError::new(err.into()).with_resource(resource.clone()))?;
 
         response.error_for_status_ref()?;
+        let response_type = response
+            .headers()
+            .get(reqwest::header::CONTENT_TYPE)
+            .map(|value| value.to_str().expect("Content valid"))
+            .unwrap_or_default();
+        // Use 'contains()', because response_type holds also encoding information f.e. 'text/tab-separated-values;charset=utf-8'
+        if !response_type.contains(media_type) {
+            //ComplexError::new_warning(reference)
+            debug!(
+                "HTTP received content type {:?}, expected {:?}",
+                response_type, media_type
+            );
+            return Err(ReadingError::new(ReadingErrorKind::HttpWrongContentType)
+                .with_resource(resource.clone()));
+        }
 
         // we're expecting potentially compressed data, don't try to
         // do any character set guessing, as `response.text()` would do.

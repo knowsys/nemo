@@ -17,6 +17,7 @@ use std::collections::HashSet;
 use std::{fmt, iter, path::PathBuf};
 use thiserror::Error;
 
+
 /// Type of error that is returned when parsing of Iri fails
 #[derive(Clone, Debug, Error)]
 pub enum ResourceValidationErrorKind {
@@ -27,8 +28,7 @@ pub enum ResourceValidationErrorKind {
     #[error("Invalid IRI")]
     InvalidIri,
     /// Resource has invalid [ValueDomain]
-    /// #"parameter `{parameter}` was given as a `{given}`, expected `{expected}`"#
-    #[error("Resource was given as {:?}, expected: {:?}", given, expected)]
+    #[error("Resource was given as {given:?}, expected one of: {expected:?}")]
     InvalidResourceFormat {
         /// Collection of expected [ValueDomain] for HTTP parameter
         expected: Vec<ValueDomain>,
@@ -36,7 +36,7 @@ pub enum ResourceValidationErrorKind {
         given: ValueDomain,
     },
     /// HTTP parameter is invalid
-    #[error("HTTP parameter was given as {:?}, expected: {:?}", expected, given)]
+    #[error("HTTP parameter was given as {given:?}, expected one of: {expected:?}")]
     HttpParameterNotInValueDomain {
         /// Collection of expected [ValueDomain] for HTTP parameter
         expected: Vec<ValueDomain>,
@@ -75,7 +75,7 @@ pub struct HttpParameters {
 pub enum Resource {
     /// A local file path
     Path(PathBuf),
-    /// An IRI
+    /// A resource that can be retrieved by an HTTP request
     Http {
         /// Base IRI of the resource
         iri: Iri<String>,
@@ -99,7 +99,7 @@ impl Resource {
     pub fn headers(&self) -> Box<dyn Iterator<Item = &(String, String)> + '_> {
         match self {
             Self::Http { parameters, .. } => Box::new(parameters.headers.iter()),
-            Self::Path(..) => Box::new(iter::empty()),
+            _ => Box::new(iter::empty()),
         }
     }
 
@@ -107,7 +107,7 @@ impl Resource {
     pub fn get_parameters(&self) -> Box<dyn Iterator<Item = &(String, String)> + '_> {
         match self {
             Self::Http { parameters, .. } => Box::new(parameters.get_parameters.iter()),
-            Self::Path(..) => Box::new(iter::empty()),
+            _ => Box::new(iter::empty()),
         }
     }
 
@@ -115,7 +115,7 @@ impl Resource {
     pub fn fragment(&self) -> Option<&String> {
         match self {
             Self::Http { parameters, .. } => parameters.fragment.as_ref(),
-            Self::Path(..) => None,
+            _ => None,
         }
     }
 
@@ -123,7 +123,7 @@ impl Resource {
     pub fn post_parameters(&self) -> Box<dyn Iterator<Item = &(String, String)> + '_> {
         match self {
             Self::Http { parameters, .. } => Box::new(parameters.post_parameters.iter()),
-            Self::Path(..) => Box::new(iter::empty()),
+            _ => Box::new(iter::empty()),
         }
     }
 
@@ -186,6 +186,7 @@ impl fmt::Display for Resource {
     }
 }
 
+
 /// Builder collecting parameters into a [Resource]
 #[derive(Debug)]
 pub struct ResourceBuilder {
@@ -211,88 +212,6 @@ impl ResourceBuilder {
         }
     }
 
-    /// Validate HTTP headers with a dummy [ResourceBuilder]
-    pub fn validate_headers(headers: AnyDataValue) -> Result<(), ResourceValidationErrorKind> {
-        let mut builder = TryInto::<Self>::try_into(String::from("http://foo.org"))?;
-        let vec = builder.unpack_headers(headers)?;
-        // Assert that headers is a map
-        for (key, value) in vec {
-            builder.add_header(key, value)?;
-        }
-        Ok(())
-    }
-
-    /// Validate HTTP parameters with a dummy [ResourceBuilder]
-    pub fn validate_http_parameters(
-        parameters: AnyDataValue,
-    ) -> Result<(), ResourceValidationErrorKind> {
-        // Assert parameters as map of tuples
-        let mut builder = TryInto::<Self>::try_into(String::from("http://foo.org"))?;
-        let vec = builder.unpack_http_parameters(parameters)?;
-        for (key, value) in vec {
-            // Since GET and POST parameters have identical requirements add_get_parameter() will work for both types
-            builder.add_get_parameter(key, value)?;
-        }
-        Ok(())
-    }
-
-    /// Convert headers into a key-value iterator
-    pub fn unpack_headers(
-        &self,
-        map: AnyDataValue,
-    ) -> Result<impl Iterator<Item = (String, String)>, ResourceValidationErrorKind> {
-        let keys = map.map_keys();
-        let result = keys
-            .into_iter()
-            .flat_map(|keys| {
-                keys.map(|key| {
-                    Ok((
-                        self.as_lexical_value(key)?,
-                        self.as_lexical_value(map.map_element_unchecked(key))?,
-                    ))
-                })
-            })
-            .collect::<Result<Vec<_>, _>>()?;
-        Ok(result.into_iter())
-    }
-
-    /// Flatten HTTP parameters into a key-value vector
-    pub fn unpack_http_parameters(
-        &self,
-        parameters: AnyDataValue,
-    ) -> Result<impl Iterator<Item = (String, String)>, ResourceValidationErrorKind> {
-        let keys = parameters.map_keys();
-
-        let result = keys
-            .into_iter()
-            .flat_map(|keys| {
-                keys.flat_map(|key| {
-                    let tuple = parameters.map_element_unchecked(key);
-                    (0..tuple.len_unchecked()).map(|idx| {
-                        let element = tuple.tuple_element_unchecked(idx);
-                        Ok((self.as_lexical_value(key)?, self.as_lexical_value(element)?))
-                    })
-                })
-            })
-            .collect::<Result<Vec<_>, _>>()?;
-        Ok(result.into_iter())
-    }
-
-    /// Try to convert a single HTTP parameter value into a [String]
-    fn as_lexical_value(
-        &self,
-        value: &AnyDataValue,
-    ) -> Result<String, ResourceValidationErrorKind> {
-        match value.value_domain() {
-            ValueDomain::PlainString | ValueDomain::Int | ValueDomain::Iri => {
-                Ok(value.lexical_value())
-            }
-            _ => Err(ResourceValidationErrorKind::HttpParameterNotInValueDomain {
-                expected: vec![ValueDomain::PlainString, ValueDomain::Int, ValueDomain::Iri],
-                given: value.value_domain(),
-            }),
-        }
-    }
 
     /// Add HTTP header
     pub fn add_header(
@@ -309,7 +228,7 @@ impl ResourceBuilder {
                     Err(ResourceValidationErrorKind::DuplicateHttpHeader(key))
                 }
             }
-            Resource::Path(..) => Err(ResourceValidationErrorKind::UnexpectedHttpParameter),
+            _ => Err(ResourceValidationErrorKind::UnexpectedHttpParameter),
         }
     }
 
@@ -324,7 +243,7 @@ impl ResourceBuilder {
                 parameters.get_parameters.push((key, value));
                 Ok(self)
             }
-            Resource::Path(..) => Err(ResourceValidationErrorKind::UnexpectedHttpParameter),
+            _ => Err(ResourceValidationErrorKind::UnexpectedHttpParameter),
         }
     }
 
@@ -360,7 +279,7 @@ impl ResourceBuilder {
                 parameters.post_parameters.push((key, value));
                 Ok(self)
             }
-            Resource::Path(..) => Err(ResourceValidationErrorKind::UnexpectedHttpParameter),
+            _ => Err(ResourceValidationErrorKind::UnexpectedHttpParameter),
         }
     }
 

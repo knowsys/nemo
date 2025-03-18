@@ -26,9 +26,6 @@ thiserror = "2.0"
 flate2 = "1"
 sanitise-file-name = "1.0.0"
 getrandom = { version = "0.2.9", default-features = false }
-rio_api = "0.8.4"
-rio_turtle = "0.8.4"
-rio_xml = "0.8.4"
 oxiri = "0.2.2"
 tokio = { version = "1.40.0", features = ["rt"] }
 reqwest = { version = "0.12.2", features = ["gzip", "brotli", "zstd", "deflate"] }

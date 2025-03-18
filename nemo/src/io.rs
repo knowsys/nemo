@@ -8,5 +8,6 @@ pub mod format_builder;
 pub mod formats;
 pub mod import_manager;
 pub mod resource_providers;
+pub mod http_parameters;
 pub use export_manager::ExportManager;
 pub use import_manager::ImportManager;

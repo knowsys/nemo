@@ -35,6 +35,7 @@ use super::{
         sparql::{SparqlBuilder, SparqlTag},
         Export, ExportHandler, Import, ImportHandler, ResourceSpec,
     },
+    http_parameters,
 };
 
 pub(crate) trait FormatParameter<Tag>:

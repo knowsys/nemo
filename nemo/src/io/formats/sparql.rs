@@ -38,7 +38,7 @@ format_parameter! {
     pub(crate) enum SparqlParameter(StandardParameter) {
         Format(name = attribute::FORMAT, supported_types = &[ValueType::Constant, ValueType::Tuple]),
         Base(name = attribute::BASE, supported_types = &[ValueType::Constant]),
-        Endpoint(name = attribute::ENDPOINT, supported_types = &[ValueType::Constant]),
+        Endpoint(name = attribute::ENDPOINT, supported_types = &[ValueType::Constant,ValueType::String]),
         Query(name = attribute::QUERY, supported_types = &[ValueType::String]),
     }
 }
@@ -64,6 +64,11 @@ impl FormatParameter<SparqlTag> for SparqlParameter {
             SparqlParameter::Endpoint => value
                 .to_iri()
                 .and(Some(()))
+                .or_else(|| {
+                    value
+                        .to_plain_string()
+                        .and_then(|string| Iri::parse(string).map(|_| ()).ok())
+                })
                 .ok_or(ValidationErrorKind::InvalidIri),
             SparqlParameter::Query => {
                 Query::parse(value.to_plain_string_unchecked().as_str(), None)
@@ -104,11 +109,12 @@ impl FormatBuilder for SparqlBuilder {
             });
 
         // SPARQL specific fields
-        let endpoint = Iri::parse_unchecked(
-            parameters
-                .get_required(SparqlParameter::Endpoint)
-                .to_iri_unchecked(),
-        );
+        let value = parameters.get_required(SparqlParameter::Endpoint);
+        let endpoint = value
+            .to_plain_string()
+            .or_else(|| value.to_iri())
+            .map(|string| Iri::parse_unchecked(string))
+            .expect("Endpoint is validated already");
 
         let query = parameters
             .get_required(SparqlParameter::Query)
@@ -174,3 +180,124 @@ impl FormatBuilder for SparqlBuilder {
         unimplemented!("SPARQL export is currently not supported")
     }
 }
+#[cfg(test)]
+mod test {
+    use crate::{
+        io::{
+            format_builder::{FormatBuilder, FormatParameter, FormatTag, Parameters},
+            formats::sparql::SparqlTag,
+        },
+        parser::ast::tag::parameter::Parameter,
+        rule_model::{
+            components::{
+                import_export::{Direction, ImportExportSpec},
+                tag::Tag,
+                term::primitive::ground::GroundTerm,
+            },
+            error::ValidationErrorBuilder,
+            origin::Origin,
+        },
+    };
+    use nemo_physical::datavalues::AnyDataValue;
+    use std::collections::HashMap;
+
+    use super::{SparqlBuilder, SparqlParameter, ValidationErrorKind};
+
+    #[test]
+    fn parse_query() {
+        let valid_query = AnyDataValue::new_plain_string(String::from("
+            PREFIX wikibase: <http://wikiba.se/ontology#>
+            PREFIX bd: <http://www.bigdata.com/rdf#>
+            PREFIX wdt: <http://www.wikidata.org/prop/direct/>
+            PREFIX wd: <http://www.wikidata.org/entity/>
+            PREFIX ps: <http://www.wikidata.org/prop/statement/>
+            PREFIX p: <http://www.wikidata.org/prop/>
+            PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+                SELECT ?item ?itemLabel
+                WHERE
+                {
+                ?item wdt:P31 wd:Q146. # Must be a cat
+                SERVICE wikibase:label { bd:serviceParam wikibase:language \"[AUTO_LANGUAGE],mul,en\". } # Helps get the label in your language, if not, then default for all languages, then en language
+                }
+            LIMIT 10")
+        );
+
+        let query_param = SparqlParameter::Query;
+        let result = query_param.is_value_valid(valid_query);
+        assert!(result.is_ok());
+
+        // Invalid because no prefixes are specified
+        let invalid_query = AnyDataValue::new_plain_string(String::from("
+            SELECT ?item ?itemLabel
+            WHERE
+            {
+            ?item wdt:P31 wd:Q146. # Must be a cat
+            SERVICE wikibase:label { bd:serviceParam wikibase:language \"[AUTO_LANGUAGE],mul,en\". } # Helps get the label in your language, if not, then default for all languages, then en language
+            }
+            LIMIT 10")
+        );
+        let result = query_param.is_value_valid(invalid_query);
+        assert!(result.is_err());
+    }
+    #[test]
+    fn check_get_post_selection() {
+        let query = AnyDataValue::new_plain_string(String::from("
+            PREFIX wikibase: <http://wikiba.se/ontology#>
+            PREFIX bd: <http://www.bigdata.com/rdf#>
+            PREFIX wdt: <http://www.wikidata.org/prop/direct/>
+            PREFIX wd: <http://www.wikidata.org/entity/>
+            PREFIX ps: <http://www.wikidata.org/prop/statement/>
+            PREFIX p: <http://www.wikidata.org/prop/>
+            PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+                SELECT ?item ?itemLabel
+                WHERE
+                {
+                ?item wdt:P31 wd:Q146. # Must be a cat
+                SERVICE wikibase:label { bd:serviceParam wikibase:language \"[AUTO_LANGUAGE],mul,en\". } # Helps get the label in your language, if not, then default for all languages, then en language
+                }
+            LIMIT 10")
+        );
+        let mut builder = ValidationErrorBuilder::default();
+        let mut spec = ImportExportSpec::new(Origin::default(), Tag::new(String::from("sparql")));
+
+        spec.push_attribute(
+            (String::from("query"), Origin::default()),
+            GroundTerm::new(query),
+        );
+        //let query_param = SparqlParameter::Query;
+        //let endpoint_param = SparqlParameter::Endpoint;
+        let endpoint = AnyDataValue::new_iri(String::from("<https://query.wikidata.org/>"));
+        spec.push_attribute(
+            (String::from("endpoint"), Origin::default()),
+            GroundTerm::new(endpoint),
+        );
+
+        let parameters =
+            Parameters::<SparqlBuilder>::validate(spec, Direction::Import, &mut builder)
+                .expect("Invalid ResourceSpec");
+
+        let sb = SparqlBuilder::new(SparqlTag::Sparql, &parameters, Direction::Import).unwrap();
+        let result = sb.customize_resource_builder(Direction::Import, None);
+        //println!("{:?}", result.clone());
+        let resource = result.map(|rb| rb.finalize());
+        println!("{:?}", resource);
+        assert!(resource.is_some());
+    }
+
+    fn foo() {}
+}
+
+//#[cfg(test)]
+//mod test{
+//    fn parse_iris() {
+//        let valid_iris = vec![
+//            "https://query.wikidata.org/",
+//            "file:///localhost:path/to/foo.tsv",
+//
+//        ];
+//        let invalid_iris = vec![
+//            "https://que ry.wikidata.org/",
+//            "file://localhost:path/to/foo.tsv",
+//        ];
+//    }
+//}
