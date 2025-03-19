@@ -1,6 +1,5 @@
 use super::ResourceProvider;
-use crate::rule_model::error::{ComplexError, ComplexErrorKind};
-use log::debug;
+use log::{debug, warn};
 use nemo_physical::{
     error::{ReadingError, ReadingErrorKind},
     resource::Resource,
@@ -105,9 +104,9 @@ impl HttpResourceProvider {
             .post_parameters()
             .collect::<Vec<&(String, String)>>();
         let request_builder = if post_parameters.is_empty() {
-            client.get(full_url)
+            client.get(full_url.clone())
         } else {
-            client.post(full_url).form(&post_parameters)
+            client.post(full_url.clone()).form(&post_parameters)
         };
         let response = request_builder
             .send()
@@ -120,15 +119,16 @@ impl HttpResourceProvider {
             .get(reqwest::header::CONTENT_TYPE)
             .map(|value| value.to_str().expect("Content valid"))
             .unwrap_or_default();
-        // Use 'contains()', because response_type holds also encoding information f.e. 'text/tab-separated-values;charset=utf-8'
+        // Use 'contains()', because response_type contains content type and encoding information
         if !response_type.contains(media_type) {
-            //ComplexError::new_warning(reference)
-            debug!(
-                "HTTP received content type {:?}, expected {:?}",
-                response_type, media_type
-            );
-            return Err(ReadingError::new(ReadingErrorKind::HttpWrongContentType)
-                .with_resource(resource.clone()));
+            warn!("HTTP response to the request: \n {full_url} \n is of content type {response_type:?}, expected {media_type:?}. Make sure you specified the correct IRI and parameters.");
+        }
+        if response
+            .headers()
+            .get(reqwest::header::CONTENT_LENGTH)
+            .is_none()
+        {
+            warn!("HTTP response to the request: \n {full_url} \n contains no content. Make sure you specified the correct IRI and parameters.");
         }
 
         // we're expecting potentially compressed data, don't try to

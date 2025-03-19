@@ -17,7 +17,6 @@ use std::collections::HashSet;
 use std::{fmt, iter, path::PathBuf};
 use thiserror::Error;
 
-
 /// Type of error that is returned when parsing of Iri fails
 #[derive(Clone, Debug, Error)]
 pub enum ResourceValidationErrorKind {
@@ -30,14 +29,6 @@ pub enum ResourceValidationErrorKind {
     /// Resource has invalid [ValueDomain]
     #[error("Resource was given as {given:?}, expected one of: {expected:?}")]
     InvalidResourceFormat {
-        /// Collection of expected [ValueDomain] for HTTP parameter
-        expected: Vec<ValueDomain>,
-        /// The actual [ValueDomain] of the HTTP parameter
-        given: ValueDomain,
-    },
-    /// HTTP parameter is invalid
-    #[error("HTTP parameter was given as {given:?}, expected one of: {expected:?}")]
-    HttpParameterNotInValueDomain {
         /// Collection of expected [ValueDomain] for HTTP parameter
         expected: Vec<ValueDomain>,
         /// The actual [ValueDomain] of the HTTP parameter
@@ -186,6 +177,22 @@ impl fmt::Display for Resource {
     }
 }
 
+/// Returns the path of a local iri
+fn strip_local_iri(iri: Iri<String>) -> Result<String, ResourceValidationErrorKind> {
+    match iri.authority() {
+        None | Some("") | Some("localhost") => Ok(format!(
+            "{}{}{}",
+            iri.path(),
+            iri.query()
+                .map(|query| format!("?{}", query))
+                .unwrap_or_default(),
+            iri.fragment()
+                .map(|query| format!("#{}", query))
+                .unwrap_or_default()
+        )),
+        _ => Err(ResourceValidationErrorKind::InvalidIri),
+    }
+}
 
 /// Builder collecting parameters into a [Resource]
 #[derive(Debug)]
@@ -195,24 +202,6 @@ pub struct ResourceBuilder {
 }
 
 impl ResourceBuilder {
-    /// Returns the path of a local iri
-    fn strip_local_iri(iri: Iri<String>) -> Result<String, ResourceValidationErrorKind> {
-        match iri.authority() {
-            None | Some("") | Some("localhost") => Ok(format!(
-                "{}{}{}",
-                iri.path(),
-                iri.query()
-                    .map(|query| format!("?{}", query))
-                    .unwrap_or_default(),
-                iri.fragment()
-                    .map(|query| format!("#{}", query))
-                    .unwrap_or_default()
-            )),
-            _ => Err(ResourceValidationErrorKind::InvalidIri),
-        }
-    }
-
-
     /// Add HTTP header
     pub fn add_header(
         &mut self,
@@ -296,7 +285,7 @@ impl TryFrom<Iri<String>> for ResourceBuilder {
     fn try_from(iri: Iri<String>) -> Result<Self, Self::Error> {
         match iri.scheme() {
             "file" => {
-                let path = Self::strip_local_iri(iri)?;
+                let path = strip_local_iri(iri)?;
                 Ok(Self {
                     resource: Resource::Path(PathBuf::from_slash(path)),
                     header_names: HashSet::new(),

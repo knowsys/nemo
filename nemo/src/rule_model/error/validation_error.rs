@@ -2,7 +2,7 @@
 #![allow(missing_docs)]
 
 use enum_assoc::Assoc;
-use nemo_physical::resource::ResourceValidationErrorKind;
+use nemo_physical::{datavalues::ValueDomain, resource::ResourceValidationErrorKind};
 use thiserror::Error;
 
 use crate::rule_model::components::term::primitive::variable::Variable;
@@ -175,6 +175,15 @@ pub enum ValidationErrorKind {
     #[assoc(code = 235)]
     #[error(transparent)]
     ResourceValidationError(#[from] ResourceValidationErrorKind),
+    /// HTTP parameter is invalid
+    #[assoc(code = 236)]
+    #[error("HTTP parameter was given as {given:?}, expected one of: {expected:?}")]
+    HttpParameterNotInValueDomain {
+        /// Collection of expected [ValueDomain] for HTTP parameter
+        expected: Vec<ValueDomain>,
+        /// The actual [ValueDomain] of the HTTP parameter
+        given: ValueDomain,
+    },
     /// Unsupported feature: Multiple aggregates in one rule
     #[error(r#"multiple aggregates in one rule is currently unsupported"#)]
     #[assoc(code = 999)]

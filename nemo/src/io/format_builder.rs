@@ -10,7 +10,7 @@ use std::{
 
 use nemo_physical::{
     datavalues::{AnyDataValue, DataValue},
-    resource::{ResourceBuilder, ResourceValidationErrorKind},
+    resource::ResourceBuilder,
 };
 use strum::IntoEnumIterator;
 
@@ -239,16 +239,13 @@ impl<Tag> FormatParameter<Tag> for StandardParameter {
                         format: value.to_string(),
                     })
             }
-            StandardParameter::HttpHeaders => ResourceBuilder::validate_headers(value)
-                .map_err(|err: ResourceValidationErrorKind| err.into()),
+            StandardParameter::HttpHeaders => http_parameters::validate_headers(value),
             StandardParameter::HttpGetParameters => {
-                ResourceBuilder::validate_http_parameters(value)
-                    .map_err(|err: ResourceValidationErrorKind| err.into())
+                http_parameters::validate_http_parameters(value)
             }
             StandardParameter::IriFragment => Ok(()),
             StandardParameter::HttpPostParameters => {
-                ResourceBuilder::validate_http_parameters(value)
-                    .map_err(|err: ResourceValidationErrorKind| err.into())
+                http_parameters::validate_http_parameters(value)
             }
         }
     }
@@ -452,7 +449,7 @@ impl ImportExportBuilder {
                 parameters
                     .get_optional(StandardParameter::HttpHeaders.into())
                     .map(|headers| {
-                        rb.unpack_headers(headers).map(|mut headers| {
+                        http_parameters::unpack_headers(headers).map(|mut headers| {
                             headers
                                 .try_for_each(|(key, value)| rb.add_header(key, value).map(|_| ()))
                         })
@@ -462,7 +459,7 @@ impl ImportExportBuilder {
                 parameters
                     .get_optional(StandardParameter::HttpGetParameters.into())
                     .map(|parameters| {
-                        rb.unpack_http_parameters(parameters).map(|mut parameters| {
+                        http_parameters::unpack_http_parameters(parameters).map(|mut parameters| {
                             parameters.try_for_each(|(key, value)| {
                                 rb.add_get_parameter(key, value).map(|_| ())
                             })
@@ -473,7 +470,7 @@ impl ImportExportBuilder {
                 parameters
                     .get_optional(StandardParameter::HttpPostParameters.into())
                     .map(|parameters| {
-                        rb.unpack_http_parameters(parameters).map(|mut parameters| {
+                        http_parameters::unpack_http_parameters(parameters).map(|mut parameters| {
                             parameters.try_for_each(|(key, value)| {
                                 rb.add_post_parameter(key, value).map(|_| ())
                             })
@@ -492,7 +489,7 @@ impl ImportExportBuilder {
                 Ok(rb.finalize())
             })
             .transpose()
-            .map_err(|err: ResourceValidationErrorKind| builder.report_error(origin, err.into()))
+            .map_err(|err| builder.report_error(origin, err))
             .ok()?;
 
         Some(ImportExportBuilder {
