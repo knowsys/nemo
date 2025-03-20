@@ -78,30 +78,21 @@ impl Rule {
         self
     }
 
+    /// Return the name of the rule, if it is given one.
+    pub fn name(&self) -> Option<String> {
+        self.name.clone()
+    }
+
     /// Return a string representation of the rule instantiated with the given [Substitution].
-    /// This will either return
-    ///     * The content of the display attribute for this rule
-    ///     * a canonical string representation of the rule (i.e. [Display] representation)
-    /// whichever is the first defined in this list.
-    pub fn display_instantiated(&self, substitution: &Substitution) -> String {
+    pub fn display_instantiated(&self, substitution: &Substitution) -> Option<String> {
         if let Some(mut display) = self.display.clone() {
             substitution.apply(&mut display);
             if let Term::Primitive(Primitive::Ground(ground)) = display.reduce() {
-                if let Some(result) = ground.value().to_plain_string() {
-                    return result;
-                }
+                return ground.value().to_plain_string();
             }
         }
 
-        let mut rule_name_prefix = String::from("");
-        if let Some(name) = &self.name {
-            rule_name_prefix = format!("{}: ", name.clone());
-        }
-
-        let mut rule_instantiated = self.clone();
-        substitution.apply(&mut rule_instantiated);
-
-        format!("{}{}", rule_name_prefix, rule_instantiated)
+        None
     }
 
     /// Return a reference to the body of the rule.
