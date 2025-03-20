@@ -382,10 +382,10 @@ struct ExecutionTraceInferenceJSON {
     #[serde(rename = "rule")]
     rule_string: String,
     /// Optionally provided name of the rule
-    #[serde(rename = "ruleName")]
+    #[serde(rename = "ruleName", skip_serializing_if = "Option::is_none")]
     rule_name: Option<String>,
     /// Optional human readable string representation of the rule
-    #[serde(rename = "ruleDisplay")]
+    #[serde(rename = "ruleDisplay", skip_serializing_if = "Option::is_none")]
     rule_display: Option<String>,
     /// Instantiated result of the rule application
     conclusion: String,
@@ -722,7 +722,7 @@ mod test {
         let trace_p_ba = trace.find_fact(&p_ba).unwrap();
         let trace_handles = vec![trace_r_ba, trace_p_ba];
 
-        let expected_json = r#"{"finalConclusion":["R(b, a)","P(b, a)"],"inferences":[{"ruleName":"R(?x, ?y) :- P(?x, ?y), S(?y) .","conclusion":"R(b, a)","premises":["P(b, a)","S(a)"]},{"ruleName":"S(?x) :- T(?x) .","conclusion":"S(a)","premises":["T(a)"]},{"ruleName":"Asserted","conclusion":"T(a)","premises":[]},{"ruleName":"P(?x, ?y) :- Q(?y, ?x) .","conclusion":"P(b, a)","premises":["Q(a, b)"]},{"ruleName":"Asserted","conclusion":"Q(a, b)","premises":[]}]}"#.to_string();
+        let expected_json = r#"{"finalConclusion":["R(b, a)","P(b, a)"],"inferences":[{"rule":"R(?x, ?y) :- P(?x, ?y), S(?y) .","conclusion":"R(b, a)","premises":["P(b, a)","S(a)"]},{"rule":"S(?x) :- T(?x) .","conclusion":"S(a)","premises":["T(a)"]},{"rule":"Asserted","conclusion":"T(a)","premises":[]},{"rule":"P(?x, ?y) :- Q(?y, ?x) .","conclusion":"P(b, a)","premises":["Q(a, b)"]},{"rule":"Asserted","conclusion":"Q(a, b)","premises":[]}]}"#.to_string();
         let computed_json = serde_json::to_string(&trace.json(&trace_handles)).unwrap();
 
         assert_eq!(expected_json, computed_json);
