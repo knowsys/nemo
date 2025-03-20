@@ -235,7 +235,7 @@ mod test {
     #[test]
     fn parse_import() {
         let parser_input = ParserInput::new(
-            r#"@import response :- sparql {endpoint = "http://example.org", query="SELECT ?a ?b ?c WHERE {?a ?b ?c.}", iri_fragment="section1", http_get_parameters={test=(foo)}, http_post_parameters={test=(foo)}, http_headers={ACCEPT=html/text}}}"#,
+            r#"@import response :- sparql {endpoint = "http://example.org", query="SELECT ?a ?b ?c WHERE {?a ?b ?c.}", iri_fragment="section1", http_get_parameters={test=(foo,)}, http_post_parameters={test=(foo,)}, http_headers={ACCEPT="html/text"}}"#,
             ParserState::default(),
         );
         let result = all_consuming(Import::parse)(parser_input);
