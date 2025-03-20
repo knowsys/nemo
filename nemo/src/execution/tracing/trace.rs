@@ -19,27 +19,6 @@ use crate::{
     },
 };
 
-trait ToGraphMl {
-    fn to_graphml(&self) -> String;
-}
-
-impl ToGraphMl for DiGraph<TracePetGraphNodeLabel, ()> {
-    fn to_graphml(&self) -> String {
-        GraphMl::new(&self)
-            .export_node_weights(Box::new(|node_label| match node_label {
-                TracePetGraphNodeLabel::Fact(chase_fact) => vec![
-                    (Cow::from("type"), Cow::from("axiom")),
-                    (Cow::from("element"), Cow::from(chase_fact.to_string())),
-                ],
-                TracePetGraphNodeLabel::Rule(rule) => vec![
-                    (Cow::from("type"), Cow::from("DLRule")),
-                    (Cow::from("element"), Cow::from(rule.to_string())),
-                ],
-            }))
-            .to_string()
-    }
-}
-
 /// Index of a rule within a [Program]
 type RuleIndex = usize;
 
@@ -108,11 +87,12 @@ impl TraceStatus {
 struct TracedFact {
     /// The considered fact
     fact: GroundAtom,
-    /// Its current status with resepect to its derivablity in the chase
+    /// Its current status with respect to its derivability in the chase
     status: TraceStatus,
 }
 
-/// Graph structure that encodes how certain facts were derived during the chase.
+/// Structure for recording execution traces
+/// while not recomputing traces for the same facts occurring multiple times
 #[derive(Debug)]
 pub struct ExecutionTrace {
     /// Input program
@@ -131,10 +111,12 @@ impl ExecutionTrace {
         }
     }
 
+    /// Given a [TraceFactHandle] return a reference to the corresponding [TracedFact].
     fn get_fact(&self, handle: TraceFactHandle) -> &TracedFact {
         &self.facts[handle.0]
     }
 
+    /// Given a [TraceFactHandle] return a mutable reference to the corresponding [TracedFact].
     fn get_fact_mut(&mut self, handle: TraceFactHandle) -> &mut TracedFact {
         &mut self.facts[handle.0]
     }
@@ -195,6 +177,30 @@ impl ExecutionTrace {
     }
 }
 
+/// Trait implemented by tree structure of traces
+/// that can be converted into the GraphML format
+trait ToGraphMl {
+    /// Return graphml representation of the content.
+    fn to_graphml(&self) -> String;
+}
+
+impl ToGraphMl for DiGraph<TracePetGraphNodeLabel, ()> {
+    fn to_graphml(&self) -> String {
+        GraphMl::new(&self)
+            .export_node_weights(Box::new(|node_label| match node_label {
+                TracePetGraphNodeLabel::Fact(chase_fact) => vec![
+                    (Cow::from("type"), Cow::from("axiom")),
+                    (Cow::from("element"), Cow::from(chase_fact.to_string())),
+                ],
+                TracePetGraphNodeLabel::Rule(rule) => vec![
+                    (Cow::from("type"), Cow::from("DLRule")),
+                    (Cow::from("element"), Cow::from(rule.to_string())),
+                ],
+            }))
+            .to_string()
+    }
+}
+
 /// Represents the application of a rule to derive a specific fact
 #[derive(Debug, Clone)]
 pub struct TraceTreeRuleApplication {
@@ -217,7 +223,19 @@ impl TraceTreeRuleApplication {
 
     /// Get a string representation of the Instantiated rule.
     fn to_instantiated_string(&self) -> String {
-        self.rule.display_instantiated(&self.assignment)
+        if let Some(display_string) = self.rule.display_instantiated(&self.assignment) {
+            return display_string;
+        }
+
+        let mut rule_name_prefix = String::from("");
+        if let Some(name) = &self.rule.name() {
+            rule_name_prefix = format!("{}: ", name.clone());
+        }
+
+        let mut rule_instantiated = self.rule.clone();
+        self.assignment.apply(&mut rule_instantiated);
+
+        format!("{}{}", rule_name_prefix, rule_instantiated)
     }
 }
 
@@ -230,13 +248,17 @@ pub enum ExecutionTraceTree {
     Rule(TraceTreeRuleApplication, Vec<ExecutionTraceTree>),
 }
 
+/// Type of labels for [DiGraph] representation of [ExecutionTrace]
 #[derive(Debug, Hash, PartialEq, Eq, Clone)]
 enum TracePetGraphNodeLabel {
+    /// Fact
     Fact(Fact),
+    /// Application of a rule
     Rule(Rule),
 }
 
 impl ExecutionTraceTree {
+    /// Create an ascii tree representation.
     fn to_ascii_tree(&self) -> ascii_tree::Tree {
         match self {
             Self::Fact(chase_fact) => ascii_tree::Tree::Leaf(vec![chase_fact.to_string()]),
@@ -342,20 +364,32 @@ impl ExecutionTrace {
     }
 }
 
-type OptDerivationRule = Option<Rule>;
-
+/// Inference in [ExecutionTraceListOfInferences]
 #[derive(Debug)]
 struct ExecutionTraceInference {
-    rule: OptDerivationRule,
+    /// Pair of [Rule] and [Substitution]
+    trigger: Option<(Rule, Substitution)>,
+    /// Result of the rule application
     conclusion: GroundAtom,
+    /// Input facts to the rule
     premises: Vec<GroundAtom>,
 }
 
+/// Serializable version of [ExecutionTraceInference]
 #[derive(Debug, Serialize)]
 struct ExecutionTraceInferenceJSON {
+    /// String representation of the logical rule
+    #[serde(rename = "rule")]
+    rule_string: String,
+    /// Optionally provided name of the rule
     #[serde(rename = "ruleName")]
-    rule_name: String,
+    rule_name: Option<String>,
+    /// Optional human readable string representation of the rule
+    #[serde(rename = "ruleDisplay")]
+    rule_display: Option<String>,
+    /// Instantiated result of the rule application
     conclusion: String,
+    /// Premises enabling the rule application
     premises: Vec<String>,
 }
 
@@ -364,10 +398,16 @@ const DEFAULT_DERIVATION_ANNOTATION: &str = "Asserted";
 impl From<ExecutionTraceInference> for ExecutionTraceInferenceJSON {
     fn from(value: ExecutionTraceInference) -> Self {
         Self {
-            rule_name: value
-                .rule
-                .map(|rule| rule.to_string())
+            rule_string: value
+                .trigger
+                .as_ref()
+                .map(|(rule, _)| rule.to_string())
                 .unwrap_or(DEFAULT_DERIVATION_ANNOTATION.to_string()),
+            rule_name: value.trigger.as_ref().and_then(|(rule, _)| rule.name()),
+            rule_display: value
+                .trigger
+                .as_ref()
+                .and_then(|(rule, substitution)| rule.display_instantiated(substitution)),
             conclusion: value.conclusion.to_string(),
             premises: value
                 .premises
@@ -380,28 +420,37 @@ impl From<ExecutionTraceInference> for ExecutionTraceInferenceJSON {
 
 impl ExecutionTraceInference {
     /// Create a new [ExecutionTraceInference]
-    pub fn new(rule: OptDerivationRule, conclusion: GroundAtom, premises: Vec<GroundAtom>) -> Self {
+    pub fn new(
+        trigger: Option<(Rule, Substitution)>,
+        conclusion: GroundAtom,
+        premises: Vec<GroundAtom>,
+    ) -> Self {
         Self {
-            rule,
+            trigger,
             conclusion,
             premises,
         }
     }
 }
 
+/// Representation of an [ExecutionTrace] as a list of inferences
 #[derive(Debug)]
 struct ExecutionTraceListOfInferences {
+    /// The list of conclusions for which the trace is computed
     final_conclusions: Vec<GroundAtom>,
 
+    /// List of inferences which result in the `final_conclusions`
     inferences: Vec<ExecutionTraceInference>,
 }
 
-/// Object representing an [ExecutionTrace] that can be sertialized into JSON
+/// Serializable representation of an [ExecutionTrace] as a list of inferences
 #[derive(Debug, Serialize, Default)]
 pub struct ExecutionTraceListOfInferencesJSON {
+    /// The list of conclusions for which the trace is computed
     #[serde(rename = "finalConclusion")]
     final_conclusions: Vec<String>,
 
+    /// List of inferences which result in the `final_conclusions`
     inferences: Vec<ExecutionTraceInferenceJSON>,
 }
 
@@ -441,11 +490,16 @@ impl ExecutionTrace {
                     .map(|&handle| self.get_fact(handle).fact.clone())
                     .collect();
 
-                ExecutionTraceInference::new(Some(rule.clone()), conclusion.clone(), premises)
+                ExecutionTraceInference::new(
+                    Some((rule.clone(), application.assignment.clone())),
+                    conclusion.clone(),
+                    premises,
+                )
             }
         }
     }
 
+    /// Represent the [ExecutionTrace] as a list of inferences.
     fn list_of_inferences(
         &self,
         fact_handles: &[TraceFactHandle],
@@ -509,7 +563,7 @@ impl ExecutionTraceListOfInferences {
 
         self.inferences.iter().for_each(|inference| {
             let conclusion = &inference.conclusion;
-            let rule_opt = &inference.rule;
+            let trigger_opt = &inference.trigger;
             let premises = &inference.premises;
 
             let conclusion_label = TracePetGraphNodeLabel::Fact(Fact::from(conclusion.clone()));
@@ -517,7 +571,7 @@ impl ExecutionTraceListOfInferences {
                 .entry(conclusion_label.clone())
                 .or_insert_with(|| graph.add_node(conclusion_label));
 
-            if let Some(rule) = rule_opt {
+            if let Some((rule, _substitution)) = trigger_opt {
                 let rule_node_index = graph.add_node(TracePetGraphNodeLabel::Rule(rule.clone()));
                 graph.add_edge(rule_node_index, *conclusion_node_index, ());
 
