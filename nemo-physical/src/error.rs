@@ -40,9 +40,6 @@ pub enum ReadingErrorKind {
     /// Error in Reqwest's HTTP handler
     #[error(transparent)]
     HttpTransfer(#[from] reqwest::Error),
-    /// Error when HTTP response has not the expected content type
-    #[error("HTTP response failed")]
-    HttpWrongContentType,
     /// Type conversion error
     #[error("failed to convert value {0} to type {1}.")]
     TypeConversionError(String, String), // Note we cannot access logical types in physical layer

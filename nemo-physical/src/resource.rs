@@ -12,22 +12,19 @@ use log::debug;
 ///
 use oxiri::Iri;
 use path_slash::PathBufExt;
-use serde;
+use serde::Serialize;
 use std::collections::HashSet;
 use std::{fmt, iter, path::PathBuf};
 use thiserror::Error;
 
 /// Type of error that is returned when parsing of Iri fails
-#[derive(Clone, Debug, Error)]
+#[derive(Clone, Debug, Error, PartialEq)]
 pub enum ResourceValidationErrorKind {
-    /// Path is not valid
-    #[error("Invalid path")]
-    InvalidPath,
     /// IRI is not valid
     #[error("Invalid IRI")]
     InvalidIri,
     /// Resource has invalid [ValueDomain]
-    #[error("Resource was given as {given:?}, expected one of: {expected:?}")]
+    #[error("Resource was given as `{given:?}`, expected one of: `{expected:?}`")]
     InvalidResourceFormat {
         /// Collection of expected [ValueDomain] for HTTP parameter
         expected: Vec<ValueDomain>,
@@ -49,7 +46,7 @@ pub enum ResourceValidationErrorKind {
 }
 
 /// Parameters than can be specified for HTTP requests
-#[derive(Debug, Clone, PartialEq, Eq, Default, serde::Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize)]
 pub struct HttpParameters {
     /// Headers sent with the request
     headers: Vec<(String, String)>,
@@ -250,10 +247,7 @@ impl ResourceBuilder {
                     Ok(self)
                 }
             }
-            Resource::Path(path) => {
-                path.push(format!("#{value}"));
-                Ok(self)
-            }
+            _ => Err(ResourceValidationErrorKind::UnexpectedHttpParameter),
         }
     }
 
@@ -350,5 +344,80 @@ impl TryFrom<AnyDataValue> for ResourceBuilder {
                 given: value.value_domain(),
             })?
             .try_into()
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::{ResourceBuilder, ResourceValidationErrorKind};
+
+    #[test]
+    fn create_http_resource() -> Result<(), ResourceValidationErrorKind> {
+        let valid_iri = String::from("http://example.org/directory?query=A&query=B#fragment");
+        let builder =
+            TryInto::<ResourceBuilder>::try_into(valid_iri.clone()).expect("IRI is valid");
+        assert_eq!(builder.finalize().to_string(), valid_iri);
+
+        let start_iri = String::from("http://example.org/directory");
+        let mut builder = TryInto::<ResourceBuilder>::try_into(start_iri).expect("IRI is valid");
+        builder.add_get_parameter(String::from("query"), String::from("A"))?;
+        builder.add_get_parameter(String::from("query"), String::from("B"))?;
+        builder.set_fragment(String::from("fragment"))?;
+        assert_eq!(builder.finalize().to_string(), valid_iri);
+        Ok(())
+    }
+
+    #[test]
+    fn duplicate_http_parameters() -> Result<(), ResourceValidationErrorKind> {
+        let valid_iri = String::from("http://example.org#fragment");
+        let mut builder = TryInto::<ResourceBuilder>::try_into(valid_iri).expect("IRI is valid");
+        let err = builder.set_fragment(String::from("fragment")).unwrap_err();
+        assert_eq!(err, ResourceValidationErrorKind::DuplicateFragment);
+
+        let key = String::from("Accept");
+        let value = String::from("text/html");
+        builder.add_header(key.clone(), value.clone())?;
+        let err = builder.add_header(key.clone(), value).unwrap_err();
+        assert_eq!(err, ResourceValidationErrorKind::DuplicateHttpHeader(key));
+
+        Ok(())
+    }
+
+    #[test]
+    fn create_path_resource() {
+        let builder = TryInto::<ResourceBuilder>::try_into(String::from(
+            "file:directory/file.extension#fragment",
+        ))
+        .expect("Path is valid");
+        let resource = builder.finalize();
+        assert_eq!(
+            resource.to_string(),
+            String::from("directory/file.extension#fragment")
+        );
+
+        let builder = TryInto::<ResourceBuilder>::try_into(String::from(
+            "file://localhost/directory/file.extension#fragment",
+        ))
+        .expect("Path is valid");
+        let resource = builder.finalize();
+        assert_eq!(
+            resource.to_string(),
+            String::from("/directory/file.extension#fragment")
+        );
+
+        let mut builder = TryInto::<ResourceBuilder>::try_into(String::from(
+            "file:///directory/file.extension#fragment",
+        ))
+        .expect("Path is valid");
+        assert!(builder
+            .add_get_parameter(String::from("query"), String::from("Select"))
+            .is_err());
+        assert!(builder
+            .add_post_parameter(String::from("query"), String::from("Select"))
+            .is_err());
+        assert!(builder
+            .add_header(String::from("query"), String::from("Select"))
+            .is_err());
+        assert!(builder.set_fragment(String::from("fragment")).is_err());
     }
 }

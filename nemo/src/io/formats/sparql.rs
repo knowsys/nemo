@@ -90,7 +90,7 @@ pub(crate) struct SparqlBuilder {
 
 impl From<SparqlBuilder> for AnyImportExportBuilder {
     fn from(value: SparqlBuilder) -> Self {
-        AnyImportExportBuilder::Sparql(value)
+        AnyImportExportBuilder::Sparql(Box::new(value))
     }
 }
 impl FormatBuilder for SparqlBuilder {
@@ -178,5 +178,67 @@ impl FormatBuilder for SparqlBuilder {
 
     fn build_export(&self, _arity: usize) -> Arc<dyn ExportHandler + Send + Sync + 'static> {
         unimplemented!("SPARQL export is currently not supported")
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use crate::parser::{
+        ast::{directive::import::Import, ProgramAST},
+        input::ParserInput,
+        ParserState,
+    };
+    use nom::combinator::all_consuming;
+
+    use crate::io::format_builder::FormatParameter;
+    use nemo_physical::datavalues::AnyDataValue;
+
+    use super::SparqlParameter;
+
+    #[test]
+    fn parse_query() {
+        let valid_query = AnyDataValue::new_plain_string(String::from("
+            PREFIX wikibase: <http://wikiba.se/ontology#>
+            PREFIX bd: <http://www.bigdata.com/rdf#>
+            PREFIX wdt: <http://www.wikidata.org/prop/direct/>
+            PREFIX wd: <http://www.wikidata.org/entity/>
+            PREFIX ps: <http://www.wikidata.org/prop/statement/>
+            PREFIX p: <http://www.wikidata.org/prop/>
+            PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+                SELECT ?item ?itemLabel
+                WHERE
+                {
+                ?item wdt:P31 wd:Q146. # Must be a cat
+                SERVICE wikibase:label { bd:serviceParam wikibase:language \"[AUTO_LANGUAGE],mul,en\". } # Helps get the label in your language, if not, then default for all languages, then en language
+                }
+            LIMIT 10")
+        );
+
+        let query_param = SparqlParameter::Query;
+        let result = query_param.is_value_valid(valid_query);
+        assert!(result.is_ok());
+
+        // Invalid because no prefixes are specified
+        let invalid_query = AnyDataValue::new_plain_string(String::from("
+            SELECT ?item ?itemLabel
+            WHERE
+            {
+            ?item wdt:P31 wd:Q146. # Must be a cat
+            SERVICE wikibase:label { bd:serviceParam wikibase:language \"[AUTO_LANGUAGE],mul,en\". } # Helps get the label in your language, if not, then default for all languages, then en language
+            }
+            LIMIT 10")
+        );
+        let result = query_param.is_value_valid(invalid_query);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn parse_import() {
+        let parser_input = ParserInput::new(
+            r#"@import response :- sparql {endpoint = "http://example.org", query="SELECT ?a ?b ?c WHERE {?a ?b ?c.}", iri_fragment="section1", http_get_parameters={test=(foo)}, http_post_parameters={test=(foo)}, http_headers={ACCEPT=html/text}}}"#,
+            ParserState::default(),
+        );
+        let result = all_consuming(Import::parse)(parser_input);
+        assert!(result.is_ok());
     }
 }

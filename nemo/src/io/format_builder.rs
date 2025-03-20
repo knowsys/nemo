@@ -581,12 +581,11 @@ impl ImportExportBuilder {
 }
 
 #[derive(Clone)]
-#[allow(variant_size_differences)]
 pub(crate) enum AnyImportExportBuilder {
     Dsv(DsvBuilder),
     Rdf(RdfHandler),
     Json(JsonHandler),
-    Sparql(SparqlBuilder),
+    Sparql(Box<SparqlBuilder>),
 }
 
 impl Debug for AnyImportExportBuilder {

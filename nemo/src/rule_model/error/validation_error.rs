@@ -177,7 +177,7 @@ pub enum ValidationErrorKind {
     ResourceValidationError(#[from] ResourceValidationErrorKind),
     /// HTTP parameter is invalid
     #[assoc(code = 236)]
-    #[error("HTTP parameter was given as {given:?}, expected one of: {expected:?}")]
+    #[error("HTTP parameter was given as `{given:?}`, expected one of: `{expected:?}`")]
     HttpParameterNotInValueDomain {
         /// Collection of expected [ValueDomain] for HTTP parameter
         expected: Vec<ValueDomain>,

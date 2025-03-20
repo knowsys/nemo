@@ -41,8 +41,8 @@ pub fn unpack_headers(
 ) -> Result<impl Iterator<Item = (String, String)>, ValidationErrorKind> {
     if map.value_domain() != ValueDomain::Map {
         return Err(ValidationErrorKind::HttpParameterNotInValueDomain {
-            expected: (vec![map.value_domain()]),
-            given: (ValueDomain::Map),
+            expected: (vec![ValueDomain::Map]),
+            given: (map.value_domain()),
         });
     }
     let keys = map.map_keys().expect("Verified to be a map");
@@ -67,31 +67,38 @@ pub fn unpack_http_parameters(
 ) -> Result<impl Iterator<Item = (String, String)>, ValidationErrorKind> {
     if parameters.value_domain() != ValueDomain::Map {
         return Err(ValidationErrorKind::HttpParameterNotInValueDomain {
-            expected: (vec![parameters.value_domain()]),
-            given: (ValueDomain::Map),
+            expected: (vec![ValueDomain::Map]),
+            given: (parameters.value_domain()),
         });
     }
-    let keys = parameters.map_keys().expect("Verified to be a map");
-    for key in keys {
-        validate_http_parameter_value_domain(key)?;
-    }
+    parameters
+        .map_keys()
+        .expect("Verified to be a map")
+        .try_for_each(|key| {
+            validate_http_parameter_value_domain(key)?;
+            let tuple = parameters.map_element_unchecked(key);
+            if tuple.value_domain() != ValueDomain::Tuple {
+                return Err(ValidationErrorKind::HttpParameterNotInValueDomain {
+                    expected: (vec![ValueDomain::Tuple]),
+                    given: (tuple.value_domain()),
+                });
+            }
+            Ok(())
+        })?;
 
-    let keys = parameters.map_keys().expect("Verified to be a map");
-    let result = keys
-        .into_iter()
+    let result = parameters
+        .map_keys()
+        .expect("Verified to be a map")
         .flat_map(|key| {
             let tuple = parameters.map_element_unchecked(key);
 
             (0..tuple.len_unchecked()).map(|idx| {
-                if tuple.value_domain() != ValueDomain::Tuple {
-                    return Err(ValidationErrorKind::HttpParameterNotInValueDomain {
-                        expected: (vec![tuple.value_domain()]),
-                        given: (ValueDomain::Tuple),
-                    });
-                }
                 let element = tuple.tuple_element_unchecked(idx);
                 validate_http_parameter_value_domain(element)?;
-                Ok((key.lexical_value(), element.lexical_value()))
+                Ok::<(String, String), ValidationErrorKind>((
+                    key.lexical_value(),
+                    element.lexical_value(),
+                ))
             })
         })
         .collect::<Result<Vec<_>, _>>()?;
