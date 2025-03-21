@@ -11,8 +11,8 @@ const EXAMPLE_IRI: &str = "http://example.org";
 
 /// Validate HTTP headers with a dummy [ResourceBuilder]
 pub fn validate_headers(headers: AnyDataValue) -> Result<(), ValidationErrorKind> {
-    let mut builder = TryInto::<ResourceBuilder>::try_into(String::from(EXAMPLE_IRI))
-        .map_err(ValidationErrorKind::from)?;
+    let mut builder =
+        ResourceBuilder::try_from(String::from(EXAMPLE_IRI)).map_err(ValidationErrorKind::from)?;
     let vec = unpack_headers(headers)?;
     for (key, value) in vec {
         builder
@@ -24,7 +24,7 @@ pub fn validate_headers(headers: AnyDataValue) -> Result<(), ValidationErrorKind
 
 /// Validate HTTP parameters with a dummy [ResourceBuilder]
 pub fn validate_http_parameters(parameters: AnyDataValue) -> Result<(), ValidationErrorKind> {
-    let mut builder = TryInto::<ResourceBuilder>::try_into(String::from(EXAMPLE_IRI))?;
+    let mut builder = ResourceBuilder::try_from(String::from(EXAMPLE_IRI))?;
     let vec = unpack_http_parameters(parameters)?;
     for (key, value) in vec {
         // Since GET and POST parameters have identical requirements add_get_parameter() will work for both parameter types
@@ -76,11 +76,19 @@ pub fn unpack_http_parameters(
         .expect("Verified to be a map")
         .try_for_each(|key| {
             validate_http_parameter_value_domain(key)?;
-            let tuple = parameters.map_element_unchecked(key);
-            if tuple.value_domain() != ValueDomain::Tuple {
+            let value = parameters.map_element_unchecked(key);
+            if !matches!(
+                value.value_domain(),
+                ValueDomain::Tuple | ValueDomain::PlainString | ValueDomain::Int | ValueDomain::Iri
+            ) {
                 return Err(ValidationErrorKind::HttpParameterNotInValueDomain {
-                    expected: (vec![ValueDomain::Tuple]),
-                    given: (tuple.value_domain()),
+                    expected: (vec![
+                        ValueDomain::Tuple,
+                        ValueDomain::PlainString,
+                        ValueDomain::Int,
+                        ValueDomain::Iri,
+                    ]),
+                    given: (value.value_domain()),
                 });
             }
             Ok(())
@@ -90,16 +98,28 @@ pub fn unpack_http_parameters(
         .map_keys()
         .expect("Verified to be a map")
         .flat_map(|key| {
-            let tuple = parameters.map_element_unchecked(key);
+            let value = parameters.map_element_unchecked(key);
 
-            (0..tuple.len_unchecked()).map(|idx| {
-                let element = tuple.tuple_element_unchecked(idx);
-                validate_http_parameter_value_domain(element)?;
-                Ok::<(String, String), ValidationErrorKind>((
-                    key.lexical_value(),
-                    element.lexical_value(),
-                ))
-            })
+            // value was verified to be either a constant or tuple
+            if let Some(len) = value.length() {
+                (0..len)
+                    .map(|idx| {
+                        let element = value.tuple_element_unchecked(idx);
+                        validate_http_parameter_value_domain(element)?;
+                        Ok::<(String, String), ValidationErrorKind>((
+                            key.lexical_value(),
+                            element.lexical_value(),
+                        ))
+                    })
+                    .collect::<Vec<Result<_, _>>>()
+            } else {
+                vec![
+                    (Ok::<(String, String), ValidationErrorKind>((
+                        key.lexical_value(),
+                        value.lexical_value(),
+                    ))),
+                ]
+            }
         })
         .collect::<Result<Vec<_>, _>>()?;
     Ok(result.into_iter())

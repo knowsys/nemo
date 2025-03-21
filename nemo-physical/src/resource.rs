@@ -354,12 +354,11 @@ mod test {
     #[test]
     fn create_http_resource() -> Result<(), ResourceValidationErrorKind> {
         let valid_iri = String::from("http://example.org/directory?query=A&query=B#fragment");
-        let builder =
-            TryInto::<ResourceBuilder>::try_into(valid_iri.clone()).expect("IRI is valid");
+        let builder = ResourceBuilder::try_from(valid_iri.clone()).expect("IRI is valid");
         assert_eq!(builder.finalize().to_string(), valid_iri);
 
         let start_iri = String::from("http://example.org/directory");
-        let mut builder = TryInto::<ResourceBuilder>::try_into(start_iri).expect("IRI is valid");
+        let mut builder = ResourceBuilder::try_from(start_iri).expect("IRI is valid");
         builder.add_get_parameter(String::from("query"), String::from("A"))?;
         builder.add_get_parameter(String::from("query"), String::from("B"))?;
         builder.set_fragment(String::from("fragment"))?;
@@ -370,7 +369,7 @@ mod test {
     #[test]
     fn duplicate_http_parameters() -> Result<(), ResourceValidationErrorKind> {
         let valid_iri = String::from("http://example.org#fragment");
-        let mut builder = TryInto::<ResourceBuilder>::try_into(valid_iri).expect("IRI is valid");
+        let mut builder = ResourceBuilder::try_from(valid_iri.clone()).expect("IRI is valid");
         let err = builder.set_fragment(String::from("fragment")).unwrap_err();
         assert_eq!(err, ResourceValidationErrorKind::DuplicateFragment);
 
@@ -385,17 +384,16 @@ mod test {
 
     #[test]
     fn create_path_resource() {
-        let builder = TryInto::<ResourceBuilder>::try_into(String::from(
-            "file:directory/file.extension#fragment",
-        ))
-        .expect("Path is valid");
+        let builder =
+            ResourceBuilder::try_from(String::from("file:/directory/file.extension#fragment"))
+                .expect("Path is valid");
         let resource = builder.finalize();
         assert_eq!(
             resource.to_string(),
-            String::from("directory/file.extension#fragment")
+            String::from("/directory/file.extension#fragment")
         );
 
-        let builder = TryInto::<ResourceBuilder>::try_into(String::from(
+        let builder = ResourceBuilder::try_from(String::from(
             "file://localhost/directory/file.extension#fragment",
         ))
         .expect("Path is valid");
@@ -405,10 +403,9 @@ mod test {
             String::from("/directory/file.extension#fragment")
         );
 
-        let mut builder = TryInto::<ResourceBuilder>::try_into(String::from(
-            "file:///directory/file.extension#fragment",
-        ))
-        .expect("Path is valid");
+        let mut builder =
+            ResourceBuilder::try_from(String::from("file:///directory/file.extension#fragment"))
+                .expect("Path is valid");
         assert!(builder
             .add_get_parameter(String::from("query"), String::from("Select"))
             .is_err());
