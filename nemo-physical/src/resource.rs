@@ -176,6 +176,9 @@ impl fmt::Display for Resource {
 
 /// Returns the path of a local iri
 fn strip_local_iri(iri: Iri<String>) -> Result<String, ResourceValidationErrorKind> {
+    if !iri.path().starts_with('/') {
+        return Err(ResourceValidationErrorKind::InvalidIri);
+    }
     match iri.authority() {
         None | Some("") | Some("localhost") => Ok(format!(
             "{}{}{}",
@@ -416,5 +419,10 @@ mod test {
             .add_header(String::from("query"), String::from("Select"))
             .is_err());
         assert!(builder.set_fragment(String::from("fragment")).is_err());
+
+        assert!(
+            ResourceBuilder::try_from(String::from("file:directory/file.extension#fragment"))
+                .is_err()
+        );
     }
 }
