@@ -3,7 +3,7 @@
 use crate::rule_model::error::validation_error::ValidationErrorKind;
 use nemo_physical::{
     datavalues::{AnyDataValue, DataValue, ValueDomain},
-    resource::{ResourceBuilder, ResourceValidationErrorKind},
+    resource::ResourceBuilder,
 };
 
 /// An example IRI to build a ResourceBuilder
@@ -30,7 +30,7 @@ pub fn validate_http_parameters(parameters: AnyDataValue) -> Result<(), Validati
         // Since GET and POST parameters have identical requirements add_get_parameter() will work for both parameter types
         builder
             .add_get_parameter(key, value)
-            .map_err(|err: ResourceValidationErrorKind| ValidationErrorKind::from(err))?;
+            .map_err(ValidationErrorKind::from)?;
     }
     Ok(())
 }

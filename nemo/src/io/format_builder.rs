@@ -231,7 +231,9 @@ impl<Tag> FormatParameter<Tag> for StandardParameter {
 
         match self {
             StandardParameter::BaseParamType(no_parameters) => match *no_parameters {},
-            StandardParameter::Resource => Ok(()),
+            StandardParameter::Resource => ResourceBuilder::try_from(value)
+                .map(|_| ())
+                .map_err(ValidationErrorKind::from),
             StandardParameter::Compression => {
                 CompressionFormat::from_name(&value.to_plain_string_unchecked())
                     .and(Some(()))
@@ -449,9 +451,12 @@ impl ImportExportBuilder {
                 parameters
                     .get_optional(StandardParameter::HttpHeaders.into())
                     .map(|headers| {
-                        http_parameters::unpack_headers(headers).map(|mut headers| {
-                            headers
-                                .try_for_each(|(key, value)| rb.add_header(key, value).map(|_| ()))
+                        http_parameters::unpack_headers(headers).and_then(|mut headers| {
+                            headers.try_for_each(|(key, value)| {
+                                rb.add_header(key, value)
+                                    .map(|_| ())
+                                    .map_err(ValidationErrorKind::from)
+                            })
                         })
                     })
                     .transpose()?;
@@ -459,22 +464,30 @@ impl ImportExportBuilder {
                 parameters
                     .get_optional(StandardParameter::HttpGetParameters.into())
                     .map(|parameters| {
-                        http_parameters::unpack_http_parameters(parameters).map(|mut parameters| {
-                            parameters.try_for_each(|(key, value)| {
-                                rb.add_get_parameter(key, value).map(|_| ())
-                            })
-                        })
+                        http_parameters::unpack_http_parameters(parameters).and_then(
+                            |mut parameters| {
+                                parameters.try_for_each(|(key, value)| {
+                                    rb.add_get_parameter(key, value)
+                                        .map(|_| ())
+                                        .map_err(ValidationErrorKind::from)
+                                })
+                            },
+                        )
                     })
                     .transpose()?;
 
                 parameters
                     .get_optional(StandardParameter::HttpPostParameters.into())
                     .map(|parameters| {
-                        http_parameters::unpack_http_parameters(parameters).map(|mut parameters| {
-                            parameters.try_for_each(|(key, value)| {
-                                rb.add_post_parameter(key, value).map(|_| ())
-                            })
-                        })
+                        http_parameters::unpack_http_parameters(parameters).and_then(
+                            |mut parameters| {
+                                parameters.try_for_each(|(key, value)| {
+                                    rb.add_post_parameter(key, value)
+                                        .map(|_| ())
+                                        .map_err(ValidationErrorKind::from)
+                                })
+                            },
+                        )
                     })
                     .transpose()?;
 
@@ -483,6 +496,7 @@ impl ImportExportBuilder {
                     .map(|fragment| {
                         rb.set_fragment(fragment.to_plain_string_unchecked())
                             .map(|_| ())
+                            .map_err(ValidationErrorKind::from)
                     })
                     .transpose()?;
 

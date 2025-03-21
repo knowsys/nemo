@@ -163,10 +163,10 @@ pub enum ValidationErrorKind {
     #[assoc(note = "arity of predicates in import/export statements must be known in advance.")]
     #[assoc(code = 232)]
     UnknownArity { predicate: String },
-    /// Invalid IRI
-    #[error(r#"resource or endpoint is not a valid IRI"#)]
+    /// IRI is invalid for HTTP request
+    #[error(r#"IRI is invalid for HTTP request"#)]
     #[assoc(code = 233)]
-    InvalidIri,
+    InvalidHttpIri,
     /// Invalid SPARQL query
     #[assoc(code = 234)]
     #[error(r#"invalid SPARQL query: {oxi_error}"#)]

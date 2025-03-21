@@ -61,15 +61,17 @@ impl FormatParameter<SparqlTag> for SparqlParameter {
                     file_format: "sparql".to_string(),
                 }
             }),
-            SparqlParameter::Endpoint => value
-                .to_iri()
-                .and(Some(()))
-                .or_else(|| {
-                    value
-                        .to_plain_string()
-                        .and_then(|string| Iri::parse(string).map(|_| ()).ok())
-                })
-                .ok_or(ValidationErrorKind::InvalidIri),
+
+            SparqlParameter::Endpoint => {
+                let resource = ResourceBuilder::try_from(value)
+                    .map_err(ValidationErrorKind::from)?
+                    .finalize();
+                if resource.is_http() {
+                    Ok(())
+                } else {
+                    Err(ValidationErrorKind::InvalidHttpIri)
+                }
+            }
             SparqlParameter::Query => {
                 Query::parse(value.to_plain_string_unchecked().as_str(), None)
                     .and(Ok(()))

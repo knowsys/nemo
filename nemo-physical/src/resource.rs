@@ -339,14 +339,16 @@ impl TryFrom<AnyDataValue> for ResourceBuilder {
     type Error = ResourceValidationErrorKind;
 
     fn try_from(value: AnyDataValue) -> Result<Self, Self::Error> {
-        value
-            .to_plain_string()
-            .or_else(|| value.to_iri())
-            .ok_or(ResourceValidationErrorKind::InvalidResourceFormat {
+        match value.value_domain() {
+            ValueDomain::PlainString => value.to_plain_string_unchecked().try_into(),
+            ValueDomain::Iri => Iri::parse(value.to_iri_unchecked())
+                .map_err(|_| ResourceValidationErrorKind::InvalidIri)?
+                .try_into(),
+            _ => Err(ResourceValidationErrorKind::InvalidResourceFormat {
                 expected: vec![ValueDomain::PlainString, ValueDomain::Iri],
                 given: value.value_domain(),
-            })?
-            .try_into()
+            }),
+        }
     }
 }
 
