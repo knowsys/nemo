@@ -1,12 +1,8 @@
 use std::{fs::File, io::Read, path::PathBuf};
 
-use nemo_physical::{
-    error::{ReadingError, ReadingErrorKind},
-    resource::Resource,
-};
-use path_slash::PathBufExt;
+use nemo_physical::{error::ReadingError, resource::Resource};
 
-use super::{is_iri, ResourceProvider};
+use super::ResourceProvider;
 
 /// Resolves resources from the OS-provided file system.
 ///
@@ -23,51 +19,24 @@ impl FileResourceProvider {
     }
 }
 
-impl FileResourceProvider {
-    fn parse_resource(&self, resource: &Resource) -> Result<Option<PathBuf>, ReadingError> {
-        if is_iri(resource) {
-            if resource.starts_with("file://") {
-                // File URI. We only support local files, i.e., URIs
-                // where the host part is either empty or `localhost`.
-
-                let path = resource
-                    .strip_prefix("file://localhost")
-                    .or_else(|| resource.strip_prefix("file://"))
-                    .ok_or_else(|| {
-                        ReadingError::new(ReadingErrorKind::InvalidFileUri)
-                            .with_resource(resource.clone())
-                    })?;
-                Ok(Some(PathBuf::from_slash(path)))
-            } else {
-                // Non-file IRI, file resource provider is not responsible
-                Ok(None)
-            }
-        } else {
-            // Not a valid URI, interpret as path directly
-            Ok(Some(
-                self.base_path
-                    .as_ref()
-                    .map(|bp| bp.join(resource))
-                    .unwrap_or(resource.into()),
-            ))
-        }
-    }
-}
-
 impl ResourceProvider for FileResourceProvider {
     fn open_resource(
         &self,
         resource: &Resource,
         _media_type: &str,
     ) -> Result<Option<Box<dyn Read>>, ReadingError> {
-        // Try to parse as file IRI
-        if let Some(path) = self.parse_resource(resource)? {
-            let file = File::open(&path)
-                .map_err(|e| ReadingError::from(e).with_resource(resource.clone()))?;
-
-            Ok(Some(Box::new(file)))
-        } else {
-            Ok(None)
+        if !resource.is_path() {
+            // we can't handle this resource
+            return Ok(None);
         }
+
+        let path = self
+            .base_path
+            .as_ref()
+            .map(|bp| bp.join(resource.to_string()))
+            .unwrap_or(PathBuf::from(resource.to_string()));
+        let file =
+            File::open(&path).map_err(|e| ReadingError::from(e).with_resource(resource.clone()))?;
+        Ok(Some(Box::new(file)))
     }
 }
