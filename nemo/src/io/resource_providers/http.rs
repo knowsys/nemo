@@ -1,12 +1,11 @@
-use std::io::Read;
-
+use super::ResourceProvider;
+use log::{debug, warn};
 use nemo_physical::{
     error::{ReadingError, ReadingErrorKind},
     resource::Resource,
 };
-use reqwest::header::InvalidHeaderValue;
-
-use super::{is_iri, ResourceProvider};
+use reqwest::header::{HeaderName, HeaderValue, InvalidHeaderName, InvalidHeaderValue};
+use std::io::Read;
 
 /// Resolves resources using HTTP or HTTPS.
 ///
@@ -18,15 +17,15 @@ pub struct HttpResourceProvider {}
 #[derive(Debug, Clone)]
 pub struct HttpResource {
     /// IRI that this resource was fetched from
-    url: Resource,
+    resource: Resource,
     /// Content of the resource
     content: Vec<u8>,
 }
 
 impl HttpResource {
     /// Return the IRI this resource was fetched from.
-    pub fn url(&self) -> &Resource {
-        &self.url
+    pub fn url(&self) -> String {
+        self.resource.to_string()
     }
 
     /// Return the content of this resource.
@@ -45,13 +44,13 @@ impl Read for HttpResource {
 }
 
 impl HttpResourceProvider {
-    async fn get(url: &Resource, media_type: &str) -> Result<HttpResource, ReadingError> {
+    async fn fetch(resource: &Resource, media_type: &str) -> Result<HttpResource, ReadingError> {
         let mut headers = reqwest::header::HeaderMap::new();
         headers.insert(
             reqwest::header::ACCEPT,
             media_type.parse().map_err(|err: InvalidHeaderValue| {
                 ReadingError::new(ReadingErrorKind::ExternalError(err.into()))
-                    .with_resource(url.clone())
+                    .with_resource(resource.clone())
             })?,
         );
         headers.insert(
@@ -66,26 +65,78 @@ impl HttpResourceProvider {
             .parse()
             .map_err(|err: InvalidHeaderValue| {
                 ReadingError::new(ReadingErrorKind::ExternalError(err.into()))
-                    .with_resource(url.clone())
+                    .with_resource(resource.clone())
             })?,
         );
 
+        let new_headers = resource
+            .headers()
+            .map(|(name, value)| {
+                Ok::<(HeaderName, HeaderValue), ReadingError>((
+                    name.parse::<HeaderName>()
+                        .map_err(|err: InvalidHeaderName| {
+                            ReadingError::new(ReadingErrorKind::ExternalError(err.into()))
+                                .with_resource(resource.clone())
+                        })?,
+                    value
+                        .parse::<HeaderValue>()
+                        .map_err(|err: InvalidHeaderValue| {
+                            ReadingError::new(ReadingErrorKind::ExternalError(err.into()))
+                                .with_resource(resource.clone())
+                        })?,
+                ))
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        headers.extend(new_headers.into_iter());
+
         let err_mapping =
-            |err: reqwest::Error| ReadingError::new(err.into()).with_resource(url.clone());
+            |err: reqwest::Error| ReadingError::new(err.into()).with_resource(resource.clone());
 
         let client = reqwest::Client::builder()
             .default_headers(headers)
             .build()
             .map_err(err_mapping)?;
 
-        let response = client.get(url).send().await.map_err(err_mapping)?;
+        let full_url = resource.to_string();
+        debug!("Make HTTP request: {:?}", full_url);
+
+        let post_parameters = resource
+            .post_parameters()
+            .collect::<Vec<&(String, String)>>();
+        let request_builder = if post_parameters.is_empty() {
+            client.get(full_url.clone())
+        } else {
+            client.post(full_url.clone()).form(&post_parameters)
+        };
+        let response = request_builder
+            .send()
+            .await
+            .map_err(|err| ReadingError::new(err.into()).with_resource(resource.clone()))?;
+
+        response.error_for_status_ref()?;
+        let response_type = response
+            .headers()
+            .get(reqwest::header::CONTENT_TYPE)
+            .map(|value| value.to_str().expect("Content valid"))
+            .unwrap_or_default();
+        // Use 'contains()', because response_type contains content type and encoding information
+        if !response_type.contains(media_type) {
+            warn!("HTTP response to the request: \n {full_url} \n is of content type {response_type:?}, expected {media_type:?}. Make sure you specified the correct IRI and parameters.");
+        }
+        if response
+            .headers()
+            .get(reqwest::header::CONTENT_LENGTH)
+            .is_none()
+        {
+            warn!("HTTP response to the request: \n {full_url} \n contains no content. Make sure you specified the correct IRI and parameters.");
+        }
 
         // we're expecting potentially compressed data, don't try to
         // do any character set guessing, as `response.text()` would do.
         let content = response.bytes().await.map_err(err_mapping)?;
 
         Ok(HttpResource {
-            url: url.to_string(),
+            resource: resource.clone(),
             content: content.into(),
         })
     }
@@ -97,12 +148,8 @@ impl ResourceProvider for HttpResourceProvider {
         resource: &Resource,
         media_type: &str,
     ) -> Result<Option<Box<dyn Read>>, ReadingError> {
-        if !is_iri(resource) {
-            return Ok(None);
-        }
-
-        if !(resource.starts_with("http:") || resource.starts_with("https:")) {
-            // Non-http IRI; resource provider is not responsible
+        if !resource.is_http() {
+            // We cannot handle this resource
             return Ok(None);
         }
 
@@ -111,7 +158,8 @@ impl ResourceProvider for HttpResourceProvider {
             .build()
             .map_err(|e| ReadingError::from(e).with_resource(resource.clone()))?;
 
-        let response = rt.block_on(Self::get(resource, media_type))?;
+        let response = rt.block_on(Self::fetch(resource, media_type))?;
+
         Ok(Some(Box::new(response)))
     }
 }

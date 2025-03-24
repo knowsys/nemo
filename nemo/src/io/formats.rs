@@ -3,6 +3,7 @@
 pub mod dsv;
 pub mod json;
 pub mod rdf;
+pub mod sparql;
 
 use core::fmt;
 use std::{
@@ -12,7 +13,9 @@ use std::{
 };
 
 use nemo_physical::{
-    datasources::table_providers::TableProvider, datavalues::AnyDataValue, resource::Resource,
+    datasources::table_providers::TableProvider,
+    datavalues::AnyDataValue,
+    resource::{Resource, ResourceBuilder},
 };
 
 use crate::error::Error;
@@ -57,12 +60,16 @@ pub enum ResourceSpec {
 }
 
 impl ResourceSpec {
-    /// Convert a [String] to a [ImportExportResource].
-    pub(crate) fn from_string(string: String) -> Self {
-        if string.is_empty() {
+    /// Create a default [ResourceSpec]
+    pub(crate) fn default_resource(predicate_name: &str, meta: &dyn FileFormatMeta) -> Self {
+        if predicate_name.is_empty() {
             Self::Stdout
         } else {
-            Self::Resource(string)
+            Self::Resource(
+                ResourceBuilder::try_from(format!("{predicate_name}.{}", meta.default_extension()))
+                    .expect("default name is valid")
+                    .finalize(),
+            )
         }
     }
 
@@ -84,7 +91,7 @@ impl ResourceSpec {
 impl fmt::Display for ResourceSpec {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            ResourceSpec::Resource(r) => f.write_str(r),
+            ResourceSpec::Resource(resource) => write!(f, "{}", resource),
             ResourceSpec::Stdout => f.write_str("stdout"),
         }
     }

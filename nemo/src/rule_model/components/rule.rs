@@ -629,14 +629,14 @@ impl RuleBuilder {
     }
 
     /// Add an operation to the body of the rule.
-    pub fn add_body_operation(mut self, opreation: Operation) -> Self {
-        self.body.push(Literal::Operation(opreation));
+    pub fn add_body_operation(mut self, operation: Operation) -> Self {
+        self.body.push(Literal::Operation(operation));
         self
     }
 
     /// Add an operation to the body of the rule.
-    pub fn add_body_operation_mut(&mut self, opreation: Operation) -> &mut Self {
-        self.body.push(Literal::Operation(opreation));
+    pub fn add_body_operation_mut(&mut self, operation: Operation) -> &mut Self {
+        self.body.push(Literal::Operation(operation));
         self
     }
 

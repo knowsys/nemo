@@ -56,6 +56,20 @@ impl DsvHandler {
             ignore_headers: false,
         }
     }
+
+    pub(crate) fn with_value_formats(
+        delimiter: u8,
+        value_formats: DsvValueFormats,
+        limit: Option<u64>,
+        ignore_headers: bool,
+    ) -> Self {
+        DsvHandler {
+            delimiter,
+            value_formats,
+            limit,
+            ignore_headers,
+        }
+    }
 }
 
 impl FileFormatMeta for DsvHandler {
@@ -199,9 +213,9 @@ impl FormatBuilder for DsvBuilder {
         parameters: &Parameters<DsvBuilder>,
         _direction: Direction,
     ) -> Result<Self, ValidationErrorKind> {
-        let value_formats = parameters
-            .get_optional(DsvParameter::Format)
-            .map(|value| DsvValueFormats::try_from(value).unwrap());
+        let value_formats = parameters.get_optional(DsvParameter::Format).map(|value| {
+            DsvValueFormats::try_from(value).expect("value formats have already been validated")
+        });
 
         let limit = parameters
             .get_optional(DsvParameter::Limit)

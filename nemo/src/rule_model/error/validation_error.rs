@@ -2,6 +2,7 @@
 #![allow(missing_docs)]
 
 use enum_assoc::Assoc;
+use nemo_physical::{datavalues::ValueDomain, resource::ResourceValidationErrorKind};
 use thiserror::Error;
 
 use crate::rule_model::components::term::primitive::variable::Variable;
@@ -162,7 +163,27 @@ pub enum ValidationErrorKind {
     #[assoc(note = "arity of predicates in import/export statements must be known in advance.")]
     #[assoc(code = 232)]
     UnknownArity { predicate: String },
-
+    /// IRI is invalid for HTTP request
+    #[error(r#"IRI is invalid for HTTP request"#)]
+    #[assoc(code = 233)]
+    InvalidHttpIri,
+    /// Invalid SPARQL query
+    #[assoc(code = 234)]
+    #[error(r#"invalid SPARQL query: {oxi_error}"#)]
+    InvalidSparqlQuery { oxi_error: String },
+    /// Error during resource validation
+    #[assoc(code = 235)]
+    #[error(transparent)]
+    ResourceValidationError(#[from] ResourceValidationErrorKind),
+    /// HTTP parameter is invalid
+    #[assoc(code = 236)]
+    #[error("HTTP parameter was given as `{given:?}`, expected one of: `{expected:?}`")]
+    HttpParameterNotInValueDomain {
+        /// Collection of expected [ValueDomain] for HTTP parameter
+        expected: Vec<ValueDomain>,
+        /// The actual [ValueDomain] of the HTTP parameter
+        given: ValueDomain,
+    },
     /// Unsupported feature: Multiple aggregates in one rule
     #[error(r#"multiple aggregates in one rule is currently unsupported"#)]
     #[assoc(code = 999)]

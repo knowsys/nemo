@@ -16,7 +16,7 @@ pub enum ImportExportAttribute {
     /// Location of the file
     #[assoc(name = attribute::RESOURCE)]
     #[assoc(from_name = attribute::RESOURCE)]
-    #[assoc(value_type = ProgramComponentKind::OneOf(&[ProgramComponentKind::PlainString, ProgramComponentKind::Operation]))]
+    #[assoc(value_type = ProgramComponentKind::OneOf(&[ProgramComponentKind::Iri, ProgramComponentKind::PlainString, ProgramComponentKind::Operation]))]
     Resource,
     /// Data types of the input relations
     #[assoc(name = attribute::FORMAT)]
@@ -48,6 +48,36 @@ pub enum ImportExportAttribute {
     #[assoc(from_name = attribute::IGNORE_HEADERS)]
     #[assoc(value_type = ProgramComponentKind::Boolean)]
     IgnoreHeaders,
+    /// URL endpoint for SPARQL queries
+    #[assoc(name = attribute::ENDPOINT)]
+    #[assoc(from_name = attribute::ENDPOINT)]
+    #[assoc(value_type = ProgramComponentKind::Iri)]
+    Endpoint,
+    /// The query sent to the endpoint
+    #[assoc(name = attribute::QUERY)]
+    #[assoc(from_name = attribute::QUERY)]
+    #[assoc(value_type = ProgramComponentKind::PlainString)]
+    Query,
+    /// The parameters appended to the web-IRI
+    #[assoc(name = attribute::HTTP_GET_PARAMETERS)]
+    #[assoc(from_name = attribute::HTTP_GET_PARAMETERS)]
+    #[assoc(value_type = ProgramComponentKind::PlainString)]
+    HttpGetParameters,
+    /// The parameters sent in the body of a POST-request
+    #[assoc(name = attribute::HTTP_POST_PARAMETERS)]
+    #[assoc(from_name = attribute::HTTP_POST_PARAMETERS)]
+    #[assoc(value_type = ProgramComponentKind::PlainString)]
+    HttpPostParameters,
+    /// The parameters sent as additional headers in a web-request
+    #[assoc(name = attribute::HTTP_HEADERS)]
+    #[assoc(from_name = attribute::HTTP_HEADERS)]
+    #[assoc(value_type = ProgramComponentKind::PlainString)]
+    HttpHeaders,
+    /// The parameter appended at the very end of to the web-IRI
+    #[assoc(name = attribute::HTTP_FRAGMENT)]
+    #[assoc(from_name = attribute::HTTP_FRAGMENT)]
+    #[assoc(value_type = ProgramComponentKind::PlainString)]
+    HttpFragment,
 }
 
 impl ImportExportAttribute {}
