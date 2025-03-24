@@ -21,8 +21,8 @@ use thiserror::Error;
 #[derive(Clone, Debug, Error, PartialEq)]
 pub enum ResourceValidationErrorKind {
     /// IRI is not valid
-    #[error("Invalid IRI")]
-    InvalidIri,
+    #[error("Invalid IRI: {0}")]
+    InvalidIri(String),
     /// Resource has invalid [ValueDomain]
     #[error("Resource was given as `{given:?}`, expected one of: `{expected:?}`")]
     InvalidResourceFormat {
@@ -177,7 +177,10 @@ impl fmt::Display for Resource {
 /// Returns the path of a local iri
 fn strip_local_iri(iri: Iri<String>) -> Result<String, ResourceValidationErrorKind> {
     if !iri.path().starts_with('/') {
-        return Err(ResourceValidationErrorKind::InvalidIri);
+        return Err(ResourceValidationErrorKind::InvalidIri(format!(
+            "Local IRI path `{}` should start with '/'",
+            iri.path()
+        )));
     }
     match iri.authority() {
         None | Some("") | Some("localhost") => Ok(format!(
@@ -190,7 +193,10 @@ fn strip_local_iri(iri: Iri<String>) -> Result<String, ResourceValidationErrorKi
                 .map(|query| format!("#{}", query))
                 .unwrap_or_default()
         )),
-        _ => Err(ResourceValidationErrorKind::InvalidIri),
+        _ => Err(ResourceValidationErrorKind::InvalidIri(format!(
+            "Authority `{}`is not supported in local IRI",
+            iri.authority().unwrap_or_default()
+        ))),
     }
 }
 
@@ -293,7 +299,7 @@ impl TryFrom<Iri<String>> for ResourceBuilder {
                 let get_parameters = serde_urlencoded::from_str::<Vec<(String, String)>>(
                     iri.query().unwrap_or_default(),
                 )
-                .map_err(|_| ResourceValidationErrorKind::InvalidIri)?;
+                .map_err(|err| ResourceValidationErrorKind::InvalidIri(err.to_string()))?;
 
                 Ok(Self {
                     resource: Resource::Http {
@@ -342,7 +348,7 @@ impl TryFrom<AnyDataValue> for ResourceBuilder {
         match value.value_domain() {
             ValueDomain::PlainString => value.to_plain_string_unchecked().try_into(),
             ValueDomain::Iri => Iri::parse(value.to_iri_unchecked())
-                .map_err(|_| ResourceValidationErrorKind::InvalidIri)?
+                .map_err(|err| ResourceValidationErrorKind::InvalidIri(err.to_string()))?
                 .try_into(),
             _ => Err(ResourceValidationErrorKind::InvalidResourceFormat {
                 expected: vec![ValueDomain::PlainString, ValueDomain::Iri],

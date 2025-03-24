@@ -232,7 +232,7 @@ impl<Tag> FormatParameter<Tag> for StandardParameter {
         match self {
             StandardParameter::BaseParamType(no_parameters) => match *no_parameters {},
             StandardParameter::Resource => ResourceBuilder::try_from(value)
-                .map(|_| ())
+                .and(Ok(()))
                 .map_err(ValidationErrorKind::from),
             StandardParameter::Compression => {
                 CompressionFormat::from_name(&value.to_plain_string_unchecked())
@@ -454,7 +454,7 @@ impl ImportExportBuilder {
                         http_parameters::unpack_headers(headers).and_then(|mut headers| {
                             headers.try_for_each(|(key, value)| {
                                 rb.add_header(key, value)
-                                    .map(|_| ())
+                                    .and(Ok(()))
                                     .map_err(ValidationErrorKind::from)
                             })
                         })
@@ -468,7 +468,7 @@ impl ImportExportBuilder {
                             |mut parameters| {
                                 parameters.try_for_each(|(key, value)| {
                                     rb.add_get_parameter(key, value)
-                                        .map(|_| ())
+                                        .and(Ok(()))
                                         .map_err(ValidationErrorKind::from)
                                 })
                             },
@@ -483,7 +483,7 @@ impl ImportExportBuilder {
                             |mut parameters| {
                                 parameters.try_for_each(|(key, value)| {
                                     rb.add_post_parameter(key, value)
-                                        .map(|_| ())
+                                        .and(Ok(()))
                                         .map_err(ValidationErrorKind::from)
                                 })
                             },
@@ -495,7 +495,7 @@ impl ImportExportBuilder {
                     .get_optional(StandardParameter::IriFragment.into())
                     .map(|fragment| {
                         rb.set_fragment(fragment.to_plain_string_unchecked())
-                            .map(|_| ())
+                            .and(Ok(()))
                             .map_err(ValidationErrorKind::from)
                     })
                     .transpose()?;
