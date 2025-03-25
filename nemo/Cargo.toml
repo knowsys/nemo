@@ -51,6 +51,8 @@ oxrdfio = "0.1.6"
 oxrdf = "0.2.4"
 
 [dev-dependencies]
+assert_cmd = "2.0"
+dir-test = "0.2.1"
 env_logger = "*"
 assert_fs = "1.0"
 test-log = "0.2"
