@@ -283,12 +283,12 @@ impl ResourceBuilder {
         }
     }
 
-    /// Returns a [Resource] of variant [Resource::Stdout]
+    /// Create a [ResourceBuilder] for [Resource::Stdout]
     pub fn stdout_resource_builder() -> Self {
         Self::try_from(String::from("")).expect("Empty string is valid resource for stdout")
     }
 
-    /// Create a default [Resource]
+    /// Create a default [ResourceBuilder]
     pub fn default_resource_builder(predicate_name: &str, default_extension: String) -> Self {
         if predicate_name.is_empty() {
             Self::stdout_resource_builder()
