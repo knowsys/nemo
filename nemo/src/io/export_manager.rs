@@ -12,7 +12,7 @@ use sanitise_file_name::{sanitise_with_options, Options};
 
 use super::{
     compression_format::CompressionFormat,
-    formats::{Export, ExportHandler, ResourceSpec},
+    formats::{Export, ExportHandler},
 };
 
 /// Main object for exporting data to files.
@@ -68,7 +68,9 @@ impl ExportManager {
     /// Validates the given [ExportHandler].
     /// This also checks whether the specified file could (likely) be written.
     pub fn validate(&self, _predicate: &Tag, handler: &Export) -> Result<(), Error> {
-        let ResourceSpec::Resource(resource) = handler.resource_spec() else {
+        let resource = handler.resource();
+
+        if resource.is_stdout() {
             return Ok(());
         };
 
@@ -126,19 +128,19 @@ impl ExportManager {
     /// This function may already create directories, and should not be used if
     /// [ExportManager::disable_write] is `true`.
     fn writer(&self, export_handler: &Export, predicate: &Tag) -> Result<Box<dyn Write>, Error> {
-        let writer: Box<dyn Write> = match export_handler.resource_spec() {
-            ResourceSpec::Resource(resource) => {
-                let output_path = self.sanitized_path(resource, !export_handler.is_compressed())?;
+        let resource = export_handler.resource();
+        let writer: Box<dyn Write> = if resource.is_stdout() {
+            Box::new(std::io::stdout().lock())
+        } else {
+            let output_path = self.sanitized_path(resource, !export_handler.is_compressed())?;
 
-                log::info!("Exporting predicate \"{}\" to {output_path:?}", predicate);
+            log::info!("Exporting predicate \"{}\" to {output_path:?}", predicate);
 
-                if let Some(parent) = output_path.parent() {
-                    create_dir_all(parent)?;
-                }
-
-                Box::new(Self::open_options(self.overwrite).open(output_path)?)
+            if let Some(parent) = output_path.parent() {
+                create_dir_all(parent)?;
             }
-            ResourceSpec::Stdout => Box::new(std::io::stdout().lock()),
+
+            Box::new(Self::open_options(self.overwrite).open(output_path)?)
         };
 
         if !export_handler.is_compressed() {
@@ -175,7 +177,7 @@ impl ExportManager {
             table_writer.export_table_data(Box::new(table))?;
         }
 
-        Ok(export_handler.resource_spec().is_stdout())
+        Ok(export_handler.resource().is_stdout())
     }
 
     /// Export a (possibly empty) table according to the given [ExportHandler],

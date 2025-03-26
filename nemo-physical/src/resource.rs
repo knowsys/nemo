@@ -70,6 +70,8 @@ pub enum Resource {
         /// Additional parameters sent with the HTTP request
         parameters: HttpParameters,
     },
+    /// Use stdout (only for export)
+    Stdout,
 }
 
 impl Resource {
@@ -81,6 +83,11 @@ impl Resource {
     /// Return if resource is a path
     pub fn is_path(&self) -> bool {
         matches!(self, Self::Path(..))
+    }
+
+    /// Return if resource points to stdout
+    pub fn is_stdout(&self) -> bool {
+        matches!(self, Self::Stdout)
     }
 
     /// Return the headers
@@ -120,6 +127,7 @@ impl Resource {
         match self {
             Self::Path(path) => path.extension().and_then(|ext| ext.to_str()),
             Self::Http { iri, .. } => iri.path().rfind('.').map(|index| &iri[index..]),
+            _ => None,
         }
     }
 
@@ -145,6 +153,7 @@ impl Resource {
                     ));
                 }
             }
+            _ => (),
         }
         self
     }
@@ -167,9 +176,8 @@ impl fmt::Display for Resource {
                     write!(f, "{iri}?{get_parameters}{fragment}")
                 }
             }
-            Self::Path(path) => {
-                write!(f, "{}", path.display())
-            }
+            Self::Path(path) => write!(f, "{}", path.display()),
+            Self::Stdout => f.write_str("stdout"),
         }
     }
 }
@@ -275,6 +283,21 @@ impl ResourceBuilder {
         }
     }
 
+    /// Create a [ResourceBuilder] for [Resource::Stdout]
+    pub fn stdout_resource_builder() -> Self {
+        Self::try_from(String::from("")).expect("Empty string is valid resource for stdout")
+    }
+
+    /// Create a default [ResourceBuilder]
+    pub fn default_resource_builder(predicate_name: &str, default_extension: String) -> Self {
+        if predicate_name.is_empty() {
+            Self::stdout_resource_builder()
+        } else {
+            ResourceBuilder::try_from(format!("{predicate_name}.{}", default_extension))
+                .expect("default name is valid")
+        }
+    }
+
     /// Build a [Resource] with the collected parameters
     pub fn finalize(self) -> Resource {
         debug!("Created resource: {:?}", self.resource);
@@ -332,6 +355,11 @@ impl TryFrom<String> for ResourceBuilder {
     fn try_from(string: String) -> Result<Self, Self::Error> {
         if let Ok(iri) = Iri::parse(string.to_owned()) {
             iri.try_into()
+        } else if string.is_empty() {
+            Ok(Self {
+                resource: Resource::Stdout,
+                header_names: HashSet::new(),
+            })
         } else {
             Ok(Self {
                 resource: Resource::Path(PathBuf::from_slash(string)),
