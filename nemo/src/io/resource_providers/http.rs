@@ -128,6 +128,10 @@ impl HttpResourceProvider {
         // do any character set guessing, as `response.text()` would do.
         let content = response.bytes().await.map_err(err_mapping)?;
 
+        if content.is_empty() {
+            warn!("HTTP response to the request: \n {full_url} \n contains no content. Make sure you specified the correct IRI and parameters.");
+        }
+        
         Ok(HttpResource {
             resource: resource.clone(),
             content: content.into(),
