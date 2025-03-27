@@ -131,7 +131,7 @@ impl HttpResourceProvider {
         if content.is_empty() {
             warn!("HTTP response to the request: \n {full_url} \n contains no content. Make sure you specified the correct IRI and parameters.");
         }
-        
+
         Ok(HttpResource {
             resource: resource.clone(),
             content: content.into(),
