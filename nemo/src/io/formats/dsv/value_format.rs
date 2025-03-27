@@ -59,10 +59,16 @@ impl TryFrom<AnyDataValue> for DsvValueFormats {
 
     fn try_from(value: AnyDataValue) -> Result<Self, Self::Error> {
         let mut res = Vec::new();
-        let mut idx = 0;
-        while let Some(element) = value.tuple_element(idx) {
-            idx += 1;
-            res.push(DsvValueFormat::from_name(&element.to_string()).ok_or(())?);
+
+        match value.value_domain() {
+            nemo_physical::datavalues::ValueDomain::Tuple => {
+                let mut idx = 0;
+                while let Some(element) = value.tuple_element(idx) {
+                    idx += 1;
+                    res.push(DsvValueFormat::from_name(&element.to_string()).ok_or(())?);
+                }
+            }
+            _ => res.push(DsvValueFormat::from_name(&value.to_string()).ok_or(())?),
         }
 
         Ok(Self(res))
