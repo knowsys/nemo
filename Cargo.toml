@@ -1,10 +1,11 @@
 [workspace]
 resolver = "2"
 default-members = [
-       "nemo",
+    "nemo",
     "nemo-cli",
     "nemo-physical",
     "nemo-python",
+    "nemo-static-checks",
 ]
 members = [
     "nemo",
@@ -13,22 +14,23 @@ members = [
     "nemo-python",
     "nemo-language-server",
     "nemo-wasm",
+    "nemo-static-checks",
 ]
 
 [workspace.package]
 description = "Nemo, a datalog-based rule engine for fast and scalable analytic data processing in memory"
 version = "0.7.1-dev"
 authors = [
-"Alex Ivliev <alex.ivliev@tu-dresden.de>",
-"Aidan Bailey <dev@aidanbailey.me>",
-"Jakob Steinberg <jakob_maximilian.steinberg@mailbox.tu-dresden.de>",
-"Lukas Gerlach <lukas.gerlach@tu-dresden.de>",
-"Larry González <larry.gonzalez@tu-dresden.de>",
-"Markus Krötzsch <markus.kroetzsch@tu-dresden.de>",
-"Matthias Meissner <matthias.meissner2@mailbox.tu-dresden.de>",
-"Maximilian Marx <maximilian.marx@tu-dresden.de>",
-"Simon Meusel <simon.meusel@mailbox.tu-dresden.de>",
-"Stefan Ellmauthaler <stefan.ellmauthaler@tu-dresden.de>",
+    "Alex Ivliev <alex.ivliev@tu-dresden.de>",
+    "Aidan Bailey <dev@aidanbailey.me>",
+    "Jakob Steinberg <jakob_maximilian.steinberg@mailbox.tu-dresden.de>",
+    "Lukas Gerlach <lukas.gerlach@tu-dresden.de>",
+    "Larry González <larry.gonzalez@tu-dresden.de>",
+    "Markus Krötzsch <markus.kroetzsch@tu-dresden.de>",
+    "Matthias Meissner <matthias.meissner2@mailbox.tu-dresden.de>",
+    "Maximilian Marx <maximilian.marx@tu-dresden.de>",
+    "Simon Meusel <simon.meusel@mailbox.tu-dresden.de>",
+    "Stefan Ellmauthaler <stefan.ellmauthaler@tu-dresden.de>",
 ]
 edition = "2021"
 homepage = "https://github.com/knowsys/nemo"

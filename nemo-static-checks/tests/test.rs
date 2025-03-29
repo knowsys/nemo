@@ -1,6 +1,6 @@
 #![cfg(not(miri))]
-use nemo::static_checks::rule_set::RuleSet;
-use nemo::static_checks::rules_properties::RulesProperties;
+use nemo_static_checks::static_checks::rule_set::RuleSet;
+use nemo_static_checks::static_checks::rules_properties::RulesProperties;
 
 use std::{assert_eq, fs::read_to_string, path::PathBuf, str::FromStr};
 

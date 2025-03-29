@@ -1,6 +1,6 @@
 //! This module defines an [Atom].
 
-use std::{fmt::Display, hash::Hash};
+use std::{collections::HashSet, fmt::Display, hash::Hash};
 
 use crate::rule_model::{
     error::{validation_error::ValidationErrorKind, ComponentParseError, ValidationErrorBuilder},
@@ -97,6 +97,22 @@ impl Atom {
     /// Return whether this atom contains no subterms.
     pub fn is_empty(&self) -> bool {
         self.len() == 0
+    }
+}
+
+/// This Impl-Block contains a method for an atom to get its universal variables.
+impl Atom {
+    /// This method returns the universal Variables of an Atom.
+    pub fn universal_variables(&self) -> HashSet<&Variable> {
+        self.variables().filter(|var| var.is_universal()).collect()
+    }
+}
+
+/// This Impl-Block contains a method for an atom to get its variables as a reference.
+impl Atom {
+    /// Returns all the Variables of an Atom.
+    pub fn variables_refs(&self) -> HashSet<&Variable> {
+        self.variables().collect()
     }
 }
 

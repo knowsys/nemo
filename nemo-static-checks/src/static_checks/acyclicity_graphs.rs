@@ -1,12 +1,15 @@
 //! Functionality that provides methods to build the (JointAcyclicityGraph / WeakAcyclicityGraph) based on
 /// a RuleSet.
-use crate::rule_model::components::{rule::Rule, term::primitive::variable::Variable};
 use crate::static_checks::collection_traits::{InsertAll, RemoveAll};
 use crate::static_checks::positions::{Position, Positions, PositionsByRuleAndVariables};
+// use crate::static_checks::rule_set::*;
 use crate::static_checks::rule_set::{RuleAndVariable, RuleSet};
+use nemo::rule_model::components::{rule::Rule, term::primitive::variable::Variable};
 use petgraph::algo::is_cyclic_directed;
 use petgraph::graphmap::{DiGraphMap, NodeTrait};
 use std::collections::HashSet;
+
+use crate::static_checks::rule_set::*;
 
 type Cycle<N> = Vec<N>;
 

@@ -1,9 +1,11 @@
 //! Functionality that provides the static checks for a Rule.
-use crate::rule_model::components::{
-    rule::Rule, term::primitive::variable::Variable, IterablePrimitives,
-};
 use crate::static_checks::positions::{Positions, PositionsByRuleAndVariables};
 use crate::static_checks::rule_set::{RuleAndVariable, RuleAndVariablePair};
+use nemo::rule_model::components::{
+    rule::Rule, term::primitive::variable::Variable, IterablePrimitives,
+};
+
+use crate::static_checks::rule_set::*;
 
 use std::collections::HashSet;
 

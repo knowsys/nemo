@@ -1,12 +1,14 @@
 //! Functionality that provides methods in relation with Position-Types.
-use crate::rule_model::components::{
-    atom::Atom, rule::Rule, tag::Tag, term::primitive::variable::Variable,
-};
 use crate::static_checks::acyclicity_graphs::{JointAcyclicityGraph, WeakAcyclicityGraph};
 use crate::static_checks::collection_traits::{Disjoint, InsertAll, RemoveAll, Superset};
 use crate::static_checks::rule_set::{RuleAndVariable, RuleSet};
+use nemo::rule_model::components::{
+    atom::Atom, rule::Rule, tag::Tag, term::primitive::variable::Variable,
+};
 
 use std::collections::{HashMap, HashSet};
+
+use crate::static_checks::rule_set::*;
 
 /// Type to represent a position in an Atom.
 pub type Index = usize;
