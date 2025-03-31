@@ -1,0 +1,8 @@
+%% Example case following issue #644
+@import A :- csv { resource = "sources/dataUnary.csv", format=int } . 
+@import B :- csv { resource = "sources/dataUnary.csv", format=(int) } . 
+
+dataUnary(?X) :- A(?X) .
+dataUnary(?X) :- B(?X) .
+
+@export dataUnary :- csv{}.
