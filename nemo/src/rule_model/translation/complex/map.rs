@@ -1,8 +1,6 @@
 //! This module contains a function to create a map term
 //! from the corresponding ast node.
 
-use log::debug;
-
 use crate::{
     parser::ast,
     rule_model::{
