@@ -235,7 +235,7 @@ impl BinaryFunction for StringBefore {
         string_pair_from_any(parameter_first, parameter_second).map(
             |(first_string, second_string)| {
                 let result = if let Some(i) = unicode_find(&first_string, &second_string) {
-                    first_string[..i].to_string()
+                    first_string.graphemes(true).collect::<Vec<&str>>()[..i].join("")
                 } else {
                     "".to_string()
                 };
@@ -271,7 +271,9 @@ impl BinaryFunction for StringAfter {
         string_pair_from_any(parameter_first, parameter_second).map(
             |(first_string, second_string)| {
                 let result = if let Some(i) = unicode_find(&first_string, &second_string) {
-                    first_string[i + second_string.len()..].to_string()
+                    first_string.graphemes(true).collect::<Vec<&str>>()
+                        [i + second_string.graphemes(true).collect::<Vec<&str>>().len()..]
+                        .join("")
                 } else {
                     "".to_string()
                 };
@@ -832,6 +834,14 @@ mod test {
         assert!(actual_result_unicode.is_some());
         assert_eq!(result_unicode, actual_result_unicode.unwrap());
 
+        let string_unicode = AnyDataValue::new_plain_string("fçs".to_string());
+        let start_unicode = AnyDataValue::new_plain_string("s".to_string());
+        let result_unicode = AnyDataValue::new_plain_string("fç".to_string());
+        let actual_result_unicode =
+            super::StringBefore.evaluate(string_unicode.clone(), start_unicode);
+        assert!(actual_result_unicode.is_some());
+        assert_eq!(result_unicode, actual_result_unicode.unwrap());
+
         let string_notstring = AnyDataValue::new_integer_from_i64(1);
         let start_notstring = AnyDataValue::new_plain_string("ẅ".to_string());
         let actual_result_notstring =
@@ -851,6 +861,14 @@ mod test {
         let string_unicode = AnyDataValue::new_plain_string("loẅks".to_string());
         let start_unicode = AnyDataValue::new_plain_string("ẅ".to_string());
         let result_unicode = AnyDataValue::new_plain_string("ks".to_string());
+        let actual_result_unicode =
+            super::StringAfter.evaluate(string_unicode.clone(), start_unicode);
+        assert!(actual_result_unicode.is_some());
+        assert_eq!(result_unicode, actual_result_unicode.unwrap());
+
+        let string_unicode = AnyDataValue::new_plain_string("fççsa".to_string());
+        let start_unicode = AnyDataValue::new_plain_string("s".to_string());
+        let result_unicode = AnyDataValue::new_plain_string("a".to_string());
         let actual_result_unicode =
             super::StringAfter.evaluate(string_unicode.clone(), start_unicode);
         assert!(actual_result_unicode.is_some());
