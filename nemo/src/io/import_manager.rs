@@ -28,13 +28,9 @@ impl ImportManager {
         &self,
         handler: &Import,
     ) -> Result<Box<dyn TableProvider>, Error> {
-        let reader = self.resource_providers.open_resource(
-            &handler
-                .resource_spec()
-                .resource()
-                .expect("checked when making handler"),
-            &handler.media_type(),
-        )?;
+        let reader = self
+            .resource_providers
+            .open_resource(handler.resource(), &handler.media_type())?;
 
         handler.reader(reader)
     }
