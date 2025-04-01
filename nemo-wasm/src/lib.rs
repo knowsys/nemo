@@ -2,7 +2,9 @@
 
 use std::{alloc::Layout, collections::HashMap, fmt::Formatter, io::Cursor};
 
+use gloo_utils::format::JsValueSerdeExt;
 use js_sys::{Array, Reflect, Set, Uint8Array};
+use models::{table_entries_for_tree_nodes_query, TableResponseBaseTableEntries};
 use thiserror::Error;
 use wasm_bindgen::{prelude::wasm_bindgen, JsCast, JsValue};
 use web_sys::{Blob, FileReaderSync};
@@ -34,6 +36,7 @@ use nemo::{
 use nemo_physical::{error::ExternalReadingError, resource::Resource};
 
 mod language_server;
+mod models;
 
 #[wasm_bindgen]
 #[derive(Clone)]
@@ -501,6 +504,161 @@ impl NemoEngine {
     ) -> Result<Option<String>, NemoError> {
         self.parse_and_trace_fact(fact)
             .map(|opt| opt.map(|(trace, handles)| trace.graphml(&handles)))
+    }
+}
+
+// This is the new tracing stuff. It got its own impl block just to keep it visually separate.
+// The mock is the example from https://github.com/knowsys/EvonNemo-API-Spec/tree/main/examples/common-descendants
+#[wasm_bindgen]
+impl NemoEngine {
+    #[wasm_bindgen(js_name = "experimentalNewTracingTreeForTableMock")]
+    pub fn experimental_new_tracing_tree_for_table_mock(
+        tree_for_table_query: JsValue,
+    ) -> Result<JsValue, JsValue> {
+        // in this mock, we ignore the query and always return the same tree
+        let _tree_for_table_query: models::TreeForTableQuery = tree_for_table_query
+            .into_serde()
+            .map_err(|err| err.to_string())?;
+
+        let response: models::TreeForTableResponse = models::TreeForTableResponse {
+            predicate: "ancestor".to_string(),
+            table_entries: Box::new(TableResponseBaseTableEntries {
+                entries: vec![models::TableEntryResponse {
+                    entry_id: 42,
+                    term_tuple: vec!["alice".to_string(), "edward".to_string()],
+                }],
+                pagination: Box::new(models::TableResponseBaseTableEntriesPagination {
+                    start: 0,
+                    more_entries_exist: false,
+                }),
+            }),
+            possible_rules_above: vec![], // empty for now...
+            possible_rules_below: vec![], // empty for now...
+            child_information: Some(Box::new(models::TreeForTableResponseChildInformation {
+                rule: 1,
+                children: vec![
+                    models::TreeForTableResponse {
+                        predicate: "ancestor".to_string(),
+                        table_entries: Box::new(TableResponseBaseTableEntries {
+                            entries: vec![],
+                            pagination: Box::new(models::TableResponseBaseTableEntriesPagination {
+                                start: 0,
+                                more_entries_exist: true,
+                            }),
+                        }),
+                        possible_rules_above: vec![], // empty for now...
+                        possible_rules_below: vec![], // empty for now...
+                        child_information: Some(Box::new(
+                            models::TreeForTableResponseChildInformation {
+                                rule: 0,
+                                children: vec![models::TreeForTableResponse {
+                                    predicate: "parent".to_string(),
+                                    table_entries: Box::new(TableResponseBaseTableEntries {
+                                        entries: vec![models::TableEntryResponse {
+                                            entry_id: 3,
+                                            term_tuple: vec![
+                                                "alice".to_string(),
+                                                "charlotte".to_string(),
+                                            ],
+                                        }],
+                                        pagination: Box::new(
+                                            models::TableResponseBaseTableEntriesPagination {
+                                                start: 0,
+                                                more_entries_exist: false,
+                                            },
+                                        ),
+                                    }),
+                                    possible_rules_above: vec![], // empty for now
+                                    possible_rules_below: vec![], // empty for now
+                                    child_information: None,
+                                }],
+                            },
+                        )),
+                    },
+                    models::TreeForTableResponse {
+                        predicate: "parent".to_string(),
+                        table_entries: Box::new(TableResponseBaseTableEntries {
+                            entries: vec![],
+                            pagination: Box::new(models::TableResponseBaseTableEntriesPagination {
+                                start: 0,
+                                more_entries_exist: true,
+                            }),
+                        }),
+                        possible_rules_above: vec![], // empty for now
+                        possible_rules_below: vec![], // empty for now
+                        child_information: None,
+                    },
+                ],
+            })),
+        };
+
+        Ok(JsValue::from_serde(&response).map_err(|err| err.to_string())?)
+    }
+
+    #[wasm_bindgen(js_name = "experimentalNewTracingTableEntriesForTreeNodesMock")]
+    pub fn experimental_new_tracing_table_entries_for_tree_nodes_mock(
+        table_entries_for_tree_nodes_query: JsValue,
+    ) -> Result<JsValue, JsValue> {
+        // in this mock, we ignore the query and always return the same entries for the same nodes
+        let _table_entries_for_tree_nodes_query: models::TableEntriesForTreeNodesQuery =
+            table_entries_for_tree_nodes_query
+                .into_serde()
+                .map_err(|err| err.to_string())?;
+
+        let response: Vec<models::TableEntriesForTreeNodesResponseInner> = vec![
+            models::TableEntriesForTreeNodesResponseInner {
+                address_in_tree: Some(vec![]), // this should not be an Option, I'm unsure why this
+                // is currently generated like that...;
+                // anyway, works for now
+                predicate: "ancestor".to_string(),
+                table_entries: Box::new(TableResponseBaseTableEntries {
+                    entries: vec![models::TableEntryResponse {
+                        entry_id: 42,
+                        term_tuple: vec!["alice".to_string(), "edward".to_string()],
+                    }],
+                    pagination: Box::new(models::TableResponseBaseTableEntriesPagination {
+                        start: 0,
+                        more_entries_exist: false,
+                    }),
+                }),
+                possible_rules_above: vec![], // empty for now...
+                possible_rules_below: vec![], // empty for now...
+            },
+            models::TableEntriesForTreeNodesResponseInner {
+                address_in_tree: Some(vec![0]),
+                predicate: "ancestor".to_string(),
+                table_entries: Box::new(TableResponseBaseTableEntries {
+                    entries: vec![models::TableEntryResponse {
+                        entry_id: 73,
+                        term_tuple: vec!["alice".to_string(), "charlotte".to_string()],
+                    }],
+                    pagination: Box::new(models::TableResponseBaseTableEntriesPagination {
+                        start: 0,
+                        more_entries_exist: false,
+                    }),
+                }),
+                possible_rules_above: vec![], // empty for now...
+                possible_rules_below: vec![], // empty for now...
+            },
+            models::TableEntriesForTreeNodesResponseInner {
+                address_in_tree: Some(vec![1]),
+                predicate: "parent".to_string(),
+                table_entries: Box::new(TableResponseBaseTableEntries {
+                    entries: vec![models::TableEntryResponse {
+                        entry_id: 21,
+                        term_tuple: vec!["charlotte".to_string(), "edward".to_string()],
+                    }],
+                    pagination: Box::new(models::TableResponseBaseTableEntriesPagination {
+                        start: 0,
+                        more_entries_exist: false,
+                    }),
+                }),
+                possible_rules_above: vec![], // empty for now...
+                possible_rules_below: vec![], // empty for now...
+            },
+        ];
+
+        Ok(JsValue::from_serde(&response).map_err(|err| err.to_string())?)
     }
 }
 

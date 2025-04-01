@@ -1691,6 +1691,8 @@ dependencies = [
  "nemo",
  "nemo-language-server",
  "nemo-physical",
+ "serde",
+ "serde_json",
  "thiserror",
  "wasm-bindgen",
  "wasm-bindgen-futures",
