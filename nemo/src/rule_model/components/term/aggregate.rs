@@ -315,7 +315,7 @@ impl IterablePrimitives for Aggregate {
         self.aggregate.primitive_terms()
     }
 
-    fn primitive_terms_mut<'a>(&'a mut self) -> Box<dyn Iterator<Item = &'a mut Primitive> + 'a> {
+    fn primitive_terms_mut<'a>(&'a mut self) -> Box<dyn Iterator<Item = &'a mut Term> + 'a> {
         self.aggregate.primitive_terms_mut()
     }
 }
