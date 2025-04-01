@@ -68,6 +68,9 @@ pub enum TokenKind {
     /// [EXISTENTIAL_INDICATOR](variable::EXISTENTIAL_INDICATOR), used to mark existential variables
     #[assoc(name = variable::EXISTENTIAL_INDICATOR)]
     ExistentialIndicator,
+    /// [GLOBAL_INDICATOR](variable::GLOBAL_INDICATOR), used to mark global variables
+    #[assoc(name = variable::GLOBAL_INDICATOR)]
+    GlobalIndicator,
     /// Opening delimiter for term sequence of atoms
     #[assoc(name = atom::OPEN)]
     AtomOpen,
@@ -815,6 +818,7 @@ impl<'a> Token<'a> {
     string_token!(rule_arrow, TokenKind::RuleArrow);
     string_token!(universal_indicator, TokenKind::UniversalIndicator);
     string_token!(existential_indicator, TokenKind::ExistentialIndicator);
+    string_token!(global_indicator, TokenKind::GlobalIndicator);
     string_token!(lang_tag_indicator, TokenKind::LangTagIndicator);
     string_token!(name_datatype_separator, TokenKind::NameDatatypeSeparator);
 }

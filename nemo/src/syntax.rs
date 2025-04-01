@@ -116,6 +116,8 @@ pub mod expression {
         pub const UNIVERSAL_INDICATOR: &str = "?";
         /// Indicator for existential variables
         pub const EXISTENTIAL_INDICATOR: &str = "!";
+        /// Indicator for global variables
+        pub const GLOBAL_INDICATOR: &str = "$";
     }
 
     /// Syntax for operations

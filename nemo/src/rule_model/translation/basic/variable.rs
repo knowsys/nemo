@@ -50,6 +50,7 @@ impl TranslationComponent for Variable {
                     ));
                 }
             }
+            ast::expression::basic::variable::VariableType::Global => todo!(),
         };
 
         Ok(translation.register_component(result, variable))

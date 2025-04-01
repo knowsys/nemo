@@ -25,6 +25,9 @@ pub enum VariableType {
     /// Existential variable
     #[assoc(token = TokenKind::ExistentialIndicator)]
     Existential,
+    /// Global variable
+    #[assoc(token = TokenKind::GlobalIndicator)]
+    Global,
     /// Anonymous variable
     #[assoc(token = TokenKind::AnonVal)]
     Anonymous,
@@ -59,6 +62,7 @@ impl<'a> Variable<'a> {
         alt((
             Token::universal_indicator,
             Token::existential_indicator,
+            Token::global_indicator,
             Token::underscore,
         ))(input)
         .map(|(rest, result)| {
