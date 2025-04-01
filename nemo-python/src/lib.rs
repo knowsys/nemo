@@ -11,7 +11,12 @@ use nemo::{
     io::{resource_providers::ResourceProviders, ExportManager, ImportManager},
     meta::timing::TimedCode,
     rule_model::{
-        components::{fact::Fact, tag::Tag, term::primitive::Primitive, ProgramComponent},
+        components::{
+            fact::Fact,
+            tag::Tag,
+            term::{primitive::Primitive, Term},
+            ProgramComponent,
+        },
         error::ValidationErrorBuilder,
         substitution::Substitution,
     },
@@ -272,7 +277,7 @@ fn assignement_to_dict<'py>(
 ) -> PyResult<Bound<'py, PyDict>> {
     let dict = PyDict::new(py);
     for (variable, term) in assignment {
-        if let Primitive::Ground(ground) = term {
+        if let Term::Primitive(Primitive::Ground(ground)) = term {
             dict.set_item(
                 variable.to_string(),
                 datavalue_to_python(py, ground.value())?,
