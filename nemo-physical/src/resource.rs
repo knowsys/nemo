@@ -287,6 +287,20 @@ impl ResourceBuilder {
         }
     }
 
+    /// Whether the resource supports compression
+    pub fn supports_compression(&self) -> bool {
+        match self.resource {
+            Resource::Stdout => false,     // never compress output to standard out
+            Resource::Http { .. } => true, // reqwest handles transport layer compression, but retrieved resources may still need decompression
+            Resource::Path(_) => true,     // for local files, we need to handle compression
+        }
+    }
+
+    /// Return the file extension of the underlying resource, if any
+    pub fn file_extension(&self) -> Option<&str> {
+        self.resource.file_extension()
+    }
+
     /// Build a [Resource] with the collected parameters
     pub fn finalize(self) -> Resource {
         debug!("Created resource: {:?}", self.resource);
