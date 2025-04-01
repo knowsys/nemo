@@ -75,6 +75,15 @@ pub enum Resource {
 }
 
 impl Resource {
+    /// Whether the resource supports compression
+    pub fn supports_compression(&self) -> bool {
+        match self {
+            Resource::Stdout => false,     // never compress output to standard out
+            Resource::Http { .. } => true, // reqwest handles transport layer compression, but retrieved resources may still need decompression
+            Resource::Path(_) => true,     // for local files, we need to handle compression
+        }
+    }
+
     /// Return if resource is an Iri
     pub fn is_http(&self) -> bool {
         matches!(self, Self::Http { .. })
@@ -289,11 +298,7 @@ impl ResourceBuilder {
 
     /// Whether the resource supports compression
     pub fn supports_compression(&self) -> bool {
-        match self.resource {
-            Resource::Stdout => false,     // never compress output to standard out
-            Resource::Http { .. } => true, // reqwest handles transport layer compression, but retrieved resources may still need decompression
-            Resource::Path(_) => true,     // for local files, we need to handle compression
-        }
+        self.resource.supports_compression()
     }
 
     /// Return the file extension of the underlying resource, if any
