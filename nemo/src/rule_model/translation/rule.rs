@@ -19,11 +19,8 @@ use super::{
 };
 
 impl Rule {
-    pub(crate) const EXPECTED_ATTRIBUTES: &'static [KnownAttributes] = &[
-        KnownAttributes::Name,
-        KnownAttributes::Display,
-        KnownAttributes::External,
-    ];
+    pub(crate) const EXPECTED_ATTRIBUTES: &'static [KnownAttributes] =
+        &[KnownAttributes::Name, KnownAttributes::Display];
 }
 
 impl TranslationComponent for Rule {
@@ -47,11 +44,6 @@ impl TranslationComponent for Rule {
 
         if let Some(rule_display) = attributes.get_unique(KnownAttributes::Display) {
             rule_builder.display_mut(rule_display[0].clone());
-        }
-
-        for binding in translation.external_variables() {
-            let (variable, expansion) = binding?;
-            rule_builder.add_external_variable(variable.clone(), expansion.clone());
         }
 
         for expression in rule.head() {

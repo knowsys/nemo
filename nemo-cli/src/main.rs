@@ -254,14 +254,14 @@ fn run(mut cli: CliApp) -> Result<(), CliError> {
         }
     };
 
-    let mut translation = rule_model::translation::ASTProgramTranslation::initialize(
+    let translation = rule_model::translation::ASTProgramTranslation::initialize(
         &program_content,
         program_filename.clone(),
     );
 
-    // do not move out of cli.parameters, since cli is needed in call to handle_tracing
-    for ParamKeyValue { key, value } in cli.parameters.drain(..) {
-        translation.add_parameter(key, value);
+    // do not move out of cli.globals, since cli is needed in call to handle_tracing
+    for ParamKeyValue { key, value } in cli.globals.drain(..) {
+        todo!()
     }
 
     let mut program = match translation.translate(&program_ast) {
