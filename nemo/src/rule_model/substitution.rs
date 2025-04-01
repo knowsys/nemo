@@ -52,7 +52,7 @@ impl Substitution {
                 unreachable!()
             };
 
-            if let Some(replacement) = self.map.get(&primitive) {
+            if let Some(replacement) = self.map.get(primitive) {
                 *term = replacement.clone();
             }
         }
