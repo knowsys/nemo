@@ -13,7 +13,6 @@ use super::{
     atom::{primitive_atom::PrimitiveAtom, variable_atom::VariableAtom},
     filter::ChaseFilter,
     operation::ChaseOperation,
-    term::operation_term::OperationTerm,
     ChaseComponent,
 };
 
