@@ -153,7 +153,11 @@ impl ProgramComponent for Fact {
                 return None;
             }
 
-            if let Some(variable) = term.variables().next() {
+            if let Some(variable) = term
+                .variables()
+                .filter(|variable| !variable.is_global())
+                .next()
+            {
                 builder.report_error(*variable.origin(), ValidationErrorKind::FactNonGround);
                 continue;
             }
