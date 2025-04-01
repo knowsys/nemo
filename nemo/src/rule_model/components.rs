@@ -16,7 +16,10 @@ pub mod term;
 use std::fmt::{Debug, Display};
 
 use enum_assoc::Assoc;
-use term::primitive::{variable::Variable, Primitive};
+use term::{
+    primitive::{variable::Variable, Primitive},
+    Term,
+};
 
 use super::{error::ValidationErrorBuilder, origin::Origin};
 
@@ -126,9 +129,13 @@ pub trait IterableVariables {
 
 /// Trait implemented by program components that allow iterating over [Primitive] terms
 pub trait IterablePrimitives {
+    type TermType = Term;
+
     /// Return an iterator over all [Primitive] terms contained within this program component.
     fn primitive_terms<'a>(&'a self) -> Box<dyn Iterator<Item = &'a Primitive> + 'a>;
 
     /// Return a mutable iterator over all [Primitive] terms contained within this program component.
-    fn primitive_terms_mut<'a>(&'a mut self) -> Box<dyn Iterator<Item = &'a mut Primitive> + 'a>;
+    fn primitive_terms_mut<'a>(
+        &'a mut self,
+    ) -> Box<dyn Iterator<Item = &'a mut Self::TermType> + 'a>;
 }

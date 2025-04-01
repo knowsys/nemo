@@ -539,7 +539,7 @@ impl IterablePrimitives for Rule {
         Box::new(head_primitives.chain(body_primitives))
     }
 
-    fn primitive_terms_mut<'a>(&'a mut self) -> Box<dyn Iterator<Item = &'a mut Primitive> + 'a> {
+    fn primitive_terms_mut<'a>(&'a mut self) -> Box<dyn Iterator<Item = &'a mut Term> + 'a> {
         let head_primitives = self
             .head
             .iter_mut()
