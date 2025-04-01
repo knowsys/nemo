@@ -58,7 +58,7 @@ impl Substitution {
         }
     }
 
-    /// Return an iterator over all mapped variables in this substition.
+    /// Return an iterator over all mapped variables in this substitution.
     pub fn variables(&self) -> impl Iterator<Item = &Variable> {
         self.map.keys().filter_map(|term| {
             if let Primitive::Variable(variable) = term {

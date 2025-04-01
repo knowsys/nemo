@@ -53,7 +53,7 @@ impl ProgramChaseTranslation {
         let mut result = ChaseProgram::default();
 
         for fact in program.facts() {
-            result.add_fact(self.build_fact(fact));
+            result.add_fact(self.build_fact(fact, program.globals()));
         }
 
         for rule in program.rules_mut() {

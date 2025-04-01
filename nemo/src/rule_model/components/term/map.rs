@@ -1,6 +1,6 @@
 //! This module defines [Map].
 
-use std::{fmt::Display, hash::Hash};
+use std::{collections::HashMap, fmt::Display, hash::Hash};
 
 use crate::rule_model::{
     components::{
@@ -11,7 +11,11 @@ use crate::rule_model::{
 };
 
 use super::{
-    primitive::{variable::Variable, Primitive},
+    primitive::{
+        ground::GroundTerm,
+        variable::{global::GlobalVariable, Variable},
+        Primitive,
+    },
     value_type::ValueType,
     Term,
 };
@@ -114,13 +118,13 @@ impl Map {
     }
 
     /// Reduce the [Term]s in each key-value pair returning a copy.
-    pub fn reduce(&self) -> Self {
+    pub fn reduce(&self, bindings: &HashMap<GlobalVariable, GroundTerm>) -> Self {
         Self {
             origin: self.origin,
             tag: self.tag.clone(),
             map: self
                 .key_value()
-                .map(|(key, value)| (key.reduce(), value.reduce()))
+                .map(|(key, value)| (key.reduce(bindings), value.reduce(bindings)))
                 .collect(),
         }
     }

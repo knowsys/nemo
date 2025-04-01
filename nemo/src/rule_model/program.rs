@@ -14,6 +14,7 @@ use super::{
         literal::Literal,
         output::Output,
         rule::Rule,
+        term::primitive::{ground::GroundTerm, variable::global::GlobalVariable},
         ProgramComponent,
     },
     error::{
@@ -39,6 +40,9 @@ pub struct Program {
     facts: Vec<Fact>,
     /// Outputs
     outputs: Vec<Output>,
+    /// Global constants
+    globals: HashMap<GlobalVariable, GroundTerm>,
+
     /// Map of all predicate arities (filled upon validation)
     arities: HashMap<Tag, (usize, Origin)>,
     /// Builders for import handlers (filled upon validation)
@@ -56,6 +60,7 @@ impl std::fmt::Debug for Program {
             .field("rules", &self.rules)
             .field("facts", &self.facts)
             .field("outputs", &self.outputs)
+            .field("globals", &self.globals)
             .field("arities", &self.arities)
             .finish()
     }
@@ -77,6 +82,11 @@ impl Program {
     /// Return an iterator over all rules.
     pub fn rules(&self) -> impl Iterator<Item = &Rule> {
         self.rules.iter()
+    }
+
+    /// Return a reference to the global constant bindings
+    pub fn globals(&self) -> &HashMap<GlobalVariable, GroundTerm> {
+        &self.globals
     }
 
     /// Return the rule at a particular index.

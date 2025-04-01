@@ -1,5 +1,7 @@
 //! This module contains a function for handling import/export statements.
 
+use std::collections::HashMap;
+
 use nemo_physical::datavalues::DataValue;
 
 use crate::{
@@ -51,16 +53,7 @@ fn import_export_bindings<'a, 'b>(
             ));
         };
 
-        let Ok(right) = GroundTerm::try_from(right.clone()) else {
-            return Err(TranslationError::new(
-                infix.pair().1.span(),
-                TranslationErrorKind::NonGroundTerm {
-                    found: right.kind().name().to_string(),
-                },
-            ));
-        };
-
-        result.push((left.clone(), Primitive::Ground(right)));
+        result.push((left.clone(), right.clone()));
     }
 
     Ok(Substitution::new(result))

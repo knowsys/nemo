@@ -22,7 +22,11 @@ use crate::{
 };
 
 use super::{
-    primitive::{ground::GroundTerm, variable::Variable, Primitive},
+    primitive::{
+        ground::GroundTerm,
+        variable::{global::GlobalVariable, Variable},
+        Primitive,
+    },
     value_type::ValueType,
     Term,
 };
@@ -96,12 +100,16 @@ impl Operation {
     }
 
     /// Reduce constant expressions returning a copy of the reduced [Term].
-    pub fn reduce(&self) -> Term {
+    pub fn reduce(&self, bindings: &HashMap<GlobalVariable, GroundTerm>) -> Term {
         if !self.is_ground() {
             return Term::Operation(Self {
                 origin: self.origin,
                 kind: self.kind,
-                subterms: self.subterms.iter().map(Term::reduce).collect(),
+                subterms: self
+                    .subterms
+                    .iter()
+                    .map(|term| term.reduce(bindings))
+                    .collect(),
             });
         }
 

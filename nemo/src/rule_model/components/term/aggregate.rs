@@ -2,7 +2,7 @@
 #![allow(missing_docs)]
 
 use std::{
-    collections::HashSet,
+    collections::{HashMap, HashSet},
     fmt::{Display, Write},
     hash::Hash,
 };
@@ -23,7 +23,11 @@ use crate::{
 };
 
 use super::{
-    primitive::{variable::Variable, Primitive},
+    primitive::{
+        ground::GroundTerm,
+        variable::{global::GlobalVariable, Variable},
+        Primitive,
+    },
     value_type::ValueType,
     Term,
 };
@@ -163,11 +167,11 @@ impl Aggregate {
     }
 
     /// Reduce the [Term] in the aggregate expression returning a copy.
-    pub fn reduce(&self) -> Self {
+    pub fn reduce(&self, bindings: &HashMap<GlobalVariable, GroundTerm>) -> Self {
         Self {
             origin: self.origin,
             kind: self.kind,
-            aggregate: Box::new(self.aggregate.reduce()),
+            aggregate: Box::new(self.aggregate.reduce(bindings)),
             distinct: self.distinct.clone(),
         }
     }

@@ -1,10 +1,15 @@
 //! This module defines a function for translating
 //! logical facts into chase facts.
 
+use std::collections::HashMap;
+
 use crate::{
     chase_model::components::{atom::ground_atom::GroundAtom, ChaseComponent},
     rule_model::components::{
-        term::{primitive::Primitive, Term},
+        term::{
+            primitive::{ground::GroundTerm, variable::global::GlobalVariable, Primitive},
+            Term,
+        },
         ProgramComponent,
     },
 };
@@ -20,13 +25,14 @@ impl ProgramChaseTranslation {
     pub(crate) fn build_fact(
         &mut self,
         fact: &crate::rule_model::components::fact::Fact,
+        globals: &HashMap<GlobalVariable, GroundTerm>,
     ) -> GroundAtom {
         let origin = *fact.origin();
         let predicate = fact.predicate().clone();
         let mut terms = Vec::new();
 
         for term in fact.subterms() {
-            let reduced = term.reduce();
+            let reduced = term.reduce(globals);
 
             if let Term::Primitive(Primitive::Ground(value)) = reduced {
                 terms.push(value.clone());
