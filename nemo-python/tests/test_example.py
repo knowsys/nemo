@@ -29,6 +29,9 @@ class TestExample(unittest.TestCase):
         interesting(msg).
 
         interesting(?x) :- data(?x, ?y), interesting(?y).
+
+        #[name("interesting rule")]
+        #[name(f"data: {?x}, {?y}")]
         interesting(?y) :- data(?x, ?y), interesting(?x).
         """
 
@@ -89,6 +92,8 @@ class TestExample(unittest.TestCase):
         expected_trace = {
             "rule": "interesting(?y) :- data(?x, ?y), interesting(?x) .",
             "assignment": {"?x": 3.14, "?y": "<circle>"},
+            "name": "interesting rule",
+            "description": "data: 3.14, <circle>",
             "subtraces": [
                 {
                     "fact": 'data("3.14"^^<http://www.w3.org/2001/XMLSchema#double>, circle)'
@@ -96,6 +101,8 @@ class TestExample(unittest.TestCase):
                 {
                     "rule": "interesting(?y) :- data(?x, ?y), interesting(?x) .",
                     "assignment": {"?x": "<py>", "?y": 3.14},
+                    "name": "interesting rule",
+                    "description": "data: <py>, 3.14",
                     "subtraces": [
                         {
                             "fact": 'data(py, "3.14"^^<http://www.w3.org/2001/XMLSchema#double>)'
