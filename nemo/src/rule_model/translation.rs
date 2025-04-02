@@ -26,7 +26,15 @@ use crate::{
 };
 
 use super::{
-    components::{fact::Fact, rule::Rule, term::Term, ProgramComponent},
+    components::{
+        fact::Fact,
+        rule::Rule,
+        term::{
+            primitive::{ground::GroundTerm, variable::global::GlobalVariable},
+            Term,
+        },
+        ProgramComponent,
+    },
     error::{
         translation_error::TranslationErrorKind, ComponentParseError, ProgramError,
         TranslationError, ValidationErrorBuilder,
@@ -88,6 +96,16 @@ impl<'a, 'b> ASTProgramTranslation<'a, 'b> {
         node: &'b dyn ProgramAST<'a>,
     ) -> Component {
         component.set_origin(self.register_node(node))
+    }
+
+    /// Add a global constant to the program being built
+    pub fn add_global_constant(&mut self, ident: GlobalVariable, value: GroundTerm) {
+        self.program_builder.add_global(ident, value);
+    }
+
+    /// Retrieve global constant definitions
+    fn globals(&self) -> &HashMap<GlobalVariable, GroundTerm> {
+        self.program_builder.globals()
     }
 }
 

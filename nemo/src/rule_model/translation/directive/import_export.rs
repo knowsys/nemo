@@ -1,7 +1,5 @@
 //! This module contains a function for handling import/export statements.
 
-use std::collections::HashMap;
-
 use nemo_physical::datavalues::DataValue;
 
 use crate::{
@@ -10,12 +8,7 @@ use crate::{
         components::{
             import_export::{ExportDirective, ImportDirective, ImportExportSpec},
             tag::Tag,
-            term::{
-                map::Map,
-                primitive::{ground::GroundTerm, Primitive},
-                value_type::ValueType,
-                Term,
-            },
+            term::{map::Map, primitive::Primitive, value_type::ValueType, Term},
             ProgramComponent,
         },
         error::{translation_error::TranslationErrorKind, ComplexErrorLabelKind, TranslationError},
@@ -72,7 +65,7 @@ fn import_export_spec<'a, 'b>(
         .unwrap_or_default();
 
     substitution.apply(&mut spec);
-    spec = spec.reduce();
+    spec = spec.reduce(translation.globals());
 
     let Some(format_tag) = spec.tag() else {
         let span = instructions.span().beginning();
@@ -117,7 +110,7 @@ fn import_export_spec<'a, 'b>(
             ));
         };
 
-        let Ok(value) = GroundTerm::try_from(value.clone()) else {
+        let Ok(value) = value.clone().try_into_ground(translation.globals()) else {
             let span = translation
                 .origin_map
                 .get(value.origin())

@@ -35,7 +35,10 @@ use nemo::{
     meta::timing::{TimedCode, TimedDisplay},
     rule_model::{
         self,
-        components::{fact::Fact, import_export::ExportDirective, tag::Tag, ProgramComponent},
+        components::{
+            fact::Fact, import_export::ExportDirective, tag::Tag,
+            term::primitive::variable::global::GlobalVariable, ProgramComponent,
+        },
         error::ValidationErrorBuilder,
         program::Program,
     },
@@ -254,14 +257,14 @@ fn run(mut cli: CliApp) -> Result<(), CliError> {
         }
     };
 
-    let translation = rule_model::translation::ASTProgramTranslation::initialize(
+    let mut translation = rule_model::translation::ASTProgramTranslation::initialize(
         &program_content,
         program_filename.clone(),
     );
 
     // do not move out of cli.globals, since cli is needed in call to handle_tracing
     for ParamKeyValue { key, value } in cli.globals.drain(..) {
-        todo!()
+        translation.add_global_constant(GlobalVariable::new(&key), value);
     }
 
     let mut program = match translation.translate(&program_ast) {

@@ -446,6 +446,16 @@ impl ProgramBuilder {
         self.program.outputs.push(output);
     }
 
+    /// Add a global constant to the program
+    pub fn add_global(&mut self, ident: GlobalVariable, value: GroundTerm) {
+        self.program.globals.insert(ident, value);
+    }
+
+    /// Retrieve global variable definitions
+    pub fn globals(&self) -> &HashMap<GlobalVariable, GroundTerm> {
+        &self.program.globals
+    }
+
     /// Validate the program that is being built
     pub fn validate(&mut self, error_builder: &mut ValidationErrorBuilder) -> Option<()> {
         self.program.validate(error_builder)
