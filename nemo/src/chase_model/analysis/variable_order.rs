@@ -553,7 +553,7 @@ mod test {
             program::ChaseProgram,
             rule::ChaseRule,
         },
-        io::formats::{Import, MockHandler, ResourceSpec},
+        io::formats::{Import, MockHandler},
         rule_model::components::{
             tag::Tag,
             term::primitive::{variable::Variable, Primitive},
@@ -562,7 +562,7 @@ mod test {
 
     use super::{IterationOrder, RuleVariableList, VariableOrder};
 
-    use nemo_physical::management::execution_plan::ColumnOrder;
+    use nemo_physical::{management::execution_plan::ColumnOrder, resource::ResourceBuilder};
 
     use std::{
         collections::{HashMap, HashSet},
@@ -966,7 +966,7 @@ mod test {
     /// Helper function to create source-like imports
     fn csv_import(predicate: Tag, arity: usize) -> ChaseImport {
         let handler: Import = Import::new(
-            ResourceSpec::Stdout,
+            ResourceBuilder::stdout_resource_builder().finalize(),
             Default::default(),
             arity,
             Arc::new(MockHandler),

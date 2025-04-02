@@ -10,7 +10,7 @@ use std::{
 
 use nemo_physical::{
     datavalues::{AnyDataValue, DataValue},
-    resource::ResourceBuilder,
+    resource::{Resource, ResourceBuilder},
 };
 use strum::IntoEnumIterator;
 
@@ -33,7 +33,7 @@ use super::{
         json::{JsonHandler, JsonTag},
         rdf::{RdfHandler, RdfTag},
         sparql::{SparqlBuilder, SparqlTag},
-        Export, ExportHandler, Import, ImportHandler, ResourceSpec,
+        Export, ExportHandler, Import, ImportHandler,
     },
     http_parameters,
 };
@@ -365,7 +365,7 @@ impl<B: FormatBuilder> Parameters<B> {
 #[derive(Clone, Debug)]
 pub struct ImportExportBuilder {
     inner: AnyImportExportBuilder,
-    resource: Option<ResourceSpec>,
+    resource: Option<Resource>,
     compression: CompressionFormat,
 }
 
@@ -407,7 +407,7 @@ impl ImportExportBuilder {
     }
 
     /// The resource as specified in the parameters
-    pub fn resource(&self) -> Option<ResourceSpec> {
+    pub fn resource(&self) -> Option<Resource> {
         self.resource.clone()
     }
 
@@ -500,7 +500,12 @@ impl ImportExportBuilder {
                     })
                     .transpose()?;
 
-                Ok(rb.finalize())
+                let resource = rb.finalize();
+                if resource.is_stdout() && direction == Direction::Import {
+                    Err(ValidationErrorKind::UnsupportedStdoutImport)
+                } else {
+                    Ok(resource)
+                }
             })
             .transpose()
             .map_err(|err| builder.report_error(origin, err))
@@ -508,7 +513,7 @@ impl ImportExportBuilder {
 
         Some(ImportExportBuilder {
             inner: inner.into(),
-            resource: resource.map(ResourceSpec::Resource),
+            resource,
             compression,
         })
     }
@@ -552,16 +557,16 @@ impl ImportExportBuilder {
             AnyImportExportBuilder::Sparql(sparql_builder) => sparql_builder.build_import(arity),
         };
 
-        let resource_spec = self
-            .resource
-            .clone()
-            .unwrap_or(ResourceSpec::default_resource(
+        let resource = self.resource.clone().unwrap_or(
+            ResourceBuilder::default_resource_builder(
                 predicate_name,
-                handler.as_ref(),
-            ));
+                handler.as_ref().default_extension(),
+            )
+            .finalize(),
+        );
 
         Import {
-            resource_spec,
+            resource,
             compression: self.compression,
             predicate_arity: arity,
             handler,
@@ -577,16 +582,16 @@ impl ImportExportBuilder {
             AnyImportExportBuilder::Sparql(sparql_builder) => sparql_builder.build_export(arity),
         };
 
-        let resource_spec = self
-            .resource
-            .clone()
-            .unwrap_or(ResourceSpec::default_resource(
+        let resource = self.resource.clone().unwrap_or(
+            ResourceBuilder::default_resource_builder(
                 predicate_name,
-                handler.as_ref(),
-            ));
+                handler.as_ref().default_extension(),
+            )
+            .finalize(),
+        );
 
         Export {
-            resource_spec,
+            resource,
             compression: self.compression,
             predicate_arity: arity,
             handler,
