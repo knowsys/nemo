@@ -143,7 +143,7 @@ impl ExportManager {
             Box::new(Self::open_options(self.overwrite).open(output_path)?)
         };
 
-        if !export_handler.is_compressed() {
+        if resource.supports_compression() && !export_handler.is_compressed() {
             Ok(self
                 .default_compression_format
                 .implementation()

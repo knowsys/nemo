@@ -27,12 +27,9 @@ use writer::RdfWriter;
 
 use crate::{
     error::Error,
-    io::{
-        compression_format::CompressionFormat,
-        format_builder::{
-            format_parameter, format_tag, value_type_matches, AnyImportExportBuilder,
-            FormatParameter, Parameters, StandardParameter,
-        },
+    io::format_builder::{
+        format_parameter, format_tag, value_type_matches, AnyImportExportBuilder, FormatParameter,
+        Parameters, StandardParameter,
     },
     rule_model::{
         components::{import_export::Direction, term::value_type::ValueType},
@@ -211,8 +208,7 @@ impl FormatBuilder for RdfHandler {
                 let value = parameters
                     .get_required(RdfParameter::BaseParamType(StandardParameter::Resource));
 
-                let mut resource = ResourceBuilder::try_from(value)?.finalize();
-                let resource = CompressionFormat::from_resource(&mut resource).1;
+                let resource = ResourceBuilder::try_from(value)?.finalize();
 
                 let Some(extension) = resource.file_extension() else {
                     return Err(ValidationErrorKind::RdfUnspecifiedMissingExtension);

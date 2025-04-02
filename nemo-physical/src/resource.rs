@@ -75,6 +75,15 @@ pub enum Resource {
 }
 
 impl Resource {
+    /// Whether the resource supports compression
+    pub fn supports_compression(&self) -> bool {
+        match self {
+            Resource::Stdout => false,     // never compress output to standard out
+            Resource::Http { .. } => true, // reqwest handles transport layer compression, but retrieved resources may still need decompression
+            Resource::Path(_) => true,     // for local files, we need to handle compression
+        }
+    }
+
     /// Return if resource is an Iri
     pub fn is_http(&self) -> bool {
         matches!(self, Self::Http { .. })
@@ -122,40 +131,29 @@ impl Resource {
         }
     }
 
-    /// Returns the file extension of a path or IRI based on the last '.'
+    /// Returns the file extension of the resource, based on the last
+    /// `.` in the name. Treats an empty extension (i.e., a name
+    /// ending in `.`) as `None`.
     pub fn file_extension(&self) -> Option<&str> {
         match self {
-            Self::Path(path) => path.extension().and_then(|ext| ext.to_str()),
-            Self::Http { iri, .. } => iri.path().rfind('.').map(|index| &iri[index..]),
+            Self::Path(path) => path
+                .extension()
+                .filter(|extension| !extension.is_empty())
+                .and_then(|extension| extension.to_str()),
+            Self::Http { iri, .. } => {
+                let path = iri.path();
+                path.rfind('.').and_then(|idx| {
+                    let start = idx + 1;
+
+                    if start < path.len() {
+                        Some(&path[start..])
+                    } else {
+                        None
+                    }
+                })
+            }
             _ => None,
         }
-    }
-
-    /// Remove a certain file extension from the resource
-    pub fn strip_file_extension(&mut self, suffix: &str) -> &Self {
-        match self {
-            Self::Path(path) => {
-                *path = path.with_extension("");
-            }
-            Self::Http { iri, .. } => {
-                if let Some(path) = iri.path().strip_suffix(&format!("'.'{suffix}")) {
-                    *iri = Iri::parse_unchecked(format!(
-                        "{}://{}{}{}{}",
-                        iri.scheme(),
-                        iri.authority().unwrap_or_default(),
-                        path,
-                        iri.query()
-                            .map(|query| format!("?{}", query))
-                            .unwrap_or_default(),
-                        iri.fragment()
-                            .map(|fragment| format!("#{}", fragment))
-                            .unwrap_or_default()
-                    ));
-                }
-            }
-            _ => (),
-        }
-        self
     }
 }
 
@@ -298,6 +296,16 @@ impl ResourceBuilder {
         }
     }
 
+    /// Whether the resource supports compression
+    pub fn supports_compression(&self) -> bool {
+        self.resource.supports_compression()
+    }
+
+    /// Return the file extension of the underlying resource, if any
+    pub fn file_extension(&self) -> Option<&str> {
+        self.resource.file_extension()
+    }
+
     /// Build a [Resource] with the collected parameters
     pub fn finalize(self) -> Resource {
         debug!("Created resource: {:?}", self.resource);
@@ -388,7 +396,7 @@ impl TryFrom<AnyDataValue> for ResourceBuilder {
 
 #[cfg(test)]
 mod test {
-    use super::{ResourceBuilder, ResourceValidationErrorKind};
+    use super::{Resource, ResourceBuilder, ResourceValidationErrorKind};
 
     #[test]
     fn create_http_resource() -> Result<(), ResourceValidationErrorKind> {
@@ -460,5 +468,72 @@ mod test {
             ResourceBuilder::try_from(String::from("file:directory/file.extension#fragment"))
                 .is_err()
         );
+    }
+
+    #[test]
+    fn file_extension() {
+        let resource =
+            ResourceBuilder::try_from(String::from("https://example.org/foo/bar/quux.csv.gz"))
+                .unwrap()
+                .finalize();
+        assert_eq!(resource.file_extension(), Some("gz"));
+
+        let resource =
+            ResourceBuilder::try_from(String::from("https://example.org/foo/bar/quux.csv"))
+                .unwrap()
+                .finalize();
+        assert_eq!(resource.file_extension(), Some("csv"));
+
+        let resource = ResourceBuilder::try_from(String::from("https://example.org/foo/bar/quux"))
+            .unwrap()
+            .finalize();
+        assert_eq!(resource.file_extension(), None);
+
+        let resource =
+            ResourceBuilder::try_from(String::from("https://example.org/foo/bar/quux.csv.gz."))
+                .unwrap()
+                .finalize();
+        assert_eq!(resource.file_extension(), None);
+
+        let resource = ResourceBuilder::try_from(String::from(
+            "https://example.org/foo/bar/quux.csv?dot=.gz#other.rdf",
+        ))
+        .unwrap()
+        .finalize();
+        assert_eq!(resource.file_extension(), Some("csv"));
+
+        let resource = ResourceBuilder::try_from(String::from(
+            "https://example.org/foo/bar/quux.csv.gz.?dot=.gz#other.rdf",
+        ))
+        .unwrap()
+        .finalize();
+        assert_eq!(resource.file_extension(), None);
+
+        let resource = ResourceBuilder::try_from(String::from("https://example.org"))
+            .unwrap()
+            .finalize();
+        assert_eq!(resource.file_extension(), None);
+
+        let resource = ResourceBuilder::try_from(String::from("foo/bar/quux.csv.gz"))
+            .unwrap()
+            .finalize();
+        assert_eq!(resource.file_extension(), Some("gz"));
+
+        let resource = ResourceBuilder::try_from(String::from("foo/bar/quux.csv"))
+            .unwrap()
+            .finalize();
+        assert_eq!(resource.file_extension(), Some("csv"));
+
+        let resource = ResourceBuilder::try_from(String::from("foo/bar/quux"))
+            .unwrap()
+            .finalize();
+        assert_eq!(resource.file_extension(), None);
+
+        let resource = ResourceBuilder::try_from(String::from("foo/bar/quux."))
+            .unwrap()
+            .finalize();
+        assert_eq!(resource.file_extension(), None);
+
+        assert_eq!(Resource::Stdout.file_extension(), None);
     }
 }

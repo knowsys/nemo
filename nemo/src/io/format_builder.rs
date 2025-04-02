@@ -434,7 +434,7 @@ impl ImportExportBuilder {
             .map(|compression| {
                 CompressionFormat::from_name(&compression.to_plain_string_unchecked()).unwrap()
             })
-            .unwrap_or_default();
+            .unwrap_or_else(|| CompressionFormat::from_resource_builder(&resource_builder));
 
         let inner = match B::new(tag, &parameters, direction) {
             Ok(res) => Some(res),
