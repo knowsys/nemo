@@ -31,7 +31,7 @@ class TestExample(unittest.TestCase):
         interesting(?x) :- data(?x, ?y), interesting(?y).
 
         #[name("interesting rule")]
-        #[name(f"data: {?x}, {?y}")]
+        #[display(f"data: {?x}, {?y}")]
         interesting(?y) :- data(?x, ?y), interesting(?x).
         """
 
