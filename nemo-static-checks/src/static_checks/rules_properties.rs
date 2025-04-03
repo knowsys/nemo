@@ -1,4 +1,5 @@
 //! Functionality that provides the static checks for a RuleSet.
+use crate::static_checks::acyclicity_checks::ChaseVariant;
 use crate::static_checks::acyclicity_graphs::{JointAcyclicityGraph, WeakAcyclicityGraph};
 use crate::static_checks::positions::PositionsByRuleAndVariables;
 use crate::static_checks::rule_set::RuleSet;
@@ -166,18 +167,15 @@ impl RulesProperties for RuleSet {
     }
 
     fn is_mfa(&self) -> bool {
-        todo!("IMPLEMENT");
-        // TODO: IMPLEMENT
+        self.check_acyclicity(ChaseVariant::SkolemMFA)
     }
 
     fn is_dmfa(&self) -> bool {
-        todo!("IMPLEMENT");
-        // TODO: IMPLEMENT
+        self.check_acyclicity(ChaseVariant::SkolemDMFA)
     }
 
     fn is_rmfa(&self) -> bool {
-        todo!("IMPLEMENT");
-        // TODO: IMPLEMENT
+        self.check_acyclicity(ChaseVariant::SkolemRestricted)
     }
 
     fn is_mfc(&self) -> bool {
