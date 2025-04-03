@@ -5,8 +5,6 @@ use std::{
     fmt::Write,
 };
 
-use crate::{io::format_builder::ImportExportBuilder, rule_model::components::tag::Tag};
-
 use super::{
     components::{
         fact::Fact,
@@ -14,6 +12,7 @@ use super::{
         literal::Literal,
         output::Output,
         rule::Rule,
+        tag::Tag,
         term::primitive::{ground::GroundTerm, variable::global::GlobalVariable},
         ProgramComponent,
     },
@@ -45,10 +44,6 @@ pub struct Program {
 
     /// Map of all predicate arities (filled upon validation)
     arities: HashMap<Tag, (usize, Origin)>,
-    /// Builders for import handlers (filled upon validation)
-    import_builders: Vec<ImportExportBuilder>,
-    /// Builders for export handlers (filled upon validation)
-    export_builders: Vec<ImportExportBuilder>,
 }
 
 impl std::fmt::Debug for Program {
@@ -68,15 +63,13 @@ impl std::fmt::Debug for Program {
 
 impl Program {
     /// Return an iterator over all imports.
-    pub fn imports(&self) -> impl Iterator<Item = (&ImportDirective, &ImportExportBuilder)> {
-        debug_assert_eq!(self.imports.len(), self.import_builders.len());
-        self.imports.iter().zip(&self.import_builders)
+    pub fn imports(&self) -> impl Iterator<Item = &ImportDirective> {
+        self.imports.iter()
     }
 
     /// Return an iterator over all exports.
-    pub fn exports(&self) -> impl Iterator<Item = (&ExportDirective, &ImportExportBuilder)> {
-        debug_assert_eq!(self.exports.len(), self.export_builders.len());
-        self.exports.iter().zip(&self.export_builders)
+    pub fn exports(&self) -> impl Iterator<Item = &ExportDirective> {
+        self.exports.iter()
     }
 
     /// Return an iterator over all rules.
@@ -202,6 +195,10 @@ impl Program {
         self.outputs.push(Output::new(predicate));
     }
 
+    pub(crate) fn arities(&self) -> &HashMap<Tag, (usize, Origin)> {
+        &self.arities
+    }
+
     /// Check if a different arity was already used for the given predicate
     /// and report an error if this was the case.
     fn validate_arity(
@@ -249,25 +246,6 @@ impl Program {
     ) -> Option<HashMap<Tag, (usize, Origin)>> {
         let mut predicate_arity = HashMap::<Tag, (usize, Origin)>::new();
 
-        let mut count_stdin = 0;
-        for (import_directive, import_builder) in self.imports() {
-            let predicate = import_directive.predicate().clone();
-            let origin = *import_directive.origin();
-            if import_builder
-                .resource()
-                .is_some_and(|resource| resource.is_pipe())
-            {
-                count_stdin += 1;
-                if count_stdin > 1 {
-                    builder.report_error(origin, ValidationErrorKind::ReachedStdinImportLimit);
-                }
-            }
-
-            if let Some(arity) = import_builder.expected_arity() {
-                Self::validate_arity(&mut predicate_arity, predicate, arity, origin, builder);
-            }
-        }
-
         for fact in self.facts() {
             let predicate = fact.predicate().clone();
             let arity = fact.subterms().count();
@@ -307,15 +285,6 @@ impl Program {
             }
         }
 
-        for (export_directive, export_builder) in self.exports() {
-            let predicate = export_directive.predicate().clone();
-            let origin = *export_directive.origin();
-
-            if let Some(arity) = export_builder.expected_arity() {
-                Self::validate_arity(&mut predicate_arity, predicate, arity, origin, builder);
-            }
-        }
-
         for import in &self.imports {
             if !predicate_arity.contains_key(import.predicate()) {
                 builder.report_error(
@@ -343,8 +312,6 @@ impl Program {
         Some(predicate_arity)
     }
 }
-
-impl Program {}
 
 impl std::fmt::Display for Program {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -378,11 +345,26 @@ impl Program {
     where
         Self: Sized,
     {
-        debug_assert!(self.import_builders.is_empty());
-
+        let mut count_stdin = 0;
         for import in &self.imports {
             let builder = import.validate(error_builder)?;
-            self.import_builders.push(builder);
+            let predicate = import.predicate().clone();
+            let origin = *import.origin();
+
+            if builder
+                .resource()
+                .is_some_and(|resource| resource.is_pipe())
+            {
+                count_stdin += 1;
+                if count_stdin > 1 {
+                    error_builder
+                        .report_error(origin, ValidationErrorKind::ReachedStdinImportLimit);
+                }
+            }
+
+            if let Some(arity) = builder.expected_arity() {
+                Self::validate_arity(&mut self.arities, predicate, arity, origin, error_builder);
+            }
         }
 
         for fact in self.facts() {
@@ -399,7 +381,12 @@ impl Program {
 
         for export in &self.exports {
             let builder = export.validate(error_builder)?;
-            self.export_builders.push(builder);
+            let predicate = export.predicate().clone();
+            let origin = *export.origin();
+
+            if let Some(arity) = builder.expected_arity() {
+                Self::validate_arity(&mut self.arities, predicate, arity, origin, error_builder);
+            }
         }
 
         self.arities = self.validate_global_properties(error_builder)?;
