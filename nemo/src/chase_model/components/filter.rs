@@ -62,6 +62,8 @@ impl IterableVariables for ChaseFilter {
 }
 
 impl IterablePrimitives for ChaseFilter {
+    type TermType = Primitive;
+
     fn primitive_terms<'a>(&'a self) -> Box<dyn Iterator<Item = &'a Primitive> + 'a> {
         self.filter.primitive_terms()
     }

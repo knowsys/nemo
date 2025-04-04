@@ -223,7 +223,7 @@ impl IterablePrimitives for Map {
         )
     }
 
-    fn primitive_terms_mut<'a>(&'a mut self) -> Box<dyn Iterator<Item = &'a mut Primitive> + 'a> {
+    fn primitive_terms_mut<'a>(&'a mut self) -> Box<dyn Iterator<Item = &'a mut Term> + 'a> {
         Box::new(
             self.map.iter_mut().flat_map(|(key, value)| {
                 key.primitive_terms_mut().chain(value.primitive_terms_mut())

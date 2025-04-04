@@ -94,6 +94,8 @@ impl IterableVariables for PrimitiveAtom {
 }
 
 impl IterablePrimitives for PrimitiveAtom {
+    type TermType = Primitive;
+
     fn primitive_terms<'a>(&'a self) -> Box<dyn Iterator<Item = &'a Primitive> + 'a> {
         Box::new(self.terms.iter())
     }

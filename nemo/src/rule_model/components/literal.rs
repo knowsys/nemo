@@ -113,7 +113,7 @@ impl IterablePrimitives for Literal {
         }
     }
 
-    fn primitive_terms_mut<'a>(&'a mut self) -> Box<dyn Iterator<Item = &'a mut Primitive> + 'a> {
+    fn primitive_terms_mut<'a>(&'a mut self) -> Box<dyn Iterator<Item = &'a mut Term> + 'a> {
         match self {
             Literal::Positive(literal) => literal.primitive_terms_mut(),
             Literal::Negative(literal) => literal.primitive_terms_mut(),
