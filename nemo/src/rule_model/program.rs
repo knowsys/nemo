@@ -239,9 +239,19 @@ impl Program {
     ) -> Option<HashMap<Tag, (usize, Origin)>> {
         let mut predicate_arity = HashMap::<Tag, (usize, Origin)>::new();
 
+        let mut count_stdin = 0;
         for (import_directive, import_builder) in self.imports() {
             let predicate = import_directive.predicate().clone();
             let origin = *import_directive.origin();
+            if matches!(
+                import_builder.resource().map(|resource| resource.is_pipe()),
+                Some(true)
+            ) {
+                count_stdin += 1;
+                if count_stdin > 1 {
+                    builder.report_error(origin, ValidationErrorKind::ReachedStdinImportLimit);
+                }
+            }
 
             if let Some(arity) = import_builder.expected_arity() {
                 Self::validate_arity(&mut predicate_arity, predicate, arity, origin, builder);

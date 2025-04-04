@@ -966,7 +966,7 @@ mod test {
     /// Helper function to create source-like imports
     fn csv_import(predicate: Tag, arity: usize) -> ChaseImport {
         let handler: Import = Import::new(
-            ResourceBuilder::stdout_resource_builder().finalize(),
+            ResourceBuilder::pipe_resource_builder().finalize(),
             Default::default(),
             arity,
             Arc::new(MockHandler),

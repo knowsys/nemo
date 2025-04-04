@@ -184,10 +184,10 @@ pub enum ValidationErrorKind {
         /// The actual [ValueDomain] of the HTTP parameter
         given: ValueDomain,
     },
-    /// Stdout is not supported for imports
-    #[error("resource `stdout` is not supported for imports")]
+    /// Stdin is only supported for one import
+    #[error("Expected at most one `stdin` import, found at least 2 occurrences")]
     #[assoc(code = 237)]
-    UnsupportedStdoutImport,
+    ReachedStdinImportLimit,
     /// Unsupported feature: Multiple aggregates in one rule
     #[error(r#"multiple aggregates in one rule is currently unsupported"#)]
     #[assoc(code = 999)]

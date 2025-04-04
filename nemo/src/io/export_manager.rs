@@ -70,7 +70,7 @@ impl ExportManager {
     pub fn validate(&self, _predicate: &Tag, handler: &Export) -> Result<(), Error> {
         let resource = handler.resource();
 
-        if resource.is_stdout() {
+        if resource.is_pipe() {
             return Ok(());
         };
 
@@ -129,7 +129,7 @@ impl ExportManager {
     /// [ExportManager::disable_write] is `true`.
     fn writer(&self, export_handler: &Export, predicate: &Tag) -> Result<Box<dyn Write>, Error> {
         let resource = export_handler.resource();
-        let writer: Box<dyn Write> = if resource.is_stdout() {
+        let writer: Box<dyn Write> = if resource.is_pipe() {
             Box::new(std::io::stdout().lock())
         } else {
             let output_path = self.sanitized_path(resource, !export_handler.is_compressed())?;
@@ -177,7 +177,7 @@ impl ExportManager {
             table_writer.export_table_data(Box::new(table))?;
         }
 
-        Ok(export_handler.resource().is_stdout())
+        Ok(export_handler.resource().is_pipe())
     }
 
     /// Export a (possibly empty) table according to the given [ExportHandler],
