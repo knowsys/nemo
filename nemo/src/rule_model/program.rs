@@ -243,10 +243,10 @@ impl Program {
         for (import_directive, import_builder) in self.imports() {
             let predicate = import_directive.predicate().clone();
             let origin = *import_directive.origin();
-            if matches!(
-                import_builder.resource().map(|resource| resource.is_pipe()),
-                Some(true)
-            ) {
+            if import_builder
+                .resource()
+                .is_some_and(|resource| resource.is_pipe())
+            {
                 count_stdin += 1;
                 if count_stdin > 1 {
                     builder.report_error(origin, ValidationErrorKind::ReachedStdinImportLimit);

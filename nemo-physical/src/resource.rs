@@ -94,7 +94,7 @@ impl Resource {
         matches!(self, Self::Path(..))
     }
 
-    /// Return if resource points to pipi
+    /// Return if resource points to pipe
     pub fn is_pipe(&self) -> bool {
         matches!(self, Self::Pipe)
     }

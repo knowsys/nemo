@@ -185,7 +185,7 @@ pub enum ValidationErrorKind {
         given: ValueDomain,
     },
     /// Stdin is only supported for one import
-    #[error("Expected at most one `stdin` import, found at least 2 occurrences")]
+    #[error("expected at most one `stdin` import, found at least 2 occurrences")]
     #[assoc(code = 237)]
     ReachedStdinImportLimit,
     /// Unsupported feature: Multiple aggregates in one rule
