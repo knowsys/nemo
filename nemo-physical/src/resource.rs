@@ -78,7 +78,7 @@ impl Resource {
     /// Whether the resource supports compression
     pub fn supports_compression(&self) -> bool {
         match self {
-            Resource::Pipe => false,       // never compress output to standard out
+            Resource::Pipe => false, // never compress input from standard in or output to standard out
             Resource::Http { .. } => true, // reqwest handles transport layer compression, but retrieved resources may still need decompression
             Resource::Path(_) => true,     // for local files, we need to handle compression
         }
@@ -175,7 +175,7 @@ impl fmt::Display for Resource {
                 }
             }
             Self::Path(path) => write!(f, "{}", path.display()),
-            Self::Pipe => f.write_str("stdin/stdout"),
+            Self::Pipe => f.write_str("standard in / standard out"),
         }
     }
 }
@@ -535,5 +535,19 @@ mod test {
         assert_eq!(resource.file_extension(), None);
 
         assert_eq!(Resource::Pipe.file_extension(), None);
+    }
+
+    #[test]
+    fn pipe() {
+        assert_eq!(
+            ResourceBuilder::try_from(String::from(""))
+                .expect("Valid shortcut for Pipe")
+                .finalize(),
+            Resource::Pipe
+        );
+        assert_eq!(
+            ResourceBuilder::default_resource_builder("", String::new()).finalize(),
+            Resource::Pipe
+        );
     }
 }
