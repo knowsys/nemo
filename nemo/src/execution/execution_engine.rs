@@ -843,11 +843,10 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
 
     fn trace_node_recursive(
         &mut self,
-        result: &mut HashMap<TreeAddress, (Option<PaginationQuery>, Vec<GroundAtom>)>,
         inner: &TableEntriesForTreeNodesQueryInner,
         fact: GroundAtom,
         address: TreeAddress,
-    ) -> Option<bool> {
+    ) -> TraceNodeResult {
         // Check if fact passes the query filter
         if !inner.queries.is_empty() {
             if inner.queries.iter().all(|query| match query {
@@ -856,13 +855,18 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                 }
                 TableEntryQuery::Query(query_string) => !Self::check_fact(&fact, query_string),
             }) {
-                return Some(false);
+                return TraceNodeResult::default();
             }
         }
 
-        let step = self
+        let step = if let Some(step) = self
             .table_manager
-            .find_table_row(&fact.predicate(), &fact.datavalues().collect::<Vec<_>>())?;
+            .find_table_row(&fact.predicate(), &fact.datavalues().collect::<Vec<_>>())
+        {
+            step
+        } else {
+            return TraceNodeResult::default();
+        };
 
         let no_restriction = if let Some(successor) = &inner.children {
             successor.children.is_empty()
@@ -871,28 +875,19 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         };
 
         if step == 0 && !no_restriction {
-            return Some(false);
+            return TraceNodeResult::default();
         }
 
         let rule_index = self.rule_history[step];
 
         if let Some(successor) = &inner.children {
             if rule_index != successor.rule {
-                return Some(false);
+                return TraceNodeResult::default();
             }
         }
 
         if no_restriction {
-            match result.entry(address) {
-                Entry::Occupied(mut entry) => {
-                    entry.get_mut().1.push(fact);
-                }
-                Entry::Vacant(entry) => {
-                    entry.insert((inner.pagination.clone(), vec![fact]));
-                }
-            }
-
-            return Some(true);
+            return TraceNodeResult::single(address, inner.pagination, fact);
         }
 
         let children = if let Some(successor) = &inner.children {
@@ -904,7 +899,12 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         let rule = self.program.rules()[rule_index].clone();
 
         // Iterate over all head atoms which could have derived the given fact
-        for head_atom in rule.head() {
+        for (head_index, head_atom) in rule.head().iter().enumerate() {
+            let is_aggregate_atom = Some(head_index) == rule.aggregate_head_index();
+            let aggregate_variable = rule
+                .aggregate()
+                .map(|aggregate| aggregate.output_variable());
+
             if head_atom.predicate() != fact.predicate() {
                 continue;
             }
@@ -931,6 +931,11 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                             continue;
                         }
 
+                        // Aggregate variables are not grounded
+                        if is_aggregate_atom && Some(variable) == aggregate_variable {
+                            continue;
+                        }
+
                         match grounding.entry(variable.clone()) {
                             Entry::Occupied(entry) => {
                                 if *entry.get() != fact_term.value() {
@@ -954,7 +959,12 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
             let rule = self.program.rules()[rule_index].clone();
             let analysis = &self.analysis.rule_analysis[rule_index];
             let mut variable_order = analysis.promising_variable_orders[0].clone(); // TODO: This selection is arbitrary
-            let trace_strategy = TracingStrategy::initialize(&rule, grounding).ok()?;
+            let trace_strategy = if let Ok(strategy) = TracingStrategy::initialize(&rule, grounding)
+            {
+                strategy
+            } else {
+                return TraceNodeResult::default();
+            };
 
             let mut execution_plan = SubtableExecutionPlan::default();
 
@@ -965,18 +975,23 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                 step,
             );
 
-            let query_trie = self
-                .table_manager
-                .execute_plan_trie(execution_plan)
-                .ok()?
-                .pop()
-                .unwrap();
+            let query_trie =
+                if let Ok(mut trie) = self.table_manager.execute_plan_trie(execution_plan) {
+                    trie.pop().unwrap()
+                } else {
+                    return TraceNodeResult::default();
+                };
 
-            let query_result = self
-                .table_manager
-                .trie_row_iterator(&query_trie)
-                .ok()?
-                .collect::<Vec<_>>();
+            let query_result = if let Ok(result) = self.table_manager.trie_row_iterator(&query_trie)
+            {
+                result.collect::<Vec<_>>()
+            } else {
+                return TraceNodeResult::default();
+            };
+
+            let mut result =
+                TraceNodeResult::single(address.clone(), inner.pagination, fact.clone());
+            let mut accept = is_aggregate_atom;
 
             for grounding in query_result {
                 let variable_assignment: HashMap<Variable, AnyDataValue> = variable_order
@@ -1006,31 +1021,36 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                     let mut next_address = address.clone();
                     next_address.push(body_index);
 
-                    let derived_next =
-                        self.trace_node_recursive(result, child, next_fact, next_address)?;
+                    let derived_next = self.trace_node_recursive(child, next_fact, next_address);
 
-                    if !derived_next {
+                    if derived_next.is_empty() {
                         fully_derived = false;
+
                         break;
                     }
+
+                    result.combine(derived_next);
                 }
 
-                if fully_derived {
-                    match result.entry(address) {
-                        Entry::Occupied(mut entry) => {
-                            entry.get_mut().1.push(fact);
-                        }
-                        Entry::Vacant(entry) => {
-                            entry.insert((inner.pagination.clone(), vec![fact]));
-                        }
-                    }
-
-                    return Some(true);
+                if is_aggregate_atom && !fully_derived {
+                    accept = false;
+                    break;
                 }
+
+                if !is_aggregate_atom && fully_derived {
+                    accept = true;
+                    break;
+                }
+            }
+
+            if accept {
+                return result;
+            } else {
+                return TraceNodeResult::default();
             }
         }
 
-        Some(false)
+        TraceNodeResult::default()
     }
 
     /// Evauate a [TableEntriesForTreeNodesQuery].
@@ -1038,7 +1058,6 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         &mut self,
         query: TableEntriesForTreeNodesQuery,
     ) -> TableEntriesForTreeNodesResponse {
-        let mut result = HashMap::<TreeAddress, (Option<PaginationQuery>, Vec<GroundAtom>)>::new();
         let query_predicate = Tag::new(query.predicate.clone());
 
         let initial_facts = self
@@ -1056,13 +1075,15 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
             })
             .unwrap_or_default();
 
+        let mut result = TraceNodeResult::default();
+
         for fact in initial_facts {
-            let _ = self.trace_node_recursive(&mut result, &query.inner, fact, Vec::new());
+            result.combine(self.trace_node_recursive(&query.inner, fact, Vec::new()));
         }
 
         let mut elements = Vec::new();
 
-        for (address, (pagination, facts)) in result {
+        for (address, pagination, facts) in result.iter() {
             let predicate = if let Some(fact) = facts.first() {
                 fact.predicate().to_string()
             } else {
@@ -1112,7 +1133,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                 pagination: PaginationResponse { start, more },
                 possible_rules_above,
                 possible_rules_below,
-                address,
+                address: address.clone(),
             };
 
             elements.push(element);
@@ -1210,5 +1231,62 @@ impl Iterator for TraceGroundingIterator {
         }
 
         None
+    }
+}
+
+#[derive(Debug, Default)]
+struct TraceNodeResult {
+    map: HashMap<TreeAddress, Vec<GroundAtom>>,
+    pagination: HashMap<TreeAddress, Option<PaginationQuery>>,
+}
+
+impl TraceNodeResult {
+    pub fn single(
+        address: TreeAddress,
+        pagination_query: Option<PaginationQuery>,
+        fact: GroundAtom,
+    ) -> Self {
+        let mut map = HashMap::new();
+        let mut pagination = HashMap::new();
+
+        map.insert(address.clone(), vec![fact]);
+        pagination.insert(address, pagination_query);
+
+        Self { map, pagination }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.map.is_empty()
+    }
+
+    pub fn combine(&mut self, other: Self) {
+        for (address, atoms) in other.map {
+            match self.map.entry(address) {
+                Entry::Occupied(mut entry) => {
+                    entry.get_mut().extend(atoms);
+                }
+                Entry::Vacant(entry) => {
+                    entry.insert(atoms);
+                }
+            }
+        }
+
+        for (address, pagination) in other.pagination {
+            match self.pagination.entry(address) {
+                Entry::Occupied(_) => {}
+                Entry::Vacant(entry) => {
+                    entry.insert(pagination);
+                }
+            }
+        }
+    }
+
+    pub fn iter(
+        &self,
+    ) -> impl Iterator<Item = (&TreeAddress, Option<&PaginationQuery>, &Vec<GroundAtom>)> {
+        self.map.iter().map(move |(addr, atoms)| {
+            let pagination_opt = self.pagination.get(addr).and_then(|x| x.as_ref());
+            (addr, pagination_opt, atoms)
+        })
     }
 }
