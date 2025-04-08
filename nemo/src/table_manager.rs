@@ -543,13 +543,6 @@ impl TableManager {
             .unwrap_or_default()
     }
 
-    /// Return the id of a table corresponding to a predicate and step, if it exists
-    pub fn table_step(&self, predicate: &Tag, step: usize) -> Option<PermanentTableId> {
-        self.predicate_subtables
-            .get(predicate)
-            .and_then(|handler| handler.subtable(step))
-    }
-
     /// Combine subtables in a certain range into one larger table.
     pub fn combine_tables(
         &mut self,

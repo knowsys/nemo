@@ -15,16 +15,17 @@ pub struct TableEntriesForTreeNodesQuerySuccessor {
     pub children: Vec<TableEntriesForTreeNodesQueryInner>,
 }
 
+/// Inner query in [TableEntriesForTreeNodesQuery]
 #[derive(Debug, Serialize, Deserialize)]
 pub struct TableEntriesForTreeNodesQueryInner {
     /// List of queries
     pub queries: Vec<TableEntryQuery>,
 
     /// [PaginationQuery] for restricting the amount of expected results
-    pub pagination: PaginationQuery,
+    pub pagination: Option<PaginationQuery>,
 
     /// Children of this node
-    pub children: TableEntriesForTreeNodesQuerySuccessor,
+    pub children: Option<TableEntriesForTreeNodesQuerySuccessor>,
 }
 
 /// Request for a trace which follows the given tree structure
@@ -47,6 +48,7 @@ pub struct TableEntriesForTreeNodesQuery {
 /// first child level, and so on.
 pub type TreeAddress = Vec<usize>;
 
+/// Single entry in [TableEntriesForTreeNodesResponse]
 #[derive(Debug, Serialize, Deserialize)]
 pub struct TableEntriesForTreeNodesResponseElement {
     /// Predicate of the this table
