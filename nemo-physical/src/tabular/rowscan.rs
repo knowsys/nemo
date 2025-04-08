@@ -8,7 +8,7 @@ use crate::datatypes::{StorageTypeName, StorageValueT};
 
 use super::triescan::PartialTrieScan;
 
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 struct TypeIndex {
     start: usize,
     used: usize,
@@ -16,7 +16,7 @@ struct TypeIndex {
 
 /// Stores the possible [StorageTypeName] for each layer,
 /// and which of those are currently in use
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct PossibleTypes {
     /// All possible storage types
     storage_types: Vec<StorageTypeName>,
@@ -88,7 +88,7 @@ impl PossibleTypes {
 /// Additionally also contains the first row index which differes from the last call to `next`.
 ///
 /// TODO: It would be nice if the next operation could return `(usize, &[StorageValueT])` instead of &Row
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub(crate) struct Row {
     /// Row as a vector of [StorageValueT]
     pub row: Vec<StorageValueT>,
@@ -97,7 +97,7 @@ pub(crate) struct Row {
 }
 
 /// A [StreamingIterator] for a [PartialTrieScan]
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub(crate) struct RowScan<'a, Scan: PartialTrieScan<'a>> {
     /// Using 'a in the trait bound doesn't count
     _phantom: PhantomData<&'a usize>,
