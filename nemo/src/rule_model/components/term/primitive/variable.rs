@@ -128,6 +128,12 @@ impl From<ExistentialVariable> for Variable {
     }
 }
 
+impl From<GlobalVariable> for Variable {
+    fn from(value: GlobalVariable) -> Self {
+        Self::Global(value)
+    }
+}
+
 impl Display for Variable {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {

@@ -2,7 +2,7 @@
 #![allow(missing_docs)]
 
 use std::{
-    collections::{HashMap, HashSet},
+    collections::HashSet,
     fmt::{Display, Write},
     hash::Hash,
 };
@@ -18,16 +18,13 @@ use crate::{
         },
         error::{validation_error::ValidationErrorKind, ValidationErrorBuilder},
         origin::Origin,
+        substitution::Substitution,
     },
     syntax::builtin::aggregate,
 };
 
 use super::{
-    primitive::{
-        ground::GroundTerm,
-        variable::{global::GlobalVariable, Variable},
-        Primitive,
-    },
+    primitive::{variable::Variable, Primitive},
     value_type::ValueType,
     Term,
 };
@@ -167,11 +164,11 @@ impl Aggregate {
     }
 
     /// Reduce the [Term] in the aggregate expression returning a copy.
-    pub fn reduce(&self, bindings: &HashMap<GlobalVariable, GroundTerm>) -> Self {
+    pub fn reduce_with_substitution(&self, bindings: &Substitution) -> Self {
         Self {
             origin: self.origin,
             kind: self.kind,
-            aggregate: Box::new(self.aggregate.reduce(bindings)),
+            aggregate: Box::new(self.aggregate.reduce_with_substitution(bindings)),
             distinct: self.distinct.clone(),
         }
     }

@@ -1,6 +1,6 @@
 //! This module defines [FunctionTerm].
 
-use std::{collections::HashMap, fmt::Display, hash::Hash, vec};
+use std::{fmt::Display, hash::Hash, vec};
 
 use crate::rule_model::{
     components::{
@@ -8,14 +8,11 @@ use crate::rule_model::{
     },
     error::{validation_error::ValidationErrorKind, ValidationErrorBuilder},
     origin::Origin,
+    substitution::Substitution,
 };
 
 use super::{
-    primitive::{
-        ground::GroundTerm,
-        variable::{global::GlobalVariable, Variable},
-        Primitive,
-    },
+    primitive::{variable::Variable, Primitive},
     value_type::ValueType,
     Term,
 };
@@ -106,14 +103,14 @@ impl FunctionTerm {
     }
 
     /// Reduce each sub [Term] in the function returning a copy.
-    pub fn reduce(&self, bindings: &HashMap<GlobalVariable, GroundTerm>) -> Self {
+    pub fn reduce_with_substitution(&self, bindings: &Substitution) -> Self {
         Self {
             origin: self.origin,
             tag: self.tag.clone(),
             terms: self
                 .terms
                 .iter()
-                .map(|term| term.reduce(bindings))
+                .map(|term| term.reduce_with_substitution(bindings))
                 .collect(),
         }
     }

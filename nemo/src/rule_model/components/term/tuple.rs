@@ -1,19 +1,16 @@
 //! This module defines [Tuple].
 
-use std::{collections::HashMap, fmt::Display, hash::Hash};
+use std::{fmt::Display, hash::Hash};
 
 use crate::rule_model::{
     components::{IterablePrimitives, IterableVariables, ProgramComponent, ProgramComponentKind},
     error::ValidationErrorBuilder,
     origin::Origin,
+    substitution::Substitution,
 };
 
 use super::{
-    primitive::{
-        ground::GroundTerm,
-        variable::{global::GlobalVariable, Variable},
-        Primitive,
-    },
+    primitive::{variable::Variable, Primitive},
     value_type::ValueType,
     Term,
 };
@@ -73,13 +70,13 @@ impl Tuple {
     }
 
     /// Reduce each sub [Term] in the tuple returning a copy.
-    pub fn reduce(&self, bindings: &HashMap<GlobalVariable, GroundTerm>) -> Self {
+    pub fn reduce(&self, bindings: &Substitution) -> Self {
         Self {
             origin: self.origin,
             terms: self
                 .terms
                 .iter()
-                .map(|term| term.reduce(bindings))
+                .map(|term| term.reduce_with_substitution(bindings))
                 .collect(),
         }
     }

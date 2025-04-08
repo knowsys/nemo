@@ -36,7 +36,9 @@ use primitive::{
 use tuple::Tuple;
 use value_type::ValueType;
 
-use crate::rule_model::{error::ValidationErrorBuilder, origin::Origin};
+use crate::rule_model::{
+    error::ValidationErrorBuilder, origin::Origin, substitution::Substitution,
+};
 
 use super::{IterablePrimitives, IterableVariables, ProgramComponent};
 
@@ -147,24 +149,23 @@ impl Term {
         }
     }
 
-    /// Reduce (potential) constant expressions contained and return a copy of the resulting [Term].
-    pub fn reduce(&self, bindings: &HashMap<GlobalVariable, GroundTerm>) -> Term {
-        match self {
-            Term::Operation(operation) => operation.reduce(bindings),
-            Term::Aggregate(term) => Term::Aggregate(term.reduce(bindings)),
-            Term::FunctionTerm(term) => Term::FunctionTerm(term.reduce(bindings)),
-            Term::Map(term) => Term::Map(term.reduce(bindings)),
-            Term::Tuple(term) => Term::Tuple(term.reduce(bindings)),
-            Term::Primitive(primitive) => match primitive {
-                Primitive::Variable(Variable::Global(variable)) => {
-                    let Some(term) = bindings.get(variable) else {
-                        return self.clone();
-                    };
+    pub fn reduce(&self) -> Term {
+        self.reduce_with_substitution(&Substitution::default())
+    }
 
-                    Term::Primitive(Primitive::Ground(term.clone()))
-                }
-                _ => self.clone(),
-            },
+    /// Reduce (potential) constant expressions contained and return a copy of the resulting [Term].
+    pub fn reduce_with_substitution(&self, bindings: &Substitution) -> Term {
+        match self {
+            Term::Operation(operation) => operation.reduce_with_substitution(bindings),
+            Term::Aggregate(term) => Term::Aggregate(term.reduce_with_substitution(bindings)),
+            Term::FunctionTerm(term) => Term::FunctionTerm(term.reduce_with_substitution(bindings)),
+            Term::Map(term) => Term::Map(term.reduce_with_substitution(bindings)),
+            Term::Tuple(term) => Term::Tuple(term.reduce(bindings)),
+            Term::Primitive(_) => {
+                let mut res = self.clone();
+                bindings.apply(&mut res);
+                res
+            }
         }
     }
 
@@ -172,69 +173,75 @@ impl Term {
         self,
         bindings: &HashMap<GlobalVariable, GroundTerm>,
     ) -> Result<GroundTerm, Term> {
-        match self {
-            Term::Map(map) => {
-                let origin = *map.origin();
-                let label = map
-                    .tag()
-                    .map(|tag| IriDataValue::new(tag.name().to_string()));
+        let subst = Substitution::new(bindings.clone().into_iter());
 
-                let mut buffer = Vec::new();
-                for (key, value) in map.into_iter() {
-                    let key = key.try_into_ground(bindings)?.value();
-                    let value = value.try_into_ground(bindings)?.value();
-                    buffer.push((key, value));
+        fn rec(term: Term, subst: &Substitution) -> Result<GroundTerm, Term> {
+            match term {
+                Term::Map(map) => {
+                    let origin = *map.origin();
+                    let label = map
+                        .tag()
+                        .map(|tag| IriDataValue::new(tag.name().to_string()));
+
+                    let mut buffer = Vec::new();
+                    for (key, value) in map.into_iter() {
+                        let key = rec(key, subst)?.value();
+                        let value = rec(value, subst)?.value();
+                        buffer.push((key, value));
+                    }
+
+                    let res = AnyDataValue::from(MapDataValue::new(label, buffer));
+                    Ok(GroundTerm::new(res).set_origin(origin))
                 }
+                Term::Tuple(tuple) => {
+                    let origin = *tuple.origin();
 
-                let res = AnyDataValue::from(MapDataValue::new(label, buffer));
-                Ok(GroundTerm::new(res).set_origin(origin))
-            }
-            Term::Tuple(tuple) => {
-                let origin = *tuple.origin();
+                    let mut buffer = Vec::new();
+                    for value in tuple.into_iter() {
+                        let value = rec(value, subst)?.value();
+                        buffer.push(value);
+                    }
 
-                let mut buffer = Vec::new();
-                for value in tuple.into_iter() {
-                    let value = value.try_into_ground(bindings)?.value();
-                    buffer.push(value);
+                    let res = AnyDataValue::from(TupleDataValue::from_iter(buffer));
+                    Ok(GroundTerm::new(res).set_origin(origin))
                 }
+                Term::FunctionTerm(function_term) => {
+                    let origin = *function_term.origin();
+                    let label = IriDataValue::new(function_term.tag().name().to_string());
 
-                let res = AnyDataValue::from(TupleDataValue::from_iter(buffer));
-                Ok(GroundTerm::new(res).set_origin(origin))
-            }
-            Term::FunctionTerm(function_term) => {
-                let origin = *function_term.origin();
-                let label = IriDataValue::new(function_term.tag().name().to_string());
+                    let mut buffer = Vec::new();
+                    for value in function_term.into_iter() {
+                        let value = rec(value, subst)?.value();
+                        buffer.push(value);
+                    }
 
-                let mut buffer = Vec::new();
-                for value in function_term.into_iter() {
-                    let value = value.try_into_ground(bindings)?.value();
-                    buffer.push(value);
+                    let res = AnyDataValue::from(TupleDataValue::new(Some(label), buffer));
+                    Ok(GroundTerm::new(res).set_origin(origin))
                 }
+                Term::Operation(operation) => {
+                    let reduced = operation.reduce_with_substitution(&subst);
 
-                let res = AnyDataValue::from(TupleDataValue::new(Some(label), buffer));
-                Ok(GroundTerm::new(res).set_origin(origin))
-            }
-            Term::Operation(operation) => {
-                let reduced = operation.reduce(bindings);
-
-                if matches!(reduced, Term::Operation(_)) {
-                    Err(reduced)
-                } else {
-                    reduced.try_into_ground(bindings)
+                    if matches!(reduced, Term::Operation(_)) {
+                        Err(reduced)
+                    } else {
+                        rec(reduced, subst)
+                    }
                 }
-            }
-            Term::Aggregate(_) => Err(self),
-            Term::Primitive(_) => {
-                let Term::Primitive(primitive) = self.reduce(bindings) else {
-                    unreachable!("primitive reduces to primitive")
-                };
+                Term::Aggregate(_) => Err(term),
+                Term::Primitive(_) => {
+                    let Term::Primitive(primitive) = term.reduce_with_substitution(&subst) else {
+                        unreachable!("primitive reduces to primitive")
+                    };
 
-                match primitive {
-                    Primitive::Variable(_) => Err(self),
-                    Primitive::Ground(ground_term) => Ok(ground_term),
+                    match primitive {
+                        Primitive::Variable(_) => Err(term),
+                        Primitive::Ground(ground_term) => Ok(ground_term),
+                    }
                 }
             }
         }
+
+        rec(self, &subst)
     }
 }
 
@@ -449,10 +456,9 @@ impl IterablePrimitives for Term {
 
 #[cfg(test)]
 mod test {
-    use std::collections::HashMap;
-
     use crate::rule_model::{
         components::term::primitive::{ground::GroundTerm, variable::global::GlobalVariable},
+        substitution::Substitution,
         translation::TranslationComponent,
     };
 
@@ -463,7 +469,7 @@ mod test {
         let constant = Term::parse("2 * (?global + 7)").unwrap();
         let term = Term::from(tuple!(5, constant));
 
-        let reduced = term.reduce(&HashMap::from([(
+        let reduced = term.reduce_with_substitution(&Substitution::new([(
             GlobalVariable::new("global"),
             GroundTerm::parse("3").unwrap(),
         )]));
@@ -477,7 +483,7 @@ mod test {
         let expression = Term::parse("?x * (3 + 7)").unwrap();
         let term = Term::from(tuple!(5, expression));
 
-        let reduced = term.reduce(&HashMap::new());
+        let reduced = term.reduce();
         let expected_term = Term::parse("(5, ?x * 10)").unwrap();
 
         assert_eq!(reduced, expected_term);

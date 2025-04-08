@@ -65,7 +65,7 @@ fn import_export_spec<'a, 'b>(
         .unwrap_or_default();
 
     substitution.apply(&mut spec);
-    spec = spec.reduce(translation.globals());
+    spec = spec.reduce_with_substitution(&Substitution::new(translation.globals().clone()));
 
     let Some(format_tag) = spec.tag() else {
         let span = instructions.span().beginning();

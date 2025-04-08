@@ -5,12 +5,15 @@ use std::collections::HashMap;
 
 use crate::{
     chase_model::components::{atom::ground_atom::GroundAtom, ChaseComponent},
-    rule_model::components::{
-        term::{
-            primitive::{ground::GroundTerm, variable::global::GlobalVariable, Primitive},
-            Term,
+    rule_model::{
+        components::{
+            term::{
+                primitive::{ground::GroundTerm, variable::global::GlobalVariable, Primitive},
+                Term,
+            },
+            ProgramComponent,
         },
-        ProgramComponent,
+        substitution::Substitution,
     },
 };
 
@@ -32,7 +35,7 @@ impl ProgramChaseTranslation {
         let mut terms = Vec::new();
 
         for term in fact.subterms() {
-            let reduced = term.reduce(globals);
+            let reduced = term.reduce_with_substitution(&Substitution::new(globals.clone()));
 
             if let Term::Primitive(Primitive::Ground(value)) = reduced {
                 terms.push(value.clone());

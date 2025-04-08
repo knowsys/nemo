@@ -24,8 +24,9 @@ use nemo::{
             fact::Fact,
             tag::Tag,
             term::{primitive::Primitive, Term},
+            ProgramComponent,
         },
-        error::ComponentParseError,
+        error::{ComponentParseError, ValidationErrorBuilder},
     },
 };
 
@@ -115,7 +116,10 @@ impl NemoProgram {
     pub fn resources_used_in_imports(&self) -> Vec<NemoResource> {
         let mut result: Vec<NemoResource> = vec![];
 
-        for (_, builder) in self.0.imports() {
+        for import in self.0.imports() {
+            let builder = import
+                .validate(&mut ValidationErrorBuilder::default())
+                .expect("imports have been validated at this point");
             let format: String = builder.build_import("", 0).media_type();
             if let Some(resource) = builder.resource() {
                 result.push(NemoResource {

@@ -18,15 +18,12 @@ use crate::{
         },
         error::{validation_error::ValidationErrorKind, ValidationErrorBuilder},
         origin::Origin,
+        substitution::Substitution,
     },
 };
 
 use super::{
-    primitive::{
-        ground::GroundTerm,
-        variable::{global::GlobalVariable, Variable},
-        Primitive,
-    },
+    primitive::{ground::GroundTerm, variable::Variable, Primitive},
     value_type::ValueType,
     Term,
 };
@@ -100,7 +97,7 @@ impl Operation {
     }
 
     /// Reduce constant expressions returning a copy of the reduced [Term].
-    pub fn reduce(&self, bindings: &HashMap<GlobalVariable, GroundTerm>) -> Term {
+    pub fn reduce_with_substitution(&self, bindings: &Substitution) -> Term {
         if !self.is_ground() {
             return Term::Operation(Self {
                 origin: self.origin,
@@ -108,7 +105,7 @@ impl Operation {
                 subterms: self
                     .subterms
                     .iter()
-                    .map(|term| term.reduce(bindings))
+                    .map(|term| term.reduce_with_substitution(bindings))
                     .collect(),
             });
         }

@@ -86,7 +86,7 @@ impl Rule {
     pub fn display_instantiated(&self, substitution: &Substitution) -> String {
         if let Some(mut display) = self.display.clone() {
             substitution.apply(&mut display);
-            if let Term::Primitive(Primitive::Ground(ground)) = display.reduce(&[].into()) {
+            if let Term::Primitive(Primitive::Ground(ground)) = display.reduce() {
                 if let Some(result) = ground.value().to_plain_string() {
                     return result;
                 }
