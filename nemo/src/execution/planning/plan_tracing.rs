@@ -19,7 +19,6 @@ use crate::{
     rule_model::components::{
         tag::Tag,
         term::{
-            aggregate::AggregateKind,
             operation::operation_kind::OperationKind,
             primitive::{variable::Variable, Primitive},
         },
@@ -51,22 +50,6 @@ impl TracingStrategy {
         rule: &ChaseRule,
         grounding: HashMap<Variable, AnyDataValue>,
     ) -> Result<Self, TracingError> {
-        // An aggregate does not impose any restriction,
-        // as the tracing finds relevant values
-
-        // if let Some(aggregate) = rule.aggregate() {
-        //     match aggregate.aggregate_kind() {
-        //         AggregateKind::CountValues | AggregateKind::SumOfNumbers => {
-        //             return Err(TracingError::UnsupportedFeatureNonMinMaxAggregation)
-        //         }
-        //         AggregateKind::MinNumber | AggregateKind::MaxNumber => {}
-        //     }
-        // }
-
-        // if !rule.aggregate_operations().is_empty() || !rule.aggregate_filters().is_empty() {
-        //     return Err(TracingError::UnsupportedFeatureComplexAggregates);
-        // }
-
         let mut variable_translation = VariableTranslation::new();
         for variable in rule.variables().cloned() {
             variable_translation.add_marker(variable);
