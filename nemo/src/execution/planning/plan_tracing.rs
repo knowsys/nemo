@@ -51,18 +51,21 @@ impl TracingStrategy {
         rule: &ChaseRule,
         grounding: HashMap<Variable, AnyDataValue>,
     ) -> Result<Self, TracingError> {
-        if let Some(aggregate) = rule.aggregate() {
-            match aggregate.aggregate_kind() {
-                AggregateKind::CountValues | AggregateKind::SumOfNumbers => {
-                    return Err(TracingError::UnsupportedFeatureNonMinMaxAggregation)
-                }
-                AggregateKind::MinNumber | AggregateKind::MaxNumber => {}
-            }
-        }
+        // An aggregate does not impose any restriction,
+        // as the tracing finds relevant values
 
-        if !rule.aggregate_operations().is_empty() || !rule.aggregate_filters().is_empty() {
-            return Err(TracingError::UnsupportedFeatureComplexAggregates);
-        }
+        // if let Some(aggregate) = rule.aggregate() {
+        //     match aggregate.aggregate_kind() {
+        //         AggregateKind::CountValues | AggregateKind::SumOfNumbers => {
+        //             return Err(TracingError::UnsupportedFeatureNonMinMaxAggregation)
+        //         }
+        //         AggregateKind::MinNumber | AggregateKind::MaxNumber => {}
+        //     }
+        // }
+
+        // if !rule.aggregate_operations().is_empty() || !rule.aggregate_filters().is_empty() {
+        //     return Err(TracingError::UnsupportedFeatureComplexAggregates);
+        // }
 
         let mut variable_translation = VariableTranslation::new();
         for variable in rule.variables().cloned() {

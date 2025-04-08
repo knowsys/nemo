@@ -132,6 +132,13 @@ pub(crate) struct TracingArgs {
     pub(crate) output_file: Option<PathBuf>,
 }
 
+/// Cli arguments related to type 1 tracing
+#[derive(Debug, clap::Args)]
+pub(crate) struct TracingTreeArgs {
+    /// Query formatted as json specifying the facts that should be traced
+    #[arg(long = "trace-tree")]
+    pub(crate) trace_tree_json: Option<String>,
+}
 /// Nemo CLI
 #[derive(clap::Parser, Debug)]
 #[command(author, version, about)]
@@ -148,6 +155,9 @@ pub(crate) struct CliApp {
     /// Arguments related to tracing
     #[command(flatten)]
     pub(crate) tracing: TracingArgs,
+    /// Arguments related to advanded tracing
+    #[command(flatten)]
+    pub(crate) tracing_tree: TracingTreeArgs,
     /// Control amount of reporting printed by the program
     #[arg(long = "report", value_enum, default_value_t)]
     pub(crate) reporting: Reporting,
