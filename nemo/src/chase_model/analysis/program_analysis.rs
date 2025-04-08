@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::{hash_map::Entry, HashMap, HashSet};
 
 use nemo_physical::management::execution_plan::ColumnOrder;
 
@@ -236,6 +236,11 @@ pub struct ProgramAnalysis {
     pub derived_predicates: HashSet<Tag>,
     /// Set of all predicates and their arity.
     pub all_predicates: HashMap<Tag, usize>,
+
+    /// Map from a predicate to all the rules where that predicate appears in its body
+    pub predicate_to_rule_body: HashMap<Tag, HashSet<usize>>,
+    /// Map from a predicate to all the rules where that predicate appears in its head
+    pub predicate_to_rule_head: HashMap<Tag, HashSet<usize>>,
 }
 
 impl ChaseProgram {
@@ -341,10 +346,39 @@ impl ChaseProgram {
             })
             .collect();
 
+        let mut predicate_to_rule_body = HashMap::<Tag, HashSet<usize>>::new();
+        let mut predicate_to_rule_head = HashMap::<Tag, HashSet<usize>>::new();
+
+        for (rule_index, rule) in self.rules().iter().enumerate() {
+            for body_atom in rule.positive_body() {
+                match predicate_to_rule_body.entry(body_atom.predicate()) {
+                    Entry::Occupied(mut entry) => {
+                        entry.get_mut().insert(rule_index);
+                    }
+                    Entry::Vacant(entry) => {
+                        entry.insert(HashSet::from([rule_index]));
+                    }
+                }
+            }
+
+            for head_atom in rule.head() {
+                match predicate_to_rule_head.entry(head_atom.predicate()) {
+                    Entry::Occupied(mut entry) => {
+                        entry.get_mut().insert(rule_index);
+                    }
+                    Entry::Vacant(entry) => {
+                        entry.insert(HashSet::from([rule_index]));
+                    }
+                }
+            }
+        }
+
         ProgramAnalysis {
             rule_analysis,
             derived_predicates,
             all_predicates,
+            predicate_to_rule_body,
+            predicate_to_rule_head,
         }
     }
 }

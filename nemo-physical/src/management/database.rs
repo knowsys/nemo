@@ -149,6 +149,14 @@ impl DatabaseInstance {
             .unwrap_or_else(|err| panic!("No table with the id {id} exists: {err}"));
         let trie = self.reference_manager.trie(storage_id);
 
+        self.trie_row_iterator(trie)
+    }
+
+    /// Provide an iterator over the rows of the table with the given [Trie].
+    pub fn trie_row_iterator<'a>(
+        &'a self,
+        trie: &'a Trie,
+    ) -> Result<impl Iterator<Item = Vec<AnyDataValue>> + 'a, Error> {
         Ok(trie.row_iterator().map(|values| {
             values
                 .into_iter()
@@ -351,7 +359,7 @@ impl DatabaseInstance {
     /// Returns a pair containing a (possibly empty) [Trie]
     /// and a list of reordered [Trie]s, one for each provided [ProjectReordering].
     fn execute_tree<'a>(
-        &'a mut self,
+        &'a self,
         storage: &'a TemporaryStorage,
         tree: &ExecutionTree,
         dependent: Vec<ProjectReordering>,
@@ -546,6 +554,57 @@ impl DatabaseInstance {
         }
 
         None
+    }
+
+    /// Evaluate the given [ExecutionPlan] and return a [Trie] without
+    /// saving anything to the permanent storage.
+    pub fn execute_plan_trie(&mut self, plan: ExecutionPlan) -> Result<Vec<Trie>, Error> {
+        let execution_series = plan.finalize();
+
+        let mut temporary_storage = TemporaryStorage {
+            loaded_tables: self.collect_requiured_tries(&execution_series.loaded_tries)?,
+            computed_tables: vec![None; execution_series.trees.len()],
+        };
+
+        for (tree_index, tree) in execution_series.trees.iter().enumerate() {
+            if temporary_storage.computed_tables[tree_index].is_some() {
+                continue;
+            }
+
+            let dependent_reorderings = tree
+                .dependents
+                .iter()
+                .map(|(_, projectreordering)| projectreordering.clone())
+                .collect::<Vec<_>>();
+
+            let (result_tree, results_dependent) =
+                self.execute_tree(&temporary_storage, tree, dependent_reorderings);
+
+            temporary_storage.computed_tables[tree_index] = Some(result_tree);
+            for ((computed_id, _), result_dependent) in
+                tree.dependents.iter().zip(results_dependent)
+            {
+                Self::log_new_trie(tree, &result_dependent);
+                temporary_storage.computed_tables[*computed_id] = Some(result_dependent);
+            }
+        }
+
+        let mut result = Vec::new();
+        for (tree, trie) in execution_series
+            .trees
+            .into_iter()
+            .zip(temporary_storage.computed_tables)
+        {
+            match tree.result {
+                ExecutionResult::Temporary => {} // Temporary table will be dropped at the end of the function
+                ExecutionResult::Permanent(_order, _name) => {
+                    let trie = trie.expect("Trie should have been computed.");
+                    result.push(trie);
+                }
+            }
+        }
+
+        Ok(result)
     }
 }
 
