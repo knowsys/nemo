@@ -29,6 +29,12 @@ pub struct GroundAtom {
     terms: Vec<GroundTerm>,
 }
 
+impl PartialEq for GroundAtom {
+    fn eq(&self, other: &Self) -> bool {
+        self.predicate == other.predicate && self.terms == other.terms
+    }
+}
+
 impl GroundAtom {
     /// Construct a new [GroundAtom].
     pub fn new(predicate: Tag, terms: Vec<GroundTerm>) -> Self {

@@ -36,7 +36,9 @@ use nemo::{
     datavalues::AnyDataValue,
     error::Error,
     execution::{
-        execution_parameters::ExecutionParameters, DefaultExecutionEngine, ExecutionEngine,
+        execution_parameters::ExecutionParameters,
+        tracing::{shared::TableEntryQuery, tree_query::TreeForTableQuery},
+        DefaultExecutionEngine, ExecutionEngine,
     },
     io::{resource_providers::ResourceProviders, ImportManager},
     meta::timing::{TimedCode, TimedDisplay},
@@ -212,6 +214,22 @@ fn handle_tracing(cli: &CliApp, engine: &mut DefaultExecutionEngine) -> Result<(
     Ok(())
 }
 
+fn handle_tracing_tree(cli: &CliApp, engine: &mut DefaultExecutionEngine) -> Result<(), CliError> {
+    if let Some(query_json) = &cli.tracing_tree.trace_tree_json {
+        let tree_query: TreeForTableQuery =
+            serde_json::from_str(&query_json).map_err(|_| CliError::TracingInvalidFact {
+                fact: String::from("placeholder"),
+            })?;
+
+        let result = engine.trace_tree(tree_query)?;
+
+        let json = serde_json::to_string_pretty(&result).unwrap();
+        println!("{}", json);
+    }
+
+    Ok(())
+}
+
 fn run(mut cli: CliApp) -> Result<(), CliError> {
     TimedCode::instance().start();
     TimedCode::instance().sub("Reading & Preprocessing").start();
@@ -322,7 +340,8 @@ fn run(mut cli: CliApp) -> Result<(), CliError> {
         print_memory_details(&engine);
     }
 
-    handle_tracing(&cli, &mut engine)
+    handle_tracing(&cli, &mut engine)?;
+    handle_tracing_tree(&cli, &mut engine)
 }
 
 fn main() {
