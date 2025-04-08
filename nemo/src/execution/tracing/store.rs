@@ -1,7 +1,5 @@
 //! This module defines [].
 
-use std::collections::HashMap;
-
 use crate::chase_model::GroundAtom;
 
 #[derive(Debug, Default)]

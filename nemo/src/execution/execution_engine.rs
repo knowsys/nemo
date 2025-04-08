@@ -1,9 +1,6 @@
 //! Functionality which handles the execution of a program
 
-use std::{
-    collections::{hash_map::Entry, HashMap},
-    iter,
-};
+use std::collections::{hash_map::Entry, HashMap};
 
 use itertools::Itertools;
 
@@ -16,11 +13,7 @@ use nemo_physical::{
 
 use crate::{
     chase_model::{
-        analysis::{
-            self,
-            program_analysis::{ProgramAnalysis, RuleAnalysis},
-            variable_order::VariableOrder,
-        },
+        analysis::{program_analysis::ProgramAnalysis, variable_order::VariableOrder},
         components::{
             atom::{ground_atom::GroundAtom, ChaseAtom},
             export::ChaseExport,
@@ -41,7 +34,10 @@ use crate::{
             atom::Atom,
             fact::Fact,
             tag::Tag,
-            term::primitive::{ground::GroundTerm, variable::Variable, Primitive},
+            term::{
+                primitive::{ground::GroundTerm, variable::Variable, Primitive},
+                Term,
+            },
         },
         pipeline::transformations::default::TransformationDefault,
         programs::{handle::ProgramHandle, program::Program},
@@ -56,8 +52,11 @@ use super::{
     selection_strategy::strategy::RuleSelectionStrategy,
     tracing::{
         error::TracingError,
-        node_query::{TableEntriesForTreeNodesQuery, TableEntriesForTreeNodesResponse},
-        shared::{PaginationResponse, RuleId, TableEntryResponse},
+        node_query::{
+            TableEntriesForTreeNodesQuery, TableEntriesForTreeNodesQueryInner,
+            TableEntriesForTreeNodesResponse, TableEntriesForTreeNodesResponseElement, TreeAddress,
+        },
+        shared::{PaginationQuery, PaginationResponse, TableEntryResponse},
         store::FactStore,
         trace::{ExecutionTrace, TraceFactHandle, TraceRuleApplication, TraceStatus},
         tree_query::{TreeForTableQuery, TreeForTableResponse, TreeForTableResponseSuccessor},
@@ -663,15 +662,11 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
 
         let grounding_iterators = {
             let rule = &self.program.rules()[rule_index];
-            let analysis = &self.analysis.rule_analysis[rule_index];
 
             facts
                 .iter()
                 .cloned()
-                .zip(steps.iter())
-                .map(|(fact, &step)| {
-                    TraceGroundingIterator::new(rule.clone(), analysis.clone(), fact, step)
-                })
+                .map(|fact| TraceGroundingIterator::new(rule.clone(), fact))
                 .collect::<Vec<_>>()
         };
 
@@ -787,6 +782,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         None
     }
 
+    /// Evaluate a [TreeForTableQuery].
     pub fn trace_tree(&mut self, query: TreeForTableQuery) -> Result<TreeForTableResponse, Error> {
         let mut facts = Vec::new();
         let mut store = FactStore::default();
@@ -797,6 +793,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                     unimplemented!("querying a fact by entry not implemented")
                 }
                 TableEntryQuery::Query(query_string) => {
+                    // TODO: Support patterns
                     let atom = Atom::parse(&format!("{}({})", query.predicate, query_string))
                         .expect("ill formed query");
                     GroundAtom::try_from(atom).expect("only support fact queries for now")
@@ -809,6 +806,24 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         if let Some(result) = self.trace_tree_recursive(&mut store, facts) {
             Ok(result)
         } else {
+            let possible_rules_above = self
+                .analysis
+                .predicate_to_rule_body
+                .get(&Tag::new(query.predicate.clone()))
+                .cloned()
+                .unwrap_or_default()
+                .into_iter()
+                .collect::<Vec<_>>();
+
+            let possible_rules_below = self
+                .analysis
+                .predicate_to_rule_head
+                .get(&Tag::new(query.predicate.clone()))
+                .cloned()
+                .unwrap_or_default()
+                .into_iter()
+                .collect::<Vec<_>>();
+
             Ok(TreeForTableResponse {
                 predicate: query.predicate,
                 entries: vec![],
@@ -819,36 +834,351 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                         .unwrap_or(0),
                     more: false,
                 },
-                possible_rules_above: vec![],
-                possible_rules_below: vec![],
+                possible_rules_above,
+                possible_rules_below,
                 children: None,
             })
         }
     }
 
-    pub fn trace_node(query: TableEntriesForTreeNodesQuery) -> TableEntriesForTreeNodesResponse {
-        todo!()
+    fn check_fact(fact: &GroundAtom, query_string: &str) -> bool {
+        let atom = if let Ok(atom) = Atom::parse(&format!("{}({})", fact.predicate(), query_string))
+        {
+            atom
+        } else {
+            return false;
+        };
+
+        let mut assignment = HashMap::<Variable, AnyDataValue>::new();
+
+        if fact.terms().count() != atom.len() {
+            return false;
+        }
+
+        for (fact_term, atom_term) in fact.terms().zip(atom.terms()) {
+            match atom_term {
+                Term::Primitive(primitive) => match primitive {
+                    Primitive::Variable(variable) => match assignment.entry(variable.clone()) {
+                        Entry::Occupied(entry) => {
+                            if &fact_term.value() != entry.get() {
+                                return false;
+                            }
+                        }
+                        Entry::Vacant(entry) => {
+                            entry.insert(fact_term.value());
+                        }
+                    },
+                    Primitive::Ground(ground) => {
+                        if fact_term.value() != ground.value() {
+                            return false;
+                        }
+                    }
+                },
+                Term::Aggregate(_)
+                | Term::FunctionTerm(_)
+                | Term::Map(_)
+                | Term::Operation(_)
+                | Term::Tuple(_) => return false,
+            }
+        }
+
+        true
+    }
+
+    fn trace_node_recursive(
+        &mut self,
+        result: &mut HashMap<TreeAddress, (Option<PaginationQuery>, Vec<GroundAtom>)>,
+        inner: &TableEntriesForTreeNodesQueryInner,
+        fact: GroundAtom,
+        address: TreeAddress,
+    ) -> Option<bool> {
+        // Check if fact passes the query filter
+        if !inner.queries.is_empty() {
+            if inner.queries.iter().all(|query| match query {
+                TableEntryQuery::Entry(_) => {
+                    unimplemented!("querying a fact by entry not implemented")
+                }
+                TableEntryQuery::Query(query_string) => !Self::check_fact(&fact, query_string),
+            }) {
+                return Some(false);
+            }
+        }
+
+        let step = self
+            .table_manager
+            .find_table_row(&fact.predicate(), &fact.datavalues().collect::<Vec<_>>())?;
+
+        let no_restriction = if let Some(successor) = &inner.children {
+            successor.children.is_empty()
+        } else {
+            true
+        };
+
+        if step == 0 && !no_restriction {
+            return Some(false);
+        }
+
+        let rule_index = self.rule_history[step];
+
+        if let Some(successor) = &inner.children {
+            if rule_index != successor.rule {
+                return Some(false);
+            }
+        }
+
+        if no_restriction {
+            match result.entry(address) {
+                Entry::Occupied(mut entry) => {
+                    entry.get_mut().1.push(fact);
+                }
+                Entry::Vacant(entry) => {
+                    entry.insert((inner.pagination.clone(), vec![fact]));
+                }
+            }
+
+            return Some(true);
+        }
+
+        let children = if let Some(successor) = &inner.children {
+            &successor.children
+        } else {
+            unreachable!("no_restriction is false")
+        };
+
+        let rule = self.program.rules()[rule_index].clone();
+
+        // Iterate over all head atoms which could have derived the given fact
+        for head_atom in rule.head() {
+            if head_atom.predicate() != fact.predicate() {
+                continue;
+            }
+
+            // Unify the head atom with the given fact
+
+            // If unification is possible `compatible` remains true
+            let mut compatible = true;
+            // Contains the head variable and the ground term it aligns with.
+            let mut grounding = HashMap::<Variable, AnyDataValue>::new();
+
+            for (head_term, fact_term) in head_atom.terms().zip(fact.terms()) {
+                match head_term {
+                    Primitive::Ground(ground) => {
+                        if ground != fact_term {
+                            compatible = false;
+                            break;
+                        }
+                    }
+                    Primitive::Variable(variable) => {
+                        // Matching with existential variables should not produce any restrictions,
+                        // so we just consider universal variables here
+                        if variable.is_existential() {
+                            continue;
+                        }
+
+                        match grounding.entry(variable.clone()) {
+                            Entry::Occupied(entry) => {
+                                if *entry.get() != fact_term.value() {
+                                    compatible = false;
+                                    break;
+                                }
+                            }
+                            Entry::Vacant(entry) => {
+                                entry.insert(fact_term.value());
+                            }
+                        }
+                    }
+                }
+            }
+
+            if !compatible {
+                // Fact could not have been unified
+                continue;
+            }
+
+            let rule = self.program.rules()[rule_index].clone();
+            let analysis = &self.analysis.rule_analysis[rule_index];
+            let mut variable_order = analysis.promising_variable_orders[0].clone(); // TODO: This selection is arbitrary
+            let trace_strategy = TracingStrategy::initialize(&rule, grounding).ok()?;
+
+            let mut execution_plan = SubtableExecutionPlan::default();
+
+            trace_strategy.add_plan(
+                &self.table_manager,
+                &mut execution_plan,
+                &mut variable_order,
+                step,
+            );
+
+            let query_trie = self
+                .table_manager
+                .execute_plan_trie(execution_plan)
+                .ok()?
+                .pop()
+                .unwrap();
+
+            let query_result = self
+                .table_manager
+                .trie_row_iterator(&query_trie)
+                .ok()?
+                .collect::<Vec<_>>();
+
+            for grounding in query_result {
+                let variable_assignment: HashMap<Variable, AnyDataValue> = variable_order
+                    .as_ordered_list()
+                    .into_iter()
+                    .zip(grounding.iter().cloned())
+                    .collect();
+
+                let mut fully_derived = true;
+                for (body_index, (body_atom, child)) in
+                    rule.positive_body().iter().zip(children.iter()).enumerate()
+                {
+                    let next_fact_predicate = body_atom.predicate();
+                    let next_fact_terms = body_atom
+                        .terms()
+                        .map(|variable| {
+                            GroundTerm::from(
+                                variable_assignment
+                                    .get(variable)
+                                    .expect("Query must assign value to each variable.")
+                                    .clone(),
+                            )
+                        })
+                        .collect::<Vec<_>>();
+
+                    let next_fact = GroundAtom::new(next_fact_predicate, next_fact_terms);
+                    let mut next_address = address.clone();
+                    next_address.push(body_index);
+
+                    let derived_next =
+                        self.trace_node_recursive(result, child, next_fact, next_address)?;
+
+                    if !derived_next {
+                        fully_derived = false;
+                        break;
+                    }
+                }
+
+                if fully_derived {
+                    match result.entry(address) {
+                        Entry::Occupied(mut entry) => {
+                            entry.get_mut().1.push(fact);
+                        }
+                        Entry::Vacant(entry) => {
+                            entry.insert((inner.pagination.clone(), vec![fact]));
+                        }
+                    }
+
+                    return Some(true);
+                }
+            }
+        }
+
+        Some(false)
+    }
+
+    /// Evauate a [TableEntriesForTreeNodesQuery].
+    pub fn trace_node(
+        &mut self,
+        query: TableEntriesForTreeNodesQuery,
+    ) -> TableEntriesForTreeNodesResponse {
+        let mut result = HashMap::<TreeAddress, (Option<PaginationQuery>, Vec<GroundAtom>)>::new();
+        let query_predicate = Tag::new(query.predicate.clone());
+
+        let initial_facts = self
+            .predicate_rows(&query_predicate)
+            .ok()
+            .flatten()
+            .map(|iter| {
+                iter.map(|row| {
+                    GroundAtom::new(
+                        query_predicate.clone(),
+                        row.into_iter().map(GroundTerm::from).collect::<Vec<_>>(),
+                    )
+                })
+                .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+
+        for fact in initial_facts {
+            let _ = self.trace_node_recursive(&mut result, &query.inner, fact, Vec::new());
+        }
+
+        let mut elements = Vec::new();
+
+        for (address, (pagination, facts)) in result {
+            let predicate = if let Some(fact) = facts.first() {
+                fact.predicate().to_string()
+            } else {
+                continue;
+            };
+
+            let len_facts = facts.len();
+            let (start, count) = if let Some(pagination) = pagination {
+                (pagination.start, pagination.count)
+            } else {
+                (0, len_facts)
+            };
+
+            let entries = facts
+                .into_iter()
+                .map(|fact| TableEntryResponse {
+                    entry_id: 0, // TODO: Include entry id
+                    terms: fact.terms().map(|term| term.value()).collect(),
+                })
+                .skip(start)
+                .take(count)
+                .collect::<Vec<_>>();
+
+            let more = entries.len() + start < len_facts;
+
+            let possible_rules_above = self
+                .analysis
+                .predicate_to_rule_body
+                .get(&Tag::new(predicate.clone()))
+                .cloned()
+                .unwrap_or_default()
+                .into_iter()
+                .collect::<Vec<_>>();
+
+            let possible_rules_below = self
+                .analysis
+                .predicate_to_rule_head
+                .get(&Tag::new(predicate.clone()))
+                .cloned()
+                .unwrap_or_default()
+                .into_iter()
+                .collect::<Vec<_>>();
+
+            let element = TableEntriesForTreeNodesResponseElement {
+                predicate,
+                entries,
+                pagination: PaginationResponse { start, more },
+                possible_rules_above,
+                possible_rules_below,
+                address,
+            };
+
+            elements.push(element);
+        }
+
+        TableEntriesForTreeNodesResponse { elements }
     }
 }
 
 #[derive(Clone)]
 struct TraceGroundingIterator {
     rule: ChaseRule,
-    analysis: RuleAnalysis,
-
     fact: GroundAtom,
-    step: usize,
 
     head_index: Option<usize>,
 }
 
 impl TraceGroundingIterator {
-    pub fn new(rule: ChaseRule, analysis: RuleAnalysis, fact: GroundAtom, step: usize) -> Self {
+    pub fn new(rule: ChaseRule, fact: GroundAtom) -> Self {
         Self {
             rule,
-            analysis,
             fact,
-            step,
             head_index: None,
         }
     }
