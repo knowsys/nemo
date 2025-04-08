@@ -70,15 +70,15 @@ pub enum Resource {
         /// Additional parameters sent with the HTTP request
         parameters: HttpParameters,
     },
-    /// Use stdout (only for export)
-    Stdout,
+    /// Use stdin for import, stdout for export
+    Pipe,
 }
 
 impl Resource {
     /// Whether the resource supports compression
     pub fn supports_compression(&self) -> bool {
         match self {
-            Resource::Stdout => false,     // never compress output to standard out
+            Resource::Pipe => false, // never compress input from standard in or output to standard out
             Resource::Http { .. } => true, // reqwest handles transport layer compression, but retrieved resources may still need decompression
             Resource::Path(_) => true,     // for local files, we need to handle compression
         }
@@ -94,9 +94,9 @@ impl Resource {
         matches!(self, Self::Path(..))
     }
 
-    /// Return if resource points to stdout
-    pub fn is_stdout(&self) -> bool {
-        matches!(self, Self::Stdout)
+    /// Return if resource points to pipe
+    pub fn is_pipe(&self) -> bool {
+        matches!(self, Self::Pipe)
     }
 
     /// Return the headers
@@ -175,7 +175,7 @@ impl fmt::Display for Resource {
                 }
             }
             Self::Path(path) => write!(f, "{}", path.display()),
-            Self::Stdout => f.write_str("stdout"),
+            Self::Pipe => f.write_str("standard in / standard out"),
         }
     }
 }
@@ -281,15 +281,15 @@ impl ResourceBuilder {
         }
     }
 
-    /// Create a [ResourceBuilder] for [Resource::Stdout]
-    pub fn stdout_resource_builder() -> Self {
-        Self::try_from(String::from("")).expect("Empty string is valid resource for stdout")
+    /// Create a [ResourceBuilder] for [Resource::Pipe]
+    pub fn pipe_resource_builder() -> Self {
+        Self::try_from(String::from("")).expect("Empty string is valid resource for pipe")
     }
 
     /// Create a default [ResourceBuilder]
     pub fn default_resource_builder(predicate_name: &str, default_extension: String) -> Self {
         if predicate_name.is_empty() {
-            Self::stdout_resource_builder()
+            Self::pipe_resource_builder()
         } else {
             ResourceBuilder::try_from(format!("{predicate_name}.{}", default_extension))
                 .expect("default name is valid")
@@ -365,7 +365,7 @@ impl TryFrom<String> for ResourceBuilder {
             iri.try_into()
         } else if string.is_empty() {
             Ok(Self {
-                resource: Resource::Stdout,
+                resource: Resource::Pipe,
                 header_names: HashSet::new(),
             })
         } else {
@@ -534,6 +534,20 @@ mod test {
             .finalize();
         assert_eq!(resource.file_extension(), None);
 
-        assert_eq!(Resource::Stdout.file_extension(), None);
+        assert_eq!(Resource::Pipe.file_extension(), None);
+    }
+
+    #[test]
+    fn pipe() {
+        assert_eq!(
+            ResourceBuilder::try_from(String::from(""))
+                .expect("Valid shortcut for Pipe")
+                .finalize(),
+            Resource::Pipe
+        );
+        assert_eq!(
+            ResourceBuilder::default_resource_builder("", String::new()).finalize(),
+            Resource::Pipe
+        );
     }
 }

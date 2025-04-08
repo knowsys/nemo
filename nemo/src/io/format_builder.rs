@@ -500,12 +500,7 @@ impl ImportExportBuilder {
                     })
                     .transpose()?;
 
-                let resource = rb.finalize();
-                if resource.is_stdout() && direction == Direction::Import {
-                    Err(ValidationErrorKind::UnsupportedStdoutImport)
-                } else {
-                    Ok(resource)
-                }
+                Ok(rb.finalize())
             })
             .transpose()
             .map_err(|err| builder.report_error(origin, err))
