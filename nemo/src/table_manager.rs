@@ -374,6 +374,14 @@ impl TableManager {
         Ok(self.database.table_row_iterator(id)?)
     }
 
+    /// Get a an iterator over the rows of a trie
+    pub(crate) fn trie_row_iterator<'a>(
+        &'a self,
+        trie: &'a Trie,
+    ) -> Result<impl Iterator<Item = Vec<AnyDataValue>> + 'a, Error> {
+        Ok(self.database.trie_row_iterator(trie)?)
+    }
+
     /// Combine all subtables of a predicate into one table
     /// and return the [PermanentTableId] of that new table.
     pub(crate) fn combine_predicate(
@@ -528,6 +536,13 @@ impl TableManager {
             .unwrap_or_default()
     }
 
+    /// Return the id of a table corresponding to a predicate and step, if it exists
+    pub fn table_step(&self, predicate: &Tag, step: usize) -> Option<PermanentTableId> {
+        self.predicate_subtables
+            .get(predicate)
+            .and_then(|handler| handler.subtable(step))
+    }
+
     /// Combine subtables in a certain range into one larger table.
     pub fn combine_tables(
         &mut self,
@@ -652,6 +667,18 @@ impl TableManager {
     ) -> Option<Vec<AnyDataValue>> {
         self.database
             .execute_first_match(subtable_plan.execution_plan)
+    }
+
+    /// Execute a given [SubtableExecutionPlan]
+    /// and return a list of [Trie]s for each permanent table
+    /// instead of saving it to the database.
+    pub fn execute_plan_trie(
+        &mut self,
+        subtable_plan: SubtableExecutionPlan,
+    ) -> Result<Vec<Trie>, Error> {
+        Ok(self
+            .database
+            .execute_plan_trie(subtable_plan.execution_plan)?)
     }
 }
 
