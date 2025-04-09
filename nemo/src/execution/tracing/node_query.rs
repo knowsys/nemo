@@ -25,7 +25,7 @@ pub struct TableEntriesForTreeNodesQueryInner {
     pub pagination: Option<PaginationQuery>,
 
     /// Children of this node
-    pub children: Option<TableEntriesForTreeNodesQuerySuccessor>,
+    pub next: Option<TableEntriesForTreeNodesQuerySuccessor>,
 }
 
 /// Request for a trace which follows the given tree structure

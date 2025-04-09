@@ -53,5 +53,5 @@ pub struct TreeForTableResponse {
     pub possible_rules_below: Vec<RuleId>,
 
     /// Children of this tree node
-    pub children: Option<TreeForTableResponseSuccessor>,
+    pub next: Option<TreeForTableResponseSuccessor>,
 }

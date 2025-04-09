@@ -4,7 +4,7 @@ use std::{alloc::Layout, collections::HashMap, fmt::Formatter, io::Cursor};
 
 use gloo_utils::format::JsValueSerdeExt;
 use js_sys::{Array, Reflect, Set, Uint8Array};
-use models::{table_entries_for_tree_nodes_query, TableResponseBaseTableEntries};
+use models::TableResponseBaseTableEntries;
 use thiserror::Error;
 use wasm_bindgen::{prelude::wasm_bindgen, JsCast, JsValue};
 use web_sys::{Blob, FileReaderSync};
@@ -511,6 +511,60 @@ impl NemoEngine {
 // The mock is the example from https://github.com/knowsys/EvonNemo-API-Spec/tree/main/examples/common-descendants
 #[wasm_bindgen]
 impl NemoEngine {
+    #[wasm_bindgen(js_name = "experimentalNewTracingTreeForTable")]
+    pub fn experimental_new_tracing_tree_for_table(
+        &mut self,
+        tree_for_table_query: JsValue,
+    ) -> Result<JsValue, NemoError> {
+        let tree_for_table_query: models::TreeForTableQuery = tree_for_table_query
+            .into_serde()
+            .map_err(|err| WasmOrInternalNemoError::Reflection(err.to_string().into()))
+            .map_err(NemoError)?;
+
+        let query =
+            nemo::execution::tracing::tree_query::TreeForTableQuery::from(tree_for_table_query);
+
+        let response = self
+            .engine
+            .trace_tree(query)
+            .map_err(WasmOrInternalNemoError::Nemo)
+            .map_err(NemoError)?;
+
+        let tree_for_table_response = models::TreeForTableResponse::from(response);
+
+        Ok(JsValue::from_serde(&tree_for_table_response)
+            .map_err(|err| WasmOrInternalNemoError::Reflection(err.to_string().into()))
+            .map_err(NemoError)?)
+    }
+
+    #[wasm_bindgen(js_name = "experimentalNewTracingTableEntriesForTreeNodes")]
+    pub fn experimental_new_tracing_table_entries_for_tree_nodes(
+        &mut self,
+        table_entries_for_tree_nodes_query: JsValue,
+    ) -> Result<JsValue, JsValue> {
+        let table_entries_for_tree_nodes_query: models::TableEntriesForTreeNodesQuery =
+            table_entries_for_tree_nodes_query
+                .into_serde()
+                .map_err(|err| WasmOrInternalNemoError::Reflection(err.to_string().into()))
+                .map_err(NemoError)?;
+
+        let query = nemo::execution::tracing::node_query::TableEntriesForTreeNodesQuery::from(
+            table_entries_for_tree_nodes_query,
+        );
+
+        let response = self.engine.trace_node(query);
+
+        let table_entries_for_tree_nodes_response = response
+            .elements
+            .into_iter()
+            .map(models::TableEntriesForTreeNodesResponseInner::from)
+            .collect::<Vec<_>>();
+
+        Ok(JsValue::from_serde(&table_entries_for_tree_nodes_response)
+            .map_err(|err| WasmOrInternalNemoError::Reflection(err.to_string().into()))
+            .map_err(NemoError)?)
+    }
+
     #[wasm_bindgen(js_name = "experimentalNewTracingTreeForTableMock")]
     pub fn experimental_new_tracing_tree_for_table_mock(
         tree_for_table_query: JsValue,
