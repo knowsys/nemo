@@ -12,6 +12,22 @@ use crate::{
     execution::rule_execution::VariableTranslation,
 };
 
+/// Compute the [OperationTable] necessary for computing
+/// an aggregate from an input table.
+///
+/// This function receives the column markers of the input table,
+/// the name of the column that contains the inputs to the aggregate (`aggregate_input_column`),
+/// the name of the column that contains the result of the aggregate (`aggregate_output_column`),
+/// as well as distinct as group by columns.
+///
+/// For the aggreagtion, we need to reorder the input columns such that
+/// group by columns come first, then the aggregated column,
+/// and finally the distinct columns.
+///
+/// The return value is a pair of [OperationTable],
+/// where the first entry is the required ordering of the input table
+/// needed to perform an aggregation
+/// and the second entry is the ordering of the table after applying the aggregation.
 fn operations_tables(
     input: &OperationTable,
     aggregate_input_column: &OperationColumnMarker,
@@ -19,26 +35,22 @@ fn operations_tables(
     distinct_columns: &[OperationColumnMarker],
     group_by_columns: &[OperationColumnMarker],
 ) -> (OperationTable, OperationTable) {
-    // Create input order that produces intended output order
-
     let mut ordered_input = OperationTable::default();
     let mut ordered_output = OperationTable::default();
+
     for column in input.iter() {
         if group_by_columns.contains(column) {
-            if column != aggregate_input_column {
-                ordered_input.push(*column);
-            }
-
-            ordered_output.push(*column);
+            ordered_input.push_distinct(*column);
+            ordered_output.push_distinct(*column);
         }
     }
 
-    ordered_input.push(*aggregate_input_column);
-    ordered_output.push(*aggregate_output_column);
+    ordered_input.push_distinct(*aggregate_input_column);
+    ordered_output.push_distinct(*aggregate_output_column);
 
     for column in input.iter() {
         if distinct_columns.contains(column) {
-            ordered_input.push(*column);
+            ordered_input.push_distinct(*column);
         }
     }
 
