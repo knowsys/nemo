@@ -102,11 +102,6 @@ impl<'a, 'b> ASTProgramTranslation<'a, 'b> {
     pub fn add_global_constant(&mut self, ident: GlobalVariable, value: GroundTerm) {
         self.program_builder.add_global(ident, value);
     }
-
-    /// Retrieve global constant definitions
-    fn globals(&self) -> &HashMap<GlobalVariable, GroundTerm> {
-        self.program_builder.globals()
-    }
 }
 
 /// Report of all [ProgramError]s occurred

@@ -59,7 +59,7 @@ impl ProgramChaseTranslation {
             .collect();
 
         for fact in program.facts() {
-            result.add_fact(self.build_fact(fact, program.globals()));
+            result.add_fact(self.build_fact(fact));
         }
 
         for rule in program.rules_mut() {

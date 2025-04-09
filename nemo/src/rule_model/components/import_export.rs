@@ -12,7 +12,7 @@ use crate::{
     syntax,
 };
 
-use super::{tag::Tag, term::Term, ProgramComponent, ProgramComponentKind};
+use super::{tag::Tag, term::Term, IterablePrimitives, ProgramComponent, ProgramComponentKind};
 
 /// Direction of import/export activities.
 /// We often share code for the two directions, and a direction
@@ -117,6 +117,32 @@ pub(crate) struct ImportExportDirective {
     spec: ImportExportSpec,
 }
 
+impl IterablePrimitives for ImportExportDirective {
+    type TermType = Term;
+
+    fn primitive_terms<'a>(
+        &'a self,
+    ) -> Box<dyn Iterator<Item = &'a super::term::primitive::Primitive> + 'a> {
+        Box::new(
+            self.spec
+                .values
+                .iter()
+                .flat_map(|term| term.primitive_terms()),
+        )
+    }
+
+    fn primitive_terms_mut<'a>(
+        &'a mut self,
+    ) -> Box<dyn Iterator<Item = &'a mut Self::TermType> + 'a> {
+        Box::new(
+            self.spec
+                .values
+                .iter_mut()
+                .flat_map(|term| term.primitive_terms_mut()),
+        )
+    }
+}
+
 impl Debug for ImportExportDirective {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("ImportExportDirective")
@@ -195,6 +221,22 @@ impl ProgramComponent for ImportDirective {
     }
 }
 
+impl IterablePrimitives for ImportDirective {
+    type TermType = Term;
+
+    fn primitive_terms<'a>(
+        &'a self,
+    ) -> Box<dyn Iterator<Item = &'a super::term::primitive::Primitive> + 'a> {
+        self.0.primitive_terms()
+    }
+
+    fn primitive_terms_mut<'a>(
+        &'a mut self,
+    ) -> Box<dyn Iterator<Item = &'a mut Self::TermType> + 'a> {
+        self.0.primitive_terms_mut()
+    }
+}
+
 /// An export specification.
 #[derive(Debug, Clone)]
 pub struct ExportDirective(pub(crate) ImportExportDirective);
@@ -231,6 +273,22 @@ impl ExportDirective {
 impl From<ImportExportDirective> for ExportDirective {
     fn from(value: ImportExportDirective) -> Self {
         Self(value)
+    }
+}
+
+impl IterablePrimitives for ExportDirective {
+    type TermType = Term;
+
+    fn primitive_terms<'a>(
+        &'a self,
+    ) -> Box<dyn Iterator<Item = &'a super::term::primitive::Primitive> + 'a> {
+        self.0.primitive_terms()
+    }
+
+    fn primitive_terms_mut<'a>(
+        &'a mut self,
+    ) -> Box<dyn Iterator<Item = &'a mut Self::TermType> + 'a> {
+        self.0.primitive_terms_mut()
     }
 }
 

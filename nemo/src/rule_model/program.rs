@@ -21,6 +21,7 @@ use super::{
         ValidationErrorBuilder,
     },
     origin::Origin,
+    substitution::Substitution,
 };
 
 /// Representation of a nemo program
@@ -341,8 +342,11 @@ impl Program {
     where
         Self: Sized,
     {
+        let bindings = Substitution::new(self.globals.clone());
+
         let mut count_stdin = 0;
-        for import in &self.imports {
+        for import in &mut self.imports {
+            bindings.apply(import);
             let builder = import.validate(error_builder)?;
             let predicate = import.predicate().clone();
             let origin = *import.origin();
@@ -363,11 +367,13 @@ impl Program {
             }
         }
 
-        for fact in self.facts() {
+        for fact in &mut self.facts {
+            bindings.apply(fact);
             let _ = fact.validate(error_builder);
         }
 
-        for rule in self.rules() {
+        for rule in &mut self.rules {
+            bindings.apply(rule);
             let _ = rule.validate(error_builder);
         }
 
@@ -375,7 +381,8 @@ impl Program {
             let _ = output.validate(error_builder);
         }
 
-        for export in &self.exports {
+        for export in &mut self.exports {
+            bindings.apply(export);
             let builder = export.validate(error_builder)?;
             let predicate = export.predicate().clone();
             let origin = *export.origin();
