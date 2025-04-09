@@ -427,9 +427,9 @@ impl IterablePrimitives for Term {
         }
     }
 
-    fn primitive_terms_mut<'a>(&'a mut self) -> Box<dyn Iterator<Item = &'a mut Primitive> + 'a> {
+    fn primitive_terms_mut<'a>(&'a mut self) -> Box<dyn Iterator<Item = &'a mut Term> + 'a> {
         match self {
-            Term::Primitive(term) => Box::new(Some(term).into_iter()),
+            Term::Primitive(_) => Box::new(Some(self).into_iter()),
             Term::Aggregate(term) => term.primitive_terms_mut(),
             Term::FunctionTerm(term) => term.primitive_terms_mut(),
             Term::Map(term) => term.primitive_terms_mut(),

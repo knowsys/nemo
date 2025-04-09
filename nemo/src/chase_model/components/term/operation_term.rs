@@ -79,6 +79,8 @@ impl IterableVariables for Operation {
 }
 
 impl IterablePrimitives for Operation {
+    type TermType = Primitive;
+
     fn primitive_terms<'a>(&'a self) -> Box<dyn Iterator<Item = &'a Primitive> + 'a> {
         Box::new(self.subterms.iter().flat_map(|term| term.primitive_terms()))
     }
@@ -116,6 +118,8 @@ impl IterableVariables for OperationTerm {
 }
 
 impl IterablePrimitives for OperationTerm {
+    type TermType = Primitive;
+
     fn primitive_terms<'a>(&'a self) -> Box<dyn Iterator<Item = &'a Primitive> + 'a> {
         match self {
             OperationTerm::Primitive(primitive) => Box::new(Some(primitive).into_iter()),
