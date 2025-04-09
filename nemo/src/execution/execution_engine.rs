@@ -633,7 +633,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
             },
             possible_rules_above,
             possible_rules_below,
-            children: None,
+            next: None,
         };
 
         // Get the steps
@@ -738,7 +738,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                     .collect::<Option<Vec<TreeForTableResponse>>>();
 
                 if let Some(children) = children_option {
-                    result.children = Some(TreeForTableResponseSuccessor {
+                    result.next = Some(TreeForTableResponseSuccessor {
                         rule: rule_index,
                         children,
                     });
@@ -768,7 +768,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                         .collect::<Option<Vec<TreeForTableResponse>>>();
 
                     if let Some(children) = children_option {
-                        result.children = Some(TreeForTableResponseSuccessor {
+                        result.next = Some(TreeForTableResponseSuccessor {
                             rule: rule_index,
                             children,
                         });
@@ -836,7 +836,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
                 },
                 possible_rules_above,
                 possible_rules_below,
-                children: None,
+                next: None,
             })
         }
     }
@@ -912,7 +912,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
             return TraceNodeResult::default();
         };
 
-        let no_restriction = if let Some(successor) = &inner.children {
+        let no_restriction = if let Some(successor) = &inner.next {
             successor.children.is_empty()
         } else {
             true
@@ -924,7 +924,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
 
         let rule_index = self.rule_history[step];
 
-        if let Some(successor) = &inner.children {
+        if let Some(successor) = &inner.next {
             if rule_index != successor.rule {
                 return TraceNodeResult::default();
             }
@@ -934,7 +934,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
             return TraceNodeResult::single(address, inner.pagination, fact);
         }
 
-        let children = if let Some(successor) = &inner.children {
+        let children = if let Some(successor) = &inner.next {
             &successor.children
         } else {
             unreachable!("no_restriction is false")
