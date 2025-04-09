@@ -466,7 +466,7 @@ mod test {
 
     #[test]
     fn term_reduce_ground() {
-        let constant = Term::parse("2 * (?global + 7)").unwrap();
+        let constant = Term::parse("2 * ($global + 7)").unwrap();
         let term = Term::from(tuple!(5, constant));
 
         let reduced = term.reduce_with_substitution(&Substitution::new([(

@@ -5,7 +5,7 @@ use enum_assoc::Assoc;
 use nemo_physical::{datavalues::ValueDomain, resource::ResourceValidationErrorKind};
 use thiserror::Error;
 
-use crate::rule_model::components::term::primitive::variable::Variable;
+use crate::rule_model::components::term::{primitive::variable::Variable, Term};
 
 /// Types of errors that occur while building the logical rule model
 #[derive(Assoc, Error, Clone, Debug)]
@@ -188,6 +188,11 @@ pub enum ValidationErrorKind {
     #[error("expected at most one `stdin` import, found at least 2 occurrences")]
     #[assoc(code = 237)]
     ReachedStdinImportLimit,
+    /// Import/Export parameter contains unspecified variables
+    #[assoc(code = 238)]
+    #[error("parameter value `{0}` is not a ground term")]
+    ImportExportParameterNotGround(Term),
+
     /// Unsupported feature: Multiple aggregates in one rule
     #[error(r#"multiple aggregates in one rule is currently unsupported"#)]
     #[assoc(code = 999)]

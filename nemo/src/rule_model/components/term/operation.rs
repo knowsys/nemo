@@ -98,19 +98,21 @@ impl Operation {
 
     /// Reduce constant expressions returning a copy of the reduced [Term].
     pub fn reduce_with_substitution(&self, bindings: &Substitution) -> Term {
-        if !self.is_ground() {
-            return Term::Operation(Self {
-                origin: self.origin,
-                kind: self.kind,
-                subterms: self
-                    .subterms
-                    .iter()
-                    .map(|term| term.reduce_with_substitution(bindings))
-                    .collect(),
-            });
+        let reduced_subterms = Operation {
+            origin: self.origin,
+            kind: self.kind,
+            subterms: self
+                .subterms
+                .iter()
+                .map(|term| term.reduce_with_substitution(bindings))
+                .collect(),
+        };
+
+        if !reduced_subterms.is_ground() {
+            return Term::Operation(reduced_subterms);
         }
 
-        let chase_operation_term = ProgramChaseTranslation::build_operation_term(self);
+        let chase_operation_term = ProgramChaseTranslation::build_operation_term(&reduced_subterms);
 
         let empty_translation = VariableTranslation::new();
         let function_tree =

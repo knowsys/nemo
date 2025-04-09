@@ -333,13 +333,23 @@ impl<B: FormatBuilder> Parameters<B> {
             };
 
             required_parameters.remove(&parameter);
+            let value = match value_term.clone().try_into_ground(&Default::default()) {
+                Ok(ground_term) => ground_term.value(),
+                Err(value_term) => {
+                    builder.report_error(
+                        *value_term.origin(),
+                        ValidationErrorKind::ImportExportParameterNotGround(value_term),
+                    );
+                    return None;
+                }
+            };
 
-            if let Err(kind) = parameter.is_value_valid(value_term.value()) {
+            if let Err(kind) = parameter.is_value_valid(value.clone()) {
                 builder.report_error(*value_term.origin(), kind);
                 return None;
             }
 
-            result.insert(parameter, value_term.value());
+            result.insert(parameter, value);
         }
 
         if required_parameters.is_empty() {

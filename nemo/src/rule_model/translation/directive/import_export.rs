@@ -8,8 +8,13 @@ use crate::{
         components::{
             import_export::{ExportDirective, ImportDirective, ImportExportSpec},
             tag::Tag,
-            term::{map::Map, primitive::Primitive, value_type::ValueType, Term},
-            ProgramComponent,
+            term::{
+                map::Map,
+                primitive::{variable::Variable, Primitive},
+                value_type::ValueType,
+                Term,
+            },
+            IterablePrimitives, ProgramComponent,
         },
         error::{translation_error::TranslationErrorKind, ComplexErrorLabelKind, TranslationError},
         substitution::Substitution,
@@ -110,7 +115,12 @@ fn import_export_spec<'a, 'b>(
             ));
         };
 
-        let Ok(value) = value.clone().try_into_ground(translation.globals()) else {
+        if value
+            .primitive_terms()
+            .filter(|p| !p.is_ground() && !matches!(p, Primitive::Variable(Variable::Global(_))))
+            .next()
+            .is_some()
+        {
             let span = translation
                 .origin_map
                 .get(value.origin())
