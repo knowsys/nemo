@@ -13,17 +13,26 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct TreeForTableQuery {
-    #[serde(rename = "predicate", skip_serializing_if = "Option::is_none")]
-    pub predicate: Option<String>,
+    #[serde(rename = "predicate")]
+    pub predicate: String,
     #[serde(rename = "tableEntries", skip_serializing_if = "Option::is_none")]
     pub table_entries: Option<Box<models::TableQueryBaseTableEntries>>,
 }
 
-impl TreeForTableQuery {
-    pub fn new() -> TreeForTableQuery {
-        TreeForTableQuery {
-            predicate: None,
-            table_entries: None,
+impl From<TreeForTableQuery> for nemo::execution::tracing::tree_query::TreeForTableQuery {
+    fn from(value: TreeForTableQuery) -> Self {
+        let (queries, pagination) = match value.table_entries {
+            Some(entries) => (entries.queries.unwrap_or_default(), entries.pagination),
+            None => (Vec::default(), None),
+        };
+
+        let pagination = pagination.map(|pagination| (*pagination).into());
+        let queries = queries.into_iter().map(Into::into).collect();
+
+        Self {
+            predicate: value.predicate,
+            queries,
+            pagination,
         }
     }
 }
