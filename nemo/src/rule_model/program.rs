@@ -241,17 +241,17 @@ impl Program {
     /// Validate the global program properties without validating
     /// each program element.
     pub(crate) fn validate_global_properties(
-        &self,
+        &mut self,
         builder: &mut ValidationErrorBuilder,
-    ) -> Option<HashMap<Tag, (usize, Origin)>> {
-        let mut predicate_arity = HashMap::<Tag, (usize, Origin)>::new();
+    ) -> Option<()> {
+        let mut arities = self.arities.clone();
 
         for fact in self.facts() {
             let predicate = fact.predicate().clone();
             let arity = fact.subterms().count();
             let origin = *fact.origin();
 
-            Self::validate_arity(&mut predicate_arity, predicate, arity, origin, builder);
+            Self::validate_arity(&mut arities, predicate, arity, origin, builder);
         }
 
         for rule in self.rules() {
@@ -260,7 +260,7 @@ impl Program {
                 let arity = atom.arguments().count();
                 let origin = *atom.origin();
 
-                Self::validate_arity(&mut predicate_arity, predicate, arity, origin, builder);
+                Self::validate_arity(&mut arities, predicate, arity, origin, builder);
             }
 
             for literal in rule.body() {
@@ -270,13 +270,7 @@ impl Program {
                         let arity = atom.arguments().count();
                         let origin = *atom.origin();
 
-                        Self::validate_arity(
-                            &mut predicate_arity,
-                            predicate,
-                            arity,
-                            origin,
-                            builder,
-                        );
+                        Self::validate_arity(&mut arities, predicate, arity, origin, builder);
                     }
                     Literal::Operation(_) => {
                         continue;
@@ -286,7 +280,7 @@ impl Program {
         }
 
         for import in &self.imports {
-            if !predicate_arity.contains_key(import.predicate()) {
+            if !arities.contains_key(import.predicate()) {
                 builder.report_error(
                     *import.predicate().origin(),
                     ValidationErrorKind::UnknownArity {
@@ -298,7 +292,7 @@ impl Program {
         }
 
         for export in &self.exports {
-            if !predicate_arity.contains_key(export.predicate()) {
+            if !arities.contains_key(export.predicate()) {
                 builder.report_error(
                     *export.predicate().origin(),
                     ValidationErrorKind::UnknownArity {
@@ -309,7 +303,9 @@ impl Program {
             }
         }
 
-        Some(predicate_arity)
+        self.arities = arities;
+
+        Some(())
     }
 }
 
@@ -389,7 +385,7 @@ impl Program {
             }
         }
 
-        self.arities = self.validate_global_properties(error_builder)?;
+        self.validate_global_properties(error_builder)?;
 
         Some(())
     }
