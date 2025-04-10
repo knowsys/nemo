@@ -8,6 +8,7 @@ use std::{
 };
 
 use enum_assoc::Assoc;
+use log::warn;
 use nemo_physical::aggregates::operation::AggregateOperation;
 use strum_macros::EnumIter;
 
@@ -255,7 +256,11 @@ impl ProgramComponent for Aggregate {
             }
         }
 
-        let mut distinct_set = HashSet::new();
+        let mut distinct_set = if self.aggregate.is_primitive() {
+            self.aggregate.variables().collect()
+        } else {
+            HashSet::new()
+        };
         for variable in &self.distinct {
             let name = if variable.is_universal() {
                 if let Some(name) = variable.name() {
@@ -280,11 +285,10 @@ impl ProgramComponent for Aggregate {
             };
 
             if !distinct_set.insert(variable) {
-                builder.report_error(
-                    *variable.origin(),
-                    ValidationErrorKind::AggregateRepeatedDistinctVariable { variable: name },
+                warn!(
+                    "found duplicate variable `{name}` in aggregate `{}`",
+                    self.aggregate_kind()
                 );
-                return None;
             }
         }
 
