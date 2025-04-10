@@ -301,11 +301,11 @@ fn trace_to_dict<'py>(trace: &ExecutionTraceTree, py: Python<'py>) -> PyResult<B
             if let Some(name) = rule_application.rule.name() {
                 result.set_item("name", name)?;
             }
-            if let Some(description) = rule_application
+            if let Some(display) = rule_application
                 .rule
                 .instantiated_display(&rule_application.assignment)
             {
-                result.set_item("description", description)?;
+                result.set_item("display", display)?;
             }
 
             let subtraces: Vec<_> = subtraces

@@ -384,7 +384,7 @@ struct ExecutionTraceInferenceJSON {
     /// Optionally provided name of the rule
     #[serde(rename = "ruleName", skip_serializing_if = "Option::is_none")]
     rule_name: Option<String>,
-    /// Optional human readable string representation of the rule
+    /// Optional human readable string representation of a rule instance
     #[serde(rename = "ruleDisplay", skip_serializing_if = "Option::is_none")]
     rule_display: Option<String>,
     /// Instantiated result of the rule application
