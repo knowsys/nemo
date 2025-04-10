@@ -40,8 +40,9 @@ pub struct Rule {
 
     /// Name of the rule
     name: Option<String>,
-    /// Description of the rule
-    description: Option<Term>,
+    /// [Term] specifying how an instance of the rule should be displayed
+    /// in e.g. tracing
+    display: Option<Term>,
 
     /// Head of the rule
     head: Vec<Atom>,
@@ -60,7 +61,7 @@ impl Rule {
         Self {
             origin: Origin::Created,
             name: None,
-            description: None,
+            display: None,
             head,
             body,
         }
@@ -74,7 +75,7 @@ impl Rule {
 
     /// Set how an instantiated version of the rule should be displayed.
     pub fn set_display(mut self, display: Term) -> Self {
-        self.description = Some(display);
+        self.display = Some(display);
         self
     }
 
@@ -86,8 +87,8 @@ impl Rule {
     /// Return a string representation of the rule's description with the given [Substitution].
     ///
     /// Returns `None` if `description` results not in a ground term after applying the substitution.
-    pub fn description_instantiated(&self, substitution: &Substitution) -> Option<String> {
-        if let Some(mut display) = self.description.clone() {
+    pub fn instantiated_display(&self, substitution: &Substitution) -> Option<String> {
+        if let Some(mut display) = self.display.clone() {
             substitution.apply(&mut display);
             if let Term::Primitive(Primitive::Ground(ground)) = display.reduce() {
                 return ground.value().to_plain_string();
@@ -370,7 +371,7 @@ impl ProgramComponent for Rule {
             .flat_map(|atom| atom.variables())
             .any(|variable| variable.is_existential());
 
-        if let Some(display) = &self.description {
+        if let Some(display) = &self.display {
             display.validate(builder)?;
 
             for variable in display.variables() {

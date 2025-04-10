@@ -303,7 +303,7 @@ fn trace_to_dict<'py>(trace: &ExecutionTraceTree, py: Python<'py>) -> PyResult<B
             }
             if let Some(description) = rule_application
                 .rule
-                .description_instantiated(&rule_application.assignment)
+                .instantiated_display(&rule_application.assignment)
             {
                 result.set_item("description", description)?;
             }

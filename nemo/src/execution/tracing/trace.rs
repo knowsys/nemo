@@ -223,7 +223,7 @@ impl TraceTreeRuleApplication {
 
     /// Get a string representation of the Instantiated rule.
     fn to_instantiated_string(&self) -> String {
-        if let Some(display_string) = self.rule.description_instantiated(&self.assignment) {
+        if let Some(display_string) = self.rule.instantiated_display(&self.assignment) {
             return display_string;
         }
 
@@ -407,7 +407,7 @@ impl From<ExecutionTraceInference> for ExecutionTraceInferenceJSON {
             rule_display: value
                 .trigger
                 .as_ref()
-                .and_then(|(rule, substitution)| rule.description_instantiated(substitution)),
+                .and_then(|(rule, substitution)| rule.instantiated_display(substitution)),
             conclusion: value.conclusion.to_string(),
             premises: value
                 .premises
