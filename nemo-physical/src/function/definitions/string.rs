@@ -309,11 +309,11 @@ impl BinaryFunction for StringSubstring {
         parameter_second: AnyDataValue,
     ) -> Option<AnyDataValue> {
         let string = parameter_first.to_plain_string()?;
-        let start = usize::try_from(parameter_second.to_u64()?).ok()?;
+        let start = usize::try_from(parameter_second.to_i64().map(|val| val.max(1))?).ok()?;
 
         let graphemes = string.graphemes(true).collect::<Vec<&str>>();
 
-        if start > graphemes.len() || start < 1 {
+        if start > graphemes.len() {
             return None;
         }
 
@@ -553,16 +553,20 @@ impl TernaryFunction for StringSubstringLength {
         parameter_third: AnyDataValue,
     ) -> Option<AnyDataValue> {
         let string = parameter_first.to_plain_string()?;
-        let start = usize::try_from(parameter_second.to_u64()?).ok()?;
-
         let graphemes = string.graphemes(true).collect::<Vec<&str>>();
+        let start = parameter_second.to_i64()?;
+        let length = parameter_third.to_i64()?;
 
-        if start > graphemes.len() || start < 1 {
+        if length < 1 {
             return None;
         }
 
-        let length = usize::try_from(parameter_third.to_u64()?).ok()?;
-        let end = start + length;
+        let end = usize::try_from(start + length).ok()?;
+        let start = usize::try_from(start.max(1)).ok()?;
+
+        if start > graphemes.len() {
+            return None;
+        }
 
         let result = if end > graphemes.len() {
             graphemes[(start - 1)..].join("")
@@ -679,6 +683,12 @@ mod test {
         assert!(actual_result_unicode.is_some());
         assert_eq!(result_unicode, actual_result_unicode.unwrap());
 
+        let start_unicode_negative = AnyDataValue::new_integer_from_i64(-1);
+        let actual_result_unicode =
+            StringSubstring.evaluate(string_unicode.clone(), start_unicode_negative);
+        assert!(actual_result_unicode.is_some());
+        assert_eq!(string_unicode, actual_result_unicode.unwrap());
+
         let string_notstring = AnyDataValue::new_integer_from_i64(1);
         let start_notstring = AnyDataValue::new_integer_from_u64(3);
         let actual_result_notstring = StringSubstring.evaluate(string_notstring, start_notstring);
@@ -730,9 +740,11 @@ mod test {
         assert_eq!(result6, actual_result6.unwrap());
 
         let start7 = AnyDataValue::new_integer_from_u64(0);
-        let length7 = AnyDataValue::new_integer_from_u64(4);
+        let length7 = AnyDataValue::new_integer_from_u64(3);
+        let result7 = AnyDataValue::new_plain_string("ab".to_string());
         let actual_result7 = StringSubstringLength.evaluate(string.clone(), start7, length7);
-        assert!(actual_result7.is_none());
+        assert!(actual_result7.is_some());
+        assert_eq!(result7, actual_result7.unwrap());
 
         let string_unicode = AnyDataValue::new_plain_string("loẅks".to_string());
         let start8 = AnyDataValue::new_integer_from_u64(3);
@@ -742,6 +754,28 @@ mod test {
             StringSubstringLength.evaluate(string_unicode.clone(), start8, length8);
         assert!(actual_result8.is_some());
         assert_eq!(result8, actual_result8.unwrap());
+
+        let string_clip = AnyDataValue::new_plain_string("12345".to_string());
+        let start9 = AnyDataValue::new_integer_from_u64(5);
+        let length9 = AnyDataValue::new_integer_from_i64(-3);
+        let actual_result9 = StringSubstringLength.evaluate(string_clip.clone(), start9, length9);
+        assert!(actual_result9.is_none());
+
+        let start10 = AnyDataValue::new_integer_from_i64(-3);
+        let length10 = AnyDataValue::new_integer_from_u64(5);
+        let result10 = AnyDataValue::new_plain_string("1".to_string());
+        let actual_result10 =
+            StringSubstringLength.evaluate(string_clip.clone(), start10, length10);
+        assert!(actual_result10.is_some());
+        assert_eq!(result10, actual_result10.unwrap());
+
+        let start11 = AnyDataValue::new_integer_from_u64(0);
+        let length11 = AnyDataValue::new_integer_from_u64(3);
+        let result11 = AnyDataValue::new_plain_string("12".to_string());
+        let actual_result11 =
+            StringSubstringLength.evaluate(string_clip.clone(), start11, length11);
+        assert!(actual_result11.is_some());
+        assert_eq!(result11, actual_result11.unwrap());
 
         let string_notstring = AnyDataValue::new_integer_from_i64(1);
         let start_notstring = AnyDataValue::new_integer_from_u64(3);
