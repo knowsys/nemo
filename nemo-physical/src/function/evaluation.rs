@@ -674,7 +674,7 @@ mod test {
         let tree_round = Function::numeric_round(Function::constant(any_float(-5.0)));
         evaluate_expect(&tree_round, Some(any_float(-5.0)));
         let tree_round = Function::numeric_round(Function::constant(any_float(-10.5)));
-        evaluate_expect(&tree_round, Some(any_float(-11.0)));
+        evaluate_expect(&tree_round, Some(any_float(-10.0)));
         let tree_round = Function::numeric_round(Function::constant(any_float(-10.2)));
         evaluate_expect(&tree_round, Some(any_float(-10.0)));
         let tree_round = Function::numeric_round(Function::constant(any_float(-10.8)));
@@ -820,7 +820,7 @@ mod test {
         let tree_round = Function::numeric_round(Function::constant(any_double(-5.0)));
         evaluate_expect(&tree_round, Some(any_double(-5.0)));
         let tree_round = Function::numeric_round(Function::constant(any_double(-10.5)));
-        evaluate_expect(&tree_round, Some(any_double(-11.0)));
+        evaluate_expect(&tree_round, Some(any_double(-10.0)));
         let tree_round = Function::numeric_round(Function::constant(any_double(-10.2)));
         evaluate_expect(&tree_round, Some(any_double(-10.0)));
         let tree_round = Function::numeric_round(Function::constant(any_double(-10.8)));
