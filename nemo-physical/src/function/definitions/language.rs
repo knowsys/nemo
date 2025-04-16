@@ -9,8 +9,9 @@ use super::{FunctionTypePropagation, UnaryFunction};
 
 /// Language tag
 ///
-/// Returns the the language tag as a string of a language tagged string.
-/// Returns `None` if value is not a languaged tagged string.
+/// Returns the language tag as a string of a language tagged string.
+/// Returns the empty string if parameter is a string
+/// Returns `None` if parameter is neither string nor language tagged string.
 #[derive(Debug, Copy, Clone)]
 pub struct LanguageTag;
 impl UnaryFunction for LanguageTag {
@@ -18,6 +19,11 @@ impl UnaryFunction for LanguageTag {
         parameter
             .to_language_tagged_string()
             .map(|(_, tag)| AnyDataValue::new_plain_string(tag))
+            .or_else(|| {
+                parameter
+                    .to_plain_string()
+                    .map(|_| AnyDataValue::new_plain_string(String::new()))
+            })
     }
 
     fn type_propagation(&self) -> FunctionTypePropagation {
@@ -26,5 +32,27 @@ impl UnaryFunction for LanguageTag {
                 .bitset()
                 .union(StorageTypeName::Id64.bitset()),
         )
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use crate::{
+        datavalues::AnyDataValue,
+        function::definitions::{language::LanguageTag, UnaryFunction},
+    };
+
+    #[test]
+    fn sparql_compliance() {
+        let lang_tag =
+            AnyDataValue::new_language_tagged_string("Roberto".to_string(), "en".to_string());
+        let exp_result = AnyDataValue::new_plain_string("en".to_string());
+        let result = LanguageTag.evaluate(lang_tag);
+        assert_eq!(result.unwrap(), exp_result);
+
+        let string = AnyDataValue::new_plain_string("Roberto".to_string());
+        let empty_result = AnyDataValue::new_plain_string("".to_string());
+        let result = LanguageTag.evaluate(string).unwrap();
+        assert_eq!(result, empty_result);
     }
 }
