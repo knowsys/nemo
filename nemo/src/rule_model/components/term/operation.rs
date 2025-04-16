@@ -271,6 +271,11 @@ impl ProgramComponent for Operation {
             return None;
         }
 
+        if self.is_ground() && matches!(self.reduce(), Term::Operation(_)) {
+            builder.report_error(self.origin, ValidationErrorKind::InvalidGroundOperation);
+            return None;
+        }
+
         for argument in self.arguments() {
             argument.validate(builder)?;
         }
@@ -314,8 +319,11 @@ impl IterablePrimitives for Operation {
 #[cfg(test)]
 mod test {
     use crate::rule_model::{
-        components::term::{operation::operation_kind::OperationKind, Term},
-        error::ComponentParseError,
+        components::{
+            term::{operation::operation_kind::OperationKind, Term},
+            ProgramComponent,
+        },
+        error::{ComponentParseError, ValidationErrorBuilder},
         translation::TranslationComponent,
     };
 
@@ -342,5 +350,25 @@ mod test {
             ),
             operaton
         );
+    }
+
+    #[test]
+    fn invalid_grounded_operations() {
+        let invalid_operations = vec![
+            "2 * \"5\"",
+            "STRBEFORE(\"123\",123)",
+            "URIDECODE(Hello%2GWorld)",
+            "STRLEN(123)",
+            "SUBSTR(\"12345\", 7)",
+            "SUBSTR(\"12345\", 1, -3)",
+            "LOG(1,\"3\")",
+        ];
+        for string in invalid_operations {
+            let operation = Operation::parse(string).unwrap();
+            let mut builder = ValidationErrorBuilder::default();
+            let result = operation.validate(&mut builder);
+            assert!(result.is_none());
+            assert_eq!(builder.finalize().is_empty(), false);
+        }
     }
 }

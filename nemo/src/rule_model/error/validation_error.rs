@@ -188,6 +188,10 @@ pub enum ValidationErrorKind {
     #[error("expected at most one `stdin` import, found at least 2 occurrences")]
     #[assoc(code = 237)]
     ReachedStdinImportLimit,
+    /// Ground operation contains invalid literals
+    #[error("ground operation contains at least one invalid literal")]
+    #[assoc(code = 238)]
+    InvalidGroundOperation,
     /// Unsupported feature: Multiple aggregates in one rule
     #[error(r#"multiple aggregates in one rule is currently unsupported"#)]
     #[assoc(code = 999)]
