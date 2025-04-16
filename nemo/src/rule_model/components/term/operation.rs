@@ -368,7 +368,7 @@ mod test {
             let mut builder = ValidationErrorBuilder::default();
             let result = operation.validate(&mut builder);
             assert!(result.is_none());
-            assert_eq!(builder.finalize().is_empty(), false);
+            assert!(!builder.finalize().is_empty());
         }
     }
 }
