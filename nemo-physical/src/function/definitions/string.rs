@@ -2,12 +2,12 @@
 
 use levenshtein::levenshtein;
 use once_cell::sync::OnceCell;
-use std::{cmp::Ordering, num::NonZero, sync::Mutex};
+use std::{cmp::Ordering, collections::HashSet, num::NonZero, sync::Mutex};
 use unicode_segmentation::UnicodeSegmentation;
 
 use crate::{
     datatypes::StorageTypeName,
-    datavalues::{AnyDataValue, DataValue},
+    datavalues::{AnyDataValue, DataValue, ValueDomain},
 };
 
 use super::{
@@ -28,35 +28,91 @@ fn unicode_find(haystack: &str, needle: &str) -> Option<usize> {
         .find(|&i| needle_graphemes == haystack_graphemes[i..i + needle_graphemes.len()])
 }
 
+#[derive(Clone)]
+struct LangString {
+    string: String,
+    tag : Option<String>
+}
+
+impl LangString {
+    fn new(string: String, tag: Option<String>) -> Self{
+        Self {string , tag}
+    }
+
+    fn as_string_data_value(self) -> AnyDataValue {
+        match self.tag {
+            Some(tag) => AnyDataValue::new_language_tagged_string(self.string, tag),
+            None => AnyDataValue::new_plain_string(self.string) 
+        }
+    }
+
+}
+
+impl TryFrom<AnyDataValue> for LangString {
+    type Error = () ;
+
+    fn try_from(parameter: AnyDataValue) -> Result<Self, ()>{
+        match parameter.value_domain() {
+            ValueDomain::PlainString => {
+                Ok(Self::new( parameter.to_plain_string_unchecked(),None))
+            } 
+            ValueDomain::LanguageTaggedString => {
+                let (string, lang_tag) = parameter.to_language_tagged_string_unchecked();
+                Ok(Self::new( string, Some(lang_tag)))
+            }
+            _ => Err(()),
+        }
+    }
+}
+
+
+
+
+fn lang_string_from_any(
+    parameter: AnyDataValue,
+) -> Option<LangString> {
+    Some(
+        parameter.try_into().ok()?
+    )
+}
+
 /// Given two [AnyDataValue]s,
-/// check if both are strings and return a pair of [String]
-/// if this is the case.
+/// check if both are plain strings or language tagged strings and return a pair of [LangString]
+/// if this is the case and 
 ///
 /// Returns `None` otherwise.
-fn string_pair_from_any(
+fn lang_string_pair_from_any(
     parameter_first: AnyDataValue,
     parameter_second: AnyDataValue,
-) -> Option<(String, String)> {
-    Some((
-        parameter_first.to_plain_string()?,
-        parameter_second.to_plain_string()?,
-    ))
-}
+) -> Option<(LangString, LangString)> {
+        let lang_string_first = lang_string_from_any(parameter_first)?;
+        let lang_string_second = lang_string_from_any(parameter_second)?;
+
+        // Implement the Argument Compatibility Rules for language tags from https://www.w3.org/TR/sparql11-query/#func-arg-compatibility
+        match (&lang_string_first.tag, &lang_string_second.tag) {
+            (None, None) |
+            (Some(_), None) => Some((lang_string_first, lang_string_second)),
+            (Some(tag_first), Some(tag_second)) if tag_first == tag_second => Some((lang_string_first, lang_string_second)),            
+            _ => None,
+        }
+    }
 
 /// Given a list of [AnyDataValue]s,
 /// check if all of them are strings and return a list of [String]
 /// if this is the case.
 ///
 /// Returns `None` otherwise.
-fn string_vec_from_any(parameters: &[AnyDataValue]) -> Option<Vec<String>> {
+fn string_vec_from_any(parameters: &[AnyDataValue]) -> Option<Vec<LangString>> {
     let mut result = Vec::new();
 
     for parameter in parameters {
-        result.push(parameter.to_plain_string()?);
+        result.push(lang_string_from_any(parameter.clone())?);
     }
 
     Some(result)
 }
+
+
 
 /// Comparison of strings
 ///
@@ -71,8 +127,8 @@ impl BinaryFunction for StringCompare {
         parameter_first: AnyDataValue,
         parameter_second: AnyDataValue,
     ) -> Option<AnyDataValue> {
-        string_pair_from_any(parameter_first, parameter_second).map(
-            |(first_string, second_string)| match first_string.cmp(&second_string) {
+        lang_string_pair_from_any(parameter_first, parameter_second).map(
+            |(first_lang_string, second_lang_string)| match first_lang_string.string.cmp(&second_lang_string.string) {
                 Ordering::Less => AnyDataValue::new_integer_from_i64(-1),
                 Ordering::Equal => AnyDataValue::new_integer_from_i64(0),
                 Ordering::Greater => AnyDataValue::new_integer_from_i64(1),
@@ -97,8 +153,16 @@ impl BinaryFunction for StringCompare {
 pub struct StringConcatenation;
 impl NaryFunction for StringConcatenation {
     fn evaluate(&self, parameters: &[AnyDataValue]) -> Option<AnyDataValue> {
-        string_vec_from_any(parameters)
-            .map(|strings| AnyDataValue::new_plain_string(strings.concat()))
+        let lang_strings = string_vec_from_any(parameters)?;
+        let lang_tags: HashSet<String> = lang_strings.iter().filter_map(|lang_string| lang_string.tag.as_ref()).cloned().collect();
+        let result = lang_strings.iter().map(|ls| ls.string.as_str()).collect::<String>();
+        
+        let lang_tag = if lang_tags.len() == 1 {
+            lang_tags.into_iter().next()
+        } else {
+            None
+        };
+        Some(LangString::new(result, lang_tag).as_string_data_value())
     }
 
     fn type_propagation(&self) -> FunctionTypePropagation {
@@ -124,9 +188,9 @@ impl BinaryFunction for StringContains {
         parameter_first: AnyDataValue,
         parameter_second: AnyDataValue,
     ) -> Option<AnyDataValue> {
-        string_pair_from_any(parameter_first, parameter_second).map(
-            |(first_string, second_string)| {
-                AnyDataValue::new_boolean(unicode_find(&first_string, &second_string).is_some())
+        lang_string_pair_from_any(parameter_first, parameter_second).map(
+            |(first_lang_string, second_lang_string)| {
+                AnyDataValue::new_boolean(unicode_find(&first_lang_string.string, &second_lang_string.string).is_some())
             },
         )
     }
@@ -155,10 +219,10 @@ impl BinaryFunction for StringStarts {
         parameter_first: AnyDataValue,
         parameter_second: AnyDataValue,
     ) -> Option<AnyDataValue> {
-        string_pair_from_any(parameter_first, parameter_second).map(
-            |(first_string, second_string)| {
-                let first_graphemes = first_string.graphemes(true).collect::<Vec<&str>>();
-                let second_graphemes = second_string.graphemes(true).collect::<Vec<&str>>();
+        lang_string_pair_from_any(parameter_first, parameter_second).map(
+            |(first_lang_string, second_lang_string)| {
+                let first_graphemes = first_lang_string.string.graphemes(true).collect::<Vec<&str>>();
+                let second_graphemes = second_lang_string.string.graphemes(true).collect::<Vec<&str>>();
                 if second_graphemes.len() > first_graphemes.len() {
                     return AnyDataValue::new_boolean(false);
                 }
@@ -193,10 +257,10 @@ impl BinaryFunction for StringEnds {
         parameter_first: AnyDataValue,
         parameter_second: AnyDataValue,
     ) -> Option<AnyDataValue> {
-        string_pair_from_any(parameter_first, parameter_second).map(
-            |(first_string, second_string)| {
-                let first_graphemes = first_string.graphemes(true).collect::<Vec<&str>>();
-                let second_graphemes = second_string.graphemes(true).collect::<Vec<&str>>();
+        lang_string_pair_from_any(parameter_first, parameter_second).map(
+            |(first_lang_string, second_lang_string)| {
+                let first_graphemes = first_lang_string.string.graphemes(true).collect::<Vec<&str>>();
+                let second_graphemes = second_lang_string.string.graphemes(true).collect::<Vec<&str>>();
                 if second_graphemes.len() > first_graphemes.len() {
                     return AnyDataValue::new_boolean(false);
                 }
@@ -232,10 +296,10 @@ impl BinaryFunction for StringBefore {
         parameter_first: AnyDataValue,
         parameter_second: AnyDataValue,
     ) -> Option<AnyDataValue> {
-        string_pair_from_any(parameter_first, parameter_second).map(
-            |(first_string, second_string)| {
-                let result = if let Some(i) = unicode_find(&first_string, &second_string) {
-                    first_string.graphemes(true).collect::<Vec<&str>>()[..i].join("")
+        lang_string_pair_from_any(parameter_first, parameter_second).map(
+            |(first_lang_string, second_lang_string)| {
+                let result = if let Some(i) = unicode_find(&first_lang_string.string, &second_lang_string.string) {
+                    first_lang_string.string.graphemes(true).collect::<Vec<&str>>()[..i].join("")
                 } else {
                     "".to_string()
                 };
@@ -268,11 +332,11 @@ impl BinaryFunction for StringAfter {
         parameter_first: AnyDataValue,
         parameter_second: AnyDataValue,
     ) -> Option<AnyDataValue> {
-        string_pair_from_any(parameter_first, parameter_second).map(
-            |(first_string, second_string)| {
-                let result = if let Some(i) = unicode_find(&first_string, &second_string) {
-                    first_string.graphemes(true).collect::<Vec<&str>>()
-                        [i + second_string.graphemes(true).collect::<Vec<&str>>().len()..]
+        lang_string_pair_from_any(parameter_first, parameter_second).map(
+            |(first_lang_string, second_lang_string)| {
+                let result = if let Some(i) = unicode_find(&first_lang_string.string, &second_lang_string.string) {
+                    first_lang_string.string.graphemes(true).collect::<Vec<&str>>()
+                        [i + second_lang_string.string.graphemes(true).collect::<Vec<&str>>().len()..]
                         .join("")
                 } else {
                     "".to_string()
@@ -308,18 +372,16 @@ impl BinaryFunction for StringSubstring {
         parameter_first: AnyDataValue,
         parameter_second: AnyDataValue,
     ) -> Option<AnyDataValue> {
-        let string = parameter_first.to_plain_string()?;
+        let lang_string = lang_string_from_any(parameter_first)?;
         let start = usize::try_from(parameter_second.to_i64().map(|val| val.max(1))?).ok()?;
 
-        let graphemes = string.graphemes(true).collect::<Vec<&str>>();
+        let graphemes = lang_string.string.graphemes(true).collect::<Vec<&str>>();
 
         if start > graphemes.len() {
             return None;
         }
 
-        Some(AnyDataValue::new_plain_string(
-            graphemes[(start - 1)..].join(""),
-        ))
+        Some(LangString::new(graphemes[(start - 1)..].join(""), lang_string.tag).as_string_data_value())
     }
 
     fn type_propagation(&self) -> FunctionTypePropagation {
@@ -349,16 +411,16 @@ impl BinaryFunction for StringRegex {
         parameter_first: AnyDataValue,
         parameter_second: AnyDataValue,
     ) -> Option<AnyDataValue> {
-        string_pair_from_any(parameter_first, parameter_second).map(|(string, pattern)| {
+        lang_string_pair_from_any(parameter_first, parameter_second).map(|(lang_string, lang_pattern)| {
             let mut cache = REGEX_CACHE
                 .get_or_init(|| Mutex::new(lru::LruCache::new(REGEX_CACHE_SIZE)))
                 .lock()
                 .unwrap();
 
-            let regex = cache.try_get_or_insert(pattern.clone(), || regex::Regex::new(&pattern));
+            let regex = cache.try_get_or_insert(lang_pattern.string.clone(), || regex::Regex::new(&lang_pattern.string));
 
             match regex {
-                Ok(regex) => AnyDataValue::new_boolean(regex.is_match(&string)),
+                Ok(regex) => AnyDataValue::new_boolean(regex.is_match(&lang_string.string)),
                 Err(_) => AnyDataValue::new_boolean(false),
             }
         })
@@ -389,8 +451,8 @@ impl BinaryFunction for StringLevenshtein {
         parameter_first: AnyDataValue,
         parameter_second: AnyDataValue,
     ) -> Option<AnyDataValue> {
-        string_pair_from_any(parameter_first, parameter_second)
-            .map(|(from, to)| AnyDataValue::new_integer_from_u64(levenshtein(&from, &to) as u64))
+        lang_string_pair_from_any(parameter_first, parameter_second)
+            .map(|(from, to)| AnyDataValue::new_integer_from_u64(levenshtein(&from.string, &to.string) as u64))
     }
 
     fn type_propagation(&self) -> FunctionTypePropagation {
@@ -407,9 +469,10 @@ impl BinaryFunction for StringLevenshtein {
 pub struct StringLength;
 impl UnaryFunction for StringLength {
     fn evaluate(&self, parameter: AnyDataValue) -> Option<AnyDataValue> {
-        parameter
-            .to_plain_string()
-            .map(|string| AnyDataValue::new_integer_from_u64(string.graphemes(true).count() as u64))
+        lang_string_from_any(parameter)
+            .map(|lang_string : LangString| 
+        AnyDataValue::new_integer_from_u64(lang_string.string.graphemes(true).count() as u64))
+    
     }
 
     fn type_propagation(&self) -> FunctionTypePropagation {
@@ -426,8 +489,9 @@ impl UnaryFunction for StringLength {
 pub struct StringReverse;
 impl UnaryFunction for StringReverse {
     fn evaluate(&self, parameter: AnyDataValue) -> Option<AnyDataValue> {
-        parameter.to_plain_string().map(|string| {
-            AnyDataValue::new_plain_string(string.graphemes(true).rev().collect::<String>())
+        lang_string_from_any(parameter).map(|lang_string| {
+            let reverse = lang_string.string.graphemes(true).rev().collect::<String>();
+            LangString::new(reverse, lang_string.tag).as_string_data_value()
         })
     }
 
@@ -449,9 +513,10 @@ impl UnaryFunction for StringReverse {
 pub struct StringUppercase;
 impl UnaryFunction for StringUppercase {
     fn evaluate(&self, parameter: AnyDataValue) -> Option<AnyDataValue> {
-        parameter
-            .to_plain_string()
-            .map(|string| AnyDataValue::new_plain_string(string.to_uppercase()))
+        lang_string_from_any(parameter).map(|lang_string| {
+            let ucase = lang_string.string.to_uppercase();
+            LangString::new(ucase, lang_string.tag).as_string_data_value()
+        })
     }
 
     fn type_propagation(&self) -> FunctionTypePropagation {
@@ -472,9 +537,11 @@ impl UnaryFunction for StringUppercase {
 pub struct StringLowercase;
 impl UnaryFunction for StringLowercase {
     fn evaluate(&self, parameter: AnyDataValue) -> Option<AnyDataValue> {
-        parameter
-            .to_plain_string()
-            .map(|string| AnyDataValue::new_plain_string(string.to_lowercase()))
+        lang_string_from_any(parameter)
+            .map(|lang_string| {
+                let lcase = lang_string.string.to_lowercase();
+                LangString::new(lcase, lang_string.tag).as_string_data_value()
+            })
     }
 
     fn type_propagation(&self) -> FunctionTypePropagation {
@@ -495,9 +562,11 @@ impl UnaryFunction for StringLowercase {
 pub struct StringUriEncode;
 impl UnaryFunction for StringUriEncode {
     fn evaluate(&self, parameter: AnyDataValue) -> Option<AnyDataValue> {
-        parameter
-            .to_plain_string()
-            .map(|string| AnyDataValue::new_plain_string(urlencoding::encode(&string).to_string()))
+        lang_string_from_any(parameter)
+        .map(|lang_string| {
+            let uri_encode = urlencoding::encode(&lang_string.string).to_string();
+            LangString::new(uri_encode, None).as_string_data_value()
+        })
     }
 
     fn type_propagation(&self) -> FunctionTypePropagation {
@@ -518,10 +587,9 @@ impl UnaryFunction for StringUriEncode {
 pub struct StringUriDecode;
 impl UnaryFunction for StringUriDecode {
     fn evaluate(&self, parameter: AnyDataValue) -> Option<AnyDataValue> {
-        let string = parameter.to_plain_string()?;
-        let decoded = urlencoding::decode(&string).ok()?;
-
-        Some(AnyDataValue::new_plain_string(decoded.to_string()))
+        let lang_string = lang_string_from_any(parameter)?;
+        let uri_decode = urlencoding::decode(&lang_string.string).ok()?.to_string();
+        Some(LangString::new(uri_decode, None).as_string_data_value())
     }
 
     fn type_propagation(&self) -> FunctionTypePropagation {
@@ -552,10 +620,11 @@ impl TernaryFunction for StringSubstringLength {
         parameter_second: AnyDataValue,
         parameter_third: AnyDataValue,
     ) -> Option<AnyDataValue> {
-        let string = parameter_first.to_plain_string()?;
-        let graphemes = string.graphemes(true).collect::<Vec<&str>>();
+        let lang_string = lang_string_from_any(parameter_first)?;
+        let graphemes = lang_string.string.graphemes(true).collect::<Vec<&str>>();
         let start = parameter_second.to_i64()?;
         let length = parameter_third.to_i64()?;
+
 
         if length < 1 {
             return None;
@@ -574,7 +643,7 @@ impl TernaryFunction for StringSubstringLength {
             graphemes[(start - 1)..(end - 1)].join("")
         };
 
-        Some(AnyDataValue::new_plain_string(result))
+        Some(LangString::new(result, lang_string.tag).as_string_data_value())
     }
 
     fn type_propagation(&self) -> FunctionTypePropagation {
@@ -621,6 +690,12 @@ mod test {
         let string_notstring = AnyDataValue::new_integer_from_i64(1);
         let actual_result_notstring = StringLength.evaluate(string_notstring);
         assert!(actual_result_notstring.is_none());
+
+        let string_lang =
+            AnyDataValue::new_language_tagged_string("chat".to_string(), "en".to_string());
+        let result_lang = AnyDataValue::new_integer_from_u64(4);
+        let actual_result_lang = StringLength.evaluate(string_lang);
+        assert_eq!(result_lang, actual_result_lang.unwrap());
     }
 
     #[test]
