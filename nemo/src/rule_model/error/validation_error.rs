@@ -184,6 +184,24 @@ pub enum ValidationErrorKind {
         /// The actual [ValueDomain] of the HTTP parameter
         given: ValueDomain,
     },
+    /// Variable assignemnts in directive have incorrect form
+    #[error("expected a variable assignment of the form `?variable = term")]
+    #[assoc(code = 237)]
+    DirectiveNonAssignment,
+    /// Variable assignemnts in directive have incorrect form
+    #[error("expected a variable assignment to a ground term")]
+    #[assoc(note = "ground terms are terms without variables")]
+    #[assoc(code = 238)]
+    DirectiveAssignmentNotGround,
+    /// Directive received conflicting variable assignments
+    #[error("variable `{variable}` has been defined multiple times")]
+    #[assoc(code = 239)]
+    DirectiveConflictingAssignments { variable: String },
+    /// Keys in a map have the wrong type
+    #[error("key is of type {found}, expected {expected}")]
+    #[assoc(code = 128)]
+    DirectiveSpecAssignmentKeyWrongType { found: String, expected: String },
+
     /// Stdin is only supported for one import
     #[error("expected at most one `stdin` import, found at least 2 occurrences")]
     #[assoc(code = 237)]

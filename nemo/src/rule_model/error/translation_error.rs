@@ -77,10 +77,6 @@ pub enum TranslationErrorKind {
     #[error(r#"prefix has been redefined"#)]
     #[assoc(code = 114)]
     PrefixRedefinition,
-    /// Missing file format
-    #[error("missing file format")]
-    #[assoc(code = 116)]
-    FileFormatMissing,
     /// Unkown attribute
     #[error("unknown attribute: `{0}`")]
     #[assoc(code = 119)]
@@ -108,23 +104,11 @@ pub enum TranslationErrorKind {
     /// Non-variable-assignment in directive
     #[error("expected a variable assignment, found `{found}`")]
     #[assoc(code = 125)]
-    NonAssignment { found: String },
-    /// Expected a ground term in a fact
-    #[error("expected a ground term, found `{found}`")]
-    #[assoc(code = 126)]
-    NonGroundTerm { found: String },
+    DirectiveNonOperation { found: String },
     /// Arbitrary expression used in place of a fact
     #[error("expected a fact, found `{found}`")]
     #[assoc(code = 127)]
     ExpressionAsFact { found: String },
-    /// Keys in a map have the wrong type
-    #[error("wrong key type: {key} is of type {found}, but expected {expected}")]
-    #[assoc(code = 128)]
-    KeyWrongType {
-        key: String,
-        found: String,
-        expected: String,
-    },
     /// parameter in a map is defined twice
     #[error("parameter {key} is defined multiple times")]
     #[assoc(code = 129)]

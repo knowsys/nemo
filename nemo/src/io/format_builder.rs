@@ -18,10 +18,19 @@ use crate::{
     rule_model::{
         components::{
             import_export::{Direction, ImportExportSpec},
-            term::value_type::ValueType,
+            term::{
+                operation::Operation,
+                primitive::{ground::GroundTerm, Primitive},
+                value_type::ValueType,
+                Term,
+            },
             ProgramComponent,
         },
-        error::{hint::Hint, validation_error::ValidationErrorKind, ValidationErrorBuilder},
+        error::{
+            hint::Hint, info::Info, validation_error::ValidationErrorKind, ComplexErrorLabelKind,
+            ValidationErrorBuilder,
+        },
+        substitution::Substitution,
     },
     syntax::import_export::attribute,
 };
@@ -294,18 +303,74 @@ impl<B: FormatBuilder> Parameters<B> {
         self.0.get(&param).cloned()
     }
 
+    /// Take as input a list of bindings (statements of the form ?variable = ground term),
+    /// validate that they are of the correct form
+    /// and consturct a [Substitution].
+    fn build_substitution(
+        bindings: &[Operation],
+        builder: &mut ValidationErrorBuilder,
+    ) -> Option<Substitution> {
+        let mut result = HashMap::new();
+
+        for binding in bindings {
+            let Some((left, right)) = binding.variable_assignment() else {
+                builder.report_error(
+                    *binding.origin(),
+                    ValidationErrorKind::DirectiveNonAssignment,
+                );
+                return None;
+            };
+
+            let Ok(right) = GroundTerm::try_from(right.clone()) else {
+                builder.report_error(
+                    *binding.origin(),
+                    ValidationErrorKind::DirectiveAssignmentNotGround,
+                );
+                return None;
+            };
+
+            if let Some((_, previous_origin)) =
+                result.insert(left.clone(), (Primitive::Ground(right), *binding.origin()))
+            {
+                builder
+                    .report_error(
+                        *binding.origin(),
+                        ValidationErrorKind::DirectiveConflictingAssignments {
+                            variable: left.to_string(),
+                        },
+                    )
+                    .add_label(
+                        ComplexErrorLabelKind::Information,
+                        previous_origin,
+                        Info::FirstDefinition,
+                    );
+                return None;
+            }
+        }
+
+        Some(Substitution::new(
+            result
+                .into_iter()
+                .map(|(key, (value, _origin))| (key, value)),
+        ))
+    }
+
     pub(crate) fn validate(
-        spec: ImportExportSpec,
+        mut spec: ImportExportSpec,
+        bindings: &[Operation],
         direction: Direction,
         builder: &mut ValidationErrorBuilder,
     ) -> Option<Self> {
-        let Ok(format_tag) = B::Tag::from_str(spec.format_tag().name()) else {
+        let Ok(format_tag) = B::Tag::from_str(spec.format().name()) else {
             builder.report_error(
-                *spec.format_tag().origin(),
-                ValidationErrorKind::ImportExportFileFormatUnknown(spec.format_tag().name().into()),
+                *spec.format().origin(),
+                ValidationErrorKind::ImportExportFileFormatUnknown(spec.format().name().into()),
             );
             return None;
         };
+
+        let substitution = Self::build_substitution(bindings, builder)?;
+        substitution.apply(&mut spec);
 
         let mut required_parameters: HashSet<_> = B::Parameter::iter()
             .filter(|param| param.required_for(format_tag))
@@ -314,7 +379,29 @@ impl<B: FormatBuilder> Parameters<B> {
         let mut result = HashMap::new();
 
         for (key, value_term) in spec.key_value() {
-            let Ok(parameter) = B::Parameter::from_str(key.name()) else {
+            let key_string_opt = if let Term::Primitive(Primitive::Ground(ground)) = key {
+                ground.value().to_plain_string()
+            } else {
+                None
+            };
+
+            let Some(key_string) = key_string_opt else {
+                builder.report_error(
+                    *key.origin(),
+                    ValidationErrorKind::DirectiveSpecAssignmentKeyWrongType {
+                        found: key.value_type().name().to_owned(),
+                        expected: ValueType::String.name().to_owned(),
+                    },
+                );
+
+                return None;
+            };
+
+            let Ok(value_ground) = GroundTerm::try_from(value_term.clone()) else {
+                return None;
+            };
+
+            let Ok(parameter) = B::Parameter::from_str(&key_string) else {
                 builder
                     .report_error(
                         *key.origin(),
@@ -325,7 +412,7 @@ impl<B: FormatBuilder> Parameters<B> {
                     )
                     .add_hint_option(Hint::similar(
                         "parameter",
-                        key.name(),
+                        key_string,
                         B::Parameter::iter().map(|attribute| attribute.to_string()),
                     ));
 
@@ -334,12 +421,12 @@ impl<B: FormatBuilder> Parameters<B> {
 
             required_parameters.remove(&parameter);
 
-            if let Err(kind) = parameter.is_value_valid(value_term.value()) {
+            if let Err(kind) = parameter.is_value_valid(value_ground.value()) {
                 builder.report_error(*value_term.origin(), kind);
                 return None;
             }
 
-            result.insert(parameter, value_term.value());
+            result.insert(parameter, value_ground.value());
         }
 
         if required_parameters.is_empty() {
@@ -414,11 +501,12 @@ impl ImportExportBuilder {
     fn new_with_tag<B: FormatBuilder>(
         tag: B::Tag,
         spec: ImportExportSpec,
+        bindings: &[Operation],
         direction: Direction,
         builder: &mut ValidationErrorBuilder,
     ) -> Option<ImportExportBuilder> {
         let origin = *spec.origin();
-        let parameters = Parameters::<B>::validate(spec, direction, builder)?;
+        let parameters = Parameters::<B>::validate(spec, bindings, direction, builder)?;
 
         let resource_builder = parameters
             .get_optional(StandardParameter::Resource.into())
@@ -515,13 +603,14 @@ impl ImportExportBuilder {
 
     pub(crate) fn new(
         spec: ImportExportSpec,
+        bindings: &[Operation],
         direction: Direction,
         error_builder: &mut ValidationErrorBuilder,
     ) -> Option<Self> {
-        let format_tag = spec.format_tag().name();
+        let format_tag = spec.format().name().to_owned();
         let Ok(tag) = format_tag.parse::<SupportedFormatTag>() else {
             error_builder.report_error(
-                *spec.format_tag().origin(),
+                *spec.format().origin(),
                 ValidationErrorKind::ImportExportFileFormatUnknown(format_tag.to_string()),
             );
             return None;
@@ -529,16 +618,16 @@ impl ImportExportBuilder {
 
         match tag {
             SupportedFormatTag::Dsv(tag) => {
-                Self::new_with_tag::<DsvBuilder>(tag, spec, direction, error_builder)
+                Self::new_with_tag::<DsvBuilder>(tag, spec, bindings, direction, error_builder)
             }
             SupportedFormatTag::Rdf(tag) => {
-                Self::new_with_tag::<RdfHandler>(tag, spec, direction, error_builder)
+                Self::new_with_tag::<RdfHandler>(tag, spec, bindings, direction, error_builder)
             }
             SupportedFormatTag::Json(tag) => {
-                Self::new_with_tag::<JsonHandler>(tag, spec, direction, error_builder)
+                Self::new_with_tag::<JsonHandler>(tag, spec, bindings, direction, error_builder)
             }
             SupportedFormatTag::Sparql(tag) => {
-                Self::new_with_tag::<SparqlBuilder>(tag, spec, direction, error_builder)
+                Self::new_with_tag::<SparqlBuilder>(tag, spec, bindings, direction, error_builder)
             }
         }
     }
