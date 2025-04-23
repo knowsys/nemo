@@ -271,7 +271,7 @@ impl ProgramComponent for Operation {
             return None;
         }
 
-        if self.is_ground() && matches!(self.reduce(), Term::Operation(_)) {
+        if self.is_ground() && !self.reduce().is_primitive() {
             builder.report_error(self.origin, ValidationErrorKind::InvalidGroundOperation);
             return None;
         }
