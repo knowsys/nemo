@@ -197,10 +197,6 @@ pub enum ValidationErrorKind {
     #[error("variable `{variable}` has been defined multiple times")]
     #[assoc(code = 239)]
     DirectiveConflictingAssignments { variable: String },
-    /// Keys in a map have the wrong type
-    #[error("key is of type {found}, expected {expected}")]
-    #[assoc(code = 128)]
-    DirectiveSpecAssignmentKeyWrongType { found: String, expected: String },
 
     /// Stdin is only supported for one import
     #[error("expected at most one `stdin` import, found at least 2 occurrences")]

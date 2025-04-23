@@ -33,6 +33,9 @@ pub enum ProgramComponentKind {
     /// Plain String
     #[assoc(name = "string")]
     PlainString,
+    /// Attribute
+    #[assoc(name = "attribute")]
+    Attribute,
     /// Language tagged string
     #[assoc(name = "language tagged string")]
     LanguageTaggedString,

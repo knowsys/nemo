@@ -1,10 +1,16 @@
 //! This module contains a function for handling import/export statements.
 
 use crate::{
-    parser::ast::{self, tag::structure::StructureTag, ProgramAST},
+    parser::{
+        ast::{self, tag::structure::StructureTag, ProgramAST},
+        context::ParserContext,
+    },
     rule_model::{
         components::{
-            import_export::{ExportDirective, ImportDirective, ImportExportSpec},
+            import_export::{
+                attribute::ImportExportAttribute, specification::ImportExportSpec, ExportDirective,
+                ImportDirective,
+            },
             tag::Tag,
             term::{operation::Operation, Term},
         },
@@ -24,7 +30,7 @@ impl TranslationComponent for ImportExportSpec {
     ) -> Result<Self, TranslationError> {
         let mut subterms = Vec::new();
         for (key, value) in map.key_value() {
-            let key = Term::build_component(translation, key)?;
+            let key = ImportExportAttribute::build_component(translation, key)?;
             let value = Term::build_component(translation, value)?;
 
             subterms.push((key, value));
@@ -34,6 +40,28 @@ impl TranslationComponent for ImportExportSpec {
 
         let result = ImportExportSpec::new(&format, subterms);
         Ok(translation.register_component(result, map))
+    }
+}
+
+impl TranslationComponent for ImportExportAttribute {
+    type Ast<'a> = ast::expression::Expression<'a>;
+
+    fn build_component<'a, 'b>(
+        translation: &mut ASTProgramTranslation<'a, 'b>,
+        expression: &'b Self::Ast<'a>,
+    ) -> Result<Self, TranslationError> {
+        if let ast::expression::Expression::Constant(constant) = expression {
+            let result = ImportExportAttribute::new(constant.tag().to_string());
+            Ok(translation.register_component(result, expression))
+        } else {
+            Err(TranslationError::new(
+                expression.span(),
+                TranslationErrorKind::KeyWrongType {
+                    found: expression.context_type().name().to_owned(),
+                    expected: ParserContext::Constant.name().to_owned(),
+                },
+            ))
+        }
     }
 }
 

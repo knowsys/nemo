@@ -17,12 +17,11 @@ use strum::IntoEnumIterator;
 use crate::{
     rule_model::{
         components::{
-            import_export::{Direction, ImportExportSpec},
+            import_export::{specification::ImportExportSpec, Direction},
             term::{
                 operation::Operation,
                 primitive::{ground::GroundTerm, Primitive},
                 value_type::ValueType,
-                Term,
             },
             ProgramComponent,
         },
@@ -379,29 +378,11 @@ impl<B: FormatBuilder> Parameters<B> {
         let mut result = HashMap::new();
 
         for (key, value_term) in spec.key_value() {
-            let key_string_opt = if let Term::Primitive(Primitive::Ground(ground)) = key {
-                ground.value().to_plain_string()
-            } else {
-                None
-            };
-
-            let Some(key_string) = key_string_opt else {
-                builder.report_error(
-                    *key.origin(),
-                    ValidationErrorKind::DirectiveSpecAssignmentKeyWrongType {
-                        found: key.value_type().name().to_owned(),
-                        expected: ValueType::String.name().to_owned(),
-                    },
-                );
-
-                return None;
-            };
-
             let Ok(value_ground) = GroundTerm::try_from(value_term.clone()) else {
                 return None;
             };
 
-            let Ok(parameter) = B::Parameter::from_str(&key_string) else {
+            let Ok(parameter) = B::Parameter::from_str(key.value()) else {
                 builder
                     .report_error(
                         *key.origin(),
@@ -412,7 +393,7 @@ impl<B: FormatBuilder> Parameters<B> {
                     )
                     .add_hint_option(Hint::similar(
                         "parameter",
-                        key_string,
+                        key.value(),
                         B::Parameter::iter().map(|attribute| attribute.to_string()),
                     ));
 

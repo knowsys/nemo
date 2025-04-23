@@ -109,6 +109,10 @@ pub enum TranslationErrorKind {
     #[error("expected a fact, found `{found}`")]
     #[assoc(code = 127)]
     ExpressionAsFact { found: String },
+    /// Keys in a map have the wrong type
+    #[error("attribute is of type {found}, but expected {expected}")]
+    #[assoc(code = 128)]
+    KeyWrongType { found: String, expected: String },
     /// parameter in a map is defined twice
     #[error("parameter {key} is defined multiple times")]
     #[assoc(code = 129)]
