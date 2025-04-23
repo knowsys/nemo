@@ -189,7 +189,7 @@ pub enum ValidationErrorKind {
     #[assoc(code = 237)]
     ReachedStdinImportLimit,
     /// Ground operation contains invalid literals
-    #[error("ground operation contains at least one invalid literal")]
+    #[error("ground operation does not return a result")]
     #[assoc(code = 238)]
     InvalidGroundOperation,
     /// Unsupported feature: Multiple aggregates in one rule
