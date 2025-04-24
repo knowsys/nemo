@@ -43,7 +43,7 @@ mod test {
     };
 
     #[test]
-    fn sparql_compliance() {
+    fn test_lang() {
         let lang_tag =
             AnyDataValue::new_language_tagged_string("Roberto".to_string(), "en".to_string());
         let exp_result = AnyDataValue::new_plain_string("en".to_string());
