@@ -2,8 +2,9 @@
 
 use crate::{
     datatypes::StorageTypeName,
-    datavalues::{AnyDataValue, DataValue},
+    datavalues::AnyDataValue,
 };
+use crate::function::definitions::string::LangTaggedString;
 
 use super::{FunctionTypePropagation, UnaryFunction};
 
@@ -16,14 +17,7 @@ use super::{FunctionTypePropagation, UnaryFunction};
 pub struct LanguageTag;
 impl UnaryFunction for LanguageTag {
     fn evaluate(&self, parameter: AnyDataValue) -> Option<AnyDataValue> {
-        parameter
-            .to_language_tagged_string()
-            .map(|(_, tag)| AnyDataValue::new_plain_string(tag))
-            .or_else(|| {
-                parameter
-                    .to_plain_string()
-                    .map(|_| AnyDataValue::new_plain_string(String::new()))
-            })
+        LangTaggedString::try_from(parameter).ok()?.tag_into_data_value()
     }
 
     fn type_propagation(&self) -> FunctionTypePropagation {
