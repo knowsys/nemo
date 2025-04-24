@@ -1,10 +1,7 @@
 //! This module defines functions relating to language tagged strings
 
-use crate::{
-    datatypes::StorageTypeName,
-    datavalues::AnyDataValue,
-};
 use crate::function::definitions::string::LangTaggedString;
+use crate::{datatypes::StorageTypeName, datavalues::AnyDataValue};
 
 use super::{FunctionTypePropagation, UnaryFunction};
 
@@ -17,7 +14,10 @@ use super::{FunctionTypePropagation, UnaryFunction};
 pub struct LanguageTag;
 impl UnaryFunction for LanguageTag {
     fn evaluate(&self, parameter: AnyDataValue) -> Option<AnyDataValue> {
-        LangTaggedString::try_from(parameter).ok()?.tag_into_data_value()
+        LangTaggedString::try_from(parameter)
+            .ok()?
+            .tag_into_data_value()
+            .or_else(|| Some(AnyDataValue::new_plain_string(String::default())))
     }
 
     fn type_propagation(&self) -> FunctionTypePropagation {

@@ -45,7 +45,7 @@ impl LangTaggedString {
             None => AnyDataValue::new_plain_string(self.string),
         }
     }
-    
+
     pub fn tag_into_data_value(self) -> Option<AnyDataValue> {
         self.tag.map(AnyDataValue::new_plain_string)
     }
@@ -67,10 +67,11 @@ impl TryFrom<AnyDataValue> for LangTaggedString {
 }
 
 /// Given two [AnyDataValue]s,
-/// check if both are plain strings or language tagged strings and return a pair of [LangString]
-/// if this is the case and
+/// check if both are plain strings or language tagged strings and return a pair of [LangTaggedString]
 ///
-/// Returns `None` otherwise.
+/// Implements the Argument Compatibility Rules for language tags from https://www.w3.org/TR/sparql11-query/#func-arg-compatibility
+///
+/// Returns `None` if one parameter is not a string or the language tags do not match.
 fn lang_string_pair_from_any(
     parameter_first: AnyDataValue,
     parameter_second: AnyDataValue,
@@ -78,7 +79,6 @@ fn lang_string_pair_from_any(
     let lang_string_first = LangTaggedString::try_from(parameter_first).ok()?;
     let lang_string_second = LangTaggedString::try_from(parameter_second).ok()?;
 
-    // Implement the Argument Compatibility Rules for language tags from https://www.w3.org/TR/sparql11-query/#func-arg-compatibility
     match (&lang_string_first.tag, &lang_string_second.tag) {
         (None, None) | (Some(_), None) => Some((lang_string_first, lang_string_second)),
         (Some(tag_first), Some(tag_second)) if tag_first == tag_second => {
@@ -103,14 +103,13 @@ fn string_vec_from_any(parameters: &[AnyDataValue]) -> Option<Vec<LangTaggedStri
     Some(result)
 }
 
-
 /// Comparison of strings
 ///
 /// Evaluates to -1 from the integer value space if the first string is alphabetically smaller than the second.
 /// Evaluates to 0 from the integer value space if both strings are equal.
 /// Evaluates to 1 from the integer value space if the second string is alphabetically larger than the first.
 ///
-/// Language tags that comply with the Argument Compatibility Rules are ignored.
+/// This function ignores language tags.
 #[derive(Debug, Copy, Clone)]
 pub struct StringCompare;
 impl BinaryFunction for StringCompare {
@@ -141,7 +140,7 @@ impl BinaryFunction for StringCompare {
 /// Returns a string, that results from merging together
 /// all input strings.
 ///
-/// Adds a language tag if all parameters have the identical language tag
+/// Returns a language tagged string if all parameters have the identical language tag.
 ///
 /// Returns an empty string if no parameters are given.
 ///
@@ -178,7 +177,7 @@ impl NaryFunction for StringConcatenation {
 /// Returns `true` from the boolean value space if the string provided as the second parameter
 /// is contained in the string provided as the first parameter and `false` otherwise.
 ///
-/// Language tags that comply with the Argument Compatibility Rules are ignored.
+/// This function ignores language tags.
 ///
 /// Returns `None` if either parameter is not a string.
 #[derive(Debug, Copy, Clone)]
@@ -213,7 +212,7 @@ impl BinaryFunction for StringContains {
 /// Returns `true` from the boolean value space if the string provided as the first parameter
 /// starts with the string provided as the second parameter and `false` otherwise.
 ///
-/// Language tags that comply with the Argument Compatibility Rules are ignored.
+/// This function ignores language tags.
 ///
 /// Returns `None` if either parameter is not a string.
 #[derive(Debug, Copy, Clone)]
@@ -259,7 +258,7 @@ impl BinaryFunction for StringStarts {
 /// Returns `true` from the boolean value space if the string provided as the first parameter
 /// ends with the string provided as the second parameter and `false` otherwise.
 ///
-/// Language tags that comply with the Argument Compatibility Rules are ignored.
+/// This function ignores language tags.
 ///
 /// Returns `None` if either parameter is not a string.
 #[derive(Debug, Copy, Clone)]
@@ -306,7 +305,9 @@ impl BinaryFunction for StringEnds {
 /// Returns the part of the string given in the first parameter which comes before
 /// the string provided as the second parameter.
 ///
-/// Language tags that comply with the Argument Compatibility Rules are ignored.
+/// Applies the language tag of the first parameter on the result, if:
+/// - the resulting string is not empty
+/// - or the second parameter is empty
 ///
 /// Returns `None` if either parameter is not a string.
 #[derive(Debug, Copy, Clone)]
@@ -330,13 +331,12 @@ impl BinaryFunction for StringBefore {
                             LangTaggedString::new(string, first_lang_string.tag)
                         }
                         None => {
-                            // SPARQL defines to only apply the language tag of the first parameter if the second parameter is empty
                             let tag = if second_lang_string.string.is_empty() {
                                 first_lang_string.tag
                             } else {
                                 None
                             };
-                            LangTaggedString::new(String::new(), tag)
+                            LangTaggedString::new(String::default(), tag)
                         }
                     };
                 result_lang_string.into_data_value()
@@ -358,7 +358,9 @@ impl BinaryFunction for StringBefore {
 /// Returns the part of the string given in the first parameter which comes after
 /// the string provided as the second parameter.
 ///
-/// Language tags that comply with the Argument Compatibility Rules are ignored.
+/// Applies the language tag of the first parameter on the result, if:
+/// - the resulting string is not empty
+/// - or the second parameter is empty
 ///
 /// Returns `None` if either parameter is not a string.
 #[derive(Debug, Copy, Clone)]
@@ -386,13 +388,12 @@ impl BinaryFunction for StringAfter {
                             LangTaggedString::new(string, first_lang_string.tag)
                         }
                         None => {
-                            // SPARQL defines to only apply the language tag of the first parameter if the second parameter is empty
                             let tag = if second_lang_string.string.is_empty() {
                                 first_lang_string.tag
                             } else {
                                 None
                             };
-                            LangTaggedString::new(String::new(), tag)
+                            LangTaggedString::new(String::default(), tag)
                         }
                     };
                 result_lang_string.into_data_value()
@@ -416,7 +417,7 @@ impl BinaryFunction for StringAfter {
 /// Return a string containing the characters from the first parameter,
 /// starting from the position given by the second paramter.
 ///
-/// Preserves the original lanuage tag, if available.
+/// Applies the language tag of the parameter on the result.
 ///
 /// Returns `None` if the type requirements from above are not met.
 #[derive(Debug, Copy, Clone)]
@@ -434,7 +435,7 @@ impl BinaryFunction for StringSubstring {
 
         let result = graphemes
             .get((start - 1)..)
-            .map_or_else(String::new, |slice| slice.join(""));
+            .map_or_else(String::default, |slice| slice.join(""));
 
         Some(LangTaggedString::new(result, lang_string.tag).into_data_value())
     }
@@ -458,6 +459,8 @@ static REGEX_CACHE: OnceCell<Mutex<lru::LruCache<String, regex::Regex>>> = OnceC
 ///
 /// Returns `None` if either parameter is not a string or the second parameter is not
 /// a regular expression.
+///
+/// This function ignores language tags.
 #[derive(Debug, Copy, Clone)]
 pub struct StringRegex;
 impl BinaryFunction for StringRegex {
@@ -501,7 +504,7 @@ impl BinaryFunction for StringRegex {
 /// change one argument into the other) between the two given strings
 /// as a number from the integer value space.
 ///
-/// Language tags that comply with the Argument Compatibility Rules are ignored.
+/// This function ignores language tags.
 ///
 /// Return `None` if the the provided arguments are not both strings.
 #[derive(Debug, Copy, Clone)]
@@ -512,11 +515,9 @@ impl BinaryFunction for StringLevenshtein {
         parameter_first: AnyDataValue,
         parameter_second: AnyDataValue,
     ) -> Option<AnyDataValue> {
-        lang_string_pair_from_any(parameter_first, parameter_second).map(
-            |(from, to)| {
-                AnyDataValue::new_integer_from_u64(levenshtein(&from.string, &to.string) as u64)
-            },
-        )
+        lang_string_pair_from_any(parameter_first, parameter_second).map(|(from, to)| {
+            AnyDataValue::new_integer_from_u64(levenshtein(&from.string, &to.string) as u64)
+        })
     }
 
     fn type_propagation(&self) -> FunctionTypePropagation {
@@ -529,6 +530,8 @@ impl BinaryFunction for StringLevenshtein {
 /// Returns the length of the given string as a number from the integer value space.
 ///
 /// Returns `None` if the provided argument is not a string.
+///
+/// This function ignores language tags.
 #[derive(Debug, Copy, Clone)]
 pub struct StringLength;
 impl UnaryFunction for StringLength {
@@ -546,17 +549,19 @@ impl UnaryFunction for StringLength {
 /// Transformation of a string into its reverse
 ///
 /// Returns the reversed version of the provided string.
-/// Preserves the original lanuage tag, if available.
+/// Applies the language tag of the parameter on the result.
 ///
 /// Returns `None` if the provided argument is not a string.
 #[derive(Debug, Copy, Clone)]
 pub struct StringReverse;
 impl UnaryFunction for StringReverse {
     fn evaluate(&self, parameter: AnyDataValue) -> Option<AnyDataValue> {
-        LangTaggedString::try_from(parameter).ok().map(|lang_string| {
-            let reverse = lang_string.string.graphemes(true).rev().collect::<String>();
-            LangTaggedString::new(reverse, lang_string.tag).into_data_value()
-        })
+        LangTaggedString::try_from(parameter)
+            .ok()
+            .map(|lang_string| {
+                let reverse = lang_string.string.graphemes(true).rev().collect::<String>();
+                LangTaggedString::new(reverse, lang_string.tag).into_data_value()
+            })
     }
 
     fn type_propagation(&self) -> FunctionTypePropagation {
@@ -578,10 +583,12 @@ impl UnaryFunction for StringReverse {
 pub struct StringUppercase;
 impl UnaryFunction for StringUppercase {
     fn evaluate(&self, parameter: AnyDataValue) -> Option<AnyDataValue> {
-        LangTaggedString::try_from(parameter).ok().map(|lang_string| {
-            let ucase = lang_string.string.to_uppercase();
-            LangTaggedString::new(ucase, lang_string.tag).into_data_value()
-        })
+        LangTaggedString::try_from(parameter)
+            .ok()
+            .map(|lang_string| {
+                let ucase = lang_string.string.to_uppercase();
+                LangTaggedString::new(ucase, lang_string.tag).into_data_value()
+            })
     }
 
     fn type_propagation(&self) -> FunctionTypePropagation {
@@ -596,17 +603,20 @@ impl UnaryFunction for StringUppercase {
 /// Transformation of a string into lower case
 ///
 /// Returns the lower case version of the provided string.
-/// Preserves the original lanuage tag, if available.
+///
+/// Applies the language tag of the parameter on the result.
 ///
 /// Returns `None` if the provided argument is not a string.
 #[derive(Debug, Copy, Clone)]
 pub struct StringLowercase;
 impl UnaryFunction for StringLowercase {
     fn evaluate(&self, parameter: AnyDataValue) -> Option<AnyDataValue> {
-        LangTaggedString::try_from(parameter).ok().map(|lang_string| {
-            let lcase = lang_string.string.to_lowercase();
-            LangTaggedString::new(lcase, lang_string.tag).into_data_value()
-        })
+        LangTaggedString::try_from(parameter)
+            .ok()
+            .map(|lang_string| {
+                let lcase = lang_string.string.to_lowercase();
+                LangTaggedString::new(lcase, lang_string.tag).into_data_value()
+            })
     }
 
     fn type_propagation(&self) -> FunctionTypePropagation {
@@ -621,17 +631,20 @@ impl UnaryFunction for StringLowercase {
 /// URI encoding (percent encoding) of a string
 ///
 /// Returns the percent-encoded version of the provided string.
-/// Ignores language tags.
+///
+/// This function ignores language tags.
 ///
 /// Returns `None` if the provided argument is not a string.
 #[derive(Debug, Copy, Clone)]
 pub struct StringUriEncode;
 impl UnaryFunction for StringUriEncode {
     fn evaluate(&self, parameter: AnyDataValue) -> Option<AnyDataValue> {
-        LangTaggedString::try_from(parameter).ok().map(|lang_string| {
-            let uri_encode = urlencoding::encode(&lang_string.string).to_string();
-            LangTaggedString::new(uri_encode, None).into_data_value()
-        })
+        LangTaggedString::try_from(parameter)
+            .ok()
+            .map(|lang_string| {
+                let uri_encode = urlencoding::encode(&lang_string.string).to_string();
+                LangTaggedString::new(uri_encode, None).into_data_value()
+            })
     }
 
     fn type_propagation(&self) -> FunctionTypePropagation {
@@ -646,7 +659,8 @@ impl UnaryFunction for StringUriEncode {
 /// URI encoding (percent encoding) of a string
 ///
 /// Returns the percent-encoded version of the provided string.
-/// Ignores language tags.
+///
+/// This function ignores language tags.
 ///
 /// Returns `None` if the provided argument is not a string.
 #[derive(Debug, Copy, Clone)]
@@ -676,7 +690,7 @@ impl UnaryFunction for StringUriDecode {
 /// starting from the position given by the second parameter
 /// with the maximum length given by the third parameter.
 ///
-/// Preserves the original lanuage tag, if available.
+/// Applies the language tag of the parameter on the result.
 ///
 /// Returns `None` if the type requirements from above are not met.
 #[derive(Debug, Copy, Clone)]
@@ -694,12 +708,12 @@ impl TernaryFunction for StringSubstringLength {
         let length = parameter_third.to_i64()?;
 
         let result = match length {
-            length if length < 1 => String::new(),
+            length if length < 1 => String::default(),
             _ => {
                 let end = usize::try_from(start + length).ok()?;
                 let start = usize::try_from(start.max(1)).ok()?;
                 if start > graphemes.len() {
-                    String::new()
+                    String::default()
                 } else {
                     graphemes
                         .get((start - 1)..(end - 1))
