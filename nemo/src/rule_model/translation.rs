@@ -359,7 +359,7 @@ impl<'a, 'b> ASTProgramTranslation<'a, 'b> {
             }
             ast::tag::structure::StructureTagKind::Prefixed { prefix, tag } => {
                 if let Some((expanded_prefix, _)) = self.prefix_mapping.get(&prefix.to_string()) {
-                    format!("{expanded_prefix}{}", tag)
+                    format!("{expanded_prefix}{tag}")
                 } else {
                     return Err(TranslationError::new(
                         prefix.span(),

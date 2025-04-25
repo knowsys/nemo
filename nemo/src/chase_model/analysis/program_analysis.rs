@@ -118,7 +118,7 @@ fn construct_existential_aux_rule(
     let mut variable_index = 0;
     let mut generate_variable = move || {
         variable_index += 1;
-        let name = format!("__GENERATED_HEAD_AUX_VARIABLE_{}", variable_index);
+        let name = format!("__GENERATED_HEAD_AUX_VARIABLE_{variable_index}");
         Variable::universal(&name)
     };
 
