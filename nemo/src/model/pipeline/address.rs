@@ -1,5 +1,9 @@
 //! This module defines [ProgramComponentAddress]
 
+use std::ops::Deref;
+
+use crate::model::components::{atom::Atom, rule::Rule, ProgramComponent};
+
 /// Used to locate a [super::super::components::ProgramComponent] within
 /// a [super::ProgramPipeline]
 #[derive(Debug, Clone, Default)]
@@ -7,13 +11,16 @@ pub struct ProgramComponentAddress(Vec<AddressSegment>);
 
 impl ProgramComponentAddress {
     /// Push a [ProgramComponentAddress] onto the address.
-    pub fn push(&mut self, segment: AddressSegment) {
+    pub(crate) fn push(&mut self, segment: AddressSegment) {
         self.0.push(segment);
     }
+}
 
-    /// Get an iterator over all [AddressSegment]s.
-    pub fn iter(&self) -> impl Iterator<Item = AddressSegment> + '_ {
-        self.0.iter().cloned()
+impl Deref for ProgramComponentAddress {
+    type Target = [AddressSegment];
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
     }
 }
 
@@ -35,4 +42,20 @@ pub enum AddressSegment {
     /// Rule: Body literal
     Body(usize),
     // TODO: ...
+}
+
+pub(crate) trait Addressable {
+    fn next_component(&self, segment: &AddressSegment) -> Option<Box<&dyn Addressable>>;
+
+    fn address_rule(&self, _segment: &AddressSegment) -> Option<&Rule> {
+        None
+    }
+
+    fn address_atom(&self, _segment: &AddressSegment) -> Option<&Atom> {
+        None
+    }
+
+    fn address_fact(&self, _segment: &AddressSegment) -> Option<&Atom> {
+        None
+    }
 }

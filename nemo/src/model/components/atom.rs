@@ -2,7 +2,13 @@
 
 use std::fmt::Display;
 
-use crate::model::{origin::Origin, pipeline::id::ProgramComponentId};
+use crate::model::{
+    origin::Origin,
+    pipeline::{
+        address::{AddressSegment, Addressable},
+        id::ProgramComponentId,
+    },
+};
 
 use super::{ProgramComponent, ProgramComponentKind};
 
@@ -41,5 +47,19 @@ impl ProgramComponent for Atom {
 
     fn validate(&self) -> Result<(), super::NewValidationError> {
         todo!()
+    }
+
+    fn set_origin(&mut self, origin: Origin) {
+        self.origin = origin;
+    }
+
+    fn set_id(&mut self, id: ProgramComponentId) {
+        self.id = id;
+    }
+}
+
+impl Addressable for Atom {
+    fn next_component(&self, _segment: &AddressSegment) -> Option<Box<&dyn Addressable>> {
+        None
     }
 }

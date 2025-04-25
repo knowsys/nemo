@@ -1,10 +1,14 @@
 //! This module defines [Rule].
 
-use std::fmt::Display;
+use std::{fmt::Display, io::SeekFrom};
 
 use crate::model::{
     origin::Origin,
-    pipeline::{id::ProgramComponentId, ProgramPipeline},
+    pipeline::{
+        address::{AddressSegment, Addressable},
+        id::ProgramComponentId,
+        ProgramPipeline,
+    },
 };
 
 use super::{atom::Atom, ProgramComponent, ProgramComponentKind};
@@ -51,6 +55,15 @@ impl Rule {
         empty_rule.origin = Origin::rule_combination(first, second);
         empty_rule
     }
+
+    /// Return
+    pub fn body_atom(&self, index: usize) -> &Atom {
+        &self.body[index]
+    }
+
+    pub fn head_atom(&self, index: usize) -> &Atom {
+        &self.head[index]
+    }
 }
 
 impl Display for Rule {
@@ -74,5 +87,45 @@ impl ProgramComponent for Rule {
 
     fn validate(&self) -> Result<(), super::NewValidationError> {
         todo!()
+    }
+
+    fn set_origin(&mut self, origin: Origin) {
+        self.origin = origin;
+    }
+
+    fn set_id(&mut self, id: ProgramComponentId) {
+        self.id = id;
+    }
+}
+
+impl Addressable for Rule {
+    fn next_component(&self, segment: &AddressSegment) -> Option<Box<&dyn Addressable>> {
+        Some(Box::new(match segment {
+            AddressSegment::Head(index) => self.head_atom(*index),
+            AddressSegment::Body(index) => self.body_atom(*index),
+            _ => return None,
+        }))
+    }
+
+    fn address_atom(&self, segment: &AddressSegment) -> Option<&Atom> {
+        Some(match segment {
+            AddressSegment::Head(index) => self.head_atom(*index),
+            AddressSegment::Body(index) => self.body_atom(*index),
+            _ => return None,
+        })
+    }
+}
+
+// TODO: Decide on how to set id and origin
+
+impl Rule {
+    pub(crate) fn set_id(&mut self, id: ProgramComponentId) {
+        self.id = id;
+    }
+}
+
+impl ProgramPipeline {
+    pub(crate) fn set_id_rule(rule: &mut Rule, id: ProgramComponentId) {
+        rule.id = id;
     }
 }
