@@ -529,7 +529,7 @@ impl AnyDataValue {
                 let add_result = dictionary.add_datavalue(self.clone());
 
                 if add_result == AddResult::Rejected {
-                    panic!("Dictionary rejected the data value: {:?}", self);
+                    panic!("Dictionary rejected the data value: {self:?}");
                 }
 
                 let dictionary_id = add_result.value();

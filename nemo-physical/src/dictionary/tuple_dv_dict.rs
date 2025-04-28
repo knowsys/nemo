@@ -587,7 +587,7 @@ fn id_to_tuple_datavalue_with_parent(
                     values.push(AnyDataValue::new_boolean(true));
                 }
             }
-            _ => panic!("unexpected type byte {} for tuple value", cur_type),
+            _ => panic!("unexpected type byte {cur_type} for tuple value"),
         }
     }
 

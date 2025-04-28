@@ -273,7 +273,7 @@ impl CheckedMul for Float {
 
 impl CheckedNeg for Float {
     fn checked_neg(&self) -> Option<Self> {
-        Float::new(-1.0 * self.0).ok()
+        Float::new(-self.0).ok()
     }
 }
 

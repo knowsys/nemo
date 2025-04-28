@@ -733,7 +733,7 @@ mod test {
 
         let ar = dict.add_datavalue(dv_tuple.clone());
         let AddResult::Fresh(dv_tuple_id) = ar else {
-            panic!("add failed: {:?}", ar);
+            panic!("add failed: {ar:?}");
         };
 
         assert_eq!(dict.datavalue_to_id(&dv_tuple), Some(dv_tuple_id));
@@ -758,7 +758,7 @@ mod test {
 
         let ar = dict.add_datavalue(dv_tuple.clone());
         let AddResult::Fresh(dv_tuple_id) = ar else {
-            panic!("add failed: {:?}", ar);
+            panic!("add failed: {ar:?}");
         };
 
         assert_eq!(dict.datavalue_to_id(&dv_tuple), Some(dv_tuple_id));
@@ -779,7 +779,7 @@ mod test {
 
         let ar = dict.add_datavalue(dv_tuple.clone());
         let AddResult::Fresh(dv_tuple_id) = ar else {
-            panic!("add failed: {:?}", ar);
+            panic!("add failed: {ar:?}");
         };
 
         assert_eq!(dict.datavalue_to_id(&dv_tuple), Some(dv_tuple_id));
@@ -811,7 +811,7 @@ mod test {
 
         let ar = dict.add_datavalue(dv_tuple2.clone());
         let AddResult::Fresh(dv_tuple_id) = ar else {
-            panic!("add failed: {:?}", ar);
+            panic!("add failed: {ar:?}");
         };
 
         assert_eq!(dict.datavalue_to_id(&dv_tuple2), Some(dv_tuple_id));

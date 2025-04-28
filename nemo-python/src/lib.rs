@@ -41,7 +41,7 @@ impl<T> PythonResult for Result<T, nemo::error::Error> {
     type Value = T;
 
     fn py_res(self) -> PyResult<Self::Value> {
-        self.map_err(|err| NemoError::new_err(format!("{}", err)))
+        self.map_err(|err| NemoError::new_err(format!("{err}")))
     }
 }
 impl<T> PythonResult for (T, Vec<Error>) {

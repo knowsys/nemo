@@ -49,7 +49,7 @@ impl Display for OperationNumArguments {
                 2 => write!(f, "{} or {}", choice[0], choice[1]),
                 _ => {
                     for (index, value) in choice.iter().enumerate() {
-                        write!(f, "{}", value)?;
+                        write!(f, "{value}")?;
 
                         match index.cmp(&(choice.len() - 2)) {
                             std::cmp::Ordering::Less => write!(f, ", ")?,

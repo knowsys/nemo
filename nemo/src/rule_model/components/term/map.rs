@@ -136,7 +136,7 @@ impl Display for Map {
         ))?;
 
         for (term_index, (key, value)) in self.map.iter().enumerate() {
-            f.write_fmt(format_args!("{}: {}", key, value))?;
+            f.write_fmt(format_args!("{key}: {value}"))?;
 
             if term_index < self.map.len() - 1 {
                 f.write_str(", ")?;

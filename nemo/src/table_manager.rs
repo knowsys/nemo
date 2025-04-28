@@ -615,7 +615,7 @@ impl TableManager {
 
             for (step, id) in &subtable_handler.single {
                 let memory = self.database.table_size_bytes(*id);
-                predicate_usage.add_sub_block(MemoryUsage::new(&format!("Step {}", step), memory));
+                predicate_usage.add_sub_block(MemoryUsage::new(&format!("Step {step}"), memory));
             }
             for (steps, id) in &subtable_handler.combined {
                 let memory = self.database.table_size_bytes(*id);

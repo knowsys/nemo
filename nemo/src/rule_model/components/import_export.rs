@@ -94,7 +94,7 @@ impl fmt::Display for ImportExportSpec {
         f.write_fmt(format_args!("{} {{", self.format.name()))?;
 
         for (idx, (key, value)) in self.key_value().enumerate() {
-            f.write_fmt(format_args!("{}: {}", key, value))?;
+            f.write_fmt(format_args!("{key}: {value}"))?;
 
             if idx < self.keys.len() - 1 {
                 f.write_str(", ")?;

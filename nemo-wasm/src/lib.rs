@@ -91,7 +91,7 @@ impl NemoProgram {
     pub fn new(input: &str) -> Result<NemoProgram, NemoError> {
         nemo::parser::Parser::initialize(input, PROGRAM_LABEL.to_string())
             .parse()
-            .map_err(|(_, report)| WasmOrInternalNemoError::Parser(format!("{}", report)))
+            .map_err(|(_, report)| WasmOrInternalNemoError::Parser(format!("{report}")))
             .map_err(NemoError)
             .and_then(|ast| {
                 nemo::rule_model::translation::ASTProgramTranslation::initialize(
@@ -99,7 +99,7 @@ impl NemoProgram {
                     PROGRAM_LABEL.to_string(),
                 )
                 .translate(&ast)
-                .map_err(|report| WasmOrInternalNemoError::Program(format!("{}", report)))
+                .map_err(|report| WasmOrInternalNemoError::Program(format!("{report}")))
                 .map_err(NemoError)
                 .map(NemoProgram)
             })

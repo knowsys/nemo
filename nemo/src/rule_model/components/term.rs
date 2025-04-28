@@ -329,12 +329,12 @@ impl TryFrom<Term> for GroundTerm {
 impl Display for Term {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Term::Primitive(term) => write!(f, "{}", term),
-            Term::FunctionTerm(term) => write!(f, "{}", term),
-            Term::Map(term) => write!(f, "{}", term),
-            Term::Operation(term) => write!(f, "{}", term),
-            Term::Tuple(term) => write!(f, "{}", term),
-            Term::Aggregate(term) => write!(f, "{}", term),
+            Term::Primitive(term) => write!(f, "{term}"),
+            Term::FunctionTerm(term) => write!(f, "{term}"),
+            Term::Map(term) => write!(f, "{term}"),
+            Term::Operation(term) => write!(f, "{term}"),
+            Term::Tuple(term) => write!(f, "{term}"),
+            Term::Aggregate(term) => write!(f, "{term}"),
         }
     }
 }

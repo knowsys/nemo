@@ -285,7 +285,7 @@ impl CheckedPow for Double {
 
 impl CheckedNeg for Double {
     fn checked_neg(&self) -> Option<Self> {
-        Double::new(-1.0 * self.0).ok()
+        Double::new(-self.0).ok()
     }
 }
 

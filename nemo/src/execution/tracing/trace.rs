@@ -235,7 +235,7 @@ impl TraceTreeRuleApplication {
         let mut rule_instantiated = self.rule.clone();
         self.assignment.apply(&mut rule_instantiated);
 
-        format!("{}{}", rule_name_prefix, rule_instantiated)
+        format!("{rule_name_prefix}{rule_instantiated}")
     }
 }
 

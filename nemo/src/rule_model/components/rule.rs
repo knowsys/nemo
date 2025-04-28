@@ -305,7 +305,7 @@ impl Rule {
 impl Display for Rule {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         for (head_index, head_atom) in self.head.iter().enumerate() {
-            write!(f, "{}", head_atom)?;
+            write!(f, "{head_atom}")?;
 
             if head_index < self.head.len() - 1 {
                 f.write_str(", ")?;
@@ -315,7 +315,7 @@ impl Display for Rule {
         f.write_str(" :- ")?;
 
         for (body_index, body_literal) in self.body.iter().enumerate() {
-            write!(f, "{}", body_literal)?;
+            write!(f, "{body_literal}")?;
 
             if body_index < self.body.len() - 1 {
                 f.write_str(", ")?;

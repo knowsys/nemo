@@ -141,13 +141,13 @@ impl Operation {
         if need_braces {
             self.format_braces(f, term)
         } else {
-            write!(f, "{}", term)
+            write!(f, "{term}")
         }
     }
 
     /// Put braces around the input term.
     fn format_braces(&self, f: &mut std::fmt::Formatter<'_>, term: &Term) -> std::fmt::Result {
-        write!(f, "({})", term)
+        write!(f, "({term})")
     }
 
     /// Formats the arguments of an operation as a delimiter separated list.
@@ -202,7 +202,7 @@ impl Operation {
         right: &Term,
     ) -> std::fmt::Result {
         self.format_braces_priority(f, left)?;
-        write!(f, " {} ", operation)?;
+        write!(f, " {operation} ")?;
         self.format_braces_priority(f, right)
     }
 }
