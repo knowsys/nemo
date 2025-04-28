@@ -299,6 +299,7 @@ impl OperationGenerator for OperationGeneratorEnum {
             Self::Function(generator) => generator,
             Self::Null(generator) => generator,
         } {
+            #[allow(late_bound_lifetime_arguments)]
             fn generate<'a>(
                 &'_ self,
                 input: Vec<Option<TrieScanEnum<'a>>>,
