@@ -1,22 +1,35 @@
 //! This module defines [Program].
 
-use std::ops::Add;
+use std::fmt::Display;
 
-use crate::model::pipeline::address::{AddressSegment, Addressable};
+use crate::model::{origin::Origin, pipeline::id::ProgramComponentId};
 
-use super::{atom::Atom, rule::Rule, IterableProgramComponent, ProgramComponent};
+use super::{
+    atom::Atom, rule::Rule, ComponentBehavior, ComponentIdentity, IterableComponent,
+    ProgramComponent, ProgramComponentKind,
+};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Program {
+    /// Origin of this component
+    origin: Origin,
+
     /// Rules
     rules: Vec<Rule>,
     /// Facts
     facts: Vec<Atom>,
 }
 
+impl Display for Program {
+    fn fmt(&self, _f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        todo!()
+    }
+}
+
 impl Program {
     pub fn empty() -> Self {
         Self {
+            origin: Origin::default(),
             rules: Vec::default(),
             facts: Vec::default(),
         }
@@ -33,47 +46,43 @@ impl Program {
     }
 }
 
-impl IterableProgramComponent for Program {
-    fn components<'a>(&'a self) -> Box<dyn Iterator<Item = &'a dyn ProgramComponent> + 'a> {
+impl ComponentBehavior for Program {
+    fn kind(&self) -> ProgramComponentKind {
+        ProgramComponentKind::Atom
+    }
+
+    fn validate(&self) -> Result<(), super::NewValidationError> {
+        todo!()
+    }
+}
+
+impl ComponentIdentity for Program {
+    fn id(&self) -> ProgramComponentId {
+        ProgramComponentId::UNASSIGNED
+    }
+
+    fn set_id(&mut self, _id: ProgramComponentId) {}
+
+    fn origin(&self) -> &Origin {
+        &self.origin
+    }
+
+    fn set_origin(&mut self, origin: Origin) {
+        self.origin = origin
+    }
+}
+
+impl IterableComponent for Program {
+    fn children<'a>(&'a self) -> Box<dyn Iterator<Item = &'a dyn ProgramComponent> + 'a> {
         Box::new(self.rules.iter().map(|rule| {
             let rule: &dyn ProgramComponent = rule;
             rule
         }))
     }
 
-    fn components_mut<'a>(
+    fn children_mut<'a>(
         &'a mut self,
     ) -> Box<dyn Iterator<Item = &'a mut dyn ProgramComponent> + 'a> {
         todo!()
-    }
-
-    fn rules(&self) -> impl Iterator<Item = &Rule> {
-        self.rules.iter()
-    }
-}
-
-impl Addressable for Program {
-    fn next_component(&self, segment: &AddressSegment) -> Option<Box<&dyn Addressable>> {
-        Some(Box::new(match segment {
-            AddressSegment::Rule(index) => self.rule(*index),
-            AddressSegment::Fact(index) => self.fact(*index),
-            _ => return None,
-        }))
-    }
-
-    fn address_rule(&self, segment: &AddressSegment) -> Option<&Rule> {
-        if let &AddressSegment::Rule(index) = segment {
-            Some(self.rule(index))
-        } else {
-            None
-        }
-    }
-
-    fn address_fact(&self, segment: &AddressSegment) -> Option<&Atom> {
-        if let &AddressSegment::Fact(index) = segment {
-            Some(self.fact(index))
-        } else {
-            None
-        }
     }
 }

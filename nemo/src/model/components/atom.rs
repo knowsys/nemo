@@ -2,18 +2,14 @@
 
 use std::fmt::Display;
 
-use crate::model::{
-    origin::Origin,
-    pipeline::{
-        address::{AddressSegment, Addressable},
-        id::ProgramComponentId,
-    },
+use crate::model::{origin::Origin, pipeline::id::ProgramComponentId};
+
+use super::{
+    ComponentBehavior, ComponentIdentity, IterableComponent, ProgramComponent, ProgramComponentKind,
 };
 
-use super::{ProgramComponent, ProgramComponentKind};
-
 /// Atom  
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Atom {
     /// Origin of this component
     origin: Origin,
@@ -32,34 +28,44 @@ impl Display for Atom {
     }
 }
 
-impl ProgramComponent for Atom {
+impl ComponentBehavior for Atom {
     fn kind(&self) -> ProgramComponentKind {
         ProgramComponentKind::Atom
+    }
+
+    fn validate(&self) -> Result<(), super::NewValidationError> {
+        todo!()
+    }
+}
+
+impl ComponentIdentity for Atom {
+    fn id(&self) -> ProgramComponentId {
+        self.id
+    }
+
+    fn set_id(&mut self, id: ProgramComponentId) {
+        self.id = id;
     }
 
     fn origin(&self) -> &Origin {
         &self.origin
     }
 
-    fn id(&self) -> ProgramComponentId {
-        self.id
-    }
-
-    fn validate(&self) -> Result<(), super::NewValidationError> {
-        todo!()
-    }
-
     fn set_origin(&mut self, origin: Origin) {
-        self.origin = origin;
-    }
-
-    fn set_id(&mut self, id: ProgramComponentId) {
-        self.id = id;
+        self.origin = origin
     }
 }
 
-impl Addressable for Atom {
-    fn next_component(&self, _segment: &AddressSegment) -> Option<Box<&dyn Addressable>> {
-        None
+impl IterableComponent for Atom {
+    fn children<'a>(&'a self) -> Box<dyn Iterator<Item = &'a dyn ProgramComponent> + 'a> {
+        Box::new(std::iter::empty::<&'a dyn ProgramComponent>())
+    }
+
+    fn children_mut<'a>(
+        &'a mut self,
+    ) -> Box<dyn Iterator<Item = &'a mut dyn ProgramComponent> + 'a> {
+        Box::new(std::iter::empty::<&'a mut dyn ProgramComponent>())
     }
 }
+
+impl ProgramComponent for Atom {}

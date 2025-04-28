@@ -20,6 +20,7 @@
 #![feature(str_from_raw_parts)]
 #![feature(path_add_extension)]
 #![feature(associated_type_defaults)]
+#![feature(specialization)]
 
 /// The crate for underlying physical operations.
 pub extern crate nemo_physical;

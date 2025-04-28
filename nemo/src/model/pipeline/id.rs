@@ -10,7 +10,9 @@ use std::hash::Hash;
 pub struct ProgramComponentId(usize);
 
 impl ProgramComponentId {
-    const UNASSIGNED: Self = Self(usize::MAX);
+    /// Indicates that the [super::super::components::ProgramComponent]
+    /// does not belong to any [super::ProgramPipeline]
+    pub const UNASSIGNED: Self = Self(usize::MAX);
 
     /// Increment the id and return its old value.
     pub fn increment(&mut self) -> Self {
@@ -32,5 +34,11 @@ impl ProgramComponentId {
 impl Default for ProgramComponentId {
     fn default() -> Self {
         Self::UNASSIGNED
+    }
+}
+
+impl PartialOrd for ProgramComponentId {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        self.0.partial_cmp(&other.0)
     }
 }

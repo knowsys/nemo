@@ -10,6 +10,7 @@ use std::{fmt::Debug, fmt::Display};
 
 use atom::Atom;
 use enum_assoc::Assoc;
+use program::Program;
 use rule::Rule;
 
 use super::{origin::Origin, pipeline::id::ProgramComponentId};
@@ -27,37 +28,56 @@ pub enum ProgramComponentKind {
     /// Atom
     #[assoc(name = "atom")]
     Atom,
+    /// Program
+    #[assoc(name = "program")]
+    Program,
 }
 
 /// TODO: This is placeholder for improved validation error type
 #[derive(Debug, Clone, Copy)]
 pub struct NewValidationError(usize);
 
-/// Trait implemented by objects that are part
-/// of the logical rule model of the nemo language.
-pub trait ProgramComponent: Debug + Display {
+/// Trait that collects common methods of all components
+/// of Nemo's logical rule model
+pub trait ComponentBehavior {
     /// Return the [ProgramComponentKind] of this component.
     fn kind(&self) -> ProgramComponentKind;
-
-    /// Return the [Origin] of this component.
-    fn origin(&self) -> &Origin;
-
-    /// Return the [ProgramComponentId] associated with this component.
-    fn id(&self) -> ProgramComponentId;
-
-    /// Set the [Origin] of this component.
-    fn set_origin(&mut self, origin: Origin);
-
-    /// Set the [ProgramComponentId] of this component.
-    fn set_id(&mut self, id: ProgramComponentId);
 
     /// Validate this component.
     fn validate(&self) -> Result<(), NewValidationError>;
 }
 
+/// Trait that collects methods for identifying and tracking the origins of  
+/// components of Nemo's logical rule model
+pub trait ComponentIdentity {
+    /// Return the [ProgramComponentId] associated with this component.
+    fn id(&self) -> ProgramComponentId;
+
+    /// Set the [ProgramComponentId] of this component.
+    fn set_id(&mut self, id: ProgramComponentId);
+
+    /// Return the [Origin] of this component.
+    fn origin(&self) -> &Origin;
+
+    /// Set the [Origin] of this component.
+    fn set_origin(&mut self, origin: Origin);
+}
+
+/// Trait that allows to iterate over children
+/// of components of Nemo's logical rule model
+pub trait IterableComponent {
+    /// Return an iterator over all [Variable]s contained within this program component.
+    fn children<'a>(&'a self) -> Box<dyn Iterator<Item = &'a dyn ProgramComponent> + 'a>;
+
+    /// Return a mutable iterator over all [Variable]s contained within this program component.
+    fn children_mut<'a>(
+        &'a mut self,
+    ) -> Box<dyn Iterator<Item = &'a mut dyn ProgramComponent> + 'a>;
+}
+
 /// Trait that defines a helper method that is useful
 /// when combining [Origin]s
-pub(crate) trait EffectiveOrigin: ProgramComponent {
+pub(crate) trait EffectiveOrigin: ComponentIdentity {
     /// If the component is assigned to a [super::pipeline::ProgramPipeline],
     /// the [Origin] will be a reference using its [ProgramComponentId].
     /// Otherwise, returns the [Origin] of the component.
@@ -70,26 +90,46 @@ pub(crate) trait EffectiveOrigin: ProgramComponent {
     }
 }
 
-impl<Component: ProgramComponent> EffectiveOrigin for Component {}
+impl<Component: ComponentIdentity> EffectiveOrigin for Component {}
 
-/// Trait implemented by [ProgramComponent]s
-/// to allow an iteration over their sub components.
-pub(crate) trait IterableProgramComponent {
-    /// Return an iterator over all [Variable]s contained within this program component.
-    fn components<'a>(&'a self) -> Box<dyn Iterator<Item = &'a dyn ProgramComponent> + 'a>;
+/// Fallible version of [std::convert::AsRef]
+pub trait TryAsRef<T> {
+    /// Try to convert `&self` into `&T`.
+    ///
+    /// Returns `None` if unsuccessful.
+    fn try_as_ref(&self) -> Option<&T>;
+}
 
-    /// Return a mutable iterator over all [Variable]s contained within this program component.
-    fn components_mut<'a>(
-        &'a mut self,
-    ) -> Box<dyn Iterator<Item = &'a mut dyn ProgramComponent> + 'a>;
+/// Trait implemented by components of Nemo's logical rule model
+/// that allows conversion between them
+pub trait ComponentCast: TryAsRef<Rule> + TryAsRef<Atom> + TryAsRef<Program> {}
+impl<Component> ComponentCast for Component where
+    Component: TryAsRef<Rule> + TryAsRef<Atom> + TryAsRef<Program>
+{
+}
 
-    /// Return an iterator over all [Rule]s contained in this [ProgramComponent].
-    fn rules(&self) -> impl Iterator<Item = &Rule> {
-        Option::<Rule>::None.iter()
+impl<ComponentLeft: ComponentBehavior, ComponentRight: ComponentBehavior> TryAsRef<ComponentLeft>
+    for ComponentRight
+{
+    default fn try_as_ref(&self) -> Option<&ComponentLeft> {
+        None
     }
+}
 
-    /// Return an iterator over all [Atom]s contained in this [ProgramComponent].
-    fn atoms(&self) -> impl Iterator<Item = &Atom> {
-        Option::<Atom>::None.iter()
+impl<Component: ComponentBehavior> TryAsRef<Component> for Component {
+    fn try_as_ref(&self) -> Option<&Component> {
+        Some(self)
     }
+}
+
+/// Trait implemented by objects that are part
+/// of the logical rule model of the Nemo language.
+pub trait ProgramComponent:
+    Debug + Display + ComponentBehavior + ComponentIdentity + ComponentCast + IterableComponent
+{
+}
+impl<Component> ProgramComponent for Component where
+    Component:
+        Debug + Display + ComponentBehavior + ComponentIdentity + ComponentCast + IterableComponent
+{
 }

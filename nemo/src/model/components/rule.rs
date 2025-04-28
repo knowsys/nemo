@@ -1,19 +1,15 @@
 //! This module defines [Rule].
 
-use std::{fmt::Display, io::SeekFrom};
+use std::fmt::Display;
 
-use crate::model::{
-    origin::Origin,
-    pipeline::{
-        address::{AddressSegment, Addressable},
-        id::ProgramComponentId,
-        ProgramPipeline,
-    },
+use crate::model::{origin::Origin, pipeline::id::ProgramComponentId};
+
+use super::{
+    atom::Atom, ComponentBehavior, ComponentIdentity, IterableComponent, ProgramComponent,
+    ProgramComponentKind, TryAsRef,
 };
 
-use super::{atom::Atom, ProgramComponent, ProgramComponentKind};
-
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Rule {
     /// Origin of this component
     origin: Origin,
@@ -72,60 +68,52 @@ impl Display for Rule {
     }
 }
 
-impl ProgramComponent for Rule {
+impl ComponentBehavior for Rule {
     fn kind(&self) -> ProgramComponentKind {
         ProgramComponentKind::Rule
+    }
+
+    fn validate(&self) -> Result<(), super::NewValidationError> {
+        todo!()
+    }
+}
+
+impl ComponentIdentity for Rule {
+    fn id(&self) -> ProgramComponentId {
+        self.id
+    }
+
+    fn set_id(&mut self, id: ProgramComponentId) {
+        self.id = id;
     }
 
     fn origin(&self) -> &Origin {
         &self.origin
     }
 
-    fn id(&self) -> ProgramComponentId {
-        self.id
-    }
-
-    fn validate(&self) -> Result<(), super::NewValidationError> {
-        todo!()
-    }
-
     fn set_origin(&mut self, origin: Origin) {
-        self.origin = origin;
-    }
-
-    fn set_id(&mut self, id: ProgramComponentId) {
-        self.id = id;
+        self.origin = origin
     }
 }
 
-impl Addressable for Rule {
-    fn next_component(&self, segment: &AddressSegment) -> Option<Box<&dyn Addressable>> {
-        Some(Box::new(match segment {
-            AddressSegment::Head(index) => self.head_atom(*index),
-            AddressSegment::Body(index) => self.body_atom(*index),
-            _ => return None,
+impl IterableComponent for Rule {
+    fn children<'a>(&'a self) -> Box<dyn Iterator<Item = &'a dyn ProgramComponent> + 'a> {
+        let atom_iter = self.head.iter().chain(self.body.iter());
+
+        Box::new(atom_iter.map(|atom| {
+            let component: &dyn ProgramComponent = atom;
+            component
         }))
     }
 
-    fn address_atom(&self, segment: &AddressSegment) -> Option<&Atom> {
-        Some(match segment {
-            AddressSegment::Head(index) => self.head_atom(*index),
-            AddressSegment::Body(index) => self.body_atom(*index),
-            _ => return None,
-        })
-    }
-}
+    fn children_mut<'a>(
+        &'a mut self,
+    ) -> Box<dyn Iterator<Item = &'a mut dyn ProgramComponent> + 'a> {
+        let atom_iter = self.head.iter_mut().chain(self.body.iter_mut());
 
-// TODO: Decide on how to set id and origin
-
-impl Rule {
-    pub(crate) fn set_id(&mut self, id: ProgramComponentId) {
-        self.id = id;
-    }
-}
-
-impl ProgramPipeline {
-    pub(crate) fn set_id_rule(rule: &mut Rule, id: ProgramComponentId) {
-        rule.id = id;
+        Box::new(atom_iter.map(|atom| {
+            let component: &mut dyn ProgramComponent = atom;
+            component
+        }))
     }
 }

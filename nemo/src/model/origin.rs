@@ -1,7 +1,7 @@
 //! This module defines
 
 use super::{
-    components::{rule::Rule, EffectiveOrigin},
+    components::{rule::Rule, EffectiveOrigin, ProgramComponent},
     pipeline::id::ProgramComponentId,
 };
 
@@ -13,10 +13,12 @@ pub(crate) type ExternalReference = usize;
 pub enum Origin {
     /// Component has no special origin
     Created,
-    /// Component stems from parsing
-    Parsing(ExternalReference),
     /// Reference
     Reference(ProgramComponentId),
+
+    /// Component stems from parsing
+    Parsing(ExternalReference),
+
     /// Combination of two rules
     RuleCombination(Box<Origin>, Box<Origin>),
 }
