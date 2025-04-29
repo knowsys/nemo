@@ -148,11 +148,11 @@ mod test {
     fn hook() {
         let rules = "a(1, 3). a(1, 4). a(1, 5). b(?x, ?y) :- a(?x, ?y).";
 
-        let program_ast = Parser::initialize(&rules, String::default())
+        let program_ast = Parser::initialize(rules, String::default())
             .parse()
             .map_err(|_| Error::ProgramParseError)
             .unwrap();
-        let mut program = ASTProgramTranslation::initialize(&rules, String::default())
+        let mut program = ASTProgramTranslation::initialize(rules, String::default())
             .translate(&program_ast)
             .map_err(|_| Error::ProgramParseError)
             .unwrap();
