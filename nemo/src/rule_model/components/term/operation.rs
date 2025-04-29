@@ -278,7 +278,11 @@ impl ProgramComponent for Operation {
             return None;
         }
 
-        if self.is_ground() && !self.reduce_with_substitution(&Substitution::default()).is_primitive() {
+        if self.is_ground()
+            && !self
+                .reduce_with_substitution(&Substitution::default())
+                .is_primitive()
+        {
             builder.report_error(self.origin, ValidationErrorKind::InvalidGroundOperation);
             return None;
         }
