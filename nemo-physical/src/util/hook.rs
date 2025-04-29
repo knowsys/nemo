@@ -15,23 +15,40 @@ pub enum FilterResult {
     Abort,
 }
 
+/// A callback function that implements filtering of tuples
+pub trait FilterFunction: 'static + Send + Sync {
+    /// Call to the callback function on a derived tuple
+    fn call(&self, string: &str, values: &[AnyDataValue]) -> FilterResult;
+}
+
 /// Callable function used to filter table entries
 #[derive(Clone)]
-pub struct FilterHook(Arc<dyn Fn(&str, &[AnyDataValue]) -> FilterResult>);
+pub struct FilterHook(Arc<dyn FilterFunction>);
 
-impl FilterHook {
+impl FilterFunction for FilterHook {
     /// Call the inner function.
-    pub fn call(&self, string: &str, values: &[AnyDataValue]) -> FilterResult {
+    fn call(&self, string: &str, values: &[AnyDataValue]) -> FilterResult {
+        self.0.call(string, values)
+    }
+}
+
+struct FnWrapper<F>(F);
+
+impl<F> FilterFunction for FnWrapper<F>
+where
+    F: Fn(&str, &[AnyDataValue]) -> FilterResult + 'static + Send + Sync,
+{
+    fn call(&self, string: &str, values: &[AnyDataValue]) -> FilterResult {
         (self.0)(string, values)
     }
 }
 
 impl<Function> From<Function> for FilterHook
 where
-    Function: Fn(&str, &[AnyDataValue]) -> FilterResult + 'static,
+    Function: Fn(&str, &[AnyDataValue]) -> FilterResult + 'static + Send + Sync,
 {
     fn from(value: Function) -> Self {
-        FilterHook(Arc::new(value))
+        FilterHook(Arc::new(FnWrapper(value)))
     }
 }
 

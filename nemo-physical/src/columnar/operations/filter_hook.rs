@@ -7,7 +7,7 @@ use crate::{
     datatypes::ColumnDataType,
     datavalues::AnyDataValue,
     management::database::Dict,
-    util::hook::{FilterHook, FilterResult},
+    util::hook::{FilterFunction, FilterHook, FilterResult},
 };
 
 /// [ColumnScan], which filters values of a "value" scan based on a [FilterHook]
