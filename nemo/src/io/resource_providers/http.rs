@@ -98,7 +98,7 @@ impl HttpResourceProvider {
             .map_err(err_mapping)?;
 
         let full_url = resource.to_string();
-        debug!("Make HTTP request: {:?}", full_url);
+        debug!("Make HTTP request: {full_url:?}");
 
         let post_parameters = resource
             .post_parameters()

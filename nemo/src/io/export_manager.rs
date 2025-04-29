@@ -134,7 +134,7 @@ impl ExportManager {
         } else {
             let output_path = self.sanitized_path(resource, !export_handler.is_compressed())?;
 
-            log::info!("Exporting predicate \"{}\" to {output_path:?}", predicate);
+            log::info!("Exporting predicate \"{predicate}\" to {output_path:?}");
 
             if let Some(parent) = output_path.parent() {
                 create_dir_all(parent)?;

@@ -528,7 +528,7 @@ impl DvDict for MetaDvDictionary {
             log::info!("+ {} entries in dict {:?}", dr.dict.len(), dr.dict_type);
             len += dr.dict.len();
         }
-        log::info!("Total len {}", len);
+        log::info!("Total len {len}");
         len
     }
 
