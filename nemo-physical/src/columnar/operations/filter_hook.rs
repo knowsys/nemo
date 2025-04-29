@@ -68,7 +68,7 @@ where
         let referenced = &mut self.referenced_values.borrow_mut();
         referenced[self.reference_index] = datavalue;
 
-        self.hook.call(&self.string, &referenced)
+        self.hook.call(&self.string, referenced)
     }
 
     /// Loop through `self.value_scan` until the next value passing
