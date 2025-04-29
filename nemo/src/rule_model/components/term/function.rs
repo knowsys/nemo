@@ -8,6 +8,7 @@ use crate::rule_model::{
     },
     error::{validation_error::ValidationErrorKind, ValidationErrorBuilder},
     origin::Origin,
+    substitution::Substitution,
 };
 
 use super::{
@@ -102,11 +103,15 @@ impl FunctionTerm {
     }
 
     /// Reduce each sub [Term] in the function returning a copy.
-    pub fn reduce(&self) -> Self {
+    pub fn reduce_with_substitution(&self, bindings: &Substitution) -> Self {
         Self {
             origin: self.origin,
             tag: self.tag.clone(),
-            terms: self.terms.iter().map(Term::reduce).collect(),
+            terms: self
+                .terms
+                .iter()
+                .map(|term| term.reduce_with_substitution(bindings))
+                .collect(),
         }
     }
 }

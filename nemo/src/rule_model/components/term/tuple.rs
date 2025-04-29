@@ -6,6 +6,7 @@ use crate::rule_model::{
     components::{IterablePrimitives, IterableVariables, ProgramComponent, ProgramComponentKind},
     error::ValidationErrorBuilder,
     origin::Origin,
+    substitution::Substitution,
 };
 
 use super::{
@@ -69,10 +70,14 @@ impl Tuple {
     }
 
     /// Reduce each sub [Term] in the tuple returning a copy.
-    pub fn reduce(&self) -> Self {
+    pub fn reduce(&self, bindings: &Substitution) -> Self {
         Self {
             origin: self.origin,
-            terms: self.terms.iter().map(Term::reduce).collect(),
+            terms: self
+                .terms
+                .iter()
+                .map(|term| term.reduce_with_substitution(bindings))
+                .collect(),
         }
     }
 }

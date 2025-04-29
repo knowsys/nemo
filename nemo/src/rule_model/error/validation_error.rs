@@ -5,7 +5,7 @@ use enum_assoc::Assoc;
 use nemo_physical::{datavalues::ValueDomain, resource::ResourceValidationErrorKind};
 use thiserror::Error;
 
-use crate::rule_model::components::term::primitive::variable::Variable;
+use crate::rule_model::components::term::{primitive::variable::Variable, Term};
 
 /// Types of errors that occur while building the logical rule model
 #[derive(Assoc, Error, Clone, Debug)]
@@ -192,6 +192,20 @@ pub enum ValidationErrorKind {
     #[error("ground operation does not return a result")]
     #[assoc(code = 238)]
     InvalidGroundOperation,
+    /// Import/Export parameter contains unspecified variables
+    #[error("parameter value `{0}` is not a ground term")]
+    #[assoc(code = 239)]
+    ImportExportParameterNotGround(Term),
+    /// Parameter declaration references undefined parameter
+    #[error("parameter value references an undefined global")]
+    #[assoc(code = 240)]
+    #[assoc(note = "parameters can only reference parameters defined earlier")]
+    ParameterDeclarationReferencesUndefinedGlobal,
+    /// Parameter declaration has no definition
+    #[error("parameter value needs to defined (via assignment or externally e.g. via --param on the cli)")]
+    #[assoc(code = 241)]
+    ParameterMissingDefinition,
+
     /// Unsupported feature: Multiple aggregates in one rule
     #[error(r#"multiple aggregates in one rule is currently unsupported"#)]
     #[assoc(code = 999)]
