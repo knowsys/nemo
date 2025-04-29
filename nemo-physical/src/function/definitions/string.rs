@@ -305,9 +305,9 @@ impl BinaryFunction for StringEnds {
 /// Returns the part of the string given in the first parameter which comes before
 /// the string provided as the second parameter.
 ///
-/// Applies the language tag of the first parameter on the result, if:
-/// - the resulting string is not empty
-/// - or the second parameter is empty
+/// Applies the language tag of the first parameter on the result, if
+/// there is a non-empty match or the second parameter is empty
+///
 ///
 /// Returns `None` if either parameter is not a string.
 #[derive(Debug, Copy, Clone)]
@@ -330,14 +330,7 @@ impl BinaryFunction for StringBefore {
                                 .join("");
                             LangTaggedString::new(string, first_lang_string.tag)
                         }
-                        None => {
-                            let tag = if second_lang_string.string.is_empty() {
-                                first_lang_string.tag
-                            } else {
-                                None
-                            };
-                            LangTaggedString::new(String::default(), tag)
-                        }
+                        None => LangTaggedString::new(String::default(), None),
                     };
                 result_lang_string.into_data_value()
             },
@@ -358,9 +351,8 @@ impl BinaryFunction for StringBefore {
 /// Returns the part of the string given in the first parameter which comes after
 /// the string provided as the second parameter.
 ///
-/// Applies the language tag of the first parameter on the result, if:
-/// - the resulting string is not empty
-/// - or the second parameter is empty
+/// Applies the language tag of the first parameter on the result, if
+/// there is a non-empty match or the second parameter is empty
 ///
 /// Returns `None` if either parameter is not a string.
 #[derive(Debug, Copy, Clone)]
@@ -387,14 +379,7 @@ impl BinaryFunction for StringAfter {
                                 .join("");
                             LangTaggedString::new(string, first_lang_string.tag)
                         }
-                        None => {
-                            let tag = if second_lang_string.string.is_empty() {
-                                first_lang_string.tag
-                            } else {
-                                None
-                            };
-                            LangTaggedString::new(String::default(), tag)
-                        }
+                        None => LangTaggedString::new(String::default(), None),
                     };
                 result_lang_string.into_data_value()
             },
@@ -642,8 +627,7 @@ impl UnaryFunction for StringUriEncode {
         LangTaggedString::try_from(parameter)
             .ok()
             .map(|lang_string| {
-                let uri_encode = urlencoding::encode(&lang_string.string).to_string();
-                LangTaggedString::new(uri_encode, None).into_data_value()
+                AnyDataValue::new_plain_string(urlencoding::encode(&lang_string.string).to_string())
             })
     }
 
@@ -669,7 +653,7 @@ impl UnaryFunction for StringUriDecode {
     fn evaluate(&self, parameter: AnyDataValue) -> Option<AnyDataValue> {
         let lang_string = LangTaggedString::try_from(parameter).ok()?;
         let uri_decode = urlencoding::decode(&lang_string.string).ok()?.to_string();
-        Some(LangTaggedString::new(uri_decode, None).into_data_value())
+        Some(AnyDataValue::new_plain_string(uri_decode))
     }
 
     fn type_propagation(&self) -> FunctionTypePropagation {
