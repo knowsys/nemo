@@ -119,7 +119,7 @@ mod test {
     use assert_fs::TempDir;
     use nemo_physical::{
         datavalues::{AnyDataValue, DataValue},
-        util::hook::FilterHook,
+        util::hook::{FilterHook, FilterResult},
     };
 
     use super::*;
@@ -158,8 +158,13 @@ mod test {
             .unwrap();
 
         let filter = FilterHook::from(|string: &str, values: &[AnyDataValue]| {
-            ((values[0].to_i64_unchecked() + values[1].to_i64_unchecked()) % 2 == 0)
+            if ((values[0].to_i64_unchecked() + values[1].to_i64_unchecked()) % 2 == 0)
                 && string == "b"
+            {
+                FilterResult::Accept
+            } else {
+                FilterResult::Reject
+            }
         });
 
         program.set_hook(filter.clone());

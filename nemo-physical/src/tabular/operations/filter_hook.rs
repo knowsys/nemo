@@ -186,6 +186,7 @@ mod test {
         dictionary::meta_dv_dict::MetaDvDictionary,
         tabular::{operations::OperationGenerator, triescan::TrieScanEnum},
         util::{
+            hook::FilterResult,
             mapping::permutation::Permutation,
             test_util::test::{trie_dfs, trie_int64},
         },
@@ -209,8 +210,13 @@ mod test {
         let trie_scan = TrieScanEnum::Generic(trie.partial_iterator());
 
         let function = FilterHook::from(|_string: &str, values: &[AnyDataValue]| {
-            values[0].to_i64_unchecked() + values[1].to_i64_unchecked()
+            if values[0].to_i64_unchecked() + values[1].to_i64_unchecked()
                 == values[2].to_i64_unchecked()
+            {
+                FilterResult::Accept
+            } else {
+                FilterResult::Reject
+            }
         });
 
         let filter_generator =

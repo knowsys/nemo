@@ -7,7 +7,7 @@ use crate::{
     datatypes::ColumnDataType,
     datavalues::AnyDataValue,
     management::database::Dict,
-    util::hook::FilterHook,
+    util::hook::{FilterHook, FilterResult},
 };
 
 /// [ColumnScan], which filters values of a "value" scan based on a [FilterHook]
@@ -61,7 +61,7 @@ where
 
     /// Check whether a given value passes the filter defined by `self.filter`
     /// and return the result as a boolean.
-    fn check_value(&self, value: T) -> bool {
+    fn check_value(&self, value: T) -> FilterResult {
         let datavalue = value
             .into_datavalue(&self.dictionary.borrow())
             .expect("It is assumed that all id already in columns are present in the dictionary.");
@@ -80,8 +80,10 @@ where
     /// Returns that value or `None` if there is none.
     fn find_next(&mut self) -> Option<T> {
         while let Some(next) = self.value_scan.next() {
-            if self.check_value(next) {
-                return Some(next);
+            match self.check_value(next) {
+                FilterResult::Accept => return Some(next),
+                FilterResult::Reject => continue,
+                FilterResult::Abort => return None,
             }
         }
 
@@ -108,10 +110,10 @@ where
     fn seek(&mut self, value: T) -> Option<T> {
         let seeked_value = self.value_scan.seek(value)?;
 
-        self.current_value = if self.check_value(seeked_value) {
-            Some(seeked_value)
-        } else {
-            self.find_next()
+        self.current_value = match self.check_value(seeked_value) {
+            FilterResult::Accept => Some(seeked_value),
+            FilterResult::Reject => self.find_next(),
+            FilterResult::Abort => None,
         };
 
         self.current_value
@@ -145,7 +147,7 @@ mod test {
         },
         datavalues::{AnyDataValue, DataValue},
         management::database::Dict,
-        util::hook::FilterHook,
+        util::hook::{FilterHook, FilterResult},
     };
 
     use super::ColumnScanFilterHook;
@@ -154,7 +156,7 @@ mod test {
     fn columnscan_filter_hook() {
         let dictionary = RefCell::new(Dict::default());
 
-        let value_column = ColumnVector::new(vec![0i64, 7, 14, 21]);
+        let value_column = ColumnVector::new(vec![0i64, 7, 14, 17, 18, 21]);
         let value_scan = ColumnScanCell::new(ColumnScanEnum::Vector(value_column.iter()));
 
         let reference_values = vec![
@@ -163,7 +165,15 @@ mod test {
         ];
 
         let function = FilterHook::from(|_string: &str, values: &[AnyDataValue]| {
-            values[1].to_i64_unchecked() % 2 == 0
+            if values[1].to_i64_unchecked() == 17 {
+                return FilterResult::Abort;
+            }
+
+            if values[1].to_i64_unchecked() % 2 == 0 {
+                FilterResult::Accept
+            } else {
+                FilterResult::Reject
+            }
         });
 
         let mut scan_filter = ColumnScanFilterHook::new(
