@@ -376,7 +376,7 @@ impl MetaDictionary {
                                     self.dicts[best_dict_idx].dict.mark_str(string.as_str());
                                 }
                             }
-                            log::info!("Marked {} older strings of that type, iterating {} strings overall.",c,i);
+                            log::info!("Marked {c} older strings of that type, iterating {i} strings overall.");
                         }
                     }
                 } else {
@@ -448,7 +448,7 @@ impl Dictionary for MetaDictionary {
             log::info!("+ {} entries in dict {:?}", dr.dict.len(), dr.dict_type);
             len += dr.dict.len();
         }
-        log::info!("Total len {}", len);
+        log::info!("Total len {len}");
         len
     }
 }
