@@ -351,7 +351,7 @@ fn run(mut cli: CliApp) -> Result<(), CliError> {
                 &handler,
                 engine.predicate_rows(&predicate)?,
             )?;
-        }        
+        }
 
         if let Some(dumping) = cli.output.dumping {
             log::info!("Dumping facts");
@@ -370,8 +370,6 @@ fn run(mut cli: CliApp) -> Result<(), CliError> {
             .sub("Output & Final Materialization")
             .stop();
     }
-
-
 
     TimedCode::instance().stop();
 
