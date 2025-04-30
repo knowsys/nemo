@@ -103,6 +103,12 @@ pub(crate) struct OutputArgs {
     /// does not affect export directives that already specify a compression
     #[arg(short, long = "gzip", default_value = "false")]
     gz: bool,
+    /// Specify which predicates to dump
+    #[arg(long = "dump", value_enum)]
+    pub(crate) dumping: Option<Dumping>,
+    /// File to dump the specified facts
+    #[arg(long = "dump-file", requires = "dumping")]
+    pub(crate) dump_file: Option<PathBuf>,
 }
 
 impl OutputArgs {
@@ -199,4 +205,15 @@ impl clap::builder::TypedValueParser for ParamKeyValueParser {
             value,
         })
     }
+}
+
+/// Possible settings for the dump option.
+#[derive(clap::ValueEnum, Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Dumping {
+    /// Dump all predicates.
+    All,
+    /// Dump all IDB predicates (those used in rule heads)
+    Idb,
+    /// Dump all EDB predicates (those for which facts are given or imported)
+    Edb,
 }

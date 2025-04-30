@@ -20,15 +20,19 @@
 pub mod cli;
 pub mod error;
 
-use std::fs::{read_to_string, File};
+use std::{
+    fs::{read_to_string, File},
+    io::Write,
+};
 
 use clap::Parser;
 use colored::Colorize;
 
-use cli::{CliApp, Exporting, ParamKeyValue, Reporting};
+use cli::{CliApp, Dumping, Exporting, ParamKeyValue, Reporting};
 
 use error::CliError;
 use nemo::{
+    datavalues::AnyDataValue,
     error::Error,
     execution::{DefaultExecutionEngine, ExecutionEngine},
     io::{resource_providers::ResourceProviders, ImportManager},
@@ -46,6 +50,18 @@ use nemo::{
 
 fn default_export(predicate: Tag) -> ExportDirective {
     ExportDirective::new_csv(predicate)
+}
+
+fn dump_table<W: Write>(
+    writer: &mut W,
+    table: impl Iterator<Item = Vec<AnyDataValue>>,
+    predicate: Tag,
+) -> Result<(), Error> {
+    for row in table {
+        let string: Vec<String> = row.iter().map(|value| value.to_string()).collect();
+        writeln!(writer, "{}({}).", predicate.name(), string.join(","))?;
+    }
+    Ok(())
 }
 
 /// Set exports according to command-line parameter.
@@ -78,6 +94,28 @@ fn override_exports(program: &mut Program, value: Exporting) {
         Exporting::Keep => unreachable!("already checked above"),
     }
     program.add_exports(additional_exports);
+}
+
+fn dump_facts(dumping: Dumping, program: &mut Program) -> Vec<Tag> {
+    let mut predicates = Vec::new();
+    match dumping {
+        Dumping::Idb => {
+            for predicate in program.derived_predicates() {
+                predicates.push(predicate);
+            }
+        }
+        Dumping::Edb => {
+            for predicate in program.import_predicates() {
+                predicates.push(predicate);
+            }
+        }
+        Dumping::All => {
+            for predicate in program.all_predicates() {
+                predicates.push(predicate);
+            }
+        }
+    }
+    predicates
 }
 
 /// Prints short summary message.
@@ -314,10 +352,24 @@ fn run(mut cli: CliApp) -> Result<(), CliError> {
                 engine.predicate_rows(&predicate)?,
             )?;
         }
+        
 
         TimedCode::instance()
             .sub("Output & Final Materialization")
             .stop();
+    }
+
+    if let Some(dumping) = cli.output.dumping {
+        log::info!("Dumping facts");
+        let mut writer: Box<dyn Write> = match cli.output.dump_file {
+            Some(ref path) => Box::new(File::create(path)?),
+            None => Box::new(std::io::stdout().lock()),
+        };
+        for tag in dump_facts(dumping, &mut program) {
+            if let Some(table) = engine.predicate_rows(&tag)? {
+                dump_table(&mut writer, table, tag)?;
+            }
+        }
     }
 
     TimedCode::instance().stop();
