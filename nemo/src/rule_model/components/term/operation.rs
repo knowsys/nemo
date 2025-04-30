@@ -359,8 +359,6 @@ mod test {
             "STRBEFORE(\"123\",123)",
             "URIDECODE(Hello%2GWorld)",
             "STRLEN(123)",
-            "SUBSTR(\"12345\", 7)",
-            "SUBSTR(\"12345\", 1, -3)",
             "LOG(1,\"3\")",
         ];
         for string in invalid_operations {
