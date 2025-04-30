@@ -73,7 +73,6 @@ impl TryFrom<AnyDataValue> for LangTaggedString {
 ///
 /// Returns `None` if one parameter is not a (language tagged) string or the two language tags do not comply
 /// with the Argument Compatibility Rules from https://www.w3.org/TR/sparql11-query/#func-arg-compatibility
-
 fn lang_string_pair_from_any(
     parameter_first: AnyDataValue,
     parameter_second: AnyDataValue,
