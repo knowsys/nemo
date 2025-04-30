@@ -18,6 +18,8 @@ use super::{
 ///
 /// Returns the index of the first occurrence of the needle in the haystack
 /// or `None` if the needle is not found.
+///
+/// Returns `Some("")` if the needle is an empty string.
 fn unicode_find(haystack: &str, needle: &str) -> Option<usize> {
     let haystack_graphemes = haystack.graphemes(true).collect::<Vec<&str>>();
     let needle_graphemes = needle.graphemes(true).collect::<Vec<&str>>();
@@ -69,9 +71,9 @@ impl TryFrom<AnyDataValue> for LangTaggedString {
 /// Given two [AnyDataValue]s,
 /// check if both are plain strings or language tagged strings and return a pair of [LangTaggedString]
 ///
-/// Implements the Argument Compatibility Rules for language tags from https://www.w3.org/TR/sparql11-query/#func-arg-compatibility
-///
-/// Returns `None` if one parameter is not a string or the language tags do not match.
+/// Returns `None` if one parameter is not a (language tagged) string or the two language tags do not comply
+/// with the Argument Compatibility Rules from https://www.w3.org/TR/sparql11-query/#func-arg-compatibility
+
 fn lang_string_pair_from_any(
     parameter_first: AnyDataValue,
     parameter_second: AnyDataValue,
@@ -109,7 +111,10 @@ fn string_vec_from_any(parameters: &[AnyDataValue]) -> Option<Vec<LangTaggedStri
 /// Evaluates to 0 from the integer value space if both strings are equal.
 /// Evaluates to 1 from the integer value space if the second string is alphabetically larger than the first.
 ///
-/// This function ignores language tags.
+/// Returns an integer.
+///
+/// Returns `None` if either parameter is not a (language tagged) string or
+/// if the two language tags do not comply with Argument Compatibility Rules.
 #[derive(Debug, Copy, Clone)]
 pub struct StringCompare;
 impl BinaryFunction for StringCompare {
@@ -140,9 +145,10 @@ impl BinaryFunction for StringCompare {
 /// Returns a string, that results from merging together
 /// all input strings.
 ///
-/// Returns a language tagged string if all parameters have the identical language tag.
+/// Returns a language tagged string if all parameters have an identical language tag.
+/// Otherwise, return a plain string.
 ///
-/// Returns an empty string if no parameters are given.
+/// Returns an empty plain string if no parameters are given.
 ///
 /// Returns `None` if either parameter is not a string.
 #[derive(Debug, Copy, Clone)]
@@ -177,9 +183,8 @@ impl NaryFunction for StringConcatenation {
 /// Returns `true` from the boolean value space if the string provided as the second parameter
 /// is contained in the string provided as the first parameter and `false` otherwise.
 ///
-/// This function ignores language tags.
-///
-/// Returns `None` if either parameter is not a string.
+/// Returns `None` if either parameter is not a (language tagged) string or
+/// if the two language tags do not comply with Argument Compatibility Rules.
 #[derive(Debug, Copy, Clone)]
 pub struct StringContains;
 impl BinaryFunction for StringContains {
@@ -212,9 +217,8 @@ impl BinaryFunction for StringContains {
 /// Returns `true` from the boolean value space if the string provided as the first parameter
 /// starts with the string provided as the second parameter and `false` otherwise.
 ///
-/// This function ignores language tags.
-///
-/// Returns `None` if either parameter is not a string.
+/// Returns `None` if either parameter is not a (language tagged) string or
+/// if the two language tags do not comply with Argument Compatibility Rules.
 #[derive(Debug, Copy, Clone)]
 pub struct StringStarts;
 impl BinaryFunction for StringStarts {
@@ -258,9 +262,8 @@ impl BinaryFunction for StringStarts {
 /// Returns `true` from the boolean value space if the string provided as the first parameter
 /// ends with the string provided as the second parameter and `false` otherwise.
 ///
-/// This function ignores language tags.
-///
-/// Returns `None` if either parameter is not a string.
+/// Returns `None` if either parameter is not a (language tagged) string or
+/// if the two language tags do not comply with Argument Compatibility Rules.
 #[derive(Debug, Copy, Clone)]
 pub struct StringEnds;
 impl BinaryFunction for StringEnds {
@@ -305,11 +308,12 @@ impl BinaryFunction for StringEnds {
 /// Returns the part of the string given in the first parameter which comes before
 /// the string provided as the second parameter.
 ///
-/// Applies the language tag of the first parameter on the result, if
-/// there is a non-empty match or the second parameter is empty
+/// Returns a language tagged string if the first parameter has a language tag
+/// and [unicode_find] computed a match.
+/// Otherwise, returns a plain string.
 ///
-///
-/// Returns `None` if either parameter is not a string.
+/// Returns `None` if either parameter is not a (language tagged) string or if
+/// the two language tags do not comply with Argument Compatibility Rules.
 #[derive(Debug, Copy, Clone)]
 pub struct StringBefore;
 impl BinaryFunction for StringBefore {
@@ -351,10 +355,12 @@ impl BinaryFunction for StringBefore {
 /// Returns the part of the string given in the first parameter which comes after
 /// the string provided as the second parameter.
 ///
-/// Applies the language tag of the first parameter on the result, if
-/// there is a non-empty match or the second parameter is empty
+/// Returns a language tagged string if the first parameter has a language tag
+/// and [unicode_find] computed a match.
+/// Otherwise, returns a plain string.
 ///
-/// Returns `None` if either parameter is not a string.
+/// Returns `None` if either parameter is not a (language tagged) string or if
+/// the two language tags do not comply with Argument Compatibility Rules.
 #[derive(Debug, Copy, Clone)]
 pub struct StringAfter;
 impl BinaryFunction for StringAfter {
@@ -402,7 +408,8 @@ impl BinaryFunction for StringAfter {
 /// Return a string containing the characters from the first parameter,
 /// starting from the position given by the second paramter.
 ///
-/// Applies the language tag of the parameter on the result.
+/// Returns a language tagged string if the first parameter has a language tag.
+/// Otherwise, return a plain string.
 ///
 /// Returns `None` if the type requirements from above are not met.
 #[derive(Debug, Copy, Clone)]
@@ -442,10 +449,10 @@ static REGEX_CACHE: OnceCell<Mutex<lru::LruCache<String, regex::Regex>>> = OnceC
 /// Returns `true` from the boolean value space if the regex provided as the second parameter
 /// is matched in the string provided as the first parameter and `false` otherwise.
 ///
-/// Returns `None` if either parameter is not a string or the second parameter is not
-/// a regular expression.
+/// Returns a plain string.
 ///
-/// This function ignores language tags.
+/// Returns `None` if either parameter is not a (language tagged) string, if the second parameter is not
+/// a regular expression or if the two language tags do not comply with Argument Compatibility Rules.
 #[derive(Debug, Copy, Clone)]
 pub struct StringRegex;
 impl BinaryFunction for StringRegex {
@@ -489,9 +496,10 @@ impl BinaryFunction for StringRegex {
 /// change one argument into the other) between the two given strings
 /// as a number from the integer value space.
 ///
-/// This function ignores language tags.
+/// Returns a plain string.
 ///
-/// Return `None` if the the provided arguments are not both strings.
+/// Returns `None` if either parameter is not a (language tagged) string or
+/// if the two language tags do not comply with Argument Compatibility Rules.
 #[derive(Debug, Copy, Clone)]
 pub struct StringLevenshtein;
 impl BinaryFunction for StringLevenshtein {
@@ -514,9 +522,9 @@ impl BinaryFunction for StringLevenshtein {
 ///
 /// Returns the length of the given string as a number from the integer value space.
 ///
-/// Returns `None` if the provided argument is not a string.
+/// Returns a plain string.
 ///
-/// This function ignores language tags.
+/// Returns `None` if the provided argument is not a (language tagged) string
 #[derive(Debug, Copy, Clone)]
 pub struct StringLength;
 impl UnaryFunction for StringLength {
@@ -534,9 +542,11 @@ impl UnaryFunction for StringLength {
 /// Transformation of a string into its reverse
 ///
 /// Returns the reversed version of the provided string.
-/// Applies the language tag of the parameter on the result.
 ///
-/// Returns `None` if the provided argument is not a string.
+/// Returns a language tagged string if the first parameter has a language tag.
+/// Otherwise, return a plain string.
+///
+/// Returns `None` if the provided argument is not a (language tagged) string.
 #[derive(Debug, Copy, Clone)]
 pub struct StringReverse;
 impl UnaryFunction for StringReverse {
@@ -560,10 +570,10 @@ impl UnaryFunction for StringReverse {
 
 /// Transformation of a string into upper case
 ///
-/// Returns the upper case version of the provided string.
-/// Preserves the original lanuage tag, if available.
+/// Returns a language tagged string if the first parameter has a language tag.
+/// Otherwise, return a plain string.
 ///
-/// Returns `None` if the provided argument is not a string.
+/// Returns `None` if the provided argument is not a (language tagged) string.
 #[derive(Debug, Copy, Clone)]
 pub struct StringUppercase;
 impl UnaryFunction for StringUppercase {
@@ -589,9 +599,10 @@ impl UnaryFunction for StringUppercase {
 ///
 /// Returns the lower case version of the provided string.
 ///
-/// Applies the language tag of the parameter on the result.
+/// Returns a language tagged string if the first parameter has a language tag.
+/// Otherwise, return a plain string.
 ///
-/// Returns `None` if the provided argument is not a string.
+/// Returns `None` if the provided argument is not a (language tagged) string.
 #[derive(Debug, Copy, Clone)]
 pub struct StringLowercase;
 impl UnaryFunction for StringLowercase {
@@ -617,9 +628,9 @@ impl UnaryFunction for StringLowercase {
 ///
 /// Returns the percent-encoded version of the provided string.
 ///
-/// This function ignores language tags.
+/// Returns a plain string.
 ///
-/// Returns `None` if the provided argument is not a string.
+/// Returns `None` if the provided argument is not a (language tagged) string.
 #[derive(Debug, Copy, Clone)]
 pub struct StringUriEncode;
 impl UnaryFunction for StringUriEncode {
@@ -644,9 +655,9 @@ impl UnaryFunction for StringUriEncode {
 ///
 /// Returns the percent-encoded version of the provided string.
 ///
-/// This function ignores language tags.
+/// Returns a plain string.
 ///
-/// Returns `None` if the provided argument is not a string.
+/// Returns `None` if the provided argument is not a (language tagged) string.
 #[derive(Debug, Copy, Clone)]
 pub struct StringUriDecode;
 impl UnaryFunction for StringUriDecode {
@@ -674,7 +685,8 @@ impl UnaryFunction for StringUriDecode {
 /// starting from the position given by the second parameter
 /// with the maximum length given by the third parameter.
 ///
-/// Applies the language tag of the parameter on the result.
+/// Returns a language tagged string if the first parameter has a language tag.
+/// Otherwise, return a plain string.
 ///
 /// Returns `None` if the type requirements from above are not met.
 #[derive(Debug, Copy, Clone)]
