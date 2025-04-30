@@ -263,7 +263,7 @@ fn run(mut cli: CliApp) -> Result<(), CliError> {
     );
 
     // do not move out of cli.globals, since cli is needed in call to handle_tracing
-    for ParamKeyValue { key, value } in cli.globals.drain(..) {
+    for ParamKeyValue { key, value } in cli.parameters.drain(..) {
         translation.add_external_parameter(GlobalVariable::new(&key), value);
     }
 
