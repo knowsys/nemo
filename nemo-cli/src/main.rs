@@ -339,7 +339,7 @@ fn run(mut cli: CliApp) -> Result<(), CliError> {
 
     let mut stdout_used = false;
 
-    if !export_manager.write_disabled() {
+    if !export_manager.write_disabled() || cli.output.dumping.is_some() {
         TimedCode::instance()
             .sub("Output & Final Materialization")
             .start();
@@ -351,26 +351,27 @@ fn run(mut cli: CliApp) -> Result<(), CliError> {
                 &handler,
                 engine.predicate_rows(&predicate)?,
             )?;
+        }        
+
+        if let Some(dumping) = cli.output.dumping {
+            log::info!("Dumping facts");
+            let mut writer: Box<dyn Write> = match cli.output.dump_file {
+                Some(ref path) => Box::new(File::create(path)?),
+                None => Box::new(std::io::stdout().lock()),
+            };
+            for tag in dump_facts(dumping, &mut program) {
+                if let Some(table) = engine.predicate_rows(&tag)? {
+                    dump_table(&mut writer, table, tag)?;
+                }
+            }
         }
-        
 
         TimedCode::instance()
             .sub("Output & Final Materialization")
             .stop();
     }
 
-    if let Some(dumping) = cli.output.dumping {
-        log::info!("Dumping facts");
-        let mut writer: Box<dyn Write> = match cli.output.dump_file {
-            Some(ref path) => Box::new(File::create(path)?),
-            None => Box::new(std::io::stdout().lock()),
-        };
-        for tag in dump_facts(dumping, &mut program) {
-            if let Some(table) = engine.predicate_rows(&tag)? {
-                dump_table(&mut writer, table, tag)?;
-            }
-        }
-    }
+
 
     TimedCode::instance().stop();
 

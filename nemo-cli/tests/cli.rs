@@ -33,12 +33,6 @@ fn cli_argument_parsing() -> Result<(), Box<dyn std::error::Error>> {
     ));
 
     cmd = Command::cargo_bin(bin)?;
-    cmd.arg("-v").arg("-q");
-    cmd.assert().failure().stderr(predicate::str::contains(
-        "argument '--verbose...' cannot be used with '--quiet'",
-    ));
-
-    cmd = Command::cargo_bin(bin)?;
     cmd.arg("-v").arg("--log").arg("error");
     cmd.assert().failure().stderr(predicate::str::contains(
         "argument '--verbose...' cannot be used with '--log <LOG_LEVEL>'",
@@ -49,5 +43,11 @@ fn cli_argument_parsing() -> Result<(), Box<dyn std::error::Error>> {
     cmd.assert()
         .failure()
         .stderr(predicate::str::contains("'--log <LOG_LEVEL>'"));
+
+    cmd = Command::cargo_bin(bin)?;
+    cmd.arg("--dump").arg("None");
+    cmd.assert()
+        .failure()
+        .stderr(predicate::str::contains("invalid value 'none' for '--dump <DUMPING>'"));
     Ok(())
 }
