@@ -47,7 +47,7 @@ fn cli_argument_parsing() -> Result<(), Box<dyn std::error::Error>> {
     cmd = Command::cargo_bin(bin)?;
     cmd.arg("--dump").arg("None");
     cmd.assert().failure().stderr(predicate::str::contains(
-        "invalid value 'none' for '--dump <DUMPING>'",
+        "invalid value 'None' for '--dump <DUMPING>'",
     ));
     Ok(())
 }
