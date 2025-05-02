@@ -6,6 +6,7 @@ use std::collections::HashMap;
 use nemo_physical::{
     management::execution_plan::{ColumnOrder, ExecutionNodeRef},
     tabular::operations::OperationTable,
+    util::hook::FilterHook,
 };
 
 use crate::{
@@ -27,6 +28,7 @@ use super::{
 #[derive(Debug)]
 pub(crate) struct DatalogStrategy {
     predicate_to_atoms: HashMap<Tag, Vec<(HeadInstruction, bool)>>,
+    hook: Option<FilterHook>,
 }
 
 impl DatalogStrategy {
@@ -45,7 +47,10 @@ impl DatalogStrategy {
             atoms.push((head_instruction_from_atom(head_atom), is_aggregate_atom));
         }
 
-        Self { predicate_to_atoms }
+        Self {
+            predicate_to_atoms,
+            hook: rule.filter_hook(),
+        }
     }
 }
 
@@ -109,8 +114,18 @@ impl HeadStrategy for DatalogStrategy {
                 .plan_mut()
                 .subtract(new_tables_union, vec![old_table_union]);
 
+            let final_node = if let Some(hook) = &self.hook {
+                current_plan.plan_mut().filter_hook(
+                    remove_duplicate_node,
+                    predicate.to_string(),
+                    hook.clone(),
+                )
+            } else {
+                remove_duplicate_node
+            };
+
             current_plan.add_permanent_table(
-                remove_duplicate_node,
+                final_node,
                 "Duplicate Elimination (Datalog)",
                 &head_table_name,
                 SubtableIdentifier::new(predicate.clone(), step),

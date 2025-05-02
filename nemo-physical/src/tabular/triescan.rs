@@ -12,8 +12,9 @@ use crate::{
 
 use super::{
     operations::{
-        aggregate::TrieScanAggregateWrapper, filter::TrieScanFilter, function::TrieScanFunction,
-        join::TrieScanJoin, null::TrieScanNull, subtract::TrieScanSubtract, union::TrieScanUnion,
+        aggregate::TrieScanAggregateWrapper, filter::TrieScanFilter,
+        filter_hook::TrieScanFilterHook, function::TrieScanFunction, join::TrieScanJoin,
+        null::TrieScanNull, subtract::TrieScanSubtract, union::TrieScanUnion,
     },
     trie::TrieScanGeneric,
 };
@@ -64,6 +65,8 @@ pub(crate) enum TrieScanEnum<'a> {
     AggregateWrapper(TrieScanAggregateWrapper<'a>),
     /// Case [TrieScanFilter]
     Filter(TrieScanFilter<'a>),
+    /// Case [TrieScanFilterHook]
+    FilterHook(TrieScanFilterHook<'a>),
     /// Case [TrieScanFunction]
     Function(TrieScanFunction<'a>),
     /// Case [TrieScanGeneric]
@@ -86,6 +89,7 @@ impl<'a> PartialTrieScan<'a> for TrieScanEnum<'a> {
         to match self {
             Self::AggregateWrapper(scan) => scan,
             Self::Filter(scan) => scan,
+            Self::FilterHook(scan) => scan,
             Self::Function(scan) => scan,
             Self::Generic(scan) => scan,
             Self::Join(scan) => scan,

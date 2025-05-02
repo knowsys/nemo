@@ -9,6 +9,8 @@ pub(crate) mod rule;
 
 use std::collections::HashMap;
 
+use nemo_physical::util::hook::FilterHook;
+
 use crate::rule_model::{
     components::{tag::Tag, term::primitive::variable::Variable},
     program::Program,
@@ -37,6 +39,8 @@ pub(crate) struct ProgramChaseTranslation {
     fresh_variable_generator: FreshVariableGenerator,
     /// Map associating each predicate with its arity
     predicate_arity: HashMap<Tag, usize>,
+    /// Optional hook with external code supplied to each rule
+    hook: Option<FilterHook>,
 }
 
 impl ProgramChaseTranslation {
@@ -45,11 +49,14 @@ impl ProgramChaseTranslation {
         Self {
             fresh_variable_generator: FreshVariableGenerator::default(),
             predicate_arity: HashMap::default(),
+            hook: None,
         }
     }
 
     /// Translate a [Program] into a [ChaseProgram].
     pub(crate) fn translate(&mut self, mut program: Program) -> ChaseProgram {
+        self.hook = program.hook();
+
         let mut result = ChaseProgram::default();
 
         for fact in program.facts() {

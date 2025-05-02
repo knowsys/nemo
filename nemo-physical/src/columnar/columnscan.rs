@@ -14,8 +14,9 @@ use super::{
     operations::{
         constant::ColumnScanConstant, filter::ColumnScanFilter,
         filter_constant::ColumnScanFilterConstant, filter_equal::ColumnScanFilterEqual,
-        filter_interval::ColumnScanFilterInterval, join::ColumnScanJoin, pass::ColumnScanPass,
-        prune::ColumnScanPrune, subtract::ColumnScanSubtract, union::ColumnScanUnion,
+        filter_hook::ColumnScanFilterHook, filter_interval::ColumnScanFilterInterval,
+        join::ColumnScanJoin, pass::ColumnScanPass, prune::ColumnScanPrune,
+        subtract::ColumnScanSubtract, union::ColumnScanUnion,
     },
 };
 
@@ -68,6 +69,8 @@ where
     FilterEqual(ColumnScanFilterEqual<'a, T>),
     /// Case ColumnScanFilterInterval
     FilterInterval(ColumnScanFilterInterval<'a, T>),
+    /// Case ColumnScanFilterHook
+    FilterHook(ColumnScanFilterHook<'a, T>),
     /// Case ColumnScanJoin
     Join(ColumnScanJoin<'a, T>),
     /// Case ColumnScanPass
@@ -220,6 +223,7 @@ generate_forwarder!(forward_to_columnscan;
     FilterConstant,
     FilterEqual,
     FilterInterval,
+    FilterHook,
     Join,
     Pass,
     Prune,

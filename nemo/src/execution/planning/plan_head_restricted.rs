@@ -9,6 +9,7 @@ use nemo_physical::{
         execution_plan::{ColumnOrder, ExecutionNodeRef},
     },
     tabular::operations::OperationTable,
+    util::hook::FilterHook,
 };
 
 use crate::{
@@ -59,6 +60,9 @@ pub(crate) struct RestrictedChaseStrategy {
     aux_predicate: Tag,
 
     analysis: RuleAnalysis,
+
+    /// Filter hook
+    hook: Option<FilterHook>,
 }
 
 impl RestrictedChaseStrategy {
@@ -109,6 +113,7 @@ impl RestrictedChaseStrategy {
             analysis: analysis.clone(),
             aux_predicate,
             aux_head_order,
+            hook: rule.filter_hook(),
         }
     }
 }
@@ -314,9 +319,19 @@ impl HeadStrategy for RestrictedChaseStrategy {
             let result_subtable_id = SubtableIdentifier::new(predicate.clone(), step);
 
             if *self.predicate_to_full_existential.get(predicate).unwrap() {
+                let final_node = if let Some(hook) = &self.hook {
+                    current_plan.plan_mut().filter_hook(
+                        new_tables_union,
+                        predicate.to_string(),
+                        hook.clone(),
+                    )
+                } else {
+                    new_tables_union
+                };
+
                 // Since every new entry will contain a fresh null no duplcate elimination is needed
                 current_plan.add_permanent_table(
-                    new_tables_union,
+                    final_node,
                     "Head (Restricted): Result Project",
                     &result_table_name,
                     result_subtable_id,
@@ -342,8 +357,18 @@ impl HeadStrategy for RestrictedChaseStrategy {
                     .plan_mut()
                     .subtract(new_tables_union, vec![old_table_union]);
 
+                let final_node = if let Some(hook) = &self.hook {
+                    current_plan.plan_mut().filter_hook(
+                        remove_duplicate_node,
+                        predicate.to_string(),
+                        hook.clone(),
+                    )
+                } else {
+                    remove_duplicate_node
+                };
+
                 current_plan.add_permanent_table(
-                    remove_duplicate_node,
+                    final_node,
                     "Head (Restricted): Result Project",
                     &result_table_name,
                     result_subtable_id,
