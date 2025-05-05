@@ -8,27 +8,29 @@ use crate::{
         ChaseComponent,
     },
     rule_model::{
-        error::{
-            hint::Hint, validation_error::ValidationErrorKind, ComponentParseError,
-            ValidationErrorBuilder,
-        },
+        error::{hint::Hint, ComponentParseError, ValidationErrorBuilder},
         origin::Origin,
+        pipeline::id::ProgramComponentId,
         translation::{literal::HeadAtom, TranslationComponent},
     },
 };
 
 use super::{
     atom::Atom,
+    component_iterator, component_iterator_mut,
     tag::Tag,
     term::{primitive::Primitive, Term},
-    IterablePrimitives, IterableVariables, ProgramComponent, ProgramComponentKind,
+    ComponentBehavior, ComponentIdentity, IterableComponent, IterablePrimitives, ProgramComponent,
+    ProgramComponentKind,
 };
 
 /// A (ground) fact
-#[derive(Debug, Clone, Eq)]
+#[derive(Debug, Clone)]
 pub struct Fact {
     /// Origin of this component
     origin: Origin,
+    /// Id of this component
+    id: ProgramComponentId,
 
     /// Predicate of the fact
     predicate: Tag,
@@ -41,6 +43,7 @@ impl Fact {
     pub fn new<Terms: IntoIterator<Item = Term>>(predicate: Tag, subterms: Terms) -> Self {
         Self {
             origin: Origin::Created,
+            id: ProgramComponentId::default(),
             predicate,
             terms: subterms.into_iter().collect(),
         }
@@ -80,7 +83,8 @@ impl Fact {
 impl From<Atom> for Fact {
     fn from(value: Atom) -> Self {
         Self {
-            origin: *value.origin(),
+            origin: value.origin().clone(),
+            id: ProgramComponentId::default(),
             predicate: value.predicate(),
             terms: value.arguments().cloned().collect(),
         }
@@ -109,6 +113,8 @@ impl PartialEq for Fact {
     }
 }
 
+impl Eq for Fact {}
+
 impl Hash for Fact {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         self.predicate.hash(state);
@@ -116,56 +122,77 @@ impl Hash for Fact {
     }
 }
 
-impl ProgramComponent for Fact {
-    fn origin(&self) -> &Origin {
-        &self.origin
+impl ComponentBehavior for Fact {
+    fn kind(&self) -> ProgramComponentKind {
+        ProgramComponentKind::Fact
     }
 
-    fn set_origin(mut self, origin: Origin) -> Self
-    where
-        Self: Sized,
-    {
-        self.origin = origin;
-        self
-    }
+    fn validate(&self, _builder: &mut ValidationErrorBuilder) -> Option<()> {
+        // if !self.predicate.is_valid() {
+        //             builder.report_error(
+        //                 *self.predicate.origin(),
+        //                 ValidationErrorKind::InvalidTermTag(self.predicate.to_string()),
+        //             );
+        //         }
 
-    fn validate(&self, builder: &mut ValidationErrorBuilder) -> Option<()>
-    where
-        Self: Sized,
-    {
-        if !self.predicate.is_valid() {
-            builder.report_error(
-                *self.predicate.origin(),
-                ValidationErrorKind::InvalidTermTag(self.predicate.to_string()),
-            );
-        }
+        //         for term in self.subterms() {
+        //             if term.is_map() || term.is_tuple() || term.is_function() {
+        //                 builder
+        //                     .report_error(*term.origin(), ValidationErrorKind::UnsupportedComplexTerm)
+        //                     .add_hint_option(Self::hint_term_operation(term));
+        //                 return None;
+        //             }
 
-        for term in self.subterms() {
-            if term.is_map() || term.is_tuple() || term.is_function() {
-                builder
-                    .report_error(*term.origin(), ValidationErrorKind::UnsupportedComplexTerm)
-                    .add_hint_option(Self::hint_term_operation(term));
-                return None;
-            }
+        //             if term.is_aggregate() {
+        //                 builder.report_error(*term.origin(), ValidationErrorKind::FactSubtermAggregate);
+        //                 return None;
+        //             }
 
-            if term.is_aggregate() {
-                builder.report_error(*term.origin(), ValidationErrorKind::FactSubtermAggregate);
-                return None;
-            }
+        //             if let Some(variable) = term.variables().next() {
+        //                 builder.report_error(*variable.origin(), ValidationErrorKind::FactNonGround);
+        //                 continue;
+        //             }
 
-            if let Some(variable) = term.variables().next() {
-                builder.report_error(*variable.origin(), ValidationErrorKind::FactNonGround);
-                continue;
-            }
-
-            term.validate(builder)?;
-        }
+        //             term.validate(builder)?;
+        //         }
 
         Some(())
     }
 
-    fn kind(&self) -> ProgramComponentKind {
-        ProgramComponentKind::Fact
+    fn boxed_clone(&self) -> Box<dyn ProgramComponent> {
+        Box::new(self.clone())
+    }
+}
+
+impl ComponentIdentity for Fact {
+    fn id(&self) -> ProgramComponentId {
+        self.id
+    }
+
+    fn set_id(&mut self, id: ProgramComponentId) {
+        self.id = id;
+    }
+
+    fn origin(&self) -> &Origin {
+        &self.origin
+    }
+
+    fn set_origin(&mut self, origin: Origin) {
+        self.origin = origin;
+    }
+}
+
+impl IterableComponent for Fact {
+    fn children<'a>(&'a self) -> Box<dyn Iterator<Item = &'a dyn ProgramComponent> + 'a> {
+        let subterm_iterator = component_iterator(self.terms.iter());
+        Box::new(subterm_iterator)
+    }
+
+    fn children_mut<'a>(
+        &'a mut self,
+    ) -> Box<dyn Iterator<Item = &'a mut dyn ProgramComponent> + 'a> {
+        let subterm_iterator = component_iterator_mut(self.terms.iter_mut());
+        Box::new(subterm_iterator)
     }
 }
 
@@ -185,12 +212,13 @@ impl IterablePrimitives for Fact {
 
 impl From<GroundAtom> for Fact {
     fn from(value: GroundAtom) -> Self {
-        let origin = *value.origin();
+        let origin = value.origin().clone();
         let predicate = value.predicate();
         let terms = value.terms().cloned().map(Term::from).collect();
 
         Self {
             origin,
+            id: ProgramComponentId::default(),
             predicate,
             terms,
         }

@@ -3,9 +3,14 @@
 use std::{fmt::Display, hash::Hash};
 
 use crate::rule_model::{
-    components::{IterablePrimitives, IterableVariables, ProgramComponent, ProgramComponentKind},
+    components::{
+        component_iterator, component_iterator_mut, ComponentBehavior, ComponentIdentity,
+        IterableComponent, IterablePrimitives, IterableVariables, ProgramComponent,
+        ProgramComponentKind,
+    },
     error::ValidationErrorBuilder,
     origin::Origin,
+    pipeline::id::ProgramComponentId,
 };
 
 use super::{
@@ -17,10 +22,12 @@ use super::{
 /// Tuple
 ///
 /// An ordered list of [Term]s.
-#[derive(Debug, Clone, Eq)]
+#[derive(Debug, Clone)]
 pub struct Tuple {
     /// Origin of this component
     origin: Origin,
+    /// Id of this component
+    id: ProgramComponentId,
 
     /// Ordered list of terms contained in this tuple
     terms: Vec<Term>,
@@ -48,6 +55,7 @@ impl Tuple {
     pub fn new<Terms: IntoIterator<Item = Term>>(terms: Terms) -> Self {
         Self {
             origin: Origin::default(),
+            id: ProgramComponentId::default(),
             terms: terms.into_iter().collect(),
         }
     }
@@ -71,7 +79,8 @@ impl Tuple {
     /// Reduce each sub [Term] in the tuple returning a copy.
     pub fn reduce(&self) -> Self {
         Self {
-            origin: self.origin,
+            origin: self.origin.clone(),
+            id: ProgramComponentId::default(),
             terms: self.terms.iter().map(Term::reduce).collect(),
         }
     }
@@ -99,6 +108,8 @@ impl PartialEq for Tuple {
     }
 }
 
+impl Eq for Tuple {}
+
 impl Hash for Tuple {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         self.terms.hash(state);
@@ -111,23 +122,12 @@ impl PartialOrd for Tuple {
     }
 }
 
-impl ProgramComponent for Tuple {
-    fn origin(&self) -> &Origin {
-        &self.origin
+impl ComponentBehavior for Tuple {
+    fn kind(&self) -> ProgramComponentKind {
+        ProgramComponentKind::Tuple
     }
 
-    fn set_origin(mut self, origin: Origin) -> Self
-    where
-        Self: Sized,
-    {
-        self.origin = origin;
-        self
-    }
-
-    fn validate(&self, builder: &mut ValidationErrorBuilder) -> Option<()>
-    where
-        Self: Sized,
-    {
+    fn validate(&self, builder: &mut ValidationErrorBuilder) -> Option<()> {
         for term in self.arguments() {
             term.validate(builder)?;
         }
@@ -135,8 +135,40 @@ impl ProgramComponent for Tuple {
         Some(())
     }
 
-    fn kind(&self) -> ProgramComponentKind {
-        ProgramComponentKind::Tuple
+    fn boxed_clone(&self) -> Box<dyn ProgramComponent> {
+        Box::new(self.clone())
+    }
+}
+
+impl ComponentIdentity for Tuple {
+    fn id(&self) -> ProgramComponentId {
+        self.id
+    }
+
+    fn set_id(&mut self, id: ProgramComponentId) {
+        self.id = id;
+    }
+
+    fn origin(&self) -> &Origin {
+        &self.origin
+    }
+
+    fn set_origin(&mut self, origin: Origin) {
+        self.origin = origin;
+    }
+}
+
+impl IterableComponent for Tuple {
+    fn children<'a>(&'a self) -> Box<dyn Iterator<Item = &'a dyn ProgramComponent> + 'a> {
+        let subterm_iterator = component_iterator(self.terms.iter());
+        Box::new(subterm_iterator)
+    }
+
+    fn children_mut<'a>(
+        &'a mut self,
+    ) -> Box<dyn Iterator<Item = &'a mut dyn ProgramComponent> + 'a> {
+        let subterm_iterator = component_iterator_mut(self.terms.iter_mut());
+        Box::new(subterm_iterator)
     }
 }
 

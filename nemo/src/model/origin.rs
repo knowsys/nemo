@@ -15,9 +15,12 @@ pub enum Origin {
     Created,
     /// Reference
     Reference(ProgramComponentId),
-
-    /// Component stems from parsing
-    Parsing(ExternalReference),
+    /// Component was created directly from a string
+    String(Box<str>),
+    /// Component was created by parsing from a string
+    Parsing { id: usize, start: usize, end: usize },
+    ///
+    Component(Box<dyn ProgramComponent>),
 
     /// Combination of two rules
     RuleCombination(Box<Origin>, Box<Origin>),

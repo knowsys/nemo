@@ -35,7 +35,7 @@ use nemo::{
     meta::timing::{TimedCode, TimedDisplay},
     rule_model::{
         self,
-        components::{fact::Fact, import_export::ExportDirective, tag::Tag, ProgramComponent},
+        components::{fact::Fact, import_export::ExportDirective, tag::Tag, ComponentBehavior},
         error::ValidationErrorBuilder,
         program::Program,
     },

@@ -44,6 +44,11 @@ impl Program {
     pub fn fact(&self, index: usize) -> &Atom {
         &self.facts[index]
     }
+
+    /// Add a [Rule] to the program
+    pub fn add_rule(&mut self, rule: Rule) {
+        self.rules.push(rule);
+    }
 }
 
 impl ComponentBehavior for Program {
@@ -52,6 +57,10 @@ impl ComponentBehavior for Program {
     }
 
     fn validate(&self) -> Result<(), super::NewValidationError> {
+        todo!()
+    }
+
+    fn boxed_clone(&self) -> Box<dyn ProgramComponent> {
         todo!()
     }
 }

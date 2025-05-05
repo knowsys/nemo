@@ -5,10 +5,11 @@ use std::{fmt::Display, hash::Hash};
 use crate::rule_model::origin::Origin;
 
 /// Name of a term or predicate
-#[derive(Debug, Clone, Eq)]
+#[derive(Debug, Clone)]
 pub struct Tag {
     /// Origin of this component.
     origin: Origin,
+
     /// Content of this tag
     tag: String,
 }
@@ -58,6 +59,8 @@ impl PartialEq for Tag {
         self.tag == other.tag
     }
 }
+
+impl Eq for Tag {}
 
 impl PartialOrd for Tag {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {

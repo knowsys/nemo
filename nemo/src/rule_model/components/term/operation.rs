@@ -14,10 +14,13 @@ use crate::{
     },
     rule_model::{
         components::{
-            IterablePrimitives, IterableVariables, ProgramComponent, ProgramComponentKind,
+            component_iterator, component_iterator_mut, ComponentBehavior, ComponentIdentity,
+            IterableComponent, IterablePrimitives, IterableVariables, ProgramComponent,
+            ProgramComponentKind,
         },
-        error::{validation_error::ValidationErrorKind, ValidationErrorBuilder},
+        error::ValidationErrorBuilder,
         origin::Origin,
+        pipeline::id::ProgramComponentId,
     },
 };
 
@@ -31,10 +34,12 @@ use super::{
 ///
 /// An action or computation performed on [Term]s.
 /// This can include for example arithmetic or string operations.
-#[derive(Debug, Clone, Eq)]
+#[derive(Debug, Clone)]
 pub struct Operation {
     /// Origin of this component
     origin: Origin,
+    /// Id of this component
+    id: ProgramComponentId,
 
     /// The kind of operation
     kind: OperationKind,
@@ -47,6 +52,7 @@ impl Operation {
     pub fn new(kind: OperationKind, subterms: Vec<Term>) -> Self {
         Self {
             origin: Origin::default(),
+            id: ProgramComponentId::default(),
             kind,
             subterms,
         }
@@ -99,7 +105,8 @@ impl Operation {
     pub fn reduce(&self) -> Term {
         if !self.is_ground() {
             return Term::Operation(Self {
-                origin: self.origin,
+                origin: self.origin.clone(),
+                id: ProgramComponentId::default(),
                 kind: self.kind,
                 subterms: self.subterms.iter().map(Term::reduce).collect(),
             });
@@ -225,6 +232,8 @@ impl PartialEq for Operation {
     }
 }
 
+impl Eq for Operation {}
+
 impl PartialOrd for Operation {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         match self.kind.partial_cmp(&other.kind) {
@@ -242,44 +251,70 @@ impl Hash for Operation {
     }
 }
 
-impl ProgramComponent for Operation {
-    fn origin(&self) -> &Origin {
-        &self.origin
+impl ComponentBehavior for Operation {
+    fn kind(&self) -> ProgramComponentKind {
+        ProgramComponentKind::Operation
     }
 
-    fn set_origin(mut self, origin: Origin) -> Self
-    where
-        Self: Sized,
-    {
-        self.origin = origin;
-        self
-    }
+    fn validate(&self, _builder: &mut ValidationErrorBuilder) -> Option<()> {
+        // if !self.kind.num_arguments().validate(self.subterms.len()) {
+        //     builder.report_error(
+        //         self.origin,
+        //         ValidationErrorKind::OperationArgumentNumber {
+        //             used: self.subterms.len(),
+        //             expected: self.kind.num_arguments().to_string(),
+        //         },
+        //     );
 
-    fn validate(&self, builder: &mut ValidationErrorBuilder) -> Option<()>
-    where
-        Self: Sized,
-    {
-        if !self.kind.num_arguments().validate(self.subterms.len()) {
-            builder.report_error(
-                self.origin,
-                ValidationErrorKind::OperationArgumentNumber {
-                    used: self.subterms.len(),
-                    expected: self.kind.num_arguments().to_string(),
-                },
-            );
+        //     return None;
+        // }
 
-            return None;
-        }
+        // if self.is_ground() && !self.reduce().is_primitive() {
+        //     builder.report_error(self.origin, ValidationErrorKind::InvalidGroundOperation);
+        //     return None;
+        // }
 
-        for argument in self.arguments() {
-            argument.validate(builder)?;
-        }
+        // for argument in self.arguments() {
+        //     argument.validate(builder)?;
+        // }
 
         Some(())
     }
 
-    fn kind(&self) -> ProgramComponentKind {
-        ProgramComponentKind::Operation
+    fn boxed_clone(&self) -> Box<dyn ProgramComponent> {
+        Box::new(self.clone())
+    }
+}
+
+impl ComponentIdentity for Operation {
+    fn id(&self) -> ProgramComponentId {
+        self.id
+    }
+
+    fn set_id(&mut self, id: ProgramComponentId) {
+        self.id = id;
+    }
+
+    fn origin(&self) -> &Origin {
+        &self.origin
+    }
+
+    fn set_origin(&mut self, origin: Origin) {
+        self.origin = origin
+    }
+}
+
+impl IterableComponent for Operation {
+    fn children<'a>(&'a self) -> Box<dyn Iterator<Item = &'a dyn ProgramComponent> + 'a> {
+        let subterm_iterator = component_iterator(self.subterms.iter());
+        Box::new(subterm_iterator)
+    }
+
+    fn children_mut<'a>(
+        &'a mut self,
+    ) -> Box<dyn Iterator<Item = &'a mut dyn ProgramComponent> + 'a> {
+        let subterm_iterator = component_iterator_mut(self.subterms.iter_mut());
+        Box::new(subterm_iterator)
     }
 }
 

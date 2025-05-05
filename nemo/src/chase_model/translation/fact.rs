@@ -5,7 +5,7 @@ use crate::{
     chase_model::components::{atom::ground_atom::GroundAtom, ChaseComponent},
     rule_model::components::{
         term::{primitive::Primitive, Term},
-        ProgramComponent,
+        ComponentIdentity,
     },
 };
 
@@ -21,7 +21,7 @@ impl ProgramChaseTranslation {
         &mut self,
         fact: &crate::rule_model::components::fact::Fact,
     ) -> GroundAtom {
-        let origin = *fact.origin();
+        let origin = fact.origin().clone();
         let predicate = fact.predicate().clone();
         let mut terms = Vec::new();
 

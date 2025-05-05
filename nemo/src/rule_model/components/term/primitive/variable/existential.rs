@@ -3,9 +3,13 @@
 use std::{fmt::Display, hash::Hash};
 
 use crate::rule_model::{
-    components::{ProgramComponent, ProgramComponentKind},
-    error::{validation_error::ValidationErrorKind, ValidationErrorBuilder},
+    components::{
+        ComponentBehavior, ComponentIdentity, IterableComponent, ProgramComponent,
+        ProgramComponentKind,
+    },
+    error::ValidationErrorBuilder,
     origin::Origin,
+    pipeline::id::ProgramComponentId,
 };
 
 use super::VariableName;
@@ -13,10 +17,12 @@ use super::VariableName;
 /// Existentially quantified variable
 ///
 /// Variable that implies the existence of a value satisfying a certain pattern.
-#[derive(Debug, Clone, Eq)]
+#[derive(Debug, Clone)]
 pub struct ExistentialVariable {
     /// Origin of this component
     origin: Origin,
+    /// Id of this component
+    id: ProgramComponentId,
 
     /// Name of the variable
     name: VariableName,
@@ -26,8 +32,9 @@ impl ExistentialVariable {
     /// Create a new [ExistentialVariable].
     pub fn new(name: &str) -> Self {
         Self {
-            origin: Origin::Created,
-            name: VariableName::new(name.to_string()),
+            origin: Origin::default(),
+            id: ProgramComponentId::default(),
+            name: VariableName::new(name.to_owned()),
         }
     }
 
@@ -54,6 +61,8 @@ impl PartialEq for ExistentialVariable {
     }
 }
 
+impl Eq for ExistentialVariable {}
+
 impl PartialOrd for ExistentialVariable {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         self.name.partial_cmp(&other.name)
@@ -66,34 +75,43 @@ impl Hash for ExistentialVariable {
     }
 }
 
-impl ProgramComponent for ExistentialVariable {
-    fn origin(&self) -> &Origin {
-        &self.origin
+impl ComponentBehavior for ExistentialVariable {
+    fn kind(&self) -> ProgramComponentKind {
+        ProgramComponentKind::Variable
     }
 
-    fn set_origin(mut self, origin: Origin) -> Self
-    where
-        Self: Sized,
-    {
-        self.origin = origin;
-        self
-    }
-
-    fn validate(&self, builder: &mut ValidationErrorBuilder) -> Option<()>
-    where
-        Self: Sized,
-    {
-        if !self.name.is_valid() {
-            builder.report_error(
-                self.origin,
-                ValidationErrorKind::InvalidVariableName(self.name()),
-            );
-        }
+    fn validate(&self, _builder: &mut ValidationErrorBuilder) -> Option<()> {
+        // if !self.name.is_valid() {
+        //     builder.report_error(
+        //         self.origin,
+        //         ValidationErrorKind::InvalidVariableName(self.name()),
+        //     );
+        // }
 
         Some(())
     }
 
-    fn kind(&self) -> ProgramComponentKind {
-        ProgramComponentKind::Variable
+    fn boxed_clone(&self) -> Box<dyn ProgramComponent> {
+        Box::new(self.clone())
     }
 }
+
+impl ComponentIdentity for ExistentialVariable {
+    fn id(&self) -> ProgramComponentId {
+        self.id
+    }
+
+    fn set_id(&mut self, id: ProgramComponentId) {
+        self.id = id;
+    }
+
+    fn origin(&self) -> &Origin {
+        &self.origin
+    }
+
+    fn set_origin(&mut self, origin: Origin) {
+        self.origin = origin
+    }
+}
+
+impl IterableComponent for ExistentialVariable {}

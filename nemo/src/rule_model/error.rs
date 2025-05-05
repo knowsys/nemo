@@ -197,7 +197,7 @@ pub struct ValidationError {
 impl ValidationError {
     /// Construct a new [`ValidationError`] with given [`Origin`] and [`ValidationErrorKind`]
     pub fn new(origin: Origin, kind: ValidationErrorKind) -> Self {
-        let mut info = ComplexError::new_error(origin);
+        let mut info = ComplexError::new_error(origin.clone());
         info.add_label(ComplexErrorLabelKind::Error, origin, kind.to_string());
 
         ValidationError { kind, info }

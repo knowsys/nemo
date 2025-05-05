@@ -7,13 +7,13 @@ use std::{
 };
 
 use crate::{
-    io::format_builder::ImportExportBuilder,
-    rule_model::{error::ValidationErrorBuilder, origin::Origin},
+    rule_model::{error::ValidationErrorBuilder, origin::Origin, pipeline::id::ProgramComponentId},
     syntax,
 };
 
 use super::{
-    tag::Tag, term::primitive::ground::GroundTerm, ProgramComponent, ProgramComponentKind,
+    tag::Tag, term::primitive::ground::GroundTerm, ComponentBehavior, ComponentIdentity,
+    IterableComponent, ProgramComponent, ProgramComponentKind,
 };
 
 /// Direction of import/export activities.
@@ -36,7 +36,7 @@ impl fmt::Display for Direction {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 pub(crate) struct ImportExportSpec {
     format: Tag,
     keys: HashMap<String, (Origin, usize)>,
@@ -83,9 +83,11 @@ impl ImportExportSpec {
     }
 
     pub(crate) fn key_value(&self) -> impl Iterator<Item = (Tag, &GroundTerm)> {
-        self.keys
-            .iter()
-            .map(|(k, (origin, idx))| (Tag::new(k.into()).set_origin(*origin), &self.values[*idx]))
+        // self.keys
+        //     .iter()
+        //     .map(|(k, (origin, idx))| (Tag::new(k.into()).set_origin(*origin), &self.values[*idx]))
+
+        std::iter::empty()
     }
 }
 
@@ -113,6 +115,9 @@ impl fmt::Display for ImportExportSpec {
 pub(crate) struct ImportExportDirective {
     /// Origin of this component
     origin: Origin,
+    /// Id of this component
+    id: ProgramComponentId,
+
     /// The predicate we're handling.
     predicate: Tag,
     /// The specified format and import/export attributes
@@ -138,6 +143,7 @@ impl ImportDirective {
     pub(crate) fn new(predicate: Tag, spec: ImportExportSpec) -> Self {
         Self(ImportExportDirective {
             origin: Origin::default(),
+            id: ProgramComponentId::default(),
             predicate,
             spec,
         })
@@ -170,30 +176,48 @@ impl fmt::Display for ImportDirective {
     }
 }
 
-impl ProgramComponent for ImportDirective {
-    type ValidationResult = ImportExportBuilder;
+impl ComponentBehavior for ImportDirective {
+    fn kind(&self) -> ProgramComponentKind {
+        ProgramComponentKind::Import
+    }
+
+    fn validate(&self, _builder: &mut ValidationErrorBuilder) -> Option<()> {
+        // ImportExportBuilder::new(self.0.spec.clone(), Direction::Import, builder)
+        todo!()
+    }
+
+    fn boxed_clone(&self) -> Box<dyn ProgramComponent> {
+        Box::new(self.clone())
+    }
+}
+
+impl ComponentIdentity for ImportDirective {
+    fn id(&self) -> ProgramComponentId {
+        self.0.id
+    }
+
+    fn set_id(&mut self, id: ProgramComponentId) {
+        self.0.id = id;
+    }
 
     fn origin(&self) -> &Origin {
         &self.0.origin
     }
 
-    fn set_origin(mut self, origin: Origin) -> Self
-    where
-        Self: Sized,
-    {
+    fn set_origin(&mut self, origin: Origin) {
         self.0.origin = origin;
-        self
+    }
+}
+
+impl IterableComponent for ImportDirective {
+    fn children<'a>(&'a self) -> Box<dyn Iterator<Item = &'a dyn ProgramComponent> + 'a> {
+        Box::new(std::iter::empty()) // TODO: ?
     }
 
-    fn validate(&self, builder: &mut ValidationErrorBuilder) -> Option<ImportExportBuilder>
-    where
-        Self: Sized,
-    {
-        ImportExportBuilder::new(self.0.spec.clone(), Direction::Import, builder)
-    }
-
-    fn kind(&self) -> ProgramComponentKind {
-        ProgramComponentKind::Import
+    fn children_mut<'a>(
+        &'a mut self,
+    ) -> Box<dyn Iterator<Item = &'a mut dyn ProgramComponent> + 'a> {
+        Box::new(std::iter::empty())
     }
 }
 
@@ -205,6 +229,7 @@ impl ExportDirective {
     pub(crate) fn new(predicate: Tag, spec: ImportExportSpec) -> Self {
         Self(ImportExportDirective {
             origin: Origin::default(),
+            id: ProgramComponentId::default(),
             predicate,
             spec,
         })
@@ -230,6 +255,51 @@ impl ExportDirective {
     }
 }
 
+impl ComponentBehavior for ExportDirective {
+    fn kind(&self) -> ProgramComponentKind {
+        ProgramComponentKind::Export
+    }
+
+    fn validate(&self, _builder: &mut ValidationErrorBuilder) -> Option<()> {
+        // ImportExportBuilder::new(self.0.spec.clone(), Direction::Export, builder)
+        todo!()
+    }
+
+    fn boxed_clone(&self) -> Box<dyn ProgramComponent> {
+        Box::new(self.clone())
+    }
+}
+
+impl ComponentIdentity for ExportDirective {
+    fn id(&self) -> ProgramComponentId {
+        self.0.id
+    }
+
+    fn set_id(&mut self, id: ProgramComponentId) {
+        self.0.id = id;
+    }
+
+    fn origin(&self) -> &Origin {
+        &self.0.origin
+    }
+
+    fn set_origin(&mut self, origin: Origin) {
+        self.0.origin = origin;
+    }
+}
+
+impl IterableComponent for ExportDirective {
+    fn children<'a>(&'a self) -> Box<dyn Iterator<Item = &'a dyn ProgramComponent> + 'a> {
+        Box::new(std::iter::empty())
+    }
+
+    fn children_mut<'a>(
+        &'a mut self,
+    ) -> Box<dyn Iterator<Item = &'a mut dyn ProgramComponent> + 'a> {
+        Box::new(std::iter::empty())
+    }
+}
+
 impl From<ImportExportDirective> for ExportDirective {
     fn from(value: ImportExportDirective) -> Self {
         Self(value)
@@ -246,29 +316,29 @@ impl fmt::Display for ExportDirective {
     }
 }
 
-impl ProgramComponent for ExportDirective {
-    type ValidationResult = ImportExportBuilder;
+// impl ProgramComponent for ExportDirective {
+//     type ValidationResult = ImportExportBuilder;
 
-    fn origin(&self) -> &Origin {
-        &self.0.origin
-    }
+//     fn origin(&self) -> &Origin {
+//         &self.0.origin
+//     }
 
-    fn set_origin(mut self, origin: Origin) -> Self
-    where
-        Self: Sized,
-    {
-        self.0.origin = origin;
-        self
-    }
+//     fn set_origin(mut self, origin: Origin) -> Self
+//     where
+//         Self: Sized,
+//     {
+//         self.0.origin = origin;
+//         self
+//     }
 
-    fn validate(&self, builder: &mut ValidationErrorBuilder) -> Option<ImportExportBuilder>
-    where
-        Self: Sized,
-    {
-        ImportExportBuilder::new(self.0.spec.clone(), Direction::Export, builder)
-    }
+//     fn validate(&self, builder: &mut ValidationErrorBuilder) -> Option<ImportExportBuilder>
+//     where
+//         Self: Sized,
+//     {
+//         ImportExportBuilder::new(self.0.spec.clone(), Direction::Export, builder)
+//     }
 
-    fn kind(&self) -> ProgramComponentKind {
-        ProgramComponentKind::Export
-    }
-}
+//     fn kind(&self) -> ProgramComponentKind {
+//         ProgramComponentKind::Export
+//     }
+// }

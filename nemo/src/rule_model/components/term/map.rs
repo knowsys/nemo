@@ -4,10 +4,13 @@ use std::{fmt::Display, hash::Hash};
 
 use crate::rule_model::{
     components::{
-        tag::Tag, IterablePrimitives, IterableVariables, ProgramComponent, ProgramComponentKind,
+        component_iterator, component_iterator_mut, tag::Tag, ComponentBehavior, ComponentIdentity,
+        IterableComponent, IterablePrimitives, IterableVariables, ProgramComponent,
+        ProgramComponentKind,
     },
     error::ValidationErrorBuilder,
     origin::Origin,
+    pipeline::id::ProgramComponentId,
 };
 
 use super::{
@@ -20,10 +23,12 @@ use super::{
 ///
 /// A collection of key-value pairs,
 /// associating [Term]s with each other.
-#[derive(Debug, Clone, Eq)]
+#[derive(Debug, Clone)]
 pub struct Map {
     /// Origin of this component
     origin: Origin,
+    /// Id of this component
+    id: ProgramComponentId,
 
     /// Name of the map
     tag: Option<Tag>,
@@ -36,7 +41,8 @@ impl Map {
     /// Create a new [Map].
     pub fn new<Pairs: IntoIterator<Item = (Term, Term)>>(name: &str, map: Pairs) -> Self {
         Self {
-            origin: Origin::Created,
+            origin: Origin::default(),
+            id: ProgramComponentId::default(),
             tag: Some(Tag::new(name.to_string())),
             map: map.into_iter().collect(),
         }
@@ -45,7 +51,8 @@ impl Map {
     /// Create a new [Map] without a name.
     pub fn new_unnamed<Pairs: IntoIterator<Item = (Term, Term)>>(map: Pairs) -> Self {
         Self {
-            origin: Origin::Created,
+            origin: Origin::default(),
+            id: ProgramComponentId::default(),
             tag: None,
             map: map.into_iter().collect(),
         }
@@ -57,7 +64,8 @@ impl Map {
         map: Pairs,
     ) -> Self {
         Self {
-            origin: Origin::Created,
+            origin: Origin::default(),
+            id: ProgramComponentId::default(),
             tag,
             map: map.into_iter().collect(),
         }
@@ -66,7 +74,8 @@ impl Map {
     /// Create a new empty [Map].
     pub fn empty(name: &str) -> Self {
         Self {
-            origin: Origin::Created,
+            origin: Origin::default(),
+            id: ProgramComponentId::default(),
             tag: Some(Tag::new(name.to_string())),
             map: Vec::default(),
         }
@@ -75,7 +84,8 @@ impl Map {
     /// Create a new empty [Map].
     pub fn empty_unnamed() -> Self {
         Self {
-            origin: Origin::Created,
+            origin: Origin::default(),
+            id: ProgramComponentId::default(),
             tag: None,
             map: Vec::default(),
         }
@@ -116,7 +126,8 @@ impl Map {
     /// Reduce the [Term]s in each key-value pair returning a copy.
     pub fn reduce(&self) -> Self {
         Self {
-            origin: self.origin,
+            origin: self.origin.clone(),
+            id: ProgramComponentId::default(),
             tag: self.tag.clone(),
             map: self
                 .key_value()
@@ -153,6 +164,8 @@ impl PartialEq for Map {
     }
 }
 
+impl Eq for Map {}
+
 impl PartialOrd for Map {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         self.map.partial_cmp(&other.map)
@@ -166,23 +179,12 @@ impl Hash for Map {
     }
 }
 
-impl ProgramComponent for Map {
-    fn origin(&self) -> &Origin {
-        &self.origin
+impl ComponentBehavior for Map {
+    fn kind(&self) -> ProgramComponentKind {
+        ProgramComponentKind::Map
     }
 
-    fn set_origin(mut self, origin: Origin) -> Self
-    where
-        Self: Sized,
-    {
-        self.origin = origin;
-        self
-    }
-
-    fn validate(&self, builder: &mut ValidationErrorBuilder) -> Option<()>
-    where
-        Self: Sized,
-    {
+    fn validate(&self, builder: &mut ValidationErrorBuilder) -> Option<()> {
         for (key, value) in self.key_value() {
             key.validate(builder)?;
             value.validate(builder)?;
@@ -191,8 +193,44 @@ impl ProgramComponent for Map {
         Some(())
     }
 
-    fn kind(&self) -> ProgramComponentKind {
-        ProgramComponentKind::Map
+    fn boxed_clone(&self) -> Box<dyn ProgramComponent> {
+        Box::new(self.clone())
+    }
+}
+
+impl ComponentIdentity for Map {
+    fn id(&self) -> ProgramComponentId {
+        self.id
+    }
+
+    fn set_id(&mut self, id: ProgramComponentId) {
+        self.id = id;
+    }
+
+    fn origin(&self) -> &Origin {
+        &self.origin
+    }
+
+    fn set_origin(&mut self, origin: Origin) {
+        self.origin = origin
+    }
+}
+
+impl IterableComponent for Map {
+    fn children<'a>(&'a self) -> Box<dyn Iterator<Item = &'a dyn ProgramComponent> + 'a> {
+        let key_value_iterator =
+            component_iterator(self.key_value().flat_map(|(a, b)| [a, b].into_iter()));
+
+        Box::new(key_value_iterator)
+    }
+
+    fn children_mut<'a>(
+        &'a mut self,
+    ) -> Box<dyn Iterator<Item = &'a mut dyn ProgramComponent> + 'a> {
+        let key_value_iterator =
+            component_iterator_mut(self.map.iter_mut().flat_map(|(a, b)| [a, b].into_iter()));
+
+        Box::new(key_value_iterator)
     }
 }
 

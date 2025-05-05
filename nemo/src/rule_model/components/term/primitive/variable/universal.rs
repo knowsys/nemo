@@ -3,9 +3,13 @@
 use std::{fmt::Display, hash::Hash};
 
 use crate::rule_model::{
-    components::{ProgramComponent, ProgramComponentKind},
-    error::{validation_error::ValidationErrorKind, ValidationErrorBuilder},
+    components::{
+        ComponentBehavior, ComponentIdentity, IterableComponent, ProgramComponent,
+        ProgramComponentKind,
+    },
+    error::ValidationErrorBuilder,
     origin::Origin,
+    pipeline::id::ProgramComponentId,
 };
 
 use super::VariableName;
@@ -16,10 +20,12 @@ use super::VariableName;
 ///
 /// Universal variables may not have a name,
 /// in which case we call them anonymous.
-#[derive(Debug, Clone, Eq)]
+#[derive(Debug, Clone)]
 pub struct UniversalVariable {
     /// Origin of this component
     origin: Origin,
+    /// Id of this component
+    id: ProgramComponentId,
 
     /// Name of the variable
     ///
@@ -31,7 +37,8 @@ impl UniversalVariable {
     /// Create a new named [UniversalVariable]
     pub fn new(name: &str) -> Self {
         Self {
-            origin: Origin::Created,
+            origin: Origin::default(),
+            id: ProgramComponentId::default(),
             name: Some(VariableName::new(name.to_string())),
         }
     }
@@ -39,7 +46,8 @@ impl UniversalVariable {
     /// Create a new anonymous [UniversalVariable]
     pub fn new_anonymous() -> Self {
         Self {
-            origin: Origin::Created,
+            origin: Origin::default(),
+            id: ProgramComponentId::default(),
             name: None,
         }
     }
@@ -77,6 +85,8 @@ impl PartialEq for UniversalVariable {
     }
 }
 
+impl Eq for UniversalVariable {}
+
 impl PartialOrd for UniversalVariable {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         self.name.partial_cmp(&other.name)
@@ -89,36 +99,45 @@ impl Hash for UniversalVariable {
     }
 }
 
-impl ProgramComponent for UniversalVariable {
-    fn origin(&self) -> &Origin {
-        &self.origin
+impl ComponentBehavior for UniversalVariable {
+    fn kind(&self) -> ProgramComponentKind {
+        ProgramComponentKind::Variable
     }
 
-    fn set_origin(mut self, origin: Origin) -> Self
-    where
-        Self: Sized,
-    {
-        self.origin = origin;
-        self
-    }
-
-    fn validate(&self, builder: &mut ValidationErrorBuilder) -> Option<()>
-    where
-        Self: Sized,
-    {
-        if let Some(name) = &self.name {
-            if !name.is_valid() {
-                builder.report_error(
-                    self.origin,
-                    ValidationErrorKind::InvalidVariableName(name.0.clone()),
-                );
-            }
-        }
+    fn validate(&self, _builder: &mut ValidationErrorBuilder) -> Option<()> {
+        // if let Some(name) = &self.name {
+        //     if !name.is_valid() {
+        //         builder.report_error(
+        //             self.origin,
+        //             ValidationErrorKind::InvalidVariableName(name.0.clone()),
+        //         );
+        //     }
+        // }
 
         Some(())
     }
 
-    fn kind(&self) -> ProgramComponentKind {
-        ProgramComponentKind::Variable
+    fn boxed_clone(&self) -> Box<dyn ProgramComponent> {
+        Box::new(self.clone())
     }
 }
+
+impl ComponentIdentity for UniversalVariable {
+    fn id(&self) -> ProgramComponentId {
+        self.id
+    }
+
+    fn set_id(&mut self, id: ProgramComponentId) {
+        self.id = id;
+    }
+
+    fn origin(&self) -> &Origin {
+        &self.origin
+    }
+
+    fn set_origin(&mut self, origin: Origin) {
+        self.origin = origin
+    }
+}
+
+impl IterableComponent for UniversalVariable {}

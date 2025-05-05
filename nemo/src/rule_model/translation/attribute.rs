@@ -14,7 +14,7 @@ use crate::{
     rule_model::{
         components::{
             term::{value_type::ValueType, Term},
-            ProgramComponent, ProgramComponentKind,
+            ComponentBehavior, ProgramComponentKind,
         },
         error::{
             hint::Hint, info::Info, translation_error::TranslationErrorKind, ComplexErrorLabelKind,

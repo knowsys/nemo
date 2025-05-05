@@ -11,7 +11,7 @@ use nemo::{
     io::{resource_providers::ResourceProviders, ExportManager, ImportManager},
     meta::timing::TimedCode,
     rule_model::{
-        components::{fact::Fact, tag::Tag, term::primitive::Primitive, ProgramComponent},
+        components::{fact::Fact, tag::Tag, term::primitive::Primitive, ComponentBehavior},
         error::ValidationErrorBuilder,
         substitution::Substitution,
     },

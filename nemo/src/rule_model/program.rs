@@ -1,7 +1,7 @@
 //! This module defines [Program].
 
 use std::{
-    collections::{hash_map::Entry, HashMap, HashSet},
+    collections::{HashMap, HashSet},
     fmt::Write,
 };
 
@@ -9,18 +9,18 @@ use crate::{io::format_builder::ImportExportBuilder, rule_model::components::tag
 
 use super::{
     components::{
+        component_iterator, component_iterator_mut,
         fact::Fact,
         import_export::{ExportDirective, ImportDirective},
         literal::Literal,
         output::Output,
         rule::Rule,
-        ProgramComponent,
+        ComponentBehavior, ComponentIdentity, IterableComponent, ProgramComponent,
+        ProgramComponentKind,
     },
-    error::{
-        info::Info, validation_error::ValidationErrorKind, ComplexErrorLabelKind,
-        ValidationErrorBuilder,
-    },
+    error::ValidationErrorBuilder,
     origin::Origin,
+    pipeline::id::ProgramComponentId,
 };
 
 /// Representation of a nemo program
@@ -28,6 +28,8 @@ use super::{
 pub struct Program {
     /// Origin of this component
     origin: Origin,
+    /// Id of this component
+    id: ProgramComponentId,
 
     /// Imported resources
     imports: Vec<ImportDirective>,
@@ -195,136 +197,233 @@ impl Program {
     /// Check if a different arity was already used for the given predicate
     /// and report an error if this was the case.
     fn validate_arity(
-        predicate_arity: &mut HashMap<Tag, (usize, Origin)>,
-        tag: Tag,
-        arity: usize,
-        origin: Origin,
-        builder: &mut ValidationErrorBuilder,
+        _predicate_arity: &mut HashMap<Tag, (usize, Origin)>,
+        _tag: Tag,
+        _arity: usize,
+        _origin: Origin,
+        _builder: &mut ValidationErrorBuilder,
     ) {
-        let predicate_string = tag.to_string();
+        // let predicate_string = tag.to_string();
 
-        match predicate_arity.entry(tag) {
-            Entry::Occupied(entry) => {
-                let (previous_arity, previous_origin) = entry.get();
+        // match predicate_arity.entry(tag) {
+        //     Entry::Occupied(entry) => {
+        //         let (previous_arity, previous_origin) = entry.get();
 
-                if arity != *previous_arity {
-                    builder
-                        .report_error(
-                            origin,
-                            ValidationErrorKind::InconsistentArities {
-                                predicate: predicate_string,
-                                arity,
-                            },
-                        )
-                        .add_label(
-                            ComplexErrorLabelKind::Information,
-                            *previous_origin,
-                            Info::PredicateArity {
-                                arity: *previous_arity,
-                            },
-                        );
-                }
-            }
-            Entry::Vacant(entry) => {
-                entry.insert((arity, origin));
-            }
-        }
+        //         if arity != *previous_arity {
+        //             builder
+        //                 .report_error(
+        //                     origin,
+        //                     ValidationErrorKind::InconsistentArities {
+        //                         predicate: predicate_string,
+        //                         arity,
+        //                     },
+        //                 )
+        //                 .add_label(
+        //                     ComplexErrorLabelKind::Information,
+        //                     *previous_origin,
+        //                     Info::PredicateArity {
+        //                         arity: *previous_arity,
+        //                     },
+        //                 );
+        //         }
+        //     }
+        //     Entry::Vacant(entry) => {
+        //         entry.insert((arity, origin));
+        //     }
+        // }
     }
 
     /// Validate the global program properties without validating
     /// each program element.
     pub(crate) fn validate_global_properties(
         &self,
-        builder: &mut ValidationErrorBuilder,
+        _builder: &mut ValidationErrorBuilder,
     ) -> Option<HashMap<Tag, (usize, Origin)>> {
-        let mut predicate_arity = HashMap::<Tag, (usize, Origin)>::new();
+        // let mut predicate_arity = HashMap::<Tag, (usize, Origin)>::new();
 
-        for (import_directive, import_builder) in self.imports() {
-            let predicate = import_directive.predicate().clone();
-            let origin = *import_directive.origin();
+        // for (import_directive, import_builder) in self.imports() {
+        //     let predicate = import_directive.predicate().clone();
+        //     let origin = *import_directive.origin();
 
-            if let Some(arity) = import_builder.expected_arity() {
-                Self::validate_arity(&mut predicate_arity, predicate, arity, origin, builder);
-            }
-        }
+        //     if let Some(arity) = import_builder.expected_arity() {
+        //         Self::validate_arity(&mut predicate_arity, predicate, arity, origin, builder);
+        //     }
+        // }
 
-        for fact in self.facts() {
-            let predicate = fact.predicate().clone();
-            let arity = fact.subterms().count();
-            let origin = *fact.origin();
+        // for fact in self.facts() {
+        //     let predicate = fact.predicate().clone();
+        //     let arity = fact.subterms().count();
+        //     let origin = *fact.origin();
 
-            Self::validate_arity(&mut predicate_arity, predicate, arity, origin, builder);
-        }
+        //     Self::validate_arity(&mut predicate_arity, predicate, arity, origin, builder);
+        // }
 
-        for rule in self.rules() {
-            for atom in rule.head() {
-                let predicate = atom.predicate().clone();
-                let arity = atom.arguments().count();
-                let origin = *atom.origin();
+        // for rule in self.rules() {
+        //     for atom in rule.head() {
+        //         let predicate = atom.predicate().clone();
+        //         let arity = atom.arguments().count();
+        //         let origin = *atom.origin();
 
-                Self::validate_arity(&mut predicate_arity, predicate, arity, origin, builder);
-            }
+        //         Self::validate_arity(&mut predicate_arity, predicate, arity, origin, builder);
+        //     }
 
-            for literal in rule.body() {
-                match literal {
-                    Literal::Positive(atom) | Literal::Negative(atom) => {
-                        let predicate = atom.predicate().clone();
-                        let arity = atom.arguments().count();
-                        let origin = *atom.origin();
+        //     for literal in rule.body() {
+        //         match literal {
+        //             Literal::Positive(atom) | Literal::Negative(atom) => {
+        //                 let predicate = atom.predicate().clone();
+        //                 let arity = atom.arguments().count();
+        //                 let origin = *atom.origin();
 
-                        Self::validate_arity(
-                            &mut predicate_arity,
-                            predicate,
-                            arity,
-                            origin,
-                            builder,
-                        );
-                    }
-                    Literal::Operation(_) => {
-                        continue;
-                    }
-                }
-            }
-        }
+        //                 Self::validate_arity(
+        //                     &mut predicate_arity,
+        //                     predicate,
+        //                     arity,
+        //                     origin,
+        //                     builder,
+        //                 );
+        //             }
+        //             Literal::Operation(_) => {
+        //                 continue;
+        //             }
+        //         }
+        //     }
+        // }
 
-        for (export_directive, export_builder) in self.exports() {
-            let predicate = export_directive.predicate().clone();
-            let origin = *export_directive.origin();
+        // for (export_directive, export_builder) in self.exports() {
+        //     let predicate = export_directive.predicate().clone();
+        //     let origin = *export_directive.origin();
 
-            if let Some(arity) = export_builder.expected_arity() {
-                Self::validate_arity(&mut predicate_arity, predicate, arity, origin, builder);
-            }
-        }
+        //     if let Some(arity) = export_builder.expected_arity() {
+        //         Self::validate_arity(&mut predicate_arity, predicate, arity, origin, builder);
+        //     }
+        // }
 
-        for import in &self.imports {
-            if !predicate_arity.contains_key(import.predicate()) {
-                builder.report_error(
-                    *import.predicate().origin(),
-                    ValidationErrorKind::UnknownArity {
-                        predicate: import.predicate().to_string(),
-                    },
-                );
-                return None;
-            }
-        }
+        // for import in &self.imports {
+        //     if !predicate_arity.contains_key(import.predicate()) {
+        //         builder.report_error(
+        //             *import.predicate().origin(),
+        //             ValidationErrorKind::UnknownArity {
+        //                 predicate: import.predicate().to_string(),
+        //             },
+        //         );
+        //         return None;
+        //     }
+        // }
 
-        for export in &self.exports {
-            if !predicate_arity.contains_key(export.predicate()) {
-                builder.report_error(
-                    *export.predicate().origin(),
-                    ValidationErrorKind::UnknownArity {
-                        predicate: export.predicate().to_string(),
-                    },
-                );
-                return None;
-            }
-        }
+        // for export in &self.exports {
+        //     if !predicate_arity.contains_key(export.predicate()) {
+        //         builder.report_error(
+        //             *export.predicate().origin(),
+        //             ValidationErrorKind::UnknownArity {
+        //                 predicate: export.predicate().to_string(),
+        //             },
+        //         );
+        //         return None;
+        //     }
+        // }
 
-        Some(predicate_arity)
+        // Some(predicate_arity)
+        todo!()
     }
 }
 
-impl Program {}
+impl ComponentBehavior for Program {
+    fn kind(&self) -> ProgramComponentKind {
+        ProgramComponentKind::Boolean // TODO
+    }
+
+    fn validate(&self, error_builder: &mut ValidationErrorBuilder) -> Option<()> {
+        debug_assert!(self.import_builders.is_empty());
+
+        for _import in &self.imports {
+            // TODO
+
+            // let builder = import.validate(error_builder)?;
+            // self.import_builders.push(builder);
+        }
+
+        for fact in self.facts() {
+            let _ = fact.validate(error_builder);
+        }
+
+        for rule in self.rules() {
+            let _ = rule.validate(error_builder);
+        }
+
+        for output in self.outputs() {
+            let _ = output.validate(error_builder);
+        }
+
+        for _export in &self.exports {
+            // TODO
+
+            // let builder = export.validate(error_builder)?;
+            // self.export_builders.push(builder);
+        }
+
+        // self.arities = self.validate_global_properties(error_builder)?;
+
+        Some(())
+    }
+
+    fn boxed_clone(&self) -> Box<dyn ProgramComponent> {
+        Box::new(self.clone())
+    }
+}
+
+impl ComponentIdentity for Program {
+    fn id(&self) -> ProgramComponentId {
+        self.id
+    }
+
+    fn set_id(&mut self, id: ProgramComponentId) {
+        self.id = id;
+    }
+
+    fn origin(&self) -> &Origin {
+        &self.origin
+    }
+
+    fn set_origin(&mut self, origin: Origin) {
+        self.origin = origin
+    }
+}
+
+impl IterableComponent for Program {
+    fn children<'a>(&'a self) -> Box<dyn Iterator<Item = &'a dyn ProgramComponent> + 'a> {
+        let rule_iterator = component_iterator(self.rules.iter());
+        let fact_iterator = component_iterator(self.facts.iter());
+        let output_iterator = component_iterator(self.outputs.iter());
+        let import_iterator = component_iterator(self.imports.iter());
+        let export_iterator = component_iterator(self.exports.iter());
+
+        Box::new(
+            rule_iterator
+                .chain(fact_iterator)
+                .chain(output_iterator)
+                .chain(import_iterator)
+                .chain(export_iterator),
+        )
+    }
+
+    fn children_mut<'a>(
+        &'a mut self,
+    ) -> Box<dyn Iterator<Item = &'a mut dyn ProgramComponent> + 'a> {
+        let rule_iterator = component_iterator_mut(self.rules.iter_mut());
+        let fact_iterator = component_iterator_mut(self.facts.iter_mut());
+        let output_iterator = component_iterator_mut(self.outputs.iter_mut());
+        let import_iterator = component_iterator_mut(self.imports.iter_mut());
+        let export_iterator = component_iterator_mut(self.exports.iter_mut());
+
+        Box::new(
+            rule_iterator
+                .chain(fact_iterator)
+                .chain(output_iterator)
+                .chain(import_iterator)
+                .chain(export_iterator),
+        )
+    }
+}
 
 impl std::fmt::Display for Program {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -350,41 +449,6 @@ impl std::fmt::Display for Program {
         }
 
         Ok(())
-    }
-}
-
-impl Program {
-    fn validate(&mut self, error_builder: &mut ValidationErrorBuilder) -> Option<()>
-    where
-        Self: Sized,
-    {
-        debug_assert!(self.import_builders.is_empty());
-
-        for import in &self.imports {
-            let builder = import.validate(error_builder)?;
-            self.import_builders.push(builder);
-        }
-
-        for fact in self.facts() {
-            let _ = fact.validate(error_builder);
-        }
-
-        for rule in self.rules() {
-            let _ = rule.validate(error_builder);
-        }
-
-        for output in self.outputs() {
-            let _ = output.validate(error_builder);
-        }
-
-        for export in &self.exports {
-            let builder = export.validate(error_builder)?;
-            self.export_builders.push(builder);
-        }
-
-        self.arities = self.validate_global_properties(error_builder)?;
-
-        Some(())
     }
 }
 

@@ -76,6 +76,10 @@ impl ComponentBehavior for Rule {
     fn validate(&self) -> Result<(), super::NewValidationError> {
         todo!()
     }
+
+    fn boxed_clone(&self) -> Box<dyn ProgramComponent> {
+        todo!()
+    }
 }
 
 impl ComponentIdentity for Rule {

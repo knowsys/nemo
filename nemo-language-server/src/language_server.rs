@@ -131,38 +131,38 @@ impl Backend {
             };
         }
 
-        if let Some(Err(program_error_report)) = translation_result {
-            for error in program_error_report.errors() {
-                let range_opt = error.character_range(|origin| {
-                    program_error_report
-                        .origin_map()
-                        .get(origin)
-                        .map(|node| node.span().range())
-                });
-                let Some(range) = range_opt else {
-                    continue;
-                };
+        // if let Some(Err(program_error_report)) = translation_result {
+        //     for error in program_error_report.errors() {
+        //         let range_opt = error.character_range(|origin| {
+        //             program_error_report
+        //                 .origin_map()
+        //                 .get(origin)
+        //                 .map(|node| node.span().range())
+        //         });
+        //         let Some(range) = range_opt else {
+        //             continue;
+        //         };
 
-                let message = format!(
-                    "{}{}{}",
-                    error.message(),
-                    error
-                        .note()
-                        .map(|n| format!("\nNote: {n}"))
-                        .unwrap_or("".to_string()),
-                    error.hints().iter().fold(String::new(), |mut acc, h| {
-                        let _ = write!(acc, "\nHint: {h}");
-                        acc
-                    })
-                );
+        //         let message = format!(
+        //             "{}{}{}",
+        //             error.message(),
+        //             error
+        //                 .note()
+        //                 .map(|n| format!("\nNote: {n}"))
+        //                 .unwrap_or("".to_string()),
+        //             error.hints().iter().fold(String::new(), |mut acc, h| {
+        //                 let _ = write!(acc, "\nHint: {h}");
+        //                 acc
+        //             })
+        //         );
 
-                if let Some(set) = errors_by_posision.get_mut(&range) {
-                    set.insert(message);
-                } else {
-                    errors_by_posision.insert(range, std::iter::once(message).collect());
-                };
-            }
-        }
+        //         if let Some(set) = errors_by_posision.get_mut(&range) {
+        //             set.insert(message);
+        //         } else {
+        //             errors_by_posision.insert(range, std::iter::once(message).collect());
+        //         };
+        //     }
+        // }
 
         let diagnostics = errors_by_posision
             .into_iter()

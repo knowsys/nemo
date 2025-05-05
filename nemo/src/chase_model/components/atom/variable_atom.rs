@@ -12,7 +12,7 @@ use crate::{
                 primitive::{variable::Variable, Primitive},
                 Term,
             },
-            IterableVariables, ProgramComponent,
+            ComponentIdentity, IterableVariables,
         },
         origin::Origin,
     },
@@ -115,7 +115,7 @@ impl TryFrom<Atom> for VariableAtom {
     type Error = VariableAtomConversionError;
 
     fn try_from(value: Atom) -> Result<Self, Self::Error> {
-        let origin = *value.origin();
+        let origin = value.origin().clone();
         let predicate = value.predicate();
         let mut terms = Vec::new();
 

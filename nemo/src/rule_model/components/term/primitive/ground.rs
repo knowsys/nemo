@@ -7,10 +7,12 @@ use nemo_physical::datavalues::{AnyDataValue, DataValue, IriDataValue, ValueDoma
 use crate::rule_model::{
     components::{
         term::{value_type::ValueType, Term},
-        ProgramComponent, ProgramComponentKind,
+        ComponentBehavior, ComponentIdentity, IterableComponent, ProgramComponent,
+        ProgramComponentKind,
     },
     error::{ComponentParseError, ValidationErrorBuilder},
     origin::Origin,
+    pipeline::id::ProgramComponentId,
     translation::TranslationComponent,
 };
 
@@ -18,10 +20,13 @@ use crate::rule_model::{
 ///
 /// Represents a basic, indivisible constant value like integers, or strings.
 /// Such terms are the atomic values used in the construction of more complex expressions.
-#[derive(Debug, Clone, Eq)]
+#[derive(Debug, Clone)]
 pub struct GroundTerm {
     /// Origin of this component
     origin: Origin,
+    /// Id of this component
+    id: ProgramComponentId,
+
     /// Value of this term
     value: AnyDataValue,
 }
@@ -30,7 +35,8 @@ impl GroundTerm {
     /// Create a new [GroundTerm].
     pub fn new(value: AnyDataValue) -> Self {
         Self {
-            origin: Origin::Created,
+            origin: Origin::default(),
+            id: ProgramComponentId::default(),
             value,
         }
     }
@@ -100,6 +106,8 @@ impl PartialEq for GroundTerm {
     }
 }
 
+impl Eq for GroundTerm {}
+
 impl PartialOrd for GroundTerm {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         self.value.partial_cmp(&other.value)
@@ -112,26 +120,7 @@ impl Hash for GroundTerm {
     }
 }
 
-impl ProgramComponent for GroundTerm {
-    fn origin(&self) -> &Origin {
-        &self.origin
-    }
-
-    fn set_origin(mut self, origin: Origin) -> Self
-    where
-        Self: Sized,
-    {
-        self.origin = origin;
-        self
-    }
-
-    fn validate(&self, _builder: &mut ValidationErrorBuilder) -> Option<()>
-    where
-        Self: Sized,
-    {
-        Some(())
-    }
-
+impl ComponentBehavior for GroundTerm {
     fn kind(&self) -> ProgramComponentKind {
         match self.value.value_domain() {
             ValueDomain::PlainString => ProgramComponentKind::PlainString,
@@ -152,7 +141,35 @@ impl ProgramComponent for GroundTerm {
             ValueDomain::Other => ProgramComponentKind::Other,
         }
     }
+
+    fn validate(&self, _builder: &mut ValidationErrorBuilder) -> Option<()> {
+        Some(())
+    }
+
+    fn boxed_clone(&self) -> Box<dyn ProgramComponent> {
+        Box::new(self.clone())
+    }
 }
+
+impl ComponentIdentity for GroundTerm {
+    fn id(&self) -> ProgramComponentId {
+        self.id
+    }
+
+    fn set_id(&mut self, id: ProgramComponentId) {
+        self.id = id;
+    }
+
+    fn origin(&self) -> &Origin {
+        &self.origin
+    }
+
+    fn set_origin(&mut self, origin: Origin) {
+        self.origin = origin
+    }
+}
+
+impl IterableComponent for GroundTerm {}
 
 impl GroundTerm {
     pub fn parse(input: &str) -> Result<Self, ComponentParseError>

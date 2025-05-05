@@ -45,6 +45,8 @@ pub trait ComponentBehavior {
 
     /// Validate this component.
     fn validate(&self) -> Result<(), NewValidationError>;
+
+    fn boxed_clone(&self) -> Box<dyn ProgramComponent>;
 }
 
 /// Trait that collects methods for identifying and tracking the origins of  
@@ -77,7 +79,7 @@ pub trait IterableComponent {
 
 /// Trait that defines a helper method that is useful
 /// when combining [Origin]s
-pub(crate) trait EffectiveOrigin: ComponentIdentity {
+pub(crate) trait EffectiveOrigin: ComponentIdentity + ComponentBehavior {
     /// If the component is assigned to a [super::pipeline::ProgramPipeline],
     /// the [Origin] will be a reference using its [ProgramComponentId].
     /// Otherwise, returns the [Origin] of the component.
@@ -85,12 +87,12 @@ pub(crate) trait EffectiveOrigin: ComponentIdentity {
         if self.id().is_assigned() {
             Origin::Reference(self.id())
         } else {
-            self.origin().clone()
+            Origin::Component(self.boxed_clone())
         }
     }
 }
 
-impl<Component: ComponentIdentity> EffectiveOrigin for Component {}
+impl<Component: ComponentIdentity + ComponentBehavior> EffectiveOrigin for Component {}
 
 /// Fallible version of [std::convert::AsRef]
 pub trait TryAsRef<T> {
@@ -132,4 +134,36 @@ impl<Component> ProgramComponent for Component where
     Component:
         Debug + Display + ComponentBehavior + ComponentIdentity + ComponentCast + IterableComponent
 {
+}
+
+pub(crate) fn component_iterator<'a, Component, Iter>(
+    iterator: Iter,
+) -> impl Iterator<Item = &'a dyn ProgramComponent>
+where
+    Component: ProgramComponent + 'a,
+    Iter: Iterator<Item = &'a Component>,
+{
+    iterator.map(|element| {
+        let element: &dyn ProgramComponent = element;
+        element
+    })
+}
+
+pub(crate) fn component_iterator_mut<'a, Component, Iter>(
+    iterator: Iter,
+) -> impl Iterator<Item = &'a mut dyn ProgramComponent>
+where
+    Component: ProgramComponent + 'a,
+    Iter: Iterator<Item = &'a mut Component>,
+{
+    iterator.map(|element| {
+        let element: &mut dyn ProgramComponent = element;
+        element
+    })
+}
+
+impl Clone for Box<dyn ProgramComponent> {
+    fn clone(&self) -> Self {
+        self.boxed_clone()
+    }
 }

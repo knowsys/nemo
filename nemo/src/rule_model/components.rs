@@ -15,10 +15,29 @@ pub mod term;
 
 use std::fmt::{Debug, Display};
 
+use atom::Atom;
 use enum_assoc::Assoc;
-use term::primitive::{variable::Variable, Primitive};
+use import_export::{ExportDirective, ImportDirective};
+use literal::Literal;
+use output::Output;
+use rule::Rule;
+use term::{
+    aggregate::Aggregate,
+    function::FunctionTerm,
+    map::Map,
+    primitive::{
+        ground::GroundTerm,
+        variable::{existential::ExistentialVariable, universal::UniversalVariable, Variable},
+        Primitive,
+    },
+    tuple::Tuple,
+    Term,
+};
 
-use super::{error::ValidationErrorBuilder, origin::Origin};
+use super::{
+    error::ValidationErrorBuilder, origin::Origin, pipeline::id::ProgramComponentId,
+    program::Program, util::TryAsRef,
+};
 
 /// Types of [ProgramComponent]s
 #[derive(Assoc, Debug, Copy, Clone, Eq, PartialEq, Hash)]
@@ -95,24 +114,187 @@ pub enum ProgramComponentKind {
     OneOf(&'static [ProgramComponentKind]),
 }
 
-/// Trait implemented by objects that are part of the logical rule model of the nemo language.
-pub trait ProgramComponent: Debug + Display + Sized {
-    type ValidationResult = ();
-
+/// Trait that collects common methods of all components
+/// of Nemo's logical rule model
+pub trait ComponentBehavior {
     /// Return the [ProgramComponentKind] of this component.
     fn kind(&self) -> ProgramComponentKind;
+
+    /// Validate this component.
+    ///
+    /// TODO: Change the builder to `Result`
+    fn validate(&self, builder: &mut ValidationErrorBuilder) -> Option<()>;
+
+    /// Clone this component into a boxed trait object.
+    fn boxed_clone(&self) -> Box<dyn ProgramComponent>;
+}
+
+/// Trait that collects methods for identifying and tracking the origins of  
+/// components of Nemo's logical rule model
+pub trait ComponentIdentity {
+    /// Return the [ProgramComponentId] associated with this component.
+    fn id(&self) -> ProgramComponentId;
+
+    /// Set the [ProgramComponentId] of this component.
+    fn set_id(&mut self, id: ProgramComponentId);
 
     /// Return the [Origin] of this component.
     fn origin(&self) -> &Origin;
 
     /// Set the [Origin] of this component.
-    fn set_origin(self, origin: Origin) -> Self;
+    fn set_origin(&mut self, origin: Origin);
+}
 
-    /// Validate this component.
-    ///
-    /// Errors will be appended to the given [ValidationErrorBuilder].
-    /// Returns `Some(())` if successful and `None` otherwise.
-    fn validate(&self, builder: &mut ValidationErrorBuilder) -> Option<Self::ValidationResult>;
+/// Trait that allows to iterate over children
+/// of components of Nemo's logical rule model
+pub trait IterableComponent {
+    /// Return an iterator over all [Variable]s contained within this program component.
+    fn children<'a>(&'a self) -> Box<dyn Iterator<Item = &'a dyn ProgramComponent> + 'a> {
+        Box::new(std::iter::empty())
+    }
+
+    /// Return a mutable iterator over all [Variable]s contained within this program component.
+    fn children_mut<'a>(
+        &'a mut self,
+    ) -> Box<dyn Iterator<Item = &'a mut dyn ProgramComponent> + 'a> {
+        Box::new(std::iter::empty())
+    }
+}
+
+/// Trait that defines a helper method that is useful when combining [Origin]s
+pub(crate) trait EffectiveOrigin: ComponentIdentity + ComponentBehavior {
+    /// If the component is assigned to a [super::pipeline::ProgramPipeline],
+    /// the [Origin] will be a reference using its [ProgramComponentId].
+    /// Otherwise, returns the [Origin] of the component.
+    fn effective_origin(&self) -> Origin {
+        if self.id().is_assigned() {
+            Origin::Reference(self.id())
+        } else {
+            Origin::Component(self.boxed_clone())
+        }
+    }
+}
+
+impl<Component: ComponentIdentity + ComponentBehavior> EffectiveOrigin for Component {}
+
+/// Trait implemented by components of Nemo's logical rule model
+/// that allows conversion between them
+pub trait ComponentCast:
+    TryAsRef<ExistentialVariable>
+    + TryAsRef<UniversalVariable>
+    + TryAsRef<Variable>
+    + TryAsRef<GroundTerm>
+    + TryAsRef<Aggregate>
+    + TryAsRef<Term>
+    + TryAsRef<Tuple>
+    + TryAsRef<Map>
+    + TryAsRef<FunctionTerm>
+    + TryAsRef<Primitive>
+    + TryAsRef<Rule>
+    + TryAsRef<Literal>
+    + TryAsRef<Output>
+    + TryAsRef<ImportDirective>
+    + TryAsRef<ExportDirective>
+    + TryAsRef<Atom>
+    + TryAsRef<Program>
+{
+}
+impl<Component> ComponentCast for Component where
+    Component: TryAsRef<ExistentialVariable>
+        + TryAsRef<UniversalVariable>
+        + TryAsRef<Variable>
+        + TryAsRef<GroundTerm>
+        + TryAsRef<Aggregate>
+        + TryAsRef<Term>
+        + TryAsRef<Tuple>
+        + TryAsRef<Map>
+        + TryAsRef<FunctionTerm>
+        + TryAsRef<Primitive>
+        + TryAsRef<Rule>
+        + TryAsRef<Literal>
+        + TryAsRef<Output>
+        + TryAsRef<ImportDirective>
+        + TryAsRef<ExportDirective>
+        + TryAsRef<Atom>
+        + TryAsRef<Program>
+{
+}
+
+impl<ComponentLeft: ComponentBehavior, ComponentRight: ComponentBehavior> TryAsRef<ComponentLeft>
+    for ComponentRight
+{
+    default fn try_as_ref(&self) -> Option<&ComponentLeft> {
+        None
+    }
+}
+
+impl<Component: ComponentBehavior> TryAsRef<Component> for Component {
+    fn try_as_ref(&self) -> Option<&Component> {
+        Some(self)
+    }
+}
+
+/// Trait implemented by objects that are part
+/// of the logical rule model of the Nemo language.
+pub trait ProgramComponent:
+    Debug
+    + Display
+    + ComponentBehavior
+    + ComponentIdentity
+    + ComponentCast
+    + IterableComponent
+    + Send
+    + Sync
+{
+}
+impl<Component> ProgramComponent for Component where
+    Component: Debug
+        + Display
+        + ComponentBehavior
+        + ComponentIdentity
+        + ComponentCast
+        + IterableComponent
+        + Sync
+        + Send
+{
+}
+
+/// Helper function that converts an iterator over
+/// references to concrete [ProgramComponent]s
+/// into an iterator over trait object references.
+pub(crate) fn component_iterator<'a, Component, Iter>(
+    iterator: Iter,
+) -> impl Iterator<Item = &'a dyn ProgramComponent>
+where
+    Component: ProgramComponent + 'a,
+    Iter: Iterator<Item = &'a Component>,
+{
+    iterator.map(|element| {
+        let element: &dyn ProgramComponent = element;
+        element
+    })
+}
+
+/// Helper function that converts an iterator over
+/// mutable references to concrete [ProgramComponent]s
+/// into an iterator over mutable trait object references.
+pub(crate) fn component_iterator_mut<'a, Component, Iter>(
+    iterator: Iter,
+) -> impl Iterator<Item = &'a mut dyn ProgramComponent>
+where
+    Component: ProgramComponent + 'a,
+    Iter: Iterator<Item = &'a mut Component>,
+{
+    iterator.map(|element| {
+        let element: &mut dyn ProgramComponent = element;
+        element
+    })
+}
+
+impl Clone for Box<dyn ProgramComponent> {
+    fn clone(&self) -> Self {
+        self.boxed_clone()
+    }
 }
 
 /// Trait implemented by program components that allow iterating over [Variable]s

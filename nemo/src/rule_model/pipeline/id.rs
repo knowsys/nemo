@@ -12,11 +12,18 @@ pub struct ProgramComponentId(usize);
 impl ProgramComponentId {
     /// Indicates that the [super::super::components::ProgramComponent]
     /// does not belong to any [super::ProgramPipeline]
-    pub const UNASSIGNED: Self = Self(usize::MAX);
+    const UNASSIGNED: Self = Self(usize::MAX);
 
     /// Create a new [ProgramComponentId].
     pub fn start() -> Self {
         Self(0)
+    }
+
+    /// Create a new [ProgramComponentId]
+    /// that indicates that the [super::super::components::ProgramComponent]
+    /// does not belong to any [super::ProgramPipeline]
+    pub fn unassigned() -> Self {
+        Self::UNASSIGNED
     }
 
     /// Increment the id and return its old value.
@@ -38,7 +45,7 @@ impl ProgramComponentId {
 
 impl Default for ProgramComponentId {
     fn default() -> Self {
-        Self::UNASSIGNED
+        Self::unassigned()
     }
 }
 

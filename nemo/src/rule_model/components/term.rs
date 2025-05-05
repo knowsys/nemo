@@ -17,6 +17,8 @@ pub mod tuple;
 
 use std::fmt::{Debug, Display};
 
+use delegate::delegate;
+
 use aggregate::Aggregate;
 use function::FunctionTerm;
 use map::Map;
@@ -31,15 +33,19 @@ use tuple::Tuple;
 use value_type::ValueType;
 
 use crate::rule_model::{
-    error::ValidationErrorBuilder, origin::Origin, substitution::Substitution,
+    error::ValidationErrorBuilder, origin::Origin, pipeline::id::ProgramComponentId,
+    substitution::Substitution,
 };
 
-use super::{IterablePrimitives, IterableVariables, ProgramComponent};
+use super::{
+    ComponentBehavior, ComponentIdentity, IterableComponent, IterablePrimitives, IterableVariables,
+    ProgramComponent, ProgramComponentKind,
+};
 
 /// Term
 ///
 /// Basic building block for expressions like atoms or facts.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd)]
+#[derive(Debug, Clone, PartialEq, Hash, PartialOrd)]
 pub enum Term {
     /// Unstructured, primitive term
     Primitive(Primitive),
@@ -168,6 +174,63 @@ impl Term {
     }
 }
 
+impl ComponentBehavior for Term {
+    delegate! {
+        to match self {
+            Self::Aggregate(term) => term,
+            Self::FunctionTerm(term) => term,
+            Self::Map(term) => term,
+            Self::Operation(term) => term,
+            Self::Primitive(term) => term,
+            Self::Tuple(term) => term,
+        } {
+            fn kind(&self) -> ProgramComponentKind;
+            fn validate(&self, builder: &mut ValidationErrorBuilder) -> Option<()>;
+            fn boxed_clone(&self) -> Box<dyn ProgramComponent>;
+        }
+    }
+}
+
+impl ComponentIdentity for Term {
+    delegate! {
+        to match self {
+            Self::Aggregate(term) => term,
+            Self::FunctionTerm(term) => term,
+            Self::Map(term) => term,
+            Self::Operation(term) => term,
+            Self::Primitive(term) => term,
+            Self::Tuple(term) => term,
+        } {
+            fn id(&self) -> ProgramComponentId;
+            fn set_id(&mut self, id: ProgramComponentId);
+            fn origin(&self) -> &Origin;
+            fn set_origin(&mut self, origin: Origin);
+        }
+    }
+}
+
+impl IterableComponent for Term {
+    delegate! {
+        to match self {
+            Self::Aggregate(term) => term,
+            Self::FunctionTerm(term) => term,
+            Self::Map(term) => term,
+            Self::Operation(term) => term,
+            Self::Primitive(term) => term,
+            Self::Tuple(term) => term,
+        } {
+            #[allow(late_bound_lifetime_arguments)]
+            fn children<'a>(&'a self) -> Box<dyn Iterator<Item = &'a dyn ProgramComponent> + 'a>;
+            #[allow(late_bound_lifetime_arguments)]
+            fn children_mut<'a>(
+                &'a mut self,
+            ) -> Box<dyn Iterator<Item = &'a mut dyn ProgramComponent> + 'a>;
+        }
+    }
+}
+
+impl ProgramComponent for Term {}
+
 impl From<Variable> for Term {
     fn from(value: Variable) -> Self {
         Self::Primitive(Primitive::from(value))
@@ -271,7 +334,7 @@ impl TryFrom<Term> for GroundTerm {
         match value {
             Term::Primitive(Primitive::Ground(ground)) => Ok(ground),
             Term::Map(map) => {
-                let origin = *map.origin();
+                let origin = map.origin();
                 let label = map
                     .tag()
                     .map(|tag| IriDataValue::new(tag.name().to_string()));
@@ -284,10 +347,11 @@ impl TryFrom<Term> for GroundTerm {
                 }
 
                 let res = AnyDataValue::from(MapDataValue::new(label, buffer));
-                Ok(GroundTerm::new(res).set_origin(origin))
+                // Ok(GroundTerm::new(res).set_origin(origin))
+                todo!()
             }
             Term::Tuple(tuple) => {
-                let origin = *tuple.origin();
+                let origin = tuple.origin();
 
                 let mut buffer = Vec::new();
                 for value in tuple.into_iter() {
@@ -296,10 +360,11 @@ impl TryFrom<Term> for GroundTerm {
                 }
 
                 let res = AnyDataValue::from(TupleDataValue::from_iter(buffer));
-                Ok(GroundTerm::new(res).set_origin(origin))
+                // Ok(GroundTerm::new(res).set_origin(origin))
+                todo!()
             }
             Term::FunctionTerm(function_term) => {
-                let origin = *function_term.origin();
+                let origin = function_term.origin();
                 let label = IriDataValue::new(function_term.tag().name().to_string());
 
                 let mut buffer = Vec::new();
@@ -309,7 +374,8 @@ impl TryFrom<Term> for GroundTerm {
                 }
 
                 let res = AnyDataValue::from(TupleDataValue::new(Some(label), buffer));
-                Ok(GroundTerm::new(res).set_origin(origin))
+                // Ok(GroundTerm::new(res).set_origin(origin))
+                todo!()
             }
             Term::Operation(operation) => {
                 let reduced = operation.reduce();
@@ -335,58 +401,6 @@ impl Display for Term {
             Term::Operation(term) => write!(f, "{}", term),
             Term::Tuple(term) => write!(f, "{}", term),
             Term::Aggregate(term) => write!(f, "{}", term),
-        }
-    }
-}
-
-impl ProgramComponent for Term {
-    fn origin(&self) -> &Origin {
-        match self {
-            Term::Primitive(primitive) => primitive.origin(),
-            Term::FunctionTerm(function) => function.origin(),
-            Term::Map(map) => map.origin(),
-            Term::Operation(operation) => operation.origin(),
-            Term::Tuple(tuple) => tuple.origin(),
-            Term::Aggregate(aggregate) => aggregate.origin(),
-        }
-    }
-
-    fn set_origin(self, origin: Origin) -> Self
-    where
-        Self: Sized,
-    {
-        match self {
-            Term::Primitive(primitive) => Term::Primitive(primitive.set_origin(origin)),
-            Term::FunctionTerm(function) => Term::FunctionTerm(function.set_origin(origin)),
-            Term::Map(map) => Term::Map(map.set_origin(origin)),
-            Term::Operation(operation) => Term::Operation(operation.set_origin(origin)),
-            Term::Tuple(tuple) => Term::Tuple(tuple.set_origin(origin)),
-            Term::Aggregate(aggregate) => Term::Aggregate(aggregate.set_origin(origin)),
-        }
-    }
-
-    fn validate(&self, builder: &mut ValidationErrorBuilder) -> Option<()>
-    where
-        Self: Sized,
-    {
-        match self {
-            Term::Primitive(term) => term.validate(builder),
-            Term::Aggregate(term) => term.validate(builder),
-            Term::FunctionTerm(term) => term.validate(builder),
-            Term::Map(term) => term.validate(builder),
-            Term::Operation(term) => term.validate(builder),
-            Term::Tuple(term) => term.validate(builder),
-        }
-    }
-
-    fn kind(&self) -> super::ProgramComponentKind {
-        match self {
-            Term::Primitive(term) => term.kind(),
-            Term::Aggregate(term) => term.kind(),
-            Term::FunctionTerm(term) => term.kind(),
-            Term::Map(term) => term.kind(),
-            Term::Operation(term) => term.kind(),
-            Term::Tuple(term) => term.kind(),
         }
     }
 }

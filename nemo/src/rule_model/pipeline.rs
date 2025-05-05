@@ -5,7 +5,7 @@ use state::ProgramState;
 
 use crate::{error::Error, parser::Parser, rule_model::translation::ASTProgramTranslation};
 
-use super::components::{atom::Atom, program::Program, rule::Rule, ProgramComponent};
+use super::components::{atom::Atom, rule::Rule, ProgramComponent};
 
 pub mod id;
 pub mod state;
@@ -111,7 +111,7 @@ impl ProgramPipeline {
         id
     }
 
-    /// Add a [Rule] to the current [Program].
+    /// Add a [Rule] to the current program.
     pub fn add_rule(&mut self, mut rule: Rule) -> ProgramComponentId {
         let component: &mut dyn ProgramComponent = &mut rule;
         let id = self.register_component(component);
@@ -122,8 +122,11 @@ impl ProgramPipeline {
     }
 }
 
+#[cfg(test)]
 mod test {
-    use crate::model::components::{atom::Atom, rule::Rule, ComponentIdentity};
+    use crate::rule_model::components::{
+        atom::Atom, literal::Literal, rule::Rule, ComponentIdentity,
+    };
 
     use super::ProgramPipeline;
 
@@ -131,16 +134,16 @@ mod test {
     fn find_atom() {
         let mut pipeline = ProgramPipeline::new();
 
-        let head_atom = Atom::new("head");
-        let body_atom = Atom::new("body");
+        let head_atom = Atom::new("head".into(), vec![]);
+        let body_atom = Atom::new("body".into(), vec![]);
 
-        let rule = Rule::new(vec![head_atom], vec![body_atom]);
+        let rule = Rule::new(vec![head_atom], vec![Literal::Positive(body_atom)]);
         let rule_id = pipeline.add_rule(rule);
         let rule = pipeline.rule_by_id(rule_id).unwrap();
 
-        let head = rule.head_atom(0);
+        let head = &rule.head()[0];
         let head = pipeline.atom_by_id(head.id()).unwrap();
 
-        assert_eq!(head.predicate(), "head");
+        assert_eq!(head.predicate().to_string(), "head".to_owned());
     }
 }

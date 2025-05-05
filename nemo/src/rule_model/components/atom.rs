@@ -3,19 +3,22 @@
 use std::{fmt::Display, hash::Hash};
 
 use crate::rule_model::{
-    error::{validation_error::ValidationErrorKind, ComponentParseError, ValidationErrorBuilder},
+    error::{ComponentParseError, ValidationErrorBuilder},
     origin::Origin,
+    pipeline::id::ProgramComponentId,
     translation::TranslationComponent,
 };
 
 use super::{
+    component_iterator, component_iterator_mut,
     literal::Literal,
     tag::Tag,
     term::{
         primitive::{variable::Variable, Primitive},
         Term,
     },
-    IterablePrimitives, IterableVariables, ProgramComponent, ProgramComponentKind,
+    ComponentBehavior, ComponentIdentity, IterableComponent, IterablePrimitives, IterableVariables,
+    ProgramComponent, ProgramComponentKind,
 };
 
 /// Atom
@@ -23,10 +26,12 @@ use super::{
 /// Tagged list of [Term]s.
 /// It forms the core component of rules,
 /// representing a logical proposition that can be true or false.
-#[derive(Debug, Clone, Eq)]
+#[derive(Debug, Clone)]
 pub struct Atom {
-    /// Origin of this component.
+    /// Origin of this component
     origin: Origin,
+    /// Id of this component
+    id: ProgramComponentId,
 
     /// Predicate name associated with this atom
     predicate: Tag,
@@ -62,6 +67,7 @@ impl Atom {
     pub fn new<Terms: IntoIterator<Item = Term>>(predicate: Tag, subterms: Terms) -> Self {
         Self {
             origin: Origin::Created,
+            id: ProgramComponentId::default(),
             predicate,
             terms: subterms.into_iter().collect(),
         }
@@ -114,11 +120,11 @@ impl Display for Atom {
 
 impl PartialEq for Atom {
     fn eq(&self, other: &Self) -> bool {
-        self.origin == other.origin
-            && self.predicate == other.predicate
-            && self.terms == other.terms
+        self.predicate == other.predicate && self.terms == other.terms
     }
 }
+
+impl Eq for Atom {}
 
 impl Hash for Atom {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
@@ -127,43 +133,64 @@ impl Hash for Atom {
     }
 }
 
-impl ProgramComponent for Atom {
-    fn origin(&self) -> &Origin {
-        &self.origin
+impl ComponentBehavior for Atom {
+    fn kind(&self) -> ProgramComponentKind {
+        ProgramComponentKind::Atom
     }
 
-    fn set_origin(mut self, origin: Origin) -> Self
-    where
-        Self: Sized,
-    {
-        self.origin = origin;
-        self
-    }
+    fn validate(&self, _builder: &mut ValidationErrorBuilder) -> Option<()> {
+        // if !self.predicate.is_valid() {
+        //     builder.report_error(
+        //         *self.predicate.origin(),
+        //         ValidationErrorKind::InvalidTermTag(self.predicate.to_string()),
+        //     );
+        // }
 
-    fn validate(&self, builder: &mut ValidationErrorBuilder) -> Option<()>
-    where
-        Self: Sized,
-    {
-        if !self.predicate.is_valid() {
-            builder.report_error(
-                *self.predicate.origin(),
-                ValidationErrorKind::InvalidTermTag(self.predicate.to_string()),
-            );
-        }
+        // if self.is_empty() {
+        //     builder.report_error(self.origin, ValidationErrorKind::UnsupportedAtomEmpty);
+        // }
 
-        if self.is_empty() {
-            builder.report_error(self.origin, ValidationErrorKind::UnsupportedAtomEmpty);
-        }
-
-        for term in self.arguments() {
-            term.validate(builder)?;
-        }
+        // for term in self.arguments() {
+        //     term.validate(builder)?;
+        // }
 
         Some(())
     }
 
-    fn kind(&self) -> ProgramComponentKind {
-        ProgramComponentKind::Atom
+    fn boxed_clone(&self) -> Box<dyn ProgramComponent> {
+        Box::new(self.clone())
+    }
+}
+
+impl ComponentIdentity for Atom {
+    fn id(&self) -> ProgramComponentId {
+        self.id
+    }
+
+    fn set_id(&mut self, id: ProgramComponentId) {
+        self.id = id;
+    }
+
+    fn origin(&self) -> &Origin {
+        &self.origin
+    }
+
+    fn set_origin(&mut self, origin: Origin) {
+        self.origin = origin;
+    }
+}
+
+impl IterableComponent for Atom {
+    fn children<'a>(&'a self) -> Box<dyn Iterator<Item = &'a dyn ProgramComponent> + 'a> {
+        let subterm_iterator = component_iterator(self.terms.iter());
+        Box::new(subterm_iterator)
+    }
+
+    fn children_mut<'a>(
+        &'a mut self,
+    ) -> Box<dyn Iterator<Item = &'a mut dyn ProgramComponent> + 'a> {
+        let subterm_iterator = component_iterator_mut(self.terms.iter_mut());
+        Box::new(subterm_iterator)
     }
 }
 

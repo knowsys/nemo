@@ -10,9 +10,13 @@ use nemo_physical::datavalues::AnyDataValue;
 use variable::{existential::ExistentialVariable, universal::UniversalVariable, Variable};
 
 use crate::rule_model::{
-    components::{IterableVariables, ProgramComponent, ProgramComponentKind},
+    components::{
+        ComponentBehavior, ComponentIdentity, IterableComponent, IterableVariables,
+        ProgramComponent, ProgramComponentKind,
+    },
     error::{ComponentParseError, ValidationErrorBuilder},
     origin::Origin,
+    pipeline::id::ProgramComponentId,
     translation::TranslationComponent,
 };
 
@@ -123,38 +127,73 @@ impl Display for Primitive {
     }
 }
 
-impl ProgramComponent for Primitive {
-    fn origin(&self) -> &Origin {
-        match self {
-            Self::Variable(variable) => variable.origin(),
-            Self::Ground(ground) => ground.origin(),
-        }
-    }
-
-    fn set_origin(self, origin: Origin) -> Self
-    where
-        Self: Sized,
-    {
-        match self {
-            Self::Variable(variable) => Self::Variable(variable.set_origin(origin)),
-            Self::Ground(ground) => Self::Ground(ground.set_origin(origin)),
-        }
-    }
-
-    fn validate(&self, builder: &mut ValidationErrorBuilder) -> Option<()>
-    where
-        Self: Sized,
-    {
-        match self {
-            Primitive::Variable(variable) => variable.validate(builder),
-            Primitive::Ground(ground) => ground.validate(builder),
-        }
-    }
-
+impl ComponentBehavior for Primitive {
     fn kind(&self) -> ProgramComponentKind {
         match self {
-            Primitive::Variable(primitive) => primitive.kind(),
-            Primitive::Ground(primitive) => primitive.kind(),
+            Primitive::Variable(term) => term.kind(),
+            Primitive::Ground(term) => term.kind(),
+        }
+    }
+
+    fn validate(&self, builder: &mut ValidationErrorBuilder) -> Option<()> {
+        match self {
+            Primitive::Variable(term) => term.validate(builder),
+            Primitive::Ground(term) => term.validate(builder),
+        }
+    }
+
+    fn boxed_clone(&self) -> Box<dyn ProgramComponent> {
+        match self {
+            Primitive::Variable(term) => term.boxed_clone(),
+            Primitive::Ground(term) => term.boxed_clone(),
+        }
+    }
+}
+
+impl ComponentIdentity for Primitive {
+    fn id(&self) -> ProgramComponentId {
+        match self {
+            Primitive::Variable(term) => term.id(),
+            Primitive::Ground(term) => term.id(),
+        }
+    }
+
+    fn set_id(&mut self, id: ProgramComponentId) {
+        match self {
+            Primitive::Variable(term) => term.set_id(id),
+            Primitive::Ground(term) => term.set_id(id),
+        }
+    }
+
+    fn origin(&self) -> &Origin {
+        match self {
+            Primitive::Variable(term) => term.origin(),
+            Primitive::Ground(term) => term.origin(),
+        }
+    }
+
+    fn set_origin(&mut self, origin: Origin) {
+        match self {
+            Primitive::Variable(term) => term.set_origin(origin),
+            Primitive::Ground(term) => term.set_origin(origin),
+        }
+    }
+}
+
+impl IterableComponent for Primitive {
+    fn children<'a>(&'a self) -> Box<dyn Iterator<Item = &'a dyn ProgramComponent> + 'a> {
+        match self {
+            Primitive::Variable(term) => term.children(),
+            Primitive::Ground(term) => term.children(),
+        }
+    }
+
+    fn children_mut<'a>(
+        &'a mut self,
+    ) -> Box<dyn Iterator<Item = &'a mut dyn ProgramComponent> + 'a> {
+        match self {
+            Primitive::Variable(term) => term.children_mut(),
+            Primitive::Ground(term) => term.children_mut(),
         }
     }
 }

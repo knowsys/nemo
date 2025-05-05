@@ -8,7 +8,7 @@ use crate::{
     },
     rule_model::components::{
         import_export::{ExportDirective, ImportDirective},
-        ProgramComponent,
+        ComponentIdentity,
     },
 };
 
@@ -22,7 +22,7 @@ impl ProgramChaseTranslation {
         import_directive: &ImportDirective,
         import_builder: &ImportExportBuilder,
     ) -> ChaseImport {
-        let origin = *import_directive.origin();
+        let origin = import_directive.origin().clone();
         let predicate = import_directive.predicate().clone();
         let arity = *self
             .predicate_arity
@@ -41,7 +41,7 @@ impl ProgramChaseTranslation {
         export_directive: &ExportDirective,
         export_builder: &ImportExportBuilder,
     ) -> ChaseExport {
-        let origin = *export_directive.origin();
+        let origin = export_directive.origin().clone();
         let predicate = export_directive.predicate().clone();
         let arity = *self
             .predicate_arity

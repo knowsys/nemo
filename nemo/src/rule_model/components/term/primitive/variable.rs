@@ -6,7 +6,10 @@ use existential::ExistentialVariable;
 use universal::UniversalVariable;
 
 use crate::rule_model::{
-    components::ProgramComponentKind, error::ValidationErrorBuilder, origin::Origin,
+    components::{ComponentBehavior, ComponentIdentity, IterableComponent, ProgramComponentKind},
+    error::ValidationErrorBuilder,
+    origin::Origin,
+    pipeline::id::ProgramComponentId,
 };
 
 use super::ProgramComponent;
@@ -121,7 +124,38 @@ impl Display for Variable {
     }
 }
 
-impl ProgramComponent for Variable {
+impl ComponentBehavior for Variable {
+    fn kind(&self) -> ProgramComponentKind {
+        ProgramComponentKind::Variable
+    }
+
+    fn validate(&self, builder: &mut ValidationErrorBuilder) -> Option<()> {
+        match self {
+            Variable::Universal(variable) => variable.validate(builder),
+            Variable::Existential(variable) => variable.validate(builder),
+        }
+    }
+
+    fn boxed_clone(&self) -> Box<dyn ProgramComponent> {
+        Box::new(self.clone())
+    }
+}
+
+impl ComponentIdentity for Variable {
+    fn id(&self) -> ProgramComponentId {
+        match self {
+            Variable::Universal(variable) => variable.id(),
+            Variable::Existential(variable) => variable.id(),
+        }
+    }
+
+    fn set_id(&mut self, id: ProgramComponentId) {
+        match self {
+            Variable::Universal(variable) => variable.set_id(id),
+            Variable::Existential(variable) => variable.set_id(id),
+        }
+    }
+
     fn origin(&self) -> &Origin {
         match self {
             Variable::Universal(variable) => variable.origin(),
@@ -129,30 +163,15 @@ impl ProgramComponent for Variable {
         }
     }
 
-    fn set_origin(self, origin: Origin) -> Self
-    where
-        Self: Sized,
-    {
+    fn set_origin(&mut self, origin: Origin) {
         match self {
-            Variable::Universal(variable) => Self::Universal(variable.set_origin(origin)),
-            Variable::Existential(variable) => Self::Existential(variable.set_origin(origin)),
+            Variable::Universal(variable) => variable.set_origin(origin),
+            Variable::Existential(variable) => variable.set_origin(origin),
         }
-    }
-
-    fn validate(&self, builder: &mut ValidationErrorBuilder) -> Option<()>
-    where
-        Self: Sized,
-    {
-        match &self {
-            Variable::Universal(universal) => universal.validate(builder),
-            Variable::Existential(existential) => existential.validate(builder),
-        }
-    }
-
-    fn kind(&self) -> ProgramComponentKind {
-        ProgramComponentKind::Variable
     }
 }
+
+impl IterableComponent for Variable {}
 
 #[cfg(test)]
 mod test {

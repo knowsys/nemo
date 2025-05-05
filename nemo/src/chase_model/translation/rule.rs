@@ -20,7 +20,7 @@ use crate::{
             },
             Term,
         },
-        IterableVariables, ProgramComponent,
+        ComponentIdentity, IterableVariables,
     },
 };
 
@@ -126,7 +126,7 @@ impl ProgramChaseTranslation {
     /// # Panics
     /// Panics if atom contains a structured term or an aggregate.
     fn build_body_atom(&mut self, atom: &Atom) -> (VariableAtom, Vec<ChaseFilter>) {
-        let origin = *atom.origin();
+        let origin = atom.origin().clone();
         let predicate = atom.predicate().clone();
         let mut variables = Vec::new();
 
@@ -238,7 +238,8 @@ impl ProgramChaseTranslation {
 
             if let Literal::Operation(operation) = literal {
                 let new_operation = Self::build_operation_term(operation);
-                let new_filter = ChaseFilter::new(new_operation).set_origin(*operation.origin());
+                let new_filter =
+                    ChaseFilter::new(new_operation).set_origin(operation.origin().clone());
 
                 result.add_positive_filter(new_filter);
             }
@@ -249,7 +250,7 @@ impl ProgramChaseTranslation {
     /// while taking care of operations and aggregates.
     fn handle_head(&mut self, result: &mut ChaseRule, head: &[Atom]) {
         for (head_index, atom) in head.iter().enumerate() {
-            let origin = *atom.origin();
+            let origin = atom.origin().clone();
             let predicate = atom.predicate().clone();
             let mut terms = Vec::new();
 

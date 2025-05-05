@@ -16,7 +16,7 @@ use crate::{
         components::{
             import_export::{Direction, ImportExportSpec},
             term::value_type::ValueType,
-            ProgramComponent,
+            ComponentIdentity,
         },
         error::{hint::Hint, validation_error::ValidationErrorKind, ValidationErrorBuilder},
     },
@@ -273,7 +273,7 @@ impl<B: FormatBuilder> Parameters<B> {
     ) -> Option<Self> {
         let Ok(format_tag) = B::Tag::from_str(spec.format_tag().name()) else {
             builder.report_error(
-                *spec.format_tag().origin(),
+                spec.format_tag().origin().clone(),
                 ValidationErrorKind::ImportExportFileFormatUnknown(spec.format_tag().name().into()),
             );
             return None;
@@ -289,7 +289,7 @@ impl<B: FormatBuilder> Parameters<B> {
             let Ok(parameter) = B::Parameter::from_str(key.name()) else {
                 builder
                     .report_error(
-                        *key.origin(),
+                        key.origin().clone(),
                         ValidationErrorKind::ImportExportUnrecognizedAttribute {
                             format: format_tag.to_string(),
                             attribute: key.to_string(),
@@ -307,7 +307,7 @@ impl<B: FormatBuilder> Parameters<B> {
             required_parameters.remove(&parameter);
 
             if let Err(kind) = parameter.is_value_valid(value_term.value()) {
-                builder.report_error(*value_term.origin(), kind);
+                builder.report_error(value_term.origin().clone(), kind);
                 return None;
             }
 
@@ -319,7 +319,7 @@ impl<B: FormatBuilder> Parameters<B> {
         } else {
             for param in required_parameters {
                 builder.report_error(
-                    *spec.origin(),
+                    spec.origin().clone(),
                     ValidationErrorKind::ImportExportMissingRequiredAttribute {
                         attribute: param.to_string(),
                         direction: direction.to_string(),
@@ -385,7 +385,7 @@ impl ImportExportBuilder {
         direction: Direction,
         builder: &mut ValidationErrorBuilder,
     ) -> Option<ImportExportBuilder> {
-        let origin = *spec.origin();
+        let origin = spec.origin().clone();
         let parameters = Parameters::<B>::validate(spec, direction, builder)?;
 
         let resource = parameters
@@ -422,7 +422,7 @@ impl ImportExportBuilder {
         let format_tag = spec.format_tag().name();
         let Ok(tag) = format_tag.parse::<SupportedFormatTag>() else {
             error_builder.report_error(
-                *spec.format_tag().origin(),
+                spec.format_tag().origin().clone(),
                 ValidationErrorKind::ImportExportFileFormatUnknown(format_tag.to_string()),
             );
             return None;

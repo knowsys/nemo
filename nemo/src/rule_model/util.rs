@@ -30,3 +30,11 @@ macro_rules! term_list {
         $terms.push($crate::rule_model::components::term::Term::from($e)); term_list!($terms; $($others)*)
     };
 }
+
+/// Fallible version of [std::convert::AsRef]
+pub trait TryAsRef<T> {
+    /// Try to convert `&self` into `&T`.
+    ///
+    /// Returns `None` if unsuccessful.
+    fn try_as_ref(&self) -> Option<&T>;
+}

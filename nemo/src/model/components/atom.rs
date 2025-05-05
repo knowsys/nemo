@@ -28,6 +28,22 @@ impl Display for Atom {
     }
 }
 
+impl Atom {
+    /// Create a new [Atom].
+    pub fn new(predicate: &str) -> Self {
+        Self {
+            origin: Origin::default(),
+            id: ProgramComponentId::default(),
+            predicate: predicate.to_owned(),
+            terms: Vec::default(),
+        }
+    }
+
+    pub fn predicate(&self) -> &str {
+        &self.predicate
+    }
+}
+
 impl ComponentBehavior for Atom {
     fn kind(&self) -> ProgramComponentKind {
         ProgramComponentKind::Atom
@@ -35,6 +51,10 @@ impl ComponentBehavior for Atom {
 
     fn validate(&self) -> Result<(), super::NewValidationError> {
         todo!()
+    }
+
+    fn boxed_clone(&self) -> Box<dyn ProgramComponent> {
+        Box::new(self.clone())
     }
 }
 

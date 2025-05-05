@@ -547,6 +547,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "delegate"
+version = "0.13.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b9b6483c2bbed26f97861cf57651d4f2b731964a28cd2257f934a4b452480d21"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.99",
+]
+
+[[package]]
 name = "derive_arbitrary"
 version = "1.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1501,6 +1512,7 @@ dependencies = [
  "bytecount",
  "colored",
  "csv",
+ "delegate 0.13.3",
  "dyn-clone",
  "enum-assoc",
  "env_logger 0.11.6",
@@ -1577,7 +1589,7 @@ dependencies = [
  "ascii_tree",
  "bitvec",
  "cpu-time",
- "delegate",
+ "delegate 0.12.0",
  "enum_dispatch",
  "env_logger 0.11.6",
  "flate2",

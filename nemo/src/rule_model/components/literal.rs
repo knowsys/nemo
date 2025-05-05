@@ -1,8 +1,10 @@
-//! This module defines [Literal]
+//! This module defines [Literal].
 
 use std::{fmt::Display, hash::Hash};
 
-use crate::rule_model::error::ValidationErrorBuilder;
+use crate::rule_model::{
+    error::ValidationErrorBuilder, origin::Origin, pipeline::id::ProgramComponentId,
+};
 
 use super::{
     atom::Atom,
@@ -11,7 +13,8 @@ use super::{
         primitive::{variable::Variable, Primitive},
         Term,
     },
-    IterablePrimitives, IterableVariables, ProgramComponent, ProgramComponentKind,
+    ComponentBehavior, ComponentIdentity, IterableComponent, IterablePrimitives, IterableVariables,
+    ProgramComponent, ProgramComponentKind,
 };
 
 /// Literal
@@ -19,7 +22,7 @@ use super::{
 /// An [Atom], its negation, or an [Operation].
 /// Literals are used to represent conditions that must be satisfied
 /// for a rule to be applicable.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Hash)]
 pub enum Literal {
     /// Positive atom
     Positive(Atom),
@@ -50,41 +53,117 @@ impl Display for Literal {
     }
 }
 
-impl ProgramComponent for Literal {
-    fn origin(&self) -> &crate::rule_model::origin::Origin {
+impl ComponentBehavior for Literal {
+    fn kind(&self) -> ProgramComponentKind {
+        ProgramComponentKind::Literal
+    }
+
+    fn validate(&self, builder: &mut ValidationErrorBuilder) -> Option<()> {
         match self {
-            Literal::Positive(positive) => positive.origin(),
-            Literal::Negative(negative) => negative.origin(),
+            Literal::Positive(atom) => atom.validate(builder),
+            Literal::Negative(atom) => atom.validate(builder),
+            Literal::Operation(operation) => operation.validate(builder),
+        }
+    }
+
+    fn boxed_clone(&self) -> Box<dyn ProgramComponent> {
+        match self {
+            Literal::Positive(atom) => atom.boxed_clone(),
+            Literal::Negative(atom) => atom.boxed_clone(),
+            Literal::Operation(operation) => operation.boxed_clone(),
+        }
+    }
+}
+
+impl ComponentIdentity for Literal {
+    fn id(&self) -> ProgramComponentId {
+        match self {
+            Literal::Positive(atom) => atom.id(),
+            Literal::Negative(atom) => atom.id(),
+            Literal::Operation(operation) => operation.id(),
+        }
+    }
+
+    fn set_id(&mut self, id: ProgramComponentId) {
+        match self {
+            Literal::Positive(atom) => atom.set_id(id),
+            Literal::Negative(atom) => atom.set_id(id),
+            Literal::Operation(operation) => operation.set_id(id),
+        }
+    }
+
+    fn origin(&self) -> &Origin {
+        match self {
+            Literal::Positive(atom) => atom.origin(),
+            Literal::Negative(atom) => atom.origin(),
             Literal::Operation(operation) => operation.origin(),
         }
     }
 
-    fn set_origin(self, origin: crate::rule_model::origin::Origin) -> Self
-    where
-        Self: Sized,
-    {
+    fn set_origin(&mut self, origin: Origin) {
         match self {
-            Literal::Positive(positive) => Literal::Positive(positive.set_origin(origin)),
-            Literal::Negative(negative) => Literal::Negative(negative.set_origin(origin)),
-            Literal::Operation(operation) => Literal::Operation(operation.set_origin(origin)),
+            Literal::Positive(atom) => atom.set_origin(origin),
+            Literal::Negative(atom) => atom.set_origin(origin),
+            Literal::Operation(operation) => operation.set_origin(origin),
         }
-    }
-
-    fn validate(&self, builder: &mut ValidationErrorBuilder) -> Option<()>
-    where
-        Self: Sized,
-    {
-        match self {
-            Literal::Positive(literal) => literal.validate(builder),
-            Literal::Negative(literal) => literal.validate(builder),
-            Literal::Operation(literal) => literal.validate(builder),
-        }
-    }
-
-    fn kind(&self) -> ProgramComponentKind {
-        ProgramComponentKind::Literal
     }
 }
+
+impl IterableComponent for Literal {
+    fn children<'a>(&'a self) -> Box<dyn Iterator<Item = &'a dyn ProgramComponent> + 'a> {
+        match self {
+            Literal::Positive(atom) => atom.children(),
+            Literal::Negative(atom) => atom.children(),
+            Literal::Operation(operation) => operation.children(),
+        }
+    }
+
+    fn children_mut<'a>(
+        &'a mut self,
+    ) -> Box<dyn Iterator<Item = &'a mut dyn ProgramComponent> + 'a> {
+        match self {
+            Literal::Positive(atom) => atom.children_mut(),
+            Literal::Negative(atom) => atom.children_mut(),
+            Literal::Operation(operation) => operation.children_mut(),
+        }
+    }
+}
+
+// impl ProgramComponent for Literal {
+//     fn origin(&self) -> &crate::rule_model::origin::Origin {
+//         match self {
+//             Literal::Positive(positive) => positive.origin(),
+//             Literal::Negative(negative) => negative.origin(),
+//             Literal::Operation(operation) => operation.origin(),
+//         }
+//     }
+
+//     fn set_origin(self, origin: crate::rule_model::origin::Origin) -> Self
+//     where
+//         Self: Sized,
+//     {
+//         match self {
+//             Literal::Positive(positive) => Literal::Positive(positive.set_origin(origin)),
+//             Literal::Negative(negative) => Literal::Negative(negative.set_origin(origin)),
+//             Literal::Operation(operation) => Literal::Operation(operation.set_origin(origin)),
+//         }
+//     }
+
+//     fn validate(&self, builder: &mut ValidationErrorBuilder) -> Option<()>
+//     where
+//         Self: Sized,
+//     {
+//         match self {
+//             Literal::Positive(literal) => literal.validate(builder),
+//             Literal::Negative(literal) => literal.validate(builder),
+//             Literal::Operation(literal) => literal.validate(builder),
+//         }
+//     }
+
+//     fn kind(&self) -> ProgramComponentKind {
+//         ProgramComponentKind::Literal
+//     }
+// }
 
 impl IterableVariables for Literal {
     fn variables<'a>(&'a self) -> Box<dyn Iterator<Item = &'a Variable> + 'a> {

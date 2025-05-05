@@ -28,42 +28,44 @@ fn import_export_bindings<'a, 'b>(
     translation: &mut ASTProgramTranslation<'a, 'b>,
     guards: impl Iterator<Item = &'b ast::guard::Guard<'a>>,
 ) -> Result<Substitution, TranslationError> {
-    let mut result = Vec::new();
+    // let mut result = Vec::new();
 
-    for guard in guards {
-        let ast::guard::Guard::Infix(infix) = guard else {
-            return Err(TranslationError::new(
-                guard.span(),
-                TranslationErrorKind::NonAssignment {
-                    found: "expression".to_string(),
-                },
-            ));
-        };
+    // for guard in guards {
+    //     let ast::guard::Guard::Infix(infix) = guard else {
+    //         return Err(TranslationError::new(
+    //             guard.span(),
+    //             TranslationErrorKind::NonAssignment {
+    //                 found: "expression".to_string(),
+    //             },
+    //         ));
+    //     };
 
-        let operation = InfixOperation::build_component(translation, infix)?.into_inner();
+    //     let operation = InfixOperation::build_component(translation, infix)?.into_inner();
 
-        let Some((left, right)) = operation.variable_assignment() else {
-            return Err(TranslationError::new(
-                guard.span(),
-                TranslationErrorKind::NonAssignment {
-                    found: operation.operation_kind().to_string(),
-                },
-            ));
-        };
+    //     let Some((left, right)) = operation.variable_assignment() else {
+    //         return Err(TranslationError::new(
+    //             guard.span(),
+    //             TranslationErrorKind::NonAssignment {
+    //                 found: operation.operation_kind().to_string(),
+    //             },
+    //         ));
+    //     };
 
-        let Ok(right) = GroundTerm::try_from(right.clone()) else {
-            return Err(TranslationError::new(
-                infix.pair().1.span(),
-                TranslationErrorKind::NonGroundTerm {
-                    found: right.kind().name().to_string(),
-                },
-            ));
-        };
+    //     let Ok(right) = GroundTerm::try_from(right.clone()) else {
+    //         return Err(TranslationError::new(
+    //             infix.pair().1.span(),
+    //             TranslationErrorKind::NonGroundTerm {
+    //                 found: right.kind().name().to_string(),
+    //             },
+    //         ));
+    //     };
 
-        result.push((left.clone(), Primitive::Ground(right)));
-    }
+    //     result.push((left.clone(), Primitive::Ground(right)));
+    // }
 
-    Ok(Substitution::new(result))
+    // Ok(Substitution::new(result))
+
+    todo!()
 }
 
 fn import_export_spec<'a, 'b>(
@@ -71,107 +73,109 @@ fn import_export_spec<'a, 'b>(
     instructions: &'b ast::expression::complex::map::Map<'a>,
     guards: Option<&'b ast::sequence::Sequence<'a, ast::guard::Guard<'a>>>,
 ) -> Result<ImportExportSpec, TranslationError> {
-    let mut spec = Map::build_component(translation, instructions)?;
+    // let mut spec = Map::build_component(translation, instructions)?;
 
-    let mut substitution = guards
-        .map(|guards| import_export_bindings(translation, guards.iter()))
-        .transpose()?
-        .unwrap_or_default();
+    // let mut substitution = guards
+    //     .map(|guards| import_export_bindings(translation, guards.iter()))
+    //     .transpose()?
+    //     .unwrap_or_default();
 
-    for binding in translation.external_variables() {
-        let (variable, expansion) = binding?;
-        substitution.insert(variable.clone(), expansion.clone());
-    }
+    // for binding in translation.external_variables() {
+    //     let (variable, expansion) = binding?;
+    //     substitution.insert(variable.clone(), expansion.clone());
+    // }
 
-    substitution.apply(&mut spec);
-    spec = spec.reduce();
+    // substitution.apply(&mut spec);
+    // spec = spec.reduce();
 
-    let Some(format_tag) = spec.tag() else {
-        let span = instructions.span().beginning();
-        return Err(TranslationError::new(
-            span,
-            TranslationErrorKind::FileFormatMissing,
-        ));
-    };
+    // let Some(format_tag) = spec.tag() else {
+    //     let span = instructions.span().beginning();
+    //     return Err(TranslationError::new(
+    //         span,
+    //         TranslationErrorKind::FileFormatMissing,
+    //     ));
+    // };
 
-    let mut result = ImportExportSpec::new(*spec.origin(), format_tag);
+    // let mut result = ImportExportSpec::new(*spec.origin(), format_tag);
 
-    for (key, value) in spec.key_value() {
-        let Term::Primitive(Primitive::Ground(key_term)) = key else {
-            let span = translation
-                .origin_map
-                .get(key.origin())
-                .map(|ast| ast.span())
-                .unwrap_or(instructions.span());
+    // for (key, value) in spec.key_value() {
+    //     let Term::Primitive(Primitive::Ground(key_term)) = key else {
+    //         let span = translation
+    //             .origin_map
+    //             .get(key.origin())
+    //             .map(|ast| ast.span())
+    //             .unwrap_or(instructions.span());
 
-            return Err(TranslationError::new(
-                span,
-                TranslationErrorKind::NonGroundTerm {
-                    found: key.to_string(),
-                },
-            ));
-        };
+    //         return Err(TranslationError::new(
+    //             span,
+    //             TranslationErrorKind::NonGroundTerm {
+    //                 found: key.to_string(),
+    //             },
+    //         ));
+    //     };
 
-        let Some(key) = key_term.value().to_iri() else {
-            let span = translation
-                .origin_map
-                .get(key_term.origin())
-                .map(|ast| ast.span())
-                .unwrap_or(instructions.span());
+    //     let Some(key) = key_term.value().to_iri() else {
+    //         let span = translation
+    //             .origin_map
+    //             .get(key_term.origin())
+    //             .map(|ast| ast.span())
+    //             .unwrap_or(instructions.span());
 
-            return Err(TranslationError::new(
-                span,
-                TranslationErrorKind::KeyWrongType {
-                    key: key_term.to_string(),
-                    expected: ValueType::Constant.name().to_string(),
-                    found: key_term.value_type().name().to_string(),
-                },
-            ));
-        };
+    //         return Err(TranslationError::new(
+    //             span,
+    //             TranslationErrorKind::KeyWrongType {
+    //                 key: key_term.to_string(),
+    //                 expected: ValueType::Constant.name().to_string(),
+    //                 found: key_term.value_type().name().to_string(),
+    //             },
+    //         ));
+    //     };
 
-        let Ok(value) = GroundTerm::try_from(value.clone()) else {
-            let span = translation
-                .origin_map
-                .get(value.origin())
-                .map(|ast| ast.span())
-                .unwrap_or(instructions.span());
+    //     let Ok(value) = GroundTerm::try_from(value.clone()) else {
+    //         let span = translation
+    //             .origin_map
+    //             .get(value.origin())
+    //             .map(|ast| ast.span())
+    //             .unwrap_or(instructions.span());
 
-            return Err(TranslationError::new(
-                span,
-                TranslationErrorKind::NonGroundTerm {
-                    found: value.to_string(),
-                },
-            ));
-        };
+    //         return Err(TranslationError::new(
+    //             span,
+    //             TranslationErrorKind::NonGroundTerm {
+    //                 found: value.to_string(),
+    //             },
+    //         ));
+    //     };
 
-        if let Some((prev_origin, _)) =
-            result.push_attribute((key.clone(), *key_term.origin()), value.clone())
-        {
-            let key_span = translation
-                .origin_map
-                .get(key_term.origin())
-                .map(|ast| ast.span())
-                .unwrap_or(instructions.span());
+    // if let Some((prev_origin, _)) =
+    //     result.push_attribute((key.clone(), *key_term.origin()), value.clone())
+    // {
+    //     let key_span = translation
+    //         .origin_map
+    //         .get(key_term.origin())
+    //         .map(|ast| ast.span())
+    //         .unwrap_or(instructions.span());
 
-            let mut error = TranslationError::new(
-                key_span,
-                TranslationErrorKind::MapParameterRedefined { key },
-            );
+    //     let mut error = TranslationError::new(
+    //         key_span,
+    //         TranslationErrorKind::MapParameterRedefined { key },
+    //     );
 
-            if let Some(prev_key) = translation.origin_map.get(&prev_origin) {
-                error = error.add_label(
-                    ComplexErrorLabelKind::Information,
-                    prev_key.span().range(),
-                    "first definition occurred here",
-                );
-            }
+    //     if let Some(prev_key) = translation.origin_map.get(&prev_origin) {
+    //         error = error.add_label(
+    //             ComplexErrorLabelKind::Information,
+    //             prev_key.span().range(),
+    //             "first definition occurred here",
+    //         );
+    //     }
 
-            return Err(error);
-        }
-    }
+    //     return Err(error);
+    // }
+    // }
 
-    log::trace!("Import/Export spec {result}");
-    Ok(result)
+    // log::trace!("Import/Export spec {result}");
+    // Ok(result)
+
+    todo!()
 }
 
 impl TranslationComponent for ImportDirective {

@@ -9,7 +9,7 @@ use crate::{
     },
     rule_model::components::{
         term::{primitive::variable::Variable, Term},
-        ProgramComponent,
+        ComponentIdentity,
     },
 };
 
@@ -39,7 +39,7 @@ impl ProgramChaseTranslation {
     pub(crate) fn build_operation_term(
         operation: &crate::rule_model::components::term::operation::Operation,
     ) -> OperationTerm {
-        let origin = *operation.origin();
+        let origin = operation.origin().clone();
         let kind = operation.operation_kind();
         let subterms = operation.arguments().map(Self::operation_term).collect();
 
@@ -52,7 +52,7 @@ impl ProgramChaseTranslation {
     /// Panics if the operation is not "pure", i.e. if it contains as subterms
     /// terms that are not operations or primitive terms.
     pub(crate) fn build_operation(output_variable: &Variable, term: &Term) -> ChaseOperation {
-        let origin = *term.origin();
+        let origin = term.origin().clone();
         let operation = Self::operation_term(term);
 
         ChaseOperation::new(output_variable.clone(), operation).set_origin(origin)

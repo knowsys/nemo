@@ -1,7 +1,7 @@
 use crate::{
     parser::ast::{self, ProgramAST},
     rule_model::{
-        components::{term::primitive::variable::Variable, ProgramComponent},
+        components::term::primitive::variable::Variable,
         error::{hint::Hint, translation_error::TranslationErrorKind, TranslationError},
         translation::{ASTProgramTranslation, TranslationComponent},
     },
@@ -18,7 +18,7 @@ impl TranslationComponent for Variable {
             ast::expression::basic::variable::VariableType::Universal => {
                 if let Some(variable_name) = variable.name() {
                     Variable::universal(&variable_name)
-                        .set_origin(translation.register_node(variable))
+                    // .set_origin(translation.register_node(variable))
                 } else {
                     return Err(TranslationError::new(
                         variable.span(),
@@ -30,7 +30,7 @@ impl TranslationComponent for Variable {
             ast::expression::basic::variable::VariableType::Existential => {
                 if let Some(variable_name) = variable.name() {
                     Variable::existential(&variable_name)
-                        .set_origin(translation.register_node(variable))
+                    // .set_origin(translation.register_node(variable))
                 } else {
                     return Err(TranslationError::new(
                         variable.span(),
@@ -40,7 +40,7 @@ impl TranslationComponent for Variable {
             }
             ast::expression::basic::variable::VariableType::Anonymous => {
                 if variable.name().is_none() {
-                    Variable::anonymous().set_origin(translation.register_node(variable))
+                    Variable::anonymous() // .set_origin(translation.register_node(variable))
                 } else {
                     return Err(TranslationError::new(
                         variable.span(),

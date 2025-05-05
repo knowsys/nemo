@@ -4,10 +4,13 @@ use std::{fmt::Display, hash::Hash, vec};
 
 use crate::rule_model::{
     components::{
-        tag::Tag, IterablePrimitives, IterableVariables, ProgramComponent, ProgramComponentKind,
+        component_iterator, component_iterator_mut, tag::Tag, ComponentBehavior, ComponentIdentity,
+        IterableComponent, IterablePrimitives, IterableVariables, ProgramComponent,
+        ProgramComponentKind,
     },
-    error::{validation_error::ValidationErrorKind, ValidationErrorBuilder},
+    error::ValidationErrorBuilder,
     origin::Origin,
+    pipeline::id::ProgramComponentId,
 };
 
 use super::{
@@ -19,10 +22,12 @@ use super::{
 /// Function term
 ///
 /// List of [Term]s with a [Tag].
-#[derive(Debug, Clone, Eq)]
+#[derive(Debug, Clone)]
 pub struct FunctionTerm {
     /// Origin of this component
     origin: Origin,
+    /// Id of this component
+    id: ProgramComponentId,
 
     /// Name of the function
     tag: Tag,
@@ -55,7 +60,8 @@ impl FunctionTerm {
     /// Create a new [FunctionTerm].
     pub fn new<Terms: IntoIterator<Item = Term>>(name: &str, subterms: Terms) -> Self {
         Self {
-            origin: Origin::Created,
+            origin: Origin::default(),
+            id: ProgramComponentId::default(),
             tag: Tag::new(name.to_string()),
             terms: subterms.into_iter().collect(),
         }
@@ -64,7 +70,8 @@ impl FunctionTerm {
     /// Create a new [FunctionTerm] with a [Tag].
     pub(crate) fn new_tag<Terms: IntoIterator<Item = Term>>(tag: Tag, subterms: Terms) -> Self {
         Self {
-            origin: Origin::Created,
+            origin: Origin::default(),
+            id: ProgramComponentId::default(),
             tag,
             terms: subterms.into_iter().collect(),
         }
@@ -104,7 +111,8 @@ impl FunctionTerm {
     /// Reduce each sub [Term] in the function returning a copy.
     pub fn reduce(&self) -> Self {
         Self {
-            origin: self.origin,
+            origin: self.origin.clone(),
+            id: ProgramComponentId::default(),
             tag: self.tag.clone(),
             terms: self.terms.iter().map(Term::reduce).collect(),
         }
@@ -142,6 +150,8 @@ impl PartialEq for FunctionTerm {
     }
 }
 
+impl Eq for FunctionTerm {}
+
 impl PartialOrd for FunctionTerm {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         match self.tag.partial_cmp(&other.tag) {
@@ -159,43 +169,64 @@ impl Hash for FunctionTerm {
     }
 }
 
-impl ProgramComponent for FunctionTerm {
-    fn origin(&self) -> &Origin {
-        &self.origin
+impl ComponentBehavior for FunctionTerm {
+    fn kind(&self) -> ProgramComponentKind {
+        ProgramComponentKind::FunctionTerm
     }
 
-    fn set_origin(mut self, origin: Origin) -> Self
-    where
-        Self: Sized,
-    {
-        self.origin = origin;
-        self
-    }
+    fn validate(&self, _builder: &mut ValidationErrorBuilder) -> Option<()> {
+        // if !self.tag.is_valid() {
+        //     builder.report_error(
+        //         *self.tag.origin(),
+        //         ValidationErrorKind::InvalidTermTag(self.tag.to_string()),
+        //     );
+        // }
 
-    fn validate(&self, builder: &mut ValidationErrorBuilder) -> Option<()>
-    where
-        Self: Sized,
-    {
-        if !self.tag.is_valid() {
-            builder.report_error(
-                *self.tag.origin(),
-                ValidationErrorKind::InvalidTermTag(self.tag.to_string()),
-            );
-        }
+        // for term in self.arguments() {
+        //     term.validate(builder)?
+        // }
 
-        for term in self.arguments() {
-            term.validate(builder)?
-        }
-
-        if self.is_empty() {
-            builder.report_error(self.origin, ValidationErrorKind::FunctionTermEmpty);
-        }
+        // if self.is_empty() {
+        //     builder.report_error(self.origin, ValidationErrorKind::FunctionTermEmpty);
+        // }
 
         Some(())
     }
 
-    fn kind(&self) -> ProgramComponentKind {
-        ProgramComponentKind::FunctionTerm
+    fn boxed_clone(&self) -> Box<dyn ProgramComponent> {
+        Box::new(self.clone())
+    }
+}
+
+impl ComponentIdentity for FunctionTerm {
+    fn id(&self) -> ProgramComponentId {
+        self.id
+    }
+
+    fn set_id(&mut self, id: ProgramComponentId) {
+        self.id = id;
+    }
+
+    fn origin(&self) -> &Origin {
+        &self.origin
+    }
+
+    fn set_origin(&mut self, origin: Origin) {
+        self.origin = origin
+    }
+}
+
+impl IterableComponent for FunctionTerm {
+    fn children<'a>(&'a self) -> Box<dyn Iterator<Item = &'a dyn ProgramComponent> + 'a> {
+        let term_iterator = component_iterator(self.terms.iter());
+        Box::new(term_iterator)
+    }
+
+    fn children_mut<'a>(
+        &'a mut self,
+    ) -> Box<dyn Iterator<Item = &'a mut dyn ProgramComponent> + 'a> {
+        let term_iterator = component_iterator_mut(self.terms.iter_mut());
+        Box::new(term_iterator)
     }
 }
 

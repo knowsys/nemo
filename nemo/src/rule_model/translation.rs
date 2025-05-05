@@ -37,7 +37,7 @@ use super::{
             },
             Term,
         },
-        ProgramComponent,
+        ComponentIdentity, ProgramComponent,
     },
     error::{
         translation_error::TranslationErrorKind, ComponentParseError, ProgramError,
@@ -94,10 +94,12 @@ impl<'a, 'b> ASTProgramTranslation<'a, 'b> {
     /// Register a [ProgramAST] so that it can be associated with and later referenced by
     /// the returned [Origin].
     pub fn register_node(&mut self, node: &'b dyn ProgramAST<'a>) -> Origin {
-        let new_origin = Origin::External(self.origin_map.len());
-        self.origin_map.insert(new_origin, node);
+        // let new_origin = Origin::External(self.origin_map.len());
+        // self.origin_map.insert(new_origin, node);
 
-        new_origin
+        // new_origin
+
+        todo!()
     }
 
     /// Register a [ProgramComponent]
@@ -106,7 +108,9 @@ impl<'a, 'b> ASTProgramTranslation<'a, 'b> {
         component: Component,
         node: &'b dyn ProgramAST<'a>,
     ) -> Component {
-        component.set_origin(self.register_node(node))
+        // component.set_origin(self.register_node(node))
+
+        todo!()
     }
 }
 
@@ -149,29 +153,31 @@ impl<'a, 'b> ProgramErrorReport<'a, 'b> {
 
     /// Build a [Report] for each error.
     pub fn build_reports(&self) -> Vec<Report<'_, (String, Range<usize>)>> {
-        self.errors
-            .iter()
-            .map(move |error| {
-                let translation = |origin: &Origin| {
-                    self.origin_map
-                        .get(origin)
-                        .expect("map must contain origin")
-                        .span()
-                        .range()
-                        .range()
-                };
+        // self.errors
+        //     .iter()
+        //     .map(move |error| {
+        //         let translation = |origin: &Origin| {
+        //             self.origin_map
+        //                 .get(origin)
+        //                 .expect("map must contain origin")
+        //                 .span()
+        //                 .range()
+        //                 .range()
+        //         };
 
-                let mut report = Report::build(
-                    ReportKind::Error,
-                    self.label.clone(),
-                    error.range(translation).start,
-                );
+        //         let mut report = Report::build(
+        //             ReportKind::Error,
+        //             self.label.clone(),
+        //             error.range(translation).start,
+        //         );
 
-                report = error.report(report, self.label.clone(), translation);
+        //         report = error.report(report, self.label.clone(), translation);
 
-                report.finish()
-            })
-            .collect()
+        //         report.finish()
+        //     })
+        //     .collect()
+
+        todo!()
     }
 
     /// Return the mapping from origins to AST nodes.
@@ -227,43 +233,45 @@ impl<'a, 'b> ASTProgramTranslation<'a, 'b> {
         &self,
     ) -> impl Iterator<Item = Result<(&UniversalVariable, &GroundTerm), TranslationError>> + use<'a, '_>
     {
-        self.statement_attributes
-            .get(KnownAttributes::External)
-            .iter()
-            .map(|external_term| {
-                let Term::Primitive(Primitive::Variable(variable)) = &external_term[0] else {
-                    unreachable!("checked in process_attributes()")
-                };
+        //     self.statement_attributes
+        //         .get(KnownAttributes::External)
+        //         .iter()
+        //         .map(|external_term| {
+        //             let Term::Primitive(Primitive::Variable(variable)) = &external_term[0] else {
+        //                 unreachable!("checked in process_attributes()")
+        //             };
 
-                let span = self
-                    .origin_map
-                    .get(variable.origin())
-                    .map(|ast| ast.span())
-                    .expect("should be part of the origin map");
+        //             let span = self
+        //                 .origin_map
+        //                 .get(variable.origin())
+        //                 .map(|ast| ast.span())
+        //                 .expect("should be part of the origin map");
 
-                let Variable::Universal(variable) = variable else {
-                    return Err(TranslationError::new(
-                        span,
-                        TranslationErrorKind::ExternalVariableAttribute,
-                    ));
-                };
+        //             let Variable::Universal(variable) = variable else {
+        //                 return Err(TranslationError::new(
+        //                     span,
+        //                     TranslationErrorKind::ExternalVariableAttribute,
+        //                 ));
+        //             };
 
-                let Some(variable_name) = variable.name() else {
-                    return Err(TranslationError::new(
-                        span,
-                        TranslationErrorKind::ExternalVariableAttribute,
-                    ));
-                };
+        //             let Some(variable_name) = variable.name() else {
+        //                 return Err(TranslationError::new(
+        //                     span,
+        //                     TranslationErrorKind::ExternalVariableAttribute,
+        //                 ));
+        //             };
 
-                let Some(expansion) = self.external_parameters.get(&variable_name) else {
-                    return Err(TranslationError::new(
-                        span,
-                        TranslationErrorKind::MissingExternalVariable,
-                    ));
-                };
+        //             let Some(expansion) = self.external_parameters.get(&variable_name) else {
+        //                 return Err(TranslationError::new(
+        //                     span,
+        //                     TranslationErrorKind::MissingExternalVariable,
+        //                 ));
+        //             };
 
-                Ok((variable, expansion))
-            })
+        //             Ok((variable, expansion))
+        //         })
+
+        std::iter::empty()
     }
 
     /// Translate the given [ProgramAST] into a [Program].

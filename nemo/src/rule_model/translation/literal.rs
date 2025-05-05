@@ -69,8 +69,8 @@ impl TranslationComponent for Literal {
                     TranslationErrorKind::BodyNonLiteral(body.context_type().name().to_string()),
                 ))
             }
-        }
-        .set_origin(translation.register_node(body));
+        };
+        // .set_origin(translation.register_node(body));
 
         Ok(result)
     }
