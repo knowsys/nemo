@@ -7,6 +7,7 @@ use crate::{
     rule_model::{
         components::{
             import_export::{ExportDirective, ImportDirective},
+            parameter::ParameterDeclaration,
             tag::Tag,
         },
         error::{
@@ -19,6 +20,7 @@ use crate::{
 use super::{ASTProgramTranslation, TranslationComponent};
 
 pub(crate) mod import_export;
+pub(crate) mod parmater_declaration;
 
 /// Handle directive nodes that do not use names defined elsewhere.
 pub fn handle_define_directive<'a, 'b>(
@@ -30,6 +32,7 @@ pub fn handle_define_directive<'a, 'b>(
         ast::directive::Directive::Prefix(prefix) => handle_prefix(translation, prefix),
         ast::directive::Directive::Declare(declare) => handle_declare(translation, declare),
         ast::directive::Directive::Export(_)
+        | ast::directive::Directive::Parameter(_)
         | ast::directive::Directive::Import(_)
         | ast::directive::Directive::Output(_)
         | ast::directive::Directive::Unknown(_) => Ok(()),
@@ -57,6 +60,14 @@ pub fn handle_use_directive<'a, 'b>(
         ast::directive::Directive::Base(_)
         | ast::directive::Directive::Declare(_)
         | ast::directive::Directive::Prefix(_) => Ok(()),
+        ast::directive::Directive::Parameter(parameter) => {
+            let parameter_declaration =
+                ParameterDeclaration::build_component(translation, parameter)?;
+            translation
+                .program_builder
+                .add_parameter_declaration(parameter_declaration);
+            Ok(())
+        }
     }
 }
 

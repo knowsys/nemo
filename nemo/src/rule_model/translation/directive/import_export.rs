@@ -10,11 +10,11 @@ use crate::{
             tag::Tag,
             term::{
                 map::Map,
-                primitive::{ground::GroundTerm, Primitive},
+                primitive::{variable::Variable, Primitive},
                 value_type::ValueType,
                 Term,
             },
-            ProgramComponent,
+            IterablePrimitives, ProgramComponent,
         },
         error::{translation_error::TranslationErrorKind, ComplexErrorLabelKind, TranslationError},
         substitution::Substitution,
@@ -51,16 +51,7 @@ fn import_export_bindings<'a, 'b>(
             ));
         };
 
-        let Ok(right) = GroundTerm::try_from(right.clone()) else {
-            return Err(TranslationError::new(
-                infix.pair().1.span(),
-                TranslationErrorKind::NonGroundTerm {
-                    found: right.kind().name().to_string(),
-                },
-            ));
-        };
-
-        result.push((left.clone(), Primitive::Ground(right)));
+        result.push((left.clone(), right.clone()));
     }
 
     Ok(Substitution::new(result))
@@ -73,18 +64,13 @@ fn import_export_spec<'a, 'b>(
 ) -> Result<ImportExportSpec, TranslationError> {
     let mut spec = Map::build_component(translation, instructions)?;
 
-    let mut substitution = guards
+    let substitution = guards
         .map(|guards| import_export_bindings(translation, guards.iter()))
         .transpose()?
         .unwrap_or_default();
 
-    for binding in translation.external_variables() {
-        let (variable, expansion) = binding?;
-        substitution.insert(variable.clone(), expansion.clone());
-    }
-
     substitution.apply(&mut spec);
-    spec = spec.reduce();
+    spec = spec.reduce_with_substitution(&Substitution::default());
 
     let Some(format_tag) = spec.tag() else {
         let span = instructions.span().beginning();
@@ -129,7 +115,10 @@ fn import_export_spec<'a, 'b>(
             ));
         };
 
-        let Ok(value) = GroundTerm::try_from(value.clone()) else {
+        if value
+            .primitive_terms()
+            .any(|p| !p.is_ground() && !matches!(&p, Primitive::Variable(Variable::Global(_))))
+        {
             let span = translation
                 .origin_map
                 .get(value.origin())

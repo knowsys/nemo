@@ -8,6 +8,7 @@ use crate::rule_model::{
     },
     error::ValidationErrorBuilder,
     origin::Origin,
+    substitution::Substitution,
 };
 
 use super::{
@@ -114,13 +115,18 @@ impl Map {
     }
 
     /// Reduce the [Term]s in each key-value pair returning a copy.
-    pub fn reduce(&self) -> Self {
+    pub fn reduce_with_substitution(&self, bindings: &Substitution) -> Self {
         Self {
             origin: self.origin,
             tag: self.tag.clone(),
             map: self
                 .key_value()
-                .map(|(key, value)| (key.reduce(), value.reduce()))
+                .map(|(key, value)| {
+                    (
+                        key.reduce_with_substitution(bindings),
+                        value.reduce_with_substitution(bindings),
+                    )
+                })
                 .collect(),
         }
     }

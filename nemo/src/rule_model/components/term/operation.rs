@@ -18,6 +18,7 @@ use crate::{
         },
         error::{validation_error::ValidationErrorKind, ValidationErrorBuilder},
         origin::Origin,
+        substitution::Substitution,
     },
 };
 
@@ -96,16 +97,22 @@ impl Operation {
     }
 
     /// Reduce constant expressions returning a copy of the reduced [Term].
-    pub fn reduce(&self) -> Term {
-        if !self.is_ground() {
-            return Term::Operation(Self {
-                origin: self.origin,
-                kind: self.kind,
-                subterms: self.subterms.iter().map(Term::reduce).collect(),
-            });
+    pub fn reduce_with_substitution(&self, bindings: &Substitution) -> Term {
+        let reduced_subterms = Operation {
+            origin: self.origin,
+            kind: self.kind,
+            subterms: self
+                .subterms
+                .iter()
+                .map(|term| term.reduce_with_substitution(bindings))
+                .collect(),
+        };
+
+        if !reduced_subterms.is_ground() {
+            return Term::Operation(reduced_subterms);
         }
 
-        let chase_operation_term = ProgramChaseTranslation::build_operation_term(self);
+        let chase_operation_term = ProgramChaseTranslation::build_operation_term(&reduced_subterms);
 
         let empty_translation = VariableTranslation::new();
         let function_tree =
@@ -271,7 +278,11 @@ impl ProgramComponent for Operation {
             return None;
         }
 
-        if self.is_ground() && !self.reduce().is_primitive() {
+        if self.is_ground()
+            && !self
+                .reduce_with_substitution(&Substitution::default())
+                .is_primitive()
+        {
             builder.report_error(self.origin, ValidationErrorKind::InvalidGroundOperation);
             return None;
         }

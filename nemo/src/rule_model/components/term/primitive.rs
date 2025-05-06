@@ -7,7 +7,10 @@ use std::{fmt::Display, hash::Hash};
 
 use ground::GroundTerm;
 use nemo_physical::datavalues::AnyDataValue;
-use variable::{existential::ExistentialVariable, universal::UniversalVariable, Variable};
+use variable::{
+    existential::ExistentialVariable, global::GlobalVariable, universal::UniversalVariable,
+    Variable,
+};
 
 use crate::rule_model::{
     components::{IterableVariables, ProgramComponent, ProgramComponentKind},
@@ -68,6 +71,12 @@ impl From<UniversalVariable> for Primitive {
 
 impl From<ExistentialVariable> for Primitive {
     fn from(value: ExistentialVariable) -> Self {
+        Self::from(Variable::from(value))
+    }
+}
+
+impl From<GlobalVariable> for Primitive {
+    fn from(value: GlobalVariable) -> Self {
         Self::from(Variable::from(value))
     }
 }

@@ -133,11 +133,14 @@ pub enum TranslationErrorKind {
     #[error("external variable must be a single universal variable")]
     #[assoc(code = 130)]
     ExternalVariableAttribute,
-    /// missing external variable
-    #[error("external variable is undefined")]
-    #[assoc(note = "consider using the `--param` cli option")]
+    /// parameter declaration using non-global variable
+    #[error("parameter names must have the form `$name'")]
     #[assoc(code = 131)]
-    MissingExternalVariable,
+    ParamDeclarationNotGlobal,
+    /// parameter definition referencing local variable
+    #[error("parameter definitions can only consist of ground terms and other parameters")]
+    #[assoc(code = 132)]
+    ParameterDeclarationNotGroundish,
 
     /// Unsupported: Declare statements
     #[error(r#"declare statements are currently unsupported"#)]

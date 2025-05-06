@@ -24,6 +24,9 @@ pub mod directive {
     /// The string used in the keyword for the prefix directive.
     pub const PREFIX: &str = "prefix";
 
+    /// The string used in the keyword of a parameter directive.
+    pub const PARAMETER: &str = "parameter";
+
     /// The token used to separate prefix and name
     pub const NAMESPACE_SEPARATOR: &str = ":";
 
@@ -116,6 +119,8 @@ pub mod expression {
         pub const UNIVERSAL_INDICATOR: &str = "?";
         /// Indicator for existential variables
         pub const EXISTENTIAL_INDICATOR: &str = "!";
+        /// Indicator for global variables
+        pub const GLOBAL_INDICATOR: &str = "$";
     }
 
     /// Syntax for operations

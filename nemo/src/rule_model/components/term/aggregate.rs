@@ -19,6 +19,7 @@ use crate::{
         },
         error::{validation_error::ValidationErrorKind, ValidationErrorBuilder},
         origin::Origin,
+        substitution::Substitution,
     },
     syntax::builtin::aggregate,
 };
@@ -164,11 +165,11 @@ impl Aggregate {
     }
 
     /// Reduce the [Term] in the aggregate expression returning a copy.
-    pub fn reduce(&self) -> Self {
+    pub fn reduce_with_substitution(&self, bindings: &Substitution) -> Self {
         Self {
             origin: self.origin,
             kind: self.kind,
-            aggregate: Box::new(self.aggregate.reduce()),
+            aggregate: Box::new(self.aggregate.reduce_with_substitution(bindings)),
             distinct: self.distinct.clone(),
         }
     }
