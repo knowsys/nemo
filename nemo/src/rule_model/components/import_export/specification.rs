@@ -60,6 +60,16 @@ impl ImportExportSpec {
         self.map.iter()
     }
 
+    /// Return an iterator over the values in this map.
+    pub fn values(&self) -> impl Iterator<Item = &Term> {
+        self.map.iter().map(|(_key, value)| value)
+    }
+
+    /// Return a mutable iterator over the values in this map.
+    pub fn values_mut(&mut self) -> impl Iterator<Item = &mut Term> {
+        self.map.iter_mut().map(|(_key, value)| value)
+    }
+
     /// Return the number of entries in this map.
     pub fn len(&self) -> usize {
         self.map.len()

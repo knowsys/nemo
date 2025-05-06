@@ -50,6 +50,15 @@ impl TranslationComponent for Variable {
                     ));
                 }
             }
+            ast::expression::basic::variable::VariableType::Global => {
+                let Some(variable_name) = variable.name() else {
+                    return Err(TranslationError::new(
+                        variable.span(),
+                        TranslationErrorKind::UnnamedVariable,
+                    ));
+                };
+                Variable::global(&variable_name).set_origin(translation.register_node(variable))
+            }
         };
 
         Ok(translation.register_component(result, variable))

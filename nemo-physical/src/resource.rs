@@ -193,10 +193,10 @@ fn strip_local_iri(iri: Iri<String>) -> Result<String, ResourceValidationErrorKi
             "{}{}{}",
             iri.path(),
             iri.query()
-                .map(|query| format!("?{}", query))
+                .map(|query| format!("?{query}"))
                 .unwrap_or_default(),
             iri.fragment()
-                .map(|query| format!("#{}", query))
+                .map(|query| format!("#{query}"))
                 .unwrap_or_default()
         )),
         _ => Err(ResourceValidationErrorKind::InvalidIri(format!(
@@ -291,7 +291,7 @@ impl ResourceBuilder {
         if predicate_name.is_empty() {
             Self::pipe_resource_builder()
         } else {
-            ResourceBuilder::try_from(format!("{predicate_name}.{}", default_extension))
+            ResourceBuilder::try_from(format!("{predicate_name}.{default_extension}"))
                 .expect("default name is valid")
         }
     }

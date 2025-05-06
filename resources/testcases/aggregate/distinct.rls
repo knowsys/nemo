@@ -1,12 +1,34 @@
 @import sourceA :- csv{ resource = "sources/dataA.csv" }.
 @import sourceB :- csv{ resource = "sources/dataB.csv" }.
+@import sourceC :- csv{ resource = "sources/dataC.csv" }.
+@import sourceD :- csv{ resource = "sources/dataD.csv" }.
 
 r0(#count(?X, ?Y)) :- sourceA(?X, ?Y, ?Z).
 r1(#count(?X, ?Y, ?Z)) :- sourceA(?X, ?Y, ?Z).
 r2(?X, #count(?Y, ?Z)) :- sourceA(?X, ?Y, ?Z).
 r3(?X1, #sum(?X2, ?X4)) :- sourceB(?X1, ?X2, ?X3, ?X4).
+r4(#count(?X, ?X)) :- sourceA(?X, ?Y, ?Z).
+r5(?X, #count(?Y, ?Z, ?X)) :- sourceA(?X, ?Y, ?Z).
 
-@export r3 :- csv {}.
+% Expect r6(3). and a duplicate variable warning
+r6(#MAX(?x, ?x)) :- sourceC(?x).
+
+% Expect r7(8).  and a duplicate variable warning
+r7(#SUM(?a + ?b, ?a, ?a)) :- sourceD(?a,?b).
+
+% Expect r8(4).  and a duplicate variable warning
+r8(#MAX(?b, ?a, ?a)) :- sourceD(?a,?b).
+
+% Expect r9(1).  and a duplicate variable warning
+r9(#MAX(?a, ?a)) :- sourceD(?a,?b).
+
 @export r0 :- csv {}.
 @export r1 :- csv {}.
 @export r2 :- csv {}.
+@export r3 :- csv {}.
+@export r4 :- csv {}.
+@export r5 :- csv {}.
+@export r6 :- csv {}.
+@export r7 :- csv {}.
+@export r8 :- csv {}.
+@export r9 :- csv {}.

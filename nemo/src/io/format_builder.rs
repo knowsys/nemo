@@ -18,11 +18,7 @@ use crate::{
     rule_model::{
         components::{
             import_export::{specification::ImportExportSpec, Direction},
-            term::{
-                operation::Operation,
-                primitive::{ground::GroundTerm, Primitive},
-                value_type::ValueType,
-            },
+            term::{operation::Operation, value_type::ValueType},
             ProgramComponent,
         },
         error::{
@@ -320,7 +316,7 @@ impl<B: FormatBuilder> Parameters<B> {
                 return None;
             };
 
-            let Ok(right) = GroundTerm::try_from(right.clone()) else {
+            if !right.is_ground() {
                 builder.report_error(
                     *binding.origin(),
                     ValidationErrorKind::DirectiveAssignmentNotGround,
@@ -329,7 +325,7 @@ impl<B: FormatBuilder> Parameters<B> {
             };
 
             if let Some((_, previous_origin)) =
-                result.insert(left.clone(), (Primitive::Ground(right), *binding.origin()))
+                result.insert(left.clone(), (right.clone(), *binding.origin()))
             {
                 builder
                     .report_error(
@@ -378,10 +374,6 @@ impl<B: FormatBuilder> Parameters<B> {
         let mut result = HashMap::new();
 
         for (key, value_term) in spec.key_value() {
-            let Ok(value_ground) = GroundTerm::try_from(value_term.clone()) else {
-                return None;
-            };
-
             let Ok(parameter) = B::Parameter::from_str(key.value()) else {
                 builder
                     .report_error(
@@ -401,13 +393,23 @@ impl<B: FormatBuilder> Parameters<B> {
             };
 
             required_parameters.remove(&parameter);
+            let value = match value_term.clone().try_into_ground(&Default::default()) {
+                Ok(ground_term) => ground_term.value(),
+                Err(value_term) => {
+                    builder.report_error(
+                        *value_term.origin(),
+                        ValidationErrorKind::ImportExportParameterNotGround(value_term),
+                    );
+                    return None;
+                }
+            };
 
-            if let Err(kind) = parameter.is_value_valid(value_ground.value()) {
+            if let Err(kind) = parameter.is_value_valid(value.clone()) {
                 builder.report_error(*value_term.origin(), kind);
                 return None;
             }
 
-            result.insert(parameter, value_ground.value());
+            result.insert(parameter, value);
         }
 
         if required_parameters.is_empty() {

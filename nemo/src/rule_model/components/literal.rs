@@ -43,9 +43,9 @@ impl Literal {
 impl Display for Literal {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Literal::Positive(positive) => write!(f, "{}", positive),
-            Literal::Negative(negative) => write!(f, "~{}", negative),
-            Literal::Operation(operation) => write!(f, "{}", operation),
+            Literal::Positive(positive) => write!(f, "{positive}"),
+            Literal::Negative(negative) => write!(f, "~{negative}"),
+            Literal::Operation(operation) => write!(f, "{operation}"),
         }
     }
 }

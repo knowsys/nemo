@@ -30,11 +30,7 @@ use super::{
         fact::Fact,
         rule::Rule,
         term::{
-            primitive::{
-                ground::GroundTerm,
-                variable::{universal::UniversalVariable, Variable},
-                Primitive,
-            },
+            primitive::{ground::GroundTerm, variable::global::GlobalVariable},
             Term,
         },
         ProgramComponent,
@@ -67,10 +63,10 @@ pub struct ASTProgramTranslation<'a, 'b> {
     program_builder: ProgramBuilder,
     /// Builder for validation errors
     validation_error_builder: ValidationErrorBuilder,
-    /// Parameter expansions supplied externally (e.g. via the --param cli option)
-    external_parameters: HashMap<String, GroundTerm>,
     /// Attributes for the statement currently being translated
     statement_attributes: Bag<KnownAttributes, Vec<Term>>,
+
+    external_parameters: HashMap<GlobalVariable, GroundTerm>,
 
     /// Errors
     errors: Vec<ProgramError>,
@@ -84,11 +80,6 @@ impl<'a, 'b> ASTProgramTranslation<'a, 'b> {
             input_label,
             ..Default::default()
         }
-    }
-
-    /// Add a value for an external parameter, that will be expanded during translation
-    pub fn add_parameter(&mut self, key: String, value: GroundTerm) {
-        self.external_parameters.insert(key, value);
     }
 
     /// Register a [ProgramAST] so that it can be associated with and later referenced by
@@ -107,6 +98,11 @@ impl<'a, 'b> ASTProgramTranslation<'a, 'b> {
         node: &'b dyn ProgramAST<'a>,
     ) -> Component {
         component.set_origin(self.register_node(node))
+    }
+
+    /// Add a global constant to the program being built
+    pub fn add_external_parameter(&mut self, ident: GlobalVariable, value: GroundTerm) {
+        self.external_parameters.insert(ident, value);
     }
 }
 
@@ -211,59 +207,14 @@ impl std::fmt::Display for ProgramErrorReport<'_, '_> {
 impl<'a, 'b> ASTProgramTranslation<'a, 'b> {
     fn process_attributes(&mut self, statement: &'b ast::statement::Statement<'a>) {
         let expected_attributes = match statement.kind() {
-            ast::statement::StatementKind::Fact(_) => &[KnownAttributes::External],
             ast::statement::StatementKind::Rule(_) => Rule::EXPECTED_ATTRIBUTES,
-            ast::statement::StatementKind::Directive(_) => &[KnownAttributes::External],
-            ast::statement::StatementKind::Error(_) => &[],
+            _ => &[],
         };
 
         match process_attributes(self, statement.attributes().iter(), expected_attributes) {
             Ok(attributes) => self.statement_attributes = attributes,
             Err(error) => self.errors.push(ProgramError::TranslationError(error)),
         }
-    }
-
-    pub(crate) fn external_variables(
-        &self,
-    ) -> impl Iterator<Item = Result<(&UniversalVariable, &GroundTerm), TranslationError>> + use<'a, '_>
-    {
-        self.statement_attributes
-            .get(KnownAttributes::External)
-            .iter()
-            .map(|external_term| {
-                let Term::Primitive(Primitive::Variable(variable)) = &external_term[0] else {
-                    unreachable!("checked in process_attributes()")
-                };
-
-                let span = self
-                    .origin_map
-                    .get(variable.origin())
-                    .map(|ast| ast.span())
-                    .expect("should be part of the origin map");
-
-                let Variable::Universal(variable) = variable else {
-                    return Err(TranslationError::new(
-                        span,
-                        TranslationErrorKind::ExternalVariableAttribute,
-                    ));
-                };
-
-                let Some(variable_name) = variable.name() else {
-                    return Err(TranslationError::new(
-                        span,
-                        TranslationErrorKind::ExternalVariableAttribute,
-                    ));
-                };
-
-                let Some(expansion) = self.external_parameters.get(&variable_name) else {
-                    return Err(TranslationError::new(
-                        span,
-                        TranslationErrorKind::MissingExternalVariable,
-                    ));
-                };
-
-                Ok((variable, expansion))
-            })
     }
 
     /// Translate the given [ProgramAST] into a [Program].
@@ -314,9 +265,10 @@ impl<'a, 'b> ASTProgramTranslation<'a, 'b> {
             self.statement_attributes.clear();
         }
 
-        let _ = self
-            .program_builder
-            .validate(&mut self.validation_error_builder);
+        let _ = self.program_builder.validate(
+            &self.external_parameters,
+            &mut self.validation_error_builder,
+        );
 
         self.errors.extend(
             self.validation_error_builder
@@ -359,7 +311,7 @@ impl<'a, 'b> ASTProgramTranslation<'a, 'b> {
             }
             ast::tag::structure::StructureTagKind::Prefixed { prefix, tag } => {
                 if let Some((expanded_prefix, _)) = self.prefix_mapping.get(&prefix.to_string()) {
-                    format!("{expanded_prefix}{}", tag)
+                    format!("{expanded_prefix}{tag}")
                 } else {
                     return Err(TranslationError::new(
                         prefix.span(),

@@ -50,7 +50,7 @@ impl DictEnum {
                 println!("Using MetaDvDictionary.");
                 DictEnum::DvMeta(MetaDvDictionary::new())
             }
-            _ => panic!("Unexpected dictionary type '{}'.", dict_type),
+            _ => panic!("Unexpected dictionary type '{dict_type}'."),
         }
     }
 
@@ -145,7 +145,7 @@ fn main() {
                     ) {
                         Ok(val) => dv = val,
                         Err(err) => {
-                            println!("Error parsing value `{}`: {:?}", s, err);
+                            println!("Error parsing value `{s}`: {err:?}");
                             dv = AnyDataValue::new_plain_string(s.clone());
                         }
                     }
@@ -205,14 +205,12 @@ fn main() {
 
     TimedCode::instance().sub("Dictionary filling").stop();
 
-    println!("Processed {} strings.", count_lines);
+    println!("Processed {count_lines} strings.");
     println!(
-        "  Dictionary accepted data for {} unique strings with {} bytes overall.",
-        count_added, bytes_added
+        "  Dictionary accepted data for {count_added} unique strings with {bytes_added} bytes overall."
     );
     println!(
-        "  Dictionary rejected {} (non-unique) strings with {} bytes overall.",
-        count_rejected, bytes_rejected
+        "  Dictionary rejected {count_rejected} (non-unique) strings with {bytes_rejected} bytes overall."
     );
     println!("  Dictionary reports own size as {}.", dict.size_bytes());
 
@@ -246,7 +244,7 @@ fn main() {
         let mut count_more: u64 = 0;
         println!("Lengths of unique IRIs:");
         for (pos, count) in iri_lengths.iter().enumerate() {
-            println!("  {:>5}: {:>20}", pos, count);
+            println!("  {pos:>5}: {count:>20}");
             if pos < 256 {
                 count_less += count;
             } else {
@@ -254,16 +252,13 @@ fn main() {
             }
         }
         println!("The last line summarises all longer cases.");
-        println!(
-            "{} IRIs up to length <256, {} IRIs beyond that length.",
-            count_less, count_more
-        );
+        println!("{count_less} IRIs up to length <256, {count_more} IRIs beyond that length.");
 
         count_less = 0;
         count_more = 0;
         println!("Lengths of unique strings:");
         for (pos, count) in string_lengths.iter().enumerate() {
-            println!("  {:>5}: {:>20}", pos, count);
+            println!("  {pos:>5}: {count:>20}");
             if pos < 256 {
                 count_less += count;
             } else {
@@ -272,8 +267,7 @@ fn main() {
         }
         println!("The last line summarises all longer cases.");
         println!(
-            "{} strings up to length <256, {} strings beyond that length.",
-            count_less, count_more
+            "{count_less} strings up to length <256, {count_more} strings beyond that length."
         );
     }
 }

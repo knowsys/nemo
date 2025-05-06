@@ -68,6 +68,9 @@ pub enum TokenKind {
     /// [EXISTENTIAL_INDICATOR](variable::EXISTENTIAL_INDICATOR), used to mark existential variables
     #[assoc(name = variable::EXISTENTIAL_INDICATOR)]
     ExistentialIndicator,
+    /// [GLOBAL_INDICATOR](variable::GLOBAL_INDICATOR), used to mark global variables
+    #[assoc(name = variable::GLOBAL_INDICATOR)]
+    GlobalIndicator,
     /// Opening delimiter for term sequence of atoms
     #[assoc(name = atom::OPEN)]
     AtomOpen,
@@ -265,6 +268,9 @@ pub enum TokenKind {
     /// Token for the prefix directive
     #[assoc(name = directive::PREFIX)]
     PrefixDirective,
+    /// Token for the parameter directive
+    #[assoc(name = directive::PARAMETER)]
+    ParameterDirective,
     /// Token for the import assignment
     #[assoc(name = directive::IMPORT_ASSIGNMENT)]
     ImportAssignment,
@@ -706,6 +712,24 @@ impl<'a> Token<'a> {
             )
         })
     }
+    pub fn directive_parameter(input: ParserInput<'a>) -> ParserResult<'a, Token<'a>> {
+        context(
+            ParserContext::token(TokenKind::ParameterDirective),
+            // The reasoning behind using `verify` is the same as in the `directive_base` function.
+            verify(Self::name, |tag| {
+                tag.span.fragment() == directive::PARAMETER
+            }),
+        )(input)
+        .map(|(rest, result)| {
+            (
+                rest,
+                Token {
+                    span: result.span,
+                    kind: TokenKind::ParameterDirective,
+                },
+            )
+        })
+    }
 
     pub fn comment(input: ParserInput<'a>) -> ParserResult<'a, Token<'a>> {
         context(
@@ -815,6 +839,7 @@ impl<'a> Token<'a> {
     string_token!(rule_arrow, TokenKind::RuleArrow);
     string_token!(universal_indicator, TokenKind::UniversalIndicator);
     string_token!(existential_indicator, TokenKind::ExistentialIndicator);
+    string_token!(global_indicator, TokenKind::GlobalIndicator);
     string_token!(lang_tag_indicator, TokenKind::LangTagIndicator);
     string_token!(name_datatype_separator, TokenKind::NameDatatypeSeparator);
 }

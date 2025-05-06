@@ -12,7 +12,11 @@ use crate::{
     syntax,
 };
 
-use super::{tag::Tag, term::operation::Operation, ProgramComponent, ProgramComponentKind};
+use super::{
+    tag::Tag,
+    term::{operation::Operation, Term},
+    IterablePrimitives, ProgramComponent, ProgramComponentKind,
+};
 
 pub mod attribute;
 pub mod specification;
@@ -54,6 +58,39 @@ pub(crate) struct ImportExportDirective {
     bindings: Vec<Operation>,
 }
 
+impl std::fmt::Display for ImportExportDirective {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_fmt(format_args!("{} :- {}.", self.predicate, self.spec))?;
+
+        for binding in &self.bindings {
+            f.write_str(", ")?;
+            f.write_fmt(format_args!("{binding}"))?;
+        }
+
+        Ok(())
+    }
+}
+
+impl IterablePrimitives for ImportExportDirective {
+    type TermType = Term;
+
+    fn primitive_terms<'a>(
+        &'a self,
+    ) -> Box<dyn Iterator<Item = &'a super::term::primitive::Primitive> + 'a> {
+        Box::new(self.spec.values().flat_map(|term| term.primitive_terms()))
+    }
+
+    fn primitive_terms_mut<'a>(
+        &'a mut self,
+    ) -> Box<dyn Iterator<Item = &'a mut Self::TermType> + 'a> {
+        Box::new(
+            self.spec
+                .values_mut()
+                .flat_map(|term| term.primitive_terms_mut()),
+        )
+    }
+}
+
 /// An import specification.
 #[derive(Debug, Clone)]
 pub struct ImportDirective(pub(crate) ImportExportDirective);
@@ -80,19 +117,16 @@ impl ImportDirective {
     }
 }
 
-impl From<ImportExportDirective> for ImportDirective {
-    fn from(value: ImportExportDirective) -> Self {
-        Self(value)
+impl std::fmt::Display for ImportDirective {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("@import ")?;
+        self.0.fmt(f)
     }
 }
 
-impl std::fmt::Display for ImportDirective {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_fmt(format_args!(
-            "@import {} :- {}.",
-            self.predicate(),
-            self.spec()
-        ))
+impl From<ImportExportDirective> for ImportDirective {
+    fn from(value: ImportExportDirective) -> Self {
+        Self(value)
     }
 }
 
@@ -134,6 +168,22 @@ impl ProgramComponent for ImportDirective {
 
     fn kind(&self) -> ProgramComponentKind {
         ProgramComponentKind::Import
+    }
+}
+
+impl IterablePrimitives for ImportDirective {
+    type TermType = Term;
+
+    fn primitive_terms<'a>(
+        &'a self,
+    ) -> Box<dyn Iterator<Item = &'a super::term::primitive::Primitive> + 'a> {
+        self.0.primitive_terms()
+    }
+
+    fn primitive_terms_mut<'a>(
+        &'a mut self,
+    ) -> Box<dyn Iterator<Item = &'a mut Self::TermType> + 'a> {
+        self.0.primitive_terms_mut()
     }
 }
 
@@ -180,11 +230,8 @@ impl From<ImportExportDirective> for ExportDirective {
 
 impl std::fmt::Display for ExportDirective {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_fmt(format_args!(
-            "@export {} :- {}.",
-            self.predicate(),
-            self.spec()
-        ))
+        f.write_str("@export ")?;
+        self.0.fmt(f)
     }
 }
 
@@ -226,5 +273,21 @@ impl ProgramComponent for ExportDirective {
 
     fn kind(&self) -> ProgramComponentKind {
         ProgramComponentKind::Export
+    }
+}
+
+impl IterablePrimitives for ExportDirective {
+    type TermType = Term;
+
+    fn primitive_terms<'a>(
+        &'a self,
+    ) -> Box<dyn Iterator<Item = &'a super::term::primitive::Primitive> + 'a> {
+        self.0.primitive_terms()
+    }
+
+    fn primitive_terms_mut<'a>(
+        &'a mut self,
+    ) -> Box<dyn Iterator<Item = &'a mut Self::TermType> + 'a> {
+        self.0.primitive_terms_mut()
     }
 }

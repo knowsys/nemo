@@ -100,7 +100,7 @@ impl<'a> PartialTrieScan<'a> for TrieScanEnum<'a> {
             fn possible_types(&self, layer: usize) -> StorageTypeBitSet;
             fn arity(&self) -> usize;
             fn current_layer(&self) -> Option<usize>;
-            fn scan<'b>(&'b self, layer: usize) -> &'b UnsafeCell<ColumnScanT<'a>>;
+            fn scan(&self, layer: usize) -> &UnsafeCell<ColumnScanT<'a>>;
             fn current_scan(&self) -> Option<&UnsafeCell<ColumnScanT<'a>>>;
         }
     }

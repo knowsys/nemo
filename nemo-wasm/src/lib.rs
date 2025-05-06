@@ -24,8 +24,9 @@ use nemo::{
             fact::Fact,
             tag::Tag,
             term::{primitive::Primitive, Term},
+            ProgramComponent,
         },
-        error::ComponentParseError,
+        error::{ComponentParseError, ValidationErrorBuilder},
     },
 };
 
@@ -91,7 +92,7 @@ impl NemoProgram {
     pub fn new(input: &str) -> Result<NemoProgram, NemoError> {
         nemo::parser::Parser::initialize(input, PROGRAM_LABEL.to_string())
             .parse()
-            .map_err(|(_, report)| WasmOrInternalNemoError::Parser(format!("{}", report)))
+            .map_err(|(_, report)| WasmOrInternalNemoError::Parser(format!("{report}")))
             .map_err(NemoError)
             .and_then(|ast| {
                 nemo::rule_model::translation::ASTProgramTranslation::initialize(
@@ -99,7 +100,7 @@ impl NemoProgram {
                     PROGRAM_LABEL.to_string(),
                 )
                 .translate(&ast)
-                .map_err(|report| WasmOrInternalNemoError::Program(format!("{}", report)))
+                .map_err(|report| WasmOrInternalNemoError::Program(format!("{report}")))
                 .map_err(NemoError)
                 .map(NemoProgram)
             })
@@ -115,7 +116,10 @@ impl NemoProgram {
     pub fn resources_used_in_imports(&self) -> Vec<NemoResource> {
         let mut result: Vec<NemoResource> = vec![];
 
-        for (_, builder) in self.0.imports() {
+        for import in self.0.imports() {
+            let builder = import
+                .validate(&mut ValidationErrorBuilder::default())
+                .expect("imports have been validated at this point");
             let format: String = builder.build_import("", 0).media_type();
             if let Some(resource) = builder.resource() {
                 result.push(NemoResource {

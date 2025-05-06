@@ -9,6 +9,7 @@ pub mod fact;
 pub mod import_export;
 pub mod literal;
 pub mod output;
+pub mod parameter;
 pub mod rule;
 pub mod tag;
 pub mod term;
@@ -96,6 +97,9 @@ pub enum ProgramComponentKind {
     /// Output
     #[assoc(name = "output")]
     Output,
+    /// Parameter declaration directive
+    #[assoc(name = "parameter")]
+    ParameterDeclaration,
     /// One of the given kinds:
     #[assoc(name = "oneof")]
     OneOf(&'static [ProgramComponentKind]),

@@ -644,7 +644,7 @@ impl TrieScan for TrieScanPrune<'_> {
         if !unsafe { (*self.state.get()).initialized } {
             for current_layer in 0..=layer {
                 let first_type =
-                    unsafe { (*self.state.get()).possible_types[current_layer].first()? };
+                    unsafe { (&(*self.state.get()).possible_types)[current_layer].first()? };
                 self.down(*first_type);
             }
         }
