@@ -119,8 +119,10 @@ mod test {
     use assert_fs::TempDir;
     use nemo_physical::{
         datavalues::{AnyDataValue, DataValue},
-        util::hook::{FilterHook, FilterResult},
+        util::hook::FilterResult,
     };
+
+    use crate::rule_model::filter_hook::GlobalRuleFilterHook;
 
     use super::*;
 
@@ -157,15 +159,16 @@ mod test {
             .map_err(|_| Error::ProgramParseError)
             .unwrap();
 
-        let filter = FilterHook::from(|string: &str, values: &[AnyDataValue]| {
-            if ((values[0].to_i64_unchecked() + values[1].to_i64_unchecked()) % 2 == 0)
-                && string == "b"
-            {
-                FilterResult::Accept
-            } else {
-                FilterResult::Reject
-            }
-        });
+        let filter =
+            GlobalRuleFilterHook::from(|_: Option<&str>, string: &str, values: &[AnyDataValue]| {
+                if ((values[0].to_i64_unchecked() + values[1].to_i64_unchecked()) % 2 == 0)
+                    && string == "b"
+                {
+                    FilterResult::Accept
+                } else {
+                    FilterResult::Reject
+                }
+            });
 
         program.set_hook(filter.clone());
 

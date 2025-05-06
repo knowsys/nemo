@@ -1,6 +1,9 @@
 //! This module defines a function for translating logical rules into chase rules
 
-use std::collections::{HashMap, HashSet};
+use std::{
+    collections::{HashMap, HashSet},
+    sync::Arc,
+};
 
 use crate::{
     chase_model::components::{
@@ -40,7 +43,9 @@ impl ProgramChaseTranslation {
     ) -> ChaseRule {
         let mut result = ChaseRule::default();
 
-        result.set_hook(self.hook.clone());
+        if let Some(hook) = &self.hook {
+            result.set_hook(Some(hook.instantiate(rule.name().map(Arc::<str>::from))));
+        }
 
         let variable_assignments = Self::variables_assignments(rule);
         Self::apply_variable_assignment(rule, &variable_assignments);

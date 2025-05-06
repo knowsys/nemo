@@ -6,7 +6,6 @@ use std::{
 };
 
 use crate::io::format_builder::ImportExportBuilder;
-use nemo_physical::util::hook::FilterHook;
 
 use super::{
     components::{
@@ -22,6 +21,7 @@ use super::{
         info::Info, validation_error::ValidationErrorKind, ComplexErrorLabelKind,
         ValidationErrorBuilder,
     },
+    filter_hook::GlobalRuleFilterHook,
     origin::Origin,
 };
 
@@ -49,7 +49,7 @@ pub struct Program {
     export_builders: Vec<ImportExportBuilder>,
 
     /// Hook
-    hook: Option<FilterHook>,
+    hook: Option<GlobalRuleFilterHook>,
 }
 
 impl std::fmt::Debug for Program {
@@ -237,12 +237,12 @@ impl Program {
     }
 
     /// Return filter associated with this program, if it exists.
-    pub fn hook(&self) -> Option<FilterHook> {
+    pub fn hook(&self) -> Option<GlobalRuleFilterHook> {
         self.hook.clone()
     }
 
     /// Set a filter that is applied to each derivation.
-    pub fn set_hook(&mut self, hook: FilterHook) {
+    pub fn set_hook(&mut self, hook: GlobalRuleFilterHook) {
         self.hook = Some(hook)
     }
 

@@ -9,10 +9,9 @@ pub(crate) mod rule;
 
 use std::collections::HashMap;
 
-use nemo_physical::util::hook::FilterHook;
-
 use crate::rule_model::{
     components::{tag::Tag, term::primitive::variable::Variable},
+    filter_hook::GlobalRuleFilterHook,
     program::Program,
 };
 
@@ -40,7 +39,7 @@ pub(crate) struct ProgramChaseTranslation {
     /// Map associating each predicate with its arity
     predicate_arity: HashMap<Tag, usize>,
     /// Optional hook with external code supplied to each rule
-    hook: Option<FilterHook>,
+    hook: Option<GlobalRuleFilterHook>,
 }
 
 impl ProgramChaseTranslation {

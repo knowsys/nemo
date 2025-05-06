@@ -5,6 +5,7 @@ pub mod util;
 
 pub mod components;
 pub mod error;
+pub mod filter_hook;
 pub mod origin;
 pub mod program;
 pub mod substitution;

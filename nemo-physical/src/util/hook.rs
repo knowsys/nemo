@@ -25,6 +25,13 @@ pub trait FilterFunction: 'static + Send + Sync {
 #[derive(Clone)]
 pub struct FilterHook(Arc<dyn FilterFunction>);
 
+impl FilterHook {
+    /// Create a new FilterHook from a [FilterFunction] implementation
+    pub fn new(inner: impl FilterFunction) -> Self {
+        Self(Arc::new(inner))
+    }
+}
+
 impl FilterFunction for FilterHook {
     /// Call the inner function.
     fn call(&self, string: &str, values: &[AnyDataValue]) -> FilterResult {
