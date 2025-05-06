@@ -28,7 +28,6 @@ pub extern crate nemo_physical;
 pub mod api;
 pub mod error;
 pub mod io;
-pub mod model;
 pub mod parser;
 pub mod syntax;
 
