@@ -5,9 +5,6 @@ use super::{
     pipeline::id::ProgramComponentId,
 };
 
-// TODO: The thing which holds the parser should have this
-pub(crate) type ExternalReference = usize;
-
 /// Origin of a [super::components::ProgramComponent]
 #[derive(Debug, Clone)]
 pub enum Origin {
@@ -18,7 +15,14 @@ pub enum Origin {
     /// Component was created directly from a string
     String(Box<str>),
     /// Component was created by parsing a file
-    Parsing { id: usize, start: usize, end: usize },
+    Parsing {
+        /// Id of the program
+        id: usize,
+        /// Start position of the character
+        start: usize,
+        /// End position of the character
+        end: usize,
+    },
     /// Component was created from another component
     Component(Box<dyn ProgramComponent>),
 

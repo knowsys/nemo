@@ -1,22 +1,34 @@
 //! This module defines [ProgramPipeline].
 
+use commit::ProgramCommit;
 use id::ProgramComponentId;
-use state::ProgramState;
+use state::{ExtendStatementValidity, ProgramState};
 
-use crate::{error::Error, parser::Parser, rule_model::translation::ASTProgramTranslation};
+use super::components::{
+    atom::Atom,
+    fact::Fact,
+    import_export::{ExportDirective, ImportDirective},
+    output::Output,
+    parameter::ParameterDeclaration,
+    rule::Rule,
+    IterableComponent, ProgramComponent,
+};
 
-use super::components::{atom::Atom, rule::Rule, ProgramComponent};
-
+pub mod commit;
 pub mod id;
 pub mod state;
+pub mod transformation;
 
 /// Big manager object
 #[derive(Debug)]
 pub struct ProgramPipeline {
-    inputs: Vec<String>,
+    /// Programs given as strings
+    _inputs: Vec<String>,
 
+    /// Contains state of the program at every commit
     state: ProgramState,
 
+    /// Current id
     current_id: ProgramComponentId,
 }
 
@@ -24,7 +36,7 @@ impl ProgramPipeline {
     /// Create a new [ProgramPipeline].
     pub fn new() -> Self {
         Self {
-            inputs: Vec::default(),
+            _inputs: Vec::default(),
             state: ProgramState::new(),
             current_id: ProgramComponentId::start(),
         }
@@ -32,33 +44,13 @@ impl ProgramPipeline {
 }
 
 impl ProgramPipeline {
-    pub fn parse(&mut self, string: &str) -> Result<(), Error> {
-        self.inputs.push(string.to_owned());
-
-        let input = self.inputs.last().expect("msg");
-
-        let ast = Parser::initialize(&input, String::default())
-            .parse()
-            .map_err(|_| Error::ProgramParseError)?;
-        let program = ASTProgramTranslation::initialize(&input, String::default()).translate(&ast);
-
-        todo!()
-    }
-}
-
-impl ProgramPipeline {
-    /// Search for the [ProgramComponent] with a given [ProgramComponentId]
-    /// by traversing it's children.
+    /// Search for the [ProgramComponent] with a given [ProgramComponentId].
     ///
     /// Returns `None` if there is no  [ProgramComponent] with that [ProgramComponentId].
     fn find_child_component(
-        component: &dyn ProgramComponent,
+        component: &dyn IterableComponent,
         id: ProgramComponentId,
     ) -> Option<&dyn ProgramComponent> {
-        if component.id() == id {
-            return Some(component);
-        }
-
         let mut child_iterator = component.children();
         let mut previous_component = child_iterator.next()?;
         while let Some(current_component) = child_iterator.next() {
@@ -119,6 +111,96 @@ impl ProgramPipeline {
         self.state.add_rule(rule);
 
         id
+    }
+
+    /// Add a [Fact] to the current program.
+    pub fn add_fact(&mut self, mut fact: Fact) -> ProgramComponentId {
+        let component: &mut dyn ProgramComponent = &mut fact;
+        let id = self.register_component(component);
+
+        self.state.add_fact(fact);
+
+        id
+    }
+
+    /// Add a [ImportDirective] to the current program.
+    pub fn add_import(&mut self, mut import: ImportDirective) -> ProgramComponentId {
+        let component: &mut dyn ProgramComponent = &mut import;
+        let id = self.register_component(component);
+
+        self.state.add_import(import);
+
+        id
+    }
+
+    /// Add a [ImportDirective] to the current program.
+    pub fn add_export(&mut self, mut export: ExportDirective) -> ProgramComponentId {
+        let component: &mut dyn ProgramComponent = &mut export;
+        let id = self.register_component(component);
+
+        self.state.add_export(export);
+
+        id
+    }
+
+    /// Add a [Output] to the current program.
+    pub fn add_output(&mut self, mut output: Output) -> ProgramComponentId {
+        let component: &mut dyn ProgramComponent = &mut output;
+        let id = self.register_component(component);
+
+        self.state.add_output(output);
+
+        id
+    }
+
+    /// Add a [ParameterDeclaration] to the current program.
+    pub fn add_parameter(&mut self, mut parameter: ParameterDeclaration) -> ProgramComponentId {
+        let component: &mut dyn ProgramComponent = &mut parameter;
+        let id = self.register_component(component);
+
+        self.state.add_parameter(parameter);
+
+        id
+    }
+
+    /// Prepare a new commit.
+    pub fn prepare(&mut self, extend: ExtendStatementValidity) {
+        self.state.prepare(extend);
+    }
+
+    /// Apply a commit.
+    pub fn commit(&mut self, commit: ProgramCommit) {
+        for id in commit.deleted {
+            self.state.delete(id);
+        }
+
+        for id in commit.keep {
+            self.state.keep(id);
+        }
+
+        for rule in commit.rules {
+            self.add_rule(rule);
+        }
+
+        for fact in commit.facts {
+            self.add_fact(fact);
+        }
+
+        for import in commit.imports {
+            self.add_import(import);
+        }
+
+        for export in commit.exports {
+            self.add_export(export);
+        }
+
+        for output in commit.outputs {
+            self.add_output(output);
+        }
+
+        for parameter in commit.parameters {
+            self.add_parameter(parameter);
+        }
     }
 }
 

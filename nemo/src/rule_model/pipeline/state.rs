@@ -1,18 +1,14 @@
 //! This module defines [ProgramState].
 
-use std::{fmt::Display, ops::Range};
+use std::ops::Range;
 
-use crate::rule_model::{
-    components::{
-        component_iterator, component_iterator_mut,
-        fact::Fact,
-        import_export::{ExportDirective, ImportDirective},
-        output::Output,
-        rule::Rule,
-        ComponentBehavior, ComponentIdentity, IterableComponent, ProgramComponent,
-        ProgramComponentKind,
-    },
-    origin::Origin,
+use crate::rule_model::components::{
+    fact::Fact,
+    import_export::{ExportDirective, ImportDirective},
+    output::Output,
+    parameter::ParameterDeclaration,
+    rule::Rule,
+    IterableComponent, ProgramComponent,
 };
 
 use super::id::ProgramComponentId;
@@ -21,8 +17,11 @@ use super::id::ProgramComponentId;
 /// [StatementSpan], which associates a nemo statement
 /// with a span.
 trait Spanned {
-    /// Extend span by one.
-    fn extend(&mut self);
+    /// Extend span to include the given commit.
+    fn extend(&mut self, commit: usize);
+
+    /// Restrict the span to end at the provided commit
+    fn restrict(&mut self, commit: usize);
 
     /// Check whether this statement is valid for the given commid id.
     fn contains(&self, commit: usize) -> bool;
@@ -60,11 +59,6 @@ where
         }
     }
 
-    /// Return the underlying statement.
-    pub fn statement(&self) -> &Statement {
-        &self.statement
-    }
-
     /// Given an itereator over statements and a target commit,
     /// return all statements that are valid in this commit.
     pub fn filter<'a, Iter>(iterator: Iter, commit: usize) -> impl Iterator<Item = &'a Statement>
@@ -76,29 +70,18 @@ where
             .filter(move |element| element.contains(commit))
             .map(|element| &element.statement)
     }
-
-    /// Given a mutable itereator over statements and a target commit,
-    /// return all statements that are valid in this commit.
-    pub fn filter_mut<'a, Iter>(
-        iterator: Iter,
-        commit: usize,
-    ) -> impl Iterator<Item = &'a mut Statement>
-    where
-        Statement: 'a,
-        Iter: Iterator<Item = &'a mut StatementSpan<Statement>>,
-    {
-        iterator
-            .filter(move |element| element.contains(commit))
-            .map(|element| &mut element.statement)
-    }
 }
 
 impl<Statement> Spanned for StatementSpan<Statement>
 where
     Statement: ProgramComponent,
 {
-    fn extend(&mut self) {
-        self.span.end += 1;
+    fn extend(&mut self, commit: usize) {
+        self.span.end = commit + 1;
+    }
+
+    fn restrict(&mut self, commit: usize) {
+        self.span.end = commit;
     }
 
     fn contains(&self, commit: usize) -> bool {
@@ -116,7 +99,7 @@ where
 
 /// Types of statement (top-level [ProgramComponent]s)
 /// whose validity can be extended within a [ProgramState]
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum ExtendStatementKind {
     /// Rules
     Rule,
@@ -128,10 +111,27 @@ pub enum ExtendStatementKind {
     Export,
     /// Outputs
     Output,
+    /// Parameters
+    Parameter,
     /// All from the provided list
     AllOf(&'static [Self]),
     /// All statements
     All,
+}
+
+impl ExtendStatementKind {
+    /// Check whether a particular [ExtendStatementKind] is included.
+    pub fn includes(&self, kind: Self) -> bool {
+        if *self == kind || matches!(self, Self::All) {
+            return true;
+        }
+
+        if let Self::AllOf(list) = self {
+            return list.iter().any(|element| *element == kind);
+        }
+
+        false
+    }
 }
 
 /// Used to decide which types of statements
@@ -146,15 +146,21 @@ pub enum ExtendStatementValidity {
     Delete(ExtendStatementKind),
 }
 
+impl ExtendStatementValidity {
+    /// Check whether to keep a given [ExtendStatementKind].
+    pub fn keep(&self, kind: ExtendStatementKind) -> bool {
+        match self {
+            ExtendStatementValidity::Keep(keep) => keep.includes(kind),
+            ExtendStatementValidity::Delete(delete) => !delete.includes(kind),
+        }
+    }
+}
+
 /// Holds multiple states of a [crate::rule_model::program::Program]
 /// where statements are only valid for a certain range of
 /// transformation steps, called commits.
 #[derive(Debug)]
 pub struct ProgramState {
-    /// Origin of this component
-    /// (Only needed for the implementation of [ProgramComponent])
-    origin: Origin,
-
     /// Rules
     rules: Vec<StatementSpan<Rule>>,
     /// Facts
@@ -165,32 +171,44 @@ pub struct ProgramState {
     exports: Vec<StatementSpan<ExportDirective>>,
     /// Outputs
     outputs: Vec<StatementSpan<Output>>,
+    /// Parameters
+    parameters: Vec<StatementSpan<ParameterDeclaration>>,
 
     /// Number of the current commit
     current_commit: usize,
-}
-
-impl Display for ProgramState {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        todo!()
-    }
 }
 
 impl ProgramState {
     /// Create a new [ProgramState].
     pub fn new() -> Self {
         Self {
-            origin: Origin::default(),
             rules: Vec::default(),
             facts: Vec::default(),
             imports: Vec::default(),
             exports: Vec::default(),
             outputs: Vec::default(),
+            parameters: Vec::default(),
             current_commit: 0,
         }
     }
 
-    ///
+    /// Translate an iterator over any type implementing [Spanned]
+    /// to an iterator over [Spanned] trait objects.
+    fn iterator_spanned<'a, Component, Iter>(
+        iterator: Iter,
+    ) -> impl Iterator<Item = &'a dyn Spanned>
+    where
+        Component: ProgramComponent + 'a,
+        Iter: Iterator<Item = &'a StatementSpan<Component>>,
+    {
+        iterator.map(|component| {
+            let component: &dyn Spanned = component;
+            component
+        })
+    }
+
+    /// Translate an iterator over any type implementing [Spanned]
+    /// to an iterator over [Spanned] trait objects.
     fn iterator_spanned_mut<'a, Component, Iter>(
         iterator: Iter,
     ) -> impl Iterator<Item = &'a mut dyn Spanned>
@@ -204,110 +222,171 @@ impl ProgramState {
         })
     }
 
-    fn spans_mut(&mut self) -> impl Iterator<Item = &mut dyn Spanned> {
-        self.rules
-            .iter_mut()
-            .map(|rule| {
-                let rule: &mut dyn Spanned = rule;
-                rule
-            })
-            .chain(self.facts.iter_mut().map(|fact| {
-                let fact: &mut dyn Spanned = fact;
-                fact
-            }))
+    /// Return an iterator over every [Spanned] program component.
+    fn spans(&self) -> impl Iterator<Item = &dyn Spanned> {
+        let rules_iterator = Self::iterator_spanned(self.rules.iter());
+        let facts_iterator = Self::iterator_spanned(self.facts.iter());
+        let imports_iterator = Self::iterator_spanned(self.imports.iter());
+        let exports_iterator = Self::iterator_spanned(self.exports.iter());
+        let outputs_iterator = Self::iterator_spanned(self.outputs.iter());
+        let parameters_iterator = Self::iterator_spanned(self.parameters.iter());
+
+        rules_iterator
+            .chain(facts_iterator)
+            .chain(imports_iterator)
+            .chain(exports_iterator)
+            .chain(outputs_iterator)
+            .chain(parameters_iterator)
     }
 
-    pub fn commit(&mut self, extend: bool) {
+    /// Return an iterator over every [Spanned] program component.
+    fn spans_mut(&mut self) -> impl Iterator<Item = &mut dyn Spanned> {
+        let rules_iterator = Self::iterator_spanned_mut(self.rules.iter_mut());
+        let facts_iterator = Self::iterator_spanned_mut(self.facts.iter_mut());
+        let imports_iterator = Self::iterator_spanned_mut(self.imports.iter_mut());
+        let exports_iterator = Self::iterator_spanned_mut(self.exports.iter_mut());
+        let outputs_iterator = Self::iterator_spanned_mut(self.outputs.iter_mut());
+        let parameters_iterator = Self::iterator_spanned_mut(self.parameters.iter_mut());
+
+        rules_iterator
+            .chain(facts_iterator)
+            .chain(imports_iterator)
+            .chain(exports_iterator)
+            .chain(outputs_iterator)
+            .chain(parameters_iterator)
+    }
+
+    /// Find a [Spanned] component from its id
+    fn find_spanned_mut(&mut self, id: ProgramComponentId) -> Option<&mut dyn Spanned> {
+        for spanned in self.spans_mut() {
+            if spanned.component().id() == id {
+                return Some(spanned);
+            }
+        }
+
+        None
+    }
+
+    /// Prepare the next commit.
+    pub fn prepare(&mut self, extend: ExtendStatementValidity) {
         self.current_commit += 1;
 
-        if extend {
-            for statement in self.spans_mut() {
-                statement.extend();
+        if extend.keep(ExtendStatementKind::Rule) {
+            for rule in &mut self.rules {
+                rule.extend(self.current_commit);
+            }
+        }
+
+        if extend.keep(ExtendStatementKind::Fact) {
+            for fact in &mut self.facts {
+                fact.extend(self.current_commit);
+            }
+        }
+
+        if extend.keep(ExtendStatementKind::Import) {
+            for import in &mut self.imports {
+                import.extend(self.current_commit);
+            }
+        }
+
+        if extend.keep(ExtendStatementKind::Export) {
+            for export in &mut self.exports {
+                export.extend(self.current_commit);
+            }
+        }
+
+        if extend.keep(ExtendStatementKind::Output) {
+            for output in &mut self.outputs {
+                output.extend(self.current_commit);
+            }
+        }
+
+        if extend.keep(ExtendStatementKind::Parameter) {
+            for parameter in &mut self.parameters {
+                parameter.extend(self.current_commit);
             }
         }
     }
 }
 
 impl ProgramState {
+    /// Delete a program component.
+    pub fn delete(&mut self, id: ProgramComponentId) {
+        let commit = self.current_commit;
+
+        if let Some(component) = self.find_spanned_mut(id) {
+            component.restrict(commit);
+        }
+    }
+
+    /// Keep a program component.
+    pub fn keep(&mut self, id: ProgramComponentId) {
+        let commit = self.current_commit;
+
+        if let Some(component) = self.find_spanned_mut(id) {
+            component.extend(commit);
+        }
+    }
+
+    /// Add a [Rule] valid for the current commit.
     pub fn add_rule(&mut self, rule: Rule) {
         self.rules
             .push(StatementSpan::new(rule, self.current_commit));
     }
 
+    /// Add a [Fact] valid for the current commit.
     pub fn add_fact(&mut self, fact: Fact) {
         self.facts
             .push(StatementSpan::new(fact, self.current_commit));
     }
+
+    /// Add a [ImportDirective] valid for the current commit.
+    pub fn add_import(&mut self, import: ImportDirective) {
+        self.imports
+            .push(StatementSpan::new(import, self.current_commit));
+    }
+
+    /// Add a [ExportDirective] valid for the current commit.
+    pub fn add_export(&mut self, export: ExportDirective) {
+        self.exports
+            .push(StatementSpan::new(export, self.current_commit));
+    }
+
+    /// Add a [Output] valid for the current commit.
+    pub fn add_output(&mut self, output: Output) {
+        self.outputs
+            .push(StatementSpan::new(output, self.current_commit));
+    }
+
+    /// Add a [ParameterDeclaration] valid for the current commit.
+    pub fn add_parameter(&mut self, parameter: ParameterDeclaration) {
+        self.parameters
+            .push(StatementSpan::new(parameter, self.current_commit));
+    }
 }
 
 impl ProgramState {
+    /// Return an iterator over all active [Rule]s.
     pub fn rules(&self) -> impl Iterator<Item = &Rule> {
         StatementSpan::filter(self.rules.iter(), self.current_commit)
     }
 
-    fn rules_mut(&mut self) -> impl Iterator<Item = &mut Rule> {
-        StatementSpan::filter_mut(self.rules.iter_mut(), self.current_commit)
-    }
-
+    /// Return an iterator over all active [Fact]s.
     pub fn facts(&self) -> impl Iterator<Item = &Fact> {
         StatementSpan::filter(self.facts.iter(), self.current_commit)
-    }
-
-    fn facts_mut(&mut self) -> impl Iterator<Item = &mut Fact> {
-        StatementSpan::filter_mut(self.facts.iter_mut(), self.current_commit)
-    }
-}
-
-impl ComponentBehavior for ProgramState {
-    fn kind(&self) -> ProgramComponentKind {
-        todo!()
-    }
-
-    fn boxed_clone(&self) -> Box<dyn ProgramComponent> {
-        todo!()
-    }
-
-    fn validate(
-        &self,
-        builder: &mut crate::rule_model::error::ValidationErrorBuilder,
-    ) -> Option<()> {
-        todo!()
-    }
-}
-
-impl ComponentIdentity for ProgramState {
-    fn id(&self) -> ProgramComponentId {
-        ProgramComponentId::unassigned()
-    }
-
-    fn set_id(&mut self, _id: ProgramComponentId) {}
-
-    fn origin(&self) -> &Origin {
-        &self.origin
-    }
-
-    fn set_origin(&mut self, origin: Origin) {
-        self.origin = origin
     }
 }
 
 impl IterableComponent for ProgramState {
     fn children<'a>(&'a self) -> Box<dyn Iterator<Item = &'a dyn ProgramComponent> + 'a> {
-        let rules = component_iterator(self.rules());
-        let facts = component_iterator(self.facts());
-
-        Box::new(rules.chain(facts))
+        let iterator = self.spans().map(|spanned| spanned.component());
+        Box::new(iterator)
     }
 
     fn children_mut<'a>(
         &'a mut self,
     ) -> Box<dyn Iterator<Item = &'a mut dyn ProgramComponent> + 'a> {
-        let rules = StatementSpan::filter_mut(self.rules.iter_mut(), self.current_commit);
-        let facts = StatementSpan::filter_mut(self.facts.iter_mut(), self.current_commit);
-
-        let rules = component_iterator_mut(rules);
-        let facts = component_iterator_mut(facts);
-
-        Box::new(rules.chain(facts))
+        let iterator = self.spans_mut().map(|spanned| spanned.component_mut());
+        Box::new(iterator)
     }
 }
