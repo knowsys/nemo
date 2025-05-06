@@ -3,6 +3,7 @@
 use std::fmt::Display;
 
 use existential::ExistentialVariable;
+use global::GlobalVariable;
 use universal::UniversalVariable;
 
 use crate::rule_model::{
@@ -15,6 +16,7 @@ use crate::rule_model::{
 use super::ProgramComponent;
 
 pub mod existential;
+pub mod global;
 pub mod universal;
 
 /// Name of a variable
@@ -49,6 +51,8 @@ pub enum Variable {
     Universal(UniversalVariable),
     /// Existential variable
     Existential(ExistentialVariable),
+    /// Global variable
+    Global(GlobalVariable),
 }
 
 impl Variable {
@@ -62,6 +66,11 @@ impl Variable {
         Self::Existential(ExistentialVariable::new(name))
     }
 
+    /// Create a new global variable.
+    pub fn global(name: &str) -> Self {
+        Self::Global(GlobalVariable::new(name))
+    }
+
     /// Create a new anonymous variable.
     pub fn anonymous() -> Self {
         Self::Universal(UniversalVariable::new_anonymous())
@@ -72,6 +81,7 @@ impl Variable {
         match self {
             Variable::Universal(variable) => variable.name(),
             Variable::Existential(variable) => Some(variable.name()),
+            Variable::Global(global_variable) => Some(global_variable.name()),
         }
     }
 
@@ -83,6 +93,11 @@ impl Variable {
     /// Return whether this is an existential variable.
     pub fn is_existential(&self) -> bool {
         matches!(self, Variable::Existential(_))
+    }
+
+    /// Return whether this is an global variable.
+    pub fn is_global(&self) -> bool {
+        matches!(self, Variable::Global(_))
     }
 
     /// Return whether this is an anonymous universal variable.
@@ -99,6 +114,7 @@ impl Variable {
         match self {
             Variable::Universal(variable) => variable.rename(name),
             Variable::Existential(variable) => variable.rename(name),
+            Variable::Global(variable) => variable.rename(name),
         }
     }
 }
@@ -115,11 +131,18 @@ impl From<ExistentialVariable> for Variable {
     }
 }
 
+impl From<GlobalVariable> for Variable {
+    fn from(value: GlobalVariable) -> Self {
+        Self::Global(value)
+    }
+}
+
 impl Display for Variable {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Variable::Universal(variable) => variable.fmt(f),
             Variable::Existential(variable) => variable.fmt(f),
+            Variable::Global(variable) => variable.fmt(f),
         }
     }
 }
@@ -133,6 +156,7 @@ impl ComponentBehavior for Variable {
         match self {
             Variable::Universal(variable) => variable.validate(builder),
             Variable::Existential(variable) => variable.validate(builder),
+            Variable::Global(variable) => variable.validate(builder),
         }
     }
 
@@ -146,6 +170,7 @@ impl ComponentIdentity for Variable {
         match self {
             Variable::Universal(variable) => variable.id(),
             Variable::Existential(variable) => variable.id(),
+            Variable::Global(variable) => variable.id(),
         }
     }
 
@@ -153,6 +178,7 @@ impl ComponentIdentity for Variable {
         match self {
             Variable::Universal(variable) => variable.set_id(id),
             Variable::Existential(variable) => variable.set_id(id),
+            Variable::Global(variable) => variable.set_id(id),
         }
     }
 
@@ -160,6 +186,7 @@ impl ComponentIdentity for Variable {
         match self {
             Variable::Universal(variable) => variable.origin(),
             Variable::Existential(variable) => variable.origin(),
+            Variable::Global(variable) => variable.origin(),
         }
     }
 
@@ -167,6 +194,7 @@ impl ComponentIdentity for Variable {
         match self {
             Variable::Universal(variable) => variable.set_origin(origin),
             Variable::Existential(variable) => variable.set_origin(origin),
+            Variable::Global(variable) => variable.set_origin(origin),
         }
     }
 }

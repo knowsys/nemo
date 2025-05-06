@@ -112,7 +112,7 @@ impl<'a> Number<'a> {
             String::default()
         };
 
-        format!("{}{}{}", integer, fractional, exponent)
+        format!("{integer}{fractional}{exponent}")
     }
 
     /// Return the value of this number, represented as a [NumberValue].

@@ -3,8 +3,8 @@
 pub mod dsv;
 pub mod json;
 pub mod rdf;
+pub mod sparql;
 
-use core::fmt;
 use std::{
     fmt::Debug,
     io::{Read, Write},
@@ -47,54 +47,11 @@ pub trait ExportHandler: FileFormatMeta {
     fn writer(&self, writer: Box<dyn Write>) -> Result<Box<dyn TableWriter>, Error>;
 }
 
-/// Representation of a resource (file, URL, etc.) for import or export.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum ResourceSpec {
-    /// A concrete resource string.
-    Resource(Resource),
-    /// Use stdout (only for export)
-    Stdout,
-}
-
-impl ResourceSpec {
-    /// Convert a [String] to a [ImportExportResource].
-    pub(crate) fn from_string(string: String) -> Self {
-        if string.is_empty() {
-            Self::Stdout
-        } else {
-            Self::Resource(string)
-        }
-    }
-
-    /// Retrieve the contained resource, if any.
-    pub(crate) fn resource(&self) -> Option<Resource> {
-        if let ResourceSpec::Resource(resource) = &self {
-            Some(resource.clone())
-        } else {
-            None
-        }
-    }
-
-    /// Will this stream be directed to the standard output
-    pub fn is_stdout(&self) -> bool {
-        matches!(self, Self::Stdout)
-    }
-}
-
-impl fmt::Display for ResourceSpec {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            ResourceSpec::Resource(r) => f.write_str(r),
-            ResourceSpec::Stdout => f.write_str("stdout"),
-        }
-    }
-}
-
 #[derive(Debug, Clone)]
 /// Holds all information needed to perform an import or export operation.
 pub struct FileHandler<H> {
     /// The resource which locates the file
-    pub(super) resource_spec: ResourceSpec,
+    pub(super) resource: Resource,
     /// The compression format used when importing
     pub(super) compression: CompressionFormat,
     /// The arity of the predicate related to this directive
@@ -106,13 +63,13 @@ pub struct FileHandler<H> {
 impl<H> FileHandler<H> {
     /// Construct a new [`FileHandler`]
     pub fn new(
-        resource_spec: ResourceSpec,
+        resource: Resource,
         compression: CompressionFormat,
         predicate_arity: usize,
         handler: H,
     ) -> Self {
         FileHandler {
-            resource_spec,
+            resource,
             compression,
             predicate_arity,
             handler,
@@ -167,8 +124,8 @@ impl<T: FileFormatMeta + ?Sized + Send + Sync> FileFormatMeta for Arc<T> {
 
 impl<H> FileHandler<H> {
     /// The resource that will be read from / written to
-    pub fn resource_spec(&self) -> &ResourceSpec {
-        &self.resource_spec
+    pub fn resource(&self) -> &Resource {
+        &self.resource
     }
 
     /// The compression format that will be applied to this stream

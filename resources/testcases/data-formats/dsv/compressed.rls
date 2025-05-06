@@ -1,0 +1,8 @@
+@import auto :- csv{resource="sources/compressed.csv.gz"}.
+@import format :- csv{resource="sources/compressed.csv.gz", compression="gzip"}.
+
+implicit(?x) :- auto(?x).
+explicit(?x) :- format(?x).
+
+@export explicit :- csv{} .
+@export implicit :- csv{} .

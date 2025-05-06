@@ -72,9 +72,16 @@ impl OperationTable {
             .position(|current_marker| current_marker == marker)
     }
 
-    /// Push a new marker to end of this table.
+    /// Push a new marker to the end of this table.
     pub fn push(&mut self, marker: OperationColumnMarker) {
         self.0.push(marker);
+    }
+
+    /// Push a new marker to the end of this table, if it is not already contained in it.
+    pub fn push_distinct(&mut self, marker: OperationColumnMarker) {
+        if !self.contains(&marker) {
+            self.push(marker);
+        }
     }
 
     /// Extend the operation table by appending a series of [OperationColumnMarker]s.
@@ -299,6 +306,7 @@ impl OperationGenerator for OperationGeneratorEnum {
             Self::Function(generator) => generator,
             Self::Null(generator) => generator,
         } {
+            #[allow(late_bound_lifetime_arguments)]
             fn generate<'a>(
                 &'_ self,
                 input: Vec<Option<TrieScanEnum<'a>>>,

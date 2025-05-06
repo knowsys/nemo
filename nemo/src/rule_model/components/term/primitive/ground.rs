@@ -1,6 +1,6 @@
 //! This module defines [GroundTerm].
 
-use std::{fmt::Display, hash::Hash};
+use std::{collections::HashMap, fmt::Display, hash::Hash};
 
 use nemo_physical::datavalues::{AnyDataValue, DataValue, IriDataValue, ValueDomain};
 
@@ -177,7 +177,8 @@ impl GroundTerm {
         Self: Sized,
     {
         let term = Term::parse(input)?;
-        GroundTerm::try_from(term).map_err(|_| ComponentParseError::ParseError)
+        term.try_into_ground(&HashMap::default())
+            .map_err(|_| ComponentParseError::ParseError)
     }
 }
 

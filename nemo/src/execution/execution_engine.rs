@@ -482,12 +482,15 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         program: Program,
         facts: Vec<Fact>,
     ) -> Result<(ExecutionTrace, Vec<TraceFactHandle>), Error> {
+        let chase_facts: Vec<_> = facts
+            .into_iter()
+            .map(|fact| ProgramChaseTranslation::new().build_fact(&fact))
+            .collect();
+
         let mut trace = ExecutionTrace::new(program);
         let mut handles = Vec::new();
 
-        for fact in facts {
-            let chase_fact = ProgramChaseTranslation::new().build_fact(&fact);
-
+        for chase_fact in chase_facts {
             handles.push(self.trace_recursive(&mut trace, chase_fact)?);
         }
 

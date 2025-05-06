@@ -9,13 +9,13 @@ pub(crate) mod writer;
 
 use std::{
     io::{Read, Write},
-    path::Path,
     sync::Arc,
 };
 
 use nemo_physical::{
     datasources::table_providers::TableProvider,
     datavalues::{AnyDataValue, DataValue},
+    resource::ResourceBuilder,
 };
 
 use oxiri::Iri;
@@ -27,12 +27,9 @@ use writer::RdfWriter;
 
 use crate::{
     error::Error,
-    io::{
-        compression_format::CompressionFormat,
-        format_builder::{
-            format_parameter, format_tag, value_type_matches, AnyImportExportBuilder,
-            FormatParameter, Parameters, StandardParameter,
-        },
+    io::format_builder::{
+        format_parameter, format_tag, value_type_matches, AnyImportExportBuilder, FormatParameter,
+        Parameters, StandardParameter,
     },
     rule_model::{
         components::{import_export::Direction, term::value_type::ValueType},
@@ -211,10 +208,9 @@ impl FormatBuilder for RdfHandler {
                 let value = parameters
                     .get_required(RdfParameter::BaseParamType(StandardParameter::Resource));
 
-                let resource = value.to_plain_string_unchecked();
-                let stripped = CompressionFormat::from_resource(&resource).1;
+                let resource = ResourceBuilder::try_from(value)?.finalize();
 
-                let Some(extension) = Path::new(&stripped).extension() else {
+                let Some(extension) = resource.file_extension() else {
                     return Err(ValidationErrorKind::RdfUnspecifiedMissingExtension);
                 };
 
@@ -223,7 +219,7 @@ impl FormatBuilder for RdfHandler {
                     .find(|variant| extension == variant.default_extension())
                 else {
                     return Err(ValidationErrorKind::RdfUnspecifiedUnknownExtension(
-                        extension.to_string_lossy().into_owned(),
+                        extension.to_string(),
                     ));
                 };
 

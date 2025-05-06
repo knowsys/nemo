@@ -12,16 +12,8 @@ use nemo_physical::{
 pub mod file;
 /// A resource provider for HTTP(s) requests.
 pub mod http;
-
-/// Helper function that determines whether resource has the form of an iri.
-///
-/// For now, we don't validate the exact requirements but simply check
-/// whether the string contains a `:`.
-///
-/// TODO: Revise if deemed necessary.
-fn is_iri(resource: &Resource) -> bool {
-    resource.contains(':')
-}
+/// A resource provider for stdin.
+pub mod stdin;
 
 /// Allows resolving resources to readers.
 ///
@@ -64,6 +56,7 @@ impl ResourceProviders {
         Self(Rc::new(vec![
             Box::<http::HttpResourceProvider>::default(),
             Box::new(file::FileResourceProvider::new(base_path)),
+            Box::new(stdin::StdinResourceProvider::default()),
         ]))
     }
 

@@ -21,6 +21,7 @@ use crate::{
         error::ValidationErrorBuilder,
         origin::Origin,
         pipeline::id::ProgramComponentId,
+        substitution::Substitution,
     },
 };
 
@@ -102,17 +103,23 @@ impl Operation {
     }
 
     /// Reduce constant expressions returning a copy of the reduced [Term].
-    pub fn reduce(&self) -> Term {
-        if !self.is_ground() {
-            return Term::Operation(Self {
-                origin: self.origin.clone(),
-                id: ProgramComponentId::default(),
-                kind: self.kind,
-                subterms: self.subterms.iter().map(Term::reduce).collect(),
-            });
+    pub fn reduce_with_substitution(&self, bindings: &Substitution) -> Term {
+        let reduced_subterms = Operation {
+            origin: self.origin.clone(),
+            id: ProgramComponentId::default(),
+            kind: self.kind,
+            subterms: self
+                .subterms
+                .iter()
+                .map(|term| term.reduce_with_substitution(bindings))
+                .collect(),
+        };
+
+        if !reduced_subterms.is_ground() {
+            return Term::Operation(reduced_subterms);
         }
 
-        let chase_operation_term = ProgramChaseTranslation::build_operation_term(self);
+        let chase_operation_term = ProgramChaseTranslation::build_operation_term(&reduced_subterms);
 
         let empty_translation = VariableTranslation::new();
         let function_tree =
@@ -148,13 +155,13 @@ impl Operation {
         if need_braces {
             self.format_braces(f, term)
         } else {
-            write!(f, "{}", term)
+            write!(f, "{term}")
         }
     }
 
     /// Put braces around the input term.
     fn format_braces(&self, f: &mut std::fmt::Formatter<'_>, term: &Term) -> std::fmt::Result {
-        write!(f, "({})", term)
+        write!(f, "({term})")
     }
 
     /// Formats the arguments of an operation as a delimiter separated list.
@@ -209,7 +216,7 @@ impl Operation {
         right: &Term,
     ) -> std::fmt::Result {
         self.format_braces_priority(f, left)?;
-        write!(f, " {} ", operation)?;
+        write!(f, " {operation} ")?;
         self.format_braces_priority(f, right)
     }
 }
@@ -269,7 +276,11 @@ impl ComponentBehavior for Operation {
         //     return None;
         // }
 
-        // if self.is_ground() && !self.reduce().is_primitive() {
+        // if self.is_ground()
+        //     && !self
+        //         .reduce_with_substitution(&Substitution::default())
+        //         .is_primitive()
+        // {
         //     builder.report_error(self.origin, ValidationErrorKind::InvalidGroundOperation);
         //     return None;
         // }
@@ -337,7 +348,7 @@ impl IterablePrimitives for Operation {
         Box::new(self.subterms.iter().flat_map(|term| term.primitive_terms()))
     }
 
-    fn primitive_terms_mut<'a>(&'a mut self) -> Box<dyn Iterator<Item = &'a mut Primitive> + 'a> {
+    fn primitive_terms_mut<'a>(&'a mut self) -> Box<dyn Iterator<Item = &'a mut Term> + 'a> {
         Box::new(
             self.subterms
                 .iter_mut()
@@ -349,8 +360,11 @@ impl IterablePrimitives for Operation {
 #[cfg(test)]
 mod test {
     use crate::rule_model::{
-        components::term::{operation::operation_kind::OperationKind, Term},
-        error::ComponentParseError,
+        components::{
+            term::{operation::operation_kind::OperationKind, Term},
+            ComponentBehavior,
+        },
+        error::{ComponentParseError, ValidationErrorBuilder},
         translation::TranslationComponent,
     };
 
@@ -377,5 +391,23 @@ mod test {
             ),
             operaton
         );
+    }
+
+    #[test]
+    fn invalid_grounded_operations() {
+        let invalid_operations = vec![
+            "2 * \"5\"",
+            "STRBEFORE(\"123\",123)",
+            "URIDECODE(Hello%2GWorld)",
+            "STRLEN(123)",
+            "LOG(1,\"3\")",
+        ];
+        for string in invalid_operations {
+            let operation = Operation::parse(string).unwrap();
+            let mut builder = ValidationErrorBuilder::default();
+            let result = operation.validate(&mut builder);
+            assert!(result.is_none());
+            assert!(!builder.finalize().is_empty());
+        }
     }
 }

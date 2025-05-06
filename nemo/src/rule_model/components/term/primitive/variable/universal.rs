@@ -73,7 +73,7 @@ impl UniversalVariable {
 impl Display for UniversalVariable {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match &self.name {
-            Some(name) => write!(f, "?{}", name),
+            Some(name) => write!(f, "?{name}"),
             None => write!(f, "_"),
         }
     }

@@ -19,11 +19,8 @@ use super::{
 };
 
 impl Rule {
-    pub(crate) const EXPECTED_ATTRIBUTES: &'static [KnownAttributes] = &[
-        KnownAttributes::Name,
-        KnownAttributes::Display,
-        KnownAttributes::External,
-    ];
+    pub(crate) const EXPECTED_ATTRIBUTES: &'static [KnownAttributes] =
+        &[KnownAttributes::Name, KnownAttributes::Display];
 }
 
 impl TranslationComponent for Rule {

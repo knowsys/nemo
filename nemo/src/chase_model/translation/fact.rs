@@ -31,7 +31,7 @@ impl ProgramChaseTranslation {
             if let Term::Primitive(Primitive::Ground(value)) = reduced {
                 terms.push(value.clone());
             } else {
-                unreachable!("invalid program: fact contains non-primitive values")
+                panic!("invalid program: fact contains non-primitive values")
             }
         }
 

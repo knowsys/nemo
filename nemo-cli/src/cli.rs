@@ -154,7 +154,7 @@ pub(crate) struct CliApp {
     /// Arguments related to logging
     #[command(flatten)]
     pub(crate) logging: LoggingArgs,
-    /// Set parameters in the rule file
+    /// Overwrite global parameters in the rule file
     #[arg(long = "param")]
     pub(crate) parameters: Vec<ParamKeyValue>,
 }

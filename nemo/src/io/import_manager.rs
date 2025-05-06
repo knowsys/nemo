@@ -21,20 +21,16 @@ impl ImportManager {
     }
 
     /// Constructs a [TableProvider] from the given [Import].
-    /// The expeced arity can reflect additional knowledge of the caller (or might be taken
+    /// The expected arity can reflect additional knowledge of the caller (or might be taken
     /// from the handler, if it has an arity). It is validated if the import directive is
     /// compatible with this assumption.
     pub(crate) fn table_provider_from_handler(
         &self,
         handler: &Import,
     ) -> Result<Box<dyn TableProvider>, Error> {
-        let reader = self.resource_providers.open_resource(
-            &handler
-                .resource_spec()
-                .resource()
-                .expect("checked when making handler"),
-            &handler.media_type(),
-        )?;
+        let reader = self
+            .resource_providers
+            .open_resource(handler.resource(), &handler.media_type())?;
 
         handler.reader(reader)
     }

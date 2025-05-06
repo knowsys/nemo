@@ -209,7 +209,7 @@ impl IterablePrimitives for Atom {
         Box::new(self.terms.iter().flat_map(|term| term.primitive_terms()))
     }
 
-    fn primitive_terms_mut<'a>(&'a mut self) -> Box<dyn Iterator<Item = &'a mut Primitive> + 'a> {
+    fn primitive_terms_mut<'a>(&'a mut self) -> Box<dyn Iterator<Item = &'a mut Term> + 'a> {
         Box::new(
             self.terms
                 .iter_mut()

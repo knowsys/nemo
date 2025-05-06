@@ -1,0 +1,13 @@
+%! This test is related to 
+%! https://github.com/knowsys/nemo/issues/662
+
+%! Previously, the base was applied to the tag of the map,
+%! which produced a parse error
+
+@base <https://example.org/> .
+
+@import input :- csv { resource = "sources/input.csv" }.
+
+result(?x, ?y) :- input(?x, ?y).
+
+@export result :- csv {}.

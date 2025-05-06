@@ -1,181 +1,103 @@
 //! This module contains a function for handling import/export statements.
 
-use nemo_physical::datavalues::DataValue;
-
 use crate::{
-    parser::ast::{self, ProgramAST},
+    parser::{
+        ast::{self, tag::structure::StructureTag, ProgramAST},
+        context::ParserContext,
+    },
     rule_model::{
         components::{
-            import_export::{ExportDirective, ImportDirective, ImportExportSpec},
-            tag::Tag,
-            term::{
-                map::Map,
-                primitive::{ground::GroundTerm, Primitive},
-                value_type::ValueType,
-                Term,
+            import_export::{
+                attribute::ImportExportAttribute, specification::ImportExportSpec, ExportDirective,
+                ImportDirective,
             },
-            ProgramComponent,
+            tag::Tag,
+            term::{operation::Operation, Term},
         },
-        error::{translation_error::TranslationErrorKind, ComplexErrorLabelKind, TranslationError},
-        substitution::Substitution,
+        error::{translation_error::TranslationErrorKind, TranslationError},
         translation::{
             complex::infix::InfixOperation, ASTProgramTranslation, TranslationComponent,
         },
     },
 };
 
-fn import_export_bindings<'a, 'b>(
-    translation: &mut ASTProgramTranslation<'a, 'b>,
-    guards: impl Iterator<Item = &'b ast::guard::Guard<'a>>,
-) -> Result<Substitution, TranslationError> {
-    // let mut result = Vec::new();
+impl TranslationComponent for ImportExportSpec {
+    type Ast<'a> = ast::expression::complex::map::Map<'a>;
 
-    // for guard in guards {
-    //     let ast::guard::Guard::Infix(infix) = guard else {
-    //         return Err(TranslationError::new(
-    //             guard.span(),
-    //             TranslationErrorKind::NonAssignment {
-    //                 found: "expression".to_string(),
-    //             },
-    //         ));
-    //     };
+    fn build_component<'a, 'b>(
+        translation: &mut ASTProgramTranslation<'a, 'b>,
+        map: &'b Self::Ast<'a>,
+    ) -> Result<Self, TranslationError> {
+        let mut subterms = Vec::new();
+        for (key, value) in map.key_value() {
+            let key = ImportExportAttribute::build_component(translation, key)?;
+            let value = Term::build_component(translation, value)?;
 
-    //     let operation = InfixOperation::build_component(translation, infix)?.into_inner();
+            subterms.push((key, value));
+        }
 
-    //     let Some((left, right)) = operation.variable_assignment() else {
-    //         return Err(TranslationError::new(
-    //             guard.span(),
-    //             TranslationErrorKind::NonAssignment {
-    //                 found: operation.operation_kind().to_string(),
-    //             },
-    //         ));
-    //     };
+        let format = map.tag().map(StructureTag::to_string).unwrap_or_default();
 
-    //     let Ok(right) = GroundTerm::try_from(right.clone()) else {
-    //         return Err(TranslationError::new(
-    //             infix.pair().1.span(),
-    //             TranslationErrorKind::NonGroundTerm {
-    //                 found: right.kind().name().to_string(),
-    //             },
-    //         ));
-    //     };
-
-    //     result.push((left.clone(), Primitive::Ground(right)));
-    // }
-
-    // Ok(Substitution::new(result))
-
-    todo!()
+        let result = ImportExportSpec::new(&format, subterms);
+        Ok(translation.register_component(result, map))
+    }
 }
 
-fn import_export_spec<'a, 'b>(
+impl TranslationComponent for ImportExportAttribute {
+    type Ast<'a> = ast::expression::Expression<'a>;
+
+    fn build_component<'a, 'b>(
+        translation: &mut ASTProgramTranslation<'a, 'b>,
+        expression: &'b Self::Ast<'a>,
+    ) -> Result<Self, TranslationError> {
+        if let ast::expression::Expression::Constant(constant) = expression {
+            let result = ImportExportAttribute::new(constant.tag().to_string());
+            Ok(translation.register_component(result, expression))
+        } else {
+            Err(TranslationError::new(
+                expression.span(),
+                TranslationErrorKind::KeyWrongType {
+                    found: expression.context_type().name().to_owned(),
+                    expected: ParserContext::Constant.name().to_owned(),
+                },
+            ))
+        }
+    }
+}
+
+/// Translate additional bindings
+fn import_export_bindings<'a, 'b>(
     translation: &mut ASTProgramTranslation<'a, 'b>,
-    instructions: &'b ast::expression::complex::map::Map<'a>,
     guards: Option<&'b ast::sequence::Sequence<'a, ast::guard::Guard<'a>>>,
-) -> Result<ImportExportSpec, TranslationError> {
-    // let mut spec = Map::build_component(translation, instructions)?;
+) -> Result<Vec<Operation>, TranslationError> {
+    let mut bindings = Vec::new();
 
-    // let mut substitution = guards
-    //     .map(|guards| import_export_bindings(translation, guards.iter()))
-    //     .transpose()?
-    //     .unwrap_or_default();
+    if let Some(guards) = guards {
+        for guard in guards {
+            let term = match guard {
+                ast::guard::Guard::Expression(expression) => {
+                    if let Term::Operation(operation) =
+                        Term::build_component(translation, expression)?
+                    {
+                        operation
+                    } else {
+                        return Err(TranslationError::new(
+                            expression.span(),
+                            TranslationErrorKind::DirectiveNonOperation {
+                                found: expression.context().name().to_owned(),
+                            },
+                        ));
+                    }
+                }
+                ast::guard::Guard::Infix(infix_expression) => {
+                    InfixOperation::build_component(translation, infix_expression)?.into_inner()
+                }
+            };
+            bindings.push(term);
+        }
+    }
 
-    // for binding in translation.external_variables() {
-    //     let (variable, expansion) = binding?;
-    //     substitution.insert(variable.clone(), expansion.clone());
-    // }
-
-    // substitution.apply(&mut spec);
-    // spec = spec.reduce();
-
-    // let Some(format_tag) = spec.tag() else {
-    //     let span = instructions.span().beginning();
-    //     return Err(TranslationError::new(
-    //         span,
-    //         TranslationErrorKind::FileFormatMissing,
-    //     ));
-    // };
-
-    // let mut result = ImportExportSpec::new(*spec.origin(), format_tag);
-
-    // for (key, value) in spec.key_value() {
-    //     let Term::Primitive(Primitive::Ground(key_term)) = key else {
-    //         let span = translation
-    //             .origin_map
-    //             .get(key.origin())
-    //             .map(|ast| ast.span())
-    //             .unwrap_or(instructions.span());
-
-    //         return Err(TranslationError::new(
-    //             span,
-    //             TranslationErrorKind::NonGroundTerm {
-    //                 found: key.to_string(),
-    //             },
-    //         ));
-    //     };
-
-    //     let Some(key) = key_term.value().to_iri() else {
-    //         let span = translation
-    //             .origin_map
-    //             .get(key_term.origin())
-    //             .map(|ast| ast.span())
-    //             .unwrap_or(instructions.span());
-
-    //         return Err(TranslationError::new(
-    //             span,
-    //             TranslationErrorKind::KeyWrongType {
-    //                 key: key_term.to_string(),
-    //                 expected: ValueType::Constant.name().to_string(),
-    //                 found: key_term.value_type().name().to_string(),
-    //             },
-    //         ));
-    //     };
-
-    //     let Ok(value) = GroundTerm::try_from(value.clone()) else {
-    //         let span = translation
-    //             .origin_map
-    //             .get(value.origin())
-    //             .map(|ast| ast.span())
-    //             .unwrap_or(instructions.span());
-
-    //         return Err(TranslationError::new(
-    //             span,
-    //             TranslationErrorKind::NonGroundTerm {
-    //                 found: value.to_string(),
-    //             },
-    //         ));
-    //     };
-
-    // if let Some((prev_origin, _)) =
-    //     result.push_attribute((key.clone(), *key_term.origin()), value.clone())
-    // {
-    //     let key_span = translation
-    //         .origin_map
-    //         .get(key_term.origin())
-    //         .map(|ast| ast.span())
-    //         .unwrap_or(instructions.span());
-
-    //     let mut error = TranslationError::new(
-    //         key_span,
-    //         TranslationErrorKind::MapParameterRedefined { key },
-    //     );
-
-    //     if let Some(prev_key) = translation.origin_map.get(&prev_origin) {
-    //         error = error.add_label(
-    //             ComplexErrorLabelKind::Information,
-    //             prev_key.span().range(),
-    //             "first definition occurred here",
-    //         );
-    //     }
-
-    //     return Err(error);
-    // }
-    // }
-
-    // log::trace!("Import/Export spec {result}");
-    // Ok(result)
-
-    todo!()
+    Ok(bindings)
 }
 
 impl TranslationComponent for ImportDirective {
@@ -188,9 +110,11 @@ impl TranslationComponent for ImportDirective {
         let predicate = Tag::new(translation.resolve_tag(import.predicate())?)
             .set_origin(translation.register_node(import.predicate()));
 
-        let spec = import_export_spec(translation, import.instructions(), import.guards())?;
+        let spec = ImportExportSpec::build_component(translation, import.instructions())?;
 
-        Ok(translation.register_component(ImportDirective::new(predicate, spec), import))
+        let bindings = import_export_bindings(translation, import.guards())?;
+
+        Ok(translation.register_component(ImportDirective::new(predicate, spec, bindings), import))
     }
 }
 
@@ -204,8 +128,10 @@ impl TranslationComponent for ExportDirective {
         let predicate = Tag::new(translation.resolve_tag(export.predicate())?)
             .set_origin(translation.register_node(export.predicate()));
 
-        let spec = import_export_spec(translation, export.instructions(), export.guards())?;
+        let spec = ImportExportSpec::build_component(translation, export.instructions())?;
 
-        Ok(translation.register_component(ExportDirective::new(predicate, spec), export))
+        let bindings = import_export_bindings(translation, export.guards())?;
+
+        Ok(translation.register_component(ExportDirective::new(predicate, spec, bindings), export))
     }
 }

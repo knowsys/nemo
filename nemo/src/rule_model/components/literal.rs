@@ -46,9 +46,9 @@ impl Literal {
 impl Display for Literal {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Literal::Positive(positive) => write!(f, "{}", positive),
-            Literal::Negative(negative) => write!(f, "~{}", negative),
-            Literal::Operation(operation) => write!(f, "{}", operation),
+            Literal::Positive(positive) => write!(f, "{positive}"),
+            Literal::Negative(negative) => write!(f, "~{negative}"),
+            Literal::Operation(operation) => write!(f, "{operation}"),
         }
     }
 }
@@ -192,7 +192,7 @@ impl IterablePrimitives for Literal {
         }
     }
 
-    fn primitive_terms_mut<'a>(&'a mut self) -> Box<dyn Iterator<Item = &'a mut Primitive> + 'a> {
+    fn primitive_terms_mut<'a>(&'a mut self) -> Box<dyn Iterator<Item = &'a mut Term> + 'a> {
         match self {
             Literal::Positive(literal) => literal.primitive_terms_mut(),
             Literal::Negative(literal) => literal.primitive_terms_mut(),

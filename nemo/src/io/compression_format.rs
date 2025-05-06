@@ -8,7 +8,7 @@ use std::{
 use flate2::Compression;
 
 use gzip::Gzip;
-use nemo_physical::{error::ReadingError, resource::Resource};
+use nemo_physical::{error::ReadingError, resource::ResourceBuilder};
 
 use crate::syntax::import_export::{attribute, file_format};
 
@@ -54,15 +54,19 @@ impl Display for CompressionFormat {
 const GZIP_COMPRESSION_LEVEL: Compression = Compression::new(6);
 
 impl CompressionFormat {
-    /// Derive a compression format from the file extension of the given resource,
-    /// and return the compression format and the resource string without this extenions.
-    pub fn from_resource(resource: &Resource) -> (CompressionFormat, Resource) {
-        match resource {
-            resource if resource.ends_with(".gz") => (
-                CompressionFormat::GZip,
-                resource.as_str()[0..resource.len() - 3].to_string(),
-            ),
-            _ => (CompressionFormat::None, resource.to_owned()),
+    /// Derive a compression format from the file extension of the given resource builder.
+    pub fn from_resource_builder(builder: &Option<ResourceBuilder>) -> Self {
+        let Some(builder) = builder else {
+            return Self::None;
+        };
+
+        if !builder.supports_compression() {
+            return Self::None;
+        }
+
+        match builder.file_extension() {
+            Some(file_format::EXTENSION_GZ) => Self::GZip,
+            _ => Self::None,
         }
     }
 }

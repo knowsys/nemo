@@ -11,6 +11,7 @@ use crate::rule_model::{
     error::ValidationErrorBuilder,
     origin::Origin,
     pipeline::id::ProgramComponentId,
+    substitution::Substitution,
 };
 
 use super::{
@@ -124,14 +125,19 @@ impl Map {
     }
 
     /// Reduce the [Term]s in each key-value pair returning a copy.
-    pub fn reduce(&self) -> Self {
+    pub fn reduce_with_substitution(&self, bindings: &Substitution) -> Self {
         Self {
             origin: self.origin.clone(),
             id: ProgramComponentId::default(),
             tag: self.tag.clone(),
             map: self
                 .key_value()
-                .map(|(key, value)| (key.reduce(), value.reduce()))
+                .map(|(key, value)| {
+                    (
+                        key.reduce_with_substitution(bindings),
+                        value.reduce_with_substitution(bindings),
+                    )
+                })
                 .collect(),
         }
     }
@@ -147,7 +153,7 @@ impl Display for Map {
         ))?;
 
         for (term_index, (key, value)) in self.map.iter().enumerate() {
-            f.write_fmt(format_args!("{}: {}", key, value))?;
+            f.write_fmt(format_args!("{key}: {value}"))?;
 
             if term_index < self.map.len() - 1 {
                 f.write_str(", ")?;
@@ -261,7 +267,7 @@ impl IterablePrimitives for Map {
         )
     }
 
-    fn primitive_terms_mut<'a>(&'a mut self) -> Box<dyn Iterator<Item = &'a mut Primitive> + 'a> {
+    fn primitive_terms_mut<'a>(&'a mut self) -> Box<dyn Iterator<Item = &'a mut Term> + 'a> {
         Box::new(
             self.map.iter_mut().flat_map(|(key, value)| {
                 key.primitive_terms_mut().chain(value.primitive_terms_mut())

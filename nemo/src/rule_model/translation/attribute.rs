@@ -44,12 +44,6 @@ pub(crate) enum KnownAttributes {
     #[assoc(unique = true)]
     #[assoc(schema = vec![(None, Some(ValueType::String))])]
     Display,
-    /// Local variable, supplied by an external component (cli / APIs)
-    #[assoc(name = "external")]
-    #[assoc(from_name = "external")]
-    #[assoc(unique = false)]
-    #[assoc(schema = vec![(Some(ProgramComponentKind::Variable), None)])]
-    External,
 }
 
 #[derive(Debug)]
@@ -67,6 +61,7 @@ impl<V> Bag<KnownAttributes, V> {
         self.0.get(&attr).map(|v| &v[0])
     }
 
+    #[allow(unused)]
     pub(crate) fn get(&self, attr: KnownAttributes) -> &[V] {
         self.0.get(&attr).map(|v| &**v).unwrap_or(&[])
     }

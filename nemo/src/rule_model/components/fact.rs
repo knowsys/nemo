@@ -129,32 +129,32 @@ impl ComponentBehavior for Fact {
 
     fn validate(&self, _builder: &mut ValidationErrorBuilder) -> Option<()> {
         // if !self.predicate.is_valid() {
-        //             builder.report_error(
-        //                 *self.predicate.origin(),
-        //                 ValidationErrorKind::InvalidTermTag(self.predicate.to_string()),
-        //             );
-        //         }
+        //     builder.report_error(
+        //         *self.predicate.origin(),
+        //         ValidationErrorKind::InvalidTermTag(self.predicate.to_string()),
+        //     );
+        // }
 
-        //         for term in self.subterms() {
-        //             if term.is_map() || term.is_tuple() || term.is_function() {
-        //                 builder
-        //                     .report_error(*term.origin(), ValidationErrorKind::UnsupportedComplexTerm)
-        //                     .add_hint_option(Self::hint_term_operation(term));
-        //                 return None;
-        //             }
+        // for term in self.subterms() {
+        //     if term.is_map() || term.is_tuple() || term.is_function() {
+        //         builder
+        //             .report_error(*term.origin(), ValidationErrorKind::UnsupportedComplexTerm)
+        //             .add_hint_option(Self::hint_term_operation(term));
+        //         return None;
+        //     }
 
-        //             if term.is_aggregate() {
-        //                 builder.report_error(*term.origin(), ValidationErrorKind::FactSubtermAggregate);
-        //                 return None;
-        //             }
+        //     if term.is_aggregate() {
+        //         builder.report_error(*term.origin(), ValidationErrorKind::FactSubtermAggregate);
+        //         return None;
+        //     }
 
-        //             if let Some(variable) = term.variables().next() {
-        //                 builder.report_error(*variable.origin(), ValidationErrorKind::FactNonGround);
-        //                 continue;
-        //             }
+        //     if let Some(variable) = term.variables().find(|variable| !variable.is_global()) {
+        //         builder.report_error(*variable.origin(), ValidationErrorKind::FactNonGround);
+        //         continue;
+        //     }
 
-        //             term.validate(builder)?;
-        //         }
+        //     term.validate(builder)?;
+        // }
 
         Some(())
     }
@@ -201,7 +201,7 @@ impl IterablePrimitives for Fact {
         Box::new(self.subterms().flat_map(|term| term.primitive_terms()))
     }
 
-    fn primitive_terms_mut<'a>(&'a mut self) -> Box<dyn Iterator<Item = &'a mut Primitive> + 'a> {
+    fn primitive_terms_mut<'a>(&'a mut self) -> Box<dyn Iterator<Item = &'a mut Term> + 'a> {
         Box::new(
             self.terms
                 .iter_mut()

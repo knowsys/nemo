@@ -11,6 +11,7 @@ use crate::rule_model::{
     error::ValidationErrorBuilder,
     origin::Origin,
     pipeline::id::ProgramComponentId,
+    substitution::Substitution,
 };
 
 use super::{
@@ -109,12 +110,16 @@ impl FunctionTerm {
     }
 
     /// Reduce each sub [Term] in the function returning a copy.
-    pub fn reduce(&self) -> Self {
+    pub fn reduce_with_substitution(&self, bindings: &Substitution) -> Self {
         Self {
             origin: self.origin.clone(),
             id: ProgramComponentId::default(),
             tag: self.tag.clone(),
-            terms: self.terms.iter().map(Term::reduce).collect(),
+            terms: self
+                .terms
+                .iter()
+                .map(|term| term.reduce_with_substitution(bindings))
+                .collect(),
         }
     }
 }
@@ -245,7 +250,7 @@ impl IterablePrimitives for FunctionTerm {
         Box::new(self.terms.iter().flat_map(|term| term.primitive_terms()))
     }
 
-    fn primitive_terms_mut<'a>(&'a mut self) -> Box<dyn Iterator<Item = &'a mut Primitive> + 'a> {
+    fn primitive_terms_mut<'a>(&'a mut self) -> Box<dyn Iterator<Item = &'a mut Term> + 'a> {
         Box::new(
             self.terms
                 .iter_mut()

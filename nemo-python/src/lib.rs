@@ -11,7 +11,9 @@ use nemo::{
     io::{resource_providers::ResourceProviders, ExportManager, ImportManager},
     meta::timing::TimedCode,
     rule_model::{
-        components::{fact::Fact, tag::Tag, term::primitive::Primitive, ComponentBehavior},
+        components::{
+            fact::Fact, tag::Tag, term::primitive::Primitive, term::Term, ComponentBehavior,
+        },
         error::ValidationErrorBuilder,
         substitution::Substitution,
     },
@@ -36,7 +38,7 @@ impl<T> PythonResult for Result<T, nemo::error::Error> {
     type Value = T;
 
     fn py_res(self) -> PyResult<Self::Value> {
-        self.map_err(|err| NemoError::new_err(format!("{}", err)))
+        self.map_err(|err| NemoError::new_err(format!("{err}")))
     }
 }
 impl<T> PythonResult for (T, Vec<Error>) {
@@ -272,7 +274,7 @@ fn assignement_to_dict<'py>(
 ) -> PyResult<Bound<'py, PyDict>> {
     let dict = PyDict::new(py);
     for (variable, term) in assignment {
-        if let Primitive::Ground(ground) = term {
+        if let Term::Primitive(Primitive::Ground(ground)) = term {
             dict.set_item(
                 variable.to_string(),
                 datavalue_to_python(py, ground.value())?,
@@ -293,6 +295,16 @@ fn trace_to_dict<'py>(trace: &ExecutionTraceTree, py: Python<'py>) -> PyResult<B
                 "assignment",
                 assignement_to_dict(&rule_application.assignment, py)?,
             )?;
+            if let Some(name) = rule_application.rule.name() {
+                result.set_item("name", name)?;
+            }
+            if let Some(display) = rule_application
+                .rule
+                .instantiated_display(&rule_application.assignment)
+            {
+                result.set_item("display", display)?;
+            }
+
             let subtraces: Vec<_> = subtraces
                 .iter()
                 .map(|trace| trace_to_dict(trace, py))

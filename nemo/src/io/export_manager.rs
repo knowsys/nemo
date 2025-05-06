@@ -7,12 +7,12 @@ use std::{
 
 use crate::{error::Error, rule_model::components::tag::Tag};
 
-use nemo_physical::datavalues::AnyDataValue;
+use nemo_physical::{datavalues::AnyDataValue, resource::Resource};
 use sanitise_file_name::{sanitise_with_options, Options};
 
 use super::{
     compression_format::CompressionFormat,
-    formats::{Export, ExportHandler, ResourceSpec},
+    formats::{Export, ExportHandler},
 };
 
 /// Main object for exporting data to files.
@@ -68,7 +68,9 @@ impl ExportManager {
     /// Validates the given [ExportHandler].
     /// This also checks whether the specified file could (likely) be written.
     pub fn validate(&self, _predicate: &Tag, handler: &Export) -> Result<(), Error> {
-        let ResourceSpec::Resource(resource) = handler.resource_spec() else {
+        let resource = handler.resource();
+
+        if resource.is_pipe() {
             return Ok(());
         };
 
@@ -95,7 +97,7 @@ impl ExportManager {
     ///
     /// This is a complete path (based on our base path),
     /// which includes all extensions.
-    fn sanitized_path(&self, file_name_unsafe: &str, add_compression: bool) -> PathBuf {
+    fn sanitized_path(&self, resource: &Resource, add_compression: bool) -> PathBuf {
         let mut pred_path = self.base_path.to_path_buf();
 
         let sanitize_options = Options::<Option<char>> {
@@ -103,7 +105,9 @@ impl ExportManager {
             ..Default::default()
         };
 
-        let file_name = sanitise_with_options(file_name_unsafe, &sanitize_options);
+        let file_name_unsanitized = resource.to_string();
+
+        let file_name = sanitise_with_options(&file_name_unsanitized, &sanitize_options);
 
         pred_path.push(file_name);
 
@@ -122,23 +126,22 @@ impl ExportManager {
     /// This function may already create directories, and should not be used if
     /// [ExportManager::disable_write] is `true`.
     fn writer(&self, export_handler: &Export, predicate: &Tag) -> Result<Box<dyn Write>, Error> {
-        let writer: Box<dyn Write> = match export_handler.resource_spec() {
-            ResourceSpec::Resource(file_name_unsafe) => {
-                let output_path =
-                    self.sanitized_path(file_name_unsafe, !export_handler.is_compressed());
+        let resource = export_handler.resource();
+        let writer: Box<dyn Write> = if resource.is_pipe() {
+            Box::new(std::io::stdout().lock())
+        } else {
+            let output_path = self.sanitized_path(resource, !export_handler.is_compressed());
 
-                log::info!("Exporting predicate \"{}\" to {output_path:?}", predicate);
+            log::info!("Exporting predicate \"{predicate}\" to {output_path:?}");
 
-                if let Some(parent) = output_path.parent() {
-                    create_dir_all(parent)?;
-                }
-
-                Box::new(Self::open_options(self.overwrite).open(output_path)?)
+            if let Some(parent) = output_path.parent() {
+                create_dir_all(parent)?;
             }
-            ResourceSpec::Stdout => Box::new(std::io::stdout().lock()),
+
+            Box::new(Self::open_options(self.overwrite).open(output_path)?)
         };
 
-        if !export_handler.is_compressed() {
+        if resource.supports_compression() && !export_handler.is_compressed() {
             Ok(self
                 .default_compression_format
                 .implementation()
@@ -172,7 +175,7 @@ impl ExportManager {
             table_writer.export_table_data(Box::new(table))?;
         }
 
-        Ok(export_handler.resource_spec().is_stdout())
+        Ok(export_handler.resource().is_pipe())
     }
 
     /// Export a (possibly empty) table according to the given [ExportHandler],

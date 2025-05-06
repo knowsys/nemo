@@ -2,9 +2,10 @@
 #![allow(missing_docs)]
 
 use enum_assoc::Assoc;
+use nemo_physical::{datavalues::ValueDomain, resource::ResourceValidationErrorKind};
 use thiserror::Error;
 
-use crate::rule_model::components::term::primitive::variable::Variable;
+use crate::rule_model::components::term::{primitive::variable::Variable, Term};
 
 /// Types of errors that occur while building the logical rule model
 #[derive(Assoc, Error, Clone, Debug)]
@@ -162,6 +163,62 @@ pub enum ValidationErrorKind {
     #[assoc(note = "arity of predicates in import/export statements must be known in advance.")]
     #[assoc(code = 232)]
     UnknownArity { predicate: String },
+    /// IRI is invalid for HTTP request
+    #[error(r#"IRI is invalid for HTTP request"#)]
+    #[assoc(code = 233)]
+    InvalidHttpIri,
+    /// Invalid SPARQL query
+    #[assoc(code = 234)]
+    #[error(r#"invalid SPARQL query: {oxi_error}"#)]
+    InvalidSparqlQuery { oxi_error: String },
+    /// Error during resource validation
+    #[assoc(code = 235)]
+    #[error(transparent)]
+    ResourceValidationError(#[from] ResourceValidationErrorKind),
+    /// HTTP parameter is invalid
+    #[assoc(code = 236)]
+    #[error("HTTP parameter was given as `{given:?}`, expected one of: `{expected:?}`")]
+    HttpParameterNotInValueDomain {
+        /// Collection of expected [ValueDomain] for HTTP parameter
+        expected: Vec<ValueDomain>,
+        /// The actual [ValueDomain] of the HTTP parameter
+        given: ValueDomain,
+    },
+    /// Variable assignemnts in directive have incorrect form
+    #[error("expected a variable assignment of the form `?variable = term")]
+    #[assoc(code = 237)]
+    DirectiveNonAssignment,
+    /// Variable assignemnts in directive have incorrect form
+    #[error("expected a variable assignment to a ground term")]
+    #[assoc(note = "ground terms are terms without variables")]
+    #[assoc(code = 238)]
+    DirectiveAssignmentNotGround,
+    /// Directive received conflicting variable assignments
+    #[error("variable `{variable}` has been defined multiple times")]
+    #[assoc(code = 239)]
+    DirectiveConflictingAssignments { variable: String },
+
+    /// Stdin is only supported for one import
+    #[error("expected at most one `stdin` import, found at least 2 occurrences")]
+    #[assoc(code = 237)]
+    ReachedStdinImportLimit,
+    /// Ground operation contains invalid literals
+    #[error("ground operation does not return a result")]
+    #[assoc(code = 238)]
+    InvalidGroundOperation,
+    /// Import/Export parameter contains unspecified variables
+    #[error("parameter value `{0}` is not a ground term")]
+    #[assoc(code = 239)]
+    ImportExportParameterNotGround(Term),
+    /// Parameter declaration references undefined parameter
+    #[error("parameter value references an undefined global")]
+    #[assoc(code = 240)]
+    #[assoc(note = "parameters can only reference parameters defined earlier")]
+    ParameterDeclarationReferencesUndefinedGlobal,
+    /// Parameter declaration has no definition
+    #[error("parameter value needs to defined (via assignment or externally e.g. via --param on the cli)")]
+    #[assoc(code = 241)]
+    ParameterMissingDefinition,
 
     /// Unsupported feature: Multiple aggregates in one rule
     #[error(r#"multiple aggregates in one rule is currently unsupported"#)]

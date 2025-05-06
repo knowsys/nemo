@@ -9,6 +9,7 @@ pub mod fact;
 pub mod import_export;
 pub mod literal;
 pub mod output;
+pub mod parameter;
 pub mod rule;
 pub mod tag;
 pub mod term;
@@ -17,9 +18,13 @@ use std::fmt::{Debug, Display};
 
 use atom::Atom;
 use enum_assoc::Assoc;
-use import_export::{ExportDirective, ImportDirective};
+use import_export::{
+    attribute::ImportExportAttribute, specification::ImportExportSpec, ExportDirective,
+    ImportDirective,
+};
 use literal::Literal;
 use output::Output;
+use parameter::ParameterDeclaration;
 use rule::Rule;
 use term::{
     aggregate::Aggregate,
@@ -27,7 +32,10 @@ use term::{
     map::Map,
     primitive::{
         ground::GroundTerm,
-        variable::{existential::ExistentialVariable, universal::UniversalVariable, Variable},
+        variable::{
+            existential::ExistentialVariable, global::GlobalVariable, universal::UniversalVariable,
+            Variable,
+        },
         Primitive,
     },
     tuple::Tuple,
@@ -49,6 +57,9 @@ pub enum ProgramComponentKind {
     /// Plain String
     #[assoc(name = "string")]
     PlainString,
+    /// Attribute
+    #[assoc(name = "attribute")]
+    Attribute,
     /// Language tagged string
     #[assoc(name = "language tagged string")]
     LanguageTaggedString,
@@ -109,6 +120,9 @@ pub enum ProgramComponentKind {
     /// Output
     #[assoc(name = "output")]
     Output,
+    /// Parameter declaration directive
+    #[assoc(name = "parameter")]
+    ParameterDeclaration,
     /// One of the given kinds:
     #[assoc(name = "oneof")]
     OneOf(&'static [ProgramComponentKind]),
@@ -182,6 +196,7 @@ impl<Component: ComponentIdentity + ComponentBehavior> EffectiveOrigin for Compo
 pub trait ComponentCast:
     TryAsRef<ExistentialVariable>
     + TryAsRef<UniversalVariable>
+    + TryAsRef<GlobalVariable>
     + TryAsRef<Variable>
     + TryAsRef<GroundTerm>
     + TryAsRef<Aggregate>
@@ -197,11 +212,15 @@ pub trait ComponentCast:
     + TryAsRef<ExportDirective>
     + TryAsRef<Atom>
     + TryAsRef<Program>
+    + TryAsRef<ImportExportAttribute>
+    + TryAsRef<ImportExportSpec>
+    + TryAsRef<ParameterDeclaration>
 {
 }
 impl<Component> ComponentCast for Component where
     Component: TryAsRef<ExistentialVariable>
         + TryAsRef<UniversalVariable>
+        + TryAsRef<GlobalVariable>
         + TryAsRef<Variable>
         + TryAsRef<GroundTerm>
         + TryAsRef<Aggregate>
@@ -217,6 +236,9 @@ impl<Component> ComponentCast for Component where
         + TryAsRef<ExportDirective>
         + TryAsRef<Atom>
         + TryAsRef<Program>
+        + TryAsRef<ImportExportAttribute>
+        + TryAsRef<ImportExportSpec>
+        + TryAsRef<ParameterDeclaration>
 {
 }
 
@@ -308,9 +330,13 @@ pub trait IterableVariables {
 
 /// Trait implemented by program components that allow iterating over [Primitive] terms
 pub trait IterablePrimitives {
+    type TermType = Term;
+
     /// Return an iterator over all [Primitive] terms contained within this program component.
     fn primitive_terms<'a>(&'a self) -> Box<dyn Iterator<Item = &'a Primitive> + 'a>;
 
     /// Return a mutable iterator over all [Primitive] terms contained within this program component.
-    fn primitive_terms_mut<'a>(&'a mut self) -> Box<dyn Iterator<Item = &'a mut Primitive> + 'a>;
+    fn primitive_terms_mut<'a>(
+        &'a mut self,
+    ) -> Box<dyn Iterator<Item = &'a mut Self::TermType> + 'a>;
 }
