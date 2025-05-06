@@ -45,9 +45,14 @@ fn cli_argument_parsing() -> Result<(), Box<dyn std::error::Error>> {
         .stderr(predicate::str::contains("'--log <LOG_LEVEL>'"));
 
     cmd = Command::cargo_bin(bin)?;
-    cmd.arg("--dump").arg("None");
+    cmd.arg("--print-facts").arg("keep");
     cmd.assert().failure().stderr(predicate::str::contains(
-        "invalid value 'None' for '--dump <DUMPING>'",
+        "invalid value 'keep' for '--print-facts <PRINT_FACTS_SETTING>'",
+    ));
+    cmd = Command::cargo_bin(bin)?;
+    cmd.arg("--print-facts").arg("none");
+    cmd.assert().failure().stderr(predicate::str::contains(
+        "the following required arguments were not provided",
     ));
     Ok(())
 }

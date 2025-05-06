@@ -22,13 +22,14 @@ pub mod error;
 
 use std::{
     fs::{read_to_string, File},
+    io::stdout,
     io::Write,
 };
 
 use clap::Parser;
 use colored::Colorize;
 
-use cli::{CliApp, Dumping, Exporting, ParamKeyValue, Reporting};
+use cli::{CliApp, Exporting, FactPrinting, ParamKeyValue, Reporting};
 
 use error::CliError;
 use nemo::{
@@ -40,8 +41,11 @@ use nemo::{
     rule_model::{
         self,
         components::{
-            fact::Fact, import_export::ExportDirective, tag::Tag,
-            term::primitive::variable::global::GlobalVariable, ProgramComponent,
+            fact::Fact,
+            import_export::ExportDirective,
+            tag::Tag,
+            term::{primitive::variable::global::GlobalVariable, Term},
+            ProgramComponent,
         },
         error::ValidationErrorBuilder,
         program::Program,
@@ -52,16 +56,20 @@ fn default_export(predicate: Tag) -> ExportDirective {
     ExportDirective::new_csv(predicate)
 }
 
-fn dump_table<W: Write>(
+fn print_facts_for_table<W: Write>(
     writer: &mut W,
-    table: impl Iterator<Item = Vec<AnyDataValue>>,
+    mut table: impl Iterator<Item = Vec<AnyDataValue>>,
     predicate: Tag,
 ) -> Result<(), Error> {
-    for row in table {
-        let string: Vec<String> = row.iter().map(|value| value.to_string()).collect();
-        writeln!(writer, "{}({}).", predicate.name(), string.join(","))?;
-    }
-    Ok(())
+    table
+        .try_for_each(|row| {
+            writeln!(
+                writer,
+                "{}",
+                Fact::new(predicate.clone(), row.into_iter().map(Term::ground))
+            )
+        })
+        .map_err(Error::IO)
 }
 
 /// Set exports according to command-line parameter.
@@ -96,26 +104,13 @@ fn override_exports(program: &mut Program, value: Exporting) {
     program.add_exports(additional_exports);
 }
 
-fn dump_facts(dumping: Dumping, program: &mut Program) -> Vec<Tag> {
-    let mut predicates = Vec::new();
-    match dumping {
-        Dumping::Idb => {
-            for predicate in program.derived_predicates() {
-                predicates.push(predicate);
-            }
-        }
-        Dumping::Edb => {
-            for predicate in program.import_predicates() {
-                predicates.push(predicate);
-            }
-        }
-        Dumping::All => {
-            for predicate in program.all_predicates() {
-                predicates.push(predicate);
-            }
-        }
+fn predicates_to_print_facts_for(print_facts_setting: FactPrinting, program: &Program) -> Vec<Tag> {
+    match print_facts_setting {
+        FactPrinting::None => Vec::new(),
+        FactPrinting::Idb => program.derived_predicates().into_iter().collect(),
+        FactPrinting::Edb => program.import_predicates().into_iter().collect(),
+        FactPrinting::All => program.all_predicates().into_iter().collect(),
     }
-    predicates
 }
 
 /// Prints short summary message.
@@ -339,7 +334,7 @@ fn run(mut cli: CliApp) -> Result<(), CliError> {
 
     let mut stdout_used = false;
 
-    if !export_manager.write_disabled() || cli.output.dumping.is_some() {
+    if !export_manager.write_disabled() {
         TimedCode::instance()
             .sub("Output & Final Materialization")
             .start();
@@ -353,22 +348,24 @@ fn run(mut cli: CliApp) -> Result<(), CliError> {
             )?;
         }
 
-        if let Some(dumping) = cli.output.dumping {
-            log::info!("Dumping facts");
-            let mut writer: Box<dyn Write> = match cli.output.dump_file {
-                Some(ref path) => Box::new(File::create(path)?),
-                None => Box::new(std::io::stdout().lock()),
-            };
-            for tag in dump_facts(dumping, &mut program) {
-                if let Some(table) = engine.predicate_rows(&tag)? {
-                    dump_table(&mut writer, table, tag)?;
-                }
-            }
-        }
-
         TimedCode::instance()
             .sub("Output & Final Materialization")
             .stop();
+    }
+
+    if cli.output.print_facts_setting.is_enabled() {
+        TimedCode::instance().sub("Printing Facts").start();
+        log::info!("Printing facts");
+
+        let mut stdout = Box::new(stdout().lock());
+
+        for predicate in predicates_to_print_facts_for(cli.output.print_facts_setting, &program) {
+            if let Some(table) = engine.predicate_rows(&predicate)? {
+                print_facts_for_table(&mut stdout, table, predicate)?;
+            }
+        }
+
+        TimedCode::instance().sub("Printing Facts").stop();
     }
 
     TimedCode::instance().stop();
