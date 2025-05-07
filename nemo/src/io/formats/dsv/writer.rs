@@ -3,7 +3,7 @@
 use std::io::Write;
 
 use csv::{Writer, WriterBuilder};
-use nemo_physical::datavalues::AnyDataValue;
+use nemo_physical::{datavalues::AnyDataValue, meta::timing::TimedCode};
 
 use crate::{
     error::Error,
@@ -54,54 +54,65 @@ impl DsvWriter {
     ) -> Result<(), Error> {
         log::info!("Starting data export");
 
-        let serializers: Vec<DataValueSerializerFunction> = self
-            .value_formats
-            .iter()
-            .map(|vf| vf.data_value_serializer_function())
-            .collect();
-        let skip: Vec<bool> = self
-            .value_formats
-            .iter()
-            .map(|vf| *vf == DsvValueFormat::Skip)
-            .collect();
+        // let serializers: Vec<DataValueSerializerFunction> = self
+        //     .value_formats
+        //     .iter()
+        //     .map(|vf| vf.data_value_serializer_function())
+        //     .collect();
+        // let skip: Vec<bool> = self
+        //     .value_formats
+        //     .iter()
+        //     .map(|vf| *vf == DsvValueFormat::Skip)
+        //     .collect();
 
-        let stop_limit = self.limit.unwrap_or(0);
+        // let stop_limit = self.limit.unwrap_or(0);
 
-        let mut line_count: u64 = 0;
-        let mut drop_count: u64 = 0;
+        // let mut line_count: u64 = 0;
+        // let mut drop_count: u64 = 0;
+
+        let mut record_count: usize = 0;
+
+        TimedCode::instance().sub("Iterate").start();
+
         for record in table {
-            let mut string_record = Vec::with_capacity(record.len());
-            let mut complete = true;
-            for (i, dv) in record.iter().enumerate() {
-                assert!(i < self.value_formats.len());
-                if skip[i] {
-                    continue;
-                }
-                if let Some(stringvalue) = serializers[i](dv) {
-                    string_record.push(stringvalue);
-                } else {
-                    complete = false;
-                    break;
-                }
-            }
+            record_count += 1;
 
-            if complete {
-                self.writer.write_record(string_record)?;
-                line_count += 1;
-                if (line_count % PROGRESS_NOTIFY_INCREMENT) == 0 {
-                    log::info!("... processed {line_count} tuples");
-                }
-                if line_count == stop_limit {
-                    break;
-                }
-            } else {
-                drop_count += 1;
-            }
+            // let mut string_record = Vec::with_capacity(record.len());
+            // let mut complete = true;
+            // for (i, dv) in record.iter().enumerate() {
+            //     assert!(i < self.value_formats.len());
+            //     if skip[i] {
+            //         continue;
+            //     }
+            //     if let Some(stringvalue) = serializers[i](dv) {
+            //         string_record.push(stringvalue);
+            //     } else {
+            //         complete = false;
+            //         break;
+            //     }
+            // }
+
+            // if complete {
+            //     self.writer.write_record(string_record)?;
+            //     line_count += 1;
+            //     if (line_count % PROGRESS_NOTIFY_INCREMENT) == 0 {
+            //         log::info!("... processed {line_count} tuples");
+            //     }
+            //     if line_count == stop_limit {
+            //         break;
+            //     }
+            // } else {
+            //     drop_count += 1;
+            // }
         }
+
+        self.writer.write_record(vec![record_count.to_string()])?;
+
+        TimedCode::instance().sub("Iterate").stop();
 
         self.writer.flush()?;
 
-        log::info!("Finished export: processed {line_count} tuples (dropped {drop_count})");
+        // log::info!("Finished export: processed {line_count} tuples (dropped {drop_count})");
 
         Ok(())
     }

@@ -117,7 +117,7 @@ fn predicates_to_print_facts_for(print_facts_setting: FactPrinting, program: &Pr
 fn print_finished_message(new_facts: usize, saving: bool) {
     let overall_time = TimedCode::instance().total_system_time().as_millis();
     let reading_time = TimedCode::instance()
-        .sub("Reading & Preprocessing")
+        .sub("Reading && Preprocessing")
         .total_system_time()
         .as_millis();
     let loading_time = TimedCode::instance()

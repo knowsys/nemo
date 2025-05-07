@@ -6,7 +6,7 @@ use std::cell::RefCell;
 
 use crate::{
     datasources::tuple_writer::TupleWriter, error::Error, management::bytesized::ByteSized,
-    tabular::trie::Trie,
+    meta::timing::TimedCode, tabular::trie::Trie,
 };
 
 use super::{sources::TableSource, Dict};
@@ -45,7 +45,11 @@ impl TableStorage {
             source.provide_table_data(&mut tuple_writer)?;
         }
 
-        Ok(Trie::from_tuple_writer(tuple_writer))
+        TimedCode::instance().sub("Create Table").start();
+        let result = Trie::from_tuple_writer(tuple_writer);
+        TimedCode::instance().sub("Create Table").stop();
+
+        Ok(result)
     }
 
     /// Return the [Trie] stored by this object.
