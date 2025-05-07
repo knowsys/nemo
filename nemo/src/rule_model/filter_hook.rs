@@ -8,6 +8,7 @@ use nemo_physical::{
 };
 
 #[derive(Clone)]
+#[allow(clippy::type_complexity)]
 /// Defines a filter hook that can be applied globally to a program
 /// which is able to access the rule name on each call.
 pub struct GlobalRuleFilterHook {
