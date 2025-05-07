@@ -16,12 +16,33 @@ pub(crate) enum Exporting {
     Keep,
     /// Disable all exports.
     None,
-    /// Export all IDB predicates (those used in rule heads)
+    /// Export all IDB predicates (those used in rule heads).
     Idb,
-    /// Export all EDB predicates (those for which facts are given or imported)
+    /// Export all EDB predicates (those for which facts are given or imported).
     Edb,
     /// Export all predicates.
     All,
+}
+
+/// Possible settings for the fact-printing option.
+#[derive(clap::ValueEnum, Clone, Copy, Default, Debug, PartialEq, Eq)]
+pub(crate) enum FactPrinting {
+    /// Do not print facts for any predicate.
+    #[default]
+    None,
+    /// Print facts for all IDB predicates (those used in rule heads).
+    Idb,
+    /// Print facts for all EDB predicates (those for which facts are given or imported).
+    Edb,
+    /// Print facts for all predicates.
+    All,
+}
+
+impl FactPrinting {
+    /// Whether printing is enabled for some predicates
+    pub(crate) fn is_enabled(&self) -> bool {
+        !matches!(self, Self::None)
+    }
 }
 
 /// Possible settings for the reporting option.
@@ -103,6 +124,9 @@ pub(crate) struct OutputArgs {
     /// does not affect export directives that already specify a compression
     #[arg(short, long = "gzip", default_value = "false")]
     gz: bool,
+    /// Print all facts for the select predicates
+    #[arg(long = "print-facts", value_enum, default_value_t)]
+    pub(crate) print_facts_setting: FactPrinting,
 }
 
 impl OutputArgs {
