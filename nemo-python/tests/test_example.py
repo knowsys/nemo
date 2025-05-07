@@ -123,6 +123,16 @@ class TestExample(unittest.TestCase):
 
         self.assertEqual(names, expected_names)
 
+    def test_hook(self):
+        program = load_string(self.rules)
+        program.set_hook(lambda rule_name, predicate_name, args : rule_name != "interesting rule")
+
+        engine = NemoEngine(program)
+        engine.reason()
+
+        result = list(engine.result("interesting"))
+        self.assertEqual(result, [['<py>'], ['<msg>']])
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

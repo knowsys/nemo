@@ -10,6 +10,7 @@ use nemo::{
     execution::{tracing::trace::ExecutionTraceTree, ExecutionEngine},
     io::{resource_providers::ResourceProviders, ExportManager, ImportManager},
     meta::timing::TimedCode,
+    nemo_physical::util::hook::FilterResult,
     rule_model::{
         components::{
             fact::Fact,
@@ -18,12 +19,17 @@ use nemo::{
             ProgramComponent,
         },
         error::ValidationErrorBuilder,
+        filter_hook::GlobalRuleFilterHook,
         substitution::Substitution,
     },
 };
 
 use pyo3::{
-    create_exception, exceptions::PyNotImplementedError, prelude::*, types::PyDict, IntoPyObjectExt,
+    create_exception,
+    exceptions::PyNotImplementedError,
+    prelude::*,
+    types::{PyDict, PyFunction},
+    IntoPyObjectExt,
 };
 
 create_exception!(module, NemoError, pyo3::exceptions::PyException);
@@ -92,6 +98,35 @@ impl NemoProgram {
             .into_iter()
             .map(|predicate| predicate.to_string())
             .collect()
+    }
+
+    fn set_hook(&mut self, hook: Py<PyFunction>) {
+        self.0.set_hook(GlobalRuleFilterHook::from(
+            move |rule_name: Option<&str>, predicate: &str, values: &[AnyDataValue]| {
+                Python::with_gil(|py| {
+                    let Ok(values): Result<Vec<_>, _> = values
+                        .iter()
+                        .map(|v| datavalue_to_python(py, v.clone()))
+                        .collect()
+                    else {
+                        return FilterResult::Accept;
+                    };
+
+                    let Ok(res) = hook.call(py, (rule_name, predicate, values), None) else {
+                        return FilterResult::Accept;
+                    };
+
+                    if let Ok(value) = res.extract::<bool>(py) {
+                        return match value {
+                            true => FilterResult::Accept,
+                            false => FilterResult::Reject,
+                        };
+                    }
+
+                    FilterResult::Accept
+                })
+            },
+        ));
     }
 }
 
