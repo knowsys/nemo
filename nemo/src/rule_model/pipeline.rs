@@ -3,6 +3,7 @@
 use commit::ProgramCommit;
 use id::ProgramComponentId;
 use state::{ExtendStatementValidity, ProgramState};
+use transformations::ProgramTransformation;
 
 use super::components::{
     atom::Atom,
@@ -17,7 +18,7 @@ use super::components::{
 pub mod commit;
 pub mod id;
 pub mod state;
-pub mod transformation;
+pub mod transformations;
 
 /// Big manager object
 #[derive(Debug)]
@@ -87,6 +88,36 @@ impl ProgramPipeline {
     pub fn atom_by_id(&self, id: ProgramComponentId) -> Option<&Atom> {
         self.find_component(id)
             .and_then(|component| component.try_as_ref())
+    }
+
+    /// Return an iterator over all active [Rule]s.
+    pub fn rules(&self) -> impl Iterator<Item = &Rule> {
+        self.state.rules()
+    }
+
+    /// Return an iterator over all active [Fact]s.
+    pub fn facts(&self) -> impl Iterator<Item = &Fact> {
+        self.state.facts()
+    }
+
+    /// Return an iterator over all active [ImportDirective]s.
+    pub fn imports(&self) -> impl Iterator<Item = &ImportDirective> {
+        self.state.imports()
+    }
+
+    /// Return an iterator over all active [ExportDirective]s.
+    pub fn exports(&self) -> impl Iterator<Item = &ExportDirective> {
+        self.state.exports()
+    }
+
+    /// Return an iterator over all active [Output]s.
+    pub fn outputs(&self) -> impl Iterator<Item = &Output> {
+        self.state.outputs()
+    }
+
+    /// Return an iterator over all active [ParameterDeclaration]s.
+    pub fn parameters(&self) -> impl Iterator<Item = &ParameterDeclaration> {
+        self.state.parameters()
     }
 }
 
@@ -201,6 +232,15 @@ impl ProgramPipeline {
         for parameter in commit.parameters {
             self.add_parameter(parameter);
         }
+    }
+
+    /// Apply a [ProgramTransformation].
+    pub fn apply_transformation<Transformation: ProgramTransformation>(
+        &mut self,
+        transformation: Transformation,
+    ) {
+        self.prepare(transformation.keep());
+        self.commit(transformation.finalize());
     }
 }
 

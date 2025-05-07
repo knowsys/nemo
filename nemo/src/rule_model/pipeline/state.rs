@@ -113,6 +113,8 @@ pub enum ExtendStatementKind {
     Output,
     /// Parameters
     Parameter,
+    /// All except the following
+    Except(&'static Self),
     /// All from the provided list
     AllOf(&'static [Self]),
     /// All statements
@@ -124,6 +126,10 @@ impl ExtendStatementKind {
     pub fn includes(&self, kind: Self) -> bool {
         if *self == kind || matches!(self, Self::All) {
             return true;
+        }
+
+        if let Self::Except(except) = self {
+            return kind != **except;
         }
 
         if let Self::AllOf(list) = self {
@@ -374,6 +380,26 @@ impl ProgramState {
     /// Return an iterator over all active [Fact]s.
     pub fn facts(&self) -> impl Iterator<Item = &Fact> {
         StatementSpan::filter(self.facts.iter(), self.current_commit)
+    }
+
+    /// Return an iterator over all active [ImportDirective]s.
+    pub fn imports(&self) -> impl Iterator<Item = &ImportDirective> {
+        StatementSpan::filter(self.imports.iter(), self.current_commit)
+    }
+
+    /// Return an iterator over all active [ExportDirective]s.
+    pub fn exports(&self) -> impl Iterator<Item = &ExportDirective> {
+        StatementSpan::filter(self.exports.iter(), self.current_commit)
+    }
+
+    /// Return an iterator over all active [Output]s.
+    pub fn outputs(&self) -> impl Iterator<Item = &Output> {
+        StatementSpan::filter(self.outputs.iter(), self.current_commit)
+    }
+
+    /// Return an iterator over all active [ParameterDeclaration]s.
+    pub fn parameters(&self) -> impl Iterator<Item = &ParameterDeclaration> {
+        StatementSpan::filter(self.parameters.iter(), self.current_commit)
     }
 }
 

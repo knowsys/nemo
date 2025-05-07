@@ -125,7 +125,7 @@ impl Rule {
 
         for literal in &self.body {
             if let Literal::Positive(atom) = literal {
-                for term in atom.arguments() {
+                for term in atom.terms() {
                     if let Term::Primitive(Primitive::Variable(variable)) = term {
                         if variable.is_universal() && variable.name().is_some() {
                             result.insert(variable);

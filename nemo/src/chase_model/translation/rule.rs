@@ -134,7 +134,7 @@ impl ProgramChaseTranslation {
 
         let mut used_variables = HashSet::<&Variable>::new();
 
-        for argument in atom.arguments() {
+        for argument in atom.terms() {
             match argument {
                 Term::Primitive(Primitive::Variable(variable)) => {
                     if variable.is_anonymous() {
@@ -257,7 +257,7 @@ impl ProgramChaseTranslation {
             let mut aggregate: Option<(&Aggregate, usize, HashSet<Variable>)> = None;
             let aggregate_variable = Variable::universal("__AGGREGATE");
 
-            for (argument_index, argument) in atom.arguments().enumerate() {
+            for (argument_index, argument) in atom.terms().enumerate() {
                 match argument {
                     Term::Primitive(primitive) => terms.push(primitive.clone()),
                     Term::Aggregate(term_aggregate) => {

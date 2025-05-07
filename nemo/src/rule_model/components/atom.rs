@@ -86,9 +86,14 @@ impl Atom {
         self.predicate.clone()
     }
 
-    /// Return an iterator over the arguments of this atom.
-    pub fn arguments(&self) -> impl Iterator<Item = &Term> {
+    /// Return an iterator over the terms of this atom.
+    pub fn terms(&self) -> impl Iterator<Item = &Term> {
         self.terms.iter()
+    }
+
+    /// Return an iterator over the terms of this atom.
+    pub fn terms_mut(&mut self) -> impl Iterator<Item = &mut Term> {
+        self.terms.iter_mut()
     }
 
     /// Return the number of subterms in this atom.

@@ -126,7 +126,7 @@ impl TryFrom<Atom> for GroundAtom {
         let predicate = value.predicate();
         let mut terms = Vec::new();
 
-        for term in value.arguments().cloned() {
+        for term in value.terms().cloned() {
             if let Term::Primitive(Primitive::Ground(ground_term)) = term {
                 terms.push(ground_term)
             } else {

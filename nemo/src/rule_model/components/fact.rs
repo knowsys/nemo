@@ -86,7 +86,7 @@ impl From<Atom> for Fact {
             origin: value.origin().clone(),
             id: ProgramComponentId::default(),
             predicate: value.predicate(),
-            terms: value.arguments().cloned().collect(),
+            terms: value.terms().cloned().collect(),
         }
     }
 }

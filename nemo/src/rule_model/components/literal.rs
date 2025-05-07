@@ -8,6 +8,7 @@ use crate::rule_model::{
 
 use super::{
     atom::Atom,
+    tag::Tag,
     term::{
         operation::Operation,
         primitive::{variable::Variable, Primitive},
@@ -33,12 +34,22 @@ pub enum Literal {
 }
 
 impl Literal {
-    /// Return an iterator over the arguments contained in this literal.
-    pub fn arguments(&self) -> Box<dyn Iterator<Item = &Term> + '_> {
+    /// Return an iterator over the terms contained in this literal.
+    pub fn terms(&self) -> Box<dyn Iterator<Item = &Term> + '_> {
         match self {
-            Literal::Positive(literal) => Box::new(literal.arguments()),
-            Literal::Negative(literal) => Box::new(literal.arguments()),
+            Literal::Positive(literal) => Box::new(literal.terms()),
+            Literal::Negative(literal) => Box::new(literal.terms()),
             Literal::Operation(literal) => Box::new(literal.arguments()),
+        }
+    }
+
+    /// If literal is not an operation, return the predicate.
+    /// Returns `None` otherwise.
+    pub fn predicate(&self) -> Option<Tag> {
+        match self {
+            Literal::Positive(atom) => Some(atom.predicate()),
+            Literal::Negative(atom) => Some(atom.predicate()),
+            Literal::Operation(_) => None,
         }
     }
 }
