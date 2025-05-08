@@ -74,7 +74,7 @@ impl ExportManager {
             return Ok(());
         };
 
-        let path = self.sanitized_path(resource, !handler.is_compressed())?;
+        let path = self.sanitized_path(resource, !handler.is_compressed());
 
         let meta_info = path.metadata();
         if let Err(err) = meta_info {
@@ -97,16 +97,14 @@ impl ExportManager {
     ///
     /// This is a complete path (based on our base path),
     /// which includes all extensions.
-    fn sanitized_path(&self, resource: &Resource, add_compression: bool) -> Result<PathBuf, Error> {
+    fn sanitized_path(&self, resource: &Resource, add_compression: bool) -> PathBuf {
         let mut pred_path = self.base_path.to_path_buf();
 
         let sanitize_options = Options::<Option<char>> {
             url_safe: true,
             ..Default::default()
         };
-        if !resource.is_path() {
-            return Err(Error::ExpectedResourcePath);
-        }
+
         let file_name_unsanitized = resource.to_string();
 
         let file_name = sanitise_with_options(&file_name_unsanitized, &sanitize_options);
@@ -119,7 +117,7 @@ impl ExportManager {
             }
         }
 
-        Ok(pred_path)
+        pred_path
     }
 
     /// Create a writer based on an export handler. The predicate is used to
@@ -132,7 +130,7 @@ impl ExportManager {
         let writer: Box<dyn Write> = if resource.is_pipe() {
             Box::new(std::io::stdout().lock())
         } else {
-            let output_path = self.sanitized_path(resource, !export_handler.is_compressed())?;
+            let output_path = self.sanitized_path(resource, !export_handler.is_compressed());
 
             log::info!("Exporting predicate \"{predicate}\" to {output_path:?}");
 

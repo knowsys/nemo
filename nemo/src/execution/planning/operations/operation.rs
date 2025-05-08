@@ -18,11 +18,12 @@ pub(crate) fn operation_term_to_function_tree(
     match operation_term {
         OperationTerm::Primitive(primitive) => match &primitive {
             Primitive::Ground(datavalue) => FunctionTree::constant(datavalue.value()),
-            Primitive::Variable(variable) => FunctionTree::reference(
+            Primitive::Variable(variable) => FunctionTree::reference({
+                log::debug!("{variable:?}");
                 *translation
                     .get(variable)
-                    .expect("Every variable must be known"),
-            ),
+                    .expect("Every variable must be known")
+            }),
         },
         OperationTerm::Operation(operation) => operation_to_function_tree(translation, operation),
     }

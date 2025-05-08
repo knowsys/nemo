@@ -1,20 +1,28 @@
 //! Import and export directives are a direct representation of the syntactic information
 //! given in rule files.
 
-use std::{
-    collections::{hash_map, HashMap},
-    fmt::{self, Debug},
-};
+use specification::ImportExportSpec;
 
 use crate::{
     io::format_builder::ImportExportBuilder,
-    rule_model::{error::ValidationErrorBuilder, origin::Origin},
+    rule_model::{
+        error::{validation_error::ValidationErrorKind, ValidationErrorBuilder},
+        origin::Origin,
+    },
     syntax,
 };
 
-use super::{tag::Tag, term::Term, IterablePrimitives, ProgramComponent, ProgramComponentKind};
+use super::{
+    tag::Tag,
+    term::{operation::Operation, Term},
+    IterablePrimitives, ProgramComponent, ProgramComponentKind,
+};
+
+pub mod attribute;
+pub mod specification;
 
 /// Direction of import/export activities.
+///
 /// We often share code for the two directions, and a direction
 /// is then used to enable smaller distinctions where needed.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
@@ -25,8 +33,8 @@ pub enum Direction {
     Export,
 }
 
-impl fmt::Display for Direction {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl std::fmt::Display for Direction {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Direction::Import => f.write_str("import"),
             Direction::Export => f.write_str("export"),
@@ -34,80 +42,11 @@ impl fmt::Display for Direction {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct ImportExportSpec {
-    format: Tag,
-    keys: HashMap<String, (Origin, usize)>,
-    values: Vec<Term>,
-    origin: Origin,
-}
-
-impl ImportExportSpec {
-    pub(crate) fn new(origin: Origin, format: Tag) -> Self {
-        ImportExportSpec {
-            format,
-            origin,
-            keys: Default::default(),
-            values: Default::default(),
-        }
-    }
-
-    pub(crate) fn format_tag(&self) -> &Tag {
-        &self.format
-    }
-
-    pub(crate) fn push_attribute(
-        &mut self,
-        key: (String, Origin),
-        value: Term,
-    ) -> Option<(Origin, &Term)> {
-        let index = self.values.len();
-        self.values.push(value);
-
-        match self.keys.entry(key.0) {
-            hash_map::Entry::Occupied(mut entry) => {
-                let (origin, index) = entry.insert((key.1, index));
-                Some((origin, &self.values[index]))
-            }
-            hash_map::Entry::Vacant(entry) => {
-                entry.insert((key.1, index));
-                None
-            }
-        }
-    }
-
-    pub(crate) fn origin(&self) -> &Origin {
-        &self.origin
-    }
-
-    pub(crate) fn key_value(&self) -> impl Iterator<Item = (Tag, &Term)> {
-        self.keys
-            .iter()
-            .map(|(k, (origin, idx))| (Tag::new(k.into()).set_origin(*origin), &self.values[*idx]))
-    }
-}
-
-impl fmt::Display for ImportExportSpec {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_fmt(format_args!("{} {{", self.format.name()))?;
-
-        for (idx, (key, value)) in self.key_value().enumerate() {
-            f.write_fmt(format_args!("{key}: {value}"))?;
-
-            if idx < self.keys.len() - 1 {
-                f.write_str(", ")?;
-            }
-        }
-
-        f.write_str("}")
-    }
-}
-
 /// An import/export specification. This object captures all information that is typically
 /// present in an import or export directive in a Nemo program, including the main format,
 /// optional attributes that define additional parameters, and an indentifier to map the data
 /// to or from (i.e., a predicate name).
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub(crate) struct ImportExportDirective {
     /// Origin of this component
     origin: Origin,
@@ -115,6 +54,21 @@ pub(crate) struct ImportExportDirective {
     predicate: Tag,
     /// The specified format and import/export attributes
     spec: ImportExportSpec,
+    /// Additional variable bindings
+    bindings: Vec<Operation>,
+}
+
+impl std::fmt::Display for ImportExportDirective {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_fmt(format_args!("{} :- {}.", self.predicate, self.spec))?;
+
+        for binding in &self.bindings {
+            f.write_str(", ")?;
+            f.write_fmt(format_args!("{binding}"))?;
+        }
+
+        Ok(())
+    }
 }
 
 impl IterablePrimitives for ImportExportDirective {
@@ -125,9 +79,9 @@ impl IterablePrimitives for ImportExportDirective {
     ) -> Box<dyn Iterator<Item = &'a super::term::primitive::Primitive> + 'a> {
         Box::new(
             self.spec
-                .values
-                .iter()
-                .flat_map(|term| term.primitive_terms()),
+                .values()
+                .flat_map(|term| term.primitive_terms())
+                .chain(self.bindings.iter().flat_map(|op| op.primitive_terms())),
         )
     }
 
@@ -136,20 +90,14 @@ impl IterablePrimitives for ImportExportDirective {
     ) -> Box<dyn Iterator<Item = &'a mut Self::TermType> + 'a> {
         Box::new(
             self.spec
-                .values
-                .iter_mut()
-                .flat_map(|term| term.primitive_terms_mut()),
+                .values_mut()
+                .flat_map(|term| term.primitive_terms_mut())
+                .chain(
+                    self.bindings
+                        .iter_mut()
+                        .flat_map(|op| op.primitive_terms_mut()),
+                ),
         )
-    }
-}
-
-impl Debug for ImportExportDirective {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("ImportExportDirective")
-            .field("origin", &self.origin)
-            .field("predicate", &self.predicate)
-            .field("spec", &self.spec)
-            .finish()
     }
 }
 
@@ -159,11 +107,12 @@ pub struct ImportDirective(pub(crate) ImportExportDirective);
 
 impl ImportDirective {
     /// Create a new [ImportDirective].
-    pub(crate) fn new(predicate: Tag, spec: ImportExportSpec) -> Self {
+    pub fn new(predicate: Tag, spec: ImportExportSpec, bindings: Vec<Operation>) -> Self {
         Self(ImportExportDirective {
             origin: Origin::default(),
             predicate,
             spec,
+            bindings,
         })
     }
 
@@ -172,25 +121,22 @@ impl ImportDirective {
         &self.0.predicate
     }
 
-    /// Return the attributes.
-    pub(crate) fn attributes(&self) -> &ImportExportSpec {
+    /// Return the attribute specification.
+    pub(crate) fn spec(&self) -> &ImportExportSpec {
         &self.0.spec
+    }
+}
+
+impl std::fmt::Display for ImportDirective {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("@import ")?;
+        self.0.fmt(f)
     }
 }
 
 impl From<ImportExportDirective> for ImportDirective {
     fn from(value: ImportExportDirective) -> Self {
         Self(value)
-    }
-}
-
-impl fmt::Display for ImportDirective {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_fmt(format_args!(
-            "@import {} :- {}.",
-            self.predicate(),
-            self.attributes()
-        ))
     }
 }
 
@@ -213,7 +159,21 @@ impl ProgramComponent for ImportDirective {
     where
         Self: Sized,
     {
-        ImportExportBuilder::new(self.0.spec.clone(), Direction::Import, builder)
+        if !self.predicate().is_valid() {
+            builder.report_error(
+                *self.predicate().origin(),
+                ValidationErrorKind::InvalidTermTag(self.predicate().to_string()),
+            );
+        }
+
+        self.spec().validate(builder)?;
+
+        ImportExportBuilder::new(
+            self.0.spec.clone(),
+            &self.0.bindings,
+            Direction::Import,
+            builder,
+        )
     }
 
     fn kind(&self) -> ProgramComponentKind {
@@ -242,21 +202,23 @@ impl IterablePrimitives for ImportDirective {
 pub struct ExportDirective(pub(crate) ImportExportDirective);
 
 impl ExportDirective {
-    pub(crate) fn new(predicate: Tag, spec: ImportExportSpec) -> Self {
+    /// Create a new [ExportDirective].
+    pub fn new(predicate: Tag, spec: ImportExportSpec, bindings: Vec<Operation>) -> Self {
         Self(ImportExportDirective {
             origin: Origin::default(),
             predicate,
             spec,
+            bindings,
         })
     }
 
+    /// Return a new [ExportDirective] with file format csv.
     pub fn new_csv(predicate: Tag) -> Self {
-        let spec = ImportExportSpec::new(
-            Origin::Created,
-            Tag::new(syntax::import_export::file_format::CSV.into()),
-        );
-
-        Self::new(predicate, spec)
+        Self::new(
+            predicate,
+            ImportExportSpec::empty(syntax::import_export::file_format::CSV),
+            Vec::default(),
+        )
     }
 
     /// Return the predicate.
@@ -264,8 +226,8 @@ impl ExportDirective {
         &self.0.predicate
     }
 
-    /// Return the attributes.
-    pub(crate) fn attributes(&self) -> &ImportExportSpec {
+    /// Return the attribute specification.
+    pub(crate) fn spec(&self) -> &ImportExportSpec {
         &self.0.spec
     }
 }
@@ -276,29 +238,10 @@ impl From<ImportExportDirective> for ExportDirective {
     }
 }
 
-impl IterablePrimitives for ExportDirective {
-    type TermType = Term;
-
-    fn primitive_terms<'a>(
-        &'a self,
-    ) -> Box<dyn Iterator<Item = &'a super::term::primitive::Primitive> + 'a> {
-        self.0.primitive_terms()
-    }
-
-    fn primitive_terms_mut<'a>(
-        &'a mut self,
-    ) -> Box<dyn Iterator<Item = &'a mut Self::TermType> + 'a> {
-        self.0.primitive_terms_mut()
-    }
-}
-
-impl fmt::Display for ExportDirective {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_fmt(format_args!(
-            "@export {} :- {}.",
-            self.predicate(),
-            self.attributes()
-        ))
+impl std::fmt::Display for ExportDirective {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("@export ")?;
+        self.0.fmt(f)
     }
 }
 
@@ -321,10 +264,40 @@ impl ProgramComponent for ExportDirective {
     where
         Self: Sized,
     {
-        ImportExportBuilder::new(self.0.spec.clone(), Direction::Export, builder)
+        if !self.predicate().is_valid() {
+            builder.report_error(
+                *self.predicate().origin(),
+                ValidationErrorKind::InvalidTermTag(self.predicate().to_string()),
+            );
+        }
+
+        self.spec().validate(builder)?;
+
+        ImportExportBuilder::new(
+            self.0.spec.clone(),
+            &self.0.bindings,
+            Direction::Export,
+            builder,
+        )
     }
 
     fn kind(&self) -> ProgramComponentKind {
         ProgramComponentKind::Export
+    }
+}
+
+impl IterablePrimitives for ExportDirective {
+    type TermType = Term;
+
+    fn primitive_terms<'a>(
+        &'a self,
+    ) -> Box<dyn Iterator<Item = &'a super::term::primitive::Primitive> + 'a> {
+        self.0.primitive_terms()
+    }
+
+    fn primitive_terms_mut<'a>(
+        &'a mut self,
+    ) -> Box<dyn Iterator<Item = &'a mut Self::TermType> + 'a> {
+        self.0.primitive_terms_mut()
     }
 }
