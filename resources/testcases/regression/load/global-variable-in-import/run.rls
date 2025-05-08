@@ -1,0 +1,8 @@
+@parameter $data_set = "A".
+
+@import data :- csv {resource = f"../sources/data{?a}.csv"}, ?a = $data_set.
+
+x(?x, ?y) :- data(?x, ?y, ?z).
+
+@export x :- csv {}.
+
