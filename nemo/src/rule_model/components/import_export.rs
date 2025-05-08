@@ -77,7 +77,12 @@ impl IterablePrimitives for ImportExportDirective {
     fn primitive_terms<'a>(
         &'a self,
     ) -> Box<dyn Iterator<Item = &'a super::term::primitive::Primitive> + 'a> {
-        Box::new(self.spec.values().flat_map(|term| term.primitive_terms()))
+        Box::new(
+            self.spec
+                .values()
+                .flat_map(|term| term.primitive_terms())
+                .chain(self.bindings.iter().flat_map(|op| op.primitive_terms())),
+        )
     }
 
     fn primitive_terms_mut<'a>(
@@ -86,7 +91,12 @@ impl IterablePrimitives for ImportExportDirective {
         Box::new(
             self.spec
                 .values_mut()
-                .flat_map(|term| term.primitive_terms_mut()),
+                .flat_map(|term| term.primitive_terms_mut())
+                .chain(
+                    self.bindings
+                        .iter_mut()
+                        .flat_map(|op| op.primitive_terms_mut()),
+                ),
         )
     }
 }
