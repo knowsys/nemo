@@ -759,6 +759,7 @@ mod test {
         let steps = vec![1, 3, 5, 7, 9, 11, 13, 15];
         let ranges = vec![0..8, 0..16, 9..16];
         let target = 0..16;
+        #[allow(clippy::single_range_in_vec_init)]
         let expected_ranges = vec![0..16];
         compare_covering(&steps, &ranges, &expected_ranges, &target);
     }
