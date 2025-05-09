@@ -194,11 +194,6 @@ impl SubtableHandler {
                 result.push(self.single[current_start].1);
                 current_start += 1;
             }
-
-            println!(
-                "current_start: {}, target_end: {}",
-                current_start, target_end
-            );
         }
 
         result
@@ -759,6 +754,12 @@ mod test {
 
         let target = 6..8;
         let expected_ranges = vec![6..7, 7..8];
+        compare_covering(&steps, &ranges, &expected_ranges, &target);
+
+        let steps = vec![1, 3, 5, 7, 9, 11, 13, 15];
+        let ranges = vec![0..8, 0..16, 9..16];
+        let target = 0..16;
+        let expected_ranges = vec![0..16];
         compare_covering(&steps, &ranges, &expected_ranges, &target);
     }
 }
