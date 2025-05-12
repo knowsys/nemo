@@ -1,7 +1,7 @@
 //! This module defines [Origin].
 
 use super::{
-    components::{rule::Rule, EffectiveOrigin, ProgramComponent},
+    components::{rule::Rule, ComponentDuplicate, ProgramComponent},
     pipeline::id::ProgramComponentId,
 };
 
@@ -10,19 +10,16 @@ use super::{
 pub enum Origin {
     /// Component has no special origin
     Created,
-    /// Reference to another object by id
-    Reference(ProgramComponentId),
-    /// Component was created directly from a string
-    String(Box<str>),
     /// Component was created by parsing a file
-    Parsing {
-        /// Id of the program
-        id: usize,
+    File {
         /// Start position of the character
         start: usize,
         /// End position of the character
         end: usize,
     },
+
+    /// Reference to another object by id
+    Reference(ProgramComponentId),
     /// Component was created from another component
     Component(Box<dyn ProgramComponent>),
 
@@ -39,8 +36,8 @@ impl Default for Origin {
 impl Origin {
     /// Create an [Origin] that ... combination
     pub fn rule_combination(first: &Rule, second: &Rule) -> Self {
-        let first_origin = first.effective_origin();
-        let second_origin = second.effective_origin();
+        let first_origin = first.duplicated_origin();
+        let second_origin = second.duplicated_origin();
 
         Self::RuleCombination(Box::new(first_origin), Box::new(second_origin))
     }

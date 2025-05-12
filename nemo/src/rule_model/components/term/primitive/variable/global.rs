@@ -4,15 +4,13 @@ use std::{fmt::Display, hash::Hash};
 
 use crate::rule_model::{
     components::{
-        ComponentBehavior, ComponentIdentity, IterableComponent, ProgramComponent,
-        ProgramComponentKind,
+        symbols::Symbols, ComponentBehavior, ComponentIdentity, IterableComponent,
+        ProgramComponent, ProgramComponentKind,
     },
-    error::{validation_error::ValidationErrorKind, ValidationErrorBuilder},
+    error::{validation_error::ValidationError, ValidationReport},
     origin::Origin,
     pipeline::id::ProgramComponentId,
 };
-
-use super::VariableName;
 
 /// Globally defined named constant
 ///
@@ -25,7 +23,7 @@ pub struct GlobalVariable {
     id: ProgramComponentId,
 
     /// Name of the variable
-    name: VariableName,
+    name: String,
 }
 
 impl GlobalVariable {
@@ -34,17 +32,17 @@ impl GlobalVariable {
         Self {
             origin: Origin::Created,
             id: ProgramComponentId::default(),
-            name: VariableName::new(name.to_string()),
+            name: name.to_owned(),
         }
     }
 
     /// Return the name of this variable.
-    pub fn name(&self) -> String {
-        self.name.to_string()
+    pub fn name(&self) -> &str {
+        &self.name
     }
 
     /// Change the name of this variable.
-    pub fn rename(&mut self, name: VariableName) {
+    pub fn rename(&mut self, name: String) {
         self.name = name;
     }
 }
@@ -80,15 +78,17 @@ impl ComponentBehavior for GlobalVariable {
         ProgramComponentKind::Variable
     }
 
-    fn validate(&self, builder: &mut ValidationErrorBuilder) -> Option<()> {
-        if !self.name.is_valid() {
-            builder.report_error(
-                self.origin.clone(),
-                ValidationErrorKind::InvalidVariableName(self.name()),
+    fn validate(&self) -> Result<(), ValidationReport> {
+        let mut report = ValidationReport::default();
+
+        if Symbols::is_reserved(self.name()) {
+            report.add(
+                self,
+                ValidationError::InvalidVariableName(self.name().to_owned()),
             );
         }
 
-        Some(())
+        report.result()
     }
 
     fn boxed_clone(&self) -> Box<dyn ProgramComponent> {

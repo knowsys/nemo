@@ -8,7 +8,7 @@ use crate::syntax::datatypes;
 
 #[derive(Assoc, EnumIter, Debug, Copy, Clone, PartialEq, Eq)]
 #[func(pub fn name(&self) -> &'static str)]
-pub enum DataType {
+pub enum IOType {
     /// 64bit integer number
     #[assoc(name = datatypes::INT)]
     Integer,

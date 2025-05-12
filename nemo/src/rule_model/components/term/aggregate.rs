@@ -20,7 +20,6 @@ use crate::{
         error::ValidationErrorBuilder,
         origin::Origin,
         pipeline::id::ProgramComponentId,
-        substitution::Substitution,
     },
     syntax::builtin::aggregate,
 };
@@ -148,9 +147,14 @@ impl Aggregate {
         self.kind.value_type()
     }
 
-    /// Return a reference to aggregated term.
+    /// Return a reference to the aggregated term.
     pub fn aggregate_term(&self) -> &Term {
         &self.aggregate
+    }
+
+    /// Return a mutable reference to the aggregated term.
+    pub fn aggregate_term_mut(&mut self) -> &mut Term {
+        &mut self.aggregate
     }
 
     /// Return the kind of aggregate.
@@ -158,9 +162,28 @@ impl Aggregate {
         self.kind
     }
 
-    /// Return a iterator over the distinct variables
+    /// Return a iterator over the distinct variables.
     pub fn distinct(&self) -> impl Iterator<Item = &Variable> {
         self.distinct.iter()
+    }
+
+    /// Return a mutable iterator over the distinct variables.
+    pub fn distinct_mut(&mut self) -> impl Iterator<Item = &mut Variable> {
+        self.distinct.iter_mut()
+    }
+
+    /// Add a new distinct variable.
+    pub fn push_distinct(&mut self, variable: Variable) {
+        self.distinct.push(variable);
+    }
+
+    /// Remove a distinct variable at the given index
+    /// and return it.
+    ///
+    /// # Panics
+    /// Panics if the index is out of bounds.
+    pub fn remove_distinct(&mut self, index: usize) -> Variable {
+        self.distinct.remove(index)
     }
 
     /// Return whether the aggregate expression is ground.
@@ -168,13 +191,16 @@ impl Aggregate {
         self.aggregate.is_ground()
     }
 
-    /// Reduce the [Term] in the aggregate expression returning a copy.
-    pub fn reduce_with_substitution(&self, bindings: &Substitution) -> Self {
+    /// Reduce this term by evaluating all contained expressions,
+    /// and return a new [Aggregate] with the same [Origin] as `self`.
+    ///
+    /// This function does nothing if `self` is not ground.
+    pub fn reduce(&self) -> Self {
         Self {
             origin: self.origin.clone(),
             id: ProgramComponentId::default(),
             kind: self.kind,
-            aggregate: Box::new(self.aggregate.reduce_with_substitution(bindings)),
+            aggregate: Box::new(self.aggregate.reduce()),
             distinct: self.distinct.clone(),
         }
     }
@@ -235,7 +261,7 @@ impl ComponentBehavior for Aggregate {
         ProgramComponentKind::Aggregation
     }
 
-    fn validate(&self, _builder: &mut ValidationErrorBuilder) -> Option<()> {
+     fn validate(&self) -> Result<(), ValidationReport> {
         // let input_type = self.aggregate.value_type();
         // if let Some(expected_type) = self.kind.input_type() {
         //     if input_type != ValueType::Any && input_type != expected_type {

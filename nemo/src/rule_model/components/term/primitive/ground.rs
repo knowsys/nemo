@@ -1,19 +1,17 @@
 //! This module defines [GroundTerm].
 
-use std::{collections::HashMap, fmt::Display, hash::Hash};
+use std::{fmt::Display, hash::Hash};
 
 use nemo_physical::datavalues::{AnyDataValue, DataValue, IriDataValue, ValueDomain};
 
 use crate::rule_model::{
     components::{
-        term::{value_type::ValueType, Term},
-        ComponentBehavior, ComponentIdentity, IterableComponent, ProgramComponent,
-        ProgramComponentKind,
+        term::value_type::ValueType, ComponentBehavior, ComponentIdentity, IterableComponent,
+        ProgramComponent, ProgramComponentKind,
     },
-    error::{ComponentParseError, ValidationErrorBuilder},
+    error::ValidationReport,
     origin::Origin,
     pipeline::id::ProgramComponentId,
-    translation::TranslationComponent,
 };
 
 /// Primitive ground term
@@ -41,20 +39,44 @@ impl GroundTerm {
         }
     }
 
+    /// Create an IRI term.
+    pub fn constant(iri: &str) -> Self {
+        Self::new(AnyDataValue::new_iri(iri.to_owned()))
+    }
+
+    /// Create a language tagged string term.
+    pub fn language_tagged(value: &str, tag: &str) -> Self {
+        Self::new(AnyDataValue::new_language_tagged_string(
+            value.to_owned(),
+            tag.to_owned(),
+        ))
+    }
+
     /// Return the value type of this term.
     pub fn value_type(&self) -> ValueType {
         ValueType::from(self.value.value_domain())
     }
 
-    /// Return the [AnyDataValue] of this term
+    /// Return the [AnyDataValue] of this term.
     pub fn value(&self) -> AnyDataValue {
         self.value.clone()
+    }
+
+    /// Replace the value.
+    pub fn set_value(&mut self, value: AnyDataValue) {
+        self.value = value;
     }
 }
 
 impl From<AnyDataValue> for GroundTerm {
     fn from(value: AnyDataValue) -> Self {
         Self::new(value)
+    }
+}
+
+impl From<bool> for GroundTerm {
+    fn from(value: bool) -> Self {
+        Self::new(AnyDataValue::new_boolean(value))
     }
 }
 
@@ -142,8 +164,8 @@ impl ComponentBehavior for GroundTerm {
         }
     }
 
-    fn validate(&self, _builder: &mut ValidationErrorBuilder) -> Option<()> {
-        Some(())
+    fn validate(&self) -> Result<(), ValidationReport> {
+        ValidationReport::default().result()
     }
 
     fn boxed_clone(&self) -> Box<dyn ProgramComponent> {
@@ -172,13 +194,16 @@ impl ComponentIdentity for GroundTerm {
 impl IterableComponent for GroundTerm {}
 
 impl GroundTerm {
-    pub fn parse(input: &str) -> Result<Self, ComponentParseError>
+    // TODO:
+
+    pub fn parse(_input: &str) -> Result<Self, ()>
     where
         Self: Sized,
     {
-        let term = Term::parse(input)?;
-        term.try_into_ground(&HashMap::default())
-            .map_err(|_| ComponentParseError::ParseError)
+        // let term = Term::parse(input)?;
+        // term.try_into_ground(&HashMap::default())
+        //     .map_err(|_| ComponentParseError::ParseError)
+        todo!()
     }
 }
 

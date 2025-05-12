@@ -1,6 +1,10 @@
 //! This module defines [Fact].
 
-use std::{fmt::Display, hash::Hash};
+use std::{
+    fmt::Display,
+    hash::Hash,
+    ops::{Deref, DerefMut, Index, IndexMut},
+};
 
 use crate::{
     chase_model::components::{
@@ -59,13 +63,26 @@ impl Fact {
     }
 
     /// Return an iterator over the subterms of this fact.
-    pub fn subterms(&self) -> impl Iterator<Item = &Term> {
+    pub fn terms(&self) -> impl Iterator<Item = &Term> {
         self.terms.iter()
     }
 
     /// Return an mutable iterator over the subterms of this fact.
-    pub fn subterms_mut(&mut self) -> impl Iterator<Item = &mut Term> {
+    pub fn terms_mut(&mut self) -> impl Iterator<Item = &mut Term> {
         self.terms.iter_mut()
+    }
+
+    /// Push a [Term] to the end of this atom.
+    pub fn push(&mut self, term: Term) {
+        self.terms.push(term);
+    }
+
+    /// Remove the [Term] at the given index and return it.
+    ///
+    /// # Panics
+    /// Panics if the index is out of bounds.
+    pub fn remove(&mut self, index: usize) -> Term {
+        self.terms.remove(index)
     }
 
     /// If the given [Term] is a function term,
@@ -77,6 +94,34 @@ impl Fact {
         } else {
             None
         }
+    }
+}
+
+impl Index<usize> for Fact {
+    type Output = Term;
+
+    fn index(&self, index: usize) -> &Self::Output {
+        &self.terms[index]
+    }
+}
+
+impl IndexMut<usize> for Fact {
+    fn index_mut(&mut self, index: usize) -> &mut Self::Output {
+        &mut self.terms[index]
+    }
+}
+
+impl Deref for Fact {
+    type Target = [Term];
+
+    fn deref(&self) -> &Self::Target {
+        &self.terms
+    }
+}
+
+impl DerefMut for Fact {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.terms
     }
 }
 
@@ -127,7 +172,7 @@ impl ComponentBehavior for Fact {
         ProgramComponentKind::Fact
     }
 
-    fn validate(&self, _builder: &mut ValidationErrorBuilder) -> Option<()> {
+    fn validate(&self) -> Result<(), ValidationReport> {
         // if !self.predicate.is_valid() {
         //     builder.report_error(
         //         *self.predicate.origin(),
@@ -198,7 +243,7 @@ impl IterableComponent for Fact {
 
 impl IterablePrimitives for Fact {
     fn primitive_terms<'a>(&'a self) -> Box<dyn Iterator<Item = &'a Primitive> + 'a> {
-        Box::new(self.subterms().flat_map(|term| term.primitive_terms()))
+        Box::new(self.terms().flat_map(|term| term.primitive_terms()))
     }
 
     fn primitive_terms_mut<'a>(&'a mut self) -> Box<dyn Iterator<Item = &'a mut Term> + 'a> {

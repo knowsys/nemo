@@ -10,7 +10,7 @@ use crate::rule_model::{
         ComponentBehavior, ComponentIdentity, IterableComponent, IterablePrimitives,
         IterableVariables, ProgramComponent, ProgramComponentKind,
     },
-    error::ValidationErrorBuilder,
+    error::ValidationReport,
     origin::Origin,
     pipeline::id::ProgramComponentId,
 };
@@ -148,13 +148,15 @@ impl ComponentBehavior for ImportExportSpec {
         ProgramComponentKind::Map
     }
 
-    fn validate(&self, builder: &mut ValidationErrorBuilder) -> Option<()> {
+    fn validate(&self) -> Result<(), ValidationReport> {
+        let mut report = ValidationReport::default();
+
         for (key, value) in self.key_value() {
-            key.validate(builder)?;
-            value.validate(builder)?;
+            report.merge(key.validate());
+            report.merge(value.validate());
         }
 
-        Some(())
+        report.result()
     }
 
     fn boxed_clone(&self) -> Box<dyn ProgramComponent> {

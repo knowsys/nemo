@@ -69,7 +69,7 @@ impl ComponentBehavior for Literal {
         ProgramComponentKind::Literal
     }
 
-    fn validate(&self, builder: &mut ValidationErrorBuilder) -> Option<()> {
+    fn validate(&self) -> Result<(), ValidationReport> {
         match self {
             Literal::Positive(atom) => atom.validate(builder),
             Literal::Negative(atom) => atom.validate(builder),
@@ -139,42 +139,6 @@ impl IterableComponent for Literal {
         }
     }
 }
-
-// impl ProgramComponent for Literal {
-//     fn origin(&self) -> &crate::rule_model::origin::Origin {
-//         match self {
-//             Literal::Positive(positive) => positive.origin(),
-//             Literal::Negative(negative) => negative.origin(),
-//             Literal::Operation(operation) => operation.origin(),
-//         }
-//     }
-
-//     fn set_origin(self, origin: crate::rule_model::origin::Origin) -> Self
-//     where
-//         Self: Sized,
-//     {
-//         match self {
-//             Literal::Positive(positive) => Literal::Positive(positive.set_origin(origin)),
-//             Literal::Negative(negative) => Literal::Negative(negative.set_origin(origin)),
-//             Literal::Operation(operation) => Literal::Operation(operation.set_origin(origin)),
-//         }
-//     }
-
-//     fn validate(&self, builder: &mut ValidationErrorBuilder) -> Option<()>
-//     where
-//         Self: Sized,
-//     {
-//         match self {
-//             Literal::Positive(literal) => literal.validate(builder),
-//             Literal::Negative(literal) => literal.validate(builder),
-//             Literal::Operation(literal) => literal.validate(builder),
-//         }
-//     }
-
-//     fn kind(&self) -> ProgramComponentKind {
-//         ProgramComponentKind::Literal
-//     }
-// }
 
 impl IterableVariables for Literal {
     fn variables<'a>(&'a self) -> Box<dyn Iterator<Item = &'a Variable> + 'a> {

@@ -1,6 +1,10 @@
 //! This module defines an [Atom].
 
-use std::{fmt::Display, hash::Hash};
+use std::{
+    fmt::Display,
+    hash::Hash,
+    ops::{Deref, DerefMut, Index, IndexMut},
+};
 
 use crate::rule_model::{
     error::{ComponentParseError, ValidationErrorBuilder},
@@ -43,19 +47,19 @@ pub struct Atom {
 #[macro_export]
 macro_rules! atom {
     // Base case: no elements
-    ($name:tt) => {
+    ($name:ident) => {
         $crate::rule_model::components::atom::Atom::new(
-            $crate::rule_model::components::tag::Tag::from($name),
+            $crate::rule_model::components::tag::Tag::from(stringify!($name)),
             Vec::new()
         )
     };
     // Recursive case: handle each term, separated by commas
-    ($name:tt; $($tt:tt)*) => {{
+    ($name:ident($($tt:tt)*)) => {{
         #[allow(clippy::vec_init_then_push)] {
             let mut terms = Vec::new();
             term_list!(terms; $($tt)*);
             $crate::rule_model::components::atom::Atom::new(
-                $crate::rule_model::components::tag::Tag::from($name),
+                $crate::rule_model::components::tag::Tag::from(stringify!($name)),
                 terms
             )
         }
@@ -96,14 +100,45 @@ impl Atom {
         self.terms.iter_mut()
     }
 
-    /// Return the number of subterms in this atom.
-    pub fn len(&self) -> usize {
-        self.terms.len()
+    /// Push a [Term] to the end of this atom.
+    pub fn push(&mut self, term: Term) {
+        self.terms.push(term);
     }
 
-    /// Return whether this atom contains no subterms.
-    pub fn is_empty(&self) -> bool {
-        self.len() == 0
+    /// Remove the [Term] at the given index and return it.
+    ///
+    /// # Panics
+    /// Panics if the index is out of bounds.
+    pub fn remove(&mut self, index: usize) -> Term {
+        self.terms.remove(index)
+    }
+}
+
+impl Index<usize> for Atom {
+    type Output = Term;
+
+    fn index(&self, index: usize) -> &Self::Output {
+        &self.terms[index]
+    }
+}
+
+impl IndexMut<usize> for Atom {
+    fn index_mut(&mut self, index: usize) -> &mut Self::Output {
+        &mut self.terms[index]
+    }
+}
+
+impl Deref for Atom {
+    type Target = [Term];
+
+    fn deref(&self) -> &Self::Target {
+        &self.terms
+    }
+}
+
+impl DerefMut for Atom {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.terms
     }
 }
 
@@ -143,7 +178,7 @@ impl ComponentBehavior for Atom {
         ProgramComponentKind::Atom
     }
 
-    fn validate(&self, _builder: &mut ValidationErrorBuilder) -> Option<()> {
+    fn validate(&self) -> Result<(), ValidationReport> {
         // if !self.predicate.is_valid() {
         //     builder.report_error(
         //         *self.predicate.origin(),
@@ -230,7 +265,7 @@ mod test {
     #[test]
     fn atom_basic() {
         let variable = Variable::universal("u");
-        let atom = atom!("p"; 12, variable, !e, "abc", ?v);
+        let atom = atom!(p(12, variable, !e, "abc", ?v));
 
         let variables = atom.variables().cloned().collect::<Vec<_>>();
         assert_eq!(

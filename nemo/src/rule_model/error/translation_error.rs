@@ -5,17 +5,21 @@ use enum_assoc::Assoc;
 use nemo_physical::datavalues::DataValueCreationError;
 use thiserror::Error;
 
+use crate::error::rich::RichError;
+
 /// Types of errors that occur
 /// while translating the ASP representation of a nemo program
 /// into its logical representation.
 #[derive(Assoc, Error, Debug, Clone)]
 #[func(pub fn note(&self) -> Option<&'static str>)]
 #[func(pub fn code(&self) -> usize)]
-pub enum TranslationErrorKind {
+#[func(pub fn is_warning(&self) -> Option<()>)]
+pub enum TranslationError {
     /// A non-atom was used in the head of a rule
     #[error(r#"{0} used in rule head"#)]
     #[assoc(note = "rule head must only use atoms")]
     #[assoc(code = 101)]
+    #[assoc(flag = true)]
     HeadNonAtom(String),
     /// A non-literal was used in the body of a rule
     #[error(r#"{0} used in rule body"#)]
@@ -134,4 +138,22 @@ pub enum TranslationErrorKind {
     #[error(r#"declare statements are currently unsupported"#)]
     #[assoc(code = 899)]
     UnsupportedDeclare,
+}
+
+impl RichError for TranslationError {
+    fn is_warning(&self) -> bool {
+        self.is_warning().is_some()
+    }
+
+    fn message(&self) -> String {
+        self.to_string()
+    }
+
+    fn code(&self) -> usize {
+        self.code()
+    }
+
+    fn note(&self) -> Option<String> {
+        self.note().map(str::to_owned)
+    }
 }

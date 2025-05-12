@@ -5,13 +5,17 @@ use enum_assoc::Assoc;
 use nemo_physical::{datavalues::ValueDomain, resource::ResourceValidationErrorKind};
 use thiserror::Error;
 
-use crate::rule_model::components::term::{primitive::variable::Variable, Term};
+use crate::{
+    error::rich::RichError,
+    rule_model::components::term::{primitive::variable::Variable, Term},
+};
 
 /// Types of errors that occur while building the logical rule model
 #[derive(Assoc, Error, Clone, Debug)]
 #[func(pub fn note(&self) -> Option<&'static str>)]
 #[func(pub fn code(&self) -> usize)]
-pub enum ValidationErrorKind {
+#[func(pub fn is_warning(&self) -> Option<()>)]
+pub enum ValidationError {
     /// An existentially quantified variable occurs in the body of a rule.
     #[error(r#"existential variable used in rule body: `{0}`"#)]
     #[assoc(code = 201)]
@@ -244,4 +248,22 @@ pub enum ValidationErrorKind {
     #[error(r#"rule without positive literals are currently unsupported"#)]
     #[assoc(code = 994)]
     UnsupportedNoPositiveLiterals,
+}
+
+impl RichError for ValidationError {
+    fn is_warning(&self) -> bool {
+        self.is_warning().is_some()
+    }
+
+    fn message(&self) -> String {
+        self.to_string()
+    }
+
+    fn code(&self) -> usize {
+        self.code()
+    }
+
+    fn note(&self) -> Option<String> {
+        self.note().map(str::to_owned)
+    }
 }

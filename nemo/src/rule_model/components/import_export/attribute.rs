@@ -5,7 +5,7 @@ use crate::rule_model::{
         ComponentBehavior, ComponentIdentity, IterableComponent, ProgramComponent,
         ProgramComponentKind,
     },
-    error::ValidationErrorBuilder,
+    error::ValidationReport,
     origin::Origin,
     pipeline::id::ProgramComponentId,
 };
@@ -69,8 +69,8 @@ impl ComponentBehavior for ImportExportAttribute {
         ProgramComponentKind::Attribute
     }
 
-    fn validate(&self, builder: &mut ValidationErrorBuilder) -> Option<()> {
-        Some(())
+    fn validate(&self) -> Result<(), ValidationReport> {
+        Ok(())
     }
 
     fn boxed_clone(&self) -> Box<dyn ProgramComponent> {

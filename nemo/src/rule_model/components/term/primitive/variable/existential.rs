@@ -4,15 +4,13 @@ use std::{fmt::Display, hash::Hash};
 
 use crate::rule_model::{
     components::{
-        ComponentBehavior, ComponentIdentity, IterableComponent, ProgramComponent,
-        ProgramComponentKind,
+        symbols::Symbols, ComponentBehavior, ComponentIdentity, IterableComponent,
+        ProgramComponent, ProgramComponentKind,
     },
-    error::ValidationErrorBuilder,
+    error::{validation_error::ValidationError, ValidationReport},
     origin::Origin,
     pipeline::id::ProgramComponentId,
 };
-
-use super::VariableName;
 
 /// Existentially quantified variable
 ///
@@ -25,7 +23,7 @@ pub struct ExistentialVariable {
     id: ProgramComponentId,
 
     /// Name of the variable
-    name: VariableName,
+    name: String,
 }
 
 impl ExistentialVariable {
@@ -34,17 +32,17 @@ impl ExistentialVariable {
         Self {
             origin: Origin::default(),
             id: ProgramComponentId::default(),
-            name: VariableName::new(name.to_owned()),
+            name: name.to_owned(),
         }
     }
 
     /// Return the name of this variable.
-    pub fn name(&self) -> String {
-        self.name.to_string()
+    pub fn name(&self) -> &str {
+        &self.name
     }
 
     /// Change the name of this variable.
-    pub fn rename(&mut self, name: VariableName) {
+    pub fn rename(&mut self, name: String) {
         self.name = name;
     }
 }
@@ -80,15 +78,17 @@ impl ComponentBehavior for ExistentialVariable {
         ProgramComponentKind::Variable
     }
 
-    fn validate(&self, _builder: &mut ValidationErrorBuilder) -> Option<()> {
-        // if !self.name.is_valid() {
-        //     builder.report_error(
-        //         self.origin,
-        //         ValidationErrorKind::InvalidVariableName(self.name()),
-        //     );
-        // }
+    fn validate(&self) -> Result<(), ValidationReport> {
+        let mut report = ValidationReport::default();
 
-        Some(())
+        if Symbols::is_reserved(self.name()) {
+            report.add(
+                self,
+                ValidationError::InvalidVariableName(self.name().to_owned()),
+            );
+        }
+
+        report.result()
     }
 
     fn boxed_clone(&self) -> Box<dyn ProgramComponent> {

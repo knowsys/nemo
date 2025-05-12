@@ -25,6 +25,6 @@ impl TranslationComponent for FunctionTerm {
             subterms.push(Term::build_component(translation, expression)?);
         }
 
-        Ok(translation.register_component(FunctionTerm::new_tag(tag, subterms), function))
+        Ok(translation.register_component(FunctionTerm::new_tagged(tag, subterms), function))
     }
 }

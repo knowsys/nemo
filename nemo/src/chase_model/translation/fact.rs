@@ -25,7 +25,7 @@ impl ProgramChaseTranslation {
         let predicate = fact.predicate().clone();
         let mut terms = Vec::new();
 
-        for term in fact.subterms() {
+        for term in fact.terms() {
             let reduced = term.reduce();
 
             if let Term::Primitive(Primitive::Ground(value)) = reduced {

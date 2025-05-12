@@ -66,7 +66,7 @@ impl ComponentBehavior for Output {
         ProgramComponentKind::Output
     }
 
-    fn validate(&self, _builder: &mut ValidationErrorBuilder) -> Option<()> {
+     fn validate(&self) -> Result<(), ValidationReport> {
         Some(())
     }
 

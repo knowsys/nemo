@@ -5,6 +5,14 @@
 macro_rules! term_list {
     // Base case
     () => {};
+    // Match a single constant
+    ($terms:ident; < $constant:ident >) => {
+        $terms.push($crate::rule_model::components::term::Term::constant(stringify!($constant)));
+    };
+    // Match constants
+    ($terms:ident; < $constant:ident >, $($others:tt)* ) => {
+        $terms.push($crate::rule_model::components::term::Term::constant(stringify!($constant))); term_list!($terms; $($others)*)
+    };
     // Match a single universally quantified variable
     ($terms:ident; ? $var:ident) => {
         $terms.push($crate::rule_model::components::term::Term::universal_variable(stringify!($var)));
@@ -21,7 +29,7 @@ macro_rules! term_list {
     ($terms:ident; ! $var:ident, $($others:tt)* ) => {
         $terms.push($crate::rule_model::components::term::Term::existential_variable(stringify!($var))); term_list!($terms; $($others)*)
     };
-    // Match a single occurence of anything
+    // Match a single occurrence of anything
     ($terms:ident; $e:tt) => {
         $terms.push($crate::rule_model::components::term::Term::from($e));
     };

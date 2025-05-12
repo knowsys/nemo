@@ -21,7 +21,6 @@ use crate::{
         error::ValidationErrorBuilder,
         origin::Origin,
         pipeline::id::ProgramComponentId,
-        substitution::Substitution,
     },
 };
 
@@ -102,24 +101,16 @@ impl Operation {
         self.subterms.iter().all(Term::is_ground)
     }
 
-    /// Reduce constant expressions returning a copy of the reduced [Term].
-    pub fn reduce_with_substitution(&self, bindings: &Substitution) -> Term {
-        let reduced_subterms = Operation {
-            origin: self.origin.clone(),
-            id: ProgramComponentId::default(),
-            kind: self.kind,
-            subterms: self
-                .subterms
-                .iter()
-                .map(|term| term.reduce_with_substitution(bindings))
-                .collect(),
-        };
-
-        if !reduced_subterms.is_ground() {
-            return Term::Operation(reduced_subterms);
+    /// Reduce this term by evaluating the expression
+    /// returning a new [Term] with the same [Origin] as `self`.
+    ///
+    /// This function does nothing if `self` is not ground.
+    pub fn reduce(&self) -> Term {
+        if !self.is_ground() {
+            return Term::Operation(self.clone());
         }
 
-        let chase_operation_term = ProgramChaseTranslation::build_operation_term(&reduced_subterms);
+        let chase_operation_term = ProgramChaseTranslation::build_operation_term(self);
 
         let empty_translation = VariableTranslation::new();
         let function_tree =
@@ -263,7 +254,7 @@ impl ComponentBehavior for Operation {
         ProgramComponentKind::Operation
     }
 
-    fn validate(&self, _builder: &mut ValidationErrorBuilder) -> Option<()> {
+     fn validate(&self) -> Result<(), ValidationReport> {
         // if !self.kind.num_arguments().validate(self.subterms.len()) {
         //     builder.report_error(
         //         self.origin,

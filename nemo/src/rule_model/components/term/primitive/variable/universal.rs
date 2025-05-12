@@ -4,15 +4,13 @@ use std::{fmt::Display, hash::Hash};
 
 use crate::rule_model::{
     components::{
-        ComponentBehavior, ComponentIdentity, IterableComponent, ProgramComponent,
-        ProgramComponentKind,
+        symbols::Symbols, ComponentBehavior, ComponentIdentity, IterableComponent,
+        ProgramComponent, ProgramComponentKind,
     },
-    error::ValidationErrorBuilder,
+    error::{validation_error::ValidationError, ValidationReport},
     origin::Origin,
     pipeline::id::ProgramComponentId,
 };
-
-use super::VariableName;
 
 /// Universally quantified variable
 ///
@@ -30,20 +28,20 @@ pub struct UniversalVariable {
     /// Name of the variable
     ///
     /// This can be `None` in case this is an anonymous variable.
-    name: Option<VariableName>,
+    name: Option<String>,
 }
 
 impl UniversalVariable {
-    /// Create a new named [UniversalVariable]
+    /// Create a new named [UniversalVariable].
     pub fn new(name: &str) -> Self {
         Self {
             origin: Origin::default(),
             id: ProgramComponentId::default(),
-            name: Some(VariableName::new(name.to_string())),
+            name: Some(name.to_owned()),
         }
     }
 
-    /// Create a new anonymous [UniversalVariable]
+    /// Create a new anonymous [UniversalVariable].
     pub fn new_anonymous() -> Self {
         Self {
             origin: Origin::default(),
@@ -54,8 +52,8 @@ impl UniversalVariable {
 
     /// Return the name of this variable,
     /// or `None` if the variable is unnamed.
-    pub fn name(&self) -> Option<String> {
-        self.name.as_ref().map(|name| name.to_string())
+    pub fn name(&self) -> Option<&str> {
+        self.name.as_deref()
     }
 
     /// Return `true` if this is an anonymous variable,
@@ -65,7 +63,7 @@ impl UniversalVariable {
     }
 
     /// Change the name of this variable.
-    pub fn rename(&mut self, name: VariableName) {
+    pub fn rename(&mut self, name: String) {
         self.name = Some(name);
     }
 }
@@ -104,17 +102,16 @@ impl ComponentBehavior for UniversalVariable {
         ProgramComponentKind::Variable
     }
 
-    fn validate(&self, _builder: &mut ValidationErrorBuilder) -> Option<()> {
-        // if let Some(name) = &self.name {
-        //     if !name.is_valid() {
-        //         builder.report_error(
-        //             self.origin,
-        //             ValidationErrorKind::InvalidVariableName(name.0.clone()),
-        //         );
-        //     }
-        // }
+    fn validate(&self) -> Result<(), ValidationReport> {
+        let mut report = ValidationReport::default();
 
-        Some(())
+        if let Some(name) = self.name() {
+            if Symbols::is_reserved(name) {
+                report.add(self, ValidationError::InvalidVariableName(name.to_owned()));
+            }
+        }
+
+        report.result()
     }
 
     fn boxed_clone(&self) -> Box<dyn ProgramComponent> {

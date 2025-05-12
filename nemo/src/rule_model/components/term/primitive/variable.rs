@@ -8,7 +8,7 @@ use universal::UniversalVariable;
 
 use crate::rule_model::{
     components::{ComponentBehavior, ComponentIdentity, IterableComponent, ProgramComponentKind},
-    error::ValidationErrorBuilder,
+    error::ValidationReport,
     origin::Origin,
     pipeline::id::ProgramComponentId,
 };
@@ -18,28 +18,6 @@ use super::ProgramComponent;
 pub mod existential;
 pub mod global;
 pub mod universal;
-
-/// Name of a variable
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct VariableName(String);
-
-impl VariableName {
-    /// Create a new [VariableName].
-    pub fn new(name: String) -> Self {
-        Self(name)
-    }
-
-    /// Validate variable name.
-    pub fn is_valid(&self) -> bool {
-        !self.0.starts_with("__")
-    }
-}
-
-impl Display for VariableName {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.0.fmt(f)
-    }
-}
 
 /// Variable
 ///
@@ -77,7 +55,7 @@ impl Variable {
     }
 
     /// Return the name of the variable or `None` if it is anonymous
-    pub fn name(&self) -> Option<String> {
+    pub fn name(&self) -> Option<&str> {
         match self {
             Variable::Universal(variable) => variable.name(),
             Variable::Existential(variable) => Some(variable.name()),
@@ -110,7 +88,7 @@ impl Variable {
     }
 
     /// Change the name of this variable.
-    pub fn rename(&mut self, name: VariableName) {
+    pub fn rename(&mut self, name: String) {
         match self {
             Variable::Universal(variable) => variable.rename(name),
             Variable::Existential(variable) => variable.rename(name),
@@ -152,11 +130,11 @@ impl ComponentBehavior for Variable {
         ProgramComponentKind::Variable
     }
 
-    fn validate(&self, builder: &mut ValidationErrorBuilder) -> Option<()> {
+    fn validate(&self) -> Result<(), ValidationReport> {
         match self {
-            Variable::Universal(variable) => variable.validate(builder),
-            Variable::Existential(variable) => variable.validate(builder),
-            Variable::Global(variable) => variable.validate(builder),
+            Variable::Universal(variable) => variable.validate(),
+            Variable::Existential(variable) => variable.validate(),
+            Variable::Global(variable) => variable.validate(),
         }
     }
 

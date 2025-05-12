@@ -47,13 +47,47 @@ impl Primitive {
         Ok(term)
     }
 
+    /// Create a universal variable term.
+    pub fn universal_variable(name: &str) -> Self {
+        Self::Variable(Variable::universal(name))
+    }
+
+    /// Create a anynmous variable term.
+    pub fn anonymous_variable() -> Self {
+        Self::Variable(Variable::anonymous())
+    }
+
+    /// Create a global variable term.
+    pub fn global_variable(name: &str) -> Self {
+        Self::Variable(Variable::global(name))
+    }
+
+    /// Create a existential variable term.
+    pub fn existential_variable(name: &str) -> Self {
+        Self::Variable(Variable::existential(name))
+    }
+
+    /// Create a groud term.
+    pub fn ground(value: AnyDataValue) -> Self {
+        Self::Ground(GroundTerm::new(value))
+    }
+
+    /// Create an IRI term.
+    pub fn constant(iri: &str) -> Self {
+        Self::Ground(GroundTerm::constant(iri))
+    }
+
+    /// Create a language tagged string term.
+    pub fn language_tagged(value: &str, tag: &str) -> Self {
+        Self::Ground(GroundTerm::language_tagged(value, tag))
+    }
+
     /// Return `true` if this term is considered "ground".
     ///
-    /// This is the case if the term is not a universal or existential variable
-    /// (we consider global variables to be ground).
+    /// This is the case if the term is not a variable.
     pub fn is_ground(&self) -> bool {
         match self {
-            Primitive::Variable(variable) => variable.is_global(),
+            Primitive::Variable(_) => false,
             Primitive::Ground(_) => true,
         }
     }
@@ -100,6 +134,12 @@ impl From<GroundTerm> for Primitive {
 impl From<AnyDataValue> for Primitive {
     fn from(value: AnyDataValue) -> Self {
         Self::Ground(GroundTerm::from(value))
+    }
+}
+
+impl From<bool> for Primitive {
+    fn from(value: bool) -> Self {
+        Self::from(GroundTerm::from(value))
     }
 }
 
@@ -150,7 +190,7 @@ impl ComponentBehavior for Primitive {
         }
     }
 
-    fn validate(&self, builder: &mut ValidationErrorBuilder) -> Option<()> {
+     fn validate(&self) -> Result<(), ValidationReport> {
         match self {
             Primitive::Variable(term) => term.validate(builder),
             Primitive::Ground(term) => term.validate(builder),

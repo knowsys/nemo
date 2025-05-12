@@ -4,13 +4,13 @@
 
 #[macro_use]
 pub mod atom;
-pub mod datatype;
 pub mod fact;
 pub mod import_export;
 pub mod literal;
 pub mod output;
 pub mod parameter;
 pub mod rule;
+pub mod symbols;
 pub mod tag;
 pub mod term;
 
@@ -43,8 +43,8 @@ use term::{
 };
 
 use super::{
-    error::ValidationErrorBuilder, origin::Origin, pipeline::id::ProgramComponentId,
-    program::Program, util::TryAsRef,
+    error::ValidationReport, origin::Origin, pipeline::id::ProgramComponentId, program::Program,
+    util::TryAsRef,
 };
 
 /// Types of [ProgramComponent]s
@@ -137,13 +137,11 @@ pub trait ComponentBehavior {
     /// Return the [ProgramComponentKind] of this component.
     fn kind(&self) -> ProgramComponentKind;
 
-    /// Validate this component.
-    ///
-    /// TODO: Change the builder to `Result`
-    fn validate(&self, builder: &mut ValidationErrorBuilder) -> Option<()>;
-
     /// Clone this component into a boxed trait object.
     fn boxed_clone(&self) -> Box<dyn ProgramComponent>;
+
+    /// Check if this component is well-formed.
+    fn validate(&self) -> Result<(), ValidationReport>;
 }
 
 /// Trait that collects methods for identifying and tracking the origins of  
@@ -178,21 +176,35 @@ pub trait IterableComponent {
     }
 }
 
-/// Trait that defines a helper method that is useful when combining [Origin]s
-pub(crate) trait EffectiveOrigin: ComponentIdentity + ComponentBehavior {
+/// Trait that allows duplicate [ProgramComponent]s
+/// while recording their [Origin]
+pub trait ComponentDuplicate: ComponentIdentity + ComponentBehavior {
     /// If the component is assigned to a [super::pipeline::ProgramPipeline],
     /// the [Origin] will be a reference using its [ProgramComponentId].
     /// Otherwise, returns the [Origin] of the component.
-    fn effective_origin(&self) -> Origin {
+    fn duplicated_origin(&self) -> Origin {
         if self.id().is_assigned() {
             Origin::Reference(self.id())
         } else {
             Origin::Component(self.boxed_clone())
         }
     }
+
+    /// Duplicate a [ProgramComponent]
+    /// while keeping track of the [Origin].
+    fn duplicate(self) -> Self
+    where
+        Self: Clone,
+    {
+        let origin = self.duplicated_origin();
+        let mut cloned = self.clone();
+        cloned.set_origin(origin);
+
+        cloned
+    }
 }
 
-impl<Component: ComponentIdentity + ComponentBehavior> EffectiveOrigin for Component {}
+impl<Component: ComponentIdentity + ComponentBehavior> ComponentDuplicate for Component {}
 
 /// Trait implemented by components of Nemo's logical rule model
 /// that allows conversion between them

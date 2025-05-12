@@ -303,7 +303,7 @@ impl ComponentBehavior for Rule {
         ProgramComponentKind::Rule
     }
 
-    fn validate(&self, _builder: &mut ValidationErrorBuilder) -> Option<()> {
+     fn validate(&self) -> Result<(), ValidationReport> {
         // if self.body_positive().next().is_none() {
         //             builder.report_error(
         //                 self.origin,
@@ -536,7 +536,7 @@ impl Hash for Rule {
 //         self
 //     }
 
-//     fn validate(&self, builder: &mut ValidationErrorBuilder) -> Option<()>
+//      fn validate(&self) -> Result<(), ValidationReport>
 //     where
 //         Self: Sized,
 //     {
@@ -730,130 +730,3 @@ impl IterablePrimitives for Rule {
         Box::new(head_primitives.chain(body_primitives))
     }
 }
-
-// /// Builder for a rule
-// #[derive(Debug, Default)]
-// pub struct RuleBuilder {
-//     /// Origin of the rule
-//     origin: Origin,
-
-//     /// Name of the rule
-//     name: Option<String>,
-//     /// How an instantiated version of this rule should be displayed
-//     display: Option<Term>,
-
-//     /// Head of the rule
-//     head: Vec<Atom>,
-//     /// Body of the rule
-//     body: Vec<Literal>,
-// }
-
-// impl RuleBuilder {
-//     /// Set the name of the built rule.
-//     pub fn name_mut(&mut self, name: &str) -> &mut Self {
-//         self.name = Some(name.to_string());
-//         self
-//     }
-
-//     /// Set the display property of the built rule.
-//     pub fn display_mut(&mut self, display: Term) -> &mut Self {
-//         self.display = Some(display);
-//         self
-//     }
-
-//     pub fn add_external_variable(
-//         &mut self,
-//         variable: UniversalVariable,
-//         expansion: GroundTerm,
-//     ) -> &mut Self {
-//         self.add_body_operation_mut(Operation::new(
-//             OperationKind::Equal,
-//             vec![
-//                 Term::Primitive(Primitive::Variable(Variable::Universal(variable))),
-//                 Term::Primitive(Primitive::Ground(expansion)),
-//             ],
-//         ));
-//         self
-//     }
-
-//     /// Set the [Origin] of the built rule.
-//     pub fn origin(mut self, origin: Origin) -> Self {
-//         self.origin = origin;
-//         self
-//     }
-
-//     /// Add a positive atom to the body of the rule.
-//     pub fn add_body_positive(mut self, atom: Atom) -> Self {
-//         self.body.push(Literal::Positive(atom));
-//         self
-//     }
-
-//     /// Add a positive atom to the body of the rule.
-//     pub fn add_body_positive_mut(&mut self, atom: Atom) -> &mut Self {
-//         self.body.push(Literal::Positive(atom));
-//         self
-//     }
-
-//     /// Add a negative atom to the body of the rule.
-//     pub fn add_body_negative(mut self, atom: Atom) -> Self {
-//         self.body.push(Literal::Negative(atom));
-//         self
-//     }
-
-//     /// Add a negative atom to the body of the rule.
-//     pub fn add_body_negative_mut(&mut self, atom: Atom) -> &mut Self {
-//         self.body.push(Literal::Negative(atom));
-//         self
-//     }
-
-//     /// Add an operation to the body of the rule.
-//     pub fn add_body_operation(mut self, opreation: Operation) -> Self {
-//         self.body.push(Literal::Operation(opreation));
-//         self
-//     }
-
-//     /// Add an operation to the body of the rule.
-//     pub fn add_body_operation_mut(&mut self, opreation: Operation) -> &mut Self {
-//         self.body.push(Literal::Operation(opreation));
-//         self
-//     }
-
-//     /// Add a literal to the body of the rule.
-//     pub fn add_body_literal(mut self, literal: Literal) -> Self {
-//         self.body.push(literal);
-//         self
-//     }
-
-//     /// Add a literal to the body of the rule.
-//     pub fn add_body_literal_mut(&mut self, literal: Literal) -> &mut Self {
-//         self.body.push(literal);
-//         self
-//     }
-
-//     /// Add an atom to the head of the rule.
-//     pub fn add_head_atom(mut self, atom: Atom) -> Self {
-//         self.head.push(atom);
-//         self
-//     }
-
-//     /// Add an atom to the head of the rule.
-//     pub fn add_head_atom_mut(&mut self, atom: Atom) -> &mut Self {
-//         self.head.push(atom);
-//         self
-//     }
-
-//     /// Finish building and return a [Rule].
-//     pub fn finalize(self) -> Rule {
-//         let mut rule = Rule::new(self.head, self.body).set_origin(self.origin);
-
-//         if let Some(name) = &self.name {
-//             rule = rule.set_name(name);
-//         }
-
-//         if let Some(display) = self.display {
-//             rule = rule.set_display(display);
-//         }
-
-//         rule
-//     }
-// }

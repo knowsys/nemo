@@ -1,6 +1,10 @@
 //! This module defines [Tuple].
 
-use std::{fmt::Display, hash::Hash};
+use std::{
+    fmt::Display,
+    hash::Hash,
+    ops::{Deref, DerefMut, Index, IndexMut},
+};
 
 use crate::rule_model::{
     components::{
@@ -11,7 +15,6 @@ use crate::rule_model::{
     error::ValidationErrorBuilder,
     origin::Origin,
     pipeline::id::ProgramComponentId,
-    substitution::Substitution,
 };
 
 use super::{
@@ -66,9 +69,28 @@ impl Tuple {
         ValueType::Tuple
     }
 
-    /// Return an iterator over the arguments of this tuple.
-    pub fn arguments(&self) -> impl Iterator<Item = &Term> {
+    /// Return an iterator over the terms of this tuple.
+    pub fn terms(&self) -> impl Iterator<Item = &Term> {
         self.terms.iter()
+    }
+
+    /// Return a mutable iterator over the terms of this tuple.
+    pub fn terms_mut(&mut self) -> impl Iterator<Item = &mut Term> {
+        self.terms.iter_mut()
+    }
+
+    /// Push a [Term] to the end of this tuple.
+    pub fn push(&mut self, term: Term) {
+        self.terms.push(term);
+    }
+
+    /// Remove the [Term] at the given index from this tuple
+    /// and return it.
+    ///
+    /// # Panics
+    /// Panics if index out of bounds.
+    pub fn remove(&mut self, index: usize) -> Term {
+        self.terms.remove(index)
     }
 
     /// Return whether this term is ground,
@@ -77,17 +99,44 @@ impl Tuple {
         self.terms.iter().all(Term::is_ground)
     }
 
-    /// Reduce each sub [Term] in the tuple returning a copy.
-    pub fn reduce(&self, bindings: &Substitution) -> Self {
+    /// Reduce this term by evaluating all contained expressions,
+    /// and return a new [Tuple] with the same [Origin] as `self`.
+    ///
+    /// This function does nothing if `self` is not ground.
+    pub fn reduce(&self) -> Self {
         Self {
             origin: self.origin.clone(),
             id: ProgramComponentId::default(),
-            terms: self
-                .terms
-                .iter()
-                .map(|term| term.reduce_with_substitution(bindings))
-                .collect(),
+            terms: self.terms.iter().map(|term| term.reduce()).collect(),
         }
+    }
+}
+
+impl Index<usize> for Tuple {
+    type Output = Term;
+
+    fn index(&self, index: usize) -> &Self::Output {
+        &self.terms[index]
+    }
+}
+
+impl IndexMut<usize> for Tuple {
+    fn index_mut(&mut self, index: usize) -> &mut Self::Output {
+        &mut self.terms[index]
+    }
+}
+
+impl Deref for Tuple {
+    type Target = [Term];
+
+    fn deref(&self) -> &Self::Target {
+        &self.terms
+    }
+}
+
+impl DerefMut for Tuple {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.terms
     }
 }
 
@@ -132,8 +181,8 @@ impl ComponentBehavior for Tuple {
         ProgramComponentKind::Tuple
     }
 
-    fn validate(&self, builder: &mut ValidationErrorBuilder) -> Option<()> {
-        for term in self.arguments() {
+     fn validate(&self) -> Result<(), ValidationReport> {
+        for term in self.terms() {
             term.validate(builder)?;
         }
 

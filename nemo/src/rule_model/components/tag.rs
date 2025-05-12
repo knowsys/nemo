@@ -23,23 +23,14 @@ impl Tag {
         }
     }
 
-    /// Validate term name.
-    pub fn is_valid(&self) -> bool {
-        !self.tag.starts_with("__")
-    }
-
     /// Return the [Origin] associated with this tag.
     pub fn origin(&self) -> &Origin {
         &self.origin
     }
 
     /// Set the [Origin].
-    pub fn set_origin(mut self, origin: Origin) -> Self
-    where
-        Self: Sized,
-    {
+    pub fn set_origin(mut self, origin: Origin) {
         self.origin = origin;
-        self
     }
 
     /// Return the name of [Tag].
@@ -87,7 +78,7 @@ impl From<&str> for Tag {
     fn from(value: &str) -> Self {
         Self {
             origin: Origin::Created,
-            tag: value.to_string(),
+            tag: value.to_owned(),
         }
     }
 }

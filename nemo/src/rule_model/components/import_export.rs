@@ -16,6 +16,7 @@ use super::{
 };
 
 pub mod attribute;
+pub mod io_type;
 pub mod specification;
 
 /// Direction of import/export activities.
@@ -136,7 +137,7 @@ impl ComponentBehavior for ImportDirective {
         ProgramComponentKind::Import
     }
 
-    fn validate(&self, _builder: &mut ValidationErrorBuilder) -> Option<()> {
+     fn validate(&self) -> Result<(), ValidationReport> {
         // ImportExportBuilder::new(self.0.spec.clone(), Direction::Import, builder)
         todo!()
     }
@@ -233,7 +234,7 @@ impl ComponentBehavior for ExportDirective {
         ProgramComponentKind::Export
     }
 
-    fn validate(&self, _builder: &mut ValidationErrorBuilder) -> Option<()> {
+     fn validate(&self) -> Result<(), ValidationReport> {
         // ImportExportBuilder::new(self.0.spec.clone(), Direction::Export, builder)
         todo!()
     }

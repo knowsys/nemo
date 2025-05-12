@@ -11,7 +11,6 @@ use crate::rule_model::{
     error::ValidationErrorBuilder,
     origin::Origin,
     pipeline::id::ProgramComponentId,
-    substitution::Substitution,
 };
 
 use super::{
@@ -83,6 +82,16 @@ impl Map {
     }
 
     /// Create a new empty [Map].
+    pub fn empty_tagged(tag: Option<Tag>) -> Self {
+        Self {
+            origin: Origin::default(),
+            id: ProgramComponentId::default(),
+            tag,
+            map: Vec::default(),
+        }
+    }
+
+    /// Create a new empty [Map].
     pub fn empty_unnamed() -> Self {
         Self {
             origin: Origin::default(),
@@ -107,6 +116,11 @@ impl Map {
         self.map.iter()
     }
 
+    /// Return an iterator over the key value pairs in this map.
+    pub fn key_value_mut(&mut self) -> impl Iterator<Item = &mut (Term, Term)> {
+        self.map.iter_mut()
+    }
+
     /// Return the number of entries in this map.
     pub fn len(&self) -> usize {
         self.map.len()
@@ -117,6 +131,48 @@ impl Map {
         self.len() == 0
     }
 
+    /// Find the given key and return a reference to the corresponding value,
+    /// if it exists.
+    pub fn get(&self, key: &Term) -> Option<&Term> {
+        for (map_key, value) in self.key_value() {
+            if map_key == key {
+                return Some(value);
+            }
+        }
+
+        None
+    }
+
+    /// Find the given key and return a mutable reference to the corresponding value,
+    /// if it exists.
+    pub fn get_mut(&mut self, key: &Term) -> Option<&mut Term> {
+        for (map_key, value) in self.key_value_mut() {
+            if map_key == key {
+                return Some(value);
+            }
+        }
+
+        None
+    }
+
+    /// Insert a new key-value-pair into the map.
+    pub fn insert(&mut self, key: Term, value: Term) {
+        self.map.push((key, value));
+    }
+
+    /// Remove all occurrences of the given key from the map.
+    pub fn remove(&mut self, key: &Term) {
+        self.map.retain(|(key_map, _)| key_map != key);
+    }
+
+    /// Check whether the given key is contained in this map.
+    pub fn contains_key(&self, key: &Term) -> bool {
+        self.map
+            .iter()
+            .find(|(key_map, _)| key_map == key)
+            .is_some()
+    }
+
     /// Return whether this term is ground,
     /// i.e. if it does not contain any variables.
     pub fn is_ground(&self) -> bool {
@@ -124,20 +180,18 @@ impl Map {
             .all(|(key, value)| key.is_ground() && value.is_ground())
     }
 
-    /// Reduce the [Term]s in each key-value pair returning a copy.
-    pub fn reduce_with_substitution(&self, bindings: &Substitution) -> Self {
+    /// Reduce this term by evaluating all contained expressions,
+    /// and return a new [Map] with the same [Origin] as `self`.
+    ///
+    /// This function does nothing if `self` is not ground.
+    pub fn reduce(&self) -> Self {
         Self {
             origin: self.origin.clone(),
             id: ProgramComponentId::default(),
             tag: self.tag.clone(),
             map: self
                 .key_value()
-                .map(|(key, value)| {
-                    (
-                        key.reduce_with_substitution(bindings),
-                        value.reduce_with_substitution(bindings),
-                    )
-                })
+                .map(|(key, value)| (key.reduce(), value.reduce()))
                 .collect(),
         }
     }
@@ -190,7 +244,7 @@ impl ComponentBehavior for Map {
         ProgramComponentKind::Map
     }
 
-    fn validate(&self, builder: &mut ValidationErrorBuilder) -> Option<()> {
+     fn validate(&self) -> Result<(), ValidationReport> {
         for (key, value) in self.key_value() {
             key.validate(builder)?;
             value.validate(builder)?;
