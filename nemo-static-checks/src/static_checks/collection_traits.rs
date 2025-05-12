@@ -15,6 +15,33 @@ pub trait InsertAll<C, T> {
     fn insert_all_take_ret(self, other: C) -> Self;
 }
 
+impl<T> InsertAll<Vec<T>, T> for Vec<T>
+where
+    T: Clone + Eq + Hash + PartialEq,
+{
+    fn insert_all(&mut self, other: &Vec<T>) {
+        other.iter().for_each(|item| {
+            self.push(item.clone());
+        })
+    }
+
+    fn insert_all_ret(mut self, other: &Vec<T>) -> Vec<T> {
+        self.insert_all(other);
+        self
+    }
+
+    fn insert_all_take(&mut self, other: Vec<T>) {
+        other.into_iter().for_each(|item| {
+            self.push(item);
+        })
+    }
+
+    fn insert_all_take_ret(mut self, other: Vec<T>) -> Vec<T> {
+        self.insert_all_take(other);
+        self
+    }
+}
+
 impl<T> InsertAll<HashSet<T>, T> for HashSet<T>
 where
     T: Clone + Eq + Hash + PartialEq,

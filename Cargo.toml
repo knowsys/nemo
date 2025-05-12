@@ -4,14 +4,14 @@ default-members = [
     "nemo",
     "nemo-cli",
     "nemo-physical",
-    "nemo-python",
+    # "nemo-python",
     "nemo-static-checks",
 ]
 members = [
     "nemo",
     "nemo-cli",
     "nemo-physical",
-    "nemo-python",
+    # "nemo-python",
     "nemo-language-server",
     "nemo-wasm",
     "nemo-static-checks",

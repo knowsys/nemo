@@ -227,6 +227,28 @@ fn linear_positive(fixture: Fixture<&str>) {
 }
 
 #[dir_test(
+    dir: "$CARGO_MANIFEST_DIR/../resources/testcases_static_checks/tests/negative/isDmfa",
+    glob: "*.rls",
+    postfix: "mfa_negative",
+)]
+fn mfa_negative(fixture: Fixture<&str>) {
+    let path: PathBuf = path_canonicalized(fixture.path());
+    if !path.ends_with("c28.rls") {
+        return;
+    }
+    test(fixture, false, &RulesProperties::is_mfa)
+}
+
+// #[dir_test(
+//     dir: "$CARGO_MANIFEST_DIR/../resources/testcases_static_checks/tests/positive/isDmfa",
+//     glob: "*.rls",
+//     postfix: "mfa_positive",
+// )]
+// fn mfa_positive(fixture: Fixture<&str>) {
+//     test(fixture, true, &RulesProperties::is_mfa)
+// }
+
+#[dir_test(
     dir: "$CARGO_MANIFEST_DIR/../resources/testcases_static_checks/tests/negative/isMonadic",
     glob: "*.rls",
     postfix: "monadic_negative",
