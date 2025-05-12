@@ -80,6 +80,7 @@ impl Atom {
         self.predicate.clone()
     }
 
+    /// Return the predicate of this atom as a reference.
     pub fn predicate_ref(&self) -> &Tag {
         &self.predicate
     }
@@ -97,6 +98,11 @@ impl Atom {
     /// Return whether this atom contains no subterms.
     pub fn is_empty(&self) -> bool {
         self.len() == 0
+    }
+
+    /// Return the predicate of this atom as a reference with its length.
+    pub fn predicate_ref_and_len(&self) -> (&Tag, usize) {
+        (self.predicate_ref(), self.len())
     }
 }
 

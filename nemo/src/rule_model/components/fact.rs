@@ -63,6 +63,23 @@ impl Fact {
     pub fn subterms_mut(&mut self) -> impl Iterator<Item = &mut Term> {
         self.terms.iter_mut()
     }
+
+    /// Returns whether the fact contains a term that is cyclic.
+    pub fn is_cyclic(&self) -> bool {
+        let mut reused_function_tags: Vec<&Tag> = Vec::<&Tag>::new();
+        self.subterms()
+            .any(|term| term.is_cyclic(&mut reused_function_tags))
+    }
+}
+
+impl From<(&Tag, Vec<Term>)> for Fact {
+    fn from((predicate, terms): (&Tag, Vec<Term>)) -> Self {
+        Self {
+            origin: Origin::Created,
+            predicate: predicate.clone(),
+            terms,
+        }
+    }
 }
 
 impl From<Atom> for Fact {

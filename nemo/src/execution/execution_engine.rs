@@ -491,4 +491,23 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
 
         Ok((trace, handles))
     }
+
+    pub fn run_every_rule_once(&mut self) -> Result<(), Error> {
+        let rule_execution: Vec<RuleExecution> = self
+            .program
+            .rules()
+            .iter()
+            .zip(self.analysis.rule_analysis.iter())
+            .map(|(r, a)| RuleExecution::initialize(r, a))
+            .collect();
+
+        let number_of_rules: usize = self.program.rules().len();
+
+        for index in 0..number_of_rules {
+            let updated_predicates = self.step(index, &rule_execution[index])?;
+            self.defrag(updated_predicates)?;
+        }
+
+        Ok(())
+    }
 }

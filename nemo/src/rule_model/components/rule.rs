@@ -16,6 +16,7 @@ use crate::rule_model::{
 use super::{
     atom::Atom,
     literal::Literal,
+    tag::Tag,
     term::{
         operation::Operation,
         primitive::{variable::Variable, Primitive},
@@ -298,6 +299,23 @@ impl Rule {
         } else {
             None
         }
+    }
+
+    /// Return the predicates of all Literals (no Operations) of the Rule.
+    pub fn predicates_ref(&self) -> Vec<&Tag> {
+        self.body()
+            .iter()
+            .filter_map(|literal| literal.predicate_ref())
+            .chain(self.head().iter().map(|atom| atom.predicate_ref()))
+            .collect()
+    }
+
+    pub fn predicates_ref_and_lens(&self) -> Vec<(&Tag, usize)> {
+        self.body()
+            .iter()
+            .filter_map(|literal| literal.predicate_ref_and_len())
+            .chain(self.head().iter().map(|atom| atom.predicate_ref_and_len()))
+            .collect()
     }
 }
 

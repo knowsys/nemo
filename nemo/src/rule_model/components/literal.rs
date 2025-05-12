@@ -6,6 +6,7 @@ use crate::rule_model::error::ValidationErrorBuilder;
 
 use super::{
     atom::Atom,
+    tag::Tag,
     term::{
         operation::Operation,
         primitive::{variable::Variable, Primitive},
@@ -38,6 +39,42 @@ impl Literal {
             Literal::Operation(literal) => Box::new(literal.arguments()),
         }
     }
+
+    /// Return the predicate (positive Atom | negative Atom) or None (Operation) of the
+    /// Literal
+    pub fn predicate(&self) -> Option<Tag> {
+        match self {
+            Literal::Positive(atom) | Literal::Negative(atom) => Some(atom.predicate()),
+            Literal::Operation(_) => None,
+        }
+    }
+
+    /// Return the predicate (positive Atom | negative Atom) or None (Operation) of the
+    /// Literal as a reference
+    pub fn predicate_ref(&self) -> Option<&Tag> {
+        match self {
+            Literal::Positive(atom) | Literal::Negative(atom) => Some(atom.predicate_ref()),
+            Literal::Operation(_) => None,
+        }
+    }
+
+    /// Return the predicate as a reference and its length (positive Atom | negative Atom) or None (Operation) of the
+    /// Literal
+    pub fn predicate_ref_and_len(&self) -> Option<(&Tag, usize)> {
+        match self {
+            Literal::Positive(atom) | Literal::Negative(atom) => Some(atom.predicate_ref_and_len()),
+            Literal::Operation(_) => None,
+        }
+    }
+
+    // / Return the number of subterms in this literal if its a (positive Atom | negative Atom) or
+    // / None (Operation).
+    // pub fn len(&self) -> Option<usize> {
+    //     match self {
+    //         Literal::Positive(atom) | Literal::Negative(atom) => Some(atom.len()),
+    //         Literal::Operation(_) => None,
+    //     }
+    // }
 }
 
 impl Display for Literal {

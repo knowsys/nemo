@@ -34,6 +34,8 @@ use crate::rule_model::{
     error::ValidationErrorBuilder, origin::Origin, substitution::Substitution,
 };
 
+use crate::rule_model::components::tag::Tag;
+
 use super::{IterablePrimitives, IterableVariables, ProgramComponent};
 
 /// Term
@@ -165,6 +167,24 @@ impl Term {
         substitution.apply(&mut cloned);
 
         cloned.reduce()
+    }
+
+    /// Returns whether the term is cyclic.
+    pub fn is_cyclic<'a>(&'a self, function_symbols: &mut Vec<&'a Tag>) -> bool {
+        match self {
+            Term::FunctionTerm(func) => {
+                if function_symbols.contains(&func.tag()) {
+                    return true;
+                }
+                function_symbols.push(func.tag());
+                if func.is_cyclic(function_symbols) {
+                    return true;
+                }
+                function_symbols.pop();
+                false
+            }
+            _ => false,
+        }
     }
 }
 
