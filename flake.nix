@@ -33,6 +33,15 @@ rec {
         nemo.follows = "nemo-vscode-extension/nemo";
       };
     };
+
+    nemo-doc = {
+      url = "github:knowsys/nemo-doc";
+      inputs = {
+        nixpkgs.follows = "nixpkgs";
+        utils.follows = "utils";
+        dream2nix.follows = "dream2nix";
+      };
+    };
   };
 
   outputs =
@@ -277,6 +286,8 @@ rec {
                   ];
                 }).config.public;
 
+              inherit (inputs.nemo-doc.packages.${pkgs.system}) nemo-doc;
+
               default = nemo;
             };
 
@@ -299,6 +310,8 @@ rec {
                 '';
               };
             };
+
+            inherit (inputs.nemo-doc.apps.${pkgs.system}) nemo-doc;
 
             ci-checks = utils.lib.mkApp {
               drv = pkgs.writeShellApplication {
@@ -395,6 +408,7 @@ rec {
                 nemo-wasm-node
                 nemo-wasm-web
                 nemo-web
+                nemo-doc
                 nemo-vscode-extension
                 ;
               devShell = devShells.default;

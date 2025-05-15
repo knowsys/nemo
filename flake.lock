@@ -82,6 +82,32 @@
         "type": "github"
       }
     },
+    "nemo-doc": {
+      "inputs": {
+        "dream2nix": [
+          "dream2nix"
+        ],
+        "nixpkgs": [
+          "nixpkgs"
+        ],
+        "utils": [
+          "utils"
+        ]
+      },
+      "locked": {
+        "lastModified": 1747305769,
+        "narHash": "sha256-89hPChBD7BHVnKWcZyUsVRvbXkIykAYC/xHvaGX/7nI=",
+        "owner": "knowsys",
+        "repo": "nemo-doc",
+        "rev": "1a75e8b66f500978be7adefc140f74cf7a29e068",
+        "type": "github"
+      },
+      "original": {
+        "owner": "knowsys",
+        "repo": "nemo-doc",
+        "type": "github"
+      }
+    },
     "nemo-vscode-extension": {
       "inputs": {
         "dream2nix": [
@@ -232,6 +258,7 @@
     "root": {
       "inputs": {
         "dream2nix": "dream2nix",
+        "nemo-doc": "nemo-doc",
         "nemo-vscode-extension": "nemo-vscode-extension",
         "nemo-web": "nemo-web",
         "nixpkgs": "nixpkgs",
