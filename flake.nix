@@ -311,7 +311,7 @@ rec {
               };
             };
 
-            inherit (inputs.nemo-doc.apps.${pkgs.system}) nemo-doc;
+            nemo-doc = inputs.nemo-doc.apps.${pkgs.system}.nemo-doc-preview;
 
             ci-checks = utils.lib.mkApp {
               drv = pkgs.writeShellApplication {
