@@ -93,16 +93,16 @@ impl ImportExportSpec {
     }
 
     /// Reduce the [Term]s in each key-value pair returning a copy.
-    pub fn reduce(&self) -> Self {
-        Self {
+    pub fn reduce(&self) -> Option<Self> {
+        Some(Self {
             origin: self.origin.clone(),
             id: ProgramComponentId::default(),
             format: self.format.clone(),
             map: self
                 .key_value()
-                .map(|(key, value)| (key.clone(), value.reduce()))
-                .collect(),
-        }
+                .map(|(key, value)| Some((key.clone(), value.reduce()?)))
+                .collect::<Option<Vec<_>>>()?,
+        })
     }
 }
 

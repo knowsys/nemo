@@ -19,14 +19,13 @@ use super::{
         ComponentBehavior, ComponentIdentity, IterableComponent, ProgramComponent,
         ProgramComponentKind,
     },
-    error::ValidationErrorBuilder,
+    error::{validation_error::ValidationError, ValidationReport},
     origin::Origin,
     pipeline::id::ProgramComponentId,
-    substitution::Substitution,
 };
 
 /// Representation of a nemo program
-#[derive(Default, Clone)]
+#[derive(Debug, Default, Clone)]
 pub struct Program {
     /// Origin of this component
     origin: Origin,
@@ -45,29 +44,9 @@ pub struct Program {
     outputs: Vec<Output>,
     /// Parameter declarations
     parameters: Vec<ParameterDeclaration>,
-
-    /// Expanded values of global parameters (filled upon validation)
-    parameter_expansions: Substitution,
-
-    /// Map of all predicate arities (filled upon validation)
-    arities: HashMap<Tag, (usize, Origin)>,
 }
 
-impl std::fmt::Debug for Program {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("Program")
-            .field("origin", &self.origin)
-            .field("imports", &self.imports)
-            .field("exports", &self.exports)
-            .field("rules", &self.rules)
-            .field("facts", &self.facts)
-            .field("outputs", &self.outputs)
-            .field("parameters", &self.parameters)
-            .field("arities", &self.arities)
-            .finish()
-    }
-}
-
+/// Read Access
 impl Program {
     /// Return an iterator over all imports.
     pub fn imports(&self) -> impl Iterator<Item = &ImportDirective> {
@@ -84,14 +63,6 @@ impl Program {
         self.rules.iter()
     }
 
-    /// Return the rule at a particular index.
-    ///
-    /// # Panics
-    /// Panics if there is no rule at this position.
-    pub fn rule(&self, index: usize) -> &Rule {
-        &self.rules[index]
-    }
-
     /// Return an iterator over all facts.
     pub fn facts(&self) -> impl Iterator<Item = &Fact> {
         self.facts.iter()
@@ -102,25 +73,22 @@ impl Program {
         self.outputs.iter()
     }
 
-    /// Return the set of all predicates that are defined by import statements.
-    pub fn import_predicates(&self) -> HashSet<Tag> {
-        self.imports
-            .iter()
-            .map(|import| import.predicate().clone())
-            .collect()
+    /// Return an iterator over all parameter declarations.
+    pub fn parameter(&self) -> impl Iterator<Item = &ParameterDeclaration> {
+        self.parameters.iter()
+    } 
+
+    /// Return the rule at a particular index.
+    ///
+    /// # Panics
+    /// Panics if there is no rule at this position.
+    pub fn rule(&self, index: usize) -> &Rule {
+        &self.rules[index]
     }
+}
 
-    /// Return the set of all predicates that can be derived by applying rules.
-    pub fn derived_predicates(&self) -> HashSet<Tag> {
-        let rule_head = self
-            .rules()
-            .flat_map(|rule| rule.head())
-            .map(|atom| atom.predicate().clone());
-        let facts = self.facts().map(|fact| fact.predicate().clone());
-
-        rule_head.chain(facts).collect()
-    }
-
+// Write access
+impl Program {
     /// Return the set of all predicates contained in this program.
     pub fn all_predicates(&self) -> HashSet<Tag> {
         let rules = self.rules().flat_map(|rule| {
@@ -197,10 +165,6 @@ impl Program {
         self.outputs.push(Output::new(predicate));
     }
 
-    pub(crate) fn arities(&self) -> &HashMap<Tag, (usize, Origin)> {
-        &self.arities
-    }
-
     /// Check if a different arity was already used for the given predicate
     /// and report an error if this was the case.
     fn validate_arity(
@@ -208,7 +172,7 @@ impl Program {
         tag: Tag,
         arity: usize,
         origin: Origin,
-        builder: &mut ValidationErrorBuilder,
+        report: &mut ValidationReport,
     ) {
         // let predicate_string = tag.to_string();
 
@@ -242,10 +206,7 @@ impl Program {
 
     /// Validate the global program properties without validating
     /// each program element.
-    pub(crate) fn validate_global_properties(
-        &mut self,
-        builder: &mut ValidationErrorBuilder,
-    ) -> Option<()> {
+    pub(crate) fn validate_global_properties(&mut self, report: &mut ValidationReport) {
         // let mut arities = self.arities.clone();
 
         // for fact in self.facts() {
@@ -311,43 +272,136 @@ impl Program {
     }
 }
 
+// Compute auxillary information
+impl Program {
+    /// Return the set of all predicates that are defined by import statements.
+    pub fn import_predicates(&self) -> HashSet<Tag> {
+        self.imports
+            .iter()
+            .map(|import| import.predicate().clone())
+            .collect()
+    }
+
+    /// Return the set of all predicates that can be derived by applying rules.
+    pub fn derived_predicates(&self) -> HashSet<Tag> {
+        let rule_head = self
+            .rules()
+            .flat_map(|rule| rule.head())
+            .map(|atom| atom.predicate().clone());
+        let facts = self.facts().map(|fact| fact.predicate().clone());
+
+        rule_head.chain(facts).collect()
+    }
+
+
+    /// Return
+    fn arities(&self) -> Result<HashMap<Tag, usize>, ValidationReport> {
+        let mut result = HashMap::new();
+
+        for import in self.imports() {
+            import.
+        }
+
+        result
+    }
+
+}
+
 impl ComponentBehavior for Program {
     fn kind(&self) -> ProgramComponentKind {
         ProgramComponentKind::Boolean // TODO
     }
 
-    fn validate(&self, error_builder: &mut ValidationErrorBuilder) -> Option<()> {
-        // debug_assert!(self.import_builders.is_empty());
+    fn validate(&self) -> Result<(), ValidationReport> {
+        let mut report = ValidationReport::default();
 
-        for _import in &self.imports {
-            // TODO
-
-            // let builder = import.validate(error_builder)?;
-            // self.import_builders.push(builder);
+        for child in self.children() {
+            report.merge(child.validate());
         }
 
-        for fact in self.facts() {
-            let _ = fact.validate(error_builder);
-        }
+        // for decl in &self.parameters {
+        //     let var = decl.variable();
 
-        for rule in self.rules() {
-            let _ = rule.validate(error_builder);
-        }
+        //     if let Some(expansion) = external_parameters.get(var) {
+        //         self.parameter_expansions
+        //             .insert(var.clone(), expansion.clone());
+        //     } else {
+        //         let Some(term) = decl.expression() else {
+        //             error_builder.report_error(
+        //                 *decl.origin(),
+        //                 ValidationErrorKind::ParameterMissingDefinition,
+        //             );
+        //             return None;
+        //         };
 
-        for output in self.outputs() {
-            let _ = output.validate(error_builder);
-        }
+        //         let Term::Primitive(Primitive::Ground(expansion)) =
+        //             term.reduce_with_substitution(&self.parameter_expansions)
+        //         else {
+        //             error_builder.report_error(
+        //                 *term.origin(),
+        //                 ValidationErrorKind::ParameterDeclarationReferencesUndefinedGlobal,
+        //             );
+        //             return None;
+        //         };
 
-        for _export in &self.exports {
-            // TODO
+        //         self.parameter_expansions
+        //             .insert(var.clone(), expansion.clone());
+        //     }
+        // }
 
-            // let builder = export.validate(error_builder)?;
-            // self.export_builders.push(builder);
-        }
+        // let mut count_stdin = 0;
+        // for import in &mut self.imports {
+        //     self.parameter_expansions.apply(import);
+        //     let builder = import.validate(error_builder)?;
+        //     let predicate = import.predicate().clone();
+        //     let origin = *import.origin();
 
-        // self.arities = self.validate_global_properties(error_builder)?;
+        //     if builder
+        //         .resource()
+        //         .is_some_and(|resource| resource.is_pipe())
+        //     {
+        //         count_stdin += 1;
+        //         if count_stdin > 1 {
+        //             error_builder
+        //                 .report_error(origin, ValidationErrorKind::ReachedStdinImportLimit);
+        //         }
+        //     }
 
-        Some(())
+        //     if let Some(arity) = builder.expected_arity() {
+        //         Self::validate_arity(&mut self.arities, predicate, arity, origin, error_builder);
+        //     }
+        // }
+
+        // for fact in &mut self.facts {
+        //     self.parameter_expansions.apply(fact);
+        //     let _ = fact.validate(error_builder);
+        // }
+
+        // for rule in &mut self.rules {
+        //     self.parameter_expansions.apply(rule);
+        //     let _ = rule.validate(error_builder);
+        // }
+
+        // for output in self.outputs() {
+        //     let _ = output.validate(error_builder);
+        // }
+
+        // for export in &mut self.exports {
+        //     self.parameter_expansions.apply(export);
+        //     let builder = export.validate(error_builder)?;
+        //     let predicate = export.predicate().clone();
+        //     let origin = *export.origin();
+
+        //     if let Some(arity) = builder.expected_arity() {
+        //         Self::validate_arity(&mut self.arities, predicate, arity, origin, error_builder);
+        //     }
+        // }
+
+        // self.validate_global_properties(error_builder)?;
+
+        // Some(())
+
+        report.result()
     }
 
     fn boxed_clone(&self) -> Box<dyn ProgramComponent> {
@@ -415,18 +469,27 @@ impl std::fmt::Display for Program {
             import.fmt(f)?;
             f.write_char('\n')?;
         }
+
+        for parameter in self.parameters() {
+            parameter.fmt(f)?;
+            f.write_char('\n')?;
+        }
+
         for fact in self.facts() {
             fact.fmt(f)?;
             f.write_char('\n')?;
         }
+
         for rule in self.rules() {
             rule.fmt(f)?;
             f.write_char('\n')?;
         }
+
         for output in self.outputs() {
             output.fmt(f)?;
             f.write_char('\n')?;
         }
+
         for export in &self.exports {
             export.fmt(f)?;
             f.write_char('\n')?;
@@ -436,57 +499,3 @@ impl std::fmt::Display for Program {
     }
 }
 
-/// Builder for [Program]s
-#[derive(Debug, Default)]
-pub struct ProgramBuilder {
-    /// The constructed program
-    program: Program,
-}
-
-impl ProgramBuilder {
-    /// Finish building and return a [Program].
-    pub fn finalize(self) -> Program {
-        self.program
-    }
-
-    /// Add a [Rule].
-    pub fn add_rule(&mut self, rule: Rule) {
-        self.program.rules.push(rule)
-    }
-
-    /// Add a [Fact].
-    pub fn add_fact(&mut self, fact: Fact) {
-        self.program.facts.push(fact);
-    }
-
-    /// Add a [ImportDirective].
-    pub fn add_import(&mut self, import: ImportDirective) {
-        self.program.imports.push(import);
-    }
-
-    /// Add a [ExportDirective].
-    pub fn add_export(&mut self, export: ExportDirective) {
-        self.program.exports.push(export);
-    }
-
-    /// Add a [Output].
-    pub fn add_output(&mut self, output: Output) {
-        self.program.outputs.push(output);
-    }
-
-    /// Add a parameter declaration to the program
-    pub fn add_parameter_declaration(&mut self, decl: ParameterDeclaration) {
-        self.program.parameters.push(decl);
-    }
-
-    /// Validate the program that is being built
-    pub fn validate(
-        &mut self,
-        external_paramters: &HashMap<GlobalVariable, GroundTerm>,
-        error_builder: &mut ValidationErrorBuilder,
-    ) -> Option<()> {
-        // self.program.validate(external_paramters, error_builder)
-        // TODO: Think about external
-        Some(())
-    }
-}

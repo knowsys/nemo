@@ -7,15 +7,13 @@ use std::{
 };
 
 use crate::rule_model::{
-    error::{ComponentParseError, ValidationErrorBuilder},
+    error::{validation_error::ValidationError, ValidationReport},
     origin::Origin,
     pipeline::id::ProgramComponentId,
-    translation::TranslationComponent,
 };
 
 use super::{
     component_iterator, component_iterator_mut,
-    literal::Literal,
     tag::Tag,
     term::{
         primitive::{variable::Variable, Primitive},
@@ -77,12 +75,14 @@ impl Atom {
         }
     }
 
-    pub fn parse(input: &str) -> Result<Self, ComponentParseError> {
-        let Literal::Positive(atom) = Literal::parse(input)? else {
-            return Err(ComponentParseError::ParseError);
-        };
+    /// TODO:
+    pub fn parse(_input: &str) -> Result<Self, ()> {
+        // let Literal::Positive(atom) = Literal::parse(input)? else {
+        //     return Err(ComponentParseError::ParseError);
+        // };
 
-        Ok(atom)
+        // Ok(atom)
+        todo!()
     }
 
     /// Return the predicate of this atom.
@@ -179,22 +179,26 @@ impl ComponentBehavior for Atom {
     }
 
     fn validate(&self) -> Result<(), ValidationReport> {
-        // if !self.predicate.is_valid() {
-        //     builder.report_error(
-        //         *self.predicate.origin(),
-        //         ValidationErrorKind::InvalidTermTag(self.predicate.to_string()),
-        //     );
-        // }
+        let mut report = ValidationReport::default();
 
-        // if self.is_empty() {
-        //     builder.report_error(self.origin, ValidationErrorKind::UnsupportedAtomEmpty);
-        // }
+        for child in self.children() {
+            report.merge(child.validate());
+        }
 
-        // for term in self.arguments() {
-        //     term.validate(builder)?;
-        // }
+        if !self.predicate.is_valid() {
+            report.add(
+                &self.predicate,
+                ValidationError::InvalidPredicateName {
+                    predicate_name: self.predicate.to_string(),
+                },
+            );
+        }
 
-        Some(())
+        if self.is_empty() {
+            report.add(self, ValidationError::UnsupportedAtomEmpty);
+        }
+
+        report.result()
     }
 
     fn boxed_clone(&self) -> Box<dyn ProgramComponent> {

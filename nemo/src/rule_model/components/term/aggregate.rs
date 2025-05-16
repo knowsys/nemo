@@ -2,6 +2,7 @@
 #![allow(missing_docs)]
 
 use std::{
+    collections::HashSet,
     fmt::{Display, Write},
     hash::Hash,
 };
@@ -17,7 +18,7 @@ use crate::{
             IterableComponent, IterablePrimitives, IterableVariables, ProgramComponent,
             ProgramComponentKind,
         },
-        error::ValidationErrorBuilder,
+        error::{info::Info, validation_error::ValidationError, ValidationReport},
         origin::Origin,
         pipeline::id::ProgramComponentId,
     },
@@ -195,14 +196,16 @@ impl Aggregate {
     /// and return a new [Aggregate] with the same [Origin] as `self`.
     ///
     /// This function does nothing if `self` is not ground.
-    pub fn reduce(&self) -> Self {
-        Self {
+    ///
+    /// Returns `None` if any intermediate result is undefined.
+    pub fn reduce(&self) -> Option<Self> {
+        Some(Self {
             origin: self.origin.clone(),
             id: ProgramComponentId::default(),
             kind: self.kind,
-            aggregate: Box::new(self.aggregate.reduce()),
+            aggregate: Box::new(self.aggregate.reduce()?),
             distinct: self.distinct.clone(),
-        }
+        })
     }
 }
 
@@ -261,59 +264,71 @@ impl ComponentBehavior for Aggregate {
         ProgramComponentKind::Aggregation
     }
 
-     fn validate(&self) -> Result<(), ValidationReport> {
-        // let input_type = self.aggregate.value_type();
-        // if let Some(expected_type) = self.kind.input_type() {
-        //     if input_type != ValueType::Any && input_type != expected_type {
-        //         builder.report_error(
-        //             *self.aggregate.origin(),
-        //             ValidationErrorKind::AggregateInvalidValueType {
-        //                 found: input_type.name().to_string(),
-        //                 expected: expected_type.name().to_string(),
-        //             },
-        //         );
+    fn validate(&self) -> Result<(), ValidationReport> {
+        let mut report = ValidationReport::default();
 
-        //         return None;
-        //     }
-        // }
+        for child in self.children() {
+            report.merge(child.validate());
+        }
 
-        // let mut distinct_set = if self.aggregate.is_primitive() {
-        //     self.aggregate.variables().collect()
-        // } else {
-        //     HashSet::new()
-        // };
-        // for variable in &self.distinct {
-        //     let name = if variable.is_universal() {
-        //         if let Some(name) = variable.name() {
-        //             name
-        //         } else {
-        //             builder.report_error(
-        //                 *variable.origin(),
-        //                 ValidationErrorKind::AggregateDistinctNonNamedUniversal {
-        //                     variable_type: String::from("anonymous"),
-        //                 },
-        //             );
-        //             return None;
-        //         }
-        //     } else {
-        //         builder.report_error(
-        //             *variable.origin(),
-        //             ValidationErrorKind::AggregateDistinctNonNamedUniversal {
-        //                 variable_type: String::from("existential"),
-        //             },
-        //         );
-        //         return None;
-        //     };
+        let input_type = self.aggregate.value_type();
+        if let Some(expected_type) = self.kind.input_type() {
+            if input_type != ValueType::Any && input_type != expected_type {
+                report.add(
+                    &*self.aggregate,
+                    ValidationError::AggregateInvalidValueType {
+                        found: input_type.name().to_string(),
+                        expected: expected_type.name().to_string(),
+                    },
+                );
+            }
+        }
 
-        //     if !distinct_set.insert(variable) {
-        //         warn!(
-        //             "found duplicate variable `{name}` in aggregate `{}`",
-        //             self.aggregate_kind()
-        //         );
-        //     }
-        // }
+        let mut distinct_set = if self.aggregate.is_primitive() {
+            self.aggregate.variables().collect()
+        } else {
+            HashSet::new()
+        };
 
-        Some(())
+        for variable in &self.distinct {
+            if !variable.is_universal() {
+                let variable_type = match variable {
+                    Variable::Universal(_) => "",
+                    Variable::Existential(_) => "existential",
+                    Variable::Global(_) => "global",
+                }
+                .to_owned();
+
+                report.add(
+                    variable,
+                    ValidationError::AggregateDistinctNonNamedUniversal { variable_type },
+                );
+            }
+
+            if let Some(name) = variable.name() {
+                if let Some(found) = distinct_set.get(variable) {
+                    report
+                        .add(
+                            variable,
+                            ValidationError::AggregateRepeatedDistinctVariable {
+                                variable: variable.clone(),
+                            },
+                        )
+                        .add_context(*found, Info::FirstDefinition);
+                } else {
+                    distinct_set.insert(variable);
+                }
+            } else {
+                report.add(
+                    variable,
+                    ValidationError::AggregateDistinctNonNamedUniversal {
+                        variable_type: String::from("anonymous"),
+                    },
+                );
+            };
+        }
+
+        report.result()
     }
 
     fn boxed_clone(&self) -> Box<dyn ProgramComponent> {

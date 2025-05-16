@@ -3,7 +3,7 @@
 use std::{fmt::Display, hash::Hash};
 
 use crate::rule_model::{
-    error::ValidationErrorBuilder, origin::Origin, pipeline::id::ProgramComponentId,
+    error::ValidationReport, origin::Origin, pipeline::id::ProgramComponentId,
 };
 
 use super::{
@@ -66,8 +66,8 @@ impl ComponentBehavior for Output {
         ProgramComponentKind::Output
     }
 
-     fn validate(&self) -> Result<(), ValidationReport> {
-        Some(())
+    fn validate(&self) -> Result<(), ValidationReport> {
+        Ok(())
     }
 
     fn boxed_clone(&self) -> Box<dyn ProgramComponent> {

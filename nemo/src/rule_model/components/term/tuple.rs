@@ -12,7 +12,7 @@ use crate::rule_model::{
         IterableComponent, IterablePrimitives, IterableVariables, ProgramComponent,
         ProgramComponentKind,
     },
-    error::ValidationErrorBuilder,
+    error::ValidationReport,
     origin::Origin,
     pipeline::id::ProgramComponentId,
 };
@@ -103,12 +103,18 @@ impl Tuple {
     /// and return a new [Tuple] with the same [Origin] as `self`.
     ///
     /// This function does nothing if `self` is not ground.
-    pub fn reduce(&self) -> Self {
-        Self {
+    ///
+    /// Returns `None` if
+    pub fn reduce(&self) -> Option<Self> {
+        Some(Self {
             origin: self.origin.clone(),
             id: ProgramComponentId::default(),
-            terms: self.terms.iter().map(|term| term.reduce()).collect(),
-        }
+            terms: self
+                .terms
+                .iter()
+                .map(|term| term.reduce())
+                .collect::<Option<Vec<_>>>()?,
+        })
     }
 }
 
@@ -181,12 +187,14 @@ impl ComponentBehavior for Tuple {
         ProgramComponentKind::Tuple
     }
 
-     fn validate(&self) -> Result<(), ValidationReport> {
-        for term in self.terms() {
-            term.validate(builder)?;
+    fn validate(&self) -> Result<(), ValidationReport> {
+        let mut report = ValidationReport::default();
+
+        for child in self.children() {
+            report.merge(child.validate());
         }
 
-        Some(())
+        report.result()
     }
 
     fn boxed_clone(&self) -> Box<dyn ProgramComponent> {

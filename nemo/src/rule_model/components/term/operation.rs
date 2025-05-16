@@ -18,7 +18,7 @@ use crate::{
             IterableComponent, IterablePrimitives, IterableVariables, ProgramComponent,
             ProgramComponentKind,
         },
-        error::ValidationErrorBuilder,
+        error::{validation_error::ValidationError, ValidationReport},
         origin::Origin,
         pipeline::id::ProgramComponentId,
     },
@@ -105,9 +105,11 @@ impl Operation {
     /// returning a new [Term] with the same [Origin] as `self`.
     ///
     /// This function does nothing if `self` is not ground.
-    pub fn reduce(&self) -> Term {
+    ///
+    /// Returns `None` if any intermediate result is undefined.
+    pub fn reduce(&self) -> Option<Term> {
         if !self.is_ground() {
-            return Term::Operation(self.clone());
+            return Some(Term::Operation(self.clone()));
         }
 
         let chase_operation_term = ProgramChaseTranslation::build_operation_term(self);
@@ -122,10 +124,9 @@ impl Operation {
             None,
         );
 
-        match stack_program.evaluate_data(&[]) {
-            Some(result) => Term::from(GroundTerm::new(result)),
-            None => Term::Operation(self.clone()),
-        }
+        stack_program
+            .evaluate_data(&[])
+            .map(|result| Term::from(GroundTerm::new(result)))
     }
 }
 
@@ -254,33 +255,32 @@ impl ComponentBehavior for Operation {
         ProgramComponentKind::Operation
     }
 
-     fn validate(&self) -> Result<(), ValidationReport> {
-        // if !self.kind.num_arguments().validate(self.subterms.len()) {
-        //     builder.report_error(
-        //         self.origin,
-        //         ValidationErrorKind::OperationArgumentNumber {
-        //             used: self.subterms.len(),
-        //             expected: self.kind.num_arguments().to_string(),
-        //         },
-        //     );
+    fn validate(&self) -> Result<(), ValidationReport> {
+        let mut report = ValidationReport::default();
 
-        //     return None;
-        // }
+        for child in self.children() {
+            report.merge(child.validate());
+        }
 
-        // if self.is_ground()
-        //     && !self
-        //         .reduce_with_substitution(&Substitution::default())
-        //         .is_primitive()
-        // {
-        //     builder.report_error(self.origin, ValidationErrorKind::InvalidGroundOperation);
-        //     return None;
-        // }
+        if !self.kind.num_arguments().validate(self.subterms.len()) {
+            report.add(
+                self,
+                ValidationError::OperationArgumentNumber {
+                    used: self.subterms.len(),
+                    expected: self.kind.num_arguments().to_string(),
+                },
+            );
+        }
 
-        // for argument in self.arguments() {
-        //     argument.validate(builder)?;
-        // }
+        if let Some(variable) = self.variables().find(|variable| variable.is_anonymous()) {
+            report.add(variable, ValidationError::OperationAnonymous);
+        }
 
-        Some(())
+        if self.reduce().is_none() {
+            report.add(self, ValidationError::InvalidGroundOperation);
+        }
+
+        report.result()
     }
 
     fn boxed_clone(&self) -> Box<dyn ProgramComponent> {
@@ -355,19 +355,21 @@ mod test {
             term::{operation::operation_kind::OperationKind, Term},
             ComponentBehavior,
         },
-        error::{ComponentParseError, ValidationErrorBuilder},
         translation::TranslationComponent,
     };
 
     use super::Operation;
 
     impl Operation {
-        fn parse(input: &str) -> Result<Operation, ComponentParseError> {
-            let Term::Operation(op) = Term::parse(input)? else {
-                return Err(ComponentParseError::ParseError);
-            };
+        // TODO?
+        fn parse(input: &str) -> Result<Operation, ()> {
+            // let Term::Operation(op) = Term::parse(input)? else {
+            //     return Err(ComponentParseError::ParseError);
+            // };
 
-            Ok(op)
+            // Ok(op)
+
+            todo!()
         }
     }
 
@@ -393,12 +395,10 @@ mod test {
             "STRLEN(123)",
             "LOG(1,\"3\")",
         ];
+
         for string in invalid_operations {
             let operation = Operation::parse(string).unwrap();
-            let mut builder = ValidationErrorBuilder::default();
-            let result = operation.validate(&mut builder);
-            assert!(result.is_none());
-            assert!(!builder.finalize().is_empty());
+            assert!(operation.validate().is_err());
         }
     }
 }

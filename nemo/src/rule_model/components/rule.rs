@@ -5,7 +5,7 @@ use std::{collections::HashSet, fmt::Display, hash::Hash};
 use nemo_physical::datavalues::DataValue;
 
 use crate::rule_model::{
-    error::{hint::Hint, validation_error::ValidationErrorKind, ValidationErrorBuilder},
+    error::{hint::Hint, info::Info, validation_error::ValidationError, ValidationReport},
     origin::Origin,
     pipeline::id::ProgramComponentId,
     substitution::Substitution,
@@ -83,7 +83,7 @@ impl Rule {
     pub fn instantiated_display(&self, substitution: &Substitution) -> Option<String> {
         if let Some(mut display) = self.display.clone() {
             substitution.apply(&mut display);
-            if let Term::Primitive(Primitive::Ground(ground)) = display.reduce() {
+            if let Term::Primitive(Primitive::Ground(ground)) = display.reduce()? {
                 return ground.value().to_plain_string();
             }
         }
@@ -176,18 +176,14 @@ impl Rule {
     ///     * an aggregate occurs at most once
     ///     * there is no aggregation over a group-by variable
     fn validate_term_head(
-        builder: &mut ValidationErrorBuilder,
+        report: &mut ValidationReport,
         term: &Term,
         group_by_variable: &HashSet<&Variable>,
-    ) -> Option<bool> {
+    ) -> bool {
         if term.is_map() || term.is_tuple() || term.is_function() {
-            builder
-                .report_error(
-                    term.origin().clone(),
-                    ValidationErrorKind::UnsupportedComplexTerm,
-                )
+            report
+                .add(term, ValidationError::UnsupportedComplexTerm)
                 .add_hint_option(Self::hint_term_operation(term));
-            return None;
         }
 
         let mut first_aggregate = if let Term::Aggregate(aggregate) = term {
@@ -195,13 +191,12 @@ impl Rule {
                 aggregate.aggregate_term()
             {
                 if group_by_variable.contains(aggregate_variable) {
-                    builder.report_error(
-                        aggregate.aggregate_term().origin().clone(),
-                        ValidationErrorKind::AggregateOverGroupByVariable {
-                            variable: aggregate_variable.name().unwrap_or_default(),
+                    report.add(
+                        aggregate.aggregate_term(),
+                        ValidationError::AggregateOverGroupByVariable {
+                            variable: aggregate_variable.clone(),
                         },
                     );
-                    return None;
                 }
             }
 
@@ -211,80 +206,69 @@ impl Rule {
         };
 
         for subterm in term.arguments() {
-            let contains_aggregate = Self::validate_term_head(builder, subterm, group_by_variable)?;
+            let contains_aggregate = Self::validate_term_head(report, subterm, group_by_variable);
 
             if contains_aggregate && first_aggregate {
-                builder.report_error(
-                    subterm.origin().clone(),
-                    ValidationErrorKind::UnsupportedAggregateMultiple,
-                );
-
-                return None;
+                report.add(subterm, ValidationError::UnsupportedAggregateMultiple);
             }
 
             first_aggregate |= contains_aggregate;
         }
 
-        Some(first_aggregate)
+        first_aggregate
     }
 
-    // /// Check if
-    // ///     * body does not contain any existential variables
-    // ///     * body does not contain aggregation
-    // ///     * body does not contain any complex term
-    // ///     * used operations do not use anonymous variables
-    // ///     * operations only use safe variables
-    // fn validate_term_body(
-    //     builder: &mut ValidationErrorBuilder,
-    //     term: &Term,
-    //     safe_variables: &HashSet<&Variable>,
-    // ) -> Option<()> {
-    //     if let Term::Primitive(Primitive::Variable(Variable::Existential(existential))) = term {
-    //         builder.report_error(
-    //             *existential.origin(),
-    //             ValidationErrorKind::BodyExistential(Variable::Existential(existential.clone())),
-    //         );
-    //         return None;
-    //     }
+    /// Check if
+    ///     * body does not contain any existential variables
+    ///     * body does not contain aggregation
+    ///     * body does not contain any complex term
+    ///     * used operations do not use anonymous variables
+    ///     * operations only use safe variables
+    fn validate_term_body(
+        report: &mut ValidationReport,
+        term: &Term,
+        safe_variables: &HashSet<&Variable>,
+    ) {
+        if let Term::Primitive(Primitive::Variable(Variable::Existential(existential))) = term {
+            report.add(
+                existential,
+                ValidationError::BodyExistential {
+                    variable: existential.clone(),
+                },
+            );
+        }
 
-    //     if term.is_aggregate() {
-    //         builder.report_error(*term.origin(), ValidationErrorKind::BodyAggregate);
-    //         return None;
-    //     }
+        if term.is_aggregate() {
+            report.add(term, ValidationError::BodyAggregate);
+        }
 
-    //     if term.is_operation() {
-    //         for operation_variable in term.variables() {
-    //             if operation_variable.name().is_none() {
-    //                 builder.report_error(
-    //                     *operation_variable.origin(),
-    //                     ValidationErrorKind::OperationAnonymous,
-    //                 );
-    //                 return None;
-    //             }
+        if term.is_operation() {
+            for operation_variable in term.variables() {
+                if operation_variable.name().is_none() {
+                    continue;
+                }
 
-    //             if !safe_variables.contains(operation_variable) {
-    //                 builder.report_error(
-    //                     *operation_variable.origin(),
-    //                     ValidationErrorKind::OperationUnsafe(operation_variable.clone()),
-    //                 );
-    //                 return None;
-    //             }
-    //         }
-    //     }
+                if !safe_variables.contains(operation_variable) {
+                    report.add(
+                        operation_variable,
+                        ValidationError::OperationUnsafe {
+                            variable: operation_variable.clone(),
+                        },
+                    );
+                }
+            }
+        }
 
-    //     if term.is_map() || term.is_tuple() || term.is_function() {
-    //         builder
-    //             .report_error(*term.origin(), ValidationErrorKind::UnsupportedComplexTerm)
-    //             .add_hint_option(Self::hint_term_operation(term));
-    //         return None;
-    //     }
+        if term.is_map() || term.is_tuple() || term.is_function() {
+            report
+                .add(term, ValidationError::UnsupportedComplexTerm)
+                .add_hint_option(Self::hint_term_operation(term));
+        }
 
-    //     for subterm in term.arguments() {
-    //         Self::validate_term_body(builder, subterm, safe_variables)?;
-    //     }
-
-    //     Some(())
-    // }
+        for subterm in term.arguments() {
+            Self::validate_term_body(report, subterm, safe_variables);
+        }
+    }
 
     /// If the given [Term] is a function term,
     /// then this function returns a [Hint] returning the operation
@@ -303,144 +287,129 @@ impl ComponentBehavior for Rule {
         ProgramComponentKind::Rule
     }
 
-     fn validate(&self) -> Result<(), ValidationReport> {
-        // if self.body_positive().next().is_none() {
-        //             builder.report_error(
-        //                 self.origin,
-        //                 ValidationErrorKind::UnsupportedNoPositiveLiterals,
-        //             );
-        //             return None;
-        //         }
+    fn validate(&self) -> Result<(), ValidationReport> {
+        let mut report = ValidationReport::default();
 
-        //         let safe_variables = self.safe_variables();
-        //         let is_existential = self
-        //             .head()
-        //             .iter()
-        //             .flat_map(|atom| atom.variables())
-        //             .any(|variable| variable.is_existential());
+        for child in self.children() {
+            report.merge(child.validate());
+        }
 
-        //         if let Some(display) = &self.display {
-        //             display.validate(builder)?;
+        if self.body_positive().next().is_none() {
+            report.add(self, ValidationError::UnsupportedNoPositiveLiterals);
+            return report.result();
+        }
 
-        //             for variable in display.variables() {
-        //                 if !safe_variables.contains(variable) {
-        //                     builder.report_error(
-        //                         *variable.origin(),
-        //                         ValidationErrorKind::AttributeRuleUnsafe {
-        //                             variable: variable.to_string(),
-        //                         },
-        //                     );
-        //                     return None;
-        //                 }
-        //             }
-        //         }
+        let safe_variables = self.safe_variables();
+        let is_existential = self
+            .head()
+            .iter()
+            .flat_map(|atom| atom.variables())
+            .any(|variable| variable.is_existential());
 
-        //         for atom in self.head() {
-        //             atom.validate(builder)?;
+        if let Some(display) = &self.display {
+            report.merge(display.validate());
 
-        //             for variable in atom.variables() {
-        //                 if let Some(variable_name) = variable.name() {
-        //                     if !variable.is_existential() && !safe_variables.contains(variable) {
-        //                         builder
-        //                             .report_error(
-        //                                 *variable.origin(),
-        //                                 ValidationErrorKind::HeadUnsafe(variable.clone()),
-        //                             )
-        //                             .add_hint_option(Hint::similar(
-        //                                 "variable",
-        //                                 variable_name,
-        //                                 safe_variables.iter().flat_map(|variable| variable.name()),
-        //                             ));
+            for variable in display.variables() {
+                if !safe_variables.contains(variable) {
+                    report.add(
+                        variable,
+                        ValidationError::AttributeRuleUnsafe {
+                            variable: variable.clone(),
+                        },
+                    );
+                }
+            }
+        }
 
-        //                         return None;
-        //                     }
-        //                 } else {
-        //                     builder.report_error(*variable.origin(), ValidationErrorKind::HeadAnonymous);
-        //                     return None;
-        //                 }
-        //             }
+        for atom in self.head() {
+            for variable in atom.variables() {
+                if let Some(variable_name) = variable.name() {
+                    if !variable.is_existential() && !safe_variables.contains(variable) {
+                        report
+                            .add(
+                                variable,
+                                ValidationError::HeadUnsafe {
+                                    variable: variable.clone(),
+                                },
+                            )
+                            .add_hint_option(Hint::similar(
+                                "variable",
+                                variable_name,
+                                safe_variables.iter().flat_map(|variable| variable.name()),
+                            ));
+                    }
+                } else {
+                    report.add(variable, ValidationError::HeadAnonymous);
+                }
+            }
 
-        //             let group_by_variables = atom
-        //                 .arguments()
-        //                 .flat_map(|term| {
-        //                     if let Term::Primitive(Primitive::Variable(variable)) = term {
-        //                         Some(variable)
-        //                     } else {
-        //                         None
-        //                     }
-        //                 })
-        //                 .collect::<HashSet<_>>();
+            let group_by_variables = atom
+                .terms()
+                .flat_map(|term| {
+                    if let Term::Primitive(Primitive::Variable(variable)) = term {
+                        Some(variable)
+                    } else {
+                        None
+                    }
+                })
+                .collect::<HashSet<_>>();
 
-        //             let mut contains_aggregate = false;
-        //             for term in atom.arguments() {
-        //                 if let Some(aggregate) =
-        //                     Self::validate_term_head(builder, term, &group_by_variables)
-        //                 {
-        //                     if aggregate && contains_aggregate {
-        //                         builder.report_error(
-        //                             *term.origin(),
-        //                             ValidationErrorKind::UnsupportedAggregateMultiple,
-        //                         );
-        //                     }
+            let mut contains_aggregate = false;
+            for term in atom.terms() {
+                let aggregate = Self::validate_term_head(&mut report, term, &group_by_variables);
 
-        //                     if aggregate && is_existential {
-        //                         builder.report_error(
-        //                             *term.origin(),
-        //                             ValidationErrorKind::UnsupportedAggregatesAndExistentials,
-        //                         );
-        //                     }
+                if aggregate && contains_aggregate {
+                    report.add(term, ValidationError::UnsupportedAggregateMultiple);
+                }
 
-        //                     contains_aggregate |= aggregate;
-        //                 }
-        //             }
-        //         }
+                if aggregate && is_existential {
+                    report.add(term, ValidationError::UnsupportedAggregatesAndExistentials);
+                }
 
-        //         let mut negative_variables = HashSet::<&Variable>::new();
+                contains_aggregate |= aggregate;
+            }
+        }
 
-        //         for literal in self.body() {
-        //             literal.validate(builder)?;
+        let mut negative_variables = HashSet::<&Variable>::new();
 
-        //             for term in literal.arguments() {
-        //                 let _ = Self::validate_term_body(builder, term, &safe_variables);
-        //             }
+        for literal in self.body() {
+            for term in literal.terms() {
+                Self::validate_term_body(&mut report, term, &safe_variables);
+            }
 
-        //             let mut current_negative_variables = HashSet::<&Variable>::new();
-        //             if let Literal::Negative(negative) = literal {
-        //                 for negative_subterm in negative.arguments() {
-        //                     if let Term::Primitive(Primitive::Variable(variable)) = negative_subterm {
-        //                         if !safe_variables.contains(variable) {
-        //                             current_negative_variables.insert(variable);
-        //                         }
-        //                     }
-        //                 }
-        //             }
+            let mut current_negative_variables = HashSet::<&Variable>::new();
+            if let Literal::Negative(negative) = literal {
+                for negative_subterm in negative.terms() {
+                    if let Term::Primitive(Primitive::Variable(variable)) = negative_subterm {
+                        if !safe_variables.contains(variable) {
+                            current_negative_variables.insert(variable);
+                        }
+                    }
+                }
+            }
 
-        //             for repeated_variable in current_negative_variables.intersection(&negative_variables) {
-        //                 let first_use = negative_variables
-        //                     .get(repeated_variable)
-        //                     .expect("value is contained in the intersection");
-        //                 let repeated_use = current_negative_variables
-        //                     .get(repeated_variable)
-        //                     .expect("value is contained in the intersection");
+            for repeated_variable in current_negative_variables.intersection(&negative_variables) {
+                let first_use = negative_variables
+                    .get(repeated_variable)
+                    .expect("value is contained in the intersection");
+                let repeated_use = current_negative_variables
+                    .get(repeated_variable)
+                    .expect("value is contained in the intersection");
 
-        //                 builder
-        //                     .report_error(
-        //                         *repeated_use.origin(),
-        //                         ValidationErrorKind::MultipleNegativeLiteralsUnsafe(
-        //                             (*repeated_use).clone(),
-        //                         ),
-        //                     )
-        //                     .add_label(
-        //                         ComplexErrorLabelKind::Information,
-        //                         *first_use.origin(),
-        //                         Info::FirstUse,
-        //                     );
-        //             }
+                report
+                    .add(
+                        *repeated_use,
+                        ValidationError::MultipleNegativeLiteralsUnsafe {
+                            variable: (*repeated_use).clone(),
+                        },
+                    )
+                    .add_context(*first_use, Info::FirstUse);
+            }
 
-        //             negative_variables.extend(current_negative_variables);
-        //         }
+            negative_variables.extend(current_negative_variables);
+        }
 
-        Some(())
+        report.result()
     }
 
     fn boxed_clone(&self) -> Box<dyn super::ProgramComponent> {
@@ -522,167 +491,6 @@ impl Hash for Rule {
         self.body.hash(state);
     }
 }
-
-// impl ProgramComponent for Rule {
-//     fn origin(&self) -> &Origin {
-//         &self.origin
-//     }
-
-//     fn set_origin(mut self, origin: Origin) -> Self
-//     where
-//         Self: Sized,
-//     {
-//         self.origin = origin;
-//         self
-//     }
-
-//      fn validate(&self) -> Result<(), ValidationReport>
-//     where
-//         Self: Sized,
-//     {
-//         if self.body_positive().next().is_none() {
-//             builder.report_error(
-//                 self.origin,
-//                 ValidationErrorKind::UnsupportedNoPositiveLiterals,
-//             );
-//             return None;
-//         }
-
-//         let safe_variables = self.safe_variables();
-//         let is_existential = self
-//             .head()
-//             .iter()
-//             .flat_map(|atom| atom.variables())
-//             .any(|variable| variable.is_existential());
-
-//         if let Some(display) = &self.display {
-//             display.validate(builder)?;
-
-//             for variable in display.variables() {
-//                 if !safe_variables.contains(variable) {
-//                     builder.report_error(
-//                         *variable.origin(),
-//                         ValidationErrorKind::AttributeRuleUnsafe {
-//                             variable: variable.to_string(),
-//                         },
-//                     );
-//                     return None;
-//                 }
-//             }
-//         }
-
-//         for atom in self.head() {
-//             atom.validate(builder)?;
-
-//             for variable in atom.variables() {
-//                 if let Some(variable_name) = variable.name() {
-//                     if !variable.is_existential() && !safe_variables.contains(variable) {
-//                         builder
-//                             .report_error(
-//                                 *variable.origin(),
-//                                 ValidationErrorKind::HeadUnsafe(variable.clone()),
-//                             )
-//                             .add_hint_option(Hint::similar(
-//                                 "variable",
-//                                 variable_name,
-//                                 safe_variables.iter().flat_map(|variable| variable.name()),
-//                             ));
-
-//                         return None;
-//                     }
-//                 } else {
-//                     builder.report_error(*variable.origin(), ValidationErrorKind::HeadAnonymous);
-//                     return None;
-//                 }
-//             }
-
-//             let group_by_variables = atom
-//                 .arguments()
-//                 .flat_map(|term| {
-//                     if let Term::Primitive(Primitive::Variable(variable)) = term {
-//                         Some(variable)
-//                     } else {
-//                         None
-//                     }
-//                 })
-//                 .collect::<HashSet<_>>();
-
-//             let mut contains_aggregate = false;
-//             for term in atom.arguments() {
-//                 if let Some(aggregate) =
-//                     Self::validate_term_head(builder, term, &group_by_variables)
-//                 {
-//                     if aggregate && contains_aggregate {
-//                         builder.report_error(
-//                             *term.origin(),
-//                             ValidationErrorKind::UnsupportedAggregateMultiple,
-//                         );
-//                     }
-
-//                     if aggregate && is_existential {
-//                         builder.report_error(
-//                             *term.origin(),
-//                             ValidationErrorKind::UnsupportedAggregatesAndExistentials,
-//                         );
-//                     }
-
-//                     contains_aggregate |= aggregate;
-//                 }
-//             }
-//         }
-
-//         let mut negative_variables = HashSet::<&Variable>::new();
-
-//         for literal in self.body() {
-//             literal.validate(builder)?;
-
-//             for term in literal.arguments() {
-//                 let _ = Self::validate_term_body(builder, term, &safe_variables);
-//             }
-
-//             let mut current_negative_variables = HashSet::<&Variable>::new();
-//             if let Literal::Negative(negative) = literal {
-//                 for negative_subterm in negative.arguments() {
-//                     if let Term::Primitive(Primitive::Variable(variable)) = negative_subterm {
-//                         if !safe_variables.contains(variable) {
-//                             current_negative_variables.insert(variable);
-//                         }
-//                     }
-//                 }
-//             }
-
-//             for repeated_variable in current_negative_variables.intersection(&negative_variables) {
-//                 let first_use = negative_variables
-//                     .get(repeated_variable)
-//                     .expect("value is contained in the intersection");
-//                 let repeated_use = current_negative_variables
-//                     .get(repeated_variable)
-//                     .expect("value is contained in the intersection");
-
-//                 builder
-//                     .report_error(
-//                         *repeated_use.origin(),
-//                         ValidationErrorKind::MultipleNegativeLiteralsUnsafe(
-//                             (*repeated_use).clone(),
-//                         ),
-//                     )
-//                     .add_label(
-//                         ComplexErrorLabelKind::Information,
-//                         *first_use.origin(),
-//                         Info::FirstUse,
-//                     );
-//             }
-
-//             negative_variables.extend(current_negative_variables);
-//         }
-
-//         Some(())
-//     }
-
-//     fn kind(&self) -> ProgramComponentKind {
-//         ProgramComponentKind::Rule
-//     }
-// }
 
 impl IterableVariables for Rule {
     fn variables<'a>(&'a self) -> Box<dyn Iterator<Item = &'a Variable> + 'a> {

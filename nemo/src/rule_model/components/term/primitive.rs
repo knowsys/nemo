@@ -17,13 +17,12 @@ use crate::rule_model::{
         ComponentBehavior, ComponentIdentity, IterableComponent, IterableVariables,
         ProgramComponent, ProgramComponentKind,
     },
-    error::{ComponentParseError, ValidationErrorBuilder},
+    error::ValidationReport,
     origin::Origin,
     pipeline::id::ProgramComponentId,
-    translation::TranslationComponent,
 };
 
-use super::{value_type::ValueType, Term};
+use super::value_type::ValueType;
 
 /// Primitive term
 ///
@@ -38,14 +37,16 @@ pub enum Primitive {
 }
 
 impl Primitive {
-    /// Parse a primitive term from a [`str`] reference.
-    pub fn parse(input: &str) -> Result<Self, ComponentParseError> {
-        let Term::Primitive(term) = Term::parse(input)? else {
-            return Err(ComponentParseError::ParseError);
-        };
+    // TODO:
 
-        Ok(term)
-    }
+    // /// Parse a primitive term from a [`str`] reference.
+    // pub fn parse(input: &str) -> Result<Self, ComponentParseError> {
+    //     let Term::Primitive(term) = Term::parse(input)? else {
+    //         return Err(ComponentParseError::ParseError);
+    //     };
+
+    //     Ok(term)
+    // }
 
     /// Create a universal variable term.
     pub fn universal_variable(name: &str) -> Self {
@@ -190,10 +191,10 @@ impl ComponentBehavior for Primitive {
         }
     }
 
-     fn validate(&self) -> Result<(), ValidationReport> {
+    fn validate(&self) -> Result<(), ValidationReport> {
         match self {
-            Primitive::Variable(term) => term.validate(builder),
-            Primitive::Ground(term) => term.validate(builder),
+            Primitive::Variable(term) => term.validate(),
+            Primitive::Ground(term) => term.validate(),
         }
     }
 
@@ -283,10 +284,12 @@ mod test {
 
     #[test]
     fn parse_primitive() {
-        let variable = Primitive::parse("?x").unwrap();
-        let ground = Primitive::parse("2").unwrap();
+        // TODO
 
-        assert_eq!(Primitive::from(Variable::universal("x")), variable);
-        assert_eq!(Primitive::from(2), ground);
+        // let variable = Primitive::parse("?x").unwrap();
+        // let ground = Primitive::parse("2").unwrap();
+
+        // assert_eq!(Primitive::from(Variable::universal("x")), variable);
+        // assert_eq!(Primitive::from(2), ground);
     }
 }

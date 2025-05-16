@@ -3,7 +3,7 @@
 use std::{fmt::Display, hash::Hash};
 
 use crate::rule_model::{
-    error::ValidationErrorBuilder, origin::Origin, pipeline::id::ProgramComponentId,
+    error::ValidationReport, origin::Origin, pipeline::id::ProgramComponentId,
 };
 
 use super::{
@@ -71,9 +71,9 @@ impl ComponentBehavior for Literal {
 
     fn validate(&self) -> Result<(), ValidationReport> {
         match self {
-            Literal::Positive(atom) => atom.validate(builder),
-            Literal::Negative(atom) => atom.validate(builder),
-            Literal::Operation(operation) => operation.validate(builder),
+            Literal::Positive(atom) => atom.validate(),
+            Literal::Negative(atom) => atom.validate(),
+            Literal::Operation(operation) => operation.validate(),
         }
     }
 

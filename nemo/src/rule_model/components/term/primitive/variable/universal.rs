@@ -107,7 +107,12 @@ impl ComponentBehavior for UniversalVariable {
 
         if let Some(name) = self.name() {
             if Symbols::is_reserved(name) {
-                report.add(self, ValidationError::InvalidVariableName(name.to_owned()));
+                report.add(
+                    self,
+                    ValidationError::InvalidVariableName {
+                        variable_name: name.to_owned(),
+                    },
+                );
             }
         }
 

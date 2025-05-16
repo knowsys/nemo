@@ -84,7 +84,9 @@ impl ComponentBehavior for GlobalVariable {
         if Symbols::is_reserved(self.name()) {
             report.add(
                 self,
-                ValidationError::InvalidVariableName(self.name().to_owned()),
+                ValidationError::InvalidVariableName {
+                    variable_name: self.name().to_owned(),
+                },
             );
         }
 

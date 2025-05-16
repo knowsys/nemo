@@ -33,7 +33,7 @@ use tuple::Tuple;
 use value_type::ValueType;
 
 use crate::rule_model::{
-    error::ValidationErrorBuilder, origin::Origin, pipeline::id::ProgramComponentId,
+    error::ValidationReport, origin::Origin, pipeline::id::ProgramComponentId,
 };
 
 use super::{
@@ -162,15 +162,15 @@ impl Term {
     /// and return a new [Term] with the same [Origin] as `self`.
     ///
     /// This function does nothing if `self` is not ground.
-    pub fn reduce(&self) -> Self {
-        match self {
-            Term::Operation(operation) => operation.reduce(),
-            Term::Aggregate(term) => Term::Aggregate(term.reduce()),
-            Term::FunctionTerm(term) => Term::FunctionTerm(term.reduce()),
-            Term::Map(term) => Term::Map(term.reduce()),
-            Term::Tuple(term) => Term::Tuple(term.reduce()),
+    pub fn reduce(&self) -> Option<Self> {
+        Some(match self {
+            Term::Operation(operation) => operation.reduce()?,
+            Term::Aggregate(term) => Term::Aggregate(term.reduce()?),
+            Term::FunctionTerm(term) => Term::FunctionTerm(term.reduce()?),
+            Term::Map(term) => Term::Map(term.reduce()?),
+            Term::Tuple(term) => Term::Tuple(term.reduce()?),
             Term::Primitive(term) => Term::Primitive(term.clone()),
-        }
+        })
     }
 }
 
@@ -185,7 +185,7 @@ impl ComponentBehavior for Term {
             Self::Tuple(term) => term,
         } {
             fn kind(&self) -> ProgramComponentKind;
-             fn validate(&self) -> Result<(), ValidationReport>;
+            fn validate(&self) -> Result<(), ValidationReport>;
             fn boxed_clone(&self) -> Box<dyn ProgramComponent>;
         }
     }
@@ -420,7 +420,7 @@ mod test {
         substitution.apply(&mut constant);
 
         let term = Term::from(tuple!(5, constant));
-        let reduced = term.reduce();
+        let reduced = term.reduce().unwrap();
 
         let expected_term = Term::from(tuple!(5, 20));
 

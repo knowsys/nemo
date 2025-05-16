@@ -13,7 +13,7 @@ use crate::rule_model::{
         IterableComponent, IterablePrimitives, IterableVariables, ProgramComponent,
         ProgramComponentKind,
     },
-    error::ValidationErrorBuilder,
+    error::{validation_error::ValidationError, ValidationReport},
     origin::Origin,
     pipeline::id::ProgramComponentId,
 };
@@ -126,13 +126,19 @@ impl FunctionTerm {
     /// and return a new [FunctionTerm] with the same [Origin] as `self`.
     ///
     /// This function does nothing if `self` is not ground.
-    pub fn reduce(&self) -> Self {
-        Self {
+    ///
+    /// Returns `None` if any intermediate result is undefined.
+    pub fn reduce(&self) -> Option<Self> {
+        Some(Self {
             origin: self.origin.clone(),
             id: ProgramComponentId::default(),
             tag: self.tag.clone(),
-            terms: self.terms.iter().map(|term| term.reduce()).collect(),
-        }
+            terms: self
+                .terms
+                .iter()
+                .map(|term| term.reduce())
+                .collect::<Option<Vec<_>>>()?,
+        })
     }
 }
 
@@ -219,23 +225,27 @@ impl ComponentBehavior for FunctionTerm {
         ProgramComponentKind::FunctionTerm
     }
 
-     fn validate(&self) -> Result<(), ValidationReport> {
-        // if !self.tag.is_valid() {
-        //     builder.report_error(
-        //         *self.tag.origin(),
-        //         ValidationErrorKind::InvalidTermTag(self.tag.to_string()),
-        //     );
-        // }
+    fn validate(&self) -> Result<(), ValidationReport> {
+        let mut report = ValidationReport::default();
 
-        // for term in self.arguments() {
-        //     term.validate(builder)?
-        // }
+        for child in self.children() {
+            report.merge(child.validate());
+        }
 
-        // if self.is_empty() {
-        //     builder.report_error(self.origin, ValidationErrorKind::FunctionTermEmpty);
-        // }
+        if !self.tag.is_valid() {
+            report.add(
+                &self.tag,
+                ValidationError::InvalidTermTag {
+                    function_name: self.tag.to_string(),
+                },
+            );
+        }
 
-        Some(())
+        if self.is_empty() {
+            report.add(self, ValidationError::FunctionTermEmpty);
+        }
+
+        report.result()
     }
 
     fn boxed_clone(&self) -> Box<dyn ProgramComponent> {

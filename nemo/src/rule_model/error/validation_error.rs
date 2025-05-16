@@ -1,4 +1,4 @@
-//! This module defines [ValidationErrorKind].
+//! This module defines [ValidationError].
 #![allow(missing_docs)]
 
 use enum_assoc::Assoc;
@@ -7,7 +7,10 @@ use thiserror::Error;
 
 use crate::{
     error::rich::RichError,
-    rule_model::components::term::{primitive::variable::Variable, Term},
+    rule_model::components::term::{
+        primitive::variable::{existential::ExistentialVariable, Variable},
+        Term,
+    },
 };
 
 /// Types of errors that occur while building the logical rule model
@@ -17,72 +20,73 @@ use crate::{
 #[func(pub fn is_warning(&self) -> Option<()>)]
 pub enum ValidationError {
     /// An existentially quantified variable occurs in the body of a rule.
-    #[error(r#"existential variable used in rule body: `{0}`"#)]
+    #[error(r#"existential variable used in rule body: `{variable}`"#)]
     #[assoc(code = 201)]
-    BodyExistential(Variable),
+    BodyExistential { variable: ExistentialVariable },
     /// Unsafe variable used in the head of the rule.
-    #[error(r#"unsafe variable used in rule head: `{0}`"#)]
+    #[error(r#"unsafe variable used in rule head: `{variable}`"#)]
     #[assoc(
         note = "every universal variable in the head must occur at a safe position in the body"
     )]
     #[assoc(code = 202)]
-    HeadUnsafe(Variable),
+    HeadUnsafe { variable: Variable },
     /// Anonymous variable used in the head of the rule.
     #[error(r#"anonymous variable used in rule head"#)]
     #[assoc(code = 203)]
     HeadAnonymous,
     /// Operation with unsafe variable
-    #[error(r#"unsafe variable used in operation: `{0}`"#)]
+    #[error(r#"unsafe variable used in operation: `{variable}`"#)]
     #[assoc(
         note = "every universal variable used in an operation must occur at a safe position in the body"
     )]
     #[assoc(code = 204)]
-    OperationUnsafe(Variable),
+    OperationUnsafe { variable: Variable },
     /// Unsafe variable used in multiple negative literals
-    #[error(r#"unsafe variable used in multiple negative literals: `{0}`"#)]
+    #[error(r#"unsafe variable used in multiple negative literals: `{variable}`"#)]
     #[assoc(code = 205)]
-    MultipleNegativeLiteralsUnsafe(Variable),
+    MultipleNegativeLiteralsUnsafe { variable: Variable },
     /// Aggregate is used in body
     #[error(r#"aggregate used in rule body"#)]
     #[assoc(code = 206)]
     BodyAggregate,
     /// A variable is both universally and existentially quantified
-    #[error(r#"variable is both universal and existential: `{0}`"#)]
+    #[error(r#"variable is both universal and existential: `{variable_name}`"#)]
     #[assoc(code = 207)]
-    VariableMultipleQuantifiers(String),
+    VariableMultipleQuantifiers { variable_name: String },
     /// Fact contains non-ground term
     #[error(r#"non-ground term used in fact"#)]
     #[assoc(code = 208)]
     FactNonGround,
     /// Invalid variable name was used
-    #[error(r#"variable name is invalid: `{0}`"#)]
+    #[error(r#"variable name is invalid: `{variable_name}`"#)]
     #[assoc(code = 209)]
     #[assoc(note = "variable names may not start with double underscore")]
-    InvalidVariableName(String),
+    InvalidVariableName { variable_name: String },
     /// Invalid function term name was used
-    #[error(r#"function name is invalid: `{0}`"#)]
+    #[error(r#"function name is invalid: `{function_name}`"#)]
     #[assoc(code = 210)]
     #[assoc(note = "function names may not start with double underscore")]
-    InvalidTermTag(String),
+    InvalidTermTag { function_name: String },
     /// Invalid predicate name was used
-    #[error(r#"predicate name is invalid: `{0}`"#)]
+    #[error(r#"predicate name is invalid: `{predicate_name}`"#)]
     #[assoc(code = 211)]
     #[assoc(note = "predicate names may not start with double underscore")]
-    InvalidPredicateName(String),
+    InvalidPredicateName { predicate_name: String },
     /// Invalid value type for aggregate
     #[error(r#"used aggregate term of type `{found}`, expected `{expected}`"#)]
     #[assoc(code = 212)]
     AggregateInvalidValueType { found: String, expected: String },
     /// Aggregate has repeated distinct variables
-    #[error(r#"found repeated variable: `{variable}`"#)]
+    #[error(r#"found redundant distinct variable: `{variable}`"#)]
     #[assoc(code = 213)]
-    #[assoc(note = "variables marked as distinct must not be repeated")]
-    AggregateRepeatedDistinctVariable { variable: String },
+    #[assoc(note = "repeated distinct variables do not affect the result")]
+    #[assoc(is_warning = ())]
+    AggregateRepeatedDistinctVariable { variable: Variable },
     /// Aggregate variable cannot be group-by-variable
     #[error(r#"aggregation over group-by variable: `{variable}`"#)]
     #[assoc(code = 214)]
     #[assoc(note = "cannot aggregate over a variable that is also a group-by variable")]
-    AggregateOverGroupByVariable { variable: String },
+    AggregateOverGroupByVariable { variable: Variable },
     /// Distinct variables in aggregate must be named universal variables
     #[error(r#"aggregation marks `{variable_type}` as distinct."#)]
     #[assoc(code = 215)]
@@ -143,7 +147,7 @@ pub enum ValidationError {
     /// Attribute in rule is unsafe
     #[error(r#"display attribute uses unsafe variable: `{variable}`"#)]
     #[assoc(code = 227)]
-    AttributeRuleUnsafe { variable: String },
+    AttributeRuleUnsafe { variable: Variable },
     /// Aggregation used in fact
     #[error(r#"aggregates may not be used in facts"#)]
     #[assoc(code = 228)]
@@ -154,14 +158,14 @@ pub enum ValidationError {
     #[assoc(code = 229)]
     RdfUnspecifiedMissingExtension,
     /// RDF unspecified missing extension
-    #[error("`{0}` is not an rdf format")]
+    #[error("`{format}` is not an rdf format")]
     #[assoc(note = "rdf imports/exports must have file extension nt, nq, ttl, trig, or rdf.")]
     #[assoc(code = 230)]
-    RdfUnspecifiedUnknownExtension(String),
+    RdfUnspecifiedUnknownExtension { format: String },
     /// Unknown file format
-    #[error(r#"unknown file format: `{0}`"#)]
+    #[error(r#"unknown file format: `{format}`"#)]
     #[assoc(code = 231)]
-    ImportExportFileFormatUnknown(String),
+    ImportExportFileFormatUnknown { format: String },
     /// Unknown arity
     #[error(r#"arity of predicate {predicate} is unknown"#)]
     #[assoc(note = "arity of predicates in import/export statements must be known in advance.")]
@@ -200,20 +204,21 @@ pub enum ValidationError {
     /// Directive received conflicting variable assignments
     #[error("variable `{variable}` has been defined multiple times")]
     #[assoc(code = 239)]
-    DirectiveConflictingAssignments { variable: String },
+    DirectiveConflictingAssignments { variable: Variable },
 
     /// Stdin is only supported for one import
     #[error("expected at most one `stdin` import, found at least 2 occurrences")]
     #[assoc(code = 237)]
     ReachedStdinImportLimit,
     /// Ground operation contains invalid literals
-    #[error("ground operation does not return a result")]
+    #[error("operation does not return a result")]
     #[assoc(code = 238)]
+    #[assoc(is_warning = ())]
     InvalidGroundOperation,
     /// Import/Export parameter contains unspecified variables
-    #[error("parameter value `{0}` is not a ground term")]
+    #[error("parameter value `{term}` is not a ground term")]
     #[assoc(code = 239)]
-    ImportExportParameterNotGround(Term),
+    ImportExportParameterNotGround { term: Term },
     /// Parameter declaration references undefined parameter
     #[error("parameter value references an undefined global")]
     #[assoc(code = 240)]

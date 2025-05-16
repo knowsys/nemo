@@ -4,7 +4,7 @@
 use specification::ImportExportSpec;
 
 use crate::{
-    rule_model::{error::ValidationErrorBuilder, origin::Origin, pipeline::id::ProgramComponentId},
+    rule_model::{error::ValidationReport, origin::Origin, pipeline::id::ProgramComponentId},
     syntax,
 };
 
@@ -117,6 +117,11 @@ impl ImportDirective {
     pub(crate) fn spec(&self) -> &ImportExportSpec {
         &self.0.spec
     }
+
+    /// Return the expected arity of this directive, if any.
+    pub fn expected_arity(&self) -> Option<usize> {
+        todo!()
+    }
 }
 
 impl std::fmt::Display for ImportDirective {
@@ -137,7 +142,7 @@ impl ComponentBehavior for ImportDirective {
         ProgramComponentKind::Import
     }
 
-     fn validate(&self) -> Result<(), ValidationReport> {
+    fn validate(&self) -> Result<(), ValidationReport> {
         // ImportExportBuilder::new(self.0.spec.clone(), Direction::Import, builder)
         todo!()
     }
@@ -234,7 +239,7 @@ impl ComponentBehavior for ExportDirective {
         ProgramComponentKind::Export
     }
 
-     fn validate(&self) -> Result<(), ValidationReport> {
+    fn validate(&self) -> Result<(), ValidationReport> {
         // ImportExportBuilder::new(self.0.spec.clone(), Direction::Export, builder)
         todo!()
     }

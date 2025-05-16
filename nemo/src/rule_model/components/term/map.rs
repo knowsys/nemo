@@ -8,7 +8,7 @@ use crate::rule_model::{
         IterableComponent, IterablePrimitives, IterableVariables, ProgramComponent,
         ProgramComponentKind,
     },
-    error::ValidationErrorBuilder,
+    error::ValidationReport,
     origin::Origin,
     pipeline::id::ProgramComponentId,
 };
@@ -184,16 +184,16 @@ impl Map {
     /// and return a new [Map] with the same [Origin] as `self`.
     ///
     /// This function does nothing if `self` is not ground.
-    pub fn reduce(&self) -> Self {
-        Self {
+    pub fn reduce(&self) -> Option<Self> {
+        Some(Self {
             origin: self.origin.clone(),
             id: ProgramComponentId::default(),
             tag: self.tag.clone(),
             map: self
                 .key_value()
-                .map(|(key, value)| (key.reduce(), value.reduce()))
-                .collect(),
-        }
+                .map(|(key, value)| Some((key.reduce()?, value.reduce()?)))
+                .collect::<Option<Vec<_>>>()?,
+        })
     }
 }
 
@@ -244,13 +244,14 @@ impl ComponentBehavior for Map {
         ProgramComponentKind::Map
     }
 
-     fn validate(&self) -> Result<(), ValidationReport> {
-        for (key, value) in self.key_value() {
-            key.validate(builder)?;
-            value.validate(builder)?;
+    fn validate(&self) -> Result<(), ValidationReport> {
+        let mut report = ValidationReport::default();
+
+        for child in self.children() {
+            report.merge(child.validate());
         }
 
-        Some(())
+        report.result()
     }
 
     fn boxed_clone(&self) -> Box<dyn ProgramComponent> {

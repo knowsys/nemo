@@ -16,21 +16,21 @@ use crate::error::rich::RichError;
 #[func(pub fn is_warning(&self) -> Option<()>)]
 pub enum TranslationError {
     /// A non-atom was used in the head of a rule
-    #[error(r#"{0} used in rule head"#)]
+    #[error(r#"{kind} used in rule head"#)]
     #[assoc(note = "rule head must only use atoms")]
     #[assoc(code = 101)]
     #[assoc(flag = true)]
-    HeadNonAtom(String),
+    HeadNonAtom { kind: String },
     /// A non-literal was used in the body of a rule
-    #[error(r#"{0} used in rule body"#)]
+    #[error(r#"{kind} used in rule body"#)]
     #[assoc(note = "rule body must only use literals or boolean operations")]
     #[assoc(code = 102)]
-    BodyNonLiteral(String),
+    BodyNonLiteral { kind: String },
     /// An undefined prefix was used
-    #[error(r#"unknown prefix: `{0}`"#)]
+    #[error(r#"unknown prefix: `{prefix}`"#)]
     #[assoc(note = "prefix must be defined using @prefix")]
     #[assoc(code = 103)]
-    PrefixUnknown(String),
+    PrefixUnknown { prefix: String },
     /// Unnamed non-anonymous variable
     #[error(r#"unnamed variable"#)]
     #[assoc(note = "variables starting with ? or ! must have a name")]
@@ -42,24 +42,24 @@ pub enum TranslationError {
     #[assoc(code = 105)]
     NamedAnonymous(String),
     /// Negation of a non-atom
-    #[error(r#"found negated {0}"#)]
+    #[error(r#"found negated {kind}"#)]
     #[assoc(note = "negation can only be applied to atoms")]
     #[assoc(code = 106)]
-    NegatedNonAtom(String),
+    NegatedNonAtom { kind: String },
     /// Error in creating an any datavalue term
     #[error(transparent)]
     #[assoc(code = 107)]
     DataValueCreationError(DataValueCreationError),
     /// Unknown aggregation
-    #[error(r#"unknown aggregation: `{0}`"#)]
+    #[error(r#"unknown aggregation: `{aggregation}`"#)]
     #[assoc(note = "supported aggregates are sum, count, min, and max")]
     #[assoc(code = 108)]
-    AggregationUnknown(String),
+    AggregationUnknown { aggregation: String },
     /// Distinct non-variable
-    #[error(r#"expected variable found {0}"#)]
+    #[error(r#"expected variable found {kind}"#)]
     #[assoc(note = "the aggregation term is followed by a list of distinct variables")]
     #[assoc(code = 109)]
-    AggregationDistinctNonVariable(String),
+    AggregationDistinctNonVariable { kind: String },
     /// Infix expression as inner term
     #[error(r#"comparison not allowed within an atom"#)]
     #[assoc(code = 110)]
@@ -69,9 +69,9 @@ pub enum TranslationError {
     #[assoc(code = 111)]
     InnerExpressionNegation,
     /// Negation as inner term
-    #[error(r#"unknown directive: `{0}`"#)]
+    #[error(r#"unknown directive: `{directive}`"#)]
     #[assoc(code = 112)]
-    DirectiveUnknown(String),
+    DirectiveUnknown { directive: String },
     /// Base was redefined
     #[error(r#"base has been redefined"#)]
     #[assoc(note = "program may only contain one @base statement")]
@@ -82,13 +82,13 @@ pub enum TranslationError {
     #[assoc(code = 114)]
     PrefixRedefinition,
     /// Unkown attribute
-    #[error("unknown attribute: `{0}`")]
+    #[error("unknown attribute: `{attribute}`")]
     #[assoc(code = 119)]
-    AttributeUnknown(String),
+    AttributeUnknown { attribute: String },
     /// Unexpected attribute
-    #[error("unexpected attribute: `{0}`")]
+    #[error("unexpected attribute: `{attribute}`")]
     #[assoc(code = 120)]
-    AttributeUnexpected(String),
+    AttributeUnexpected { attribute: String },
     /// Attributed defined multiple times
     #[error("attribute defined multiple times")]
     #[assoc(code = 121)]

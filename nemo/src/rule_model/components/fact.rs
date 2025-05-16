@@ -12,10 +12,9 @@ use crate::{
         ChaseComponent,
     },
     rule_model::{
-        error::{hint::Hint, ComponentParseError, ValidationErrorBuilder},
+        error::{hint::Hint, validation_error::ValidationError, ValidationReport},
         origin::Origin,
         pipeline::id::ProgramComponentId,
-        translation::{literal::HeadAtom, TranslationComponent},
     },
 };
 
@@ -24,8 +23,8 @@ use super::{
     component_iterator, component_iterator_mut,
     tag::Tag,
     term::{primitive::Primitive, Term},
-    ComponentBehavior, ComponentIdentity, IterableComponent, IterablePrimitives, ProgramComponent,
-    ProgramComponentKind,
+    ComponentBehavior, ComponentIdentity, IterableComponent, IterablePrimitives, IterableVariables,
+    ProgramComponent, ProgramComponentKind,
 };
 
 /// A (ground) fact
@@ -53,8 +52,10 @@ impl Fact {
         }
     }
 
-    pub fn parse(input: &str) -> Result<Self, ComponentParseError> {
-        Ok(Fact::from(HeadAtom::parse(input)?.into_inner()))
+    /// TODO:
+    pub fn parse(_input: &str) -> Result<Self, ()> {
+        // Ok(Fact::from(HeadAtom::parse(input)?.into_inner()))
+        todo!()
     }
 
     /// Return the predicate associated with this fact.
@@ -173,35 +174,43 @@ impl ComponentBehavior for Fact {
     }
 
     fn validate(&self) -> Result<(), ValidationReport> {
-        // if !self.predicate.is_valid() {
-        //     builder.report_error(
-        //         *self.predicate.origin(),
-        //         ValidationErrorKind::InvalidTermTag(self.predicate.to_string()),
-        //     );
-        // }
+        let mut report = ValidationReport::default();
 
-        // for term in self.subterms() {
-        //     if term.is_map() || term.is_tuple() || term.is_function() {
-        //         builder
-        //             .report_error(*term.origin(), ValidationErrorKind::UnsupportedComplexTerm)
-        //             .add_hint_option(Self::hint_term_operation(term));
-        //         return None;
-        //     }
+        for child in self.children() {
+            report.merge(child.validate());
+        }
 
-        //     if term.is_aggregate() {
-        //         builder.report_error(*term.origin(), ValidationErrorKind::FactSubtermAggregate);
-        //         return None;
-        //     }
+        if !self.predicate.is_valid() {
+            report.add(
+                &self.predicate,
+                ValidationError::InvalidPredicateName {
+                    predicate_name: self.predicate.to_string(),
+                },
+            );
+        }
 
-        //     if let Some(variable) = term.variables().find(|variable| !variable.is_global()) {
-        //         builder.report_error(*variable.origin(), ValidationErrorKind::FactNonGround);
-        //         continue;
-        //     }
+        if self.is_empty() {
+            report.add(self, ValidationError::UnsupportedAtomEmpty);
+        }
 
-        //     term.validate(builder)?;
-        // }
+        for term in self.terms() {
+            if term.is_map() || term.is_tuple() || term.is_function() {
+                report
+                    .add(term, ValidationError::UnsupportedComplexTerm)
+                    .add_hint_option(Self::hint_term_operation(term));
+            }
 
-        Some(())
+            if term.is_aggregate() {
+                report.add(term, ValidationError::FactSubtermAggregate);
+            }
+
+            if let Some(variable) = term.variables().find(|variable| !variable.is_global()) {
+                report.add(variable, ValidationError::FactNonGround);
+                continue;
+            }
+        }
+
+        report.result()
     }
 
     fn boxed_clone(&self) -> Box<dyn ProgramComponent> {

@@ -1,36 +1,37 @@
 //! This module contains functions to validate and unpack HTTP parameter
 
-use crate::rule_model::error::validation_error::ValidationErrorKind;
 use nemo_physical::{
     datavalues::{AnyDataValue, DataValue, ValueDomain},
     resource::ResourceBuilder,
 };
 
+use crate::rule_model::error::validation_error::ValidationError;
+
 /// An example IRI to build a ResourceBuilder
 const EXAMPLE_IRI: &str = "http://example.org";
 
 /// Validate HTTP headers with a dummy [ResourceBuilder]
-pub fn validate_headers(headers: AnyDataValue) -> Result<(), ValidationErrorKind> {
+pub fn validate_headers(headers: AnyDataValue) -> Result<(), ValidationError> {
     let mut builder =
-        ResourceBuilder::try_from(String::from(EXAMPLE_IRI)).map_err(ValidationErrorKind::from)?;
+        ResourceBuilder::try_from(String::from(EXAMPLE_IRI)).map_err(ValidationError::from)?;
     let vec = unpack_headers(headers)?;
     for (key, value) in vec {
         builder
             .add_header(key, value)
-            .map_err(ValidationErrorKind::from)?;
+            .map_err(ValidationError::from)?;
     }
     Ok(())
 }
 
 /// Validate HTTP parameters with a dummy [ResourceBuilder]
-pub fn validate_http_parameters(parameters: AnyDataValue) -> Result<(), ValidationErrorKind> {
+pub fn validate_http_parameters(parameters: AnyDataValue) -> Result<(), ValidationError> {
     let mut builder = ResourceBuilder::try_from(String::from(EXAMPLE_IRI))?;
     let vec = unpack_http_parameters(parameters)?;
     for (key, value) in vec {
         // Since GET and POST parameters have identical requirements add_get_parameter() will work for both parameter types
         builder
             .add_get_parameter(key, value)
-            .map_err(ValidationErrorKind::from)?;
+            .map_err(ValidationError::from)?;
     }
     Ok(())
 }
@@ -38,9 +39,9 @@ pub fn validate_http_parameters(parameters: AnyDataValue) -> Result<(), Validati
 /// Convert headers into a key-value iterator
 pub fn unpack_headers(
     map: AnyDataValue,
-) -> Result<impl Iterator<Item = (String, String)>, ValidationErrorKind> {
+) -> Result<impl Iterator<Item = (String, String)>, ValidationError> {
     if map.value_domain() != ValueDomain::Map {
-        return Err(ValidationErrorKind::HttpParameterNotInValueDomain {
+        return Err(ValidationError::HttpParameterNotInValueDomain {
             expected: (vec![ValueDomain::Map]),
             given: (map.value_domain()),
         });
@@ -52,10 +53,7 @@ pub fn unpack_headers(
             validate_http_parameter_value_domain(key)?;
             let element = map.map_element_unchecked(key);
             validate_http_parameter_value_domain(element)?;
-            Ok::<(String, String), ValidationErrorKind>((
-                key.lexical_value(),
-                element.lexical_value(),
-            ))
+            Ok::<(String, String), ValidationError>((key.lexical_value(), element.lexical_value()))
         })
         .collect::<Result<Vec<_>, _>>()?;
     Ok(result.into_iter())
@@ -64,9 +62,9 @@ pub fn unpack_headers(
 /// Flatten HTTP parameters into a key-value vector
 pub fn unpack_http_parameters(
     parameters: AnyDataValue,
-) -> Result<impl Iterator<Item = (String, String)>, ValidationErrorKind> {
+) -> Result<impl Iterator<Item = (String, String)>, ValidationError> {
     if parameters.value_domain() != ValueDomain::Map {
-        return Err(ValidationErrorKind::HttpParameterNotInValueDomain {
+        return Err(ValidationError::HttpParameterNotInValueDomain {
             expected: (vec![ValueDomain::Map]),
             given: (parameters.value_domain()),
         });
@@ -81,7 +79,7 @@ pub fn unpack_http_parameters(
                 value.value_domain(),
                 ValueDomain::Tuple | ValueDomain::PlainString | ValueDomain::Int | ValueDomain::Iri
             ) {
-                return Err(ValidationErrorKind::HttpParameterNotInValueDomain {
+                return Err(ValidationError::HttpParameterNotInValueDomain {
                     expected: (vec![
                         ValueDomain::Tuple,
                         ValueDomain::PlainString,
@@ -106,7 +104,7 @@ pub fn unpack_http_parameters(
                     .map(|idx| {
                         let element = value.tuple_element_unchecked(idx);
                         validate_http_parameter_value_domain(element)?;
-                        Ok::<(String, String), ValidationErrorKind>((
+                        Ok::<(String, String), ValidationError>((
                             key.lexical_value(),
                             element.lexical_value(),
                         ))
@@ -114,7 +112,7 @@ pub fn unpack_http_parameters(
                     .collect::<Vec<Result<_, _>>>()
             } else {
                 vec![
-                    (Ok::<(String, String), ValidationErrorKind>((
+                    (Ok::<(String, String), ValidationError>((
                         key.lexical_value(),
                         value.lexical_value(),
                     ))),
@@ -126,12 +124,10 @@ pub fn unpack_http_parameters(
 }
 
 /// Validate the [ValueDomain] of an HTTP parameter
-pub fn validate_http_parameter_value_domain(
-    value: &AnyDataValue,
-) -> Result<(), ValidationErrorKind> {
+pub fn validate_http_parameter_value_domain(value: &AnyDataValue) -> Result<(), ValidationError> {
     match value.value_domain() {
         ValueDomain::PlainString | ValueDomain::Int | ValueDomain::Iri => Ok(()),
-        _ => Err(ValidationErrorKind::HttpParameterNotInValueDomain {
+        _ => Err(ValidationError::HttpParameterNotInValueDomain {
             expected: vec![ValueDomain::PlainString, ValueDomain::Int, ValueDomain::Iri],
             given: value.value_domain(),
         }),

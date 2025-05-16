@@ -2,9 +2,12 @@
 
 use std::fmt;
 
-use crate::rule_model::{origin::Origin, pipeline::id::ProgramComponentId};
+use crate::rule_model::{
+    error::ValidationReport, origin::Origin, pipeline::id::ProgramComponentId,
+};
 
 use super::{
+    component_iterator, component_iterator_mut,
     term::{primitive::variable::global::GlobalVariable, Term},
     ComponentBehavior, ComponentIdentity, IterableComponent, ProgramComponent,
     ProgramComponentKind,
@@ -45,6 +48,12 @@ impl ParameterDeclaration {
         self.expression.as_ref()
     }
 
+    /// Return a mutable reference to the expression assigned to the global variable,
+    /// if there is one.
+    pub fn expression_mut(&mut self) -> Option<&mut Term> {
+        self.expression.as_mut()
+    }
+
     /// Set the expression that is assigned to the global variable
     pub fn set_expression(&mut self, expression: Term) {
         self.expression = Some(expression)
@@ -54,6 +63,12 @@ impl ParameterDeclaration {
     /// is assigned to a term.
     pub fn variable(&self) -> &GlobalVariable {
         &self.variable
+    }
+
+    /// Return a mutable reference to the global variable
+    /// that is assigned to a term.
+    pub fn variable_mut(&mut self) -> &mut GlobalVariable {
+        &mut self.variable
     }
 
     /// Return a mutable reference to the global variable
@@ -80,11 +95,14 @@ impl ComponentBehavior for ParameterDeclaration {
         ProgramComponentKind::ParameterDeclaration
     }
 
-    fn validate(
-        &self,
-        _builder: &mut crate::rule_model::error::ValidationErrorBuilder,
-    ) -> Option<()> {
-        Some(())
+    fn validate(&self) -> Result<(), ValidationReport> {
+        let mut report = ValidationReport::default();
+
+        for child in self.children() {
+            report.merge(child.validate());
+        }
+
+        report.result()
     }
 
     fn boxed_clone(&self) -> Box<dyn ProgramComponent> {
@@ -110,4 +128,20 @@ impl ComponentIdentity for ParameterDeclaration {
     }
 }
 
-impl IterableComponent for ParameterDeclaration {}
+impl IterableComponent for ParameterDeclaration {
+    fn children<'a>(&'a self) -> Box<dyn Iterator<Item = &'a dyn ProgramComponent> + 'a> {
+        let variable = component_iterator(std::iter::once(self.variable()));
+        let term = component_iterator(self.expression().into_iter());
+
+        Box::new(variable.chain(term))
+    }
+
+    fn children_mut<'a>(
+        &'a mut self,
+    ) -> Box<dyn Iterator<Item = &'a mut dyn ProgramComponent> + 'a> {
+        let variable = component_iterator_mut(std::iter::once(&mut self.variable));
+        let term = component_iterator_mut(self.expression.as_mut().into_iter());
+
+        Box::new(variable.chain(term))
+    }
+}

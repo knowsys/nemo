@@ -1,4 +1,4 @@
-//! This module defines [ProgramErrors].
+//! This module defines [ProgramReport].
 
 use std::ops::Range;
 
@@ -8,14 +8,23 @@ use super::{context::ContextError, rich::RichError};
 
 /// Collects errors (and warning) that may occur in a nemo program
 #[derive(Debug)]
-pub struct ProgramErrors {
+pub struct ProgramReport {
     /// List of all warnings
     warnings: Vec<ContextError>,
     /// List of all errors
     errors: Vec<ContextError>,
 }
 
-impl ProgramErrors {
+impl Default for ProgramReport {
+    fn default() -> Self {
+        Self {
+            warnings: Default::default(),
+            errors: Default::default(),
+        }
+    }
+}
+
+impl ProgramReport {
     /// Check if there are errors.
     pub fn contains_errors(&self) -> bool {
         !self.errors.is_empty()
@@ -32,6 +41,18 @@ impl ProgramErrors {
         Ok(())
     }
 
+    /// Add a new [ContextError].
+    pub fn add_error(&mut self, error: ContextError) -> &mut ContextError {
+        self.errors.push(error);
+        self.errors.last_mut().expect("push in previous line")
+    }
+
+    /// Add a new [ContextError] treated as a warning.
+    pub fn add_warning(&mut self, warning: ContextError) -> &mut ContextError {
+        self.warnings.push(warning);
+        self.warnings.last_mut().expect("push in previous line")
+    }
+
     /// Report a new error.
     pub fn report_error<Error: RichError>(
         &mut self,
@@ -39,11 +60,9 @@ impl ProgramErrors {
         range: Range<usize>,
     ) -> &mut ContextError {
         if error.is_warning() {
-            self.warnings.push(ContextError::new(error, range));
-            self.warnings.last_mut().expect("push in previous line")
+            self.add_warning(ContextError::new(error, range))
         } else {
-            self.errors.push(ContextError::new(error, range));
-            self.errors.last_mut().expect("push in previous line")
+            self.add_error(ContextError::new(error, range))
         }
     }
 

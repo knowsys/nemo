@@ -6,13 +6,16 @@ use nemo_physical::datavalues::{AnyDataValue, DataValue, IriDataValue, ValueDoma
 
 use crate::rule_model::{
     components::{
-        term::value_type::ValueType, ComponentBehavior, ComponentIdentity, IterableComponent,
-        ProgramComponent, ProgramComponentKind,
+        term::{value_type::ValueType, Term},
+        ComponentBehavior, ComponentIdentity, IterableComponent, ProgramComponent,
+        ProgramComponentKind,
     },
     error::ValidationReport,
     origin::Origin,
     pipeline::id::ProgramComponentId,
 };
+
+use super::Primitive;
 
 /// Primitive ground term
 ///
@@ -65,6 +68,34 @@ impl GroundTerm {
     /// Replace the value.
     pub fn set_value(&mut self, value: AnyDataValue) {
         self.value = value;
+    }
+}
+
+impl TryFrom<Term> for GroundTerm {
+    type Error = Term;
+
+    fn try_from(value: Term) -> Result<Self, Self::Error> {
+        if !value.is_ground() {
+            return Err(value);
+        }
+
+        let reduced = value.reduce().ok_or(value)?;
+
+        // TODO: AnyDataValue at some point should support complex values
+        match reduced {
+            Term::Primitive(primitive) => {
+                if let Primitive::Ground(ground) = primitive {
+                    return Ok(ground);
+                } else {
+                    unreachable!("value is ground");
+                }
+            }
+            Term::Aggregate(term) => Err(Term::Aggregate(term)),
+            Term::FunctionTerm(term) => Err(Term::FunctionTerm(term)),
+            Term::Map(term) => Err(Term::Map(term)),
+            Term::Operation(term) => Err(Term::Operation(term)),
+            Term::Tuple(term) => Err(Term::Tuple(term)),
+        }
     }
 }
 

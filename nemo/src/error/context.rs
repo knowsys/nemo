@@ -154,6 +154,12 @@ impl ContextError {
         self
     }
 
+    /// Add a list of hints.
+    pub fn add_hints(mut self, hints: Vec<String>) -> Self {
+        self.hints.extend(hints);
+        self
+    }
+
     /// Add this information to a [ReportBuilder].
     pub fn report<'a>(&self, source_label: &str) -> Report<'a, (String, Range<usize>)> {
         let mut report = Report::build(
@@ -177,7 +183,7 @@ impl ContextError {
         }
 
         for hint in &self.hints {
-            report = report.with_help(hint.message());
+            report = report.with_help(hint);
         }
 
         report.finish()

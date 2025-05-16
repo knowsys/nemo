@@ -12,7 +12,7 @@ use crate::execution::{
 pub use nemo_physical::error::ReadingError;
 
 pub mod context;
-pub mod program;
+pub mod report;
 pub mod rich;
 
 /// Error-Collection for all the possible Errors occurring in this crate
