@@ -7,18 +7,22 @@ use nemo::{
             fact::Fact,
             rule::Rule,
             tag::Tag,
-            term::{primitive::variable::Variable, Term},
+            term::{
+                primitive::{variable::Variable, Primitive},
+                Term,
+            },
         },
         program::{Program, ProgramBuilder},
     },
 };
 
-use crate::static_checks::positions::Positions;
+use crate::static_checks::collection_traits::InsertAll;
 use crate::static_checks::rule_properties::RuleProperties;
 use crate::static_checks::rule_set::{RuleRefs, RuleSet};
-use crate::static_checks::{collection_traits::InsertAll, rule_set::AtomPositions};
 
 use std::collections::{HashMap, HashSet};
+
+use super::rule_set::{ExistentialVariables, SpecialVariables};
 
 pub enum ChaseVariant {
     SkolemMFA,
@@ -114,11 +118,12 @@ impl RuleSet {
         let mut datalog_execution_engine: DefaultExecutionEngine;
         let mut existential_reasoner: ExistentialReasoner = ExistentialReasoner::new(
             existential_predicates,
-            &new_facts,
+            &HashSet::default(),
             existential_rules,
             variant,
         );
         while !new_facts.is_empty() {
+            // println!("here");
             datalog_execution_engine = self.initialize_execution_engine(&datalog_rules, &cur_facts);
             datalog_execution_engine
                 .execute()
@@ -131,12 +136,15 @@ impl RuleSet {
                     .map(|values| Fact::from((*pred, values.into_iter().map(Term::from).collect())))
                     .filter(|fact| !cur_facts.contains(fact))
                     .collect();
+                new_facts.insert_all(&facts_of_pred);
                 cur_facts.insert_all_take(facts_of_pred);
             });
             new_facts = existential_reasoner.run_every_rule_once(new_facts);
+            // println!("{:#?}", new_facts);
             if new_facts.iter().any(|fact| fact.is_cyclic()) {
                 return false;
             }
+            println!("here");
             cur_facts.insert_all(&new_facts);
         }
         true
@@ -155,27 +163,30 @@ impl<'a> ExistentialReasoner<'a> {
     // TODO: MAYBE REWRITE
     fn assignment_for_fact(
         &self,
-        fact: &'a Fact,
+        fact: &Fact,
         atom_idx: usize,
         var_per_atom_idx_pos_idx: &HashMap<(usize, usize), &'a Variable>,
+        cur_ass: Assignment<'a>,
     ) -> Option<Assignment> {
         fact.subterms()
             .enumerate()
-            .try_fold(Assignment::new(), |mut ret_val, (pos_idx, term)| {
+            .try_fold(cur_ass, |mut ret_val, (pos_idx, term)| {
                 let var: &Variable = var_per_atom_idx_pos_idx.get(&(atom_idx, pos_idx)).unwrap();
-                if ret_val.contains_key(var) && ret_val.get(var).unwrap() != &term {
+                if ret_val.contains_key(var) && ret_val.get(var).unwrap() != term {
                     return None;
                 }
-                ret_val.insert(var, term);
+                ret_val.entry(var).or_insert(term.clone());
                 Some(ret_val)
             })
     }
 
     fn assignments_for_rule(
-        &self,
-        rule: &Rule,
+        &'a self,
+        rule_idx: usize,
+        rule: &'a Rule,
         new_facts_by_pred: &HashMap<&Tag, HashSet<Fact>>,
-    ) -> Vec<Assignment> {
+    ) -> Vec<Assignment<'a>> {
+        let mut ret_val: Vec<Assignment> = Vec::<Assignment>::new();
         let preds_of_body: Vec<&Tag> = rule
             .body_positive_refs()
             .iter()
@@ -184,8 +195,8 @@ impl<'a> ExistentialReasoner<'a> {
         let var_per_atom_idx_pos_idx_of_rule: &HashMap<(usize, usize), &Variable> =
             self.var_per_atom_idx_pos_idx_per_rule.get(rule).unwrap();
         for (atom_idx, start_pred) in preds_of_body
-            .into_iter()
-            .filter(|pred| !new_facts_by_pred.get(pred).unwrap().is_empty())
+            .iter()
+            .filter(|pred| !new_facts_by_pred.get(*pred).unwrap().is_empty())
             .enumerate()
         {
             let facts_for_start_pred: &HashSet<Fact> = new_facts_by_pred.get(start_pred).unwrap();
@@ -195,25 +206,52 @@ impl<'a> ExistentialReasoner<'a> {
             let unfiltered_assignments_for_start_predicate: Vec<Assignment> = facts_for_start_pred
                 .iter()
                 .filter_map(|fact| {
-                    self.assignment_for_fact(fact, atom_idx, var_per_atom_idx_pos_idx_of_rule)
+                    self.assignment_for_fact(
+                        fact,
+                        atom_idx,
+                        var_per_atom_idx_pos_idx_of_rule,
+                        Assignment::new(),
+                    )
                 })
                 .collect();
+            let other_preds: Vec<&Tag> = preds_of_body
+                .iter()
+                .enumerate()
+                .filter(|(i, _)| *i != atom_idx)
+                .map(|(_, pred)| *pred)
+                .collect();
+            let filtered_assignments_for_start_predicate: Vec<Assignment> =
+                other_preds.iter().enumerate().fold(
+                    unfiltered_assignments_for_start_predicate,
+                    |assigns, (i, pred)| {
+                        let facts_of_pred: &HashSet<Fact> = self.facts_by_pred.get(pred).unwrap();
+                        assigns.into_iter().fold(
+                            Vec::<Assignment>::new(),
+                            |mut new_assigns, ass| {
+                                facts_of_pred.iter().for_each(|fact| {
+                                    let new_ass_op: Option<Assignment> = self.assignment_for_fact(
+                                        fact,
+                                        i,
+                                        var_per_atom_idx_pos_idx_of_rule,
+                                        ass.clone(),
+                                    );
+                                    if let Some(new_ass) = new_ass_op {
+                                        new_assigns.push(new_ass);
+                                    }
+                                });
+                                new_assigns
+                            },
+                        )
+                    },
+                );
+            ret_val.insert_all_take(filtered_assignments_for_start_predicate);
         }
-        // preds_of_body
-        //     .into_iter()
-        //     .filter(|pred| !new_facts_by_pred.get(pred).unwrap().is_empty())
-        //     .enumerate()
-        //     .for_each(|(i, start_pred)| {
-        //         let facts_for_start_pred: &HashSet<Fact> =
-        //             new_facts_by_pred.get(start_pred).unwrap();
-        //         let unfiltered_assignments_for_start_predicate: Vec<Assignment> =
-        //             facts_for_start_pred
-        //                 .iter()
-        //                 .map(|fact| self.assignment_for_fact(fact))
-        //                 .collect();
-        //     });
-        todo!("IMPLEMENT");
-        // TODO: IMPLEMENT
+        let frontier_vars: HashSet<&Variable> = rule.frontier_variables();
+        let ex_vars: HashSet<&Variable> = rule.existential_variables();
+        ret_val.iter_mut().for_each(|ass| {
+            self.extend_assign_for_ex_vars(rule_idx, ass, &frontier_vars, &ex_vars)
+        });
+        ret_val
     }
 
     fn convert_set_to_map(&self, filtered_facts: HashSet<Fact>) -> HashMap<&Tag, HashSet<Fact>> {
@@ -231,16 +269,74 @@ impl<'a> ExistentialReasoner<'a> {
         )
     }
 
+    fn extend_assign_for_ex_vars(
+        &self,
+        rule_idx: usize,
+        ass: &mut Assignment<'a>,
+        frontier_vars: &HashSet<&Variable>,
+        ex_vars: &HashSet<&'a Variable>,
+    ) {
+        let frontier_terms: Vec<&Term> = frontier_vars
+            .iter()
+            .map(|var| ass.get(var).unwrap())
+            .collect();
+        let frontier_term_string: String = frontier_terms
+            .iter()
+            .map(|term| format!("{term}"))
+            .collect::<Vec<String>>()
+            .join(",");
+        let cleaned_string: String = frontier_term_string.replace('"', "");
+        ex_vars.iter().enumerate().for_each(|(var_idx, var)| {
+            let new_term_name: String = format!("f_{}_{}({})", rule_idx, var_idx, cleaned_string);
+            let new_term: Term = Term::from(new_term_name);
+            ass.insert(var, new_term);
+        })
+        // head.iter().for_each(|atom| {
+        //     atom.arguments()
+        //         .filter_map(|term| match term {
+        //             Term::Primitive(Primitive::Variable(var)) if var.is_existential() => Some(var),
+        //             _ => None,
+        //         })
+        //         .enumerate()
+        //         .for_each(|(var_idx, var)| {
+        //             let new_term_name: String =
+        //                 format!("f_{}_{}({})", rule_idx, var_idx, cleaned_string);
+        //             let new_term: Term = Term::from(new_term_name);
+        //             ass.insert(var, new_term);
+        //         })
+        // })
+    }
+
     fn filter_new_facts(&self, new_facts: HashSet<Fact>) -> HashSet<Fact> {
         new_facts
             .into_iter()
-            .filter(|fact| self.facts_by_pred.contains_key(fact.predicate()))
+            .filter(|fact| {
+                !self
+                    .facts_by_pred
+                    .get(fact.predicate())
+                    .unwrap()
+                    .contains(fact)
+            })
             .collect()
     }
 
+    // NOTE: PANIC MAYBE NOT RIGHT -> CAN HEAD CONTAIN CONSTANTS?
     fn head_for_assignment(&self, rule: &Rule, ass: &Assignment) -> HashSet<Fact> {
-        todo!("IMPLEMENT");
-        // TODO: IMPLEMENT
+        let head: Vec<&Atom> = rule.head_refs();
+        head.iter()
+            .fold(HashSet::<Fact>::new(), |mut ret_val, atom| {
+                let subterms: Vec<Term> = atom
+                    .arguments()
+                    .map(|term| match term {
+                        Term::Primitive(Primitive::Variable(var)) => var,
+                        _ => panic!("can only be a var"),
+                    })
+                    .map(|var| ass.get(var).unwrap().clone())
+                    .collect();
+                let fact: Fact = Fact::from((atom.predicate_ref(), subterms));
+                ret_val.insert(fact);
+                ret_val
+            })
     }
 
     fn new(
@@ -261,30 +357,37 @@ impl<'a> ExistentialReasoner<'a> {
                 ret_val
             },
         );
-        let var_per_atom_idx_pos_idx_per_rule: VarPerAtomIdxPosIdxPerRule = todo!("IMPLEMENT");
+        let var_per_atom_idx_pos_idx_per_rule: VarPerAtomIdxPosIdxPerRule = rules.iter().fold(
+            VarPerAtomIdxPosIdxPerRule::new(),
+            |mut var_atom_pos_rule, rule| {
+                rule.body_positive_refs()
+                    .iter()
+                    .enumerate()
+                    .for_each(|(i, atom)| {
+                        atom.arguments()
+                            .enumerate()
+                            .filter_map(|(j, term)| match term {
+                                Term::Primitive(Primitive::Variable(var)) => Some((j, var)),
+                                _ => None,
+                            })
+                            .for_each(|(j, var)| {
+                                var_atom_pos_rule
+                                    .entry(rule)
+                                    .and_modify(|map| {
+                                        map.insert((i, j), var);
+                                    })
+                                    .or_insert(HashMap::from([((i, j), var)]));
+                            })
+                    });
+                var_atom_pos_rule
+            },
+        );
         Self {
             facts_by_pred,
             rules,
             var_per_atom_idx_pos_idx_per_rule,
             variant,
-        };
-        // let body_pos_per_var_per_rule: BodyPosPerVarPerRule =
-        //     rules
-        //         .iter()
-        //         .fold(BodyPosPerVarPerRule::new(), |mut ret_val, rule| {
-        //             let body_pos_per_var_of_rule: HashMap<&Variable, Positions> =
-        //                 rule.positive_variables_iter().fold(
-        //                     HashMap::<&Variable, Positions>::new(),
-        //                     |mut pos_per_var_of_rule, var| {
-        //                         let body_atoms_of_rule: Vec<&Atom> = rule.body_positive_refs();
-        //                         pos_per_var_of_rule
-        //                             .insert(var, var.positions_in_atoms(&body_atoms_of_rule));
-        //                         pos_per_var_of_rule
-        //                     },
-        //                 );
-        //             ret_val.insert(rule, body_pos_per_var_of_rule);
-        //             ret_val
-        //         });
+        }
     }
 
     fn run_every_rule_once(&mut self, new_facts: HashSet<Fact>) -> HashSet<Fact> {
@@ -294,18 +397,22 @@ impl<'a> ExistentialReasoner<'a> {
             self.convert_set_to_map(filtered_facts);
         self.rules
             .iter()
-            .fold(HashSet::<Fact>::new(), |ret_val, rule| {
-                let concluded_facts: HashSet<Fact> = self.run_rule(rule, &filtered_facts_by_pred);
+            .enumerate()
+            .fold(HashSet::<Fact>::new(), |ret_val, (rule_idx, rule)| {
+                let concluded_facts: HashSet<Fact> =
+                    self.run_rule(rule_idx, rule, &filtered_facts_by_pred);
                 ret_val.insert_all_take_ret(concluded_facts)
             })
     }
 
     fn run_rule(
         &self,
+        rule_idx: usize,
         rule: &Rule,
         filtered_facts_by_pred: &HashMap<&Tag, HashSet<Fact>>,
     ) -> HashSet<Fact> {
-        let assignments: Vec<Assignment> = self.assignments_for_rule(rule, filtered_facts_by_pred);
+        let assignments: Vec<Assignment> =
+            self.assignments_for_rule(rule_idx, rule, filtered_facts_by_pred);
 
         // TODO: FILTER ASSIGNMENTS FOR RMFA / DMFA CHECKS
 
@@ -323,16 +430,9 @@ impl<'a> ExistentialReasoner<'a> {
         new_facts.into_iter().for_each(|fact| {
             let tag: &Tag = fact.predicate();
             self.facts_by_pred.get_mut(tag).unwrap().insert(fact);
-            // self.facts_by_pred
-            //     .entry(tag)
-            //     .and_modify(|facts| {
-            //         facts.insert(fact.clone());
-            //     })
-            //     .or_insert(HashSet::from([fact]));
         });
     }
 }
 
-type Assignment<'a> = HashMap<&'a Variable, &'a Term>;
+type Assignment<'a> = HashMap<&'a Variable, Term>;
 type VarPerAtomIdxPosIdxPerRule<'a> = HashMap<&'a Rule, HashMap<(usize, usize), &'a Variable>>;
-// type BodyPosPerVarPerRule<'a> = HashMap<&'a Rule, HashMap<&'a Variable, Positions<'a>>>;

@@ -66,9 +66,9 @@ impl Fact {
 
     /// Returns whether the fact contains a term that is cyclic.
     pub fn is_cyclic(&self) -> bool {
-        let mut reused_function_tags: Vec<&Tag> = Vec::<&Tag>::new();
+        let mut reused_function_names: Vec<String> = Vec::<String>::new();
         self.subterms()
-            .any(|term| term.is_cyclic(&mut reused_function_tags))
+            .any(|term| term.is_cyclic(&mut reused_function_names))
     }
 }
 

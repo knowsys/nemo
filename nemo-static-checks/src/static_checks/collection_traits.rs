@@ -15,9 +15,10 @@ pub trait InsertAll<C, T> {
     fn insert_all_take_ret(self, other: C) -> Self;
 }
 
+// NOTE: HASH NEEDED FOR T?
 impl<T> InsertAll<Vec<T>, T> for Vec<T>
 where
-    T: Clone + Eq + Hash + PartialEq,
+    T: Clone + Eq + PartialEq,
 {
     fn insert_all(&mut self, other: &Vec<T>) {
         other.iter().for_each(|item| {

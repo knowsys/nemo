@@ -57,6 +57,11 @@ impl GroundTerm {
     pub fn value(&self) -> AnyDataValue {
         self.value.clone()
     }
+
+    // TODO: DELETE FUNCTION ONCE MFA CHECK CAN BE IMPLEMENTED DIFFERENTLY
+    pub fn value_ref(&self) -> &AnyDataValue {
+        &self.value
+    }
 }
 
 impl From<AnyDataValue> for GroundTerm {

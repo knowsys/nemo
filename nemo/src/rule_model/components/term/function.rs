@@ -110,11 +110,11 @@ impl FunctionTerm {
         }
     }
 
-    /// Returns whether the term is cyclic.
-    pub fn is_cyclic<'a>(&'a self, function_symbols: &mut Vec<&'a Tag>) -> bool {
-        self.arguments()
-            .any(|term| term.is_cyclic(function_symbols))
-    }
+    // / Returns whether the term is cyclic.
+    // pub fn is_cyclic<'a>(&'a self, function_symbols: &mut Vec<&'a Tag>) -> bool {
+    //     self.arguments()
+    //         .any(|term| term.is_cyclic(function_symbols))
+    // }
 }
 
 impl Display for FunctionTerm {

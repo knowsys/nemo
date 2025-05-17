@@ -20,7 +20,7 @@ use std::fmt::{Debug, Display};
 use aggregate::Aggregate;
 use function::FunctionTerm;
 use map::Map;
-use nemo_physical::datavalues::AnyDataValue;
+use nemo_physical::datavalues::{AnyDataValue, StringDataValue};
 use operation::Operation;
 use primitive::{
     ground::GroundTerm,
@@ -170,21 +170,60 @@ impl Term {
     }
 
     /// Returns whether the term is cyclic.
-    pub fn is_cyclic<'a>(&'a self, function_symbols: &mut Vec<&'a Tag>) -> bool {
-        match self {
-            Term::FunctionTerm(func) => {
-                if function_symbols.contains(&func.tag()) {
-                    return true;
-                }
-                function_symbols.push(func.tag());
-                if func.is_cyclic(function_symbols) {
-                    return true;
-                }
-                function_symbols.pop();
-                false
-            }
-            _ => false,
+    pub fn is_cyclic(&self, function_names: &mut Vec<String>) -> bool {
+        let gterm: &GroundTerm = match self {
+            Term::Primitive(Primitive::Ground(gterm)) => gterm,
+            _ => panic!("must be a gterm"),
+        };
+        let function_name: &String = gterm.value_ref().function_name();
+        function_name.is_cyclic(function_names)
+        // match self {
+        // Term::FunctionTerm(func) => {
+        //     if function_symbols.contains(&func.tag()) {
+        //         return true;
+        //     }
+        //     function_symbols.push(func.tag());
+        //     if func.is_cyclic(function_symbols) {
+        //         return true;
+        //     }
+        //     function_symbols.pop();
+        //     false
+        // }
+        // _ => false,
+        // }
+    }
+}
+
+trait Cyclic<'a> {
+    fn is_cyclic(&self, function_names: &mut Vec<String>) -> bool;
+}
+
+impl<'a> Cyclic<'a> for String {
+    fn is_cyclic(&self, function_names: &mut Vec<String>) -> bool {
+        if self.starts_with("*") {
+            return false;
         }
+        let (function_name_str, inner): (&str, &str) = self.split_once('(').unwrap();
+        let function_name: String = String::from(function_name_str);
+        if function_names.contains(&function_name) {
+            return true;
+        }
+        function_names.push(function_name);
+        let inner_function_names: Vec<String> = inner
+            .split(',')
+            .filter_map(|s| match s.is_empty() {
+                true => None,
+                false => Some(String::from(s)),
+            })
+            .collect();
+        let any_cyclics: bool = inner_function_names
+            .iter()
+            .any(|s| s.is_cyclic(function_names));
+        if any_cyclics {
+            return true;
+        }
+        function_names.pop();
+        false
     }
 }
 

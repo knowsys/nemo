@@ -232,10 +232,10 @@ fn linear_positive(fixture: Fixture<&str>) {
     postfix: "mfa_negative",
 )]
 fn mfa_negative(fixture: Fixture<&str>) {
-    let path: PathBuf = path_canonicalized(fixture.path());
-    if !path.ends_with("c28.rls") {
-        return;
-    }
+    // let path: PathBuf = path_canonicalized(fixture.path());
+    // if !path.ends_with("c28.rls") {
+    //     return;
+    // }
     test(fixture, false, &RulesProperties::is_mfa)
 }
 
