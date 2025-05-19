@@ -2,7 +2,7 @@
 
 use crate::rule_model::{
     components::{
-        ComponentBehavior, ComponentIdentity, IterableComponent, ProgramComponent,
+        ComponentBehavior, ComponentIdentity, ComponentSource, IterableComponent, ProgramComponent,
         ProgramComponentKind,
     },
     error::ValidationReport,
@@ -78,6 +78,18 @@ impl ComponentBehavior for ImportExportAttribute {
     }
 }
 
+impl ComponentSource for ImportExportAttribute {
+    type Source = Origin;
+
+    fn origin(&self) -> Origin {
+        self.origin.clone()
+    }
+
+    fn set_origin(&mut self, origin: Origin) {
+        self.origin = origin;
+    }
+}
+
 impl ComponentIdentity for ImportExportAttribute {
     fn id(&self) -> ProgramComponentId {
         self.id
@@ -85,14 +97,6 @@ impl ComponentIdentity for ImportExportAttribute {
 
     fn set_id(&mut self, id: ProgramComponentId) {
         self.id = id;
-    }
-
-    fn origin(&self) -> &Origin {
-        &self.origin
-    }
-
-    fn set_origin(&mut self, origin: Origin) {
-        self.origin = origin;
     }
 }
 

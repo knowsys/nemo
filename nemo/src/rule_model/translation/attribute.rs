@@ -7,20 +7,15 @@ use enum_assoc::Assoc;
 use strum_macros::EnumIter;
 
 use crate::{
-    parser::{
-        ast::{self, ProgramAST},
-        span::Span,
-    },
+    parser::ast::{self},
     rule_model::{
         components::{
             term::{value_type::ValueType, Term},
             ComponentBehavior, ProgramComponentKind,
         },
-        error::{
-            hint::Hint, info::Info, translation_error::TranslationErrorKind, ComplexErrorLabelKind,
-            TranslationError,
-        },
+        error::{hint::Hint, info::Info, translation_error::TranslationError},
     },
+    util::bag::Bag,
 };
 
 use super::{ASTProgramTranslation, TranslationComponent};
@@ -46,75 +41,54 @@ pub(crate) enum KnownAttributes {
     Display,
 }
 
-#[derive(Debug)]
-pub(crate) struct Bag<K, V>(HashMap<K, Vec<V>>);
-
-impl<K, V> Default for Bag<K, V> {
-    fn default() -> Self {
-        Self(Default::default())
-    }
-}
-
-impl<V> Bag<KnownAttributes, V> {
-    pub(crate) fn get_unique(&self, attr: KnownAttributes) -> Option<&V> {
-        debug_assert!(attr.unique());
-        self.0.get(&attr).map(|v| &v[0])
-    }
-
-    #[allow(unused)]
-    pub(crate) fn get(&self, attr: KnownAttributes) -> &[V] {
-        self.0.get(&attr).map(|v| &**v).unwrap_or(&[])
-    }
-
-    pub(crate) fn clear(&mut self) {
-        self.0.clear();
-    }
-}
-
 /// Evaluates a list of attributes, checking for errors,
 /// and returns a map from an attribute to a list of parameters.
-pub(crate) fn process_attributes<'a, 'b>(
-    translation: &mut ASTProgramTranslation<'a, 'b>,
-    attributes: impl Iterator<Item = &'b ast::attribute::Attribute<'a>>,
+pub(crate) fn process_attributes<'a>(
+    translation: &mut ASTProgramTranslation,
+    attributes: impl Iterator<Item = &'a ast::attribute::Attribute<'a>>,
     expected: &[KnownAttributes],
-) -> Result<Bag<KnownAttributes, Vec<Term>>, TranslationError> {
-    let mut result = Bag(HashMap::new());
-    let mut previous_attributes = HashMap::<KnownAttributes, Span<'a>>::new();
+) -> Option<Bag<KnownAttributes, Vec<Term>>> {
+    let mut result = Bag::default();
+    let mut previous_attributes =
+        HashMap::<KnownAttributes, &'a ast::attribute::Attribute<'a>>::new();
 
     for attribute in attributes {
         let tag = attribute.content().tag();
         let name = tag.to_string();
 
         let Some(attribute_kind) = KnownAttributes::from_name(&name) else {
-            let mut error = TranslationError::new(
-                tag.span(),
-                TranslationErrorKind::AttributeUnknown(name.clone()),
-            );
-            error.add_hint_option(Hint::similar_attribute(&name));
+            translation
+                .report
+                .add(
+                    tag,
+                    TranslationError::AttributeUnknown {
+                        attribute: name.clone(),
+                    },
+                )
+                .add_hint_option(Hint::similar_attribute(&name));
 
-            return Err(error);
+            continue;
         };
 
         if !expected.contains(&attribute_kind) {
-            return Err(TranslationError::new(
-                tag.span(),
-                TranslationErrorKind::AttributeUnexpected(name.clone()),
-            ));
+            translation.report.add(
+                tag,
+                TranslationError::AttributeUnexpected {
+                    attribute: name.clone(),
+                },
+            );
+
+            continue;
         }
 
         if attribute_kind.unique() {
-            if let Some(previous_span) = previous_attributes.get(&attribute_kind) {
-                let error = TranslationError::new(
-                    attribute.span(),
-                    TranslationErrorKind::AttributeRedefined,
-                )
-                .add_label(
-                    ComplexErrorLabelKind::Information,
-                    previous_span.range(),
-                    Info::FirstDefinition,
-                );
+            if let Some(previous) = previous_attributes.get(&attribute_kind) {
+                translation
+                    .report
+                    .add(attribute, TranslationError::AttributeRedefined)
+                    .add_context(*previous, Info::FirstDefinition);
 
-                return Err(error);
+                continue;
             }
         }
 
@@ -123,13 +97,13 @@ pub(crate) fn process_attributes<'a, 'b>(
         let count_expected = attribute_kind.schema().len();
         let count_found = attribute.content().expressions().count();
         if count_found != count_expected {
-            return Err(TranslationError::new(
-                attribute.span(),
-                TranslationErrorKind::AttributeInvalidParameterCount {
+            translation.report.add(
+                attribute,
+                TranslationError::AttributeInvalidParameterCount {
                     expected: count_expected,
                     found: count_found,
                 },
-            ));
+            );
         }
 
         for (expression, schema) in attribute
@@ -141,34 +115,36 @@ pub(crate) fn process_attributes<'a, 'b>(
 
             if let Some(expected_component) = schema.0 {
                 if term.kind() != expected_component {
-                    return Err(TranslationError::new(
-                        expression.span(),
-                        TranslationErrorKind::AttributeParameterWrongComponent {
+                    translation.report.add(
+                        expression,
+                        TranslationError::AttributeParameterWrongComponent {
                             expected: expected_component.name().to_string(),
                             found: term.kind().name().to_string(),
                         },
-                    ));
+                    );
+
+                    continue;
                 }
             }
 
             if let Some(expected_type) = schema.1 {
                 if term.value_type() != expected_type {
-                    return Err(TranslationError::new(
-                        expression.span(),
-                        TranslationErrorKind::AttributeParameterWrongType {
+                    translation.report.add(
+                        expression,
+                        TranslationError::AttributeParameterWrongType {
                             expected: expected_type.name().to_string(),
                             found: term.value_type().name().to_string(),
                         },
-                    ));
+                    );
                 }
             }
 
             terms.push(term);
         }
 
-        result.0.entry(attribute_kind).or_default().push(terms);
-        previous_attributes.insert(attribute_kind, attribute.span());
+        result.get_mut(attribute_kind).push(terms);
+        previous_attributes.insert(attribute_kind, attribute);
     }
 
-    Ok(result)
+    Some(result)
 }

@@ -9,53 +9,14 @@ use std::{
 use translation_error::TranslationError;
 use validation_error::ValidationError;
 
-use crate::{
-    error::{context::ContextError, report::ProgramReport, rich::RichError},
-    parser::ast::ProgramAST,
-};
+use crate::error::{context::ContextError, report::ProgramReport, rich::RichError};
 
-use super::{
-    components::{tag::Tag, ComponentIdentity},
-    origin::Origin,
-};
+use super::{components::ComponentSource, origin::Origin};
 
 pub mod hint;
 pub mod info;
 pub mod translation_error;
 pub mod validation_error;
-
-/// Trait implemented by objects who can provide information
-/// about their source
-trait SourcedObject {
-    type Source;
-
-    /// Return a copy of the source.
-    fn source(&self) -> Self::Source;
-}
-
-impl<Component: ComponentIdentity> SourcedObject for Component {
-    type Source = Origin;
-
-    fn source(&self) -> Self::Source {
-        self.origin().clone()
-    }
-}
-
-impl SourcedObject for Tag {
-    type Source = Origin;
-
-    fn source(&self) -> Self::Source {
-        self.origin().clone()
-    }
-}
-
-impl<'a> SourcedObject for &dyn ProgramAST<'a> {
-    type Source = Range<usize>;
-
-    fn source(&self) -> Self::Source {
-        self.span().range().range()
-    }
-}
 
 /// Error message associated with a source
 #[derive(Debug)]
@@ -86,13 +47,13 @@ where
 impl<Source, Error> SourceError<Source, Error>
 where
     Error: Debug + RichError,
-    Source: Debug,
+    Source: Debug + Clone,
 {
     /// Create a new [SourceError].
-    pub fn new<Object: SourcedObject<Source = Source>>(error: Error, object: &Object) -> Self {
+    pub fn new<Object: ComponentSource<Source = Source>>(error: Error, object: &Object) -> Self {
         Self {
             error,
-            source: object.source(),
+            source: object.origin(),
             context: Vec::default(),
             hints: Vec::default(),
         }
@@ -114,13 +75,22 @@ where
     }
 
     /// Add more context to the error.
-    pub fn add_context<Message: Display, Object: SourcedObject<Source = Source>>(
+    pub fn add_context<Message: Display, Object: ComponentSource<Source = Source>>(
         &mut self,
         object: &Object,
         message: Message,
     ) -> &mut Self {
+        self.add_context_source(object.origin(), message)
+    }
+
+    /// Add more context to the error attached to a source.
+    pub fn add_context_source<Message: Display>(
+        &mut self,
+        source: Source,
+        message: Message,
+    ) -> &mut Self {
         self.context.push(SourceMessage {
-            source: object.source(),
+            source,
             message: message.to_string(),
         });
 
@@ -170,17 +140,17 @@ where
 impl<Source, Error> SourceErrorReport<Source, Error>
 where
     Error: Debug + RichError,
-    Source: Debug,
+    Source: Debug + Clone,
 {
     /// Create a new report containing the given error.
-    pub fn single<Object: SourcedObject<Source = Source>>(object: &Object, error: Error) -> Self {
+    pub fn single<Object: ComponentSource<Source = Source>>(object: &Object, error: Error) -> Self {
         let mut report = Self::default();
         report.errors.push(SourceError::new(error, object));
         report
     }
 
     /// Add a new error to the report.
-    pub fn add<Object: SourcedObject<Source = Source>>(
+    pub fn add<Object: ComponentSource<Source = Source>>(
         &mut self,
         object: &Object,
         error: Error,

@@ -225,9 +225,17 @@ pub enum ValidationError {
     #[assoc(note = "parameters can only reference parameters defined earlier")]
     ParameterDeclarationReferencesUndefinedGlobal,
     /// Parameter declaration has no definition
-    #[error("parameter value needs to defined (via assignment or externally e.g. via --param on the cli)")]
+    #[error("undefined parameter")]
+    #[assoc(
+        note = "parameters can be defined via assignment or externally via --param on the cli"
+    )]
     #[assoc(code = 241)]
     ParameterMissingDefinition,
+    /// parameter definition referencing local variable
+    #[error("parameter definition is not ground")]
+    #[assoc(note = "parameter definitions may only use ground terms and global variables")]
+    #[assoc(code = 242)]
+    ParameterDeclarationNotGroundish,
 
     /// Unsupported feature: Multiple aggregates in one rule
     #[error(r#"multiple aggregates in one rule is currently unsupported"#)]

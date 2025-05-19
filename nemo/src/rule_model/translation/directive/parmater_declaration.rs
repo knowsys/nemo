@@ -1,15 +1,12 @@
 use crate::{
-    parser::ast::{self, ProgramAST},
+    parser::ast::{self},
     rule_model::{
         components::{
             parameter::ParameterDeclaration,
-            term::{
-                primitive::{variable::Variable, Primitive},
-                Term,
-            },
-            IterablePrimitives, ProgramComponent,
+            term::{primitive::variable::Variable, Term},
         },
-        error::{translation_error::TranslationErrorKind, TranslationError},
+        error::translation_error::TranslationError,
+        origin::Origin,
         translation::{ASTProgramTranslation, TranslationComponent},
     },
 };
@@ -17,45 +14,25 @@ use crate::{
 impl TranslationComponent for ParameterDeclaration {
     type Ast<'a> = ast::directive::parameter::ParameterDeclaration<'a>;
 
-    fn build_component<'a, 'b>(
-        translation: &mut ASTProgramTranslation<'a, 'b>,
-        ast: &'b Self::Ast<'a>,
-    ) -> Result<Self, TranslationError> {
+    fn build_component<'a>(
+        translation: &mut ASTProgramTranslation,
+        ast: &Self::Ast<'a>,
+    ) -> Option<Self> {
         let Variable::Global(variable) = Variable::build_component(translation, ast.variable())?
         else {
-            return Err(TranslationError::new(
-                ast.variable().span(),
-                TranslationErrorKind::ParamDeclarationNotGlobal,
-            ));
+            translation
+                .report
+                .add(ast.variable(), TranslationError::ParamDeclarationNotGlobal);
+            return None;
         };
 
-        let mut result = translation.register_component(Self::new(variable), ast);
+        let mut result = Origin::ast(Self::new(variable), ast);
 
         if let Some(expression) = ast.expression() {
             let term = Term::build_component(translation, expression)?;
-
-            if let Some(primitive) = term.primitive_terms().find(|primitive| {
-                matches!(
-                    primitive,
-                    Primitive::Variable(Variable::Universal(_))
-                        | Primitive::Variable(Variable::Existential(_))
-                )
-            }) {
-                todo!()
-
-                // return Err(TranslationError::new(
-                //     translation
-                //         .origin_map
-                //         .get(primitive.origin())
-                //         .expect("already registered")
-                //         .span(),
-                //     TranslationErrorKind::ParameterDeclarationNotGroundish,
-                // ));
-            }
-
             result.set_expression(term);
         }
 
-        Ok(result)
+        Some(result)
     }
 }

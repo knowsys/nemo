@@ -37,8 +37,9 @@ use crate::rule_model::{
 };
 
 use super::{
-    import_export::io_type::IOType, ComponentBehavior, ComponentIdentity, IterableComponent,
-    IterablePrimitives, IterableVariables, ProgramComponent, ProgramComponentKind,
+    import_export::io_type::IOType, ComponentBehavior, ComponentIdentity, ComponentSource,
+    IterableComponent, IterablePrimitives, IterableVariables, ProgramComponent,
+    ProgramComponentKind,
 };
 
 /// Term
@@ -191,6 +192,24 @@ impl ComponentBehavior for Term {
     }
 }
 
+impl ComponentSource for Term {
+    type Source = Origin;
+
+    delegate! {
+        to match self {
+            Self::Aggregate(term) => term,
+            Self::FunctionTerm(term) => term,
+            Self::Map(term) => term,
+            Self::Operation(term) => term,
+            Self::Primitive(term) => term,
+            Self::Tuple(term) => term,
+        } {
+            fn origin(&self) -> Origin;
+            fn set_origin(&mut self, origin: Origin);
+        }
+    }
+}
+
 impl ComponentIdentity for Term {
     delegate! {
         to match self {
@@ -203,8 +222,6 @@ impl ComponentIdentity for Term {
         } {
             fn id(&self) -> ProgramComponentId;
             fn set_id(&mut self, id: ProgramComponentId);
-            fn origin(&self) -> &Origin;
-            fn set_origin(&mut self, origin: Origin);
         }
     }
 }
@@ -432,7 +449,7 @@ mod test {
         let expression = Term::parse("?x * (3 + 7)").unwrap();
         let term = Term::from(tuple!(5, expression));
 
-        let reduced = term.reduce();
+        let reduced = term.reduce().unwrap();
         let expected_term = Term::parse("(5, ?x * 10)").unwrap();
 
         assert_eq!(reduced, expected_term);

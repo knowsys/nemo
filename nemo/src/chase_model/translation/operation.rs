@@ -5,12 +5,8 @@ use crate::{
     chase_model::components::{
         operation::ChaseOperation,
         term::operation_term::{Operation, OperationTerm},
-        ChaseComponent,
     },
-    rule_model::components::{
-        term::{primitive::variable::Variable, Term},
-        ComponentIdentity,
-    },
+    rule_model::components::term::{primitive::variable::Variable, Term},
 };
 
 use super::ProgramChaseTranslation;
@@ -39,11 +35,10 @@ impl ProgramChaseTranslation {
     pub(crate) fn build_operation_term(
         operation: &crate::rule_model::components::term::operation::Operation,
     ) -> OperationTerm {
-        let origin = operation.origin().clone();
         let kind = operation.operation_kind();
         let subterms = operation.arguments().map(Self::operation_term).collect();
 
-        OperationTerm::Operation(Operation::new(kind, subterms).set_origin(origin))
+        OperationTerm::Operation(Operation::new(kind, subterms))
     }
 
     /// Create a [ChaseOperation] form a given [Term].
@@ -52,9 +47,8 @@ impl ProgramChaseTranslation {
     /// Panics if the operation is not "pure", i.e. if it contains as subterms
     /// terms that are not operations or primitive terms.
     pub(crate) fn build_operation(output_variable: &Variable, term: &Term) -> ChaseOperation {
-        let origin = term.origin().clone();
         let operation = Self::operation_term(term);
 
-        ChaseOperation::new(output_variable.clone(), operation).set_origin(origin)
+        ChaseOperation::new(output_variable.clone(), operation)
     }
 }

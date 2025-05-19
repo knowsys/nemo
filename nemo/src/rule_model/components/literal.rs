@@ -14,8 +14,8 @@ use super::{
         primitive::{variable::Variable, Primitive},
         Term,
     },
-    ComponentBehavior, ComponentIdentity, IterableComponent, IterablePrimitives, IterableVariables,
-    ProgramComponent, ProgramComponentKind,
+    ComponentBehavior, ComponentIdentity, ComponentSource, IterableComponent, IterablePrimitives,
+    IterableVariables, ProgramComponent, ProgramComponentKind,
 };
 
 /// Literal
@@ -86,6 +86,26 @@ impl ComponentBehavior for Literal {
     }
 }
 
+impl ComponentSource for Literal {
+    type Source = Origin;
+
+    fn origin(&self) -> Origin {
+        match self {
+            Literal::Positive(atom) => atom.origin(),
+            Literal::Negative(atom) => atom.origin(),
+            Literal::Operation(operation) => operation.origin(),
+        }
+    }
+
+    fn set_origin(&mut self, origin: Origin) {
+        match self {
+            Literal::Positive(atom) => atom.set_origin(origin),
+            Literal::Negative(atom) => atom.set_origin(origin),
+            Literal::Operation(operation) => operation.set_origin(origin),
+        }
+    }
+}
+
 impl ComponentIdentity for Literal {
     fn id(&self) -> ProgramComponentId {
         match self {
@@ -100,22 +120,6 @@ impl ComponentIdentity for Literal {
             Literal::Positive(atom) => atom.set_id(id),
             Literal::Negative(atom) => atom.set_id(id),
             Literal::Operation(operation) => operation.set_id(id),
-        }
-    }
-
-    fn origin(&self) -> &Origin {
-        match self {
-            Literal::Positive(atom) => atom.origin(),
-            Literal::Negative(atom) => atom.origin(),
-            Literal::Operation(operation) => operation.origin(),
-        }
-    }
-
-    fn set_origin(&mut self, origin: Origin) {
-        match self {
-            Literal::Positive(atom) => atom.set_origin(origin),
-            Literal::Negative(atom) => atom.set_origin(origin),
-            Literal::Operation(operation) => operation.set_origin(origin),
         }
     }
 }

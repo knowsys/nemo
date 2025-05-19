@@ -7,8 +7,8 @@ use crate::rule_model::{
 };
 
 use super::{
-    tag::Tag, ComponentBehavior, ComponentIdentity, IterableComponent, ProgramComponent,
-    ProgramComponentKind,
+    tag::Tag, ComponentBehavior, ComponentIdentity, ComponentSource, IterableComponent,
+    ProgramComponent, ProgramComponentKind,
 };
 
 /// Output directive
@@ -75,6 +75,18 @@ impl ComponentBehavior for Output {
     }
 }
 
+impl ComponentSource for Output {
+    type Source = Origin;
+
+    fn origin(&self) -> Origin {
+        self.origin.clone()
+    }
+
+    fn set_origin(&mut self, origin: Origin) {
+        self.origin = origin;
+    }
+}
+
 impl ComponentIdentity for Output {
     fn id(&self) -> ProgramComponentId {
         self.id
@@ -82,14 +94,6 @@ impl ComponentIdentity for Output {
 
     fn set_id(&mut self, id: ProgramComponentId) {
         self.id = id;
-    }
-
-    fn origin(&self) -> &Origin {
-        &self.origin
-    }
-
-    fn set_origin(&mut self, origin: Origin) {
-        self.origin = origin;
     }
 }
 

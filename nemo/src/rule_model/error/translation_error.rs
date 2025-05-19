@@ -37,10 +37,10 @@ pub enum TranslationError {
     #[assoc(code = 104)]
     UnnamedVariable,
     /// Named non-anonymous variable
-    #[error(r#"anonymous variable with name: ``"#)]
+    #[error(r#"anonymous variable with name: `{name}`"#)]
     #[assoc(note = "anonymous variables cannot have a name")]
     #[assoc(code = 105)]
-    NamedAnonymous(String),
+    NamedAnonymous { name: String },
     /// Negation of a non-atom
     #[error(r#"found negated {kind}"#)]
     #[assoc(note = "negation can only be applied to atoms")]
@@ -121,18 +121,11 @@ pub enum TranslationError {
     #[error("parameter {key} is defined multiple times")]
     #[assoc(code = 129)]
     MapParameterRedefined { key: String },
-    /// malformed external variable declaration
-    #[error("external variable must be a single universal variable")]
-    #[assoc(code = 130)]
-    ExternalVariableAttribute,
     /// parameter declaration using non-global variable
-    #[error("parameter names must have the form `$name'")]
-    #[assoc(code = 131)]
+    #[error("parameter defines non-global variable")]
+    #[assoc(note = "parameter names must have the form `$name'")]
+    #[assoc(code = 130)]
     ParamDeclarationNotGlobal,
-    /// parameter definition referencing local variable
-    #[error("parameter definitions can only consist of ground terms and other parameters")]
-    #[assoc(code = 132)]
-    ParameterDeclarationNotGroundish,
 
     /// Unsupported: Declare statements
     #[error(r#"declare statements are currently unsupported"#)]

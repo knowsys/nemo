@@ -7,10 +7,7 @@ use std::{
 };
 
 use crate::{
-    chase_model::components::{
-        atom::{ground_atom::GroundAtom, ChaseAtom},
-        ChaseComponent,
-    },
+    chase_model::components::atom::{ground_atom::GroundAtom, ChaseAtom},
     rule_model::{
         error::{hint::Hint, validation_error::ValidationError, ValidationReport},
         origin::Origin,
@@ -23,8 +20,8 @@ use super::{
     component_iterator, component_iterator_mut,
     tag::Tag,
     term::{primitive::Primitive, Term},
-    ComponentBehavior, ComponentIdentity, IterableComponent, IterablePrimitives, IterableVariables,
-    ProgramComponent, ProgramComponentKind,
+    ComponentBehavior, ComponentIdentity, ComponentSource, IterableComponent, IterablePrimitives,
+    IterableVariables, ProgramComponent, ProgramComponentKind,
 };
 
 /// A (ground) fact
@@ -129,7 +126,7 @@ impl DerefMut for Fact {
 impl From<Atom> for Fact {
     fn from(value: Atom) -> Self {
         Self {
-            origin: value.origin().clone(),
+            origin: value.origin(),
             id: ProgramComponentId::default(),
             predicate: value.predicate(),
             terms: value.terms().cloned().collect(),
@@ -218,6 +215,18 @@ impl ComponentBehavior for Fact {
     }
 }
 
+impl ComponentSource for Fact {
+    type Source = Origin;
+
+    fn origin(&self) -> Origin {
+        self.origin.clone()
+    }
+
+    fn set_origin(&mut self, origin: Origin) {
+        self.origin = origin;
+    }
+}
+
 impl ComponentIdentity for Fact {
     fn id(&self) -> ProgramComponentId {
         self.id
@@ -225,14 +234,6 @@ impl ComponentIdentity for Fact {
 
     fn set_id(&mut self, id: ProgramComponentId) {
         self.id = id;
-    }
-
-    fn origin(&self) -> &Origin {
-        &self.origin
-    }
-
-    fn set_origin(&mut self, origin: Origin) {
-        self.origin = origin;
     }
 }
 
@@ -266,7 +267,7 @@ impl IterablePrimitives for Fact {
 
 impl From<GroundAtom> for Fact {
     fn from(value: GroundAtom) -> Self {
-        let origin = value.origin().clone();
+        let origin = Origin::Created; // TODO
         let predicate = value.predicate();
         let terms = value.terms().cloned().map(Term::from).collect();
 

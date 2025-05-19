@@ -15,8 +15,8 @@ use crate::{
     rule_model::{
         components::{
             component_iterator, component_iterator_mut, ComponentBehavior, ComponentIdentity,
-            IterableComponent, IterablePrimitives, IterableVariables, ProgramComponent,
-            ProgramComponentKind,
+            ComponentSource, IterableComponent, IterablePrimitives, IterableVariables,
+            ProgramComponent, ProgramComponentKind,
         },
         error::{info::Info, validation_error::ValidationError, ValidationReport},
         origin::Origin,
@@ -305,7 +305,7 @@ impl ComponentBehavior for Aggregate {
                 );
             }
 
-            if let Some(name) = variable.name() {
+            if !variable.is_anonymous() {
                 if let Some(found) = distinct_set.get(variable) {
                     report
                         .add(
@@ -336,6 +336,18 @@ impl ComponentBehavior for Aggregate {
     }
 }
 
+impl ComponentSource for Aggregate {
+    type Source = Origin;
+
+    fn origin(&self) -> Origin {
+        self.origin.clone()
+    }
+
+    fn set_origin(&mut self, origin: Origin) {
+        self.origin = origin;
+    }
+}
+
 impl ComponentIdentity for Aggregate {
     fn id(&self) -> ProgramComponentId {
         self.id
@@ -343,14 +355,6 @@ impl ComponentIdentity for Aggregate {
 
     fn set_id(&mut self, id: ProgramComponentId) {
         self.id = id;
-    }
-
-    fn origin(&self) -> &Origin {
-        &self.origin
-    }
-
-    fn set_origin(&mut self, origin: Origin) {
-        self.origin = origin
     }
 }
 

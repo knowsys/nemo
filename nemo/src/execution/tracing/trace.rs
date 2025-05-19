@@ -607,7 +607,7 @@ mod test {
                 rule::Rule,
                 term::primitive::{variable::Variable, Primitive},
             },
-            program::ProgramBuilder,
+            program::Program,
             substitution::Substitution,
             translation::TranslationComponent,
         },
@@ -650,11 +650,10 @@ mod test {
         let rule_2_index = 1;
         let rule_3_index = 2;
 
-        let mut program = ProgramBuilder::default();
+        let mut program = Program::default();
         program.add_rule(rule_1);
         program.add_rule(rule_2);
         program.add_rule(rule_3);
-        let program = program.finalize();
 
         let mut trace = ExecutionTrace::new(program);
 

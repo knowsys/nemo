@@ -7,7 +7,10 @@ use global::GlobalVariable;
 use universal::UniversalVariable;
 
 use crate::rule_model::{
-    components::{ComponentBehavior, ComponentIdentity, IterableComponent, ProgramComponentKind},
+    components::{
+        ComponentBehavior, ComponentIdentity, ComponentSource, IterableComponent,
+        ProgramComponentKind,
+    },
     error::ValidationReport,
     origin::Origin,
     pipeline::id::ProgramComponentId,
@@ -142,6 +145,25 @@ impl ComponentBehavior for Variable {
         Box::new(self.clone())
     }
 }
+impl ComponentSource for Variable {
+    type Source = Origin;
+
+    fn origin(&self) -> Origin {
+        match self {
+            Variable::Universal(variable) => variable.origin(),
+            Variable::Existential(variable) => variable.origin(),
+            Variable::Global(variable) => variable.origin(),
+        }
+    }
+
+    fn set_origin(&mut self, origin: Origin) {
+        match self {
+            Variable::Universal(variable) => variable.set_origin(origin),
+            Variable::Existential(variable) => variable.set_origin(origin),
+            Variable::Global(variable) => variable.set_origin(origin),
+        }
+    }
+}
 
 impl ComponentIdentity for Variable {
     fn id(&self) -> ProgramComponentId {
@@ -157,22 +179,6 @@ impl ComponentIdentity for Variable {
             Variable::Universal(variable) => variable.set_id(id),
             Variable::Existential(variable) => variable.set_id(id),
             Variable::Global(variable) => variable.set_id(id),
-        }
-    }
-
-    fn origin(&self) -> &Origin {
-        match self {
-            Variable::Universal(variable) => variable.origin(),
-            Variable::Existential(variable) => variable.origin(),
-            Variable::Global(variable) => variable.origin(),
-        }
-    }
-
-    fn set_origin(&mut self, origin: Origin) {
-        match self {
-            Variable::Universal(variable) => variable.set_origin(origin),
-            Variable::Existential(variable) => variable.set_origin(origin),
-            Variable::Global(variable) => variable.set_origin(origin),
         }
     }
 }

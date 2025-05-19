@@ -1,8 +1,9 @@
 use crate::{
-    parser::ast::{self, ProgramAST},
+    parser::ast::{self},
     rule_model::{
-        components::{atom::Atom, literal::Literal, tag::Tag, term::Term, ProgramComponent},
-        error::{translation_error::TranslationErrorKind, TranslationError},
+        components::{atom::Atom, literal::Literal, tag::Tag, term::Term},
+        error::translation_error::TranslationError,
+        origin::Origin,
     },
 };
 
@@ -14,46 +15,45 @@ use super::{
 impl TranslationComponent for Literal {
     type Ast<'a> = ast::guard::Guard<'a>;
 
-    fn build_component<'a, 'b>(
-        translation: &mut super::ASTProgramTranslation<'a, 'b>,
-        body: &'b Self::Ast<'a>,
-    ) -> Result<Self, TranslationError> {
+    fn build_component<'a>(
+        translation: &mut super::ASTProgramTranslation,
+        body: &Self::Ast<'a>,
+    ) -> Option<Self> {
         let result = match body {
             ast::guard::Guard::Expression(ast::expression::Expression::Atom(atom)) => {
-                let predicate = Tag::from(translation.resolve_tag(atom.tag())?)
-                    .set_origin(translation.register_node(atom.tag()));
+                let predicate =
+                    Origin::ast(Tag::from(translation.resolve_tag(atom.tag())?), atom.tag());
 
                 let mut subterms = Vec::new();
                 for expression in atom.expressions() {
                     subterms.push(Term::build_component(translation, expression)?);
                 }
 
-                Literal::Positive(
-                    translation.register_component(Atom::new(predicate, subterms), atom),
-                )
+                Literal::Positive(Origin::ast(Atom::new(predicate, subterms), atom))
             }
             ast::guard::Guard::Expression(ast::expression::Expression::Negation(negated)) => {
                 let atom = if let ast::expression::Expression::Atom(atom) = negated.expression() {
                     atom
                 } else {
-                    return Err(TranslationError::new(
-                        negated.span(),
-                        TranslationErrorKind::NegatedNonAtom(
-                            negated.expression().context_type().name().to_string(),
-                        ),
-                    ));
+                    translation.report.add(
+                        negated,
+                        TranslationError::NegatedNonAtom {
+                            kind: negated.expression().context_type().name().to_string(),
+                        },
+                    );
+
+                    return None;
                 };
 
-                let predicate = Tag::from(translation.resolve_tag(atom.tag())?)
-                    .set_origin(translation.register_node(atom.tag()));
+                let predicate =
+                    Origin::ast(Tag::from(translation.resolve_tag(atom.tag())?), atom.tag());
+
                 let mut subterms = Vec::new();
                 for expression in atom.expressions() {
                     subterms.push(Term::build_component(translation, expression)?);
                 }
 
-                Literal::Negative(
-                    translation.register_component(Atom::new(predicate, subterms), atom),
-                )
+                Literal::Negative(Origin::ast(Atom::new(predicate, subterms), atom))
             }
             ast::guard::Guard::Infix(infix) => Literal::Operation(
                 InfixOperation::build_component(translation, infix)?.into_inner(),
@@ -64,15 +64,18 @@ impl TranslationComponent for Literal {
                 )
             }
             _ => {
-                return Err(TranslationError::new(
-                    body.span(),
-                    TranslationErrorKind::BodyNonLiteral(body.context_type().name().to_string()),
-                ))
+                translation.report.add(
+                    body,
+                    TranslationError::BodyNonLiteral {
+                        kind: body.context_type().name().to_string(),
+                    },
+                );
+
+                return None;
             }
         };
-        // .set_origin(translation.register_node(body));
 
-        Ok(result)
+        Some(result)
     }
 }
 
@@ -87,27 +90,28 @@ impl HeadAtom {
 impl TranslationComponent for HeadAtom {
     type Ast<'a> = ast::guard::Guard<'a>;
 
-    fn build_component<'a, 'b>(
-        translation: &mut super::ASTProgramTranslation<'a, 'b>,
-        head: &'b Self::Ast<'a>,
-    ) -> Result<Self, TranslationError> {
-        let result =
-            if let ast::guard::Guard::Expression(ast::expression::Expression::Atom(atom)) = head {
-                let predicate = Tag::from(translation.resolve_tag(atom.tag())?)
-                    .set_origin(translation.register_node(atom.tag()));
-                let mut subterms = Vec::new();
-                for expression in atom.expressions() {
-                    subterms.push(Term::build_component(translation, expression)?);
-                }
+    fn build_component<'a>(
+        translation: &mut super::ASTProgramTranslation,
+        head: &Self::Ast<'a>,
+    ) -> Option<Self> {
+        if let ast::guard::Guard::Expression(ast::expression::Expression::Atom(atom)) = head {
+            let predicate =
+                Origin::ast(Tag::from(translation.resolve_tag(atom.tag())?), atom.tag());
 
-                translation.register_component(Atom::new(predicate, subterms), atom)
-            } else {
-                return Err(TranslationError::new(
-                    head.span(),
-                    TranslationErrorKind::HeadNonAtom(head.context_type().name().to_string()),
-                ));
-            };
+            let mut subterms = Vec::new();
+            for expression in atom.expressions() {
+                subterms.push(Term::build_component(translation, expression)?);
+            }
 
-        Ok(HeadAtom(result))
+            Some(HeadAtom(Origin::ast(Atom::new(predicate, subterms), atom)))
+        } else {
+            translation.report.add(
+                head,
+                TranslationError::HeadNonAtom {
+                    kind: head.context_type().name().to_string(),
+                },
+            );
+            None
+        }
     }
 }

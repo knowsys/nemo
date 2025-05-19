@@ -1,17 +1,11 @@
 //! This module defines [Operation] and [OperationTerm].
 
-use crate::{
-    chase_model::components::ChaseComponent,
-    rule_model::{
-        components::{
-            term::{
-                operation::operation_kind::OperationKind,
-                primitive::{variable::Variable, Primitive},
-            },
-            IterablePrimitives, IterableVariables,
-        },
-        origin::Origin,
+use crate::rule_model::components::{
+    term::{
+        operation::operation_kind::OperationKind,
+        primitive::{variable::Variable, Primitive},
     },
+    IterablePrimitives, IterableVariables,
 };
 
 /// Operation
@@ -20,9 +14,6 @@ use crate::{
 /// This can include for example arithmetic or string operations.
 #[derive(Debug, Clone)]
 pub(crate) struct Operation {
-    /// Origin of this component
-    origin: Origin,
-
     /// The kind of operation
     kind: OperationKind,
     /// The input arguments for the operation
@@ -32,11 +23,7 @@ pub(crate) struct Operation {
 impl Operation {
     /// Create a new [Operation].
     pub(crate) fn new(kind: OperationKind, subterms: Vec<OperationTerm>) -> Self {
-        Self {
-            origin: Origin::default(),
-            kind,
-            subterms,
-        }
+        Self { kind, subterms }
     }
 
     /// Return the kind of operation.
@@ -47,20 +34,6 @@ impl Operation {
     /// Return the list of subterms.
     pub(crate) fn subterms(&self) -> &Vec<OperationTerm> {
         &self.subterms
-    }
-}
-
-impl ChaseComponent for Operation {
-    fn origin(&self) -> &Origin {
-        &self.origin
-    }
-
-    fn set_origin(mut self, origin: Origin) -> Self
-    where
-        Self: Sized,
-    {
-        self.origin = origin;
-        self
     }
 }
 

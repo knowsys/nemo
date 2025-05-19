@@ -19,8 +19,8 @@ use super::{
         primitive::{variable::Variable, Primitive},
         Term,
     },
-    ComponentBehavior, ComponentIdentity, IterableComponent, IterablePrimitives, IterableVariables,
-    ProgramComponent, ProgramComponentKind,
+    ComponentBehavior, ComponentIdentity, ComponentSource, IterableComponent, IterablePrimitives,
+    IterableVariables, ProgramComponent, ProgramComponentKind,
 };
 
 /// Atom
@@ -206,6 +206,18 @@ impl ComponentBehavior for Atom {
     }
 }
 
+impl ComponentSource for Atom {
+    type Source = Origin;
+
+    fn origin(&self) -> Origin {
+        self.origin.clone()
+    }
+
+    fn set_origin(&mut self, origin: Origin) {
+        self.origin = origin;
+    }
+}
+
 impl ComponentIdentity for Atom {
     fn id(&self) -> ProgramComponentId {
         self.id
@@ -213,14 +225,6 @@ impl ComponentIdentity for Atom {
 
     fn set_id(&mut self, id: ProgramComponentId) {
         self.id = id;
-    }
-
-    fn origin(&self) -> &Origin {
-        &self.origin
-    }
-
-    fn set_origin(&mut self, origin: Origin) {
-        self.origin = origin;
     }
 }
 

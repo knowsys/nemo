@@ -15,8 +15,8 @@ use crate::{
     rule_model::{
         components::{
             component_iterator, component_iterator_mut, ComponentBehavior, ComponentIdentity,
-            IterableComponent, IterablePrimitives, IterableVariables, ProgramComponent,
-            ProgramComponentKind,
+            ComponentSource, IterableComponent, IterablePrimitives, IterableVariables,
+            ProgramComponent, ProgramComponentKind,
         },
         error::{validation_error::ValidationError, ValidationReport},
         origin::Origin,
@@ -288,6 +288,18 @@ impl ComponentBehavior for Operation {
     }
 }
 
+impl ComponentSource for Operation {
+    type Source = Origin;
+
+    fn origin(&self) -> Origin {
+        self.origin.clone()
+    }
+
+    fn set_origin(&mut self, origin: Origin) {
+        self.origin = origin;
+    }
+}
+
 impl ComponentIdentity for Operation {
     fn id(&self) -> ProgramComponentId {
         self.id
@@ -295,14 +307,6 @@ impl ComponentIdentity for Operation {
 
     fn set_id(&mut self, id: ProgramComponentId) {
         self.id = id;
-    }
-
-    fn origin(&self) -> &Origin {
-        &self.origin
-    }
-
-    fn set_origin(&mut self, origin: Origin) {
-        self.origin = origin
     }
 }
 
@@ -361,15 +365,14 @@ mod test {
     use super::Operation;
 
     impl Operation {
-        // TODO?
         fn parse(input: &str) -> Result<Operation, ()> {
-            // let Term::Operation(op) = Term::parse(input)? else {
-            //     return Err(ComponentParseError::ParseError);
-            // };
+            let term = Term::parse(input).map_err(|_| ())?;
 
-            // Ok(op)
-
-            todo!()
+            if let Term::Operation(operation) = term {
+                Ok(operation)
+            } else {
+                Err(())
+            }
         }
     }
 

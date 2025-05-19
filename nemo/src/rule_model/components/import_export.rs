@@ -11,8 +11,8 @@ use crate::{
 use super::{
     tag::Tag,
     term::{operation::Operation, Term},
-    ComponentBehavior, ComponentIdentity, IterableComponent, IterablePrimitives, ProgramComponent,
-    ProgramComponentKind,
+    ComponentBehavior, ComponentIdentity, ComponentSource, IterableComponent, IterablePrimitives,
+    ProgramComponent, ProgramComponentKind,
 };
 
 pub mod attribute;
@@ -152,6 +152,18 @@ impl ComponentBehavior for ImportDirective {
     }
 }
 
+impl ComponentSource for ImportDirective {
+    type Source = Origin;
+
+    fn origin(&self) -> Origin {
+        self.0.origin.clone()
+    }
+
+    fn set_origin(&mut self, origin: Origin) {
+        self.0.origin = origin;
+    }
+}
+
 impl ComponentIdentity for ImportDirective {
     fn id(&self) -> ProgramComponentId {
         self.0.id
@@ -159,14 +171,6 @@ impl ComponentIdentity for ImportDirective {
 
     fn set_id(&mut self, id: ProgramComponentId) {
         self.0.id = id;
-    }
-
-    fn origin(&self) -> &Origin {
-        &self.0.origin
-    }
-
-    fn set_origin(&mut self, origin: Origin) {
-        self.0.origin = origin;
     }
 }
 
@@ -249,6 +253,18 @@ impl ComponentBehavior for ExportDirective {
     }
 }
 
+impl ComponentSource for ExportDirective {
+    type Source = Origin;
+
+    fn origin(&self) -> Origin {
+        self.0.origin.clone()
+    }
+
+    fn set_origin(&mut self, origin: Origin) {
+        self.0.origin = origin;
+    }
+}
+
 impl ComponentIdentity for ExportDirective {
     fn id(&self) -> ProgramComponentId {
         self.0.id
@@ -256,14 +272,6 @@ impl ComponentIdentity for ExportDirective {
 
     fn set_id(&mut self, id: ProgramComponentId) {
         self.0.id = id;
-    }
-
-    fn origin(&self) -> &Origin {
-        &self.0.origin
-    }
-
-    fn set_origin(&mut self, origin: Origin) {
-        self.0.origin = origin;
     }
 }
 

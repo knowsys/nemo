@@ -4,7 +4,7 @@ use std::{fmt::Display, hash::Hash};
 
 use crate::rule_model::origin::Origin;
 
-use super::symbols::Symbols;
+use super::{symbols::Symbols, ComponentSource};
 
 /// Name of a term or predicate
 #[derive(Debug, Clone)]
@@ -16,6 +16,18 @@ pub struct Tag {
     tag: String,
 }
 
+impl ComponentSource for Tag {
+    type Source = Origin;
+
+    fn origin(&self) -> Origin {
+        self.origin.clone()
+    }
+
+    fn set_origin(&mut self, origin: Origin) {
+        self.origin = origin
+    }
+}
+
 impl Tag {
     /// Create a new [Tag].
     pub fn new(name: String) -> Self {
@@ -23,16 +35,6 @@ impl Tag {
             origin: Origin::Created,
             tag: name,
         }
-    }
-
-    /// Return the [Origin] associated with this tag.
-    pub fn origin(&self) -> &Origin {
-        &self.origin
-    }
-
-    /// Set the [Origin].
-    pub fn set_origin(mut self, origin: Origin) {
-        self.origin = origin;
     }
 
     /// Return the name of [Tag].

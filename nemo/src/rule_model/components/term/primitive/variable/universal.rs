@@ -4,7 +4,7 @@ use std::{fmt::Display, hash::Hash};
 
 use crate::rule_model::{
     components::{
-        symbols::Symbols, ComponentBehavior, ComponentIdentity, IterableComponent,
+        symbols::Symbols, ComponentBehavior, ComponentIdentity, ComponentSource, IterableComponent,
         ProgramComponent, ProgramComponentKind,
     },
     error::{validation_error::ValidationError, ValidationReport},
@@ -124,6 +124,18 @@ impl ComponentBehavior for UniversalVariable {
     }
 }
 
+impl ComponentSource for UniversalVariable {
+    type Source = Origin;
+
+    fn origin(&self) -> Origin {
+        self.origin.clone()
+    }
+
+    fn set_origin(&mut self, origin: Origin) {
+        self.origin = origin;
+    }
+}
+
 impl ComponentIdentity for UniversalVariable {
     fn id(&self) -> ProgramComponentId {
         self.id
@@ -131,14 +143,6 @@ impl ComponentIdentity for UniversalVariable {
 
     fn set_id(&mut self, id: ProgramComponentId) {
         self.id = id;
-    }
-
-    fn origin(&self) -> &Origin {
-        &self.origin
-    }
-
-    fn set_origin(&mut self, origin: Origin) {
-        self.origin = origin
     }
 }
 

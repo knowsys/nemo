@@ -19,7 +19,7 @@ use crate::{
         components::{
             import_export::{specification::ImportExportSpec, Direction},
             term::{operation::Operation, primitive::ground::GroundTerm, value_type::ValueType},
-            ComponentIdentity,
+            ComponentSource,
         },
         error::{hint::Hint, info::Info, validation_error::ValidationError, ValidationReport},
         substitution::Substitution,
@@ -471,7 +471,7 @@ impl ImportExportBuilder {
         bindings: &[Operation],
         direction: Direction,
     ) -> Result<ImportExportBuilder, ValidationReport> {
-        let origin = spec.origin().clone();
+        let origin = spec.origin();
         let mut report = ValidationReport::default();
         let parameters = Parameters::<B>::validate(spec, bindings, direction)?;
 

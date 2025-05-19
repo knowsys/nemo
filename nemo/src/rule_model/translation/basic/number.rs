@@ -7,8 +7,8 @@ use crate::newtype_wrapper;
 use crate::parser::ast;
 
 use crate::parser::ast::expression::basic::number::NumberTypeMarker;
+use crate::rule_model::translation::ASTProgramTranslation;
 use crate::rule_model::translation::TranslationComponent;
-use crate::rule_model::{error::TranslationError, translation::ASTProgramTranslation};
 
 pub(crate) struct NumberLiteral(AnyDataValue);
 newtype_wrapper!(NumberLiteral: AnyDataValue);
@@ -16,11 +16,11 @@ newtype_wrapper!(NumberLiteral: AnyDataValue);
 impl TranslationComponent for NumberLiteral {
     type Ast<'a> = ast::expression::basic::number::Number<'a>;
 
-    fn build_component<'a, 'b>(
-        _translation: &mut ASTProgramTranslation<'a, 'b>,
-        number: &'b Self::Ast<'a>,
-    ) -> Result<Self, TranslationError> {
-        Ok(NumberLiteral(match number.value() {
+    fn build_component<'a>(
+        _translation: &mut ASTProgramTranslation,
+        number: &Self::Ast<'a>,
+    ) -> Option<Self> {
+        Some(NumberLiteral(match number.value() {
             ast::expression::basic::number::NumberValue::Integer(integer) => {
                 AnyDataValue::new_integer_from_i64(integer)
             }

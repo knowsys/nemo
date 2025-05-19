@@ -9,7 +9,7 @@ use crate::{
             operation::{operation_kind::OperationKind, Operation},
             Term,
         },
-        error::TranslationError,
+        origin::Origin,
         translation::{ASTProgramTranslation, TranslationComponent},
     },
 };
@@ -20,10 +20,10 @@ newtype_wrapper!(ArithmeticOperation: Operation);
 impl TranslationComponent for ArithmeticOperation {
     type Ast<'a> = ast::expression::complex::arithmetic::Arithmetic<'a>;
 
-    fn build_component<'a, 'b>(
-        translation: &mut ASTProgramTranslation<'a, 'b>,
-        arithmetic: &'b ast::expression::complex::arithmetic::Arithmetic<'a>,
-    ) -> Result<Self, TranslationError> {
+    fn build_component<'a>(
+        translation: &mut ASTProgramTranslation,
+        arithmetic: &ast::expression::complex::arithmetic::Arithmetic<'a>,
+    ) -> Option<Self> {
         let kind = match arithmetic.kind() {
             ast::expression::complex::arithmetic::ArithmeticOperation::Addition => {
                 OperationKind::NumericSum
@@ -44,7 +44,7 @@ impl TranslationComponent for ArithmeticOperation {
             Term::build_component(translation, arithmetic.right())?,
         ];
 
-        Ok(ArithmeticOperation(translation.register_component(
+        Some(ArithmeticOperation(Origin::ast(
             Operation::new(kind, subterms),
             arithmetic,
         )))

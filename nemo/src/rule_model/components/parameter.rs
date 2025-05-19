@@ -3,14 +3,16 @@
 use std::fmt;
 
 use crate::rule_model::{
-    error::ValidationReport, origin::Origin, pipeline::id::ProgramComponentId,
+    error::{validation_error::ValidationError, ValidationReport},
+    origin::Origin,
+    pipeline::id::ProgramComponentId,
 };
 
 use super::{
     component_iterator, component_iterator_mut,
     term::{primitive::variable::global::GlobalVariable, Term},
-    ComponentBehavior, ComponentIdentity, IterableComponent, ProgramComponent,
-    ProgramComponentKind,
+    ComponentBehavior, ComponentIdentity, ComponentSource, IterableComponent, IterableVariables,
+    ProgramComponent, ProgramComponentKind,
 };
 
 /// Parameter declaration
@@ -102,11 +104,38 @@ impl ComponentBehavior for ParameterDeclaration {
             report.merge(child.validate());
         }
 
+        if let Some(expression) = self.expression() {
+            if expression
+                .variables()
+                .find(|variable| !variable.is_global())
+                .is_some()
+            {
+                report.add(
+                    expression,
+                    ValidationError::ParameterDeclarationNotGroundish,
+                );
+            }
+        } else {
+            report.add(self, ValidationError::ParameterMissingDefinition);
+        }
+
         report.result()
     }
 
     fn boxed_clone(&self) -> Box<dyn ProgramComponent> {
         Box::new(self.clone())
+    }
+}
+
+impl ComponentSource for ParameterDeclaration {
+    type Source = Origin;
+
+    fn origin(&self) -> Origin {
+        self.origin.clone()
+    }
+
+    fn set_origin(&mut self, origin: Origin) {
+        self.origin = origin;
     }
 }
 
@@ -117,14 +146,6 @@ impl ComponentIdentity for ParameterDeclaration {
 
     fn set_id(&mut self, id: ProgramComponentId) {
         self.id = id;
-    }
-
-    fn origin(&self) -> &Origin {
-        &self.origin
-    }
-
-    fn set_origin(&mut self, origin: Origin) {
-        self.origin = origin;
     }
 }
 

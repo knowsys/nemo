@@ -41,6 +41,23 @@ impl ProgramReport {
         Ok(())
     }
 
+    /// Write this report to a given writer.
+    pub fn write(
+        &self,
+        writer: &mut impl std::io::Write,
+        source_string: &str,
+        source_label: &str,
+    ) -> Result<(), std::io::Error> {
+        for error in self.warnings.iter().chain(self.errors.iter()) {
+            error.report(source_label).write(
+                (source_label.to_owned(), Source::from(source_string)),
+                &mut *writer,
+            )?
+        }
+
+        Ok(())
+    }
+
     /// Add a new [ContextError].
     pub fn add_error(&mut self, error: ContextError) -> &mut ContextError {
         self.errors.push(error);

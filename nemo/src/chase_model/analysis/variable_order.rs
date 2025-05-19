@@ -128,7 +128,7 @@ impl VariableOrder {
 
         result += "[";
         for (index, variable) in variable_vector.iter().enumerate() {
-            let identifier = variable.name().unwrap_or(String::from("_"));
+            let identifier = variable.name().unwrap_or("_");
 
             result += &identifier;
 

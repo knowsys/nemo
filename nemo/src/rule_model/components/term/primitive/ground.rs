@@ -7,7 +7,7 @@ use nemo_physical::datavalues::{AnyDataValue, DataValue, IriDataValue, ValueDoma
 use crate::rule_model::{
     components::{
         term::{value_type::ValueType, Term},
-        ComponentBehavior, ComponentIdentity, IterableComponent, ProgramComponent,
+        ComponentBehavior, ComponentIdentity, ComponentSource, IterableComponent, ProgramComponent,
         ProgramComponentKind,
     },
     error::ValidationReport,
@@ -204,6 +204,18 @@ impl ComponentBehavior for GroundTerm {
     }
 }
 
+impl ComponentSource for GroundTerm {
+    type Source = Origin;
+
+    fn origin(&self) -> Origin {
+        self.origin.clone()
+    }
+
+    fn set_origin(&mut self, origin: Origin) {
+        self.origin = origin;
+    }
+}
+
 impl ComponentIdentity for GroundTerm {
     fn id(&self) -> ProgramComponentId {
         self.id
@@ -211,14 +223,6 @@ impl ComponentIdentity for GroundTerm {
 
     fn set_id(&mut self, id: ProgramComponentId) {
         self.id = id;
-    }
-
-    fn origin(&self) -> &Origin {
-        &self.origin
-    }
-
-    fn set_origin(&mut self, origin: Origin) {
-        self.origin = origin
     }
 }
 

@@ -1,7 +1,9 @@
 //! This module defines [Origin].
 
+use crate::parser::ast::ProgramAST;
+
 use super::{
-    components::{rule::Rule, ComponentDuplicate, ProgramComponent},
+    components::{rule::Rule, ComponentDuplicate, ComponentSource, ProgramComponent},
     pipeline::id::ProgramComponentId,
 };
 
@@ -34,6 +36,21 @@ impl Default for Origin {
 }
 
 impl Origin {
+    /// Create an Oriign pointing to character range represented
+    /// by the given ast node.
+    pub fn ast<'a, Component: ComponentSource<Source = Self>, Node: ProgramAST<'a>>(
+        mut component: Component,
+        node: &Node,
+    ) -> Component {
+        let start = node.span().range().range().start;
+        let end = node.span().range().range().start;
+
+        let origin = Self::File { start, end };
+        component.set_origin(origin);
+
+        component
+    }
+
     /// Create an [Origin] that ... combination
     pub fn rule_combination(first: &Rule, second: &Rule) -> Self {
         let first_origin = first.duplicated_origin();

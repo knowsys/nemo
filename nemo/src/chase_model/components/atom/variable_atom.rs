@@ -3,18 +3,14 @@
 use std::fmt::Display;
 
 use crate::{
-    chase_model::components::ChaseComponent,
-    rule_model::{
-        components::{
-            atom::Atom,
-            tag::Tag,
-            term::{
-                primitive::{variable::Variable, Primitive},
-                Term,
-            },
-            ComponentIdentity, IterableVariables,
+    rule_model::components::{
+        atom::Atom,
+        tag::Tag,
+        term::{
+            primitive::{variable::Variable, Primitive},
+            Term,
         },
-        origin::Origin,
+        IterableVariables,
     },
     syntax,
     util::seperated_list::DisplaySeperatedList,
@@ -25,9 +21,6 @@ use super::ChaseAtom;
 /// An atom which may only use [Variable]s.
 #[derive(Debug, Clone)]
 pub(crate) struct VariableAtom {
-    /// Origin of this component
-    origin: Origin,
-
     /// Predicate name of this atom
     predicate: Tag,
     /// Variables contained in this atom
@@ -38,7 +31,6 @@ impl VariableAtom {
     /// Construct a new [VariableAtom].
     pub(crate) fn new(predicate: Tag, variables: Vec<Variable>) -> Self {
         Self {
-            origin: Origin::default(),
             predicate,
             variables,
         }
@@ -86,21 +78,6 @@ impl IterableVariables for VariableAtom {
         Box::new(self.terms_mut())
     }
 }
-
-impl ChaseComponent for VariableAtom {
-    fn origin(&self) -> &Origin {
-        &self.origin
-    }
-
-    fn set_origin(mut self, origin: Origin) -> Self
-    where
-        Self: Sized,
-    {
-        self.origin = origin;
-        self
-    }
-}
-
 /// Error struct for converting logical atoms to [VariableAtom]s
 #[derive(Debug)]
 pub(crate) struct VariableAtomConversionError;
@@ -115,7 +92,6 @@ impl TryFrom<Atom> for VariableAtom {
     type Error = VariableAtomConversionError;
 
     fn try_from(value: Atom) -> Result<Self, Self::Error> {
-        let origin = value.origin().clone();
         let predicate = value.predicate();
         let mut terms = Vec::new();
 
@@ -127,6 +103,6 @@ impl TryFrom<Atom> for VariableAtom {
             }
         }
 
-        Ok(Self::new(predicate, terms).set_origin(origin))
+        Ok(Self::new(predicate, terms))
     }
 }

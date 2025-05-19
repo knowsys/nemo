@@ -14,15 +14,16 @@ use variable::{
 
 use crate::rule_model::{
     components::{
-        ComponentBehavior, ComponentIdentity, IterableComponent, IterableVariables,
-        ProgramComponent, ProgramComponentKind,
+        ComponentBehavior, ComponentIdentity, ComponentSource, IterableComponent,
+        IterableVariables, ProgramComponent, ProgramComponentKind,
     },
-    error::ValidationReport,
+    error::{TranslationReport, ValidationReport},
     origin::Origin,
     pipeline::id::ProgramComponentId,
+    translation::{ComponentParseReport, TranslationComponent},
 };
 
-use super::value_type::ValueType;
+use super::{value_type::ValueType, Term};
 
 /// Primitive term
 ///
@@ -37,16 +38,16 @@ pub enum Primitive {
 }
 
 impl Primitive {
-    // TODO:
+    /// Parse a primitive term from a [`str`] reference.
+    pub fn parse(input: &str) -> Result<Self, ComponentParseReport> {
+        let Term::Primitive(term) = Term::parse(input)? else {
+            return Err(ComponentParseReport::Translation(
+                TranslationReport::default(),
+            ));
+        };
 
-    // /// Parse a primitive term from a [`str`] reference.
-    // pub fn parse(input: &str) -> Result<Self, ComponentParseError> {
-    //     let Term::Primitive(term) = Term::parse(input)? else {
-    //         return Err(ComponentParseError::ParseError);
-    //     };
-
-    //     Ok(term)
-    // }
+        Ok(term)
+    }
 
     /// Create a universal variable term.
     pub fn universal_variable(name: &str) -> Self {
@@ -206,6 +207,24 @@ impl ComponentBehavior for Primitive {
     }
 }
 
+impl ComponentSource for Primitive {
+    type Source = Origin;
+
+    fn origin(&self) -> Origin {
+        match self {
+            Primitive::Variable(term) => term.origin(),
+            Primitive::Ground(term) => term.origin(),
+        }
+    }
+
+    fn set_origin(&mut self, origin: Origin) {
+        match self {
+            Primitive::Variable(term) => term.set_origin(origin),
+            Primitive::Ground(term) => term.set_origin(origin),
+        }
+    }
+}
+
 impl ComponentIdentity for Primitive {
     fn id(&self) -> ProgramComponentId {
         match self {
@@ -218,20 +237,6 @@ impl ComponentIdentity for Primitive {
         match self {
             Primitive::Variable(term) => term.set_id(id),
             Primitive::Ground(term) => term.set_id(id),
-        }
-    }
-
-    fn origin(&self) -> &Origin {
-        match self {
-            Primitive::Variable(term) => term.origin(),
-            Primitive::Ground(term) => term.origin(),
-        }
-    }
-
-    fn set_origin(&mut self, origin: Origin) {
-        match self {
-            Primitive::Variable(term) => term.set_origin(origin),
-            Primitive::Ground(term) => term.set_origin(origin),
         }
     }
 }
@@ -284,12 +289,10 @@ mod test {
 
     #[test]
     fn parse_primitive() {
-        // TODO
+        let variable = Primitive::parse("?x").unwrap();
+        let ground = Primitive::parse("2").unwrap();
 
-        // let variable = Primitive::parse("?x").unwrap();
-        // let ground = Primitive::parse("2").unwrap();
-
-        // assert_eq!(Primitive::from(Variable::universal("x")), variable);
-        // assert_eq!(Primitive::from(2), ground);
+        assert_eq!(Primitive::from(Variable::universal("x")), variable);
+        assert_eq!(Primitive::from(2), ground);
     }
 }

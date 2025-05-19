@@ -5,8 +5,8 @@ use std::{fmt::Display, hash::Hash};
 use crate::rule_model::{
     components::{
         component_iterator, component_iterator_mut, tag::Tag, ComponentBehavior, ComponentIdentity,
-        IterableComponent, IterablePrimitives, IterableVariables, ProgramComponent,
-        ProgramComponentKind,
+        ComponentSource, IterableComponent, IterablePrimitives, IterableVariables,
+        ProgramComponent, ProgramComponentKind,
     },
     error::ValidationReport,
     origin::Origin,
@@ -259,6 +259,18 @@ impl ComponentBehavior for Map {
     }
 }
 
+impl ComponentSource for Map {
+    type Source = Origin;
+
+    fn origin(&self) -> Origin {
+        self.origin.clone()
+    }
+
+    fn set_origin(&mut self, origin: Origin) {
+        self.origin = origin;
+    }
+}
+
 impl ComponentIdentity for Map {
     fn id(&self) -> ProgramComponentId {
         self.id
@@ -266,14 +278,6 @@ impl ComponentIdentity for Map {
 
     fn set_id(&mut self, id: ProgramComponentId) {
         self.id = id;
-    }
-
-    fn origin(&self) -> &Origin {
-        &self.origin
-    }
-
-    fn set_origin(&mut self, origin: Origin) {
-        self.origin = origin
     }
 }
 

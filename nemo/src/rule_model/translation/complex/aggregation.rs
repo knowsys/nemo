@@ -2,10 +2,11 @@
 //! from the corresponding ast node.
 
 use crate::{
-    parser::ast::{self, ProgramAST},
+    parser::ast::{self},
     rule_model::{
         components::term::{aggregate::Aggregate, primitive::variable::Variable, Term},
-        error::{translation_error::TranslationErrorKind, TranslationError},
+        error::translation_error::TranslationError,
+        origin::Origin,
         translation::{ASTProgramTranslation, TranslationComponent},
     },
 };
@@ -13,17 +14,20 @@ use crate::{
 impl TranslationComponent for Aggregate {
     type Ast<'a> = ast::expression::complex::aggregation::Aggregation<'a>;
 
-    fn build_component<'a, 'b>(
-        translation: &mut ASTProgramTranslation<'a, 'b>,
-        aggregation: &'b Self::Ast<'a>,
-    ) -> Result<Self, TranslationError> {
+    fn build_component<'a>(
+        translation: &mut ASTProgramTranslation,
+        aggregation: &Self::Ast<'a>,
+    ) -> Option<Self> {
         let kind = if let Some(kind) = aggregation.kind() {
             kind
         } else {
-            return Err(TranslationError::new(
-                aggregation.tag().span(),
-                TranslationErrorKind::AggregationUnknown(aggregation.tag().content()),
-            ));
+            translation.report.add(
+                aggregation.tag(),
+                TranslationError::AggregationUnknown {
+                    aggregation: aggregation.tag().content(),
+                },
+            );
+            return None;
         };
 
         let aggregate = Term::build_component(translation, aggregation.aggregate())?;
@@ -32,15 +36,19 @@ impl TranslationComponent for Aggregate {
             if let ast::expression::Expression::Variable(variable) = expression {
                 distinct.push(Variable::build_component(translation, variable)?);
             } else {
-                return Err(TranslationError::new(
-                    expression.span(),
-                    TranslationErrorKind::AggregationDistinctNonVariable(
-                        expression.context_type().name().to_string(),
-                    ),
-                ));
+                translation.report.add(
+                    expression,
+                    TranslationError::AggregationDistinctNonVariable {
+                        kind: expression.context_type().name().to_string(),
+                    },
+                );
+                return None;
             }
         }
 
-        Ok(translation.register_component(Aggregate::new(kind, aggregate, distinct), aggregation))
+        Some(Origin::ast(
+            Aggregate::new(kind, aggregate, distinct),
+            aggregation,
+        ))
     }
 }

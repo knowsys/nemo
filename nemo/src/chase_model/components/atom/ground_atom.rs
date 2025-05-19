@@ -5,18 +5,14 @@ use std::fmt::Display;
 use nemo_physical::datavalues::AnyDataValue;
 
 use crate::{
-    chase_model::components::ChaseComponent,
-    rule_model::{
-        components::{
-            atom::Atom,
-            tag::Tag,
-            term::{
-                primitive::{ground::GroundTerm, variable::Variable, Primitive},
-                Term,
-            },
-            ComponentIdentity, IterableVariables,
+    rule_model::components::{
+        atom::Atom,
+        tag::Tag,
+        term::{
+            primitive::{ground::GroundTerm, variable::Variable, Primitive},
+            Term,
         },
-        origin::Origin,
+        IterableVariables,
     },
     syntax,
     util::seperated_list::DisplaySeperatedList,
@@ -27,9 +23,6 @@ use super::ChaseAtom;
 /// An atom which may only use [GroundTerm]s
 #[derive(Debug, Clone)]
 pub struct GroundAtom {
-    /// Origin of this component
-    origin: Origin,
-
     /// Predicate name of this atom
     predicate: Tag,
     /// Terms contained in this atom
@@ -39,11 +32,7 @@ pub struct GroundAtom {
 impl GroundAtom {
     /// Construct a new [GroundAtom].
     pub fn new(predicate: Tag, terms: Vec<GroundTerm>) -> Self {
-        Self {
-            origin: Origin::default(),
-            predicate,
-            terms,
-        }
+        Self { predicate, terms }
     }
 
     /// Returns all [AnyDataValue]s used as constants in this atom
@@ -94,20 +83,6 @@ impl IterableVariables for GroundAtom {
     }
 }
 
-impl ChaseComponent for GroundAtom {
-    fn origin(&self) -> &Origin {
-        &self.origin
-    }
-
-    fn set_origin(mut self, origin: Origin) -> Self
-    where
-        Self: Sized,
-    {
-        self.origin = origin;
-        self
-    }
-}
-
 /// Error struct for converting logical atoms to [GroundAtom]s
 #[derive(Debug, Clone, Copy)]
 pub struct GroundAtomConversionError;
@@ -122,7 +97,6 @@ impl TryFrom<Atom> for GroundAtom {
     type Error = GroundAtomConversionError;
 
     fn try_from(value: Atom) -> Result<Self, Self::Error> {
-        let origin = value.origin().clone();
         let predicate = value.predicate();
         let mut terms = Vec::new();
 
@@ -134,6 +108,6 @@ impl TryFrom<Atom> for GroundAtom {
             }
         }
 
-        Ok(Self::new(predicate, terms).set_origin(origin))
+        Ok(Self::new(predicate, terms))
     }
 }

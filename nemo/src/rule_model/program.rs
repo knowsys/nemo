@@ -16,7 +16,7 @@ use super::{
         rule::Rule,
         tag::Tag,
         term::primitive::{ground::GroundTerm, variable::global::GlobalVariable},
-        ComponentBehavior, ComponentIdentity, IterableComponent, ProgramComponent,
+        ComponentBehavior, ComponentIdentity, ComponentSource, IterableComponent, ProgramComponent,
         ProgramComponentKind,
     },
     error::{validation_error::ValidationError, ValidationReport},
@@ -74,9 +74,9 @@ impl Program {
     }
 
     /// Return an iterator over all parameter declarations.
-    pub fn parameter(&self) -> impl Iterator<Item = &ParameterDeclaration> {
+    pub fn parameters(&self) -> impl Iterator<Item = &ParameterDeclaration> {
         self.parameters.iter()
-    } 
+    }
 
     /// Return the rule at a particular index.
     ///
@@ -163,6 +163,21 @@ impl Program {
     /// Mark a predicate as an output predicate.
     pub fn add_output(&mut self, predicate: Tag) {
         self.outputs.push(Output::new(predicate));
+    }
+
+    /// Add a new paramater declaration to the program.
+    pub fn add_paramater_declaration(&mut self, parameter: ParameterDeclaration) {
+        self.parameters.push(parameter);
+    }
+
+    /// Add a new rule to this program.
+    pub fn add_rule(&mut self, rule: Rule) {
+        self.rules.push(rule);
+    }
+
+    /// Add a new fact to this program.
+    pub fn add_fact(&mut self, fact: Fact) {
+        self.facts.push(fact);
     }
 
     /// Check if a different arity was already used for the given predicate
@@ -267,8 +282,6 @@ impl Program {
         // }
 
         // self.arities = arities;
-
-        Some(())
     }
 }
 
@@ -293,18 +306,16 @@ impl Program {
         rule_head.chain(facts).collect()
     }
 
-
     /// Return
     fn arities(&self) -> Result<HashMap<Tag, usize>, ValidationReport> {
         let mut result = HashMap::new();
 
-        for import in self.imports() {
-            import.
-        }
+        // for import in self.imports() {
+        //     import.
+        // }
 
-        result
+        Ok(result)
     }
-
 }
 
 impl ComponentBehavior for Program {
@@ -409,6 +420,18 @@ impl ComponentBehavior for Program {
     }
 }
 
+impl ComponentSource for Program {
+    type Source = Origin;
+
+    fn origin(&self) -> Origin {
+        self.origin.clone()
+    }
+
+    fn set_origin(&mut self, origin: Origin) {
+        self.origin = origin;
+    }
+}
+
 impl ComponentIdentity for Program {
     fn id(&self) -> ProgramComponentId {
         self.id
@@ -416,14 +439,6 @@ impl ComponentIdentity for Program {
 
     fn set_id(&mut self, id: ProgramComponentId) {
         self.id = id;
-    }
-
-    fn origin(&self) -> &Origin {
-        &self.origin
-    }
-
-    fn set_origin(&mut self, origin: Origin) {
-        self.origin = origin
     }
 }
 
@@ -465,7 +480,7 @@ impl IterableComponent for Program {
 
 impl std::fmt::Display for Program {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        for import in &self.imports {
+        for import in self.imports() {
             import.fmt(f)?;
             f.write_char('\n')?;
         }
@@ -490,7 +505,7 @@ impl std::fmt::Display for Program {
             f.write_char('\n')?;
         }
 
-        for export in &self.exports {
+        for export in self.exports() {
             export.fmt(f)?;
             f.write_char('\n')?;
         }
@@ -498,4 +513,3 @@ impl std::fmt::Display for Program {
         Ok(())
     }
 }
-

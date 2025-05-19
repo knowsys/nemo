@@ -10,7 +10,7 @@ use crate::{
             rule::Rule,
             term::{primitive::Primitive, Term},
         },
-        error::TranslationError,
+        origin::Origin,
     },
 };
 
@@ -26,45 +26,37 @@ impl Rule {
 impl TranslationComponent for Rule {
     type Ast<'a> = ast::rule::Rule<'a>;
 
-    fn build_component<'a, 'b>(
-        translation: &mut ASTProgramTranslation<'a, 'b>,
-        rule: &'b Self::Ast<'a>,
-    ) -> Result<Self, TranslationError> {
-        // let mut rule_builder = RuleBuilder::default().origin(translation.register_node(rule));
+    fn build_component<'a>(
+        translation: &mut ASTProgramTranslation,
+        rule: &Self::Ast<'a>,
+    ) -> Option<Self> {
+        let mut result = Origin::ast(Rule::empty(), rule);
+        let attributes = translation.statement_attributes();
 
-        // let attributes = translation.statement_attributes();
+        if let Some(rule_name) = attributes.get_unique(&KnownAttributes::Name) {
+            if let Term::Primitive(Primitive::Ground(ground)) = &rule_name[0] {
+                if let Some(name) = ground.value().to_plain_string() {
+                    result.set_name(&name);
+                }
+            }
+        }
 
-        // if let Some(rule_name) = attributes.get_unique(KnownAttributes::Name) {
-        //     if let Term::Primitive(Primitive::Ground(ground)) = &rule_name[0] {
-        //         if let Some(name) = ground.value().to_plain_string() {
-        //             rule_builder.name_mut(&name);
-        //         }
-        //     }
-        // }
+        if let Some(rule_display) = attributes.get_unique(&KnownAttributes::Display) {
+            result.set_display(rule_display[0].clone());
+        }
 
-        // if let Some(rule_display) = attributes.get_unique(KnownAttributes::Display) {
-        //     rule_builder.display_mut(rule_display[0].clone());
-        // }
+        for expression in rule.head() {
+            result
+                .head_mut()
+                .push(HeadAtom::build_component(translation, expression)?.into_inner());
+        }
 
-        // for binding in translation.external_variables() {
-        //     let (variable, expansion) = binding?;
-        //     rule_builder.add_external_variable(variable.clone(), expansion.clone());
-        // }
+        for expression in rule.body() {
+            result
+                .body_mut()
+                .push(Literal::build_component(translation, expression)?);
+        }
 
-        // for expression in rule.head() {
-        //     rule_builder.add_head_atom_mut(
-        //         HeadAtom::build_component(translation, expression)?.into_inner(),
-        //     );
-        // }
-
-        // for expression in rule.body() {
-        //     rule_builder.add_body_literal_mut(Literal::build_component(translation, expression)?);
-        // }
-
-        // let rule = rule_builder.finalize();
-
-        // Ok(rule)
-
-        todo!()
+        Some(result)
     }
 }

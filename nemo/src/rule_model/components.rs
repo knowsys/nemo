@@ -144,6 +144,17 @@ pub trait ComponentBehavior {
     fn validate(&self) -> Result<(), ValidationReport>;
 }
 
+/// Trait that contains methods for tracking the source of a component
+pub trait ComponentSource {
+    type Source;
+
+    /// Return the source of this component.
+    fn origin(&self) -> Self::Source;
+
+    /// Set the source of this component.
+    fn set_origin(&mut self, origin: Self::Source);
+}
+
 /// Trait that collects methods for identifying and tracking the origins of  
 /// components of Nemo's logical rule model
 pub trait ComponentIdentity {
@@ -152,12 +163,6 @@ pub trait ComponentIdentity {
 
     /// Set the [ProgramComponentId] of this component.
     fn set_id(&mut self, id: ProgramComponentId);
-
-    /// Return the [Origin] of this component.
-    fn origin(&self) -> &Origin;
-
-    /// Set the [Origin] of this component.
-    fn set_origin(&mut self, origin: Origin);
 }
 
 /// Trait that allows to iterate over children
@@ -178,7 +183,9 @@ pub trait IterableComponent {
 
 /// Trait that allows duplicate [ProgramComponent]s
 /// while recording their [Origin]
-pub trait ComponentDuplicate: ComponentIdentity + ComponentBehavior {
+pub trait ComponentDuplicate:
+    ComponentSource<Source = Origin> + ComponentIdentity + ComponentBehavior
+{
     /// If the component is assigned to a [super::pipeline::ProgramPipeline],
     /// the [Origin] will be a reference using its [ProgramComponentId].
     /// Otherwise, returns the [Origin] of the component.
@@ -204,7 +211,10 @@ pub trait ComponentDuplicate: ComponentIdentity + ComponentBehavior {
     }
 }
 
-impl<Component: ComponentIdentity + ComponentBehavior> ComponentDuplicate for Component {}
+impl<Component: ComponentSource<Source = Origin> + ComponentIdentity + ComponentBehavior>
+    ComponentDuplicate for Component
+{
+}
 
 /// Trait implemented by components of Nemo's logical rule model
 /// that allows conversion between them

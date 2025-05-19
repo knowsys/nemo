@@ -484,7 +484,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
     ) -> Result<(ExecutionTrace, Vec<TraceFactHandle>), Error> {
         let chase_facts: Vec<_> = facts
             .into_iter()
-            .map(|fact| ProgramChaseTranslation::new().build_fact(&fact))
+            .filter_map(|fact| ProgramChaseTranslation::new().build_fact(&fact))
             .collect();
 
         let mut trace = ExecutionTrace::new(program);

@@ -10,10 +10,7 @@ pub(crate) mod rule;
 use std::collections::HashMap;
 
 use crate::rule_model::{
-    components::{
-        tag::Tag, term::primitive::variable::Variable, ComponentBehavior, ProgramComponent,
-    },
-    error::ValidationErrorBuilder,
+    components::{tag::Tag, term::primitive::variable::Variable},
     program::Program,
 };
 
@@ -54,14 +51,19 @@ impl ProgramChaseTranslation {
     /// Translate a [Program] into a [ChaseProgram].
     pub(crate) fn translate(&mut self, mut program: Program) -> ChaseProgram {
         let mut result = ChaseProgram::default();
-        self.predicate_arity = program
-            .arities()
-            .iter()
-            .map(|(tag, (arity, _))| (tag.clone(), *arity))
-            .collect();
+
+        // TODO:
+
+        // self.predicate_arity = program
+        //     .arities()
+        //     .iter()
+        //     .map(|(tag, (arity, _))| (tag.clone(), *arity))
+        //     .collect();
 
         for fact in program.facts() {
-            result.add_fact(self.build_fact(fact));
+            if let Some(fact) = self.build_fact(fact) {
+                result.add_fact(fact);
+            }
         }
 
         for rule in program.rules_mut() {

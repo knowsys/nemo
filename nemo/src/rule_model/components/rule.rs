@@ -19,8 +19,8 @@ use super::{
         primitive::{variable::Variable, Primitive},
         Term,
     },
-    ComponentBehavior, ComponentIdentity, IterableComponent, IterablePrimitives, IterableVariables,
-    ProgramComponentKind,
+    ComponentBehavior, ComponentIdentity, ComponentSource, IterableComponent, IterablePrimitives,
+    IterableVariables, ProgramComponentKind,
 };
 
 /// Rule
@@ -60,16 +60,26 @@ impl Rule {
         }
     }
 
+    /// Create a new empty [Rule].
+    pub fn empty() -> Self {
+        Self {
+            origin: Origin::Created,
+            id: ProgramComponentId::default(),
+            name: None,
+            display: None,
+            head: Vec::default(),
+            body: Vec::default(),
+        }
+    }
+
     /// Set the name of the rule.
-    pub fn set_name(mut self, name: &str) -> Self {
+    pub fn set_name(&mut self, name: &str) {
         self.name = Some(name.to_string());
-        self
     }
 
     /// Set how an instantiated version of the rule should be displayed.
-    pub fn set_display(mut self, display: Term) -> Self {
+    pub fn set_display(&mut self, display: Term) {
         self.display = Some(display);
-        self
     }
 
     /// Return the name of the rule, if it is given one.
@@ -417,6 +427,18 @@ impl ComponentBehavior for Rule {
     }
 }
 
+impl ComponentSource for Rule {
+    type Source = Origin;
+
+    fn origin(&self) -> Origin {
+        self.origin.clone()
+    }
+
+    fn set_origin(&mut self, origin: Origin) {
+        self.origin = origin;
+    }
+}
+
 impl ComponentIdentity for Rule {
     fn id(&self) -> ProgramComponentId {
         self.id
@@ -424,14 +446,6 @@ impl ComponentIdentity for Rule {
 
     fn set_id(&mut self, id: ProgramComponentId) {
         self.id = id;
-    }
-
-    fn origin(&self) -> &Origin {
-        &self.origin
-    }
-
-    fn set_origin(&mut self, origin: Origin) {
-        self.origin = origin;
     }
 }
 

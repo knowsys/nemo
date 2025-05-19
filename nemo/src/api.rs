@@ -51,10 +51,10 @@ pub fn load(file: PathBuf) -> Result<Engine, Error> {
 /// # Error
 /// Returns an appropriate [Error] variant on parsing and feature check issues.
 pub fn load_string(input: String) -> Result<Engine, Error> {
-    let program_ast = Parser::initialize(&input, String::default())
+    let program_ast = Parser::initialize(&input)
         .parse()
         .map_err(|_| Error::ProgramParseError)?;
-    let program = ASTProgramTranslation::initialize(&input, String::default())
+    let program = ASTProgramTranslation::default()
         .translate(&program_ast)
         .map_err(|_| Error::ProgramParseError)?;
 
