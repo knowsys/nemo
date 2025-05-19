@@ -40,6 +40,7 @@ pub(crate) enum FactPrinting {
 
 impl FactPrinting {
     /// Whether printing is enabled for some predicates
+    #[allow(dead_code)]
     pub(crate) fn is_enabled(&self) -> bool {
         !matches!(self, Self::None)
     }
@@ -85,6 +86,7 @@ impl LoggingArgs {
     ///  * `Error` when `-q` is used
     ///  * The `NMO_LOG` environment variable value
     ///  * `Warn` otherwise
+    #[allow(dead_code)]
     pub(crate) fn initialize_logging(&self) {
         let mut builder = env_logger::Builder::new();
 
@@ -131,6 +133,7 @@ pub(crate) struct OutputArgs {
 
 impl OutputArgs {
     /// Creates an output file manager with the current options
+    #[allow(dead_code)]
     pub(crate) fn export_manager(&self) -> Result<ExportManager, Error> {
         let export_manager = ExportManager::default()
             .set_base_path(self.export_directory.clone())
@@ -159,7 +162,7 @@ pub(crate) struct TracingArgs {
 /// Nemo CLI
 #[derive(clap::Parser, Debug)]
 #[command(author, version, about)]
-pub(crate) struct CliApp {
+pub struct CliApp {
     /// One or more rule program files
     #[arg(value_parser, required = true)]
     pub(crate) rules: Vec<PathBuf>,
@@ -185,7 +188,9 @@ pub(crate) struct CliApp {
 
 #[derive(Debug, Clone)]
 pub(crate) struct ParamKeyValue {
+    #[allow(dead_code)]
     pub(crate) key: String,
+    #[allow(dead_code)]
     pub(crate) value: GroundTerm,
 }
 

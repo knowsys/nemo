@@ -109,6 +109,40 @@ rec {
             toolchain
             pkgs.pkg-config
           ];
+
+          runCargo' =
+            name: env: buildCommand:
+            pkgs.stdenv.mkDerivation (
+              {
+                preferLocalBuild = true;
+                allowSubstitutes = false;
+
+                RUSTFLAGS = "-Dwarnings";
+                RUSTDOCFLAGS = "-Dwarnings";
+
+                src = ./.;
+                cargoDeps = platform.importCargoLock { lockFile = ./Cargo.lock; };
+
+                buildInputs = defaultBuildInputs;
+                nativeBuildInputs =
+                  defaultNativeBuildInputs
+                  ++ (with platform; [
+                    cargoSetupHook
+                    pkgs.python3
+                  ]);
+
+                inherit name;
+
+                buildPhase = ''
+                  runHook preBuild
+                  mkdir $out
+                  ${buildCommand}
+                  runHook postBuild
+                '';
+              }
+              // env
+            );
+          runCargo = name: runCargo' name { };
         in
         rec {
           packages =
@@ -169,10 +203,11 @@ rec {
                     runHook postBuild
                   '';
                 };
+
+              manpages = runCargo "nemo-generate-manpages" "cargo xtask generate-manpages $out";
+              shellCompletions = runCargo "nemo-generate-shell-completions" "cargo xtask generate-shell-completions $out";
             in
             rec {
-              rust-toolchain = toolchain;
-
               nemo = platform.buildRustPackage {
                 pname = "nemo";
                 src = ./.;
@@ -189,8 +224,17 @@ rec {
                   ++ (with platform; [
                     cargoBuildHook
                     cargoCheckHook
+                    pkgs.installShellFiles
                   ]);
                 buildAndTestSubdir = "nemo-cli";
+
+                postInstall = ''
+                  installManPage ${manpages}/nmo.1
+                  installShellCompletion \
+                    --fish ${shellCompletions}/nmo.fish \
+                    --bash ${shellCompletions}/nmo.bash \
+                    --zsh ${shellCompletions}/_nmo
+                '';
               };
 
               nemo-language-server = platform.buildRustPackage {
@@ -363,82 +407,46 @@ rec {
             };
           };
 
-          checks =
-            let
-              runCargo' =
-                name: env: buildCommand:
-                pkgs.stdenv.mkDerivation (
-                  {
-                    preferLocalBuild = true;
-                    allowSubstitutes = false;
+          checks = {
+            inherit (packages)
+              nemo
+              nemo-language-server
+              nemo-python
+              nemo-wasm
+              nemo-wasm-node
+              nemo-wasm-web
+              nemo-web
+              nemo-doc
+              nemo-vscode-extension
+              ;
+            devShell = devShells.default;
 
-                    RUSTFLAGS = "-Dwarnings";
-                    RUSTDOCFLAGS = "-Dwarnings";
+            clippy = runCargo "nemo-check-clippy" ''
+              cargo clippy --all-targets
+            '';
 
-                    src = ./.;
-                    cargoDeps = platform.importCargoLock { lockFile = ./Cargo.lock; };
+            doc = runCargo "nemo-check-docs" ''
+              cargo doc --workspace
+            '';
 
-                    buildInputs = defaultBuildInputs;
-                    nativeBuildInputs =
-                      defaultNativeBuildInputs
-                      ++ (with platform; [
-                        cargoSetupHook
-                        pkgs.python3
-                      ]);
+            fmt = runCargo "nemo-check-formatting" ''
+              cargo fmt --all -- --check
+            '';
 
-                    inherit name;
+            test = runCargo "nemo-check-tests" ''
+              cargo test
+            '';
 
-                    buildPhase = ''
-                      runHook preBuild
-                      mkdir $out
-                      ${buildCommand}
-                      runHook postBuild
-                    '';
-                  }
-                  // env
-                );
-              runCargo = name: runCargo' name { };
-            in
-            {
-              inherit (packages)
-                nemo
-                nemo-language-server
-                nemo-python
-                nemo-wasm
-                nemo-wasm-node
-                nemo-wasm-web
-                nemo-web
-                nemo-doc
-                nemo-vscode-extension
-                ;
-              devShell = devShells.default;
-
-              clippy = runCargo "nemo-check-clippy" ''
-                cargo clippy --all-targets
-              '';
-
-              doc = runCargo "nemo-check-docs" ''
-                cargo doc --workspace
-              '';
-
-              fmt = runCargo "nemo-check-formatting" ''
-                cargo fmt --all -- --check
-              '';
-
-              test = runCargo "nemo-check-tests" ''
-                cargo test
-              '';
-
-              python-codestyle =
-                pkgs.runCommandLocal "nemo-check-python-codestyle"
-                  {
-                    nativeBuildInputs = [ pkgs.python3Packages.pycodestyle ];
-                  }
-                  ''
-                    mkdir $out
-                    pycodestyle ${./nemo-python}
-                  '';
-            };
+            python-codestyle =
+              pkgs.runCommandLocal "nemo-check-python-codestyle"
+                {
+                  nativeBuildInputs = [ pkgs.python3Packages.pycodestyle ];
+                }
+                ''
+                  mkdir $out
+                  pycodestyle ${./nemo-python}
+                '';
+          };
 
           devShells.default = pkgs.mkShell {
             NMO_LOG = "debug";
