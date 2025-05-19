@@ -1,5 +1,20 @@
 {
   "nodes": {
+    "crane": {
+      "locked": {
+        "lastModified": 1747587869,
+        "narHash": "sha256-Zay3WJdSvC2VQmNqWSVLBOg/1iS/0/Q0c9JOBsB+3qw=",
+        "owner": "ipetkov",
+        "repo": "crane",
+        "rev": "76603d32f18e0e378d9f6335c8fc286413493655",
+        "type": "github"
+      },
+      "original": {
+        "owner": "ipetkov",
+        "repo": "crane",
+        "type": "github"
+      }
+    },
     "dream2nix": {
       "inputs": {
         "nixpkgs": [
@@ -257,6 +272,7 @@
     },
     "root": {
       "inputs": {
+        "crane": "crane",
         "dream2nix": "dream2nix",
         "nemo-doc": "nemo-doc",
         "nemo-vscode-extension": "nemo-vscode-extension",

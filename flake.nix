@@ -1,4 +1,4 @@
-rec {
+{
   description = "nemo, a datalog-based rule engine for fast and scalable analytic data processing in memory";
 
   inputs = {
@@ -9,6 +9,8 @@ rec {
       url = "github:oxalica/rust-overlay";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+
+    crane.url = "github:ipetkov/crane";
 
     dream2nix = {
       url = "github:nix-community/dream2nix";
@@ -91,262 +93,326 @@ rec {
         channels:
         let
           pkgs = channels.nixpkgs;
+          inherit (pkgs) lib system;
           toolchain = pkgs.rust-bin.fromRustupToolchainFile ./rust-toolchain.toml;
-          platform = pkgs.makeRustPlatform {
-            cargo = toolchain;
-            rustc = toolchain;
-          };
-          defaultBuildInputs =
-            [
-              pkgs.openssl
-              pkgs.openssl.dev
-            ]
-            ++ pkgs.lib.optionals pkgs.stdenv.isDarwin [
-              pkgs.darwin.apple_sdk.frameworks.Security
-              pkgs.darwin.apple_sdk.frameworks.SystemConfiguration
+
+          crane = (inputs.crane.mkLib pkgs).overrideToolchain toolchain;
+          src = lib.fileset.toSource rec {
+            root = ./.;
+            fileset = lib.fileset.unions [
+              (crane.fileset.commonCargoSources root)
+              (lib.fileset.fileFilter (
+                file:
+                lib.any file.hasExt [
+                  "md"
+                  "py"
+                ]
+              ) root)
+              ./resources # contains the integration tests
+              ./LICENSE-MIT
+              ./LICENSE-APACHE
             ];
-          defaultNativeBuildInputs = [
-            toolchain
-            pkgs.pkg-config
-          ];
+          };
 
-          runCargo' =
-            name: env: buildCommand:
-            pkgs.stdenv.mkDerivation (
-              {
-                preferLocalBuild = true;
-                allowSubstitutes = false;
+          inherit (pkgs) python3; # this should match the install hook version below
+          inherit (pkgs.python3Packages) pypaInstallHook pycodestyle; # this should match the python version above
 
-                RUSTFLAGS = "-Dwarnings";
-                RUSTDOCFLAGS = "-Dwarnings";
+          commonArgs = {
+            inherit src;
+            strictDeps = true;
 
-                src = ./.;
-                cargoDeps = platform.importCargoLock { lockFile = ./Cargo.lock; };
+            nativeBuildInputs = lib.attrValues {
+              inherit python3;
+              inherit (pkgs) pkg-config;
+            };
 
-                buildInputs = defaultBuildInputs;
-                nativeBuildInputs =
-                  defaultNativeBuildInputs
-                  ++ (with platform; [
-                    cargoSetupHook
-                    pkgs.python3
-                  ]);
+            # avoid rebuilds by pinning python:
+            # https://crane.dev/faq/rebuilds-pyo3.html
+            env.PYO3_PYTHON = lib.getExe python3;
 
-                inherit name;
+            buildInputs =
+              (lib.attrValues { inherit (pkgs) openssl; })
+              ++ lib.optionals pkgs.stdenv.isDarwin (
+                lib.attrValues {
+                  inherit (pkgs) libiconv;
+                  inherit (pkgs.darwin.apple_sdk.frameworks) Security SystemConfiguration;
+                }
+              );
+          };
 
-                buildPhase = ''
-                  runHook preBuild
-                  mkdir $out
-                  ${buildCommand}
-                  runHook postBuild
-                '';
+          # build all dependencies in a single derivation, so that they can be cached
+          cargoArtifacts =
+            let
+              hack =
+                {
+                  task,
+                  profile ? "release",
+                  target ? null,
+                }:
+                "cargo hack --workspace --feature-powerset ${task} --profile ${profile} ${
+                  lib.optionalString (target != null) "--target ${target}"
+                }";
+            in
+            crane.buildDepsOnly (
+              commonArgs
+              // {
+                pname = "nemo-cargo-workspace";
+                cargoBuildCommand = hack { task = "build"; };
+                cargoCheckCommand = hack { task = "build"; };
+                cargoTestCommand = hack { task = "test"; };
+
+                nativeBuildInputs = commonArgs.nativeBuildInputs ++ (lib.attrValues { inherit (pkgs) cargo-hack; });
               }
-              // env
             );
-          runCargo = name: runCargo' name { };
+
+          # the same, but for the WASM target
+          cargoWasmArtifacts = crane.buildDepsOnly (
+            commonArgs
+            // {
+              pname = "nemo-cargo-workspace-wasm";
+              cargoExtraArgs = "--target wasm32-unknown-unknown --package nemo-wasm --package nemo-language-server --no-default-features --features js";
+
+              doCheck = false; # skip tests for WASM, since they wouldn't run anyways
+            }
+          );
+
+          crateArgs = commonArgs // {
+            inherit cargoArtifacts;
+            inherit (crane.crateNameFromCargoToml { inherit src; }) version;
+
+            meta = {
+              inherit ((builtins.fromTOML (builtins.readFile ./Cargo.toml)).workspace.package)
+                description
+                homepage
+                ;
+              license = [
+                pkgs.lib.licenses.asl20
+                pkgs.lib.licenses.mit
+              ];
+            };
+          };
+
+          cargoXtask =
+            {
+              task,
+              cargoXtaskArgs ? "",
+              ...
+            }@origArgs:
+            let
+              args = builtins.removeAttrs origArgs [
+                "task"
+                "cargoXtaskArgs"
+              ];
+            in
+            crane.mkCargoDerivation (
+              args
+              // {
+                inherit cargoArtifacts src;
+                pname = "nemo-xtask-${task}";
+                buildPhaseCargoCommand = "cargo run --release --package xtask -- ${task} ${cargoXtaskArgs}";
+                buildInputs = args.buildInputs or commonArgs.buildInputs;
+                nativeBuildInputs = args.nativeBuildInputs or commonArgs.nativeBuildInputs;
+              }
+            );
+
+          cargoXtaskGenerate =
+            task:
+            cargoXtask {
+              task = "generate-${task}";
+              cargoXtaskArgs = "$out";
+              preBuild = ''
+                mkdir $out
+              '';
+            };
+
+          buildCrate =
+            {
+              crate,
+              pname ? crate,
+              ...
+            }@origArgs:
+            let
+              args = builtins.removeAttrs origArgs [
+                "crate"
+              ];
+            in
+            crane.buildPackage (
+              crateArgs
+              // {
+                inherit pname;
+                cargoExtraArgs = "--package ${crate}";
+              }
+              // args
+            );
+
+          wasmPack =
+            { target, ... }@origArgs:
+            let
+              args = builtins.removeAttrs origArgs [
+                "target"
+              ];
+            in
+            crane.mkCargoDerivation (
+              args
+              // {
+                inherit src;
+                cargoArtifacts = cargoWasmArtifacts;
+                pname = "nemo-wasm-${target}";
+
+                buildPhaseCargoCommand = ''
+                  cat LICENSE-APACHE LICENSE-MIT > nemo-wasm/LICENSE
+                  mkdir -p lib/node_modules/nemo-wasm
+                  wasm-pack build \
+                    --target ${target} \
+                    --weak-refs \
+                    --mode=no-install \
+                    --out-dir=/build/lib/node_modules/nemo-wasm nemo-wasm
+                '';
+
+                installPhaseCommand = ''
+                  mkdir -p $out
+                  cp -R /build/lib $out/
+                '';
+
+                buildInputs = (args.buildInputs or [ ]) ++ crateArgs.buildInputs;
+                nativeBuildInputs =
+                  (args.nativeBuildInputs or [ ])
+                  ++ crateArgs.nativeBuildInputs
+                  ++ (lib.attrValues {
+                    inherit (pkgs)
+                      binaryen
+                      wasm-bindgen-cli
+                      wasm-pack
+                      writableTmpDirAsHomeHook
+                      ;
+                  });
+              }
+            );
+
+          nemo-cli-manpages = cargoXtaskGenerate "manpages";
+          nemo-cli-shell-completions = cargoXtaskGenerate "shell-completions";
         in
         rec {
-          packages =
-            let
-              cargoMeta = (builtins.fromTOML (builtins.readFile ./Cargo.toml)).workspace.package;
-              inherit (cargoMeta) version;
-              meta = {
-                inherit description;
-                inherit (cargoMeta) homepage;
-                license = [
-                  pkgs.lib.licenses.asl20
-                  pkgs.lib.licenses.mit
-                ];
-              };
+          packages = rec {
+            nemo = buildCrate {
+              pname = "nemo";
+              crate = "nemo-cli";
 
-              buildWasm =
-                target:
-                {
-                  pname,
-                  src,
-                  version,
-                  meta,
-                  ...
-                }@args:
-                pkgs.stdenv.mkDerivation rec {
-                  inherit (args)
-                    version
-                    meta
-                    pname
-                    src
-                    ;
+              nativeBuildInputs =
+                crateArgs.nativeBuildInputs ++ (lib.attrValues { inherit (pkgs) installShellFiles; });
 
-                  cargoDeps = platform.importCargoLock { lockFile = ./Cargo.lock; };
-
-                  nativeBuildInputs =
-                    defaultNativeBuildInputs
-                    ++ (with platform; [
-                      cargoSetupHook
-                      pkgs.wasm-pack
-                      pkgs.nodejs
-                      pkgs.wasm-bindgen-cli
-                    ]);
-                  buildInputs = defaultBuildInputs ++ [ pkgs.nodejs ];
-
-                  buildPhase = ''
-                    runHook preBuild
-
-                    mkdir -p $out/lib/node_modules/nemo-wasm
-                    mkdir .cache
-                    mkdir target
-                    export CARGO_HOME=$TMPDIR/.cargo
-                    export CARGO_TARGET_DIR=$TMPDIR/target
-                    export XDG_CACHE_HOME=$TMPDIR/.cache
-
-                    cd $src
-                    HOME=$TMPDIR wasm-pack build --target ${target} --weak-refs --mode=no-install --out-dir=$out/lib/node_modules/${pname} nemo-wasm
-
-                    runHook postBuild
-                  '';
-                };
-
-              manpages = runCargo "nemo-generate-manpages" "cargo xtask generate-manpages $out";
-              shellCompletions = runCargo "nemo-generate-shell-completions" "cargo xtask generate-shell-completions $out";
-            in
-            rec {
-              nemo = platform.buildRustPackage {
-                pname = "nemo";
-                src = ./.;
-                meta = meta // {
-                  mainProgram = "nmo";
-                };
-                inherit version;
-
-                cargoLock.lockFile = ./Cargo.lock;
-
-                buildInputs = defaultBuildInputs;
-                nativeBuildInputs =
-                  defaultNativeBuildInputs
-                  ++ (with platform; [
-                    cargoBuildHook
-                    cargoCheckHook
-                    pkgs.installShellFiles
-                  ]);
-                buildAndTestSubdir = "nemo-cli";
-
-                postInstall = ''
-                  installManPage ${manpages}/nmo.1
-                  installShellCompletion \
-                    --fish ${shellCompletions}/nmo.fish \
-                    --bash ${shellCompletions}/nmo.bash \
-                    --zsh ${shellCompletions}/_nmo
-                '';
-              };
-
-              nemo-language-server = platform.buildRustPackage {
-                pname = "nemo-language-server";
-                src = ./.;
-                meta = meta // {
-                  mainProgram = "nemo-language-server";
-                };
-                inherit version;
-
-                cargoLock.lockFile = ./Cargo.lock;
-
-                buildInputs = defaultBuildInputs;
-                nativeBuildInputs =
-                  defaultNativeBuildInputs
-                  ++ (with platform; [
-                    cargoBuildHook
-                    cargoCheckHook
-                  ]);
-                buildAndTestSubdir = "nemo-language-server";
-              };
-
-              nemo-python = pkgs.python3Packages.buildPythonPackage {
-                pname = "nemo-python";
-                src = ./.;
-                inherit version meta;
-
-                cargoDeps = platform.importCargoLock { lockFile = ./Cargo.lock; };
-
-                buildInputs = defaultBuildInputs;
-                nativeBuildInputs =
-                  defaultNativeBuildInputs
-                  ++ (with platform; [
-                    cargoSetupHook
-                    maturinBuildHook
-                  ]);
-                buildAndTestSubdir = "nemo-python";
-
-                checkPhase = ''
-                  PYTHONPATH=''${PYTHONPATH:+''${PYTHONPATH}:}out python3 -m unittest discover -s nemo-python/tests -v
-                '';
-              };
-
-              nemo-wasm-node = buildWasm "nodejs" {
-                pname = "nemo-wasm";
-                src = ./.;
-                inherit version meta;
-              };
-              nemo-wasm-bundler = buildWasm "bundler" {
-                pname = "nemo-wasm";
-                src = ./.;
-                inherit version meta;
-              };
-              nemo-wasm-web = buildWasm "web" {
-                pname = "nemo-wasm";
-                src = ./.;
-                inherit version meta;
-              };
-              nemo-wasm = nemo-wasm-bundler;
-
-              python3 = pkgs.python3.withPackages (ps: [ nemo-python ]);
-              python = python3;
-
-              nodejs = pkgs.writeShellScriptBin "node" ''
-                NODE_PATH=${nemo-wasm-node}/lib/node_modules''${NODE_PATH:+":$NODE_PATH"} ${pkgs.nodejs}/bin/node $@
+              postInstall = ''
+                installManPage ${nemo-cli-manpages}/nmo.1
+                installShellCompletion \
+                  --fish ${nemo-cli-shell-completions}/nmo.fish \
+                  --bash ${nemo-cli-shell-completions}/nmo.bash \
+                  --zsh ${nemo-cli-shell-completions}/_nmo
               '';
 
-              nemo-vscode-extension-vsix =
-                (inputs.nemo-vscode-extension.packages.${pkgs.system}.nemo-vscode-extension-vsix.extendModules {
-                  modules = [
-                    {
-                      deps = {
-                        inherit nemo-wasm-web;
-                      };
-                    }
-                  ];
-                }).config.public;
-
-              nemo-vscode-extension =
-                inputs.nemo-vscode-extension.packages.${pkgs.system}.nemo-vscode-extension.overrideAttrs
-                  (old: {
-                    src = "${nemo-vscode-extension-vsix}/nemo-${old.version}.vsix";
-                  });
-
-              nemo-web =
-                (inputs.nemo-web.packages.${pkgs.system}.nemo-web.extendModules {
-                  modules = [
-                    {
-                      deps = {
-                        inherit nemo-wasm-web nemo-wasm-bundler nemo-vscode-extension-vsix;
-                      };
-                    }
-                  ];
-                }).config.public;
-
-              inherit (inputs.nemo-doc.packages.${pkgs.system}) nemo-doc;
-
-              default = nemo;
+              meta = crateArgs.meta // {
+                mainProgram = "nmo";
+              };
             };
+
+            nemo-language-server = buildCrate { crate = "nemo-language-server"; };
+
+            nemo-python = buildCrate {
+              crate = "nemo-python";
+
+              doInstallCheck = true;
+              doNotPostBuildInstallCargoBinaries = true;
+
+              nativeBuildInputs =
+                crateArgs.nativeBuildInputs
+                ++ (lib.attrValues {
+                  inherit pypaInstallHook;
+                  inherit (pkgs) maturin;
+                });
+
+              buildPhaseCargoCommand = ''
+                maturin build \
+                  --offline \
+                  --target-dir target \
+                  --manylinux off \
+                  --strip \
+                  --release \
+                  --manifest-path nemo-python/Cargo.toml
+              '';
+
+              preInstall = ''
+                mkdir -p dist
+                cp target/wheels/*.whl dist/
+              '';
+
+              installPhaseCommand = "pypaInstallPhase";
+
+              installCheckPhase = ''
+                PYTHONPATH=''${PYTHONPATH:+''${PYTHONPATH}:}out python3 -m unittest discover -s nemo-python/tests -v
+              '';
+            };
+
+            nemo-wasm-node = wasmPack { target = "nodejs"; };
+            nemo-wasm-bundler = wasmPack { target = "bundler"; };
+            nemo-wasm-web = wasmPack { target = "web"; };
+            nemo-wasm = nemo-wasm-bundler;
+
+            python3 = pkgs.python3.withPackages (ps: [ nemo-python ]);
+            python = python3;
+
+            nodejs = pkgs.writeShellApplication {
+              name = "node";
+              meta = { inherit (pkgs.nodejs.meta) description; };
+
+              runtimeInputs = lib.attrValues { inherit (pkgs) nodejs; };
+
+              text = ''
+                NODE_PATH=${nemo-wasm-node}/lib/node_modules''${NODE_PATH:+":$NODE_PATH"} node "$@"
+              '';
+            };
+
+            nemo-vscode-extension-vsix =
+              (inputs.nemo-vscode-extension.packages.${system}.nemo-vscode-extension-vsix.extendModules {
+                modules = [
+                  {
+                    deps = {
+                      inherit nemo-wasm-web;
+                    };
+                  }
+                ];
+              }).config.public;
+
+            nemo-vscode-extension =
+              inputs.nemo-vscode-extension.packages.${system}.nemo-vscode-extension.overrideAttrs
+                (old: {
+                  src = "${nemo-vscode-extension-vsix}/nemo-${old.version}.vsix";
+                });
+
+            nemo-web =
+              (inputs.nemo-web.packages.${system}.nemo-web.extendModules {
+                modules = [
+                  {
+                    deps = {
+                      inherit nemo-wasm-web nemo-wasm-bundler nemo-vscode-extension-vsix;
+                    };
+                  }
+                ];
+              }).config.public;
+
+            inherit (inputs.nemo-doc.packages.${system}) nemo-doc;
+
+            default = nemo;
+          };
 
           apps = {
             nemo-web = utils.lib.mkApp {
               drv = pkgs.writeShellApplication {
                 name = "nemo-web-preview";
 
-                runtimeInputs = [
-                  pkgs.nodejs
-                ];
+                runtimeInputs = lib.attrValues { inherit (pkgs) nodejs; };
 
                 text = ''
                   cd "$(mktemp --directory)"
-                  cp -R ${self.packages.${pkgs.system}.nemo-web}/lib/node_modules/nemo-web/* .
+                  cp -R ${self.packages.${system}.nemo-web}/lib/node_modules/nemo-web/* .
                   mkdir wrapper
                   ln -s ../node_modules/vite/bin/vite.js wrapper/vite
                   export PATH="''${PATH}:wrapper"
@@ -355,27 +421,21 @@ rec {
               };
             };
 
-            nemo-doc = inputs.nemo-doc.apps.${pkgs.system}.nemo-doc-preview;
+            nemo-doc = inputs.nemo-doc.apps.${system}.nemo-doc-preview;
 
             ci-checks = utils.lib.mkApp {
               drv = pkgs.writeShellApplication {
                 name = "nemo-run-ci-checks";
 
-                runtimeInputs = pkgs.lib.concatLists [
-                  defaultBuildInputs
-                  defaultNativeBuildInputs
-                  [
-                    pkgs.python3
-                    pkgs.python3Packages.pycodestyle
-                    pkgs.maturin
-                    pkgs.wasm-pack
-                    pkgs.wasm-bindgen-cli
-                  ]
+                runtimeInputs = lib.concatLists [
+                  self.devShells.${system}.default.buildInputs
+                  self.devShells.${system}.default.nativeBuildInputs
                 ];
 
                 text = ''
-                  export RUSTFLAGS"=-Dwarnings"
-                  export RUSTDOCFLAGS="-Dwarnings"
+                  export RUSTFLAGS"=--deny warnings"
+                  export RUSTDOCFLAGS="--deny warnings"
+                  export PYO3_PYTHON="${commonArgs.env.PYO3_PYTHON}"
 
                   if [[ ! -f "flake.nix" || ! -f "Cargo.toml" || ! -f "rust-toolchain.toml" ]]; then
                     echo "This should be run from the top-level of the nemo source tree."
@@ -383,7 +443,7 @@ rec {
                   fi
 
                   cargo test
-                  cargo clippy --all-targets
+                  cargo clippy --workspace --all-targets -- --deny warnings
                   cargo fmt --all -- --check
                   cargo doc --workspace
 
@@ -399,7 +459,7 @@ rec {
                     rm -rf "''${VENV}"
                   popd
 
-                  HOME=$TMPDIR wasm-pack build --weak-refs --mode=no-install nemo-wasm
+                  RUSTFLAGS="" wasm-pack build --weak-refs --mode=no-install nemo-wasm
 
                   cargo miri test
                 '';
@@ -419,28 +479,46 @@ rec {
               nemo-doc
               nemo-vscode-extension
               ;
-            devShell = devShells.default;
 
-            clippy = runCargo "nemo-check-clippy" ''
-              cargo clippy --all-targets
-            '';
+            clippy = crane.cargoClippy (
+              commonArgs
+              // {
+                pname = "nemo-cargo-workspace";
+                inherit cargoArtifacts;
+                cargoClippyExtraArgs = "--workspace --all-targets -- --deny warnings";
+              }
+            );
 
-            doc = runCargo "nemo-check-docs" ''
-              cargo doc --workspace
-            '';
+            doc = crane.cargoDoc (
+              commonArgs
+              // {
+                pname = "nemo-cargo-workspace";
+                inherit cargoArtifacts;
+                env.RUSTDOCFLAGS = "--deny warnings";
+                cargoDocExtraArgs = "--workspace";
+              }
+            );
 
-            fmt = runCargo "nemo-check-formatting" ''
-              cargo fmt --all -- --check
-            '';
+            fmt = crane.cargoFmt (
+              commonArgs
+              // {
+                pname = "nemo-cargo-workspace";
+              }
+            );
 
-            test = runCargo "nemo-check-tests" ''
-              cargo test
-            '';
+            test = crane.cargoTest (
+              commonArgs
+              // {
+                pname = "nemo-cargo-workspace";
+                inherit cargoArtifacts;
+                cargoTestExtraArgs = "--workspace --all-targets";
+              }
+            );
 
             python-codestyle =
               pkgs.runCommandLocal "nemo-check-python-codestyle"
                 {
-                  nativeBuildInputs = [ pkgs.python3Packages.pycodestyle ];
+                  nativeBuildInputs = [ pycodestyle ];
                 }
                 ''
                   mkdir $out
@@ -448,30 +526,47 @@ rec {
                 '';
           };
 
-          devShells.default = pkgs.mkShell {
+          devShells.default = crane.devShell {
+            checks = lib.filterAttrs (
+              name: _value:
+              builtins.elem name [
+                "nemo-web"
+                "nemo-doc"
+              ]
+            ) self.checks.${system};
+
             NMO_LOG = "debug";
-            RUST_LOG = "debug";
             RUST_BACKTRACE = 1;
             RUST_SRC_PATH = "${toolchain}/lib/rustlib/src/rust/library";
+            inherit (commonArgs.env) PYO3_PYTHON;
 
             shellHook = ''
               export PATH=''${HOME}/.cargo/bin''${PATH+:''${PATH}}
             '';
 
-            buildInputs = pkgs.lib.concatLists [
-              defaultBuildInputs
-              defaultNativeBuildInputs
-              [
-                pkgs.cargo-audit
-                pkgs.cargo-license
-                pkgs.cargo-tarpaulin
-                pkgs.gnuplot
-                pkgs.maturin
-                pkgs.python3
-                pkgs.wasm-pack
-                pkgs.wasm-bindgen-cli
-                pkgs.nodejs
-              ]
+            packages = lib.concatLists [
+              crateArgs.nativeBuildInputs
+              crateArgs.buildInputs
+
+              (lib.attrValues {
+                inherit
+                  python3
+                  pycodestyle
+                  ;
+                inherit (pkgs)
+                  cargo-audit
+                  cargo-license
+                  cargo-tarpaulin
+
+                  maturin
+                  binaryen
+                  wasm-bindgen-cli
+                  wasm-pack
+
+                  gnuplot
+                  nodejs
+                  ;
+              })
             ];
           };
 
