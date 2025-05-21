@@ -266,12 +266,12 @@
                     --target ${target} \
                     --weak-refs \
                     --mode=no-install \
-                    --out-dir=./lib/node_modules/nemo-wasm nemo-wasm
+                    --out-dir=$TMPDIR/lib/node_modules/nemo-wasm nemo-wasm
                 '';
 
                 installPhaseCommand = ''
                   mkdir -p $out
-                  cp -R ./lib $out/
+                  cp -R $TMPDIR/lib $out/
                 '';
 
                 buildInputs = (args.buildInputs or [ ]) ++ crateArgs.buildInputs;
