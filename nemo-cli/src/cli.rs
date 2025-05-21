@@ -1,9 +1,7 @@
 //! Contains structures and functionality for the binary
 use std::path::PathBuf;
 
-use nemo::{
-    error::Error, io::ExportManager, rule_model::components::term::primitive::ground::GroundTerm,
-};
+use nemo::{error::Error, execution::execution_parameters::ExportParameters, io::ExportManager};
 
 /// Default export directory.
 const DEFAULT_OUTPUT_DIRECTORY: &str = "results";
@@ -22,6 +20,18 @@ pub(crate) enum Exporting {
     Edb,
     /// Export all predicates.
     All,
+}
+
+impl Into<ExportParameters> for Exporting {
+    fn into(self) -> ExportParameters {
+        match self {
+            Exporting::Keep => ExportParameters::Keep,
+            Exporting::None => ExportParameters::None,
+            Exporting::Idb => ExportParameters::Idb,
+            Exporting::Edb => ExportParameters::Edb,
+            Exporting::All => ExportParameters::All,
+        }
+    }
 }
 
 /// Possible settings for the reporting option.
@@ -159,10 +169,13 @@ pub(crate) struct CliApp {
     pub(crate) parameters: Vec<ParamKeyValue>,
 }
 
+/// Key-Value pair for global variable
 #[derive(Debug, Clone)]
 pub(crate) struct ParamKeyValue {
+    /// Key: Global variable
     pub(crate) key: String,
-    pub(crate) value: GroundTerm,
+    /// Value
+    pub(crate) value: String,
 }
 
 impl clap::builder::ValueParserFactory for ParamKeyValue {
@@ -190,13 +203,9 @@ impl clap::builder::TypedValueParser for ParamKeyValueParser {
             return Err(clap::Error::new(clap::error::ErrorKind::InvalidValue).with_cmd(cmd));
         };
 
-        let Ok(value) = GroundTerm::parse(value) else {
-            return Err(clap::Error::new(clap::error::ErrorKind::InvalidValue).with_cmd(cmd));
-        };
-
         Ok(ParamKeyValue {
-            key: key.into(),
-            value,
+            key: key.to_owned(),
+            value: value.to_owned(),
         })
     }
 }

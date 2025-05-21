@@ -607,7 +607,7 @@ mod test {
                 rule::Rule,
                 term::primitive::{variable::Variable, Primitive},
             },
-            program::Program,
+            program::{Program, ProgramWrite},
             substitution::Substitution,
             translation::TranslationComponent,
         },

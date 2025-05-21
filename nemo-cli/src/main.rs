@@ -25,60 +25,19 @@ use std::fs::{read_to_string, File};
 use clap::Parser;
 use colored::Colorize;
 
-use cli::{CliApp, Exporting, ParamKeyValue, Reporting};
+use cli::{CliApp, Reporting};
 
 use error::CliError;
 use nemo::{
     error::Error,
-    execution::{DefaultExecutionEngine, ExecutionEngine},
+    execution::{
+        execution_parameters::ExecutionParameters, DefaultExecutionEngine, ExecutionEngine,
+    },
     io::{resource_providers::ResourceProviders, ImportManager},
     meta::timing::{TimedCode, TimedDisplay},
-    rule_model::{
-        self,
-        components::{
-            fact::Fact, import_export::ExportDirective, tag::Tag,
-            term::primitive::variable::global::GlobalVariable, ComponentBehavior,
-        },
-        error::ValidationErrorBuilder,
-        program::Program,
-    },
+    rule_file::RuleFile,
+    rule_model::components::{fact::Fact, ComponentBehavior},
 };
-
-fn default_export(predicate: Tag) -> ExportDirective {
-    ExportDirective::new_csv(predicate)
-}
-
-/// Set exports according to command-line parameter.
-/// This disables all existing exports.
-fn override_exports(program: &mut Program, value: Exporting) {
-    if value == Exporting::Keep {
-        return;
-    }
-
-    program.clear_exports();
-
-    let mut additional_exports = Vec::new();
-    match value {
-        Exporting::Idb => {
-            for predicate in program.derived_predicates() {
-                additional_exports.push(default_export(predicate));
-            }
-        }
-        Exporting::Edb => {
-            for predicate in program.import_predicates() {
-                additional_exports.push(default_export(predicate));
-            }
-        }
-        Exporting::All => {
-            for predicate in program.all_predicates() {
-                additional_exports.push(default_export(predicate));
-            }
-        }
-        Exporting::None => {}
-        Exporting::Keep => unreachable!("already checked above"),
-    }
-    program.add_exports(additional_exports);
-}
 
 /// Prints short summary message.
 fn print_finished_message(new_facts: usize, saving: bool) {
@@ -175,11 +134,7 @@ fn parse_trace_facts(cli: &CliApp) -> Result<Vec<String>, Error> {
 }
 
 /// Deal with tracing
-fn handle_tracing(
-    cli: &CliApp,
-    engine: &mut DefaultExecutionEngine,
-    program: Program,
-) -> Result<(), CliError> {
+fn handle_tracing(cli: &CliApp, engine: &mut DefaultExecutionEngine) -> Result<(), CliError> {
     let tracing_facts = parse_trace_facts(cli)?;
     if !tracing_facts.is_empty() {
         let mut facts = Vec::<Fact>::with_capacity(tracing_facts.len());
@@ -187,8 +142,7 @@ fn handle_tracing(
             let fact = Fact::parse(fact_string).map_err(|_| CliError::TracingInvalidFact {
                 fact: fact_string.clone(),
             })?;
-            let mut builder = ValidationErrorBuilder::default();
-            if fact.validate(&mut builder).is_none() {
+            if fact.validate().is_err() {
                 return Err(CliError::TracingInvalidFact {
                     fact: fact_string.clone(),
                 });
@@ -197,7 +151,7 @@ fn handle_tracing(
             facts.push(fact);
         }
 
-        let (trace, handles) = engine.trace(program, facts)?;
+        let (trace, handles) = engine.trace(facts)?;
 
         match &cli.tracing.output_file {
             Some(output_file) => {
@@ -234,58 +188,30 @@ fn run(mut cli: CliApp) -> Result<(), CliError> {
         return Err(CliError::MultipleFilesNotImplemented);
     }
 
-    let program_file = cli.rules.pop().ok_or(CliError::NoInput)?;
-    let program_filename = program_file.to_string_lossy().to_string();
-    let program_content =
-        read_to_string(program_file.clone()).map_err(|err| CliError::IoReading {
-            error: err,
-            filename: program_filename.clone(),
-        })?;
-
-    let program_ast = match nemo::parser::Parser::initialize(
-        &program_content,
-        program_filename.clone(),
-    )
-    .parse()
-    {
-        Ok(program) => program,
-        Err((_program, report)) => {
-            report.eprint()?;
-            return Err(CliError::ProgramParsing {
-                filename: program_filename.clone(),
-            });
-        }
-    };
-
-    let mut translation = rule_model::translation::ASTProgramTranslation::initialize(
-        &program_content,
-        program_filename.clone(),
-    );
-
-    // do not move out of cli.globals, since cli is needed in call to handle_tracing
-    for ParamKeyValue { key, value } in cli.parameters.drain(..) {
-        translation.add_external_parameter(GlobalVariable::new(&key), value);
-    }
-
-    let mut program = match translation.translate(&program_ast) {
-        Ok(program) => program,
-        Err(report) => {
-            report.eprint()?;
-            return Err(CliError::ProgramParsing {
-                filename: program_filename,
-            });
-        }
-    };
-    override_exports(&mut program, cli.output.export_setting);
-    log::info!("Rules parsed");
+    let program_path = cli.rules.pop().ok_or(CliError::NoInput)?;
+    let program_file = RuleFile::load(program_path)?;
 
     let export_manager = cli.output.export_manager()?;
     let import_manager = ImportManager::new(ResourceProviders::with_base_path(
         cli.import_directory.clone(),
     ));
 
+    let mut execution_parameters = ExecutionParameters::default();
+    execution_parameters.set_export_parameters(cli.output.export_setting.into());
+    execution_parameters.set_import_manager(import_manager);
+
+    if let Err(parameter) = execution_parameters.set_global(
+        cli.parameters
+            .drain(..)
+            .map(|parameter| (parameter.key, parameter.value)),
+    ) {
+        return Err(CliError::InvalidParameter { parameter });
+    }
+
     let mut engine: DefaultExecutionEngine =
-        ExecutionEngine::initialize(program.clone(), import_manager)?;
+        ExecutionEngine::file(program_file, execution_parameters)?;
+
+    log::info!("Rules parsed");
 
     for (predicate, handler) in engine.exports() {
         export_manager.validate(&predicate, &handler)?;
@@ -344,7 +270,7 @@ fn run(mut cli: CliApp) -> Result<(), CliError> {
         print_memory_details(&engine);
     }
 
-    handle_tracing(&cli, &mut engine, program)
+    handle_tracing(&cli, &mut engine)
 }
 
 fn main() {
@@ -354,8 +280,13 @@ fn main() {
     log::info!("Version: {}", clap::crate_version!());
     log::debug!("Rule files: {:?}", cli.rules);
 
-    run(cli).unwrap_or_else(|err| {
-        log::error!("{} {err}", "error:".red().bold());
+    if let Err(error) = run(cli) {
+        if let CliError::NemoError(Error::ProgramReport(report)) = error {
+            let _ = report.eprint();
+        } else {
+            log::error!("{} {error}", "error:".red().bold());
+        }
+
         std::process::exit(1)
-    })
+    }
 }

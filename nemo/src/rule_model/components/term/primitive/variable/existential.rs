@@ -2,15 +2,21 @@
 
 use std::{fmt::Display, hash::Hash};
 
-use crate::rule_model::{
-    components::{
-        symbols::Symbols, ComponentBehavior, ComponentIdentity, ComponentSource, IterableComponent,
-        ProgramComponent, ProgramComponentKind,
+use crate::{
+    parser::ParserErrorReport,
+    rule_model::{
+        components::{
+            symbols::Symbols, ComponentBehavior, ComponentIdentity, ComponentSource,
+            IterableComponent, ProgramComponent, ProgramComponentKind,
+        },
+        error::{validation_error::ValidationError, ValidationReport},
+        origin::Origin,
+        pipeline::id::ProgramComponentId,
+        translation::{ProgramParseReport, TranslationComponent},
     },
-    error::{validation_error::ValidationError, ValidationReport},
-    origin::Origin,
-    pipeline::id::ProgramComponentId,
 };
+
+use super::Variable;
 
 /// Existentially quantified variable
 ///
@@ -33,6 +39,15 @@ impl ExistentialVariable {
             origin: Origin::default(),
             id: ProgramComponentId::default(),
             name: name.to_owned(),
+        }
+    }
+
+    /// Construct this object from a string.
+    pub fn parse(input: &str) -> Result<Self, ProgramParseReport> {
+        if let Variable::Existential(result) = Variable::parse(input)? {
+            Ok(result)
+        } else {
+            Err(ProgramParseReport::Parsing(ParserErrorReport::empty()))
         }
     }
 

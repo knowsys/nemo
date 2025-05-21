@@ -4,11 +4,13 @@ use std::collections::HashSet;
 
 use crate::rule_model::{
     components::{tag::Tag, ComponentIdentity},
+    error::ValidationReport,
     pipeline::{
         commit::ProgramCommit,
         state::{ExtendStatementKind, ExtendStatementValidity},
         ProgramPipeline,
     },
+    program::ProgramRead,
 };
 
 use super::ProgramTransformation;
@@ -16,18 +18,19 @@ use super::ProgramTransformation;
 /// Program transformation
 ///
 /// Removes any rule that is not needed in the output.
-#[derive(Debug)]
-pub struct TransformationActive {
-    /// Current commit
-    commit: ProgramCommit,
-}
+#[derive(Debug, Default, Clone, Copy)]
+pub struct TransformationActive {}
 
 impl ProgramTransformation for TransformationActive {
     fn keep(&self) -> ExtendStatementValidity {
         ExtendStatementValidity::Keep(ExtendStatementKind::Except(&ExtendStatementKind::Rule))
     }
 
-    fn apply(&mut self, pipeline: &ProgramPipeline) {
+    fn apply(
+        self,
+        commit: &mut ProgramCommit,
+        pipeline: &ProgramPipeline,
+    ) -> Result<(), ValidationReport> {
         let mut required = HashSet::<Tag>::new();
         let mut result = HashSet::new();
 
@@ -63,11 +66,9 @@ impl ProgramTransformation for TransformationActive {
         }
 
         for id in result {
-            self.commit.keep(id);
+            commit.keep(id);
         }
-    }
 
-    fn finalize(self) -> ProgramCommit {
-        self.commit
+        Ok(())
     }
 }

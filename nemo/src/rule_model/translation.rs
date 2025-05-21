@@ -9,26 +9,27 @@ pub(crate) mod literal;
 pub(crate) mod rule;
 mod term;
 
-use std::{collections::HashMap, ops::Range};
+use std::{collections::HashMap, fmt::Display, ops::Range};
 
 use attribute::{process_attributes, KnownAttributes};
 use directive::{handle_define_directive, handle_use_directive};
-use nom::InputLength;
 
 use crate::{
+    error::report::ProgramReport,
     parser::{
         ast::{self, ProgramAST},
         error::translate_error_tree,
         input::ParserInput,
         ParserErrorReport, ParserState,
     },
+    rule_file::RuleFile,
     util::bag::Bag,
 };
 
 use super::{
     components::{fact::Fact, rule::Rule, term::Term},
     error::{translation_error::TranslationError, TranslationReport},
-    program::Program,
+    program::ProgramWrite,
 };
 
 /// Object for handling the translation of the ast representation
@@ -42,9 +43,6 @@ pub struct ASTProgramTranslation {
 
     /// Attributes for the statement currently being translated
     statement_attributes: Bag<KnownAttributes, Vec<Term>>,
-
-    /// Current program
-    program: Program,
 
     /// Current error report
     report: TranslationReport,
@@ -73,10 +71,12 @@ impl ASTProgramTranslation {
     }
 
     /// Translate the given [ProgramAST] into a [Program].
-    pub fn translate<'a>(
+    pub fn translate<'a, Writer: ProgramWrite>(
         mut self,
         ast: &ast::program::Program<'a>,
-    ) -> Result<Program, TranslationReport> {
+    ) -> Result<Writer, TranslationReport> {
+        let mut program = Writer::default();
+
         // First, handle directives
         for statement in ast.statements() {
             if let ast::statement::StatementKind::Directive(directive) = statement.kind() {
@@ -91,16 +91,16 @@ impl ASTProgramTranslation {
             match statement.kind() {
                 ast::statement::StatementKind::Fact(fact) => {
                     if let Some(fact) = Fact::build_component(&mut self, fact) {
-                        self.program.add_fact(fact);
+                        program.add_fact(fact);
                     }
                 }
                 ast::statement::StatementKind::Rule(rule) => {
                     if let Some(rule) = Rule::build_component(&mut self, rule) {
-                        self.program.add_rule(rule);
+                        program.add_rule(rule);
                     }
                 }
                 ast::statement::StatementKind::Directive(directive) => {
-                    handle_use_directive(&mut self, directive);
+                    handle_use_directive(&mut self, directive, &mut program);
                 }
                 ast::statement::StatementKind::Error(_token) => {
                     panic!(
@@ -112,7 +112,7 @@ impl ASTProgramTranslation {
             self.statement_attributes.clear();
         }
 
-        self.report.result_value(self.program)
+        self.report.result_value(program)
     }
 
     /// Recreate the name from a [ast::tag::structure::StructureTag]
@@ -153,11 +153,42 @@ impl ASTProgramTranslation {
 /// Errors due to either parsing a program
 /// or translating the resulting AST
 #[derive(Debug)]
-pub enum ComponentParseReport {
+pub enum ProgramParseReport {
     /// Error while parsing
     Parsing(ParserErrorReport),
     /// Error while translating the AST
     Translation(TranslationReport),
+}
+
+impl Display for ProgramParseReport {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ProgramParseReport::Parsing(report) => report.fmt(f),
+            ProgramParseReport::Translation(report) => report.fmt(f),
+        }
+    }
+}
+
+impl ProgramParseReport {
+    /// Convert this report into a [ProgramReport]
+    pub fn program_report(self, program: RuleFile) -> ProgramReport {
+        match self {
+            ProgramParseReport::Parsing(report) => report.program_report(program),
+            ProgramParseReport::Translation(report) => report.program_report(program),
+        }
+    }
+}
+
+impl From<ParserErrorReport> for ProgramParseReport {
+    fn from(value: ParserErrorReport) -> Self {
+        ProgramParseReport::Parsing(value)
+    }
+}
+
+impl From<TranslationReport> for ProgramParseReport {
+    fn from(value: TranslationReport) -> Self {
+        ProgramParseReport::Translation(value)
+    }
 }
 
 /// Trait implemented by program components
@@ -172,22 +203,18 @@ pub(crate) trait TranslationComponent: Sized {
     ) -> Option<Self>;
 
     /// Construct this object from a string.
-    fn parse(input: &str) -> Result<Self, ComponentParseReport> {
+    fn parse(input: &str) -> Result<Self, ProgramParseReport> {
         let parser_input = ParserInput::new(input, ParserState::default());
 
-        let (tail, ast) = Self::Ast::parse(parser_input).map_err(|error| {
-            ComponentParseReport::Parsing(ParserErrorReport::from(translate_error_tree(&error)))
+        let (_tail, ast) = Self::Ast::parse(parser_input).map_err(|error| {
+            ProgramParseReport::Parsing(ParserErrorReport::from(translate_error_tree(&error)))
         })?;
-
-        if tail.input_len() != 0 {
-            panic!("parsing should always succeed");
-        }
 
         let mut translation = ASTProgramTranslation::default();
 
         match Self::build_component(&mut translation, &ast) {
             Some(component) => Ok(component),
-            None => Err(ComponentParseReport::Translation(translation.report)),
+            None => Err(ProgramParseReport::Translation(translation.report)),
         }
     }
 }

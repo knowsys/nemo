@@ -2,11 +2,13 @@
 
 use crate::rule_model::{
     components::{rule::Rule, ComponentIdentity},
+    error::ValidationReport,
     pipeline::{
         commit::ProgramCommit,
         state::{ExtendStatementKind, ExtendStatementValidity},
         ProgramPipeline,
     },
+    program::ProgramRead,
 };
 
 use super::ProgramTransformation;
@@ -15,32 +17,31 @@ use super::ProgramTransformation;
 ///
 /// Replaces each occurrence of a global variable
 /// with the term it evaluates to.
-#[derive(Debug)]
-pub struct TransformationSplitRule {
-    /// Current commit
-    commit: ProgramCommit,
-}
+#[derive(Debug, Clone, Copy)]
+pub struct TransformationSplitRule {}
 
 impl ProgramTransformation for TransformationSplitRule {
     fn keep(&self) -> ExtendStatementValidity {
         ExtendStatementValidity::Keep(ExtendStatementKind::All)
     }
 
-    fn apply(&mut self, pipeline: &ProgramPipeline) {
+    fn apply(
+        self,
+        commit: &mut ProgramCommit,
+        pipeline: &ProgramPipeline,
+    ) -> Result<(), ValidationReport> {
         for rule in pipeline.rules() {
             if rule.head().len() > 1 {
-                self.commit.delete(rule.id());
+                commit.delete(rule.id());
 
                 for head in rule.head() {
                     let new_rule = Rule::new(vec![head.clone()], rule.body().clone());
 
-                    self.commit.add_rule(new_rule);
+                    commit.add_rule(new_rule);
                 }
             }
         }
-    }
 
-    fn finalize(self) -> ProgramCommit {
-        self.commit
+        Ok(())
     }
 }

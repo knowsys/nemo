@@ -2,11 +2,13 @@ mod lsp_component;
 mod nemo_position;
 mod token_type;
 
-use nemo::rule_model::translation::ProgramErrorReport;
-use std::collections::{BTreeMap, BTreeSet, HashMap};
-use std::fmt::Write;
+use lsp_document::{IndexedText, TextAdapter, TextMap};
+use nemo::api::load_program;
+use nemo::error::context::ContextError;
+use std::collections::HashMap;
 use std::vec;
 use strum::IntoEnumIterator;
+use tower_lsp::{Client, LanguageServer};
 
 use anyhow::anyhow;
 use futures::lock::Mutex;
@@ -15,14 +17,15 @@ use lsp_component::LSPComponent;
 use nemo::parser::ast::program::Program;
 use nemo::parser::ast::ProgramAST;
 use nemo::parser::context::ParserContext;
-use nemo::parser::span::{CharacterPosition, CharacterRange};
+use nemo::parser::span::CharacterPosition;
 use nemo::parser::{Parser, ParserErrorReport};
 use nemo_position::{
     lsp_position_to_nemo_position, nemo_range_to_lsp_range, PositionConversionError,
 };
 use token_type::TokenType;
 use tower_lsp::lsp_types::{
-    Diagnostic, DidChangeTextDocumentParams, DidOpenTextDocumentParams, DocumentChangeOperation,
+    self, Diagnostic, DiagnosticRelatedInformation, DiagnosticSeverity,
+    DidChangeTextDocumentParams, DidOpenTextDocumentParams, DocumentChangeOperation,
     DocumentChanges, DocumentSymbol, DocumentSymbolOptions, DocumentSymbolParams,
     DocumentSymbolResponse, InitializeParams, InitializeResult, InitializedParams, Location,
     MessageType, OneOf, OptionalVersionedTextDocumentIdentifier, Position, PrepareRenameResponse,
@@ -32,7 +35,6 @@ use tower_lsp::lsp_types::{
     TextDocumentPositionParams, TextDocumentSyncCapability, TextDocumentSyncKind, TextEdit, Url,
     VersionedTextDocumentIdentifier, WorkDoneProgressOptions, WorkspaceEdit,
 };
-use tower_lsp::{Client, LanguageServer};
 
 #[derive(Debug)]
 pub struct Backend {
@@ -54,7 +56,9 @@ struct TextDocumentInfo {
 }
 
 /// Converts a source position to a LSP position
-pub(crate) fn line_col_to_lsp_position(
+///
+/// TODO: May be obsolete
+pub(crate) fn _line_col_to_lsp_position(
     line_index: &LineIndex,
     line_col: LineCol,
 ) -> Result<tower_lsp::lsp_types::Position, PositionConversionError> {
@@ -86,6 +90,72 @@ impl Backend {
         }
     }
 
+    fn create_diagnostic(
+        text_index: &IndexedText<&str>,
+        url: &Url,
+        error: &ContextError,
+        severity: DiagnosticSeverity,
+    ) -> Option<Diagnostic> {
+        let range = text_index
+            .range_to_lsp_range(&text_index.offset_range_to_range(error.diagnostic().range())?)?;
+        let mut message = error.diagnostic().message().to_owned();
+
+        for hint in error.hints() {
+            message += &format!("\n{hint}");
+        }
+
+        if let Some(note) = error.note() {
+            message += &format!("\n{note}");
+        }
+
+        let mut related_information = Vec::<DiagnosticRelatedInformation>::new();
+        for context in error.context() {
+            let range = text_index
+                .range_to_lsp_range(&text_index.offset_range_to_range(context.range())?)?;
+
+            related_information.push(DiagnosticRelatedInformation {
+                location: Location {
+                    uri: url.clone(),
+                    range: Range {
+                        start: Position {
+                            line: range.start.line,
+                            character: range.start.character,
+                        },
+                        end: Position {
+                            line: range.end.line,
+                            character: range.end.character,
+                        },
+                    },
+                },
+                message: context.message().to_owned(),
+            });
+        }
+
+        let related_information = if !related_information.is_empty() {
+            Some(related_information)
+        } else {
+            None
+        };
+
+        Some(Diagnostic {
+            message,
+            range: Range {
+                start: Position {
+                    line: range.start.line,
+                    character: range.start.character,
+                },
+                end: Position {
+                    line: range.end.line,
+                    character: range.end.character,
+                },
+            },
+            severity: Some(severity),
+            code: Some(lsp_types::NumberOrString::Number(error.code() as i32)),
+            related_information,
+            ..Default::default()
+        })
+    }
+
     /// Parses the Nemo Program and returns errors with their respective positions
     async fn handle_change(
         &self,
@@ -100,98 +170,35 @@ impl Backend {
             },
         );
 
-        let line_index = LineIndex::new(text);
+        let text_index = lsp_document::IndexedText::new(text);
 
-        let (program, parse_errors): (Program, Option<ParserErrorReport>) =
-            Parser::initialize(text, text_document.uri.to_string())
-                .parse()
-                .map(|prg| (prg, None))
-                .unwrap_or_else(|(prg, err)| (*prg, Some(err)));
+        let label = text_document.uri.to_string();
 
-        let translation_result: Option<
-            Result<nemo::rule_model::program::Program, ProgramErrorReport>,
-        > = parse_errors.is_none().then(|| {
-            nemo::rule_model::translation::ASTProgramTranslation::initialize(
-                text,
-                text_document.uri.to_string(),
-            )
-            .translate(&program)
-        });
+        let mut diagnostics = Vec::<Diagnostic>::new();
 
-        // Group errors by position and deduplicate error
-        let mut errors_by_posision: BTreeMap<CharacterRange, BTreeSet<String>> = BTreeMap::new();
-        for error in parse_errors.iter().flat_map(|report| report.errors()) {
-            if let Some(set) = errors_by_posision.get_mut(&CharacterRange::from(error.position)) {
-                set.insert(error.to_string());
-            } else {
-                errors_by_posision.insert(
-                    CharacterRange::from(error.position),
-                    std::iter::once(error.to_string()).collect(),
-                );
-            };
+        if let Err(report) = load_program(text.to_owned(), label) {
+            for warning in report.warnings() {
+                if let Some(diagnostic) = Self::create_diagnostic(
+                    &text_index,
+                    &text_document.uri,
+                    warning,
+                    DiagnosticSeverity::WARNING,
+                ) {
+                    diagnostics.push(diagnostic);
+                }
+            }
+
+            for error in report.errors() {
+                if let Some(diagnostic) = Self::create_diagnostic(
+                    &text_index,
+                    &text_document.uri,
+                    error,
+                    DiagnosticSeverity::ERROR,
+                ) {
+                    diagnostics.push(diagnostic);
+                }
+            }
         }
-
-        // if let Some(Err(program_error_report)) = translation_result {
-        //     for error in program_error_report.errors() {
-        //         let range_opt = error.character_range(|origin| {
-        //             program_error_report
-        //                 .origin_map()
-        //                 .get(origin)
-        //                 .map(|node| node.span().range())
-        //         });
-        //         let Some(range) = range_opt else {
-        //             continue;
-        //         };
-
-        //         let message = format!(
-        //             "{}{}{}",
-        //             error.message(),
-        //             error
-        //                 .note()
-        //                 .map(|n| format!("\nNote: {n}"))
-        //                 .unwrap_or("".to_string()),
-        //             error.hints().iter().fold(String::new(), |mut acc, h| {
-        //                 let _ = write!(acc, "\nHint: {h}");
-        //                 acc
-        //             })
-        //         );
-
-        //         if let Some(set) = errors_by_posision.get_mut(&range) {
-        //             set.insert(message);
-        //         } else {
-        //             errors_by_posision.insert(range, std::iter::once(message).collect());
-        //         };
-        //     }
-        // }
-
-        let diagnostics = errors_by_posision
-            .into_iter()
-            .map(|(range, error_set)| {
-                Ok(Diagnostic {
-                    message: error_set.into_iter().collect::<Vec<_>>().join("\n\n"),
-                    range: Range::new(
-                        line_col_to_lsp_position(
-                            &line_index,
-                            LineCol {
-                                line: range.start.line - 1,
-                                col: range.start.column - 1,
-                            },
-                        )
-                        .unwrap(),
-                        line_col_to_lsp_position(
-                            &line_index,
-                            LineCol {
-                                line: range.end.line - 1,
-                                col: range.end.column - 1,
-                            },
-                        )
-                        .unwrap(),
-                    ),
-                    ..Default::default()
-                })
-            })
-            .filter_map(|result: Result<_, PositionConversionError>| result.ok())
-            .collect();
 
         self.client
             .publish_diagnostics(
@@ -324,13 +331,10 @@ impl LanguageServer for Backend {
                 .map_err(Into::into)
                 .map_err(jsonrpc_error)?;
 
-        let (program, _): (Program, Option<ParserErrorReport>) = Parser::initialize(
-            &text,
-            params.text_document_position.text_document.uri.to_string(),
-        )
-        .parse()
-        .map(|prg| (prg, None))
-        .unwrap_or_else(|(prg, err)| (*prg, Some(err)));
+        let (program, _): (Program, Option<ParserErrorReport>) = Parser::initialize(&text)
+            .parse()
+            .map(|prg| (prg, None))
+            .unwrap_or_else(|(prg, err)| (*prg, Some(err)));
 
         let node_path = find_in_ast(&program, position);
 
@@ -373,11 +377,10 @@ impl LanguageServer for Backend {
         let text = info.text;
         let line_index = LineIndex::new(&text);
 
-        let (program, _): (Program, Option<ParserErrorReport>) =
-            Parser::initialize(&text, params.text_document.uri.to_string())
-                .parse()
-                .map(|prg| (prg, None))
-                .unwrap_or_else(|(prg, err)| (*prg, Some(err)));
+        let (program, _): (Program, Option<ParserErrorReport>) = Parser::initialize(&text)
+            .parse()
+            .map(|prg| (prg, None))
+            .unwrap_or_else(|(prg, err)| (*prg, Some(err)));
 
         let document_symbols = ast_node_to_document_symbol(&line_index, &program)
             .map_err(Into::into)
@@ -401,11 +404,10 @@ impl LanguageServer for Backend {
         let text = info.text;
         let line_index = LineIndex::new(&text);
 
-        let (program, _): (Program, Option<ParserErrorReport>) =
-            Parser::initialize(&text, params.text_document.uri.to_string())
-                .parse()
-                .map(|prg| (prg, None))
-                .unwrap_or_else(|(prg, err)| (*prg, Some(err)));
+        let (program, _): (Program, Option<ParserErrorReport>) = Parser::initialize(&text)
+            .parse()
+            .map(|prg| (prg, None))
+            .unwrap_or_else(|(prg, err)| (*prg, Some(err)));
 
         let token_types_with_ranges = ast_node_to_semantic_tokens(&line_index, &program);
 
@@ -454,13 +456,10 @@ impl LanguageServer for Backend {
                 .map_err(Into::into)
                 .map_err(jsonrpc_error)?;
 
-        let (program, _): (Program, Option<ParserErrorReport>) = Parser::initialize(
-            &text,
-            params.text_document_position.text_document.uri.to_string(),
-        )
-        .parse()
-        .map(|prg| (prg, None))
-        .unwrap_or_else(|(prg, err)| (*prg, Some(err)));
+        let (program, _): (Program, Option<ParserErrorReport>) = Parser::initialize(&text)
+            .parse()
+            .map(|prg| (prg, None))
+            .unwrap_or_else(|(prg, err)| (*prg, Some(err)));
 
         let node_path = find_in_ast(&program, position);
 
@@ -521,11 +520,10 @@ impl LanguageServer for Backend {
             .map_err(Into::into)
             .map_err(jsonrpc_error)?;
 
-        let (program, _): (Program, Option<ParserErrorReport>) =
-            Parser::initialize(&text, params.text_document.uri.to_string())
-                .parse()
-                .map(|prg| (prg, None))
-                .unwrap_or_else(|(prg, err)| (*prg, Some(err)));
+        let (program, _): (Program, Option<ParserErrorReport>) = Parser::initialize(&text)
+            .parse()
+            .map(|prg| (prg, None))
+            .unwrap_or_else(|(prg, err)| (*prg, Some(err)));
 
         let node_path = find_in_ast(&program, position);
 

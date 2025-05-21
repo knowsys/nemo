@@ -12,11 +12,13 @@ use crate::rule_model::{
         },
         ComponentIdentity, IterableVariables,
     },
+    error::ValidationReport,
     pipeline::{
         commit::ProgramCommit,
         state::{ExtendStatementKind, ExtendStatementValidity},
         ProgramPipeline,
     },
+    program::ProgramRead,
 };
 
 use super::ProgramTransformation;
@@ -24,11 +26,8 @@ use super::ProgramTransformation;
 /// Program transformation
 ///
 /// Replaces each existential variable with skolem terms.
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 pub struct TransformationSkolemize {
-    /// Current commit
-    commit: ProgramCommit,
-
     /// Skolem function counter
     skolem_count: usize,
 }
@@ -38,7 +37,11 @@ impl ProgramTransformation for TransformationSkolemize {
         ExtendStatementValidity::Keep(ExtendStatementKind::All)
     }
 
-    fn apply(&mut self, pipeline: &ProgramPipeline) {
+    fn apply(
+        mut self,
+        commit: &mut ProgramCommit,
+        pipeline: &ProgramPipeline,
+    ) -> Result<(), ValidationReport> {
         for rule in pipeline.rules() {
             let head_variables = || rule.head().iter().flat_map(|atom| atom.variables());
             if !head_variables().any(|variable| variable.is_existential()) {
@@ -77,11 +80,9 @@ impl ProgramTransformation for TransformationSkolemize {
                 }
             }
 
-            self.commit.delete(rule.id());
+            commit.delete(rule.id());
         }
-    }
 
-    fn finalize(self) -> ProgramCommit {
-        self.commit
+        Ok(())
     }
 }

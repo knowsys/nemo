@@ -334,7 +334,7 @@ impl<B: FormatBuilder> Parameters<B> {
     }
 
     pub(crate) fn validate(
-        mut spec: ImportExportSpec,
+        spec: &ImportExportSpec,
         bindings: &[Operation],
         direction: Direction,
     ) -> Result<Self, ValidationReport> {
@@ -342,7 +342,7 @@ impl<B: FormatBuilder> Parameters<B> {
 
         let Ok(format_tag) = B::Tag::from_str(spec.format().name()) else {
             report.add(
-                &spec,
+                spec,
                 ValidationError::ImportExportFileFormatUnknown {
                     format: spec.format().name().to_owned(),
                 },
@@ -350,6 +350,7 @@ impl<B: FormatBuilder> Parameters<B> {
             return Err(report);
         };
 
+        let mut spec = spec.clone();
         let substitution = Self::build_substitution(bindings)?;
         substitution.apply(&mut spec);
 
@@ -467,7 +468,7 @@ impl ImportExportBuilder {
 
     fn new_with_tag<B: FormatBuilder>(
         tag: B::Tag,
-        spec: ImportExportSpec,
+        spec: &ImportExportSpec,
         bindings: &[Operation],
         direction: Direction,
     ) -> Result<ImportExportBuilder, ValidationReport> {
@@ -578,14 +579,14 @@ impl ImportExportBuilder {
 
     /// Create a new [ImportExportBuilder].
     pub(crate) fn new(
-        spec: ImportExportSpec,
+        spec: &ImportExportSpec,
         bindings: &[Operation],
         direction: Direction,
     ) -> Result<Self, ValidationReport> {
         let format_tag = spec.format().name().to_owned();
         let Ok(tag) = format_tag.parse::<SupportedFormatTag>() else {
             return Err(ValidationReport::single(
-                &spec,
+                spec,
                 ValidationError::ImportExportFileFormatUnknown {
                     format: format_tag.to_string(),
                 },

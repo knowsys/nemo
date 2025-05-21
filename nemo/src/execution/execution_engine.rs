@@ -22,12 +22,14 @@ use crate::{
     error::Error,
     execution::{planning::plan_tracing::TracingStrategy, tracing::trace::TraceDerivation},
     io::{formats::Export, import_manager::ImportManager},
+    rule_file::RuleFile,
     rule_model::{
         components::{
             fact::Fact,
             tag::Tag,
             term::primitive::{ground::GroundTerm, variable::Variable, Primitive},
         },
+        pipeline::{transformations::default::TransformationDefault, ProgramPipeline},
         program::Program,
         substitution::Substitution,
     },
@@ -35,6 +37,7 @@ use crate::{
 };
 
 use super::{
+    execution_parameters::ExecutionParameters,
     rule_execution::RuleExecution,
     selection_strategy::strategy::RuleSelectionStrategy,
     tracing::{
@@ -65,33 +68,60 @@ impl RuleInfo {
 /// Object which handles the evaluation of the program.
 #[derive(Debug)]
 pub struct ExecutionEngine<RuleSelectionStrategy> {
+    /// Logical program
+    nemo_program: Program,
+
+    /// Normalized program
     program: ChaseProgram,
+    /// Auxillary information for `program`
     analysis: ProgramAnalysis,
 
+    /// The picked selection strategy for rules
     rule_strategy: RuleSelectionStrategy,
 
-    #[allow(dead_code)]
-    input_manager: ImportManager,
+    /// Management of tables that represent predicates
     table_manager: TableManager,
 
+    /// Stores for each predicate the number of subtables
     predicate_fragmentation: HashMap<Tag, usize>,
+    /// Stores for each predicate the step up until subtables have been combined
     predicate_last_union: HashMap<Tag, usize>,
 
+    /// For each rule in `program` additional information
     rule_infos: Vec<RuleInfo>,
+    /// For each step the rule index of the applied rule
     rule_history: Vec<usize>,
+    /// Current step
     current_step: usize,
 }
 
 impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
+    /// Initialize a [ExecutionEngine] by parsing and translating
+    /// the contents of the given file.
+    pub fn file(file: RuleFile, parameters: ExecutionParameters) -> Result<Self, Error> {
+        let import_manager = parameters.import_manager.clone();
+
+        let mut pipeline = match ProgramPipeline::file(&file) {
+            Ok(pipeline) => pipeline,
+            Err(errors) => return Err(errors.program_report(file).into()),
+        };
+
+        pipeline
+            .apply_transformation(TransformationDefault::new(parameters))
+            .map_err(|errors| errors.program_report_pipeline(file, &pipeline))?;
+
+        Self::initialize(pipeline.finalize(), import_manager)
+    }
+
     /// Initialize [ExecutionEngine].
-    pub fn initialize(program: Program, input_manager: ImportManager) -> Result<Self, Error> {
-        let chase_program = ProgramChaseTranslation::new().translate(program);
+    pub fn initialize(program: Program, import_manager: ImportManager) -> Result<Self, Error> {
+        let chase_program = ProgramChaseTranslation::new().translate(program.clone());
         let analysis = chase_program.analyze();
 
         let mut table_manager = TableManager::new();
         Self::register_all_predicates(&mut table_manager, &analysis);
         Self::add_all_constants(&mut table_manager, &chase_program);
-        Self::add_imports(&mut table_manager, &input_manager, &chase_program)?;
+        Self::add_imports(&mut table_manager, &import_manager, &chase_program)?;
 
         let mut rule_infos = Vec::<RuleInfo>::new();
         chase_program
@@ -105,10 +135,10 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         )?;
 
         Ok(Self {
+            nemo_program: program,
             program: chase_program,
             analysis,
             rule_strategy,
-            input_manager,
             table_manager,
             predicate_fragmentation: HashMap::new(),
             predicate_last_union: HashMap::new(),
@@ -136,14 +166,14 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
     /// based on the import declaration of the given progam.
     fn add_imports(
         table_manager: &mut TableManager,
-        input_manager: &ImportManager,
+        import_manager: &ImportManager,
         program: &ChaseProgram,
     ) -> Result<(), Error> {
         let mut predicate_to_sources = HashMap::<Tag, Vec<TableSource>>::new();
 
         // Add all the import specifications
         for import in program.imports() {
-            let table_source = input_manager.table_provider_from_handler(import.handler())?;
+            let table_source = import_manager.table_provider_from_handler(import.handler())?;
 
             predicate_to_sources
                 .entry(import.predicate().clone())
@@ -479,7 +509,6 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
     /// TODO: Verify that Fact is ground
     pub fn trace(
         &mut self,
-        program: Program,
         facts: Vec<Fact>,
     ) -> Result<(ExecutionTrace, Vec<TraceFactHandle>), Error> {
         let chase_facts: Vec<_> = facts
@@ -487,7 +516,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
             .filter_map(|fact| ProgramChaseTranslation::new().build_fact(&fact))
             .collect();
 
-        let mut trace = ExecutionTrace::new(program);
+        let mut trace = ExecutionTrace::new(self.nemo_program.clone());
         let mut handles = Vec::new();
 
         for chase_fact in chase_facts {

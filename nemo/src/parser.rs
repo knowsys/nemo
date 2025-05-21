@@ -6,7 +6,7 @@ pub mod error;
 pub mod input;
 pub mod span;
 
-use std::{cell::RefCell, rc::Rc};
+use std::{cell::RefCell, fmt::Display, rc::Rc};
 
 use ast::{program::Program, ProgramAST};
 use error::{ParserError, ParserErrorTree};
@@ -14,7 +14,10 @@ use input::ParserInput;
 
 use nom::IResult;
 
-use crate::error::{context::ContextError, report::ProgramReport};
+use crate::{
+    error::{context::ContextError, report::ProgramReport},
+    rule_file::RuleFile,
+};
 
 /// State of the parser
 #[derive(Debug, Clone, Default)]
@@ -49,10 +52,31 @@ pub struct ParserErrorReport {
     errors: Vec<ParserError>,
 }
 
+impl Display for ParserErrorReport {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        for (index, error) in self.errors.iter().enumerate() {
+            if index > 0 {
+                writeln!(f)?;
+            }
+
+            write!(f, "{error}")?;
+        }
+
+        Ok(())
+    }
+}
+
 impl ParserErrorReport {
+    /// Construct an empty report, indicating there is some unspecified error.
+    pub fn empty() -> Self {
+        Self {
+            errors: Vec::default(),
+        }
+    }
+
     /// Convert this report to a [ProgramReport].
-    pub fn program_report(self) -> ProgramReport {
-        let mut report = ProgramReport::default();
+    pub fn program_report(self, program: RuleFile) -> ProgramReport {
+        let mut report = ProgramReport::new(program);
 
         for error in self.errors {
             let range = error.position.range();

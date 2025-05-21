@@ -5,14 +5,21 @@ use id::ProgramComponentId;
 use state::{ExtendStatementValidity, ProgramState};
 use transformations::ProgramTransformation;
 
-use super::components::{
-    atom::Atom,
-    fact::Fact,
-    import_export::{ExportDirective, ImportDirective},
-    output::Output,
-    parameter::ParameterDeclaration,
-    rule::Rule,
-    IterableComponent, ProgramComponent,
+use crate::{parser::Parser, rule_file::RuleFile, rule_model::translation::ASTProgramTranslation};
+
+use super::{
+    components::{
+        atom::Atom,
+        fact::Fact,
+        import_export::{ExportDirective, ImportDirective},
+        output::Output,
+        parameter::ParameterDeclaration,
+        rule::Rule,
+        IterableComponent, ProgramComponent,
+    },
+    error::ValidationReport,
+    program::{Program, ProgramRead, ProgramWrite},
+    translation::ProgramParseReport,
 };
 
 pub mod commit;
@@ -23,9 +30,6 @@ pub mod transformations;
 /// Big manager object
 #[derive(Debug)]
 pub struct ProgramPipeline {
-    /// Programs given as strings
-    _inputs: Vec<String>,
-
     /// Contains state of the program at every commit
     state: ProgramState,
 
@@ -33,14 +37,23 @@ pub struct ProgramPipeline {
     current_id: ProgramComponentId,
 }
 
-impl ProgramPipeline {
-    /// Create a new [ProgramPipeline].
-    pub fn new() -> Self {
+impl Default for ProgramPipeline {
+    fn default() -> Self {
         Self {
-            _inputs: Vec::default(),
             state: ProgramState::new(),
             current_id: ProgramComponentId::start(),
         }
+    }
+}
+
+impl ProgramPipeline {
+    /// Initilaize a [ProgramPipeline] with the contents of a given [RuleFile].
+    pub fn file(file: &RuleFile) -> Result<Self, ProgramParseReport> {
+        let parser = Parser::initialize(file.content());
+        let ast = parser.parse().map_err(|(_tail, report)| report)?;
+
+        let translation = ASTProgramTranslation::default();
+        Ok(translation.translate::<Self>(&ast)?)
     }
 }
 
@@ -72,7 +85,7 @@ impl ProgramPipeline {
     /// Search for the [ProgramComponent] with a given [ProgramComponentId].
     ///
     /// Returns `None` if there is no  [ProgramComponent] with that [ProgramComponentId].
-    fn find_component(&self, id: ProgramComponentId) -> Option<&dyn ProgramComponent> {
+    pub fn find_component(&self, id: ProgramComponentId) -> Option<&dyn ProgramComponent> {
         Self::find_child_component(&self.state, id)
     }
 
@@ -88,36 +101,6 @@ impl ProgramPipeline {
     pub fn atom_by_id(&self, id: ProgramComponentId) -> Option<&Atom> {
         self.find_component(id)
             .and_then(|component| component.try_as_ref())
-    }
-
-    /// Return an iterator over all active [Rule]s.
-    pub fn rules(&self) -> impl Iterator<Item = &Rule> {
-        self.state.rules()
-    }
-
-    /// Return an iterator over all active [Fact]s.
-    pub fn facts(&self) -> impl Iterator<Item = &Fact> {
-        self.state.facts()
-    }
-
-    /// Return an iterator over all active [ImportDirective]s.
-    pub fn imports(&self) -> impl Iterator<Item = &ImportDirective> {
-        self.state.imports()
-    }
-
-    /// Return an iterator over all active [ExportDirective]s.
-    pub fn exports(&self) -> impl Iterator<Item = &ExportDirective> {
-        self.state.exports()
-    }
-
-    /// Return an iterator over all active [Output]s.
-    pub fn outputs(&self) -> impl Iterator<Item = &Output> {
-        self.state.outputs()
-    }
-
-    /// Return an iterator over all active [ParameterDeclaration]s.
-    pub fn parameters(&self) -> impl Iterator<Item = &ParameterDeclaration> {
-        self.state.parameters()
     }
 }
 
@@ -238,9 +221,72 @@ impl ProgramPipeline {
     pub fn apply_transformation<Transformation: ProgramTransformation>(
         &mut self,
         transformation: Transformation,
-    ) {
+    ) -> Result<(), ValidationReport> {
         self.prepare(transformation.keep());
-        self.commit(transformation.finalize());
+
+        let mut commit = ProgramCommit::default();
+        transformation.apply(&mut commit, self)?;
+
+        self.commit(commit);
+
+        Ok(())
+    }
+
+    /// Return the currently valid program.
+    pub fn finalize(self) -> Program {
+        self.state.finalize()
+    }
+}
+
+impl ProgramWrite for ProgramPipeline {
+    fn add_export(&mut self, export: ExportDirective) {
+        self.add_export(export);
+    }
+
+    fn add_import(&mut self, import: ImportDirective) {
+        self.add_import(import);
+    }
+
+    fn add_output(&mut self, output: Output) {
+        self.add_output(output);
+    }
+
+    fn add_parameter_declaration(&mut self, parameter: ParameterDeclaration) {
+        self.add_parameter(parameter);
+    }
+
+    fn add_rule(&mut self, rule: Rule) {
+        self.add_rule(rule);
+    }
+
+    fn add_fact(&mut self, fact: Fact) {
+        self.add_fact(fact);
+    }
+}
+
+impl ProgramRead for ProgramPipeline {
+    fn imports(&self) -> impl Iterator<Item = &ImportDirective> {
+        self.state.imports()
+    }
+
+    fn exports(&self) -> impl Iterator<Item = &ExportDirective> {
+        self.state.exports()
+    }
+
+    fn rules(&self) -> impl Iterator<Item = &Rule> {
+        self.state.rules()
+    }
+
+    fn facts(&self) -> impl Iterator<Item = &Fact> {
+        self.state.facts()
+    }
+
+    fn outputs(&self) -> impl Iterator<Item = &Output> {
+        self.state.outputs()
+    }
+
+    fn parameters(&self) -> impl Iterator<Item = &ParameterDeclaration> {
+        self.state.parameters()
     }
 }
 
@@ -254,7 +300,7 @@ mod test {
 
     #[test]
     fn find_atom() {
-        let mut pipeline = ProgramPipeline::new();
+        let mut pipeline = ProgramPipeline::default();
 
         let head_atom = Atom::new("head".into(), vec![]);
         let body_atom = Atom::new("body".into(), vec![]);

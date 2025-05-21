@@ -9,9 +9,12 @@ use std::{
 use translation_error::TranslationError;
 use validation_error::ValidationError;
 
-use crate::error::{context::ContextError, report::ProgramReport, rich::RichError};
+use crate::{
+    error::{context::ContextError, report::ProgramReport, rich::RichError},
+    rule_file::RuleFile,
+};
 
-use super::{components::ComponentSource, origin::Origin};
+use super::{components::ComponentSource, origin::Origin, pipeline::ProgramPipeline};
 
 pub mod hint;
 pub mod info;
@@ -75,7 +78,7 @@ where
     }
 
     /// Add more context to the error.
-    pub fn add_context<Message: Display, Object: ComponentSource<Source = Source>>(
+    pub fn add_context<Message: Display, Object: ComponentSource<Source = Source> + ?Sized>(
         &mut self,
         object: &Object,
         message: Message,
@@ -123,6 +126,24 @@ where
 {
     /// List of errors
     errors: Vec<SourceError<Source, Error>>,
+}
+
+impl<Source, Error> Display for SourceErrorReport<Source, Error>
+where
+    Error: Debug + Display + RichError,
+    Source: Debug,
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        for (index, error) in self.errors.iter().enumerate() {
+            if index > 0 {
+                writeln!(f)?;
+            }
+
+            write!(f, "{}", error.error)?;
+        }
+
+        Ok(())
+    }
 }
 
 impl<Source, Error> Default for SourceErrorReport<Source, Error>
@@ -208,16 +229,31 @@ where
     }
 
     /// Translate this [ValidationReport] into a [ProgramReport].
-    pub fn program_report<Translation>(self, translation: Translation) -> ProgramReport
+    pub fn program_report<Translation>(
+        self,
+        program: RuleFile,
+        translation: Translation,
+    ) -> ProgramReport
     where
-        Translation: Fn(Source) -> Range<usize>,
+        Translation: Fn(Source) -> Option<Range<usize>>,
     {
-        let mut result = ProgramReport::default();
+        let mut result = ProgramReport::new(program);
 
         for error in self.errors {
             let is_warning = error.is_warning();
-            let context_error =
-                ContextError::new(error.error, translation(error.source)).add_hints(error.hints);
+            let Some(range) = translation(error.source) else {
+                continue;
+            };
+
+            let mut context_error = ContextError::new(error.error, range).add_hints(error.hints);
+
+            for context in error.context {
+                let Some(range) = translation(context.source) else {
+                    continue;
+                };
+
+                context_error.add_context(context.message, range);
+            }
 
             if is_warning {
                 result.add_warning(context_error);
@@ -231,6 +267,158 @@ where
 }
 
 /// Error that can occur because of incorrectly constructed program components
-pub type ValidationReport = SourceErrorReport<Origin, ValidationError>;
+#[derive(Debug, Default)]
+pub struct ValidationReport(SourceErrorReport<Origin, ValidationError>);
+
+impl Display for ValidationReport {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl ValidationReport {
+    /// Create a new report containing the given error.
+    pub fn single<Object: ComponentSource<Source = Origin>>(
+        object: &Object,
+        error: ValidationError,
+    ) -> Self {
+        Self(SourceErrorReport::single(object, error))
+    }
+
+    /// Add a new error to the report.
+    pub fn add<Object: ComponentSource<Source = Origin>>(
+        &mut self,
+        object: &Object,
+        error: ValidationError,
+    ) -> &mut SourceError<Origin, ValidationError> {
+        self.0.add(object, error)
+    }
+
+    /// Add a new error to the report by providing the source.
+    pub fn add_source(
+        &mut self,
+        source: Origin,
+        error: ValidationError,
+    ) -> &mut SourceError<Origin, ValidationError> {
+        self.0.add_source(source, error)
+    }
+
+    /// Convert this report into a [Result],
+    /// depending on whether it contains any errors.
+    pub fn result(self) -> Result<(), Self> {
+        self.0.result().map_err(|report| Self(report))
+    }
+
+    /// Convert this report into a [Result]
+    /// containing the given value or `self`
+    /// depending on whether it contains any errors.
+    pub fn result_value<Value>(self, value: Value) -> Result<Value, Self> {
+        self.0.result_value(value).map_err(|report| Self(report))
+    }
+
+    /// Merge another report given as a `Result`.
+    pub fn merge(&mut self, other: Result<(), Self>) {
+        self.0.merge(other.map_err(|report| report.0));
+    }
+
+    /// Merge another report.
+    pub fn merge_report(&mut self, other: Self) {
+        self.0.merge_report(other.0);
+    }
+
+    /// Return an iterator over all [ValidationError]s.
+    pub fn errors(&self) -> impl Iterator<Item = &ValidationError> {
+        self.0.errors()
+    }
+
+    /// Translate this [ValidationReport] into a [ProgramReport].
+    pub fn program_report(self, program: RuleFile) -> ProgramReport {
+        let translation = |origin: Origin| origin.to_range();
+
+        self.0.program_report(program, translation)
+    }
+
+    /// Translate this [ValidationReport] into a [ProgramReport]
+    /// using a [ProgramPipeline] for translating [Origin]s.
+    pub fn program_report_pipeline(
+        self,
+        program: RuleFile,
+        pipeline: &ProgramPipeline,
+    ) -> ProgramReport {
+        let translation = |origin: Origin| origin.to_range_pipeline(pipeline);
+
+        self.0.program_report(program, translation)
+    }
+}
+
 /// Error that can occur due to syntactically ill formed statements
-pub type TranslationReport = SourceErrorReport<Range<usize>, TranslationError>;
+#[derive(Debug, Default)]
+pub struct TranslationReport(SourceErrorReport<Range<usize>, TranslationError>);
+
+impl Display for TranslationReport {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl TranslationReport {
+    /// Create a new report containing the given error.
+    pub fn single<Object: ComponentSource<Source = Range<usize>>>(
+        object: &Object,
+        error: TranslationError,
+    ) -> Self {
+        Self(SourceErrorReport::single(object, error))
+    }
+
+    /// Add a new error to the report.
+    pub fn add<Object: ComponentSource<Source = Range<usize>>>(
+        &mut self,
+        object: &Object,
+        error: TranslationError,
+    ) -> &mut SourceError<Range<usize>, TranslationError> {
+        self.0.add(object, error)
+    }
+
+    /// Add a new error to the report by providing the source.
+    pub fn add_source(
+        &mut self,
+        source: Range<usize>,
+        error: TranslationError,
+    ) -> &mut SourceError<Range<usize>, TranslationError> {
+        self.0.add_source(source, error)
+    }
+
+    /// Convert this report into a [Result],
+    /// depending on whether it contains any errors.
+    pub fn result(self) -> Result<(), Self> {
+        self.0.result().map_err(|report| Self(report))
+    }
+
+    /// Convert this report into a [Result]
+    /// containing the given value or `self`
+    /// depending on whether it contains any errors.
+    pub fn result_value<Value>(self, value: Value) -> Result<Value, Self> {
+        self.0.result_value(value).map_err(|report| Self(report))
+    }
+
+    /// Merge another report given as a `Result`.
+    pub fn merge(&mut self, other: Result<(), Self>) {
+        self.0.merge(other.map_err(|report| report.0));
+    }
+
+    /// Merge another report.
+    pub fn merge_report(&mut self, other: Self) {
+        self.0.merge_report(other.0);
+    }
+
+    /// Return an iterator over all [TranslationError]s.
+    pub fn errors(&self) -> impl Iterator<Item = &TranslationError> {
+        self.0.errors()
+    }
+
+    /// Translate this [TranslationError] into a [ProgramReport].
+    pub fn program_report(self, program: RuleFile) -> ProgramReport {
+        let translation = |range| Some(range);
+        self.0.program_report(program, translation)
+    }
+}

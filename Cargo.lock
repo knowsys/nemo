@@ -1408,6 +1408,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "lsp-document"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "43590d4fd929e822de2ab109b9422467f1c547fe543be27e522b043c457dcb37"
+dependencies = [
+ "lsp-types 0.93.2",
+]
+
+[[package]]
+name = "lsp-types"
+version = "0.93.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9be6e9c7e2d18f651974370d7aff703f9513e0df6e464fd795660edc77e6ca51"
+dependencies = [
+ "bitflags 1.3.2",
+ "serde",
+ "serde_json",
+ "serde_repr",
+ "url",
+]
+
+[[package]]
 name = "lsp-types"
 version = "0.94.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1575,6 +1597,7 @@ dependencies = [
  "anyhow",
  "futures",
  "line-index",
+ "lsp-document",
  "nemo",
  "strum",
  "strum_macros",
@@ -2922,7 +2945,7 @@ dependencies = [
  "dashmap",
  "futures",
  "httparse",
- "lsp-types",
+ "lsp-types 0.94.1",
  "memchr",
  "serde",
  "serde_json",

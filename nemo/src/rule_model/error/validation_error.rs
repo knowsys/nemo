@@ -8,7 +8,7 @@ use thiserror::Error;
 use crate::{
     error::rich::RichError,
     rule_model::components::term::{
-        primitive::variable::{existential::ExistentialVariable, Variable},
+        primitive::variable::{existential::ExistentialVariable, global::GlobalVariable, Variable},
         Term,
     },
 };
@@ -219,11 +219,10 @@ pub enum ValidationError {
     #[error("parameter value `{term}` is not a ground term")]
     #[assoc(code = 239)]
     ImportExportParameterNotGround { term: Term },
-    /// Parameter declaration references undefined parameter
-    #[error("parameter value references an undefined global")]
+    /// Parameter definition is cyclic
+    #[error("circular definition of parameter `{variable}`")]
     #[assoc(code = 240)]
-    #[assoc(note = "parameters can only reference parameters defined earlier")]
-    ParameterDeclarationReferencesUndefinedGlobal,
+    ParameterDeclarationCyclic { variable: GlobalVariable },
     /// Parameter declaration has no definition
     #[error("undefined parameter")]
     #[assoc(
@@ -236,6 +235,10 @@ pub enum ValidationError {
     #[assoc(note = "parameter definitions may only use ground terms and global variables")]
     #[assoc(code = 242)]
     ParameterDeclarationNotGroundish,
+    /// parameter defined multiple types
+    #[error("parameter is defined multiple times")]
+    #[assoc(code = 243)]
+    ParameterRedefinition,
 
     /// Unsupported feature: Multiple aggregates in one rule
     #[error(r#"multiple aggregates in one rule is currently unsupported"#)]

@@ -14,6 +14,7 @@
     unused_extern_crates,
     variant_size_differences
 )]
+#![allow(incomplete_features)]
 #![feature(macro_metavar_expr)]
 #![feature(assert_matches)]
 #![feature(iter_intersperse)]
@@ -27,12 +28,12 @@ pub extern crate nemo_physical;
 
 pub mod api;
 pub mod error;
+pub mod execution;
 pub mod io;
 pub mod parser;
-pub mod syntax;
-
-pub mod execution;
+pub mod rule_file;
 pub mod rule_model;
+pub mod syntax;
 pub mod util;
 
 pub mod chase_model; // TODO: Make private

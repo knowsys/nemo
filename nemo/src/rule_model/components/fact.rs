@@ -12,6 +12,7 @@ use crate::{
         error::{hint::Hint, validation_error::ValidationError, ValidationReport},
         origin::Origin,
         pipeline::id::ProgramComponentId,
+        translation::{literal::HeadAtom, ProgramParseReport, TranslationComponent},
     },
 };
 
@@ -19,7 +20,10 @@ use super::{
     atom::Atom,
     component_iterator, component_iterator_mut,
     tag::Tag,
-    term::{primitive::Primitive, Term},
+    term::{
+        primitive::{variable::Variable, Primitive},
+        Term,
+    },
     ComponentBehavior, ComponentIdentity, ComponentSource, IterableComponent, IterablePrimitives,
     IterableVariables, ProgramComponent, ProgramComponentKind,
 };
@@ -49,10 +53,9 @@ impl Fact {
         }
     }
 
-    /// TODO:
-    pub fn parse(_input: &str) -> Result<Self, ()> {
-        // Ok(Fact::from(HeadAtom::parse(input)?.into_inner()))
-        todo!()
+    /// Construct this object from a string.
+    pub fn parse(input: &str) -> Result<Self, ProgramParseReport> {
+        Ok(Fact::from(HeadAtom::parse(input)?.into_inner()))
     }
 
     /// Return the predicate associated with this fact.
@@ -234,6 +237,16 @@ impl ComponentIdentity for Fact {
 
     fn set_id(&mut self, id: ProgramComponentId) {
         self.id = id;
+    }
+}
+
+impl IterableVariables for Fact {
+    fn variables<'a>(&'a self) -> Box<dyn Iterator<Item = &'a Variable> + 'a> {
+        Box::new(self.terms.iter().flat_map(|term| term.variables()))
+    }
+
+    fn variables_mut<'a>(&'a mut self) -> Box<dyn Iterator<Item = &'a mut Variable> + 'a> {
+        Box::new(self.terms.iter_mut().flat_map(|term| term.variables_mut()))
     }
 }
 

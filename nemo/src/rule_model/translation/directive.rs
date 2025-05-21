@@ -7,12 +7,14 @@ use crate::{
     rule_model::{
         components::{
             import_export::{ExportDirective, ImportDirective},
+            output::Output,
             parameter::ParameterDeclaration,
             tag::Tag,
             ComponentSource,
         },
         error::{info::Info, translation_error::TranslationError},
         origin::Origin,
+        program::ProgramWrite,
     },
 };
 
@@ -39,22 +41,23 @@ pub fn handle_define_directive<'a>(
 }
 
 /// Handle directive nodes that may use defined names.
-pub fn handle_use_directive<'a>(
+pub fn handle_use_directive<'a, Writer: ProgramWrite>(
     translation: &mut ASTProgramTranslation,
     directive: &ast::directive::Directive<'a>,
+    program: &mut Writer,
 ) {
     match directive {
         ast::directive::Directive::Export(export) => {
             if let Some(export_directive) = ExportDirective::build_component(translation, export) {
-                translation.program.add_export(export_directive);
+                program.add_export(export_directive);
             }
         }
         ast::directive::Directive::Import(import) => {
             if let Some(import_directive) = ImportDirective::build_component(translation, import) {
-                translation.program.add_import(import_directive);
+                program.add_import(import_directive);
             }
         }
-        ast::directive::Directive::Output(output) => handle_output(translation, output),
+        ast::directive::Directive::Output(output) => handle_output(translation, output, program),
         ast::directive::Directive::Unknown(unknown) => {
             handle_unknown_directive(translation, unknown)
         }
@@ -65,9 +68,7 @@ pub fn handle_use_directive<'a>(
             if let Some(parameter_declaration) =
                 ParameterDeclaration::build_component(translation, parameter)
             {
-                translation
-                    .program
-                    .add_paramater_declaration(parameter_declaration);
+                program.add_parameter_declaration(parameter_declaration);
             }
         }
     }
@@ -109,15 +110,14 @@ fn handle_declare<'a>(
 }
 
 /// Handle output directives.
-fn handle_output<'a>(
+fn handle_output<'a, Writer: ProgramWrite>(
     translation: &mut ASTProgramTranslation,
     output: &ast::directive::output::Output<'a>,
+    program: &mut Writer,
 ) {
     for predicate in output.predicates() {
         if let Some(tag) = translation.resolve_tag(predicate) {
-            translation
-                .program
-                .add_output(Origin::ast(Tag::new(tag), predicate));
+            program.add_output(Output::new(Origin::ast(Tag::new(tag), predicate)));
         }
     }
 }

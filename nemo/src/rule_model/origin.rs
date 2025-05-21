@@ -1,10 +1,12 @@
 //! This module defines [Origin].
 
+use std::ops::Range;
+
 use crate::parser::ast::ProgramAST;
 
 use super::{
-    components::{rule::Rule, ComponentDuplicate, ComponentSource, ProgramComponent},
-    pipeline::id::ProgramComponentId,
+    components::{ComponentSource, ProgramComponent},
+    pipeline::{id::ProgramComponentId, ProgramPipeline},
 };
 
 /// Origin of a [super::components::ProgramComponent]
@@ -51,11 +53,28 @@ impl Origin {
         component
     }
 
-    /// Create an [Origin] that ... combination
-    pub fn rule_combination(first: &Rule, second: &Rule) -> Self {
-        let first_origin = first.duplicated_origin();
-        let second_origin = second.duplicated_origin();
+    /// Translate [Origin] into a range of characters,
+    /// if it the component originated from parsing a file.
+    pub fn to_range(&self) -> Option<Range<usize>> {
+        if let Self::File { start, end } = self {
+            Some(*start..*end)
+        } else {
+            None
+        }
+    }
 
-        Self::RuleCombination(Box::new(first_origin), Box::new(second_origin))
+    /// Translate [Origin] into a range of characters,
+    /// if it the component originated from parsing a file.
+    pub fn to_range_pipeline(&self, pipeline: &ProgramPipeline) -> Option<Range<usize>> {
+        match self {
+            Origin::Created => None,
+            Origin::File { start, end } => Some(*start..*end),
+            Origin::Reference(id) => pipeline
+                .find_component(*id)?
+                .origin()
+                .to_range_pipeline(pipeline),
+            Origin::Component(component) => component.origin().to_range_pipeline(pipeline),
+            Origin::RuleCombination(first, _second) => first.to_range_pipeline(pipeline),
+        }
     }
 }

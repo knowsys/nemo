@@ -4,15 +4,19 @@ use std::{fmt::Display, hash::Hash};
 
 use nemo_physical::datavalues::{AnyDataValue, DataValue, IriDataValue, ValueDomain};
 
-use crate::rule_model::{
-    components::{
-        term::{value_type::ValueType, Term},
-        ComponentBehavior, ComponentIdentity, ComponentSource, IterableComponent, ProgramComponent,
-        ProgramComponentKind,
+use crate::{
+    parser::ParserErrorReport,
+    rule_model::{
+        components::{
+            term::{value_type::ValueType, Term},
+            ComponentBehavior, ComponentIdentity, ComponentSource, IterableComponent,
+            ProgramComponent, ProgramComponentKind,
+        },
+        error::ValidationReport,
+        origin::Origin,
+        pipeline::id::ProgramComponentId,
+        translation::{ProgramParseReport, TranslationComponent},
     },
-    error::ValidationReport,
-    origin::Origin,
-    pipeline::id::ProgramComponentId,
 };
 
 use super::Primitive;
@@ -39,6 +43,15 @@ impl GroundTerm {
             origin: Origin::default(),
             id: ProgramComponentId::default(),
             value,
+        }
+    }
+
+    /// Construct this object from a string.
+    pub fn parse(input: &str) -> Result<Self, ProgramParseReport> {
+        if let Term::Primitive(Primitive::Ground(result)) = Term::parse(input)? {
+            Ok(result)
+        } else {
+            Err(ProgramParseReport::Parsing(ParserErrorReport::empty()))
         }
     }
 
@@ -227,20 +240,6 @@ impl ComponentIdentity for GroundTerm {
 }
 
 impl IterableComponent for GroundTerm {}
-
-impl GroundTerm {
-    // TODO:
-
-    pub fn parse(_input: &str) -> Result<Self, ()>
-    where
-        Self: Sized,
-    {
-        // let term = Term::parse(input)?;
-        // term.try_into_ground(&HashMap::default())
-        //     .map_err(|_| ComponentParseError::ParseError)
-        todo!()
-    }
-}
 
 #[cfg(test)]
 mod test {

@@ -2,13 +2,13 @@
 
 use std::{fmt::Display, ops::Range};
 
-use ariadne::{Report, ReportBuilder, ReportKind};
+use ariadne::{Config, Report, ReportBuilder, ReportKind};
 
 use super::rich::RichError;
 
 /// Severity of an error message
 #[derive(Debug, Clone, Copy)]
-pub(crate) enum DiagnosticSeverity {
+pub enum DiagnosticSeverity {
     /// Information
     Information,
     /// Warning
@@ -39,7 +39,7 @@ impl DiagnosticSeverity {
 
 /// Message relating to some part of the input program
 #[derive(Debug)]
-pub(crate) struct DiagnosticLabel {
+pub struct DiagnosticLabel {
     /// Type of label
     severity: DiagnosticSeverity,
     /// Range of characters this error applies to
@@ -79,13 +79,11 @@ impl DiagnosticLabel {
         report: ReportBuilder<'a, (String, Range<usize>)>,
         source_label: &str,
     ) -> ReportBuilder<'a, (String, Range<usize>)> {
-        report
-            .with_label(
-                ariadne::Label::new((source_label.to_owned(), self.range()))
-                    .with_message(self.message())
-                    .with_color(self.severity().color()),
-            )
-            .with_config(ariadne::Config::default().with_index_type(ariadne::IndexType::Byte))
+        report.with_label(
+            ariadne::Label::new((source_label.to_owned(), self.range()))
+                .with_message(self.message())
+                .with_color(self.severity().color()),
+        )
     }
 }
 
@@ -102,6 +100,12 @@ pub struct ContextError {
     hints: Vec<String>,
     /// Note about the error
     note: Option<String>,
+}
+
+impl Display for ContextError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.diagnostic.message.fmt(f)
+    }
 }
 
 impl ContextError {
@@ -122,6 +126,32 @@ impl ContextError {
             hints: Vec::default(),
             note: error.note(),
         }
+    }
+
+    /// Return the code of this error.
+    pub fn code(&self) -> usize {
+        self.code
+    }
+
+    /// Return the main diagnostic of this error.
+    pub fn diagnostic(&self) -> &DiagnosticLabel {
+        &self.diagnostic
+    }
+
+    /// Return an iterator over additional context labels.
+    pub fn context(&self) -> impl Iterator<Item = &DiagnosticLabel> {
+        self.context.iter()
+    }
+
+    /// Return an iterator over user hints.
+    pub fn hints(&self) -> impl Iterator<Item = &String> {
+        self.hints.iter()
+    }
+
+    /// Return a note for the error,
+    /// if there is one.
+    pub fn note(&self) -> Option<&String> {
+        self.note.as_ref()
     }
 
     /// Add a new context label to the error.
@@ -165,8 +195,9 @@ impl ContextError {
         let mut report = Report::build(
             self.diagnostic.severity.ariande_kind(),
             source_label.to_owned(),
-            12,
-        );
+            self.diagnostic.range.start,
+        )
+        .with_config(Config::default().with_index_type(ariadne::IndexType::Byte));
 
         report = self
             .diagnostic

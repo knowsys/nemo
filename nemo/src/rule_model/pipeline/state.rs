@@ -2,13 +2,16 @@
 
 use std::ops::Range;
 
-use crate::rule_model::components::{
-    fact::Fact,
-    import_export::{ExportDirective, ImportDirective},
-    output::Output,
-    parameter::ParameterDeclaration,
-    rule::Rule,
-    IterableComponent, ProgramComponent,
+use crate::rule_model::{
+    components::{
+        fact::Fact,
+        import_export::{ExportDirective, ImportDirective},
+        output::Output,
+        parameter::ParameterDeclaration,
+        rule::Rule,
+        IterableComponent, ProgramComponent,
+    },
+    program::{Program, ProgramWrite},
 };
 
 use super::id::ProgramComponentId;
@@ -69,6 +72,17 @@ where
         iterator
             .filter(move |element| element.contains(commit))
             .map(|element| &element.statement)
+    }
+
+    /// Given an itereator over statements and a target commit,
+    /// return all statements that are valid in this commit.
+    pub fn filter_owned<Iter>(iterator: Iter, commit: usize) -> impl Iterator<Item = Statement>
+    where
+        Iter: Iterator<Item = StatementSpan<Statement>>,
+    {
+        iterator
+            .filter(move |element| element.contains(commit))
+            .map(|element| element.statement)
     }
 }
 
@@ -400,6 +414,41 @@ impl ProgramState {
     /// Return an iterator over all active [ParameterDeclaration]s.
     pub fn parameters(&self) -> impl Iterator<Item = &ParameterDeclaration> {
         StatementSpan::filter(self.parameters.iter(), self.current_commit)
+    }
+}
+
+impl ProgramState {
+    /// Return the current [Program].
+    pub fn finalize(self) -> Program {
+        let mut program = Program::default();
+
+        let commit = self.current_commit;
+
+        for rule in StatementSpan::filter_owned(self.rules.into_iter(), commit) {
+            program.add_rule(rule);
+        }
+
+        for fact in StatementSpan::filter_owned(self.facts.into_iter(), commit) {
+            program.add_fact(fact);
+        }
+
+        for import in StatementSpan::filter_owned(self.imports.into_iter(), commit) {
+            program.add_import(import);
+        }
+
+        for export in StatementSpan::filter_owned(self.exports.into_iter(), commit) {
+            program.add_export(export);
+        }
+
+        for output in StatementSpan::filter_owned(self.outputs.into_iter(), commit) {
+            program.add_output(output);
+        }
+
+        for parameter in StatementSpan::filter_owned(self.parameters.into_iter(), commit) {
+            program.add_parameter_declaration(parameter);
+        }
+
+        program
     }
 }
 

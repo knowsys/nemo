@@ -24,11 +24,17 @@
 use std::{fs::read_to_string, path::PathBuf};
 
 use crate::{
-    error::{Error, ReadingError},
-    execution::{DefaultExecutionEngine, ExecutionEngine},
-    io::{resource_providers::ResourceProviders, ImportManager},
+    error::{report::ProgramReport, Error, ReadingError},
+    execution::{
+        execution_parameters::ExecutionParameters, DefaultExecutionEngine, ExecutionEngine,
+    },
     parser::Parser,
-    rule_model::{components::tag::Tag, translation::ASTProgramTranslation},
+    rule_file::RuleFile,
+    rule_model::{
+        components::{tag::Tag, ComponentBehavior},
+        program::Program,
+        translation::ASTProgramTranslation,
+    },
 };
 use nemo_physical::resource::Resource;
 
@@ -51,14 +57,36 @@ pub fn load(file: PathBuf) -> Result<Engine, Error> {
 /// # Error
 /// Returns an appropriate [Error] variant on parsing and feature check issues.
 pub fn load_string(input: String) -> Result<Engine, Error> {
-    let program_ast = Parser::initialize(&input)
-        .parse()
-        .map_err(|_| Error::ProgramParseError)?;
-    let program = ASTProgramTranslation::default()
-        .translate(&program_ast)
-        .map_err(|_| Error::ProgramParseError)?;
+    let execution_parameters = ExecutionParameters::default();
+    let file = RuleFile::new(input, String::default());
 
-    ExecutionEngine::initialize(program, ImportManager::new(ResourceProviders::default()))
+    ExecutionEngine::file(file, execution_parameters)
+}
+
+/// Parse a program in the given `input`-string and return a [Program].
+///
+/// # Error
+/// Returns a [ProgramReport] if parsing or validation fails.
+pub fn load_program(input: String, label: String) -> Result<Program, ProgramReport> {
+    let file = RuleFile::new(input, label);
+
+    let parser = Parser::initialize(file.content());
+    let ast = match parser.parse() {
+        Ok(ast) => ast,
+        Err((_, errors)) => return Err(errors.program_report(file)),
+    };
+
+    let translation = ASTProgramTranslation::default();
+    let translated = match translation.translate::<Program>(&ast) {
+        Ok(translated) => translated,
+        Err(errors) => return Err(errors.program_report(file)),
+    };
+
+    translated
+        .validate()
+        .map_err(|errors| errors.program_report(file))?;
+
+    Ok(translated)
 }
 
 /// Executes the reasoning process of the [Engine].

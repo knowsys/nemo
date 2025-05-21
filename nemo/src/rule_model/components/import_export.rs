@@ -4,15 +4,16 @@
 use specification::ImportExportSpec;
 
 use crate::{
+    io::format_builder::ImportExportBuilder,
     rule_model::{error::ValidationReport, origin::Origin, pipeline::id::ProgramComponentId},
     syntax,
 };
 
 use super::{
     tag::Tag,
-    term::{operation::Operation, Term},
+    term::{operation::Operation, primitive::variable::Variable, Term},
     ComponentBehavior, ComponentIdentity, ComponentSource, IterableComponent, IterablePrimitives,
-    ProgramComponent, ProgramComponentKind,
+    IterableVariables, ProgramComponent, ProgramComponentKind,
 };
 
 pub mod attribute;
@@ -72,6 +73,26 @@ impl std::fmt::Display for ImportExportDirective {
     }
 }
 
+impl IterableVariables for ImportExportDirective {
+    fn variables<'a>(&'a self) -> Box<dyn Iterator<Item = &'a Variable> + 'a> {
+        Box::new(
+            self.spec
+                .variables()
+                .chain(self.bindings.iter().flat_map(|binding| binding.variables())),
+        )
+    }
+
+    fn variables_mut<'a>(&'a mut self) -> Box<dyn Iterator<Item = &'a mut Variable> + 'a> {
+        Box::new(
+            self.spec.variables_mut().chain(
+                self.bindings
+                    .iter_mut()
+                    .flat_map(|binding| binding.variables_mut()),
+            ),
+        )
+    }
+}
+
 impl IterablePrimitives for ImportExportDirective {
     type TermType = Term;
 
@@ -108,19 +129,43 @@ impl ImportDirective {
         })
     }
 
+    /// Return the corresponding [ImportExportBuilder] or an error
+    pub fn builder(&self) -> Result<ImportExportBuilder, ValidationReport> {
+        ImportExportBuilder::new(self.spec(), self.bindings(), Direction::Import)
+    }
+
     /// Return the predicate.
     pub fn predicate(&self) -> &Tag {
         &self.0.predicate
     }
 
     /// Return the attribute specification.
-    pub(crate) fn spec(&self) -> &ImportExportSpec {
+    pub fn spec(&self) -> &ImportExportSpec {
         &self.0.spec
+    }
+
+    /// Return the additional bindings of this statement.
+    pub fn bindings(&self) -> &[Operation] {
+        &self.0.bindings
+    }
+
+    /// Check whether this imports from stdin.
+    pub fn is_stdin(&self) -> bool {
+        // TODO: There must be a better way
+        if let Ok(builder) = self.builder() {
+            builder
+                .resource()
+                .map(|resource| resource.is_pipe())
+                .unwrap_or(false)
+        } else {
+            false
+        }
     }
 
     /// Return the expected arity of this directive, if any.
     pub fn expected_arity(&self) -> Option<usize> {
-        todo!()
+        // TODO: There must be a better way
+        self.builder().ok()?.expected_arity()
     }
 }
 
@@ -143,8 +188,8 @@ impl ComponentBehavior for ImportDirective {
     }
 
     fn validate(&self) -> Result<(), ValidationReport> {
-        // ImportExportBuilder::new(self.0.spec.clone(), Direction::Import, builder)
-        todo!()
+        self.builder()?;
+        Ok(())
     }
 
     fn boxed_clone(&self) -> Box<dyn ProgramComponent> {
@@ -183,6 +228,16 @@ impl IterableComponent for ImportDirective {
         &'a mut self,
     ) -> Box<dyn Iterator<Item = &'a mut dyn ProgramComponent> + 'a> {
         Box::new(std::iter::empty())
+    }
+}
+
+impl IterableVariables for ImportDirective {
+    fn variables<'a>(&'a self) -> Box<dyn Iterator<Item = &'a Variable> + 'a> {
+        self.0.variables()
+    }
+
+    fn variables_mut<'a>(&'a mut self) -> Box<dyn Iterator<Item = &'a mut Variable> + 'a> {
+        self.0.variables_mut()
     }
 }
 
@@ -227,14 +282,30 @@ impl ExportDirective {
         )
     }
 
+    /// Return the corresponding [ImportExportBuilder] or an error
+    pub fn builder(&self) -> Result<ImportExportBuilder, ValidationReport> {
+        ImportExportBuilder::new(self.spec(), self.bindings(), Direction::Export)
+    }
+
     /// Return the predicate.
     pub fn predicate(&self) -> &Tag {
         &self.0.predicate
     }
 
     /// Return the attribute specification.
-    pub(crate) fn spec(&self) -> &ImportExportSpec {
+    pub fn spec(&self) -> &ImportExportSpec {
         &self.0.spec
+    }
+
+    /// Return the additional bindings of this statement.
+    pub fn bindings(&self) -> &[Operation] {
+        &self.0.bindings
+    }
+
+    /// Return the expected arity of this directive, if any.
+    pub fn expected_arity(&self) -> Option<usize> {
+        // TODO: There must be a better way
+        self.builder().ok()?.expected_arity()
     }
 }
 
@@ -244,8 +315,8 @@ impl ComponentBehavior for ExportDirective {
     }
 
     fn validate(&self) -> Result<(), ValidationReport> {
-        // ImportExportBuilder::new(self.0.spec.clone(), Direction::Export, builder)
-        todo!()
+        self.builder()?;
+        Ok(())
     }
 
     fn boxed_clone(&self) -> Box<dyn ProgramComponent> {

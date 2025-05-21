@@ -129,6 +129,21 @@ impl Rule {
         &mut self.head
     }
 
+    /// Return an iterator over all positive and negative [Atom]s
+    /// contained in the body of this rule.
+    pub fn body_atoms(&self) -> impl Iterator<Item = &Atom> {
+        self.body.iter().filter_map(|literal| match literal {
+            Literal::Positive(atom) | Literal::Negative(atom) => Some(atom),
+            Literal::Operation(_) => None,
+        })
+    }
+
+    /// Return an iterator over all [Atom]s contained in this rule,
+    /// including the head and the positive and negative body.
+    pub fn atoms(&self) -> impl Iterator<Item = &Atom> {
+        self.head.iter().chain(self.body_atoms())
+    }
+
     /// Return the set of variables that are bound in positive body atoms.
     pub fn positive_variables(&self) -> HashSet<&Variable> {
         let mut result = HashSet::new();

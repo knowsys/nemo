@@ -17,19 +17,17 @@ pub enum CliError {
         /// Name of the file where data could not have been serialized into
         filename: String,
     },
-    /// Errors on reading a file
-    #[error("failed to read `{filename}`: {error}")]
-    IoReading {
-        /// Contains the wrapped error
-        error: std::io::Error,
-        /// Filename which caused the error
-        filename: String,
-    },
     /// Error while parsing fact for tracing
     #[error("unable to parse fact: {fact}")]
     TracingInvalidFact {
         /// Incorrectly formatted fact
         fact: String,
+    },
+    /// Invalid paramater
+    #[error("invalid paramater: {parameter}")]
+    InvalidParameter {
+        /// Invalid paramater
+        parameter: String,
     },
     /// Error while parsing a rule file
     #[error("unable to parse program `{filename}`")]

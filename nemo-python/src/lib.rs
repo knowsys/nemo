@@ -4,6 +4,7 @@
 use std::{collections::HashSet, fs::read_to_string, time::Duration};
 
 use nemo::{
+    api::load_program,
     chase_model::ChaseAtom,
     datavalues::{AnyDataValue, DataValue},
     error::Error,
@@ -12,9 +13,12 @@ use nemo::{
     meta::timing::TimedCode,
     rule_model::{
         components::{
-            fact::Fact, tag::Tag, term::primitive::Primitive, term::Term, ComponentBehavior,
+            fact::Fact,
+            tag::Tag,
+            term::{primitive::Primitive, Term},
+            ComponentBehavior,
         },
-        error::ValidationErrorBuilder,
+        program::ProgramRead,
         substitution::Substitution,
     },
 };
@@ -61,15 +65,9 @@ fn load_file(file: String) -> PyResult<NemoProgram> {
 
 #[pyfunction]
 fn load_string(rules: String) -> PyResult<NemoProgram> {
-    let program_ast = nemo::parser::Parser::initialize(&rules, String::default())
-        .parse()
-        .map_err(|_| Error::ProgramParseError)
+    let program = load_program(rules, String::default())
+        .map_err(|report| Error::ProgramReport(report))
         .py_res()?;
-    let program =
-        nemo::rule_model::translation::ASTProgramTranslation::initialize(&rules, String::default())
-            .translate(&program_ast)
-            .map_err(|_| Error::ProgramParseError)
-            .py_res()?;
 
     Ok(NemoProgram(program))
 }
@@ -336,7 +334,6 @@ impl NemoResults {
 
 #[pyclass(unsendable)]
 struct NemoEngine {
-    program: NemoProgram,
     engine: nemo::execution::DefaultExecutionEngine,
 }
 
@@ -411,7 +408,7 @@ impl NemoEngine {
         TimedCode::instance().reset();
         let import_manager = ImportManager::new(ResourceProviders::default());
         let engine = ExecutionEngine::initialize(program.0.clone(), import_manager).py_res()?;
-        Ok(NemoEngine { program, engine })
+        Ok(NemoEngine { engine })
     }
 
     fn reason(&mut self) -> PyResult<()> {
@@ -427,10 +424,9 @@ impl NemoEngine {
 
     fn trace(&mut self, fact_string: String) -> Option<NemoTrace> {
         let fact = Fact::parse(&fact_string).ok()?;
-        let mut builder = ValidationErrorBuilder::default();
-        fact.validate(&mut builder)?;
+        fact.validate().ok()?;
 
-        let (trace, handles) = self.engine.trace(self.program.0.clone(), vec![fact]).ok()?;
+        let (trace, handles) = self.engine.trace(vec![fact]).ok()?;
         let handle = *handles
             .first()
             .expect("Function trace always returns a handle for each input fact");

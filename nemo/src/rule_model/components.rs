@@ -288,6 +288,7 @@ pub trait ProgramComponent:
     + Display
     + ComponentBehavior
     + ComponentIdentity
+    + ComponentSource<Source = Origin>
     + ComponentCast
     + IterableComponent
     + Send
@@ -299,6 +300,7 @@ impl<Component> ProgramComponent for Component where
         + Display
         + ComponentBehavior
         + ComponentIdentity
+        + ComponentSource<Source = Origin>
         + ComponentCast
         + IterableComponent
         + Sync

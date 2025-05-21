@@ -20,7 +20,7 @@ use crate::rule_model::{
     error::{TranslationReport, ValidationReport},
     origin::Origin,
     pipeline::id::ProgramComponentId,
-    translation::{ComponentParseReport, TranslationComponent},
+    translation::{ProgramParseReport, TranslationComponent},
 };
 
 use super::{value_type::ValueType, Term};
@@ -39,11 +39,9 @@ pub enum Primitive {
 
 impl Primitive {
     /// Parse a primitive term from a [`str`] reference.
-    pub fn parse(input: &str) -> Result<Self, ComponentParseReport> {
+    pub fn parse(input: &str) -> Result<Self, ProgramParseReport> {
         let Term::Primitive(term) = Term::parse(input)? else {
-            return Err(ComponentParseReport::Translation(
-                TranslationReport::default(),
-            ));
+            return Err(ProgramParseReport::Translation(TranslationReport::default()));
         };
 
         Ok(term)
