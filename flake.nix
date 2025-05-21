@@ -260,18 +260,18 @@
                 pname = "nemo-wasm-${target}";
 
                 buildPhaseCargoCommand = ''
-                  cat LICENSE-APACHE LICENSE-MIT > nemo-wasm/LICENSE
+                  cat LICENSE-APACHE LICENSE-MIT > nemo-wasm/LICENSE || true
                   mkdir -p lib/node_modules/nemo-wasm
                   wasm-pack build \
                     --target ${target} \
                     --weak-refs \
                     --mode=no-install \
-                    --out-dir=/build/lib/node_modules/nemo-wasm nemo-wasm
+                    --out-dir=./lib/node_modules/nemo-wasm nemo-wasm
                 '';
 
                 installPhaseCommand = ''
                   mkdir -p $out
-                  cp -R /build/lib $out/
+                  cp -R ./lib $out/
                 '';
 
                 buildInputs = (args.buildInputs or [ ]) ++ crateArgs.buildInputs;
