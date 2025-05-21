@@ -192,6 +192,7 @@ mod test {
     };
 
     #[test]
+    #[cfg_attr(miri, ignore)]
     fn parse_expression() {
         let test = vec![
             ("#sum(1 + POW(?x, 2), ?y, ?z)", ParserContext::Aggregation),
