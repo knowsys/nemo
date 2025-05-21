@@ -75,7 +75,7 @@ jobs:
           components: miri
           rust-version: nightly
       - run: cargo miri setup
-      - run: cargo miri test
+      - run: cargo miri test -- -Z unstable-options --report-time
 
   test-python:
     name: Test python bindings

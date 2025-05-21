@@ -126,9 +126,18 @@
               inherit (pkgs) pkg-config;
             };
 
-            # avoid rebuilds by pinning python:
-            # https://crane.dev/faq/rebuilds-pyo3.html
-            env.PYO3_PYTHON = lib.getExe python3;
+            env = {
+              # avoid rebuilds by pinning python:
+              # https://crane.dev/faq/rebuilds-pyo3.html
+              PYO3_PYTHON = lib.getExe python3;
+
+              # thresholds for the time reporting for cargo test
+              # first value is warning, second is critical
+              # values are in milliseconds
+              RUST_TEST_TIME_UNIT = "15000,60000";
+              RUST_TEST_TIME_INTEGRATION = "15000,60000";
+              RUST_TEST_TIME_DOCTEST = "15000,60000";
+            };
 
             buildInputs =
               (lib.attrValues { inherit (pkgs) openssl; })
@@ -442,7 +451,7 @@
                     exit 1
                   fi
 
-                  cargo test
+                  cargo test --workspace --all-targets -- -Z unstable-options --report-time
                   cargo clippy --workspace --all-targets -- --deny warnings
                   cargo fmt --all -- --check
                   cargo doc --workspace
@@ -461,7 +470,7 @@
 
                   RUSTFLAGS="" wasm-pack build --weak-refs --mode=no-install nemo-wasm
 
-                  cargo miri test
+                  cargo miri test -- -Z unstable-options --report-time
                 '';
               };
             };
@@ -538,7 +547,12 @@
             NMO_LOG = "debug";
             RUST_BACKTRACE = 1;
             RUST_SRC_PATH = "${toolchain}/lib/rustlib/src/rust/library";
-            inherit (commonArgs.env) PYO3_PYTHON;
+            inherit (commonArgs.env)
+              PYO3_PYTHON
+              RUST_TEST_TIME_UNIT
+              RUST_TEST_TIME_INTEGRATION
+              RUST_TEST_TIME_DOCTEST
+              ;
 
             shellHook = ''
               export PATH=''${HOME}/.cargo/bin''${PATH+:''${PATH}}
