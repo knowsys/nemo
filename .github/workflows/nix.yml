@@ -23,7 +23,7 @@ jobs:
         uses: nix-community/cache-nix-action@v6
         with:
           primary-key: nemo-nix-${{ runner.os }}-${{ hashFiles('**/*.nix', '**/flake.lock') }}
-          restore-prefixes-first-match: nix-${{ runner.os }}-
+          restore-prefixes-first-match: nemo-nix-${{ runner.os }}-
           gc-max-store-size-linux: 2.5G
           purge: true
           purge-prefixes: nemo-nix-${{ runner.os }}-
