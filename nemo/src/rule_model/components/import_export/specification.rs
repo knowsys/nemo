@@ -2,6 +2,7 @@
 
 use crate::rule_model::{
     components::{
+        component_iterator, component_iterator_mut,
         tag::Tag,
         term::{
             primitive::{variable::Variable, Primitive},
@@ -188,13 +189,15 @@ impl ComponentIdentity for ImportExportSpec {
 
 impl IterableComponent for ImportExportSpec {
     fn children<'a>(&'a self) -> Box<dyn Iterator<Item = &'a dyn ProgramComponent> + 'a> {
-        Box::new(std::iter::empty())
+        Box::new(component_iterator(self.map.iter().map(|(_, term)| term)))
     }
 
     fn children_mut<'a>(
         &'a mut self,
     ) -> Box<dyn Iterator<Item = &'a mut dyn ProgramComponent> + 'a> {
-        Box::new(std::iter::empty())
+        Box::new(component_iterator_mut(
+            self.map.iter_mut().map(|(_, term)| term),
+        ))
     }
 }
 

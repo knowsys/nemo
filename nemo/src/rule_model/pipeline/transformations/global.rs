@@ -44,6 +44,8 @@ impl TransformationGlobal {
         external: HashMap<GlobalVariable, GroundTerm>,
         pipeline: &ProgramPipeline,
     ) -> Substitution {
+        println!("apply glboal transformation");
+
         let mut ground_set = external.keys().cloned().collect::<HashSet<_>>();
         let mut substitution = Substitution::new(external);
 
@@ -87,6 +89,8 @@ impl TransformationGlobal {
         Iter: Iterator<Item = &'a Component> + 'a,
     {
         iterator.filter_map(|old_component| {
+            println!("{:?}", old_component.variables().collect::<Vec<_>>());
+
             if old_component
                 .variables()
                 .any(|variable| variable.is_global())
@@ -118,6 +122,11 @@ impl ProgramTransformation for TransformationGlobal {
         for (old_import, new_import) in Self::apply_subsitution(pipeline.imports(), &substitution) {
             commit.delete(old_import.id());
             commit.add_import(new_import);
+        }
+
+        for (old_export, new_export) in Self::apply_subsitution(pipeline.exports(), &substitution) {
+            commit.delete(old_export.id());
+            commit.add_export(new_export);
         }
 
         for (old_rule, new_rule) in Self::apply_subsitution(pipeline.rules(), &substitution) {

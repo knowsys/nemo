@@ -10,6 +10,7 @@ use crate::{
 };
 
 use super::{
+    component_iterator, component_iterator_mut,
     tag::Tag,
     term::{operation::Operation, primitive::variable::Variable, Term},
     ComponentBehavior, ComponentIdentity, ComponentSource, IterableComponent, IterablePrimitives,
@@ -120,6 +121,24 @@ impl IterablePrimitives for ImportExportDirective {
                         .flat_map(|op| op.primitive_terms_mut()),
                 ),
         )
+    }
+}
+
+impl IterableComponent for ImportExportDirective {
+    fn children<'a>(&'a self) -> Box<dyn Iterator<Item = &'a dyn ProgramComponent> + 'a> {
+        let iterator_spec = self.spec.children();
+        let iterator_operations = component_iterator(self.bindings.iter());
+
+        Box::new(iterator_spec.chain(iterator_operations))
+    }
+
+    fn children_mut<'a>(
+        &'a mut self,
+    ) -> Box<dyn Iterator<Item = &'a mut dyn ProgramComponent> + 'a> {
+        let iterator_spec = self.spec.children_mut();
+        let iterator_operations = component_iterator_mut(self.bindings.iter_mut());
+
+        Box::new(iterator_spec.chain(iterator_operations))
     }
 }
 
@@ -238,13 +257,13 @@ impl ComponentIdentity for ImportDirective {
 
 impl IterableComponent for ImportDirective {
     fn children<'a>(&'a self) -> Box<dyn Iterator<Item = &'a dyn ProgramComponent> + 'a> {
-        Box::new(std::iter::empty()) // TODO: ?
+        self.0.children()
     }
 
     fn children_mut<'a>(
         &'a mut self,
     ) -> Box<dyn Iterator<Item = &'a mut dyn ProgramComponent> + 'a> {
-        Box::new(std::iter::empty())
+        self.0.children_mut()
     }
 }
 
@@ -372,13 +391,13 @@ impl ComponentIdentity for ExportDirective {
 
 impl IterableComponent for ExportDirective {
     fn children<'a>(&'a self) -> Box<dyn Iterator<Item = &'a dyn ProgramComponent> + 'a> {
-        Box::new(std::iter::empty())
+        self.0.children()
     }
 
     fn children_mut<'a>(
         &'a mut self,
     ) -> Box<dyn Iterator<Item = &'a mut dyn ProgramComponent> + 'a> {
-        Box::new(std::iter::empty())
+        self.0.children_mut()
     }
 }
 
@@ -392,6 +411,16 @@ impl std::fmt::Display for ExportDirective {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str("@export ")?;
         self.0.fmt(f)
+    }
+}
+
+impl IterableVariables for ExportDirective {
+    fn variables<'a>(&'a self) -> Box<dyn Iterator<Item = &'a Variable> + 'a> {
+        self.0.variables()
+    }
+
+    fn variables_mut<'a>(&'a mut self) -> Box<dyn Iterator<Item = &'a mut Variable> + 'a> {
+        self.0.variables_mut()
     }
 }
 
