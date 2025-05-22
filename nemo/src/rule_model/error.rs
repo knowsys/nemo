@@ -204,8 +204,7 @@ where
     pub fn contains_errors(&self) -> bool {
         self.errors
             .iter()
-            .find(|error| !error.is_warning())
-            .is_some()
+            .any(|error| !error.is_warning())
     }
 
     /// Check if report is empty.
@@ -218,12 +217,10 @@ where
     pub fn warned<Object: Debug>(self, object: Object) -> Result<Warned<Object, Self>, Self> {
         if self.contains_errors() {
             Err(self)
+        } else if self.errors.is_empty() {
+            Ok(Warned::new(object, None))
         } else {
-            if self.errors.is_empty() {
-                Ok(Warned::new(object, None))
-            } else {
-                Ok(Warned::new(object, Some(self)))
-            }
+            Ok(Warned::new(object, Some(self)))
         }
     }
 
@@ -318,7 +315,7 @@ impl ValidationReport {
     /// Convert this report into a [Result],
     /// depending on whether it contains any errors.
     pub fn result(self) -> Result<(), Self> {
-        self.0.result().map_err(|report| Self(report))
+        self.0.result().map_err(Self)
     }
 
     /// Convert this report into a [Warned] object,
@@ -326,12 +323,10 @@ impl ValidationReport {
     pub fn warned<Object: Debug>(self, object: Object) -> Result<Warned<Object, Self>, Self> {
         if self.contains_errors() {
             Err(self)
+        } else if self.is_empty() {
+            Ok(Warned::new(object, None))
         } else {
-            if self.is_empty() {
-                Ok(Warned::new(object, None))
-            } else {
-                Ok(Warned::new(object, Some(self)))
-            }
+            Ok(Warned::new(object, Some(self)))
         }
     }
 
@@ -419,7 +414,7 @@ impl TranslationReport {
     /// Convert this report into a [Result],
     /// depending on whether it contains any errors.
     pub fn result(self) -> Result<(), Self> {
-        self.0.result().map_err(|report| Self(report))
+        self.0.result().map_err(Self)
     }
 
     /// Convert this report into a [Warned] object,
@@ -427,12 +422,10 @@ impl TranslationReport {
     pub fn warned<Object: Debug>(self, object: Object) -> Result<Warned<Object, Self>, Self> {
         if self.contains_errors() {
             Err(self)
+        } else if self.is_empty() {
+            Ok(Warned::new(object, None))
         } else {
-            if self.is_empty() {
-                Ok(Warned::new(object, None))
-            } else {
-                Ok(Warned::new(object, Some(self)))
-            }
+            Ok(Warned::new(object, Some(self)))
         }
     }
 

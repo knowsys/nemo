@@ -147,7 +147,7 @@ impl ExtendStatementKind {
         }
 
         if let Self::AllOf(list) = self {
-            return list.iter().any(|element| *element == kind);
+            return list.contains(&kind);
         }
 
         false
@@ -196,6 +196,12 @@ pub struct ProgramState {
 
     /// Number of the current commit
     current_commit: usize,
+}
+
+impl Default for ProgramState {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl ProgramState {
@@ -278,13 +284,8 @@ impl ProgramState {
 
     /// Find a [Spanned] component from its id
     fn find_spanned_mut(&mut self, id: ProgramComponentId) -> Option<&mut dyn Spanned> {
-        for spanned in self.spans_mut() {
-            if spanned.component().id() == id {
-                return Some(spanned);
-            }
-        }
-
-        None
+        self.spans_mut()
+            .find(|spanned| spanned.component().id() == id)
     }
 
     /// Prepare the next commit.

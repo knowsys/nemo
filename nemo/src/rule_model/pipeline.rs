@@ -70,7 +70,7 @@ impl ProgramPipeline {
     ) -> Option<&dyn ProgramComponent> {
         let mut child_iterator = component.children();
         let mut previous_component = child_iterator.next()?;
-        while let Some(current_component) = child_iterator.next() {
+        for current_component in child_iterator {
             if current_component.id() > id {
                 break;
             }

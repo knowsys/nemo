@@ -100,7 +100,7 @@ impl TryFrom<Term> for GroundTerm {
         match reduced {
             Term::Primitive(primitive) => {
                 if let Primitive::Ground(ground) = primitive {
-                    return Ok(ground);
+                    Ok(ground)
                 } else {
                     unreachable!("value is ground");
                 }

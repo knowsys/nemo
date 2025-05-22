@@ -66,7 +66,7 @@ fn load_file(file: String) -> PyResult<NemoProgram> {
 #[pyfunction]
 fn load_string(rules: String) -> PyResult<NemoProgram> {
     let program = load_program(rules, String::default())
-        .map_err(|report| Error::ProgramReport(report))
+        .map_err(Error::ProgramReport)
         .py_res()?;
 
     Ok(NemoProgram(program))

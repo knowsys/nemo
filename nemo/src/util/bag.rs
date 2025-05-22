@@ -31,7 +31,7 @@ where
     /// Return a mutable reference to the list of values
     /// associated with the fiven key.
     pub fn get_mut(&mut self, key: K) -> &mut Vec<V> {
-        self.0.entry(key).or_insert_with(Vec::default)
+        self.0.entry(key).or_default()
     }
 
     /// Delete all entries.

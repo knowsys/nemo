@@ -107,8 +107,7 @@ impl ComponentBehavior for ParameterDeclaration {
         if let Some(expression) = self.expression() {
             if expression
                 .variables()
-                .find(|variable| !variable.is_global())
-                .is_some()
+                .any(|variable| !variable.is_global())
             {
                 report.add(
                     expression,

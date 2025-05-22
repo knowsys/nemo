@@ -240,6 +240,7 @@ impl TraceTreeRuleApplication {
 }
 
 /// Tree representation of an [ExecutionTrace] from a given start node
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug, Clone)]
 pub enum ExecutionTraceTree {
     /// Node represent a fact in the initial data base

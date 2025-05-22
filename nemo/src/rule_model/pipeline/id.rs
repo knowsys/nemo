@@ -28,7 +28,7 @@ impl ProgramComponentId {
 
     /// Increment the id and return its old value.
     pub fn increment(&mut self) -> Self {
-        let current = self.clone();
+        let current = *self;
 
         if *self != Self::UNASSIGNED {
             self.0 += 1;

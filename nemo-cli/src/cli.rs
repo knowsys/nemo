@@ -23,9 +23,9 @@ pub(crate) enum Exporting {
     All,
 }
 
-impl Into<ExportParameters> for Exporting {
-    fn into(self) -> ExportParameters {
-        match self {
+impl From<Exporting> for ExportParameters {
+    fn from(val: Exporting) -> Self {
+        match val {
             Exporting::Keep => ExportParameters::Keep,
             Exporting::None => ExportParameters::None,
             Exporting::Idb => ExportParameters::Idb,

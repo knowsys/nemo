@@ -273,15 +273,13 @@ pub trait ProgramRead {
 
             if let Some(arity) = import.expected_arity() {
                 add(&mut arities, report, predicate, arity, import);
-            } else {
-                if !arities.contains_key(&predicate) {
-                    report.add(
-                        import,
-                        ValidationError::UnknownArity {
-                            predicate: predicate.to_string(),
-                        },
-                    );
-                }
+            } else if !arities.contains_key(&predicate) {
+                report.add(
+                    import,
+                    ValidationError::UnknownArity {
+                        predicate: predicate.to_string(),
+                    },
+                );
             }
         }
 
@@ -290,15 +288,13 @@ pub trait ProgramRead {
 
             if let Some(arity) = export.expected_arity() {
                 add(&mut arities, report, predicate, arity, export);
-            } else {
-                if !arities.contains_key(&predicate) {
-                    report.add(
-                        export,
-                        ValidationError::UnknownArity {
-                            predicate: predicate.to_string(),
-                        },
-                    );
-                }
+            } else if !arities.contains_key(&predicate) {
+                report.add(
+                    export,
+                    ValidationError::UnknownArity {
+                        predicate: predicate.to_string(),
+                    },
+                );
             }
         }
     }
@@ -337,10 +333,8 @@ pub trait ProgramRead {
                 return;
             }
 
-            if parameter.expression().is_none() {
-                if !external.contains(parameter.variable()) {
-                    report.add(parameter, ValidationError::ParameterMissingDefinition);
-                }
+            if parameter.expression().is_none() && !external.contains(parameter.variable()) {
+                report.add(parameter, ValidationError::ParameterMissingDefinition);
             }
         }
 
@@ -374,17 +368,15 @@ pub trait ProgramRead {
         }
 
         for parameter in self.parameters() {
-            if parameter.expression().is_some() {
-                if !valid.contains(parameter.variable()) {
-                    report.add(
-                        parameter,
-                        ValidationError::ParameterDeclarationCyclic {
-                            variable: parameter.variable().clone(),
-                        },
-                    );
+            if parameter.expression().is_some() && !valid.contains(parameter.variable()) {
+                report.add(
+                    parameter,
+                    ValidationError::ParameterDeclarationCyclic {
+                        variable: parameter.variable().clone(),
+                    },
+                );
 
-                    return;
-                }
+                return;
             }
         }
     }

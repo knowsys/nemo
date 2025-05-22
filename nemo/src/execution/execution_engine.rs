@@ -117,7 +117,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         );
 
         let mut report = ProgramReport::new(file);
-        parsing_report.map(|parsing_report| report.merge_program_parser(parsing_report));
+        if let Some(parsing_report) = parsing_report { report.merge_program_parser(parsing_report) }
         report.merge_validation(validation_report);
 
         if report.contains_errors() {

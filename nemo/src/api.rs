@@ -79,7 +79,7 @@ pub fn load_program(input: String, label: String) -> Result<Program, ProgramRepo
     };
 
     let mut report = ProgramReport::new(file);
-    parsing_report.map(|parsing_report| report.merge_translation(parsing_report));
+    if let Some(parsing_report) = parsing_report { report.merge_translation(parsing_report) }
 
     if report.contains_errors() {
         Err(report)

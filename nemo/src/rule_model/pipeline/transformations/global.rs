@@ -45,7 +45,7 @@ impl TransformationGlobal {
         pipeline: &ProgramPipeline,
     ) -> Substitution {
         let mut ground_set = external.keys().cloned().collect::<HashSet<_>>();
-        let mut substitution = Substitution::new(external.into_iter());
+        let mut substitution = Substitution::new(external);
 
         let mut ground_count: usize = ground_set.len();
         loop {

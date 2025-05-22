@@ -11,8 +11,10 @@ use crate::{
 
 /// Externally modify the export statements of the program
 #[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Default)]
 pub enum ExportParameters {
     /// Keep all exports as is
+    #[default]
     Keep,
     /// Disable all exports
     None,
@@ -24,11 +26,6 @@ pub enum ExportParameters {
     All,
 }
 
-impl Default for ExportParameters {
-    fn default() -> Self {
-        ExportParameters::Keep
-    }
-}
 
 /// External parameters affecting the execution
 #[derive(Debug)]
