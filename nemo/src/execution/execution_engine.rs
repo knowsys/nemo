@@ -19,7 +19,7 @@ use crate::{
         },
         translation::ProgramChaseTranslation,
     },
-    error::Error,
+    error::{report::ProgramReport, warned::Warned, Error},
     execution::{planning::plan_tracing::TracingStrategy, tracing::trace::TraceDerivation},
     io::{formats::Export, import_manager::ImportManager},
     rule_file::RuleFile,
@@ -29,6 +29,7 @@ use crate::{
             tag::Tag,
             term::primitive::{ground::GroundTerm, variable::Variable, Primitive},
         },
+        error::ValidationReport,
         pipeline::{transformations::default::TransformationDefault, ProgramPipeline},
         program::Program,
         substitution::Substitution,
@@ -98,19 +99,38 @@ pub struct ExecutionEngine<RuleSelectionStrategy> {
 impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
     /// Initialize a [ExecutionEngine] by parsing and translating
     /// the contents of the given file.
-    pub fn file(file: RuleFile, parameters: ExecutionParameters) -> Result<Self, Error> {
+    pub fn file(
+        file: RuleFile,
+        parameters: ExecutionParameters,
+    ) -> Result<Warned<Self, ProgramReport>, Error> {
         let import_manager = parameters.import_manager.clone();
 
-        let mut pipeline = match ProgramPipeline::file(&file) {
-            Ok(pipeline) => pipeline,
+        let (mut pipeline, parsing_report) = match ProgramPipeline::file(&file) {
+            Ok(pipeline) => pipeline.pair(),
             Err(errors) => return Err(errors.program_report(file).into()),
         };
 
-        pipeline
-            .apply_transformation(TransformationDefault::new(parameters))
-            .map_err(|errors| errors.program_report_pipeline(file, &pipeline))?;
+        let mut validation_report = ValidationReport::default();
+        pipeline.apply_transformation(
+            &mut validation_report,
+            TransformationDefault::new(parameters),
+        );
 
-        Self::initialize(pipeline.finalize(), import_manager)
+        let mut report = ProgramReport::new(file);
+        parsing_report.map(|parsing_report| report.merge_program_parser(parsing_report));
+        report.merge_validation(validation_report);
+
+        if report.contains_errors() {
+            Err(Error::ProgramReport(report))
+        } else {
+            let engine = Self::initialize(pipeline.finalize(), import_manager)?;
+
+            if report.is_empty() {
+                Ok(Warned::new(engine, None))
+            } else {
+                Ok(Warned::new(engine, Some(report)))
+            }
+        }
     }
 
     /// Initialize [ExecutionEngine].

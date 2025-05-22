@@ -388,6 +388,26 @@ pub trait ProgramRead {
             }
         }
     }
+
+    /// Validate each component within this program.
+    fn validate_components(&self, report: &mut ValidationReport) {
+        let rule_iterator = component_iterator(self.rules());
+        let fact_iterator = component_iterator(self.facts());
+        let output_iterator = component_iterator(self.outputs());
+        let import_iterator = component_iterator(self.imports());
+        let export_iterator = component_iterator(self.exports());
+        let parameter_iterator = component_iterator(self.parameters());
+
+        for component in rule_iterator
+            .chain(fact_iterator)
+            .chain(output_iterator)
+            .chain(import_iterator)
+            .chain(export_iterator)
+            .chain(parameter_iterator)
+        {
+            report.merge(component.validate());
+        }
+    }
 }
 
 impl ProgramRead for Program {

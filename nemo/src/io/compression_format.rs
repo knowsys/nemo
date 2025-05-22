@@ -55,7 +55,11 @@ const GZIP_COMPRESSION_LEVEL: Compression = Compression::new(6);
 
 impl CompressionFormat {
     /// Derive a compression format from the file extension of the given resource builder.
-    pub fn from_resource_builder(builder: &ResourceBuilder) -> Self {
+    pub fn from_resource_builder(builder: &Option<ResourceBuilder>) -> Self {
+        let Some(builder) = builder else {
+            return Self::None;
+        };
+
         match builder.file_extension() {
             Some(file_format::EXTENSION_GZ) => Self::GZip,
             _ => Self::None,

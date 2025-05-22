@@ -208,8 +208,8 @@ fn run(mut cli: CliApp) -> Result<(), CliError> {
         return Err(CliError::InvalidParameter { parameter });
     }
 
-    let mut engine: DefaultExecutionEngine =
-        ExecutionEngine::file(program_file, execution_parameters)?;
+    let (mut engine, warnings) = ExecutionEngine::file(program_file, execution_parameters)?.pair();
+    warnings.map(|warnings| warnings.eprint(cli.disable_warnings));
 
     log::info!("Rules parsed");
 
@@ -276,17 +276,22 @@ fn run(mut cli: CliApp) -> Result<(), CliError> {
 fn main() {
     let cli = CliApp::parse();
 
+    let disable_warnings = cli.disable_warnings;
+
     cli.logging.initialize_logging();
     log::info!("Version: {}", clap::crate_version!());
     log::debug!("Rule files: {:?}", cli.rules);
 
     if let Err(error) = run(cli) {
         if let CliError::NemoError(Error::ProgramReport(report)) = error {
-            let _ = report.eprint();
+            let _ = report.eprint(disable_warnings);
+
+            if report.contains_errors() {
+                std::process::exit(1);
+            }
         } else {
             log::error!("{} {error}", "error:".red().bold());
+            std::process::exit(1);
         }
-
-        std::process::exit(1)
     }
 }

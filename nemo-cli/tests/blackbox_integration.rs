@@ -110,6 +110,10 @@ impl TestCase {
             let output_file =
                 PathBuf::from_str(self.output_dir.child(expected_name).to_str().unwrap()).unwrap();
             log::info!("output file: {output_file:?}");
+            if !output_file.exists() {
+                println!("file: {:?}", output_file);
+            }
+
             assert!(output_file.exists());
             let mut output_lines = read_to_string(output_file)
                 .unwrap()

@@ -101,11 +101,11 @@ impl Backend {
         let mut message = error.diagnostic().message().to_owned();
 
         for hint in error.hints() {
-            message += &format!("\n{hint}");
+            message += &format!("\nHint: {hint}");
         }
 
         if let Some(note) = error.note() {
-            message += &format!("\n{note}");
+            message += &format!("\nNote: {note}");
         }
 
         let mut related_information = Vec::<DiagnosticRelatedInformation>::new();

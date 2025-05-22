@@ -40,8 +40,9 @@ impl ProgramTransformation for TransformationSkolemize {
     fn apply(
         mut self,
         commit: &mut ProgramCommit,
+        _report: &mut ValidationReport,
         pipeline: &ProgramPipeline,
-    ) -> Result<(), ValidationReport> {
+    ) {
         for rule in pipeline.rules() {
             let head_variables = || rule.head().iter().flat_map(|atom| atom.variables());
             if !head_variables().any(|variable| variable.is_existential()) {
@@ -82,7 +83,5 @@ impl ProgramTransformation for TransformationSkolemize {
 
             commit.delete(rule.id());
         }
-
-        Ok(())
     }
 }

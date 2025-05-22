@@ -6,14 +6,19 @@ use std::{
     ops::{Deref, DerefMut, Index, IndexMut},
 };
 
-use crate::rule_model::{
-    error::{validation_error::ValidationError, ValidationReport},
-    origin::Origin,
-    pipeline::id::ProgramComponentId,
+use crate::{
+    parser::ParserErrorReport,
+    rule_model::{
+        error::{validation_error::ValidationError, ValidationReport},
+        origin::Origin,
+        pipeline::id::ProgramComponentId,
+        translation::{ProgramParseReport, TranslationComponent},
+    },
 };
 
 use super::{
     component_iterator, component_iterator_mut,
+    literal::Literal,
     tag::Tag,
     term::{
         primitive::{variable::Variable, Primitive},
@@ -75,14 +80,13 @@ impl Atom {
         }
     }
 
-    /// TODO:
-    pub fn parse(_input: &str) -> Result<Self, ()> {
-        // let Literal::Positive(atom) = Literal::parse(input)? else {
-        //     return Err(ComponentParseError::ParseError);
-        // };
-
-        // Ok(atom)
-        todo!()
+    /// Construct this object from a string.
+    pub fn parse(input: &str) -> Result<Self, ProgramParseReport> {
+        if let Literal::Positive(atom) = Literal::parse(input)? {
+            Ok(atom)
+        } else {
+            Err(ProgramParseReport::Parsing(ParserErrorReport::empty()))
+        }
     }
 
     /// Return the predicate of this atom.

@@ -5,7 +5,10 @@ use id::ProgramComponentId;
 use state::{ExtendStatementValidity, ProgramState};
 use transformations::ProgramTransformation;
 
-use crate::{parser::Parser, rule_file::RuleFile, rule_model::translation::ASTProgramTranslation};
+use crate::{
+    error::warned::Warned, parser::Parser, rule_file::RuleFile,
+    rule_model::translation::ASTProgramTranslation,
+};
 
 use super::{
     components::{
@@ -48,12 +51,12 @@ impl Default for ProgramPipeline {
 
 impl ProgramPipeline {
     /// Initilaize a [ProgramPipeline] with the contents of a given [RuleFile].
-    pub fn file(file: &RuleFile) -> Result<Self, ProgramParseReport> {
+    pub fn file(file: &RuleFile) -> Result<Warned<Self, ProgramParseReport>, ProgramParseReport> {
         let parser = Parser::initialize(file.content());
         let ast = parser.parse().map_err(|(_tail, report)| report)?;
 
         let translation = ASTProgramTranslation::default();
-        Ok(translation.translate::<Self>(&ast)?)
+        Ok(translation.translate::<Self>(&ast)?.into())
     }
 }
 
@@ -75,7 +78,9 @@ impl ProgramPipeline {
             previous_component = current_component;
         }
 
-        if previous_component.id() <= id {
+        if previous_component.id() == id {
+            Some(previous_component)
+        } else if previous_component.id() < id {
             Self::find_child_component(previous_component, id)
         } else {
             None
@@ -220,16 +225,15 @@ impl ProgramPipeline {
     /// Apply a [ProgramTransformation].
     pub fn apply_transformation<Transformation: ProgramTransformation>(
         &mut self,
+        report: &mut ValidationReport,
         transformation: Transformation,
-    ) -> Result<(), ValidationReport> {
+    ) {
         self.prepare(transformation.keep());
 
         let mut commit = ProgramCommit::default();
-        transformation.apply(&mut commit, self)?;
+        transformation.apply(&mut commit, report, self);
 
         self.commit(commit);
-
-        Ok(())
     }
 
     /// Return the currently valid program.

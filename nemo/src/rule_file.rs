@@ -27,7 +27,7 @@ impl RuleFile {
             filename: name.clone(),
         })?;
 
-        Ok(Self::new(name, content))
+        Ok(Self::new(content, name))
     }
 
     /// Return a reference to the content of this file.

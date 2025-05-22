@@ -2,7 +2,9 @@
 
 use std::{fmt::Display, hash::Hash};
 
-use nemo_physical::datavalues::{AnyDataValue, DataValue, IriDataValue, ValueDomain};
+use nemo_physical::datavalues::{
+    AnyDataValue, DataValue, IriDataValue, TupleDataValue, ValueDomain,
+};
 
 use crate::{
     parser::ParserErrorReport,
@@ -104,10 +106,27 @@ impl TryFrom<Term> for GroundTerm {
                 }
             }
             Term::Aggregate(term) => Err(Term::Aggregate(term)),
-            Term::FunctionTerm(term) => Err(Term::FunctionTerm(term)),
             Term::Map(term) => Err(Term::Map(term)),
             Term::Operation(term) => Err(Term::Operation(term)),
-            Term::Tuple(term) => Err(Term::Tuple(term)),
+            Term::FunctionTerm(term) => {
+                let subterms = term
+                    .terms()
+                    .map(|term| Self::try_from(term.clone()).map(|term| term.value()))
+                    .collect::<Result<Vec<_>, Term>>()?;
+
+                let tuple_datavalue =
+                    TupleDataValue::new(Some(IriDataValue::new(term.tag().to_string())), subterms);
+                Ok(GroundTerm::new(tuple_datavalue.into()))
+            }
+            Term::Tuple(term) => {
+                let subterms = term
+                    .terms()
+                    .map(|term| Self::try_from(term.clone()).map(|term| term.value()))
+                    .collect::<Result<Vec<_>, Term>>()?;
+
+                let tuple_datavalue = TupleDataValue::new(None, subterms);
+                Ok(GroundTerm::new(tuple_datavalue.into()))
+            }
         }
     }
 }

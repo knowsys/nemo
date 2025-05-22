@@ -33,8 +33,9 @@ impl ProgramTransformation for TransformationSplitRule {
     fn apply(
         self,
         commit: &mut ProgramCommit,
+        _report: &mut ValidationReport,
         pipeline: &ProgramPipeline,
-    ) -> Result<(), ValidationReport> {
+    ) {
         for rule in pipeline.rules() {
             if rule.head().len() > 1 {
                 commit.delete(rule.id());
@@ -46,7 +47,5 @@ impl ProgramTransformation for TransformationSplitRule {
                 }
             }
         }
-
-        Ok(())
     }
 }

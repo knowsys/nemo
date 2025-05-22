@@ -42,10 +42,11 @@ impl ProgramTransformation for TransformationExports {
     fn apply(
         self,
         commit: &mut ProgramCommit,
+        _report: &mut ValidationReport,
         pipeline: &ProgramPipeline,
-    ) -> Result<(), ValidationReport> {
+    ) {
         if let ExportParameters::Keep = self.parameters {
-            return Ok(());
+            return;
         }
 
         let derived_predicates = pipeline.derived_predicates();
@@ -76,7 +77,5 @@ impl ProgramTransformation for TransformationExports {
                 commit.add_export(export);
             }
         }
-
-        Ok(())
     }
 }

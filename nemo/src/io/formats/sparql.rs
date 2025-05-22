@@ -135,8 +135,8 @@ impl FormatBuilder for SparqlBuilder {
     fn customize_resource_builder(
         &self,
         direction: Direction,
-        builder: ResourceBuilder,
-    ) -> Result<ResourceBuilder, ResourceValidationErrorKind> {
+        _builder: Option<ResourceBuilder>,
+    ) -> Result<Option<ResourceBuilder>, ResourceValidationErrorKind> {
         match direction {
             Direction::Import => {
                 let mut resource_builder = ResourceBuilder::try_from(self.endpoint.clone())?;
@@ -146,9 +146,9 @@ impl FormatBuilder for SparqlBuilder {
                 } else {
                     resource_builder.add_get_parameter(String::from("query"), query)?;
                 }
-                Ok(resource_builder)
+                Ok(Some(resource_builder))
             }
-            _ => Ok(builder),
+            _ => Ok(None),
         }
     }
 

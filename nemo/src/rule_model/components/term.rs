@@ -443,15 +443,4 @@ mod test {
 
         assert_eq!(reduced, expected_term);
     }
-
-    #[test]
-    fn term_reduce_nonground() {
-        let expression = Term::parse("?x * (3 + 7)").unwrap();
-        let term = Term::from(tuple!(5, expression));
-
-        let reduced = term.reduce().unwrap();
-        let expected_term = Term::parse("(5, ?x * 10)").unwrap();
-
-        assert_eq!(reduced, expected_term);
-    }
 }

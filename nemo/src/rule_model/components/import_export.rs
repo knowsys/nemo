@@ -129,9 +129,15 @@ impl ImportDirective {
         })
     }
 
-    /// Return the corresponding [ImportExportBuilder] or an error
-    pub fn builder(&self) -> Result<ImportExportBuilder, ValidationReport> {
-        ImportExportBuilder::new(self.spec(), self.bindings(), Direction::Import)
+    /// Return the corresponding [ImportExportBuilder] if this component is valid.
+    pub fn builder_report(&self, report: &mut ValidationReport) -> Option<ImportExportBuilder> {
+        ImportExportBuilder::new(self.spec(), self.bindings(), Direction::Import, report)
+    }
+
+    /// Return the corresponding [ImportExportBuilder] if this component is valid.
+    pub fn builder(&self) -> Option<ImportExportBuilder> {
+        let mut report = ValidationReport::default();
+        ImportExportBuilder::new(self.spec(), self.bindings(), Direction::Import, &mut report)
     }
 
     /// Return the predicate.
@@ -152,7 +158,7 @@ impl ImportDirective {
     /// Check whether this imports from stdin.
     pub fn is_stdin(&self) -> bool {
         // TODO: There must be a better way
-        if let Ok(builder) = self.builder() {
+        if let Some(builder) = self.builder() {
             builder
                 .resource()
                 .map(|resource| resource.is_pipe())
@@ -165,7 +171,7 @@ impl ImportDirective {
     /// Return the expected arity of this directive, if any.
     pub fn expected_arity(&self) -> Option<usize> {
         // TODO: There must be a better way
-        self.builder().ok()?.expected_arity()
+        self.builder()?.expected_arity()
     }
 }
 
@@ -188,8 +194,9 @@ impl ComponentBehavior for ImportDirective {
     }
 
     fn validate(&self) -> Result<(), ValidationReport> {
-        self.builder()?;
-        Ok(())
+        let mut report = ValidationReport::default();
+        let _ = self.builder_report(&mut report);
+        report.result()
     }
 
     fn boxed_clone(&self) -> Box<dyn ProgramComponent> {
@@ -282,9 +289,15 @@ impl ExportDirective {
         )
     }
 
-    /// Return the corresponding [ImportExportBuilder] or an error
-    pub fn builder(&self) -> Result<ImportExportBuilder, ValidationReport> {
-        ImportExportBuilder::new(self.spec(), self.bindings(), Direction::Export)
+    /// Return the corresponding [ImportExportBuilder] if this component is valid.
+    pub fn builder_report(&self, report: &mut ValidationReport) -> Option<ImportExportBuilder> {
+        ImportExportBuilder::new(self.spec(), self.bindings(), Direction::Export, report)
+    }
+
+    /// Return the corresponding [ImportExportBuilder] if this component is valid.
+    pub fn builder(&self) -> Option<ImportExportBuilder> {
+        let mut report = ValidationReport::default();
+        ImportExportBuilder::new(self.spec(), self.bindings(), Direction::Export, &mut report)
     }
 
     /// Return the predicate.
@@ -305,7 +318,7 @@ impl ExportDirective {
     /// Return the expected arity of this directive, if any.
     pub fn expected_arity(&self) -> Option<usize> {
         // TODO: There must be a better way
-        self.builder().ok()?.expected_arity()
+        self.builder()?.expected_arity()
     }
 }
 
@@ -315,8 +328,9 @@ impl ComponentBehavior for ExportDirective {
     }
 
     fn validate(&self) -> Result<(), ValidationReport> {
-        self.builder()?;
-        Ok(())
+        let mut report = ValidationReport::default();
+        let _ = self.builder_report(&mut report);
+        report.result()
     }
 
     fn boxed_clone(&self) -> Box<dyn ProgramComponent> {

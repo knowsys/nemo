@@ -15,6 +15,7 @@ pub use nemo_physical::error::ReadingError;
 pub mod context;
 pub mod report;
 pub mod rich;
+pub mod warned;
 
 /// Error-Collection for all the possible Errors occurring in this crate
 #[allow(variant_size_differences)]

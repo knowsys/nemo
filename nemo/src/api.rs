@@ -30,11 +30,7 @@ use crate::{
     },
     parser::Parser,
     rule_file::RuleFile,
-    rule_model::{
-        components::{tag::Tag, ComponentBehavior},
-        program::Program,
-        translation::ASTProgramTranslation,
-    },
+    rule_model::{components::tag::Tag, program::Program, translation::ASTProgramTranslation},
 };
 use nemo_physical::resource::Resource;
 
@@ -60,7 +56,7 @@ pub fn load_string(input: String) -> Result<Engine, Error> {
     let execution_parameters = ExecutionParameters::default();
     let file = RuleFile::new(input, String::default());
 
-    ExecutionEngine::file(file, execution_parameters)
+    Ok(ExecutionEngine::file(file, execution_parameters)?.into_object())
 }
 
 /// Parse a program in the given `input`-string and return a [Program].
@@ -77,16 +73,19 @@ pub fn load_program(input: String, label: String) -> Result<Program, ProgramRepo
     };
 
     let translation = ASTProgramTranslation::default();
-    let translated = match translation.translate::<Program>(&ast) {
-        Ok(translated) => translated,
+    let (translated, parsing_report) = match translation.translate::<Program>(&ast) {
+        Ok(program) => program.pair(),
         Err(errors) => return Err(errors.program_report(file)),
     };
 
-    translated
-        .validate()
-        .map_err(|errors| errors.program_report(file))?;
+    let mut report = ProgramReport::new(file);
+    parsing_report.map(|parsing_report| report.merge_translation(parsing_report));
 
-    Ok(translated)
+    if report.contains_errors() {
+        Err(report)
+    } else {
+        Ok(translated)
+    }
 }
 
 /// Executes the reasoning process of the [Engine].

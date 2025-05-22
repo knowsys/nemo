@@ -110,8 +110,9 @@ impl ProgramTransformation for TransformationGlobal {
     fn apply(
         self,
         commit: &mut ProgramCommit,
+        _report: &mut ValidationReport,
         pipeline: &ProgramPipeline,
-    ) -> Result<(), ValidationReport> {
+    ) {
         let substitution = Self::subsitution(self.external, pipeline);
 
         for (old_import, new_import) in Self::apply_subsitution(pipeline.imports(), &substitution) {
@@ -128,7 +129,5 @@ impl ProgramTransformation for TransformationGlobal {
             commit.delete(old_fact.id());
             commit.add_fact(new_fact);
         }
-
-        Ok(())
     }
 }

@@ -45,7 +45,7 @@ impl Origin {
         node: &Node,
     ) -> Component {
         let start = node.span().range().range().start;
-        let end = node.span().range().range().start;
+        let end = node.span().range().range().end;
 
         let origin = Self::File { start, end };
         component.set_origin(origin);

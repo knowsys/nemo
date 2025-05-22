@@ -20,6 +20,7 @@ pub trait ProgramTransformation {
     fn apply(
         self,
         commit: &mut ProgramCommit,
+        report: &mut ValidationReport,
         pipeline: &ProgramPipeline,
-    ) -> Result<(), ValidationReport>;
+    );
 }

@@ -273,8 +273,8 @@ pub(crate) trait FormatBuilder: Sized + Into<AnyImportExportBuilder> {
     fn customize_resource_builder(
         &self,
         _direction: Direction,
-        builder: ResourceBuilder,
-    ) -> Result<ResourceBuilder, ResourceValidationErrorKind> {
+        builder: Option<ResourceBuilder>,
+    ) -> Result<Option<ResourceBuilder>, ResourceValidationErrorKind> {
         Ok(builder)
     }
 
@@ -298,8 +298,10 @@ impl<B: FormatBuilder> Parameters<B> {
     /// Take as input a list of bindings (statements of the form ?variable = ground term),
     /// validate that they are of the correct form
     /// and consturct a [Substitution].
-    fn build_substitution(bindings: &[Operation]) -> Result<Substitution, ValidationReport> {
-        let mut report = ValidationReport::default();
+    fn build_substitution(
+        bindings: &[Operation],
+        report: &mut ValidationReport,
+    ) -> Option<Substitution> {
         let mut result = HashMap::new();
 
         for binding in bindings {
@@ -326,7 +328,7 @@ impl<B: FormatBuilder> Parameters<B> {
             }
         }
 
-        report.result_value(Substitution::new(
+        Some(Substitution::new(
             result
                 .into_iter()
                 .map(|(key, (value, _origin))| (key, value)),
@@ -337,9 +339,8 @@ impl<B: FormatBuilder> Parameters<B> {
         spec: &ImportExportSpec,
         bindings: &[Operation],
         direction: Direction,
-    ) -> Result<Self, ValidationReport> {
-        let mut report = ValidationReport::default();
-
+        report: &mut ValidationReport,
+    ) -> Option<Self> {
         let Ok(format_tag) = B::Tag::from_str(spec.format().name()) else {
             report.add(
                 spec,
@@ -347,11 +348,11 @@ impl<B: FormatBuilder> Parameters<B> {
                     format: spec.format().name().to_owned(),
                 },
             );
-            return Err(report);
+            return None;
         };
 
         let mut spec = spec.clone();
-        let substitution = Self::build_substitution(bindings)?;
+        let substitution = Self::build_substitution(bindings, report)?;
         substitution.apply(&mut spec);
 
         let mut required_parameters: HashSet<_> = B::Parameter::iter()
@@ -411,7 +412,7 @@ impl<B: FormatBuilder> Parameters<B> {
             );
         }
 
-        report.result_value(Self(result))
+        Some(Self(result))
     }
 }
 
@@ -471,22 +472,22 @@ impl ImportExportBuilder {
         spec: &ImportExportSpec,
         bindings: &[Operation],
         direction: Direction,
-    ) -> Result<ImportExportBuilder, ValidationReport> {
+        report: &mut ValidationReport,
+    ) -> Option<ImportExportBuilder> {
         let origin = spec.origin();
-        let mut report = ValidationReport::default();
-        let parameters = Parameters::<B>::validate(spec, bindings, direction)?;
+        let parameters = Parameters::<B>::validate(spec, bindings, direction, report)?;
 
         let resource_builder =
             if let Some(value) = parameters.get_optional(StandardParameter::Resource.into()) {
                 match ResourceBuilder::try_from(value) {
-                    Ok(builder) => builder,
+                    Ok(builder) => Some(builder),
                     Err(error) => {
                         report.add_source(origin.clone(), error.into());
-                        return Err(report);
+                        return None;
                     }
                 }
             } else {
-                unimplemented!("no resource builder?")
+                None
             };
 
         let compression = parameters
@@ -500,18 +501,25 @@ impl ImportExportBuilder {
             Ok(b) => b,
             Err(error) => {
                 report.add_source(origin.clone(), error);
-                return Err(report);
+                return None;
             }
         };
 
-        let mut resource_builder =
-            match inner.customize_resource_builder(direction, resource_builder) {
-                Ok(builder) => builder,
-                Err(error) => {
-                    report.add_source(origin.clone(), error.into());
-                    return Err(report);
-                }
-            };
+        let resource_builder = match inner.customize_resource_builder(direction, resource_builder) {
+            Ok(builder) => builder,
+            Err(error) => {
+                report.add_source(origin.clone(), error.into());
+                return None;
+            }
+        };
+
+        let Some(mut resource_builder) = resource_builder else {
+            return Some(ImportExportBuilder {
+                inner: inner.into(),
+                resource: None,
+                compression,
+            });
+        };
 
         if let Some(headers) = parameters.get_optional(StandardParameter::HttpHeaders.into()) {
             if let Err(error) = http_parameters::unpack_headers(headers).and_then(|mut headers| {
@@ -570,7 +578,7 @@ impl ImportExportBuilder {
             }
         }
 
-        report.result_value(ImportExportBuilder {
+        Some(ImportExportBuilder {
             inner: inner.into(),
             resource: Some(resource_builder.finalize()),
             compression,
@@ -582,29 +590,32 @@ impl ImportExportBuilder {
         spec: &ImportExportSpec,
         bindings: &[Operation],
         direction: Direction,
-    ) -> Result<Self, ValidationReport> {
+        report: &mut ValidationReport,
+    ) -> Option<Self> {
         let format_tag = spec.format().name().to_owned();
         let Ok(tag) = format_tag.parse::<SupportedFormatTag>() else {
-            return Err(ValidationReport::single(
+            report.add(
                 spec,
                 ValidationError::ImportExportFileFormatUnknown {
                     format: format_tag.to_string(),
                 },
-            ));
+            );
+
+            return None;
         };
 
         match tag {
             SupportedFormatTag::Dsv(tag) => {
-                Self::new_with_tag::<DsvBuilder>(tag, spec, bindings, direction)
+                Self::new_with_tag::<DsvBuilder>(tag, spec, bindings, direction, report)
             }
             SupportedFormatTag::Rdf(tag) => {
-                Self::new_with_tag::<RdfHandler>(tag, spec, bindings, direction)
+                Self::new_with_tag::<RdfHandler>(tag, spec, bindings, direction, report)
             }
             SupportedFormatTag::Json(tag) => {
-                Self::new_with_tag::<JsonHandler>(tag, spec, bindings, direction)
+                Self::new_with_tag::<JsonHandler>(tag, spec, bindings, direction, report)
             }
             SupportedFormatTag::Sparql(tag) => {
-                Self::new_with_tag::<SparqlBuilder>(tag, spec, bindings, direction)
+                Self::new_with_tag::<SparqlBuilder>(tag, spec, bindings, direction, report)
             }
         }
     }

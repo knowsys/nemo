@@ -100,7 +100,7 @@ impl NemoProgram {
 
         let translated =
             match nemo::rule_model::translation::ASTProgramTranslation::default().translate(&ast) {
-                Ok(translated) => translated,
+                Ok(translated) => translated.into_object(),
                 Err(report) => {
                     return Err(NemoError(WasmOrInternalNemoError::Program(format!(
                         "{report}"
@@ -122,7 +122,7 @@ impl NemoProgram {
         let mut result: Vec<NemoResource> = vec![];
 
         for import in self.0.imports() {
-            let Ok(builder) = import.builder() else {
+            let Some(builder) = import.builder() else {
                 continue;
             };
 

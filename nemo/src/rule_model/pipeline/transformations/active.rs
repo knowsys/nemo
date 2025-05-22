@@ -29,8 +29,9 @@ impl ProgramTransformation for TransformationActive {
     fn apply(
         self,
         commit: &mut ProgramCommit,
+        _report: &mut ValidationReport,
         pipeline: &ProgramPipeline,
-    ) -> Result<(), ValidationReport> {
+    ) {
         let mut required = HashSet::<Tag>::new();
         let mut result = HashSet::new();
 
@@ -69,6 +70,10 @@ impl ProgramTransformation for TransformationActive {
             commit.keep(id);
         }
 
-        Ok(())
+        for import in pipeline.imports() {
+            if !required.contains(import.predicate()) {
+                commit.delete(import.id());
+            }
+        }
     }
 }

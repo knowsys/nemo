@@ -1,10 +1,20 @@
 //! This module defines [ProgramReport].
 
-use std::{fmt::Display, ops::Range};
+use std::{
+    fmt::{Debug, Display},
+    ops::Range,
+};
 
 use ariadne::Source;
 
-use crate::rule_file::RuleFile;
+use crate::{
+    parser::ParserErrorReport,
+    rule_file::RuleFile,
+    rule_model::{
+        error::{TranslationReport, ValidationReport},
+        translation::ProgramParseReport,
+    },
+};
 
 use super::{context::ContextError, rich::RichError};
 
@@ -44,6 +54,11 @@ impl ProgramReport {
         }
     }
 
+    /// Check whether report is empty.
+    pub fn is_empty(&self) -> bool {
+        self.warnings.is_empty() && self.errors.is_empty()
+    }
+
     /// Return an iterator over all warnings.
     pub fn warnings(&self) -> impl Iterator<Item = &ContextError> {
         self.warnings.iter()
@@ -60,7 +75,16 @@ impl ProgramReport {
     }
 
     /// Print the error messages, provided the source string and label
-    pub fn eprint(&self) -> Result<(), std::io::Error> {
+    pub fn eprint(&self, disbale_warnings: bool) -> Result<(), std::io::Error> {
+        if !disbale_warnings {
+            for warning in self.warnings() {
+                warning.report(self.program.name()).eprint((
+                    self.program.name().to_owned(),
+                    Source::from(self.program.content()),
+                ))?;
+            }
+        }
+
         for error in self.warnings.iter().chain(self.errors.iter()) {
             error.report(self.program.name()).eprint((
                 self.program.name().to_owned(),
@@ -111,9 +135,46 @@ impl ProgramReport {
         }
     }
 
-    /// Merge another [ProgramErrors] into this one.
+    /// Merge another [ProgramReport] into this one.
     pub fn merge(&mut self, other: Self) {
         self.warnings.extend(other.warnings);
         self.errors.extend(other.errors);
+    }
+
+    /// Merge a list of [ContextError]s into [ProgramReport].
+    pub fn merge_errors<Iter>(&mut self, errors: Iter)
+    where
+        Iter: Iterator<Item = (ContextError, bool)>,
+    {
+        for (error, is_warning) in errors {
+            if is_warning {
+                self.warnings.push(error)
+            } else {
+                self.errors.push(error)
+            }
+        }
+    }
+
+    /// Merge a [ValidationReport] into this [ProgramReport].
+    pub fn merge_validation(&mut self, report: ValidationReport) {
+        self.merge_errors(report.context_errors());
+    }
+
+    /// Merge a [ValidationReport] into this [TranslationReport].
+    pub fn merge_translation(&mut self, report: TranslationReport) {
+        self.merge_errors(report.context_errors());
+    }
+
+    /// Merge a [ValidationReport] into this [ProgramReport].
+    pub fn merge_parser(&mut self, report: ParserErrorReport) {
+        self.merge_errors(report.context_errors());
+    }
+
+    /// Merge a [ValidationReport] into this [ProgramParseReport].
+    pub fn merge_program_parser(&mut self, report: ProgramParseReport) {
+        match report {
+            ProgramParseReport::Parsing(report) => self.merge_parser(report),
+            ProgramParseReport::Translation(report) => self.merge_translation(report),
+        }
     }
 }

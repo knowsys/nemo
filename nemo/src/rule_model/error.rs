@@ -10,7 +10,7 @@ use translation_error::TranslationError;
 use validation_error::ValidationError;
 
 use crate::{
-    error::{context::ContextError, report::ProgramReport, rich::RichError},
+    error::{context::ContextError, report::ProgramReport, rich::RichError, warned::Warned},
     rule_file::RuleFile,
 };
 
@@ -200,20 +200,43 @@ where
         }
     }
 
-    /// Convert this report into a [Result]
-    /// containing the given value or `self`
-    /// depending on whether it contains any errors.
-    pub fn result_value<Value>(self, value: Value) -> Result<Value, Self> {
-        if self.errors.is_empty() {
-            Ok(value)
-        } else {
+    /// Check whether this report contains any errors.
+    pub fn contains_errors(&self) -> bool {
+        self.errors
+            .iter()
+            .find(|error| !error.is_warning())
+            .is_some()
+    }
+
+    /// Check if report is empty.
+    pub fn is_empty(&self) -> bool {
+        self.errors.is_empty()
+    }
+
+    /// Convert this report into a [Warned] object,
+    /// depending whether this report contains any errors or warnings.
+    pub fn warned<Object: Debug>(self, object: Object) -> Result<Warned<Object, Self>, Self> {
+        if self.contains_errors() {
             Err(self)
+        } else {
+            if self.errors.is_empty() {
+                Ok(Warned::new(object, None))
+            } else {
+                Ok(Warned::new(object, Some(self)))
+            }
         }
     }
 
     /// Merge another report given as a `Result`.
     pub fn merge(&mut self, other: Result<(), Self>) {
         if let Err(report) = other {
+            self.errors.extend(report.errors);
+        }
+    }
+
+    /// Merge another report given as a `Result`.
+    pub fn merge_option(&mut self, other: Option<Self>) {
+        if let Some(report) = other {
             self.errors.extend(report.errors);
         }
     }
@@ -228,22 +251,17 @@ where
         self.errors.iter().map(|error| &error.error)
     }
 
-    /// Translate this [ValidationReport] into a [ProgramReport].
-    pub fn program_report<Translation>(
+    /// Translate this [SourceErrorReport] into a list of [ContextError].
+    pub fn context_errors<Translation>(
         self,
-        program: RuleFile,
         translation: Translation,
-    ) -> ProgramReport
+    ) -> impl Iterator<Item = (ContextError, bool)>
     where
         Translation: Fn(Source) -> Option<Range<usize>>,
     {
-        let mut result = ProgramReport::new(program);
-
-        for error in self.errors {
+        self.errors.into_iter().flat_map(move |error| {
             let is_warning = error.is_warning();
-            let Some(range) = translation(error.source) else {
-                continue;
-            };
+            let range = translation(error.source)?;
 
             let mut context_error = ContextError::new(error.error, range).add_hints(error.hints);
 
@@ -255,14 +273,8 @@ where
                 context_error.add_context(context.message, range);
             }
 
-            if is_warning {
-                result.add_warning(context_error);
-            } else {
-                result.add_error(context_error);
-            }
-        }
-
-        result
+            Some((context_error, is_warning))
+        })
     }
 }
 
@@ -309,11 +321,18 @@ impl ValidationReport {
         self.0.result().map_err(|report| Self(report))
     }
 
-    /// Convert this report into a [Result]
-    /// containing the given value or `self`
-    /// depending on whether it contains any errors.
-    pub fn result_value<Value>(self, value: Value) -> Result<Value, Self> {
-        self.0.result_value(value).map_err(|report| Self(report))
+    /// Convert this report into a [Warned] object,
+    /// depending whether this report contains any errors or warnings.
+    pub fn warned<Object: Debug>(self, object: Object) -> Result<Warned<Object, Self>, Self> {
+        if self.contains_errors() {
+            Err(self)
+        } else {
+            if self.is_empty() {
+                Ok(Warned::new(object, None))
+            } else {
+                Ok(Warned::new(object, Some(self)))
+            }
+        }
     }
 
     /// Merge another report given as a `Result`.
@@ -326,28 +345,37 @@ impl ValidationReport {
         self.0.merge_report(other.0);
     }
 
+    /// Check whether this report contains any errors.
+    pub fn contains_errors(&self) -> bool {
+        self.0.contains_errors()
+    }
+
+    /// Check if report is empty.
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
     /// Return an iterator over all [ValidationError]s.
     pub fn errors(&self) -> impl Iterator<Item = &ValidationError> {
         self.0.errors()
     }
 
-    /// Translate this [ValidationReport] into a [ProgramReport].
-    pub fn program_report(self, program: RuleFile) -> ProgramReport {
+    /// Translate this [ValidationReport] into a list of [ContextError].
+    pub fn context_errors(self) -> impl Iterator<Item = (ContextError, bool)> {
         let translation = |origin: Origin| origin.to_range();
 
-        self.0.program_report(program, translation)
+        self.0.context_errors(translation)
     }
 
-    /// Translate this [ValidationReport] into a [ProgramReport]
+    /// Translate this [ValidationReport] into a list of [ContextError].
     /// using a [ProgramPipeline] for translating [Origin]s.
     pub fn program_report_pipeline(
         self,
-        program: RuleFile,
         pipeline: &ProgramPipeline,
-    ) -> ProgramReport {
+    ) -> impl Iterator<Item = (ContextError, bool)> + '_ {
         let translation = |origin: Origin| origin.to_range_pipeline(pipeline);
 
-        self.0.program_report(program, translation)
+        self.0.context_errors(translation)
     }
 }
 
@@ -394,11 +422,28 @@ impl TranslationReport {
         self.0.result().map_err(|report| Self(report))
     }
 
-    /// Convert this report into a [Result]
-    /// containing the given value or `self`
-    /// depending on whether it contains any errors.
-    pub fn result_value<Value>(self, value: Value) -> Result<Value, Self> {
-        self.0.result_value(value).map_err(|report| Self(report))
+    /// Convert this report into a [Warned] object,
+    /// depending whether this report contains any errors or warnings.
+    pub fn warned<Object: Debug>(self, object: Object) -> Result<Warned<Object, Self>, Self> {
+        if self.contains_errors() {
+            Err(self)
+        } else {
+            if self.is_empty() {
+                Ok(Warned::new(object, None))
+            } else {
+                Ok(Warned::new(object, Some(self)))
+            }
+        }
+    }
+
+    /// Check whether this report contains any errors.
+    pub fn contains_errors(&self) -> bool {
+        self.0.contains_errors()
+    }
+
+    /// Check if report is empty.
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
     }
 
     /// Merge another report given as a `Result`.
@@ -416,9 +461,16 @@ impl TranslationReport {
         self.0.errors()
     }
 
-    /// Translate this [TranslationError] into a [ProgramReport].
-    pub fn program_report(self, program: RuleFile) -> ProgramReport {
+    /// Translate this [TranslationReport] into a list of [ContextError].
+    pub fn context_errors(self) -> impl Iterator<Item = (ContextError, bool)> {
         let translation = |range| Some(range);
-        self.0.program_report(program, translation)
+        self.0.context_errors(translation)
+    }
+
+    /// Translate this [TranslationReport] into a [ProgramReport].
+    pub fn program_report(self, file: RuleFile) -> ProgramReport {
+        let mut report = ProgramReport::new(file);
+        report.merge_translation(self);
+        report
     }
 }

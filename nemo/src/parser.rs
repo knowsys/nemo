@@ -74,16 +74,18 @@ impl ParserErrorReport {
         }
     }
 
-    /// Convert this report to a [ProgramReport].
-    pub fn program_report(self, program: RuleFile) -> ProgramReport {
-        let mut report = ProgramReport::new(program);
-
-        for error in self.errors {
+    /// Convert this report to a list of [ContextError]s.
+    pub fn context_errors(self) -> impl Iterator<Item = (ContextError, bool)> {
+        self.errors.into_iter().map(|error| {
             let range = error.position.range();
+            (ContextError::new(error, range), false)
+        })
+    }
 
-            report.add_error(ContextError::new(error, range));
-        }
-
+    /// Convert this report to a [ProgramReport].
+    pub fn program_report(self, file: RuleFile) -> ProgramReport {
+        let mut report = ProgramReport::new(file);
+        report.merge_parser(self);
         report
     }
 

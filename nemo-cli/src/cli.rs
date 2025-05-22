@@ -167,6 +167,9 @@ pub(crate) struct CliApp {
     /// Overwrite global parameters in the rule file
     #[arg(long = "param")]
     pub(crate) parameters: Vec<ParamKeyValue>,
+    /// Disable warnings when validating rule files
+    #[arg(long = "no-warnings")]
+    pub(crate) disable_warnings: bool,
 }
 
 /// Key-Value pair for global variable

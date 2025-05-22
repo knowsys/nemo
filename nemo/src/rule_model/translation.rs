@@ -9,13 +9,13 @@ pub(crate) mod literal;
 pub(crate) mod rule;
 mod term;
 
-use std::{collections::HashMap, fmt::Display, ops::Range};
+use std::{collections::HashMap, fmt::Debug, fmt::Display, ops::Range};
 
 use attribute::{process_attributes, KnownAttributes};
 use directive::{handle_define_directive, handle_use_directive};
 
 use crate::{
-    error::report::ProgramReport,
+    error::{report::ProgramReport, warned::Warned},
     parser::{
         ast::{self, ProgramAST},
         error::translate_error_tree,
@@ -71,10 +71,10 @@ impl ASTProgramTranslation {
     }
 
     /// Translate the given [ProgramAST] into a [Program].
-    pub fn translate<'a, Writer: ProgramWrite>(
+    pub fn translate<'a, Writer: Debug + ProgramWrite>(
         mut self,
         ast: &ast::program::Program<'a>,
-    ) -> Result<Writer, TranslationReport> {
+    ) -> Result<Warned<Writer, TranslationReport>, TranslationReport> {
         let mut program = Writer::default();
 
         // First, handle directives
@@ -112,7 +112,7 @@ impl ASTProgramTranslation {
             self.statement_attributes.clear();
         }
 
-        self.report.result_value(program)
+        self.report.warned(program)
     }
 
     /// Recreate the name from a [ast::tag::structure::StructureTag]
@@ -160,21 +160,21 @@ pub enum ProgramParseReport {
     Translation(TranslationReport),
 }
 
-impl Display for ProgramParseReport {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl ProgramParseReport {
+    /// Convert this report to a [ProgramReport].
+    pub fn program_report(self, file: RuleFile) -> ProgramReport {
         match self {
-            ProgramParseReport::Parsing(report) => report.fmt(f),
-            ProgramParseReport::Translation(report) => report.fmt(f),
+            ProgramParseReport::Parsing(report) => report.program_report(file),
+            ProgramParseReport::Translation(report) => report.program_report(file),
         }
     }
 }
 
-impl ProgramParseReport {
-    /// Convert this report into a [ProgramReport]
-    pub fn program_report(self, program: RuleFile) -> ProgramReport {
+impl Display for ProgramParseReport {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            ProgramParseReport::Parsing(report) => report.program_report(program),
-            ProgramParseReport::Translation(report) => report.program_report(program),
+            ProgramParseReport::Parsing(report) => write!(f, "{}", report),
+            ProgramParseReport::Translation(report) => write!(f, "{}", report),
         }
     }
 }

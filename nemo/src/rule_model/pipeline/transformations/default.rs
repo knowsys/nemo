@@ -45,27 +45,29 @@ impl ProgramTransformation for TransformationDefault {
     fn apply(
         self,
         commit: &mut ProgramCommit,
+        report: &mut ValidationReport,
         pipeline: &ProgramPipeline,
-    ) -> Result<(), ValidationReport> {
-        let mut report = ValidationReport::default();
-
+    ) {
         pipeline.validate_parameters(
-            &mut report,
+            report,
             self.parameters
                 .global_variables
                 .keys()
                 .collect::<HashSet<_>>(),
         );
 
-        TransformationGlobal::new(self.parameters.global_variables).apply(commit, pipeline)?;
-        TransformationExports::new(self.parameters.export_parameters).apply(commit, pipeline)?;
+        TransformationGlobal::new(self.parameters.global_variables).apply(commit, report, pipeline);
+        TransformationExports::new(self.parameters.export_parameters)
+            .apply(commit, report, pipeline);
 
-        pipeline.validate_arity(&mut report);
-        pipeline.validate_stdin_imports(&mut report);
-        report.result()?;
+        pipeline.validate_arity(report);
+        pipeline.validate_stdin_imports(report);
+        pipeline.validate_components(report);
 
-        TransformationActive::default().apply(commit, pipeline)?;
+        if report.contains_errors() {
+            return;
+        }
 
-        Ok(())
+        TransformationActive::default().apply(commit, report, pipeline);
     }
 }
