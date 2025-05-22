@@ -79,6 +79,7 @@ mod test {
     };
 
     #[test]
+    #[cfg_attr(miri, ignore)]
     fn parse_expression_sequence_simple() {
         let test = vec![
             ("", 0),

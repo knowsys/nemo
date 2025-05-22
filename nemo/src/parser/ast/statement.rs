@@ -161,6 +161,7 @@ mod test {
     };
 
     #[test]
+    #[cfg_attr(miri, ignore)]
     fn parse_statement() {
         let test = vec![
             (

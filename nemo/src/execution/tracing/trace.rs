@@ -692,6 +692,7 @@ mod test {
     }
 
     #[test]
+    #[cfg_attr(miri, ignore)]
     fn trace_ascii() {
         let trace = test_trace();
         let r_ba = GroundAtom::try_from(Atom::parse("R(b,a)").unwrap()).unwrap();
@@ -712,6 +713,7 @@ mod test {
     }
 
     #[test]
+    #[cfg_attr(miri, ignore)]
     fn trace_json() {
         let trace = test_trace();
 

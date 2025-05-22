@@ -10,12 +10,13 @@ readme = "README.md"
 repository.workspace = true
 
 [features]
-stringpairdictionary = []
 check_column_sorting = []
+old_dictionaries = []
 
 [[bin]]
 name = "dict-bench"
 path = "src/benches/dict-bench.rs"
+required-features = ["old_dictionaries"]
 
 [dependencies]
 enum_dispatch = "0.3.12"

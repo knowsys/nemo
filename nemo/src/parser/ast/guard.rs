@@ -75,6 +75,7 @@ mod test {
     };
 
     #[test]
+    #[cfg_attr(miri, ignore)]
     fn parse_guard() {
         let test = vec![
             ("test(?x, (1,), (1 + 2))", ParserContext::Atom),

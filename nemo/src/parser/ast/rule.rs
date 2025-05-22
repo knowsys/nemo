@@ -96,6 +96,7 @@ mod test {
     };
 
     #[test]
+    #[cfg_attr(miri, ignore)]
     fn parse_rule() {
         let test = vec![
             ("a(?x, ?y) :- b(?x, ?y)", (1, 1)),
