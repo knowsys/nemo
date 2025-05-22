@@ -61,9 +61,7 @@ impl ExecutionParameters {
     {
         let mut result = HashMap::new();
         for (key, value) in iterator {
-            let Ok(variable) = GlobalVariable::parse(&key) else {
-                return Err(key);
-            };
+            let variable = GlobalVariable::new(&key);
 
             let Ok(term) = GroundTerm::parse(&value) else {
                 return Err(key);

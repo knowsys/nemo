@@ -24,7 +24,7 @@ pub enum CliError {
         fact: String,
     },
     /// Invalid paramater
-    #[error("invalid paramater: {parameter}")]
+    #[error("invalid parameter: {parameter}")]
     InvalidParameter {
         /// Invalid paramater
         parameter: String,

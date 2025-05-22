@@ -115,8 +115,6 @@ impl ComponentBehavior for ParameterDeclaration {
                     ValidationError::ParameterDeclarationNotGroundish,
                 );
             }
-        } else {
-            report.add(self, ValidationError::ParameterMissingDefinition);
         }
 
         report.result()
