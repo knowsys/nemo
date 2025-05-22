@@ -101,7 +101,7 @@ pub fn reason(engine: &mut Engine) -> Result<(), Error> {
 /// Get a [Vec] of all output predicates that are computed by the engine.
 pub fn output_predicates(engine: &Engine) -> Vec<Tag> {
     engine
-        .program()
+        .chase_program()
         .exports()
         .iter()
         .map(|export| export.predicate())

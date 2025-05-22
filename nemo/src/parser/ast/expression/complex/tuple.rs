@@ -89,6 +89,7 @@ mod test {
     };
 
     #[test]
+    #[cfg_attr(miri, ignore)]
     fn parse_tuple() {
         let test = vec![
             ("(1,)", 1),

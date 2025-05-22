@@ -14,9 +14,9 @@ pub(crate) enum Exporting {
     Keep,
     /// Disable all exports.
     None,
-    /// Export all IDB predicates (those used in rule heads)
+    /// Export all IDB predicates (those used in rule heads).
     Idb,
-    /// Export all EDB predicates (those for which facts are given or imported)
+    /// Export all EDB predicates (those for which facts are given or imported).
     Edb,
     /// Export all predicates.
     All,
@@ -31,6 +31,28 @@ impl Into<ExportParameters> for Exporting {
             Exporting::Edb => ExportParameters::Edb,
             Exporting::All => ExportParameters::All,
         }
+    }
+}
+
+/// Possible settings for the fact-printing option.
+#[derive(clap::ValueEnum, Clone, Copy, Default, Debug, PartialEq, Eq)]
+pub(crate) enum FactPrinting {
+    /// Do not print facts for any predicate.
+    #[default]
+    None,
+    /// Print facts for all IDB predicates (those used in rule heads).
+    Idb,
+    /// Print facts for all EDB predicates (those for which facts are given or imported).
+    Edb,
+    /// Print facts for all predicates.
+    All,
+}
+
+impl FactPrinting {
+    /// Whether printing is enabled for some predicates
+    #[allow(dead_code)]
+    pub(crate) fn is_enabled(&self) -> bool {
+        !matches!(self, Self::None)
     }
 }
 
@@ -74,6 +96,7 @@ impl LoggingArgs {
     ///  * `Error` when `-q` is used
     ///  * The `NMO_LOG` environment variable value
     ///  * `Warn` otherwise
+    #[allow(dead_code)]
     pub(crate) fn initialize_logging(&self) {
         let mut builder = env_logger::Builder::new();
 
@@ -113,10 +136,14 @@ pub(crate) struct OutputArgs {
     /// does not affect export directives that already specify a compression
     #[arg(short, long = "gzip", default_value = "false")]
     gz: bool,
+    /// Print all facts for the select predicates
+    #[arg(long = "print-facts", value_enum, default_value_t)]
+    pub(crate) print_facts_setting: FactPrinting,
 }
 
 impl OutputArgs {
     /// Creates an output file manager with the current options
+    #[allow(dead_code)]
     pub(crate) fn export_manager(&self) -> Result<ExportManager, Error> {
         let export_manager = ExportManager::default()
             .set_base_path(self.export_directory.clone())
@@ -145,7 +172,7 @@ pub(crate) struct TracingArgs {
 /// Nemo CLI
 #[derive(clap::Parser, Debug)]
 #[command(author, version, about)]
-pub(crate) struct CliApp {
+pub struct CliApp {
     /// One or more rule program files
     #[arg(value_parser, required = true)]
     pub(crate) rules: Vec<PathBuf>,

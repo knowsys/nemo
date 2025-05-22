@@ -303,6 +303,7 @@ mod test {
     }
 
     #[test]
+    #[cfg_attr(miri, ignore)]
     fn parse_arithmetic() {
         let test = vec![
             ("1 * 2", 2),

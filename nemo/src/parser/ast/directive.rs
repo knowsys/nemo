@@ -171,6 +171,7 @@ mod test {
     };
 
     #[test]
+    #[cfg_attr(miri, ignore)]
     fn parse_directive() {
         let test = vec![
             ("@base <test>", ParserContext::Base),

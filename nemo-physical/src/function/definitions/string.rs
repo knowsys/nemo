@@ -734,6 +734,8 @@ impl TernaryFunction for StringSubstringLength {
 #[cfg(test)]
 mod test {
 
+    use std::slice;
+
     use crate::{
         datavalues::AnyDataValue,
         function::definitions::{BinaryFunction, NaryFunction, TernaryFunction, UnaryFunction},
@@ -1482,12 +1484,12 @@ mod test {
         assert!(actual_result_no_lang.is_some());
         assert_eq!(actual_result_no_lang.unwrap(), result_no_lang);
 
-        let actual_result_single_val = StringConcatenation.evaluate(&[foo_en.clone()]);
+        let actual_result_single_val = StringConcatenation.evaluate(slice::from_ref(&foo_en));
         assert!(actual_result_single_val.is_some());
         assert_eq!(actual_result_single_val.unwrap(), foo_en.clone());
 
         let empty_en = AnyDataValue::new_language_tagged_string("".to_string(), "en".to_string());
-        let actual_result_empty1 = StringConcatenation.evaluate(&[empty_en.clone()]);
+        let actual_result_empty1 = StringConcatenation.evaluate(slice::from_ref(&empty_en));
         assert!(actual_result_empty1.is_some());
         assert_eq!(actual_result_empty1.unwrap(), empty_en);
 

@@ -304,8 +304,13 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         Ok(())
     }
 
+    /// Return a reference to the current [Program].
+    pub fn program(&self) -> &Program {
+        &self.nemo_program
+    }
+
     /// Get a reference to the loaded program.
-    pub(crate) fn program(&self) -> &ChaseProgram {
+    pub(crate) fn chase_program(&self) -> &ChaseProgram {
         &self.program
     }
 

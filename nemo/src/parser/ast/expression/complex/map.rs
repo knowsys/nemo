@@ -112,6 +112,7 @@ mod test {
     };
 
     #[test]
+    #[cfg_attr(miri, ignore)]
     fn parse_map() {
         let test = vec![
             ("{?x=7}", (None, 1)),

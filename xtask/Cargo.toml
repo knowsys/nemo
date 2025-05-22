@@ -1,0 +1,18 @@
+[package]
+name = "xtask"
+description.workspace = true
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+homepage.workspace = true
+license.workspace = true
+readme.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+cargo_metadata = "0.19.2"
+clap = { version = "4.5.38", features = ["derive", "env", "cargo", "string"] }
+clap_complete = "4.5.50"
+clap_mangen = "0.2.26"
+nemo-cli = { path = "../nemo-cli" }

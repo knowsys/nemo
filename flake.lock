@@ -1,5 +1,20 @@
 {
   "nodes": {
+    "crane": {
+      "locked": {
+        "lastModified": 1747587869,
+        "narHash": "sha256-Zay3WJdSvC2VQmNqWSVLBOg/1iS/0/Q0c9JOBsB+3qw=",
+        "owner": "ipetkov",
+        "repo": "crane",
+        "rev": "76603d32f18e0e378d9f6335c8fc286413493655",
+        "type": "github"
+      },
+      "original": {
+        "owner": "ipetkov",
+        "repo": "crane",
+        "type": "github"
+      }
+    },
     "dream2nix": {
       "inputs": {
         "nixpkgs": [
@@ -9,11 +24,11 @@
         "pyproject-nix": "pyproject-nix"
       },
       "locked": {
-        "lastModified": 1735160684,
-        "narHash": "sha256-n5CwhmqKxifuD4Sq4WuRP/h5LO6f23cGnSAuJemnd/4=",
+        "lastModified": 1747658429,
+        "narHash": "sha256-qZWuEdxmPx818qR61t3mMozJOvZSmTRUDPU4L3JeGgE=",
         "owner": "nix-community",
         "repo": "dream2nix",
-        "rev": "8ce6284ff58208ed8961681276f82c2f8f978ef4",
+        "rev": "6fd6d9188f32efd1e1656b3c3e63a67f9df7b636",
         "type": "github"
       },
       "original": {
@@ -79,6 +94,32 @@
       "original": {
         "owner": "knowsys",
         "repo": "nemo",
+        "type": "github"
+      }
+    },
+    "nemo-doc": {
+      "inputs": {
+        "dream2nix": [
+          "dream2nix"
+        ],
+        "nixpkgs": [
+          "nixpkgs"
+        ],
+        "utils": [
+          "utils"
+        ]
+      },
+      "locked": {
+        "lastModified": 1747305769,
+        "narHash": "sha256-89hPChBD7BHVnKWcZyUsVRvbXkIykAYC/xHvaGX/7nI=",
+        "owner": "knowsys",
+        "repo": "nemo-doc",
+        "rev": "1a75e8b66f500978be7adefc140f74cf7a29e068",
+        "type": "github"
+      },
+      "original": {
+        "owner": "knowsys",
+        "repo": "nemo-doc",
         "type": "github"
       }
     },
@@ -160,11 +201,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1738172049,
-        "narHash": "sha256-NTuNDxe29s+OZVnVOCXTna//rnewuTQT0W/DXTlQueM=",
+        "lastModified": 1745599010,
+        "narHash": "sha256-dEvrXb0ml9ixSirQLWzei3Jbta6F4C9tJbjkuyQUne0=",
         "owner": "knowsys",
         "repo": "nemo-web",
-        "rev": "cd3ee3403b0df18c102a4c7f1e8948b039d32194",
+        "rev": "032f7a001274667a0c43e3a751574808809a5c64",
         "type": "github"
       },
       "original": {
@@ -175,11 +216,11 @@
     },
     "nixpkgs": {
       "locked": {
-        "lastModified": 1743367904,
-        "narHash": "sha256-sOos1jZGKmT6xxPvxGQyPTApOunXvScV4lNjBCXd/CI=",
+        "lastModified": 1747485343,
+        "narHash": "sha256-YbsZyuRE1tobO9sv0PUwg81QryYo3L1F3R3rF9bcG38=",
         "owner": "NixOS",
         "repo": "nixpkgs",
-        "rev": "7ffe0edc685f14b8c635e3d6591b0bbb97365e6c",
+        "rev": "9b5ac7ad45298d58640540d0323ca217f32a6762",
         "type": "github"
       },
       "original": {
@@ -231,7 +272,9 @@
     },
     "root": {
       "inputs": {
+        "crane": "crane",
         "dream2nix": "dream2nix",
+        "nemo-doc": "nemo-doc",
         "nemo-vscode-extension": "nemo-vscode-extension",
         "nemo-web": "nemo-web",
         "nixpkgs": "nixpkgs",
@@ -268,11 +311,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1743475035,
-        "narHash": "sha256-uLjVsb4Rxnp1zmFdPCDmdODd4RY6ETOeRj0IkC0ij/4=",
+        "lastModified": 1747622321,
+        "narHash": "sha256-W0dYIWgsUu6rvOJRtKLhKskkv0VhQhJYGNIq+gGUc8g=",
         "owner": "oxalica",
         "repo": "rust-overlay",
-        "rev": "bee11c51c2cda3ac57c9e0149d94b86cc1b00d13",
+        "rev": "bd030fd9983f7fddf87be1c64aa3064c8afa24c4",
         "type": "github"
       },
       "original": {
