@@ -105,10 +105,7 @@ impl ComponentBehavior for ParameterDeclaration {
         }
 
         if let Some(expression) = self.expression() {
-            if expression
-                .variables()
-                .any(|variable| !variable.is_global())
-            {
+            if expression.variables().any(|variable| !variable.is_global()) {
                 report.add(
                     expression,
                     ValidationError::ParameterDeclarationNotGroundish,

@@ -10,8 +10,7 @@ use crate::{
 };
 
 /// Externally modify the export statements of the program
-#[derive(Debug, Clone, Copy, PartialEq)]
-#[derive(Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub enum ExportParameters {
     /// Keep all exports as is
     #[default]
@@ -25,7 +24,6 @@ pub enum ExportParameters {
     /// Export all predicates
     All,
 }
-
 
 /// External parameters affecting the execution
 #[derive(Debug)]

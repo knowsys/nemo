@@ -202,9 +202,7 @@ where
 
     /// Check whether this report contains any errors.
     pub fn contains_errors(&self) -> bool {
-        self.errors
-            .iter()
-            .any(|error| !error.is_warning())
+        self.errors.iter().any(|error| !error.is_warning())
     }
 
     /// Check if report is empty.

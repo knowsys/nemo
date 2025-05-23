@@ -167,9 +167,7 @@ impl Map {
 
     /// Check whether the given key is contained in this map.
     pub fn contains_key(&self, key: &Term) -> bool {
-        self.map
-            .iter()
-            .any(|(key_map, _)| key_map == key)
+        self.map.iter().any(|(key_map, _)| key_map == key)
     }
 
     /// Return whether this term is ground,

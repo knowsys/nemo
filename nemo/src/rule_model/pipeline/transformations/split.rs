@@ -17,10 +17,10 @@ use super::ProgramTransformation;
 ///
 /// Rewrites multi-head rules into several single-head rules with the same body,
 /// and only one of the head atoms each.
-/// 
+///
 /// FIXME: The implementation is only for showcasing the code. It is not semantically correct
 /// for rules that contain existential quantifiers, where one would have to split into "pieces"
-/// (connected components of head atoms that share existential variables). Currently, this 
+/// (connected components of head atoms that share existential variables). Currently, this
 /// transformation is unused, and this semantic error does not affect reasoning.
 #[derive(Debug, Clone, Copy)]
 pub struct TransformationSplitRule {}
