@@ -1,6 +1,6 @@
 //! This module defines [ProgramState].
 
-use std::ops::Range;
+use std::{fmt::Write, ops::Range};
 
 use crate::rule_model::{
     components::{
@@ -62,7 +62,7 @@ where
         }
     }
 
-    /// Given an itereator over statements and a target commit,
+    /// Given an iterator over statements and a target commit,
     /// return all statements that are valid in this commit.
     pub fn filter<'a, Iter>(iterator: Iter, commit: usize) -> impl Iterator<Item = &'a Statement>
     where
@@ -74,7 +74,7 @@ where
             .map(|element| &element.statement)
     }
 
-    /// Given an itereator over statements and a target commit,
+    /// Given an iterator over statements and a target commit,
     /// return all statements that are valid in this commit.
     pub fn filter_owned<Iter>(iterator: Iter, commit: usize) -> impl Iterator<Item = Statement>
     where
@@ -464,5 +464,41 @@ impl IterableComponent for ProgramState {
     ) -> Box<dyn Iterator<Item = &'a mut dyn ProgramComponent> + 'a> {
         let iterator = self.spans_mut().map(|spanned| spanned.component_mut());
         Box::new(iterator)
+    }
+}
+
+impl std::fmt::Display for ProgramState {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        for parameter in self.parameters() {
+            parameter.fmt(f)?;
+            f.write_char('\n')?;
+        }
+
+        for import in self.imports() {
+            import.fmt(f)?;
+            f.write_char('\n')?;
+        }
+
+        for fact in self.facts() {
+            fact.fmt(f)?;
+            f.write_char('\n')?;
+        }
+
+        for rule in self.rules() {
+            rule.fmt(f)?;
+            f.write_char('\n')?;
+        }
+
+        for output in self.outputs() {
+            output.fmt(f)?;
+            f.write_char('\n')?;
+        }
+
+        for export in self.exports() {
+            export.fmt(f)?;
+            f.write_char('\n')?;
+        }
+
+        Ok(())
     }
 }

@@ -294,6 +294,12 @@ impl ProgramRead for ProgramPipeline {
     }
 }
 
+impl std::fmt::Display for ProgramPipeline {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.state.fmt(f)
+    }
+}
+
 #[cfg(test)]
 mod test {
     use crate::rule_model::components::{
