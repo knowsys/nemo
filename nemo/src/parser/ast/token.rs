@@ -1,7 +1,7 @@
 //! This module defines [Token].
 #![allow(missing_docs)]
 
-use std::fmt::Display;
+use std::{fmt::Display, ops::Range};
 
 use enum_assoc::Assoc;
 
@@ -25,6 +25,7 @@ use crate::{
         span::Span,
         ParserInput, ParserResult,
     },
+    rule_model::components::ComponentSource,
     syntax::{
         self, comment,
         datavalues::{self, boolean, iri, map, string, tuple, RDF_DATATYPE_INDICATOR},
@@ -315,6 +316,18 @@ pub struct Token<'a> {
 
     /// The kind of token
     kind: TokenKind,
+}
+
+impl<'a> ComponentSource for Token<'a> {
+    type Source = Range<usize>;
+
+    fn origin(&self) -> Range<usize> {
+        self.span.range().range().clone()
+    }
+
+    fn set_origin(&mut self, _origin: Self::Source) {
+        // Not needed
+    }
 }
 
 impl Display for Token<'_> {

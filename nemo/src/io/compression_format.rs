@@ -60,10 +60,6 @@ impl CompressionFormat {
             return Self::None;
         };
 
-        if !builder.supports_compression() {
-            return Self::None;
-        }
-
         match builder.file_extension() {
             Some(file_format::EXTENSION_GZ) => Self::GZip,
             _ => Self::None,
