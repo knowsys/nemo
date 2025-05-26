@@ -97,15 +97,13 @@ impl OrderedReferenceManager {
         }
     }
 
-    /// Return the number of rows contained in this table.
-    ///
-    /// TODO: Currently only counting of in-memory facts is supported, see <https://github.com/knowsys/nemo/issues/335>
-    pub(crate) fn count_rows(&self, id: PermanentTableId) -> usize {
+    /// Return the number of in-memory rows contained in this table.
+    pub(crate) fn count_rows_in_memory(&self, id: PermanentTableId) -> usize {
         let (id, _) = self.resolve_reference(id, ColumnOrder::default());
 
         if let Some(order_map) = self.storage_map.get(&id) {
             if let Some(&storage_id) = order_map.values().next() {
-                return self.stored_tables[storage_id].count_rows();
+                return self.stored_tables[storage_id].count_rows_in_memory();
             }
 
             unreachable!("At least one entry must exist");
