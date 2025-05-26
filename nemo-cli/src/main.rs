@@ -215,6 +215,7 @@ fn handle_tracing(
 ) -> Result<(), CliError> {
     let tracing_facts = parse_trace_facts(cli)?;
     if !tracing_facts.is_empty() {
+        log::info!("Starting tracing of {} facts...", tracing_facts.len());
         let mut facts = Vec::<Fact>::with_capacity(tracing_facts.len());
         for fact_string in &tracing_facts {
             let fact = Fact::parse(fact_string).map_err(|_| CliError::TracingInvalidFact {
