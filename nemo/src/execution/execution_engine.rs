@@ -490,9 +490,20 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         let mut trace = ExecutionTrace::new(program);
         let mut handles = Vec::new();
 
-        for chase_fact in chase_facts {
+        let num_chase_facts = chase_facts.len();
+
+        for (i, chase_fact) in chase_facts.into_iter().enumerate() {
+            if i > 0 && i % 500 == 0 {
+                log::info!(
+                    "{i}/{num_chase_facts} facts traced. ({}%)",
+                    i * 100 / num_chase_facts
+                );
+            }
+
             handles.push(self.trace_recursive(&mut trace, chase_fact)?);
         }
+
+        log::info!("{num_chase_facts}/{num_chase_facts} facts traced. (100%)");
 
         Ok((trace, handles))
     }
