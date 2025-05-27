@@ -127,11 +127,9 @@ impl DatabaseInstance {
         self.reference_manager.table_size_bytes(id)
     }
 
-    /// Return the number of rows contained in this table.
-    ///
-    /// TODO: Currently only counting of in-memory facts is supported, see <https://github.com/knowsys/nemo/issues/335>
-    pub fn count_rows(&self, id: PermanentTableId) -> usize {
-        self.reference_manager.count_rows(id)
+    /// Return the number of in-memory rows contained in this table.
+    pub fn count_rows_in_memory(&self, id: PermanentTableId) -> usize {
+        self.reference_manager.count_rows_in_memory(id)
     }
 
     /// Provide an iterator over the rows of the table with the given [PermanentTableId].

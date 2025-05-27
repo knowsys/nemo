@@ -382,7 +382,7 @@ fn run(mut cli: CliApp) -> Result<(), CliError> {
 
     if print_summary {
         print_finished_message(
-            engine.count_facts_of_derived_predicates(),
+            engine.count_facts_in_memory_for_derived_predicates(),
             !export_manager.write_disabled(),
         );
     }
