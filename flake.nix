@@ -2,7 +2,7 @@
   description = "nemo, a datalog-based rule engine for fast and scalable analytic data processing in memory";
 
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-24.11";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.05";
     utils.url = "github:gytis-ivaskevicius/flake-utils-plus";
 
     rust-overlay = {
@@ -290,7 +290,7 @@
                   ++ (lib.attrValues {
                     inherit (pkgs)
                       binaryen
-                      wasm-bindgen-cli
+                      wasm-bindgen-cli_0_2_100
                       wasm-pack
                       writableTmpDirAsHomeHook
                       ;
