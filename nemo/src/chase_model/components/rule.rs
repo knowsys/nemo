@@ -13,7 +13,6 @@ use super::{
     atom::{primitive_atom::PrimitiveAtom, variable_atom::VariableAtom},
     filter::ChaseFilter,
     operation::ChaseOperation,
-    ChaseComponent,
 };
 
 /// The positive body of a [ChaseRule]
@@ -196,20 +195,6 @@ impl ChaseRule {
     /// Add a new atom to the head of the rule.
     pub(crate) fn add_head_atom(&mut self, atom: PrimitiveAtom) {
         self.head.atoms.push(atom)
-    }
-}
-
-impl ChaseComponent for ChaseRule {
-    fn origin(&self) -> &Origin {
-        &self.origin
-    }
-
-    fn set_origin(mut self, origin: Origin) -> Self
-    where
-        Self: Sized,
-    {
-        self.origin = origin;
-        self
     }
 }
 

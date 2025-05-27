@@ -1,14 +1,9 @@
 //! This module defines [ChaseAggregate].
 
-use crate::rule_model::{
-    components::{
-        term::{aggregate::AggregateKind, primitive::variable::Variable},
-        IterableVariables,
-    },
-    origin::Origin,
+use crate::rule_model::components::{
+    term::{aggregate::AggregateKind, primitive::variable::Variable},
+    IterableVariables,
 };
-
-use super::ChaseComponent;
 
 /// Specifies how the values for a placeholder aggregate variable will get computed.
 ///
@@ -19,9 +14,6 @@ use super::ChaseComponent;
 /// See [nemo_physical::tabular::operations::TrieScanAggregate]
 #[derive(Debug, Clone)]
 pub(crate) struct ChaseAggregate {
-    /// Origin of this component
-    origin: Origin,
-
     /// Type of aggregate operation
     kind: AggregateKind,
 
@@ -39,7 +31,6 @@ pub(crate) struct ChaseAggregate {
 impl ChaseAggregate {
     /// Create a new [ChaseAggregate].
     pub fn new(
-        origin: Origin,
         kind: AggregateKind,
         input_variable: Variable,
         output_variable: Variable,
@@ -47,7 +38,6 @@ impl ChaseAggregate {
         group_by_variables: Vec<Variable>,
     ) -> Self {
         Self {
-            origin,
             kind,
             input_variable,
             output_variable,
@@ -79,20 +69,6 @@ impl ChaseAggregate {
     /// Return which operation is performed.
     pub fn aggregate_kind(&self) -> AggregateKind {
         self.kind
-    }
-}
-
-impl ChaseComponent for ChaseAggregate {
-    fn origin(&self) -> &Origin {
-        &self.origin
-    }
-
-    fn set_origin(mut self, origin: Origin) -> Self
-    where
-        Self: Sized,
-    {
-        self.origin = origin;
-        self
     }
 }
 

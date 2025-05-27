@@ -2,17 +2,24 @@
 
 use std::{fmt::Display, hash::Hash};
 
-use crate::rule_model::{error::ValidationErrorBuilder, origin::Origin};
+use crate::rule_model::{
+    error::ValidationReport, origin::Origin, pipeline::id::ProgramComponentId,
+};
 
-use super::{tag::Tag, ProgramComponent, ProgramComponentKind};
+use super::{
+    tag::Tag, ComponentBehavior, ComponentIdentity, ComponentSource, IterableComponent,
+    ProgramComponent, ProgramComponentKind,
+};
 
 /// Output directive
 ///
 /// Marks a predicate as an output predicate.
-#[derive(Debug, Clone, Eq)]
+#[derive(Debug, Clone)]
 pub struct Output {
     /// Origin of this component
     origin: Origin,
+    /// Id of this component
+    id: ProgramComponentId,
 
     /// Output predicate
     predicate: Tag,
@@ -23,6 +30,7 @@ impl Output {
     pub fn new(predicate: Tag) -> Self {
         Self {
             origin: Origin::default(),
+            id: ProgramComponentId::default(),
             predicate,
         }
     }
@@ -45,33 +53,48 @@ impl PartialEq for Output {
     }
 }
 
+impl Eq for Output {}
+
 impl Hash for Output {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         self.predicate.hash(state);
     }
 }
 
-impl ProgramComponent for Output {
-    fn origin(&self) -> &Origin {
-        &self.origin
-    }
-
-    fn set_origin(mut self, origin: Origin) -> Self
-    where
-        Self: Sized,
-    {
-        self.origin = origin;
-        self
-    }
-
-    fn validate(&self, _builder: &mut ValidationErrorBuilder) -> Option<()>
-    where
-        Self: Sized,
-    {
-        Some(())
-    }
-
+impl ComponentBehavior for Output {
     fn kind(&self) -> ProgramComponentKind {
         ProgramComponentKind::Output
     }
+
+    fn validate(&self) -> Result<(), ValidationReport> {
+        Ok(())
+    }
+
+    fn boxed_clone(&self) -> Box<dyn ProgramComponent> {
+        Box::new(self.clone())
+    }
 }
+
+impl ComponentSource for Output {
+    type Source = Origin;
+
+    fn origin(&self) -> Origin {
+        self.origin.clone()
+    }
+
+    fn set_origin(&mut self, origin: Origin) {
+        self.origin = origin;
+    }
+}
+
+impl ComponentIdentity for Output {
+    fn id(&self) -> ProgramComponentId {
+        self.id
+    }
+
+    fn set_id(&mut self, id: ProgramComponentId) {
+        self.id = id;
+    }
+}
+
+impl IterableComponent for Output {}

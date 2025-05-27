@@ -4,14 +4,10 @@ use crate::{
     chase_model::components::{
         filter::ChaseFilter,
         term::operation_term::{Operation, OperationTerm},
-        ChaseComponent,
     },
-    rule_model::components::{
-        term::{
-            operation::operation_kind::OperationKind,
-            primitive::{variable::Variable, Primitive},
-        },
-        ProgramComponent,
+    rule_model::components::term::{
+        operation::operation_kind::OperationKind,
+        primitive::{variable::Variable, Primitive},
     },
 };
 
@@ -24,21 +20,17 @@ impl ProgramChaseTranslation {
         variable: &Variable,
         operation: &crate::rule_model::components::term::operation::Operation,
     ) -> ChaseFilter {
-        let origin = *operation.origin();
         let operation = Self::build_operation_term(operation);
 
-        let filter = OperationTerm::Operation(
-            Operation::new(
-                OperationKind::Equal,
-                vec![
-                    OperationTerm::Primitive(Primitive::from(variable.clone())),
-                    operation,
-                ],
-            )
-            .set_origin(origin),
-        );
+        let filter = OperationTerm::Operation(Operation::new(
+            OperationKind::Equal,
+            vec![
+                OperationTerm::Primitive(Primitive::from(variable.clone())),
+                operation,
+            ],
+        ));
 
-        ChaseFilter::new(filter).set_origin(origin)
+        ChaseFilter::new(filter)
     }
 
     /// Create a new filter that binds the values of the variable to the provided primitive term.
@@ -49,9 +41,8 @@ impl ProgramChaseTranslation {
                 OperationTerm::Primitive(Primitive::from(variable.clone())),
                 OperationTerm::Primitive(term.clone()),
             ],
-        )
-        .set_origin(*term.origin());
+        );
 
-        ChaseFilter::new(OperationTerm::Operation(filter)).set_origin(*term.origin())
+        ChaseFilter::new(OperationTerm::Operation(filter))
     }
 }
