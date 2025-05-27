@@ -26,7 +26,7 @@ nemo = { path = "../nemo", features = [ "js" ], default-features = false }
 nemo-physical = { path = "../nemo-physical", default-features = false }
 nemo-language-server = { path = "../nemo-language-server", features = [ "js" ], default-features = false}
 futures = "0.3.21"
-gloo-utils = { version = "0.1", features = ["serde"] }
+gloo-utils = { version = "0.2.0", features = ["serde"] }
 thiserror = "2.0"
 # NOTE: the version of wasm-bindgen must be kept in sync with flake.nix
 wasm-bindgen = "=0.2.100"
