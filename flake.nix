@@ -421,9 +421,12 @@
 
                 text = ''
                   cd "$(mktemp --directory)"
-                  cp -R ${self.packages.${system}.nemo-web}/lib/node_modules/nemo-web/* .
+                  cp -R ${self.packages.${pkgs.system}.nemo-web}/lib/node_modules/nemo-web/* .
+                  chmod -R +w node_modules
                   mkdir wrapper
-                  ln -s ../node_modules/vite/bin/vite.js wrapper/vite
+                  ln -s ${
+                    self.packages.${pkgs.system}.nemo-web
+                  }/lib/node_modules/nemo-web/node_modules/vite/bin/vite.js wrapper/vite
                   export PATH="''${PATH}:wrapper"
                   npm run preview
                 '';
