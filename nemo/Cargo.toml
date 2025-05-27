@@ -18,8 +18,8 @@ js = ["getrandom/js"]
 nemo-physical = { path = "../nemo-physical", default-features = false }
 log = "0.4"
 nom = "7.1.1"
-petgraph = "0.6.3"
-petgraph-graphml = "3.0.0"
+petgraph = "0.6.5"
+petgraph-graphml = "3.1.0"
 rand = "0.8"
 csv = "1.1.6"
 thiserror = "2.0"
