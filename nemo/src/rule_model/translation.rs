@@ -159,8 +159,7 @@ impl<'a, 'b> ProgramErrorReport<'a, 'b> {
 
                 let mut report = Report::build(
                     ReportKind::Error,
-                    self.label.clone(),
-                    error.range(translation).start,
+                    (self.label.clone(), error.range(translation)),
                 );
 
                 report = error.report(report, self.label.clone(), translation);

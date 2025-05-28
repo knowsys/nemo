@@ -18,8 +18,8 @@ js = ["getrandom/js"]
 nemo-physical = { path = "../nemo-physical", default-features = false }
 log = "0.4"
 nom = "7.1.1"
-petgraph = "0.6.3"
-petgraph-graphml = "3.0.0"
+petgraph = "0.6.5"
+petgraph-graphml = "3.1.0"
 rand = "0.8"
 csv = "1.1.6"
 thiserror = "2.0"
@@ -39,7 +39,7 @@ unicode-ident = "1.0.12"
 nom-greedyerror = "0.5.0"
 nom-supreme = "0.8.0"
 enum-assoc = "1.1.0"
-ariadne = { version = "0.4.1", features = ["auto-color"] }
+ariadne = { version = "0.5.1", features = ["auto-color"] }
 strum = "0.27.1"
 strum_macros = "0.27.1"
 similar-string = "1.4.3"
