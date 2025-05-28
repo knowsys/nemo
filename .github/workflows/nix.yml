@@ -37,3 +37,8 @@ jobs:
           purge-last-accessed: 0
           purge-primary-key: never
       - run: nix flake check
+      - name: Collect garbage
+        run: |
+          nix build .\#nemo-{,-doc,-language-server,-python,-vscode-extension,-wasm-bundler,-wasm-node,-wasm-web,-web}
+          nix-store --optimise
+          nix-collect-garbage -d
