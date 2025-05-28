@@ -324,11 +324,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1748419078,
-        "narHash": "sha256-VuaHnMfvjQTyGoNOxXmRouJC/8c7D+XOTo9fu4fm0u0=",
+        "lastModified": 1748474348,
+        "narHash": "sha256-LnRs9SqiFUTr5aDPVKdSPSiWDxcTqSE73z4GkH4EXcI=",
         "owner": "knowsys",
         "repo": "nemo-vscode-extension",
-        "rev": "555607678ed86899129bb855b1df5fcc309eaf89",
+        "rev": "7c28283cc646fcde2f9cde86880baf4404348c8b",
         "type": "github"
       },
       "original": {
@@ -519,11 +519,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1748419078,
-        "narHash": "sha256-VuaHnMfvjQTyGoNOxXmRouJC/8c7D+XOTo9fu4fm0u0=",
+        "lastModified": 1748474348,
+        "narHash": "sha256-LnRs9SqiFUTr5aDPVKdSPSiWDxcTqSE73z4GkH4EXcI=",
         "owner": "knowsys",
         "repo": "nemo-vscode-extension",
-        "rev": "555607678ed86899129bb855b1df5fcc309eaf89",
+        "rev": "7c28283cc646fcde2f9cde86880baf4404348c8b",
         "type": "github"
       },
       "original": {
@@ -636,11 +636,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1748419223,
-        "narHash": "sha256-ZbTSNRPrPyDVMPpeL+M01cygm1uGch+CCk7ri4fJgwU=",
+        "lastModified": 1748475631,
+        "narHash": "sha256-XdsvnuzGsG7UoNuM2bfRg3eY/++X7NPV8YaRFXaWinc=",
         "owner": "knowsys",
         "repo": "nemo-web",
-        "rev": "eaf54ea8359aaa9452e2766722b80c8312d4ad94",
+        "rev": "aca84e34c73bc597e03817c6defee6ee7d982d02",
         "type": "github"
       },
       "original": {
@@ -720,11 +720,11 @@
     },
     "nixpkgs": {
       "locked": {
-        "lastModified": 1748162331,
-        "narHash": "sha256-rqc2RKYTxP3tbjA+PB3VMRQNnjesrT0pEofXQTrMsS8=",
+        "lastModified": 1748302896,
+        "narHash": "sha256-ixMT0a8mM091vSswlTORZj93WQAJsRNmEvqLL+qwTFM=",
         "owner": "NixOS",
         "repo": "nixpkgs",
-        "rev": "7c43f080a7f28b2774f3b3f43234ca11661bf334",
+        "rev": "7848cd8c982f7740edf76ddb3b43d234cb80fc4d",
         "type": "github"
       },
       "original": {
