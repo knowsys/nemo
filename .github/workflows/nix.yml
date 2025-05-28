@@ -19,6 +19,8 @@ jobs:
           nix_conf: |
             keep-env-derivations = true
             keep-outputs = true
+            sandbox = true
+            sandbox-fallback = false
       - uses: jlumbroso/free-disk-space@v1.3.1
         with:
           swap-storage: false
