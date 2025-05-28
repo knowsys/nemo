@@ -19,7 +19,7 @@ jobs:
           nix_conf: |
             keep-env-derivations = true
             keep-outputs = true
-      - uses: jlumbroso/free-disk-space
+      - uses: jlumbroso/free-disk-space@v1.3.1
         with:
           swap-storage: false
           tool-cache: true
