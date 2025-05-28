@@ -19,6 +19,10 @@ jobs:
           nix_conf: |
             keep-env-derivations = true
             keep-outputs = true
+      - uses: jlumbroso/free-disk-space
+        with:
+          swap-storage: false
+          tool-cache: true
       - name: Restore and save Nix store
         uses: nix-community/cache-nix-action@v6
         with:
