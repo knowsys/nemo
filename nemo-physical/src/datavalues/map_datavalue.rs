@@ -32,6 +32,18 @@ impl MapDataValue {
             pairs: pairs_iter.into_iter().collect(),
         }
     }
+
+    pub(crate) fn from_chunks<'a, T: Iterator<Item = &'a [AnyDataValue; 2]> + 'a>(
+        label: Option<IriDataValue>,
+        chunks: T,
+    ) -> Self {
+        Self {
+            label,
+            pairs: chunks
+                .map(|item| (item[0].clone(), item[1].clone()))
+                .collect(),
+        }
+    }
 }
 
 impl FromIterator<(AnyDataValue, AnyDataValue)> for MapDataValue {
@@ -89,6 +101,10 @@ impl DataValue for MapDataValue {
         Some(Box::new(self.pairs.keys()))
     }
 
+    fn map_items(&self) -> Option<Box<dyn Iterator<Item = (&AnyDataValue, &AnyDataValue)> + '_>> {
+        Some(Box::new(self.pairs.iter()))
+    }
+
     fn contains(&self, key: &AnyDataValue) -> bool {
         self.pairs.contains_key(key)
     }
@@ -99,6 +115,20 @@ impl DataValue for MapDataValue {
 
     fn map_element_unchecked(&self, key: &AnyDataValue) -> &AnyDataValue {
         self.pairs.get(key).expect("unchecked method")
+    }
+
+    fn tuple_element_unchecked(&self, index: usize) -> &AnyDataValue {
+        let pair = index / 2;
+        let (key, value) = self.pairs.iter().nth(pair).expect("unchecked method");
+
+        match index % 2 == 0 {
+            true => key,
+            false => value,
+        }
+    }
+
+    fn tuple_len_unchecked(&self) -> usize {
+        2 * self.pairs.len()
     }
 }
 
