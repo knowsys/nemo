@@ -627,7 +627,9 @@ impl DataValue for AnyDataValue {
             fn length(&self) -> Option<usize>;
             fn len_unchecked(&self) -> usize;
             fn tuple_element_unchecked(&self, index: usize) -> &AnyDataValue;
+            fn tuple_len_unchecked(&self) -> usize;
             fn map_keys(&self) -> Option<Box<dyn Iterator<Item = &AnyDataValue> + '_>>;
+            fn map_items(&self) -> Option<Box<dyn Iterator<Item = (&AnyDataValue, &AnyDataValue)> + '_>>;
             fn map_element_unchecked(&self, key: &AnyDataValue) -> &AnyDataValue;
             }
     }
