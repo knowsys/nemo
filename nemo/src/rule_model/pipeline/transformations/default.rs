@@ -4,15 +4,7 @@ use std::collections::HashSet;
 
 use crate::{
     execution::execution_parameters::ExecutionParameters,
-    rule_model::{
-        error::ValidationReport,
-        pipeline::{
-            commit::ProgramCommit,
-            state::{ExtendStatementKind, ExtendStatementValidity},
-            ProgramPipeline,
-        },
-        program::ProgramRead,
-    },
+    rule_model::{error::ValidationReport, pipeline::ProgramPipeline, program::ProgramRead},
 };
 
 use super::{
@@ -38,16 +30,7 @@ impl TransformationDefault {
 }
 
 impl ProgramTransformation for TransformationDefault {
-    fn keep(&self) -> ExtendStatementValidity {
-        ExtendStatementValidity::Keep(ExtendStatementKind::All)
-    }
-
-    fn apply(
-        self,
-        commit: &mut ProgramCommit,
-        report: &mut ValidationReport,
-        pipeline: &ProgramPipeline,
-    ) {
+    fn apply(self, pipeline: &mut ProgramPipeline, report: &mut ValidationReport) {
         pipeline.validate_parameters(
             report,
             self.parameters
@@ -56,9 +39,8 @@ impl ProgramTransformation for TransformationDefault {
                 .collect::<HashSet<_>>(),
         );
 
-        TransformationGlobal::new(self.parameters.global_variables).apply(commit, report, pipeline);
-        TransformationExports::new(self.parameters.export_parameters)
-            .apply(commit, report, pipeline);
+        TransformationGlobal::new(self.parameters.global_variables).apply(pipeline, report);
+        TransformationExports::new(self.parameters.export_parameters).apply(pipeline, report);
 
         pipeline.validate_arity(report);
         pipeline.validate_stdin_imports(report);
@@ -68,6 +50,6 @@ impl ProgramTransformation for TransformationDefault {
             return;
         }
 
-        TransformationActive::default().apply(commit, report, pipeline);
+        TransformationActive::default().apply(pipeline, report);
     }
 }

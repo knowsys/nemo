@@ -13,11 +13,7 @@ use crate::rule_model::{
         ComponentIdentity, IterableVariables,
     },
     error::ValidationReport,
-    pipeline::{
-        commit::ProgramCommit,
-        state::{ExtendStatementKind, ExtendStatementValidity},
-        ProgramPipeline,
-    },
+    pipeline::{commit::ProgramCommit, ProgramPipeline},
     program::ProgramRead,
 };
 
@@ -33,16 +29,9 @@ pub struct TransformationSkolemize {
 }
 
 impl ProgramTransformation for TransformationSkolemize {
-    fn keep(&self) -> ExtendStatementValidity {
-        ExtendStatementValidity::Keep(ExtendStatementKind::All)
-    }
+    fn apply(mut self, pipeline: &mut ProgramPipeline, _report: &mut ValidationReport) {
+        let mut commit = ProgramCommit::default();
 
-    fn apply(
-        mut self,
-        commit: &mut ProgramCommit,
-        _report: &mut ValidationReport,
-        pipeline: &ProgramPipeline,
-    ) {
         for rule in pipeline.rules() {
             let head_variables = || rule.head().iter().flat_map(|atom| atom.variables());
             if !head_variables().any(|variable| variable.is_existential()) {
@@ -83,5 +72,7 @@ impl ProgramTransformation for TransformationSkolemize {
 
             commit.delete(rule.id());
         }
+
+        pipeline.commit(commit);
     }
 }

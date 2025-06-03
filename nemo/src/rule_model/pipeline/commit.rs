@@ -8,11 +8,14 @@ use crate::rule_model::components::{
     rule::Rule,
 };
 
-use super::id::ProgramComponentId;
+use super::{id::ProgramComponentId, state::ExtendStatementValidity};
 
 /// Defines a commit within a [super::super::pipeline::ProgramPipeline]
 #[derive(Debug, Default)]
 pub struct ProgramCommit {
+    /// Determines what happens to the currently active statements
+    pub validity: ExtendStatementValidity,
+
     /// Ids of program components to be deleted
     pub deleted: Vec<ProgramComponentId>,
     /// Ids of program components to be kept
@@ -33,6 +36,21 @@ pub struct ProgramCommit {
 }
 
 impl ProgramCommit {
+    /// Create a new empty [ProgramCommit].
+    pub fn new(validity: ExtendStatementValidity) -> Self {
+        Self {
+            validity,
+            deleted: Vec::default(),
+            keep: Vec::default(),
+            rules: Vec::default(),
+            facts: Vec::default(),
+            imports: Vec::default(),
+            exports: Vec::default(),
+            outputs: Vec::default(),
+            parameters: Vec::default(),
+        }
+    }
+
     /// Delete a program component.
     pub fn delete(&mut self, id: ProgramComponentId) {
         self.deleted.push(id);

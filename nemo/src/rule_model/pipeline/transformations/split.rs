@@ -3,11 +3,7 @@
 use crate::rule_model::{
     components::{rule::Rule, ComponentIdentity},
     error::ValidationReport,
-    pipeline::{
-        commit::ProgramCommit,
-        state::{ExtendStatementKind, ExtendStatementValidity},
-        ProgramPipeline,
-    },
+    pipeline::{commit::ProgramCommit, ProgramPipeline},
     program::ProgramRead,
 };
 
@@ -26,16 +22,9 @@ use super::ProgramTransformation;
 pub struct TransformationSplitRule {}
 
 impl ProgramTransformation for TransformationSplitRule {
-    fn keep(&self) -> ExtendStatementValidity {
-        ExtendStatementValidity::Keep(ExtendStatementKind::All)
-    }
+    fn apply(self, pipeline: &mut ProgramPipeline, _report: &mut ValidationReport) {
+        let mut commit = ProgramCommit::default();
 
-    fn apply(
-        self,
-        commit: &mut ProgramCommit,
-        _report: &mut ValidationReport,
-        pipeline: &ProgramPipeline,
-    ) {
         for rule in pipeline.rules() {
             if rule.head().len() > 1 {
                 commit.delete(rule.id());
@@ -47,5 +36,7 @@ impl ProgramTransformation for TransformationSplitRule {
                 }
             }
         }
+
+        pipeline.commit(commit);
     }
 }

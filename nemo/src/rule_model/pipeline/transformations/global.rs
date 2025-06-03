@@ -11,11 +11,7 @@ use crate::rule_model::{
         ComponentIdentity, IterablePrimitives, IterableVariables, ProgramComponent,
     },
     error::ValidationReport,
-    pipeline::{
-        commit::ProgramCommit,
-        state::{ExtendStatementKind, ExtendStatementValidity},
-        ProgramPipeline,
-    },
+    pipeline::{commit::ProgramCommit, ProgramPipeline},
     program::ProgramRead,
     substitution::Substitution,
 };
@@ -44,8 +40,6 @@ impl TransformationGlobal {
         external: HashMap<GlobalVariable, GroundTerm>,
         pipeline: &ProgramPipeline,
     ) -> Substitution {
-        println!("apply glboal transformation");
-
         let mut ground_set = external.keys().cloned().collect::<HashSet<_>>();
         let mut substitution = Substitution::new(external);
 
@@ -89,8 +83,6 @@ impl TransformationGlobal {
         Iter: Iterator<Item = &'a Component> + 'a,
     {
         iterator.filter_map(|old_component| {
-            println!("{:?}", old_component.variables().collect::<Vec<_>>());
-
             if old_component
                 .variables()
                 .any(|variable| variable.is_global())
@@ -107,16 +99,9 @@ impl TransformationGlobal {
 }
 
 impl ProgramTransformation for TransformationGlobal {
-    fn keep(&self) -> ExtendStatementValidity {
-        ExtendStatementValidity::Keep(ExtendStatementKind::All)
-    }
+    fn apply(self, pipeline: &mut ProgramPipeline, _report: &mut ValidationReport) {
+        let mut commit = ProgramCommit::default();
 
-    fn apply(
-        self,
-        commit: &mut ProgramCommit,
-        _report: &mut ValidationReport,
-        pipeline: &ProgramPipeline,
-    ) {
         let substitution = Self::subsitution(self.external, pipeline);
 
         for (old_import, new_import) in Self::apply_subsitution(pipeline.imports(), &substitution) {
@@ -138,5 +123,7 @@ impl ProgramTransformation for TransformationGlobal {
             commit.delete(old_fact.id());
             commit.add_fact(new_fact);
         }
+
+        pipeline.commit(commit);
     }
 }

@@ -166,6 +166,12 @@ pub enum ExtendStatementValidity {
     Delete(ExtendStatementKind),
 }
 
+impl Default for ExtendStatementValidity {
+    fn default() -> Self {
+        ExtendStatementValidity::Keep(ExtendStatementKind::All)
+    }
+}
+
 impl ExtendStatementValidity {
     /// Check whether to keep a given [ExtendStatementKind].
     pub fn keep(&self, kind: ExtendStatementKind) -> bool {
@@ -290,41 +296,54 @@ impl ProgramState {
 
     /// Prepare the next commit.
     pub fn prepare(&mut self, extend: ExtendStatementValidity) {
+        let last_commit = self.current_commit;
         self.current_commit += 1;
 
         if extend.keep(ExtendStatementKind::Rule) {
             for rule in &mut self.rules {
-                rule.extend(self.current_commit);
+                if rule.contains(last_commit) {
+                    rule.extend(self.current_commit);
+                }
             }
         }
 
         if extend.keep(ExtendStatementKind::Fact) {
             for fact in &mut self.facts {
-                fact.extend(self.current_commit);
+                if fact.contains(last_commit) {
+                    fact.extend(self.current_commit);
+                }
             }
         }
 
         if extend.keep(ExtendStatementKind::Import) {
             for import in &mut self.imports {
-                import.extend(self.current_commit);
+                if import.contains(last_commit) {
+                    import.extend(self.current_commit);
+                }
             }
         }
 
         if extend.keep(ExtendStatementKind::Export) {
             for export in &mut self.exports {
-                export.extend(self.current_commit);
+                if export.contains(last_commit) {
+                    export.extend(self.current_commit);
+                }
             }
         }
 
         if extend.keep(ExtendStatementKind::Output) {
             for output in &mut self.outputs {
-                output.extend(self.current_commit);
+                if output.contains(last_commit) {
+                    output.extend(self.current_commit);
+                }
             }
         }
 
         if extend.keep(ExtendStatementKind::Parameter) {
             for parameter in &mut self.parameters {
-                parameter.extend(self.current_commit);
+                if parameter.contains(last_commit) {
+                    parameter.extend(self.current_commit);
+                }
             }
         }
     }

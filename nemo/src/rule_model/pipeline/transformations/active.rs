@@ -22,16 +22,7 @@ use super::ProgramTransformation;
 pub struct TransformationActive {}
 
 impl ProgramTransformation for TransformationActive {
-    fn keep(&self) -> ExtendStatementValidity {
-        ExtendStatementValidity::Keep(ExtendStatementKind::Except(&ExtendStatementKind::Rule))
-    }
-
-    fn apply(
-        self,
-        commit: &mut ProgramCommit,
-        _report: &mut ValidationReport,
-        pipeline: &ProgramPipeline,
-    ) {
+    fn apply(self, pipeline: &mut ProgramPipeline, _report: &mut ValidationReport) {
         let mut required = HashSet::<Tag>::new();
         let mut result = HashSet::new();
 
@@ -66,6 +57,10 @@ impl ProgramTransformation for TransformationActive {
             }
         }
 
+        let mut commit = ProgramCommit::new(ExtendStatementValidity::Keep(
+            ExtendStatementKind::Except(&ExtendStatementKind::Rule),
+        ));
+
         for id in result {
             commit.keep(id);
         }
@@ -75,5 +70,7 @@ impl ProgramTransformation for TransformationActive {
                 commit.delete(import.id());
             }
         }
+
+        pipeline.commit(commit);
     }
 }

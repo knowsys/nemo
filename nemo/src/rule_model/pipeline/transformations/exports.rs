@@ -7,11 +7,7 @@ use crate::{
     rule_model::{
         components::{import_export::ExportDirective, tag::Tag, ComponentIdentity},
         error::ValidationReport,
-        pipeline::{
-            commit::ProgramCommit,
-            state::{ExtendStatementKind, ExtendStatementValidity},
-            ProgramPipeline,
-        },
+        pipeline::{commit::ProgramCommit, ProgramPipeline},
         program::ProgramRead,
     },
 };
@@ -35,19 +31,12 @@ impl TransformationExports {
 }
 
 impl ProgramTransformation for TransformationExports {
-    fn keep(&self) -> ExtendStatementValidity {
-        ExtendStatementValidity::Keep(ExtendStatementKind::All)
-    }
-
-    fn apply(
-        self,
-        commit: &mut ProgramCommit,
-        _report: &mut ValidationReport,
-        pipeline: &ProgramPipeline,
-    ) {
+    fn apply(self, pipeline: &mut ProgramPipeline, _report: &mut ValidationReport) {
         if let ExportParameters::Keep = self.parameters {
             return;
         }
+
+        let mut commit = ProgramCommit::default();
 
         let derived_predicates = pipeline.derived_predicates();
         let mut exported_predicates = HashSet::<Tag>::new();
@@ -77,5 +66,7 @@ impl ProgramTransformation for TransformationExports {
                 commit.add_export(export);
             }
         }
+
+        pipeline.commit(commit);
     }
 }

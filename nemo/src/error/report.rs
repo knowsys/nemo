@@ -85,7 +85,7 @@ impl ProgramReport {
             }
         }
 
-        for error in self.warnings.iter().chain(self.errors.iter()) {
+        for error in self.errors() {
             error.report(self.program.name()).eprint((
                 self.program.name().to_owned(),
                 Source::from(self.program.content()),

@@ -183,12 +183,14 @@ impl ProgramPipeline {
     }
 
     /// Prepare a new commit.
-    pub fn prepare(&mut self, extend: ExtendStatementValidity) {
+    fn prepare(&mut self, extend: ExtendStatementValidity) {
         self.state.prepare(extend);
     }
 
     /// Apply a commit.
     pub fn commit(&mut self, commit: ProgramCommit) {
+        self.prepare(commit.validity);
+
         for id in commit.deleted {
             self.state.delete(id);
         }
@@ -228,12 +230,7 @@ impl ProgramPipeline {
         report: &mut ValidationReport,
         transformation: Transformation,
     ) {
-        self.prepare(transformation.keep());
-
-        let mut commit = ProgramCommit::default();
-        transformation.apply(&mut commit, report, self);
-
-        self.commit(commit);
+        transformation.apply(self, report);
     }
 
     /// Return the currently valid program.
