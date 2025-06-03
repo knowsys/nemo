@@ -3,7 +3,7 @@ mod nemo_position;
 mod token_type;
 
 use lsp_document::{IndexedText, TextAdapter, TextMap};
-use nemo::api::load_program;
+use nemo::api::report;
 use nemo::error::context::ContextError;
 use std::collections::HashMap;
 use std::vec;
@@ -176,27 +176,27 @@ impl Backend {
 
         let mut diagnostics = Vec::<Diagnostic>::new();
 
-        if let Err(report) = load_program(text.to_owned(), label) {
-            for warning in report.warnings() {
-                if let Some(diagnostic) = Self::create_diagnostic(
-                    &text_index,
-                    &text_document.uri,
-                    warning,
-                    DiagnosticSeverity::WARNING,
-                ) {
-                    diagnostics.push(diagnostic);
-                }
-            }
+        let report = report(text.to_owned(), label);
 
-            for error in report.errors() {
-                if let Some(diagnostic) = Self::create_diagnostic(
-                    &text_index,
-                    &text_document.uri,
-                    error,
-                    DiagnosticSeverity::ERROR,
-                ) {
-                    diagnostics.push(diagnostic);
-                }
+        for warning in report.warnings() {
+            if let Some(diagnostic) = Self::create_diagnostic(
+                &text_index,
+                &text_document.uri,
+                warning,
+                DiagnosticSeverity::WARNING,
+            ) {
+                diagnostics.push(diagnostic);
+            }
+        }
+
+        for error in report.errors() {
+            if let Some(diagnostic) = Self::create_diagnostic(
+                &text_index,
+                &text_document.uri,
+                error,
+                DiagnosticSeverity::ERROR,
+            ) {
+                diagnostics.push(diagnostic);
             }
         }
 

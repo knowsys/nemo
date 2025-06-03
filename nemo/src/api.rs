@@ -30,7 +30,13 @@ use crate::{
     },
     parser::Parser,
     rule_file::RuleFile,
-    rule_model::{components::tag::Tag, program::Program, translation::ASTProgramTranslation},
+    rule_model::{
+        components::tag::Tag,
+        error::ValidationReport,
+        pipeline::{transformations::default::TransformationDefault, ProgramPipeline},
+        program::Program,
+        translation::ASTProgramTranslation,
+    },
 };
 use nemo_physical::resource::Resource;
 
@@ -88,6 +94,32 @@ pub fn load_program(input: String, label: String) -> Result<Program, ProgramRepo
     } else {
         Ok(translated)
     }
+}
+
+/// Validate the `input` and create a [ProgramReport] for error reporting
+pub fn report(input: String, label: String) -> ProgramReport {
+    let file = RuleFile::new(input, label);
+    let parameters = ExecutionParameters::default();
+
+    let (mut pipeline, parsing_report) = match ProgramPipeline::file(&file) {
+        Ok(pipeline) => pipeline.pair(),
+        Err(errors) => return errors.program_report(file).into(),
+    };
+
+    let mut validation_report = ValidationReport::default();
+    pipeline.apply_transformation(
+        &mut validation_report,
+        TransformationDefault::new(parameters),
+    );
+
+    let mut report = ProgramReport::new(file);
+    if let Some(parsing_report) = parsing_report {
+        report.merge_program_parser(parsing_report)
+    }
+
+    report.merge_validation(validation_report);
+
+    report
 }
 
 /// Executes the reasoning process of the [Engine].
