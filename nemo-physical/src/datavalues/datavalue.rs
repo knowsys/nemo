@@ -6,6 +6,8 @@ use std::{
     hash::Hash,
 };
 
+use serde::{Deserialize, Serialize};
+
 use crate::datatypes::{storage_type_name::StorageTypeBitSet, StorageTypeName};
 
 use super::{AnyDataValue, IriDataValue, NullDataValue};
@@ -25,6 +27,16 @@ pub(crate) fn quote_string(s: &str) -> String {
 /// been processed to be in a suitable form without inner `<` or `>`.
 pub(crate) fn quote_iri(s: &str) -> String {
     format!("<{s}>")
+}
+
+/// Removes the pointy brackets from a quoted IRI. Inverse of
+/// [quote_iri].
+pub(crate) fn unquote_iri(s: &str) -> Option<&str> {
+    if s.first()? == '<' && s.last()? == '>' {
+        Some(s[1..s.len() - 1])
+    }
+
+    None
 }
 
 /// Enum of different value domains that are distinguished in this code.
@@ -226,7 +238,10 @@ impl PartialOrd for ValueDomain {
 /// mean different values (i.e., the representation is canonical). The possible
 /// set of datatypes is unrestricted, but values of unknown types are treated
 /// literally and cannot be canonized.
-pub trait DataValue: Debug + Display + Into<AnyDataValue> + PartialEq + Eq + Hash + Ord {
+pub trait DataValue: Debug + Display + Into<AnyDataValue> + PartialEq + Eq + Hash + Ord
+// + for<'a> Deserialize<'a>
+// + Serialize
+{
     /// Return the datatype of this value, specified by an IRI.
     /// For example, the RDF literal `"abc"^^<http://www.w3.org/2001/XMLSchema#string>`
     /// has datatype IRI `http://www.w3.org/2001/XMLSchema#string`, without any surrounding

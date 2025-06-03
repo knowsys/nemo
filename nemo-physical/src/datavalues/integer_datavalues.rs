@@ -3,6 +3,8 @@
 //! Integers have a more complex domain hierarchy than most other kinds of data, and the related
 //! logic is collected here as well.
 
+use serde::{Deserialize, Serialize};
+
 use super::{DataValue, ValueDomain};
 
 /// Maximal value of an u64, i.e. 2^64-1.
@@ -25,7 +27,8 @@ const I32MIN_AS_I64: i64 = -I32MAX_AS_I64 - 1;
 
 /// Physical representation of an integer as an u64.
 #[repr(transparent)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Deserialize, Serialize)]
+#[serde(transparent)]
 pub struct UnsignedLongDataValue(u64);
 
 impl UnsignedLongDataValue {
@@ -109,7 +112,8 @@ impl std::fmt::Display for UnsignedLongDataValue {
 
 /// Physical representation of an integer as an i64.
 #[repr(transparent)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Deserialize, Serialize)]
+#[serde(transparent)]
 pub struct LongDataValue(i64);
 
 impl LongDataValue {

@@ -6,11 +6,14 @@
 //! By convention (following XML Schema), we consider the value spaces of floats of different precisions
 //! to be disjoint, and also to be dijoint with any integer domain.
 
+use serde::{Deserialize, Serialize};
+
 use super::{DataValue, DataValueCreationError, ValueDomain};
 
 /// Physical representation of a finite 32bit floating point number as an `f32`.
 #[repr(transparent)]
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Deserialize, Serialize)]
+#[serde(transparent)]
 pub struct FloatDataValue(f32);
 
 impl FloatDataValue {
@@ -91,7 +94,8 @@ impl std::fmt::Display for FloatDataValue {
 
 /// Physical representation of a finite 64bit floating point number as an f64.
 #[repr(transparent)]
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Deserialize, Serialize)]
+#[serde(transparent)]
 pub struct DoubleDataValue(f64);
 
 impl DoubleDataValue {

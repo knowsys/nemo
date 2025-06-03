@@ -1,5 +1,7 @@
 //! This module provides implementations [DataValue]s that represent boolean values.
 
+use serde::{Deserialize, Serialize};
+
 use super::{
     syntax::{
         boolean::{FALSE, TRUE},
@@ -10,7 +12,8 @@ use super::{
 
 /// Physical representation of a boolean value
 #[repr(transparent)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(transparent)]
 pub struct BooleanDataValue(bool);
 
 impl BooleanDataValue {

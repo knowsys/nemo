@@ -4,6 +4,8 @@
 //! distinct from elements of [ValueDomain::PlainString]. Moreover, some IRI-specific
 //! requirements and normalizations might apply.
 
+use serde::{de::Visitor, Deserialize, Serialize};
+
 use super::{DataValue, ValueDomain};
 
 /// Physical representation of a Unicode string using String.
@@ -15,6 +17,7 @@ use super::{DataValue, ValueDomain};
 /// this is also the default order for strings in rust.
 #[repr(transparent)]
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[serde(transparent)]
 pub struct IriDataValue(String);
 
 impl IriDataValue {
@@ -89,6 +92,44 @@ impl std::fmt::Display for IriDataValue {
         } else {
             f.write_str(self.canonical_string().as_str())
         }
+    }
+}
+
+impl Deserialize for IriDataValue {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        struct IriVisitor;
+
+        impl Visitor for IriVisitor {
+            type Value = IriDataValue;
+
+            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+                write!(formatter, "an IRI wrapped in angle brackets")
+            }
+
+            fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+            where
+                E: serde::de::Error, {
+                if v[0] != "<" ||
+            }
+
+            fn visit_string<E>(self, v: String) -> Result<Self::Value, E>
+            where
+                E: serde::de::Error, {
+                todo!()
+            }
+        }
+    }
+}
+
+impl Serialize for IriDataValue {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.serialize_str(&self.canonical_string())
     }
 }
 

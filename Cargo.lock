@@ -1636,6 +1636,7 @@ dependencies = [
  "regex",
  "reqwest",
  "serde",
+ "serde_json",
  "serde_urlencoded",
  "streaming-iterator",
  "test-log",

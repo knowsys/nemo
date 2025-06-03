@@ -1,5 +1,7 @@
 //! This module provides implementations [DataValue]s that represent Unicode strings.
 
+use serde::{Deserialize, Serialize};
+
 use super::{DataValue, ValueDomain};
 
 /// Physical representation of a Unicode string using String.
@@ -8,7 +10,8 @@ use super::{DataValue, ValueDomain};
 /// the derived order agrees with the [Unicode codepoint collation](https://www.w3.org/TR/xpath-functions/#dt-codepoint-collation),
 /// which is the style of string ordering used in SPARQL and as a default in XPath.
 #[repr(transparent)]
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Deserialize, Serialize)]
+#[serde(transparent)]
 pub struct StringDataValue(String);
 
 impl StringDataValue {

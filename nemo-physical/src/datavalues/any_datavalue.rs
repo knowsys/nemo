@@ -3,6 +3,7 @@
 use std::{num::IntErrorKind, str::FromStr};
 
 use delegate::delegate;
+use serde::{Deserialize, Serialize};
 
 use crate::{
     datatypes::{Double, Float, StorageValueT},
@@ -861,6 +862,36 @@ impl TryFrom<AnyDataValue> for IriDataValue {
         match value.0 {
             AnyDataValueEnum::Iri(idv) => Ok(idv),
             _ => Err("cannot convert this data value to IriDataValue"),
+        }
+    }
+}
+
+impl Deserialize for AnyDataValue {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        todo!()
+    }
+}
+
+impl Serialize for AnyDataValue {
+    delegate! {
+        to match &self.0 {
+            AnyDataValueEnum::Boolean(value) => value,
+            AnyDataValueEnum::PlainString(value)=> value,
+            AnyDataValueEnum::LanguageTaggedString(value) => value,
+            AnyDataValueEnum::Iri(value) => value,
+            AnyDataValueEnum::Float(value) => value,
+            AnyDataValueEnum::Double(value) => value,
+            AnyDataValueEnum::UnsignedLong(value) => value,
+            AnyDataValueEnum::Long(value) => value,
+            AnyDataValueEnum::Null(value) => value,
+            AnyDataValueEnum::Tuple(value) => value,
+            AnyDataValueEnum::Map(value) => value,
+            AnyDataValueEnum::Other(value) => value,
+        } {
+            fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error>
         }
     }
 }

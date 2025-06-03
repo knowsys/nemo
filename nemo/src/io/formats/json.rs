@@ -67,7 +67,7 @@ impl FormatBuilder for JsonHandler {
     }
 
     fn expected_arity(&self) -> Option<usize> {
-        Some(3)
+        Some(1)
     }
 
     fn build_import(&self, _arity: usize) -> Arc<dyn ImportHandler + Send + Sync + 'static> {
