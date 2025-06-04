@@ -111,12 +111,10 @@ impl AggregateGroupProcessor for SumAggregateGroupProcessor {
             }
 
             Some(overall_sum.into())
-        } else if let Some(current_sum_i64) = self.current_sum_i64 {
-            return Some(current_sum_i64.into());
-        } else if let Some(current_sum_f32) = self.current_sum_f32 {
-            return Some(current_sum_f32.into());
         } else {
-            None
+            self.current_sum_i64
+                .map(Into::into)
+                .or_else(|| self.current_sum_f32.map(Into::into))
         }
     }
 }
