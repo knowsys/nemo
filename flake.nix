@@ -323,6 +323,20 @@
               };
             };
 
+            docker = pkgs.dockerTools.buildImage {
+              name = "nemo";
+              tag = "latest";
+              copyToRoot = pkgs.buildEnv {
+                name = "image-root";
+                paths = [ 
+                  pkgs.cacert
+                  pkgs.openssl
+                  nemo
+                ];
+              };
+              config = { Entrypoint = [ "/bin/nmo" ]; };
+            };
+
             nemo-language-server = buildCrate { crate = "nemo-language-server"; };
 
             nemo-python = buildCrate {
