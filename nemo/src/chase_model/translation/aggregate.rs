@@ -84,7 +84,7 @@ impl ProgramChaseTranslation {
 
         let mut aggregation_result = None;
 
-        for argument in operation.arguments() {
+        for argument in operation.terms() {
             match argument {
                 Term::Primitive(primitive) => {
                     subterms.push(OperationTerm::Primitive(primitive.clone()))

@@ -230,7 +230,7 @@ impl Rule {
             false
         };
 
-        for subterm in term.arguments() {
+        for subterm in term.terms() {
             let contains_aggregate = Self::validate_term_head(report, subterm, group_by_variable);
 
             if contains_aggregate && first_aggregate {
@@ -290,7 +290,7 @@ impl Rule {
                 .add_hint_option(Self::hint_term_operation(term));
         }
 
-        for subterm in term.arguments() {
+        for subterm in term.terms() {
             Self::validate_term_body(report, subterm, safe_variables);
         }
     }

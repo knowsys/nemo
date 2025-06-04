@@ -11,8 +11,8 @@ use crate::rule_model::{
 use super::{
     component_iterator, component_iterator_mut,
     term::{primitive::variable::global::GlobalVariable, Term},
-    ComponentBehavior, ComponentIdentity, ComponentSource, IterableComponent, IterableVariables,
-    ProgramComponent, ProgramComponentKind,
+    ComponentBehavior, ComponentIdentity, ComponentSource, IterableComponent, ProgramComponent,
+    ProgramComponentKind,
 };
 
 /// Parameter declaration
@@ -105,7 +105,7 @@ impl ComponentBehavior for ParameterDeclaration {
         }
 
         if let Some(expression) = self.expression() {
-            if expression.variables().any(|variable| !variable.is_global()) {
+            if !expression.is_resolvable() {
                 report.add(
                     expression,
                     ValidationError::ParameterDeclarationNotGroundish,

@@ -207,6 +207,16 @@ impl Aggregate {
             distinct: self.distinct.clone(),
         })
     }
+
+    /// Check wether this term can be reduced to a ground value,
+    /// except for global variables that need to be resolved.
+    ///
+    /// This is the case if
+    ///     * This term does not contain non-global variables.
+    ///     * This term does not contain undefined intermediate values.
+    pub fn is_resolvable(&self) -> bool {
+        self.aggregate.is_resolvable()
+    }
 }
 
 impl Display for Aggregate {

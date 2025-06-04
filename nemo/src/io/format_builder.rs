@@ -310,7 +310,7 @@ impl<B: FormatBuilder> Parameters<B> {
                 continue;
             };
 
-            if !right.is_ground() {
+            if !right.is_resolvable() {
                 report.add(binding, ValidationError::DirectiveAssignmentNotGround);
             };
 
@@ -381,15 +381,21 @@ impl<B: FormatBuilder> Parameters<B> {
             };
 
             required_parameters.remove(&parameter);
+
+            if !value_term.is_resolvable() {
+                report.add(
+                    value_term,
+                    ValidationError::ImportExportParameterNotGround {
+                        term: value_term.clone(),
+                    },
+                );
+
+                continue;
+            }
+
             let value = match GroundTerm::try_from(value_term.clone()) {
                 Ok(ground_term) => ground_term.value(),
-                Err(value_term) => {
-                    report.add(
-                        &value_term,
-                        ValidationError::ImportExportParameterNotGround {
-                            term: value_term.clone(),
-                        },
-                    );
+                Err(_) => {
                     continue;
                 }
             };

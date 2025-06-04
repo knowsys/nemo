@@ -135,13 +135,13 @@ impl Term {
     }
 
     /// Return an iterator over the arguments to this term.
-    pub fn arguments(&self) -> Box<dyn Iterator<Item = &Term> + '_> {
+    pub fn terms(&self) -> Box<dyn Iterator<Item = &Term> + '_> {
         match self {
             Term::Primitive(_) => Box::new(None.into_iter()),
             Term::Aggregate(term) => Box::new(Some(term.aggregate_term()).into_iter()),
             Term::FunctionTerm(term) => Box::new(term.terms()),
             Term::Map(term) => Box::new(term.key_value().flat_map(|(key, value)| vec![key, value])),
-            Term::Operation(term) => Box::new(term.arguments()),
+            Term::Operation(term) => Box::new(term.terms()),
             Term::Tuple(term) => Box::new(term.terms()),
         }
     }
@@ -172,6 +172,23 @@ impl Term {
             Term::Tuple(term) => Term::Tuple(term.reduce()?),
             Term::Primitive(term) => Term::Primitive(term.clone()),
         })
+    }
+
+    /// Check wether this term can be reduced to a ground value,
+    /// except for global variables that need to be resolved.
+    ///
+    /// This is the case if
+    ///     * This term does not contain non-global variables.
+    ///     * This term does not contain undefined intermediate values.
+    pub fn is_resolvable(&self) -> bool {
+        match self {
+            Term::Primitive(term) => term.is_resolvable(),
+            Term::Aggregate(term) => term.is_resolvable(),
+            Term::FunctionTerm(term) => term.is_resolvable(),
+            Term::Map(term) => term.is_resolvable(),
+            Term::Operation(term) => term.is_resolvable(),
+            Term::Tuple(term) => term.is_resolvable(),
+        }
     }
 }
 

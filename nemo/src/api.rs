@@ -33,7 +33,7 @@ use crate::{
     rule_model::{
         components::tag::Tag,
         error::ValidationReport,
-        pipeline::{transformations::default::TransformationDefault, ProgramPipeline},
+        pipeline::{transformations::validate::TransformationValidate, ProgramPipeline},
         program::Program,
         translation::ASTProgramTranslation,
     },
@@ -97,20 +97,16 @@ pub fn load_program(input: String, label: String) -> Result<Program, ProgramRepo
 }
 
 /// Validate the `input` and create a [ProgramReport] for error reporting
-pub fn report(input: String, label: String) -> ProgramReport {
+pub fn validate(input: String, label: String) -> ProgramReport {
     let file = RuleFile::new(input, label);
-    let parameters = ExecutionParameters::default();
 
     let (mut pipeline, parsing_report) = match ProgramPipeline::file(&file) {
         Ok(pipeline) => pipeline.pair(),
-        Err(errors) => return errors.program_report(file).into(),
+        Err(errors) => return errors.program_report(file),
     };
 
     let mut validation_report = ValidationReport::default();
-    pipeline.apply_transformation(
-        &mut validation_report,
-        TransformationDefault::new(parameters),
-    );
+    pipeline.apply_transformation(&mut validation_report, TransformationValidate::default());
 
     let mut report = ProgramReport::new(file);
     if let Some(parsing_report) = parsing_report {

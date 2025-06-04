@@ -59,7 +59,7 @@ impl Operation {
     }
 
     /// Return an iterator over the arguments of this operation.
-    pub fn arguments(&self) -> impl Iterator<Item = &Term> {
+    pub fn terms(&self) -> impl Iterator<Item = &Term> {
         self.subterms.iter()
     }
 
@@ -104,7 +104,7 @@ impl Operation {
     /// Reduce this term by evaluating the expression
     /// returning a new [Term] with the same [Origin] as `self`.
     ///
-    /// This function does nothing if `self` is not ground.
+    /// This function does nothing if `self` contains any variable.
     ///
     /// Returns `None` if any intermediate result is undefined.
     pub fn reduce(&self) -> Option<Term> {
@@ -127,6 +127,30 @@ impl Operation {
         stack_program
             .evaluate_data(&[])
             .map(|result| Term::from(GroundTerm::new(result)))
+    }
+
+    /// Check wether this term can be reduced to a ground value,
+    /// except for global variables that need to be resolved.
+    ///
+    /// This is the case if
+    ///     * This term does not contain non-global variables.
+    ///     * This term does not contain undefined intermediate values.
+    pub fn is_resolvable(&self) -> bool {
+        if self.is_ground() {
+            return self.reduce().is_some();
+        }
+
+        for term in self.terms() {
+            if term.variables().any(|variable| variable.is_global()) {
+                continue;
+            }
+
+            if !term.is_resolvable() {
+                return false;
+            }
+        }
+
+        true
     }
 }
 

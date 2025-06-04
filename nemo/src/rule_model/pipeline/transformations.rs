@@ -6,6 +6,7 @@ pub mod exports;
 pub mod global;
 pub mod skolem;
 pub mod split;
+pub mod validate;
 
 use crate::rule_model::error::ValidationReport;
 

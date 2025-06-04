@@ -36,7 +36,7 @@ impl ProgramChaseTranslation {
         operation: &crate::rule_model::components::term::operation::Operation,
     ) -> OperationTerm {
         let kind = operation.operation_kind();
-        let subterms = operation.arguments().map(Self::operation_term).collect();
+        let subterms = operation.terms().map(Self::operation_term).collect();
 
         OperationTerm::Operation(Operation::new(kind, subterms))
     }

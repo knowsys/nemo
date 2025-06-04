@@ -99,6 +99,19 @@ impl Primitive {
             Primitive::Ground(term) => term.value_type(),
         }
     }
+
+    /// Check wether this term can be reduced to a ground value,
+    /// except for global variables that need to be resolved.
+    ///
+    /// This is the case if
+    ///     * This term is ground
+    ///     * This term is a global variable
+    pub fn is_resolvable(&self) -> bool {
+        match self {
+            Primitive::Variable(variable) => variable.is_global(),
+            Primitive::Ground(_) => true,
+        }
+    }
 }
 
 impl From<Variable> for Primitive {

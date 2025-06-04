@@ -39,7 +39,7 @@ impl Literal {
         match self {
             Literal::Positive(literal) => Box::new(literal.terms()),
             Literal::Negative(literal) => Box::new(literal.terms()),
-            Literal::Operation(literal) => Box::new(literal.arguments()),
+            Literal::Operation(literal) => Box::new(literal.terms()),
         }
     }
 

@@ -140,6 +140,16 @@ impl FunctionTerm {
                 .collect::<Option<Vec<_>>>()?,
         })
     }
+
+    /// Check wether this term can be reduced to a ground value,
+    /// except for global variables that need to be resolved.
+    ///
+    /// This is the case if
+    ///     * This term does not contain non-global variables.
+    ///     * This term does not contain undefined intermediate values.
+    pub fn is_resolvable(&self) -> bool {
+        self.terms().all(|term| term.is_resolvable())
+    }
 }
 
 impl Index<usize> for FunctionTerm {

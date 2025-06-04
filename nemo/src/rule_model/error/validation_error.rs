@@ -197,7 +197,7 @@ pub enum ValidationError {
     #[assoc(code = 237)]
     DirectiveNonAssignment,
     /// Variable assignemnts in directive have incorrect form
-    #[error("expected a variable assignment to a ground term")]
+    #[error("expected a variable assignment to be a ground term")]
     #[assoc(note = "ground terms are terms without variables")]
     #[assoc(code = 238)]
     DirectiveAssignmentNotGround,
