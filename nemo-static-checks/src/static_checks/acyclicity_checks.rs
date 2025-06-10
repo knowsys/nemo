@@ -105,9 +105,8 @@ impl RuleSet {
     }
 
     pub fn check_acyclicity(&self, variant: ChaseVariant) -> bool {
-        let mut new_facts: HashSet<Fact> = self.critical_instance();
+        let mut cur_facts: HashSet<Fact> = self.critical_instance();
         // println!("{:#?}", new_facts);
-        let mut cur_facts: HashSet<Fact> = new_facts.clone();
         let datalog_rules: Vec<&Rule> = self.datalog_rules();
         // println!("{:?}", datalog_rules);
         let existential_rules: Vec<&Rule> = self.existential_rules();
@@ -117,13 +116,18 @@ impl RuleSet {
             self.predicates_of_existential_rules(&existential_rules);
         let mut datalog_execution_engine: DefaultExecutionEngine;
         let mut existential_reasoner: ExistentialReasoner = ExistentialReasoner::new(
-            existential_predicates,
+            &existential_predicates,
             &HashSet::default(),
             existential_rules,
             variant,
         );
+        let mut new_facts: HashSet<Fact> = cur_facts
+            .iter()
+            .filter(|fact| existential_predicates.contains(fact.predicate()))
+            .cloned()
+            .collect();
         while !new_facts.is_empty() {
-            // println!("here");
+            println!("here");
             datalog_execution_engine = self.initialize_execution_engine(&datalog_rules, &cur_facts);
             datalog_execution_engine
                 .execute()
@@ -136,15 +140,19 @@ impl RuleSet {
                     .map(|values| Fact::from((*pred, values.into_iter().map(Term::from).collect())))
                     .filter(|fact| !cur_facts.contains(fact))
                     .collect();
-                new_facts.insert_all(&facts_of_pred);
-                cur_facts.insert_all_take(facts_of_pred);
+                facts_of_pred.into_iter().for_each(|fact| {
+                    if !new_facts.contains(&fact)
+                        && existential_predicates.contains(fact.predicate())
+                    {
+                        new_facts.insert(fact.clone());
+                    }
+                    cur_facts.insert(fact);
+                })
             });
             new_facts = existential_reasoner.run_every_rule_once(new_facts);
-            // println!("{:#?}", new_facts);
             if new_facts.iter().any(|fact| fact.is_cyclic()) {
                 return false;
             }
-            println!("here");
             cur_facts.insert_all(&new_facts);
         }
         true
@@ -172,6 +180,7 @@ impl<'a> ExistentialReasoner<'a> {
             .enumerate()
             .try_fold(cur_ass, |mut ret_val, (pos_idx, term)| {
                 let var: &Variable = var_per_atom_idx_pos_idx.get(&(atom_idx, pos_idx)).unwrap();
+                // println!("{}, var: {:#?}", pos_idx, var);
                 if ret_val.contains_key(var) && ret_val.get(var).unwrap() != term {
                     return None;
                 }
@@ -214,28 +223,37 @@ impl<'a> ExistentialReasoner<'a> {
                     )
                 })
                 .collect();
-            let other_preds: Vec<&Tag> = preds_of_body
+            let other_preds: Vec<(usize, &Tag)> = preds_of_body
                 .iter()
                 .enumerate()
                 .filter(|(i, _)| *i != atom_idx)
-                .map(|(_, pred)| *pred)
+                .map(|(i, pred)| (i, *pred))
                 .collect();
+            println!("other_preds: {:#?}", other_preds);
+            // println!(
+            //     "unfiltered_ass: \n{:#?}",
+            //     unfiltered_assignments_for_start_predicate
+            // );
             let filtered_assignments_for_start_predicate: Vec<Assignment> =
-                other_preds.iter().enumerate().fold(
+                other_preds.iter().fold(
                     unfiltered_assignments_for_start_predicate,
                     |assigns, (i, pred)| {
                         let facts_of_pred: &HashSet<Fact> = self.facts_by_pred.get(pred).unwrap();
+                        // println!("{:#?}", facts_of_pred);
                         assigns.into_iter().fold(
                             Vec::<Assignment>::new(),
                             |mut new_assigns, ass| {
                                 facts_of_pred.iter().for_each(|fact| {
+                                    println!("cur_ass: {:#?}", ass);
                                     let new_ass_op: Option<Assignment> = self.assignment_for_fact(
                                         fact,
-                                        i,
+                                        *i,
                                         var_per_atom_idx_pos_idx_of_rule,
                                         ass.clone(),
                                     );
+                                    // println!("{:#?}", new_ass_op);
                                     if let Some(new_ass) = new_ass_op {
+                                        // println!("new_ass: {:#?}", new_ass);
                                         new_assigns.push(new_ass);
                                     }
                                 });
@@ -244,6 +262,10 @@ impl<'a> ExistentialReasoner<'a> {
                         )
                     },
                 );
+            // println!(
+            //     "filtered_asss: {:#?}",
+            //     filtered_assignments_for_start_predicate
+            // );
             ret_val.insert_all_take(filtered_assignments_for_start_predicate);
         }
         let frontier_vars: HashSet<&Variable> = rule.frontier_variables();
@@ -276,6 +298,7 @@ impl<'a> ExistentialReasoner<'a> {
         frontier_vars: &HashSet<&Variable>,
         ex_vars: &HashSet<&'a Variable>,
     ) {
+        // println!("ass: \n{:#?}", ass);
         let frontier_terms: Vec<&Term> = frontier_vars
             .iter()
             .map(|var| ass.get(var).unwrap())
@@ -291,20 +314,6 @@ impl<'a> ExistentialReasoner<'a> {
             let new_term: Term = Term::from(new_term_name);
             ass.insert(var, new_term);
         })
-        // head.iter().for_each(|atom| {
-        //     atom.arguments()
-        //         .filter_map(|term| match term {
-        //             Term::Primitive(Primitive::Variable(var)) if var.is_existential() => Some(var),
-        //             _ => None,
-        //         })
-        //         .enumerate()
-        //         .for_each(|(var_idx, var)| {
-        //             let new_term_name: String =
-        //                 format!("f_{}_{}({})", rule_idx, var_idx, cleaned_string);
-        //             let new_term: Term = Term::from(new_term_name);
-        //             ass.insert(var, new_term);
-        //         })
-        // })
     }
 
     fn filter_new_facts(&self, new_facts: HashSet<Fact>) -> HashSet<Fact> {
@@ -340,23 +349,27 @@ impl<'a> ExistentialReasoner<'a> {
     }
 
     fn new(
-        predicates: HashSet<&'a Tag>,
+        predicates: &HashSet<&'a Tag>,
         facts: &HashSet<Fact>,
         rules: Vec<&'a Rule>,
         variant: ChaseVariant,
     ) -> Self {
-        let facts_by_pred: HashMap<&Tag, HashSet<Fact>> = predicates.into_iter().fold(
-            HashMap::<&Tag, HashSet<Fact>>::new(),
-            |mut ret_val, pred| {
-                let facts_of_pred: HashSet<Fact> = facts
-                    .iter()
-                    .filter(|fact| fact.predicate() == pred)
-                    .cloned()
-                    .collect();
-                ret_val.insert(pred, facts_of_pred);
-                ret_val
-            },
-        );
+        // let facts_by_pred: HashMap<&Tag, HashSet<Fact>> = predicates.into_iter().fold(
+        //     HashMap::<&Tag, HashSet<Fact>>::new(),
+        //     |mut ret_val, pred| {
+        //         let facts_of_pred: HashSet<Fact> = facts
+        //             .iter()
+        //             .filter(|fact| fact.predicate() == pred)
+        //             .cloned()
+        //             .collect();
+        //         ret_val.insert(pred, facts_of_pred);
+        //         ret_val
+        //     },
+        // );
+        let facts_by_pred: HashMap<&Tag, HashSet<Fact>> = predicates
+            .iter()
+            .map(|pred| (*pred, HashSet::default()))
+            .collect();
         let var_per_atom_idx_pos_idx_per_rule: VarPerAtomIdxPosIdxPerRule = rules.iter().fold(
             VarPerAtomIdxPosIdxPerRule::new(),
             |mut var_atom_pos_rule, rule| {
@@ -391,6 +404,7 @@ impl<'a> ExistentialReasoner<'a> {
     }
 
     fn run_every_rule_once(&mut self, new_facts: HashSet<Fact>) -> HashSet<Fact> {
+        // println!("{:#?}", new_facts);
         let filtered_facts: HashSet<Fact> = self.filter_new_facts(new_facts);
         self.update_facts(filtered_facts.clone());
         let filtered_facts_by_pred: HashMap<&Tag, HashSet<Fact>> =

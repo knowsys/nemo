@@ -233,10 +233,10 @@ fn linear_positive(fixture: Fixture<&str>) {
 )]
 fn mfa_negative(fixture: Fixture<&str>) {
     // let path: PathBuf = path_canonicalized(fixture.path());
-    // if !path.ends_with("c28.rls") {
+    // if !path.ends_with("higherCyclicTermDepthRequired.rls") {
     //     return;
     // }
-    test(fixture, false, &RulesProperties::is_mfa)
+    test(fixture, false, &RulesProperties::is_mfa);
 }
 
 // #[dir_test(
