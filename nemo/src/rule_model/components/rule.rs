@@ -126,23 +126,20 @@ impl Rule {
         &mut self.head
     }
 
+    pub fn positive_variables_iter(&self) -> impl Iterator<Item = &Variable> {
+        self.body_positive().flat_map(|atom| {
+            atom.arguments()
+                .filter_map(|term| match term {
+                    Term::Primitive(Primitive::Variable(variable)) => Some(variable),
+                    _ => None,
+                })
+                .filter(|variable| variable.is_universal() && variable.name().is_some())
+        })
+    }
+
     /// Return the set of variables that are bound in positive body atoms.
     pub fn positive_variables(&self) -> HashSet<&Variable> {
-        let mut result = HashSet::new();
-
-        for literal in &self.body {
-            if let Literal::Positive(atom) = literal {
-                for term in atom.arguments() {
-                    if let Term::Primitive(Primitive::Variable(variable)) = term {
-                        if variable.is_universal() && variable.name().is_some() {
-                            result.insert(variable);
-                        }
-                    }
-                }
-            }
-        }
-
-        result
+        self.positive_variables_iter().collect()
     }
 
     /// Return a set of "safe" variables.

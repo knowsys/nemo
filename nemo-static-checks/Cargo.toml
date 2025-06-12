@@ -1,0 +1,19 @@
+[package]
+name = "nemo-static-checks"
+description.workspace = true
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+homepage.workspace = true
+license.workspace = true
+readme.workspace = true
+repository.workspace = true
+
+[dependencies]
+log = "0.4"
+nemo = { path = "../nemo", default-features = false }
+petgraph = "0.6.3"
+
+[dev-dependencies]
+dir-test = "0.2.1"
+env_logger = "*"
