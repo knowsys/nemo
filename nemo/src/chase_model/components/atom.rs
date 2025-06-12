@@ -8,10 +8,8 @@ use std::fmt::Display;
 
 use crate::rule_model::components::{tag::Tag, IterableVariables};
 
-use super::ChaseComponent;
-
 /// Tagged list of terms.
-pub trait ChaseAtom: ChaseComponent + IterableVariables + Display {
+pub trait ChaseAtom: IterableVariables + Display {
     /// Type of the terms within the atom.
     type TypeTerm;
 

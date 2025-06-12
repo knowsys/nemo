@@ -3,6 +3,7 @@
 use std::path::PathBuf;
 
 use nemo_physical::datavalues::DataValueCreationError;
+use report::ProgramReport;
 use thiserror::Error;
 
 use crate::execution::{
@@ -11,6 +12,11 @@ use crate::execution::{
 
 pub use nemo_physical::error::ReadingError;
 
+pub mod context;
+pub mod report;
+pub mod rich;
+pub mod warned;
+
 /// Error-Collection for all the possible Errors occurring in this crate
 #[allow(variant_size_differences)]
 #[derive(Error, Debug)]
@@ -18,9 +24,9 @@ pub enum Error {
     /// Build selection strategy errror
     #[error(transparent)]
     SelectionStrategyError(#[from] SelectionStrategyError),
-    /// Error occurred during parsing
-    #[error("error while parsing program")]
-    ProgramParseError,
+    /// Error relating to the program
+    #[error(transparent)]
+    ProgramReport(#[from] ProgramReport),
     /// Error occurred during tracing
     #[error(transparent)]
     TracingError(#[from] TracingError),
@@ -41,6 +47,14 @@ pub enum Error {
         /// Underlying IO error
         error: std::io::Error,
         /// Name of the file that could not be written
+        filename: String,
+    },
+    /// Errors on reading a file
+    #[error("failed to read `{filename}`: {error}")]
+    IoReading {
+        /// Contains the wrapped error
+        error: std::io::Error,
+        /// Filename which caused the error
         filename: String,
     },
     /// CSV serialization/deserialization error

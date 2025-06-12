@@ -85,7 +85,7 @@ mod test {
             input::ParserInput,
             ParserState,
         },
-        rule_model::components::datatype::DataType,
+        rule_model::components::import_export::io_type::IOType,
     };
 
     #[test]
@@ -94,9 +94,9 @@ mod test {
             "_, test: string, _: int, name:any",
             vec![
                 (Parameter::Unnamed, None),
-                (Parameter::Named("test".to_string()), Some(DataType::String)),
-                (Parameter::Unnamed, Some(DataType::Integer)),
-                (Parameter::Named("name".to_string()), Some(DataType::Any)),
+                (Parameter::Named("test".to_string()), Some(IOType::String)),
+                (Parameter::Unnamed, Some(IOType::Integer)),
+                (Parameter::Named("name".to_string()), Some(IOType::Any)),
             ],
         )];
 

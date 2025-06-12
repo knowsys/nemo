@@ -6,7 +6,7 @@ use crate::{
     parser::ast::{self},
     rule_model::{
         components::term::{operation::Operation, Term},
-        error::TranslationError,
+        origin::Origin,
         translation::{ASTProgramTranslation, TranslationComponent},
     },
 };
@@ -17,17 +17,17 @@ newtype_wrapper!(FunctionLikeOperation: Operation);
 impl TranslationComponent for FunctionLikeOperation {
     type Ast<'a> = ast::expression::complex::operation::Operation<'a>;
 
-    fn build_component<'a, 'b>(
-        translation: &mut ASTProgramTranslation<'a, 'b>,
-        operation: &'b Self::Ast<'a>,
-    ) -> Result<Self, TranslationError> {
+    fn build_component<'a>(
+        translation: &mut ASTProgramTranslation,
+        operation: &Self::Ast<'a>,
+    ) -> Option<Self> {
         let kind = operation.kind();
         let mut subterms = Vec::new();
         for expression in operation.expressions() {
             subterms.push(Term::build_component(translation, expression)?);
         }
 
-        Ok(FunctionLikeOperation(translation.register_component(
+        Some(FunctionLikeOperation(Origin::ast(
             Operation::new(kind, subterms),
             operation,
         )))

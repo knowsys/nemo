@@ -2,13 +2,21 @@
 
 use std::{fmt::Display, hash::Hash};
 
-use crate::rule_model::{
-    components::{ProgramComponent, ProgramComponentKind},
-    error::{validation_error::ValidationErrorKind, ValidationErrorBuilder},
-    origin::Origin,
+use crate::{
+    parser::ParserErrorReport,
+    rule_model::{
+        components::{
+            symbols::Symbols, ComponentBehavior, ComponentIdentity, ComponentSource,
+            IterableComponent, ProgramComponent, ProgramComponentKind,
+        },
+        error::{validation_error::ValidationError, ValidationReport},
+        origin::Origin,
+        pipeline::id::ProgramComponentId,
+        translation::{ProgramParseReport, TranslationComponent},
+    },
 };
 
-use super::VariableName;
+use super::Variable;
 
 /// Universally quantified variable
 ///
@@ -16,38 +24,51 @@ use super::VariableName;
 ///
 /// Universal variables may not have a name,
 /// in which case we call them anonymous.
-#[derive(Debug, Clone, Eq)]
+#[derive(Debug, Clone)]
 pub struct UniversalVariable {
     /// Origin of this component
     origin: Origin,
+    /// Id of this component
+    id: ProgramComponentId,
 
     /// Name of the variable
     ///
     /// This can be `None` in case this is an anonymous variable.
-    name: Option<VariableName>,
+    name: Option<String>,
 }
 
 impl UniversalVariable {
-    /// Create a new named [UniversalVariable]
+    /// Create a new named [UniversalVariable].
     pub fn new(name: &str) -> Self {
         Self {
-            origin: Origin::Created,
-            name: Some(VariableName::new(name.to_string())),
+            origin: Origin::default(),
+            id: ProgramComponentId::default(),
+            name: Some(name.to_owned()),
         }
     }
 
-    /// Create a new anonymous [UniversalVariable]
+    /// Create a new anonymous [UniversalVariable].
     pub fn new_anonymous() -> Self {
         Self {
-            origin: Origin::Created,
+            origin: Origin::default(),
+            id: ProgramComponentId::default(),
             name: None,
+        }
+    }
+
+    /// Construct this object from a string.
+    pub fn parse(input: &str) -> Result<Self, ProgramParseReport> {
+        if let Variable::Universal(result) = Variable::parse(input)? {
+            Ok(result)
+        } else {
+            Err(ProgramParseReport::Parsing(ParserErrorReport::empty()))
         }
     }
 
     /// Return the name of this variable,
     /// or `None` if the variable is unnamed.
-    pub fn name(&self) -> Option<String> {
-        self.name.as_ref().map(|name| name.to_string())
+    pub fn name(&self) -> Option<&str> {
+        self.name.as_deref()
     }
 
     /// Return `true` if this is an anonymous variable,
@@ -57,7 +78,7 @@ impl UniversalVariable {
     }
 
     /// Change the name of this variable.
-    pub fn rename(&mut self, name: VariableName) {
+    pub fn rename(&mut self, name: String) {
         self.name = Some(name);
     }
 }
@@ -77,6 +98,8 @@ impl PartialEq for UniversalVariable {
     }
 }
 
+impl Eq for UniversalVariable {}
+
 impl PartialOrd for UniversalVariable {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         Some(self.cmp(other))
@@ -95,36 +118,53 @@ impl Hash for UniversalVariable {
     }
 }
 
-impl ProgramComponent for UniversalVariable {
-    fn origin(&self) -> &Origin {
-        &self.origin
+impl ComponentBehavior for UniversalVariable {
+    fn kind(&self) -> ProgramComponentKind {
+        ProgramComponentKind::Variable
     }
 
-    fn set_origin(mut self, origin: Origin) -> Self
-    where
-        Self: Sized,
-    {
-        self.origin = origin;
-        self
-    }
+    fn validate(&self) -> Result<(), ValidationReport> {
+        let mut report = ValidationReport::default();
 
-    fn validate(&self, builder: &mut ValidationErrorBuilder) -> Option<()>
-    where
-        Self: Sized,
-    {
-        if let Some(name) = &self.name {
-            if !name.is_valid() {
-                builder.report_error(
-                    self.origin,
-                    ValidationErrorKind::InvalidVariableName(name.0.clone()),
+        if let Some(name) = self.name() {
+            if Symbols::is_reserved(name) {
+                report.add(
+                    self,
+                    ValidationError::InvalidVariableName {
+                        variable_name: name.to_owned(),
+                    },
                 );
             }
         }
 
-        Some(())
+        report.result()
     }
 
-    fn kind(&self) -> ProgramComponentKind {
-        ProgramComponentKind::Variable
+    fn boxed_clone(&self) -> Box<dyn ProgramComponent> {
+        Box::new(self.clone())
     }
 }
+
+impl ComponentSource for UniversalVariable {
+    type Source = Origin;
+
+    fn origin(&self) -> Origin {
+        self.origin.clone()
+    }
+
+    fn set_origin(&mut self, origin: Origin) {
+        self.origin = origin;
+    }
+}
+
+impl ComponentIdentity for UniversalVariable {
+    fn id(&self) -> ProgramComponentId {
+        self.id
+    }
+
+    fn set_id(&mut self, id: ProgramComponentId) {
+        self.id = id;
+    }
+}
+
+impl IterableComponent for UniversalVariable {}

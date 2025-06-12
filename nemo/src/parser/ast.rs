@@ -12,7 +12,9 @@ pub mod statement;
 pub mod tag;
 pub mod token;
 
-use std::fmt::Debug;
+use std::{fmt::Debug, ops::Range};
+
+use crate::rule_model::components::ComponentSource;
 
 use super::{context::ParserContext, span::Span, ParserInput, ParserResult};
 use ascii_tree::Tree;
@@ -33,6 +35,18 @@ pub trait ProgramAST<'a>: Debug + Sync {
 
     /// Return [ParserContext] indicating the type of node.
     fn context(&self) -> ParserContext;
+}
+
+impl<'a, Node: ProgramAST<'a>> ComponentSource for Node {
+    type Source = Range<usize>;
+
+    fn origin(&self) -> Self::Source {
+        self.span().range().range().clone()
+    }
+
+    fn set_origin(&mut self, _origin: Self::Source) {
+        // Not needed
+    }
 }
 
 pub(crate) fn ast_to_ascii_tree<'a>(node: &'a dyn ProgramAST<'a>) -> Tree {

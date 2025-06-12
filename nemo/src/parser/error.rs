@@ -12,6 +12,8 @@ use nom::{
 };
 use nom_supreme::error::{GenericErrorTree, StackContext};
 
+use crate::error::rich::RichError;
+
 use super::{
     ast::{
         statement::{Statement, StatementKind},
@@ -43,6 +45,24 @@ impl Display for ParserError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         // TODO: We only use the first context to generate an error message
         f.write_fmt(format_args!("expected `{}`", self.context[0].name()))
+    }
+}
+
+impl RichError for ParserError {
+    fn is_warning(&self) -> bool {
+        false
+    }
+
+    fn message(&self) -> String {
+        self.to_string()
+    }
+
+    fn code(&self) -> usize {
+        1
+    }
+
+    fn note(&self) -> Option<String> {
+        None
     }
 }
 
@@ -91,6 +111,13 @@ pub(crate) fn recover<'a>(
             ))
         }
         Err(err) => Err(err),
+    }
+}
+
+pub(crate) fn translate_error_tree<'a>(error: &nom::Err<ParserErrorTree<'a>>) -> Vec<ParserError> {
+    match error {
+        nom::Err::Incomplete(_) => vec![],
+        nom::Err::Error(err) | nom::Err::Failure(err) => _get_deepest_error(err),
     }
 }
 
