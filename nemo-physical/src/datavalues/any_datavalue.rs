@@ -45,7 +45,7 @@ impl DecimalType {
 
 /// Enum that can represent arbitrary [DataValue]s.
 #[derive(Debug, Clone)]
-enum AnyDataValueEnum {
+pub enum AnyDataValueEnum {
     /// Variant for representing [DataValue]s in [ValueDomain::PlainString].
     PlainString(StringDataValue),
     /// Variant for representing [DataValue]s in [ValueDomain::LanguageTaggedString].
@@ -574,6 +574,21 @@ impl AnyDataValue {
         } else {
             panic!("not a null value");
         }
+    }
+
+    /// Construct a new [AnyDataValue] from an existing
+    /// [AnyDataValueEnum].
+    ///
+    /// This is most useful for implementing deserialization; if the
+    /// underlying type of the value is known, the type-specific
+    /// constructors should be preferred.
+    pub fn from_enum(value: AnyDataValueEnum) -> Self {
+        Self(value)
+    }
+
+    /// Returns the internal representation as an [AnyDataValueEnum].
+    pub fn into_inner(self) -> AnyDataValueEnum {
+        self.0
     }
 }
 
