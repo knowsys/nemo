@@ -49,6 +49,7 @@ jobs:
       - uses: hecrj/setup-rust-action@v2
         with:
           components: rustfmt
+          rust-version: nightly
       - run: cargo fmt --all -- --check
 
   doc:
@@ -74,7 +75,7 @@ jobs:
           components: miri
           rust-version: nightly
       - run: cargo miri setup
-      - run: cargo miri test
+      - run: cargo miri test -- -Z unstable-options --report-time
 
   test-python:
     name: Test python bindings

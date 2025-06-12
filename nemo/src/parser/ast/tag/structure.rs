@@ -50,7 +50,7 @@ impl Display for StructureTag<'_> {
         match &self.kind {
             StructureTagKind::Plain(token) => token.fmt(f),
             StructureTagKind::Prefixed { prefix, tag } => {
-                f.write_fmt(format_args!("{}:{}", prefix, tag))
+                f.write_fmt(format_args!("{prefix}:{tag}"))
             }
             StructureTagKind::Iri(iri) => iri.content().fmt(f),
         }

@@ -19,6 +19,9 @@ pub enum ParserContext {
     /// Number
     #[assoc(name = "number")]
     Number,
+    /// Encoded number
+    #[assoc(name = "number")]
+    EncodedNumber,
     /// Variable
     #[assoc(name = "variable")]
     Variable,
@@ -79,6 +82,12 @@ pub enum ParserContext {
     /// body of prefix directive
     #[assoc(name = "prefix body")]
     PrefixBody,
+    /// parameter directive
+    #[assoc(name = "parameter directive")]
+    ParameterDecl,
+    /// body of parameter directive
+    #[assoc(name = "parameter directive body")]
+    ParameterDeclBody,
     /// Unknown directive
     #[assoc(name = "unknown directive")]
     UnknownDirective,

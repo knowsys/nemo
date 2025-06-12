@@ -8,6 +8,7 @@ use std::{
 };
 
 use enum_assoc::Assoc;
+use log::warn;
 use nemo_physical::aggregates::operation::AggregateOperation;
 use strum_macros::EnumIter;
 
@@ -18,6 +19,7 @@ use crate::{
         },
         error::{validation_error::ValidationErrorKind, ValidationErrorBuilder},
         origin::Origin,
+        substitution::Substitution,
     },
     syntax::builtin::aggregate,
 };
@@ -163,11 +165,11 @@ impl Aggregate {
     }
 
     /// Reduce the [Term] in the aggregate expression returning a copy.
-    pub fn reduce(&self) -> Self {
+    pub fn reduce_with_substitution(&self, bindings: &Substitution) -> Self {
         Self {
             origin: self.origin,
             kind: self.kind,
-            aggregate: Box::new(self.aggregate.reduce()),
+            aggregate: Box::new(self.aggregate.reduce_with_substitution(bindings)),
             distinct: self.distinct.clone(),
         }
     }
@@ -255,7 +257,11 @@ impl ProgramComponent for Aggregate {
             }
         }
 
-        let mut distinct_set = HashSet::new();
+        let mut distinct_set = if self.aggregate.is_primitive() {
+            self.aggregate.variables().collect()
+        } else {
+            HashSet::new()
+        };
         for variable in &self.distinct {
             let name = if variable.is_universal() {
                 if let Some(name) = variable.name() {
@@ -280,11 +286,10 @@ impl ProgramComponent for Aggregate {
             };
 
             if !distinct_set.insert(variable) {
-                builder.report_error(
-                    *variable.origin(),
-                    ValidationErrorKind::AggregateRepeatedDistinctVariable { variable: name },
+                warn!(
+                    "found duplicate variable `{name}` in aggregate `{}`",
+                    self.aggregate_kind()
                 );
-                return None;
             }
         }
 
@@ -315,7 +320,7 @@ impl IterablePrimitives for Aggregate {
         self.aggregate.primitive_terms()
     }
 
-    fn primitive_terms_mut<'a>(&'a mut self) -> Box<dyn Iterator<Item = &'a mut Primitive> + 'a> {
+    fn primitive_terms_mut<'a>(&'a mut self) -> Box<dyn Iterator<Item = &'a mut Term> + 'a> {
         self.aggregate.primitive_terms_mut()
     }
 }

@@ -51,6 +51,16 @@ pub mod string {
     pub const TRIPLE_QUOTE: &str = r#"""""#;
 }
 
+/// This module defines the prefixes for encoded integers
+pub mod encodings {
+    /// Prefix for binary encoded unsigned integers
+    pub const BIN: &str = "0b";
+    /// Prefix for octal encoded unsigned integers
+    pub const OCT: &str = "0o";
+    /// Prefix for hexadecimal encoded unsigned integers
+    pub const HEX: &str = "0x";
+}
+
 /// RDF datatype indicator
 pub const RDF_DATATYPE_INDICATOR: &str = "^^";
 

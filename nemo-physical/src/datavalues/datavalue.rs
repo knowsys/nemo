@@ -24,7 +24,7 @@ pub(crate) fn quote_string(s: &str) -> String {
 /// Encloses a string in pointy brackets. No other escaping is done, since we assume that the IRI has already
 /// been processed to be in a suitable form without inner `<` or `>`.
 pub(crate) fn quote_iri(s: &str) -> String {
-    "<".to_owned() + s + ">"
+    format!("<{s}>")
 }
 
 /// Enum of different value domains that are distinguished in this code.
@@ -60,7 +60,7 @@ pub enum ValueDomain {
     /// This is a superset of [ValueDomain::NonNegativeLong] and its respective subtypes.
     UnsignedLong,
     /// Domain of all signed 64bit integer numbers that are not negative: 0…+9223372036854775807, or 0 … +2^63-1.
-    /// This is a superset of [ValueDomain::Int].
+    /// This is a superset of [ValueDomain::UnsignedInt].
     NonNegativeLong,
     /// Domain of all unsigned 32bit integer numbers: 0…+4294967295, or 0 … +2^32-1.
     /// This is a superset of [ValueDomain::NonNegativeInt].
@@ -114,9 +114,9 @@ impl ValueDomain {
             // Maps have no type in RDF
             ValueDomain::Map => "nemo:map".to_string(),
             // Other literals cannot have a fixed canonical type by definition
-            ValueDomain::Other => panic!("There is no canonical datatype for {:?}. Use the type of the value directly.", self),
+            ValueDomain::Other => panic!("There is no canonical datatype for {self:?}. Use the type of the value directly."),
             ValueDomain::Boolean => "http://www.w3.org/2001/XMLSchema#boolean".to_string(),
-            ValueDomain::Null => panic!("There is no canonical datatype for {:?} defined in Nemo yet. Nulls can be serialized as blank nodes.", self),
+            ValueDomain::Null => panic!("There is no canonical datatype for {self:?} defined in Nemo yet. Nulls can be serialized as blank nodes."),
         }
     }
 

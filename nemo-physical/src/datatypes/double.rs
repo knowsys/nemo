@@ -13,7 +13,7 @@ use num::{
 };
 
 use crate::{
-    error::{Error, ReadingError},
+    error::{Error, ReadingError, ReadingErrorKind},
     function::definitions::numeric::traits::{CheckedPow, CheckedSquareRoot},
 };
 
@@ -33,7 +33,7 @@ impl Double {
     /// Returns an error if `value` is [f32::NAN] or infinite.
     pub fn new(value: f64) -> Result<Self, ReadingError> {
         if !value.is_finite() {
-            return Err(ReadingError::InvalidFloat);
+            return Err(ReadingError::new(ReadingErrorKind::InvalidFloat));
         }
 
         Ok(Self(value))
@@ -77,11 +77,16 @@ impl Double {
     }
 
     /// Returns the nearest integer to `self`.
-    /// If a value is half-way between two integers, round away from 0.0.
+    /// If a value is half-way between two integers and positive, round away from 0.0.
+    /// If a value is half-way between two integers and negative, round towards 0.0.
     pub(crate) fn round(self) -> Self {
-        Double::new(self.0.round()).expect("operation returns valid float")
+        Double::new(if self.0.fract() == -0.5 {
+            self.0.ceil()
+        } else {
+            self.0.round()
+        })
+        .expect("operation returns valid float")
     }
-
     /// Returns the nearest integer to `self`.
     /// If a value is half-way between two integers, round away from 0.0.
     pub(crate) fn ceil(self) -> Self {
@@ -280,7 +285,7 @@ impl CheckedPow for Double {
 
 impl CheckedNeg for Double {
     fn checked_neg(&self) -> Option<Self> {
-        Double::new(-1.0 * self.0).ok()
+        Double::new(-self.0).ok()
     }
 }
 

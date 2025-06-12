@@ -149,6 +149,7 @@ mod test {
     };
 
     use super::ColumnScanUnion;
+    #[cfg(not(miri))]
     use test_log::test;
 
     #[test]

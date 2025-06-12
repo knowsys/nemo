@@ -1,7 +1,10 @@
 //! This module defines [ChaseRule].
 
 use crate::rule_model::{
-    components::{term::primitive::variable::Variable, IterablePrimitives, IterableVariables},
+    components::{
+        term::primitive::{variable::Variable, Primitive},
+        IterablePrimitives, IterableVariables,
+    },
     origin::Origin,
 };
 
@@ -328,10 +331,9 @@ impl IterableVariables for ChaseRule {
 }
 
 impl IterablePrimitives for ChaseRule {
-    fn primitive_terms<'a>(
-        &'a self,
-    ) -> Box<dyn Iterator<Item = &'a crate::rule_model::components::term::primitive::Primitive> + 'a>
-    {
+    type TermType = Primitive;
+
+    fn primitive_terms<'a>(&'a self) -> Box<dyn Iterator<Item = &'a Primitive> + 'a> {
         let head_terms = self.head().iter().flat_map(|atom| atom.primitive_terms());
         let positive_operation_terms = self
             .positive_operations()
@@ -367,11 +369,7 @@ impl IterablePrimitives for ChaseRule {
         )
     }
 
-    fn primitive_terms_mut<'a>(
-        &'a mut self,
-    ) -> Box<
-        dyn Iterator<Item = &'a mut crate::rule_model::components::term::primitive::Primitive> + 'a,
-    > {
-        todo!()
+    fn primitive_terms_mut<'a>(&'a mut self) -> Box<dyn Iterator<Item = &'a mut Primitive> + 'a> {
+        unimplemented!("currently unused, needs support in the entire chase model")
     }
 }

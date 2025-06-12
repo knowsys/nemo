@@ -97,6 +97,7 @@ mod test {
     use super::*;
     use crate::datatypes::{Double, Float};
     use quickcheck_macros::quickcheck;
+    #[cfg(not(miri))]
     use test_log::test;
 
     fn apply_sort_permutator<T>(data: &[T])
@@ -115,6 +116,7 @@ mod test {
                 .collect::<Vec<_>>()
         );
     }
+
     #[quickcheck]
     #[cfg_attr(miri, ignore)]
     fn sort_from_vec(
@@ -124,11 +126,7 @@ mod test {
         vec_f32: Vec<f32>,
     ) -> bool {
         log::debug!(
-            "used values:\nvec_u64: {:?}\nvec_i64: {:?}\nvec_f64: {:?}\n vec_f32: {:?}",
-            vec_u64,
-            vec_i64,
-            vec_f64,
-            vec_f32
+            "used values:\nvec_u64: {vec_u64:?}\nvec_i64: {vec_i64:?}\nvec_f64: {vec_f64:?}\n vec_f32: {vec_f32:?}"
         );
         // Removing NaN values
         let vec_double = vec_f64

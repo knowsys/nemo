@@ -15,17 +15,18 @@ use nemo::{
         ExecutionEngine,
     },
     io::{
+        formats::FileFormatMeta,
         resource_providers::{ResourceProvider, ResourceProviders},
         ImportManager,
     },
     rule_model::{
         components::{
             fact::Fact,
-            import_export::{attributes::ImportExportAttribute, compression::CompressionFormat},
             tag::Tag,
             term::{primitive::Primitive, Term},
+            ProgramComponent,
         },
-        error::ComponentParseError,
+        error::{ComponentParseError, ValidationErrorBuilder},
     },
 };
 
@@ -91,7 +92,7 @@ impl NemoProgram {
     pub fn new(input: &str) -> Result<NemoProgram, NemoError> {
         nemo::parser::Parser::initialize(input, PROGRAM_LABEL.to_string())
             .parse()
-            .map_err(|(_, report)| WasmOrInternalNemoError::Parser(format!("{}", report)))
+            .map_err(|(_, report)| WasmOrInternalNemoError::Parser(format!("{report}")))
             .map_err(NemoError)
             .and_then(|ast| {
                 nemo::rule_model::translation::ASTProgramTranslation::initialize(
@@ -99,7 +100,7 @@ impl NemoProgram {
                     PROGRAM_LABEL.to_string(),
                 )
                 .translate(&ast)
-                .map_err(|report| WasmOrInternalNemoError::Program(format!("{}", report)))
+                .map_err(|report| WasmOrInternalNemoError::Program(format!("{report}")))
                 .map_err(NemoError)
                 .map(NemoProgram)
             })
@@ -115,9 +116,12 @@ impl NemoProgram {
     pub fn resources_used_in_imports(&self) -> Vec<NemoResource> {
         let mut result: Vec<NemoResource> = vec![];
 
-        for directive in self.0.imports() {
-            let format = directive.file_format().media_type();
-            if let Some(resource) = directive.attributes().get(&ImportExportAttribute::Resource) {
+        for import in self.0.imports() {
+            let builder = import
+                .validate(&mut ValidationErrorBuilder::default())
+                .expect("imports have been validated at this point");
+            let format: String = builder.build_import("", 0).media_type();
+            if let Some(resource) = builder.resource() {
                 result.push(NemoResource {
                     accept: format.to_string(),
                     url: resource.to_string(),
@@ -173,7 +177,7 @@ impl BlobResourceProvider {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 #[allow(dead_code)]
 struct BlobReadingError(JsValue);
 
@@ -189,32 +193,20 @@ impl ResourceProvider for BlobResourceProvider {
     fn open_resource(
         &self,
         resource: &Resource,
-        compression: CompressionFormat,
         _media_type: &str,
-    ) -> Result<Option<Box<dyn std::io::BufRead>>, nemo_physical::error::ReadingError> {
-        if let Some(blob) = self.blobs.get(resource) {
+    ) -> Result<Option<Box<dyn std::io::Read>>, nemo_physical::error::ReadingError> {
+        if let Some(blob) = self.blobs.get(&resource.to_string()) {
             let array_buffer: js_sys::ArrayBuffer = self
                 .file_reader_sync
                 .read_as_array_buffer(blob)
                 .map_err(|js_value| {
-                    ReadingError::ExternalReadingError(Box::new(BlobReadingError(js_value)))
+                    ReadingError::new_external(Box::new(BlobReadingError(js_value)))
                 })?;
 
             let data = Uint8Array::new(&array_buffer).to_vec();
 
             let cursor = Cursor::new(data);
-
-            // Decompress blob
-            // We currently do this in Rust after the Blob has been transferred to the WebAssembly, to reuse Nemo's compression logic.
-            // We could also to this on the JavaScript side, see https://developer.mozilla.org/en-US/docs/Web/API/Compression_Streams_API .
-            if let Some(reader) = compression.try_decompression(cursor) {
-                Ok(Some(reader))
-            } else {
-                Err(ReadingError::Decompression {
-                    resource: resource.to_owned(),
-                    decompression_format: compression.to_string(),
-                })
-            }
+            Ok(Some(Box::new(cursor)))
         } else {
             Ok(None)
         }
@@ -229,10 +221,7 @@ pub struct NemoEngine {
 
 #[cfg(feature = "web_sys_unstable_apis")]
 fn std_io_error_from_js_value(js_value: JsValue, prefix: &str) -> std::io::Error {
-    std::io::Error::new(
-        std::io::ErrorKind::Other,
-        format!("{prefix}: {js_value:#?}"),
-    )
+    std::io::Error::other(format!("{prefix}: {js_value:#?}"))
 }
 
 #[cfg(feature = "web_sys_unstable_apis")]
@@ -252,12 +241,9 @@ impl std::io::Write for SyncAccessHandleWriter {
         // Convert to usize safely
         let converted_bytes_written = bytes_written as usize;
         if converted_bytes_written as f64 != bytes_written {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!(
-                    "Error while converting number of bytes written to usize: {bytes_written:#?}"
-                ),
-            ));
+            return Err(std::io::Error::other(format!(
+                "Error while converting number of bytes written to usize: {bytes_written:#?}"
+            )));
         }
 
         Ok(converted_bytes_written)
@@ -323,14 +309,15 @@ impl NemoEngine {
             .map_err(NemoError)
     }
 
-    #[wasm_bindgen(js_name = "countFactsOfDerivedPredicates")]
-    pub fn count_facts_of_derived_predicates(&mut self) -> usize {
-        self.engine.count_facts_of_derived_predicates()
+    #[wasm_bindgen(js_name = "countFactsInMemoryForDerivedPredicates")]
+    pub fn count_facts_in_memory_for_derived_predicates(&mut self) -> usize {
+        self.engine.count_facts_in_memory_for_derived_predicates()
     }
 
-    #[wasm_bindgen(js_name = "countFactsOfPredicate")]
-    pub fn count_facts_of_predicate(&mut self, predicate: String) -> Option<usize> {
-        self.engine.count_facts_of_predicate(&predicate.into())
+    #[wasm_bindgen(js_name = "countFactsInMemoryForPredicate")]
+    pub fn count_facts_in_memory_for_predicate(&mut self, predicate: String) -> Option<usize> {
+        self.engine
+            .count_facts_in_memory_for_predicate(&predicate.into())
     }
 
     #[wasm_bindgen(js_name = "getResult")]
@@ -355,13 +342,7 @@ impl NemoEngine {
         predicate: String,
         sync_access_handle: web_sys::FileSystemSyncAccessHandle,
     ) -> Result<(), NemoError> {
-        use nemo::io::{
-            formats::{
-                dsv::{value_format::DsvValueFormats, DsvHandler},
-                Direction, ImportExportHandler, ImportExportResource,
-            },
-            ExportManager,
-        };
+        use nemo::io::{formats::dsv::DsvHandler, ExportManager};
 
         let identifier = Tag::from(predicate.clone());
 
@@ -380,19 +361,11 @@ impl NemoEngine {
 
         let writer = SyncAccessHandleWriter(sync_access_handle);
 
-        let export_handler: Box<dyn ImportExportHandler> = Box::new(DsvHandler::new(
-            b',',
-            ImportExportResource::Stdout,
-            DsvValueFormats::default(arity),
-            None,
-            CompressionFormat::None,
-            false,
-            Direction::Export,
-        ));
+        let export_handler: DsvHandler = DsvHandler::new(b',', arity);
         let export_manager: ExportManager = Default::default();
 
         export_manager
-            .export_table_with_writer(Box::new(writer), &*export_handler, Some(record_iter))
+            .export_table_with_writer(Box::new(writer), &export_handler, Some(record_iter))
             .map_err(WasmOrInternalNemoError::Nemo)
             .map_err(NemoError)
     }
@@ -402,9 +375,11 @@ impl NemoEngine {
         predicate: String,
         row_index: usize,
     ) -> Result<Option<(ExecutionTrace, Vec<TraceFactHandle>)>, NemoError> {
+        let predicate_tag = Tag::from(predicate.clone());
+
         let iter = self
             .engine
-            .predicate_rows(&Tag::from(predicate.clone()))
+            .predicate_rows(&predicate_tag)
             .map_err(WasmOrInternalNemoError::Nemo)
             .map_err(NemoError)?;
 
@@ -413,7 +388,7 @@ impl NemoEngine {
 
         if let Some(terms_to_trace) = terms_to_trace_opt {
             let fact_to_trace = Fact::new(
-                &predicate,
+                predicate_tag,
                 terms_to_trace
                     .into_iter()
                     .map(|term| Term::Primitive(Primitive::from(term))),

@@ -6,3 +6,4 @@ Tests / documents all basic functionalities of the rule syntax:
 - projection
 - union
 - assignment
+- encodings

@@ -1,17 +1,23 @@
 //! Code for timing blocks of code
 
 use ascii_tree::{write_tree, Tree};
-#[cfg(feature = "timing")]
-use howlong::*;
+#[cfg(not(target_family = "wasm"))]
+use cpu_time::ProcessTime;
+#[cfg(all(not(test), not(target_family = "wasm")))]
+use cpu_time::ThreadTime;
 use linked_hash_map::LinkedHashMap;
 use once_cell::sync::Lazy;
-#[cfg(not(feature = "timing"))]
-use std::time::Duration;
+#[cfg(not(target_family = "wasm"))]
+use std::time::Instant;
 use std::{
+    cmp::Reverse,
     fmt,
     str::FromStr,
     sync::{Mutex, MutexGuard},
+    time::Duration,
 };
+#[cfg(target_family = "wasm")]
+use wasmtimer::std::Instant;
 
 /// Global instance of the [TimedCode]
 static TIMECODE_INSTANCE: Lazy<Mutex<TimedCode>> = Lazy::new(|| {
@@ -25,22 +31,13 @@ pub struct TimedCodeInfo {
     total_system_time: Duration,
     total_process_time: Duration,
     total_thread_time: Duration,
-    #[cfg(not(feature = "timing"))]
-    start_system: Option<()>,
-    #[cfg(not(feature = "timing"))]
+    start_system: Option<Instant>,
+    #[cfg(not(target_family = "wasm"))]
     #[allow(dead_code)]
-    start_process: Option<()>,
-    #[cfg(not(feature = "timing"))]
+    start_process: Option<ProcessTime>,
     #[allow(dead_code)]
-    start_thread: Option<()>,
-    #[cfg(feature = "timing")]
-    start_system: Option<TimePoint>,
-    #[cfg(feature = "timing")]
-    #[allow(dead_code)]
-    start_process: Option<TimePoint>,
-    #[cfg(feature = "timing")]
-    #[allow(dead_code)]
-    start_thread: Option<TimePoint>,
+    #[cfg(not(target_family = "wasm"))]
+    start_thread: Option<Duration>,
     runs: u64,
 }
 
@@ -158,7 +155,7 @@ impl TimedCode {
 
     /// Navigate to a subblock (use forward slash to go multiple layers at once)
     pub fn sub(&mut self, name: &str) -> &mut TimedCode {
-        if cfg!(test) || cfg!(not(feature = "timing")) {
+        if cfg!(test) {
             return self;
         }
 
@@ -179,27 +176,35 @@ impl TimedCode {
     }
 
     /// No-op because time measurement is disabled
-    #[cfg(any(test, not(feature = "timing")))]
+    #[cfg(test)]
     pub fn start(&mut self) {}
 
     /// Start the next measurement
-    #[cfg(all(not(test), feature = "timing"))]
+    #[cfg(all(not(test), not(target_family = "wasm")))]
     pub fn start(&mut self) {
         debug_assert!(self.info.start_thread.is_none());
 
-        self.info.start_system = Some(HighResolutionClock::now());
-        self.info.start_process = Some(ProcessRealCPUClock::now());
-        self.info.start_thread = Some(ThreadClock::now());
+        self.info.start_system = Some(Instant::now());
+        self.info.start_process = Some(ProcessTime::now());
+        self.info.start_thread = Some(ThreadTime::now().as_duration());
+    }
+
+    /// Start the next measurement
+    #[cfg(all(not(test), target_family = "wasm"))]
+    pub fn start(&mut self) {
+        debug_assert!(self.info.start_system.is_none());
+
+        self.info.start_system = Some(Instant::now());
     }
 
     /// No-op because time measurement is disabled
-    #[cfg(any(test, not(feature = "timing")))]
+    #[cfg(test)]
     pub fn stop(&mut self) -> Duration {
         Duration::ZERO
     }
 
     /// Stop the current measurement and save the times
-    #[cfg(all(not(test), feature = "timing"))]
+    #[cfg(all(not(test), not(target_family = "wasm")))]
     pub fn stop(&mut self) -> Duration {
         debug_assert!(self.info.start_system.is_some());
 
@@ -216,9 +221,9 @@ impl TimedCode {
             .start_thread
             .expect("start() must be called before calling stop()");
 
-        let duration_system = HighResolutionClock::now() - start_system;
-        let duration_process = ProcessRealCPUClock::now() - start_process;
-        let duration_thread = ThreadClock::now() - start_thread;
+        let duration_system = Instant::now() - start_system;
+        let duration_process = ProcessTime::now().duration_since(start_process);
+        let duration_thread = ThreadTime::now().as_duration() - start_thread;
         self.info.total_system_time += duration_system;
         self.info.total_process_time += duration_process;
         self.info.total_thread_time += duration_thread;
@@ -230,21 +235,47 @@ impl TimedCode {
         duration_thread
     }
 
+    /// Stop the current measurement and save the times
+    #[cfg(all(not(test), target_family = "wasm"))]
+    pub fn stop(&mut self) -> Duration {
+        debug_assert!(self.info.start_system.is_some());
+
+        let start_system = self
+            .info
+            .start_system
+            .expect("start() must be called before calling stop()");
+
+        let duration_system = Instant::now() - start_system;
+        self.info.total_system_time += duration_system;
+        self.info.start_system = None;
+        self.info.runs += 1;
+
+        duration_system
+    }
+
     fn apply_display_option<'a>(
         code: &'a TimedCode,
         option: &TimedDisplay,
     ) -> Vec<(&'a String, &'a TimedCode)> {
         let mut blocks: Vec<(&'a String, &'a TimedCode)> = code.subblocks.iter().collect();
 
+        fn name<'a>(entry: &(&'a String, &TimedCode)) -> &'a String {
+            entry.0
+        }
+
+        #[cfg(not(target_family = "wasm"))]
+        fn longest_time(entry: &(&String, &TimedCode)) -> Reverse<Duration> {
+            Reverse(entry.1.info.total_thread_time)
+        }
+        #[cfg(target_family = "wasm")]
+        fn longest_time(entry: &(&String, &TimedCode)) -> Reverse<Duration> {
+            Reverse(entry.1.info.total_system_time)
+        }
+
         match option.sorting {
             TimedSorting::Default => {}
-            TimedSorting::Alphabetical => blocks.sort_by(|a, b| a.0.partial_cmp(b.0).unwrap()),
-            TimedSorting::LongestThreadTime => blocks.sort_by(|a, b| {
-                b.1.info
-                    .total_thread_time
-                    .partial_cmp(&a.1.info.total_thread_time)
-                    .unwrap()
-            }),
+            TimedSorting::Alphabetical => blocks.sort_by_key(name),
+            TimedSorting::LongestThreadTime => blocks.sort_by_key(longest_time),
         };
 
         if option.num_elements > 0 {

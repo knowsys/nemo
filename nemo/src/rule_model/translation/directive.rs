@@ -2,12 +2,14 @@
 
 use std::collections::hash_map::Entry;
 
-use import_export::{handle_export, handle_import};
-
 use crate::{
     parser::ast::{self, ProgramAST},
     rule_model::{
-        components::tag::Tag,
+        components::{
+            import_export::{ExportDirective, ImportDirective},
+            parameter::ParameterDeclaration,
+            tag::Tag,
+        },
         error::{
             info::Info, translation_error::TranslationErrorKind, ComplexErrorLabelKind,
             TranslationError,
@@ -15,9 +17,10 @@ use crate::{
     },
 };
 
-use super::ASTProgramTranslation;
+use super::{ASTProgramTranslation, TranslationComponent};
 
 pub(crate) mod import_export;
+pub(crate) mod parmater_declaration;
 
 /// Handle directive nodes that do not use names defined elsewhere.
 pub fn handle_define_directive<'a, 'b>(
@@ -29,6 +32,7 @@ pub fn handle_define_directive<'a, 'b>(
         ast::directive::Directive::Prefix(prefix) => handle_prefix(translation, prefix),
         ast::directive::Directive::Declare(declare) => handle_declare(translation, declare),
         ast::directive::Directive::Export(_)
+        | ast::directive::Directive::Parameter(_)
         | ast::directive::Directive::Import(_)
         | ast::directive::Directive::Output(_)
         | ast::directive::Directive::Unknown(_) => Ok(()),
@@ -41,13 +45,29 @@ pub fn handle_use_directive<'a, 'b>(
     directive: &'b ast::directive::Directive<'a>,
 ) -> Result<(), TranslationError> {
     match directive {
-        ast::directive::Directive::Export(export) => handle_export(translation, export),
-        ast::directive::Directive::Import(import) => handle_import(translation, import),
+        ast::directive::Directive::Export(export) => {
+            let export_directive = ExportDirective::build_component(translation, export)?;
+            translation.program_builder.add_export(export_directive);
+            Ok(())
+        }
+        ast::directive::Directive::Import(import) => {
+            let import_directive = ImportDirective::build_component(translation, import)?;
+            translation.program_builder.add_import(import_directive);
+            Ok(())
+        }
         ast::directive::Directive::Output(output) => handle_output(translation, output),
         ast::directive::Directive::Unknown(unknown) => handle_unknown_directive(unknown),
         ast::directive::Directive::Base(_)
         | ast::directive::Directive::Declare(_)
         | ast::directive::Directive::Prefix(_) => Ok(()),
+        ast::directive::Directive::Parameter(parameter) => {
+            let parameter_declaration =
+                ParameterDeclaration::build_component(translation, parameter)?;
+            translation
+                .program_builder
+                .add_parameter_declaration(parameter_declaration);
+            Ok(())
+        }
     }
 }
 

@@ -8,6 +8,7 @@ use export::Export;
 use import::Import;
 use nom::{branch::alt, combinator::map};
 use output::Output;
+use parameter::ParameterDeclaration;
 use prefix::Prefix;
 use strum_macros::EnumIter;
 use unknown::UnknownDirective;
@@ -26,6 +27,7 @@ pub mod declare;
 pub mod export;
 pub mod import;
 pub mod output;
+pub mod parameter;
 pub mod prefix;
 pub mod unknown;
 
@@ -51,6 +53,9 @@ pub enum DirectiveKind {
     /// Prefix
     #[assoc(token = TokenKind::PrefixDirective)]
     Prefix,
+    /// Parameter
+    #[assoc(token = TokenKind::ParameterDirective)]
+    Parameter,
     /// Unknown
     Unknown,
 }
@@ -77,6 +82,9 @@ pub enum Directive<'a> {
     /// Prefix
     #[assoc(kind = DirectiveKind::Prefix)]
     Prefix(Prefix<'a>),
+    /// Parameter
+    #[assoc(kind = DirectiveKind::Parameter)]
+    Parameter(ParameterDeclaration<'a>),
     /// Unknown
     #[assoc(kind = DirectiveKind::Base)]
     Unknown(UnknownDirective<'a>),
@@ -92,6 +100,7 @@ impl Directive<'_> {
             Directive::Import(directive) => directive.context(),
             Directive::Output(directive) => directive.context(),
             Directive::Prefix(directive) => directive.context(),
+            Directive::Parameter(directive) => directive.context(),
             Directive::Unknown(directive) => directive.context(),
         }
     }
@@ -108,6 +117,7 @@ impl<'a> ProgramAST<'a> for Directive<'a> {
             Directive::Import(directive) => directive,
             Directive::Output(directive) => directive,
             Directive::Prefix(directive) => directive,
+            Directive::Parameter(directive) => directive,
             Directive::Unknown(directive) => directive,
         }]
     }
@@ -120,6 +130,7 @@ impl<'a> ProgramAST<'a> for Directive<'a> {
             Directive::Import(directive) => directive.span(),
             Directive::Output(directive) => directive.span(),
             Directive::Prefix(directive) => directive.span(),
+            Directive::Parameter(directive) => directive.span(),
             Directive::Unknown(directive) => directive.span(),
         }
     }
@@ -137,6 +148,7 @@ impl<'a> ProgramAST<'a> for Directive<'a> {
                 map(Import::parse, Directive::Import),
                 map(Output::parse, Directive::Output),
                 map(Prefix::parse, Directive::Prefix),
+                map(ParameterDeclaration::parse, Directive::Parameter),
                 map(UnknownDirective::parse, Directive::Unknown),
             )),
         )(input)
@@ -159,6 +171,7 @@ mod test {
     };
 
     #[test]
+    #[cfg_attr(miri, ignore)]
     fn parse_directive() {
         let test = vec![
             ("@base <test>", ParserContext::Base),
@@ -180,6 +193,7 @@ mod test {
             ),
             ("@outputtest test", ParserContext::UnknownDirective),
             ("@prefixtest test: <test>", ParserContext::UnknownDirective),
+            ("@parameter $param = 5", ParserContext::ParameterDecl),
         ];
 
         for (input, expect) in test {

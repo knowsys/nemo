@@ -435,22 +435,22 @@ impl AnyDataValue {
             }
         } else if let DecimalType::Decimal = decimal_type {
             if has_nonzero_fraction {
-                return Ok(AnyDataValue::new_other(
+                Ok(AnyDataValue::new_other(
                     trimmed_value,
                     XSD_PREFIX.to_owned() + "decimal",
-                ));
+                ))
             } else if let Ok(value) = i64::from_str(&trimmed_value) {
-                return Ok(AnyDataValue::new_integer_from_i64(value));
+                Ok(AnyDataValue::new_integer_from_i64(value))
             } else if let Ok(value) = u64::from_str(&trimmed_value) {
-                return Ok(AnyDataValue::new_integer_from_u64(value));
+                Ok(AnyDataValue::new_integer_from_u64(value))
             } else {
-                return Ok(AnyDataValue::new_other(
+                Ok(AnyDataValue::new_other(
                     trimmed_value,
                     XSD_PREFIX.to_owned() + "integer",
-                ));
+                ))
             }
         } else {
-            return Self::decimal_parse_error(lexical_value, decimal_type);
+            Self::decimal_parse_error(lexical_value, decimal_type)
         }
     }
 
@@ -529,7 +529,7 @@ impl AnyDataValue {
                 let add_result = dictionary.add_datavalue(self.clone());
 
                 if add_result == AddResult::Rejected {
-                    panic!("Dictionary rejected the data value: {:?}", self);
+                    panic!("Dictionary rejected the data value: {self:?}");
                 }
 
                 let dictionary_id = add_result.value();
@@ -623,12 +623,13 @@ impl DataValue for AnyDataValue {
             fn to_boolean_unchecked(&self) -> bool;
             fn to_null(&self) -> Option<NullDataValue>;
             fn to_null_unchecked(&self) -> NullDataValue;
-            fn tuple_element(&self, index: usize) -> Option<&AnyDataValue>;
             fn label(&self) -> Option<&IriDataValue>;
             fn length(&self) -> Option<usize>;
             fn len_unchecked(&self) -> usize;
             fn tuple_element_unchecked(&self, index: usize) -> &AnyDataValue;
-        }
+            fn map_keys(&self) -> Option<Box<dyn Iterator<Item = &AnyDataValue> + '_>>;
+            fn map_element_unchecked(&self, key: &AnyDataValue) -> &AnyDataValue;
+            }
     }
 }
 

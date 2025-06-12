@@ -4,7 +4,10 @@
 use crate::{
     parser::ast,
     rule_model::{
-        components::term::{map::Map, Term},
+        components::{
+            tag::Tag,
+            term::{map::Map, Term},
+        },
         error::TranslationError,
         translation::{ASTProgramTranslation, TranslationComponent},
     },
@@ -26,7 +29,11 @@ impl TranslationComponent for Map {
         }
 
         let result = match map.tag() {
-            Some(tag) => Map::new(&translation.resolve_tag(tag)?, subterms),
+            Some(tag) => {
+                let tag = Tag::new(translation.resolve_tag(tag)?)
+                    .set_origin(translation.register_node(tag));
+                Map::new_tagged(Some(tag), subterms)
+            }
             None => Map::new_unnamed(subterms),
         };
 

@@ -1,6 +1,6 @@
 //! This module defines [FunctionTerm].
 
-use std::{fmt::Display, hash::Hash};
+use std::{fmt::Display, hash::Hash, vec};
 
 use crate::rule_model::{
     components::{
@@ -8,6 +8,7 @@ use crate::rule_model::{
     },
     error::{validation_error::ValidationErrorKind, ValidationErrorBuilder},
     origin::Origin,
+    substitution::Substitution,
 };
 
 use super::{
@@ -102,11 +103,15 @@ impl FunctionTerm {
     }
 
     /// Reduce each sub [Term] in the function returning a copy.
-    pub fn reduce(&self) -> Self {
+    pub fn reduce_with_substitution(&self, bindings: &Substitution) -> Self {
         Self {
             origin: self.origin,
             tag: self.tag.clone(),
-            terms: self.terms.iter().map(Term::reduce).collect(),
+            terms: self
+                .terms
+                .iter()
+                .map(|term| term.reduce_with_substitution(bindings))
+                .collect(),
         }
     }
 }
@@ -124,6 +129,15 @@ impl Display for FunctionTerm {
         }
 
         f.write_str(")")
+    }
+}
+
+impl IntoIterator for FunctionTerm {
+    type Item = Term;
+    type IntoIter = vec::IntoIter<Term>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.terms.into_iter()
     }
 }
 
@@ -205,7 +219,7 @@ impl IterablePrimitives for FunctionTerm {
         Box::new(self.terms.iter().flat_map(|term| term.primitive_terms()))
     }
 
-    fn primitive_terms_mut<'a>(&'a mut self) -> Box<dyn Iterator<Item = &'a mut Primitive> + 'a> {
+    fn primitive_terms_mut<'a>(&'a mut self) -> Box<dyn Iterator<Item = &'a mut Term> + 'a> {
         Box::new(
             self.terms
                 .iter_mut()

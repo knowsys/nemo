@@ -4,63 +4,103 @@ on:
     tags:
       - "v*.*.*"
 
+env:
+  REGISTRY: ghcr.io
+
 jobs:
   release:
-    name: release ${{ matrix.target }}
-    runs-on: ubuntu-latest
+    name: release ${{ matrix.platform.os-name }}
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - build: linux
-            os: ubuntu-22.04
-            rust: nightly
+        platform:
+          - os-name: linux-x86_64
+            runs-on: ubuntu-22.04
             target: x86_64-unknown-linux-gnu
-          - build: windows-gnu
-            os: windows-2022
-            rust: nightly
-            target: x86_64-pc-windows-gnu
-          # howlong is apparently broken on darwin, not only when cross-compiling
-          # - build: darwin
-          #   os: macos-12
-          #   rust: nightly
-          #   target: x86_64-apple-darwin
+
+          - os-name: linux-aarch64
+            runs-on: ubuntu-22.04
+            target: aarch64-unknown-linux-gnu
+
+          - os-name: windows-msvc
+            runs-on: windows-latest
+            target: x86_64-pc-windows-msvc
+
+          - os-name: macOS-x86_64
+            runs-on: macOS-latest
+            target: x86_64-apple-darwin
+
+          - os-name: macOS-aarch64
+            runs-on: macOS-latest
+            target: aarch64-apple-darwin
+
+    runs-on: ${{ matrix.platform.runs-on }}
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
-      - name: Install rust toolchain
-        uses: hecrj/setup-rust-action@v2
-        with:
-          rust-version: ${{ matrix.rust }}
-          targets: ${{ matrix.target }}
-      - name: Install cross
-        # cf. https://github.com/cross-rs/cross/issues/1453
-        #run: cargo install cross
-        run: cargo install cross --git https://github.com/cross-rs/cross
       - name: Build release binary
-        run: cross build --release --bin=nmo --target=${{ matrix.target }}
-      - name: Strip release binaries (linux and darwin)
-        if: matrix.build == 'linux' || matrix.build == 'darwin'
-        run: strip "target/${{ matrix.target }}/release/nmo"
+        uses: houseabsolute/actions-rust-cross@v1
+        with:
+          command: "build"
+          toolchain: "nightly"
+          target: ${{ matrix.platform.target }}
+          args: "--locked --release --bin=nmo --bin=nemo-language-server"
+          strip: true
       - name: Build archive
         shell: bash
         run: |
-          name="${{ format('nemo_{0}_{1}', github.ref_name, matrix.target) }}"
+          name="${{ format('nemo_{0}_{1}', github.ref_name, matrix.platform.target) }}"
           mkdir -p "$name"
 
           cp {README.md,LICENSE-APACHE,LICENSE-MIT} "$name"
-          if [ "${{ matrix.os }}" = "windows-2022" ]; then
-            cp "target/${{ matrix.target }}/release/nmo.exe" "$name/"
+          if [ "${{ matrix.platform.runs-on }}" = "windows-latest" ]; then
+            cp "target/${{ matrix.platform.target }}/release/nmo.exe" "$name/"
+            cp "target/${{ matrix.platform.target }}/release/nemo-language-server.exe" "$name/"
             asset=$name.zip
             7z a "$asset" "$name"
             echo ASSET=$asset >> $GITHUB_ENV
           else
-            cp "target/${{ matrix.target }}/release/nmo" "$name/"
+            cp "target/${{ matrix.platform.target }}/release/nmo" "$name/"
+            cp "target/${{ matrix.platform.target }}/release/nemo-language-server" "$name/"
             asset=$name.tar.gz
             tar czf "$asset" "$name"
             echo ASSET=$asset >> $GITHUB_ENV
           fi
-          sha256sum "$asset" > "$asset.sha256sum"
+          if [ "${{ matrix.platform.runs-on }}" = "macOS-latest" ]; then
+            shasum -a 256 "$asset" > "$asset.sha256sum"
+          else
+            sha256sum "$asset" > "$asset.sha256sum"
+          fi
+
+      - uses: cachix/install-nix-action@v31
+      - uses: jlumbroso/free-disk-space@v1.3.1
+        with:
+          swap-storage: false
+          tool-cache: true
+      - name: Restore and save Nix store
+        uses: nix-community/cache-nix-action@v6
+        with:
+          primary-key: nemo-nix-${{ runner.os }}-${{ hashFiles('**/*.nix', '**/flake.lock') }}
+          restore-prefixes-first-match: nemo-nix-${{ runner.os }}-
+          gc-max-store-size-linux: 2.5G
+          purge: true
+          purge-prefixes: nemo-nix-${{ runner.os }}-
+          purge-created: 0
+          purge-last-accessed: 0
+          purge-primary-key: never
+      - name: Log in to the Container registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and push docker image 
+        run: |
+          nix build .\#docker
+          docker load < result
+          docker image tag nemo:latest ${{ env.REGISTRY }}/knowsys/nemo:${{ github.ref_name }}
+          docker push ${{ env.REGISTRY }}/knowsys/nemo:${{ github.ref_name }}
+
       - name: Create (draft) release
         uses: softprops/action-gh-release@v2
         with:

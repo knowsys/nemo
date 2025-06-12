@@ -1,0 +1,54 @@
+name: Build with nix and create docker image
+
+on:
+  push:
+    branches:
+      - main
+
+env:
+  RUST_BACKTRACE: 1
+  REGISTRY: ghcr.io
+
+jobs:
+  evaluate:
+    name: Make sure that the nix flake evaluates and run the checks; then build docker image from flake and push it to registry.
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: cachix/install-nix-action@v31
+      - uses: jlumbroso/free-disk-space@v1.3.1
+        with:
+          swap-storage: false
+          tool-cache: true
+      - name: Restore and save Nix store
+        uses: nix-community/cache-nix-action@v6
+        with:
+          primary-key: nemo-nix-${{ runner.os }}-${{ hashFiles('**/*.nix', '**/flake.lock') }}
+          restore-prefixes-first-match: nemo-nix-${{ runner.os }}-
+          gc-max-store-size-linux: 2.5G
+          purge: true
+          purge-prefixes: nemo-nix-${{ runner.os }}-
+          purge-created: 0
+          purge-last-accessed: 0
+          purge-primary-key: never
+      - run: nix flake check
+      - name: Build and Collect garbage
+        run: |
+          nix build .\#{nemo{,-doc,-language-server,-python,-vscode-extension,-wasm-bundler,-wasm-node,-wasm-web,-web},docker}
+          nix-store --optimise
+          nix-collect-garbage -d
+
+      - name: Log in to the Container registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and push docker image 
+        run: |
+          nix build .\#docker
+          docker load < result
+          docker image tag nemo:latest ${{ env.REGISTRY }}/knowsys/nemo:latest
+          docker push ${{ env.REGISTRY }}/knowsys/nemo:latest
+

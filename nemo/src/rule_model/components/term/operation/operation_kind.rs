@@ -31,7 +31,7 @@ impl OperationNumArguments {
             OperationNumArguments::Binary => num_arguments == 2,
             OperationNumArguments::_Ternary => num_arguments == 3,
             OperationNumArguments::Arbitrary => true,
-            OperationNumArguments::Choice(choice) => choice.iter().any(|&num| num == num_arguments),
+            OperationNumArguments::Choice(choice) => choice.contains(&num_arguments),
         }
     }
 }
@@ -49,7 +49,7 @@ impl Display for OperationNumArguments {
                 2 => write!(f, "{} or {}", choice[0], choice[1]),
                 _ => {
                     for (index, value) in choice.iter().enumerate() {
-                        write!(f, "{}", value)?;
+                        write!(f, "{value}")?;
 
                         match index.cmp(&(choice.len() - 2)) {
                             std::cmp::Ordering::Less => write!(f, ", ")?,
@@ -176,6 +176,11 @@ pub enum OperationKind {
     #[assoc(num_arguments = OperationNumArguments::Binary)]
     #[assoc(return_type = ValueType::Boolean)]
     StringEnds,
+    /// Levenshtein distance
+    #[assoc(name = function::LEVENSHTEIN)]
+    #[assoc(num_arguments = OperationNumArguments::Binary)]
+    #[assoc(return_type = ValueType::Number)]
+    StringLevenshtein,
     /// Boolean negation
     #[assoc(name = function::NOT)]
     #[assoc(num_arguments = OperationNumArguments::Unary)]
@@ -341,6 +346,21 @@ pub enum OperationKind {
     #[assoc(num_arguments = OperationNumArguments::Arbitrary)]
     #[assoc(return_type = ValueType::Number)]
     BitXor,
+    /// Perform left arithmetic shift
+    #[assoc(name = function::BITSHL)]
+    #[assoc(num_arguments = OperationNumArguments::Binary)]
+    #[assoc(return_type = ValueType::Number)]
+    BitShl,
+    /// Perform right unsigned (logical) shift
+    #[assoc(name = function::BITSHRU)]
+    #[assoc(num_arguments = OperationNumArguments::Binary)]
+    #[assoc(return_type = ValueType::Number)]
+    BitShru,
+    /// Perform right arithmetic shift
+    #[assoc(name = function::BITSHR)]
+    #[assoc(num_arguments = OperationNumArguments::Binary)]
+    #[assoc(return_type = ValueType::Number)]
+    BitShr,
     /// Conjunction of boolean values
     #[assoc(name = function::AND)]
     #[assoc(num_arguments = OperationNumArguments::Arbitrary)]

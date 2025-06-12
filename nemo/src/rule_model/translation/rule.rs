@@ -3,23 +3,25 @@
 use nemo_physical::datavalues::DataValue;
 
 use crate::{
-    parser::ast::{self},
+    parser::ast,
     rule_model::{
         components::{
             literal::Literal,
             rule::{Rule, RuleBuilder},
             term::{primitive::Primitive, Term},
-            ProgramComponent,
         },
         error::TranslationError,
     },
 };
 
 use super::{
-    attribute::{process_attributes, KnownAttributes},
-    literal::HeadAtom,
-    ASTProgramTranslation, TranslationComponent,
+    attribute::KnownAttributes, literal::HeadAtom, ASTProgramTranslation, TranslationComponent,
 };
+
+impl Rule {
+    pub(crate) const EXPECTED_ATTRIBUTES: &'static [KnownAttributes] =
+        &[KnownAttributes::Name, KnownAttributes::Display];
+}
 
 impl TranslationComponent for Rule {
     type Ast<'a> = ast::rule::Rule<'a>;
@@ -30,10 +32,9 @@ impl TranslationComponent for Rule {
     ) -> Result<Self, TranslationError> {
         let mut rule_builder = RuleBuilder::default().origin(translation.register_node(rule));
 
-        let expected_attributes = vec![KnownAttributes::Name, KnownAttributes::Display];
-        let attributes = process_attributes(translation, rule.attributes(), &expected_attributes)?;
+        let attributes = translation.statement_attributes();
 
-        if let Some(rule_name) = attributes.get(&KnownAttributes::Name) {
+        if let Some(rule_name) = attributes.get_unique(KnownAttributes::Name) {
             if let Term::Primitive(Primitive::Ground(ground)) = &rule_name[0] {
                 if let Some(name) = ground.value().to_plain_string() {
                     rule_builder.name_mut(&name);
@@ -41,7 +42,7 @@ impl TranslationComponent for Rule {
             }
         }
 
-        if let Some(rule_display) = attributes.get(&KnownAttributes::Display) {
+        if let Some(rule_display) = attributes.get_unique(KnownAttributes::Display) {
             rule_builder.display_mut(rule_display[0].clone());
         }
 
@@ -57,7 +58,6 @@ impl TranslationComponent for Rule {
 
         let rule = rule_builder.finalize();
 
-        let _ = rule.validate(&mut translation.validation_error_builder);
         Ok(rule)
     }
 }

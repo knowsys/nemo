@@ -8,6 +8,7 @@ use crate::rule_model::{
     },
     error::ValidationErrorBuilder,
     origin::Origin,
+    substitution::Substitution,
 };
 
 use super::{
@@ -114,13 +115,18 @@ impl Map {
     }
 
     /// Reduce the [Term]s in each key-value pair returning a copy.
-    pub fn reduce(&self) -> Self {
+    pub fn reduce_with_substitution(&self, bindings: &Substitution) -> Self {
         Self {
             origin: self.origin,
             tag: self.tag.clone(),
             map: self
                 .key_value()
-                .map(|(key, value)| (key.reduce(), value.reduce()))
+                .map(|(key, value)| {
+                    (
+                        key.reduce_with_substitution(bindings),
+                        value.reduce_with_substitution(bindings),
+                    )
+                })
                 .collect(),
         }
     }
@@ -136,7 +142,7 @@ impl Display for Map {
         ))?;
 
         for (term_index, (key, value)) in self.map.iter().enumerate() {
-            f.write_fmt(format_args!("{}: {}", key, value))?;
+            f.write_fmt(format_args!("{key}: {value}"))?;
 
             if term_index < self.map.len() - 1 {
                 f.write_str(", ")?;
@@ -223,12 +229,21 @@ impl IterablePrimitives for Map {
         )
     }
 
-    fn primitive_terms_mut<'a>(&'a mut self) -> Box<dyn Iterator<Item = &'a mut Primitive> + 'a> {
+    fn primitive_terms_mut<'a>(&'a mut self) -> Box<dyn Iterator<Item = &'a mut Term> + 'a> {
         Box::new(
             self.map.iter_mut().flat_map(|(key, value)| {
                 key.primitive_terms_mut().chain(value.primitive_terms_mut())
             }),
         )
+    }
+}
+
+impl IntoIterator for Map {
+    type Item = (Term, Term);
+    type IntoIter = std::vec::IntoIter<(Term, Term)>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.map.into_iter()
     }
 }
 

@@ -24,6 +24,9 @@ pub mod directive {
     /// The string used in the keyword for the prefix directive.
     pub const PREFIX: &str = "prefix";
 
+    /// The string used in the keyword of a parameter directive.
+    pub const PARAMETER: &str = "parameter";
+
     /// The token used to separate prefix and name
     pub const NAMESPACE_SEPARATOR: &str = ":";
 
@@ -116,6 +119,8 @@ pub mod expression {
         pub const UNIVERSAL_INDICATOR: &str = "?";
         /// Indicator for existential variables
         pub const EXISTENTIAL_INDICATOR: &str = "!";
+        /// Indicator for global variables
+        pub const GLOBAL_INDICATOR: &str = "$";
     }
 
     /// Syntax for operations
@@ -294,6 +299,12 @@ pub mod builtin {
         pub(crate) const BITOR: &str = "BITOR";
         /// Compute the exclusive or on the bit representation of integer values
         pub(crate) const BITXOR: &str = "BITXOR";
+        /// Compute the arithmetic bit shift left for integer values
+        pub(crate) const BITSHL: &str = "BITSHL";
+        /// Compute the unsigned bit shift right for integer values
+        pub(crate) const BITSHRU: &str = "BITSHRU";
+        /// Compute the arithmetic bit shift right for integer values
+        pub(crate) const BITSHR: &str = "BITSHR";
         /// Compute the maximum of numeric values
         pub(crate) const MAX: &str = "MAX";
         /// Compute the minimum of numeric values
@@ -316,6 +327,8 @@ pub mod builtin {
         pub(crate) const OR: &str = "OR";
         /// Compute the concatenation of string values
         pub(crate) const CONCAT: &str = "CONCAT";
+        /// Compute the Levenshtein distance of two strings
+        pub(crate) const LEVENSHTEIN: &str = "LEVENSHTEIN";
     }
 
     /// This module contains all strings of the supported builtin aggregates.
@@ -360,6 +373,17 @@ pub mod datavalues {
     pub const DOT: &str = ".";
 }
 
+pub mod encoding_prefixes {
+    //! This module defines the prefixes for encoded numbers
+
+    /// Reprsents the prefix for binary-encoded unsigned integers
+    pub const BIN: &str = "0b";
+    /// Reprsents the prefix for octal-encoded unsigned integers
+    pub const OCT: &str = "0o";
+    /// Reprsents the prefix for hex-encoded unsigned integers
+    pub const HEX: &str = "0x";
+}
+
 pub mod import_export {
     //! This module defines the import/export configuration options.
 
@@ -380,10 +404,22 @@ pub mod import_export {
         // compression
         /// The name of the compression format that means "no compression".
         pub const VALUE_COMPRESSION_NONE: &str = "none";
-        /// The name of the compression format that means "no compression".
+        /// The name of the gzip compression format.
         pub const VALUE_COMPRESSION_GZIP: &str = "gzip";
         /// Name of the attribute for ignoring DSV headers in import/export directives.
         pub const IGNORE_HEADERS: &str = "ignore_headers";
+        /// The SPARQL endpoint for the query
+        pub const ENDPOINT: &str = "endpoint";
+        /// The SPARQL query that is sent to the endpoint.
+        pub const QUERY: &str = "query";
+        /// Format parameter name for HTTP headers.
+        pub const HTTP_HEADERS: &str = "http_headers";
+        /// Format attribute name for IRI query parameters.
+        pub const HTTP_GET_PARAMETERS: &str = "http_get_parameters";
+        /// Format attribute name for IRI fragment.
+        pub const IRI_FRAGMENT: &str = "iri_fragment";
+        /// Format parameter name for HTTP POST parameters.
+        pub const HTTP_POST_PARAMETERS: &str = "http_post_parameters";
     }
 
     pub mod file_format {
@@ -409,6 +445,8 @@ pub mod import_export {
         pub const RDF_XML: &str = "rdfxml";
         /// The "predicate name" used for the json format in import/export directives.
         pub const JSON: &str = "json";
+        /// The "predicate name" used for the SPARQL format in import/export directives.
+        pub const SPARQL: &str = "sparql";
 
         // file extensions
         /// The file extension used for CSV files
@@ -429,6 +467,8 @@ pub mod import_export {
         pub(crate) const EXTENSION_RDF_XML: &str = "rdf";
         /// The file extension used for json files
         pub(crate) const EXTENSION_JSON: &str = "json";
+        /// The file extension used for gzip files
+        pub(crate) const EXTENSION_GZ: &str = "gz";
 
         // media types
         /// The media type used for CSV resources

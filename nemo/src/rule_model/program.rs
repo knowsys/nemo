@@ -5,26 +5,31 @@ use std::{
     fmt::Write,
 };
 
-use crate::rule_model::components::tag::Tag;
-
 use super::{
     components::{
         fact::Fact,
         import_export::{ExportDirective, ImportDirective},
         literal::Literal,
         output::Output,
+        parameter::ParameterDeclaration,
         rule::Rule,
-        ProgramComponent, ProgramComponentKind,
+        tag::Tag,
+        term::{
+            primitive::{ground::GroundTerm, variable::global::GlobalVariable, Primitive},
+            Term,
+        },
+        ProgramComponent,
     },
     error::{
         info::Info, validation_error::ValidationErrorKind, ComplexErrorLabelKind,
         ValidationErrorBuilder,
     },
     origin::Origin,
+    substitution::Substitution,
 };
 
 /// Representation of a nemo program
-#[derive(Debug, Default, Clone)]
+#[derive(Default, Clone)]
 pub struct Program {
     /// Origin of this component
     origin: Origin,
@@ -39,6 +44,29 @@ pub struct Program {
     facts: Vec<Fact>,
     /// Outputs
     outputs: Vec<Output>,
+    /// Parameter declarations
+    parameters: Vec<ParameterDeclaration>,
+
+    /// Expanded values of global parameters (filled upon validation)
+    parameter_expansions: Substitution,
+
+    /// Map of all predicate arities (filled upon validation)
+    arities: HashMap<Tag, (usize, Origin)>,
+}
+
+impl std::fmt::Debug for Program {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Program")
+            .field("origin", &self.origin)
+            .field("imports", &self.imports)
+            .field("exports", &self.exports)
+            .field("rules", &self.rules)
+            .field("facts", &self.facts)
+            .field("outputs", &self.outputs)
+            .field("parameters", &self.parameters)
+            .field("arities", &self.arities)
+            .finish()
+    }
 }
 
 impl Program {
@@ -77,7 +105,8 @@ impl Program {
 
     /// Return the set of all predicates that are defined by import statements.
     pub fn import_predicates(&self) -> HashSet<Tag> {
-        self.imports()
+        self.imports
+            .iter()
             .map(|import| import.predicate().clone())
             .collect()
     }
@@ -169,6 +198,10 @@ impl Program {
         self.outputs.push(Output::new(predicate));
     }
 
+    pub(crate) fn arities(&self) -> &HashMap<Tag, (usize, Origin)> {
+        &self.arities
+    }
+
     /// Check if a different arity was already used for the given predicate
     /// and report an error if this was the case.
     fn validate_arity(
@@ -211,26 +244,17 @@ impl Program {
     /// Validate the global program properties without validating
     /// each program element.
     pub(crate) fn validate_global_properties(
-        &self,
+        &mut self,
         builder: &mut ValidationErrorBuilder,
     ) -> Option<()> {
-        let mut predicate_arity = HashMap::<Tag, (usize, Origin)>::new();
-
-        for import in self.imports() {
-            let predicate = import.predicate().clone();
-            let origin = *import.origin();
-
-            if let Some(arity) = import.expected_arity() {
-                Self::validate_arity(&mut predicate_arity, predicate, arity, origin, builder);
-            }
-        }
+        let mut arities = self.arities.clone();
 
         for fact in self.facts() {
             let predicate = fact.predicate().clone();
             let arity = fact.subterms().count();
             let origin = *fact.origin();
 
-            Self::validate_arity(&mut predicate_arity, predicate, arity, origin, builder);
+            Self::validate_arity(&mut arities, predicate, arity, origin, builder);
         }
 
         for rule in self.rules() {
@@ -239,7 +263,7 @@ impl Program {
                 let arity = atom.arguments().count();
                 let origin = *atom.origin();
 
-                Self::validate_arity(&mut predicate_arity, predicate, arity, origin, builder);
+                Self::validate_arity(&mut arities, predicate, arity, origin, builder);
             }
 
             for literal in rule.body() {
@@ -249,13 +273,7 @@ impl Program {
                         let arity = atom.arguments().count();
                         let origin = *atom.origin();
 
-                        Self::validate_arity(
-                            &mut predicate_arity,
-                            predicate,
-                            arity,
-                            origin,
-                            builder,
-                        );
+                        Self::validate_arity(&mut arities, predicate, arity, origin, builder);
                     }
                     Literal::Operation(_) => {
                         continue;
@@ -264,67 +282,39 @@ impl Program {
             }
         }
 
-        for export in self.exports() {
-            let predicate = export.predicate().clone();
-            let origin = *export.origin();
-
-            if let Some(arity) = export.expected_arity() {
-                Self::validate_arity(&mut predicate_arity, predicate, arity, origin, builder);
+        for import in &self.imports {
+            if !arities.contains_key(import.predicate()) {
+                builder.report_error(
+                    *import.predicate().origin(),
+                    ValidationErrorKind::UnknownArity {
+                        predicate: import.predicate().to_string(),
+                    },
+                );
+                return None;
             }
         }
+
+        for export in &self.exports {
+            if !arities.contains_key(export.predicate()) {
+                builder.report_error(
+                    *export.predicate().origin(),
+                    ValidationErrorKind::UnknownArity {
+                        predicate: export.predicate().to_string(),
+                    },
+                );
+                return None;
+            }
+        }
+
+        self.arities = arities;
 
         Some(())
     }
 }
 
-impl ProgramComponent for Program {
-    fn origin(&self) -> &Origin {
-        &self.origin
-    }
-
-    fn set_origin(mut self, origin: Origin) -> Self
-    where
-        Self: Sized,
-    {
-        self.origin = origin;
-        self
-    }
-
-    fn validate(&self, builder: &mut ValidationErrorBuilder) -> Option<()>
-    where
-        Self: Sized,
-    {
-        for import in self.imports() {
-            let _ = import.validate(builder);
-        }
-
-        for fact in self.facts() {
-            let _ = fact.validate(builder);
-        }
-
-        for rule in self.rules() {
-            let _ = rule.validate(builder);
-        }
-
-        for output in self.outputs() {
-            let _ = output.validate(builder);
-        }
-
-        for export in self.exports() {
-            let _ = export.validate(builder);
-        }
-
-        self.validate_global_properties(builder)
-    }
-
-    fn kind(&self) -> ProgramComponentKind {
-        ProgramComponentKind::Program
-    }
-}
-
 impl std::fmt::Display for Program {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        for import in self.imports() {
+        for import in &self.imports {
             import.fmt(f)?;
             f.write_char('\n')?;
         }
@@ -340,12 +330,105 @@ impl std::fmt::Display for Program {
             output.fmt(f)?;
             f.write_char('\n')?;
         }
-        for export in self.exports() {
+        for export in &self.exports {
             export.fmt(f)?;
             f.write_char('\n')?;
         }
 
         Ok(())
+    }
+}
+
+impl Program {
+    fn validate(
+        &mut self,
+        external_parameters: &HashMap<GlobalVariable, GroundTerm>,
+        error_builder: &mut ValidationErrorBuilder,
+    ) -> Option<()>
+    where
+        Self: Sized,
+    {
+        for decl in &self.parameters {
+            let var = decl.variable();
+
+            if let Some(expansion) = external_parameters.get(var) {
+                self.parameter_expansions
+                    .insert(var.clone(), expansion.clone());
+            } else {
+                let Some(term) = decl.expression() else {
+                    error_builder.report_error(
+                        *decl.origin(),
+                        ValidationErrorKind::ParameterMissingDefinition,
+                    );
+                    return None;
+                };
+
+                let Term::Primitive(Primitive::Ground(expansion)) =
+                    term.reduce_with_substitution(&self.parameter_expansions)
+                else {
+                    error_builder.report_error(
+                        *term.origin(),
+                        ValidationErrorKind::ParameterDeclarationReferencesUndefinedGlobal,
+                    );
+                    return None;
+                };
+
+                self.parameter_expansions
+                    .insert(var.clone(), expansion.clone());
+            }
+        }
+
+        let mut count_stdin = 0;
+        for import in &mut self.imports {
+            self.parameter_expansions.apply(import);
+            let builder = import.validate(error_builder)?;
+            let predicate = import.predicate().clone();
+            let origin = *import.origin();
+
+            if builder
+                .resource()
+                .is_some_and(|resource| resource.is_pipe())
+            {
+                count_stdin += 1;
+                if count_stdin > 1 {
+                    error_builder
+                        .report_error(origin, ValidationErrorKind::ReachedStdinImportLimit);
+                }
+            }
+
+            if let Some(arity) = builder.expected_arity() {
+                Self::validate_arity(&mut self.arities, predicate, arity, origin, error_builder);
+            }
+        }
+
+        for fact in &mut self.facts {
+            self.parameter_expansions.apply(fact);
+            let _ = fact.validate(error_builder);
+        }
+
+        for rule in &mut self.rules {
+            self.parameter_expansions.apply(rule);
+            let _ = rule.validate(error_builder);
+        }
+
+        for output in self.outputs() {
+            let _ = output.validate(error_builder);
+        }
+
+        for export in &mut self.exports {
+            self.parameter_expansions.apply(export);
+            let builder = export.validate(error_builder)?;
+            let predicate = export.predicate().clone();
+            let origin = *export.origin();
+
+            if let Some(arity) = builder.expected_arity() {
+                Self::validate_arity(&mut self.arities, predicate, arity, origin, error_builder);
+            }
+        }
+
+        self.validate_global_properties(error_builder)?;
+
+        Some(())
     }
 }
 
@@ -387,8 +470,17 @@ impl ProgramBuilder {
         self.program.outputs.push(output);
     }
 
-    /// Validate the current program.
-    pub fn validate(&self, builder: &mut ValidationErrorBuilder) -> Option<()> {
-        self.program.validate_global_properties(builder)
+    /// Add a parameter declaration to the program
+    pub fn add_parameter_declaration(&mut self, decl: ParameterDeclaration) {
+        self.program.parameters.push(decl);
+    }
+
+    /// Validate the program that is being built
+    pub fn validate(
+        &mut self,
+        external_paramters: &HashMap<GlobalVariable, GroundTerm>,
+        error_builder: &mut ValidationErrorBuilder,
+    ) -> Option<()> {
+        self.program.validate(external_paramters, error_builder)
     }
 }

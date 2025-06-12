@@ -15,18 +15,19 @@ use super::{
         generic::{CanonicalString, Datatype, Equals, LexicalValue, Unequals},
         language::LanguageTag,
         numeric::{
-            BitAnd, BitOr, BitXor, NumericAbsolute, NumericAddition, NumericCeil, NumericCosine,
-            NumericDivision, NumericFloor, NumericGreaterthan, NumericGreaterthaneq,
-            NumericLessthan, NumericLessthaneq, NumericLogarithm, NumericLukasiewicz,
-            NumericMaximum, NumericMinimum, NumericMultiplication, NumericNegation, NumericPower,
-            NumericProduct, NumericRemainder, NumericRound, NumericSine, NumericSquareroot,
-            NumericSubtraction, NumericSum, NumericTangent,
+            BitAnd, BitOr, BitShiftLeft, BitShiftRight, BitShiftRightUnsigned, BitXor,
+            NumericAbsolute, NumericAddition, NumericCeil, NumericCosine, NumericDivision,
+            NumericFloor, NumericGreaterthan, NumericGreaterthaneq, NumericLessthan,
+            NumericLessthaneq, NumericLogarithm, NumericLukasiewicz, NumericMaximum,
+            NumericMinimum, NumericMultiplication, NumericNegation, NumericPower, NumericProduct,
+            NumericRemainder, NumericRound, NumericSine, NumericSquareroot, NumericSubtraction,
+            NumericSum, NumericTangent,
         },
         string::{
             StringAfter, StringBefore, StringCompare, StringConcatenation, StringContains,
-            StringEnds, StringLength, StringLowercase, StringRegex, StringReverse, StringStarts,
-            StringSubstring, StringSubstringLength, StringUppercase, StringUriDecode,
-            StringUriEncode,
+            StringEnds, StringLength, StringLevenshtein, StringLowercase, StringRegex,
+            StringReverse, StringStarts, StringSubstring, StringSubstringLength, StringUppercase,
+            StringUriDecode, StringUriEncode,
         },
         BinaryFunctionEnum, NaryFunctionEnum, TernaryFunctionEnum, UnaryFunctionEnum,
     },
@@ -792,6 +793,19 @@ where
         }
     }
 
+    /// Create a tree node representing a computation of the
+    /// Levenshtein distance between two strings.
+    ///
+    /// Evaluates to an integer giving the Levenshtein (edit) distance
+    /// between the `from` and `to` strings
+    pub fn string_levenshtein(from: Self, to: Self) -> Self {
+        Self::Binary {
+            function: BinaryFunctionEnum::StringLevenshtein(StringLevenshtein),
+            left: Box::new(from),
+            right: Box::new(to),
+        }
+    }
+
     /// Create a tree node representing the bitwise and operation.
     ///
     /// Evaluates to an integer resulting from performing the bitwise and operation
@@ -834,6 +848,45 @@ where
             }
         } else {
             parameters.remove(0)
+        }
+    }
+
+    /// Create a tree node representing the bitwise left shift operation
+    ///
+    /// This evaluates to an integer resulting from performing the bitwise left shift
+    /// The binary representation of the integer subnode 'left' is shifted
+    /// according to the integer value of the subnode 'right'
+    pub fn bit_shl(left: Self, right: Self) -> Self {
+        Self::Binary {
+            function: BinaryFunctionEnum::BitShiftLeft(BitShiftLeft),
+            left: Box::new(left),
+            right: Box::new(right),
+        }
+    }
+
+    /// Create a tree node representing the bitwise unsigned right shift operation
+    ///
+    /// Evaluates to an integer resulting from performing the bitwise unsigned right shift
+    /// The binary representation of the integer subnode 'left' is shifted
+    /// according to the integer value of the subnode 'right'
+    pub fn bit_shru(left: Self, right: Self) -> Self {
+        Self::Binary {
+            function: BinaryFunctionEnum::BitShiftRightUnsigned(BitShiftRightUnsigned),
+            left: Box::new(left),
+            right: Box::new(right),
+        }
+    }
+
+    /// Create a tree node representing the bitwise right shift operation
+    ///
+    /// Evaluates to an integer resulting from performing the bitwise right shift
+    /// The binary representation of the integer subnode 'left' is shifted
+    /// according to the integer value of the subnode 'right'
+    pub fn bit_shr(left: Self, right: Self) -> Self {
+        Self::Binary {
+            function: BinaryFunctionEnum::BitShiftRight(BitShiftRight),
+            left: Box::new(left),
+            right: Box::new(right),
         }
     }
 

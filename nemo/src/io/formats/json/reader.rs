@@ -1,43 +1,54 @@
 //! Implements a reader for json files.
 //! Deserialisation is handled by [serde_json].
 
-use std::{fmt::Debug, io::BufRead, mem::size_of};
+use core::fmt;
+use std::{fmt::Debug, io::Read, mem::size_of};
 
 use nemo_physical::{
     datasources::{table_providers::TableProvider, tuple_writer::TupleWriter},
     datavalues::AnyDataValue,
+    error::{ExternalReadingError, ReadingError, ReadingErrorKind},
     management::bytesized::ByteSized,
 };
 use serde_json::Value;
 
-pub(crate) struct JsonReader {
-    read: Box<dyn BufRead>,
-}
+pub(crate) struct JsonReader<T>(pub(super) T);
 
-impl JsonReader {
-    pub(super) fn new(read: Box<dyn BufRead>) -> Self {
-        JsonReader { read }
-    }
-}
-
-impl Debug for JsonReader {
+impl<T> Debug for JsonReader<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("JsonReader").finish()
+        f.debug_tuple("JsonReader").finish()
     }
 }
 
-impl ByteSized for JsonReader {
+impl<T> ByteSized for JsonReader<T> {
     fn size_bytes(&self) -> u64 {
         size_of::<Self>() as u64
     }
 }
 
-impl TableProvider for JsonReader {
+#[derive(Debug)]
+struct JsonReadingError(serde_json::Error);
+
+impl fmt::Display for JsonReadingError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        <serde_json::Error as fmt::Display>::fmt(&self.0, f)
+    }
+}
+
+impl ExternalReadingError for JsonReadingError {}
+
+impl From<JsonReadingError> for ReadingError {
+    fn from(value: JsonReadingError) -> Self {
+        ReadingError::new(ReadingErrorKind::ExternalReadingError(Box::new(value)))
+    }
+}
+
+impl<T: Read> TableProvider for JsonReader<T> {
     fn provide_table_data(
         self: Box<Self>,
         tuple_writer: &mut TupleWriter,
-    ) -> Result<(), Box<dyn std::error::Error>> {
-        let value: Value = serde_json::from_reader(self.read)?;
+    ) -> Result<(), ReadingError> {
+        let value: Value = serde_json::from_reader(self.0).map_err(JsonReadingError)?;
         let mut max_object_id = 0u64;
 
         let mut stack = vec![(max_object_id, value)];

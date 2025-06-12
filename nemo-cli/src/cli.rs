@@ -1,7 +1,9 @@
 //! Contains structures and functionality for the binary
 use std::path::PathBuf;
 
-use nemo::{error::Error, io::ExportManager};
+use nemo::{
+    error::Error, io::ExportManager, rule_model::components::term::primitive::ground::GroundTerm,
+};
 
 /// Default export directory.
 const DEFAULT_OUTPUT_DIRECTORY: &str = "results";
@@ -14,12 +16,34 @@ pub(crate) enum Exporting {
     Keep,
     /// Disable all exports.
     None,
-    /// Export all IDB predicates (those used in rule heads)
+    /// Export all IDB predicates (those used in rule heads).
     Idb,
-    /// Export all EDB predicates (those for which facts are given or imported)
+    /// Export all EDB predicates (those for which facts are given or imported).
     Edb,
     /// Export all predicates.
     All,
+}
+
+/// Possible settings for the fact-printing option.
+#[derive(clap::ValueEnum, Clone, Copy, Default, Debug, PartialEq, Eq)]
+pub(crate) enum FactPrinting {
+    /// Do not print facts for any predicate.
+    #[default]
+    None,
+    /// Print facts for all IDB predicates (those used in rule heads).
+    Idb,
+    /// Print facts for all EDB predicates (those for which facts are given or imported).
+    Edb,
+    /// Print facts for all predicates.
+    All,
+}
+
+impl FactPrinting {
+    /// Whether printing is enabled for some predicates
+    #[allow(dead_code)]
+    pub(crate) fn is_enabled(&self) -> bool {
+        !matches!(self, Self::None)
+    }
 }
 
 /// Possible settings for the reporting option.
@@ -62,6 +86,7 @@ impl LoggingArgs {
     ///  * `Error` when `-q` is used
     ///  * The `NMO_LOG` environment variable value
     ///  * `Warn` otherwise
+    #[allow(dead_code)]
     pub(crate) fn initialize_logging(&self) {
         let mut builder = env_logger::Builder::new();
 
@@ -101,10 +126,14 @@ pub(crate) struct OutputArgs {
     /// does not affect export directives that already specify a compression
     #[arg(short, long = "gzip", default_value = "false")]
     gz: bool,
+    /// Print all facts for the select predicates
+    #[arg(long = "print-facts", value_enum, default_value_t)]
+    pub(crate) print_facts_setting: FactPrinting,
 }
 
 impl OutputArgs {
     /// Creates an output file manager with the current options
+    #[allow(dead_code)]
     pub(crate) fn export_manager(&self) -> Result<ExportManager, Error> {
         let export_manager = ExportManager::default()
             .set_base_path(self.export_directory.clone())
@@ -133,7 +162,7 @@ pub(crate) struct TracingArgs {
 /// Nemo CLI
 #[derive(clap::Parser, Debug)]
 #[command(author, version, about)]
-pub(crate) struct CliApp {
+pub struct CliApp {
     /// One or more rule program files
     #[arg(value_parser, required = true)]
     pub(crate) rules: Vec<PathBuf>,
@@ -152,4 +181,51 @@ pub(crate) struct CliApp {
     /// Arguments related to logging
     #[command(flatten)]
     pub(crate) logging: LoggingArgs,
+    /// Overwrite global parameters in the rule file
+    #[arg(long = "param")]
+    pub(crate) parameters: Vec<ParamKeyValue>,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct ParamKeyValue {
+    #[allow(dead_code)]
+    pub(crate) key: String,
+    #[allow(dead_code)]
+    pub(crate) value: GroundTerm,
+}
+
+impl clap::builder::ValueParserFactory for ParamKeyValue {
+    type Parser = ParamKeyValueParser;
+
+    fn value_parser() -> Self::Parser {
+        ParamKeyValueParser
+    }
+}
+
+#[derive(Clone, Copy)]
+pub(crate) struct ParamKeyValueParser;
+impl clap::builder::TypedValueParser for ParamKeyValueParser {
+    type Value = ParamKeyValue;
+
+    fn parse_ref(
+        &self,
+        cmd: &clap::Command,
+        arg: Option<&clap::Arg>,
+        value: &std::ffi::OsStr,
+    ) -> Result<Self::Value, clap::Error> {
+        let inner = clap::builder::StringValueParser::new();
+        let val = inner.parse_ref(cmd, arg, value)?;
+        let Some((key, value)) = val.split_once('=') else {
+            return Err(clap::Error::new(clap::error::ErrorKind::InvalidValue).with_cmd(cmd));
+        };
+
+        let Ok(value) = GroundTerm::parse(value) else {
+            return Err(clap::Error::new(clap::error::ErrorKind::InvalidValue).with_cmd(cmd));
+        };
+
+        Ok(ParamKeyValue {
+            key: key.into(),
+            value,
+        })
+    }
 }

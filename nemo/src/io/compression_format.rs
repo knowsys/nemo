@@ -1,16 +1,51 @@
 //! Handling of compression during import and export.
 
 use std::{
-    fs::OpenOptions,
-    io::{BufRead, BufReader, Write},
-    path::PathBuf,
+    fmt::Display,
+    io::{Read, Write},
 };
 
-use flate2::{bufread::MultiGzDecoder, write::GzEncoder, Compression};
+use flate2::Compression;
 
-use nemo_physical::resource::Resource;
+use gzip::Gzip;
+use nemo_physical::{
+    error::ReadingError,
+    resource::{Resource, ResourceBuilder},
+};
 
-use crate::{error::Error, rule_model::components::import_export::compression::CompressionFormat};
+use crate::syntax::import_export::{attribute, file_format};
+
+use enum_assoc::Assoc;
+
+pub(crate) mod gzip;
+
+/// Compression formats
+#[derive(Assoc, Debug, Copy, Clone, PartialEq, Eq, Default)]
+#[func(pub(crate) fn name(&self) -> &'static str)]
+#[func(pub(crate) fn from_name(name: &str) -> Option<Self>)]
+#[func(pub(crate) fn extension(&self) -> Option<&str>)]
+#[func(pub(crate) fn media_type_addition(&self) -> Option<&str>)]
+#[func(pub(crate) fn implementation(&self) -> Box<dyn CompressionImpl>)]
+pub enum CompressionFormat {
+    /// No compression
+    #[default]
+    #[assoc(name = attribute::VALUE_COMPRESSION_NONE)]
+    #[assoc(implementation = Box::new(PassThrough))]
+    None,
+    /// GZip compression
+    #[assoc(name = attribute::VALUE_COMPRESSION_GZIP)]
+    #[assoc(from_name = attribute::VALUE_COMPRESSION_GZIP)]
+    #[assoc(extension = file_format::EXTENSION_GZ)]
+    #[assoc(media_type_addition = "gzip")]
+    #[assoc(implementation = Box::new(Gzip::default()))]
+    GZip,
+}
+
+impl Display for CompressionFormat {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.name())
+    }
+}
 
 /// Compression level for gzip output, cf. gzip(1):
 ///
@@ -22,85 +57,57 @@ use crate::{error::Error, rule_model::components::import_export::compression::Co
 const GZIP_COMPRESSION_LEVEL: Compression = Compression::new(6);
 
 impl CompressionFormat {
-    /// Derive a compression format from the file extension of the given resource,
-    /// and return the compression format and the resource string without this extenions.
-    pub fn from_resource(resource: &Resource) -> (CompressionFormat, Resource) {
-        match resource {
-            resource if resource.ends_with(".gz") => (
-                CompressionFormat::GZip,
-                resource.as_str()[0..resource.len() - 3].to_string(),
-            ),
-            _ => (CompressionFormat::None, resource.to_owned()),
+    fn from_file_extension(file_extension: Option<&str>) -> Self {
+        match file_extension {
+            Some(file_format::EXTENSION_GZ) => Self::GZip,
+            _ => Self::None,
         }
     }
 
-    /// Create a writer that compresses the output stream according to this compression.
-    ///
-    /// The path is used as is. To make sure the path ends in the compression-format specific
-    /// extension, use [CompressionFormat::path_with_extension].
-    pub(crate) fn file_writer(
-        &self,
-        path: PathBuf,
-        options: OpenOptions,
-    ) -> Result<Box<dyn Write>, Error> {
-        match self {
-            CompressionFormat::None => {
-                let writer = options.open(path)?;
-                Ok(Box::new(writer))
-            }
-            CompressionFormat::GZip => {
-                let writer = GzEncoder::new(options.open(path)?, GZIP_COMPRESSION_LEVEL);
-                Ok(Box::new(writer))
-            }
-        }
+    /// Derive a compression format from the file extension of the
+    /// given resource.
+    pub fn from_resource(resource: &Resource) -> Self {
+        Self::from_file_extension(resource.file_extension().as_deref())
     }
 
-    /// Return a reader that decompresses the input, or `None` if the input could
-    /// not be decompressed. The input reader is consumed in any case, since we need
-    /// to look into the data to check if decompression works.
-    ///
-    /// For [CompressionFormat::None], the input reader is returned unchanged.
-    ///
-    /// This is public so that it can be used by external resource providers.
-    pub fn try_decompression<R: BufRead + 'static>(&self, read: R) -> Option<Box<dyn BufRead>> {
-        match self {
-            Self::None => Some(Box::new(read)),
-            Self::GZip => {
-                let gz_reader = MultiGzDecoder::new(read);
-                if gz_reader.header().is_some() {
-                    Some(Box::new(BufReader::new(gz_reader)))
-                } else {
-                    None
-                }
-            }
+    /// Derive a compression format from the file extension of the
+    /// given resource builder.
+    pub fn from_resource_builder(builder: &Option<ResourceBuilder>) -> Self {
+        let Some(builder) = builder else {
+            return Self::None;
+        };
+
+        if !builder.supports_compression() {
+            return Self::None;
         }
+
+        Self::from_file_extension(builder.file_extension().as_deref())
     }
 
-    /// Returns the file extension to be used in files of this compression format.
-    pub(crate) fn extension(&self) -> Option<&str> {
-        match self {
-            Self::None => None,
-            Self::GZip => Some("gz"),
-        }
+    /// Return the file extension of the uncompressed file obtained
+    /// from the given resource.
+    pub fn uncompressed_file_extension(&self, resource: &Resource) -> Option<String> {
+        resource.file_extension_uncompressed(self.extension())
+    }
+}
+
+/// Implementation of a compression format
+pub trait CompressionImpl {
+    /// Returns a stream which applies decompression to the input.
+    fn decompress(&self, stream: Box<dyn Read>) -> Result<Box<dyn Read>, ReadingError>;
+
+    /// Returns a stream which applies compression to the output.
+    fn compress(&self, stream: Box<dyn Write>) -> Box<dyn Write>;
+}
+
+struct PassThrough;
+
+impl CompressionImpl for PassThrough {
+    fn decompress(&self, stream: Box<dyn Read>) -> Result<Box<dyn Read>, ReadingError> {
+        Ok(stream)
     }
 
-    /// Ensure that the [path][PathBuf] ends with the specific extension for this compression
-    /// format. Existing extentions that are different from the new extension are kept
-    /// as part of the file name.
-    pub(crate) fn path_with_extension(&self, path: PathBuf) -> PathBuf {
-        match self.extension() {
-            Some(new_ext) => path.with_extension(match path.extension() {
-                Some(cur_ext) => {
-                    let cur_ext = cur_ext.to_str().expect("valid UTF-8");
-                    if cur_ext == new_ext {
-                        cur_ext.to_string()
-                    } else {
-                        format!("{cur_ext}.{new_ext}")
-                    }
-                }
-                None => new_ext.to_string(),
-            }),
-            None => path,
-        }
+    fn compress(&self, stream: Box<dyn Write>) -> Box<dyn Write> {
+        stream
     }
 }

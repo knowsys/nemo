@@ -170,6 +170,7 @@ where
 mod test {
     use std::{cell::RefCell, rc::Rc};
 
+    #[cfg(not(miri))]
     use test_log::test;
 
     use crate::columnar::{

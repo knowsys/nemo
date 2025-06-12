@@ -17,8 +17,12 @@ use super::{
     atom::Atom,
     literal::Literal,
     term::{
-        operation::Operation,
-        primitive::{variable::Variable, Primitive},
+        operation::{operation_kind::OperationKind, Operation},
+        primitive::{
+            ground::GroundTerm,
+            variable::{universal::UniversalVariable, Variable},
+            Primitive,
+        },
         Term,
     },
     IterablePrimitives, IterableVariables, ProgramComponent, ProgramComponentKind,
@@ -36,7 +40,8 @@ pub struct Rule {
 
     /// Name of the rule
     name: Option<String>,
-    /// How an instantiated version of this rule should be displayed
+    /// [Term] specifying how an instance of the rule should be displayed
+    /// in e.g. tracing
     display: Option<Term>,
 
     /// Head of the rule
@@ -74,30 +79,23 @@ impl Rule {
         self
     }
 
-    /// Return a string representation of the rule instantiated with the given [Substitution].
-    /// This will either return
-    ///     * The content of the display attribute for this rule
-    ///     * a canonical string representation of the rule (i.e. [Display] representation)
-    /// whichever is the first defined in this list.
-    pub fn display_instantiated(&self, substitution: &Substitution) -> String {
+    /// Return the name of the rule, if it is given one.
+    pub fn name(&self) -> Option<String> {
+        self.name.clone()
+    }
+
+    /// Return a string representation of the rule's description with the given [Substitution].
+    ///
+    /// Returns `None` if `description` results not in a ground term after applying the substitution.
+    pub fn instantiated_display(&self, substitution: &Substitution) -> Option<String> {
         if let Some(mut display) = self.display.clone() {
             substitution.apply(&mut display);
             if let Term::Primitive(Primitive::Ground(ground)) = display.reduce() {
-                if let Some(result) = ground.value().to_plain_string() {
-                    return result;
-                }
+                return ground.value().to_plain_string();
             }
         }
 
-        let mut rule_name_prefix = String::from("");
-        if let Some(name) = &self.name {
-            rule_name_prefix = format!("{}: ", name.clone());
-        }
-
-        let mut rule_instantiated = self.clone();
-        substitution.apply(&mut rule_instantiated);
-
-        format!("{}{}", rule_name_prefix, rule_instantiated)
+        None
     }
 
     /// Return a reference to the body of the rule.
@@ -304,7 +302,7 @@ impl Rule {
 impl Display for Rule {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         for (head_index, head_atom) in self.head.iter().enumerate() {
-            write!(f, "{}", head_atom)?;
+            write!(f, "{head_atom}")?;
 
             if head_index < self.head.len() - 1 {
                 f.write_str(", ")?;
@@ -314,7 +312,7 @@ impl Display for Rule {
         f.write_str(" :- ")?;
 
         for (body_index, body_literal) in self.body.iter().enumerate() {
-            write!(f, "{}", body_literal)?;
+            write!(f, "{body_literal}")?;
 
             if body_index < self.body.len() - 1 {
                 f.write_str(", ")?;
@@ -532,7 +530,7 @@ impl IterablePrimitives for Rule {
         Box::new(head_primitives.chain(body_primitives))
     }
 
-    fn primitive_terms_mut<'a>(&'a mut self) -> Box<dyn Iterator<Item = &'a mut Primitive> + 'a> {
+    fn primitive_terms_mut<'a>(&'a mut self) -> Box<dyn Iterator<Item = &'a mut Term> + 'a> {
         let head_primitives = self
             .head
             .iter_mut()
@@ -576,6 +574,21 @@ impl RuleBuilder {
         self
     }
 
+    pub fn add_external_variable(
+        &mut self,
+        variable: UniversalVariable,
+        expansion: GroundTerm,
+    ) -> &mut Self {
+        self.add_body_operation_mut(Operation::new(
+            OperationKind::Equal,
+            vec![
+                Term::Primitive(Primitive::Variable(Variable::Universal(variable))),
+                Term::Primitive(Primitive::Ground(expansion)),
+            ],
+        ));
+        self
+    }
+
     /// Set the [Origin] of the built rule.
     pub fn origin(mut self, origin: Origin) -> Self {
         self.origin = origin;
@@ -607,14 +620,14 @@ impl RuleBuilder {
     }
 
     /// Add an operation to the body of the rule.
-    pub fn add_body_operation(mut self, opreation: Operation) -> Self {
-        self.body.push(Literal::Operation(opreation));
+    pub fn add_body_operation(mut self, operation: Operation) -> Self {
+        self.body.push(Literal::Operation(operation));
         self
     }
 
     /// Add an operation to the body of the rule.
-    pub fn add_body_operation_mut(&mut self, opreation: Operation) -> &mut Self {
-        self.body.push(Literal::Operation(opreation));
+    pub fn add_body_operation_mut(&mut self, operation: Operation) -> &mut Self {
+        self.body.push(Literal::Operation(operation));
         self
     }
 

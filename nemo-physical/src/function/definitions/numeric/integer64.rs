@@ -210,6 +210,54 @@ pub(super) fn numeric_bitwise_xor(parameters: &[i64]) -> Option<AnyDataValue> {
     Some(AnyDataValue::new_integer_from_i64(result))
 }
 
+/// Left shift of 64-bit integer 'value' by 'base'-bits
+///
+/// Return 'None' if base is negative
+pub(super) fn numeric_bitwise_shl(value: i64, base: i64) -> Option<AnyDataValue> {
+    if base < 0 {
+        return None;
+    }
+
+    Some(AnyDataValue::new_integer_from_i64(value << base))
+}
+
+/// Right shift of 64-bit integer 'value' by 'base'-bits
+///
+/// Arithmetic right shift preserves the sign-bit of the binary representation
+///
+/// Return 'None' if base is negative
+pub(super) fn numeric_bitwise_shr(value: i64, base: i64) -> Option<AnyDataValue> {
+    if base < 0 {
+        return None;
+    }
+
+    Some(AnyDataValue::new_integer_from_i64(value >> base))
+}
+
+/// Right shift of 64-bit integer 'value' by 'base'-bits
+///
+/// Logical right shift does not preserve the sign-bit of the binary representation
+///
+/// Return 'None' if base is negative
+pub(super) fn numeric_bitwise_shru(value: i64, base: i64) -> Option<AnyDataValue> {
+    if base < 0 {
+        return None;
+    }
+
+    // Apply arithmetic right shift, if value is positive
+    let result: i64 = if value > 0 {
+        value >> base
+    } else {
+        // Convert value in unsigned to do an unsigned right shift
+        let unsigned_value = u64::from_ne_bytes(value.to_ne_bytes());
+        let unsigned_result = unsigned_value >> base;
+
+        i64::from_ne_bytes(unsigned_result.to_ne_bytes())
+    };
+
+    Some(AnyDataValue::new_integer_from_i64(result))
+}
+
 /// Return the sum of the given 64-bit integers.
 ///
 /// Returns `None` if the result (or a intermediate result) does not fit into a 64-bit integer.

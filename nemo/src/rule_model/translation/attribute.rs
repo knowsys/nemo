@@ -29,18 +29,46 @@ use super::{ASTProgramTranslation, TranslationComponent};
 #[derive(Assoc, EnumIter, Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 #[func(pub fn name(&self) -> &'static str)]
 #[func(pub fn from_name(name: &str) -> Option<Self>)]
+#[func(pub fn unique(&self) -> bool)]
 #[func(pub fn schema(&self) -> Vec<(Option<ProgramComponentKind>, Option<ValueType>)>)]
 pub(crate) enum KnownAttributes {
     /// Name associated with a component
     #[assoc(name = "name")]
     #[assoc(from_name = "name")]
+    #[assoc(unique = true)]
     #[assoc(schema = vec![(Some(ProgramComponentKind::PlainString), None)])]
     Name,
     /// User-defined way of displaying the component
     #[assoc(name = "display")]
     #[assoc(from_name = "display")]
+    #[assoc(unique = true)]
     #[assoc(schema = vec![(None, Some(ValueType::String))])]
     Display,
+}
+
+#[derive(Debug)]
+pub(crate) struct Bag<K, V>(HashMap<K, Vec<V>>);
+
+impl<K, V> Default for Bag<K, V> {
+    fn default() -> Self {
+        Self(Default::default())
+    }
+}
+
+impl<V> Bag<KnownAttributes, V> {
+    pub(crate) fn get_unique(&self, attr: KnownAttributes) -> Option<&V> {
+        debug_assert!(attr.unique());
+        self.0.get(&attr).map(|v| &v[0])
+    }
+
+    #[allow(unused)]
+    pub(crate) fn get(&self, attr: KnownAttributes) -> &[V] {
+        self.0.get(&attr).map(|v| &**v).unwrap_or(&[])
+    }
+
+    pub(crate) fn clear(&mut self) {
+        self.0.clear();
+    }
 }
 
 /// Evaluates a list of attributes, checking for errors,
@@ -49,8 +77,8 @@ pub(crate) fn process_attributes<'a, 'b>(
     translation: &mut ASTProgramTranslation<'a, 'b>,
     attributes: impl Iterator<Item = &'b ast::attribute::Attribute<'a>>,
     expected: &[KnownAttributes],
-) -> Result<HashMap<KnownAttributes, Vec<Term>>, TranslationError> {
-    let mut result = HashMap::new();
+) -> Result<Bag<KnownAttributes, Vec<Term>>, TranslationError> {
+    let mut result = Bag(HashMap::new());
     let mut previous_attributes = HashMap::<KnownAttributes, Span<'a>>::new();
 
     for attribute in attributes {
@@ -74,16 +102,20 @@ pub(crate) fn process_attributes<'a, 'b>(
             ));
         }
 
-        if let Some(previous_span) = previous_attributes.get(&attribute_kind) {
-            let error =
-                TranslationError::new(attribute.span(), TranslationErrorKind::AttributeRedefined)
-                    .add_label(
-                        ComplexErrorLabelKind::Information,
-                        previous_span.range(),
-                        Info::FirstDefinition,
-                    );
+        if attribute_kind.unique() {
+            if let Some(previous_span) = previous_attributes.get(&attribute_kind) {
+                let error = TranslationError::new(
+                    attribute.span(),
+                    TranslationErrorKind::AttributeRedefined,
+                )
+                .add_label(
+                    ComplexErrorLabelKind::Information,
+                    previous_span.range(),
+                    Info::FirstDefinition,
+                );
 
-            return Err(error);
+                return Err(error);
+            }
         }
 
         let mut terms = Vec::<Term>::new();
@@ -134,7 +166,7 @@ pub(crate) fn process_attributes<'a, 'b>(
             terms.push(term);
         }
 
-        result.insert(attribute_kind, terms);
+        result.0.entry(attribute_kind).or_default().push(terms);
         previous_attributes.insert(attribute_kind, attribute.span());
     }
 

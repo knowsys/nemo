@@ -6,6 +6,7 @@ default-members = [
     "nemo-physical",
     "nemo-python",
     "nemo-static-checks",
+    "nemo-language-server",
 ]
 members = [
     "nemo",
@@ -15,11 +16,12 @@ members = [
     "nemo-language-server",
     "nemo-wasm",
     "nemo-static-checks",
+    "xtask",
 ]
 
 [workspace.package]
 description = "Nemo, a datalog-based rule engine for fast and scalable analytic data processing in memory"
-version = "0.7.1-dev"
+version = "0.7.2-dev"
 authors = [
     "Alex Ivliev <alex.ivliev@tu-dresden.de>",
     "Aidan Bailey <dev@aidanbailey.me>",

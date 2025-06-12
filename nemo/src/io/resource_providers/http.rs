@@ -1,11 +1,11 @@
-use std::io::{BufRead, BufReader, Read};
-
-use nemo_physical::{error::ReadingError, resource::Resource};
-use reqwest::header::InvalidHeaderValue;
-
-use crate::rule_model::components::import_export::compression::CompressionFormat;
-
-use super::{is_iri, ResourceProvider};
+use super::ResourceProvider;
+use log::{debug, warn};
+use nemo_physical::{
+    error::{ReadingError, ReadingErrorKind},
+    resource::Resource,
+};
+use reqwest::header::{HeaderName, HeaderValue, InvalidHeaderName, InvalidHeaderValue};
+use std::io::Read;
 
 /// Resolves resources using HTTP or HTTPS.
 ///
@@ -17,15 +17,15 @@ pub struct HttpResourceProvider {}
 #[derive(Debug, Clone)]
 pub struct HttpResource {
     /// IRI that this resource was fetched from
-    url: Resource,
+    resource: Resource,
     /// Content of the resource
     content: Vec<u8>,
 }
 
 impl HttpResource {
     /// Return the IRI this resource was fetched from.
-    pub fn url(&self) -> &Resource {
-        &self.url
+    pub fn url(&self) -> String {
+        self.resource.to_string()
     }
 
     /// Return the content of this resource.
@@ -44,13 +44,14 @@ impl Read for HttpResource {
 }
 
 impl HttpResourceProvider {
-    async fn get(url: &Resource, media_type: &str) -> Result<HttpResource, ReadingError> {
+    async fn fetch(resource: &Resource, media_type: &str) -> Result<HttpResource, ReadingError> {
         let mut headers = reqwest::header::HeaderMap::new();
         headers.insert(
             reqwest::header::ACCEPT,
-            media_type
-                .parse()
-                .map_err(|err: InvalidHeaderValue| ReadingError::ExternalError(err.into()))?,
+            media_type.parse().map_err(|err: InvalidHeaderValue| {
+                ReadingError::new(ReadingErrorKind::ExternalError(err.into()))
+                    .with_resource(resource.clone())
+            })?,
         );
         headers.insert(
             reqwest::header::USER_AGENT,
@@ -62,18 +63,77 @@ impl HttpResourceProvider {
                     .unwrap_or("https://iccl.inf.tu-dresden.de/web/Nemo/en")
             )
             .parse()
-            .map_err(|err: InvalidHeaderValue| ReadingError::ExternalError(err.into()))?,
+            .map_err(|err: InvalidHeaderValue| {
+                ReadingError::new(ReadingErrorKind::ExternalError(err.into()))
+                    .with_resource(resource.clone())
+            })?,
         );
+
+        let new_headers = resource
+            .headers()
+            .map(|(name, value)| {
+                Ok::<(HeaderName, HeaderValue), ReadingError>((
+                    name.parse::<HeaderName>()
+                        .map_err(|err: InvalidHeaderName| {
+                            ReadingError::new(ReadingErrorKind::ExternalError(err.into()))
+                                .with_resource(resource.clone())
+                        })?,
+                    value
+                        .parse::<HeaderValue>()
+                        .map_err(|err: InvalidHeaderValue| {
+                            ReadingError::new(ReadingErrorKind::ExternalError(err.into()))
+                                .with_resource(resource.clone())
+                        })?,
+                ))
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        headers.extend(new_headers.into_iter());
+
+        let err_mapping =
+            |err: reqwest::Error| ReadingError::new(err.into()).with_resource(resource.clone());
+
         let client = reqwest::Client::builder()
             .default_headers(headers)
-            .build()?;
-        let response = client.get(url).send().await?;
+            .build()
+            .map_err(err_mapping)?;
+
+        let full_url = resource.to_string();
+        debug!("Make HTTP request: {full_url:?}");
+
+        let post_parameters = resource
+            .post_parameters()
+            .collect::<Vec<&(String, String)>>();
+        let request_builder = if post_parameters.is_empty() {
+            client.get(full_url.clone())
+        } else {
+            client.post(full_url.clone()).form(&post_parameters)
+        };
+        let response = request_builder
+            .send()
+            .await
+            .map_err(|err| ReadingError::new(err.into()).with_resource(resource.clone()))?;
+
+        response.error_for_status_ref()?;
+        let response_type = response
+            .headers()
+            .get(reqwest::header::CONTENT_TYPE)
+            .map(|value| value.to_str().expect("Content valid"))
+            .unwrap_or_default();
+        // Use 'contains()', because response_type contains content type and encoding information
+        if !response_type.contains(media_type) {
+            warn!("HTTP response to the request: \n {full_url} \n is of content type {response_type:?}, expected {media_type:?}. Make sure you specified the correct IRI and parameters.");
+        }
+
         // we're expecting potentially compressed data, don't try to
         // do any character set guessing, as `response.text()` would do.
-        let content = response.bytes().await?;
+        let content = response.bytes().await.map_err(err_mapping)?;
+
+        if content.is_empty() {
+            warn!("HTTP response to the request: \n {full_url} \n contains no content. Make sure you specified the correct IRI and parameters.");
+        }
 
         Ok(HttpResource {
-            url: url.to_string(),
+            resource: resource.clone(),
             content: content.into(),
         })
     }
@@ -83,33 +143,20 @@ impl ResourceProvider for HttpResourceProvider {
     fn open_resource(
         &self,
         resource: &Resource,
-        compression: CompressionFormat,
         media_type: &str,
-    ) -> Result<Option<Box<dyn BufRead>>, ReadingError> {
-        if !is_iri(resource) {
-            return Ok(None);
-        }
-
-        if !(resource.starts_with("http:") || resource.starts_with("https:")) {
-            // Non-http IRI; resource provider is not responsible
+    ) -> Result<Option<Box<dyn Read>>, ReadingError> {
+        if !resource.is_http() {
+            // We cannot handle this resource
             return Ok(None);
         }
 
         let rt = tokio::runtime::Builder::new_current_thread()
             .enable_all()
             .build()
-            .map_err(|e| ReadingError::IoReading {
-                error: e,
-                filename: resource.clone(),
-            })?;
-        let response = rt.block_on(Self::get(resource, media_type))?;
-        if let Some(reader) = compression.try_decompression(BufReader::new(response)) {
-            Ok(Some(reader))
-        } else {
-            Err(ReadingError::Decompression {
-                resource: resource.to_owned(),
-                decompression_format: compression.to_string(),
-            })
-        }
+            .map_err(|e| ReadingError::from(e).with_resource(resource.clone()))?;
+
+        let response = rt.block_on(Self::fetch(resource, media_type))?;
+
+        Ok(Some(Box::new(response)))
     }
 }

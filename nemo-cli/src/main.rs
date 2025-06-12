@@ -20,15 +20,20 @@
 pub mod cli;
 pub mod error;
 
-use std::fs::{read_to_string, File};
+use std::{
+    fs::{read_to_string, File},
+    io::stdout,
+    io::Write,
+};
 
 use clap::Parser;
 use colored::Colorize;
 
-use cli::{CliApp, Exporting, Reporting};
+use cli::{CliApp, Exporting, FactPrinting, ParamKeyValue, Reporting};
 
 use error::CliError;
 use nemo::{
+    datavalues::AnyDataValue,
     error::Error,
     execution::{DefaultExecutionEngine, ExecutionEngine},
     io::{resource_providers::ResourceProviders, ImportManager},
@@ -37,9 +42,9 @@ use nemo::{
         self,
         components::{
             fact::Fact,
-            import_export::{file_formats::FileFormat, ExportDirective},
+            import_export::ExportDirective,
             tag::Tag,
-            term::map::Map,
+            term::{primitive::variable::global::GlobalVariable, Term},
             ProgramComponent,
         },
         error::ValidationErrorBuilder,
@@ -48,12 +53,23 @@ use nemo::{
 };
 
 fn default_export(predicate: Tag) -> ExportDirective {
-    ExportDirective::new(
-        predicate,
-        FileFormat::CSV,
-        Map::empty_unnamed(),
-        Default::default(),
-    )
+    ExportDirective::new_csv(predicate)
+}
+
+fn print_facts_for_table<W: Write>(
+    writer: &mut W,
+    mut table: impl Iterator<Item = Vec<AnyDataValue>>,
+    predicate: Tag,
+) -> Result<(), Error> {
+    table
+        .try_for_each(|row| {
+            writeln!(
+                writer,
+                "{}",
+                Fact::new(predicate.clone(), row.into_iter().map(Term::ground))
+            )
+        })
+        .map_err(Error::IO)
 }
 
 /// Set exports according to command-line parameter.
@@ -86,6 +102,15 @@ fn override_exports(program: &mut Program, value: Exporting) {
         Exporting::Keep => unreachable!("already checked above"),
     }
     program.add_exports(additional_exports);
+}
+
+fn predicates_to_print_facts_for(print_facts_setting: FactPrinting, program: &Program) -> Vec<Tag> {
+    match print_facts_setting {
+        FactPrinting::None => Vec::new(),
+        FactPrinting::Idb => program.derived_predicates().into_iter().collect(),
+        FactPrinting::Edb => program.import_predicates().into_iter().collect(),
+        FactPrinting::All => program.all_predicates().into_iter().collect(),
+    }
 }
 
 /// Prints short summary message.
@@ -190,6 +215,7 @@ fn handle_tracing(
 ) -> Result<(), CliError> {
     let tracing_facts = parse_trace_facts(cli)?;
     if !tracing_facts.is_empty() {
+        log::info!("Starting tracing of {} facts...", tracing_facts.len());
         let mut facts = Vec::<Fact>::with_capacity(tracing_facts.len());
         for fact_string in &tracing_facts {
             let fact = Fact::parse(fact_string).map_err(|_| CliError::TracingInvalidFact {
@@ -265,12 +291,17 @@ fn run(mut cli: CliApp) -> Result<(), CliError> {
         }
     };
 
-    let mut program = match rule_model::translation::ASTProgramTranslation::initialize(
+    let mut translation = rule_model::translation::ASTProgramTranslation::initialize(
         &program_content,
         program_filename.clone(),
-    )
-    .translate(&program_ast)
-    {
+    );
+
+    // do not move out of cli.globals, since cli is needed in call to handle_tracing
+    for ParamKeyValue { key, value } in cli.parameters.drain(..) {
+        translation.add_external_parameter(GlobalVariable::new(&key), value);
+    }
+
+    let mut program = match translation.translate(&program_ast) {
         Ok(program) => program,
         Err(report) => {
             report.eprint()?;
@@ -291,7 +322,7 @@ fn run(mut cli: CliApp) -> Result<(), CliError> {
         ExecutionEngine::initialize(program.clone(), import_manager)?;
 
     for (predicate, handler) in engine.exports() {
-        export_manager.validate(&predicate, &*handler)?;
+        export_manager.validate(&predicate, &handler)?;
     }
 
     TimedCode::instance().sub("Reading & Preprocessing").stop();
@@ -313,7 +344,7 @@ fn run(mut cli: CliApp) -> Result<(), CliError> {
         for (predicate, handler) in engine.exports() {
             stdout_used |= export_manager.export_table(
                 &predicate,
-                &*handler,
+                &handler,
                 engine.predicate_rows(&predicate)?,
             )?;
         }
@@ -321,6 +352,21 @@ fn run(mut cli: CliApp) -> Result<(), CliError> {
         TimedCode::instance()
             .sub("Output & Final Materialization")
             .stop();
+    }
+
+    if cli.output.print_facts_setting.is_enabled() {
+        TimedCode::instance().sub("Printing Facts").start();
+        log::info!("Printing facts");
+
+        let mut stdout = Box::new(stdout().lock());
+
+        for predicate in predicates_to_print_facts_for(cli.output.print_facts_setting, &program) {
+            if let Some(table) = engine.predicate_rows(&predicate)? {
+                print_facts_for_table(&mut stdout, table, predicate)?;
+            }
+        }
+
+        TimedCode::instance().sub("Printing Facts").stop();
     }
 
     TimedCode::instance().stop();
@@ -336,7 +382,7 @@ fn run(mut cli: CliApp) -> Result<(), CliError> {
 
     if print_summary {
         print_finished_message(
-            engine.count_facts_of_derived_predicates(),
+            engine.count_facts_in_memory_for_derived_predicates(),
             !export_manager.write_disabled(),
         );
     }

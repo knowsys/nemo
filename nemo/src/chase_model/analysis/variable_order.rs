@@ -172,7 +172,7 @@ impl IterationOrder {
                 &(0..(len / 2))
                     .map(|i| i * 2 + 1)
                     .rev()
-                    .chain((0..(len + 1) / 2).map(|i| i * 2))
+                    .chain((0..len.div_ceil(2)).map(|i| i * 2))
                     .collect::<Vec<_>>(),
             ),
         }
@@ -380,9 +380,11 @@ impl VariableOrderBuilder<'_> {
                     let (idb_count_b, edb_count_b) =
                         self.get_already_present_idb_edb_count_for_rule_in_tries(rule_b);
 
-                    (idb_count_a != idb_count_b)
-                        .then(|| idb_count_a.cmp(&idb_count_b))
-                        .unwrap_or_else(|| edb_count_a.cmp(&edb_count_b))
+                    if idb_count_a != idb_count_b {
+                        idb_count_a.cmp(&idb_count_b)
+                    } else {
+                        edb_count_a.cmp(&edb_count_b)
+                    }
                 })
                 .expect("the remaining rules are never empty here");
 
@@ -551,12 +553,8 @@ mod test {
             program::ChaseProgram,
             rule::ChaseRule,
         },
-        io::formats::{
-            dsv::{value_format::DsvValueFormats, DsvHandler},
-            Direction, ImportExportResource,
-        },
+        io::formats::{Import, MockHandler},
         rule_model::components::{
-            import_export::compression::CompressionFormat,
             tag::Tag,
             term::primitive::{variable::Variable, Primitive},
         },
@@ -564,9 +562,12 @@ mod test {
 
     use super::{IterationOrder, RuleVariableList, VariableOrder};
 
-    use nemo_physical::management::execution_plan::ColumnOrder;
+    use nemo_physical::{management::execution_plan::ColumnOrder, resource::ResourceBuilder};
 
-    use std::collections::{HashMap, HashSet};
+    use std::{
+        collections::{HashMap, HashSet},
+        sync::Arc,
+    };
 
     type TestRuleSetWithAdditionalInfo = (Vec<ChaseRule>, Vec<Vec<Variable>>, Vec<(Tag, usize)>);
 
@@ -964,17 +965,14 @@ mod test {
 
     /// Helper function to create source-like imports
     fn csv_import(predicate: Tag, arity: usize) -> ChaseImport {
-        let handler = DsvHandler::new(
-            b',',
-            ImportExportResource::Stdout,
-            DsvValueFormats::default(arity),
-            None,
-            CompressionFormat::None,
-            false,
-            Direction::Import,
+        let handler: Import = Import::new(
+            ResourceBuilder::pipe_resource_builder().finalize(),
+            Default::default(),
+            arity,
+            Arc::new(MockHandler),
         );
 
-        ChaseImport::new(predicate, Box::new(handler))
+        ChaseImport::new(predicate, handler)
     }
 
     #[test]

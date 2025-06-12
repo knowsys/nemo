@@ -15,6 +15,12 @@ tag,"""en"""
 int,3
 int,5
 int,40
+int,41
+int,42
+int,43
+iri,0b101001
+iri,0o52
+iri,0x2B
 int,2023
 float,"""3""^^<http://www.w3.org/2001/XMLSchema#float>"
 float,"""4.2""^^<http://www.w3.org/2001/XMLSchema#float>"
@@ -42,6 +48,12 @@ concat,"""Hello World"""
 compare,-10
 contains,"""true""^^<http://www.w3.org/2001/XMLSchema#boolean>"
 regex,"""true""^^<http://www.w3.org/2001/XMLSchema#boolean>"
+levenshtein_id,0
+levenshtein_ab,4
+levenshtein_ba,4
+levenshtein_ac,3
+levenshtein_bc,2
+levenshtein_ar,4
 stringreverse,"""olleH"""
 subString,"""ello"""
 subStringLength,"""ell"""
@@ -67,3 +79,7 @@ fstring_basic,"""Hello and World"""
 fstring_arithmetic,"""len*10=50"""
 fstring_multiline,"""Hello and World"""
 uriencode,"""%3Ffoo%5B%5D%3D%22bar%20quuz%22"""
+bitshl,4
+bitshr,0
+bitshru,4611686018427387903
+bitshru,-9223372036854775808

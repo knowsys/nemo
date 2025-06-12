@@ -37,7 +37,12 @@ pub struct SubtableRange {
 impl SubtableRange {
     /// Return the start and (the included) end point of this range.
     pub fn start_end(&self) -> (usize, usize) {
-        (self.start, self.start + self.len - 1)
+        (self.start, self.end())
+    }
+
+    /// Return the end point of this range
+    pub fn end(&self) -> usize {
+        self.start + self.len - 1
     }
 }
 
@@ -112,15 +117,11 @@ impl SubtableHandler {
         Some(self.single[postion].1)
     }
 
-    /// TODO: Currently only counting of in-memory facts is supported, see <https://github.com/knowsys/nemo/issues/335>
-    pub fn count_rows(&self, database: &DatabaseInstance) -> usize {
-        let mut result = 0;
-
-        for (_, subtable_id) in &self.single {
-            result += database.count_rows(*subtable_id);
-        }
-
-        result
+    pub fn count_rows_in_memory(&self, database: &DatabaseInstance) -> usize {
+        self.single
+            .iter()
+            .map(|(_, subtable_id)| database.count_rows_in_memory(*subtable_id))
+            .sum()
     }
 
     pub fn add_single_table(&mut self, step: usize, id: PermanentTableId) {
@@ -142,61 +143,55 @@ impl SubtableHandler {
 
     pub fn cover_range(&self, range: &Range<usize>) -> Vec<PermanentTableId> {
         let mut result = Vec::<PermanentTableId>::new();
+
         if self.single.is_empty() {
             return result;
         }
 
         let normalized_range = self.normalize_range(range);
+
         if normalized_range.len == 0 {
             return result;
         }
 
         let (target_start, target_end) = normalized_range.start_end();
 
-        // Algorithm is inspired by:
-        // https://www.geeksforgeeks.org/minimum-number-of-intervals-to-cover-the-target-interval
-
         let mut current_start = target_start;
-        let mut current_end = target_start;
-        let mut current_id = self.single[current_start].1;
+        let mut interval_index: usize = 0;
 
-        // Iterate over all the intervals
-        for (range, id) in &self.combined {
-            let (range_start, range_end) = range.start_end();
+        while current_start <= target_end {
+            let mut best: Option<(SubtableRange, PermanentTableId)> = None;
 
-            if range_start > target_end {
-                break;
-            }
+            for &(current_interval, id) in self.combined.iter().skip(interval_index) {
+                interval_index += 1;
+                let (start, end) = current_interval.start_end();
 
-            if range_start < target_start {
-                continue;
-            }
-
-            if range_start > current_start {
-                result.push(current_id);
-
-                for step in current_end + 1..range_start {
-                    result.push(self.single[step].1);
+                if start > current_start {
+                    break;
                 }
 
-                current_start = current_end + 1;
-                current_end = current_start;
-                current_id = self.single[current_start].1;
+                if start < target_start || end > target_end {
+                    continue;
+                }
+
+                if let Some((best_interval, _)) = best {
+                    if best_interval.end() < end {
+                        best = Some((current_interval, id));
+                    }
+                } else {
+                    best = Some((current_interval, id));
+                }
             }
 
-            if range_end <= target_end && range_end > current_end {
-                current_end = range_end;
-                current_id = *id;
+            if let Some((best, id)) = best {
+                result.push(id);
+                current_start = best.end() + 1;
+            } else {
+                result.push(self.single[current_start].1);
+                current_start += 1;
             }
         }
 
-        if current_end <= target_end {
-            result.push(current_id);
-        }
-
-        for step in current_end + 1..=target_end {
-            result.push(self.single[step].1);
-        }
         result
     }
 }
@@ -364,13 +359,11 @@ impl TableManager {
         self.predicate_subtables.get(predicate)?.last_step()
     }
 
-    /// Count all the rows in the table manager that belong to a predicate.
-    ///
-    /// TODO: Currently only counting of in-memory facts is supported, see <https://github.com/knowsys/nemo/issues/335>
-    pub(crate) fn predicate_count_rows(&self, predicate: &Tag) -> Option<usize> {
+    /// Count all in-memory rows in the table manager that belong to a predicate.
+    pub(crate) fn count_rows_in_memory_for_predicate(&self, predicate: &Tag) -> Option<usize> {
         self.predicate_subtables
             .get(predicate)
-            .map(|s| s.count_rows(&self.database))
+            .map(|s| s.count_rows_in_memory(&self.database))
     }
 
     /// Get a list of column iterators for the full table (i.e. the expanded trie)
@@ -615,7 +608,7 @@ impl TableManager {
 
             for (step, id) in &subtable_handler.single {
                 let memory = self.database.table_size_bytes(*id);
-                predicate_usage.add_sub_block(MemoryUsage::new(&format!("Step {}", step), memory));
+                predicate_usage.add_sub_block(MemoryUsage::new(&format!("Step {step}"), memory));
             }
             for (steps, id) in &subtable_handler.combined {
                 let memory = self.database.table_size_bytes(*id);
@@ -755,6 +748,13 @@ mod test {
 
         let target = 6..8;
         let expected_ranges = vec![6..7, 7..8];
+        compare_covering(&steps, &ranges, &expected_ranges, &target);
+
+        let steps = vec![1, 3, 5, 7, 9, 11, 13, 15];
+        let ranges = vec![0..8, 0..16, 9..16];
+        let target = 0..16;
+        #[allow(clippy::single_range_in_vec_init)]
+        let expected_ranges = vec![0..16];
         compare_covering(&steps, &ranges, &expected_ranges, &target);
     }
 }

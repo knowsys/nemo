@@ -4,6 +4,7 @@ pub(crate) mod attribute;
 pub(crate) mod basic;
 pub(crate) mod complex;
 pub(crate) mod directive;
+pub(crate) mod fact;
 pub(crate) mod literal;
 pub(crate) mod rule;
 mod term;
@@ -11,8 +12,8 @@ mod term;
 use std::{collections::HashMap, ops::Range};
 
 use ariadne::{Report, ReportKind, Source};
+use attribute::{process_attributes, Bag, KnownAttributes};
 use directive::{handle_define_directive, handle_use_directive};
-use literal::HeadAtom;
 use nom::InputLength;
 
 use crate::{
@@ -25,7 +26,15 @@ use crate::{
 };
 
 use super::{
-    components::{fact::Fact, rule::Rule, ProgramComponent},
+    components::{
+        fact::Fact,
+        rule::Rule,
+        term::{
+            primitive::{ground::GroundTerm, variable::global::GlobalVariable},
+            Term,
+        },
+        ProgramComponent,
+    },
     error::{
         translation_error::TranslationErrorKind, ComponentParseError, ProgramError,
         TranslationError, ValidationErrorBuilder,
@@ -35,7 +44,7 @@ use super::{
 
 /// Object for handling the translation of the ast representation
 /// of a nemo program into its logical representation
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct ASTProgramTranslation<'a, 'b> {
     /// Original input string
     input: &'a str,
@@ -54,6 +63,10 @@ pub struct ASTProgramTranslation<'a, 'b> {
     program_builder: ProgramBuilder,
     /// Builder for validation errors
     validation_error_builder: ValidationErrorBuilder,
+    /// Attributes for the statement currently being translated
+    statement_attributes: Bag<KnownAttributes, Vec<Term>>,
+
+    external_parameters: HashMap<GlobalVariable, GroundTerm>,
 
     /// Errors
     errors: Vec<ProgramError>,
@@ -65,12 +78,7 @@ impl<'a, 'b> ASTProgramTranslation<'a, 'b> {
         Self {
             input,
             input_label,
-            origin_map: HashMap::new(),
-            prefix_mapping: HashMap::new(),
-            base: None,
-            validation_error_builder: ValidationErrorBuilder::default(),
-            errors: Vec::default(),
-            program_builder: ProgramBuilder::default(),
+            ..Default::default()
         }
     }
 
@@ -90,6 +98,11 @@ impl<'a, 'b> ASTProgramTranslation<'a, 'b> {
         node: &'b dyn ProgramAST<'a>,
     ) -> Component {
         component.set_origin(self.register_node(node))
+    }
+
+    /// Add a global constant to the program being built
+    pub fn add_external_parameter(&mut self, ident: GlobalVariable, value: GroundTerm) {
+        self.external_parameters.insert(ident, value);
     }
 }
 
@@ -146,8 +159,7 @@ impl<'a, 'b> ProgramErrorReport<'a, 'b> {
 
                 let mut report = Report::build(
                     ReportKind::Error,
-                    self.label.clone(),
-                    error.range(translation).start,
+                    (self.label.clone(), error.range(translation)),
                 );
 
                 report = error.report(report, self.label.clone(), translation);
@@ -192,6 +204,18 @@ impl std::fmt::Display for ProgramErrorReport<'_, '_> {
 }
 
 impl<'a, 'b> ASTProgramTranslation<'a, 'b> {
+    fn process_attributes(&mut self, statement: &'b ast::statement::Statement<'a>) {
+        let expected_attributes = match statement.kind() {
+            ast::statement::StatementKind::Rule(_) => Rule::EXPECTED_ATTRIBUTES,
+            _ => &[],
+        };
+
+        match process_attributes(self, statement.attributes().iter(), expected_attributes) {
+            Ok(attributes) => self.statement_attributes = attributes,
+            Err(error) => self.errors.push(ProgramError::TranslationError(error)),
+        }
+    }
+
     /// Translate the given [ProgramAST] into a [Program].
     pub fn translate(
         mut self,
@@ -208,10 +232,12 @@ impl<'a, 'b> ASTProgramTranslation<'a, 'b> {
 
         // Now handle facts and rules
         for statement in ast.statements() {
+            self.process_attributes(statement);
+
             match statement.kind() {
                 ast::statement::StatementKind::Fact(fact) => {
-                    match HeadAtom::build_component(&mut self, fact) {
-                        Ok(atom) => self.program_builder.add_fact(Fact::from(atom.into_inner())),
+                    match Fact::build_component(&mut self, fact) {
+                        Ok(fact) => self.program_builder.add_fact(fact),
                         Err(error) => self.errors.push(ProgramError::TranslationError(error)),
                     }
                 }
@@ -229,14 +255,19 @@ impl<'a, 'b> ASTProgramTranslation<'a, 'b> {
                     }
                 }
                 ast::statement::StatementKind::Error(_token) => {
-                    todo!("Should faulty statements get ignored?")
+                    unreachable!(
+                        "Faulty statement should result in a parser error and not be propagated."
+                    )
                 }
             }
+
+            self.statement_attributes.clear();
         }
 
-        let _ = self
-            .program_builder
-            .validate(&mut self.validation_error_builder);
+        let _ = self.program_builder.validate(
+            &self.external_parameters,
+            &mut self.validation_error_builder,
+        );
 
         self.errors.extend(
             self.validation_error_builder
@@ -257,6 +288,10 @@ impl<'a, 'b> ASTProgramTranslation<'a, 'b> {
         }
     }
 
+    pub(crate) fn statement_attributes(&self) -> &Bag<KnownAttributes, Vec<Term>> {
+        &self.statement_attributes
+    }
+
     /// Recreate the name from a [ast::tag::structure::StructureTag]
     /// by resolving prefixes or bases.
     pub(super) fn resolve_tag(
@@ -275,7 +310,7 @@ impl<'a, 'b> ASTProgramTranslation<'a, 'b> {
             }
             ast::tag::structure::StructureTagKind::Prefixed { prefix, tag } => {
                 if let Some((expanded_prefix, _)) = self.prefix_mapping.get(&prefix.to_string()) {
-                    format!("{expanded_prefix}{}", tag)
+                    format!("{expanded_prefix}{tag}")
                 } else {
                     return Err(TranslationError::new(
                         prefix.span(),

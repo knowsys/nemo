@@ -126,6 +126,7 @@ where
 
 #[cfg(test)]
 mod test {
+    #[cfg(not(miri))]
     use test_log::test;
 
     use crate::columnar::{

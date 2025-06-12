@@ -5,37 +5,27 @@ use nemo_physical::{
     datasources::{table_providers::TableProvider, tuple_writer::TupleWriter},
     datavalues::{AnyDataValue, DataValueCreationError},
     dictionary::string_map::NullMap,
+    error::ReadingError,
     management::bytesized::ByteSized,
 };
-use std::{cell::Cell, io::BufRead, mem::size_of};
+use std::{cell::Cell, io::Read, mem::size_of};
 
 use oxiri::Iri;
-use rio_api::{
-    model::{BlankNode, GraphName, Literal, NamedNode, Quad, Subject, Term, Triple},
-    parser::{QuadsParser, TriplesParser},
-};
-use rio_turtle::{NQuadsParser, NTriplesParser, TriGParser, TurtleParser};
-use rio_xml::RdfXmlParser;
+use oxrdf::{BlankNode, GraphName, Literal, NamedNode, Quad, Subject, Term};
+use oxrdfio::{RdfFormat, RdfParser};
 
 use crate::io::formats::PROGRESS_NOTIFY_INCREMENT;
 
 use super::{
     error::RdfFormatError,
     value_format::{RdfValueFormat, RdfValueFormats},
-    RdfVariant,
+    RdfVariant, DEFAULT_GRAPH_IRI,
 };
-
-/// IRI to be used for the default graph used by Nemo when loading RDF data with
-/// named graphs (quads).
-///
-/// SPARQL 1.1 has failed to provide any standard identifier for this purpose.
-/// If future SPARQL or RDF versions are adding this, we could align accordingly.
-const DEFAULT_GRAPH: &str = "tag:nemo:defaultgraph";
 
 /// A [TableProvider] for RDF 1.1 files containing triples.
 pub(super) struct RdfReader {
     /// Buffer from which content is read
-    read: Box<dyn BufRead>,
+    read: Box<dyn Read>,
     /// RDF format
     variant: RdfVariant,
     /// Base url, if given
@@ -56,7 +46,7 @@ pub(super) struct RdfReader {
 impl RdfReader {
     /// Create a new [RdfReader].
     pub(super) fn new(
-        read: Box<dyn BufRead>,
+        read: Box<dyn Read>,
         variant: RdfVariant,
         base: Option<Iri<String>>,
         value_formats: RdfValueFormats,
@@ -74,7 +64,7 @@ impl RdfReader {
 
     /// Convert [NamedNode] to [AnyDataValue].
     fn datavalue_from_named_node(value: NamedNode) -> AnyDataValue {
-        AnyDataValue::new_iri(value.iri.to_string())
+        AnyDataValue::new_iri(value.into_string())
     }
 
     /// Create a [AnyDataValue] from a [BlankNode],
@@ -94,16 +84,15 @@ impl RdfReader {
     }
 
     /// Create [AnyDataValue] from a [Literal].
-    fn datavalue_from_literal(value: Literal<'_>) -> Result<AnyDataValue, DataValueCreationError> {
-        match value {
-            Literal::Simple { value } => Ok(AnyDataValue::new_plain_string(value.to_string())),
-            Literal::LanguageTaggedString { value, language } => Ok(
-                AnyDataValue::new_language_tagged_string(value.to_string(), language.to_string()),
-            ),
-            Literal::Typed { value, datatype } => Ok(AnyDataValue::new_from_typed_literal(
-                value.to_string(),
-                datatype.iri.to_string(),
-            )?),
+    fn datavalue_from_literal(value: Literal) -> Result<AnyDataValue, DataValueCreationError> {
+        let (value, datatype, language) = value.destruct();
+
+        if let Some(datatype) = datatype {
+            AnyDataValue::new_from_typed_literal(value, datatype.into_string())
+        } else if let Some(language) = language {
+            Ok(AnyDataValue::new_language_tagged_string(value, language))
+        } else {
+            Ok(AnyDataValue::new_plain_string(value))
         }
     }
 
@@ -114,14 +103,13 @@ impl RdfReader {
     fn datavalue_from_subject(
         bnode_map: &mut NullMap,
         tuple_writer: &mut TupleWriter,
-        value: Subject<'_>,
+        value: Subject,
     ) -> Result<AnyDataValue, RdfFormatError> {
         match value {
             Subject::NamedNode(nn) => Ok(Self::datavalue_from_named_node(nn)),
             Subject::BlankNode(bn) => {
                 Ok(Self::datavalue_from_blank_node(bnode_map, tuple_writer, bn))
             }
-            Subject::Triple(_t) => Err(RdfFormatError::RdfStarUnsupported),
         }
     }
 
@@ -132,13 +120,12 @@ impl RdfReader {
     fn datavalue_from_term(
         bnode_map: &mut NullMap,
         tuple_writer: &mut TupleWriter,
-        value: Term<'_>,
+        value: Term,
     ) -> Result<AnyDataValue, RdfFormatError> {
         match value {
             Term::NamedNode(nn) => Ok(Self::datavalue_from_named_node(nn)),
             Term::BlankNode(bn) => Ok(Self::datavalue_from_blank_node(bnode_map, tuple_writer, bn)),
             Term::Literal(lit) => Ok(Self::datavalue_from_literal(lit)?),
-            Term::Triple(_t) => Err(RdfFormatError::RdfStarUnsupported),
         }
     }
 
@@ -149,26 +136,23 @@ impl RdfReader {
     fn datavalue_from_graph_name(
         bnode_map: &mut NullMap,
         tuple_writer: &mut TupleWriter,
-        value: Option<GraphName<'_>>,
+        value: GraphName,
     ) -> Result<AnyDataValue, RdfFormatError> {
         match value {
-            None => Ok(AnyDataValue::new_iri(DEFAULT_GRAPH.to_string())),
-            Some(GraphName::NamedNode(nn)) => Ok(Self::datavalue_from_named_node(nn)),
-            Some(GraphName::BlankNode(bn)) => {
+            GraphName::DefaultGraph => Ok(AnyDataValue::new_iri(DEFAULT_GRAPH_IRI.to_string())),
+            GraphName::NamedNode(nn) => Ok(Self::datavalue_from_named_node(nn)),
+            GraphName::BlankNode(bn) => {
                 Ok(Self::datavalue_from_blank_node(bnode_map, tuple_writer, bn))
             }
         }
     }
 
     /// Read the RDF triples from a parser.
-    fn read_triples_with_parser<Parser>(
+    fn read_triples_with_parser(
         mut self,
         tuple_writer: &mut TupleWriter,
-        make_parser: impl Fn(Box<dyn BufRead>) -> Parser,
-    ) -> Result<(), Box<dyn std::error::Error>>
-    where
-        Parser: TriplesParser,
-    {
+        parser: RdfParser,
+    ) -> Result<(), ReadingError> {
         log::info!("Starting RDF import (format {})", self.variant);
 
         let skip: Vec<bool> = self
@@ -186,7 +170,10 @@ impl RdfReader {
         let stop_limit = self.limit.unwrap_or(u64::MAX);
         let triple_count = Cell::new(0);
 
-        let mut on_triple = |triple: Triple| {
+        // [RdfParser] always returns quads, but we ignore the graph
+        // name here (since it will always be
+        // [GraphName::DefaultGraph]).
+        let mut on_quad = |quad: Quad| {
             // This is needed since a parser might process several RDF statements
             // before giving us a chance to stop in the outer loop.
             if triple_count.get() == stop_limit {
@@ -194,20 +181,17 @@ impl RdfReader {
             }
 
             if !skip[0] {
-                let subject = Self::datavalue_from_subject(
-                    &mut self.bnode_map,
-                    tuple_writer,
-                    triple.subject,
-                )?;
+                let subject =
+                    Self::datavalue_from_subject(&mut self.bnode_map, tuple_writer, quad.subject)?;
                 tuple_writer.add_tuple_value(subject);
             }
             if !skip[1] {
-                let predicate = Self::datavalue_from_named_node(triple.predicate);
+                let predicate = Self::datavalue_from_named_node(quad.predicate);
                 tuple_writer.add_tuple_value(predicate);
             }
             if !skip[2] {
                 let object =
-                    Self::datavalue_from_term(&mut self.bnode_map, tuple_writer, triple.object)?;
+                    Self::datavalue_from_term(&mut self.bnode_map, tuple_writer, quad.object)?;
                 tuple_writer.add_tuple_value(object);
             }
 
@@ -219,12 +203,18 @@ impl RdfReader {
             Ok::<_, Box<dyn std::error::Error>>(())
         };
 
-        let mut parser = make_parser(self.read);
-
-        while !parser.is_end() {
-            if let Err(e) = parser.parse_step(&mut on_triple) {
-                log::info!("Ignoring malformed RDF: {e}");
+        for quad in parser.for_reader(self.read) {
+            match quad {
+                Ok(triple) => {
+                    if let Err(e) = on_quad(triple) {
+                        log::info!("Ignoring malformed RDF: {e}");
+                    }
+                }
+                Err(e) => {
+                    log::info!("Ignoring malformed RDF: {e}");
+                }
             }
+
             if triple_count.get() == stop_limit {
                 break;
             }
@@ -236,14 +226,11 @@ impl RdfReader {
     }
 
     /// Read the RDF quads from a parser.
-    fn read_quads_with_parser<Parser>(
+    fn read_quads_with_parser(
         mut self,
         tuple_writer: &mut TupleWriter,
-        make_parser: impl Fn(Box<dyn BufRead>) -> Parser,
-    ) -> Result<(), Box<dyn std::error::Error>>
-    where
-        Parser: QuadsParser,
-    {
+        parser: RdfParser,
+    ) -> Result<(), ReadingError> {
         log::info!("Starting RDF import (format {})", self.variant);
 
         let skip: Vec<bool> = self
@@ -299,12 +286,18 @@ impl RdfReader {
             Ok::<_, Box<dyn std::error::Error>>(())
         };
 
-        let mut parser = make_parser(self.read);
-
-        while !parser.is_end() {
-            if let Err(e) = parser.parse_step(&mut on_quad) {
-                log::info!("Ignoring malformed RDF: {e}");
+        for quad in parser.for_reader(self.read) {
+            match quad {
+                Ok(quad) => {
+                    if let Err(e) = on_quad(quad) {
+                        log::info!("Ignoring malformed RDF: {e}");
+                    }
+                }
+                Err(e) => {
+                    log::info!("Ignoring malformed RDF: {e}");
+                }
             }
+
             if quad_count.get() == stop_limit {
                 break;
             }
@@ -320,23 +313,39 @@ impl TableProvider for RdfReader {
     fn provide_table_data(
         self: Box<Self>,
         tuple_writer: &mut TupleWriter,
-    ) -> Result<(), Box<dyn std::error::Error>> {
+    ) -> Result<(), ReadingError> {
         let base_iri = self.base.clone();
-
-        match self.variant {
-            RdfVariant::NTriples => {
-                self.read_triples_with_parser(tuple_writer, NTriplesParser::new)
+        let with_base_iri = |parser: RdfParser| {
+            if let Some(base) = base_iri {
+                parser
+                    .with_base_iri(base.to_string())
+                    .expect("should be a valid IRI")
+            } else {
+                parser
             }
-            RdfVariant::NQuads => self.read_quads_with_parser(tuple_writer, NQuadsParser::new),
-            RdfVariant::Turtle => self.read_triples_with_parser(tuple_writer, |read| {
-                TurtleParser::new(read, base_iri.clone())
-            }),
-            RdfVariant::RDFXML => self.read_triples_with_parser(tuple_writer, |read| {
-                RdfXmlParser::new(read, base_iri.clone())
-            }),
-            RdfVariant::TriG => self.read_quads_with_parser(tuple_writer, |read| {
-                TriGParser::new(read, base_iri.clone())
-            }),
+        };
+
+        match &self.variant {
+            RdfVariant::NTriples => self.read_triples_with_parser(
+                tuple_writer,
+                RdfParser::from_format(RdfFormat::NTriples),
+            ),
+
+            RdfVariant::NQuads => {
+                self.read_quads_with_parser(tuple_writer, RdfParser::from_format(RdfFormat::NQuads))
+            }
+            RdfVariant::Turtle => self.read_triples_with_parser(
+                tuple_writer,
+                with_base_iri(RdfParser::from_format(RdfFormat::Turtle)),
+            ),
+            RdfVariant::RDFXML => self.read_triples_with_parser(
+                tuple_writer,
+                with_base_iri(RdfParser::from_format(RdfFormat::RdfXml)),
+            ),
+            RdfVariant::TriG => self.read_quads_with_parser(
+                tuple_writer,
+                with_base_iri(RdfParser::from_format(RdfFormat::TriG)),
+            ),
         }
     }
 
@@ -363,7 +372,7 @@ impl ByteSized for RdfReader {
 
 #[cfg(test)]
 mod test {
-    use super::{RdfReader, DEFAULT_GRAPH};
+    use super::{RdfReader, DEFAULT_GRAPH_IRI};
     use std::cell::RefCell;
 
     use nemo_physical::{
@@ -371,7 +380,9 @@ mod test {
         dictionary::string_map::NullMap, management::database::Dict,
     };
     use oxiri::Iri;
-    use rio_turtle::{NTriplesParser, TurtleParser};
+    use oxrdf::GraphName;
+    use oxrdfio::{RdfFormat, RdfParser};
+    #[cfg(not(miri))]
     use test_log::test;
 
     use crate::io::formats::rdf::{value_format::RdfValueFormats, RdfVariant};
@@ -394,7 +405,10 @@ mod test {
         );
         let dict = RefCell::new(Dict::default());
         let mut tuple_writer = TupleWriter::new(&dict, 3);
-        let result = reader.read_triples_with_parser(&mut tuple_writer, NTriplesParser::new);
+        let result = reader.read_triples_with_parser(
+            &mut tuple_writer,
+            RdfParser::from_format(RdfFormat::NTriples),
+        );
         assert!(result.is_ok());
         assert_eq!(tuple_writer.size(), 4);
     }
@@ -416,7 +430,7 @@ mod test {
         let dict = RefCell::new(Dict::default());
         let mut tuple_writer = TupleWriter::new(&dict, 3);
         let result = reader
-            .read_triples_with_parser(&mut tuple_writer, |read| TurtleParser::new(read, None));
+            .read_triples_with_parser(&mut tuple_writer, RdfParser::from_format(RdfFormat::Turtle));
         assert!(result.is_ok());
         assert_eq!(tuple_writer.size(), 3);
     }
@@ -438,7 +452,10 @@ mod test {
         );
         let dict = RefCell::new(Dict::default());
         let mut tuple_writer = TupleWriter::new(&dict, 3);
-        let result = reader.read_triples_with_parser(&mut tuple_writer, NTriplesParser::new);
+        let result = reader.read_triples_with_parser(
+            &mut tuple_writer,
+            RdfParser::from_format(RdfFormat::NTriples),
+        );
         assert!(result.is_ok());
         assert_eq!(tuple_writer.size(), 1);
     }
@@ -448,124 +465,24 @@ mod test {
         let dict = RefCell::new(Dict::default());
         let mut tuple_writer = TupleWriter::new(&dict, 3);
         let mut null_map = NullMap::default();
-        let graph_dv = AnyDataValue::new_iri(DEFAULT_GRAPH.to_string());
+        let graph_dv = AnyDataValue::new_iri(DEFAULT_GRAPH_IRI.to_string());
 
         // check that we use our own default graph IRI
         assert_eq!(
-            RdfReader::datavalue_from_graph_name(&mut null_map, &mut tuple_writer, None).expect(""),
+            RdfReader::datavalue_from_graph_name(
+                &mut null_map,
+                &mut tuple_writer,
+                GraphName::DefaultGraph
+            )
+            .expect(""),
             graph_dv
         );
         // check that our default graph is a valid IRI in the first place
         assert_eq!(
-            Iri::parse(DEFAULT_GRAPH.to_string()).unwrap().to_string(),
-            DEFAULT_GRAPH.to_string()
+            Iri::parse(DEFAULT_GRAPH_IRI.to_string())
+                .unwrap()
+                .to_string(),
+            DEFAULT_GRAPH_IRI.to_string()
         );
     }
-
-    // #[test]
-    // fn example_1() {
-    //     macro_rules! parse_example_with_rdf_parser {
-    //         ($data:tt, $make_parser:expr) => {
-    //             let $data = r#"<http://one.example/subject1> <http://one.example/predicate1> <http://one.example/object1> . # comments here
-    //                   # or on a line by themselves
-    //                   _:subject1 <http://an.example/predicate1> "object1" .
-    //                   _:subject2 <http://an.example/predicate2> "object2" .
-    //                   "#.as_bytes();
-
-    //             let dict = RefCell::new(Dict::default());
-    //             let mut builders = vec![
-    //                 PhysicalBuilderProxyEnum::String(PhysicalStringColumnBuilderProxy::new(&dict)),
-    //                 PhysicalBuilderProxyEnum::String(PhysicalStringColumnBuilderProxy::new(&dict)),
-    //                 PhysicalBuilderProxyEnum::String(PhysicalStringColumnBuilderProxy::new(&dict)),
-    //             ];
-    //             let reader = RDFReader::new(ResourceProviders::empty(), String::new(), None, vec![PrimitiveType::Any, PrimitiveType::Any, PrimitiveType::Any]);
-
-    //             let result = reader.read_triples_with_parser(&mut builders, $make_parser);
-    //             assert!(result.is_ok());
-
-    //             let columns = builders
-    //                 .into_iter()
-    //                 .map(|builder| match builder {
-    //                     PhysicalBuilderProxyEnum::String(b) => b.finalize(),
-    //                     _ => unreachable!("only string columns here"),
-    //                 })
-    //                 .collect::<Vec<_>>();
-
-    //             log::debug!("columns: {columns:?}");
-    //             let triples = (0..=2)
-    //                 .map(|idx| {
-    //                     columns
-    //                         .iter()
-    //                         .map(|column| {
-    //                             column
-    //                                 .get(idx)
-    //                                 .and_then(|value| value.try_into().ok())
-    //                                 .and_then(|u64: u64| usize::try_from(u64).ok())
-    //                                 .and_then(|usize| dict.borrow_mut().get(usize))
-    //                                 .unwrap()
-    //                         })
-    //                         .map(PhysicalString::from)
-    //                         .collect::<Vec<_>>()
-    //                 })
-    //                 .collect::<Vec<_>>();
-    //             log::debug!("triple: {triples:?}");
-    //             for (value, expected) in PrimitiveType::Any.serialize_output(DataValueIteratorT::String(Box::new(triples[0].iter().cloned()))).zip(vec!["http://one.example/subject1", "http://one.example/predicate1", "http://one.example/object1"]) {
-    //                 assert_eq!(value, expected);
-    //             }
-    //             for (value, expected) in PrimitiveType::Any.serialize_output(DataValueIteratorT::String(Box::new(triples[1].iter().cloned()))).zip(vec!["_:subject1", "http://an.example/predicate1", r#""object1""#]) {
-    //                 assert_eq!(value, expected);
-    //             }
-    //             for (value, expected) in PrimitiveType::Any.serialize_output(DataValueIteratorT::String(Box::new(triples[2].iter().cloned()))).zip(vec!["_:subject2", "http://an.example/predicate2", r#""object2""#]) {
-    //                 assert_eq!(value, expected);
-    //             }
-    //         };
-    //     }
-
-    //     parse_example_with_rdf_parser!(reader, || NTriplesParser::new(reader));
-    //     parse_example_with_rdf_parser!(reader, || TurtleParser::new(reader, None));
-    // }
-
-    // #[test]
-    // fn rollback() {
-    //     let data = r#"<http://example.org/> <http://example.org/> <http://example.org/> .
-    //                       malformed <http://example.org/> <http://example.org/>
-    //                       <http://example.org/> malformed <http://example.org/> .
-    //                       <http://example.org/> <http://example.org/> malformed .
-    //                       <http://example.org/> <http://example.org/> "123"^^<http://www.w3.org/2001/XMLSchema#integer> .
-    //                       <http://example.org/> <http://example.org/> "123.45"^^<http://www.w3.org/2001/XMLSchema#integer> .
-    //                       <http://example.org/> <http://example.org/> "123.45"^^<http://www.w3.org/2001/XMLSchema#decimal> .
-    //                       <http://example.org/> <http://example.org/> "123.45a"^^<http://www.w3.org/2001/XMLSchema#decimal> .
-    //                       <https://example.org/> <https://example.org/> <https://example.org/> .
-    //                   "#
-    //     .as_bytes();
-
-    //     let dict = RefCell::new(Dict::default());
-    //     let mut builders = vec![
-    //         PhysicalBuilderProxyEnum::String(PhysicalStringColumnBuilderProxy::new(&dict)),
-    //         PhysicalBuilderProxyEnum::String(PhysicalStringColumnBuilderProxy::new(&dict)),
-    //         PhysicalBuilderProxyEnum::String(PhysicalStringColumnBuilderProxy::new(&dict)),
-    //     ];
-    //     let reader = RDFReader::new(
-    //         ResourceProviders::empty(),
-    //         String::new(),
-    //         None,
-    //         vec![PrimitiveType::Any, PrimitiveType::Any, PrimitiveType::Any],
-    //     );
-
-    //     let result = reader.read_triples_with_parser(&mut builders, || NTriplesParser::new(data));
-    //     assert!(result.is_ok());
-
-    //     let columns = builders
-    //         .into_iter()
-    //         .map(|builder| match builder {
-    //             PhysicalBuilderProxyEnum::String(b) => b.finalize(),
-    //             _ => unreachable!("only string columns here"),
-    //         })
-    //         .collect::<Vec<_>>();
-
-    //     assert_eq!(columns.len(), 3);
-    //     assert_eq!(columns[0].len(), 4);
-    //     assert_eq!(columns[1].len(), 4);
-    //     assert_eq!(columns[2].len(), 4);
-    // }
 }

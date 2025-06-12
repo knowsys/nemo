@@ -18,11 +18,12 @@ pub(crate) fn operation_term_to_function_tree(
     match operation_term {
         OperationTerm::Primitive(primitive) => match &primitive {
             Primitive::Ground(datavalue) => FunctionTree::constant(datavalue.value()),
-            Primitive::Variable(variable) => FunctionTree::reference(
+            Primitive::Variable(variable) => FunctionTree::reference({
+                log::debug!("{variable:?}");
                 *translation
                     .get(variable)
-                    .expect("Every variable must be known"),
-            ),
+                    .expect("Every variable must be known")
+            }),
         },
         OperationTerm::Operation(operation) => operation_to_function_tree(translation, operation),
     }
@@ -85,6 +86,10 @@ pub(crate) fn operation_to_function_tree(
         OperationKind::StringStarts => binary!(string_starts, sub),
         OperationKind::StringEnds => binary!(string_ends, sub),
         OperationKind::StringRegex => binary!(string_regex, sub),
+        OperationKind::StringLevenshtein => binary!(string_levenshtein, sub),
+        OperationKind::BitShl => binary!(bit_shl, sub),
+        OperationKind::BitShru => binary!(bit_shru, sub),
+        OperationKind::BitShr => binary!(bit_shr, sub),
         OperationKind::StringSubstring => {
             if sub.len() == 2 {
                 let start = sub.pop().expect("length must be 2");

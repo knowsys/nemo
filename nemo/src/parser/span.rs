@@ -234,7 +234,7 @@ impl<'a> Span<'a> {
     pub fn get_utf8_column(&self) -> usize {
         let slice_before = self.get_slice_before();
         let offset = slice_before.rfind('\n').map(|x| x + 1).unwrap_or(0);
-        bytecount::num_chars(slice_before[offset..].as_bytes()) + 1
+        bytecount::num_chars(&slice_before.as_bytes()[offset..]) + 1
     }
 
     /// The fragment that is spanned. The fragment represents a part of the input of the parser.

@@ -9,7 +9,8 @@ use crate::{
     },
     rule_model::{
         error::{
-            validation_error::ValidationErrorKind, ComponentParseError, ValidationErrorBuilder,
+            hint::Hint, validation_error::ValidationErrorKind, ComponentParseError,
+            ValidationErrorBuilder,
         },
         origin::Origin,
         translation::{literal::HeadAtom, TranslationComponent},
@@ -37,10 +38,10 @@ pub struct Fact {
 
 impl Fact {
     /// Create a new [Fact].
-    pub fn new<Terms: IntoIterator<Item = Term>>(predicate: &str, subterms: Terms) -> Self {
+    pub fn new<Terms: IntoIterator<Item = Term>>(predicate: Tag, subterms: Terms) -> Self {
         Self {
             origin: Origin::Created,
-            predicate: Tag::new(predicate.to_string()),
+            predicate,
             terms: subterms.into_iter().collect(),
         }
     }
@@ -62,6 +63,17 @@ impl Fact {
     /// Return an mutable iterator over the subterms of this fact.
     pub fn subterms_mut(&mut self) -> impl Iterator<Item = &mut Term> {
         self.terms.iter_mut()
+    }
+
+    /// If the given [Term] is a function term,
+    /// then this function returns a [Hint] returning the operation
+    /// with the closest name to its tag.
+    fn hint_term_operation(term: &Term) -> Option<Hint> {
+        if let Term::FunctionTerm(function) = term {
+            Hint::similar_operation(function.tag().to_string())
+        } else {
+            None
+        }
     }
 }
 
@@ -129,7 +141,19 @@ impl ProgramComponent for Fact {
         }
 
         for term in self.subterms() {
-            if let Some(variable) = term.variables().next() {
+            if term.is_map() || term.is_tuple() || term.is_function() {
+                builder
+                    .report_error(*term.origin(), ValidationErrorKind::UnsupportedComplexTerm)
+                    .add_hint_option(Self::hint_term_operation(term));
+                return None;
+            }
+
+            if term.is_aggregate() {
+                builder.report_error(*term.origin(), ValidationErrorKind::FactSubtermAggregate);
+                return None;
+            }
+
+            if let Some(variable) = term.variables().find(|variable| !variable.is_global()) {
                 builder.report_error(*variable.origin(), ValidationErrorKind::FactNonGround);
                 continue;
             }
@@ -150,7 +174,7 @@ impl IterablePrimitives for Fact {
         Box::new(self.subterms().flat_map(|term| term.primitive_terms()))
     }
 
-    fn primitive_terms_mut<'a>(&'a mut self) -> Box<dyn Iterator<Item = &'a mut Primitive> + 'a> {
+    fn primitive_terms_mut<'a>(&'a mut self) -> Box<dyn Iterator<Item = &'a mut Term> + 'a> {
         Box::new(
             self.terms
                 .iter_mut()

@@ -14,13 +14,14 @@ use crate::{
         analysis::program_analysis::ProgramAnalysis,
         components::{
             atom::{ground_atom::GroundAtom, ChaseAtom},
+            export::ChaseExport,
             program::ChaseProgram,
         },
         translation::ProgramChaseTranslation,
     },
     error::Error,
     execution::{planning::plan_tracing::TracingStrategy, tracing::trace::TraceDerivation},
-    io::{formats::ImportExportHandler, import_manager::ImportManager},
+    io::{formats::Export, import_manager::ImportManager},
     rule_model::{
         components::{
             fact::Fact,
@@ -142,7 +143,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
 
         // Add all the import specifications
         for import in program.imports() {
-            let table_source = input_manager.table_provider_from_handler(&*import.handler())?;
+            let table_source = input_manager.table_provider_from_handler(import.handler())?;
 
             predicate_to_sources
                 .entry(import.predicate().clone())
@@ -276,36 +277,30 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         self.analysis.all_predicates.get(predicate).copied()
     }
 
-    /// Return a list of all all export predicates and their respective [ImportExportHandler]s,
+    /// Return a list of all all export predicates and their respective [`Export`]s,
     /// which can be used for exporting into files.
-    pub fn exports(&self) -> Vec<(Tag, Box<dyn ImportExportHandler>)> {
+    pub fn exports(&self) -> Vec<(Tag, Export)> {
         self.program
             .exports()
             .iter()
-            .map(|export| (export.predicate().clone(), export.handler()))
+            .cloned()
+            .map(ChaseExport::into_predicate_and_handler)
             .collect()
     }
 
-    /// Counts the facts of a single predicate.
-    ///
-    /// TODO: Currently only counting of in-memory facts is supported, see <https://github.com/knowsys/nemo/issues/335>
-    pub fn count_facts_of_predicate(&self, predicate: &Tag) -> Option<usize> {
-        self.table_manager.predicate_count_rows(predicate)
+    /// Counts the facts of a single predicate that are currently in memory.
+    pub fn count_facts_in_memory_for_predicate(&self, predicate: &Tag) -> Option<usize> {
+        self.table_manager
+            .count_rows_in_memory_for_predicate(predicate)
     }
 
-    /// Count the number of facts of derived predicates.
-    ///
-    /// TODO: Currently only counting of in-memory facts is supported, see <https://github.com/knowsys/nemo/issues/335>
-    pub fn count_facts_of_derived_predicates(&self) -> usize {
-        let mut result = 0;
-
-        for predicate in &self.analysis.derived_predicates {
-            if let Some(count) = self.count_facts_of_predicate(predicate) {
-                result += count;
-            }
-        }
-
-        result
+    /// Count the number of facts of derived predicates that are currently in memory.
+    pub fn count_facts_in_memory_for_derived_predicates(&self) -> usize {
+        self.analysis
+            .derived_predicates
+            .iter()
+            .map(|p| self.count_facts_in_memory_for_predicate(p).unwrap_or(0))
+            .sum()
     }
 
     /// Return the amount of consumed memory for the tables used by the chase.
@@ -480,14 +475,28 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         program: Program,
         facts: Vec<Fact>,
     ) -> Result<(ExecutionTrace, Vec<TraceFactHandle>), Error> {
+        let chase_facts: Vec<_> = facts
+            .into_iter()
+            .map(|fact| ProgramChaseTranslation::new().build_fact(&fact))
+            .collect();
+
         let mut trace = ExecutionTrace::new(program);
         let mut handles = Vec::new();
 
-        for fact in facts {
-            let chase_fact = ProgramChaseTranslation::new().build_fact(&fact);
+        let num_chase_facts = chase_facts.len();
+
+        for (i, chase_fact) in chase_facts.into_iter().enumerate() {
+            if i > 0 && i % 500 == 0 {
+                log::info!(
+                    "{i}/{num_chase_facts} facts traced. ({}%)",
+                    i * 100 / num_chase_facts
+                );
+            }
 
             handles.push(self.trace_recursive(&mut trace, chase_fact)?);
         }
+
+        log::info!("{num_chase_facts}/{num_chase_facts} facts traced. (100%)");
 
         Ok((trace, handles))
     }

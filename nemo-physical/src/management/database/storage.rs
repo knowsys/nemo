@@ -5,9 +5,7 @@
 use std::cell::RefCell;
 
 use crate::{
-    datasources::tuple_writer::TupleWriter,
-    error::{Error, ReadingError},
-    management::bytesized::ByteSized,
+    datasources::tuple_writer::TupleWriter, error::Error, management::bytesized::ByteSized,
     tabular::trie::Trie,
 };
 
@@ -44,9 +42,7 @@ impl TableStorage {
             log::info!("Loading source {source:?}");
             debug_assert!(source.arity() == arity);
 
-            source
-                .provide_table_data(&mut tuple_writer)
-                .map_err(ReadingError::ExternalError)?;
+            source.provide_table_data(&mut tuple_writer)?;
         }
 
         Ok(Trie::from_tuple_writer(tuple_writer))
@@ -100,11 +96,10 @@ impl TableStorage {
         }
     }
 
-    /// Return the number of rows that are stored in this table.
-    pub(crate) fn count_rows(&self) -> usize {
+    /// Return the number of rows that are stored in memory for this table.
+    pub(crate) fn count_rows_in_memory(&self) -> usize {
         match self {
             TableStorage::InMemory(trie) => trie.num_rows(),
-            // TODO: Currently only counting of in-memory facts is supported, see <https://github.com/knowsys/nemo/issues/335>
             TableStorage::FromSources(_) => 0,
             TableStorage::Empty => 0,
         }

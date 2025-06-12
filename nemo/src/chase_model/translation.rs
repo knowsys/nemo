@@ -10,7 +10,8 @@ pub(crate) mod rule;
 use std::collections::HashMap;
 
 use crate::rule_model::{
-    components::{tag::Tag, term::primitive::variable::Variable},
+    components::{tag::Tag, term::primitive::variable::Variable, ProgramComponent},
+    error::ValidationErrorBuilder,
     program::Program,
 };
 
@@ -51,6 +52,11 @@ impl ProgramChaseTranslation {
     /// Translate a [Program] into a [ChaseProgram].
     pub(crate) fn translate(&mut self, mut program: Program) -> ChaseProgram {
         let mut result = ChaseProgram::default();
+        self.predicate_arity = program
+            .arities()
+            .iter()
+            .map(|(tag, (arity, _))| (tag.clone(), *arity))
+            .collect();
 
         for fact in program.facts() {
             result.add_fact(self.build_fact(fact));
@@ -64,26 +70,18 @@ impl ProgramChaseTranslation {
             result.add_output_predicate(output.predicate().clone());
         }
 
-        for import in program.imports() {
-            if let Some(arity) = import.expected_arity() {
-                self.predicate_arity
-                    .insert(import.predicate().clone(), arity);
-            }
+        for import_directive in program.imports() {
+            let import_builder = import_directive
+                .validate(&mut ValidationErrorBuilder::default())
+                .expect("validation already happened");
+            result.add_import(self.build_import(import_directive, &import_builder));
         }
 
-        for export in program.exports() {
-            if let Some(arity) = export.expected_arity() {
-                self.predicate_arity
-                    .insert(export.predicate().clone(), arity);
-            }
-        }
-
-        for import in program.imports() {
-            result.add_import(self.build_import(import));
-        }
-
-        for export in program.exports() {
-            result.add_export(self.build_export(export));
+        for export_directive in program.exports() {
+            let export_builder = export_directive
+                .validate(&mut ValidationErrorBuilder::default())
+                .expect("validation already happened");
+            result.add_export(self.build_export(export_directive, &export_builder));
         }
 
         result

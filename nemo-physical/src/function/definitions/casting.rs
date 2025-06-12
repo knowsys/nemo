@@ -2,7 +2,7 @@
 
 use crate::{
     datatypes::StorageTypeName,
-    datavalues::{AnyDataValue, DataValue},
+    datavalues::{syntax::encodings, AnyDataValue, DataValue},
 };
 
 use super::{FunctionTypePropagation, UnaryFunction};
@@ -33,7 +33,22 @@ impl UnaryFunction for CastingIntoInteger64 {
             | crate::datavalues::ValueDomain::Iri
             | crate::datavalues::ValueDomain::LanguageTaggedString => None,
             crate::datavalues::ValueDomain::PlainString | crate::datavalues::ValueDomain::Other => {
-                let result = parameter.lexical_value().parse::<i64>().ok()?;
+                let lex_val = parameter.lexical_value();
+
+                // Handle decimal, binary (0b), octal (0o) and hexadecimal (0x) encoded strings
+                // Expect 2 chars for encoding prefix and at least one char as suffix
+                let result = {
+                    if lex_val.chars().count() >= 3 {
+                        match &lex_val[0..2] {
+                            encodings::BIN => <i64>::from_str_radix(&lex_val[2..], 2).ok()?,
+                            encodings::OCT => <i64>::from_str_radix(&lex_val[2..], 8).ok()?,
+                            encodings::HEX => <i64>::from_str_radix(&lex_val[2..], 16).ok()?,
+                            _ => lex_val.parse::<i64>().ok()?,
+                        }
+                    } else {
+                        lex_val.parse::<i64>().ok()?
+                    }
+                };
 
                 Some(AnyDataValue::new_integer_from_i64(result))
             }

@@ -1,6 +1,3 @@
-// FIXME: remove this once the pyo3 macros don't trigger this
-#![allow(non_local_definitions)]
-
 use std::{collections::HashSet, fs::read_to_string, time::Duration};
 
 use nemo::{
@@ -11,7 +8,12 @@ use nemo::{
     io::{resource_providers::ResourceProviders, ExportManager, ImportManager},
     meta::timing::TimedCode,
     rule_model::{
-        components::{fact::Fact, tag::Tag, term::primitive::Primitive, ProgramComponent},
+        components::{
+            fact::Fact,
+            tag::Tag,
+            term::{primitive::Primitive, Term},
+            ProgramComponent,
+        },
         error::ValidationErrorBuilder,
         substitution::Substitution,
     },
@@ -36,7 +38,7 @@ impl<T> PythonResult for Result<T, nemo::error::Error> {
     type Value = T;
 
     fn py_res(self) -> PyResult<Self::Value> {
-        self.map_err(|err| NemoError::new_err(format!("{}", err)))
+        self.map_err(|err| NemoError::new_err(format!("{err}")))
     }
 }
 impl<T> PythonResult for (T, Vec<Error>) {
@@ -272,7 +274,7 @@ fn assignement_to_dict<'py>(
 ) -> PyResult<Bound<'py, PyDict>> {
     let dict = PyDict::new(py);
     for (variable, term) in assignment {
-        if let Primitive::Ground(ground) = term {
+        if let Term::Primitive(Primitive::Ground(ground)) = term {
             dict.set_item(
                 variable.to_string(),
                 datavalue_to_python(py, ground.value())?,
@@ -293,6 +295,16 @@ fn trace_to_dict<'py>(trace: &ExecutionTraceTree, py: Python<'py>) -> PyResult<B
                 "assignment",
                 assignement_to_dict(&rule_application.assignment, py)?,
             )?;
+            if let Some(name) = rule_application.rule.name() {
+                result.set_item("name", name)?;
+            }
+            if let Some(display) = rule_application
+                .rule
+                .instantiated_display(&rule_application.assignment)
+            {
+                result.set_item("display", display)?;
+            }
+
             let subtraces: Vec<_> = subtraces
                 .iter()
                 .map(|trace| trace_to_dict(trace, py))
@@ -460,7 +472,7 @@ impl NemoEngine {
             .0
             .export_table(
                 &tag,
-                &*export_handler,
+                &export_handler,
                 self.engine.predicate_rows(&tag).py_res()?,
             )
             .py_res()?;

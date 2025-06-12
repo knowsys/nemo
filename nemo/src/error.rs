@@ -5,11 +5,8 @@ use std::path::PathBuf;
 use nemo_physical::datavalues::DataValueCreationError;
 use thiserror::Error;
 
-use crate::{
-    chase_model::analysis::program_analysis::RuleAnalysisError,
-    execution::{
-        selection_strategy::strategy::SelectionStrategyError, tracing::error::TracingError,
-    },
+use crate::execution::{
+    selection_strategy::strategy::SelectionStrategyError, tracing::error::TracingError,
 };
 
 pub use nemo_physical::error::ReadingError;
@@ -21,9 +18,6 @@ pub enum Error {
     /// Build selection strategy errror
     #[error(transparent)]
     SelectionStrategyError(#[from] SelectionStrategyError),
-    /// Rule analysis errors
-    #[error(transparent)]
-    RuleAnalysisError(#[from] RuleAnalysisError),
     /// Error occurred during parsing
     #[error("error while parsing program")]
     ProgramParseError,

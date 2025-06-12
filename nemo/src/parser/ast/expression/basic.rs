@@ -3,6 +3,7 @@
 pub mod blank;
 pub mod boolean;
 pub mod constant;
+pub mod enc_number;
 pub mod iri;
 pub mod number;
 pub mod rdf_literal;

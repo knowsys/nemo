@@ -23,7 +23,7 @@ Nemo's datatypes allow the use of RDF-style data values but also "plain" names a
 
 The following [publication](https://github.com/knowsys/nemo/wiki/Publications) gives a first overview of the system and can be used for citing Nemo:
 
-* Alex Ivliev, Lukas Gerlach, Simon Meusel, Jakob Steinberg, Markus Krötzsch: **[Nemo: Your Friendly and Versatile Rule Reasoning Toolkit](https://iccl.inf.tu-dresden.de/web/Inproceedings3390).** _Proceedings of the 21st International Conference on Principles of Knowledge Representation and Reasoning (KR 2024)_, IJCAI Organization 2024, to appear. <a href="https://iccl.inf.tu-dresden.de/w/images/f/fb/KR-2024-CR.pdf">PDF</a>, <a href="https://iccl.inf.tu-dresden.de/web/Inproceedings3390">bibtex</a>
+* Alex Ivliev, Lukas Gerlach, Simon Meusel, Jakob Steinberg, Markus Krötzsch: **[Nemo: Your Friendly and Versatile Rule Reasoning Toolkit](https://iccl.inf.tu-dresden.de/web/Inproceedings3390).** _Proceedings of the 21st International Conference on Principles of Knowledge Representation and Reasoning (KR 2024)_, p743-754. IJCAI Organization, 2024. <a href="https://iccl.inf.tu-dresden.de/w/images/f/fb/KR-2024-CR.pdf">PDF</a>, <a href="https://iccl.inf.tu-dresden.de/web/Inproceedings3390">bibtex</a>
 
 Nemo is in heavy development and the current releases should still be considered unstable.
 

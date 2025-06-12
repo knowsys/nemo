@@ -80,11 +80,12 @@ impl<'a> ParserErrorReport<'a> {
     pub fn build_reports(&'a self) -> impl Iterator<Item = Report<'a, (String, Range<usize>)>> {
         self.errors.iter().map(move |error| {
             let message = error.to_string();
+            let span = (self.label.clone(), error.position.range());
 
-            Report::build(ReportKind::Error, self.label.clone(), error.position.offset)
+            Report::build(ReportKind::Error, span.clone())
                 .with_message(message.clone())
                 .with_label(
-                    Label::new((self.label.clone(), error.position.range()))
+                    Label::new(span)
                         .with_message(message)
                         .with_color(Color::Red),
                 )

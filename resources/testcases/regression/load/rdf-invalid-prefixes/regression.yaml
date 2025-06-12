@@ -1,0 +1,4 @@
+issue: 623
+title: Malformed Prefixes in Turtle Files Cause Crashing
+tracker: https://github.com/knowsys/nemo/issues/623
+type: bugfix

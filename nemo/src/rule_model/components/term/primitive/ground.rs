@@ -1,13 +1,17 @@
 //! This module defines [GroundTerm].
 
-use std::{fmt::Display, hash::Hash};
+use std::{collections::HashMap, fmt::Display, hash::Hash};
 
 use nemo_physical::datavalues::{AnyDataValue, DataValue, IriDataValue, ValueDomain};
 
 use crate::rule_model::{
-    components::{term::value_type::ValueType, ProgramComponent, ProgramComponentKind},
-    error::ValidationErrorBuilder,
+    components::{
+        term::{value_type::ValueType, Term},
+        ProgramComponent, ProgramComponentKind,
+    },
+    error::{ComponentParseError, ValidationErrorBuilder},
     origin::Origin,
+    translation::TranslationComponent,
 };
 
 /// Primitive ground term
@@ -33,24 +37,7 @@ impl GroundTerm {
 
     /// Return the value type of this term.
     pub fn value_type(&self) -> ValueType {
-        match self.value.value_domain() {
-            ValueDomain::Float
-            | ValueDomain::Double
-            | ValueDomain::UnsignedLong
-            | ValueDomain::NonNegativeLong
-            | ValueDomain::UnsignedInt
-            | ValueDomain::NonNegativeInt
-            | ValueDomain::Long
-            | ValueDomain::Int => ValueType::Number,
-            ValueDomain::PlainString => ValueType::String,
-            ValueDomain::LanguageTaggedString => ValueType::LanguageString,
-            ValueDomain::Iri => ValueType::Constant,
-            ValueDomain::Tuple => ValueType::Tuple,
-            ValueDomain::Map => ValueType::Map,
-            ValueDomain::Boolean => ValueType::Boolean,
-            ValueDomain::Null => ValueType::Null,
-            ValueDomain::Other => ValueType::Other,
-        }
+        ValueType::from(self.value.value_domain())
     }
 
     /// Return the [AnyDataValue] of this term
@@ -167,30 +154,20 @@ impl ProgramComponent for GroundTerm {
     }
 }
 
+impl GroundTerm {
+    pub fn parse(input: &str) -> Result<Self, ComponentParseError>
+    where
+        Self: Sized,
+    {
+        let term = Term::parse(input)?;
+        term.try_into_ground(&HashMap::default())
+            .map_err(|_| ComponentParseError::ParseError)
+    }
+}
+
 #[cfg(test)]
 mod test {
-    use crate::rule_model::{
-        components::term::{primitive::Primitive, Term},
-        error::ComponentParseError,
-        translation::TranslationComponent,
-    };
-
     use super::GroundTerm;
-
-    impl GroundTerm {
-        fn parse(input: &str) -> Result<Self, ComponentParseError>
-        where
-            Self: Sized,
-        {
-            let term = Term::parse(input)?;
-
-            if let Term::Primitive(Primitive::Ground(ground)) = term {
-                return Ok(ground);
-            }
-
-            Err(ComponentParseError::ParseError)
-        }
-    }
 
     #[test]
     fn parse_ground_term() {

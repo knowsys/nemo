@@ -9,6 +9,7 @@ pub mod fact;
 pub mod import_export;
 pub mod literal;
 pub mod output;
+pub mod parameter;
 pub mod rule;
 pub mod tag;
 pub mod term;
@@ -16,7 +17,10 @@ pub mod term;
 use std::fmt::{Debug, Display};
 
 use enum_assoc::Assoc;
-use term::primitive::{variable::Variable, Primitive};
+use term::{
+    primitive::{variable::Variable, Primitive},
+    Term,
+};
 
 use super::{error::ValidationErrorBuilder, origin::Origin};
 
@@ -30,6 +34,9 @@ pub enum ProgramComponentKind {
     /// Plain String
     #[assoc(name = "string")]
     PlainString,
+    /// Attribute
+    #[assoc(name = "attribute")]
+    Attribute,
     /// Language tagged string
     #[assoc(name = "language tagged string")]
     LanguageTaggedString,
@@ -90,9 +97,9 @@ pub enum ProgramComponentKind {
     /// Output
     #[assoc(name = "output")]
     Output,
-    /// Program
-    #[assoc(name = "program")]
-    Program,
+    /// Parameter declaration directive
+    #[assoc(name = "parameter")]
+    ParameterDeclaration,
     /// One of the given kinds:
     #[assoc(name = "oneof")]
     OneOf(&'static [ProgramComponentKind]),
@@ -100,6 +107,8 @@ pub enum ProgramComponentKind {
 
 /// Trait implemented by objects that are part of the logical rule model of the nemo language.
 pub trait ProgramComponent: Debug + Display + Sized {
+    type ValidationResult = ();
+
     /// Return the [ProgramComponentKind] of this component.
     fn kind(&self) -> ProgramComponentKind;
 
@@ -113,7 +122,7 @@ pub trait ProgramComponent: Debug + Display + Sized {
     ///
     /// Errors will be appended to the given [ValidationErrorBuilder].
     /// Returns `Some(())` if successful and `None` otherwise.
-    fn validate(&self, builder: &mut ValidationErrorBuilder) -> Option<()>;
+    fn validate(&self, builder: &mut ValidationErrorBuilder) -> Option<Self::ValidationResult>;
 }
 
 /// Trait implemented by program components that allow iterating over [Variable]s
@@ -127,9 +136,13 @@ pub trait IterableVariables {
 
 /// Trait implemented by program components that allow iterating over [Primitive] terms
 pub trait IterablePrimitives {
+    type TermType = Term;
+
     /// Return an iterator over all [Primitive] terms contained within this program component.
     fn primitive_terms<'a>(&'a self) -> Box<dyn Iterator<Item = &'a Primitive> + 'a>;
 
     /// Return a mutable iterator over all [Primitive] terms contained within this program component.
-    fn primitive_terms_mut<'a>(&'a mut self) -> Box<dyn Iterator<Item = &'a mut Primitive> + 'a>;
+    fn primitive_terms_mut<'a>(
+        &'a mut self,
+    ) -> Box<dyn Iterator<Item = &'a mut Self::TermType> + 'a>;
 }

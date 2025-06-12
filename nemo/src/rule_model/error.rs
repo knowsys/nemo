@@ -194,6 +194,21 @@ pub struct ValidationError {
     info: ComplexError<Origin>,
 }
 
+impl ValidationError {
+    /// Construct a new [`ValidationError`] with given [`Origin`] and [`ValidationErrorKind`]
+    pub fn new(origin: Origin, kind: ValidationErrorKind) -> Self {
+        let mut info = ComplexError::new_error(origin);
+        info.add_label(ComplexErrorLabelKind::Error, origin, kind.to_string());
+
+        ValidationError { kind, info }
+    }
+
+    /// Modify additional information stored in this error.
+    pub fn info(&mut self) -> &mut ComplexError<Origin> {
+        &mut self.info
+    }
+}
+
 /// Builder for [ValidationError]
 #[derive(Debug, Default)]
 pub struct ValidationErrorBuilder {
@@ -208,17 +223,8 @@ impl ValidationErrorBuilder {
         origin: Origin,
         kind: ValidationErrorKind,
     ) -> &mut ComplexError<Origin> {
-        let message = kind.to_string();
-
-        self.errors.push(ValidationError {
-            kind,
-            info: ComplexError::new_error(origin),
-        });
-
-        let info = &mut self.errors.last_mut().expect("error was just added").info;
-        info.add_label(ComplexErrorLabelKind::Error, origin, message);
-
-        info
+        self.errors.push(ValidationError::new(origin, kind));
+        self.errors.last_mut().unwrap().info()
     }
 
     /// Finish building and return a list of [ValidationError]s.

@@ -6,6 +6,7 @@ use crate::rule_model::{
     components::{IterablePrimitives, IterableVariables, ProgramComponent, ProgramComponentKind},
     error::ValidationErrorBuilder,
     origin::Origin,
+    substitution::Substitution,
 };
 
 use super::{
@@ -69,10 +70,14 @@ impl Tuple {
     }
 
     /// Reduce each sub [Term] in the tuple returning a copy.
-    pub fn reduce(&self) -> Self {
+    pub fn reduce(&self, bindings: &Substitution) -> Self {
         Self {
             origin: self.origin,
-            terms: self.terms.iter().map(Term::reduce).collect(),
+            terms: self
+                .terms
+                .iter()
+                .map(|term| term.reduce_with_substitution(bindings))
+                .collect(),
         }
     }
 }
@@ -155,12 +160,21 @@ impl IterablePrimitives for Tuple {
         Box::new(self.terms.iter().flat_map(|term| term.primitive_terms()))
     }
 
-    fn primitive_terms_mut<'a>(&'a mut self) -> Box<dyn Iterator<Item = &'a mut Primitive> + 'a> {
+    fn primitive_terms_mut<'a>(&'a mut self) -> Box<dyn Iterator<Item = &'a mut Term> + 'a> {
         Box::new(
             self.terms
                 .iter_mut()
                 .flat_map(|term| term.primitive_terms_mut()),
         )
+    }
+}
+
+impl IntoIterator for Tuple {
+    type Item = Term;
+    type IntoIter = std::vec::IntoIter<Term>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.terms.into_iter()
     }
 }
 

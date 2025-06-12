@@ -72,12 +72,12 @@ Add `quickcheck` tests whenever it is applicable.
 
 ### Integration testing
 
-Integration testing is done in the related `tests` directory on the top-level of this crate.
+Integration testing is done in the related `tests` directory on the top-level of the `nemo-cli` crate.
 
 ## Coding conventions
 
 Start reading our code and you'll get the hang of it. Code format and essential coding guidelines are already ensured
-by our use of `rstufmt` and `clippy` (as mentioned above). Some further conventions are listed below.
+by our use of `rustfmt` and `clippy` (as mentioned above). Some further conventions are listed below.
 
   * We try to reduce redundancies in enumeration-variant names.
   * We try to use the `where` clause over embedded clauses for better readability

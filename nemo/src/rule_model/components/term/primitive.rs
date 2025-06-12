@@ -7,7 +7,10 @@ use std::{fmt::Display, hash::Hash};
 
 use ground::GroundTerm;
 use nemo_physical::datavalues::AnyDataValue;
-use variable::{existential::ExistentialVariable, universal::UniversalVariable, Variable};
+use variable::{
+    existential::ExistentialVariable, global::GlobalVariable, universal::UniversalVariable,
+    Variable,
+};
 
 use crate::rule_model::{
     components::{IterableVariables, ProgramComponent, ProgramComponentKind},
@@ -40,9 +43,15 @@ impl Primitive {
         Ok(term)
     }
 
-    /// Return `true` when this term is not a variable and `false` otherwise.
+    /// Return `true` if this term is considered "ground".
+    ///
+    /// This is the case if the term is not a universal or existential variable
+    /// (we consider global variables to be ground).
     pub fn is_ground(&self) -> bool {
-        matches!(self, Self::Ground(_))
+        match self {
+            Primitive::Variable(variable) => variable.is_global(),
+            Primitive::Ground(_) => true,
+        }
     }
 
     /// Return the value type of this term.
@@ -68,6 +77,12 @@ impl From<UniversalVariable> for Primitive {
 
 impl From<ExistentialVariable> for Primitive {
     fn from(value: ExistentialVariable) -> Self {
+        Self::from(Variable::from(value))
+    }
+}
+
+impl From<GlobalVariable> for Primitive {
+    fn from(value: GlobalVariable) -> Self {
         Self::from(Variable::from(value))
     }
 }

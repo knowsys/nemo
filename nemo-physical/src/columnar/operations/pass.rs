@@ -65,6 +65,7 @@ mod test {
     };
 
     use super::ColumnScanPass;
+    #[cfg(not(miri))]
     use test_log::test;
 
     #[test]
