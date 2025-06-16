@@ -14,7 +14,7 @@ use crate::{
         },
         error::{info::Info, translation_error::TranslationError},
         origin::Origin,
-        program::ProgramWrite,
+        programs::ProgramWrite,
     },
 };
 

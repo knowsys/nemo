@@ -43,7 +43,7 @@ use nemo::{
     rule_file::RuleFile,
     rule_model::{
         components::{fact::Fact, tag::Tag, term::Term, ComponentBehavior},
-        program::{Program, ProgramRead},
+        programs::{program::Program, ProgramRead},
     },
 };
 
@@ -241,8 +241,9 @@ fn run(mut cli: CliApp) -> Result<(), CliError> {
         return Err(CliError::InvalidParameter { parameter });
     }
 
-    let (mut engine, warnings) = ExecutionEngine::file(program_file, execution_parameters)?.pair();
-    warnings.map(|warnings| warnings.eprint(cli.disable_warnings));
+    let (mut engine, warnings) =
+        ExecutionEngine::from_file(program_file, execution_parameters)?.pair();
+    warnings.eprint(cli.disable_warnings)?;
 
     log::info!("Rules parsed");
 

@@ -4,7 +4,11 @@ use std::collections::HashSet;
 
 use crate::{
     execution::execution_parameters::ExecutionParameters,
-    rule_model::{error::ValidationReport, pipeline::ProgramPipeline, program::ProgramRead},
+    rule_model::{
+        error::ValidationReport,
+        pipeline::transformations::validate::TransformationValidate,
+        programs::{handle::ProgramHandle, ProgramRead},
+    },
 };
 
 use super::{
@@ -17,39 +21,37 @@ use super::{
 /// This transformation will be applied to every nemo program
 /// before executing
 #[derive(Debug)]
-pub struct TransformationDefault {
+pub struct TransformationDefault<'a> {
     /// Execution Parameters
-    parameters: ExecutionParameters,
+    parameters: &'a ExecutionParameters,
 }
 
-impl TransformationDefault {
+impl<'a> TransformationDefault<'a> {
     /// Create a new [TransformationDefault].
-    pub fn new(parameters: ExecutionParameters) -> Self {
+    pub fn new(parameters: &'a ExecutionParameters) -> Self {
         Self { parameters }
     }
 }
 
-impl ProgramTransformation for TransformationDefault {
-    fn apply(self, pipeline: &mut ProgramPipeline, report: &mut ValidationReport) {
-        pipeline.validate_parameters(
-            report,
+impl<'a> ProgramTransformation for TransformationDefault<'a> {
+    fn apply(self, program: &ProgramHandle) -> Result<ProgramHandle, ValidationReport> {
+        let mut commit = program.fork_full();
+
+        program.validate_parameters(
+            commit.report_mut(),
             self.parameters
                 .global_variables
                 .keys()
                 .collect::<HashSet<_>>(),
         );
 
-        TransformationGlobal::new(self.parameters.global_variables).apply(pipeline, report);
-        TransformationExports::new(self.parameters.export_parameters).apply(pipeline, report);
-
-        pipeline.validate_arity(report);
-        pipeline.validate_stdin_imports(report);
-        pipeline.validate_components(report);
-
-        if report.contains_errors() {
-            return;
-        }
-
-        TransformationActive::default().apply(pipeline, report);
+        commit
+            .submit()?
+            .transform(TransformationGlobal::new(&self.parameters.global_variables))?
+            .transform(TransformationExports::new(
+                self.parameters.export_parameters,
+            ))?
+            .transform(TransformationValidate::default())?
+            .transform(TransformationActive::default())
     }
 }

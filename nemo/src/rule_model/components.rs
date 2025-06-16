@@ -10,6 +10,7 @@ pub mod literal;
 pub mod output;
 pub mod parameter;
 pub mod rule;
+pub mod statement;
 pub mod symbols;
 pub mod tag;
 pub mod term;
@@ -42,9 +43,10 @@ use term::{
     Term,
 };
 
+use crate::rule_model::{components::statement::Statement, programs::program::Program};
+
 use super::{
-    error::ValidationReport, origin::Origin, pipeline::id::ProgramComponentId, program::Program,
-    util::TryAsRef,
+    error::ValidationReport, origin::Origin, pipeline::id::ProgramComponentId, util::TryAsRef,
 };
 
 /// Types of [ProgramComponent]s
@@ -240,6 +242,7 @@ pub trait ComponentCast:
     + TryAsRef<ImportExportAttribute>
     + TryAsRef<ImportExportSpec>
     + TryAsRef<ParameterDeclaration>
+    + TryAsRef<Statement>
 {
 }
 impl<Component> ComponentCast for Component where
@@ -264,6 +267,7 @@ impl<Component> ComponentCast for Component where
         + TryAsRef<ImportExportAttribute>
         + TryAsRef<ImportExportSpec>
         + TryAsRef<ParameterDeclaration>
+        + TryAsRef<Statement>
 {
 }
 

@@ -11,7 +11,7 @@ use std::collections::HashMap;
 
 use crate::rule_model::{
     components::{tag::Tag, term::primitive::variable::Variable},
-    program::{Program, ProgramRead},
+    programs::{program::Program, ProgramRead},
 };
 
 use super::components::program::ChaseProgram;
@@ -49,7 +49,7 @@ impl ProgramChaseTranslation {
     }
 
     /// Translate a [Program] into a [ChaseProgram].
-    pub(crate) fn translate(&mut self, mut program: Program) -> ChaseProgram {
+    pub(crate) fn translate(&mut self, program: &Program) -> ChaseProgram {
         let mut result = ChaseProgram::default();
 
         self.predicate_arity = program.arities();
@@ -60,7 +60,7 @@ impl ProgramChaseTranslation {
             }
         }
 
-        for rule in program.rules_mut() {
+        for rule in program.rules() {
             result.add_rule(self.build_rule(rule));
         }
 

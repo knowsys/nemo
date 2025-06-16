@@ -3,6 +3,10 @@
 use std::fmt;
 
 use crate::rule_model::{
+    components::{
+        term::primitive::{variable::Variable, Primitive},
+        IterablePrimitives, IterableVariables,
+    },
     error::{validation_error::ValidationError, ValidationReport},
     origin::Origin,
     pipeline::id::ProgramComponentId,
@@ -158,5 +162,29 @@ impl IterableComponent for ParameterDeclaration {
         let term = component_iterator_mut(self.expression.as_mut().into_iter());
 
         Box::new(variable.chain(term))
+    }
+}
+
+impl IterableVariables for ParameterDeclaration {
+    fn variables<'a>(&'a self) -> Box<dyn Iterator<Item = &'a Variable> + 'a> {
+        Box::new(self.expression.iter().flat_map(|term| term.variables()))
+    }
+
+    fn variables_mut<'a>(&'a mut self) -> Box<dyn Iterator<Item = &'a mut Variable> + 'a> {
+        Box::new(
+            self.expression
+                .iter_mut()
+                .flat_map(|term| term.variables_mut()),
+        )
+    }
+}
+
+impl IterablePrimitives for ParameterDeclaration {
+    fn primitive_terms<'a>(&'a self) -> Box<dyn Iterator<Item = &'a Primitive> + 'a> {
+        Box::new(std::iter::empty())
+    }
+
+    fn primitive_terms_mut<'a>(&'a mut self) -> Box<dyn Iterator<Item = &'a mut Term> + 'a> {
+        Box::new(std::iter::empty())
     }
 }

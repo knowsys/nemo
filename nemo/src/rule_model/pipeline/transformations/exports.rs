@@ -5,10 +5,9 @@ use std::collections::HashSet;
 use crate::{
     execution::execution_parameters::ExportParameters,
     rule_model::{
-        components::{import_export::ExportDirective, tag::Tag, ComponentIdentity},
+        components::{import_export::ExportDirective, statement::Statement, tag::Tag},
         error::ValidationReport,
-        pipeline::{commit::ProgramCommit, ProgramPipeline},
-        program::ProgramRead,
+        programs::{handle::ProgramHandle, ProgramRead, ProgramWrite},
     },
 };
 
@@ -31,42 +30,54 @@ impl TransformationExports {
 }
 
 impl ProgramTransformation for TransformationExports {
-    fn apply(self, pipeline: &mut ProgramPipeline, _report: &mut ValidationReport) {
-        if let ExportParameters::Keep = self.parameters {
-            return;
-        }
+    fn apply(self, program: &ProgramHandle) -> Result<ProgramHandle, ValidationReport> {
+        let mut commit = program.fork();
 
-        let mut commit = ProgramCommit::default();
-
-        let derived_predicates = pipeline.derived_predicates();
+        let derived_predicates = program.derived_predicates();
         let mut exported_predicates = HashSet::<Tag>::new();
 
-        for export in pipeline.exports() {
-            let delete = match self.parameters {
-                ExportParameters::Keep => false,
-                ExportParameters::None => true,
-                ExportParameters::Idb => derived_predicates.contains(export.predicate()),
-                ExportParameters::Edb => !derived_predicates.contains(export.predicate()),
-                ExportParameters::All => {
-                    exported_predicates.insert(export.predicate().clone());
-                    false
+        for statement in program.statements() {
+            let keep = if let Statement::Export(export) = statement {
+                exported_predicates.insert(export.predicate().clone());
+
+                match self.parameters {
+                    ExportParameters::Keep => true,
+                    ExportParameters::None => false,
+                    ExportParameters::Idb => derived_predicates.contains(export.predicate()),
+                    ExportParameters::Edb => !derived_predicates.contains(export.predicate()),
+                    ExportParameters::All => todo!(),
                 }
+            } else {
+                true
             };
 
-            if delete {
-                commit.delete(export.id());
+            if keep {
+                commit.keep(statement);
             }
         }
 
-        if let ExportParameters::All = self.parameters {
-            let all_predicates = pipeline.all_predicates();
-
-            for predicate in all_predicates.difference(&exported_predicates) {
-                let export = ExportDirective::new_csv(predicate.clone());
-                commit.add_export(export);
+        match self.parameters {
+            ExportParameters::All => {
+                for predicate in program.all_predicates().difference(&exported_predicates) {
+                    let export = ExportDirective::new_csv(predicate.clone());
+                    commit.add_export(export);
+                }
             }
-        }
+            ExportParameters::Idb => {
+                for predicate in derived_predicates.difference(&exported_predicates) {
+                    let export = ExportDirective::new_csv(predicate.clone());
+                    commit.add_export(export);
+                }
+            }
+            ExportParameters::Edb => {
+                for predicate in program.import_predicates().difference(&exported_predicates) {
+                    let export = ExportDirective::new_csv(predicate.clone());
+                    commit.add_export(export);
+                }
+            }
+            ExportParameters::Keep | ExportParameters::None => {}
+        };
 
-        pipeline.commit(commit);
+        commit.submit()
     }
 }

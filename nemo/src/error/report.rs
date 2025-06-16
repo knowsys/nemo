@@ -8,6 +8,7 @@ use std::{
 use ariadne::Source;
 
 use crate::{
+    error::warned::Warned,
     parser::ParserErrorReport,
     rule_file::RuleFile,
     rule_model::{
@@ -156,25 +157,74 @@ impl ProgramReport {
     }
 
     /// Merge a [ValidationReport] into this [ProgramReport].
-    pub fn merge_validation(&mut self, report: ValidationReport) {
-        self.merge_errors(report.context_errors());
+    pub fn merge_validation_report<Object: Debug>(
+        mut self,
+        result: Result<Object, ValidationReport>,
+    ) -> Result<(Object, Self), Self> {
+        match result {
+            Ok(object) => Ok((object, self)),
+            Err(report) => {
+                self.merge_errors(report.context_errors());
+                Err(self)
+            }
+        }
     }
 
     /// Merge a [ValidationReport] into this [TranslationReport].
-    pub fn merge_translation(&mut self, report: TranslationReport) {
+    pub fn merge_translation_report(&mut self, report: TranslationReport) {
         self.merge_errors(report.context_errors());
     }
 
     /// Merge a [ValidationReport] into this [ProgramReport].
-    pub fn merge_parser(&mut self, report: ParserErrorReport) {
+    pub fn merge_parser_report(&mut self, report: ParserErrorReport) {
         self.merge_errors(report.context_errors());
     }
 
-    /// Merge a [ValidationReport] into this [ProgramParseReport].
-    pub fn merge_program_parser(&mut self, report: ProgramParseReport) {
-        match report {
-            ProgramParseReport::Parsing(report) => self.merge_parser(report),
-            ProgramParseReport::Translation(report) => self.merge_translation(report),
+    /// Merge a [ProgramParseReport] into this [ProgramParseReport].
+    pub fn merge_program_parser_report<Object: Debug>(
+        mut self,
+        result: Result<Warned<Object, TranslationReport>, ProgramParseReport>,
+    ) -> Result<(Object, Self), Self> {
+        match result {
+            Ok(success) => {
+                let (object, report) = success.pair();
+                self.merge_translation_report(report);
+                Ok((object, self))
+            }
+            Err(report) => {
+                match report {
+                    ProgramParseReport::Parsing(report) => self.merge_parser_report(report),
+                    ProgramParseReport::Translation(report) => {
+                        self.merge_translation_report(report)
+                    }
+                };
+                Err(self)
+            }
+        }
+    }
+
+    /// Convert this report into a [Warned] object,
+    /// depending whether this report contains any errors or warnings.
+    pub fn warned<Object, W, E>(self, object: Object) -> Result<Warned<Object, W>, E>
+    where
+        Object: Debug,
+        W: Debug + From<Self>,
+        E: Debug + From<Self>,
+    {
+        if self.contains_errors() {
+            Err(E::from(self))
+        } else {
+            Ok(Warned::new(object, W::from(self)))
+        }
+    }
+
+    /// Convert this report into a [Result],
+    /// depending on whether it contains any errors.
+    pub fn result<Object: Debug>(self, object: Object) -> Result<Object, Self> {
+        if self.errors.is_empty() {
+            Ok(object)
+        } else {
+            Err(self)
         }
     }
 }

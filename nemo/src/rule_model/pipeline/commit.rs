@@ -1,93 +1,121 @@
 //! This module defines [ProgramCommit].
 
-use crate::rule_model::components::{
-    fact::Fact,
-    import_export::{ExportDirective, ImportDirective},
-    output::Output,
-    parameter::ParameterDeclaration,
-    rule::Rule,
+use std::{cell::UnsafeCell, rc::Rc};
+
+use crate::rule_model::{
+    components::{statement::Statement, ComponentIdentity},
+    error::ValidationReport,
+    pipeline::{revision::ProgramRevision, ProgramPipeline},
+    programs::{handle::ProgramHandle, ProgramWrite},
 };
 
-use super::{id::ProgramComponentId, state::ExtendStatementValidity};
+use super::id::ProgramComponentId;
 
-/// Defines a commit within a [super::super::pipeline::ProgramPipeline]
-#[derive(Debug, Default)]
+/// Differentiate new statements from existing statements
+#[derive(Debug, Clone, Copy)]
+enum StatementStatus {
+    /// Statement already exists within [super::ProgramPipeline]
+    Existing(ProgramComponentId),
+    /// Statement will be added with this commit
+    Fresh,
+}
+
+/// Defines a commit adding a new program into
+/// a [ProgramPipeline]
+#[derive(Debug)]
 pub struct ProgramCommit {
-    /// Determines what happens to the currently active statements
-    pub validity: ExtendStatementValidity,
+    /// Reference to the [ProgramPipeline]
+    pipeline: Rc<UnsafeCell<ProgramPipeline>>,
 
-    /// Ids of program components to be deleted
-    pub deleted: Vec<ProgramComponentId>,
-    /// Ids of program components to be kept
-    pub keep: Vec<ProgramComponentId>,
+    /// List of new statements to add
+    new: Vec<Statement>,
+    /// List of statement ids representing the new program
+    statements: Vec<StatementStatus>,
 
-    /// New rules
-    pub rules: Vec<Rule>,
-    /// New Facts
-    pub facts: Vec<Fact>,
-    /// New imports
-    pub imports: Vec<ImportDirective>,
-    /// New exports
-    pub exports: Vec<ExportDirective>,
-    /// New outputs
-    pub outputs: Vec<Output>,
-    /// New parameter declaration
-    pub parameters: Vec<ParameterDeclaration>,
+    /// Current [ValidationReport]
+    report: ValidationReport,
 }
 
 impl ProgramCommit {
-    /// Create a new empty [ProgramCommit].
-    pub fn new(validity: ExtendStatementValidity) -> Self {
+    /// Create a new [ProgramCommit] representing an empty program.
+    pub(crate) fn empty(
+        pipeline: Rc<UnsafeCell<ProgramPipeline>>,
+        report: ValidationReport,
+    ) -> Self {
         Self {
-            validity,
-            deleted: Vec::default(),
-            keep: Vec::default(),
-            rules: Vec::default(),
-            facts: Vec::default(),
-            imports: Vec::default(),
-            exports: Vec::default(),
-            outputs: Vec::default(),
-            parameters: Vec::default(),
+            pipeline,
+            new: Vec::default(),
+            statements: Vec::default(),
+            report,
         }
     }
 
-    /// Delete a program component.
-    pub fn delete(&mut self, id: ProgramComponentId) {
-        self.deleted.push(id);
+    /// Create a new [ProgramCommit] containing existing statements.
+    pub(crate) fn new<'a, StatementIter>(
+        pipeline: Rc<UnsafeCell<ProgramPipeline>>,
+        statements: StatementIter,
+        report: ValidationReport,
+    ) -> Self
+    where
+        StatementIter: Iterator<Item = &'a ProgramComponentId>,
+    {
+        Self {
+            pipeline,
+            new: Vec::default(),
+            statements: statements.cloned().map(StatementStatus::Existing).collect(),
+            report,
+        }
     }
 
-    /// Keep program component
-    pub fn keep(&mut self, id: ProgramComponentId) {
-        self.keep.push(id);
+    /// Return a refeference to the [ValidationReport].
+    pub fn report(&self) -> &ValidationReport {
+        &self.report
     }
 
-    /// Add a new [Rule].
-    pub fn add_rule(&mut self, rule: Rule) {
-        self.rules.push(rule);
+    /// Return a mutable reference to the [ValidationReport].
+    pub fn report_mut(&mut self) -> &mut ValidationReport {
+        &mut self.report
     }
 
-    /// Add a new [Fact].
-    pub fn add_fact(&mut self, fact: Fact) {
-        self.facts.push(fact);
+    /// Add an existing statement to this commit.
+    pub fn keep<Component: ComponentIdentity>(&mut self, statement: &Component) {
+        self.statements
+            .push(StatementStatus::Existing(statement.id()));
     }
 
-    /// Add a new [ImportDirective].
-    pub fn add_import(&mut self, import: ImportDirective) {
-        self.imports.push(import);
-    }
+    /// Submit this commit to its associated [ProgramPipeline].
+    pub fn submit(self) -> Result<ProgramHandle, ValidationReport> {
+        if self.report.contains_errors() {
+            return Err(self.report);
+        }
 
-    /// Add a new [ExportDirective].
-    pub fn add_export(&mut self, export: ExportDirective) {
-        self.exports.push(export);
-    }
+        let mut statements = Vec::with_capacity(self.statements.len());
+        let mut fresh = self.new.into_iter();
 
-    /// Add a new [Output].
-    pub fn add_output(&mut self, output: Output) {
-        self.outputs.push(output);
-    }
+        for status in self.statements {
+            match status {
+                StatementStatus::Existing(id) => statements.push(id),
+                StatementStatus::Fresh => {
+                    if let Some(fresh_statement) = fresh.next() {
+                        let pipeline = unsafe { &mut *self.pipeline.get() };
 
-    /// Add a new [ParameterDeclaration].
-    pub fn add_parameter(&mut self, parameter: ParameterDeclaration) {
-        self.parameters.push(parameter);
+                        let id = pipeline.new_statement(fresh_statement);
+                        statements.push(id);
+                    }
+                }
+            }
+        }
+
+        let pipeline = unsafe { &mut *self.pipeline.get() };
+        let revision = pipeline.new_revision(ProgramRevision::new(statements, self.report));
+
+        Ok(ProgramHandle::new(self.pipeline.clone(), revision))
+    }
+}
+
+impl ProgramWrite for ProgramCommit {
+    fn add_statement(&mut self, statement: Statement) {
+        self.new.push(statement);
+        self.statements.push(StatementStatus::Fresh)
     }
 }

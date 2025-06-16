@@ -1,15 +1,12 @@
-//! This module defines [Program].
+//! This module defines [Program] and [ProgramHandle].
 
-use std::{
-    collections::{hash_map::Entry, HashMap, HashSet},
-    fmt::Write,
-};
+use std::collections::{hash_map::Entry, HashMap, HashSet};
 
-use crate::rule_model::error::info::Info;
+use crate::rule_model::{components::statement::Statement, error::info::Info};
 
 use super::{
     components::{
-        component_iterator, component_iterator_mut,
+        component_iterator,
         fact::Fact,
         import_export::{ExportDirective, ImportDirective},
         literal::Literal,
@@ -18,99 +15,99 @@ use super::{
         rule::Rule,
         tag::Tag,
         term::primitive::variable::{global::GlobalVariable, Variable},
-        ComponentBehavior, ComponentIdentity, ComponentSource, IterableComponent,
-        IterableVariables, ProgramComponent, ProgramComponentKind,
+        IterableVariables, ProgramComponent,
     },
     error::{validation_error::ValidationError, ValidationReport},
-    origin::Origin,
-    pipeline::id::ProgramComponentId,
 };
 
-/// Representation of a nemo program
-#[derive(Debug, Default, Clone)]
-pub struct Program {
-    /// Origin of this component
-    origin: Origin,
-    /// Id of this component
-    id: ProgramComponentId,
-
-    /// Imported resources
-    imports: Vec<ImportDirective>,
-    /// Exported resources
-    exports: Vec<ExportDirective>,
-    /// Rules
-    rules: Vec<Rule>,
-    /// Facts
-    facts: Vec<Fact>,
-    /// Outputs
-    outputs: Vec<Output>,
-    /// Parameter declarations
-    parameters: Vec<ParameterDeclaration>,
-}
+pub mod handle;
+pub mod program;
 
 /// Trait implemented by program-like objects
 /// that allow adding statements
-pub trait ProgramWrite: Default {
+pub trait ProgramWrite {
+    /// Add a statement to the the program.
+    fn add_statement(&mut self, statement: Statement);
+
     /// Add a new export statement to the program.
-    fn add_export(&mut self, export: ExportDirective);
+    fn add_export(&mut self, export: ExportDirective) {
+        self.add_statement(export.into());
+    }
     /// Add a new import statement to the program.
-    fn add_import(&mut self, import: ImportDirective);
+    fn add_import(&mut self, import: ImportDirective) {
+        self.add_statement(import.into());
+    }
     /// Add a new output statement to the program.
-    fn add_output(&mut self, output: Output);
-    /// Add a new paramater declaration to the program.
-    fn add_parameter_declaration(&mut self, parameter: ParameterDeclaration);
-    /// Add a new rule to this program.
-    fn add_rule(&mut self, rule: Rule);
-    /// Add a new fact to this program.
-    fn add_fact(&mut self, fact: Fact);
-}
-
-impl ProgramWrite for Program {
-    fn add_export(&mut self, import: ExportDirective) {
-        self.exports.push(import);
-    }
-
-    fn add_import(&mut self, export: ImportDirective) {
-        self.imports.push(export);
-    }
-
     fn add_output(&mut self, output: Output) {
-        self.outputs.push(output);
+        self.add_statement(output.into());
     }
-
+    /// Add a new paramater declaration to the program.
     fn add_parameter_declaration(&mut self, parameter: ParameterDeclaration) {
-        self.parameters.push(parameter);
+        self.add_statement(parameter.into());
     }
-
+    /// Add a new rule to this program.
     fn add_rule(&mut self, rule: Rule) {
-        self.rules.push(rule);
+        self.add_statement(rule.into());
     }
-
+    /// Add a new fact to this program.
     fn add_fact(&mut self, fact: Fact) {
-        self.facts.push(fact);
+        self.add_statement(fact.into());
     }
 }
 
 /// Trait implemented by program-like objects that allows read access
 /// to its statements
 pub trait ProgramRead {
+    /// Return an iterator over all statements.
+    fn statements(&self) -> impl Iterator<Item = &Statement>;
+
     /// Return an iterator over all imports.
-    fn imports(&self) -> impl Iterator<Item = &ImportDirective>;
+    fn imports(&self) -> impl Iterator<Item = &ImportDirective> {
+        self.statements().filter_map(|statement| match statement {
+            Statement::Import(import) => Some(import),
+            _ => None,
+        })
+    }
 
     /// Return an iterator over all exports.
-    fn exports(&self) -> impl Iterator<Item = &ExportDirective>;
+    fn exports(&self) -> impl Iterator<Item = &ExportDirective> {
+        self.statements().filter_map(|statement| match statement {
+            Statement::Export(export) => Some(export),
+            _ => None,
+        })
+    }
 
     /// Return an iterator over all rules.
-    fn rules(&self) -> impl Iterator<Item = &Rule>;
+    fn rules(&self) -> impl Iterator<Item = &Rule> {
+        self.statements().filter_map(|statement| match statement {
+            Statement::Rule(rule) => Some(rule),
+            _ => None,
+        })
+    }
 
     /// Return an iterator over all facts.
-    fn facts(&self) -> impl Iterator<Item = &Fact>;
+    fn facts(&self) -> impl Iterator<Item = &Fact> {
+        self.statements().filter_map(|statement| match statement {
+            Statement::Fact(fact) => Some(fact),
+            _ => None,
+        })
+    }
 
     /// Return an iterator over all outputs.
-    fn outputs(&self) -> impl Iterator<Item = &Output>;
+    fn outputs(&self) -> impl Iterator<Item = &Output> {
+        self.statements().filter_map(|statement| match statement {
+            Statement::Output(output) => Some(output),
+            _ => None,
+        })
+    }
 
     /// Return an iterator over all parameter declarations.
-    fn parameters(&self) -> impl Iterator<Item = &ParameterDeclaration>;
+    fn parameters(&self) -> impl Iterator<Item = &ParameterDeclaration> {
+        self.statements().filter_map(|statement| match statement {
+            Statement::Parameter(parameter) => Some(parameter),
+            _ => None,
+        })
+    }
 
     /// Return the set of all predicates contained in this program.
     fn all_predicates(&self) -> HashSet<Tag> {
@@ -399,205 +396,5 @@ pub trait ProgramRead {
         {
             report.merge(component.validate());
         }
-    }
-}
-
-impl ProgramRead for Program {
-    fn imports(&self) -> impl Iterator<Item = &ImportDirective> {
-        self.imports.iter()
-    }
-
-    fn exports(&self) -> impl Iterator<Item = &ExportDirective> {
-        self.exports.iter()
-    }
-
-    fn rules(&self) -> impl Iterator<Item = &Rule> {
-        self.rules.iter()
-    }
-
-    fn facts(&self) -> impl Iterator<Item = &Fact> {
-        self.facts.iter()
-    }
-
-    fn outputs(&self) -> impl Iterator<Item = &Output> {
-        self.outputs.iter()
-    }
-
-    fn parameters(&self) -> impl Iterator<Item = &ParameterDeclaration> {
-        self.parameters.iter()
-    }
-}
-
-impl Program {
-    /// Return the rule at a particular index.
-    ///
-    /// # Panics
-    /// Panics if there is no rule at this position.
-    pub fn rule(&self, index: usize) -> &Rule {
-        &self.rules[index]
-    }
-
-    /// Return an iterator over all imports.
-    pub fn imports_mut(&mut self) -> impl Iterator<Item = &mut ImportDirective> {
-        self.imports.iter_mut()
-    }
-
-    /// Return an iterator over all exports.
-    pub fn exports_mut(&mut self) -> impl Iterator<Item = &mut ExportDirective> {
-        self.exports.iter_mut()
-    }
-
-    /// Return an iterator over all rules.
-    pub fn rules_mut(&mut self) -> impl Iterator<Item = &mut Rule> {
-        self.rules.iter_mut()
-    }
-
-    /// Return an iterator over all facts.
-    pub fn facts_mut(&mut self) -> impl Iterator<Item = &mut Fact> {
-        self.facts.iter_mut()
-    }
-
-    /// Return an iterator over all outputs.
-    pub fn outputs_mut(&mut self) -> impl Iterator<Item = &mut Output> {
-        self.outputs.iter_mut()
-    }
-
-    /// Add new export statements to the program.
-    pub fn add_exports<Iterator: IntoIterator<Item = ExportDirective>>(
-        &mut self,
-        exports: Iterator,
-    ) {
-        self.exports.extend(exports)
-    }
-
-    /// Remove all export statements
-    pub fn clear_exports(&mut self) {
-        self.exports.clear();
-    }
-
-    /// Remove all export statements
-    pub fn clear_imports(&mut self) {
-        self.imports.clear();
-    }
-}
-
-impl ComponentBehavior for Program {
-    fn kind(&self) -> ProgramComponentKind {
-        ProgramComponentKind::Program
-    }
-
-    fn validate(&self) -> Result<(), ValidationReport> {
-        let mut report = ValidationReport::default();
-
-        for child in self.children() {
-            report.merge(child.validate());
-        }
-
-        self.validate_arity(&mut report);
-        self.validate_stdin_imports(&mut report);
-
-        report.result()
-    }
-
-    fn boxed_clone(&self) -> Box<dyn ProgramComponent> {
-        Box::new(self.clone())
-    }
-}
-
-impl ComponentSource for Program {
-    type Source = Origin;
-
-    fn origin(&self) -> Origin {
-        self.origin.clone()
-    }
-
-    fn set_origin(&mut self, origin: Origin) {
-        self.origin = origin;
-    }
-}
-
-impl ComponentIdentity for Program {
-    fn id(&self) -> ProgramComponentId {
-        self.id
-    }
-
-    fn set_id(&mut self, id: ProgramComponentId) {
-        self.id = id;
-    }
-}
-
-impl IterableComponent for Program {
-    fn children<'a>(&'a self) -> Box<dyn Iterator<Item = &'a dyn ProgramComponent> + 'a> {
-        let rule_iterator = component_iterator(self.rules.iter());
-        let fact_iterator = component_iterator(self.facts.iter());
-        let output_iterator = component_iterator(self.outputs.iter());
-        let import_iterator = component_iterator(self.imports.iter());
-        let export_iterator = component_iterator(self.exports.iter());
-        let parameter_iterator = component_iterator(self.parameters.iter());
-
-        Box::new(
-            rule_iterator
-                .chain(fact_iterator)
-                .chain(output_iterator)
-                .chain(import_iterator)
-                .chain(export_iterator)
-                .chain(parameter_iterator),
-        )
-    }
-
-    fn children_mut<'a>(
-        &'a mut self,
-    ) -> Box<dyn Iterator<Item = &'a mut dyn ProgramComponent> + 'a> {
-        let rule_iterator = component_iterator_mut(self.rules.iter_mut());
-        let fact_iterator = component_iterator_mut(self.facts.iter_mut());
-        let output_iterator = component_iterator_mut(self.outputs.iter_mut());
-        let import_iterator = component_iterator_mut(self.imports.iter_mut());
-        let export_iterator = component_iterator_mut(self.exports.iter_mut());
-        let parameter_iterator = component_iterator_mut(self.parameters.iter_mut());
-
-        Box::new(
-            rule_iterator
-                .chain(fact_iterator)
-                .chain(output_iterator)
-                .chain(import_iterator)
-                .chain(export_iterator)
-                .chain(parameter_iterator),
-        )
-    }
-}
-
-impl std::fmt::Display for Program {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        for parameter in self.parameters() {
-            parameter.fmt(f)?;
-            f.write_char('\n')?;
-        }
-
-        for import in self.imports() {
-            import.fmt(f)?;
-            f.write_char('\n')?;
-        }
-
-        for fact in self.facts() {
-            fact.fmt(f)?;
-            f.write_char('\n')?;
-        }
-
-        for rule in self.rules() {
-            rule.fmt(f)?;
-            f.write_char('\n')?;
-        }
-
-        for output in self.outputs() {
-            output.fmt(f)?;
-            f.write_char('\n')?;
-        }
-
-        for export in self.exports() {
-            export.fmt(f)?;
-            f.write_char('\n')?;
-        }
-
-        Ok(())
     }
 }

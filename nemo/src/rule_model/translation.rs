@@ -15,7 +15,7 @@ use attribute::{process_attributes, KnownAttributes};
 use directive::{handle_define_directive, handle_use_directive};
 
 use crate::{
-    error::{report::ProgramReport, warned::Warned},
+    error::report::ProgramReport,
     parser::{
         ast::{self, ProgramAST},
         error::translate_error_tree,
@@ -23,13 +23,13 @@ use crate::{
         ParserErrorReport, ParserState,
     },
     rule_file::RuleFile,
+    rule_model::programs::ProgramWrite,
     util::bag::Bag,
 };
 
 use super::{
     components::{fact::Fact, rule::Rule, term::Term},
     error::{translation_error::TranslationError, TranslationReport},
-    program::ProgramWrite,
 };
 
 /// Object for handling the translation of the ast representation
@@ -70,13 +70,12 @@ impl ASTProgramTranslation {
         }
     }
 
-    /// Translate the given [ProgramAST] into a [Program].
+    /// Translate the given [ProgramAST] into a [ProgramWrite].
     pub fn translate<'a, Writer: Debug + ProgramWrite>(
         mut self,
         ast: &ast::program::Program<'a>,
-    ) -> Result<Warned<Writer, TranslationReport>, TranslationReport> {
-        let mut program = Writer::default();
-
+        program: &mut Writer,
+    ) -> TranslationReport {
         // First, handle directives
         for statement in ast.statements() {
             if let ast::statement::StatementKind::Directive(directive) = statement.kind() {
@@ -100,7 +99,7 @@ impl ASTProgramTranslation {
                     }
                 }
                 ast::statement::StatementKind::Directive(directive) => {
-                    handle_use_directive(&mut self, directive, &mut program);
+                    handle_use_directive(&mut self, directive, program);
                 }
                 ast::statement::StatementKind::Error(_token) => {
                     panic!(
@@ -112,7 +111,7 @@ impl ASTProgramTranslation {
             self.statement_attributes.clear();
         }
 
-        self.report.warned(program)
+        self.report
     }
 
     /// Recreate the name from a [ast::tag::structure::StructureTag]

@@ -18,7 +18,7 @@ use nemo::{
             term::{primitive::Primitive, Term},
             ComponentBehavior,
         },
-        program::ProgramRead,
+        programs::ProgramRead,
         substitution::Substitution,
     },
 };
@@ -55,7 +55,7 @@ impl<T> PythonResult for (T, Vec<Error>) {
 
 #[pyclass]
 #[derive(Clone)]
-struct NemoProgram(nemo::rule_model::program::Program);
+struct NemoProgram(nemo::rule_model::programs::program::Program);
 
 #[pyfunction]
 fn load_file(file: String) -> PyResult<NemoProgram> {

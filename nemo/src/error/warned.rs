@@ -12,7 +12,7 @@ where
     /// Object
     object: O,
     /// Warning
-    warning: Option<W>,
+    warning: W,
 }
 
 impl<O, W> Warned<O, W>
@@ -21,7 +21,7 @@ where
     W: Debug,
 {
     /// Create a new [Warned].
-    pub fn new(object: O, warning: Option<W>) -> Self {
+    pub fn new(object: O, warning: W) -> Self {
         Self { object, warning }
     }
 
@@ -31,12 +31,12 @@ where
     }
 
     /// Return a reference to the warning.
-    pub fn warning(&self) -> Option<&W> {
-        self.warning.as_ref()
+    pub fn warning(&self) -> &W {
+        &self.warning
     }
 
     /// Return the object and warning as a pair
-    pub fn pair(self) -> (O, Option<W>) {
+    pub fn pair(self) -> (O, W) {
         (self.object, self.warning)
     }
 
@@ -52,7 +52,7 @@ where
     {
         Warned {
             object: self.object,
-            warning: self.warning.map(V::from),
+            warning: V::from(self.warning),
         }
     }
 }

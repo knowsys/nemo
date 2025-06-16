@@ -22,8 +22,11 @@ pub mod translation_error;
 pub mod validation_error;
 
 /// Error message associated with a source
-#[derive(Debug)]
-pub(crate) struct SourceMessage<Source> {
+#[derive(Debug, Clone)]
+pub(crate) struct SourceMessage<Source>
+where
+    Source: Clone,
+{
     /// Source
     source: Source,
     /// Message
@@ -31,11 +34,11 @@ pub(crate) struct SourceMessage<Source> {
 }
 
 /// Error associated wiht a source
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct SourceError<Source, Error>
 where
-    Error: Debug + RichError,
-    Source: Debug,
+    Error: Debug + Clone + RichError,
+    Source: Debug + Clone,
 {
     /// Error
     error: Error,
@@ -49,7 +52,7 @@ where
 
 impl<Source, Error> SourceError<Source, Error>
 where
-    Error: Debug + RichError,
+    Error: Debug + Clone + RichError,
     Source: Debug + Clone,
 {
     /// Create a new [SourceError].
@@ -118,11 +121,11 @@ where
 }
 
 /// Report containing multiple errors
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct SourceErrorReport<Source, Error>
 where
-    Error: Debug + RichError,
-    Source: Debug,
+    Error: Debug + Clone + RichError,
+    Source: Debug + Clone,
 {
     /// List of errors
     errors: Vec<SourceError<Source, Error>>,
@@ -130,8 +133,8 @@ where
 
 impl<Source, Error> Display for SourceErrorReport<Source, Error>
 where
-    Error: Debug + Display + RichError,
-    Source: Debug,
+    Error: Debug + Clone + Display + RichError,
+    Source: Debug + Clone,
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         for (index, error) in self.errors.iter().enumerate() {
@@ -148,8 +151,8 @@ where
 
 impl<Source, Error> Default for SourceErrorReport<Source, Error>
 where
-    Error: Debug + RichError,
-    Source: Debug,
+    Error: Debug + Clone + RichError,
+    Source: Debug + Clone,
 {
     fn default() -> Self {
         Self {
@@ -160,7 +163,7 @@ where
 
 impl<Source, Error> SourceErrorReport<Source, Error>
 where
-    Error: Debug + RichError,
+    Error: Debug + Clone + RichError,
     Source: Debug + Clone,
 {
     /// Create a new report containing the given error.
@@ -212,13 +215,16 @@ where
 
     /// Convert this report into a [Warned] object,
     /// depending whether this report contains any errors or warnings.
-    pub fn warned<Object: Debug>(self, object: Object) -> Result<Warned<Object, Self>, Self> {
+    pub fn warned<Object, W, E>(self, object: Object) -> Result<Warned<Object, W>, E>
+    where
+        Object: Debug,
+        W: Debug + From<Self>,
+        E: Debug + From<Self>,
+    {
         if self.contains_errors() {
-            Err(self)
-        } else if self.errors.is_empty() {
-            Ok(Warned::new(object, None))
+            Err(E::from(self))
         } else {
-            Ok(Warned::new(object, Some(self)))
+            Ok(Warned::new(object, W::from(self)))
         }
     }
 
@@ -274,7 +280,7 @@ where
 }
 
 /// Error that can occur because of incorrectly constructed program components
-#[derive(Debug, Default)]
+#[derive(Debug, Clone, Default)]
 pub struct ValidationReport(SourceErrorReport<Origin, ValidationError>);
 
 impl Display for ValidationReport {
@@ -318,13 +324,16 @@ impl ValidationReport {
 
     /// Convert this report into a [Warned] object,
     /// depending whether this report contains any errors or warnings.
-    pub fn warned<Object: Debug>(self, object: Object) -> Result<Warned<Object, Self>, Self> {
+    pub fn warned<Object, W, E>(self, object: Object) -> Result<Warned<Object, W>, E>
+    where
+        Object: Debug,
+        W: Debug + From<Self>,
+        E: Debug + From<Self>,
+    {
         if self.contains_errors() {
-            Err(self)
-        } else if self.is_empty() {
-            Ok(Warned::new(object, None))
+            Err(E::from(self))
         } else {
-            Ok(Warned::new(object, Some(self)))
+            Ok(Warned::new(object, W::from(self)))
         }
     }
 
@@ -373,7 +382,7 @@ impl ValidationReport {
 }
 
 /// Error that can occur due to syntactically ill formed statements
-#[derive(Debug, Default)]
+#[derive(Debug, Clone, Default)]
 pub struct TranslationReport(SourceErrorReport<Range<usize>, TranslationError>);
 
 impl Display for TranslationReport {
@@ -417,13 +426,16 @@ impl TranslationReport {
 
     /// Convert this report into a [Warned] object,
     /// depending whether this report contains any errors or warnings.
-    pub fn warned<Object: Debug>(self, object: Object) -> Result<Warned<Object, Self>, Self> {
+    pub fn warned<Object, W, E>(self, object: Object) -> Result<Warned<Object, W>, E>
+    where
+        Object: Debug,
+        W: Debug + From<Self>,
+        E: Debug + From<Self>,
+    {
         if self.contains_errors() {
-            Err(self)
-        } else if self.is_empty() {
-            Ok(Warned::new(object, None))
+            Err(E::from(self))
         } else {
-            Ok(Warned::new(object, Some(self)))
+            Ok(Warned::new(object, W::from(self)))
         }
     }
 
@@ -461,7 +473,7 @@ impl TranslationReport {
     /// Translate this [TranslationReport] into a [ProgramReport].
     pub fn program_report(self, file: RuleFile) -> ProgramReport {
         let mut report = ProgramReport::new(file);
-        report.merge_translation(self);
+        report.merge_translation_report(self);
         report
     }
 }

@@ -32,12 +32,13 @@ impl ProgramChaseTranslation {
     ///     * the body contains any aggregates
     pub(crate) fn build_rule(
         &mut self,
-        rule: &mut crate::rule_model::components::rule::Rule,
+        rule: &crate::rule_model::components::rule::Rule,
     ) -> ChaseRule {
+        let mut rule = rule.clone();
         let mut result = ChaseRule::default();
 
-        let variable_assignments = Self::variables_assignments(rule);
-        Self::apply_variable_assignment(rule, &variable_assignments);
+        let variable_assignments = Self::variables_assignments(&mut rule);
+        Self::apply_variable_assignment(&mut rule, &variable_assignments);
 
         // Handle positive and negative atoms
         for literal in rule.body() {
@@ -67,7 +68,7 @@ impl ProgramChaseTranslation {
         }
 
         // Handle operations
-        self.handle_operations(&mut result, rule);
+        self.handle_operations(&mut result, &mut rule);
 
         // Handle head
         self.handle_head(&mut result, rule.head());

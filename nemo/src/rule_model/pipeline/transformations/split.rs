@@ -1,10 +1,9 @@
 //! This module defines [TransformationSplitRule].
 
 use crate::rule_model::{
-    components::{rule::Rule, ComponentIdentity},
+    components::{rule::Rule, statement::Statement},
     error::ValidationReport,
-    pipeline::{commit::ProgramCommit, ProgramPipeline},
-    program::ProgramRead,
+    programs::{handle::ProgramHandle, ProgramRead, ProgramWrite},
 };
 
 use super::ProgramTransformation;
@@ -22,21 +21,25 @@ use super::ProgramTransformation;
 pub struct TransformationSplitRule {}
 
 impl ProgramTransformation for TransformationSplitRule {
-    fn apply(self, pipeline: &mut ProgramPipeline, _report: &mut ValidationReport) {
-        let mut commit = ProgramCommit::default();
+    fn apply(self, program: &ProgramHandle) -> Result<ProgramHandle, ValidationReport> {
+        let mut commit = program.fork();
 
-        for rule in pipeline.rules() {
-            if rule.head().len() > 1 {
-                commit.delete(rule.id());
+        for statement in program.statements() {
+            if let Statement::Rule(rule) = statement {
+                if rule.head().len() > 1 {
+                    for head in rule.head() {
+                        let new_rule = Rule::new(vec![head.clone()], rule.body().clone());
 
-                for head in rule.head() {
-                    let new_rule = Rule::new(vec![head.clone()], rule.body().clone());
-
-                    commit.add_rule(new_rule);
+                        commit.add_rule(new_rule);
+                    }
+                } else {
+                    commit.keep(rule);
                 }
+            } else {
+                commit.keep(statement);
             }
         }
 
-        pipeline.commit(commit);
+        commit.submit()
     }
 }

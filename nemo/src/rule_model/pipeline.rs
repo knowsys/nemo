@@ -1,69 +1,45 @@
 //! This module defines [ProgramPipeline].
 
-use commit::ProgramCommit;
+use std::{cell::UnsafeCell, rc::Rc};
+
 use id::ProgramComponentId;
-use state::{ExtendStatementValidity, ProgramState};
-use transformations::ProgramTransformation;
 
-use crate::{
-    error::warned::Warned, parser::Parser, rule_file::RuleFile,
-    rule_model::translation::ASTProgramTranslation,
+use crate::rule_model::{
+    components::statement::Statement,
+    pipeline::revision::ProgramRevision,
+    programs::{program::Program, ProgramWrite},
 };
 
-use super::{
-    components::{
-        atom::Atom,
-        fact::Fact,
-        import_export::{ExportDirective, ImportDirective},
-        output::Output,
-        parameter::ParameterDeclaration,
-        rule::Rule,
-        IterableComponent, ProgramComponent,
-    },
-    error::ValidationReport,
-    program::{Program, ProgramRead, ProgramWrite},
-    translation::ProgramParseReport,
-};
+use super::components::{atom::Atom, rule::Rule, IterableComponent, ProgramComponent};
 
 pub mod commit;
 pub mod id;
-pub mod state;
+pub mod revision;
 pub mod transformations;
 
-/// Big manager object
-#[derive(Debug)]
+/// Program Manager
+///
+/// Contains different versions of nemo programs.
+#[derive(Debug, Clone, Default)]
 pub struct ProgramPipeline {
-    /// Contains state of the program at every commit
-    state: ProgramState,
+    /// All statements that have been constructed.
+    /// Some may only be valid within certain revisions.
+    statements: Vec<Statement>,
 
-    /// Current id
-    current_id: ProgramComponentId,
-}
-
-impl Default for ProgramPipeline {
-    fn default() -> Self {
-        Self {
-            state: ProgramState::new(),
-            current_id: ProgramComponentId::start(),
-        }
-    }
+    /// Collection of all revisions, i.e. version of nemo prorams
+    revisions: Vec<ProgramRevision>,
 }
 
 impl ProgramPipeline {
-    /// Initilaize a [ProgramPipeline] with the contents of a given [RuleFile].
-    pub fn file(file: &RuleFile) -> Result<Warned<Self, ProgramParseReport>, ProgramParseReport> {
-        let parser = Parser::initialize(file.content());
-        let ast = parser.parse().map_err(|(_tail, report)| report)?;
-
-        let translation = ASTProgramTranslation::default();
-        Ok(translation.translate::<Self>(&ast)?.into())
+    /// Create a new managed [ProgramPipeline].
+    pub fn new() -> Rc<UnsafeCell<Self>> {
+        Rc::new(UnsafeCell::new(Self::default()))
     }
-}
 
-impl ProgramPipeline {
-    /// Search for the [ProgramComponent] with a given [ProgramComponentId].
+    /// Search for the [ProgramComponent] with a given [ProgramComponentId]
+    /// within the child components of `component`.
     ///
-    /// Returns `None` if there is no  [ProgramComponent] with that [ProgramComponentId].
+    /// Returns `None` if there is no [ProgramComponent] could be found.
     fn find_child_component(
         component: &dyn IterableComponent,
         id: ProgramComponentId,
@@ -91,7 +67,20 @@ impl ProgramPipeline {
     ///
     /// Returns `None` if there is no  [ProgramComponent] with that [ProgramComponentId].
     pub fn find_component(&self, id: ProgramComponentId) -> Option<&dyn ProgramComponent> {
-        Self::find_child_component(&self.state, id)
+        let component_statement: &dyn ProgramComponent = self.statements.get(id.statement())?;
+        if id.is_statement() {
+            return Some(component_statement);
+        }
+
+        Self::find_child_component(component_statement, id)
+    }
+
+    /// Given a [ProgramComponentId] return the corresponding [Statement],
+    ///
+    /// # Panics
+    /// Pancis if no statement with this id exists.
+    pub fn statement(&self, id: ProgramComponentId) -> &Statement {
+        &self.statements[id.statement()]
     }
 
     /// Given a [ProgramComponentId] return the corresponding [Rule],
@@ -107,218 +96,69 @@ impl ProgramPipeline {
         self.find_component(id)
             .and_then(|component| component.try_as_ref())
     }
-}
 
-impl ProgramPipeline {
     /// Assigns a [ProgramComponentId] to every (sub) [ProgramComponent].
-    fn register_component(&mut self, component: &mut dyn ProgramComponent) -> ProgramComponentId {
-        let id = self.current_id.increment();
-        component.set_id(id);
+    fn register_component(component: &mut dyn ProgramComponent, parent_id: ProgramComponentId) {
+        for child in component.children_mut() {
+            let child_id = parent_id.increment_component();
+            child.set_id(child_id);
 
-        for sub in component.children_mut() {
-            self.register_component(sub);
+            Self::register_component(child, child_id)
         }
+    }
+
+    /// Assign a [ProgramComponentId] to the given statement and its child components.
+    fn register_statement<Component: ProgramComponent>(
+        &self,
+        statement: &mut Component,
+    ) -> ProgramComponentId {
+        let id = ProgramComponentId::new_statement(self.statements.len());
+
+        Self::register_component(statement, id);
+        statement.set_id(id);
 
         id
     }
 
-    /// Add a [Rule] to the current program.
-    pub fn add_rule(&mut self, mut rule: Rule) -> ProgramComponentId {
-        let component: &mut dyn ProgramComponent = &mut rule;
-        let id = self.register_component(component);
+    /// Add a [Statement] to the given revision.
+    fn new_statement<S>(&mut self, statement: S) -> ProgramComponentId
+    where
+        S: Into<Statement>,
+    {
+        let mut statement: Statement = statement.into();
 
-        self.state.add_rule(rule);
-
-        id
-    }
-
-    /// Add a [Fact] to the current program.
-    pub fn add_fact(&mut self, mut fact: Fact) -> ProgramComponentId {
-        let component: &mut dyn ProgramComponent = &mut fact;
-        let id = self.register_component(component);
-
-        self.state.add_fact(fact);
+        let id = self.register_statement(&mut statement);
+        self.statements.push(statement);
 
         id
     }
 
-    /// Add a [ImportDirective] to the current program.
-    pub fn add_import(&mut self, mut import: ImportDirective) -> ProgramComponentId {
-        let component: &mut dyn ProgramComponent = &mut import;
-        let id = self.register_component(component);
-
-        self.state.add_import(import);
-
-        id
+    /// Return a reference to the [ProgramRevision]
+    /// with the given number.
+    ///
+    /// # Panics
+    /// Panics if no revision exists at that index.
+    pub fn revision(&self, revision: usize) -> &ProgramRevision {
+        &self.revisions[revision]
     }
 
-    /// Add a [ImportDirective] to the current program.
-    pub fn add_export(&mut self, mut export: ExportDirective) -> ProgramComponentId {
-        let component: &mut dyn ProgramComponent = &mut export;
-        let id = self.register_component(component);
+    /// Add a new [ProgramRevision] to the pipeline
+    /// via a [ProgramCommit] and returns a [ProgramHandle]
+    pub(crate) fn new_revision(&mut self, revision: ProgramRevision) -> usize {
+        let num_revisions = self.revisions.len();
+        self.revisions.push(revision);
 
-        self.state.add_export(export);
-
-        id
+        num_revisions
     }
 
-    /// Add a [Output] to the current program.
-    pub fn add_output(&mut self, mut output: Output) -> ProgramComponentId {
-        let component: &mut dyn ProgramComponent = &mut output;
-        let id = self.register_component(component);
-
-        self.state.add_output(output);
-
-        id
-    }
-
-    /// Add a [ParameterDeclaration] to the current program.
-    pub fn add_parameter(&mut self, mut parameter: ParameterDeclaration) -> ProgramComponentId {
-        let component: &mut dyn ProgramComponent = &mut parameter;
-        let id = self.register_component(component);
-
-        self.state.add_parameter(parameter);
-
-        id
-    }
-
-    /// Prepare a new commit.
-    fn prepare(&mut self, extend: ExtendStatementValidity) {
-        self.state.prepare(extend);
-    }
-
-    /// Apply a commit.
-    pub fn commit(&mut self, commit: ProgramCommit) {
-        self.prepare(commit.validity);
-
-        for id in commit.deleted {
-            self.state.delete(id);
-        }
-
-        for id in commit.keep {
-            self.state.keep(id);
-        }
-
-        for rule in commit.rules {
-            self.add_rule(rule);
-        }
-
-        for fact in commit.facts {
-            self.add_fact(fact);
-        }
-
-        for import in commit.imports {
-            self.add_import(import);
-        }
-
-        for export in commit.exports {
-            self.add_export(export);
-        }
-
-        for output in commit.outputs {
-            self.add_output(output);
-        }
-
-        for parameter in commit.parameters {
-            self.add_parameter(parameter);
-        }
-    }
-
-    /// Apply a [ProgramTransformation].
-    pub fn apply_transformation<Transformation: ProgramTransformation>(
-        &mut self,
-        report: &mut ValidationReport,
-        transformation: Transformation,
-    ) {
-        transformation.apply(self, report);
-    }
-
-    /// Return the currently valid program.
+    /// Turn the last revision into a standalone [Program].
     pub fn finalize(self) -> Program {
-        self.state.finalize()
-    }
-}
+        let mut program = Program::default();
 
-impl ProgramWrite for ProgramPipeline {
-    fn add_export(&mut self, export: ExportDirective) {
-        self.add_export(export);
-    }
+        for statement in self.statements {
+            program.add_statement(statement);
+        }
 
-    fn add_import(&mut self, import: ImportDirective) {
-        self.add_import(import);
-    }
-
-    fn add_output(&mut self, output: Output) {
-        self.add_output(output);
-    }
-
-    fn add_parameter_declaration(&mut self, parameter: ParameterDeclaration) {
-        self.add_parameter(parameter);
-    }
-
-    fn add_rule(&mut self, rule: Rule) {
-        self.add_rule(rule);
-    }
-
-    fn add_fact(&mut self, fact: Fact) {
-        self.add_fact(fact);
-    }
-}
-
-impl ProgramRead for ProgramPipeline {
-    fn imports(&self) -> impl Iterator<Item = &ImportDirective> {
-        self.state.imports()
-    }
-
-    fn exports(&self) -> impl Iterator<Item = &ExportDirective> {
-        self.state.exports()
-    }
-
-    fn rules(&self) -> impl Iterator<Item = &Rule> {
-        self.state.rules()
-    }
-
-    fn facts(&self) -> impl Iterator<Item = &Fact> {
-        self.state.facts()
-    }
-
-    fn outputs(&self) -> impl Iterator<Item = &Output> {
-        self.state.outputs()
-    }
-
-    fn parameters(&self) -> impl Iterator<Item = &ParameterDeclaration> {
-        self.state.parameters()
-    }
-}
-
-impl std::fmt::Display for ProgramPipeline {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.state.fmt(f)
-    }
-}
-
-#[cfg(test)]
-mod test {
-    use crate::rule_model::components::{
-        atom::Atom, literal::Literal, rule::Rule, ComponentIdentity,
-    };
-
-    use super::ProgramPipeline;
-
-    #[test]
-    fn find_atom() {
-        let mut pipeline = ProgramPipeline::default();
-
-        let head_atom = Atom::new("head".into(), vec![]);
-        let body_atom = Atom::new("body".into(), vec![]);
-
-        let rule = Rule::new(vec![head_atom], vec![Literal::Positive(body_atom)]);
-        let rule_id = pipeline.add_rule(rule);
-        let rule = pipeline.rule_by_id(rule_id).unwrap();
-
-        let head = &rule.head()[0];
-        let head = pipeline.atom_by_id(head.id()).unwrap();
-
-        assert_eq!(head.predicate().to_string(), "head".to_owned());
+        program
     }
 }

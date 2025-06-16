@@ -26,7 +26,7 @@ use nemo::{
             tag::Tag,
             term::{primitive::Primitive, Term},
         },
-        program::{ProgramRead, ProgramWrite},
+        programs::{program::Program, ProgramRead, ProgramWrite},
         translation::ProgramParseReport,
     },
 };
@@ -37,7 +37,7 @@ mod language_server;
 
 #[wasm_bindgen]
 #[derive(Clone)]
-pub struct NemoProgram(nemo::rule_model::program::Program);
+pub struct NemoProgram(Program);
 
 #[derive(Error, Debug)]
 enum WasmOrInternalNemoError {
@@ -98,17 +98,17 @@ impl NemoProgram {
             }
         };
 
-        let translated =
-            match nemo::rule_model::translation::ASTProgramTranslation::default().translate(&ast) {
-                Ok(translated) => translated.into_object(),
-                Err(report) => {
-                    return Err(NemoError(WasmOrInternalNemoError::Program(format!(
-                        "{report}"
-                    ))))
-                }
-            };
+        let mut program = Program::default();
+        let report = nemo::rule_model::translation::ASTProgramTranslation::default()
+            .translate(&ast, &mut program);
 
-        Ok(NemoProgram(translated))
+        if report.contains_errors() {
+            return Err(NemoError(WasmOrInternalNemoError::Program(format!(
+                "{report}"
+            ))));
+        }
+
+        Ok(NemoProgram(program))
     }
 
     /// Get all resources that are referenced in import directives of the program.

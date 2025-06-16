@@ -3,7 +3,16 @@
 use std::{fmt::Display, hash::Hash};
 
 use crate::rule_model::{
-    error::ValidationReport, origin::Origin, pipeline::id::ProgramComponentId,
+    components::{
+        term::{
+            primitive::{variable::Variable, Primitive},
+            Term,
+        },
+        IterablePrimitives, IterableVariables,
+    },
+    error::ValidationReport,
+    origin::Origin,
+    pipeline::id::ProgramComponentId,
 };
 
 use super::{
@@ -98,3 +107,22 @@ impl ComponentIdentity for Output {
 }
 
 impl IterableComponent for Output {}
+
+impl IterableVariables for Output {
+    fn variables<'a>(&'a self) -> Box<dyn Iterator<Item = &'a Variable> + 'a> {
+        Box::new(std::iter::empty())
+    }
+
+    fn variables_mut<'a>(&'a mut self) -> Box<dyn Iterator<Item = &'a mut Variable> + 'a> {
+        Box::new(std::iter::empty())
+    }
+}
+impl IterablePrimitives for Output {
+    fn primitive_terms<'a>(&'a self) -> Box<dyn Iterator<Item = &'a Primitive> + 'a> {
+        Box::new(std::iter::empty())
+    }
+
+    fn primitive_terms_mut<'a>(&'a mut self) -> Box<dyn Iterator<Item = &'a mut Term> + 'a> {
+        Box::new(std::iter::empty())
+    }
+}

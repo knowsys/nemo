@@ -29,9 +29,8 @@ use crate::{
             tag::Tag,
             term::primitive::{ground::GroundTerm, variable::Variable, Primitive},
         },
-        error::ValidationReport,
-        pipeline::{transformations::default::TransformationDefault, ProgramPipeline},
-        program::Program,
+        pipeline::transformations::default::TransformationDefault,
+        programs::{handle::ProgramHandle, program::Program},
         substitution::Substitution,
     },
     table_manager::{MemoryUsage, SubtableExecutionPlan, TableManager},
@@ -99,46 +98,25 @@ pub struct ExecutionEngine<RuleSelectionStrategy> {
 impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
     /// Initialize a [ExecutionEngine] by parsing and translating
     /// the contents of the given file.
-    pub fn file(
+    pub fn from_file(
         file: RuleFile,
         parameters: ExecutionParameters,
     ) -> Result<Warned<Self, ProgramReport>, Error> {
-        let import_manager = parameters.import_manager.clone();
+        let handle = ProgramHandle::from_file(&file);
+        let report = ProgramReport::new(file);
 
-        let (mut pipeline, parsing_report) = match ProgramPipeline::file(&file) {
-            Ok(pipeline) => pipeline.pair(),
-            Err(errors) => return Err(errors.program_report(file).into()),
-        };
+        let (program, report) = report.merge_program_parser_report(handle)?;
+        let (program, report) = report
+            .merge_validation_report(program.transform(TransformationDefault::new(&parameters)))?;
 
-        let mut validation_report = ValidationReport::default();
-        pipeline.apply_transformation(
-            &mut validation_report,
-            TransformationDefault::new(parameters),
-        );
+        let engine = Self::initialize(program.materialize(), parameters.import_manager)?;
 
-        let mut report = ProgramReport::new(file);
-        if let Some(parsing_report) = parsing_report {
-            report.merge_program_parser(parsing_report)
-        }
-
-        report.merge_validation(validation_report);
-
-        if report.contains_errors() {
-            Err(Error::ProgramReport(report))
-        } else {
-            let engine = Self::initialize(pipeline.finalize(), import_manager)?;
-
-            if report.is_empty() {
-                Ok(Warned::new(engine, None))
-            } else {
-                Ok(Warned::new(engine, Some(report)))
-            }
-        }
+        report.warned(engine)
     }
 
     /// Initialize [ExecutionEngine].
     pub fn initialize(program: Program, import_manager: ImportManager) -> Result<Self, Error> {
-        let chase_program = ProgramChaseTranslation::new().translate(program.clone());
+        let chase_program = ProgramChaseTranslation::new().translate(&program);
         let analysis = chase_program.analyze();
 
         let mut table_manager = TableManager::new();

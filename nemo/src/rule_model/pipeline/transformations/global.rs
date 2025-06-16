@@ -4,15 +4,11 @@ use std::collections::{HashMap, HashSet};
 
 use crate::rule_model::{
     components::{
-        term::{
-            primitive::{ground::GroundTerm, variable::global::GlobalVariable},
-            Term,
-        },
-        ComponentIdentity, IterablePrimitives, IterableVariables, ProgramComponent,
+        term::primitive::{ground::GroundTerm, variable::global::GlobalVariable},
+        IterableVariables,
     },
     error::ValidationReport,
-    pipeline::{commit::ProgramCommit, ProgramPipeline},
-    program::ProgramRead,
+    programs::{handle::ProgramHandle, ProgramRead, ProgramWrite},
     substitution::Substitution,
 };
 
@@ -23,25 +19,25 @@ use super::ProgramTransformation;
 /// Replaces each occurrence of a global variable
 /// with the term it evaluates to.
 #[derive(Debug)]
-pub struct TransformationGlobal {
+pub struct TransformationGlobal<'a> {
     /// Externally set global variables
-    external: HashMap<GlobalVariable, GroundTerm>,
+    external: &'a HashMap<GlobalVariable, GroundTerm>,
 }
 
-impl TransformationGlobal {
+impl<'a> TransformationGlobal<'a> {
     /// Create a new [TransformationGlobal].
-    pub fn new(external: HashMap<GlobalVariable, GroundTerm>) -> Self {
+    pub fn new(external: &'a HashMap<GlobalVariable, GroundTerm>) -> Self {
         Self { external }
     }
 
     /// Compute a [Substitution] based on external parameters
     /// and paramater declarations within the current program.
     fn subsitution(
-        external: HashMap<GlobalVariable, GroundTerm>,
-        pipeline: &ProgramPipeline,
+        external: &HashMap<GlobalVariable, GroundTerm>,
+        pipeline: &ProgramHandle,
     ) -> Substitution {
         let mut ground_set = external.keys().cloned().collect::<HashSet<_>>();
-        let mut substitution = Substitution::new(external);
+        let mut substitution = Substitution::new(external.clone());
 
         let mut ground_count: usize = ground_set.len();
         loop {
@@ -69,61 +65,27 @@ impl TransformationGlobal {
             ground_count = ground_set.len();
         }
     }
-
-    /// Takes an iterator over [ProgramComponent]s
-    /// checking whether they contain a global variable
-    /// and if so applying
-    fn apply_subsitution<'a, Iter, Component>(
-        iterator: Iter,
-        substitution: &'a Substitution,
-    ) -> impl Iterator<Item = (&'a Component, Component)> + 'a
-    where
-        Component:
-            ProgramComponent + IterablePrimitives<TermType = Term> + IterableVariables + Clone + 'a,
-        Iter: Iterator<Item = &'a Component> + 'a,
-    {
-        iterator.filter_map(|old_component| {
-            if old_component
-                .variables()
-                .any(|variable| variable.is_global())
-            {
-                let mut new_component = old_component.clone();
-                substitution.apply(&mut new_component);
-
-                Some((old_component, new_component))
-            } else {
-                None
-            }
-        })
-    }
 }
 
-impl ProgramTransformation for TransformationGlobal {
-    fn apply(self, pipeline: &mut ProgramPipeline, _report: &mut ValidationReport) {
-        let mut commit = ProgramCommit::default();
+impl<'a> ProgramTransformation for TransformationGlobal<'a> {
+    fn apply(self, program: &ProgramHandle) -> Result<ProgramHandle, ValidationReport> {
+        let mut commit = program.fork();
 
-        let substitution = Self::subsitution(self.external, pipeline);
+        let substitution = Self::subsitution(self.external, &program);
 
-        for (old_import, new_import) in Self::apply_subsitution(pipeline.imports(), &substitution) {
-            commit.delete(old_import.id());
-            commit.add_import(new_import);
+        for statement in program.statements() {
+            if !statement.is_parameter()
+                && statement.variables().any(|variable| variable.is_global())
+            {
+                let mut new_statement = statement.clone();
+                substitution.apply(&mut new_statement);
+
+                commit.add_statement(new_statement);
+            } else {
+                commit.keep(statement);
+            }
         }
 
-        for (old_export, new_export) in Self::apply_subsitution(pipeline.exports(), &substitution) {
-            commit.delete(old_export.id());
-            commit.add_export(new_export);
-        }
-
-        for (old_rule, new_rule) in Self::apply_subsitution(pipeline.rules(), &substitution) {
-            commit.delete(old_rule.id());
-            commit.add_rule(new_rule);
-        }
-
-        for (old_fact, new_fact) in Self::apply_subsitution(pipeline.facts(), &substitution) {
-            commit.delete(old_fact.id());
-            commit.add_fact(new_fact);
-        }
-
-        pipeline.commit(commit);
+        commit.submit()
     }
 }

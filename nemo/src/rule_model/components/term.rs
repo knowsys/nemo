@@ -263,8 +263,6 @@ impl IterableComponent for Term {
     }
 }
 
-impl ProgramComponent for Term {}
-
 impl From<Variable> for Term {
     fn from(value: Variable) -> Self {
         Self::Primitive(Primitive::from(value))

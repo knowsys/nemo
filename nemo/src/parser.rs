@@ -85,7 +85,7 @@ impl ParserErrorReport {
     /// Convert this report to a [ProgramReport].
     pub fn program_report(self, file: RuleFile) -> ProgramReport {
         let mut report = ProgramReport::new(file);
-        report.merge_parser(self);
+        report.merge_parser_report(self);
         report
     }
 

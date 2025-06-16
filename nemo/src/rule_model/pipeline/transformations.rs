@@ -8,12 +8,10 @@ pub mod skolem;
 pub mod split;
 pub mod validate;
 
-use crate::rule_model::error::ValidationReport;
-
-use super::ProgramPipeline;
+use crate::rule_model::{error::ValidationReport, programs::handle::ProgramHandle};
 
 /// Trait that defines a program transformation
 pub trait ProgramTransformation {
     /// Apply the transformation.
-    fn apply(self, pipeline: &mut ProgramPipeline, report: &mut ValidationReport);
+    fn apply(self, program: &ProgramHandle) -> Result<ProgramHandle, ValidationReport>;
 }

@@ -11,7 +11,7 @@ use crate::rule_model::{
         rule::Rule,
         IterableComponent, ProgramComponent,
     },
-    program::{Program, ProgramWrite},
+    programs::{Program, ProgramWrite},
 };
 
 use super::id::ProgramComponentId;

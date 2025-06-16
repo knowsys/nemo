@@ -28,14 +28,13 @@ use crate::{
     execution::{
         execution_parameters::ExecutionParameters, DefaultExecutionEngine, ExecutionEngine,
     },
-    parser::Parser,
     rule_file::RuleFile,
     rule_model::{
         components::tag::Tag,
-        error::ValidationReport,
-        pipeline::{transformations::validate::TransformationValidate, ProgramPipeline},
-        program::Program,
-        translation::ASTProgramTranslation,
+        pipeline::transformations::{
+            default::TransformationDefault, validate::TransformationValidate,
+        },
+        programs::{handle::ProgramHandle, program::Program},
     },
 };
 use nemo_physical::resource::Resource;
@@ -59,10 +58,10 @@ pub fn load(file: PathBuf) -> Result<Engine, Error> {
 /// # Error
 /// Returns an appropriate [Error] variant on parsing and feature check issues.
 pub fn load_string(input: String) -> Result<Engine, Error> {
-    let execution_parameters = ExecutionParameters::default();
+    let parameters = ExecutionParameters::default();
     let file = RuleFile::new(input, String::default());
 
-    Ok(ExecutionEngine::file(file, execution_parameters)?.into_object())
+    Ok(ExecutionEngine::from_file(file, parameters)?.into_object())
 }
 
 /// Parse a program in the given `input`-string and return a [Program].
@@ -71,49 +70,35 @@ pub fn load_string(input: String) -> Result<Engine, Error> {
 /// Returns a [ProgramReport] if parsing or validation fails.
 pub fn load_program(input: String, label: String) -> Result<Program, ProgramReport> {
     let file = RuleFile::new(input, label);
+    let parameters = ExecutionParameters::default();
 
-    let parser = Parser::initialize(file.content());
-    let ast = match parser.parse() {
-        Ok(ast) => ast,
-        Err((_, errors)) => return Err(errors.program_report(file)),
-    };
+    let handle = ProgramHandle::from_file(&file);
+    let report = ProgramReport::new(file);
 
-    let translation = ASTProgramTranslation::default();
-    let (translated, parsing_report) = match translation.translate::<Program>(&ast) {
-        Ok(program) => program.pair(),
-        Err(errors) => return Err(errors.program_report(file)),
-    };
+    let (program, report) = report.merge_program_parser_report(handle)?;
+    let (program, report) = report
+        .merge_validation_report(program.transform(TransformationDefault::new(&parameters)))?;
 
-    let mut report = ProgramReport::new(file);
-    if let Some(parsing_report) = parsing_report {
-        report.merge_translation(parsing_report)
-    }
-
-    if report.contains_errors() {
-        Err(report)
-    } else {
-        Ok(translated)
-    }
+    report.result(program.materialize())
 }
 
 /// Validate the `input` and create a [ProgramReport] for error reporting
 pub fn validate(input: String, label: String) -> ProgramReport {
     let file = RuleFile::new(input, label);
+    let handle = ProgramHandle::from_file(&file);
+    let report = ProgramReport::new(file);
 
-    let (mut pipeline, parsing_report) = match ProgramPipeline::file(&file) {
-        Ok(pipeline) => pipeline.pair(),
-        Err(errors) => return errors.program_report(file),
+    let (program, report) = match report.merge_program_parser_report(handle) {
+        Ok(result) => result,
+        Err(report) => return report,
     };
 
-    let mut validation_report = ValidationReport::default();
-    pipeline.apply_transformation(&mut validation_report, TransformationValidate::default());
-
-    let mut report = ProgramReport::new(file);
-    if let Some(parsing_report) = parsing_report {
-        report.merge_program_parser(parsing_report)
-    }
-
-    report.merge_validation(validation_report);
+    let (_program, report) = match report
+        .merge_validation_report(program.transform(TransformationValidate::default()))
+    {
+        Ok(result) => result,
+        Err(report) => return report,
+    };
 
     report
 }

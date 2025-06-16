@@ -3,14 +3,10 @@
 use std::collections::HashSet;
 
 use crate::rule_model::{
-    components::{tag::Tag, ComponentIdentity},
+    components::{statement::Statement, tag::Tag, ComponentIdentity},
     error::ValidationReport,
-    pipeline::{
-        commit::ProgramCommit,
-        state::{ExtendStatementKind, ExtendStatementValidity},
-        ProgramPipeline,
-    },
-    program::ProgramRead,
+    pipeline::id::ProgramComponentId,
+    programs::{handle::ProgramHandle, ProgramRead},
 };
 
 use super::ProgramTransformation;
@@ -21,56 +17,76 @@ use super::ProgramTransformation;
 #[derive(Debug, Default, Clone, Copy)]
 pub struct TransformationActive {}
 
-impl ProgramTransformation for TransformationActive {
-    fn apply(self, pipeline: &mut ProgramPipeline, _report: &mut ValidationReport) {
-        let mut required = HashSet::<Tag>::new();
-        let mut result = HashSet::new();
+impl TransformationActive {
+    /// Compute the required predicates and rules
+    fn required(program: &ProgramHandle) -> (HashSet<Tag>, HashSet<ProgramComponentId>) {
+        let mut predicates = HashSet::<Tag>::new();
+        let mut rules = HashSet::new();
 
-        for output in pipeline.outputs() {
-            required.insert(output.predicate().clone());
+        for output in program.outputs() {
+            predicates.insert(output.predicate().clone());
         }
 
-        for export in pipeline.exports() {
-            required.insert(export.predicate().clone());
+        for export in program.exports() {
+            predicates.insert(export.predicate().clone());
         }
 
         let mut required_count: usize = 0;
-        while required_count != required.len() {
-            required_count = required.len();
+        while required_count != predicates.len() {
+            required_count = predicates.len();
 
-            for rule in pipeline.rules() {
-                if result.contains(&rule.id()) {
+            for rule in program.rules() {
+                if rules.contains(&rule.id()) {
                     continue;
                 }
 
                 if rule
                     .head()
                     .iter()
-                    .any(|atom| required.contains(&atom.predicate()))
+                    .any(|atom| predicates.contains(&atom.predicate()))
                 {
                     for predicate in rule.body().iter().filter_map(|literal| literal.predicate()) {
-                        required.insert(predicate);
+                        predicates.insert(predicate);
                     }
 
-                    result.insert(rule.id());
+                    rules.insert(rule.id());
                 }
             }
         }
 
-        let mut commit = ProgramCommit::new(ExtendStatementValidity::Keep(
-            ExtendStatementKind::Except(&ExtendStatementKind::Rule),
-        ));
+        (predicates, rules)
+    }
+}
 
-        for id in result {
-            commit.keep(id);
-        }
+impl ProgramTransformation for TransformationActive {
+    fn apply(self, program: &ProgramHandle) -> Result<ProgramHandle, ValidationReport> {
+        let mut commit = program.fork();
 
-        for import in pipeline.imports() {
-            if !required.contains(import.predicate()) {
-                commit.delete(import.id());
+        let (predicates, rules) = Self::required(&program);
+
+        for statement in program.statements() {
+            match statement {
+                Statement::Rule(rule) => {
+                    if rules.contains(&rule.id()) {
+                        commit.keep(rule);
+                    }
+                }
+                Statement::Fact(fact) => {
+                    if predicates.contains(fact.predicate()) {
+                        commit.keep(fact);
+                    }
+                }
+                Statement::Import(import) => {
+                    if predicates.contains(import.predicate()) {
+                        commit.keep(import);
+                    }
+                }
+                Statement::Export(_) | Statement::Output(_) | Statement::Parameter(_) => {
+                    commit.keep(statement)
+                }
             }
         }
 
-        pipeline.commit(commit);
+        commit.submit()
     }
 }

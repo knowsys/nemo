@@ -14,7 +14,7 @@ use crate::{
     chase_model::components::atom::{ground_atom::GroundAtom, ChaseAtom},
     rule_model::{
         components::{fact::Fact, rule::Rule},
-        program::Program,
+        programs::program::Program,
         substitution::Substitution,
     },
 };
@@ -608,7 +608,7 @@ mod test {
                 rule::Rule,
                 term::primitive::{variable::Variable, Primitive},
             },
-            program::{Program, ProgramWrite},
+            programs::{program::Program, ProgramWrite},
             substitution::Substitution,
             translation::TranslationComponent,
         },
