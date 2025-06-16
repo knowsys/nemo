@@ -71,7 +71,7 @@ impl<'a> ProgramTransformation for TransformationGlobal<'a> {
     fn apply(self, program: &ProgramHandle) -> Result<ProgramHandle, ValidationReport> {
         let mut commit = program.fork();
 
-        let substitution = Self::subsitution(self.external, &program);
+        let substitution = Self::subsitution(self.external, program);
 
         for statement in program.statements() {
             if !statement.is_parameter()

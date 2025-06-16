@@ -62,7 +62,7 @@ impl ProgramTransformation for TransformationActive {
     fn apply(self, program: &ProgramHandle) -> Result<ProgramHandle, ValidationReport> {
         let mut commit = program.fork();
 
-        let (predicates, rules) = Self::required(&program);
+        let (predicates, rules) = Self::required(program);
 
         for statement in program.statements() {
             match statement {

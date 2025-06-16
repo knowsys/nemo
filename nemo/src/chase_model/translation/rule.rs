@@ -37,7 +37,7 @@ impl ProgramChaseTranslation {
         let mut rule = rule.clone();
         let mut result = ChaseRule::default();
 
-        let variable_assignments = Self::variables_assignments(&mut rule);
+        let variable_assignments = Self::variables_assignments(&rule);
         Self::apply_variable_assignment(&mut rule, &variable_assignments);
 
         // Handle positive and negative atoms
@@ -68,7 +68,7 @@ impl ProgramChaseTranslation {
         }
 
         // Handle operations
-        self.handle_operations(&mut result, &mut rule);
+        self.handle_operations(&mut result, &rule);
 
         // Handle head
         self.handle_head(&mut result, rule.head());
