@@ -117,15 +117,11 @@ impl SubtableHandler {
         Some(self.single[postion].1)
     }
 
-    /// TODO: Currently only counting of in-memory facts is supported, see <https://github.com/knowsys/nemo/issues/335>
-    pub fn count_rows(&self, database: &DatabaseInstance) -> usize {
-        let mut result = 0;
-
-        for (_, subtable_id) in &self.single {
-            result += database.count_rows(*subtable_id);
-        }
-
-        result
+    pub fn count_rows_in_memory(&self, database: &DatabaseInstance) -> usize {
+        self.single
+            .iter()
+            .map(|(_, subtable_id)| database.count_rows_in_memory(*subtable_id))
+            .sum()
     }
 
     pub fn add_single_table(&mut self, step: usize, id: PermanentTableId) {
@@ -363,13 +359,11 @@ impl TableManager {
         self.predicate_subtables.get(predicate)?.last_step()
     }
 
-    /// Count all the rows in the table manager that belong to a predicate.
-    ///
-    /// TODO: Currently only counting of in-memory facts is supported, see <https://github.com/knowsys/nemo/issues/335>
-    pub(crate) fn predicate_count_rows(&self, predicate: &Tag) -> Option<usize> {
+    /// Count all in-memory rows in the table manager that belong to a predicate.
+    pub(crate) fn count_rows_in_memory_for_predicate(&self, predicate: &Tag) -> Option<usize> {
         self.predicate_subtables
             .get(predicate)
-            .map(|s| s.count_rows(&self.database))
+            .map(|s| s.count_rows_in_memory(&self.database))
     }
 
     /// Get a list of column iterators for the full table (i.e. the expanded trie)

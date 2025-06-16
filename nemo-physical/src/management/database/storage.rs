@@ -96,11 +96,10 @@ impl TableStorage {
         }
     }
 
-    /// Return the number of rows that are stored in this table.
-    pub(crate) fn count_rows(&self) -> usize {
+    /// Return the number of rows that are stored in memory for this table.
+    pub(crate) fn count_rows_in_memory(&self) -> usize {
         match self {
             TableStorage::InMemory(trie) => trie.num_rows(),
-            // TODO: Currently only counting of in-memory facts is supported, see <https://github.com/knowsys/nemo/issues/335>
             TableStorage::FromSources(_) => 0,
             TableStorage::Empty => 0,
         }

@@ -154,12 +154,16 @@ pub enum ValidationError {
     FactSubtermAggregate,
     /// RDF unspecified missing extension
     #[error("no file extension specified")]
-    #[assoc(note = "rdf imports/exports must have file extension nt, nq, ttl, trig, or rdf.")]
+    #[assoc(
+        note = "RDF imports/exports must have file extension `nt`, `nq`, `ttl`, `trig`, or `rdf`."
+    )]
     #[assoc(code = 229)]
     RdfUnspecifiedMissingExtension,
     /// RDF unspecified missing extension
-    #[error("`{format}` is not an rdf format")]
-    #[assoc(note = "rdf imports/exports must have file extension nt, nq, ttl, trig, or rdf.")]
+    #[error("`{format}` is not an RDF format")]
+    #[assoc(
+        note = "RDF imports/exports must have file extension `nt`, `nq`, `ttl`, `trig`, or `rdf`."
+    )]
     #[assoc(code = 230)]
     RdfUnspecifiedUnknownExtension { format: String },
     /// Unknown file format

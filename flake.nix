@@ -2,7 +2,7 @@
   description = "nemo, a datalog-based rule engine for fast and scalable analytic data processing in memory";
 
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-24.11";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.05";
     utils.url = "github:gytis-ivaskevicius/flake-utils-plus";
 
     rust-overlay = {
@@ -290,7 +290,7 @@
                   ++ (lib.attrValues {
                     inherit (pkgs)
                       binaryen
-                      wasm-bindgen-cli
+                      wasm-bindgen-cli_0_2_100
                       wasm-pack
                       writableTmpDirAsHomeHook
                       ;
@@ -321,6 +321,20 @@
               meta = crateArgs.meta // {
                 mainProgram = "nmo";
               };
+            };
+
+            docker = pkgs.dockerTools.buildImage {
+              name = "nemo";
+              tag = "latest";
+              copyToRoot = pkgs.buildEnv {
+                name = "image-root";
+                paths = [ 
+                  pkgs.cacert
+                  pkgs.openssl
+                  nemo
+                ];
+              };
+              config = { Entrypoint = [ "/bin/nmo" ]; };
             };
 
             nemo-language-server = buildCrate { crate = "nemo-language-server"; };
@@ -421,9 +435,12 @@
 
                 text = ''
                   cd "$(mktemp --directory)"
-                  cp -R ${self.packages.${system}.nemo-web}/lib/node_modules/nemo-web/* .
+                  cp -R ${self.packages.${pkgs.system}.nemo-web}/lib/node_modules/nemo-web/* .
+                  chmod -R +w node_modules
                   mkdir wrapper
-                  ln -s ../node_modules/vite/bin/vite.js wrapper/vite
+                  ln -s ${
+                    self.packages.${pkgs.system}.nemo-web
+                  }/lib/node_modules/nemo-web/node_modules/vite/bin/vite.js wrapper/vite
                   export PATH="''${PATH}:wrapper"
                   npm run preview
                 '';

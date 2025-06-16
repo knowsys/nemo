@@ -71,6 +71,8 @@ pub(super) fn value_type_matches(
 pub(crate) trait FormatTag:
     FromStr<Err = ()> + ToString + Copy + Eq + 'static + Into<SupportedFormatTag>
 {
+    // NOTE: the only implementations of this trait happen in macros and are for some reason not recognized
+    #[allow(dead_code)]
     const VARIANTS: &'static [(Self, &'static str)];
 }
 

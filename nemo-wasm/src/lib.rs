@@ -311,14 +311,15 @@ impl NemoEngine {
             .map_err(NemoError)
     }
 
-    #[wasm_bindgen(js_name = "countFactsOfDerivedPredicates")]
-    pub fn count_facts_of_derived_predicates(&mut self) -> usize {
-        self.engine.count_facts_of_derived_predicates()
+    #[wasm_bindgen(js_name = "countFactsInMemoryForDerivedPredicates")]
+    pub fn count_facts_in_memory_for_derived_predicates(&mut self) -> usize {
+        self.engine.count_facts_in_memory_for_derived_predicates()
     }
 
-    #[wasm_bindgen(js_name = "countFactsOfPredicate")]
-    pub fn count_facts_of_predicate(&mut self, predicate: String) -> Option<usize> {
-        self.engine.count_facts_of_predicate(&predicate.into())
+    #[wasm_bindgen(js_name = "countFactsInMemoryForPredicate")]
+    pub fn count_facts_in_memory_for_predicate(&mut self, predicate: String) -> Option<usize> {
+        self.engine
+            .count_facts_in_memory_for_predicate(&predicate.into())
     }
 
     #[wasm_bindgen(js_name = "getResult")]

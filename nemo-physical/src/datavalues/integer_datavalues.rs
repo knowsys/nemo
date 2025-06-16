@@ -53,11 +53,11 @@ impl DataValue for UnsignedLongDataValue {
         if self.0 <= I32MAX_AS_U64 {
             ValueDomain::NonNegativeInt
         } else if self.0 <= U32MAX_AS_U64 {
-            return ValueDomain::UnsignedInt;
+            ValueDomain::UnsignedInt
         } else if self.0 <= I64MAX_AS_U64 {
-            return ValueDomain::NonNegativeLong;
+            ValueDomain::NonNegativeLong
         } else {
-            return ValueDomain::UnsignedLong;
+            ValueDomain::UnsignedLong
         }
     }
 
@@ -138,14 +138,14 @@ impl DataValue for LongDataValue {
             if self.0 <= I32MAX_AS_I64 {
                 ValueDomain::NonNegativeInt
             } else if self.0 <= U32MAX_AS_I64 {
-                return ValueDomain::UnsignedInt;
+                ValueDomain::UnsignedInt
             } else {
-                return ValueDomain::NonNegativeLong;
+                ValueDomain::NonNegativeLong
             }
         } else if self.0 >= I32MIN_AS_I64 {
-            return ValueDomain::Int;
+            ValueDomain::Int
         } else {
-            return ValueDomain::Long;
+            ValueDomain::Long
         }
     }
 

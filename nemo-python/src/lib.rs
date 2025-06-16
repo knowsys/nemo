@@ -1,6 +1,3 @@
-// FIXME: remove this once the pyo3 macros don't trigger this
-#![allow(non_local_definitions)]
-
 use std::{collections::HashSet, fs::read_to_string, time::Duration};
 
 use nemo::{

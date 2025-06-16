@@ -8,7 +8,10 @@ use std::{
 use flate2::Compression;
 
 use gzip::Gzip;
-use nemo_physical::{error::ReadingError, resource::ResourceBuilder};
+use nemo_physical::{
+    error::ReadingError,
+    resource::{Resource, ResourceBuilder},
+};
 
 use crate::syntax::import_export::{attribute, file_format};
 
@@ -54,16 +57,37 @@ impl Display for CompressionFormat {
 const GZIP_COMPRESSION_LEVEL: Compression = Compression::new(6);
 
 impl CompressionFormat {
-    /// Derive a compression format from the file extension of the given resource builder.
+    fn from_file_extension(file_extension: Option<&str>) -> Self {
+        match file_extension {
+            Some(file_format::EXTENSION_GZ) => Self::GZip,
+            _ => Self::None,
+        }
+    }
+
+    /// Derive a compression format from the file extension of the
+    /// given resource.
+    pub fn from_resource(resource: &Resource) -> Self {
+        Self::from_file_extension(resource.file_extension().as_deref())
+    }
+
+    /// Derive a compression format from the file extension of the
+    /// given resource builder.
     pub fn from_resource_builder(builder: &Option<ResourceBuilder>) -> Self {
         let Some(builder) = builder else {
             return Self::None;
         };
 
-        match builder.file_extension() {
-            Some(file_format::EXTENSION_GZ) => Self::GZip,
-            _ => Self::None,
+        if !builder.supports_compression() {
+            return Self::None;
         }
+
+        Self::from_file_extension(builder.file_extension().as_deref())
+    }
+
+    /// Return the file extension of the uncompressed file obtained
+    /// from the given resource.
+    pub fn uncompressed_file_extension(&self, resource: &Resource) -> Option<String> {
+        resource.file_extension_uncompressed(self.extension())
     }
 }
 

@@ -170,6 +170,7 @@ fn parse_trace_facts(cli: &CliApp) -> Result<Vec<String>, Error> {
 fn handle_tracing(cli: &CliApp, engine: &mut DefaultExecutionEngine) -> Result<(), CliError> {
     let tracing_facts = parse_trace_facts(cli)?;
     if !tracing_facts.is_empty() {
+        log::info!("Starting tracing of {} facts...", tracing_facts.len());
         let mut facts = Vec::<Fact>::with_capacity(tracing_facts.len());
         for fact_string in &tracing_facts {
             let fact = Fact::parse(fact_string).map_err(|_| CliError::TracingInvalidFact {
@@ -310,7 +311,7 @@ fn run(mut cli: CliApp) -> Result<(), CliError> {
 
     if print_summary {
         print_finished_message(
-            engine.count_facts_of_derived_predicates(),
+            engine.count_facts_in_memory_for_derived_predicates(),
             !export_manager.write_disabled(),
         );
     }

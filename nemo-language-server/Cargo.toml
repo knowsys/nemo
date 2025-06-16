@@ -27,7 +27,7 @@ nemo = { path = "../nemo", default-features = false }
 futures = "0.3.21"
 strum = "0.27.1"
 strum_macros = "0.27.1"
-tokio = { version = "1.4.0", features = ["macros", "io-util", "rt-multi-thread", "io-std"], optional = true }
+tokio = { version = "1.45.1", features = ["macros", "io-util", "rt-multi-thread", "io-std"], optional = true }
+tower-lsp = { version = "0.20.0", default-features = false }
 tower-service = "0.3.2"
 lsp-document = "0.6.0"
-tower-lsp = "0.20.0"

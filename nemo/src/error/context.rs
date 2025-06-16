@@ -194,8 +194,7 @@ impl ContextError {
     pub fn report<'a>(&self, source_label: &str) -> Report<'a, (String, Range<usize>)> {
         let mut report = Report::build(
             self.diagnostic.severity.ariande_kind(),
-            source_label.to_owned(),
-            self.diagnostic.range.start,
+            (source_label.to_string(), self.diagnostic.range.clone()),
         )
         .with_config(Config::default().with_index_type(ariadne::IndexType::Byte));
 
