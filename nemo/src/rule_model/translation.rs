@@ -172,8 +172,8 @@ impl ProgramParseReport {
 impl Display for ProgramParseReport {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            ProgramParseReport::Parsing(report) => write!(f, "{}", report),
-            ProgramParseReport::Translation(report) => write!(f, "{}", report),
+            ProgramParseReport::Parsing(report) => write!(f, "{report}"),
+            ProgramParseReport::Translation(report) => write!(f, "{report}"),
         }
     }
 }

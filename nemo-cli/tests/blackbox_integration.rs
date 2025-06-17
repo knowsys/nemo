@@ -111,7 +111,7 @@ impl TestCase {
                 PathBuf::from_str(self.output_dir.child(expected_name).to_str().unwrap()).unwrap();
             log::info!("output file: {output_file:?}");
             if !output_file.exists() {
-                println!("file: {:?}", output_file);
+                println!("file: {output_file:?}");
             }
 
             assert!(output_file.exists());

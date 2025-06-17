@@ -34,10 +34,10 @@ pub struct ProgramReport {
 impl Display for ProgramReport {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         for warning in &self.warnings {
-            writeln!(f, "{}", warning)?;
+            writeln!(f, "{warning}")?;
         }
         for error in &self.errors {
-            writeln!(f, "{}", error)?;
+            writeln!(f, "{error}")?;
         }
         Ok(())
     }

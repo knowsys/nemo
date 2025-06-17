@@ -202,7 +202,7 @@ pub struct CliApp {
 
 /// Key-Value pair for global variable
 #[derive(Debug, Clone)]
-pub(crate) struct ParamKeyValue {
+pub struct ParamKeyValue {
     /// Key: Global variable
     pub key: String,
     /// Value
@@ -213,7 +213,7 @@ pub(crate) struct ParamKeyValue {
 fn parse_key_val(s: &str) -> Result<ParamKeyValue, String> {
     let parts: Vec<&str> = s.splitn(2, '=').collect();
     if parts.len() != 2 {
-        return Err(format!("Invalid key=value: {}", s));
+        return Err(format!("Invalid key=value: {s}"));
     }
     Ok(ParamKeyValue {
         key: parts[0].to_owned(),

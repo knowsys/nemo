@@ -161,7 +161,7 @@ impl NemoLiteral {
 #[pyclass]
 struct NemoResults(Box<dyn Iterator<Item = Vec<AnyDataValue>> + Send + Sync>);
 
-fn datavalue_to_python(py: Python<'_>, v: AnyDataValue) -> PyResult<Bound<PyAny>> {
+fn datavalue_to_python(py: Python<'_>, v: AnyDataValue) -> PyResult<Bound<'_, PyAny>> {
     match v.value_domain() {
         nemo::datavalues::ValueDomain::LanguageTaggedString => {
             let (value, tag) = v.to_language_tagged_string_unchecked();
@@ -316,7 +316,7 @@ impl NemoResults {
         slf
     }
 
-    fn __next__(mut slf: PyRefMut<'_, Self>) -> PyResult<Option<Vec<Bound<PyAny>>>> {
+    fn __next__(mut slf: PyRefMut<'_, Self>) -> PyResult<Option<Vec<Bound<'_, PyAny>>>> {
         let Some(next) = slf.0.next() else {
             return Ok(None);
         };

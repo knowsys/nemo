@@ -28,8 +28,7 @@ impl ProgramChaseTranslation {
                 terms.push(value.clone());
             } else {
                 panic!(
-                    "invalid program: fact contains non-primitive value {}",
-                    reduced
+                    "invalid program: fact contains non-primitive value {reduced}"
                 )
             }
         }
