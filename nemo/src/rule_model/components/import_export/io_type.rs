@@ -1,4 +1,4 @@
-//! This module defines [DataType].
+//! This module defines [IOType].
 #![allow(missing_docs)]
 
 use enum_assoc::Assoc;

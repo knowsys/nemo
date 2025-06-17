@@ -27,7 +27,7 @@ pub struct DataTypeTag<'a> {
 }
 
 impl DataTypeTag<'_> {
-    /// Return the [DataType] that was parsed.
+    /// Return the [IOType] that was parsed.
     pub fn data_type(&self) -> IOType {
         self.data_type
     }

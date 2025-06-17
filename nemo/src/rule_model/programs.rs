@@ -1,4 +1,4 @@
-//! This module defines [Program] and [ProgramHandle].
+//! This module defines types of nemo programs and common traits.
 
 use std::collections::{hash_map::Entry, HashMap, HashSet};
 

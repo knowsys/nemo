@@ -1,4 +1,4 @@
-//! This module defines [TranslationErrorKind]
+//! This module defines [TranslationError]
 #![allow(missing_docs)]
 
 use enum_assoc::Assoc;
