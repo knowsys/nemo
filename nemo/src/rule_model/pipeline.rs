@@ -3,6 +3,7 @@
 use std::{cell::UnsafeCell, rc::Rc};
 
 use id::ProgramComponentId;
+use id_arena::Arena;
 
 use crate::rule_model::{
     components::statement::Statement,
@@ -24,7 +25,7 @@ pub mod transformations;
 pub struct ProgramPipeline {
     /// All statements that have been constructed.
     /// Some may only be valid within certain revisions.
-    statements: Vec<Statement>,
+    statements: Arena<Statement>,
 
     /// Collection of all revisions, i.e. version of nemo prorams
     revisions: Vec<ProgramRevision>,
@@ -67,7 +68,7 @@ impl ProgramPipeline {
     ///
     /// Returns `None` if there is no  [ProgramComponent] with that [ProgramComponentId].
     pub fn find_component(&self, id: ProgramComponentId) -> Option<&dyn ProgramComponent> {
-        let component_statement: &dyn ProgramComponent = self.statements.get(id.statement())?;
+        let component_statement: &dyn ProgramComponent = &self.statements[id.statement()?];
         if id.is_statement() {
             return Some(component_statement);
         }
@@ -80,7 +81,7 @@ impl ProgramPipeline {
     /// # Panics
     /// Pancis if no statement with this id exists.
     pub fn statement(&self, id: ProgramComponentId) -> &Statement {
-        &self.statements[id.statement()]
+        &self.statements[id.statement().expect("there is not statement with this id")]
     }
 
     /// Given a [ProgramComponentId] return the corresponding [Rule],
@@ -111,8 +112,9 @@ impl ProgramPipeline {
     fn register_statement<Component: ProgramComponent>(
         &self,
         statement: &mut Component,
+        id: id_arena::Id<Statement>,
     ) -> ProgramComponentId {
-        let id = ProgramComponentId::new_statement(self.statements.len());
+        let id = ProgramComponentId::new_statement(id);
 
         Self::register_component(statement, id);
         statement.set_id(id);
@@ -126,10 +128,10 @@ impl ProgramPipeline {
         S: Into<Statement>,
     {
         let mut statement: Statement = statement.into();
+        let statement_id = self.statements.next_id();
 
-        let id = self.register_statement(&mut statement);
-        self.statements.push(statement);
-
+        let id = self.register_statement(&mut statement, statement_id);
+        self.statements.alloc(statement);
         id
     }
 
@@ -155,7 +157,7 @@ impl ProgramPipeline {
     pub fn finalize(self) -> Program {
         let mut program = Program::default();
 
-        for statement in self.statements {
+        for (_, statement) in self.statements.into_iter() {
             program.add_statement(statement);
         }
 

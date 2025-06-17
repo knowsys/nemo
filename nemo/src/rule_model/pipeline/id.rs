@@ -2,14 +2,16 @@
 
 use std::{cmp::Ordering, hash::Hash};
 
+use crate::rule_model::components::statement::Statement;
+
 /// Identifies a [super::super::components::ProgramComponent] within a [super::ProgramPipeline]
 ///
 /// The id `Self::UNASSIGNED` represents the [super::super::components::ProgramComponent]
 /// not being associated with any [super::ProgramPipeline].
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
 pub struct ProgramComponentId {
-    /// Index within the [super::ProgramPipeline]
-    statement: u32,
+    /// Identifier of the statement within a [super::ProgramPipeline]
+    statement: Option<id_arena::Id<Statement>>,
     /// Identifier of a component within a statement
     ///
     /// A local id of zero refers to the statement itself.
@@ -20,16 +22,14 @@ impl ProgramComponentId {
     /// Indicates that the [super::super::components::ProgramComponent]
     /// does not belong to any [super::ProgramPipeline]
     const UNASSIGNED: Self = Self {
-        statement: u32::MAX,
+        statement: None,
         component: u32::MAX,
     };
 
     /// Create a new [ProgramComponentId].
-    pub fn new_component(statement: usize, component: usize) -> Self {
+    pub fn new_component(statement: id_arena::Id<Statement>, component: usize) -> Self {
         Self {
-            statement: statement
-                .try_into()
-                .expect("maximum number of statements reached"),
+            statement: Some(statement),
             component: component
                 .try_into()
                 .expect("maximum number of statements reached"),
@@ -38,11 +38,9 @@ impl ProgramComponentId {
 
     /// Create a new [ProgramComponentId]
     /// referring to a statement
-    pub fn new_statement(index: usize) -> Self {
+    pub fn new_statement(id: id_arena::Id<Statement>) -> Self {
         Self {
-            statement: index
-                .try_into()
-                .expect("maximum number of statements reached"),
+            statement: Some(id),
             component: 0,
         }
     }
@@ -55,8 +53,8 @@ impl ProgramComponentId {
     }
 
     /// Return the statement id.
-    pub fn statement(&self) -> usize {
-        self.statement as usize
+    pub fn statement(&self) -> Option<id_arena::Id<Statement>> {
+        self.statement
     }
 
     /// Return the local component id.
