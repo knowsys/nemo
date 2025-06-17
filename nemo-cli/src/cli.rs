@@ -204,11 +204,9 @@ pub struct CliApp {
 #[derive(Debug, Clone)]
 pub(crate) struct ParamKeyValue {
     /// Key: Global variable
-    #[allow(dead_code)] // TODO: Value is clearly read ?
-    pub(crate) key: String,
+    pub key: String,
     /// Value
-    #[allow(dead_code)]
-    pub(crate) value: String,
+    pub value: String,
 }
 
 /// Parse key value pairs.
