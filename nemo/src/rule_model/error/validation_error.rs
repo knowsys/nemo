@@ -222,7 +222,7 @@ pub enum ValidationError {
     /// Import/Export parameter contains unspecified variables
     #[error("parameter value `{term}` is not a ground term")]
     #[assoc(code = 239)]
-    ImportExportParameterNotGround { term: Term },
+    ImportExportParameterNotGround { term: Box<Term> },
     /// Parameter definition is cyclic
     #[error("circular definition of parameter `{variable}`")]
     #[assoc(code = 240)]

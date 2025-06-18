@@ -333,7 +333,8 @@ mod test {
     use std::collections::HashMap;
 
     use crate::{
-        datavalues::AnyDataValue, function::tree::FunctionTree,
+        datavalues::{AnyDataValue, DataValue, ValueDomain},
+        function::tree::FunctionTree,
         tabular::operations::OperationColumnMarker,
     };
 
@@ -363,6 +364,33 @@ mod test {
 
     fn any_bool(boolean: bool) -> AnyDataValue {
         AnyDataValue::new_boolean(boolean)
+    }
+
+    fn evaluate_float_expect(tree: &Function, expected_value: Option<AnyDataValue>) {
+        let program = StackProgram::from_function_tree(tree, &HashMap::new(), None);
+        let result = program.evaluate(&[], None);
+
+        if let Some(result) = &result {
+            if let Some(expected_value) = &expected_value {
+                match (result.value_domain(), expected_value.value_domain()) {
+                    (ValueDomain::Float, ValueDomain::Float) => {
+                        assert!(
+                            (result.to_f32_unchecked() - expected_value.to_f32_unchecked()).abs()
+                                < 0.01,
+                        );
+                    }
+                    (ValueDomain::Double, ValueDomain::Double) => {
+                        assert!(
+                            (result.to_f64_unchecked() - expected_value.to_f64_unchecked()).abs()
+                                < 0.01,
+                        );
+                    }
+                    _ => {}
+                }
+            }
+        }
+
+        assert_eq!(result, expected_value)
     }
 
     fn evaluate_expect(tree: &Function, expected_value: Option<AnyDataValue>) {
@@ -593,7 +621,7 @@ mod test {
             ),
             Function::constant(any_float(2.0)),
         );
-        evaluate_expect(&tree_arithmetic, Some(any_float(6.0)));
+        evaluate_float_expect(&tree_arithmetic, Some(any_float(6.0)));
 
         let tree_less_less = Function::numeric_lessthan(
             Function::constant(any_float(-5.0)),
@@ -663,58 +691,58 @@ mod test {
         );
 
         let tree_sin = Function::numeric_sine(Function::constant(any_float(0.0)));
-        evaluate_expect(&tree_sin, Some(any_float(0.0)));
+        evaluate_float_expect(&tree_sin, Some(any_float(0.0)));
 
         let tree_cos = Function::numeric_cosine(Function::constant(any_float(0.0)));
-        evaluate_expect(&tree_cos, Some(any_float(1.0)));
+        evaluate_float_expect(&tree_cos, Some(any_float(1.0)));
 
         let tree_tan = Function::numeric_tangent(Function::constant(any_float(0.0)));
-        evaluate_expect(&tree_tan, Some(any_float(0.0)));
+        evaluate_float_expect(&tree_tan, Some(any_float(0.0)));
 
         let tree_round = Function::numeric_round(Function::constant(any_float(-5.0)));
-        evaluate_expect(&tree_round, Some(any_float(-5.0)));
+        evaluate_float_expect(&tree_round, Some(any_float(-5.0)));
         let tree_round = Function::numeric_round(Function::constant(any_float(-10.5)));
-        evaluate_expect(&tree_round, Some(any_float(-10.0)));
+        evaluate_float_expect(&tree_round, Some(any_float(-10.0)));
         let tree_round = Function::numeric_round(Function::constant(any_float(-10.2)));
-        evaluate_expect(&tree_round, Some(any_float(-10.0)));
+        evaluate_float_expect(&tree_round, Some(any_float(-10.0)));
         let tree_round = Function::numeric_round(Function::constant(any_float(-10.8)));
-        evaluate_expect(&tree_round, Some(any_float(-11.0)));
+        evaluate_float_expect(&tree_round, Some(any_float(-11.0)));
         let tree_round = Function::numeric_round(Function::constant(any_float(10.5)));
-        evaluate_expect(&tree_round, Some(any_float(11.0)));
+        evaluate_float_expect(&tree_round, Some(any_float(11.0)));
         let tree_round = Function::numeric_round(Function::constant(any_float(10.2)));
-        evaluate_expect(&tree_round, Some(any_float(10.0)));
+        evaluate_float_expect(&tree_round, Some(any_float(10.0)));
         let tree_round = Function::numeric_round(Function::constant(any_float(10.8)));
-        evaluate_expect(&tree_round, Some(any_float(11.0)));
+        evaluate_float_expect(&tree_round, Some(any_float(11.0)));
 
         let tree_floor = Function::numeric_floor(Function::constant(any_float(-5.0)));
-        evaluate_expect(&tree_floor, Some(any_float(-5.0)));
+        evaluate_float_expect(&tree_floor, Some(any_float(-5.0)));
         let tree_floor = Function::numeric_floor(Function::constant(any_float(-10.5)));
-        evaluate_expect(&tree_floor, Some(any_float(-11.0)));
+        evaluate_float_expect(&tree_floor, Some(any_float(-11.0)));
         let tree_floor = Function::numeric_floor(Function::constant(any_float(-10.2)));
-        evaluate_expect(&tree_floor, Some(any_float(-11.0)));
+        evaluate_float_expect(&tree_floor, Some(any_float(-11.0)));
         let tree_floor = Function::numeric_floor(Function::constant(any_float(-10.8)));
-        evaluate_expect(&tree_floor, Some(any_float(-11.0)));
+        evaluate_float_expect(&tree_floor, Some(any_float(-11.0)));
         let tree_floor = Function::numeric_floor(Function::constant(any_float(10.5)));
-        evaluate_expect(&tree_floor, Some(any_float(10.0)));
+        evaluate_float_expect(&tree_floor, Some(any_float(10.0)));
         let tree_floor = Function::numeric_floor(Function::constant(any_float(10.2)));
-        evaluate_expect(&tree_floor, Some(any_float(10.0)));
+        evaluate_float_expect(&tree_floor, Some(any_float(10.0)));
         let tree_floor = Function::numeric_floor(Function::constant(any_float(10.8)));
-        evaluate_expect(&tree_floor, Some(any_float(10.0)));
+        evaluate_float_expect(&tree_floor, Some(any_float(10.0)));
 
         let tree_ceil = Function::numeric_ceil(Function::constant(any_float(-5.0)));
-        evaluate_expect(&tree_ceil, Some(any_float(-5.0)));
+        evaluate_float_expect(&tree_ceil, Some(any_float(-5.0)));
         let tree_ceil = Function::numeric_ceil(Function::constant(any_float(-10.5)));
-        evaluate_expect(&tree_ceil, Some(any_float(-10.0)));
+        evaluate_float_expect(&tree_ceil, Some(any_float(-10.0)));
         let tree_ceil = Function::numeric_ceil(Function::constant(any_float(-10.2)));
-        evaluate_expect(&tree_ceil, Some(any_float(-10.0)));
+        evaluate_float_expect(&tree_ceil, Some(any_float(-10.0)));
         let tree_ceil = Function::numeric_ceil(Function::constant(any_float(-10.8)));
-        evaluate_expect(&tree_ceil, Some(any_float(-10.0)));
+        evaluate_float_expect(&tree_ceil, Some(any_float(-10.0)));
         let tree_ceil = Function::numeric_ceil(Function::constant(any_float(10.5)));
-        evaluate_expect(&tree_ceil, Some(any_float(11.0)));
+        evaluate_float_expect(&tree_ceil, Some(any_float(11.0)));
         let tree_ceil = Function::numeric_ceil(Function::constant(any_float(10.2)));
-        evaluate_expect(&tree_ceil, Some(any_float(11.0)));
+        evaluate_float_expect(&tree_ceil, Some(any_float(11.0)));
         let tree_ceil = Function::numeric_ceil(Function::constant(any_float(10.8)));
-        evaluate_expect(&tree_ceil, Some(any_float(11.0)));
+        evaluate_float_expect(&tree_ceil, Some(any_float(11.0)));
     }
 
     #[test]
@@ -739,7 +767,7 @@ mod test {
             ),
             Function::constant(any_double(2.0)),
         );
-        evaluate_expect(&tree_arithmetic, Some(any_double(6.0)));
+        evaluate_float_expect(&tree_arithmetic, Some(any_double(6.0)));
 
         let tree_less_less = Function::numeric_lessthan(
             Function::constant(any_double(-5.0)),
@@ -809,58 +837,58 @@ mod test {
         );
 
         let tree_sin = Function::numeric_sine(Function::constant(any_double(0.0)));
-        evaluate_expect(&tree_sin, Some(any_double(0.0)));
+        evaluate_float_expect(&tree_sin, Some(any_double(0.0)));
 
         let tree_cos = Function::numeric_cosine(Function::constant(any_double(0.0)));
-        evaluate_expect(&tree_cos, Some(any_double(1.0)));
+        evaluate_float_expect(&tree_cos, Some(any_double(1.0)));
 
         let tree_tan = Function::numeric_tangent(Function::constant(any_double(0.0)));
-        evaluate_expect(&tree_tan, Some(any_double(0.0)));
+        evaluate_float_expect(&tree_tan, Some(any_double(0.0)));
 
         let tree_round = Function::numeric_round(Function::constant(any_double(-5.0)));
-        evaluate_expect(&tree_round, Some(any_double(-5.0)));
+        evaluate_float_expect(&tree_round, Some(any_double(-5.0)));
         let tree_round = Function::numeric_round(Function::constant(any_double(-10.5)));
-        evaluate_expect(&tree_round, Some(any_double(-10.0)));
+        evaluate_float_expect(&tree_round, Some(any_double(-10.0)));
         let tree_round = Function::numeric_round(Function::constant(any_double(-10.2)));
-        evaluate_expect(&tree_round, Some(any_double(-10.0)));
+        evaluate_float_expect(&tree_round, Some(any_double(-10.0)));
         let tree_round = Function::numeric_round(Function::constant(any_double(-10.8)));
-        evaluate_expect(&tree_round, Some(any_double(-11.0)));
+        evaluate_float_expect(&tree_round, Some(any_double(-11.0)));
         let tree_round = Function::numeric_round(Function::constant(any_double(10.5)));
-        evaluate_expect(&tree_round, Some(any_double(11.0)));
+        evaluate_float_expect(&tree_round, Some(any_double(11.0)));
         let tree_round = Function::numeric_round(Function::constant(any_double(10.2)));
-        evaluate_expect(&tree_round, Some(any_double(10.0)));
+        evaluate_float_expect(&tree_round, Some(any_double(10.0)));
         let tree_round = Function::numeric_round(Function::constant(any_double(10.8)));
-        evaluate_expect(&tree_round, Some(any_double(11.0)));
+        evaluate_float_expect(&tree_round, Some(any_double(11.0)));
 
         let tree_floor = Function::numeric_floor(Function::constant(any_double(-5.0)));
-        evaluate_expect(&tree_floor, Some(any_double(-5.0)));
+        evaluate_float_expect(&tree_floor, Some(any_double(-5.0)));
         let tree_floor = Function::numeric_floor(Function::constant(any_double(-10.5)));
-        evaluate_expect(&tree_floor, Some(any_double(-11.0)));
+        evaluate_float_expect(&tree_floor, Some(any_double(-11.0)));
         let tree_floor = Function::numeric_floor(Function::constant(any_double(-10.2)));
-        evaluate_expect(&tree_floor, Some(any_double(-11.0)));
+        evaluate_float_expect(&tree_floor, Some(any_double(-11.0)));
         let tree_floor = Function::numeric_floor(Function::constant(any_double(-10.8)));
-        evaluate_expect(&tree_floor, Some(any_double(-11.0)));
+        evaluate_float_expect(&tree_floor, Some(any_double(-11.0)));
         let tree_floor = Function::numeric_floor(Function::constant(any_double(10.5)));
-        evaluate_expect(&tree_floor, Some(any_double(10.0)));
+        evaluate_float_expect(&tree_floor, Some(any_double(10.0)));
         let tree_floor = Function::numeric_floor(Function::constant(any_double(10.2)));
-        evaluate_expect(&tree_floor, Some(any_double(10.0)));
+        evaluate_float_expect(&tree_floor, Some(any_double(10.0)));
         let tree_floor = Function::numeric_floor(Function::constant(any_double(10.8)));
-        evaluate_expect(&tree_floor, Some(any_double(10.0)));
+        evaluate_float_expect(&tree_floor, Some(any_double(10.0)));
 
         let tree_ceil = Function::numeric_ceil(Function::constant(any_double(-5.0)));
-        evaluate_expect(&tree_ceil, Some(any_double(-5.0)));
+        evaluate_float_expect(&tree_ceil, Some(any_double(-5.0)));
         let tree_ceil = Function::numeric_ceil(Function::constant(any_double(-10.5)));
-        evaluate_expect(&tree_ceil, Some(any_double(-10.0)));
+        evaluate_float_expect(&tree_ceil, Some(any_double(-10.0)));
         let tree_ceil = Function::numeric_ceil(Function::constant(any_double(-10.2)));
-        evaluate_expect(&tree_ceil, Some(any_double(-10.0)));
+        evaluate_float_expect(&tree_ceil, Some(any_double(-10.0)));
         let tree_ceil = Function::numeric_ceil(Function::constant(any_double(-10.8)));
-        evaluate_expect(&tree_ceil, Some(any_double(-10.0)));
+        evaluate_float_expect(&tree_ceil, Some(any_double(-10.0)));
         let tree_ceil = Function::numeric_ceil(Function::constant(any_double(10.5)));
-        evaluate_expect(&tree_ceil, Some(any_double(11.0)));
+        evaluate_float_expect(&tree_ceil, Some(any_double(11.0)));
         let tree_ceil = Function::numeric_ceil(Function::constant(any_double(10.2)));
-        evaluate_expect(&tree_ceil, Some(any_double(11.0)));
+        evaluate_float_expect(&tree_ceil, Some(any_double(11.0)));
         let tree_ceil = Function::numeric_ceil(Function::constant(any_double(10.8)));
-        evaluate_expect(&tree_ceil, Some(any_double(11.0)));
+        evaluate_float_expect(&tree_ceil, Some(any_double(11.0)));
     }
 
     #[test]

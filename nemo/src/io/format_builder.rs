@@ -388,7 +388,7 @@ impl<B: FormatBuilder> Parameters<B> {
                 report.add(
                     value_term,
                     ValidationError::ImportExportParameterNotGround {
-                        term: value_term.clone(),
+                        term: Box::new(value_term.clone()),
                     },
                 );
 
