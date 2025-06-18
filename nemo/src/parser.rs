@@ -6,14 +6,18 @@ pub mod error;
 pub mod input;
 pub mod span;
 
-use std::{cell::RefCell, ops::Range, rc::Rc};
+use std::{cell::RefCell, fmt::Display, rc::Rc};
 
-use ariadne::{Color, Config, Label, Report, ReportKind, Source};
 use ast::{program::Program, ProgramAST};
 use error::{ParserError, ParserErrorTree};
 use input::ParserInput;
 
 use nom::IResult;
+
+use crate::{
+    error::{context::ContextError, report::ProgramReport},
+    rule_file::RuleFile,
+};
 
 /// State of the parser
 #[derive(Debug, Clone, Default)]
@@ -37,61 +41,52 @@ pub type ParserResult<'a, Output> = IResult<ParserInput<'a>, Output, ParserError
 pub struct Parser<'a> {
     /// Reference to the text that is going to be parsed
     input: &'a str,
-    /// Label of the input text, usually a path of the input file
-    label: String,
     /// State of the parser
     state: ParserState,
 }
 
 /// Contains all errors that occurred during parsing
-pub struct ParserErrorReport<'a> {
-    /// Reference to the text that is going to be parsed
-    input: &'a str,
-    /// Label of the input text, usually a path of the input file
-    label: String,
+#[derive(Debug)]
+pub struct ParserErrorReport {
     /// List of [ParserError]s
     errors: Vec<ParserError>,
 }
 
-impl<'a> ParserErrorReport<'a> {
-    /// Print the given reports.
-    pub fn eprint(&self) -> Result<(), std::io::Error> {
-        let reports = self.build_reports();
+impl Display for ParserErrorReport {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        for (index, error) in self.errors.iter().enumerate() {
+            if index > 0 {
+                writeln!(f)?;
+            }
 
-        for report in reports {
-            report.eprint((self.label.clone(), Source::from(self.input)))?;
+            write!(f, "{error}")?;
         }
 
         Ok(())
     }
+}
 
-    /// Write this report to a given writer.
-    pub fn write(&self, writer: &mut impl std::io::Write) -> Result<(), std::io::Error> {
-        let reports = self.build_reports();
-
-        for report in reports {
-            report.write((self.label.clone(), Source::from(self.input)), &mut *writer)?
+impl ParserErrorReport {
+    /// Construct an empty report, indicating there is some unspecified error.
+    pub fn empty() -> Self {
+        Self {
+            errors: Vec::default(),
         }
-
-        Ok(())
     }
 
-    /// Build a [Report] for each error.
-    pub fn build_reports(&'a self) -> impl Iterator<Item = Report<'a, (String, Range<usize>)>> {
-        self.errors.iter().map(move |error| {
-            let message = error.to_string();
-            let span = (self.label.clone(), error.position.range());
-
-            Report::build(ReportKind::Error, span.clone())
-                .with_message(message.clone())
-                .with_label(
-                    Label::new(span)
-                        .with_message(message)
-                        .with_color(Color::Red),
-                )
-                .with_config(Config::default().with_index_type(ariadne::IndexType::Byte))
-                .finish()
+    /// Convert this report to a list of [ContextError]s.
+    pub fn context_errors(self) -> impl Iterator<Item = (ContextError, bool)> {
+        self.errors.into_iter().map(|error| {
+            let range = error.position.range();
+            (ContextError::new(error, range), false)
         })
+    }
+
+    /// Convert this report to a [ProgramReport].
+    pub fn program_report(self, file: RuleFile) -> ProgramReport {
+        let mut report = ProgramReport::new(file);
+        report.merge_parser_report(self);
+        report
     }
 
     /// Return raw [ParserError]s.
@@ -100,41 +95,23 @@ impl<'a> ParserErrorReport<'a> {
     }
 }
 
-impl std::fmt::Debug for ParserErrorReport<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let reports = self.build_reports();
-
-        for report in reports {
-            report.fmt(f)?;
-        }
-
-        Ok(())
-    }
-}
-
-impl std::fmt::Display for ParserErrorReport<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let mut buffer = Vec::new();
-        if self.write(&mut buffer).is_err() {
-            return Err(std::fmt::Error);
-        }
-
-        write!(f, "{}", String::from_utf8(buffer).expect("invalid string"))
+impl From<Vec<ParserError>> for ParserErrorReport {
+    fn from(errors: Vec<ParserError>) -> Self {
+        Self { errors }
     }
 }
 
 impl<'a> Parser<'a> {
     /// Initialize the parser.
-    pub fn initialize(input: &'a str, label: String) -> Self {
+    pub fn initialize(input: &'a str) -> Self {
         Self {
             input,
-            label,
             state: ParserState::default(),
         }
     }
 
     /// Parse the input.
-    pub fn parse(self) -> Result<Program<'a>, (Box<Program<'a>>, ParserErrorReport<'a>)> {
+    pub fn parse(self) -> Result<Program<'a>, (Box<Program<'a>>, ParserErrorReport)> {
         let parser_input = ParserInput::new(self.input, self.state.clone());
 
         let (_, program) = Program::parse(parser_input).expect("parsing should always succeed");
@@ -145,8 +122,6 @@ impl<'a> Parser<'a> {
             Err((
                 Box::new(program),
                 ParserErrorReport {
-                    input: self.input,
-                    label: self.label,
                     errors: Rc::try_unwrap(self.state.errors)
                         .expect("there should only be one owner now")
                         .into_inner(),

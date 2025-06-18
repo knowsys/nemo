@@ -13,7 +13,7 @@ use crate::{
         span::Span,
         ParserResult,
     },
-    rule_model::components::datatype::DataType,
+    rule_model::components::import_export::io_type::IOType,
 };
 
 /// Tags that are used to identify operations
@@ -23,12 +23,12 @@ pub struct DataTypeTag<'a> {
     span: Span<'a>,
 
     /// Data type
-    data_type: DataType,
+    data_type: IOType,
 }
 
 impl DataTypeTag<'_> {
-    /// Return the [DataType] that was parsed.
-    pub fn data_type(&self) -> DataType {
+    /// Return the [IOType] that was parsed.
+    pub fn data_type(&self) -> IOType {
         self.data_type
     }
 }
@@ -49,7 +49,7 @@ impl<'a> ProgramAST<'a> for DataTypeTag<'a> {
         Self: Sized + 'a,
     {
         let keyword_parser = |input: ParserInput<'a>| {
-            for data_type in DataType::iter() {
+            for data_type in IOType::iter() {
                 let result =
                     tag::<&str, ParserInput<'_>, ParserErrorTree>(data_type.name())(input.clone());
                 if let Ok((rest, _matched)) = result {
@@ -92,17 +92,17 @@ mod test {
             input::ParserInput,
             ParserState,
         },
-        rule_model::components::datatype::DataType,
+        rule_model::components::import_export::io_type::IOType,
     };
 
     #[test]
     fn parse_datatype() {
         let test = vec![
-            ("int", DataType::Integer),
-            ("float", DataType::Float),
-            ("double", DataType::Double),
-            ("string", DataType::String),
-            ("any", DataType::Any),
+            ("int", IOType::Integer),
+            ("float", IOType::Float),
+            ("double", IOType::Double),
+            ("string", IOType::String),
+            ("any", IOType::Any),
         ];
 
         for (input, expected) in test {

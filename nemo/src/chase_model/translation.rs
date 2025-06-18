@@ -10,9 +10,8 @@ pub(crate) mod rule;
 use std::collections::HashMap;
 
 use crate::rule_model::{
-    components::{tag::Tag, term::primitive::variable::Variable, ProgramComponent},
-    error::ValidationErrorBuilder,
-    program::Program,
+    components::{tag::Tag, term::primitive::variable::Variable},
+    programs::{program::Program, ProgramRead},
 };
 
 use super::components::program::ChaseProgram;
@@ -50,19 +49,18 @@ impl ProgramChaseTranslation {
     }
 
     /// Translate a [Program] into a [ChaseProgram].
-    pub(crate) fn translate(&mut self, mut program: Program) -> ChaseProgram {
+    pub(crate) fn translate(&mut self, program: &Program) -> ChaseProgram {
         let mut result = ChaseProgram::default();
-        self.predicate_arity = program
-            .arities()
-            .iter()
-            .map(|(tag, (arity, _))| (tag.clone(), *arity))
-            .collect();
+
+        self.predicate_arity = program.arities();
 
         for fact in program.facts() {
-            result.add_fact(self.build_fact(fact));
+            if let Some(fact) = self.build_fact(fact) {
+                result.add_fact(fact);
+            }
         }
 
-        for rule in program.rules_mut() {
+        for rule in program.rules() {
             result.add_rule(self.build_rule(rule));
         }
 
@@ -72,15 +70,15 @@ impl ProgramChaseTranslation {
 
         for import_directive in program.imports() {
             let import_builder = import_directive
-                .validate(&mut ValidationErrorBuilder::default())
-                .expect("validation already happened");
+                .builder()
+                .expect("invalid import directive");
             result.add_import(self.build_import(import_directive, &import_builder));
         }
 
         for export_directive in program.exports() {
             let export_builder = export_directive
-                .validate(&mut ValidationErrorBuilder::default())
-                .expect("validation already happened");
+                .builder()
+                .expect("invalid export directive");
             result.add_export(self.build_export(export_directive, &export_builder));
         }
 

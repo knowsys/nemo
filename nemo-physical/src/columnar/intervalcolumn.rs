@@ -149,7 +149,7 @@ where
     }
 
     /// Create a [ColumnScanT] from iterators of the internal columns.
-    pub(crate) fn iter(&self) -> ColumnScanT {
+    pub(crate) fn iter(&self) -> ColumnScanT<'_> {
         ColumnScanT {
             scan_id32: ColumnScanCell::new(self.column_id32.iter()),
             scan_id64: ColumnScanCell::new(self.column_id64.iter()),

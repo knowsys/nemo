@@ -1,23 +1,17 @@
 //! This module defines [ChaseOperation].
 
-use crate::rule_model::{
-    components::{
-        term::primitive::{variable::Variable, Primitive},
-        IterablePrimitives, IterableVariables,
-    },
-    origin::Origin,
+use crate::rule_model::components::{
+    term::primitive::{variable::Variable, Primitive},
+    IterablePrimitives, IterableVariables,
 };
 
-use super::{term::operation_term::OperationTerm, ChaseComponent};
+use super::term::operation_term::OperationTerm;
 
 /// Indicates that a new value must be created according to [OperationTerm].
 ///
 /// The result will be "stored" in the given variable.
 #[derive(Debug, Clone)]
 pub(crate) struct ChaseOperation {
-    /// Origin of this component
-    origin: Origin,
-
     /// Variable that will hold the result of this operation
     output_variable: Variable,
     /// Operation the will be evaluated
@@ -28,7 +22,6 @@ impl ChaseOperation {
     /// Create a new [ChaseOperation].
     pub(crate) fn new(output_variable: Variable, operation: OperationTerm) -> Self {
         Self {
-            origin: Origin::default(),
             output_variable,
             operation,
         }
@@ -42,20 +35,6 @@ impl ChaseOperation {
     /// Return the operation that is being evaluated.
     pub(crate) fn operation(&self) -> &OperationTerm {
         &self.operation
-    }
-}
-
-impl ChaseComponent for ChaseOperation {
-    fn origin(&self) -> &Origin {
-        &self.origin
-    }
-
-    fn set_origin(mut self, origin: Origin) -> Self
-    where
-        Self: Sized,
-    {
-        self.origin = origin;
-        self
     }
 }
 

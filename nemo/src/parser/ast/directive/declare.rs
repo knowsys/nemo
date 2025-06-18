@@ -35,7 +35,7 @@ impl<'a> Declare<'a> {
     }
 
     /// Return an iterator over the name-type pairs.
-    pub fn name_type_pairs(&self) -> impl Iterator<Item = NameTypePair> + '_ {
+    pub fn name_type_pairs(&self) -> impl Iterator<Item = NameTypePair<'_>> + '_ {
         self.declaration.clone().into_iter()
     }
 

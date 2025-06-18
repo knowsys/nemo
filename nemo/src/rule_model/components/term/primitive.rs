@@ -13,10 +13,14 @@ use variable::{
 };
 
 use crate::rule_model::{
-    components::{IterableVariables, ProgramComponent, ProgramComponentKind},
-    error::{ComponentParseError, ValidationErrorBuilder},
+    components::{
+        ComponentBehavior, ComponentIdentity, ComponentSource, IterableComponent,
+        IterableVariables, ProgramComponent, ProgramComponentKind,
+    },
+    error::{TranslationReport, ValidationReport},
     origin::Origin,
-    translation::TranslationComponent,
+    pipeline::id::ProgramComponentId,
+    translation::{ProgramParseReport, TranslationComponent},
 };
 
 use super::{value_type::ValueType, Term};
@@ -35,21 +39,55 @@ pub enum Primitive {
 
 impl Primitive {
     /// Parse a primitive term from a [`str`] reference.
-    pub fn parse(input: &str) -> Result<Self, ComponentParseError> {
+    pub fn parse(input: &str) -> Result<Self, ProgramParseReport> {
         let Term::Primitive(term) = Term::parse(input)? else {
-            return Err(ComponentParseError::ParseError);
+            return Err(ProgramParseReport::Translation(TranslationReport::default()));
         };
 
         Ok(term)
     }
 
+    /// Create a universal variable term.
+    pub fn universal_variable(name: &str) -> Self {
+        Self::Variable(Variable::universal(name))
+    }
+
+    /// Create a anynmous variable term.
+    pub fn anonymous_variable() -> Self {
+        Self::Variable(Variable::anonymous())
+    }
+
+    /// Create a global variable term.
+    pub fn global_variable(name: &str) -> Self {
+        Self::Variable(Variable::global(name))
+    }
+
+    /// Create a existential variable term.
+    pub fn existential_variable(name: &str) -> Self {
+        Self::Variable(Variable::existential(name))
+    }
+
+    /// Create a groud term.
+    pub fn ground(value: AnyDataValue) -> Self {
+        Self::Ground(GroundTerm::new(value))
+    }
+
+    /// Create an IRI term.
+    pub fn constant(iri: &str) -> Self {
+        Self::Ground(GroundTerm::constant(iri))
+    }
+
+    /// Create a language tagged string term.
+    pub fn language_tagged(value: &str, tag: &str) -> Self {
+        Self::Ground(GroundTerm::language_tagged(value, tag))
+    }
+
     /// Return `true` if this term is considered "ground".
     ///
-    /// This is the case if the term is not a universal or existential variable
-    /// (we consider global variables to be ground).
+    /// This is the case if the term is not a variable.
     pub fn is_ground(&self) -> bool {
         match self {
-            Primitive::Variable(variable) => variable.is_global(),
+            Primitive::Variable(_) => false,
             Primitive::Ground(_) => true,
         }
     }
@@ -59,6 +97,19 @@ impl Primitive {
         match self {
             Primitive::Variable(_) => ValueType::Any,
             Primitive::Ground(term) => term.value_type(),
+        }
+    }
+
+    /// Check wether this term can be reduced to a ground value,
+    /// except for global variables that need to be resolved.
+    ///
+    /// This is the case if
+    ///     * This term is ground
+    ///     * This term is a global variable
+    pub fn is_resolvable(&self) -> bool {
+        match self {
+            Primitive::Variable(variable) => variable.is_global(),
+            Primitive::Ground(_) => true,
         }
     }
 }
@@ -96,6 +147,12 @@ impl From<GroundTerm> for Primitive {
 impl From<AnyDataValue> for Primitive {
     fn from(value: AnyDataValue) -> Self {
         Self::Ground(GroundTerm::from(value))
+    }
+}
+
+impl From<bool> for Primitive {
+    fn from(value: bool) -> Self {
+        Self::from(GroundTerm::from(value))
     }
 }
 
@@ -138,38 +195,77 @@ impl Display for Primitive {
     }
 }
 
-impl ProgramComponent for Primitive {
-    fn origin(&self) -> &Origin {
-        match self {
-            Self::Variable(variable) => variable.origin(),
-            Self::Ground(ground) => ground.origin(),
-        }
-    }
-
-    fn set_origin(self, origin: Origin) -> Self
-    where
-        Self: Sized,
-    {
-        match self {
-            Self::Variable(variable) => Self::Variable(variable.set_origin(origin)),
-            Self::Ground(ground) => Self::Ground(ground.set_origin(origin)),
-        }
-    }
-
-    fn validate(&self, builder: &mut ValidationErrorBuilder) -> Option<()>
-    where
-        Self: Sized,
-    {
-        match self {
-            Primitive::Variable(variable) => variable.validate(builder),
-            Primitive::Ground(ground) => ground.validate(builder),
-        }
-    }
-
+impl ComponentBehavior for Primitive {
     fn kind(&self) -> ProgramComponentKind {
         match self {
-            Primitive::Variable(primitive) => primitive.kind(),
-            Primitive::Ground(primitive) => primitive.kind(),
+            Primitive::Variable(term) => term.kind(),
+            Primitive::Ground(term) => term.kind(),
+        }
+    }
+
+    fn validate(&self) -> Result<(), ValidationReport> {
+        match self {
+            Primitive::Variable(term) => term.validate(),
+            Primitive::Ground(term) => term.validate(),
+        }
+    }
+
+    fn boxed_clone(&self) -> Box<dyn ProgramComponent> {
+        match self {
+            Primitive::Variable(term) => term.boxed_clone(),
+            Primitive::Ground(term) => term.boxed_clone(),
+        }
+    }
+}
+
+impl ComponentSource for Primitive {
+    type Source = Origin;
+
+    fn origin(&self) -> Origin {
+        match self {
+            Primitive::Variable(term) => term.origin(),
+            Primitive::Ground(term) => term.origin(),
+        }
+    }
+
+    fn set_origin(&mut self, origin: Origin) {
+        match self {
+            Primitive::Variable(term) => term.set_origin(origin),
+            Primitive::Ground(term) => term.set_origin(origin),
+        }
+    }
+}
+
+impl ComponentIdentity for Primitive {
+    fn id(&self) -> ProgramComponentId {
+        match self {
+            Primitive::Variable(term) => term.id(),
+            Primitive::Ground(term) => term.id(),
+        }
+    }
+
+    fn set_id(&mut self, id: ProgramComponentId) {
+        match self {
+            Primitive::Variable(term) => term.set_id(id),
+            Primitive::Ground(term) => term.set_id(id),
+        }
+    }
+}
+
+impl IterableComponent for Primitive {
+    fn children<'a>(&'a self) -> Box<dyn Iterator<Item = &'a dyn ProgramComponent> + 'a> {
+        match self {
+            Primitive::Variable(term) => term.children(),
+            Primitive::Ground(term) => term.children(),
+        }
+    }
+
+    fn children_mut<'a>(
+        &'a mut self,
+    ) -> Box<dyn Iterator<Item = &'a mut dyn ProgramComponent> + 'a> {
+        match self {
+            Primitive::Variable(term) => term.children_mut(),
+            Primitive::Ground(term) => term.children_mut(),
         }
     }
 }

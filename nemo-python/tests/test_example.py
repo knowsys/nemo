@@ -33,6 +33,8 @@ class TestExample(unittest.TestCase):
         #[name("interesting rule")]
         #[display(f"data: {?x}, {?y}")]
         interesting(?y) :- data(?x, ?y), interesting(?x).
+
+        @output interesting.
         """
 
         self.engine = NemoEngine(load_string(self.rules))

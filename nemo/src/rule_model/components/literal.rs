@@ -1,17 +1,21 @@
-//! This module defines [Literal]
+//! This module defines [Literal].
 
 use std::{fmt::Display, hash::Hash};
 
-use crate::rule_model::error::ValidationErrorBuilder;
+use crate::rule_model::{
+    error::ValidationReport, origin::Origin, pipeline::id::ProgramComponentId,
+};
 
 use super::{
     atom::Atom,
+    tag::Tag,
     term::{
         operation::Operation,
         primitive::{variable::Variable, Primitive},
         Term,
     },
-    IterablePrimitives, IterableVariables, ProgramComponent, ProgramComponentKind,
+    ComponentBehavior, ComponentIdentity, ComponentSource, IterableComponent, IterablePrimitives,
+    IterableVariables, ProgramComponent, ProgramComponentKind,
 };
 
 /// Literal
@@ -19,7 +23,7 @@ use super::{
 /// An [Atom], its negation, or an [Operation].
 /// Literals are used to represent conditions that must be satisfied
 /// for a rule to be applicable.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Hash)]
 pub enum Literal {
     /// Positive atom
     Positive(Atom),
@@ -30,12 +34,22 @@ pub enum Literal {
 }
 
 impl Literal {
-    /// Return an iterator over the arguments contained in this literal.
-    pub fn arguments(&self) -> Box<dyn Iterator<Item = &Term> + '_> {
+    /// Return an iterator over the terms contained in this literal.
+    pub fn terms(&self) -> Box<dyn Iterator<Item = &Term> + '_> {
         match self {
-            Literal::Positive(literal) => Box::new(literal.arguments()),
-            Literal::Negative(literal) => Box::new(literal.arguments()),
-            Literal::Operation(literal) => Box::new(literal.arguments()),
+            Literal::Positive(literal) => Box::new(literal.terms()),
+            Literal::Negative(literal) => Box::new(literal.terms()),
+            Literal::Operation(literal) => Box::new(literal.terms()),
+        }
+    }
+
+    /// If literal is not an operation, return the predicate.
+    /// Returns `None` otherwise.
+    pub fn predicate(&self) -> Option<Tag> {
+        match self {
+            Literal::Positive(atom) => Some(atom.predicate()),
+            Literal::Negative(atom) => Some(atom.predicate()),
+            Literal::Operation(_) => None,
         }
     }
 }
@@ -50,39 +64,83 @@ impl Display for Literal {
     }
 }
 
-impl ProgramComponent for Literal {
-    fn origin(&self) -> &crate::rule_model::origin::Origin {
+impl ComponentBehavior for Literal {
+    fn kind(&self) -> ProgramComponentKind {
+        ProgramComponentKind::Literal
+    }
+
+    fn validate(&self) -> Result<(), ValidationReport> {
         match self {
-            Literal::Positive(positive) => positive.origin(),
-            Literal::Negative(negative) => negative.origin(),
+            Literal::Positive(atom) => atom.validate(),
+            Literal::Negative(atom) => atom.validate(),
+            Literal::Operation(operation) => operation.validate(),
+        }
+    }
+
+    fn boxed_clone(&self) -> Box<dyn ProgramComponent> {
+        match self {
+            Literal::Positive(atom) => atom.boxed_clone(),
+            Literal::Negative(atom) => atom.boxed_clone(),
+            Literal::Operation(operation) => operation.boxed_clone(),
+        }
+    }
+}
+
+impl ComponentSource for Literal {
+    type Source = Origin;
+
+    fn origin(&self) -> Origin {
+        match self {
+            Literal::Positive(atom) => atom.origin(),
+            Literal::Negative(atom) => atom.origin(),
             Literal::Operation(operation) => operation.origin(),
         }
     }
 
-    fn set_origin(self, origin: crate::rule_model::origin::Origin) -> Self
-    where
-        Self: Sized,
-    {
+    fn set_origin(&mut self, origin: Origin) {
         match self {
-            Literal::Positive(positive) => Literal::Positive(positive.set_origin(origin)),
-            Literal::Negative(negative) => Literal::Negative(negative.set_origin(origin)),
-            Literal::Operation(operation) => Literal::Operation(operation.set_origin(origin)),
+            Literal::Positive(atom) => atom.set_origin(origin),
+            Literal::Negative(atom) => atom.set_origin(origin),
+            Literal::Operation(operation) => operation.set_origin(origin),
+        }
+    }
+}
+
+impl ComponentIdentity for Literal {
+    fn id(&self) -> ProgramComponentId {
+        match self {
+            Literal::Positive(atom) => atom.id(),
+            Literal::Negative(atom) => atom.id(),
+            Literal::Operation(operation) => operation.id(),
         }
     }
 
-    fn validate(&self, builder: &mut ValidationErrorBuilder) -> Option<()>
-    where
-        Self: Sized,
-    {
+    fn set_id(&mut self, id: ProgramComponentId) {
         match self {
-            Literal::Positive(literal) => literal.validate(builder),
-            Literal::Negative(literal) => literal.validate(builder),
-            Literal::Operation(literal) => literal.validate(builder),
+            Literal::Positive(atom) => atom.set_id(id),
+            Literal::Negative(atom) => atom.set_id(id),
+            Literal::Operation(operation) => operation.set_id(id),
+        }
+    }
+}
+
+impl IterableComponent for Literal {
+    fn children<'a>(&'a self) -> Box<dyn Iterator<Item = &'a dyn ProgramComponent> + 'a> {
+        match self {
+            Literal::Positive(atom) => atom.children(),
+            Literal::Negative(atom) => atom.children(),
+            Literal::Operation(operation) => operation.children(),
         }
     }
 
-    fn kind(&self) -> ProgramComponentKind {
-        ProgramComponentKind::Literal
+    fn children_mut<'a>(
+        &'a mut self,
+    ) -> Box<dyn Iterator<Item = &'a mut dyn ProgramComponent> + 'a> {
+        match self {
+            Literal::Positive(atom) => atom.children_mut(),
+            Literal::Negative(atom) => atom.children_mut(),
+            Literal::Operation(operation) => operation.children_mut(),
+        }
     }
 }
 

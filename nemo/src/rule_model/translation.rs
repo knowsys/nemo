@@ -9,224 +9,77 @@ pub(crate) mod literal;
 pub(crate) mod rule;
 mod term;
 
-use std::{collections::HashMap, ops::Range};
+use std::{collections::HashMap, fmt::Debug, fmt::Display, ops::Range};
 
-use ariadne::{Report, ReportKind, Source};
-use attribute::{process_attributes, Bag, KnownAttributes};
+use attribute::{process_attributes, KnownAttributes};
 use directive::{handle_define_directive, handle_use_directive};
-use nom::InputLength;
 
 use crate::{
+    error::report::ProgramReport,
     parser::{
         ast::{self, ProgramAST},
+        error::translate_error_tree,
         input::ParserInput,
-        ParserState,
+        ParserErrorReport, ParserState,
     },
-    rule_model::{origin::Origin, program::ProgramBuilder},
+    rule_file::RuleFile,
+    rule_model::programs::ProgramWrite,
+    util::bag::Bag,
 };
 
 use super::{
-    components::{
-        fact::Fact,
-        rule::Rule,
-        term::{
-            primitive::{ground::GroundTerm, variable::global::GlobalVariable},
-            Term,
-        },
-        ProgramComponent,
-    },
-    error::{
-        translation_error::TranslationErrorKind, ComponentParseError, ProgramError,
-        TranslationError, ValidationErrorBuilder,
-    },
-    program::Program,
+    components::{fact::Fact, rule::Rule, term::Term},
+    error::{translation_error::TranslationError, TranslationReport},
 };
 
 /// Object for handling the translation of the ast representation
 /// of a nemo program into its logical representation
 #[derive(Debug, Default)]
-pub struct ASTProgramTranslation<'a, 'b> {
-    /// Original input string
-    input: &'a str,
-    /// Label of the input file
-    input_label: String,
-
-    /// Mapping of [Origin] to [ProgramAST] nodes
-    origin_map: HashMap<Origin, &'b dyn ProgramAST<'a>>,
-
+pub struct ASTProgramTranslation {
     /// Prefix mapping
-    prefix_mapping: HashMap<String, (String, &'b ast::directive::prefix::Prefix<'a>)>,
+    prefix_mapping: HashMap<String, (String, Range<usize>)>,
     /// Base
-    base: Option<(String, &'b ast::directive::base::Base<'a>)>,
+    base: Option<(String, Range<usize>)>,
 
-    /// Builder for the [Program]s
-    program_builder: ProgramBuilder,
-    /// Builder for validation errors
-    validation_error_builder: ValidationErrorBuilder,
     /// Attributes for the statement currently being translated
     statement_attributes: Bag<KnownAttributes, Vec<Term>>,
 
-    external_parameters: HashMap<GlobalVariable, GroundTerm>,
-
-    /// Errors
-    errors: Vec<ProgramError>,
+    /// Current error report
+    report: TranslationReport,
 }
 
-impl<'a, 'b> ASTProgramTranslation<'a, 'b> {
-    /// Initialize the [ASTProgramTranslation]
-    pub fn initialize(input: &'a str, input_label: String) -> Self {
-        Self {
-            input,
-            input_label,
-            ..Default::default()
-        }
-    }
-
-    /// Register a [ProgramAST] so that it can be associated with and later referenced by
-    /// the returned [Origin].
-    pub fn register_node(&mut self, node: &'b dyn ProgramAST<'a>) -> Origin {
-        let new_origin = Origin::External(self.origin_map.len());
-        self.origin_map.insert(new_origin, node);
-
-        new_origin
-    }
-
-    /// Register a [ProgramComponent]
-    pub fn register_component<Component: ProgramComponent>(
-        &mut self,
-        component: Component,
-        node: &'b dyn ProgramAST<'a>,
-    ) -> Component {
-        component.set_origin(self.register_node(node))
-    }
-
-    /// Add a global constant to the program being built
-    pub fn add_external_parameter(&mut self, ident: GlobalVariable, value: GroundTerm) {
-        self.external_parameters.insert(ident, value);
+impl ASTProgramTranslation {
+    /// Return a reference to attributes of the current statement.
+    pub(crate) fn statement_attributes(&self) -> &Bag<KnownAttributes, Vec<Term>> {
+        &self.statement_attributes
     }
 }
 
-/// Report of all [ProgramError]s occurred
-/// during the translation and validation of the AST
-pub struct ProgramErrorReport<'a, 'b> {
-    /// Original input string
-    input: &'a str,
-    /// Label of the input file::Program
-    label: String,
-    /// Mapping of [Origin] to [ProgramAST] nodes
-    origin_map: HashMap<Origin, &'b dyn ProgramAST<'a>>,
-
-    /// Errors
-    errors: Vec<ProgramError>,
-}
-
-impl<'a, 'b> ProgramErrorReport<'a, 'b> {
-    /// Print this report to standard error.
-    pub fn eprint(&self) -> Result<(), std::io::Error> {
-        let reports = self.build_reports();
-
-        for report in reports {
-            report.eprint((self.label.clone(), Source::from(self.input)))?;
-        }
-
-        Ok(())
-    }
-
-    /// Write this report to a given writer.
-    pub fn write(&self, writer: &mut impl std::io::Write) -> Result<(), std::io::Error> {
-        let reports = self.build_reports();
-
-        for report in reports {
-            report.write((self.label.clone(), Source::from(self.input)), &mut *writer)?
-        }
-
-        Ok(())
-    }
-
-    /// Build a [Report] for each error.
-    pub fn build_reports(&self) -> Vec<Report<'_, (String, Range<usize>)>> {
-        self.errors
-            .iter()
-            .map(move |error| {
-                let translation = |origin: &Origin| {
-                    self.origin_map
-                        .get(origin)
-                        .expect("map must contain origin")
-                        .span()
-                        .range()
-                        .range()
-                };
-
-                let mut report = Report::build(
-                    ReportKind::Error,
-                    (self.label.clone(), error.range(translation)),
-                );
-
-                report = error.report(report, self.label.clone(), translation);
-
-                report.finish()
-            })
-            .collect()
-    }
-
-    /// Return the mapping from origins to AST nodes.
-    pub fn origin_map(&self) -> &HashMap<Origin, &'b dyn ProgramAST<'a>> {
-        &self.origin_map
-    }
-
-    /// Return raw [ProgramError]s.
-    pub fn errors(&self) -> &Vec<ProgramError> {
-        &self.errors
-    }
-}
-
-impl std::fmt::Debug for ProgramErrorReport<'_, '_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let reports = self.build_reports();
-
-        for report in reports {
-            report.fmt(f)?
-        }
-
-        Ok(())
-    }
-}
-
-impl std::fmt::Display for ProgramErrorReport<'_, '_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let mut buffer = Vec::new();
-        if self.write(&mut buffer).is_err() {
-            return Err(std::fmt::Error);
-        }
-
-        write!(f, "{}", String::from_utf8(buffer).expect("invalid string"))
-    }
-}
-
-impl<'a, 'b> ASTProgramTranslation<'a, 'b> {
-    fn process_attributes(&mut self, statement: &'b ast::statement::Statement<'a>) {
+impl ASTProgramTranslation {
+    /// Process attributes attached to a statement
+    fn process_attributes<'a>(&mut self, statement: &ast::statement::Statement<'a>) {
         let expected_attributes = match statement.kind() {
             ast::statement::StatementKind::Rule(_) => Rule::EXPECTED_ATTRIBUTES,
             _ => &[],
         };
 
-        match process_attributes(self, statement.attributes().iter(), expected_attributes) {
-            Ok(attributes) => self.statement_attributes = attributes,
-            Err(error) => self.errors.push(ProgramError::TranslationError(error)),
+        if let Some(attributes) =
+            process_attributes(self, statement.attributes().iter(), expected_attributes)
+        {
+            self.statement_attributes = attributes;
         }
     }
 
-    /// Translate the given [ProgramAST] into a [Program].
-    pub fn translate(
+    /// Translate the given [ProgramAST] into a [ProgramWrite].
+    pub fn translate<'a, Writer: Debug + ProgramWrite>(
         mut self,
-        ast: &'b ast::program::Program<'a>,
-    ) -> Result<Program, ProgramErrorReport<'a, 'b>> {
-        // First, handle definitions
+        ast: &ast::program::Program<'a>,
+        program: &mut Writer,
+    ) -> TranslationReport {
+        // First, handle directives
         for statement in ast.statements() {
             if let ast::statement::StatementKind::Directive(directive) = statement.kind() {
-                if let Err(error) = handle_define_directive(&mut self, directive) {
-                    self.errors.push(ProgramError::TranslationError(error));
-                }
+                handle_define_directive(&mut self, directive);
             }
         }
 
@@ -236,26 +89,20 @@ impl<'a, 'b> ASTProgramTranslation<'a, 'b> {
 
             match statement.kind() {
                 ast::statement::StatementKind::Fact(fact) => {
-                    match Fact::build_component(&mut self, fact) {
-                        Ok(fact) => self.program_builder.add_fact(fact),
-                        Err(error) => self.errors.push(ProgramError::TranslationError(error)),
+                    if let Some(fact) = Fact::build_component(&mut self, fact) {
+                        program.add_fact(fact);
                     }
                 }
                 ast::statement::StatementKind::Rule(rule) => {
-                    match Rule::build_component(&mut self, rule) {
-                        Ok(new_rule) => self.program_builder.add_rule(new_rule),
-                        Err(translation_error) => self
-                            .errors
-                            .push(ProgramError::TranslationError(translation_error)),
+                    if let Some(rule) = Rule::build_component(&mut self, rule) {
+                        program.add_rule(rule);
                     }
                 }
                 ast::statement::StatementKind::Directive(directive) => {
-                    if let Err(error) = handle_use_directive(&mut self, directive) {
-                        self.errors.push(ProgramError::TranslationError(error));
-                    }
+                    handle_use_directive(&mut self, directive, program);
                 }
                 ast::statement::StatementKind::Error(_token) => {
-                    unreachable!(
+                    panic!(
                         "Faulty statement should result in a parser error and not be propagated."
                     )
                 }
@@ -264,41 +111,16 @@ impl<'a, 'b> ASTProgramTranslation<'a, 'b> {
             self.statement_attributes.clear();
         }
 
-        let _ = self.program_builder.validate(
-            &self.external_parameters,
-            &mut self.validation_error_builder,
-        );
-
-        self.errors.extend(
-            self.validation_error_builder
-                .finalize()
-                .into_iter()
-                .map(ProgramError::ValidationError),
-        );
-
-        if self.errors.is_empty() {
-            Ok(self.program_builder.finalize())
-        } else {
-            Err(ProgramErrorReport {
-                input: self.input,
-                label: self.input_label,
-                errors: self.errors,
-                origin_map: self.origin_map,
-            })
-        }
-    }
-
-    pub(crate) fn statement_attributes(&self) -> &Bag<KnownAttributes, Vec<Term>> {
-        &self.statement_attributes
+        self.report
     }
 
     /// Recreate the name from a [ast::tag::structure::StructureTag]
     /// by resolving prefixes or bases.
-    pub(super) fn resolve_tag(
-        &self,
-        tag: &'b ast::tag::structure::StructureTag<'a>,
-    ) -> Result<String, TranslationError> {
-        Ok(match tag.kind() {
+    pub(super) fn resolve_tag<'a>(
+        &mut self,
+        tag: &ast::tag::structure::StructureTag<'a>,
+    ) -> Option<String> {
+        Some(match tag.kind() {
             ast::tag::structure::StructureTagKind::Plain(token) => {
                 let token_string = token.to_string();
 
@@ -312,10 +134,14 @@ impl<'a, 'b> ASTProgramTranslation<'a, 'b> {
                 if let Some((expanded_prefix, _)) = self.prefix_mapping.get(&prefix.to_string()) {
                     format!("{expanded_prefix}{tag}")
                 } else {
-                    return Err(TranslationError::new(
-                        prefix.span(),
-                        TranslationErrorKind::PrefixUnknown(prefix.to_string()),
-                    ));
+                    self.report.add(
+                        prefix,
+                        TranslationError::PrefixUnknown {
+                            prefix: prefix.to_string(),
+                        },
+                    );
+
+                    return None;
                 }
             }
             ast::tag::structure::StructureTagKind::Iri(iri) => iri.content(),
@@ -323,33 +149,71 @@ impl<'a, 'b> ASTProgramTranslation<'a, 'b> {
     }
 }
 
+/// Errors due to either parsing a program
+/// or translating the resulting AST
+#[derive(Debug)]
+pub enum ProgramParseReport {
+    /// Error while parsing
+    Parsing(ParserErrorReport),
+    /// Error while translating the AST
+    Translation(TranslationReport),
+}
+
+impl ProgramParseReport {
+    /// Convert this report to a [ProgramReport].
+    pub fn program_report(self, file: RuleFile) -> ProgramReport {
+        match self {
+            ProgramParseReport::Parsing(report) => report.program_report(file),
+            ProgramParseReport::Translation(report) => report.program_report(file),
+        }
+    }
+}
+
+impl Display for ProgramParseReport {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ProgramParseReport::Parsing(report) => write!(f, "{report}"),
+            ProgramParseReport::Translation(report) => write!(f, "{report}"),
+        }
+    }
+}
+
+impl From<ParserErrorReport> for ProgramParseReport {
+    fn from(value: ParserErrorReport) -> Self {
+        ProgramParseReport::Parsing(value)
+    }
+}
+
+impl From<TranslationReport> for ProgramParseReport {
+    fn from(value: TranslationReport) -> Self {
+        ProgramParseReport::Translation(value)
+    }
+}
+
+/// Trait implemented by program components
+/// that can be constructed from an AST node
 pub(crate) trait TranslationComponent: Sized {
     type Ast<'a>: 'a + ProgramAST<'a>;
 
-    fn build_component<'a, 'b>(
-        translation: &mut ASTProgramTranslation<'a, 'b>,
-        ast: &'b Self::Ast<'a>,
-    ) -> Result<Self, TranslationError>;
+    /// Build component from AST node.
+    fn build_component<'a>(
+        translation: &mut ASTProgramTranslation,
+        ast: &Self::Ast<'a>,
+    ) -> Option<Self>;
 
     /// Construct this object from a string.
-    fn parse(input: &str) -> Result<Self, ComponentParseError> {
+    fn parse(input: &str) -> Result<Self, ProgramParseReport> {
         let parser_input = ParserInput::new(input, ParserState::default());
 
-        let Ok((tail, ast)) = Self::Ast::parse(parser_input) else {
-            return Err(ComponentParseError::ParseError);
-        };
+        let (_tail, ast) = Self::Ast::parse(parser_input).map_err(|error| {
+            ProgramParseReport::Parsing(ParserErrorReport::from(translate_error_tree(&error)))
+        })?;
 
-        if tail.input_len() != 0 {
-            return Err(ComponentParseError::ParseError);
-        }
+        let mut translation = ASTProgramTranslation::default();
 
-        let mut translation = ASTProgramTranslation::initialize(input, String::default());
-
-        let res = Self::build_component(&mut translation, &ast);
-
-        match res {
-            Ok(component) => Ok(component),
-            Err(error) => Err(ComponentParseError::TranslationError(error)),
+        match Self::build_component(&mut translation, &ast) {
+            Some(component) => Ok(component),
+            None => Err(ProgramParseReport::Translation(translation.report)),
         }
     }
 }

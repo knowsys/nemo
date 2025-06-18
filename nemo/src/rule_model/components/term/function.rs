@@ -1,14 +1,21 @@
 //! This module defines [FunctionTerm].
 
-use std::{fmt::Display, hash::Hash, vec};
+use std::{
+    fmt::Display,
+    hash::Hash,
+    ops::{Deref, DerefMut, Index, IndexMut},
+    vec,
+};
 
 use crate::rule_model::{
     components::{
-        tag::Tag, IterablePrimitives, IterableVariables, ProgramComponent, ProgramComponentKind,
+        component_iterator, component_iterator_mut, tag::Tag, ComponentBehavior, ComponentIdentity,
+        ComponentSource, IterableComponent, IterablePrimitives, IterableVariables,
+        ProgramComponent, ProgramComponentKind,
     },
-    error::{validation_error::ValidationErrorKind, ValidationErrorBuilder},
+    error::{validation_error::ValidationError, ValidationReport},
     origin::Origin,
-    substitution::Substitution,
+    pipeline::id::ProgramComponentId,
 };
 
 use super::{
@@ -20,10 +27,12 @@ use super::{
 /// Function term
 ///
 /// List of [Term]s with a [Tag].
-#[derive(Debug, Clone, Eq)]
+#[derive(Debug, Clone)]
 pub struct FunctionTerm {
     /// Origin of this component
     origin: Origin,
+    /// Id of this component
+    id: ProgramComponentId,
 
     /// Name of the function
     tag: Tag,
@@ -35,18 +44,18 @@ pub struct FunctionTerm {
 #[macro_export]
 macro_rules! function {
     // Base case: no elements
-    ($name:tt) => {
+    ($name:ident()) => {
         $crate::rule_model::components::term::function::FunctionTerm::new(
-            $crate::rule_model::components::tag::Tag::from($name), Vec::new()
+            $crate::rule_model::components::tag::Tag::from(stringify!($name)), Vec::new()
         )
     };
     // Recursive case: handle each term, separated by commas
-    ($name:tt; $($tt:tt)*) => {{
+    ($name:ident($($tt:tt)*)) => {{
         #[allow(clippy::vec_init_then_push)] {
             let mut terms = Vec::new();
             term_list!(terms; $($tt)*);
             $crate::rule_model::components::term::function::FunctionTerm::new(
-                $name, terms
+                stringify!($name), terms
             )
         }
     }};
@@ -56,16 +65,18 @@ impl FunctionTerm {
     /// Create a new [FunctionTerm].
     pub fn new<Terms: IntoIterator<Item = Term>>(name: &str, subterms: Terms) -> Self {
         Self {
-            origin: Origin::Created,
+            origin: Origin::default(),
+            id: ProgramComponentId::default(),
             tag: Tag::new(name.to_string()),
             terms: subterms.into_iter().collect(),
         }
     }
 
     /// Create a new [FunctionTerm] with a [Tag].
-    pub(crate) fn new_tag<Terms: IntoIterator<Item = Term>>(tag: Tag, subterms: Terms) -> Self {
+    pub(crate) fn new_tagged<Terms: IntoIterator<Item = Term>>(tag: Tag, subterms: Terms) -> Self {
         Self {
-            origin: Origin::Created,
+            origin: Origin::default(),
+            id: ProgramComponentId::default(),
             tag,
             terms: subterms.into_iter().collect(),
         }
@@ -77,18 +88,27 @@ impl FunctionTerm {
     }
 
     /// Return an iterator over the arguments of this function term.
-    pub fn arguments(&self) -> impl Iterator<Item = &Term> {
+    pub fn terms(&self) -> impl Iterator<Item = &Term> {
         self.terms.iter()
     }
 
-    /// Return the number of subterms contains in this function term.
-    pub fn len(&self) -> usize {
-        self.terms.len()
+    /// Return an iterator over the arguments of this function term.
+    pub fn terms_mut(&mut self) -> impl Iterator<Item = &mut Term> {
+        self.terms.iter_mut()
     }
 
-    /// Return whether this function terms contains no subterms.
-    pub fn is_empty(&self) -> bool {
-        self.len() == 0
+    /// Push a [Term] to the end of this function term.
+    pub fn push(&mut self, term: Term) {
+        self.terms.push(term);
+    }
+
+    /// Remove the [Term] at the given index from this function term
+    /// and return it.
+    ///
+    /// # Panics
+    /// Panics if index out of bounds.
+    pub fn remove(&mut self, index: usize) -> Term {
+        self.terms.remove(index)
     }
 
     /// Return the [Tag] of the function term.
@@ -102,17 +122,61 @@ impl FunctionTerm {
         self.terms.iter().all(Term::is_ground)
     }
 
-    /// Reduce each sub [Term] in the function returning a copy.
-    pub fn reduce_with_substitution(&self, bindings: &Substitution) -> Self {
-        Self {
-            origin: self.origin,
+    /// Reduce this term by evaluating all contained expressions,
+    /// and return a new [FunctionTerm] with the same [Origin] as `self`.
+    ///
+    /// This function does nothing if `self` is not ground.
+    ///
+    /// Returns `None` if any intermediate result is undefined.
+    pub fn reduce(&self) -> Option<Self> {
+        Some(Self {
+            origin: self.origin.clone(),
+            id: ProgramComponentId::default(),
             tag: self.tag.clone(),
             terms: self
                 .terms
                 .iter()
-                .map(|term| term.reduce_with_substitution(bindings))
-                .collect(),
-        }
+                .map(|term| term.reduce())
+                .collect::<Option<Vec<_>>>()?,
+        })
+    }
+
+    /// Check wether this term can be reduced to a ground value,
+    /// except for global variables that need to be resolved.
+    ///
+    /// This is the case if
+    ///     * This term does not contain non-global variables.
+    ///     * This term does not contain undefined intermediate values.
+    pub fn is_resolvable(&self) -> bool {
+        self.terms().all(|term| term.is_resolvable())
+    }
+}
+
+impl Index<usize> for FunctionTerm {
+    type Output = Term;
+
+    fn index(&self, index: usize) -> &Self::Output {
+        &self.terms[index]
+    }
+}
+
+impl IndexMut<usize> for FunctionTerm {
+    fn index_mut(&mut self, index: usize) -> &mut Self::Output {
+        &mut self.terms[index]
+    }
+}
+
+impl Deref for FunctionTerm {
+    type Target = [Term];
+
+    fn deref(&self) -> &Self::Target {
+        &self.terms
+    }
+}
+
+impl DerefMut for FunctionTerm {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.terms
     }
 }
 
@@ -147,6 +211,8 @@ impl PartialEq for FunctionTerm {
     }
 }
 
+impl Eq for FunctionTerm {}
+
 impl PartialOrd for FunctionTerm {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         match self.tag.partial_cmp(&other.tag) {
@@ -164,43 +230,72 @@ impl Hash for FunctionTerm {
     }
 }
 
-impl ProgramComponent for FunctionTerm {
-    fn origin(&self) -> &Origin {
-        &self.origin
+impl ComponentBehavior for FunctionTerm {
+    fn kind(&self) -> ProgramComponentKind {
+        ProgramComponentKind::FunctionTerm
     }
 
-    fn set_origin(mut self, origin: Origin) -> Self
-    where
-        Self: Sized,
-    {
-        self.origin = origin;
-        self
-    }
+    fn validate(&self) -> Result<(), ValidationReport> {
+        let mut report = ValidationReport::default();
 
-    fn validate(&self, builder: &mut ValidationErrorBuilder) -> Option<()>
-    where
-        Self: Sized,
-    {
+        for child in self.children() {
+            report.merge(child.validate());
+        }
+
         if !self.tag.is_valid() {
-            builder.report_error(
-                *self.tag.origin(),
-                ValidationErrorKind::InvalidTermTag(self.tag.to_string()),
+            report.add(
+                &self.tag,
+                ValidationError::InvalidTermTag {
+                    function_name: self.tag.to_string(),
+                },
             );
         }
 
-        for term in self.arguments() {
-            term.validate(builder)?
-        }
-
         if self.is_empty() {
-            builder.report_error(self.origin, ValidationErrorKind::FunctionTermEmpty);
+            report.add(self, ValidationError::FunctionTermEmpty);
         }
 
-        Some(())
+        report.result()
     }
 
-    fn kind(&self) -> ProgramComponentKind {
-        ProgramComponentKind::FunctionTerm
+    fn boxed_clone(&self) -> Box<dyn ProgramComponent> {
+        Box::new(self.clone())
+    }
+}
+
+impl ComponentSource for FunctionTerm {
+    type Source = Origin;
+
+    fn origin(&self) -> Origin {
+        self.origin.clone()
+    }
+
+    fn set_origin(&mut self, origin: Origin) {
+        self.origin = origin;
+    }
+}
+
+impl ComponentIdentity for FunctionTerm {
+    fn id(&self) -> ProgramComponentId {
+        self.id
+    }
+
+    fn set_id(&mut self, id: ProgramComponentId) {
+        self.id = id;
+    }
+}
+
+impl IterableComponent for FunctionTerm {
+    fn children<'a>(&'a self) -> Box<dyn Iterator<Item = &'a dyn ProgramComponent> + 'a> {
+        let term_iterator = component_iterator(self.terms.iter());
+        Box::new(term_iterator)
+    }
+
+    fn children_mut<'a>(
+        &'a mut self,
+    ) -> Box<dyn Iterator<Item = &'a mut dyn ProgramComponent> + 'a> {
+        let term_iterator = component_iterator_mut(self.terms.iter_mut());
+        Box::new(term_iterator)
     }
 }
 
@@ -241,7 +336,7 @@ mod test {
     #[test]
     fn function_basic() {
         let variable = Variable::universal("u");
-        let function = function!("f"; 12, variable, !e, "abc", ?v);
+        let function = function!(f(12, variable, !e, "abc", ?v));
 
         let variables = function.variables().cloned().collect::<Vec<_>>();
         assert_eq!(

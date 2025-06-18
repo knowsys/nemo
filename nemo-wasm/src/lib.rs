@@ -22,11 +22,12 @@ use nemo::{
     rule_model::{
         components::{
             fact::Fact,
+            output::Output,
             tag::Tag,
             term::{primitive::Primitive, Term},
-            ProgramComponent,
         },
-        error::{ComponentParseError, ValidationErrorBuilder},
+        programs::{program::Program, ProgramRead, ProgramWrite},
+        translation::ProgramParseReport,
     },
 };
 
@@ -34,11 +35,9 @@ use nemo_physical::{error::ExternalReadingError, resource::Resource};
 
 mod language_server;
 
-const PROGRAM_LABEL: &str = "nemo-web";
-
 #[wasm_bindgen]
 #[derive(Clone)]
-pub struct NemoProgram(nemo::rule_model::program::Program);
+pub struct NemoProgram(Program);
 
 #[derive(Error, Debug)]
 enum WasmOrInternalNemoError {
@@ -46,7 +45,7 @@ enum WasmOrInternalNemoError {
     #[error(transparent)]
     Nemo(#[from] nemo::error::Error),
     #[error("Unable to parse component:\n {0}")]
-    ComponentParse(ComponentParseError),
+    ComponentParse(ProgramParseReport),
     #[error("Unable to parse program:\n {0}")]
     Parser(String),
     #[error("Invalid program:\n {0}")]
@@ -90,20 +89,26 @@ impl NemoResource {
 impl NemoProgram {
     #[wasm_bindgen(constructor)]
     pub fn new(input: &str) -> Result<NemoProgram, NemoError> {
-        nemo::parser::Parser::initialize(input, PROGRAM_LABEL.to_string())
-            .parse()
-            .map_err(|(_, report)| WasmOrInternalNemoError::Parser(format!("{report}")))
-            .map_err(NemoError)
-            .and_then(|ast| {
-                nemo::rule_model::translation::ASTProgramTranslation::initialize(
-                    input,
-                    PROGRAM_LABEL.to_string(),
-                )
-                .translate(&ast)
-                .map_err(|report| WasmOrInternalNemoError::Program(format!("{report}")))
-                .map_err(NemoError)
-                .map(NemoProgram)
-            })
+        let ast = match nemo::parser::Parser::initialize(input).parse() {
+            Ok(ast) => ast,
+            Err((_, report)) => {
+                return Err(NemoError(WasmOrInternalNemoError::Parser(format!(
+                    "{report}"
+                ))))
+            }
+        };
+
+        let mut program = Program::default();
+        let report = nemo::rule_model::translation::ASTProgramTranslation::default()
+            .translate(&ast, &mut program);
+
+        if report.contains_errors() {
+            return Err(NemoError(WasmOrInternalNemoError::Program(format!(
+                "{report}"
+            ))));
+        }
+
+        Ok(NemoProgram(program))
     }
 
     /// Get all resources that are referenced in import directives of the program.
@@ -117,9 +122,10 @@ impl NemoProgram {
         let mut result: Vec<NemoResource> = vec![];
 
         for import in self.0.imports() {
-            let builder = import
-                .validate(&mut ValidationErrorBuilder::default())
-                .expect("imports have been validated at this point");
+            let Some(builder) = import.builder() else {
+                continue;
+            };
+
             let format: String = builder.build_import("", 0).media_type();
             if let Some(resource) = builder.resource() {
                 result.push(NemoResource {
@@ -137,7 +143,7 @@ impl NemoProgram {
     pub fn mark_default_output_predicates(&mut self) {
         if self.0.outputs().next().is_none() {
             for predicate in self.0.all_predicates() {
-                self.0.add_output(predicate)
+                self.0.add_output(Output::new(predicate))
             }
         }
     }
@@ -215,7 +221,6 @@ impl ResourceProvider for BlobResourceProvider {
 
 #[wasm_bindgen]
 pub struct NemoEngine {
-    program: NemoProgram,
     engine: nemo::execution::DefaultExecutionEngine,
 }
 
@@ -295,10 +300,7 @@ impl NemoEngine {
             .map_err(WasmOrInternalNemoError::Nemo)
             .map_err(NemoError)?;
 
-        Ok(NemoEngine {
-            program: program.clone(),
-            engine,
-        })
+        Ok(NemoEngine { engine })
     }
 
     #[wasm_bindgen]
@@ -396,7 +398,7 @@ impl NemoEngine {
 
             let (trace, handles) = self
                 .engine
-                .trace(self.program.0.clone(), vec![fact_to_trace])
+                .trace(vec![fact_to_trace])
                 .map_err(WasmOrInternalNemoError::Nemo)
                 .map_err(NemoError)?;
 
@@ -458,7 +460,7 @@ impl NemoEngine {
 
         let (trace, handles) = self
             .engine
-            .trace(self.program.0.clone(), vec![parsed_fact])
+            .trace(vec![parsed_fact])
             .map_err(WasmOrInternalNemoError::Nemo)
             .map_err(NemoError)?;
 

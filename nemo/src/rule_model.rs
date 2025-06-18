@@ -6,6 +6,7 @@ pub mod util;
 pub mod components;
 pub mod error;
 pub mod origin;
-pub mod program;
+pub mod pipeline;
+pub mod programs;
 pub mod substitution;
 pub mod translation;

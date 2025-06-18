@@ -1,6 +1,7 @@
 use std::{collections::HashSet, fs::read_to_string, time::Duration};
 
 use nemo::{
+    api::load_program,
     chase_model::ChaseAtom,
     datavalues::{AnyDataValue, DataValue},
     error::Error,
@@ -12,9 +13,9 @@ use nemo::{
             fact::Fact,
             tag::Tag,
             term::{primitive::Primitive, Term},
-            ProgramComponent,
+            ComponentBehavior,
         },
-        error::ValidationErrorBuilder,
+        programs::ProgramRead,
         substitution::Substitution,
     },
 };
@@ -51,7 +52,7 @@ impl<T> PythonResult for (T, Vec<Error>) {
 
 #[pyclass]
 #[derive(Clone)]
-struct NemoProgram(nemo::rule_model::program::Program);
+struct NemoProgram(nemo::rule_model::programs::program::Program);
 
 #[pyfunction]
 fn load_file(file: String) -> PyResult<NemoProgram> {
@@ -61,15 +62,9 @@ fn load_file(file: String) -> PyResult<NemoProgram> {
 
 #[pyfunction]
 fn load_string(rules: String) -> PyResult<NemoProgram> {
-    let program_ast = nemo::parser::Parser::initialize(&rules, String::default())
-        .parse()
-        .map_err(|_| Error::ProgramParseError)
+    let program = load_program(rules, String::default())
+        .map_err(Error::ProgramReport)
         .py_res()?;
-    let program =
-        nemo::rule_model::translation::ASTProgramTranslation::initialize(&rules, String::default())
-            .translate(&program_ast)
-            .map_err(|_| Error::ProgramParseError)
-            .py_res()?;
 
     Ok(NemoProgram(program))
 }
@@ -166,7 +161,7 @@ impl NemoLiteral {
 #[pyclass]
 struct NemoResults(Box<dyn Iterator<Item = Vec<AnyDataValue>> + Send + Sync>);
 
-fn datavalue_to_python(py: Python<'_>, v: AnyDataValue) -> PyResult<Bound<PyAny>> {
+fn datavalue_to_python(py: Python<'_>, v: AnyDataValue) -> PyResult<Bound<'_, PyAny>> {
     match v.value_domain() {
         nemo::datavalues::ValueDomain::LanguageTaggedString => {
             let (value, tag) = v.to_language_tagged_string_unchecked();
@@ -321,7 +316,7 @@ impl NemoResults {
         slf
     }
 
-    fn __next__(mut slf: PyRefMut<'_, Self>) -> PyResult<Option<Vec<Bound<PyAny>>>> {
+    fn __next__(mut slf: PyRefMut<'_, Self>) -> PyResult<Option<Vec<Bound<'_, PyAny>>>> {
         let Some(next) = slf.0.next() else {
             return Ok(None);
         };
@@ -336,7 +331,6 @@ impl NemoResults {
 
 #[pyclass(unsendable)]
 struct NemoEngine {
-    program: NemoProgram,
     engine: nemo::execution::DefaultExecutionEngine,
 }
 
@@ -411,7 +405,7 @@ impl NemoEngine {
         TimedCode::instance().reset();
         let import_manager = ImportManager::new(ResourceProviders::default());
         let engine = ExecutionEngine::initialize(program.0.clone(), import_manager).py_res()?;
-        Ok(NemoEngine { program, engine })
+        Ok(NemoEngine { engine })
     }
 
     fn reason(&mut self) -> PyResult<()> {
@@ -427,10 +421,9 @@ impl NemoEngine {
 
     fn trace(&mut self, fact_string: String) -> Option<NemoTrace> {
         let fact = Fact::parse(&fact_string).ok()?;
-        let mut builder = ValidationErrorBuilder::default();
-        fact.validate(&mut builder)?;
+        fact.validate().ok()?;
 
-        let (trace, handles) = self.engine.trace(self.program.0.clone(), vec![fact]).ok()?;
+        let (trace, handles) = self.engine.trace(vec![fact]).ok()?;
         let handle = *handles
             .first()
             .expect("Function trace always returns a handle for each input fact");

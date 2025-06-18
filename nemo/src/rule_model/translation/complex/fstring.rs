@@ -6,6 +6,7 @@ use crate::{
             operation::{operation_kind::OperationKind, Operation},
             Term,
         },
+        origin::Origin,
         translation::TranslationComponent,
     },
 };
@@ -16,10 +17,10 @@ newtype_wrapper!(FormatStringLiteral: Operation);
 impl TranslationComponent for FormatStringLiteral {
     type Ast<'a> = ast::expression::complex::fstring::FormatString<'a>;
 
-    fn build_component<'a, 'b>(
-        translation: &mut crate::rule_model::translation::ASTProgramTranslation<'a, 'b>,
-        format_string: &'b Self::Ast<'a>,
-    ) -> Result<Self, crate::rule_model::error::TranslationError> {
+    fn build_component<'a>(
+        translation: &mut crate::rule_model::translation::ASTProgramTranslation,
+        format_string: &Self::Ast<'a>,
+    ) -> Option<Self> {
         let mut subterms = Vec::new();
 
         for element in format_string.elements() {
@@ -38,9 +39,9 @@ impl TranslationComponent for FormatStringLiteral {
             subterms.push(term);
         }
 
-        Ok(FormatStringLiteral(Operation::new(
-            OperationKind::StringConcatenation,
-            subterms,
+        Some(FormatStringLiteral(Origin::ast(
+            Operation::new(OperationKind::StringConcatenation, subterms),
+            format_string,
         )))
     }
 }

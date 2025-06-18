@@ -14,7 +14,7 @@ use crate::{
     chase_model::components::atom::{ground_atom::GroundAtom, ChaseAtom},
     rule_model::{
         components::{fact::Fact, rule::Rule},
-        program::Program,
+        programs::program::Program,
         substitution::Substitution,
     },
 };
@@ -240,6 +240,7 @@ impl TraceTreeRuleApplication {
 }
 
 /// Tree representation of an [ExecutionTrace] from a given start node
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug, Clone)]
 pub enum ExecutionTraceTree {
     /// Node represent a fact in the initial data base
@@ -607,7 +608,7 @@ mod test {
                 rule::Rule,
                 term::primitive::{variable::Variable, Primitive},
             },
-            program::ProgramBuilder,
+            programs::{program::Program, ProgramWrite},
             substitution::Substitution,
             translation::TranslationComponent,
         },
@@ -650,11 +651,10 @@ mod test {
         let rule_2_index = 1;
         let rule_3_index = 2;
 
-        let mut program = ProgramBuilder::default();
+        let mut program = Program::default();
         program.add_rule(rule_1);
         program.add_rule(rule_2);
         program.add_rule(rule_3);
-        let program = program.finalize();
 
         let mut trace = ExecutionTrace::new(program);
 

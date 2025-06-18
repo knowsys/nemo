@@ -87,7 +87,7 @@ impl Trie {
 
     /// Return a [TrieScan] over this trie.
     #[allow(dead_code)]
-    pub(crate) fn full_iterator(&self) -> TrieScanTrim {
+    pub(crate) fn full_iterator(&self) -> TrieScanTrim<'_> {
         TrieScanTrim::new(TrieScanEnum::Generic(self.partial_iterator()))
     }
 
