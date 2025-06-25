@@ -2,7 +2,7 @@
 
 use std::{cmp::Ordering, hash::Hash};
 
-use crate::rule_model::components::statement::Statement;
+use crate::rule_model::{components::statement::Statement, pipeline::arena::Id};
 
 /// Identifies a [super::super::components::ProgramComponent] within a [super::ProgramPipeline]
 ///
@@ -11,7 +11,7 @@ use crate::rule_model::components::statement::Statement;
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
 pub struct ProgramComponentId {
     /// Identifier of the statement within a [super::ProgramPipeline]
-    statement: Option<id_arena::Id<Statement>>,
+    statement: Option<Id<Statement>>,
     /// Identifier of a component within a statement
     ///
     /// A local id of zero refers to the statement itself.
@@ -27,7 +27,7 @@ impl ProgramComponentId {
     };
 
     /// Create a new [ProgramComponentId].
-    pub fn new_component(statement: id_arena::Id<Statement>, component: usize) -> Self {
+    pub fn new_component(statement: Id<Statement>, component: usize) -> Self {
         Self {
             statement: Some(statement),
             component: component
@@ -38,7 +38,7 @@ impl ProgramComponentId {
 
     /// Create a new [ProgramComponentId]
     /// referring to a statement
-    pub fn new_statement(id: id_arena::Id<Statement>) -> Self {
+    pub fn new_statement(id: Id<Statement>) -> Self {
         Self {
             statement: Some(id),
             component: 0,
@@ -53,7 +53,7 @@ impl ProgramComponentId {
     }
 
     /// Return the statement id.
-    pub fn statement(&self) -> Option<id_arena::Id<Statement>> {
+    pub fn statement(&self) -> Option<Id<Statement>> {
         self.statement
     }
 

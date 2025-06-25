@@ -1,18 +1,22 @@
 //! This module defines [ProgramPipeline].
 
-use std::{cell::UnsafeCell, rc::Rc};
+use std::rc::Rc;
 
 use id::ProgramComponentId;
-use id_arena::Arena;
+use orx_imp_vec::{ImpVec, PinnedVec};
 
 use crate::rule_model::{
     components::statement::Statement,
-    pipeline::revision::ProgramRevision,
+    pipeline::{
+        arena::{Arena, Id},
+        revision::ProgramRevision,
+    },
     programs::{program::Program, ProgramWrite},
 };
 
 use super::components::{atom::Atom, rule::Rule, IterableComponent, ProgramComponent};
 
+pub mod arena;
 pub mod commit;
 pub mod id;
 pub mod revision;
@@ -21,20 +25,20 @@ pub mod transformations;
 /// Program Manager
 ///
 /// Contains different versions of nemo programs.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Default)]
 pub struct ProgramPipeline {
     /// All statements that have been constructed.
     /// Some may only be valid within certain revisions.
     statements: Arena<Statement>,
 
     /// Collection of all revisions, i.e. version of nemo prorams
-    revisions: Vec<ProgramRevision>,
+    revisions: ImpVec<ProgramRevision>,
 }
 
 impl ProgramPipeline {
     /// Create a new managed [ProgramPipeline].
-    pub fn new() -> Rc<UnsafeCell<Self>> {
-        Rc::new(UnsafeCell::new(Self::default()))
+    pub fn new() -> Rc<Self> {
+        Rc::new(Self::default())
     }
 
     /// Search for the [ProgramComponent] with a given [ProgramComponentId]
@@ -112,7 +116,7 @@ impl ProgramPipeline {
     fn register_statement<Component: ProgramComponent>(
         &self,
         statement: &mut Component,
-        id: id_arena::Id<Statement>,
+        id: Id<Statement>,
     ) -> ProgramComponentId {
         let id = ProgramComponentId::new_statement(id);
 
@@ -123,7 +127,7 @@ impl ProgramPipeline {
     }
 
     /// Add a [Statement] to the given revision.
-    fn new_statement<S>(&mut self, statement: S) -> ProgramComponentId
+    fn new_statement<S>(&self, statement: S) -> ProgramComponentId
     where
         S: Into<Statement>,
     {
@@ -146,9 +150,9 @@ impl ProgramPipeline {
 
     /// Add a new [ProgramRevision] to the pipeline
     /// via a [ProgramCommit] and returns a [ProgramHandle]
-    pub(crate) fn new_revision(&mut self, revision: ProgramRevision) -> usize {
+    pub(crate) fn new_revision(&self, revision: ProgramRevision) -> usize {
         let num_revisions = self.revisions.len();
-        self.revisions.push(revision);
+        self.revisions.imp_push(revision);
 
         num_revisions
     }
@@ -157,7 +161,7 @@ impl ProgramPipeline {
     pub fn finalize(self) -> Program {
         let mut program = Program::default();
 
-        for (_, statement) in self.statements.into_iter() {
+        for statement in self.statements.into_iter() {
             program.add_statement(statement);
         }
 

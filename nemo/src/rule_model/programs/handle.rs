@@ -1,6 +1,6 @@
 //! This module defines [ProgramHandle].
 
-use std::{cell::UnsafeCell, rc::Rc};
+use std::rc::Rc;
 
 use crate::{
     error::warned::Warned,
@@ -21,7 +21,7 @@ use crate::{
 #[derive(Debug)]
 pub struct ProgramHandle {
     /// Reference to the [ProgramPipeline]
-    pipeline: Rc<UnsafeCell<ProgramPipeline>>,
+    pipeline: Rc<ProgramPipeline>,
 
     /// Revision this object is a handle for
     revision: usize,
@@ -30,7 +30,7 @@ pub struct ProgramHandle {
 impl ProgramHandle {
     /// Create a new [ProgramHandle] from a reference to a [ProgramPipeline]
     /// and a revision number.
-    pub(crate) fn new(pipeline: Rc<UnsafeCell<ProgramPipeline>>, revision: usize) -> Self {
+    pub(crate) fn new(pipeline: Rc<ProgramPipeline>, revision: usize) -> Self {
         Self { pipeline, revision }
     }
 
@@ -51,17 +51,15 @@ impl ProgramHandle {
     /// Create a new [ProgramCommit] representing an empty program
     /// that contains a copy of the [ValidationReport] from the given handle.
     pub fn fork(&self) -> ProgramCommit {
-        let pipeline = unsafe { &*self.pipeline.get() };
-        let report = pipeline.revision(self.revision).report().clone();
+        let report = self.pipeline.revision(self.revision).report().clone();
 
         ProgramCommit::empty(self.pipeline.clone(), report)
     }
 
     /// Create a new [ProgramCommit] representing an exact copy of the given program.
     pub fn fork_full(&self) -> ProgramCommit {
-        let pipeline = unsafe { &*self.pipeline.get() };
-        let report = pipeline.revision(self.revision).report().clone();
-        let statements = pipeline.revision(self.revision).statements();
+        let report = self.pipeline.revision(self.revision).report().clone();
+        let statements = self.pipeline.revision(self.revision).statements();
 
         ProgramCommit::new(self.pipeline.clone(), statements, report)
     }
@@ -77,8 +75,7 @@ impl ProgramHandle {
     /// Return a reference to the [ValidationReport]
     /// attached to this handle.
     pub fn report(&self) -> &ValidationReport {
-        let pipeline = unsafe { &*self.pipeline.get() };
-        pipeline.revision(self.revision).report()
+        self.pipeline.revision(self.revision).report()
     }
 
     /// Create a [Program] from this handle.
@@ -95,12 +92,10 @@ impl ProgramHandle {
 
 impl ProgramRead for ProgramHandle {
     fn statements(&self) -> impl Iterator<Item = &Statement> {
-        let pipeline = unsafe { &*self.pipeline.get() };
-
-        pipeline
+        self.pipeline
             .revision(self.revision)
             .statements()
-            .map(|&id| pipeline.statement(id))
+            .map(|&id| self.pipeline.statement(id))
     }
 }
 

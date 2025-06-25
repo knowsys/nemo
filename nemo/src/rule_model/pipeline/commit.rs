@@ -1,6 +1,6 @@
 //! This module defines [ProgramCommit].
 
-use std::{cell::UnsafeCell, rc::Rc};
+use std::rc::Rc;
 
 use crate::rule_model::{
     components::{statement::Statement, ComponentIdentity},
@@ -25,7 +25,7 @@ enum StatementStatus {
 #[derive(Debug)]
 pub struct ProgramCommit {
     /// Reference to the [ProgramPipeline]
-    pipeline: Rc<UnsafeCell<ProgramPipeline>>,
+    pipeline: Rc<ProgramPipeline>,
 
     /// List of new statements to add
     new: Vec<Statement>,
@@ -38,10 +38,7 @@ pub struct ProgramCommit {
 
 impl ProgramCommit {
     /// Create a new [ProgramCommit] representing an empty program.
-    pub(crate) fn empty(
-        pipeline: Rc<UnsafeCell<ProgramPipeline>>,
-        report: ValidationReport,
-    ) -> Self {
+    pub(crate) fn empty(pipeline: Rc<ProgramPipeline>, report: ValidationReport) -> Self {
         Self {
             pipeline,
             new: Vec::default(),
@@ -52,7 +49,7 @@ impl ProgramCommit {
 
     /// Create a new [ProgramCommit] containing existing statements.
     pub(crate) fn new<'a, StatementIter>(
-        pipeline: Rc<UnsafeCell<ProgramPipeline>>,
+        pipeline: Rc<ProgramPipeline>,
         statements: StatementIter,
         report: ValidationReport,
     ) -> Self
@@ -97,17 +94,16 @@ impl ProgramCommit {
                 StatementStatus::Existing(id) => statements.push(id),
                 StatementStatus::Fresh => {
                     if let Some(fresh_statement) = fresh.next() {
-                        let pipeline = unsafe { &mut *self.pipeline.get() };
-
-                        let id = pipeline.new_statement(fresh_statement);
+                        let id = self.pipeline.new_statement(fresh_statement);
                         statements.push(id);
                     }
                 }
             }
         }
 
-        let pipeline = unsafe { &mut *self.pipeline.get() };
-        let revision = pipeline.new_revision(ProgramRevision::new(statements, self.report));
+        let revision = self
+            .pipeline
+            .new_revision(ProgramRevision::new(statements, self.report));
 
         Ok(ProgramHandle::new(self.pipeline.clone(), revision))
     }
