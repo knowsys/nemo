@@ -15,7 +15,10 @@ pub mod symbols;
 pub mod tag;
 pub mod term;
 
-use std::fmt::{Debug, Display};
+use std::{
+    any::Any,
+    fmt::{Debug, Display},
+};
 
 use atom::Atom;
 use enum_assoc::Assoc;
@@ -24,6 +27,7 @@ use import_export::{
     ImportDirective,
 };
 use literal::Literal;
+use nemo_physical::dictionary::datavalue_dictionary::AsAny;
 use output::Output;
 use parameter::ParameterDeclaration;
 use rule::Rule;
@@ -271,17 +275,13 @@ impl<Component> ComponentCast for Component where
 {
 }
 
-impl<ComponentLeft: ComponentBehavior, ComponentRight: ComponentBehavior> TryAsRef<ComponentLeft>
-    for ComponentRight
+impl<Left, Right> TryAsRef<Left> for Right
+where
+    Left: ComponentBehavior + Any + 'static,
+    Right: ComponentBehavior + Any + 'static,
 {
-    default fn try_as_ref(&self) -> Option<&ComponentLeft> {
-        None
-    }
-}
-
-impl<Component: ComponentBehavior> TryAsRef<Component> for Component {
-    fn try_as_ref(&self) -> Option<&Component> {
-        Some(self)
+    fn try_as_ref(&self) -> Option<&Left> {
+        self.as_any().downcast_ref()
     }
 }
 
