@@ -76,8 +76,10 @@ pub fn load_program(input: String, label: String) -> Result<Program, ProgramRepo
     let report = ProgramReport::new(file);
 
     let (program, report) = report.merge_program_parser_report(handle)?;
-    let (program, report) = report
-        .merge_validation_report(program.transform(TransformationDefault::new(&parameters)))?;
+    let (program, report) = report.merge_validation_report(
+        &program,
+        program.transform(TransformationDefault::new(&parameters)),
+    )?;
 
     report.result(program.materialize())
 }
@@ -93,9 +95,10 @@ pub fn validate(input: String, label: String) -> ProgramReport {
         Err(report) => return report,
     };
 
-    let (_program, report) = match report
-        .merge_validation_report(program.transform(TransformationValidate::default()))
-    {
+    let (_program, report) = match report.merge_validation_report(
+        &program,
+        program.transform(TransformationValidate::default()),
+    ) {
         Ok(result) => result,
         Err(report) => return report,
     };

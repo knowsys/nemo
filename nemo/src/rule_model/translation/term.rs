@@ -6,6 +6,7 @@ use crate::{
             tuple::Tuple, Term,
         },
         error::translation_error::TranslationError,
+        origin::Origin,
     },
 };
 
@@ -86,6 +87,6 @@ impl TranslationComponent for Term {
             ),
         };
 
-        Some(inner)
+        Some(Origin::ast(inner, ast))
     }
 }

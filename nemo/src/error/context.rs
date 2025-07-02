@@ -154,6 +154,12 @@ impl ContextError {
         self.note.as_ref()
     }
 
+    /// Set the range of the error.
+    pub fn set_range(&mut self, range: Range<usize>) -> &mut Self {
+        self.diagnostic.range = range;
+        self
+    }
+
     /// Add a new context label to the error.
     pub fn add_context<Message: Display>(
         &mut self,
@@ -169,8 +175,8 @@ impl ContextError {
     }
 
     /// Add a new hint to the error.
-    pub fn add_hint(&mut self, hint: String) -> &mut Self {
-        self.hints.push(hint);
+    pub fn add_hint<Message: Display>(&mut self, hint: Message) -> &mut Self {
+        self.hints.push(hint.to_string());
         self
     }
 

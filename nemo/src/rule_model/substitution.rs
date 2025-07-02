@@ -5,6 +5,8 @@ use std::collections::{
     HashMap,
 };
 
+use crate::rule_model::origin::Origin;
+
 use super::components::{
     term::{
         primitive::{variable::Variable, Primitive},
@@ -53,7 +55,7 @@ impl Substitution {
             };
 
             if let Some(replacement) = self.map.get(primitive) {
-                *term = replacement.clone();
+                *term = Origin::substitution(primitive, replacement);
             }
         }
     }

@@ -13,6 +13,7 @@ use crate::{
     rule_file::RuleFile,
     rule_model::{
         error::{TranslationReport, ValidationReport},
+        programs::handle::ProgramHandle,
         translation::ProgramParseReport,
     },
 };
@@ -159,28 +160,29 @@ impl ProgramReport {
     /// Merge a [ValidationReport] into this [ProgramReport].
     pub fn merge_validation_report<Object: Debug>(
         mut self,
+        program: &ProgramHandle,
         result: Result<Object, ValidationReport>,
     ) -> Result<(Object, Self), Self> {
         match result {
             Ok(object) => Ok((object, self)),
             Err(report) => {
-                self.merge_errors(report.context_errors());
+                self.merge_errors(report.context_errors(program));
                 Err(self)
             }
         }
     }
 
-    /// Merge a [ValidationReport] into this [TranslationReport].
+    /// Merge a [TranslationReport] into this [ProgramReport].
     pub fn merge_translation_report(&mut self, report: TranslationReport) {
         self.merge_errors(report.context_errors());
     }
 
-    /// Merge a [ValidationReport] into this [ProgramReport].
+    /// Merge a [ParserErrorReport] into this [ProgramReport].
     pub fn merge_parser_report(&mut self, report: ParserErrorReport) {
         self.merge_errors(report.context_errors());
     }
 
-    /// Merge a [ProgramParseReport] into this [ProgramParseReport].
+    /// Merge a [ProgramParseReport] into this [ProgramReport].
     pub fn merge_program_parser_report<Object: Debug>(
         mut self,
         result: Result<Warned<Object, TranslationReport>, ProgramParseReport>,

@@ -1,12 +1,10 @@
 //! This module defines [Origin].
 
-use std::ops::Range;
-
 use crate::parser::ast::ProgramAST;
 
 use super::{
     components::{ComponentSource, ProgramComponent},
-    pipeline::{id::ProgramComponentId, ProgramPipeline},
+    pipeline::id::ProgramComponentId,
 };
 
 /// Origin of a [super::components::ProgramComponent]
@@ -27,8 +25,16 @@ pub enum Origin {
     /// Component was created from another component
     Component(Box<dyn ProgramComponent>),
 
-    /// Combination of two rules
-    RuleCombination(Box<Origin>, Box<Origin>),
+    /// Value was supplied externally, e.g. via command line parameters
+    Extern,
+
+    /// Substitution
+    Substitution {
+        /// Old component that was replaced
+        replaced: ProgramComponentId,
+        /// New component that is replacing it
+        replacing: ProgramComponentId,
+    },
 }
 
 impl Default for Origin {
@@ -53,28 +59,24 @@ impl Origin {
         component
     }
 
-    /// Translate [Origin] into a range of characters,
-    /// if it the component originated from parsing a file.
-    pub fn to_range(&self) -> Option<Range<usize>> {
-        if let Self::File { start, end } = self {
-            Some(*start..*end)
-        } else {
-            None
-        }
-    }
+    /// Substition
+    pub fn substitution<ComponentReplaced, ComponentReplacing>(
+        replaced: &ComponentReplaced,
+        replacing: &ComponentReplacing,
+    ) -> ComponentReplacing
+    where
+        ComponentReplaced: ProgramComponent,
+        ComponentReplacing: ProgramComponent + Clone,
+    {
+        let replaced_id = replaced.id();
+        let replacing_id = replacing.id();
 
-    /// Translate [Origin] into a range of characters,
-    /// if it the component originated from parsing a file.
-    pub fn to_range_pipeline(&self, pipeline: &ProgramPipeline) -> Option<Range<usize>> {
-        match self {
-            Origin::Created => None,
-            Origin::File { start, end } => Some(*start..*end),
-            Origin::Reference(id) => pipeline
-                .find_component(*id)?
-                .origin()
-                .to_range_pipeline(pipeline),
-            Origin::Component(component) => component.origin().to_range_pipeline(pipeline),
-            Origin::RuleCombination(first, _second) => first.to_range_pipeline(pipeline),
-        }
+        let mut replacing = replacing.clone();
+        replacing.set_origin(Origin::Substitution {
+            replaced: replaced_id,
+            replacing: replacing_id,
+        });
+
+        replacing
     }
 }

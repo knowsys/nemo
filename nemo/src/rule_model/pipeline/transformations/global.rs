@@ -5,9 +5,10 @@ use std::collections::{HashMap, HashSet};
 use crate::rule_model::{
     components::{
         term::primitive::{ground::GroundTerm, variable::global::GlobalVariable},
-        IterableVariables,
+        ComponentSource, IterableVariables,
     },
     error::ValidationReport,
+    origin::Origin,
     programs::{handle::ProgramHandle, ProgramRead, ProgramWrite},
     substitution::Substitution,
 };
@@ -37,7 +38,14 @@ impl<'a> TransformationGlobal<'a> {
         pipeline: &ProgramHandle,
     ) -> Substitution {
         let mut ground_set = external.keys().cloned().collect::<HashSet<_>>();
-        let mut substitution = Substitution::new(external.clone());
+        let external = external.iter().map(|(variable, term)| {
+            let mut term = term.clone();
+            term.set_origin(Origin::Extern);
+
+            (variable.clone(), term)
+        });
+
+        let mut substitution = Substitution::new(external);
 
         let mut ground_count: usize = ground_set.len();
         loop {

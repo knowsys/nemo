@@ -7,10 +7,11 @@ use crate::{
     parser::Parser,
     rule_file::RuleFile,
     rule_model::{
-        components::statement::Statement,
+        components::{statement::Statement, ProgramComponent},
         error::{TranslationReport, ValidationReport},
         pipeline::{
-            commit::ProgramCommit, transformations::ProgramTransformation, ProgramPipeline,
+            commit::ProgramCommit, id::ProgramComponentId, transformations::ProgramTransformation,
+            ProgramPipeline,
         },
         programs::{program::Program, ProgramRead, ProgramWrite},
         translation::{ASTProgramTranslation, ProgramParseReport},
@@ -88,6 +89,13 @@ impl ProgramHandle {
 
         program
     }
+
+    /// Returns a reference to the [ProgramComponent] of the given [ProgramComponentId],
+    /// if it exists.
+    pub fn component(&self, id: ProgramComponentId) -> Option<&dyn ProgramComponent> {
+        let pipeline = unsafe { &*self.pipeline.get() };
+        pipeline.find_component(id)
+    }
 }
 
 impl ProgramRead for ProgramHandle {
@@ -98,24 +106,3 @@ impl ProgramRead for ProgramHandle {
             .map(|&id| self.pipeline.statement(id))
     }
 }
-
-// struct StatementIterator<'a> {
-//     pipeline: &'a Rc<RefCell<ProgramPipeline>>,
-//     revision: usize,
-//     current_statement: usize,
-// }
-
-// impl<'a> Iterator for StatementIterator<'a> {
-//     type Item = Ref<'a, Statement>;
-
-//     fn next(&mut self) -> Option<Self::Item> {
-//         let id = self
-//             .pipeline
-//             .borrow()
-//             .revision(self.revision)
-//             .statement(self.current_statement);
-//         self.current_statement += 1;
-
-//         id.map(|id| Ref::map(self.pipeline.borrow(), |pipeline| pipeline.statement(id)))
-//     }
-// }

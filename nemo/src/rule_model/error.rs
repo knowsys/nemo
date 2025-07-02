@@ -12,9 +12,12 @@ use validation_error::ValidationError;
 use crate::{
     error::{context::ContextError, report::ProgramReport, rich::RichError, warned::Warned},
     rule_file::RuleFile,
+    rule_model::{
+        error::info::Info, pipeline::id::ProgramComponentId, programs::handle::ProgramHandle,
+    },
 };
 
-use super::{components::ComponentSource, origin::Origin, pipeline::ProgramPipeline};
+use super::{components::ComponentSource, origin::Origin};
 
 pub mod hint;
 pub mod info;
@@ -362,22 +365,77 @@ impl ValidationReport {
         self.0.errors()
     }
 
-    /// Translate this [ValidationReport] into a list of [ContextError].
-    pub fn context_errors(self) -> impl Iterator<Item = (ContextError, bool)> {
-        let translation = |origin: Origin| origin.to_range();
+    /// For a given [ProgramComponentId],
+    /// return the character range pointing to the assoicated program component
+    /// in the source filee, if it exists.
+    fn id_to_range(
+        program: &ProgramHandle,
+        id: ProgramComponentId,
+        error: &mut ContextError,
+    ) -> Option<Range<usize>> {
+        Self::origin_to_range(program, &program.component(id)?.origin(), error)
+    }
 
-        self.0.context_errors(translation)
+    /// Resolve a given [Origin] returning a character range,
+    /// pointing to the component in the source file,
+    /// if it exists.
+    fn origin_to_range(
+        program: &ProgramHandle,
+        origin: &Origin,
+        error: &mut ContextError,
+    ) -> Option<Range<usize>> {
+        match origin {
+            Origin::Created => None,
+            Origin::File { start, end } => Some(*start..*end),
+            Origin::Reference(id) => Self::id_to_range(program, *id, error),
+            Origin::Component(component) => {
+                let component_origin = component.origin();
+                Self::origin_to_range(program, &component_origin, error)
+            }
+            Origin::Substitution {
+                replaced,
+                replacing,
+            } => {
+                if let Some(range) = Self::id_to_range(program, *replacing, error) {
+                    error.add_context(Info::ValueDefined, range);
+                }
+
+                Self::id_to_range(program, *replaced, error)
+            }
+            Origin::Extern => {
+                error.add_hint(Info::DefinedExternally);
+                None
+            }
+        }
     }
 
     /// Translate this [ValidationReport] into a list of [ContextError].
-    /// using a [ProgramPipeline] for translating [Origin]s.
-    pub fn program_report_pipeline(
+    pub fn context_errors(
         self,
-        pipeline: &ProgramPipeline,
+        program: &ProgramHandle,
     ) -> impl Iterator<Item = (ContextError, bool)> + '_ {
-        let translation = |origin: Origin| origin.to_range_pipeline(pipeline);
+        self.0.errors.into_iter().flat_map(move |error| {
+            let is_warning = error.is_warning();
 
-        self.0.context_errors(translation)
+            let mut context_error = ContextError::new(error.error, 0..0).add_hints(error.hints);
+            match Self::origin_to_range(program, &error.source, &mut context_error) {
+                Some(range) => {
+                    context_error.set_range(range);
+                }
+                None => return None, // TODO: Error handling for components without origin
+            }
+
+            for context in error.context {
+                match Self::origin_to_range(program, &context.source, &mut context_error) {
+                    Some(range) => {
+                        context_error.add_context(context.message, range);
+                    }
+                    None => continue,
+                }
+            }
+
+            Some((context_error, is_warning))
+        })
     }
 }
 

@@ -10,7 +10,7 @@ use super::strategy::{RuleSelectionStrategy, SelectionStrategyError};
 
 /// Defines a strategy that selects rules randomly.
 #[derive(Debug)]
-#[allow(dead_code)]
+#[allow(dead_code)] // This is just an example strategy
 pub struct StrategyRandom {
     rule_count: usize,
     no_derivations: HashSet<usize>,

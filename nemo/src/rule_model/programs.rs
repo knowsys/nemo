@@ -321,6 +321,7 @@ pub trait ProgramRead {
         external: HashSet<&GlobalVariable>,
     ) {
         let mut definitions = HashMap::<GlobalVariable, &ParameterDeclaration>::new();
+        let mut defined = external.clone();
 
         for parameter in self.parameters() {
             if let Some(previous) = definitions.insert(parameter.variable().clone(), parameter) {
@@ -332,40 +333,40 @@ pub trait ProgramRead {
 
             if parameter.expression().is_none() && !external.contains(parameter.variable()) {
                 report.add(parameter, ValidationError::ParameterMissingDefinition);
+                defined.insert(parameter.variable());
             }
         }
 
-        let mut valid = external;
-        let mut valid_count: usize = valid.len();
+        let mut defined_count: usize = defined.len();
 
         loop {
             for parameter in self.parameters() {
-                if valid.contains(parameter.variable()) {
+                if defined.contains(parameter.variable()) {
                     continue;
                 }
 
                 if let Some(expression) = parameter.expression() {
                     if expression.variables().all(|variable| {
                         if let Variable::Global(global) = variable {
-                            valid.contains(global)
+                            defined.contains(global)
                         } else {
                             true
                         }
                     }) {
-                        valid.insert(parameter.variable());
+                        defined.insert(parameter.variable());
                     }
                 }
             }
 
-            if valid_count == valid.len() {
+            if defined_count == defined.len() {
                 break;
             }
 
-            valid_count = valid.len();
+            defined_count = defined.len();
         }
 
         for parameter in self.parameters() {
-            if parameter.expression().is_some() && !valid.contains(parameter.variable()) {
+            if parameter.expression().is_some() && !defined.contains(parameter.variable()) {
                 report.add(
                     parameter,
                     ValidationError::ParameterDeclarationCyclic {
