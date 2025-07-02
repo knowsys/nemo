@@ -523,7 +523,7 @@ impl<Strategy: RuleSelectionStrategy> ExecutionEngine<Strategy> {
         let num_chase_facts = chase_facts.len();
 
         for (i, chase_fact) in chase_facts.into_iter().enumerate() {
-            if i > 0 && i % 500 == 0 {
+            if i > 0 && i.is_multiple_of(500) {
                 log::info!(
                     "{i}/{num_chase_facts} facts traced. ({}%)",
                     i * 100 / num_chase_facts

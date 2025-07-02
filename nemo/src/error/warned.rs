@@ -36,7 +36,7 @@ where
     }
 
     /// Return the object and warning as a pair
-    pub fn pair(self) -> (O, W) {
+    pub fn into_pair(self) -> (O, W) {
         (self.object, self.warning)
     }
 

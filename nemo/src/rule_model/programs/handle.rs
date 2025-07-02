@@ -93,8 +93,7 @@ impl ProgramHandle {
     /// Returns a reference to the [ProgramComponent] of the given [ProgramComponentId],
     /// if it exists.
     pub fn component(&self, id: ProgramComponentId) -> Option<&dyn ProgramComponent> {
-        let pipeline = unsafe { &*self.pipeline.get() };
-        pipeline.find_component(id)
+        self.pipeline.find_component(id)
     }
 }
 

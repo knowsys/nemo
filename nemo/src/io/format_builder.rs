@@ -323,7 +323,7 @@ impl<B: FormatBuilder> Parameters<B> {
                     .add(
                         binding,
                         ValidationError::DirectiveConflictingAssignments {
-                            variable: left.clone(),
+                            variable: Box::new(left.clone()),
                         },
                     )
                     .add_context(previous_binding, Info::FirstDefinition);

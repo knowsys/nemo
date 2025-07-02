@@ -321,7 +321,7 @@ impl ComponentBehavior for Aggregate {
                         .add(
                             variable,
                             ValidationError::AggregateRepeatedDistinctVariable {
-                                variable: variable.clone(),
+                                variable: Box::new(variable.clone()),
                             },
                         )
                         .add_context(*found, Info::FirstDefinition);

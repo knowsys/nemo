@@ -243,7 +243,7 @@ fn run(mut cli: CliApp) -> Result<(), CliError> {
     }
 
     let (mut engine, warnings) =
-        ExecutionEngine::from_file(program_file, execution_parameters)?.pair();
+        ExecutionEngine::from_file(program_file, execution_parameters)?.into_pair();
     warnings.eprint(cli.disable_warnings)?;
 
     log::info!("Rules parsed");

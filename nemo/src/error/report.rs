@@ -189,7 +189,7 @@ impl ProgramReport {
     ) -> Result<(Object, Self), Self> {
         match result {
             Ok(success) => {
-                let (object, report) = success.pair();
+                let (object, report) = success.into_pair();
                 self.merge_translation_report(report);
                 Ok((object, self))
             }

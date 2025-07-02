@@ -29,7 +29,7 @@ pub enum ValidationError {
         note = "every universal variable in the head must occur at a safe position in the body"
     )]
     #[assoc(code = 202)]
-    HeadUnsafe { variable: Variable },
+    HeadUnsafe { variable: Box<Variable> },
     /// Anonymous variable used in the head of the rule.
     #[error(r#"anonymous variable used in rule head"#)]
     #[assoc(code = 203)]
@@ -40,11 +40,11 @@ pub enum ValidationError {
         note = "every universal variable used in an operation must occur at a safe position in the body"
     )]
     #[assoc(code = 204)]
-    OperationUnsafe { variable: Variable },
+    OperationUnsafe { variable: Box<Variable> },
     /// Unsafe variable used in multiple negative literals
     #[error(r#"unsafe variable used in multiple negative literals: `{variable}`"#)]
     #[assoc(code = 205)]
-    MultipleNegativeLiteralsUnsafe { variable: Variable },
+    MultipleNegativeLiteralsUnsafe { variable: Box<Variable> },
     /// Aggregate is used in body
     #[error(r#"aggregate used in rule body"#)]
     #[assoc(code = 206)]
@@ -81,12 +81,12 @@ pub enum ValidationError {
     #[assoc(code = 213)]
     #[assoc(note = "repeated distinct variables do not affect the result")]
     #[assoc(is_warning = ())]
-    AggregateRepeatedDistinctVariable { variable: Variable },
+    AggregateRepeatedDistinctVariable { variable: Box<Variable> },
     /// Aggregate variable cannot be group-by-variable
     #[error(r#"aggregation over group-by variable: `{variable}`"#)]
     #[assoc(code = 214)]
     #[assoc(note = "cannot aggregate over a variable that is also a group-by variable")]
-    AggregateOverGroupByVariable { variable: Variable },
+    AggregateOverGroupByVariable { variable: Box<Variable> },
     /// Distinct variables in aggregate must be named universal variables
     #[error(r#"aggregation marks `{variable_type}` as distinct."#)]
     #[assoc(code = 215)]
@@ -147,7 +147,7 @@ pub enum ValidationError {
     /// Attribute in rule is unsafe
     #[error(r#"display attribute uses unsafe variable: `{variable}`"#)]
     #[assoc(code = 227)]
-    AttributeRuleUnsafe { variable: Variable },
+    AttributeRuleUnsafe { variable: Box<Variable> },
     /// Aggregation used in fact
     #[error(r#"aggregates may not be used in facts"#)]
     #[assoc(code = 228)]
@@ -208,7 +208,7 @@ pub enum ValidationError {
     /// Directive received conflicting variable assignments
     #[error("variable `{variable}` has been defined multiple times")]
     #[assoc(code = 239)]
-    DirectiveConflictingAssignments { variable: Variable },
+    DirectiveConflictingAssignments { variable: Box<Variable> },
 
     /// Stdin is only supported for one import
     #[error("expected at most one `stdin` import, found at least 2 occurrences")]

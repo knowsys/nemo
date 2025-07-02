@@ -284,7 +284,7 @@ impl RdfWriter {
             } else {
                 triple_count += 1;
 
-                if (triple_count % PROGRESS_NOTIFY_INCREMENT) == 0 {
+                if triple_count.is_multiple_of(PROGRESS_NOTIFY_INCREMENT) {
                     log::info!("... processed {triple_count} triples");
                 }
 
@@ -355,7 +355,7 @@ impl RdfWriter {
             } else {
                 quad_count += 1;
 
-                if (quad_count % PROGRESS_NOTIFY_INCREMENT) == 0 {
+                if quad_count.is_multiple_of(PROGRESS_NOTIFY_INCREMENT) {
                     log::info!("... processed {quad_count} triples");
                 }
 

@@ -45,7 +45,7 @@ impl<'a, Node: ProgramAST<'a>> ComponentSource for Node {
     }
 
     fn set_origin(&mut self, _origin: Self::Source) {
-        // Not needed
+        unimplemented!()
     }
 }
 

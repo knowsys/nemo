@@ -326,7 +326,7 @@ impl<'a> ComponentSource for Token<'a> {
     }
 
     fn set_origin(&mut self, _origin: Self::Source) {
-        // Not needed
+        unimplemented!()
     }
 }
 

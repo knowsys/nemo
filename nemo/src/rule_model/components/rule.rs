@@ -219,7 +219,7 @@ impl Rule {
                     report.add(
                         aggregate.aggregate_term(),
                         ValidationError::AggregateOverGroupByVariable {
-                            variable: aggregate_variable.clone(),
+                            variable: Box::new(aggregate_variable.clone()),
                         },
                     );
                 }
@@ -277,7 +277,7 @@ impl Rule {
                     report.add(
                         operation_variable,
                         ValidationError::OperationUnsafe {
-                            variable: operation_variable.clone(),
+                            variable: Box::new(operation_variable.clone()),
                         },
                     );
                 }
@@ -339,7 +339,7 @@ impl ComponentBehavior for Rule {
                     report.add(
                         variable,
                         ValidationError::AttributeRuleUnsafe {
-                            variable: variable.clone(),
+                            variable: Box::new(variable.clone()),
                         },
                     );
                 }
@@ -354,7 +354,7 @@ impl ComponentBehavior for Rule {
                             .add(
                                 variable,
                                 ValidationError::HeadUnsafe {
-                                    variable: variable.clone(),
+                                    variable: Box::new(variable.clone()),
                                 },
                             )
                             .add_hint_option(Hint::similar(
@@ -425,7 +425,7 @@ impl ComponentBehavior for Rule {
                     .add(
                         *repeated_use,
                         ValidationError::MultipleNegativeLiteralsUnsafe {
-                            variable: (*repeated_use).clone(),
+                            variable: Box::new((*repeated_use).clone()),
                         },
                     )
                     .add_context(*first_use, Info::FirstUse);
